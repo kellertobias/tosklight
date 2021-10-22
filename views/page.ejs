@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>
+			ToskLight Control
+    </title>
+    <link rel="icon" href="/assets/favicon.ico"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <body>
+        <div class="container">
+            <div id="app">Loading ToskLight WebUI...</div>
+        </div>
+        <% for(var jsLocation of Object.values(manifest)) {%>
+        <script type="text/javascript" src="<%- jsLocation %>"></script>
+        <% } %>        
+    </body>
+</html>
