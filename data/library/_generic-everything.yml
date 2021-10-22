@@ -1,0 +1,128 @@
+&param:
+  module: 1 # if fixture has multiple DMX Patch areas. defaults to 1
+  patch: [1] # array of patch offset from MSB to LSB
+  highlight: 255 # value to set this channel to if fixture is in highlight mode
+  default: 0 # value if device is loaded/ parameter has no state/ is cleared
+  invert: false # invert values 0 => 255 and 255 => 0
+  max: 255 # maximum possible DMX value
+  min: 0 # minium possible DMX value
+  snap: true # disable effects and fading on this channel
+  mapping: *mapping
+  virtual_dimmer: true # adds a dimmer channel to this fixture based on the color value
+
+&mapping: # used for wheels or value mapping (e.g. from 0-50 shutter open, from 51-255 strobe)
+  - dmx: [0, 10, 20] # From ... Optimal ... To
+    value: FFFFFF
+  - dmx: [21, 30, 40] # From ... Optimal ... To
+    value: FF0000
+  # or
+  - dmx: [0, 100] # From ... To
+    min: 1 # e.g. 0 = 1 flash/second shutter
+    max: 20 # e.g. 100 = 20 flashs/second shutter
+
+name: Generic Fixture with Every possible Parameter
+short: "###"
+desc: |
+  This Fixture should not be loaded as the combinations of these paraeters are not possible,
+  but it contains all possible parameters
+config:
+  startup:
+    dmx: 1
+    value: 1
+    time: 1s
+  reset:
+    dmx: 1
+    value: 15
+    time: 5s
+  shutdown:
+    dmx: 1
+    value: 10
+    time: 5s
+  clear: # releases a freeze
+    dmx: 1
+  <name>: # you can add custom settings
+    dmx: 1
+    value: 10
+    time: 5s
+    freeze: true # only different config values can change the dmx value
+
+parameters:
+  dimmer: *param
+  
+  # -- Beam Presets
+  beam_strobe: *param,
+  beam_iris:  *param
+      # mapping small to big
+  beam_prism: *param
+      # mapping values: open, <number>, <string>
+      # where open = no prism/ effect
+      # <number> is amount of prism facettes
+      # <string> is custom effect name
+  beam_effect: *param
+      # mapping values: open, <string>
+  
+  # -- Framing Presets
+  frame_1_move: *param
+  frame_1_swiv: *param
+  ...
+  frame_4_swiv: *param
+
+  # -- Focus Presets
+  focus: *param
+  zoom: *param
+
+  # -- Gobo Presets
+  gobo_1_select: *param
+    # mapping values are: open, <string>
+  gobo_1_rotate: *param
+      # mapping values are
+      #  <number(-)> => Rotating Counterclockwise
+      #  <number(+)> => Rotating Clockwise
+      #  <number>deg => Index Position
+  gobo_2_select: *param
+  gobo_2_rotate: *param
+
+  # -- Color Presets
+  color_add_red: *param
+  color_add_green: *param
+  color_add_blue: *param
+  color_add_ww: *param # warm white
+  color_add_cw: *param # cold white
+  color_add_white: *param # neutral white
+  color_add_amber: *param # amber color
+  color_add_uv: *param # uv channel
+  color_sub_cyan: *param
+  color_sub_magenta: *param
+  color_sub_yellow: *param
+  color_sub_ctc: *param
+  color_wheel_a: *param # or color_wheel_2      
+  color_wheel_b: *param # or color_wheel_2      
+  
+  # -- Position Presets
+  pos_pan: *param
+  pos_tilt: *param
+  pos_speed: *param
+
+  # -- Media Presets
+  media_folder: *param
+  media_file: *param
+  media_mode: *param
+      # mapping values are:
+      # - play
+      # - pause
+      # - reset
+      # - loop
+      # - loop-reverse
+  media_play_speed: *param
+      # mapping value in percent
+
+  # -- Control
+  misc_1: *param, # or 2, 3, etc. till 10
+
+
+  # any Channels starting with an underscore will not be mapped to the control desk
+  _control1:
+    module: 1
+    patch: [1]
+    default: 255 # we will set this channel fixed to this given value
+    highlight: 255 # value to set this channel to if fixture is in highlight mode

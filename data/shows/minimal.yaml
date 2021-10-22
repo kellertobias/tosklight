@@ -1,0 +1,44 @@
+name: Empty Show
+fixtures:
+  100:
+    type: generic-dimmer
+    name: Dimmer
+    patch: [1]
+  101:
+    type: generic-dimmer
+    name: Dimmer 2
+    patch: [2]
+groups:
+  1: 
+    name: 'All Generic Dimmers'
+    fixtures: [100, 101]
+presets:
+  dimmer:
+    1:
+      - fixture: [100]
+        parameter:
+          dimmer:
+            value: 1
+            delay: 1s
+            fade: 1s
+      - fixture: [101]
+        parameter:
+          dimmer:
+            value: 50
+            effect: sin
+            size: 50
+    2:
+      - fixture: [generic-dimmer]
+        parameter:
+          dimmer: 1
+  color: {}
+sequences: {}
+routing:
+- channels: [1,512]
+  artnet:
+    universe: 0
+    node: '10.0.0.1'
+- channels: [513,1024]
+  artnet:
+    universe: 1
+    node: '10.0.0.2'
