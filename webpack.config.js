@@ -23,7 +23,7 @@ const config = {
     publicPath: '/statics/',
   },
   resolve: {
-    extensions: ['.js', '.ts', '.tsx'],
+    extensions: ['.js', '.ts', '.tsx', '.scss'],
     alias: {
 			'/client': path.resolve(__dirname, './src/client'),
 			'/shared': path.resolve(__dirname, './src/shared'),
@@ -66,6 +66,22 @@ const config = {
         resolve: {
           fullySpecified: false,
         },
+      },
+      {
+        test: /\.s[ac]ss$/i,
+        use: [
+          // Creates `style` nodes from JS strings
+          "style-loader",
+          // Translates CSS into CommonJS
+          "css-loader",
+          // Compiles Sass to CSS
+          {
+            loader: "sass-loader",
+            options: {
+              sourceMap: IS_DEV
+            }
+          }
+        ],
       },
       {
         test: /\.css$/,
