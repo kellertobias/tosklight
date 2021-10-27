@@ -70,7 +70,9 @@ Frontend:
 
 # License
 
-At the moment the License is Proprietary. You can use it for your own purposes but are not allowed to change anything except for your own purposes. You are not allwoed to sell it as software. If you use this software we taake no liability in its running correctly.
+At the moment the License is Proprietary. You can use it for your own purposes but are not allowed to change anything except for your own purposes. You are not allwoed to sell it as software. 
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ## References to packages and content this work is based on
 - Boilerplate: https://github.com/gilamran/fullstack-typescript.git
