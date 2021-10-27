@@ -2,6 +2,10 @@
 
 The Idea behind this Software is to build a light control software that supports artnet output and a similar structure to industry standard light control software.
 
+Just a simple UI Mockup:  
+![UI Mockup](/mockups/Playback.png)
+
+
 As a long time GrandMA 2 user who also supports local theatre clubs I always have the problem that a full fledged GrandMA is too expensive while a onPC solution is too complex to manage for people who are used to work on control desks like the lightcommander.
 
 This is why this software is aimed at this audience.
