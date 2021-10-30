@@ -5,6 +5,7 @@ import { apiRouter } from "./routes";
 import * as config from "./config";
 import { pagesRouter, staticsRouter } from "./essentials";
 
+import { speedtest } from './engine/test';
 console.log(`*******************************************`);
 console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
 console.log(`config: ${JSON.stringify(config, null, 2)}`);
@@ -21,3 +22,5 @@ app.use(pagesRouter());
 app.listen(config.SERVER_PORT, () => {
   console.log(`App listening on port ${config.SERVER_PORT}!`);
 });
+
+speedtest()

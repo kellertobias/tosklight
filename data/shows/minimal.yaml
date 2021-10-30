@@ -3,11 +3,11 @@ fixtures:
   100:
     type: generic-dimmer
     name: Dimmer
-    patch: [1]
+    patch: ['1.1']
   101:
     type: generic-dimmer
     name: Dimmer 2
-    patch: [2]
+    patch: ['1.2']
 groups:
   1: 
     name: 'All Generic Dimmers'

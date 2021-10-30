@@ -1,6 +1,6 @@
 &param:
   module: 1 # if fixture has multiple DMX Patch areas. defaults to 1
-  patch: [1] # array of patch offset from MSB to LSB
+  channel: [1] # array of patch offset from MSB to LSB
   highlight: 255 # value to set this channel to if fixture is in highlight mode
   default: 0 # value if device is loaded/ parameter has no state/ is cleared
   invert: false # invert values 0 => 255 and 255 => 0
@@ -27,24 +27,29 @@ desc: |
   but it contains all possible parameters
 config:
   startup:
-    dmx: 1
+    module: 1
+    channel: 1
     value: 1
     time: 1s
   reset:
-    dmx: 1
+    module: 1
+    channel: 1
     value: 15
     time: 5s
   shutdown:
-    dmx: 1
+    module: 1
+    channel: 1
     value: 10
     time: 5s
-  clear: # releases a freeze
-    dmx: 1
+  clear:
+    module: 1
+    channel: 1
+    value: 10
   <name>: # you can add custom settings
-    dmx: 1
+    module: 1
+    channel: 1
     value: 10
     time: 5s
-    freeze: true # only different config values can change the dmx value
 
 parameters:
   dimmer: *param
@@ -123,6 +128,6 @@ parameters:
   # any Channels starting with an underscore will not be mapped to the control desk
   _control1:
     module: 1
-    patch: [1]
+    channel: [1]
     default: 255 # we will set this channel fixed to this given value
     highlight: 255 # value to set this channel to if fixture is in highlight mode

@@ -1,0 +1,35 @@
+import { DMXChannel, OutputRouting } from "/server/engine/patch/output"
+
+export const getUniverseAndChannel = (routing: OutputRouting, patch: (number | string)[]) => {
+    const patchChannels: Record<string, DMXChannel[]> = {}
+    patch.forEach((value, mod) => {
+        if (typeof(value) === 'number' || !value.includes('.')) {
+            let channel = Number.parseInt(`${value}`, 10) - 1
+
+            for (const universe of routing.universes) {
+                if (channel > universe.channels.length) {
+                    channel = channel - universe.channels.length
+                }
+                if (channel < universe.channels.length) {
+                    patchChannels[mod] = universe.channels.slice(channel)
+                    return
+                }
+            }
+            throw new Error('patch')
+        }
+        const [univNumStr, channelStr] = value.split('.')
+        const univNum = Number.parseInt(univNumStr, 10) - 1
+        const channel = Number.parseInt(channelStr, 10) - 1
+
+        const universe = routing.universes[univNum]
+        if(!universe) {
+            throw new Error('patch')
+        }
+
+        if(channel >= universe.channels.length) {
+            throw new Error('patch')
+        }
+
+        patchChannels[mod] = universe.channels.slice(channel)
+    })
+}
