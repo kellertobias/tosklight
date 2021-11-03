@@ -1,6 +1,6 @@
 import { getUniverseAndChannel } from "../helpers/patch-notation";
 import { FixtureLibrarySrcEntry, FixtureLibrarySrcParam, ParameterName } from "/server/engine/config-reader";
-import { DMXChannel, OutputRouting } from "/server/engine/patch/output";
+import { DMXChannel, DMXOutput } from "/server/engine/patch/output";
 
 export class Fixture {
     private parameters: Partial<Record<ParameterName, {
@@ -17,7 +17,7 @@ export class Fixture {
 
     constructor(
         fixtureType: FixtureLibrarySrcEntry,
-        routing: OutputRouting,
+        routing: DMXOutput,
         patch: (number | string)[],
         meta: {name?: string}
     ) {

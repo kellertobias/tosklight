@@ -1,6 +1,6 @@
-import { DMXChannel, OutputRouting } from "/server/engine/patch/output"
+import { DMXChannel, DMXOutput } from "/server/engine/patch/output"
 
-export const getUniverseAndChannel = (routing: OutputRouting, patch: (number | string)[]) => {
+export const getUniverseAndChannel = (routing: DMXOutput, patch: (number | string)[]) => {
     const patchChannels: Record<string, DMXChannel[]> = {}
     patch.forEach((value, mod) => {
         if (typeof(value) === 'number' || !value.includes('.')) {

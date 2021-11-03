@@ -1,9 +1,9 @@
 import { Configuration } from "../config-reader";
 import { Fixture } from "../fixtures";
-import { OutputRouting } from "./output";
+import { DMXOutput } from "./output";
 
 class Patch {
-    private routing: OutputRouting;
+    private routing: DMXOutput;
     private fixtures: Record<string, Fixture>;
     private groups: Record<string, {
         name: string;
@@ -31,7 +31,7 @@ class Patch {
     setup(config: Configuration) {
         const routing = config.show.routing
         const library = config.library
-        this.routing = new OutputRouting(config.show.routing)
+        this.routing = new DMXOutput(config.show.routing)
         this.fixtures = {}
         
         Object.entries(config.show.fixtures).forEach(([id, fixtConfig]) => {
