@@ -1,4 +1,5 @@
 import { getUniverseAndChannel } from "../helpers/patch-notation";
+import { Preset } from "../presets";
 import { FixtureLibrarySrcEntry, FixtureLibrarySrcParam, ParameterName } from "/server/engine/config-reader";
 import { DMXChannel, DMXOutput } from "/server/engine/patch/output";
 
@@ -13,6 +14,14 @@ interface ParameterConfig {
     virtual_dimmer: boolean;
     dmx: DMXChannel[]
 }
+
+export type ValueOrPreset<T> = {value: T} | {preset: Preset<T>}
+
+export type ValueDimmer = number;
+export type ValueColor = {red?: number, green?: number, blue?: number, warm?: number, cold?: number, uv?: number, wheel1?: number, wheel2?: number}
+export type ValuePos = {pan?: number; tilt?: number, speed?: number, focus?: number}
+export type ValueBeam = {gobo1?: number; idx1?: number, gobo2?: number, idx2?: number, zoom?: number, effect?: number, iris?: number;}
+export type ValueMedia = {pool?: number; idx?: number, mode?: number | string, speed?: number}
 
 export class Fixture {
     private parameters: Partial<Record<ParameterName, ParameterConfig>> = {}
@@ -83,5 +92,35 @@ export class Fixture {
         }
         param.value = value;
         this.setDmxValue(param.dmx, value)
+    }
+
+    // Dimmer Value
+    public setDimmer(data: ValueOrPreset<ValueDimmer>, source: any) {
+        //@TODO
+    }
+
+    // Red, Green, Blue || WarmWhite, ColdWhite, UV || Wheel 1, Wheel 2
+    public setColor(data: ValueOrPreset<ValueColor>, source: any) {
+        //@TODO
+    }
+
+    // Pan, Tile, Speed, Focus
+    public setPos(data: ValueOrPreset<ValuePos>, source: any) {
+        //@TODO
+    }
+
+    // Gobo 1 & Rot., Goto 2 & Rot. || Zoom, Iris, Prism/ Effect
+    public setBeam(data: ValueOrPreset<ValueBeam>, source: any) {
+        //@TODO
+    }
+
+    // Pool, Index, Mode, Speed
+    public setMedia(data: ValueOrPreset<ValueBeam>, source: any) {
+        //@TODO
+    }
+
+    // Any Command from Fixture Definition
+    public sendCommand(command: string) {
+        //@TODO
     }
 }
