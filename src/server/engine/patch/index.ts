@@ -2,8 +2,8 @@ import { Configuration } from "../config-reader";
 import { Fixture } from "../fixtures";
 import { DMXOutput } from "./output";
 
-class Patch {
-    private routing: DMXOutput;
+export class Patch {
+    public routing: DMXOutput;
     private fixtures: Record<string, Fixture>;
     private groups: Record<string, {
         name: string;

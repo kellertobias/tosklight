@@ -10,7 +10,8 @@ class Engine {
     private aggregatedTime = 0
     private reportInTicks = 0
 
-    private loadHistory = [...Array(5).keys()].map(x => '')
+    private loadHistory = [...Array(5).keys()].map(x => 0)
+    private loadHistoryPtr = 0
     private historySeconds = 30
 
     private actions : EngineTickAction[] = []
@@ -31,21 +32,30 @@ class Engine {
         this.actions.push(action)
     }
 
-    private executeTickActions() {
+    public tick = () => {
+        if(this.running) throw new Error('tick-mutex')
+        this.running = true
+
+        // Execute Tick
         const started = new Date().getTime()
         this.currentTick += 1
-        this.actions.forEach(action => action(this.currentTick, this.currentFPS, this.timeStep))
+        for(let i = 0; i < this.actions.length; i ++ ) {
+            this.actions[i](this.currentTick, this.currentFPS, this.timeStep)
+        }
         const end = new Date().getTime()
 
-        return end - started
-    }
-
-    private calculateStats(duration: number) {
+        const duration = end - started
+        
+        // Calculate Stats
         this.aggregatedTime += duration
 
         if(this.reportInTicks <= 0) {
-            this.loadHistory.push(Number(this.aggregatedTime / ONE_SECOND * 100).toFixed(2))
-            this.loadHistory.shift()
+            this.loadHistory[this.loadHistoryPtr] = this.aggregatedTime / ONE_SECOND * 100
+            this.loadHistoryPtr++;
+            if(this.loadHistoryPtr >= this.loadHistory.length) {
+                this.loadHistoryPtr = 0
+            }
+
             this.timeStep = this.aggregatedTime / this.fps
             this.currentFPS = ONE_SECOND / this.timeStep
             this.aggregatedTime = 0
@@ -53,13 +63,7 @@ class Engine {
         } else {
             this.reportInTicks -= 1
         }
-    }
 
-    public tick = () => {
-        if(this.running) throw new Error('tick-mutex')
-        this.running = true
-        const duration = this.executeTickActions()
-        this.calculateStats(duration)
         this.running = false
     }
 
@@ -79,6 +83,7 @@ class Engine {
         this.loadHistory = []
         this.aggregatedTime = 0
         this.reportInTicks = this.fps
+        this.actions = []
     }
 
     public start() {
