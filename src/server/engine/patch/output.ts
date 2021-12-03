@@ -1,6 +1,6 @@
-import { RoutingConfigStructure } from "../config-reader";
 import { ArtNetController } from 'artnet-protocol'
 import { ArtDmx } from 'artnet-protocol/dist/protocol'
+import { ShowRoutingType } from "/server/schemas/show-schema";
 
 const controller = new ArtNetController()
 controller.nameShort = "Tosk"
@@ -39,16 +39,16 @@ export class DMXUniverse {
     public skipped = 0
     private artnetPacket: ArtDmx
 
-    constructor(universe: number, config: RoutingConfigStructure) {
+    constructor(universe: number, config: ShowRoutingType) {
         this.universe = universe
         
-        this.channels = new Array(config.size ?? 512).map((x, channel) => new DMXChannel(universe, channel, this))
+        this.channels = [...new Array(config.size ?? 512)].map((x, channel) => new DMXChannel(universe, channel, this))
 
         // Reserving memory for the channel values. Reusing the same ArtDMX Packet
         this.artnetPacket = new ArtDmx(0, 0, config.artnet.universe, new Array(config.size ?? 512))
     }
     
-    public sendFrame() {
+    public sendFrame = () => {
         // More efficient then using array.map
         for(let i = 0; i < this.channels.length; i++) {
             this.artnetPacket.data[i] = this.channels[i].value
@@ -60,13 +60,13 @@ export class DMXUniverse {
 
 export class DMXOutput {
     public readonly universes : DMXUniverse[] = []
-    constructor(universePatch: RoutingConfigStructure[]) {
+    constructor(universePatch: ShowRoutingType[]) {
         this.universes = universePatch.map((config, unNumber) => {
             return new DMXUniverse(unNumber, config)
         })
     }
 
-    tick(fps: number, time: number) {
+    tick = (fps: number, time: number) => {
         for(let i = 0; i < this.universes.length; i ++) {
             const universe = this.universes[i]
             if(universe.changed || universe.skipped > fps) {

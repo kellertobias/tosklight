@@ -6,7 +6,7 @@ parameters:
     module: 1 # if module is empty, module is 1.
               # Use Modules t split up a fixture.
               # e.g. a dimmer with a separate scroller
-    patch: [1] # array of patch offset from MSB to LSB
+    channel: [1] # array of patch offset from MSB to LSB
     highlight: 255 # value to set this channel to if fixture is in highlight mode
     max: 255 # maximum dmx value. leave empty for maximum possible value
     min: 0 # minimum dmx value. leave empty for minimum possible value

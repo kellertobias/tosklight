@@ -123,11 +123,3 @@ parameters:
 
   # -- Control
   misc_1: *param, # or 2, 3, etc. till 10
-
-
-  # any Channels starting with an underscore will not be mapped to the control desk
-  _control1:
-    module: 1
-    channel: [1]
-    default: 255 # we will set this channel fixed to this given value
-    highlight: 255 # value to set this channel to if fixture is in highlight mode
