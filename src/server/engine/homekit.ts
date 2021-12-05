@@ -24,12 +24,15 @@ class HomekitControl {
                 const chaBright = service.getCharacteristic(Characteristic.Brightness)
 
                 chaPower.on(CharacteristicEventTypes.GET, callback => {
-                    callback(undefined, fixture.getParameter('dim'));
+                    callback(undefined, fixture.getParameter('dim') > 0);
                 });
                 chaPower.on(CharacteristicEventTypes.SET, (valueString, callback) => {
                     try {
+                        console.log("Setting on/off level to:", {valueString});
                         if(valueString == false) {
                             fixture.setDimmer({value: {dim: 0}}, 'programmer')
+                        } else {
+                            fixture.setDimmer({value: {dim: 255}}, 'programmer')
                         }
                         callback();
                     } catch(e) {
