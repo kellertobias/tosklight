@@ -5,6 +5,7 @@ import { DMXOutput } from "./output";
 export class Patch {
     public routing: DMXOutput;
     private fixtures: Record<string, Fixture> = {};
+    private fixtureList : Fixture[] = []
     private groups: Record<string, {
         name: string;
         fixtures: Fixture[];
@@ -32,6 +33,14 @@ export class Patch {
         return group
     }
 
+    tick = () => {
+        // For loop instead of list.forEach for performance reasons
+        for(let i = 0; i < this.fixtureList.length; i++) {
+            const fixture = this.fixtureList[i];
+            fixture.tick()
+        }
+    }
+
     setup = (config: Configuration) => {
         const routing = config.show.routing
         const library = config.library
@@ -51,6 +60,8 @@ export class Patch {
                 {...fixtConfig}
             )
         })
+
+        this.fixtureList = Object.values(this.fixtures)
 
         Object.entries(config.show.groups).forEach(([id, {name, fixtures}]) => {
             this.groups[id] = {

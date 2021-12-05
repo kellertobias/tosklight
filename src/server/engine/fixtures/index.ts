@@ -1,6 +1,6 @@
 import { getUniverseAndChannel } from "../helpers/patch-notation";
 import { Preset, PresetGroupMappingValueOrPreset, ValueOrPreset } from "../presets";
-import { PresetGroup, PresetGroupNames } from "../../schemas/show-schema";
+import { ParamGroupMapping, PresetGroup, PresetGroupMapping, PresetGroupNames } from "../../schemas/show-schema";
 
 import { DMXChannel, DMXOutput } from "/server/engine/patch/output";
 import { LibraryEntry, LibraryFixtureParameter, ParameterName } from "/server/schemas/library-schema";
@@ -21,10 +21,12 @@ type ValueSource = 'programmer' | unknown
 
 export class Fixture {
     private parameters: Partial<Record<ParameterName, ParameterConfig>> = {}
-    private registeredParameters : ParameterName[] = []
+    private registeredParameters : {param: ParameterName, group: PresetGroup}[] = []
     private highlightParameters : ParameterName[] = []
 
-    private parameterValues: PresetGroupMappingValueOrPreset
+    private parameterGroups: PresetGroupMappingValueOrPreset = {} as PresetGroupMappingValueOrPreset
+
+    private availableParameterGroups: PresetGroup[] = []
 
     public readonly fixtureId : string;
     public name : string;
@@ -43,8 +45,12 @@ export class Fixture {
         if(fixtureType === undefined || fixtureType.parameters === undefined) {
             throw Error('Fixture Type not loaded')
         }
+
+        const availableParameterGroups : Partial<Record<PresetGroup, true>> = {}
+
         Object.entries(fixtureType.parameters).forEach(([param, paramConfig]: [ParameterName, LibraryFixtureParameter]) => {
             const {module: dmxModule, channel} = paramConfig
+            const group = ParamGroupMapping[param]
 
             this.parameters[param] = {
                 dmx: channel.map((singleChannel) => moduleChannels[dmxModule - 1][singleChannel - 1]),
@@ -57,29 +63,34 @@ export class Fixture {
                 virtual_dimmer: paramConfig.virtual_dimmer !== undefined ? paramConfig.virtual_dimmer : (param.startsWith('color_')),
                 highlight: paramConfig.highlight,
             }
-            this.registeredParameters.push(param)
+
+            this.registeredParameters.push({param, group})
+            availableParameterGroups[group] = true
+
             if (paramConfig.highlight !== undefined) {
                 this.highlightParameters.push(param)
             }
         })
+
+        this.availableParameterGroups = Object.keys(availableParameterGroups) as PresetGroup[]
         
         this.clear()
     }
 
     public clear() {
+        for(let i = 0; i < this.availableParameterGroups.length; i ++) {
+            const group = this.availableParameterGroups[i]
+            this.parameterGroups[group] = {value: {}}
+        }
+        
         //Efficiency Optimization
         for(let i = 0; i < this.registeredParameters.length; i ++) {
-            const param = this.registeredParameters[i]
+            const {param, group} = this.registeredParameters[i]
             const { defaultValue } = this.parameters[param]
             this.setParameter(param, defaultValue)
+            this.parameterGroups[group].value[param] = defaultValue
         }
-        if(this.parameterValues === undefined) {
-            this.parameterValues = {} as PresetGroupMappingValueOrPreset
-            for(let i = 0; i < PresetGroupNames.length; i++) {
-                const name = PresetGroupNames[i]
-                this.parameterValues[name] = {value: {}}
-            }
-        }
+
     }
 
     private setDmxValue(channels: DMXChannel[], value: number) {
@@ -111,7 +122,7 @@ export class Fixture {
         }
     }
 
-    public setParameter(name: ParameterName | string, value: number) {
+    private setParameter(name: ParameterName | string, value: number) {
         const param : ParameterConfig = this.parameters[name]
         if(value < param.min) {
             throw new Error('value-min')
@@ -123,10 +134,28 @@ export class Fixture {
         this.setDmxValue(param.dmx, value)
     }
 
-    private setParamGroup<T extends PresetGroup>(groupName: T, data: ValueOrPreset<T>) {
-        const lastData = this.parameterValues[groupName]
-        this.parameterValues[groupName] = data
-        console.log(this.parameterValues)
+    private setParamGroup<T extends keyof PresetGroupMappingValueOrPreset>(groupName: T, data: PresetGroupMappingValueOrPreset[T]) {
+        const lastData = this.parameterGroups[groupName]
+        this.parameterGroups[groupName] = data
+    }
+
+    private resolvePreset<T extends keyof PresetGroupMappingValueOrPreset>(input: ValueOrPreset<T>): PresetGroupMapping[T] {
+        if(input.value !== undefined) {
+            return input.value
+        }
+        throw Error('Presets not yet supported')
+    }
+
+    public tick() {
+        for(let i = 0; i < this.availableParameterGroups.length; i++) {
+            const group = this.availableParameterGroups[i]
+            const values = this.resolvePreset(this.parameterGroups[group])
+            const keys = Object.entries(values)
+            for (let j = 0; j < keys.length; j++) {
+                const [param, value] = keys[j];
+                this.setParameter(param, value)
+            }
+        }
     }
 
     // Dimmer Value

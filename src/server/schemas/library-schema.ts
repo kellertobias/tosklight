@@ -1,15 +1,14 @@
-export type ParameterName = 'dimmer' | 
+export type ParameterName = 'dim' | 
     'beam_strobe' | 'beam_iris' | 'beam_prism' | 'beam_effect' | 
     'frame_1_move' | 'frame_1_swiv' | 'frame_2_move' | 'frame_2_swiv' | 
-    'frame_3_move' | 'frame_3_swiv' | 'frame_4_move' | 'frame_5_swiv' | 
+    'frame_3_move' | 'frame_3_swiv' | 'frame_4_move' | 
     'focus' | 'zoom' | 
     'gobo_1_select' | 'gobo_1_rotate' | 'gobo_2_select' | 'gobo_2_rotate' | 
     'color_red' | 'color_green' | 'color_blue' |
     'color_ww' | 'color_cw' | 'color_amber' | 'color_uv' |
      'color1' | 'color2' | 
      'pos_pan' | 'pos_tilt' | 'pos_speed' | 
-     'media_folder' | 'media_file' | 'media_mode' | 'media_play_speed' |
-     'misc_1'
+     'media_folder' | 'media_file' | 'media_mode' | 'media_play_speed'
 
 export const LibraryFixtureConfigSchema = {
     type: 'object',

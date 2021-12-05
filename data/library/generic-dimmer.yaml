@@ -2,7 +2,7 @@ name: Generic Dimmer
 short: DIM
 desc: Generic 1 Channel Dimmer
 parameters:
-  dimmer:
+  dim:
     module: 1 # if module is empty, module is 1.
               # Use Modules t split up a fixture.
               # e.g. a dimmer with a separate scroller

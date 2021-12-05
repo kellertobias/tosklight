@@ -89,6 +89,9 @@ export class Show {
 
         // Register Effect Calculation
 
+        // Register Fixture Update
+        engine.registerTickAction(this.patch.tick)
+
         // Register DMX Outut Last
         engine.registerTickAction(this.patch.routing.tick)
 

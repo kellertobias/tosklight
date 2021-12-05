@@ -24,7 +24,7 @@ class HomekitControl {
                 const chaBright = service.getCharacteristic(Characteristic.Brightness)
 
                 chaPower.on(CharacteristicEventTypes.GET, callback => {
-                    callback(undefined, fixture.getParameter('dimmer'));
+                    callback(undefined, fixture.getParameter('dim'));
                 });
                 chaPower.on(CharacteristicEventTypes.SET, (valueString, callback) => {
                     try {
@@ -38,7 +38,7 @@ class HomekitControl {
                 });
 
                 chaBright.on(CharacteristicEventTypes.GET, (callback) => {
-                    callback(undefined, fixture.getParameter('dimmer'));
+                    callback(undefined, fixture.getParameter('dim'));
                 });
 
                 chaBright.on(CharacteristicEventTypes.SET, (valueString, callback) => {

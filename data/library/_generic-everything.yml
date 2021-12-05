@@ -52,7 +52,7 @@ config:
     time: 5s
 
 parameters:
-  dimmer: *param
+  dim: *param
   
   # -- Beam Presets
   beam_strobe: *param,

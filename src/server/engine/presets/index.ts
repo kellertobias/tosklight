@@ -8,8 +8,16 @@ import { ValueDimmer,
     PresetGroup,
 } from '../../schemas/show-schema'
 
-export type ValueOrPreset<T extends PresetGroup> = {value: PresetGroupMapping[T]} | {preset: Preset<T>}
-export type PresetGroupMappingValueOrPreset = Record<PresetGroup, ValueOrPreset<PresetGroup>>
+export type ValueOrPreset<T extends PresetGroup> = {value: PresetGroupMapping[T], preset?: undefined} | {preset: Preset<T>, value?: undefined}
+export type PresetGroupMappingValueOrPreset = {
+    'dimmer': ValueOrPreset<'dimmer'>;
+    'color': ValueOrPreset<'color'>;
+    'pos': ValueOrPreset<'pos'>;
+    'gobo': ValueOrPreset<'gobo'>;
+    'beam': ValueOrPreset<'beam'>;
+    'media': ValueOrPreset<'media'>;
+}
+
 
 
 export class Preset<T extends PresetGroup> {
