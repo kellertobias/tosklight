@@ -20,6 +20,7 @@ interface ParameterConfig {
 type ValueSource = 'programmer' | unknown
 
 export class Fixture {
+    public readonly type : LibraryEntry;
     private parameters: Partial<Record<ParameterName, ParameterConfig>> = {}
     private registeredParameters : {param: ParameterName, group: PresetGroup}[] = []
     private highlightParameters : ParameterName[] = []
@@ -40,18 +41,23 @@ export class Fixture {
     ) {
         console.log(`[PATCH] Adding Fixture ${fixtureType.name} (${id}/${meta.name}) at ${patch}`)
         this.fixtureId = id;
+        this.type = fixtureType;
+
         this.name = meta.name || `Fixture ${id}`
+
         const moduleChannels = getUniverseAndChannel(routing, patch)
+
         if(fixtureType === undefined || fixtureType.parameters === undefined) {
             throw Error('Fixture Type not loaded')
         }
 
+        let usingVirtualDimmer = false
         const availableParameterGroups : Partial<Record<PresetGroup, true>> = {}
 
         Object.entries(fixtureType.parameters).forEach(([param, paramConfig]: [ParameterName, LibraryFixtureParameter]) => {
             const {module: dmxModule, channel} = paramConfig
             const group = ParamGroupMapping[param]
-            console.log({param, dmxModule, channel})
+
             this.parameters[param] = {
                 dmx: channel.map((singleChannel) => moduleChannels[(dmxModule ?? 1) - 1][singleChannel - 1]),
                 defaultValue: paramConfig.default ?? 0,
@@ -64,6 +70,8 @@ export class Fixture {
                 highlight: paramConfig.highlight,
             }
 
+            usingVirtualDimmer = usingVirtualDimmer || (paramConfig.virtual_dimmer ?? false)
+
             this.registeredParameters.push({param, group})
             availableParameterGroups[group] = true
 
@@ -71,6 +79,24 @@ export class Fixture {
                 this.highlightParameters.push(param)
             }
         })
+
+        if(fixtureType.parameters.dim === undefined && usingVirtualDimmer) {
+            this.parameters.dim = {
+                dmx: [],
+                defaultValue: 0,
+                value: 0,
+                max: 255,
+                min: 0,
+                invert: false,
+                snap: false,
+                virtual_dimmer: false,
+                highlight: 255
+            }
+
+            this.highlightParameters.push('dim')
+            this.registeredParameters.unshift({param: 'dim', group: 'dimmer'})
+            availableParameterGroups['dimmer'] = true
+        }
 
         this.availableParameterGroups = Object.keys(availableParameterGroups) as PresetGroup[]
         
@@ -130,19 +156,22 @@ export class Fixture {
         if(param === undefined) {
             console.log(name, this.parameters)
         }
-        if(value < param.min) {
-            throw new Error('value-min')
-        }
-        if(value > param.max) {
-            throw new Error('value-max')
-        }
+        
         param.value = value;
-        this.setDmxValue(param.dmx, value)
-    }
+        let dmxValue = value
+        if(param.virtual_dimmer) {
+            const dimmerValue = this.parameters.dim?.value ?? 100
+            dmxValue = dmxValue * dimmerValue / 255.0
+        }
 
-    private setParamGroup<T extends keyof PresetGroupMappingValueOrPreset>(groupName: T, data: PresetGroupMappingValueOrPreset[T]) {
-        const lastData = this.parameterGroups[groupName]
-        this.parameterGroups[groupName] = data
+        if(dmxValue < param.min) {
+            dmxValue = param.min
+        }
+        if(dmxValue > param.max) {
+            dmxValue = param.max
+        }
+
+        this.setDmxValue(param.dmx, Math.round(dmxValue))
     }
 
     private resolvePreset<T extends keyof PresetGroupMappingValueOrPreset>(input: ValueOrPreset<T>): PresetGroupMapping[T] {
@@ -166,32 +195,34 @@ export class Fixture {
 
     // Dimmer Value
     public setDimmer(data: ValueOrPreset<'dimmer'>, source: ValueSource) {
-        this.setParamGroup('dimmer', data)
+        this.parameterGroups.dimmer = data
+        console.log('dimmer', data)
     }
 
     // Red, Green, Blue || WarmWhite, ColdWhite, UV || Wheel 1, Wheel 2
     public setColor(data: ValueOrPreset<'color'>, source: ValueSource) {
-        this.setParamGroup('color', data)
+        this.parameterGroups.color = data
+        console.log('color', data)
     }
 
     // Pan, Tile, Speed, Focus
     public setPos(data: ValueOrPreset<'pos'>, source: ValueSource) {
-        this.setParamGroup('pos', data)
+        this.parameterGroups.pos = data
     }
 
     // Gobo 1 & Rot., Goto 2 & Rot.
     public setGobo(data: ValueOrPreset<'gobo'>, source: ValueSource) {
-        this.setParamGroup('gobo', data)
+        this.parameterGroups.gobo = data
     }
 
     // Shutter, Zoom, Iris, Prism/ Effect
     public setBeam(data: ValueOrPreset<'beam'>, source: ValueSource) {
-        this.setParamGroup('beam', data)
+        this.parameterGroups.beam = data
     }
 
     // Pool, Index, Mode, Speed
     public setMedia(data: ValueOrPreset<'media'>, source: ValueSource) {
-        this.setParamGroup('media', data)
+        this.parameterGroups.media = data
     }
 
     // Any Command from Fixture Definition

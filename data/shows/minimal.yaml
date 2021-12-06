@@ -11,19 +11,19 @@ fixtures:
   '102':
     type: generic-rgb
     name: RGB 1
-    patch: ['1.10']
+    patch: ['1.11']
   '103':
     type: generic-rgb
     name: RGB 2
-    patch: ['1.20']
+    patch: ['1.21']
   '104':
     type: generic-rgb
     name: RGB 3
-    patch: ['1.30']
+    patch: ['1.31']
   '105':
     type: generic-rgb
     name: RGB 4
-    patch: ['1.40']
+    patch: ['1.41']
 groups:
   '1': 
     name: 'All Generic Dimmers'

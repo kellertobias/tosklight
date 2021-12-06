@@ -36,6 +36,7 @@ export class DMXUniverse {
     public changed = false
     public skipped = 0
     private artnetPacket: ArtDmx
+    private lastFrame : number[] = []
 
     constructor(universe: number, config: ShowRoutingType) {
         this.universe = universe
@@ -51,6 +52,15 @@ export class DMXUniverse {
         for(let i = 0; i < this.channels.length; i++) {
             this.artnetPacket.data[i] = this.channels[i].value
         }
+
+        if(this.artnetPacket.data.join(',') !== this.lastFrame.join(',')) {
+            this.lastFrame = [...this.artnetPacket.data]
+            const lineSize = 10
+            for(let i = 0; i < 64; i += lineSize ) {
+                console.log(`${`${i + 1}`.padStart(3, ' ')}: ${this.lastFrame.slice(i, i+lineSize).map(x => x.toString(16).padStart(2, '0')).join(' ')}`)
+            }
+        }
+
         controller.sendBroadcastPacket(this.artnetPacket);
         this.changed = false
     }

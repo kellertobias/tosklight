@@ -1,5 +1,7 @@
-import {Accessory, Characteristic, CharacteristicEventTypes as CET, Service, Categories, uuid} from 'hap-nodejs'
+import {Accessory,Bridge,  Characteristic, CharacteristicEventTypes as CET, Service, Categories, uuid} from 'hap-nodejs'
 import ColorConvert from 'color-convert'
+
+import { SoftwareVersion } from '../../shared/generic'
 
 import { Patch } from './patch'
 import { Fixture } from './fixtures'
@@ -23,6 +25,13 @@ const HSBtoRGB = (hsb: {hue: number, sat: number}, fixture: Fixture): void => {
     fixture.setColor({value: {red, green, blue}}, 'programmer')
 }
 
+const HomekitBridge = new Bridge('ToskLight Bridge', uuid.generate('tosklight.bridge'))
+const bridgeInfo = HomekitBridge.getService(Service.AccessoryInformation)
+bridgeInfo.setCharacteristic(Characteristic.Manufacturer, 'Tobisk Media')
+bridgeInfo.setCharacteristic(Characteristic.Model, 'ToskLight DMX Light Controller')
+bridgeInfo.setCharacteristic(Characteristic.SerialNumber, `ToskLight Bridge`)
+bridgeInfo.setCharacteristic(Characteristic.FirmwareRevision, SoftwareVersion)
+
 class HomekitControl {
     private patch: Patch | null;
 
@@ -42,9 +51,15 @@ class HomekitControl {
                 uuid.generate(`tosklight.fixtures.${fixture.fixtureId}`)
             )
             const service = new Service.Lightbulb(fixture.name)
+            const info = accessory.getService(Service.AccessoryInformation)
+            info.setCharacteristic(Characteristic.Manufacturer, 'Tobisk Media')
+            info.setCharacteristic(Characteristic.Model, `Fixture Type: ${fixture.type.name}`)
+            info.setCharacteristic(Characteristic.SerialNumber, `ToskLight Fixture ${fixture.fixtureId}`)
+            info.setCharacteristic(Characteristic.FirmwareRevision, SoftwareVersion)
 
             // Dimmer Handling
             if(fixture.hasParameterGroup('dimmer')) {
+                let dimmerOnOff = 0
                 const chaPower = service.getCharacteristic(Characteristic.On)
                 const chaBright = service.getCharacteristic(Characteristic.Brightness)
 
@@ -52,10 +67,12 @@ class HomekitControl {
                     callback(undefined, fixture.getParameter('dim') > 0);
                 });
                 chaPower.on(CET.SET, (valueString, callback) => {
-                    console.log("Setting on/off level to:", {valueString});
+                    console.log(`[Homebridge] Fixture ${fixture.fixtureId} - PWR = ${valueString}`)
                     if(valueString == false) {
+                        dimmerOnOff = 0
                         fixture.setDimmer({value: {dim: 0}}, 'programmer')
-                    } else {
+                    } else if(dimmerOnOff == 0) {
+                        dimmerOnOff = 255
                         fixture.setDimmer({value: {dim: 255}}, 'programmer')
                     }
                     callback();
@@ -66,8 +83,9 @@ class HomekitControl {
                 });
 
                 chaBright.on(CET.SET, (valueString, callback) => {
-                    console.log("Setting brightness level to:", {valueString});
+                    console.log(`[Homebridge] Fixture ${fixture.fixtureId} - DIM = ${valueString}`)
                     const value = Number(valueString)
+                    dimmerOnOff = value
                     fixture.setDimmer({value: {dim: value * 255.0 / 100}}, 'programmer')
                     callback();
                 });
@@ -85,7 +103,7 @@ class HomekitControl {
                     callback(undefined, hue)
                 })
                 chaHue.on(CET.SET, (valueString, callback) => {
-                    console.log(`Setting Color HUE to ${valueString}`)
+                    console.log(`[Homebridge] Fixture ${fixture.fixtureId} - HUE = ${valueString}`)
                     currentHSB.hue = Number(valueString)
                     HSBtoRGB(currentHSB, fixture)
                     callback()
@@ -96,7 +114,7 @@ class HomekitControl {
                     callback(undefined, sat)
                 })
                 chaSat.on(CET.SET, (valueString, callback) => {
-                    console.log(`Setting Color SAT to ${valueString}`)
+                    console.log(`[Homebridge] Fixture ${fixture.fixtureId} - SAT = ${valueString}`)
                     currentHSB.sat = Number(valueString)
                     HSBtoRGB(currentHSB, fixture)
                     callback()
@@ -104,11 +122,19 @@ class HomekitControl {
             }
 
             accessory.addService(service)
-            accessory.publish({
-                username: `12:34:56:${fixtMac}`,
-                pincode: '123-45-678',
-                category: Categories.LIGHTBULB
-            })
+            // accessory.publish({
+            //     username: `12:34:56:${fixtMac}`,
+            //     pincode: '123-45-678',
+            //     category: Categories.LIGHTBULB
+            // })
+
+            HomekitBridge.addBridgedAccessory(accessory)
+        })
+
+        HomekitBridge.publish({
+            username: `12:34:56:00:00:00`,
+            pincode: '123-45-678',
+            category: 2
         })
     }
 }

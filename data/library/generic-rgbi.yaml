@@ -1,19 +1,19 @@
-name: Generic RGB Par with Control
-short: RGB
+name: Generic RGBI Par
+short: RGBI
 desc: Generic 3 Channel RGB Par
 parameters:
-  color_red:
+  red:
     channel: [1] # array of channel offset from MSB to LSB
     highlight: 255 # value to set this channel to if fixture is in highlight mode
-    virtual_dimmer: true
-  color_green:
+    default: 255
+  green:
     channel: [2] # array of channel offset from MSB to LSB
     highlight: 255 # value to set this channel to if fixture is in highlight mode
-    virtual_dimmer: true
-  color_blue:
+    default: 255
+  blue:
     channel: [3] # array of channel offset from MSB to LSB
     highlight: 255 # value to set this channel to if fixture is in highlight mode
-    virtual_dimmer: true
-  _control1: # Channels starting with an underscore will not be mapped to the control desk
-    default: 255 # we will set this channel fixed to this given value
+    default: 255
+  dim:
+    channel: [4] # array of patch offset from MSB to LSB
     highlight: 255 # value to set this channel to if fixture is in highlight mode
