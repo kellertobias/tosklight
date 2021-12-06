@@ -1,14 +1,12 @@
 export type ParameterName = 'dim' | 
-    'beam_strobe' | 'beam_iris' | 'beam_prism' | 'beam_effect' | 
-    'frame_1_move' | 'frame_1_swiv' | 'frame_2_move' | 'frame_2_swiv' | 
-    'frame_3_move' | 'frame_3_swiv' | 'frame_4_move' | 
+    'strobe' | 'iris' | 'prism' | 'effect1' | 'effect2' | 
     'focus' | 'zoom' | 
-    'gobo_1_select' | 'gobo_1_rotate' | 'gobo_2_select' | 'gobo_2_rotate' | 
-    'color_red' | 'color_green' | 'color_blue' |
-    'color_ww' | 'color_cw' | 'color_amber' | 'color_uv' |
-     'color1' | 'color2' | 
-     'pos_pan' | 'pos_tilt' | 'pos_speed' | 
-     'media_folder' | 'media_file' | 'media_mode' | 'media_play_speed'
+    'gobo1' | 'gobo1idx' | 'gobo2' | 'gobo2idx' | 
+    'red' | 'green' | 'blue' |
+    'warm' | 'cold' | 'amber' | 'uv' |
+    'color1' | 'color2' | 
+    'pan' | 'tilt' | 'movespeed' | 
+    'mediapool' | 'mediaidx' | 'mediamode' | 'mediaspeed'
 
 export const LibraryFixtureConfigSchema = {
     type: 'object',
@@ -76,48 +74,33 @@ export const LibrarySchema = {
             type: 'object',
             properties: {
                 dimmer: LibraryFixtureParameterSchema,
-                beam_strobe: LibraryFixtureParameterSchema,
-                beam_iris: LibraryFixtureParameterSchema,
-                beam_prism: LibraryFixtureParameterSchema,
-                beam_effect: LibraryFixtureParameterSchema,
-                frame_1_move: LibraryFixtureParameterSchema,
-                frame_1_swiv: LibraryFixtureParameterSchema,
-                frame_2_move: LibraryFixtureParameterSchema,
-                frame_2_swiv: LibraryFixtureParameterSchema,
-                frame_3_move: LibraryFixtureParameterSchema,
-                frame_3_swiv: LibraryFixtureParameterSchema,
-                frame_4_move: LibraryFixtureParameterSchema,
-                frame_4_swiv: LibraryFixtureParameterSchema,
+                strobe: LibraryFixtureParameterSchema,
+                iris: LibraryFixtureParameterSchema,
+                prism: LibraryFixtureParameterSchema,
+                effect1: LibraryFixtureParameterSchema,
+                effect2: LibraryFixtureParameterSchema,
                 focus: LibraryFixtureParameterSchema,
                 zoom: LibraryFixtureParameterSchema,
-                gobo_1_select: LibraryFixtureParameterSchema,
-                gobo_1_rotate: LibraryFixtureParameterSchema,
-                gobo_2_select: LibraryFixtureParameterSchema,
-                gobo_2_rotate: LibraryFixtureParameterSchema,
-                color_red: LibraryFixtureParameterSchema,
-                color_green: LibraryFixtureParameterSchema,
-                color_blue: LibraryFixtureParameterSchema,
-                color_ww: LibraryFixtureParameterSchema,
-                color_cw: LibraryFixtureParameterSchema,
-                color_amber: LibraryFixtureParameterSchema,
-                color_uv: LibraryFixtureParameterSchema,
+                gobo1: LibraryFixtureParameterSchema,
+                gobo1idx: LibraryFixtureParameterSchema,
+                gobo2: LibraryFixtureParameterSchema,
+                gobo2idx: LibraryFixtureParameterSchema,
+                red: LibraryFixtureParameterSchema,
+                green: LibraryFixtureParameterSchema,
+                blue: LibraryFixtureParameterSchema,
+                warm: LibraryFixtureParameterSchema,
+                cold: LibraryFixtureParameterSchema,
+                amber: LibraryFixtureParameterSchema,
+                uv: LibraryFixtureParameterSchema,
                 color1: LibraryFixtureParameterSchema,
                 color2: LibraryFixtureParameterSchema,
-                pos_pan: LibraryFixtureParameterSchema,
-                pos_tilt: LibraryFixtureParameterSchema,
-                pos_speed: LibraryFixtureParameterSchema,
-                media_folder: LibraryFixtureParameterSchema,
-                media_file: LibraryFixtureParameterSchema,
-                media_mode: LibraryFixtureParameterSchema,
-                media_speed: LibraryFixtureParameterSchema,
-                misc_1: LibraryFixtureParameterSchema,
-                misc_2: LibraryFixtureParameterSchema,
-                misc_3: LibraryFixtureParameterSchema,
-                misc_4: LibraryFixtureParameterSchema,
-                misc_5: LibraryFixtureParameterSchema,
-                misc_6: LibraryFixtureParameterSchema,
-                misc_7: LibraryFixtureParameterSchema,
-                misc_8: LibraryFixtureParameterSchema,
+                pan: LibraryFixtureParameterSchema,
+                tilt: LibraryFixtureParameterSchema,
+                movespeed: LibraryFixtureParameterSchema,
+                mediapool: LibraryFixtureParameterSchema,
+                mediaidx: LibraryFixtureParameterSchema,
+                mediamode: LibraryFixtureParameterSchema,
+                mediaspeed: LibraryFixtureParameterSchema,
             }
         }
     },

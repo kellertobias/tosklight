@@ -51,16 +51,16 @@ export class Fixture {
         Object.entries(fixtureType.parameters).forEach(([param, paramConfig]: [ParameterName, LibraryFixtureParameter]) => {
             const {module: dmxModule, channel} = paramConfig
             const group = ParamGroupMapping[param]
-
+            console.log({param, dmxModule, channel})
             this.parameters[param] = {
-                dmx: channel.map((singleChannel) => moduleChannels[dmxModule - 1][singleChannel - 1]),
+                dmx: channel.map((singleChannel) => moduleChannels[(dmxModule ?? 1) - 1][singleChannel - 1]),
                 defaultValue: paramConfig.default ?? 0,
                 value: paramConfig.default ?? 0,
                 max: (256 * channel.length - 1) ?? paramConfig.max,
                 min: 0 ?? paramConfig.max,
                 invert: false ?? paramConfig.invert,
                 snap: false ?? paramConfig.snap,
-                virtual_dimmer: paramConfig.virtual_dimmer !== undefined ? paramConfig.virtual_dimmer : (param.startsWith('color_')),
+                virtual_dimmer: paramConfig.virtual_dimmer ?? false,
                 highlight: paramConfig.highlight,
             }
 
@@ -102,6 +102,9 @@ export class Fixture {
 
     public getParameter(parameter: ParameterName): number {
         const param = this.parameters[parameter]
+        if(param === undefined) {
+            return undefined
+        }
         return param.value / param.max
     }
 
@@ -124,6 +127,9 @@ export class Fixture {
 
     private setParameter(name: ParameterName | string, value: number) {
         const param : ParameterConfig = this.parameters[name]
+        if(param === undefined) {
+            console.log(name, this.parameters)
+        }
         if(value < param.min) {
             throw new Error('value-min')
         }

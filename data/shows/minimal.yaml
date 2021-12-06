@@ -8,6 +8,22 @@ fixtures:
     type: generic-dimmer
     name: Dimmer 2
     patch: ['1.2']
+  '102':
+    type: generic-rgb
+    name: RGB 1
+    patch: ['1.10']
+  '103':
+    type: generic-rgb
+    name: RGB 2
+    patch: ['1.20']
+  '104':
+    type: generic-rgb
+    name: RGB 3
+    patch: ['1.30']
+  '105':
+    type: generic-rgb
+    name: RGB 4
+    patch: ['1.40']
 groups:
   '1': 
     name: 'All Generic Dimmers'

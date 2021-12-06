@@ -3,15 +3,15 @@ short: RGB
 desc: Generic 3 Channel RGB Par
 parameters:
   color_red:
-    patch: [1] # array of patch offset from MSB to LSB
+    channel: [1] # array of channel offset from MSB to LSB
     highlight: 255 # value to set this channel to if fixture is in highlight mode
     virtual_dimmer: true
   color_green:
-    patch: [2] # array of patch offset from MSB to LSB
+    channel: [2] # array of channel offset from MSB to LSB
     highlight: 255 # value to set this channel to if fixture is in highlight mode
     virtual_dimmer: true
   color_blue:
-    patch: [3] # array of patch offset from MSB to LSB
+    channel: [3] # array of channel offset from MSB to LSB
     highlight: 255 # value to set this channel to if fixture is in highlight mode
     virtual_dimmer: true
   _control1: # Channels starting with an underscore will not be mapped to the control desk

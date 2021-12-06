@@ -1,11 +1,11 @@
 import { ParameterName } from "./library-schema";
 
 export type ValueDimmer = {dim?: number};
-export type ValueColor = {red?: number, green?: number, blue?: number, warm?: number, cold?: number, uv?: number, wheel1?: number, wheel2?: number}
+export type ValueColor = {red?: number, green?: number, blue?: number, warm?: number, cold?: number, uv?: number, color1?: number, color2?: number}
 export type ValuePos = {pan?: number; tilt?: number, speed?: number, focus?: number}
-export type ValueGobo = {gobo1?: number; idx1?: number, gobo2?: number, idx2?: number}
-export type ValueBeam = {shut?:number, zoom?: number, effect?: number, iris?: number;}
-export type ValueMedia = {pool?: number; idx?: number, mode?: number, speed?: number}
+export type ValueGobo = {gobo1?: number; gobo1idx?: number, gobo2?: number, gobo2idx?: number}
+export type ValueBeam = {strobe?:number, zoom?: number, iris?: number; prism?: number; effect1?: number, effect2?: number,}
+export type ValueMedia = {mediapool?: number; mediaidx?: number, mediamode?: number, mediaspeed?: number}
 
 
 export type PresetGroupMapping = {
@@ -19,39 +19,33 @@ export type PresetGroupMapping = {
 
 export const ParamGroupMapping : Record<ParameterName, keyof PresetGroupMapping> = {
     'dim': 'dimmer',
-    'beam_strobe': 'beam',
-    'beam_iris': 'beam',
-    'beam_prism': 'beam',
-    'beam_effect': 'beam',
-    'frame_1_move': 'beam',
-    'frame_1_swiv': 'beam',
-    'frame_2_move': 'beam',
-    'frame_2_swiv': 'beam',
-    'frame_3_move': 'beam',
-    'frame_3_swiv': 'beam',
-    'frame_4_move': 'beam',
+    'strobe': 'beam',
+    'iris': 'beam',
+    'prism': 'beam',
+    'effect1': 'beam',
+    'effect2': 'beam',
     'focus': 'beam',
     'zoom': 'beam',
-    'gobo_1_select': 'gobo',
-    'gobo_1_rotate': 'gobo',
-    'gobo_2_select': 'gobo',
-    'gobo_2_rotate': 'gobo',
-    'color_red': 'color',
-    'color_green': 'color',
-    'color_blue': 'color',
-    'color_ww': 'color',
-    'color_cw': 'color',
-    'color_amber': 'color',
-    'color_uv': 'color',
+    'gobo1': 'gobo',
+    'gobo1idx': 'gobo',
+    'gobo2': 'gobo',
+    'gobo2idx': 'gobo',
+    'red': 'color',
+    'green': 'color',
+    'blue': 'color',
+    'warm': 'color',
+    'cold': 'color',
+    'amber': 'color',
+    'uv': 'color',
     'color1': 'color',
     'color2': 'color',
-    'pos_pan': 'pos',
-    'pos_tilt': 'pos',
-    'pos_speed': 'pos',
-    'media_folder': 'media', 
-    'media_file': 'media', 
-    'media_mode': 'media', 
-    'media_play_speed': 'media', 
+    'pan': 'pos',
+    'tilt': 'pos',
+    'movespeed': 'pos',
+    'mediapool': 'media', 
+    'mediaidx': 'media', 
+    'mediamode': 'media', 
+    'mediaspeed': 'media', 
 }
 
 export const PresetGroupNames = ['dimmer', 'color', 'pos', 'gobo', 'beam', 'media']

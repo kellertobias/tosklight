@@ -28,8 +28,6 @@ export class DMXChannel {
     public get value(): number {
         return this.currentValue
     }
-
-    
 }
 
 export class DMXUniverse {
