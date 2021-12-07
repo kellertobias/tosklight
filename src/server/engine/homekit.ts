@@ -22,7 +22,7 @@ const RGBtoHSB = (fixture: Fixture): {hue: number, sat: number, bright: number} 
 
 const HSBtoRGB = (hsb: {hue: number, sat: number}, fixture: Fixture): void => {
     const [red, green, blue] = ColorConvert.hsv.rgb([hsb.hue ?? 0, hsb.sat ?? 0, 100])
-    fixture.setColor({value: {red, green, blue}}, 'programmer')
+    fixture.setColor({value: {red, green, blue}}, {source: 'programmer', fade: HomekitControl.masterFadeTime})
 }
 
 const HomekitBridge = new Bridge('ToskLight Bridge', uuid.generate('tosklight.bridge'))
@@ -33,6 +33,7 @@ bridgeInfo.setCharacteristic(Characteristic.SerialNumber, `ToskLight Bridge`)
 bridgeInfo.setCharacteristic(Characteristic.FirmwareRevision, SoftwareVersion)
 
 class HomekitControl {
+    public static masterFadeTime = 2000
     private patch: Patch | null;
 
     public load(patch: Patch) {
@@ -70,10 +71,10 @@ class HomekitControl {
                     console.log(`[Homebridge] Fixture ${fixture.fixtureId} - PWR = ${valueString}`)
                     if(valueString == false) {
                         dimmerOnOff = 0
-                        fixture.setDimmer({value: {dim: 0}}, 'programmer')
+                        fixture.setDimmer({value: {dim: 0}}, {source: 'programmer', fade: HomekitControl.masterFadeTime})
                     } else if(dimmerOnOff == 0) {
                         dimmerOnOff = 255
-                        fixture.setDimmer({value: {dim: 255}}, 'programmer')
+                        fixture.setDimmer({value: {dim: 255}}, {source: 'programmer', fade: HomekitControl.masterFadeTime})
                     }
                     callback();
                 });
@@ -86,7 +87,7 @@ class HomekitControl {
                     console.log(`[Homebridge] Fixture ${fixture.fixtureId} - DIM = ${valueString}`)
                     const value = Number(valueString)
                     dimmerOnOff = value
-                    fixture.setDimmer({value: {dim: value * 255.0 / 100}}, 'programmer')
+                    fixture.setDimmer({value: {dim: value * 255.0 / 100}}, {source: 'programmer', fade: HomekitControl.masterFadeTime})
                     callback();
                 });
             }

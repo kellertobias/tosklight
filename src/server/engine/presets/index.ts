@@ -8,14 +8,24 @@ import { ValueDimmer,
     PresetGroup,
 } from '../../schemas/show-schema'
 
-export type ValueOrPreset<T extends PresetGroup> = {value: PresetGroupMapping[T], preset?: undefined} | {preset: Preset<T>, value?: undefined}
+export type ValueSource = {} | 'programmer'
+export type ValueOrPreset<T extends PresetGroup> = {value: PresetGroupMapping[T], preset?: undefined, source?: ValueSource} | {preset: Preset<T>, value?: undefined, source?: ValueSource}
+export type PresetGroupSeting<T> = {
+    current: T;
+    next?: T;
+    delay: number;
+    delayStarted?: Date;
+    fade: number;
+    fadeStarted?: Date;
+    changes?: T
+}
 export type PresetGroupMappingValueOrPreset = {
-    'dimmer': ValueOrPreset<'dimmer'>;
-    'color': ValueOrPreset<'color'>;
-    'pos': ValueOrPreset<'pos'>;
-    'gobo': ValueOrPreset<'gobo'>;
-    'beam': ValueOrPreset<'beam'>;
-    'media': ValueOrPreset<'media'>;
+    'dimmer': PresetGroupSeting<ValueOrPreset<'dimmer'>>;
+    'color': PresetGroupSeting<ValueOrPreset<'color'>>;
+    'pos': PresetGroupSeting<ValueOrPreset<'pos'>>;
+    'gobo': PresetGroupSeting<ValueOrPreset<'gobo'>>;
+    'beam': PresetGroupSeting<ValueOrPreset<'beam'>>;
+    'media': PresetGroupSeting<ValueOrPreset<'media'>>;
 }
 
 

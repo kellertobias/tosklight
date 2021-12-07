@@ -1,5 +1,5 @@
 import { getUniverseAndChannel } from "../helpers/patch-notation";
-import { Preset, PresetGroupMappingValueOrPreset, ValueOrPreset } from "../presets";
+import { Preset, PresetGroupMappingValueOrPreset, ValueOrPreset, ValueSource } from "../presets";
 import { ParamGroupMapping, PresetGroup, PresetGroupMapping, PresetGroupNames } from "../../schemas/show-schema";
 
 import { DMXChannel, DMXOutput } from "/server/engine/patch/output";
@@ -17,7 +17,8 @@ interface ParameterConfig {
     dmx: DMXChannel[]
 }
 
-type ValueSource = 'programmer' | unknown
+type SetParamOptions = {source?: ValueSource, fade?: number, delay?: number}
+
 
 export class Fixture {
     public readonly type : LibraryEntry;
@@ -106,7 +107,7 @@ export class Fixture {
     public clear() {
         for(let i = 0; i < this.availableParameterGroups.length; i ++) {
             const group = this.availableParameterGroups[i]
-            this.parameterGroups[group] = {value: {}}
+            this.parameterGroups[group] = {current: {value: {}}, fade: 0, delay: 0}
         }
         
         //Efficiency Optimization
@@ -114,7 +115,7 @@ export class Fixture {
             const {param, group} = this.registeredParameters[i]
             const { defaultValue } = this.parameters[param]
             this.setParameter(param, defaultValue)
-            this.parameterGroups[group].value[param] = defaultValue
+            this.parameterGroups[group].current.value[param] = defaultValue
         }
 
     }
@@ -184,7 +185,7 @@ export class Fixture {
     public tick() {
         for(let i = 0; i < this.availableParameterGroups.length; i++) {
             const group = this.availableParameterGroups[i]
-            const values = this.resolvePreset(this.parameterGroups[group])
+            const values = this.resolvePreset(this.parameterGroups[group].current)
             const keys = Object.entries(values)
             for (let j = 0; j < keys.length; j++) {
                 const [param, value] = keys[j];
@@ -194,35 +195,84 @@ export class Fixture {
     }
 
     // Dimmer Value
-    public setDimmer(data: ValueOrPreset<'dimmer'>, source: ValueSource) {
-        this.parameterGroups.dimmer = data
+    // @TODO: Define SetParamOptions (fade, delay, source)
+    // @TODO: Define function to calculate the steps
+    // @TODO: If Snap Steps will be set to sero after snapping
+    // @TODO: delayStarted and fadeStarted are used to determine if delay/fade is running right now
+    //        delay & fade are used for programmer later
+    // @TODO: Add delay to fadeStarted start date. If one of these dates is in future, do nothing
+    // @TODO: If fadeStarted/ delayStarted is longer then fade/ delay ms ago: set to undefined.
+    public setDimmer(data: ValueOrPreset<'dimmer'>, options: SetParamOptions) {
+        this.parameterGroups.dimmer = {
+            ...this.parameterGroups.dimmer,
+            ...options,
+            fadeStarted: new Date(),
+            delayStarted: new Date(),
+            next: data,
+        }
+
         console.log('dimmer', data)
     }
 
     // Red, Green, Blue || WarmWhite, ColdWhite, UV || Wheel 1, Wheel 2
-    public setColor(data: ValueOrPreset<'color'>, source: ValueSource) {
-        this.parameterGroups.color = data
+    public setColor(data: ValueOrPreset<'color'>, options: SetParamOptions) {
+        this.parameterGroups.color = {
+            ...this.parameterGroups.color,
+            ...options,
+            fadeStarted: new Date(),
+            delayStarted: new Date(),
+            next: data,
+        }
+
         console.log('color', data)
     }
 
     // Pan, Tile, Speed, Focus
-    public setPos(data: ValueOrPreset<'pos'>, source: ValueSource) {
-        this.parameterGroups.pos = data
+    public setPos(data: ValueOrPreset<'pos'>, options: SetParamOptions) {
+        this.parameterGroups.pos = {
+            ...this.parameterGroups.pos,
+            ...options,
+            fadeStarted: new Date(),
+            delayStarted: new Date(),
+            next: data,
+        }
+
     }
 
     // Gobo 1 & Rot., Goto 2 & Rot.
-    public setGobo(data: ValueOrPreset<'gobo'>, source: ValueSource) {
-        this.parameterGroups.gobo = data
+    public setGobo(data: ValueOrPreset<'gobo'>, options: SetParamOptions) {
+        this.parameterGroups.gobo = {
+            ...this.parameterGroups.gobo,
+            ...options,
+            fadeStarted: new Date(),
+            delayStarted: new Date(),
+            next: data,
+        }
+
     }
 
     // Shutter, Zoom, Iris, Prism/ Effect
-    public setBeam(data: ValueOrPreset<'beam'>, source: ValueSource) {
-        this.parameterGroups.beam = data
+    public setBeam(data: ValueOrPreset<'beam'>, options: SetParamOptions) {
+        this.parameterGroups.beam = {
+            ...this.parameterGroups.beam,
+            ...options,
+            fadeStarted: new Date(),
+            delayStarted: new Date(),
+            next: data,
+        }
+
     }
 
     // Pool, Index, Mode, Speed
-    public setMedia(data: ValueOrPreset<'media'>, source: ValueSource) {
-        this.parameterGroups.media = data
+    public setMedia(data: ValueOrPreset<'media'>, options: SetParamOptions) {
+        this.parameterGroups.media = {
+            ...this.parameterGroups.media,
+            ...options,
+            fadeStarted: new Date(),
+            delayStarted: new Date(),
+            next: data,
+        }
+
     }
 
     // Any Command from Fixture Definition
