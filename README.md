@@ -53,20 +53,21 @@ Frontend:
 
 ## Roadmap
 
--   Basic Software Layout (no UI yet)
--   DMX Output
--   Fixture Basics (Dimmer/Virtual Dimmer, Color, DMX Patch)
--   Read Showfiles from YAML
+-   ✓ Basic Software Layout (no UI yet)
+-   ✓ DMX Output
+-   ✓ Fixture Basics (Dimmer/Virtual Dimmer, Color, DMX Patch)
+-   ✓ Read Showfiles from YAML
+-   ✓ Apple HomeKit UI
+-   Fadetimes
 -   Value-Presets
 -   Scenes, Cues (only existing ones from the showfile)
 -   Tracking Engine
--   Fadetimes
 -   Effects as Values
 -   Basic UI: Show currently running Sequences
 -   Basic UI: Show Fixtures
 -   Basic UI: Load/ Save showfile
 -   Basic UI: Show DMX Values/ Patch
--   Programmer Matrix and Creating new Scenes in the software
+-   Programmer Matrix and Creating new Scenes/ Cues in the software
 
 # License
 
