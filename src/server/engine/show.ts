@@ -77,7 +77,7 @@ export class Show {
         engine.reset()
 
         const {errors, library} = this.loadLibrary()
-        const show = this.loadConfig('./data/shows/minimal.yaml')
+        const show = this.loadConfig('./data/shows/lacalidad.yaml')
         if(!show) {
             console.log(`Showfile Empty or not Correct. Aborting`)
             return

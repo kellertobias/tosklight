@@ -63,7 +63,7 @@ export class Patch {
 
         this.fixtureList = Object.values(this.fixtures)
 
-        Object.entries(config.show.groups).forEach(([id, {name, fixtures}]) => {
+        Object.entries(config?.show?.groups ?? {}).forEach(([id, {name, fixtures}]) => {
             this.groups[id] = {
                 name,
                 fixtures: fixtures.map(this.getFixture)
