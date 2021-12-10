@@ -32,6 +32,6 @@ export const getUniverseAndChannel = (routing: DMXOutput, patch: (number | strin
 
         patchChannels[mod] = universe.channels.slice(channel)
     })
-
+    console.log(patchChannels)
     return patchChannels
 }
