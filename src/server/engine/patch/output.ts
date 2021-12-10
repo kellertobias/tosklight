@@ -52,10 +52,10 @@ export class DMXUniverse {
         for(let i = 0; i < this.channels.length; i++) {
             this.artnetPacket.data[i] = this.channels[i].value
         }
-        console.log(`Sending Universe ${this.universe}: ...`)
         if(this.artnetPacket.data.join(',') !== this.lastFrame.join(',')) {
             this.lastFrame = [...this.artnetPacket.data]
             const lineSize = 10
+            console.log(`Sending Universe ${this.universe}: ...`)
             for(let i = 0; i < 64; i += lineSize ) {
                 console.log(`${`${i + 1}`.padStart(3, ' ')}: ${this.lastFrame.slice(i, i+lineSize).map(x => x.toString(16).padStart(2, '0')).join(' ')}`)
             }
