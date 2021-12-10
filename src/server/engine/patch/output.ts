@@ -32,6 +32,7 @@ export class DMXChannel {
 
 export class DMXUniverse {
     public readonly universe: number;
+    public readonly artnetUniverse: number;
     public readonly channels: DMXChannel[];
     public changed = false
     public skipped = 0
@@ -40,28 +41,43 @@ export class DMXUniverse {
 
     constructor(universe: number, config: ShowRoutingType) {
         this.universe = universe
+        this.artnetUniverse = config.artnet.universe
         
-        this.channels = [...new Array(config.size ?? 512)].map((x, channel) => new DMXChannel(universe, channel, this))
+        this.channels = [...new Array(config.size ?? 512)].map((x, channel) =>
+            new DMXChannel(universe, channel, this)
+        )
 
         // Reserving memory for the channel values. Reusing the same ArtDMX Packet
-        this.artnetPacket = new ArtDmx(0, 0, config.artnet.universe, new Array(config.size ?? 512))
     }
     
     public sendFrame = () => {
+        const artnetPacket = new ArtDmx(
+            0,
+            0,
+            this.artnetUniverse,
+            new Array(this.channels.length)
+        )
         // More efficient then using array.map
         for(let i = 0; i < this.channels.length; i++) {
-            this.artnetPacket.data[i] = this.channels[i].value
+            artnetPacket.data[i] = this.channels[i].value
         }
-        if(this.artnetPacket.data.join(',') !== this.lastFrame.join(',')) {
-            this.lastFrame = [...this.artnetPacket.data]
+
+        if(artnetPacket.data.join(',') !== this.lastFrame.join(',')) {
+            this.lastFrame = [...artnetPacket.data]
             const lineSize = 10
             console.log(`Sending Universe ${this.universe}: ...`)
             for(let i = 0; i < 64; i += lineSize ) {
-                console.log(`${`${i + 1}`.padStart(3, ' ')}: ${this.lastFrame.slice(i, i+lineSize).map(x => x.toString(16).padStart(2, '0')).join(' ')}`)
+                const startAddress = `${i + 1}`.padStart(3, ' ')
+                const valueList = this.lastFrame
+                    .slice(i, i+lineSize)
+                    .map(x => x.toString(16).padStart(2, '0'))
+                    .join(' ')
+
+                console.log(`${this.artnetUniverse} - ${startAddress}: ${valueList}`)
             }
         }
 
-        controller.sendBroadcastPacket(this.artnetPacket);
+        controller.sendBroadcastPacket(artnetPacket);
         this.changed = false
     }
 }
