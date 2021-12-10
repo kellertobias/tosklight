@@ -1,0 +1,76 @@
+name: LaCalidad
+fixtures:
+  # Lounge/ Bar
+  '900':
+    type: generic-rgb
+    name: Lounge Fernseher Links
+    patch: ['1.1']
+  '901':
+    type: generic-rgb
+    name: Lounge Fenster 
+    patch: ['1.7']
+  '902':
+    type: generic-rgb
+    name: Lounge Bar
+    patch: ['1.13']
+  '903':
+    type: generic-dimmer
+    name: Lounge Bar Warmweiß
+    patch: ['1.16']
+  '904':
+    type: generic-dimmer
+    name: Lounge Bar Kaltweiß
+    patch: ['1.17']
+  # Studio 1
+  '101':
+    type: generic-rgb
+    name: Studio 1 LED 1
+    patch: ['2.1']
+  '102':
+    type: generic-rgb
+    name: Studio 1 LED 2
+    patch: ['2.7']
+  '103':
+    type: generic-rgb
+    name: Studio 1 LED 3
+    patch: ['2.13']
+  '104':
+    type: generic-rgb
+    name: Studio 1 LED 4
+    patch: ['2.19']
+  '105':
+    type: generic-rgb
+    name: Studio 1 LED 5
+    patch: ['2.25']
+  # Studio 2
+  '201':
+    type: generic-rgb
+    name: Studio 2 LED Links
+    patch: ['3.1']
+  '202':
+    type: generic-rgb
+    name: Studio 2 LED Mitte
+    patch: ['3.8']
+  '203':
+    type: generic-rgb
+    name: Studio 2 LED Rechts
+    patch: ['3.16']
+  '204':
+    type: generic-rgb
+    name: Studio 2 LED Bars
+    patch: ['3.24']
+
+presets:
+  dimmer: {}
+  color: {}
+sequences: {}
+routing:
+- artnet:
+    universe: 0
+    node: '192.168.100.13'
+- artnet:
+    universe: 0
+    node: '192.168.100.11'
+- artnet:
+    universe: 0
+    node: '192.168.100.12'
