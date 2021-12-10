@@ -69,8 +69,8 @@ routing:
     universe: 0
     node: '192.168.100.13'
 - artnet:
-    universe: 0
+    universe: 1
     node: '192.168.100.11'
 - artnet:
-    universe: 0
+    universe: 2
     node: '192.168.100.12'
