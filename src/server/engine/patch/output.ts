@@ -52,7 +52,7 @@ export class DMXUniverse {
         for(let i = 0; i < this.channels.length; i++) {
             this.artnetPacket.data[i] = this.channels[i].value
         }
-
+        console.log(`Sending Universe ${this.universe}: ...`)
         if(this.artnetPacket.data.join(',') !== this.lastFrame.join(',')) {
             this.lastFrame = [...this.artnetPacket.data]
             const lineSize = 10
