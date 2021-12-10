@@ -40,6 +40,7 @@ export class DMXUniverse {
     private lastFrame : number[] = []
 
     constructor(universe: number, config: ShowRoutingType) {
+        console.log("Creating Universe", universe, config)
         this.universe = universe
         this.artnetUniverse = config.artnet.universe
         
@@ -86,6 +87,7 @@ export class DMXOutput {
     public readonly universes : DMXUniverse[] = []
     constructor(universePatch: ShowRoutingType[]) {
         this.universes = universePatch.map((config, unNumber) => {
+            console.log(config, unNumber)
             return new DMXUniverse(unNumber, config)
         })
     }
