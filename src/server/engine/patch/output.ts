@@ -5,7 +5,7 @@ import { ShowRoutingType } from "/server/schemas/show-schema";
 const controller = new ArtNetController()
 controller.nameShort = "Tosk"
 controller.nameLong = "ToskLight Desk"
-controller.bind('0.0.0.0')
+controller.bind('192.168.100.103')
 
 export class DMXChannel {
     public readonly universe: number;
