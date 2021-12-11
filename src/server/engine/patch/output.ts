@@ -63,18 +63,20 @@ export class DMXUniverse {
             artnetPacket.data[i] = this.channels[i].value
         }
 
-        if(artnetPacket.data.join(',') !== this.lastFrame.join(',')) {
-            this.lastFrame = [...artnetPacket.data]
-            const lineSize = 10
-            console.log(`Sending Universe ${this.universe}: ...`)
-            for(let i = 0; i < 64; i += lineSize ) {
-                const startAddress = `${i + 1}`.padStart(3, ' ')
-                const valueList = this.lastFrame
-                    .slice(i, i+lineSize)
-                    .map(x => x.toString(16).padStart(2, '0'))
-                    .join(' ')
-
-                console.log(`${this.artnetUniverse} - ${startAddress}: ${valueList}`)
+        if(process.env.DEBUG_ARTNET) {
+            if(artnetPacket.data.join(',') !== this.lastFrame.join(',')) {
+                this.lastFrame = [...artnetPacket.data]
+                const lineSize = 10
+                console.log(`Sending Universe ${this.universe}: ...`)
+                for(let i = 0; i < 64; i += lineSize ) {
+                    const startAddress = `${i + 1}`.padStart(3, ' ')
+                    const valueList = this.lastFrame
+                        .slice(i, i+lineSize)
+                        .map(x => x.toString(16).padStart(2, '0'))
+                        .join(' ')
+    
+                    console.log(`${this.artnetUniverse} - ${startAddress}: ${valueList}`)
+                }
             }
         }
 

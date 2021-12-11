@@ -42,6 +42,10 @@ fixtures:
     type: generic-rgb
     name: Studio 1 LED 5
     patch: ['1.140']
+  '106':
+    type: generic-rgb
+    name: Studio 1 LED 6
+    patch: ['1.150']
   # Studio 2
   '201':
     type: generic-rgb
