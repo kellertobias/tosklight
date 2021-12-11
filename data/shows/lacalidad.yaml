@@ -25,40 +25,40 @@ fixtures:
   '101':
     type: generic-rgb
     name: Studio 1 LED 1
-    patch: ['2.1']
+    patch: ['1.100']
   '102':
     type: generic-rgb
     name: Studio 1 LED 2
-    patch: ['2.7']
+    patch: ['1.110']
   '103':
     type: generic-rgb
     name: Studio 1 LED 3
-    patch: ['2.13']
+    patch: ['1.120']
   '104':
     type: generic-rgb
     name: Studio 1 LED 4
-    patch: ['2.19']
+    patch: ['1.130']
   '105':
     type: generic-rgb
     name: Studio 1 LED 5
-    patch: ['2.25']
+    patch: ['1.140']
   # Studio 2
   '201':
     type: generic-rgb
     name: Studio 2 LED Links
-    patch: ['3.1']
+    patch: ['1.200']
   '202':
     type: generic-rgb
     name: Studio 2 LED Mitte
-    patch: ['3.8']
+    patch: ['1.210']
   '203':
     type: generic-rgb
     name: Studio 2 LED Rechts
-    patch: ['3.16']
+    patch: ['1.220']
   '204':
     type: generic-rgb
     name: Studio 2 LED Bars
-    patch: ['3.24']
+    patch: ['1.230']
 
 presets:
   dimmer: {}
@@ -67,7 +67,3 @@ sequences: {}
 routing:
 - artnet:
     universe: 1
-- artnet:
-    universe: 2
-- artnet:
-    universe: 3
