@@ -1,3 +1,4 @@
+import ip from 'ip'
 import { ArtNetController } from 'artnet-protocol'
 import { ArtDmx } from 'artnet-protocol/dist/protocol'
 import { ShowRoutingType } from "/server/schemas/show-schema";
@@ -5,7 +6,7 @@ import { ShowRoutingType } from "/server/schemas/show-schema";
 const controller = new ArtNetController()
 controller.nameShort = "Tosk"
 controller.nameLong = "ToskLight Desk"
-controller.bind('192.168.100.103')
+controller.bind(ip.address())
 
 export class DMXChannel {
     public readonly universe: number;
@@ -47,8 +48,6 @@ export class DMXUniverse {
         this.channels = [...new Array(config.size ?? 512)].map((x, channel) =>
             new DMXChannel(universe, channel, this)
         )
-
-        // Reserving memory for the channel values. Reusing the same ArtDMX Packet
     }
     
     public sendFrame = () => {
@@ -58,6 +57,7 @@ export class DMXUniverse {
             this.artnetUniverse,
             new Array(this.channels.length)
         )
+        
         // More efficient then using array.map
         for(let i = 0; i < this.channels.length; i++) {
             artnetPacket.data[i] = this.channels[i].value
