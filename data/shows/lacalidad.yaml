@@ -16,11 +16,15 @@ fixtures:
   '903':
     type: generic-dimmer
     name: Lounge Bar Warmweiß
-    patch: ['1.16']
+    patch: ['1.17']
   '904':
     type: generic-dimmer
     name: Lounge Bar Kaltweiß
-    patch: ['1.17']
+    patch: ['1.16']
+  '905':
+    type: generic-rgb
+    name: Lounge Bar Strip
+    patch: ['1.20']
   # Studio 1
   '101':
     type: generic-rgb
