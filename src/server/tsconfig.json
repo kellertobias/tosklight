@@ -22,7 +22,7 @@
       "/server/*": ["./*"],
     }
   },
-  "include": ["**/*.ts", "config.js"],
-  "exclude": ["**/*.test.ts"],
+  "include": ["**/*.ts"],
+  "exclude": ["**/*.test.ts", "**/*.spec.ts"],
   "references": [{ "path": "../shared" }]
 }

@@ -24,6 +24,10 @@
   },
   "license": "PROPRIETARY",
   "author": "Tobias S. Keller",
+  "_moduleAliases": {
+    "/server": "dist/server",
+    "/shared": "dist/shared"
+  },
   "dependencies": {
     "@fontsource/material-icons": "^4.5.0",
     "@fontsource/material-icons-outlined": "^4.5.0",
@@ -48,6 +52,7 @@
     "hap-nodejs": "^0.9.7",
     "ip": "^1.1.5",
     "js-yaml": "^4.1.0",
+    "module-alias": "^2.2.2",
     "react": "^17.0.1",
     "react-dom": "^17.0.1",
     "react-router": "^5.2.0",
