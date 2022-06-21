@@ -70,7 +70,7 @@ fixtures:
   '205':
     type: generic-crgbs
     name: Studio 2 LED Tuer
-    patch: ['1.240']
+    patch: ['1.90']
 
 presets:
   dimmer: {}
