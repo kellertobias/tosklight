@@ -67,6 +67,10 @@ fixtures:
     type: generic-rgb
     name: Studio 2 LED Bars
     patch: ['1.230']
+  '205':
+    type: generic-crgbs
+    name: Studio 2 LED Tuer
+    patch: ['1.240']
 
 presets:
   dimmer: {}
