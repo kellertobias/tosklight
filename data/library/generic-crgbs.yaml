@@ -1,19 +1,29 @@
-name: Generic RGB Par
-short: RGB
+name: Generic CRGBS Par
+short: CRGBS
 desc: Generic 5 Channel RGB Par with Control and Speed Channel
 parameters:
-  red:
+  misc_1:
     channel: [1] # array of channel offset from MSB to LSB
-    highlight: 255 # value to set this channel to if fixture is in highlight mode
-    default: 255
-    virtual_dimmer: true
-  green:
+    highlight: 0 # value to set this channel to if fixture is in highlight mode
+    default: 0
+    virtual_dimmer: false
+  red:
     channel: [2] # array of channel offset from MSB to LSB
     highlight: 255 # value to set this channel to if fixture is in highlight mode
     default: 255
     virtual_dimmer: true
-  blue:
+  green:
     channel: [3] # array of channel offset from MSB to LSB
     highlight: 255 # value to set this channel to if fixture is in highlight mode
     default: 255
     virtual_dimmer: true
+  blue:
+    channel: [4] # array of channel offset from MSB to LSB
+    highlight: 255 # value to set this channel to if fixture is in highlight mode
+    default: 255
+    virtual_dimmer: true
+  misc_2:
+    channel: [5] # array of channel offset from MSB to LSB
+    highlight: 0 # value to set this channel to if fixture is in highlight mode
+    default: 0
+    virtual_dimmer: false
