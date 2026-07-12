@@ -29,8 +29,15 @@ interface CommandResponse {
 export function defaultServerUrl(location = window.location): string {
   const configured = import.meta.env.VITE_LIGHT_SERVER_URL as string | undefined;
   if (configured) return configured.replace(/\/$/, "");
-  if (location.protocol === "tauri:") return "http://127.0.0.1:5000";
+  if (location.protocol === "tauri:") return (browserStorage()?.getItem("light.server-url") || "http://127.0.0.1:5000").replace(/\/$/, "");
   return location.origin;
+}
+
+export function configuredServerUrl() { return defaultServerUrl(); }
+export function saveServerUrl(value: string) {
+  const url = new URL(value.trim());
+  if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("Server URL must use http or https");
+  browserStorage()?.setItem("light.server-url", url.toString().replace(/\/$/, ""));
 }
 
 export class LightApiClient {
@@ -51,12 +58,16 @@ export class LightApiClient {
   }
 
   async login(username: string): Promise<SessionResponse> {
+    const storage = browserStorage();
+    let clientId = storage?.getItem("light.client-id");
+    if (!clientId) { clientId = crypto.randomUUID(); storage?.setItem("light.client-id", clientId); }
     const session = await this.request<SessionResponse>("/api/v1/sessions", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username }),
+      body: JSON.stringify({ username, client_id: clientId, desk_id: storage?.getItem("light.control-desk") ?? null }),
     }, false);
     this.session = session;
+    if (session.desk) storage?.setItem("light.control-desk", session.desk.id);
     return session;
   }
 
@@ -73,12 +84,38 @@ export class LightApiClient {
     }
   }
 
+  createUser(name: string): Promise<import("./types").DeskUser> {
+    return this.request("/api/v1/users", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name, enabled: true }),
+    });
+  }
+
   patch(): Promise<PatchSnapshot> {
     return this.request("/api/v1/patch", {}, false);
   }
 
+  fixtureLibrary(): Promise<import("./types").FixtureDefinition[]> {
+    return this.request("/api/v1/fixture-library", {}, false);
+  }
+
+  putFixtureDefinition(definition: import("./types").FixtureDefinition) {
+    return this.request<import("./types").FixtureDefinition>("/api/v1/fixture-library", {
+      method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(definition),
+    });
+  }
+
+  deleteFixtureDefinition(id: string, revision: number) {
+    return this.request<void>(`/api/v1/fixture-library/${id}/${revision}`, { method: "DELETE" });
+  }
+
   playbacks(): Promise<PlaybackSnapshot> {
     return this.request("/api/v1/playbacks");
+  }
+
+  visualization(preload = false): Promise<import("./types").VisualizationSnapshot> {
+    return this.request(`/api/v1/visualization${preload ? "?preload=true" : ""}`);
   }
 
   dmx(): Promise<DmxSnapshot> {
@@ -181,8 +218,15 @@ export class LightApiClient {
     return this.request<import("./types").ProgrammerState[]>("/api/v1/programmers", {}, false);
   }
 
+  auditEvents(after = 0) {
+    return this.request<Array<{ revision: number; kind: string; payload: unknown }>>(`/api/v1/audit?after=${after}`);
+  }
+
   clearProgrammer(sessionId: string) {
     return this.request(`/api/v1/programmers/${sessionId}/clear`, { method: "POST" });
+  }
+  clearProgrammerValues() {
+    return this.command("programmer.clear", {});
   }
 
   selectGroup(groupId: string, frozen = false, rule: Record<string, unknown> = { type: "all" }) {
@@ -209,6 +253,11 @@ export class LightApiClient {
   playbackAction(cueListId: string, action: "go" | "back" | "pause" | "release") {
     return this.command(`playback.${action}`, { cue_list_id: cueListId });
   }
+  poolPlaybackAction(number: number, action: "on" | "off" | "toggle" | "go" | "go-minus" | "flash" | "master" | "xfade-on" | "xfade-off", input: { value?: number; pressed?: boolean } = {}) {
+    return this.request(`/api/v1/playback-pool/${number}/${action}`, { method: action === "master" ? "PUT" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) });
+  }
+  setPlaybackPage(deskId: string, page: number) { return this.request(`/api/v1/control-desks/${deskId}/page`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ page }) }); }
+  updateControlDesk(desk: import("./types").ControlDesk) { return this.request<import("./types").ControlDesk>(`/api/v1/control-desks/${desk.id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(desk) }); }
 
   setProgrammer(fixtureId: string, attribute: string, value: number) {
     return this.command("programmer.set", { fixture_id: fixtureId, attribute, value });
@@ -216,6 +265,8 @@ export class LightApiClient {
   setGroupProgrammer(groupId: string, attribute: string, value: number) {
     return this.command("programmer.group.set", { group_id: groupId, attribute, value });
   }
+  setGroupMaster(groupId: string, value: number) { return this.command("group.master.set", { group_id: groupId, value }); }
+  setGroupMasterFlash(groupId: string, value: number) { return this.command("group.master.flash", { group_id: groupId, value }); }
 
   setSelection(fixtures: string[]) {
     return this.command("selection.set", { fixtures });
@@ -233,7 +284,7 @@ export class LightApiClient {
     return this.command("preset.apply", { preset_id: presetId });
   }
 
-  storePreset(showId: string, presetId: string, preset: { name: string; values: Record<string, Record<string, unknown>>; group_values?: Record<string, Record<string, unknown>> }, mode: "Merge" | "Overwrite" | "AddMissingFixtures", revision: number) {
+  storePreset(showId: string, presetId: string, preset: { name: string; family?: string; values: Record<string, Record<string, unknown>>; group_values?: Record<string, Record<string, unknown>> }, mode: "merge" | "overwrite" | "add_missing_fixtures", revision: number) {
     return this.request(`/api/v1/shows/${showId}/presets/${encodeURIComponent(presetId)}/store`, {
       method: "POST",
       headers: { "content-type": "application/json", "if-match": String(revision) },

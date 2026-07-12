@@ -1,7 +1,7 @@
 import { useApp } from "../../state/AppContext";
 import type { BuiltInWindow } from "../../types";
 
-const choices: Array<[BuiltInWindow, string]> = [["presets", "Preset pool"], ["groups", "Group pool"], ["fixtures", "Fixture sheet"], ["stage", "Stage"], ["playback", "Playback"], ["channels", "Channels"], ["dynamics", "Dynamics"], ["dmx", "DMX output"]];
+const choices: Array<[BuiltInWindow, string]> = [["presets", "Preset pool"], ["groups", "Group pool"], ["fixtures", "Fixture sheet"], ["stage", "Stage"], ["playback_pool", "Playback pool"], ["cue_list", "Cue list"], ["playback", "Playback (tabs)"], ["channels", "Channels"], ["dynamics", "Dynamics"], ["dmx", "DMX output"]];
 export function WindowPicker() {
   const { state, dispatch } = useApp();
   if (!state.windowPicker) return null;

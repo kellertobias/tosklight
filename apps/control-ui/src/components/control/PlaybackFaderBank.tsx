@@ -1,12 +1,39 @@
 import { useServer } from "../../api/ServerContext";
+import { VerticalTouchFader } from "./VerticalTouchFader";
+import { useApp } from "../../state/AppContext";
 
 export function PlaybackFaderBank() {
   const server = useServer();
-  const cueLists = server.playbacks?.cue_lists ?? [];
-  const slots = Array.from({ length: 8 }, (_, index) => ({ cue: cueLists[index] ?? null, group: cueLists[index] ? null : server.groups.find((group) => group.body.playback_fader === index + 1) ?? null }));
-  return <div className="playback-fader-bank">{slots.map(({ cue, group }, index) => {
-    const active = cue ? server.playbacks?.active.find((item) => item.cue_list_id === cue.id) : undefined;
-    const level = Math.round((group?.body.master ?? 0) * 100);
-    return <article className={`${active ? "running" : ""} ${group ? "group-master-playback" : ""}`} key={cue?.id ?? group?.id ?? `empty-${index}`}><b>{index + 1}. {cue?.name ?? group?.body.name ?? "Unassigned"}</b><div>{group ? <><strong>Group master · {level}%</strong><input aria-label={`${group.body.name ?? group.id} playback master`} type="range" min="0" max="100" value={level} onChange={(event) => void server.setGroupMaster(group.id, Number(event.target.value) / 100)}/></> : <><strong>{active ? `Cue ${active.cue_index + 1}` : cue ? "Ready" : "Empty"}</strong><i style={{ height: `${active ? 72 : 25 + (index * 7) % 60}%` }}/></>}</div><footer><button disabled={!cue && !group} onClick={() => cue ? void server.playbackAction(cue.id, "go") : group && void server.selectGroup(group.id)}>{group ? "SELECT" : "GO"}</button><button disabled={!group} onPointerDown={() => group && void server.setGroupMaster(group.id, 1)} onPointerUp={() => group && void server.setGroupMaster(group.id, level / 100)}>FLASH</button></footer></article>;
-  })}</div>;
+  const { state } = useApp();
+  const pageSize = state.playbackColumns * state.playbackRows;
+  const page = server.playbacks?.pages.find((candidate) => candidate.number === (server.playbacks?.active_page ?? state.playbackPage + 1));
+  const slots = Array.from({ length: pageSize }, (_, index) => {
+    const number = page?.slots[String(index + 1)];
+    const playback = server.playbacks?.pool.find((candidate) => candidate.number === number) ?? null;
+    const cueListId = playback?.target.type === "cue_list" ? playback.target.cue_list_id : null;
+    const groupId = playback?.target.type === "group" ? playback.target.group_id : null;
+    const cue = cueListId ? server.playbacks?.cue_lists.find((candidate) => candidate.id === cueListId) ?? null : null;
+    const group = groupId ? server.groups.find((candidate) => candidate.id === groupId) ?? null : null;
+    return { playback, cue, group };
+  });
+  return <div className="playback-fader-bank" style={{ gridTemplateColumns: `repeat(${state.playbackColumns}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${state.playbackRows}, minmax(0, 1fr))` }}>
+    {slots.map(({ playback, cue, group }, index) => {
+      const active = playback ? server.playbacks?.active.find((item) => item.playback_number === playback.number) : undefined;
+      const value = group ? Math.round((group.body.master ?? 0) * 100) : Math.round((active?.master ?? 0) * 100);
+      return <article className={`${active ? "running" : ""} ${group ? "group-master-playback" : ""} ${!playback ? "empty" : ""}`} key={playback?.number ?? `empty-${index}`}>
+        <b>{index + 1} · {playback?.name ?? "—"}</b>
+        <VerticalTouchFader disabled={!playback || playback.fader === "speed"} label={playback?.fader ?? "Empty"} value={value}
+          display={active && cue ? `Cue ${active.cue_index + 1} · ${value}%` : playback ? `${value}%` : "Empty"}
+          onChange={(next) => playback && void server.poolPlaybackAction(playback.number, "master", { value: next / 100 })}/>
+        <footer>{(playback?.buttons ?? ["none", "none", "none"]).slice(0, server.playbacks?.desk.buttons ?? 3).map((action, button) => <button key={button} disabled={!playback || action === "none"}
+          onClick={() => playback && action !== "flash" && action !== "none" && void server.poolPlaybackAction(playback.number, action === "go_minus" ? "go-minus" : action)}
+          onPointerDown={(event) => { if (!playback || action !== "flash") return; event.currentTarget.setPointerCapture(event.pointerId); void server.poolPlaybackAction(playback.number, "flash", { pressed: true }); }}
+          onPointerUp={() => playback && action === "flash" && void server.poolPlaybackAction(playback.number, "flash", { pressed: false })}
+          onPointerCancel={() => playback && action === "flash" && void server.poolPlaybackAction(playback.number, "flash", { pressed: false })}
+          onLostPointerCapture={() => playback && action === "flash" && void server.poolPlaybackAction(playback.number, "flash", { pressed: false })}>
+          {action === "go_minus" ? "GO −" : action.toUpperCase()}
+        </button>)}</footer>
+      </article>;
+    })}
+  </div>;
 }

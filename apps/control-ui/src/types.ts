@@ -7,9 +7,12 @@ export type BuiltInWindow =
   | "fixtures"
   | "presets"
   | "playback"
+  | "playback_pool"
+  | "cue_list"
   | "dynamics"
   | "channels"
   | "dmx"
+  | "patch"
   | "setup";
 
 export type ControlMode = "programmer" | "playbacks";
@@ -27,11 +30,13 @@ export interface PaneModel extends GridRect {
   id: string;
   kind: BuiltInWindow;
   title: string;
+  showGroupShortcuts?: boolean;
 }
 
 export interface DeskModel {
   id: string;
   name: string;
+  icon?: string;
   panes: PaneModel[];
 }
 
@@ -70,6 +75,7 @@ export interface AppState {
   activeDeskId: string;
   desks: DeskModel[];
   builtIn: BuiltInWindow | null;
+  lastBuiltIn: BuiltInWindow;
   controlMode: ControlMode;
   paneSettingsId: string | null;
   maximizedPaneId: string | null;
@@ -77,13 +83,23 @@ export interface AppState {
   savingDesk: boolean;
   preload: "idle" | "blind" | "output";
   preloadActive: boolean;
-  programmerFade: number;
-  sequenceMaster: number;
-  speedGroup: "A" | "B" | "C" | "D";
+  speedGroup: "A" | "B" | "C" | "D" | "E";
+  playbackColumns: number;
+  playbackRows: number;
+  playbackPage: number;
+  playbackPageNames: string[];
+  presetFamily: "All" | "Intensity" | "Color" | "Position" | "Beam";
   setupOpen: boolean;
   specialDialogsOpen: boolean;
-  specialDialogFamily: "Color" | "Position" | "Beam" | "Control" | "Dynamics";
+  specialDialogFamily: "Color" | "Position" | "Beam" | "Shapers" | "Control" | "Dynamics";
   systemControlsOpen: boolean;
   preloadStoreOpen: boolean;
+  storeArmed: boolean;
+  storeSettingsOpen: boolean;
+  patchSetArmed: boolean;
   midiProfile: boolean;
+  debugOpen: boolean;
+  touchScrollbars: boolean;
+  deskSettingsOpen: boolean;
+  deskSettingsId: string | null;
 }

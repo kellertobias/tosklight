@@ -36,7 +36,7 @@ describe("LightApiClient", () => {
     await client.playbacks();
 
     expect(fetchMock.mock.calls[0][0]).toBe("http://desk.local/api/v1/sessions");
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ username: "Operator" });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual(expect.objectContaining({ username: "Operator", client_id: expect.any(String) }));
     const authenticatedHeaders = fetchMock.mock.calls[1][1].headers as Headers;
     expect(authenticatedHeaders.get("authorization")).toBe("Bearer secret-token");
   });

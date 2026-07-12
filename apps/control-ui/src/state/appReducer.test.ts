@@ -60,4 +60,42 @@ describe("appReducer", () => {
     expect(hydrated.builtIn).toBe("groups");
     expect(hydrated.dockMode).toBe("builtins");
   });
+
+  it("restores the last desk and built-in when switching dock sections", () => {
+    const patch = appReducer(initialState, { type: "OPEN_DESK", id: "patch" });
+    const groups = appReducer(patch, { type: "OPEN_BUILTIN", kind: "groups" });
+    const desks = appReducer(groups, { type: "SET_DOCK_MODE", mode: "desks" });
+    expect(desks.activeDeskId).toBe("patch");
+    expect(desks.builtIn).toBeNull();
+    const builtIns = appReducer(desks, { type: "SET_DOCK_MODE", mode: "builtins" });
+    expect(builtIns.builtIn).toBe("groups");
+  });
+
+  it("configures playback rows and columns within desk limits", () => {
+    const configured = appReducer(initialState, { type: "SET_PLAYBACK_LAYOUT", columns: 20, rows: 3 });
+    expect(configured.playbackColumns).toBe(20);
+    expect(configured.playbackRows).toBe(3);
+    const clamped = appReducer(configured, { type: "SET_PLAYBACK_LAYOUT", columns: 99, rows: 8 });
+    expect(clamped.playbackColumns).toBe(32);
+    expect(clamped.playbackRows).toBe(3);
+  });
+
+  it("moves between playback executor pages and clamps at the ends", () => {
+    expect(appReducer(initialState, { type: "SET_PLAYBACK_PAGE", page: 3 }).playbackPage).toBe(3);
+    expect(appReducer(initialState, { type: "SET_PLAYBACK_PAGE", page: 999 }).playbackPage).toBe(126);
+    expect(appReducer(initialState, { type: "SET_PLAYBACK_PAGE", page: -1 }).playbackPage).toBe(0);
+  });
+
+  it("keeps the preset family while navigating between built-ins", () => {
+    const intensity = appReducer(initialState, { type: "SET_PRESET_FAMILY", family: "Intensity" });
+    const groups = appReducer(intensity, { type: "OPEN_BUILTIN", kind: "groups" });
+    const presets = appReducer(groups, { type: "OPEN_BUILTIN", kind: "presets" });
+    expect(presets.presetFamily).toBe("Intensity");
+  });
+
+  it("arms and cancels the shared store workflow explicitly", () => {
+    const armed = appReducer(initialState, { type: "SET_STORE_ARMED", value: true });
+    expect(armed.storeArmed).toBe(true);
+    expect(appReducer(armed, { type: "SET_STORE_ARMED", value: false }).storeArmed).toBe(false);
+  });
 });
