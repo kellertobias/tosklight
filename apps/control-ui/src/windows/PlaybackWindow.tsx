@@ -1,0 +1,12 @@
+import { useState } from "react";
+import type { WindowProps } from "./windowTypes";
+import { useServer } from "../api/ServerContext";
+
+export function PlaybackWindow({ compact }: WindowProps) {
+  const server = useServer();
+  const sequence = server.playbacks?.cue_lists[0];
+  const active = sequence && server.playbacks?.active.find((item) => item.cue_list_id === sequence.id);
+  const cues = sequence?.cues ?? [];
+  const [selectedCue, setSelectedCue] = useState(0);
+  return <div className="playback-window"><header className="window-toolbar"><h1>Sequence · {sequence?.name ?? "No sequence"} <small>{active ? "Running" : "Ready"} · revision {server.patch?.revision ?? 0}</small></h1><span className="spacer"/>{sequence && <span>{sequence.mode} · priority {sequence.priority}</span>}</header><div className="sequence-layout"><div className="cue-editor"><div className="cue-list">{cues.length === 0 && <div className="empty-window-message">No cue list is available in the active show.</div>}{cues.map((cue, index) => <button onClick={() => setSelectedCue(index)} key={cue.number} className={`cue-row ${active?.cue_index === index ? "current" : active?.cue_index === index - 1 ? "next" : ""} ${selectedCue === index ? "selected" : ""}`}><b>{cue.number}</b><span>{cue.name || `Cue ${cue.number}`}</span><span>{cue.trigger.type}</span><span>{(cue.fade_millis / 1000).toFixed(1)} s</span><span>{index === active?.cue_index ? "Active" : "Tracked"}</span></button>)}</div></div>{!compact && <aside className="sequence-actions"><button className="go" disabled={!sequence} onClick={() => sequence && void server.playbackAction(sequence.id, "go")}>GO<br/><small>{sequence ? `Next · ${cues[(active?.cue_index ?? -1) + 1]?.name ?? "End"}` : "No sequence"}</small></button><button disabled={!sequence} onClick={() => sequence && void server.playbackAction(sequence.id, "back")}>BACK</button><button disabled={!sequence} onClick={() => sequence && void server.playbackAction(sequence.id, "pause")}>PAUSE</button><button disabled={!sequence} onClick={() => sequence && void server.playbackAction(sequence.id, "release")}>RELEASE</button>{sequence && cues[selectedCue] && <section><b>Selected cue · {cues[selectedCue].number}</b><p>{cues[selectedCue].name || "Unnamed cue"}</p><small>Fade {(cues[selectedCue].fade_millis / 1000).toFixed(1)} s · Delay {(cues[selectedCue].delay_millis / 1000).toFixed(1)} s</small></section>}</aside>}</div></div>;
+}
