@@ -45,6 +45,7 @@ export function SetupWindow(_: WindowProps) {
         <h1>Desk Setup</h1>
         <span className="spacer" />
         {restartRequired && <small className="warning">Restart required</small>}
+        <span id="setup-section-actions" className="setup-section-actions" />
         <button disabled={!draft} onClick={() => void save()}>
           Save changes
         </button>

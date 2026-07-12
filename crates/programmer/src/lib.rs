@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-//! Session-scoped selection and programmer state.
+//! User-scoped selection and programmer state, shared by all of a user's sessions.
 
 use chrono::{DateTime, Utc};
 use light_core::{
@@ -16,6 +16,8 @@ const HISTORY_LIMIT: usize = 100;
 pub struct GroupProgrammerValue {
     pub value: AttributeValue,
     pub changed_at: DateTime<Utc>,
+    #[serde(default)]
+    pub fade: bool,
 }
 impl<'de> Deserialize<'de> for GroupProgrammerValue {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
@@ -25,14 +27,25 @@ impl<'de> Deserialize<'de> for GroupProgrammerValue {
             Scoped {
                 value: AttributeValue,
                 changed_at: DateTime<Utc>,
+                #[serde(default)]
+                fade: bool,
             },
             Legacy(AttributeValue),
         }
         Ok(match Repr::deserialize(deserializer)? {
-            Repr::Scoped { value, changed_at } => Self { value, changed_at },
+            Repr::Scoped {
+                value,
+                changed_at,
+                fade,
+            } => Self {
+                value,
+                changed_at,
+                fade,
+            },
             Repr::Legacy(value) => Self {
                 value,
                 changed_at: Utc::now(),
+                fade: false,
             },
         })
     }
@@ -313,9 +326,24 @@ impl Preset {
 #[derive(Clone, Default)]
 pub struct ProgrammerRegistry {
     states: Arc<RwLock<HashMap<SessionId, ProgrammerState>>>,
+    sessions: Arc<RwLock<HashMap<SessionId, SessionId>>>,
 }
 impl ProgrammerRegistry {
     pub fn start(&self, session_id: SessionId, user_id: UserId) -> ProgrammerState {
+        let existing = self
+            .states
+            .read()
+            .iter()
+            .find_map(|(key, state)| (state.user_id == user_id).then_some(*key));
+        if let Some(key) = existing {
+            self.sessions.write().insert(session_id, key);
+            let mut states = self.states.write();
+            let state = states.get_mut(&key).expect("programmer disappeared");
+            state.connected = true;
+            state.last_activity = Utc::now();
+            return state.clone();
+        }
+        self.sessions.write().insert(session_id, session_id);
         let state = ProgrammerState {
             id: ProgrammerId::new(),
             session_id,
@@ -343,10 +371,27 @@ impl ProgrammerRegistry {
         state
     }
     pub fn restore(&self, state: ProgrammerState) {
-        self.states.write().insert(state.session_id, state);
+        let existing = {
+            self.states
+                .read()
+                .iter()
+                .find_map(|(key, current)| (current.user_id == state.user_id).then_some(*key))
+        };
+        if let Some(existing) = existing {
+            self.states.write().insert(existing, state);
+        } else {
+            self.states.write().insert(state.session_id, state);
+        }
+    }
+    fn key(&self, session: SessionId) -> SessionId {
+        self.sessions
+            .read()
+            .get(&session)
+            .copied()
+            .unwrap_or(session)
     }
     pub fn select(&self, session: SessionId, fixtures: impl IntoIterator<Item = FixtureId>) {
-        if let Some(state) = self.states.write().get_mut(&session) {
+        if let Some(state) = self.states.write().get_mut(&self.key(session)) {
             state.checkpoint();
             let mut seen = HashSet::new();
             state.selected = fixtures
@@ -363,7 +408,7 @@ impl ProgrammerRegistry {
         fixtures: Vec<FixtureId>,
         expression: SelectionExpression,
     ) {
-        if let Some(state) = self.states.write().get_mut(&session) {
+        if let Some(state) = self.states.write().get_mut(&self.key(session)) {
             state.checkpoint();
             state.selected = fixtures;
             state.selection_expression = Some(expression);
@@ -377,7 +422,26 @@ impl ProgrammerRegistry {
         attribute: AttributeKey,
         value: AttributeValue,
     ) {
-        if let Some(state) = self.states.write().get_mut(&session) {
+        self.set_with_fade(session, fixture_id, attribute, value, false);
+    }
+    pub fn set_faded(
+        &self,
+        session: SessionId,
+        fixture_id: FixtureId,
+        attribute: AttributeKey,
+        value: AttributeValue,
+    ) {
+        self.set_with_fade(session, fixture_id, attribute, value, true);
+    }
+    fn set_with_fade(
+        &self,
+        session: SessionId,
+        fixture_id: FixtureId,
+        attribute: AttributeKey,
+        value: AttributeValue,
+        fade: bool,
+    ) {
+        if let Some(state) = self.states.write().get_mut(&self.key(session)) {
             state.checkpoint();
             let merge_mode = if attribute.is_intensity() {
                 light_core::MergeMode::Htp
@@ -397,6 +461,7 @@ impl ProgrammerRegistry {
                 priority: state.priority,
                 changed_at: Utc::now(),
                 merge_mode,
+                fade,
             });
             state.last_activity = Utc::now();
         }
@@ -408,8 +473,27 @@ impl ProgrammerRegistry {
         attribute: AttributeKey,
         value: AttributeValue,
     ) -> bool {
+        self.set_group_with_fade(session, group_id, attribute, value, false)
+    }
+    pub fn set_group_faded(
+        &self,
+        session: SessionId,
+        group_id: String,
+        attribute: AttributeKey,
+        value: AttributeValue,
+    ) -> bool {
+        self.set_group_with_fade(session, group_id, attribute, value, true)
+    }
+    fn set_group_with_fade(
+        &self,
+        session: SessionId,
+        group_id: String,
+        attribute: AttributeKey,
+        value: AttributeValue,
+        fade: bool,
+    ) -> bool {
         let mut states = self.states.write();
-        let Some(state) = states.get_mut(&session) else {
+        let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
         };
         state.checkpoint();
@@ -423,6 +507,7 @@ impl ProgrammerRegistry {
             GroupProgrammerValue {
                 value,
                 changed_at: Utc::now(),
+                fade,
             },
         );
         state.last_activity = Utc::now();
@@ -430,7 +515,7 @@ impl ProgrammerRegistry {
     }
     pub fn activate_preload(&self, session: SessionId) -> bool {
         let mut states = self.states.write();
-        let Some(state) = states.get_mut(&session) else {
+        let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
         };
         state.checkpoint();
@@ -447,13 +532,15 @@ impl ProgrammerRegistry {
                 .or_default()
                 .extend(attributes);
         }
-        state.blind = true;
+        // GO publishes the prepared values, then returns input to the live
+        // programmer. Entering preload again starts the next blind edit.
+        state.blind = false;
         state.last_activity = Utc::now();
         true
     }
     pub fn clear_preload_pending(&self, session: SessionId) -> bool {
         let mut states = self.states.write();
-        let Some(state) = states.get_mut(&session) else {
+        let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
         };
         state.checkpoint();
@@ -464,7 +551,7 @@ impl ProgrammerRegistry {
     }
     pub fn release_preload(&self, session: SessionId) -> bool {
         let mut states = self.states.write();
-        let Some(state) = states.get_mut(&session) else {
+        let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
         };
         state.checkpoint();
@@ -484,7 +571,7 @@ impl ProgrammerRegistry {
         value: AttributeValue,
     ) -> bool {
         let mut states = self.states.write();
-        let Some(state) = states.get_mut(&session) else {
+        let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
         };
         state.checkpoint();
@@ -497,6 +584,7 @@ impl ProgrammerRegistry {
                 GroupProgrammerValue {
                     value,
                     changed_at: Utc::now(),
+                    fade: false,
                 },
             );
         state.last_activity = Utc::now();
@@ -504,7 +592,7 @@ impl ProgrammerRegistry {
     }
     pub fn set_command_line(&self, session: SessionId, command_line: String) -> bool {
         let mut states = self.states.write();
-        let Some(state) = states.get_mut(&session) else {
+        let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
         };
         state.checkpoint();
@@ -521,7 +609,7 @@ impl ProgrammerRegistry {
         active_context: Option<Option<String>>,
     ) -> bool {
         let mut states = self.states.write();
-        let Some(state) = states.get_mut(&session) else {
+        let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
         };
         state.checkpoint();
@@ -542,7 +630,7 @@ impl ProgrammerRegistry {
     }
     pub fn clear_values(&self, session: SessionId) -> bool {
         let mut states = self.states.write();
-        let Some(state) = states.get_mut(&session) else {
+        let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
         };
         state.checkpoint();
@@ -552,7 +640,7 @@ impl ProgrammerRegistry {
     }
     pub fn undo(&self, session: SessionId) -> bool {
         let mut states = self.states.write();
-        let Some(state) = states.get_mut(&session) else {
+        let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
         };
         let Some(previous) = state.undo.pop() else {
@@ -564,7 +652,7 @@ impl ProgrammerRegistry {
     }
     pub fn redo(&self, session: SessionId) -> bool {
         let mut states = self.states.write();
-        let Some(state) = states.get_mut(&session) else {
+        let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
         };
         let Some(next) = state.redo.pop() else {
@@ -575,24 +663,29 @@ impl ProgrammerRegistry {
         true
     }
     pub fn disconnect(&self, session: SessionId) {
-        if let Some(state) = self.states.write().get_mut(&session) {
-            state.connected = false;
+        let key = self.key(session);
+        self.sessions.write().remove(&session);
+        let still_connected = self.sessions.read().values().any(|bound| *bound == key);
+        if let Some(state) = self.states.write().get_mut(&key) {
+            state.connected = still_connected;
         }
     }
     pub fn connect(&self, session: SessionId) {
-        if let Some(state) = self.states.write().get_mut(&session) {
+        if let Some(state) = self.states.write().get_mut(&self.key(session)) {
             state.connected = true;
             state.last_activity = Utc::now();
         }
     }
     pub fn clear(&self, session: SessionId) -> bool {
-        self.states.write().remove(&session).is_some()
+        let key = self.key(session);
+        self.sessions.write().retain(|_, bound| *bound != key);
+        self.states.write().remove(&key).is_some()
     }
     pub fn active(&self) -> Vec<ProgrammerState> {
         self.states.read().values().cloned().collect()
     }
     pub fn get(&self, session: SessionId) -> Option<ProgrammerState> {
-        self.states.read().get(&session).cloned()
+        self.states.read().get(&self.key(session)).cloned()
     }
     pub fn refresh_live_selections(&self, groups: &HashMap<String, GroupDefinition>) {
         for state in self.states.write().values_mut() {
@@ -613,7 +706,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn sessions_are_strictly_isolated() {
+    fn users_are_isolated() {
         let registry = ProgrammerRegistry::default();
         let first = SessionId::new();
         let second = SessionId::new();
@@ -644,6 +737,40 @@ mod tests {
                 .contains_key("front")
         );
         assert!(registry.get(second).unwrap().group_values.is_empty());
+    }
+    #[test]
+    fn sessions_for_the_same_user_share_one_programmer() {
+        let registry = ProgrammerRegistry::default();
+        let user = UserId::new();
+        let first = SessionId::new();
+        let second = SessionId::new();
+        let fixture = FixtureId::new();
+        registry.start(first, user);
+        registry.select(first, [fixture]);
+        registry.start(second, user);
+        assert_eq!(registry.active().len(), 1);
+        assert_eq!(registry.get(second).unwrap().selected, vec![fixture]);
+        registry.disconnect(first);
+        assert!(registry.get(second).unwrap().connected);
+        registry.disconnect(second);
+        assert!(!registry.active()[0].connected);
+    }
+
+    #[test]
+    fn restoring_multiple_sessions_for_one_user_does_not_deadlock() {
+        let source = ProgrammerRegistry::default();
+        let user = UserId::new();
+        let first = SessionId::new();
+        let mut first_state = source.start(first, user);
+        first_state.connected = false;
+        let mut second_state = first_state.clone();
+        second_state.session_id = SessionId::new();
+        second_state.id = ProgrammerId::new();
+
+        let restored = ProgrammerRegistry::default();
+        restored.restore(first_state);
+        restored.restore(second_state);
+        assert_eq!(restored.active().len(), 1);
     }
     #[test]
     fn legacy_group_programmer_values_migrate_with_a_timestamp() {
@@ -736,6 +863,8 @@ mod tests {
         let state = registry.get(session).unwrap();
         assert_eq!(state.preload_active.len(), 1);
         assert!(state.preload_pending.is_empty());
+        assert_eq!(state.values.len(), 1);
+        assert_eq!(state.values[0].attribute, AttributeKey("pan".into()));
     }
     #[test]
     fn preload_retains_multiple_group_scopes_with_edit_timestamps() {

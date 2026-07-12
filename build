@@ -10,9 +10,9 @@ DATA_DIR="${LIGHT_DATA_DIR:-$ROOT/light-data}"
 usage() {
   cat <<'EOF'
 Usage:
-  ./build open             Build debug server and app, stop old instances, and open Light
-  ./build archive          Build release server and app, then create separate ZIP archives
-  ./build archive install  Also install and open Light.app in ~/Applications
+  ./build open             Build debug server and app, stop old instances, and open ToskLight
+  ./build archive          Create self-contained server archives for macOS, Windows, Linux AMD64, and Linux ARM64
+  ./build archive install  Also install and open ToskLight.app in ~/Applications
 EOF
 }
 
@@ -25,11 +25,25 @@ require() {
 
 stop_running() {
   echo "Stopping running Light instances..."
+  launchctl remove de.tokenet.tosklight.dev-server 2>/dev/null || true
   pkill -x light-server 2>/dev/null || true
   pkill -x light-control-ui 2>/dev/null || true
+  pkill -x ToskLight 2>/dev/null || true
+  pkill -x Light 2>/dev/null || true
   pkill -f "$ROOT/apps/control-ui/node_modules/.bin/vite" 2>/dev/null || true
   pkill -f "$ROOT/target/debug/light-control-ui" 2>/dev/null || true
   pkill -f "$ROOT/target/release/light-control-ui" 2>/dev/null || true
+}
+
+wait_for_endpoint() {
+  local attempts=0
+  while (( attempts < 100 )); do
+    if curl -fsS http://127.0.0.1:5000/api/v1/readiness >/dev/null 2>&1; then return 0; fi
+    sleep 0.1
+    attempts=$((attempts + 1))
+  done
+  echo "error: timed out waiting for the Light server; see $DATA_DIR/light-server.log" >&2
+  return 1
 }
 
 wait_for_server() {
@@ -66,56 +80,110 @@ build_debug_and_open() {
   require open
 
   stop_running
-  echo "Building debug server..."
+  echo "Building debug server for the app bundle..."
   cargo build --manifest-path "$ROOT/Cargo.toml" -p light-server --bin light-server
   echo "Building debug Tauri app..."
   (cd "$UI_DIR" && npm run tauri:build -- --debug --bundles app)
-
-  start_server "$TARGET_DIR/debug/light-server"
-  open "$TARGET_DIR/debug/bundle/macos/Light.app"
-  echo "Light is open. Server log: $TARGET_DIR/light-server.log"
+  cp "$TARGET_DIR/debug/light-server" "$TARGET_DIR/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-server"
+  echo "Starting development server service..."
+  launchctl submit -l de.tokenet.tosklight.dev-server -o "$DATA_DIR/light-server.log" -e "$DATA_DIR/light-server.log" -- "$TARGET_DIR/debug/light-server" --data-dir "$DATA_DIR"
+  wait_for_endpoint
+  open "$TARGET_DIR/debug/bundle/macos/ToskLight.app"
+  echo "ToskLight is open. Server log: $DATA_DIR/light-server.log"
 }
 
 archive_release() {
   local install="${1:-false}"
-  local version platform arch app_path artifact_dir server_zip app_zip
+  local version app_path artifact_dir app_zip universal_server
 
   require cargo
   require npm
   require ditto
   require zip
+  require lipo
+  require rustup
+  require cargo-zigbuild
+  require zig
 
   version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$ROOT/Cargo.toml" | head -1)"
-  platform="$(uname -s | tr '[:upper:]' '[:lower:]')"
-  arch="$(uname -m)"
   artifact_dir="$ROOT/artifacts"
-  server_zip="$artifact_dir/light-server-$version-$platform-$arch.zip"
-  app_zip="$artifact_dir/light-app-$version-$platform-$arch.zip"
+  app_zip="$artifact_dir/tosklight-$version-macos-$(uname -m).zip"
 
   echo "Building release UI for the standalone server..."
   (cd "$UI_DIR" && npm run build)
-  echo "Building release server..."
-  cargo build --manifest-path "$ROOT/Cargo.toml" --release -p light-server --bin light-server
+  ensure_rust_target aarch64-apple-darwin
+  ensure_rust_target x86_64-apple-darwin
+  ensure_rust_target x86_64-pc-windows-gnu
+  ensure_rust_target x86_64-unknown-linux-musl
+  ensure_rust_target aarch64-unknown-linux-musl
+
+  echo "Building self-contained macOS universal server..."
+  cargo build --manifest-path "$ROOT/Cargo.toml" --release --target aarch64-apple-darwin -p light-server --bin light-server
+  cargo build --manifest-path "$ROOT/Cargo.toml" --release --target x86_64-apple-darwin -p light-server --bin light-server
+  universal_server="$TARGET_DIR/release/light-server"
+  mkdir -p "$(dirname "$universal_server")"
+  lipo -create \
+    "$TARGET_DIR/aarch64-apple-darwin/release/light-server" \
+    "$TARGET_DIR/x86_64-apple-darwin/release/light-server" \
+    -output "$universal_server"
+
+  echo "Building self-contained Windows server..."
+  cargo zigbuild --manifest-path "$ROOT/Cargo.toml" --release --target x86_64-pc-windows-gnu -p light-server --bin light-server
+  echo "Building self-contained Linux AMD64 server..."
+  cargo zigbuild --manifest-path "$ROOT/Cargo.toml" --release --no-default-features --target x86_64-unknown-linux-musl -p light-server --bin light-server
+  echo "Building self-contained Linux ARM64 server..."
+  cargo zigbuild --manifest-path "$ROOT/Cargo.toml" --release --no-default-features --target aarch64-unknown-linux-musl -p light-server --bin light-server
+
   echo "Building release Tauri app..."
   (cd "$UI_DIR" && npm run tauri:build -- --bundles app)
 
-  app_path="$TARGET_DIR/release/bundle/macos/Light.app"
+  app_path="$TARGET_DIR/release/bundle/macos/ToskLight.app"
+  cp "$universal_server" "$app_path/Contents/MacOS/light-server"
   mkdir -p "$artifact_dir"
-  rm -f "$server_zip" "$app_zip"
-  (cd "$TARGET_DIR/release" && zip -q "$server_zip" light-server)
+  archive_binary "$universal_server" "light-server" "$artifact_dir/light-server-$version-macos-universal.zip"
+  archive_binary "$TARGET_DIR/x86_64-pc-windows-gnu/release/light-server.exe" "light-server.exe" "$artifact_dir/light-server-$version-windows-amd64.zip"
+  archive_binary "$TARGET_DIR/x86_64-unknown-linux-musl/release/light-server" "light-server" "$artifact_dir/light-server-$version-linux-amd64.zip"
+  archive_binary "$TARGET_DIR/aarch64-unknown-linux-musl/release/light-server" "light-server" "$artifact_dir/light-server-$version-linux-arm64.zip"
+  rm -f "$app_zip"
   ditto -c -k --sequesterRsrc --keepParent "$app_path" "$app_zip"
-  echo "Created $server_zip"
   echo "Created $app_zip"
 
   if [[ "$install" == true ]]; then
     require open
     stop_running
     mkdir -p "$HOME/Applications"
-    rm -rf "$HOME/Applications/Light.app"
-    ditto "$app_path" "$HOME/Applications/Light.app"
-    open "$HOME/Applications/Light.app"
-    echo "Installed and opened $HOME/Applications/Light.app"
+    rm -rf "$HOME/Applications/ToskLight.app"
+    ditto "$app_path" "$HOME/Applications/ToskLight.app"
+    open "$HOME/Applications/ToskLight.app"
+    echo "Installed and opened $HOME/Applications/ToskLight.app"
   fi
+}
+
+ensure_rust_target() {
+  local target="$1"
+  if ! rustup target list --installed | grep -qx "$target"; then
+    echo "error: missing Rust target $target; install it with: rustup target add $target" >&2
+    exit 1
+  fi
+}
+
+archive_binary() {
+  local binary="$1"
+  local binary_name="$2"
+  local archive="$3"
+  local archive_name
+  local staging
+
+  [[ -f "$binary" ]] || { echo "error: expected build output not found: $binary" >&2; exit 1; }
+  archive_name="${archive##*/}"
+  archive_name="${archive_name%.zip}"
+  staging="$(mktemp -d "$TARGET_DIR/archive.XXXXXX")"
+  mkdir -p "$staging/$archive_name"
+  cp "$binary" "$staging/$archive_name/$binary_name"
+  rm -f "$archive"
+  (cd "$staging" && zip -q -r "$archive" "$archive_name")
+  rm -rf "$staging"
+  echo "Created $archive"
 }
 
 case "${1:-}" in

@@ -255,21 +255,26 @@ impl Engine {
         for source in &snapshot.cue_lists {
             let mut cue_list = source.clone();
             for cue in &mut cue_list.cues {
+                let mut expanded_addresses = cue
+                    .changes
+                    .iter()
+                    .map(|change| (change.fixture_id, change.attribute.clone()))
+                    .collect::<std::collections::HashSet<_>>();
                 for change in cue.group_changes.clone() {
                     if let Ok(fixtures) = resolve_group(&change.group_id, &groups) {
-                        cue.changes.extend(
-                            fixtures
-                                .into_iter()
-                                .flat_map(|fixture_id| {
-                                    logical_targets(&snapshot.fixtures, fixture_id)
-                                })
-                                .map(|fixture_id| light_playback::CueChange {
+                        for fixture_id in fixtures
+                            .into_iter()
+                            .flat_map(|fixture_id| logical_targets(&snapshot.fixtures, fixture_id))
+                        {
+                            if expanded_addresses.insert((fixture_id, change.attribute.clone())) {
+                                cue.changes.push(light_playback::CueChange {
                                     fixture_id,
                                     attribute: change.attribute.clone(),
                                     value: change.value.clone(),
                                     automatic_restore: false,
-                                }),
-                        );
+                                });
+                            }
+                        }
                     }
                 }
                 for phaser in &mut cue.phasers {
@@ -331,7 +336,8 @@ impl Engine {
         let group_master_flashes = self.group_master_flashes.read();
         let mut universes = HashMap::new();
         for fixture in &snapshot.fixtures {
-            let frame = universes.entry(fixture.universe).or_insert([0; 512]);
+            let (Some(universe), Some(_)) = (fixture.universe, fixture.address) else { continue };
+            let frame = universes.entry(universe).or_insert([0; 512]);
             render_fixture(
                 frame,
                 fixture,
@@ -488,6 +494,7 @@ fn render_fixture(
     groups: &HashMap<String, GroupDefinition>,
     group_master_flashes: &HashMap<String, f32>,
 ) -> Result<(), EngineError> {
+    let Some(address) = fixture.address else { return Ok(()) };
     for head in &fixture.definition.heads {
         let owner = if head.shared {
             fixture.fixture_id
@@ -592,7 +599,7 @@ fn render_fixture(
             if parameter.components.is_empty() {
                 continue;
             }
-            encode_parameter(frame, fixture.address, parameter, level)?;
+            encode_parameter(frame, address, parameter, level)?;
         }
         for (attribute, value) in &abstract_values {
             if let (Some(offset), AttributeValue::RawDmx(raw)) = (
@@ -603,7 +610,7 @@ fn render_fixture(
                 value,
             ) && offset < fixture.definition.footprint
             {
-                frame[usize::from(fixture.address - 1 + offset)] = *raw;
+                frame[usize::from(address - 1 + offset)] = *raw;
             }
         }
     }
@@ -656,6 +663,8 @@ mod tests {
         (
             PatchedFixture {
                 fixture_id: physical,
+                name: "Cell".into(),
+                layer_id: "default".into(),
                 definition: FixtureDefinition {
                     schema_version: 1,
                     id: FixtureId::new(),
@@ -681,8 +690,8 @@ mod tests {
                     signal_loss_policy: SignalLossPolicy::HoldLast,
                     safe_values: BTreeMap::new(),
                 },
-                universe: 1,
-                address: 1,
+                universe: Some(1),
+                address: Some(1),
                 direct_control: None,
                 location: Default::default(),
                 rotation: Default::default(),
@@ -903,6 +912,8 @@ mod tests {
         };
         let fixture = PatchedFixture {
             fixture_id: physical,
+            name: "Two cell".into(),
+            layer_id: "default".into(),
             definition: FixtureDefinition {
                 schema_version: 1,
                 id: FixtureId::new(),
@@ -936,8 +947,8 @@ mod tests {
                 signal_loss_policy: SignalLossPolicy::HoldLast,
                 safe_values: BTreeMap::new(),
             },
-            universe: 1,
-            address: 1,
+            universe: Some(1),
+            address: Some(1),
             direct_control: None,
             location: Default::default(),
             rotation: Default::default(),
@@ -1149,11 +1160,56 @@ mod tests {
         assert!(observed.get(frozen_session).unwrap().selected.is_empty());
     }
     #[test]
+    fn explicit_cue_change_wins_when_group_expansion_targets_same_attribute() {
+        let programmers = ProgrammerRegistry::default();
+        let (fixture, logical) = fixture();
+        let physical = fixture.fixture_id;
+        let mut cue = light_playback::Cue::new(1.0);
+        cue.changes.push(light_playback::CueChange::set(
+            logical,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(1.0),
+        ));
+        cue.group_changes.push(light_playback::GroupCueChange {
+            group_id: "group".into(),
+            attribute: AttributeKey::intensity(),
+            value: Some(AttributeValue::Normalized(0.5)),
+        });
+        let cue_list = light_playback::CueList {
+            id: light_core::CueListId::new(),
+            name: "Deduplicated".into(),
+            priority: 10,
+            mode: light_playback::CueListMode::Sequence,
+            looped: false,
+            chaser_step_millis: 1_000,
+            speed_group: None,
+            cues: vec![cue],
+        };
+        let engine = Engine::new(programmers);
+        engine.replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture],
+            cue_lists: vec![cue_list],
+            groups: vec![GroupDefinition {
+                id: "group".into(),
+                name: "Group".into(),
+                fixtures: vec![physical],
+                master: 1.0,
+                playback_fader: None,
+                programming: Default::default(),
+                derived_from: None,
+                frozen_from: None,
+            }],
+            revision: 1,
+            ..Default::default()
+        }).expect("overlapping group and fixture cue values must compile");
+    }
+
+    #[test]
     fn active_group_cue_survives_snapshot_swap_and_gains_new_members() {
         let programmers = ProgrammerRegistry::default();
         let (first, first_logical) = fixture();
         let (mut second, second_logical) = fixture();
-        second.address = 2;
+        second.address = Some(2);
         let first_physical = first.fixture_id;
         let second_physical = second.fixture_id;
         let list_id = light_core::CueListId::new();

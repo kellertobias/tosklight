@@ -23,13 +23,13 @@ export function DmxWindow({ compact }: WindowProps) {
 
   const universeNumbers = useMemo(() => {
     const values = new Set(snapshot?.universes.map((frame) => frame.universe) ?? []);
-    server.patch?.fixtures.forEach((fixture) => values.add(fixture.universe));
+    server.patch?.fixtures.forEach((fixture) => { if (fixture.universe != null) values.add(fixture.universe); });
     server.patch?.routes.forEach((route) => values.add(route.logical_universe));
     if (!values.size) values.add(1);
     return [...values].sort((a, b) => a - b).slice(0, compact ? 2 : 8);
   }, [snapshot, server.patch, compact]);
 
-  const fixtureFor = (universe: number, address: number) => server.patch?.fixtures.find((fixture) => fixture.universe === universe && address >= fixture.address && address < fixture.address + fixture.definition.footprint);
+  const fixtureFor = (universe: number, address: number) => server.patch?.fixtures.find((fixture) => fixture.universe === universe && fixture.address != null && address >= fixture.address && address < fixture.address + fixture.definition.footprint);
   const positionInspector = (element: HTMLElement) => {
     const rect = element.getBoundingClientRect();
     document.documentElement.style.setProperty("--dmx-tip-x", `${Math.min(innerWidth - 260, rect.right + 10)}px`);

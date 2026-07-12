@@ -48,6 +48,7 @@ export interface BootstrapSnapshot {
   output_health: OutputHealth;
   active_timecode_source: string | null;
   active_timecode: string | null;
+  active_show_error: string | null;
 }
 
 export interface SessionResponse {
@@ -60,8 +61,10 @@ export interface ControlDesk { id: string; name: string; osc_alias: string; colu
 
 export interface PatchedFixture {
   fixture_id: string;
-  universe: number;
-  address: number;
+  name?: string;
+  universe: number | null;
+  address: number | null;
+  layer_id?: string;
   direct_control?: { protocol: "citp"; ip_address: string; port: number } | null;
   definition: FixtureDefinition;
   logical_heads: Array<{ fixture_id: string; head_index: number }>;
@@ -108,6 +111,12 @@ export interface PatchSnapshot {
     destination: string | null;
     enabled: boolean;
   }>;
+}
+
+export interface PatchLayer {
+  id: string;
+  name: string;
+  order: number;
 }
 
 export interface Cue {

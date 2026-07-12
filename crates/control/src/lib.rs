@@ -4,6 +4,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use light_core::CueListId;
+#[cfg(feature = "native-midi")]
 use midir::{Ignore, MidiInput, MidiInputConnection};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -83,6 +84,8 @@ pub enum ControlAction {
     CueRelease { cue_list_id: CueListId },
     Blackout { enabled: bool },
     GrandMaster { level: f32 },
+    /// Routes the desk's global SET key to connected operator surfaces.
+    DeskSet,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -128,6 +131,7 @@ pub trait ControlInput: Send {
     async fn next_event(&mut self) -> Option<ControlEvent>;
 }
 
+#[cfg(feature = "native-midi")]
 pub fn available_midi_inputs() -> Result<Vec<String>, String> {
     let input = MidiInput::new("Light discovery").map_err(|error| error.to_string())?;
     input
@@ -137,11 +141,18 @@ pub fn available_midi_inputs() -> Result<Vec<String>, String> {
         .collect()
 }
 
+#[cfg(not(feature = "native-midi"))]
+pub fn available_midi_inputs() -> Result<Vec<String>, String> {
+    Ok(Vec::new())
+}
+
+#[cfg(feature = "native-midi")]
 pub struct MidiControlInput {
     _connection: MidiInputConnection<()>,
     receiver: tokio::sync::mpsc::Receiver<ControlEvent>,
 }
 
+#[cfg(feature = "native-midi")]
 impl MidiControlInput {
     pub fn open(port_name: &str) -> Result<Self, String> {
         let mut input = MidiInput::new("Light").map_err(|error| error.to_string())?;
@@ -184,10 +195,30 @@ impl MidiControlInput {
     }
 }
 
+#[cfg(feature = "native-midi")]
 #[async_trait]
 impl ControlInput for MidiControlInput {
     async fn next_event(&mut self) -> Option<ControlEvent> {
         self.receiver.recv().await
+    }
+}
+
+/// Placeholder used by portable builds that intentionally omit native USB-MIDI.
+#[cfg(not(feature = "native-midi"))]
+pub struct MidiControlInput;
+
+#[cfg(not(feature = "native-midi"))]
+impl MidiControlInput {
+    pub fn open(_port_name: &str) -> Result<Self, String> {
+        Err("native MIDI is unavailable in this portable build".to_owned())
+    }
+}
+
+#[cfg(not(feature = "native-midi"))]
+#[async_trait]
+impl ControlInput for MidiControlInput {
+    async fn next_event(&mut self) -> Option<ControlEvent> {
+        None
     }
 }
 

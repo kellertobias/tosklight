@@ -18,6 +18,7 @@ import type {
   DmxSnapshot,
   MediaServerFixture,
   PatchSnapshot,
+  PatchLayer,
   PatchedFixture,
   PlaybackSnapshot,
   SessionResponse,
@@ -71,6 +72,7 @@ interface ServerContextValue {
   createUser: (name: string) => Promise<void>;
   changeUser: (user: import("./types").DeskUser) => Promise<void>;
   patch: PatchSnapshot | null;
+  patchLayers: VersionedObject<PatchLayer>[];
   playbacks: PlaybackSnapshot | null;
   shows: ShowEntry[];
   configuration: DeskConfiguration | null;
@@ -114,6 +116,7 @@ interface ServerContextValue {
   ) => Promise<void>;
   createShow: (name: string) => Promise<void>;
   saveShowAs: (name: string) => Promise<boolean>;
+  initializeEmptyShow: () => Promise<boolean>;
   uploadShow: (file: File, overwrite?: boolean) => Promise<void>;
   openShow: (
     id: string,
@@ -188,8 +191,9 @@ interface ServerContextValue {
   ) => Promise<void>;
   saveFixtureDefinition: (definition: FixtureDefinition) => Promise<boolean>;
   deleteFixtureDefinition: (id: string, revision: number) => Promise<void>;
-  patchFixture: (input: { name: string; definition: FixtureDefinition; universe: number; address: number }) => Promise<boolean>;
+  patchFixture: (input: { name: string; definition: FixtureDefinition; universe: number | null; address: number | null; layer_id?: string }) => Promise<string | null>;
   updatePatchedFixture: (fixtureId: string, changes: Partial<PatchedFixture>) => Promise<boolean>;
+  savePatchLayer: (layer: PatchLayer) => Promise<boolean>;
 }
 
 const ServerContext = createContext<ServerContextValue | null>(null);
@@ -202,6 +206,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [showDirty, setShowDirty] = useState(false);
   const [patch, setPatch] = useState<PatchSnapshot | null>(null);
+  const [patchLayers, setPatchLayers] = useState<VersionedObject<PatchLayer>[]>([]);
   const [playbacks, setPlaybacks] = useState<PlaybackSnapshot | null>(null);
   const [shows, setShows] = useState<ShowEntry[]>([]);
   const [configuration, setConfiguration] = useState<DeskConfiguration | null>(
@@ -249,7 +254,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
         setStageLayout(null);
         return;
       }
-      const [nextGroups, nextPresets, nextCueObjects, layouts, stageLayouts] =
+      const [nextGroups, nextPresets, nextCueObjects, layouts, stageLayouts, nextPatchLayers] =
         await Promise.all([
           client.objects<StoredGroup>(showId, "group"),
           client.objects<StoredPreset>(showId, "preset"),
@@ -258,12 +263,14 @@ export function ServerProvider({ children }: PropsWithChildren) {
             ? client.objects<StoredDeskLayout>(showId, "user_layout")
             : Promise.resolve([]),
           client.objects<StoredStageLayout>(showId, "stage_layout"),
+          client.objects<PatchLayer>(showId, "patch_layer"),
         ]);
       setGroups(nextGroups);
       setPresets(nextPresets);
       setCueObjects(nextCueObjects);
       setDeskLayout(layouts.find((item) => item.id === userId) ?? null);
       setStageLayout(stageLayouts.find((item) => item.id === "main") ?? null);
+      setPatchLayers(nextPatchLayers.length ? nextPatchLayers : [{ kind: "patch_layer", id: "default", revision: 0, updated_at: "", body: { id: "default", name: "Default", order: 0 } }]);
     },
     [client],
   );
@@ -345,7 +352,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
         setMediaServers(nextMedia.fixtures);
         setFixtureLibrary(nextFixtureLibrary);
         await loadShowObjects(
-          effectiveBootstrap.active_show?.id ?? null,
+          effectiveBootstrap.active_show_error ? null : effectiveBootstrap.active_show?.id ?? null,
           nextSession.user.id,
         );
         const ownProgrammer = programmers.find(
@@ -354,6 +361,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
         setCommandLineState(ownProgrammer?.command_line ?? "");
         setSelectedFixtures(ownProgrammer?.selected ?? []);
         unsubscribe = client.onEvent((event) => {
+          if (event.kind === "desk_action" && (event.payload as { action?: string })?.action === "set") window.dispatchEvent(new CustomEvent("light:desk-action", { detail: "set" }));
           if (["show_object_changed", "preset_stored", "preload_stored"].includes(event.kind)) setShowDirty(true);
           if (["show_opened", "show_rolled_back"].includes(event.kind)) setShowDirty(false);
           if (
@@ -500,6 +508,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
         window.location.reload();
       },
       patch,
+      patchLayers,
       playbacks,
       shows,
       configuration,
@@ -626,6 +635,22 @@ export function ServerProvider({ children }: PropsWithChildren) {
             for (const byte of bytes) binary += String.fromCharCode(byte);
             created = await client.createShow(name, btoa(binary), false);
           } else created = await client.createShow(name);
+          await client.openShow(created.id, "hold_current");
+          await refresh();
+          setShowDirty(false);
+          setError(null);
+          return true;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return false;
+        }
+      },
+      initializeEmptyShow: async () => {
+        try {
+          const names = new Set(shows.map((show) => show.name.toLowerCase()));
+          let name = "New Empty Show";
+          for (let suffix = 2; names.has(name.toLowerCase()); suffix += 1) name = `New Empty Show ${suffix}`;
+          const created = await client.createShow(name);
           await client.openShow(created.id, "hold_current");
           await refresh();
           setShowDirty(false);
@@ -1299,17 +1324,18 @@ export function ServerProvider({ children }: PropsWithChildren) {
     patchFixture: async (input) => {
       try {
         if (!bootstrap?.active_show) throw new Error("No active show is available");
-        if (input.universe < 1 || input.address < 1 || input.address + input.definition.footprint - 1 > 512) throw new Error("The fixture must fit within universe addresses 1–512");
+        if ((input.universe == null) !== (input.address == null)) throw new Error("Universe and address must both be set or both be empty");
+        if (input.universe != null && input.address != null && (input.universe < 1 || input.address < 1 || input.address + input.definition.footprint - 1 > 512)) throw new Error("The fixture must fit within universe addresses 1–512");
         const fixture_id = crypto.randomUUID();
         const body = {
-          fixture_id,
+          fixture_id, name: input.name,
           definition: input.definition,
-          universe: input.universe, address: input.address, direct_control: null, logical_heads: [],
+          universe: input.universe, address: input.address, layer_id: input.layer_id ?? "default", direct_control: null, location: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, logical_heads: [],
         };
         await client.putObject(bootstrap.active_show.id, "patched_fixture", fixture_id, body, 0);
-        await refresh(); setError(null); return true;
+        await refresh(); setError(null); return fixture_id;
       } catch (reason) {
-        setError(reason instanceof Error ? reason.message : String(reason)); return false;
+        setError(reason instanceof Error ? reason.message : String(reason)); return null;
       }
     },
     updatePatchedFixture: async (fixtureId, changes) => {
@@ -1323,6 +1349,10 @@ export function ServerProvider({ children }: PropsWithChildren) {
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : String(reason)); return false;
       }
+    },
+    savePatchLayer: async (layer) => {
+      try { if (!bootstrap?.active_show) throw new Error("No active show is available"); const existing = patchLayers.find((item) => item.id === layer.id); await client.putObject(bootstrap.active_show.id, "patch_layer", layer.id, layer, existing?.revision ?? 0); await loadShowObjects(bootstrap.active_show.id, session?.user.id ?? null); setError(null); return true; }
+      catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); return false; }
     },
     }),
     [

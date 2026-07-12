@@ -105,11 +105,24 @@ pub struct FixtureDefinition {
     pub id: FixtureId,
     pub revision: u32,
     pub manufacturer: String,
+    /// Broad, operator-facing classification used to browse the desk library.
+    #[serde(default)]
+    pub device_type: String,
+    /// Human-readable fixture name. `model` remains the manufacturer's model identifier.
+    #[serde(default)]
+    pub name: String,
     pub model: String,
     pub mode: String,
     pub footprint: u16,
     pub heads: Vec<LogicalHead>,
     pub color_calibration: Option<ColorCalibration>,
+    #[serde(default)]
+    pub physical: FixturePhysicalProperties,
+    /// Optional stage-view assets. Values are portable asset identifiers or data URLs.
+    #[serde(default)]
+    pub model_asset: Option<String>,
+    #[serde(default)]
+    pub icon_asset: Option<String>,
     pub hazardous: bool,
     /// Direct-control transports explicitly supported by this fixture profile.
     #[serde(default)]
@@ -117,6 +130,16 @@ pub struct FixtureDefinition {
     #[serde(default)]
     pub signal_loss_policy: SignalLossPolicy,
     pub safe_values: BTreeMap<AttributeKey, AttributeValue>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct FixturePhysicalProperties {
+    pub pan_range_degrees: Option<f32>,
+    pub tilt_range_degrees: Option<f32>,
+    pub width_millimetres: Option<f32>,
+    pub height_millimetres: Option<f32>,
+    pub depth_millimetres: Option<f32>,
+    pub weight_kilograms: Option<f32>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -133,17 +156,91 @@ pub enum SignalLossPolicy {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PatchedFixture {
     pub fixture_id: FixtureId,
+    /// Show-local operator name. Definition names remain immutable library metadata.
+    #[serde(default)]
+    pub name: String,
     pub definition: FixtureDefinition,
-    pub universe: Universe,
+    #[serde(default)]
+    pub universe: Option<Universe>,
     /// User-facing DMX address, always 1 through 512.
-    pub address: DmxAddress,
+    #[serde(default)]
+    pub address: Option<DmxAddress>,
+    #[serde(default = "default_patch_layer")]
+    pub layer_id: String,
     /// Optional direct-control endpoint attached to the physical parent fixture.
     /// Logical heads inherit this endpoint and cannot override it.
     #[serde(default)]
     pub direct_control: Option<DirectControlEndpoint>,
     #[serde(default)]
+    pub location: FixtureLocation,
+    #[serde(default)]
+    pub rotation: FixtureVector,
+    #[serde(default)]
     pub logical_heads: Vec<PatchedHead>,
 }
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct FixtureVector {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
+pub struct FixtureLocation {
+    /// Integer millimetres avoid accumulating floating-point positioning error.
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+}
+
+impl<'de> Deserialize<'de> for FixtureLocation {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct StoredLocation {
+            #[serde(deserialize_with = "deserialize_location_coordinate")]
+            x: i32,
+            #[serde(deserialize_with = "deserialize_location_coordinate")]
+            y: i32,
+            #[serde(deserialize_with = "deserialize_location_coordinate")]
+            z: i32,
+        }
+        let stored = StoredLocation::deserialize(deserializer)?;
+        Ok(Self { x: stored.x, y: stored.y, z: stored.z })
+    }
+}
+
+fn deserialize_location_coordinate<'de, D>(deserializer: D) -> Result<i32, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct CoordinateVisitor;
+    impl<'de> serde::de::Visitor<'de> for CoordinateVisitor {
+        type Value = i32;
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("an integer millimetre coordinate or a legacy floating-point metre coordinate")
+        }
+        fn visit_i64<E: serde::de::Error>(self, value: i64) -> Result<i32, E> {
+            i32::try_from(value).map_err(E::custom)
+        }
+        fn visit_u64<E: serde::de::Error>(self, value: u64) -> Result<i32, E> {
+            i32::try_from(value).map_err(E::custom)
+        }
+        fn visit_f64<E: serde::de::Error>(self, value: f64) -> Result<i32, E> {
+            let millimetres = value * 1_000.0;
+            if !millimetres.is_finite() || millimetres < f64::from(i32::MIN) || millimetres > f64::from(i32::MAX) {
+                return Err(E::custom("legacy fixture location is outside the supported range"));
+            }
+            Ok(millimetres.round() as i32)
+        }
+    }
+    deserializer.deserialize_any(CoordinateVisitor)
+}
+
+fn default_patch_layer() -> String { "default".into() }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct DirectControlEndpoint {
@@ -203,8 +300,18 @@ impl FixtureDefinition {
                 "fixture needs at least one logical head".into(),
             ));
         }
+        if self.manufacturer.trim().is_empty() || self.display_name().is_empty() {
+            return Err(FixtureError::Invalid(
+                "manufacturer and fixture name are required".into(),
+            ));
+        }
         for parameter in self.heads.iter().flat_map(|head| &head.parameters) {
-            if parameter.components.is_empty() || parameter.components.len() > 4 {
+            let abstract_virtual_dimmer = parameter.virtual_dimmer
+                && parameter.attribute.is_intensity()
+                && parameter.components.is_empty();
+            if (!abstract_virtual_dimmer && parameter.components.is_empty())
+                || parameter.components.len() > 4
+            {
                 return Err(FixtureError::Invalid(format!(
                     "{} must have 1-4 DMX components",
                     parameter.attribute.0
@@ -249,6 +356,14 @@ impl FixtureDefinition {
             }
         }
         Ok(())
+    }
+
+    pub fn display_name(&self) -> &str {
+        if self.name.trim().is_empty() {
+            &self.model
+        } else {
+            &self.name
+        }
     }
 
     pub fn generated_presets(&self) -> Vec<GeneratedPreset> {
@@ -308,16 +423,19 @@ pub fn validate_patch(fixtures: &[PatchedFixture]) -> Result<(), FixtureError> {
                 )));
             }
         }
-        if fixture.address == 0
-            || usize::from(fixture.address) + usize::from(fixture.definition.footprint) - 1 > 512
+        let (Some(universe), Some(address)) = (fixture.universe, fixture.address) else {
+            continue;
+        };
+        if address == 0
+            || usize::from(address) + usize::from(fixture.definition.footprint) - 1 > 512
         {
             return Err(FixtureError::Invalid(format!(
                 "fixture {} exceeds universe {}",
-                fixture.fixture_id.0, fixture.universe
+                fixture.fixture_id.0, universe
             )));
         }
-        let slots = used.entry(fixture.universe).or_insert([false; 512]);
-        let start = usize::from(fixture.address - 1);
+        let slots = used.entry(universe).or_insert([false; 512]);
+        let start = usize::from(address - 1);
         for (offset, slot) in slots[start..start + usize::from(fixture.definition.footprint)]
             .iter_mut()
             .enumerate()
@@ -325,7 +443,7 @@ pub fn validate_patch(fixtures: &[PatchedFixture]) -> Result<(), FixtureError> {
             if *slot {
                 return Err(FixtureError::Invalid(format!(
                     "patch overlap at universe {} address {}",
-                    fixture.universe,
+                    universe,
                     start + offset + 1
                 )));
             }
@@ -500,11 +618,376 @@ impl FixtureLibrary {
             .query_map([id.0.to_string()], |row| row.get(0))?
             .collect::<Result<_, _>>()?)
     }
+    pub fn definitions(&self) -> Result<Vec<FixtureDefinition>, FixtureError> {
+        let mut statement = self.conn.prepare(
+            "SELECT f.definition_json FROM fixture_definitions f JOIN (SELECT id,MAX(revision) revision FROM fixture_definitions GROUP BY id) latest ON latest.id=f.id AND latest.revision=f.revision ORDER BY f.manufacturer COLLATE NOCASE, f.model COLLATE NOCASE, f.mode COLLATE NOCASE",
+        )?;
+        let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
+        rows.map(|row| Ok(serde_json::from_str(&row?)?)).collect()
+    }
+    pub fn delete(&self, id: FixtureId, revision: u32) -> Result<bool, FixtureError> {
+        Ok(self.conn.execute(
+            "DELETE FROM fixture_definitions WHERE id=?1 AND revision=?2",
+            params![id.0.to_string(), revision],
+        )? == 1)
+    }
+    pub fn ensure_builtin_generics(&mut self) -> Result<usize, FixtureError> {
+        self.conn.execute_batch("CREATE TABLE IF NOT EXISTS library_metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);")?;
+        if self
+            .conn
+            .query_row(
+                "SELECT value FROM library_metadata WHERE key='generic_catalog_version'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?
+            .as_deref()
+            == Some("3")
+        {
+            return Ok(0);
+        }
+        let definitions = generic_fixture_definitions();
+        let transaction = self.conn.transaction()?;
+        transaction.execute("DELETE FROM fixture_definitions WHERE manufacturer='Generic' AND model IN ('Dimmer','Fogger','Hazer','Fan','Relay','Pan Tilt','RGB LED','RGBW LED','RGBCCT LED','RGBWA LED','RGBWAUV LED','CCT LED','CMY LED','Strobe')", [])?;
+        for fixture in &definitions {
+            let json = serde_json::to_string(fixture)?;
+            transaction.execute("INSERT INTO fixture_definitions(id,revision,manufacturer,model,mode,definition_json) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(id,revision) DO NOTHING", params![fixture.id.0.to_string(),fixture.revision,fixture.manufacturer,fixture.model,fixture.mode,json])?;
+        }
+        transaction.execute("INSERT INTO library_metadata(key,value) VALUES('generic_catalog_version','3') ON CONFLICT(key) DO UPDATE SET value=excluded.value", [])?;
+        transaction.commit()?;
+        Ok(definitions.len())
+    }
+}
+
+fn permutations(values: &[(&str, &str)]) -> Vec<Vec<(String, String)>> {
+    fn visit(
+        remaining: Vec<(&str, &str)>,
+        current: &mut Vec<(String, String)>,
+        output: &mut Vec<Vec<(String, String)>>,
+    ) {
+        if remaining.is_empty() {
+            output.push(current.clone());
+            return;
+        }
+        for index in 0..remaining.len() {
+            let mut next = remaining.clone();
+            let value = next.remove(index);
+            current.push((value.0.into(), value.1.into()));
+            visit(next, current, output);
+            current.pop();
+        }
+    }
+    let mut output = Vec::new();
+    visit(values.to_vec(), &mut Vec::new(), &mut output);
+    output
+}
+
+fn generic_definition(
+    name: &str,
+    device_type: &str,
+    mode: String,
+    channels: &[(String, String)],
+    virtual_dimmer: bool,
+    resolution: usize,
+) -> FixtureDefinition {
+    let mut offset = 0_u16;
+    let mut parameters = channels
+        .iter()
+        .map(|(_label, attribute)| {
+            let bytes = resolution;
+            let start = offset;
+            offset += bytes as u16;
+            Parameter {
+                attribute: AttributeKey(attribute.clone()),
+                components: (0..bytes)
+                    .map(|component| ChannelComponent {
+                        offset: start + component as u16,
+                        byte_order: ByteOrder::MsbFirst,
+                    })
+                    .collect(),
+                default: 0.0,
+                virtual_dimmer: virtual_dimmer && attribute.starts_with("color."),
+                metadata: ParameterMetadata::default(),
+                capabilities: if attribute == "fog" {
+                    vec![Capability {
+                        name: "Off to full output".into(),
+                        dmx_from: 0,
+                        dmx_to: 255,
+                        preset_family: Some("beam".into()),
+                    }]
+                } else if attribute == "switch" {
+                    vec![
+                        Capability {
+                            name: "Off".into(),
+                            dmx_from: 0,
+                            dmx_to: 127,
+                            preset_family: Some("control".into()),
+                        },
+                        Capability {
+                            name: "On".into(),
+                            dmx_from: 128,
+                            dmx_to: 255,
+                            preset_family: Some("control".into()),
+                        },
+                    ]
+                } else {
+                    Vec::new()
+                },
+            }
+        })
+        .collect::<Vec<_>>();
+    if virtual_dimmer {
+        parameters.insert(
+            0,
+            Parameter {
+                attribute: AttributeKey::intensity(),
+                components: Vec::new(),
+                default: 1.0,
+                virtual_dimmer: true,
+                metadata: ParameterMetadata::default(),
+                capabilities: Vec::new(),
+            },
+        );
+    }
+    FixtureDefinition {
+        schema_version: 1,
+        id: FixtureId::new(),
+        revision: 1,
+        manufacturer: "Generic".into(),
+        device_type: device_type.into(),
+        name: name.into(),
+        model: name.into(),
+        mode,
+        footprint: offset,
+        heads: vec![LogicalHead {
+            index: 0,
+            name: "Main".into(),
+            shared: true,
+            parameters,
+        }],
+        color_calibration: None,
+        physical: FixturePhysicalProperties::default(),
+        model_asset: None,
+        icon_asset: None,
+        hazardous: false,
+        direct_control_protocols: Vec::new(),
+        signal_loss_policy: SignalLossPolicy::HoldLast,
+        safe_values: BTreeMap::new(),
+    }
+}
+
+fn led_modes(name: &str, emitters: &[(&str, &str)]) -> Vec<FixtureDefinition> {
+    let mut result = Vec::new();
+    for order in permutations(emitters) {
+        let label = order
+            .iter()
+            .map(|(label, _)| label.as_str())
+            .collect::<String>();
+        let mut dimmer_first = vec![("D".into(), "intensity".into())];
+        dimmer_first.extend(order.clone());
+        result.push(generic_definition(
+            name,
+            "wash",
+            format!("D{label} 8-bit dimmer first"),
+            &dimmer_first,
+            false,
+            1,
+        ));
+        let mut dimmer_last = order.clone();
+        dimmer_last.push(("D".into(), "intensity".into()));
+        result.push(generic_definition(
+            name,
+            "wash",
+            format!("{label}D 8-bit dimmer last"),
+            &dimmer_last,
+            false,
+            1,
+        ));
+        result.push(generic_definition(
+            name,
+            "wash",
+            format!("{label} virtual dimmer"),
+            &order,
+            true,
+            1,
+        ));
+    }
+    result
+}
+
+/// Built-in profiles are normal library entries, grouped as named modes by manufacturer/model.
+pub fn generic_fixture_definitions() -> Vec<FixtureDefinition> {
+    let mut result = vec![
+        generic_definition(
+            "Dimmer",
+            "dimmer",
+            "8-bit".into(),
+            &[("D".into(), "intensity".into())],
+            false,
+            1,
+        ),
+        generic_definition(
+            "Dimmer",
+            "dimmer",
+            "16-bit".into(),
+            &[("D".into(), "intensity".into())],
+            false,
+            2,
+        ),
+        generic_definition(
+            "Fogger",
+            "fogger",
+            "Fog 8-bit".into(),
+            &[("F".into(), "fog".into())],
+            false,
+            1,
+        ),
+        generic_definition(
+            "Hazer",
+            "fogger",
+            "Fan, Fog".into(),
+            &[("Fan".into(), "fan".into()), ("Fog".into(), "fog".into())],
+            false,
+            1,
+        ),
+        generic_definition(
+            "Fan",
+            "other",
+            "Fan 8-bit".into(),
+            &[("F".into(), "fan".into())],
+            false,
+            1,
+        ),
+        generic_definition(
+            "Relay",
+            "other",
+            "Off / On".into(),
+            &[("S".into(), "switch".into())],
+            false,
+            1,
+        ),
+        generic_definition(
+            "Hazer",
+            "fogger",
+            "Fog, Fan".into(),
+            &[("Fog".into(), "fog".into()), ("Fan".into(), "fan".into())],
+            false,
+            1,
+        ),
+        generic_definition(
+            "Strobe",
+            "strobe",
+            "Dimmer, Strobe".into(),
+            &[
+                ("D".into(), "intensity".into()),
+                ("S".into(), "strobe".into()),
+            ],
+            false,
+            1,
+        ),
+        generic_definition(
+            "Strobe",
+            "strobe",
+            "Strobe, Dimmer".into(),
+            &[
+                ("S".into(), "strobe".into()),
+                ("D".into(), "intensity".into()),
+            ],
+            false,
+            1,
+        ),
+        generic_definition(
+            "Pan Tilt",
+            "other",
+            "Pan Tilt 8-bit".into(),
+            &[("P".into(), "pan".into()), ("T".into(), "tilt".into())],
+            false,
+            1,
+        ),
+        generic_definition(
+            "Pan Tilt",
+            "other",
+            "Pan Tilt 16-bit".into(),
+            &[("P".into(), "pan".into()), ("T".into(), "tilt".into())],
+            false,
+            2,
+        ),
+    ];
+    result.extend(led_modes(
+        "RGB LED",
+        &[
+            ("R", "color.red"),
+            ("G", "color.green"),
+            ("B", "color.blue"),
+        ],
+    ));
+    result.extend(led_modes(
+        "RGBW LED",
+        &[
+            ("R", "color.red"),
+            ("G", "color.green"),
+            ("B", "color.blue"),
+            ("W", "color.white"),
+        ],
+    ));
+    result.extend(led_modes(
+        "RGBCCT LED",
+        &[
+            ("R", "color.red"),
+            ("G", "color.green"),
+            ("B", "color.blue"),
+            ("C", "color.cold_white"),
+            ("W", "color.warm_white"),
+        ],
+    ));
+    result.extend(led_modes(
+        "RGBWA LED",
+        &[
+            ("R", "color.red"),
+            ("G", "color.green"),
+            ("B", "color.blue"),
+            ("W", "color.white"),
+            ("A", "color.amber"),
+        ],
+    ));
+    result.extend(led_modes(
+        "RGBWAUV LED",
+        &[
+            ("R", "color.red"),
+            ("G", "color.green"),
+            ("B", "color.blue"),
+            ("W", "color.white"),
+            ("A", "color.amber"),
+            ("U", "color.uv"),
+        ],
+    ));
+    result.extend(led_modes(
+        "CCT LED",
+        &[("C", "color.cold_white"), ("W", "color.warm_white")],
+    ));
+    result.extend(led_modes(
+        "CMY LED",
+        &[
+            ("C", "color.cyan"),
+            ("M", "color.magenta"),
+            ("Y", "color.yellow"),
+        ],
+    ));
+    result
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_legacy_metre_locations_and_current_millimetre_locations() {
+        let legacy: FixtureLocation = serde_json::from_str(r#"{"x":1.25,"y":-0.5,"z":0.00000001}"#).unwrap();
+        assert_eq!(legacy, FixtureLocation { x: 1_250, y: -500, z: 0 });
+        let current: FixtureLocation = serde_json::from_str(r#"{"x":1250,"y":-500,"z":0}"#).unwrap();
+        assert_eq!(current, legacy);
+        assert_eq!(serde_json::to_string(&current).unwrap(), r#"{"x":1250,"y":-500,"z":0}"#);
+    }
 
     fn definition(footprint: u16) -> FixtureDefinition {
         FixtureDefinition {
@@ -512,6 +995,8 @@ mod tests {
             id: FixtureId::new(),
             revision: 1,
             manufacturer: "Test".into(),
+            device_type: "other".into(),
+            name: "Lamp".into(),
             model: "Lamp".into(),
             mode: "Mode".into(),
             footprint,
@@ -522,6 +1007,9 @@ mod tests {
                 parameters: vec![],
             }],
             color_calibration: None,
+            physical: FixturePhysicalProperties::default(),
+            model_asset: None,
+            icon_asset: None,
             hazardous: false,
             direct_control_protocols: Vec::new(),
             signal_loss_policy: SignalLossPolicy::HoldLast,
@@ -578,27 +1066,39 @@ mod tests {
         let def = definition(10);
         let first = PatchedFixture {
             fixture_id: FixtureId::new(),
+            name: "First".into(),
             definition: def.clone(),
-            universe: 1,
-            address: 1,
+            universe: Some(1),
+            address: Some(1),
+            layer_id: default_patch_layer(),
             direct_control: None,
+            location: Default::default(),
+            rotation: Default::default(),
             logical_heads: vec![],
         };
         let overlap = PatchedFixture {
             fixture_id: FixtureId::new(),
+            name: "Overlap".into(),
             definition: def.clone(),
-            universe: 1,
-            address: 10,
+            universe: Some(1),
+            address: Some(10),
+            layer_id: default_patch_layer(),
             direct_control: None,
+            location: Default::default(),
+            rotation: Default::default(),
             logical_heads: vec![],
         };
         assert!(validate_patch(&[first.clone(), overlap]).is_err());
         let overflow = PatchedFixture {
             fixture_id: FixtureId::new(),
+            name: "Overflow".into(),
             definition: def,
-            universe: 1,
-            address: 504,
+            universe: Some(1),
+            address: Some(504),
+            layer_id: default_patch_layer(),
             direct_control: None,
+            location: Default::default(),
+            rotation: Default::default(),
             logical_heads: vec![],
         };
         assert!(validate_patch(&[overflow]).is_err());
@@ -615,10 +1115,14 @@ mod tests {
         media_definition.direct_control_protocols = vec![DirectControlProtocol::Citp];
         let parent = PatchedFixture {
             fixture_id: FixtureId::new(),
+            name: "Media".into(),
             definition: media_definition,
-            universe: 1,
-            address: 1,
+            universe: Some(1),
+            address: Some(1),
+            layer_id: default_patch_layer(),
             direct_control: Some(endpoint.clone()),
+            location: Default::default(),
+            rotation: Default::default(),
             logical_heads: vec![PatchedHead {
                 head_index: 1,
                 fixture_id: FixtureId::new(),
@@ -691,5 +1195,78 @@ mod tests {
         library.import_json(&json).unwrap();
         assert_eq!(library.export_json(fixture.id, 1).unwrap().unwrap(), json);
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn generic_catalog_groups_named_modes_and_covers_led_permutations() {
+        let catalog = generic_fixture_definitions();
+        assert_eq!(catalog.len(), 3_005);
+        assert!(catalog.iter().all(|fixture| fixture.validate().is_ok()));
+        let dimmers = catalog
+            .iter()
+            .filter(|fixture| fixture.name == "Dimmer")
+            .collect::<Vec<_>>();
+        assert_eq!(dimmers.len(), 2);
+        assert!(
+            dimmers
+                .iter()
+                .any(|fixture| fixture.mode == "8-bit" && fixture.footprint == 1)
+        );
+        assert!(dimmers.iter().any(|fixture| fixture.mode == "16-bit"
+            && fixture.footprint == 2
+            && fixture.heads[0].parameters[0].components.len() == 2));
+        let rgb = catalog
+            .iter()
+            .filter(|fixture| fixture.name == "RGB LED")
+            .collect::<Vec<_>>();
+        assert_eq!(rgb.len(), 18);
+        assert!(
+            rgb.iter()
+                .any(|fixture| fixture.mode == "DRGB 8-bit dimmer first")
+        );
+        assert!(
+            rgb.iter()
+                .any(|fixture| fixture.mode == "RBGD 8-bit dimmer last")
+        );
+        assert!(rgb.iter().any(|fixture| {
+            fixture.mode == "BGR virtual dimmer"
+                && fixture.footprint == 3
+                && fixture.heads[0].parameters.iter().any(|parameter| {
+                    parameter.attribute.is_intensity()
+                        && parameter.components.is_empty()
+                        && parameter.virtual_dimmer
+                })
+                && fixture.heads[0]
+                    .parameters
+                    .iter()
+                    .filter(|parameter| parameter.attribute.0.starts_with("color."))
+                    .all(|parameter| parameter.virtual_dimmer)
+        }));
+        assert_eq!(
+            catalog
+                .iter()
+                .filter(|fixture| fixture.name == "Hazer")
+                .count(),
+            2
+        );
+        assert!(catalog.iter().any(|fixture| fixture.name == "Relay"
+            && fixture.heads[0].parameters[0].capabilities.len() == 2));
+        assert_eq!(
+            catalog
+                .iter()
+                .filter(|fixture| fixture.name == "CCT LED")
+                .count(),
+            6
+        );
+        assert_eq!(
+            catalog
+                .iter()
+                .filter(|fixture| fixture.name == "CMY LED")
+                .count(),
+            18
+        );
+        assert!(catalog.iter().any(
+            |fixture| fixture.name == "RGBWAUV LED" && fixture.mode == "UAWGBR virtual dimmer"
+        ));
     }
 }

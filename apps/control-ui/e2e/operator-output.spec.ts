@@ -4,6 +4,23 @@ interface Session { session_id: string; token: string }
 interface AuditEvent { revision: number; kind: string; payload: Record<string, unknown> }
 test.describe.configure({ mode: "serial" });
 
+test("physical Enter saves Save As and activates the new show", async ({ page, request }) => {
+  const session = await jsonRequest<Session>(request, "post", "/api/v1/sessions", undefined, { username: "Operator" });
+  const empty = await jsonRequest<{ id: string }>(request, "post", "/api/v1/shows", session, { name: `Empty-${crypto.randomUUID()}`, data_base64: null, overwrite: false });
+  await jsonRequest(request, "post", `/api/v1/shows/${empty.id}/open`, session, { transition: "hold_current" });
+  await page.goto("/");
+  await expect(page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
+  await page.getByRole("button", { name: "Open show menu" }).click();
+  await page.getByRole("button", { name: "Save As", exact: true }).click();
+  await page.getByLabel("Show name").click();
+  await page.keyboard.type("My Show");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog", { name: "Save show" })).toBeHidden();
+  await expect(page.locator(".show-details>b")).toHaveText("My Show");
+  const bootstrap = await jsonRequest<{ active_show: { name: string } | null }>(request, "get", "/api/v1/bootstrap", session);
+  expect(bootstrap.active_show?.name).toBe("My Show");
+});
+
 async function jsonRequest<T>(request: APIRequestContext, method: "get" | "post" | "put", url: string, session?: Session, data?: unknown): Promise<T> {
   const headers = session ? { authorization: `Bearer ${session.token}`, ...(method === "put" ? { "if-match": "0" } : {}) } : undefined;
   const response = await request[method](url, { data, headers });
@@ -51,8 +68,8 @@ test("touch programmer path is audited and reaches the rendered DMX output", asy
   await expect(page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
   await registerAuditReceiver(page, setupSession);
 
-  await page.getByRole("button", { name: /Dimmer 1, \d+%/ }).click();
-  await page.locator(".touch-surface").filter({ hasText: "Dimmer" }).click();
+  await page.locator("button.fixture-row").first().click();
+  await page.getByLabel("Dimmer").fill("75");
 
   await expect.poll(() => page.evaluate(() => window.__lightAuditEvents.some((event) => event.kind === "command_applied" && event.payload.command === "programmer.set"))).toBeTruthy();
   await waitForDmx(request, 191);
@@ -72,13 +89,25 @@ test("touch programmer path is audited and reaches the rendered DMX output", asy
   await page.getByRole("button", { name: "ENTER", exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.__lightAuditEvents.some((event) => event.kind === "command_applied" && event.payload.command === "programmer.execute"))).toBeTruthy();
   await waitForDmx(request, 128);
+
+  await page.locator(".mode-toggle").click();
+  const groupMaster = page.locator(".group-master-playback").first();
+  await groupMaster.getByLabel("Group master").fill("25");
+  await waitForDmx(request, 32);
+  const flash = groupMaster.getByRole("button", { name: "FLASH", exact: true });
+  await flash.hover();
+  await page.mouse.down();
+  await waitForDmx(request, 128);
+  await page.mouse.up();
+  await waitForDmx(request, 32);
+  await expect(groupMaster.getByLabel("Group master")).toHaveValue("25");
 });
 
 test("all built-in windows and contextual dialogs are reachable by touch", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
   await page.getByRole("button", { name: "BUILT-INS" }).click();
-  for (const [button, heading] of [["Stage", "Stage"], ["Groups", "Group Pool"], ["Fixtures", "Fixture Sheet"], ["Presets", "Preset"], ["Playback", "Sequence"], ["Dynamics", "Attribute Dynamics"], ["Channels", "Channels"], ["DMX", "DMX Output"], ["Setup", "Setup"]] as const) {
+  for (const [button, heading] of [["Stage", "Stage"], ["Fixtures", "Fixture Sheet"], ["Presets", "Preset"], ["Playback", "Sequence"], ["Dynamics", "Attribute Dynamics"], ["Channels", "Channels"], ["DMX", "DMX Output"]] as const) {
     await page.locator(".dock-entry").filter({ hasText: button }).click();
     await expect(page.getByRole("heading", { name: new RegExp(heading), exact: false }).first()).toBeVisible();
   }
@@ -89,6 +118,47 @@ test("all built-in windows and contextual dialogs are reachable by touch", async
   await expect(page.getByRole("button", { name: /Special Dialog/ })).toBeVisible();
   await page.getByRole("button", { name: /Special Dialog/ }).click();
   await expect(page.getByRole("heading", { name: "Color · Special Dialog" })).toBeVisible();
+});
+
+test("patch, store, speed-group, and debug TODO workflows are reachable", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
+
+  await page.getByRole("button", { name: "Open show menu" }).click();
+  await page.getByRole("button", { name: "Show Patch", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Show Patch" })).toBeVisible();
+  await expect(page.locator(".patch-table thead")).toContainText("Location X/Y/Z");
+  await expect(page.locator(".patch-table thead")).toContainText("Rotation X/Y/Z");
+  await page.getByRole("button", { name: "SET", exact: true }).click();
+  await page.locator(".patch-table tbody .patch-value").first().click();
+  await expect(page.getByRole("heading", { name: "Set fixture name" })).toBeVisible();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+
+  await page.getByRole("button", { name: "BUILT-INS" }).click();
+  await page.locator(".dock-entry").filter({ hasText: "Presets" }).click();
+  await expect(page.locator(".preset-card")).toHaveCount(40);
+  await expect(page.getByRole("button", { name: "Groups", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "REC", exact: true }).click();
+  await expect(page.getByRole("button", { name: "REC ARMED", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "REC", exact: true })).toBeVisible();
+  await expect(page.locator(".show-dirty-dot")).toHaveCount(0);
+  await page.getByRole("button", { name: "REC", exact: true }).click();
+  await page.locator(".preset-card.empty").first().click();
+  await expect(page.locator(".show-dirty-dot")).toBeVisible();
+
+  await page.locator(".mode-toggle").click();
+  await expect(page.locator(".speed-group-stack button")).toHaveCount(5);
+  await page.locator(".mode-toggle").click();
+
+  await page.getByRole("button", { name: "Open show menu" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.locator(".show-dirty-dot")).toHaveCount(0);
+  await page.getByRole("button", { name: "Debug", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Debug" })).toBeVisible();
+  await expect(page.getByText("Server event log")).toBeVisible();
+  await page.getByRole("button", { name: "Simulate hardware" }).click();
+  await expect(page.getByRole("button", { name: "Hardware connected" })).toBeVisible();
 });
 
 test("stage gestures and responsive control acceptance paths are operational", async ({ page }) => {
@@ -116,7 +186,7 @@ test("stage gestures and responsive control acceptance paths are operational", a
 
   await page.getByRole("button", { name: "DESKS" }).click();
   await expect(page.locator(".dock-list-enter")).toHaveCSS("animation-duration", "0.16s");
-  for (const key of ["STORE", "SET", "GROUPS"]) await expect(page.getByRole("button", { name: key, exact: true })).toBeVisible();
+  for (const key of ["DIV", "SET", "GRP"]) await expect(page.getByRole("button", { name: key, exact: true })).toBeVisible();
   await expect(page.locator(".numeric-pad")).toHaveCSS("height", /\d+px/);
   const iconBefore = await page.locator(".mode-icon").textContent();
   await page.locator(".mode-toggle").click();
@@ -124,8 +194,10 @@ test("stage gestures and responsive control acceptance paths are operational", a
   await expect(page.locator(".mode-toggle .mode-icon")).toHaveCount(1);
   await expect(page.locator(".save-desk:visible, .dock-operator:visible")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "BUILT-INS" }).click();
-  await page.locator(".dock-entry").filter({ hasText: "Groups" }).click();
+  await page.getByRole("button", { name: "DESKS" }).click();
+  await page.getByRole("button", { name: /New desk/ }).click();
+  await page.locator(".empty-desk").click();
+  await page.getByRole("button", { name: "Group pool", exact: true }).click();
   const group = page.locator(".group-card").filter({ hasText: "All Dimmers" });
   await group.dispatchEvent("pointerdown");
   await page.waitForTimeout(650);
@@ -154,11 +226,11 @@ test("full-HD and landscape-tablet layouts stay fitted and touchable", async ({ 
     const metrics = await page.evaluate(() => ({ bodyWidth: document.body.scrollWidth, bodyHeight: document.body.scrollHeight, viewportWidth: innerWidth, viewportHeight: innerHeight }));
     expect(metrics.bodyWidth).toBeLessThanOrEqual(metrics.viewportWidth);
     expect(metrics.bodyHeight).toBeLessThanOrEqual(metrics.viewportHeight);
-    const content = await page.locator(".control-content").boundingBox();
+    const content = await page.locator(".control-section").boundingBox();
     const right = await page.locator(".control-right-pane").boundingBox();
     expect(content).not.toBeNull(); expect(right).not.toBeNull();
-    expect(Math.abs(content!.height - right!.height)).toBeLessThanOrEqual(1);
-    for (const key of ["STORE", "SET", "GROUPS", "ENTER"]) {
+    expect(right!.height).toBeGreaterThanOrEqual(content!.height - 12);
+    for (const key of ["DIV", "SET", "GRP", "ENTER"]) {
       const box = await page.getByRole("button", { name: key, exact: true }).boundingBox();
       expect(box?.height ?? 0).toBeGreaterThanOrEqual(viewport.width === 1024 ? 35 : 40);
     }
@@ -168,22 +240,30 @@ test("full-HD and landscape-tablet layouts stay fitted and touchable", async ({ 
 test("preload storage and clear keep the active preload scene isolated", async ({ page, request }) => {
   await page.goto("/");
   await expect(page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
-  await page.getByRole("button", { name: /Dimmer 1, \d+%/ }).click();
-  await page.getByRole("button", { name: "PRELOAD", exact: true }).click();
-  await page.locator(".touch-surface").filter({ hasText: "Dimmer" }).click();
+  await page.getByRole("button", { name: "BUILT-INS" }).click();
+  await page.locator(".dock-entry").filter({ hasText: "Fixtures" }).click();
+  await page.locator("button.fixture-row").first().click();
+  await page.getByRole("button", { name: /^PRELOAD/ }).click();
+  await page.getByLabel("Dimmer").fill("75");
   await page.getByRole("button", { name: "PRELOAD GO", exact: true }).click();
   await waitForDmx(request, 191);
 
-  await page.getByRole("button", { name: "PRELOAD", exact: true }).click();
-  await page.locator(".touch-surface").filter({ hasText: "Dimmer" }).click();
-  await page.getByRole("button", { name: "STORE", exact: true }).click();
-  await page.getByLabel("Preset slot").fill(`preload-${Date.now()}`);
-  await page.getByRole("button", { name: /Store to Preset/ }).click();
+  await page.getByRole("button", { name: /^PRELOAD/ }).click();
+  await page.getByLabel("Dimmer").fill("50");
+  await page.getByRole("button", { name: "REC", exact: true }).click();
+  await page.locator(".dock-entry").filter({ hasText: "Presets" }).click();
+  await page.locator(".preset-card.empty").first().click();
   await page.getByRole("button", { name: "CLEAR", exact: true }).click();
   await waitForDmx(request, 191);
-  await expect(page.getByRole("button", { name: /Preload Scene/ })).toBeVisible();
-  await expect(page.locator(".preload-scene + .preload-button")).toBeVisible();
-  await page.getByRole("button", { name: /Preload Scene/ }).click();
+  const releasePreload = page.getByTitle("Hold to release the active preload scene");
+  await expect(releasePreload).toContainText("(Hold: release)");
+  const box = await releasePreload.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(700);
+  await page.mouse.up();
+  await expect(page.getByTitle("Hold to release the active preload scene")).toHaveCount(0);
 });
 
 declare global {

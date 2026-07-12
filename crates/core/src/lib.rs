@@ -100,6 +100,9 @@ pub struct TimedValue {
     pub priority: i16,
     pub changed_at: DateTime<Utc>,
     pub merge_mode: MergeMode,
+    /// Whether this direct-entry value should use the configured programmer fade.
+    #[serde(default)]
+    pub fade: bool,
 }
 
 #[derive(Debug, Error)]

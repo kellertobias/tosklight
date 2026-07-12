@@ -16,9 +16,12 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
+    "@types/three": "^0.185.1",
     "@vitejs/plugin-react": "latest",
+    "jszip": "^3.10.1",
     "react": "latest",
     "react-dom": "latest",
+    "three": "^0.185.1",
     "vite": "latest"
   },
   "devDependencies": {

@@ -67,6 +67,7 @@ struct AppState {
     activation_lock: Arc<tokio::sync::Mutex<()>>,
     timecode_router: Arc<Mutex<TimecodeRouter>>,
     active_show: Arc<RwLock<Option<ShowEntry>>>,
+    active_show_error: Arc<RwLock<Option<String>>>,
     events: broadcast::Sender<Event>,
     audit_events: Arc<Mutex<VecDeque<Event>>>,
     event_revision: Arc<AtomicU64>,
@@ -263,6 +264,7 @@ struct Bootstrap {
     output_health: OutputHealth,
     active_timecode_source: Option<String>,
     active_timecode: Option<String>,
+    active_show_error: Option<String>,
 }
 
 fn default_speed_groups() -> [u16; 5] {
@@ -416,9 +418,7 @@ async fn main() -> anyhow::Result<()> {
     configuration
         .validate()
         .map_err(|error| anyhow::anyhow!(error.message))?;
-    let active_show = desk
-        .active_show()?
-        .filter(|entry| validate_show_file(&entry.path).is_ok());
+    let active_show = desk.active_show()?;
     tracing::info!(active_show=?active_show.as_ref().map(|show| &show.name), "desk state loaded");
     let programmers = ProgrammerRegistry::default();
     let users = desk.users()?;
@@ -440,11 +440,14 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("persisted programmers restored");
     let (events, _) = broadcast::channel(256);
     let engine = Arc::new(Engine::new(programmers.clone()));
+    let mut active_show_error = None;
     if let Some(active) = &active_show {
         tracing::info!(show=%active.name, "compiling active show");
-        engine
-            .replace_snapshot(load_engine_snapshot(active).map_err(anyhow::Error::msg)?)
-            .context("active show cannot be compiled")?;
+        if let Some(message) = compile_active_show_for_startup(&engine, active) {
+            let error = &message;
+            tracing::error!(show=%active.name, %error, "starting in show recovery mode");
+            active_show_error = Some(message);
+        }
     }
     tracing::info!("engine snapshot ready");
     engine.set_control_timing(
@@ -549,6 +552,7 @@ async fn main() -> anyhow::Result<()> {
         activation_lock: Arc::new(tokio::sync::Mutex::new(())),
         timecode_router,
         active_show: Arc::new(RwLock::new(active_show)),
+        active_show_error: Arc::new(RwLock::new(active_show_error)),
         events,
         audit_events: Arc::new(Mutex::new(VecDeque::with_capacity(2048))),
         event_revision: Arc::new(AtomicU64::new(0)),
@@ -818,6 +822,10 @@ async fn diagnostics(
     ))
 }
 async fn bootstrap(State(state): State<AppState>) -> Json<Bootstrap> {
+    let (users, desks) = {
+        let desk = state.desk.lock();
+        (desk.users().unwrap_or_default(), desk.desks().unwrap_or_default())
+    };
     let (active_timecode_source, active_timecode) = {
         let router = state.timecode_router.lock();
         (
@@ -832,8 +840,8 @@ async fn bootstrap(State(state): State<AppState>) -> Json<Bootstrap> {
     };
     Json(Bootstrap {
         api_version: "v1",
-        users: state.desk.lock().users().unwrap_or_default(),
-        desks: state.desk.lock().desks().unwrap_or_default(),
+        users,
+        desks,
         active_show: state.active_show.read().clone(),
         active_programmers: state.programmers.active(),
         frame_rate_hz: state.output_rate.load(Ordering::Relaxed),
@@ -844,6 +852,7 @@ async fn bootstrap(State(state): State<AppState>) -> Json<Bootstrap> {
             .clone(),
         active_timecode_source,
         active_timecode,
+        active_show_error: state.active_show_error.read().clone(),
     })
 }
 async fn patch_snapshot(State(state): State<AppState>) -> Json<serde_json::Value> {
@@ -1528,6 +1537,7 @@ async fn open_show(
         .set_active_show(Some(entry.id))
         .map_err(ApiError::store)?;
     *state.active_show.write() = Some(entry.clone());
+    *state.active_show_error.write() = None;
     emit(
         &state,
         "show_opened",
@@ -1578,6 +1588,7 @@ async fn rollback_show(
             .map_err(ApiError::store)?;
     }
     *state.active_show.write() = Some(entry.clone());
+    *state.active_show_error.write() = None;
     emit(
         &state,
         "show_rolled_back",
@@ -3226,6 +3237,7 @@ fn handle_control_event(state: &AppState, event: ControlEvent) {
             ControlAction::GrandMaster { level } => {
                 state.output_control.lock().options.grand_master = level.clamp(0.0, 1.0)
             }
+            ControlAction::DeskSet => emit(state, "desk_action", serde_json::json!({"action":"set"})),
         }
     }
     emit(
@@ -3296,6 +3308,12 @@ fn ingest_timecode(state: &AppState, timecode: SmpteTimecode) {
 }
 fn load_engine_snapshot(entry: &ShowEntry) -> Result<EngineSnapshot, String> {
     load_engine_snapshot_with_override(entry, None)
+}
+fn compile_active_show_for_startup(engine: &Engine, entry: &ShowEntry) -> Option<String> {
+    load_engine_snapshot(entry)
+        .and_then(|snapshot| engine.replace_snapshot(snapshot).map_err(|error| error.to_string()))
+        .err()
+        .map(|error| format!("The active show '{}' could not be loaded and might be corrupted or incompatible: {error}", entry.name))
 }
 fn load_engine_snapshot_with_override(
     entry: &ShowEntry,
@@ -3575,6 +3593,7 @@ mod tests {
                 activation_lock: Arc::new(tokio::sync::Mutex::new(())),
                 timecode_router: Arc::new(Mutex::new(TimecodeRouter::default())),
                 active_show: Arc::default(),
+                active_show_error: Arc::default(),
                 events,
                 audit_events: Arc::new(Mutex::new(VecDeque::with_capacity(2048))),
                 event_revision: Arc::new(AtomicU64::new(0)),
@@ -3594,6 +3613,21 @@ mod tests {
         let wrapped = aligned_normalized("left", 1, 3, 0.9, 0.1, true).unwrap();
         assert!(!(0.001..=0.999).contains(&wrapped));
         assert!((aligned_normalized("right", 0, 3, 0.2, 0.8, false).unwrap() - 0.8).abs() < 0.001);
+    }
+    #[test]
+    fn invalid_active_show_enters_recovery_instead_of_aborting_startup() {
+        let engine = Engine::new(ProgrammerRegistry::default());
+        let entry = ShowEntry {
+            id: light_core::ShowId::new(),
+            name: "Damaged Show".into(),
+            path: std::env::temp_dir().join(format!("missing-{}.show", Uuid::new_v4())).display().to_string(),
+            revision: 0,
+            updated_at: String::new(),
+        };
+        let error = compile_active_show_for_startup(&engine, &entry).expect("invalid show should enter recovery mode");
+        assert!(error.contains("might be corrupted or incompatible"));
+        assert!(error.contains("Damaged Show"));
+        assert_eq!(engine.snapshot().fixtures.len(), 0);
     }
     #[test]
     fn repeated_group_command_freezes_membership_while_live_reference_refreshes() {
@@ -3689,6 +3723,8 @@ mod tests {
             .engine
             .replace_snapshot(EngineSnapshot {
                 fixtures: vec![light_fixture::PatchedFixture {
+                    name: "Media Server".into(),
+                    layer_id: "default".into(),
                     fixture_id,
                     definition: light_fixture::FixtureDefinition {
                         schema_version: 1,
@@ -3715,8 +3751,8 @@ mod tests {
                         signal_loss_policy: light_fixture::SignalLossPolicy::HoldLast,
                         safe_values: std::collections::BTreeMap::new(),
                     },
-                    universe: 1,
-                    address: 1,
+                    universe: Some(1),
+                    address: Some(1),
                     direct_control: Some(light_fixture::DirectControlEndpoint {
                         protocol: light_fixture::DirectControlProtocol::Citp,
                         ip_address: address.ip(),
@@ -3929,6 +3965,17 @@ mod tests {
         );
         assert!(!revisioned.ok);
         assert!(revisioned.error.unwrap().contains("revision conflict"));
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+
+    #[tokio::test]
+    async fn bootstrap_does_not_relock_the_desk_store() {
+        let (state, data_dir) = test_state();
+        let response = tokio::time::timeout(
+            Duration::from_secs(1),
+            router(state).oneshot(Request::get("/api/v1/bootstrap").body(Body::empty()).unwrap()),
+        ).await.expect("bootstrap must not deadlock").unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
         let _ = std::fs::remove_dir_all(data_dir);
     }
 
@@ -4238,6 +4285,8 @@ mod tests {
         let first_id = first["id"].as_str().unwrap();
         let physical = light_core::FixtureId::new();
         let fixture = light_fixture::PatchedFixture {
+            name: "Media Server".into(),
+            layer_id: "default".into(),
             fixture_id: physical,
             definition: light_fixture::FixtureDefinition {
                 schema_version: 1,
@@ -4274,8 +4323,8 @@ mod tests {
                 signal_loss_policy: light_fixture::SignalLossPolicy::HoldLast,
                 safe_values: std::collections::BTreeMap::new(),
             },
-            universe: 1,
-            address: 1,
+            universe: Some(1),
+            address: Some(1),
             direct_control: None,
             location: Default::default(),
             rotation: Default::default(),
@@ -4688,6 +4737,8 @@ mod tests {
             footprint: u16,
         ) -> PatchedFixture {
             PatchedFixture {
+                name: name.clone(),
+                layer_id: "default".into(),
                 fixture_id: FixtureId::new(),
                 definition: FixtureDefinition {
                     schema_version: 1,
@@ -4714,8 +4765,8 @@ mod tests {
                     signal_loss_policy: SignalLossPolicy::HoldLast,
                     safe_values: BTreeMap::new(),
                 },
-                universe: 1,
-                address,
+                universe: Some(1),
+                address: Some(address),
                 direct_control: None,
                 location: Default::default(),
                 rotation: Default::default(),
@@ -4915,15 +4966,15 @@ mod tests {
         let dark = state.engine.render(RenderOptions::default()).unwrap();
         let dark = dark.universes[&1];
         for fixture in &dimmers {
-            assert_eq!(dark[usize::from(fixture.address - 1)], 0);
+            assert_eq!(dark[usize::from(fixture.address.unwrap() - 1)], 0);
         }
         for fixture in &profiles {
-            let offset = usize::from(fixture.address - 1);
+            let offset = usize::from(fixture.address.unwrap() - 1);
             assert_eq!(dark[offset + 4], 0);
             assert_eq!(&dark[offset + 6..=offset + 8], &[0; 3]);
         }
         for fixture in &leds {
-            let offset = usize::from(fixture.address - 1);
+            let offset = usize::from(fixture.address.unwrap() - 1);
             assert_eq!(&dark[offset..offset + 4], &[0; 4]);
         }
 
@@ -4959,14 +5010,14 @@ mod tests {
             .unwrap()
             .universes[&1];
         for fixture in &dimmers {
-            assert_eq!(white_frame[usize::from(fixture.address - 1)], 255);
+            assert_eq!(white_frame[usize::from(fixture.address.unwrap() - 1)], 255);
         }
         for fixture in &profiles {
-            let offset = usize::from(fixture.address - 1);
+            let offset = usize::from(fixture.address.unwrap() - 1);
             assert_eq!(&white_frame[offset + 4..=offset + 8], &[255; 5]);
         }
         for fixture in &leds {
-            let offset = usize::from(fixture.address - 1);
+            let offset = usize::from(fixture.address.unwrap() - 1);
             assert_eq!(&white_frame[offset..offset + 4], &[255; 4]);
         }
 
@@ -4997,8 +5048,8 @@ mod tests {
             .render(RenderOptions::default())
             .unwrap()
             .universes[&1];
-        assert_eq!(word(&after_go, profiles[0].address), 16_384);
-        assert_eq!(word(&after_go, profiles[0].address + 2), 49_151);
+        assert_eq!(word(&after_go, profiles[0].address.unwrap()), 16_384);
+        assert_eq!(word(&after_go, profiles[0].address.unwrap() + 2), 49_151);
 
         let stored = app
             .clone()
@@ -5068,16 +5119,16 @@ mod tests {
             .render(RenderOptions::default())
             .unwrap()
             .universes[&1];
-        assert_eq!(word(&recalled, profiles[0].address), 16_384);
-        assert_eq!(word(&recalled, profiles[0].address + 2), 49_151);
+        assert_eq!(word(&recalled, profiles[0].address.unwrap()), 16_384);
+        assert_eq!(word(&recalled, profiles[0].address.unwrap() + 2), 49_151);
         state.programmers.activate_preload(session_id);
         let second_go = state
             .engine
             .render(RenderOptions::default())
             .unwrap()
             .universes[&1];
-        assert_eq!(word(&second_go, profiles[0].address), 52_428);
-        assert_eq!(word(&second_go, profiles[0].address + 2), 13_107);
+        assert_eq!(word(&second_go, profiles[0].address.unwrap()), 52_428);
+        assert_eq!(word(&second_go, profiles[0].address.unwrap() + 2), 13_107);
 
         let export = data_dir.join("template-group-scenario.show");
         store.backup_to(&export).unwrap();
@@ -5136,11 +5187,11 @@ mod tests {
             .unwrap()
             .universes[&1];
         for fixture in &extra_profiles {
-            let offset = usize::from(fixture.address - 1);
+            let offset = usize::from(fixture.address.unwrap() - 1);
             assert_eq!(expanded[offset + 4], 255);
             assert_eq!(&expanded[offset + 6..=offset + 8], &[255; 3]);
-            assert_eq!(word(&expanded, fixture.address), 16_384);
-            assert_eq!(word(&expanded, fixture.address + 2), 49_151);
+            assert_eq!(word(&expanded, fixture.address.unwrap()), 16_384);
+            assert_eq!(word(&expanded, fixture.address.unwrap() + 2), 49_151);
         }
 
         let stored_cue_list: CueList = serde_json::from_value(

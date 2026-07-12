@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useReducer, type Dispatch, type PropsWithChildren } from "react";
+import { createContext, useContext, useEffect, useMemo, useReducer, type Dispatch, type PropsWithChildren } from "react";
 import { appReducer, initialState, type Action } from "./appReducer";
 import type { AppState } from "../types";
 
@@ -6,7 +6,24 @@ interface AppContextValue { state: AppState; dispatch: Dispatch<Action> }
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: PropsWithChildren) {
-  const [state, dispatch] = useReducer(appReducer, initialState);
+  const [state, dispatch] = useReducer(appReducer, initialState, (fallback) => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("light.desk-controls") ?? "null") as Partial<typeof fallback> | null;
+      return saved ? { ...fallback, playbackColumns: saved.playbackColumns ?? fallback.playbackColumns, playbackRows: saved.playbackRows ?? fallback.playbackRows } : fallback;
+    } catch { return fallback; }
+  });
+  useEffect(() => {
+    localStorage.setItem("light.desk-controls", JSON.stringify({ playbackColumns: state.playbackColumns, playbackRows: state.playbackRows }));
+  }, [state.playbackColumns, state.playbackRows]);
+  useEffect(() => {
+    document.documentElement.classList.toggle("touch-scrollbars", state.touchScrollbars);
+    return () => document.documentElement.classList.remove("touch-scrollbars");
+  }, [state.touchScrollbars]);
+  useEffect(() => {
+    const deskAction = (event: Event) => { if ((event as CustomEvent<string>).detail === "set" && state.builtIn === "patch") dispatch({ type: "SET_PATCH_ARMED", value: !state.patchSetArmed }); };
+    window.addEventListener("light:desk-action", deskAction);
+    return () => window.removeEventListener("light:desk-action", deskAction);
+  }, [state.builtIn, state.patchSetArmed]);
   const value = useMemo(() => ({ state, dispatch }), [state]);
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

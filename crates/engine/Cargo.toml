@@ -4,11 +4,15 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+default = ["native-midi"]
+native-midi = ["light-control/native-midi"]
+
 [dependencies]
 arc-swap.workspace = true
 chrono.workspace = true
 light-core = { path = "../core" }
-light-control = { path = "../control" }
+light-control = { path = "../control", default-features = false }
 light-fixture = { path = "../fixture" }
 light-output = { path = "../output" }
 light-playback = { path = "../playback" }
