@@ -26,7 +26,7 @@ use light_media::{CitpClient, LibraryId, MediaCache, PreviewKey, ThumbnailKey};
 use light_output::{NetworkOutput, OutputHealth, run_scheduler_dynamic};
 use light_programmer::ProgrammerRegistry;
 use light_show::{
-    DeskStore, DeskUser, PersistedSession, ShowEntry, ShowStore, initialise_show,
+    ControlDesk, DeskStore, DeskUser, PersistedSession, ShowEntry, ShowStore, initialise_show,
     validate_show_file,
 };
 use parking_lot::{Mutex, RwLock};
@@ -41,7 +41,7 @@ use std::{
         Arc,
         atomic::{AtomicU16, AtomicU64, Ordering},
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tokio::sync::broadcast;
 use tokio_util::sync::CancellationToken;
@@ -54,6 +54,7 @@ use uuid::Uuid;
 #[derive(Clone)]
 struct AppState {
     desk: Arc<Mutex<DeskStore>>,
+    fixture_library: Arc<Mutex<light_fixture::FixtureLibrary>>,
     data_dir: PathBuf,
     sessions: Arc<RwLock<HashMap<SessionId, Session>>>,
     ws_connections: Arc<Mutex<HashMap<SessionId, u32>>>,
@@ -73,6 +74,7 @@ struct AppState {
     shutdown: CancellationToken,
     media_cache: Arc<Mutex<MediaCache>>,
     media_status: Arc<RwLock<HashMap<light_core::FixtureId, MediaServerStatus>>>,
+    input_locks: Arc<Mutex<HashMap<String, (light_core::UserId, Instant)>>>,
 }
 
 #[derive(RustEmbed)]
@@ -91,6 +93,7 @@ struct Session {
     user: DeskUser,
     token: String,
     connected: bool,
+    desk: ControlDesk,
 }
 #[derive(Clone, Serialize)]
 struct Event {
@@ -161,6 +164,8 @@ fn default_media_height() -> u16 {
 #[derive(Deserialize)]
 struct CreateSession {
     username: String,
+    desk_id: Option<Uuid>,
+    client_id: Option<Uuid>,
 }
 #[derive(Deserialize)]
 struct UserInput {
@@ -176,6 +181,7 @@ struct SessionResponse {
     session_id: SessionId,
     token: String,
     user: DeskUser,
+    desk: ControlDesk,
 }
 #[derive(Deserialize)]
 struct UploadShow {
@@ -250,13 +256,31 @@ struct WsResponse {
 struct Bootstrap {
     api_version: &'static str,
     users: Vec<DeskUser>,
+    desks: Vec<ControlDesk>,
     active_show: Option<ShowEntry>,
     active_programmers: Vec<light_programmer::ProgrammerState>,
     frame_rate_hz: u16,
     output_health: OutputHealth,
     active_timecode_source: Option<String>,
+    active_timecode: Option<String>,
 }
 
+fn default_speed_groups() -> [u16; 5] {
+    [120, 90, 60, 30, 15]
+}
+fn deserialize_speed_groups<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<[u16; 5], D::Error> {
+    let values = Vec::<u16>::deserialize(deserializer)?;
+    if !(values.len() == 4 || values.len() == 5) {
+        return Err(serde::de::Error::custom(
+            "speed_groups_bpm requires four or five values",
+        ));
+    }
+    let mut result = default_speed_groups();
+    result[..values.len()].copy_from_slice(&values);
+    Ok(result)
+}
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 struct DeskConfiguration {
@@ -269,6 +293,13 @@ struct DeskConfiguration {
     timecode_sources: Vec<TimecodeSourceConfig>,
     osc_timecode: Option<OscTimecodeConfig>,
     backup_retention: usize,
+    #[serde(
+        default = "default_speed_groups",
+        deserialize_with = "deserialize_speed_groups"
+    )]
+    speed_groups_bpm: [u16; 5],
+    programmer_fade_millis: u64,
+    sequence_master_fade_millis: u64,
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct OscTimecodeConfig {
@@ -312,6 +343,9 @@ impl Default for DeskConfiguration {
             ],
             osc_timecode: None,
             backup_retention: 20,
+            speed_groups_bpm: default_speed_groups(),
+            programmer_fade_millis: 3_000,
+            sequence_master_fade_millis: 3_000,
         }
     }
 }
@@ -322,6 +356,20 @@ impl DeskConfiguration {
         }
         if self.backup_retention == 0 || self.backup_retention > 1_000 {
             return Err(ApiError::bad_request("backup_retention must be 1-1000"));
+        }
+        if self
+            .speed_groups_bpm
+            .iter()
+            .any(|bpm| !(1..=999).contains(bpm))
+        {
+            return Err(ApiError::bad_request(
+                "speed_groups_bpm values must be 1-999",
+            ));
+        }
+        if self.programmer_fade_millis > 60_000 || self.sequence_master_fade_millis > 60_000 {
+            return Err(ApiError::bad_request(
+                "fade times must be 0-60000 milliseconds",
+            ));
         }
         Ok(())
     }
@@ -347,7 +395,19 @@ async fn main() -> anyhow::Result<()> {
         }
     }
     std::fs::create_dir_all(data_dir.join("shows"))?;
+    tracing::info!(path=%data_dir.display(), "opening desk data");
     let desk = DeskStore::open(data_dir.join("desk.sqlite"))?;
+    tracing::info!("opening fixture library");
+    let mut fixture_library =
+        light_fixture::FixtureLibrary::open(data_dir.join("fixtures.sqlite"))?;
+    let seeded = fixture_library.ensure_builtin_generics()?;
+    if seeded > 0 {
+        tracing::info!(
+            profiles = seeded,
+            "installed built-in Generic fixture modes"
+        );
+    }
+    tracing::info!("fixture library ready");
     let configuration: DeskConfiguration = desk
         .setting("server_configuration")?
         .map(|json| serde_json::from_str(&json))
@@ -359,6 +419,7 @@ async fn main() -> anyhow::Result<()> {
     let active_show = desk
         .active_show()?
         .filter(|entry| validate_show_file(&entry.path).is_ok());
+    tracing::info!(active_show=?active_show.as_ref().map(|show| &show.name), "desk state loaded");
     let programmers = ProgrammerRegistry::default();
     let users = desk.users()?;
     for persisted in desk.persisted_sessions()? {
@@ -376,13 +437,21 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     }
+    tracing::info!("persisted programmers restored");
     let (events, _) = broadcast::channel(256);
     let engine = Arc::new(Engine::new(programmers.clone()));
     if let Some(active) = &active_show {
+        tracing::info!(show=%active.name, "compiling active show");
         engine
             .replace_snapshot(load_engine_snapshot(active).map_err(anyhow::Error::msg)?)
             .context("active show cannot be compiled")?;
     }
+    tracing::info!("engine snapshot ready");
+    engine.set_control_timing(
+        configuration.speed_groups_bpm,
+        configuration.programmer_fade_millis,
+        configuration.sequence_master_fade_millis,
+    );
     let output_health = Arc::new(std::sync::Mutex::new(OutputHealth::default()));
     let timecode_router = Arc::new(Mutex::new(TimecodeRouter::default()));
     timecode_router
@@ -467,6 +536,7 @@ async fn main() -> anyhow::Result<()> {
     });
     let state = AppState {
         desk: Arc::new(Mutex::new(desk)),
+        fixture_library: Arc::new(Mutex::new(fixture_library)),
         data_dir,
         sessions: Arc::default(),
         ws_connections: Arc::new(Mutex::new(HashMap::new())),
@@ -489,6 +559,7 @@ async fn main() -> anyhow::Result<()> {
         shutdown: output_cancel.clone(),
         media_cache: Arc::new(Mutex::new(MediaCache::default())),
         media_status: Arc::new(RwLock::new(HashMap::new())),
+        input_locks: Arc::new(Mutex::new(HashMap::new())),
     };
     let input_tasks = spawn_control_inputs(&state, output_cancel.clone());
     let app = router(state);
@@ -519,6 +590,15 @@ fn router(state: AppState) -> Router {
         .route("/api/v1/diagnostics", get(diagnostics))
         .route("/api/v1/bootstrap", get(bootstrap))
         .route("/api/v1/patch", get(patch_snapshot))
+        .route(
+            "/api/v1/fixture-library",
+            get(list_fixture_library).put(put_fixture_library),
+        )
+        .route(
+            "/api/v1/fixture-library/{id}/{revision}",
+            delete(delete_fixture_library),
+        )
+        .route("/api/v1/visualization", get(visualization_snapshot))
         .route("/api/v1/media", get(media_servers))
         .route(
             "/api/v1/media/{fixture_id}/thumbnails/refresh",
@@ -564,6 +644,11 @@ fn router(state: AppState) -> Router {
         )
         .route("/api/v1/shows/{id}/preload/store", post(store_preload))
         .route("/api/v1/playbacks/{id}/{action}", post(playback_action))
+        .route("/api/v1/playback-pool/{number}", get(pool_playback_state))
+        .route("/api/v1/playback-pool/{number}/{action}", post(pool_playback_action).put(pool_playback_action))
+        .route("/api/v1/control-desks/{id}/page", put(update_desk_page))
+        .route("/api/v1/control-desks/{id}", put(update_control_desk))
+        .route("/api/v1/control-desks/{id}/paged-playbacks/{slot}/{action}", post(paged_playback_action).put(paged_playback_action))
         .route("/api/v1/playbacks", get(playbacks))
         .route("/api/v1/programmers", get(list_programmers))
         .route("/api/v1/programmers/{id}/clear", post(clear_programmer))
@@ -588,6 +673,62 @@ fn router(state: AppState) -> Router {
                 .expose_headers([header::ETAG]),
         )
         .layer(TraceLayer::new_for_http())
+}
+
+async fn list_fixture_library(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<light_fixture::FixtureDefinition>>, ApiError> {
+    Ok(Json(
+        state
+            .fixture_library
+            .lock()
+            .definitions()
+            .map_err(ApiError::fixture)?,
+    ))
+}
+
+async fn put_fixture_library(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(definition): Json<light_fixture::FixtureDefinition>,
+) -> Result<Json<light_fixture::FixtureDefinition>, ApiError> {
+    let _session = authenticate(&state, &headers)?;
+    let json = serde_json::to_string(&definition)
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    let stored = state
+        .fixture_library
+        .lock()
+        .import_json(&json)
+        .map_err(ApiError::fixture)?;
+    emit(
+        &state,
+        "fixture_library_changed",
+        serde_json::json!({"id":stored.id,"revision":stored.revision}),
+    );
+    Ok(Json(stored))
+}
+
+async fn delete_fixture_library(
+    State(state): State<AppState>,
+    Path((id, revision)): Path<(light_core::FixtureId, u32)>,
+    headers: HeaderMap,
+) -> Result<StatusCode, ApiError> {
+    let _session = authenticate(&state, &headers)?;
+    if state
+        .fixture_library
+        .lock()
+        .delete(id, revision)
+        .map_err(ApiError::fixture)?
+    {
+        emit(
+            &state,
+            "fixture_library_changed",
+            serde_json::json!({"id":id,"revision":revision,"deleted":true}),
+        );
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(ApiError::not_found("fixture definition"))
+    }
 }
 
 async fn desk_boundary(State(state): State<AppState>, request: Request, next: Next) -> Response {
@@ -677,9 +818,22 @@ async fn diagnostics(
     ))
 }
 async fn bootstrap(State(state): State<AppState>) -> Json<Bootstrap> {
+    let (active_timecode_source, active_timecode) = {
+        let router = state.timecode_router.lock();
+        (
+            router.active_source().map(str::to_owned),
+            router.current().map(|timecode| {
+                format!(
+                    "{:02}:{:02}:{:02}:{:02}",
+                    timecode.hours, timecode.minutes, timecode.seconds, timecode.frames
+                )
+            }),
+        )
+    };
     Json(Bootstrap {
         api_version: "v1",
         users: state.desk.lock().users().unwrap_or_default(),
+        desks: state.desk.lock().desks().unwrap_or_default(),
         active_show: state.active_show.read().clone(),
         active_programmers: state.programmers.active(),
         frame_rate_hz: state.output_rate.load(Ordering::Relaxed),
@@ -688,11 +842,8 @@ async fn bootstrap(State(state): State<AppState>) -> Json<Bootstrap> {
             .lock()
             .expect("output health mutex poisoned")
             .clone(),
-        active_timecode_source: state
-            .timecode_router
-            .lock()
-            .active_source()
-            .map(str::to_owned),
+        active_timecode_source,
+        active_timecode,
     })
 }
 async fn patch_snapshot(State(state): State<AppState>) -> Json<serde_json::Value> {
@@ -700,6 +851,71 @@ async fn patch_snapshot(State(state): State<AppState>) -> Json<serde_json::Value
     Json(
         serde_json::json!({"revision":snapshot.revision,"fixtures":snapshot.fixtures,"routes":snapshot.routes}),
     )
+}
+async fn visualization_snapshot(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<VisualizationQuery>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    let snapshot = state.engine.snapshot();
+    let options = state.output_control.lock().options;
+    let mut resolved = state.engine.resolved_values();
+    if query.preload
+        && let Some(programmer) = state.programmers.get(session.id)
+    {
+        for value in programmer
+            .preload_active
+            .iter()
+            .chain(&programmer.preload_pending)
+        {
+            resolved.insert(
+                (value.fixture_id, value.attribute.clone()),
+                value.value.clone(),
+            );
+        }
+        let groups = snapshot
+            .groups
+            .iter()
+            .map(|group| (group.id.clone(), group.clone()))
+            .collect::<HashMap<_, _>>();
+        for (group_id, attributes) in programmer
+            .preload_group_active
+            .iter()
+            .chain(&programmer.preload_group_pending)
+        {
+            if let Ok(fixtures) = light_programmer::resolve_group(group_id, &groups) {
+                for fixture in fixtures {
+                    for (attribute, value) in attributes {
+                        resolved.insert((fixture, attribute.clone()), value.value.clone());
+                    }
+                }
+            }
+        }
+    }
+    let values = resolved
+        .into_iter()
+        .map(|((fixture_id, attribute), value)| {
+            serde_json::json!({
+                "fixture_id": fixture_id,
+                "attribute": attribute,
+                "value": value,
+            })
+        })
+        .collect::<Vec<_>>();
+    Ok(Json(serde_json::json!({
+        "revision": snapshot.revision,
+        "generated_at": chrono::Utc::now(),
+        "grand_master": options.grand_master,
+        "blackout": options.blackout,
+        "preload": query.preload,
+        "values": values,
+    })))
+}
+#[derive(Default, Deserialize)]
+struct VisualizationQuery {
+    #[serde(default)]
+    preload: bool,
 }
 async fn media_servers(
     State(state): State<AppState>,
@@ -1034,6 +1250,11 @@ async fn update_configuration(
         .timecode_router
         .lock()
         .configure(configuration.timecode_sources.clone());
+    state.engine.set_control_timing(
+        configuration.speed_groups_bpm,
+        configuration.programmer_fade_millis,
+        configuration.sequence_master_fade_millis,
+    );
     let requires_restart = configuration.output_bind_ip != previous.output_bind_ip
         || configuration.osc_bind != previous.osc_bind
         || configuration.art_timecode_bind != previous.art_timecode_bind
@@ -1060,11 +1281,20 @@ async fn create_session(
         .map_err(ApiError::store)?
         .filter(|u| u.enabled)
         .ok_or_else(|| ApiError::not_found("enabled user"))?;
+    let desk = {
+        let store = state.desk.lock();
+        input.desk_id.and_then(|id| store.control_desk(id).ok().flatten()).map(Ok).unwrap_or_else(|| {
+            let client = input.client_id.unwrap_or_else(Uuid::new_v4);
+            let suffix = client.simple().to_string();
+            store.add_desk(&format!("Client {}", &suffix[..6]), &format!("desk-{}", &suffix[..8]))
+        }).map_err(ApiError::store)?
+    };
     let session = Session {
         id: SessionId::new(),
         user: user.clone(),
         token: Uuid::new_v4().to_string(),
         connected: true,
+        desk: desk.clone(),
     };
     state.programmers.start(session.id, user.id);
     state.sessions.write().insert(session.id, session.clone());
@@ -1078,6 +1308,7 @@ async fn create_session(
         session_id: session.id,
         token: session.token,
         user,
+        desk,
     }))
 }
 async fn create_user(
@@ -1776,11 +2007,90 @@ async fn playbacks(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let _session = authenticate(&state, &headers)?;
+    let session = authenticate(&state, &headers)?;
     let snapshot = state.engine.snapshot();
+    let active_page = state.active_show.read().as_ref().and_then(|show| state.desk.lock().desk_page(session.desk.id, show.id).ok()).unwrap_or(1);
     Ok(Json(
-        serde_json::json!({"cue_lists":snapshot.cue_lists,"active":state.engine.playback().read().active()}),
+        serde_json::json!({"cue_lists":snapshot.cue_lists,"pool":snapshot.playbacks,"pages":snapshot.playback_pages,"active":state.engine.playback().read().active(),"desk":session.desk,"active_page":active_page}),
     ))
+}
+
+#[derive(Default, Deserialize)]
+struct PoolPlaybackInput {
+    value: Option<f32>,
+    pressed: Option<bool>,
+}
+async fn pool_playback_state(State(state):State<AppState>,Path(number):Path<u16>,headers:HeaderMap)->Result<Json<serde_json::Value>,ApiError>{
+    let _=authenticate(&state,&headers)?; let snapshot=state.engine.snapshot();
+    let definition=snapshot.playbacks.iter().find(|playback|playback.number==number).ok_or_else(||ApiError::not_found("playback"))?;
+    let runtime=state.engine.playback().read().active().into_iter().find(|active|active.playback_number==Some(number));
+    Ok(Json(serde_json::json!({"playback":definition,"runtime":runtime})))
+}
+#[derive(Deserialize)] struct DeskPageInput { page: u8 }
+#[derive(Deserialize)] struct ControlDeskInput { name:String, osc_alias:String, columns:u8, rows:u8, buttons:u8 }
+async fn update_control_desk(State(state):State<AppState>,Path(id):Path<Uuid>,headers:HeaderMap,Json(input):Json<ControlDeskInput>)->Result<Json<ControlDesk>,ApiError>{let session=authenticate(&state,&headers)?;if session.desk.id!=id{return Err(ApiError::bad_request("session is not attached to this desk"));}let desk=state.desk.lock().update_desk(id,&input.name,&input.osc_alias,input.columns,input.rows,input.buttons).map_err(ApiError::store)?;for session in state.sessions.write().values_mut().filter(|session|session.desk.id==id){session.desk=desk.clone();}emit(&state,"control_desk_changed",serde_json::json!({"desk":desk}));Ok(Json(desk))}
+
+async fn update_desk_page(State(state): State<AppState>, Path(id): Path<Uuid>, headers: HeaderMap, Json(input): Json<DeskPageInput>) -> Result<Json<serde_json::Value>, ApiError> {
+    let session=authenticate(&state,&headers)?;
+    if session.desk.id != id { return Err(ApiError::bad_request("session is not attached to this desk")); }
+    let show=state.active_show.read().clone().ok_or_else(||ApiError::bad_request("no show is open"))?;
+    if !state.engine.snapshot().playback_pages.iter().any(|page| page.number==input.page) { return Err(ApiError::bad_request("playback page does not exist")); }
+    state.desk.lock().set_desk_page(id,show.id,input.page).map_err(ApiError::store)?;
+    emit(&state,"playback_page_changed",serde_json::json!({"desk_id":id,"show_id":show.id,"page":input.page}));
+    Ok(Json(serde_json::json!({"desk_id":id,"page":input.page})))
+}
+
+async fn paged_playback_action(State(state): State<AppState>, Path((id,slot,action)): Path<(Uuid,u8,String)>, headers: HeaderMap, input: Option<Json<PoolPlaybackInput>>) -> Result<Json<serde_json::Value>,ApiError> {
+    let session=authenticate(&state,&headers)?;
+    if session.desk.id!=id {return Err(ApiError::bad_request("session is not attached to this desk"));}
+    let show=state.active_show.read().clone().ok_or_else(||ApiError::bad_request("no show is open"))?;
+    let page_number=state.desk.lock().desk_page(id,show.id).map_err(ApiError::store)?;
+    let number=state.engine.snapshot().playback_pages.iter().find(|page|page.number==page_number).and_then(|page|page.slots.get(&slot)).copied().ok_or_else(||ApiError::not_found("paged playback"))?;
+    pool_playback_action(State(state),Path((number,action)),headers,input).await
+}
+
+async fn pool_playback_action(
+    State(state): State<AppState>,
+    Path((number, action)): Path<(u16, String)>,
+    headers: HeaderMap,
+    input: Option<Json<PoolPlaybackInput>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    let input = input.map(|Json(value)| value).unwrap_or_default();
+    let definition = state.engine.snapshot().playbacks.iter().find(|playback| playback.number == number).cloned().ok_or_else(|| ApiError::not_found("playback"))?;
+    if let light_playback::PlaybackTarget::Group { group_id } = &definition.target {
+        let value = match action.as_str() {
+            "on" => 1.0, "off" => 0.0, "master" => input.value.ok_or_else(|| ApiError::bad_request("master value is required"))?,
+            "flash" => if input.pressed.unwrap_or(true) { 1.0 } else { 0.0 },
+            _ => return Err(ApiError::bad_request("action is not available for a group playback")),
+        };
+        if action == "flash" { state.engine.set_group_master_flash(group_id.clone(), value); }
+        else {
+            if !value.is_finite() || !(0.0..=1.0).contains(&value) { return Err(ApiError::bad_request("playback master must be within 0-1")); }
+            let snapshot = state.engine.snapshot();
+            let mut next = (*snapshot).clone();
+            let group = next.groups.iter_mut().find(|group| group.id == *group_id).ok_or_else(|| ApiError::bad_request("group does not exist"))?;
+            group.master = value;
+            state.engine.replace_snapshot(next).map_err(|error| ApiError::bad_request(error.to_string()))?;
+        }
+    } else {
+        let mut engine = state.engine.playback().write();
+        match action.as_str() {
+            "go" => { engine.go_playback(number).map_err(ApiError::bad_request)?; }
+            "go-minus" | "back" => { engine.back_playback(number).map_err(ApiError::bad_request)?; }
+            "on" => engine.on(number).map_err(ApiError::bad_request)?,
+            "off" => { engine.off(number).map_err(ApiError::bad_request)?; }
+            "toggle" => { engine.toggle(number).map_err(ApiError::bad_request)?; }
+            "master" => engine.set_master(number, input.value.ok_or_else(|| ApiError::bad_request("master value is required"))?).map_err(ApiError::bad_request)?,
+            "flash" => engine.set_flash(number, input.pressed.unwrap_or(true)).map_err(ApiError::bad_request)?,
+            "xfade-on" => engine.xfade(number, true).map_err(ApiError::bad_request)?,
+            "xfade-off" => engine.xfade(number, false).map_err(ApiError::bad_request)?,
+            _ => return Err(ApiError::not_found("playback action")),
+        }
+    }
+    emit(&state, "playback_changed", serde_json::json!({"playback_number":number,"action":action,"session_id":session.id}));
+    let snapshot = state.engine.snapshot();
+    Ok(Json(serde_json::json!({"playback":definition,"active":state.engine.playback().read().active(),"groups":snapshot.groups})))
 }
 async fn list_programmers(
     State(state): State<AppState>,
@@ -1810,12 +2120,31 @@ async fn clear_programmer(
 ) -> Result<StatusCode, ApiError> {
     let _session = authenticate(&state, &headers)?;
     let session_id = SessionId(id);
+    let user_id = state
+        .programmers
+        .get(session_id)
+        .map(|programmer| programmer.user_id);
     if !state.programmers.clear(session_id) {
         return Ok(StatusCode::NOT_FOUND);
     }
     if let Err(error) = state.desk.lock().delete_session(session_id) {
         tracing::error!(%error, "failed to remove persisted programmer");
         return Ok(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+    // A programmer belongs to a user. Recreate one empty programmer and bind
+    // every currently connected session for that user to it.
+    if let Some(user_id) = user_id {
+        let connected = state
+            .sessions
+            .read()
+            .values()
+            .filter(|candidate| candidate.user.id == user_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        for connected_session in connected {
+            state.programmers.start(connected_session.id, user_id);
+            persist_programmer(&state, &connected_session)?;
+        }
     }
     emit(
         &state,
@@ -1925,6 +2254,21 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
     }
 }
 
+fn lock_live_input(state: &AppState, session: &Session, key: String) -> Result<(), String> {
+    let now = Instant::now();
+    let mut locks = state.input_locks.lock();
+    locks.retain(|_, (_, expires)| *expires > now);
+    if let Some((owner, _)) = locks.get(&key)
+        && *owner != session.user.id
+    {
+        return Err(format!(
+            "input {key} is currently controlled by another user"
+        ));
+    }
+    locks.insert(key, (session.user.id, now + Duration::from_secs(1)));
+    Ok(())
+}
+
 fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) -> WsResponse {
     let revision = state.engine.snapshot().revision;
     let fail = |message: String| WsResponse {
@@ -1941,9 +2285,38 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
     if command.session_id != session.id {
         return fail("session_id does not own this connection".into());
     }
-    if command
-        .expected_revision
-        .is_some_and(|expected| expected != revision)
+    let live_absolute = matches!(
+        command.command.as_str(),
+        "selection.set"
+            | "selection.macro"
+            | "group.select"
+            | "programmer.set"
+            | "programmer.group.set"
+            | "programmer.align"
+            | "programmer.command_line"
+            | "programmer.execute"
+            | "programmer.clear"
+            | "programmer.undo"
+            | "programmer.redo"
+            | "programmer.mode"
+            | "master.set"
+            | "group.master.set"
+            | "group.master.flash"
+            | "preload.enter"
+            | "preload.group.set"
+            | "preload.go"
+            | "preload.clear"
+            | "preload.release"
+            | "playback.go"
+            | "playback.back"
+            | "playback.pause"
+            | "playback.release"
+            | "preset.apply"
+    );
+    if !live_absolute
+        && command
+            .expected_revision
+            .is_some_and(|expected| expected != revision)
     {
         return fail(format!("revision conflict: current revision is {revision}"));
     }
@@ -2126,6 +2499,11 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
             }
             let input: Input =
                 serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
+            lock_live_input(
+                state,
+                session,
+                format!("group:{}:{}", input.group_id, input.attribute),
+            )?;
             if !input.value.is_finite() || !(0.0..=1.0).contains(&input.value) {
                 return Err("value must be within 0-1".into());
             }
@@ -2150,6 +2528,11 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
         "programmer.set" => {
             let input: ProgrammerSet =
                 serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
+            lock_live_input(
+                state,
+                session,
+                format!("fixture:{}:{}", input.fixture_id.0, input.attribute),
+            )?;
             if !input.value.is_finite() || !(0.0..=1.0).contains(&input.value) {
                 return Err("value must be within 0-1".into());
             }
@@ -2279,15 +2662,18 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
                 for (attribute, value) in attributes {
                     state
                         .programmers
-                        .set(session.id, fixture_id, attribute, value);
+                        .set_faded(session.id, fixture_id, attribute, value);
                 }
             }
             for (group_id, attributes) in preset.group_values {
                 if let Ok(members) = light_programmer::resolve_group(&group_id, &group_map) {
                     for (attribute, value) in attributes {
-                        state
-                            .programmers
-                            .set_group(session.id, group_id.clone(), attribute, value);
+                        state.programmers.set_group_faded(
+                            session.id,
+                            group_id.clone(),
+                            attribute,
+                            value,
+                        );
                     }
                     state.programmers.select_expression(
                         session.id,
@@ -2327,6 +2713,7 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
         "master.set" => {
             let input: MasterInput =
                 serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
+            lock_live_input(state, session, "desk:master".into())?;
             let mut control = state.output_control.lock();
             if let Some(level) = input.grand_master {
                 if !level.is_finite() || !(0.0..=1.0).contains(&level) {
@@ -2340,6 +2727,57 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
             Ok(
                 serde_json::json!({"grand_master":control.options.grand_master,"blackout":control.options.blackout}),
             )
+        }
+        "group.master.set" => {
+            #[derive(Deserialize)]
+            struct Input {
+                group_id: String,
+                value: f32,
+            }
+            let input: Input = serde_json::from_value(command.payload.clone())
+                .map_err(|error| error.to_string())?;
+            if !input.value.is_finite() || !(0.0..=1.0).contains(&input.value) {
+                return Err("group master must be within 0-1".into());
+            }
+            lock_live_input(state, session, format!("group-master:{}", input.group_id))?;
+            let mut snapshot = (*state.engine.snapshot()).clone();
+            let group = snapshot
+                .groups
+                .iter_mut()
+                .find(|group| group.id == input.group_id)
+                .ok_or("group does not exist")?;
+            group.master = input.value;
+            state
+                .engine
+                .replace_snapshot(snapshot)
+                .map_err(|error| error.to_string())?;
+            Ok(serde_json::json!({"group_id":input.group_id,"master":input.value}))
+        }
+        "group.master.flash" => {
+            #[derive(Deserialize)]
+            struct Input {
+                group_id: String,
+                value: f32,
+            }
+            let input: Input = serde_json::from_value(command.payload.clone())
+                .map_err(|error| error.to_string())?;
+            if !input.value.is_finite() || !(0.0..=1.0).contains(&input.value) {
+                return Err("group flash must be within 0-1".into());
+            }
+            if !state
+                .engine
+                .snapshot()
+                .groups
+                .iter()
+                .any(|group| group.id == input.group_id)
+            {
+                return Err("group does not exist".into());
+            }
+            lock_live_input(state, session, format!("group-flash:{}", input.group_id))?;
+            state
+                .engine
+                .set_group_master_flash(input.group_id.clone(), input.value);
+            Ok(serde_json::json!({"group_id":input.group_id,"flash":input.value}))
         }
         "playback.go" | "playback.back" | "playback.pause" | "playback.release" => {
             #[derive(Deserialize)]
@@ -2481,13 +2919,13 @@ fn execute_programmer_command(
             .select_expression(session.id, fixtures.clone(), expression);
         return Ok(fixtures.len());
     }
-    if tokens.len() < 4
+    if tokens.len() < 2
         || !matches!(
             tokens[0].as_str(),
             "FIXTURE" | "FIXTURES" | "CHANNEL" | "CHANNELS"
         )
     {
-        return Err("expected FIXTURE or CHANNEL followed by a number and AT".into());
+        return Err("expected FIXTURE or CHANNEL followed by a number".into());
     }
     let first = tokens[1]
         .parse::<usize>()
@@ -2504,19 +2942,8 @@ fn execute_programmer_command(
     } else {
         (first, 2)
     };
-    if first == 0 || last < first || tokens.get(at_index).is_none_or(|token| token != "AT") {
-        return Err("fixture range or AT keyword is invalid".into());
-    }
-    let level_token = tokens.get(at_index + 1).ok_or("AT requires a level")?;
-    let percent = if level_token == "FULL" {
-        100.0
-    } else {
-        level_token
-            .parse::<f32>()
-            .map_err(|_| "level must be a percentage or FULL")?
-    };
-    if !percent.is_finite() || !(0.0..=100.0).contains(&percent) {
-        return Err("level must be within 0-100".into());
+    if first == 0 || last < first {
+        return Err("fixture range is invalid".into());
     }
     let snapshot = state.engine.snapshot();
     if last > snapshot.fixtures.len() {
@@ -2529,12 +2956,33 @@ fn execute_programmer_command(
         .iter()
         .map(|fixture| fixture.fixture_id)
         .collect::<Vec<_>>();
+    if tokens.len() == at_index {
+        state.programmers.select(session.id, fixture_ids.clone());
+        state
+            .programmers
+            .set_command_line(session.id, command_line.to_owned());
+        return Ok(fixture_ids.len());
+    }
+    if tokens.get(at_index).is_none_or(|token| token != "AT") {
+        return Err("expected AT after the fixture selection".into());
+    }
+    let level_token = tokens.get(at_index + 1).ok_or("AT requires a level")?;
+    let percent = if level_token == "FULL" {
+        100.0
+    } else {
+        level_token
+            .parse::<f32>()
+            .map_err(|_| "level must be a percentage or FULL")?
+    };
+    if !percent.is_finite() || !(0.0..=100.0).contains(&percent) {
+        return Err("level must be within 0-100".into());
+    }
     state.programmers.select(session.id, fixture_ids.clone());
     state
         .programmers
         .set_command_line(session.id, command_line.to_owned());
     for fixture_id in &fixture_ids {
-        state.programmers.set(
+        state.programmers.set_faded(
             session.id,
             *fixture_id,
             light_core::AttributeKey::intensity(),
@@ -2754,6 +3202,9 @@ fn handle_control_event(state: &AppState, event: ControlEvent) {
             },
         );
     }
+    if let ControlEvent::Osc { address, arguments } = &event {
+        handle_playback_osc(state, address, arguments);
+    }
     let mappings = state.engine.snapshot().control_mappings.clone();
     for mapping in mappings.iter().filter(|mapping| mapping.matches(&event)) {
         match mapping.action {
@@ -2783,6 +3234,52 @@ fn handle_control_event(state: &AppState, event: ControlEvent) {
         serde_json::to_value(event)
             .unwrap_or_else(|_| serde_json::json!({"error":"serialization failed"})),
     );
+}
+
+fn handle_playback_osc(state: &AppState, address: &str, arguments: &[OscArgument]) {
+    let parts = address.trim_matches('/').split('/').collect::<Vec<_>>();
+    let pressed = arguments.first().map(|argument| match argument { OscArgument::Bool(value) => *value, OscArgument::Int(value) => *value != 0, OscArgument::Float(value) => *value > 0.0, OscArgument::String(value) => value != "0" && value != "false" }).unwrap_or(true);
+    let value = arguments.first().and_then(|argument| match argument { OscArgument::Float(value) => Some(*value), OscArgument::Int(value) => Some(*value as f32 / 127.0), _ => None });
+    if parts.len()==3 && parts.first()==Some(&"light") && parts.get(2)==Some(&"page") {
+        let Some(page)=arguments.first().and_then(|argument| match argument { OscArgument::Int(value) => u8::try_from(*value).ok(), OscArgument::Float(value) if value.is_finite() => Some(*value as u8), _ => None }) else{return;};
+        let Some(show)=state.active_show.read().clone() else{return;};
+        let desk={state.desk.lock().control_desk_by_alias(parts[1]).ok().flatten()};
+        if let Some(desk)=desk { let _=state.desk.lock().set_desk_page(desk.id,show.id,page); emit(state,"playback_page_changed",serde_json::json!({"desk_id":desk.id,"page":page})); }
+        return;
+    }
+    let (number, action_index) = if parts.len()>=4 && parts.first()==Some(&"light") && parts.get(1)==Some(&"playback") {
+        let Ok(number)=parts[2].parse::<u16>() else{return;}; (number,3)
+    } else if parts.len()>=5 && parts.first()==Some(&"light") && parts.get(2)==Some(&"paged-playback") {
+        let Ok(slot)=parts[3].parse::<u8>() else{return;};
+        let Some(show)=state.active_show.read().clone() else{return;};
+        let Ok(Some(desk))=state.desk.lock().control_desk_by_alias(parts[1]) else{return;};
+        let page_number=state.desk.lock().desk_page(desk.id,show.id).unwrap_or(1);
+        let snapshot=state.engine.snapshot();
+        let Some(number)=snapshot.playback_pages.iter().find(|page|page.number==page_number).and_then(|page|page.slots.get(&slot)).copied() else{return;};
+        (number,4)
+    } else { return; };
+    if let Some(definition)=state.engine.snapshot().playbacks.iter().find(|playback|playback.number==number).cloned()
+        && let light_playback::PlaybackTarget::Group{group_id}=definition.target {
+        let action=if parts[action_index]=="button" && parts.len()==action_index+2 { parts[action_index+1].parse::<usize>().ok().and_then(|button|definition.buttons.get(button.saturating_sub(1))).copied().unwrap_or_default() } else { light_playback::PlaybackButtonAction::None };
+        let requested=match (parts[action_index],action,pressed) { ("on",_,true)|(_,light_playback::PlaybackButtonAction::On,true)=>Some(1.0), ("off",_,true)|(_,light_playback::PlaybackButtonAction::Off,true)=>Some(0.0), ("master"|"fader",_,_)=>value, _=>None };
+        if parts[action_index]=="flash" || action==light_playback::PlaybackButtonAction::Flash { state.engine.set_group_master_flash(group_id,if pressed{1.0}else{0.0}); }
+        else if let Some(master)=requested { let mut snapshot=(*state.engine.snapshot()).clone(); if let Some(group)=snapshot.groups.iter_mut().find(|group|group.id==group_id){group.master=master.clamp(0.0,1.0);let _=state.engine.replace_snapshot(snapshot);} }
+        return;
+    }
+    let mut playback = state.engine.playback().write();
+    let _ = match parts[action_index] {
+        "go" if pressed => playback.go_playback(number).map(|_| ()),
+        "go-minus" if pressed => playback.back_playback(number).map(|_| ()),
+        "on" if pressed => playback.on(number),
+        "off" if pressed => playback.off(number).map(|_| ()),
+        "toggle" if pressed => playback.toggle(number).map(|_| ()),
+        "flash" => playback.set_flash(number, pressed),
+        "master" | "fader" => value.ok_or_else(|| "OSC fader requires a numeric value".to_owned()).and_then(|value| playback.set_master(number, value.clamp(0.0, 1.0))),
+        "xfade-on" if pressed => playback.xfade(number, true),
+        "xfade-off" if pressed => playback.xfade(number, false),
+        "button" if parts.len() == action_index + 2 => parts[action_index+1].parse::<u8>().map_err(|_| "invalid playback button".to_owned()).and_then(|button| playback.button(number, button, pressed)),
+        _ => Ok(()),
+    };
 }
 
 fn ingest_timecode(state: &AppState, timecode: SmpteTimecode) {
@@ -2842,6 +3339,16 @@ fn load_engine_snapshot_with_override(
         .map(|object| serde_json::from_value(object.body))
         .collect::<Result<Vec<light_playback::CueList>, _>>()
         .map_err(|error| format!("invalid cue list: {error}"))?;
+    let mut playbacks = read_kind("playback")?
+        .into_iter()
+        .map(|object| serde_json::from_value(object.body))
+        .collect::<Result<Vec<light_playback::PlaybackDefinition>, _>>()
+        .map_err(|error| format!("invalid playback: {error}"))?;
+    let mut playback_pages = read_kind("playback_page")?
+        .into_iter()
+        .map(|object| serde_json::from_value(object.body))
+        .collect::<Result<Vec<light_playback::PlaybackPage>, _>>()
+        .map_err(|error| format!("invalid playback page: {error}"))?;
     let routes = read_kind("route")?
         .into_iter()
         .map(|object| serde_json::from_value(object.body))
@@ -2864,9 +3371,26 @@ fn load_engine_snapshot_with_override(
         })
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| format!("invalid group: {error}"))?;
+    if playbacks.is_empty() {
+        playbacks = cue_lists.iter().take(1_000).enumerate().map(|(index, cue)| light_playback::PlaybackDefinition {
+            number: index as u16 + 1, name: cue.name.clone(), target: light_playback::PlaybackTarget::CueList { cue_list_id: cue.id },
+            buttons: [light_playback::PlaybackButtonAction::Go, light_playback::PlaybackButtonAction::GoMinus, light_playback::PlaybackButtonAction::Flash],
+            fader: light_playback::PlaybackFaderMode::Master, go_activates: true, auto_off: true, xfade_millis: 0,
+        }).collect();
+        let offset=playbacks.len();
+        playbacks.extend(groups.iter().filter(|group|group.playback_fader.is_some()).take(1_000-offset).enumerate().map(|(index,group)|light_playback::PlaybackDefinition{
+            number:(offset+index+1) as u16,name:group.name.clone(),target:light_playback::PlaybackTarget::Group{group_id:group.id.clone()},
+            buttons:[light_playback::PlaybackButtonAction::On,light_playback::PlaybackButtonAction::Off,light_playback::PlaybackButtonAction::Flash],fader:light_playback::PlaybackFaderMode::Master,go_activates:true,auto_off:false,xfade_millis:0,
+        }));
+    }
+    if playback_pages.is_empty() {
+        playback_pages.push(light_playback::PlaybackPage { number: 1, name: "Main".into(), slots: playbacks.iter().take(127).map(|playback| (playback.number as u8, playback.number)).collect() });
+    }
     Ok(EngineSnapshot {
         fixtures,
         cue_lists,
+        playbacks,
+        playback_pages,
         routes,
         control_mappings,
         groups,
@@ -2922,6 +3446,9 @@ struct ApiError {
     message: String,
 }
 impl ApiError {
+    fn fixture(error: light_fixture::FixtureError) -> Self {
+        Self::bad_request(error.to_string())
+    }
     fn bad_request(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,
@@ -2981,6 +3508,18 @@ impl IntoResponse for ApiError {
 #[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
+    fn test_control_desk() -> ControlDesk { ControlDesk { id: Uuid::nil(), name: "Test desk".into(), osc_alias: "test-desk".into(), columns: 8, rows: 1, buttons: 3 } }
+
+    #[test]
+    fn legacy_four_speed_group_configuration_gains_group_e() {
+        let configuration: DeskConfiguration =
+            serde_json::from_value(serde_json::json!({"speed_groups_bpm":[101,102,103,104]}))
+                .unwrap();
+        assert_eq!(configuration.speed_groups_bpm, [101, 102, 103, 104, 15]);
+        let five: DeskConfiguration =
+            serde_json::from_value(serde_json::json!({"speed_groups_bpm":[1,2,3,4,5]})).unwrap();
+        assert_eq!(five.speed_groups_bpm, [1, 2, 3, 4, 5]);
+    }
     use axum::{body::Body, http::Request};
     use http_body_util::BodyExt;
     use tower::ServiceExt;
@@ -3015,12 +3554,15 @@ mod tests {
         let data_dir = std::env::temp_dir().join(format!("light-server-test-{}", Uuid::new_v4()));
         std::fs::create_dir_all(data_dir.join("shows")).unwrap();
         let desk = DeskStore::open(data_dir.join("desk.sqlite")).unwrap();
+        let fixture_library =
+            light_fixture::FixtureLibrary::open(data_dir.join("fixtures.sqlite")).unwrap();
         let programmers = ProgrammerRegistry::default();
         let engine = Arc::new(Engine::new(programmers.clone()));
         let (events, _) = broadcast::channel(32);
         (
             AppState {
                 desk: Arc::new(Mutex::new(desk)),
+                fixture_library: Arc::new(Mutex::new(fixture_library)),
                 data_dir: data_dir.clone(),
                 sessions: Arc::default(),
                 ws_connections: Arc::new(Mutex::new(HashMap::new())),
@@ -3040,6 +3582,7 @@ mod tests {
                 shutdown: CancellationToken::new(),
                 media_cache: Arc::new(Mutex::new(MediaCache::default())),
                 media_status: Arc::new(RwLock::new(HashMap::new())),
+                input_locks: Arc::new(Mutex::new(HashMap::new())),
             },
             data_dir,
         )
@@ -3061,6 +3604,7 @@ mod tests {
             user: user.clone(),
             token: "test".into(),
             connected: true,
+            desk: test_control_desk(),
         };
         state.programmers.start(session.id, user.id);
         let first = light_core::FixtureId::new();
@@ -3151,6 +3695,8 @@ mod tests {
                         id: light_core::FixtureId::new(),
                         revision: 1,
                         manufacturer: "Test".into(),
+                        device_type: "media server".into(),
+                        name: "Media Server".into(),
                         model: "Media Server".into(),
                         mode: "2 layers".into(),
                         footprint: 1,
@@ -3161,6 +3707,9 @@ mod tests {
                             parameters: vec![],
                         }],
                         color_calibration: None,
+                        physical: Default::default(),
+                        model_asset: None,
+                        icon_asset: None,
                         hazardous: false,
                         direct_control_protocols: vec![light_fixture::DirectControlProtocol::Citp],
                         signal_loss_policy: light_fixture::SignalLossPolicy::HoldLast,
@@ -3173,6 +3722,8 @@ mod tests {
                         ip_address: address.ip(),
                         port: address.port(),
                     }),
+                    location: Default::default(),
+                    rotation: Default::default(),
                     logical_heads: vec![light_fixture::PatchedHead {
                         head_index: 1,
                         fixture_id: light_core::FixtureId::new(),
@@ -3278,6 +3829,62 @@ mod tests {
         );
         assert!(response.ok);
         assert_eq!(state.programmers.get(session.id).unwrap().values.len(), 1);
+        let same_user_session = Session {
+            id: SessionId::new(),
+            user: session.user.clone(),
+            token: "same-user".into(),
+            connected: true,
+            desk: session.desk.clone(),
+        };
+        state
+            .programmers
+            .start(same_user_session.id, same_user_session.user.id);
+        let same_user_update = dispatch_ws_command(
+            &state,
+            &same_user_session,
+            WsCommand {
+                protocol_version: 1,
+                request_id: "same-user".into(),
+                session_id: same_user_session.id,
+                expected_revision: Some(999),
+                command: "programmer.set".into(),
+                payload: serde_json::json!({"fixture_id":fixture,"attribute":"intensity","value":0.5}),
+            },
+        );
+        assert!(
+            same_user_update.ok,
+            "one user owns the lock across all of their sessions"
+        );
+        let other_user = state.desk.lock().add_user("Other operator").unwrap();
+        let other_session = Session {
+            id: SessionId::new(),
+            user: other_user,
+            token: "other-user".into(),
+            connected: true,
+            desk: test_control_desk(),
+        };
+        state
+            .programmers
+            .start(other_session.id, other_session.user.id);
+        let competing_update = dispatch_ws_command(
+            &state,
+            &other_session,
+            WsCommand {
+                protocol_version: 1,
+                request_id: "other-user".into(),
+                session_id: other_session.id,
+                expected_revision: None,
+                command: "programmer.set".into(),
+                payload: serde_json::json!({"fixture_id":fixture,"attribute":"intensity","value":0.2}),
+            },
+        );
+        assert!(!competing_update.ok);
+        assert!(
+            competing_update
+                .error
+                .unwrap()
+                .contains("controlled by another user")
+        );
         let foreign = dispatch_ws_command(
             &state,
             &session,
@@ -3304,8 +3911,24 @@ mod tests {
                 payload: serde_json::Value::Null,
             },
         );
-        assert!(!stale.ok);
-        assert!(stale.error.unwrap().contains("revision conflict"));
+        assert!(
+            stale.ok,
+            "live absolute commands ignore unrelated show revisions"
+        );
+        let revisioned = dispatch_ws_command(
+            &state,
+            &session,
+            WsCommand {
+                protocol_version: 1,
+                request_id: "revisioned".into(),
+                session_id: session.id,
+                expected_revision: Some(99),
+                command: "show.activate".into(),
+                payload: serde_json::Value::Null,
+            },
+        );
+        assert!(!revisioned.ok);
+        assert!(revisioned.error.unwrap().contains("revision conflict"));
         let _ = std::fs::remove_dir_all(data_dir);
     }
 
@@ -3578,9 +4201,18 @@ mod tests {
                 .next()
                 .is_some()
         );
-        let configuration=app.clone().oneshot(Request::put("/api/v1/configuration").header(header::CONTENT_TYPE,"application/json").header(header::AUTHORIZATION,format!("Bearer {token}")).body(Body::from(r#"{"frame_rate_hz":40,"output_bind_ip":"0.0.0.0","osc_bind":null,"art_timecode_bind":null,"backup_retention":5}"#)).unwrap()).await.unwrap();
+        let configuration=app.clone().oneshot(Request::put("/api/v1/configuration").header(header::CONTENT_TYPE,"application/json").header(header::AUTHORIZATION,format!("Bearer {token}")).body(Body::from(r#"{"frame_rate_hz":40,"output_bind_ip":"0.0.0.0","osc_bind":null,"art_timecode_bind":null,"backup_retention":5,"speed_groups_bpm":[101,102,103,104],"programmer_fade_millis":1250,"sequence_master_fade_millis":2500}"#)).unwrap()).await.unwrap();
         assert_eq!(configuration.status(), StatusCode::OK);
         assert_eq!(state.output_rate.load(Ordering::Relaxed), 40);
+        assert_eq!(
+            state.configuration.read().speed_groups_bpm,
+            [101, 102, 103, 104, 15]
+        );
+        assert_eq!(state.configuration.read().programmer_fade_millis, 1_250);
+        assert_eq!(
+            state.configuration.read().sequence_master_fade_millis,
+            2_500
+        );
         let user = app
             .clone()
             .oneshot(
@@ -3612,6 +4244,8 @@ mod tests {
                 id: light_core::FixtureId::new(),
                 revision: 1,
                 manufacturer: "Test".into(),
+                device_type: "dimmer".into(),
+                name: "Dimmer".into(),
                 model: "Dimmer".into(),
                 mode: "1ch".into(),
                 footprint: 1,
@@ -3632,6 +4266,9 @@ mod tests {
                     }],
                 }],
                 color_calibration: None,
+                physical: Default::default(),
+                model_asset: None,
+                icon_asset: None,
                 hazardous: false,
                 direct_control_protocols: Vec::new(),
                 signal_loss_policy: light_fixture::SignalLossPolicy::HoldLast,
@@ -3640,6 +4277,8 @@ mod tests {
             universe: 1,
             address: 1,
             direct_control: None,
+            location: Default::default(),
+            rotation: Default::default(),
             logical_heads: vec![],
         };
         let cue_list_id = light_core::CueListId::new();
@@ -3656,6 +4295,7 @@ mod tests {
             mode: light_playback::CueListMode::Sequence,
             looped: false,
             chaser_step_millis: 1_000,
+            speed_group: None,
             cues: vec![cue],
         };
         let route = light_output::OutputRoute {
@@ -3756,6 +4396,14 @@ mod tests {
             128
         );
         let session = authenticate_token(&state, &token).unwrap();
+        assert_eq!(
+            execute_programmer_command(&state, &session, "FIXTURE 1").unwrap(),
+            1
+        );
+        assert_eq!(
+            state.programmers.get(session.id).unwrap().selected,
+            vec![physical]
+        );
         assert_eq!(
             execute_programmer_command(&state, &session, "FIXTURE 1 AT 25").unwrap(),
             1
@@ -4046,6 +4694,8 @@ mod tests {
                     id: FixtureId::new(),
                     revision: 1,
                     manufacturer: "Scenario Test".into(),
+                    device_type: "other".into(),
+                    name: name.clone(),
                     model: name,
                     mode: format!("{footprint} channel"),
                     footprint,
@@ -4056,6 +4706,9 @@ mod tests {
                         parameters,
                     }],
                     color_calibration: None,
+                    physical: Default::default(),
+                    model_asset: None,
+                    icon_asset: None,
                     hazardous: false,
                     direct_control_protocols: vec![],
                     signal_loss_policy: SignalLossPolicy::HoldLast,
@@ -4064,6 +4717,8 @@ mod tests {
                 universe: 1,
                 address,
                 direct_control: None,
+                location: Default::default(),
+                rotation: Default::default(),
                 logical_heads: vec![],
             }
         }
@@ -4238,6 +4893,7 @@ mod tests {
             mode: CueListMode::Sequence,
             looped: false,
             chaser_step_millis: 1_000,
+            speed_group: None,
             cues: vec![cue],
         };
         let cue_object_id = cue_list_id.0.to_string();

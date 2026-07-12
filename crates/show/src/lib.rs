@@ -9,7 +9,7 @@ use std::path::Path;
 use thiserror::Error;
 use uuid::Uuid;
 
-const DESK_SCHEMA_VERSION: i64 = 2;
+const DESK_SCHEMA_VERSION: i64 = 3;
 const SHOW_SCHEMA_VERSION: i64 = 3;
 
 #[derive(Debug, Error)]
@@ -34,6 +34,16 @@ pub struct DeskUser {
     pub id: UserId,
     pub name: String,
     pub enabled: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ControlDesk {
+    pub id: Uuid,
+    pub name: String,
+    pub osc_alias: String,
+    pub columns: u8,
+    pub rows: u8,
+    pub buttons: u8,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -119,6 +129,32 @@ impl DeskStore {
             })
         })
         .collect()
+    }
+
+    pub fn desks(&self) -> Result<Vec<ControlDesk>, StoreError> {
+        let mut statement = self.conn.prepare("SELECT id,name,osc_alias,columns_count,rows_count,buttons_count FROM control_desks ORDER BY name COLLATE NOCASE")?;
+        let rows = statement.query_map([], |row| Ok((row.get::<_,String>(0)?,row.get(1)?,row.get(2)?,row.get::<_,u8>(3)?,row.get::<_,u8>(4)?,row.get::<_,u8>(5)?)))?;
+        rows.map(|row| { let (id,name,osc_alias,columns,rows,buttons)=row?; Ok(ControlDesk { id:Uuid::parse_str(&id)?,name,osc_alias,columns,rows,buttons }) }).collect()
+    }
+    pub fn control_desk(&self, id: Uuid) -> Result<Option<ControlDesk>, StoreError> { Ok(self.desks()?.into_iter().find(|desk| desk.id==id)) }
+    pub fn control_desk_by_alias(&self, alias: &str) -> Result<Option<ControlDesk>, StoreError> { Ok(self.desks()?.into_iter().find(|desk| desk.osc_alias.eq_ignore_ascii_case(alias))) }
+    pub fn add_desk(&self, name: &str, alias: &str) -> Result<ControlDesk, StoreError> {
+        let alias = alias.trim().to_ascii_lowercase();
+        if alias.is_empty() || alias.len()>40 || !alias.chars().all(|c| c.is_ascii_alphanumeric() || c=='-' || c=='_') { return Err(StoreError::Invalid("OSC alias must contain only letters, numbers, dash, or underscore".into())); }
+        let desk=ControlDesk{id:Uuid::new_v4(),name:name.trim().to_owned(),osc_alias:alias,columns:8,rows:1,buttons:3};
+        self.conn.execute("INSERT INTO control_desks(id,name,osc_alias,columns_count,rows_count,buttons_count) VALUES (?1,?2,?3,?4,?5,?6)",params![desk.id.to_string(),desk.name,desk.osc_alias,desk.columns,desk.rows,desk.buttons])?; Ok(desk)
+    }
+    pub fn update_desk(&self, id:Uuid, name:&str, alias:&str, columns:u8, rows:u8, buttons:u8)->Result<ControlDesk,StoreError>{
+        let alias=alias.trim().to_ascii_lowercase(); if name.trim().is_empty() || alias.is_empty() || !alias.chars().all(|c|c.is_ascii_alphanumeric()||c=='-'||c=='_') || !(1..=32).contains(&columns)||!(1..=3).contains(&rows)||buttons>3{return Err(StoreError::Invalid("invalid control desk configuration".into()));}
+        if self.conn.execute("UPDATE control_desks SET name=?1,osc_alias=?2,columns_count=?3,rows_count=?4,buttons_count=?5 WHERE id=?6",params![name.trim(),alias,columns,rows,buttons,id.to_string()])?!=1{return Err(StoreError::Invalid("control desk does not exist".into()));}
+        self.control_desk(id)?.ok_or_else(||StoreError::Invalid("control desk update failed".into()))
+    }
+    pub fn desk_page(&self, desk: Uuid, show: ShowId) -> Result<u8, StoreError> {
+        Ok(self.conn.query_row("SELECT page FROM control_desk_pages WHERE desk_id=?1 AND show_id=?2",params![desk.to_string(),show.0.to_string()],|row|row.get(0)).optional()?.unwrap_or(1))
+    }
+    pub fn set_desk_page(&self, desk: Uuid, show: ShowId, page: u8) -> Result<(), StoreError> {
+        if !(1..=127).contains(&page) { return Err(StoreError::Invalid("page must be within 1-127".into())); }
+        self.conn.execute("INSERT INTO control_desk_pages(desk_id,show_id,page) VALUES (?1,?2,?3) ON CONFLICT(desk_id,show_id) DO UPDATE SET page=excluded.page",params![desk.to_string(),show.0.to_string(),page])?; Ok(())
     }
 
     pub fn find_user(&self, name: &str) -> Result<Option<DeskUser>, StoreError> {
@@ -556,6 +592,8 @@ fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
       CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,name TEXT NOT NULL UNIQUE COLLATE NOCASE,enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN(0,1)));
       CREATE TABLE IF NOT EXISTS show_library(id TEXT PRIMARY KEY,name TEXT NOT NULL UNIQUE COLLATE NOCASE,path TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS control_desks(id TEXT PRIMARY KEY,name TEXT NOT NULL,osc_alias TEXT NOT NULL UNIQUE COLLATE NOCASE,columns_count INTEGER NOT NULL DEFAULT 8,rows_count INTEGER NOT NULL DEFAULT 1,buttons_count INTEGER NOT NULL DEFAULT 3);
+      CREATE TABLE IF NOT EXISTS control_desk_pages(desk_id TEXT NOT NULL,show_id TEXT NOT NULL,page INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(desk_id,show_id),FOREIGN KEY(desk_id) REFERENCES control_desks(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,token TEXT NOT NULL,programmer_json TEXT NOT NULL,connected INTEGER NOT NULL CHECK(connected IN(0,1)),updated_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id));")?;
     set_schema_version(&tx, DESK_SCHEMA_VERSION)?;
     tx.commit()?;
@@ -642,6 +680,15 @@ mod tests {
         assert_eq!(loaded[0].id, session.id);
         assert_eq!(loaded[0].user_id, user.id);
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn control_desks_have_unique_aliases_and_per_show_pages() {
+        let path=temporary("control-desks"); let desk=DeskStore::open(&path).unwrap();
+        let control=desk.add_desk("Front","front-desk").unwrap(); assert!(desk.add_desk("Other","front-desk").is_err());
+        let first=ShowId::new(); let second=ShowId::new(); desk.set_desk_page(control.id,first,12).unwrap();
+        assert_eq!(desk.desk_page(control.id,first).unwrap(),12); assert_eq!(desk.desk_page(control.id,second).unwrap(),1); assert!(desk.set_desk_page(control.id,first,128).is_err());
+        drop(desk); let _=fs::remove_file(path);
     }
 
     #[test]
