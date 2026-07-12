@@ -2,6 +2,6 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default capability for the Light control surface",
-  "windows": ["main"],
+  "windows": ["main", "screen-*"],
   "permissions": ["core:default"]
 }

@@ -58,6 +58,13 @@ export interface SessionResponse {
   desk: ControlDesk;
 }
 export interface ControlDesk { id: string; name: string; osc_alias: string; columns: number; rows: number; buttons: number; }
+export interface ScreenConfiguration {
+  id: string; name: string; layout: { desks: import("../types").DeskModel[]; activeDeskId: string };
+  show_dock: boolean; show_playbacks: boolean; playback_count: number; playback_rows: number;
+  first_playback_slot: number; page_mode: "follow_main" | "independent"; show_page_controls: boolean;
+  desired_open: boolean; display_id: string | null; bounds: { x: number; y: number; width: number; height: number } | null; fullscreen: boolean;
+}
+export interface ScreenSnapshot { screens: ScreenConfiguration[]; active_pages: Record<string, number>; }
 
 export interface PatchedFixture {
   fixture_id: string;

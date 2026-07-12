@@ -26,7 +26,7 @@ use light_media::{CitpClient, LibraryId, MediaCache, PreviewKey, ThumbnailKey};
 use light_output::{NetworkOutput, OutputHealth, run_scheduler_dynamic};
 use light_programmer::ProgrammerRegistry;
 use light_show::{
-    ControlDesk, DeskStore, DeskUser, PersistedSession, ShowEntry, ShowStore, initialise_show,
+    ControlDesk, DeskStore, DeskUser, PersistedSession, ScreenConfiguration, ShowEntry, ShowStore, initialise_show,
     validate_show_file,
 };
 use parking_lot::{Mutex, RwLock};
@@ -653,6 +653,9 @@ fn router(state: AppState) -> Router {
         .route("/api/v1/control-desks/{id}/page", put(update_desk_page))
         .route("/api/v1/control-desks/{id}", put(update_control_desk))
         .route("/api/v1/control-desks/{id}/paged-playbacks/{slot}/{action}", post(paged_playback_action).put(paged_playback_action))
+        .route("/api/v1/screens", get(list_screens))
+        .route("/api/v1/screens/{id}", put(put_screen).delete(delete_screen))
+        .route("/api/v1/screens/{id}/page", put(update_screen_page))
         .route("/api/v1/playbacks", get(playbacks))
         .route("/api/v1/programmers", get(list_programmers))
         .route("/api/v1/programmers/{id}/clear", post(clear_programmer))
@@ -801,7 +804,7 @@ async fn health() -> Json<serde_json::Value> {
 }
 async fn version() -> Json<serde_json::Value> {
     Json(
-        serde_json::json!({"service":"light-server","version":env!("CARGO_PKG_VERSION"),"api_version":"v1","show_schema":3,"desk_schema":2}),
+        serde_json::json!({"service":"light-server","version":env!("CARGO_PKG_VERSION"),"api_version":"v1","show_schema":3,"desk_schema":4}),
     )
 }
 async fn readiness(State(state): State<AppState>) -> Result<Json<serde_json::Value>, ApiError> {
@@ -2049,6 +2052,28 @@ async fn update_desk_page(State(state): State<AppState>, Path(id): Path<Uuid>, h
     state.desk.lock().set_desk_page(id,show.id,input.page).map_err(ApiError::store)?;
     emit(&state,"playback_page_changed",serde_json::json!({"desk_id":id,"show_id":show.id,"page":input.page}));
     Ok(Json(serde_json::json!({"desk_id":id,"page":input.page})))
+}
+
+async fn list_screens(State(state):State<AppState>,headers:HeaderMap)->Result<Json<serde_json::Value>,ApiError>{
+    let session=authenticate(&state,&headers)?;
+    let show=state.active_show.read().clone();
+    let store=state.desk.lock();
+    let screens=store.screens().map_err(ApiError::store)?;
+    let mut pages=serde_json::Map::new();
+    if let Some(show)=show { for screen in &screens { let page=if screen.page_mode=="follow_main" { store.desk_page(session.desk.id,show.id) } else { store.screen_page(screen.id,show.id) }.map_err(ApiError::store)?; pages.insert(screen.id.to_string(),serde_json::json!(page)); } }
+    Ok(Json(serde_json::json!({"screens":screens,"active_pages":pages})))
+}
+async fn put_screen(State(state):State<AppState>,Path(id):Path<Uuid>,headers:HeaderMap,Json(mut input):Json<ScreenConfiguration>)->Result<Json<ScreenConfiguration>,ApiError>{
+    let _=authenticate(&state,&headers)?; input.id=id;
+    let screen=state.desk.lock().put_screen(input).map_err(ApiError::store)?;
+    emit(&state,"screen_configuration_changed",serde_json::json!({"screen":screen})); Ok(Json(screen))
+}
+async fn delete_screen(State(state):State<AppState>,Path(id):Path<Uuid>,headers:HeaderMap)->Result<StatusCode,ApiError>{let _=authenticate(&state,&headers)?;state.desk.lock().delete_screen(id).map_err(ApiError::store)?;emit(&state,"screen_configuration_changed",serde_json::json!({"screen_id":id,"deleted":true}));Ok(StatusCode::NO_CONTENT)}
+async fn update_screen_page(State(state):State<AppState>,Path(id):Path<Uuid>,headers:HeaderMap,Json(input):Json<DeskPageInput>)->Result<Json<serde_json::Value>,ApiError>{
+    let _=authenticate(&state,&headers)?;let show=state.active_show.read().clone().ok_or_else(||ApiError::bad_request("no show is open"))?;
+    if !state.engine.snapshot().playback_pages.iter().any(|page|page.number==input.page){return Err(ApiError::bad_request("playback page does not exist"));}
+    let store=state.desk.lock();let screen=store.screen(id).map_err(ApiError::store)?.ok_or_else(||ApiError::not_found("screen"))?;if screen.page_mode!="independent"{return Err(ApiError::bad_request("screen follows the main page"));}store.set_screen_page(id,show.id,input.page).map_err(ApiError::store)?;drop(store);
+    emit(&state,"screen_page_changed",serde_json::json!({"screen_id":id,"show_id":show.id,"page":input.page}));Ok(Json(serde_json::json!({"screen_id":id,"page":input.page})))
 }
 
 async fn paged_playback_action(State(state): State<AppState>, Path((id,slot,action)): Path<(Uuid,u8,String)>, headers: HeaderMap, input: Option<Json<PoolPlaybackInput>>) -> Result<Json<serde_json::Value>,ApiError> {

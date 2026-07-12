@@ -1,1 +1,2 @@
-export interface WindowProps { compact?: boolean; showGroupShortcuts?: boolean; playbackTab?: "pool" | "cues" }
+import type { StageView } from "../types";
+export interface WindowProps { compact?: boolean; paneId?: string; showGroupShortcuts?: boolean; stageView?: StageView; followPreload?: boolean; playbackTab?: "pool" | "cues" }

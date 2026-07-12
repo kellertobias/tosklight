@@ -1966,6 +1966,8 @@ dependencies = [
 name = "light-control-ui"
 version = "0.1.0"
 dependencies = [
+ "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
 ]

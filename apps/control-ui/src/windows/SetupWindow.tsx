@@ -5,6 +5,7 @@ import type { DeskConfiguration } from "../api/types";
 import { configuredServerUrl } from "../api/LightApiClient";
 import { FixtureLibrarySetup } from "../components/setup/FixtureLibrarySetup";
 import { useApp } from "../state/AppContext";
+import { ScreensSetup } from "../components/setup/ScreensSetup";
 
 const sections = [
   "Shows & recovery",
@@ -17,6 +18,7 @@ const sections = [
   "Diagnostics",
   "Fixture library",
   "Playback layout",
+  "Screens",
 ];
 
 export function SetupWindow(_: WindowProps) {
@@ -271,6 +273,7 @@ export function SetupWindow(_: WindowProps) {
             </>
           )}
           {section === 9 && <><h2>Playback desk</h2><p>Each client remembers a physical desk identity. Clients and OSC components joined to the same desk share its active page.</p><div className="setup-list">{server.bootstrap?.desks.map((desk) => <article key={desk.id}><b>{desk.name}</b><span>/{desk.osc_alias}/ · {desk.columns}×{desk.rows} · {desk.buttons} buttons</span><small>{desk.id === server.session?.desk.id ? "Current desk" : desk.id}</small>{desk.id !== server.session?.desk.id && <button onClick={() => server.selectControlDesk(desk.id)}>Join this desk</button>}</article>)}</div><div className="configuration-form"><label>Name<input value={deskName} onChange={(event) => setDeskName(event.target.value)}/></label><label>OSC alias<input value={deskAlias} onChange={(event) => setDeskAlias(event.target.value)}/></label><label>Playbacks per row<input type="number" min="1" max="32" value={state.playbackColumns} onChange={(event) => dispatch({ type: "SET_PLAYBACK_LAYOUT", columns: Number(event.target.value), rows: state.playbackRows })}/></label><label>Rows<input type="number" min="1" max="3" value={state.playbackRows} onChange={(event) => dispatch({ type: "SET_PLAYBACK_LAYOUT", columns: state.playbackColumns, rows: Number(event.target.value) })}/></label><label>Visible buttons<input type="number" min="0" max="3" value={deskButtons} onChange={(event) => setDeskButtons(Number(event.target.value))}/></label><button onClick={() => server.session?.desk && void server.updateControlDesk({ ...server.session.desk, name: deskName, osc_alias: deskAlias, columns: state.playbackColumns, rows: state.playbackRows, buttons: deskButtons })}>Save desk layout</button><small>{state.playbackColumns * state.playbackRows} playback slots total · OSC prefix /light/{server.session?.desk.osc_alias ?? "desk"}/</small></div></>}
+          {section === 10 && <ScreensSetup/>}
           {section === 8 && <FixtureLibrarySetup />}
           {server.error && <p className="modal-error">{server.error}</p>}
         </main>

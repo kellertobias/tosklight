@@ -18,19 +18,25 @@ import { migrateStagePosition } from "./stage3dScene";
 import type { StageAsset, StagePosition3d } from "../api/ServerContext";
 import type { VisualizationSnapshot } from "../api/types";
 import { importStageAssets } from "./stageAssetImport";
+import { useApp } from "../state/AppContext";
+import { GroupsPoolButton } from "../components/shared/GroupsPoolButton";
 
 const symbols = ["◉", "◈", "◎", "◐", "◇", "◍"];
-type StageMode = "select" | "setup" | "navigate";
 type Point = { x: number; y: number };
 
-export function StageWindow({ compact, showGroupShortcuts }: WindowProps) {
+export function StageWindow({ compact, showGroupShortcuts, stageView, followPreload: paneFollowPreload }: WindowProps) {
   const server = useServer();
-  const [mode, setMode] = useState<StageMode>("select");
-  const [view, setView] = useState<"2d" | "3d">("2d");
-  const [followPreload, setFollowPreload] = useState(false);
+  const { state, dispatch } = useApp();
+  const mode = state.stageMode;
+  const setMode = (value: typeof mode) => dispatch({ type: "SET_STAGE_MODE", value });
+  const view = compact ? (stageView ?? state.stageView) : state.stageView;
+  const setView = (value: "2d" | "3d") => dispatch({ type: "SET_STAGE_VIEW", value });
+  const [dedicatedFollowPreload, setDedicatedFollowPreload] = useState(false);
+  const followPreload = compact ? Boolean(paneFollowPreload) : dedicatedFollowPreload;
+  const [groupsVisible, setGroupsVisible] = useState(!compact);
   const tauri =
     typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-  const [zoom, setZoom] = useState(1);
+  const zoom = state.stageZoom;
   const [positions, setPositions] = useState<
     Record<string, { x: number; y: number; rotation: number }>
   >({});
@@ -45,7 +51,7 @@ export function StageWindow({ compact, showGroupShortcuts }: WindowProps) {
     useState<VisualizationSnapshot | null>(null);
   const positionsRef = useRef(positions);
   const [draggingFixture, setDraggingFixture] = useState<string | null>(null);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const pan = { x: state.stagePanX, y: state.stagePanY };
   const navigationStart = useRef<
     (Point & { panX: number; panY: number }) | null
   >(null);
@@ -95,7 +101,7 @@ export function StageWindow({ compact, showGroupShortcuts }: WindowProps) {
   }, [followPreload, server.readVisualization]);
   const patched =
     server.patch?.fixtures.map((fixture) => {
-      const intensity = fixtureValue(visualization, fixture, "intensity");
+      const intensity = (visualization?.blackout ? 0 : fixtureValue(visualization, fixture, "intensity")) * (visualization?.grand_master ?? 1);
       const red = fixtureValue(visualization, fixture, "color.red", 1);
       const green = fixtureValue(visualization, fixture, "color.green", 1);
       const blue = fixtureValue(visualization, fixture, "color.blue", 1);
@@ -226,12 +232,12 @@ export function StageWindow({ compact, showGroupShortcuts }: WindowProps) {
   };
   const updateCanvasGesture = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (navigationStart.current && mode === "navigate")
-      setPan({
-        x:
+      dispatch({ type: "SET_STAGE_NAVIGATION",
+        panX:
           navigationStart.current.panX +
           event.clientX -
           navigationStart.current.x,
-        y:
+        panY:
           navigationStart.current.panY +
           event.clientY -
           navigationStart.current.y,
@@ -282,21 +288,13 @@ export function StageWindow({ compact, showGroupShortcuts }: WindowProps) {
 
   return (
     <div className={`stage-window ${compact ? "compact" : ""}`}>
-      {compact && (
-        <button
-          className={`stage-follow-preload ${followPreload ? "active" : ""}`}
-          onClick={() => setFollowPreload(!followPreload)}
-        >
-          Follow Preload
-        </button>
-      )}
       {!compact && (
         <header className="window-toolbar">
           <h1>
-            Stage <small>{server.selectedFixtures.length} selected</small>
+            Stage <small>{server.selectedFixtures.length} selected · Tap to select · Shift range · Ctrl/Command track macro</small>
           </h1>
           <span className="spacer" />
-          <button className={followPreload ? "active" : ""} onClick={() => setFollowPreload(!followPreload)}>Follow Preload</button>
+          <button className={followPreload ? "active" : ""} onClick={() => setDedicatedFollowPreload(!dedicatedFollowPreload)}>Follow Preload</button>
           {tauri && (
             <div className="button-group">
               <button
@@ -333,6 +331,7 @@ export function StageWindow({ compact, showGroupShortcuts }: WindowProps) {
               Navigate
             </button>
           </div>
+          <GroupsPoolButton fromStage shortcutsVisible={groupsVisible} onToggleShortcuts={() => setGroupsVisible(!groupsVisible)} />
           {view === "3d" && (
             <>
               <input
@@ -347,22 +346,6 @@ export function StageWindow({ compact, showGroupShortcuts }: WindowProps) {
                 }}
               />
               <button onClick={() => assetInput.current?.click()}>Import scene</button>
-            </>
-          )}
-          {view === "2d" && (
-            <>
-              <button
-                aria-label="Zoom out"
-                onClick={() => setZoom(Math.max(0.7, zoom - 0.1))}
-              >
-                Zoom −
-              </button>
-              <button
-                aria-label="Zoom in"
-                onClick={() => setZoom(Math.min(1.6, zoom + 0.1))}
-              >
-                Zoom +
-              </button>
             </>
           )}
         </header>
@@ -457,17 +440,6 @@ export function StageWindow({ compact, showGroupShortcuts }: WindowProps) {
             setMarquee(null);
           }}
         >
-          <div className="selection-summary">
-            <b>{server.selectedFixtures.length} selected</b>
-            <br />
-            <small>
-              {mode === "select"
-                ? "Tap to select · Shift range · Ctrl/Command add · drag marquee"
-                : mode === "setup"
-                  ? "Drag fixtures to edit their stage positions"
-                  : "Drag the canvas to navigate"}
-            </small>
-          </div>
           {fixtures.length === 0 && (
             <div className="empty-window-message">
               No fixtures are patched in the active show.
@@ -520,7 +492,7 @@ export function StageWindow({ compact, showGroupShortcuts }: WindowProps) {
                   aria-label={`${fixture.name}, ${fixture.dimmer}%`}
                 >
                   <span>{fixture.icon ? <img src={fixture.icon} alt="" /> : symbols[index % symbols.length]}<i className="lamp-color-dot" style={{ background: fixture.color }} /></span>
-                  <i className="lamp-position-line" style={{ transform: `rotate(${fixture.pan * 360 - 180}deg)` }}><i style={{ left: `${fixture.tilt * 100}%` }} /></i>
+                  <i className={`lamp-position-line ${fixture.dimmer > 0 ? "active" : "inactive"}`} style={{ transform: `rotate(${fixture.pan * 360 - 180}deg)`, color: fixture.dimmer > 0 ? fixture.color : undefined }}><i style={{ left: `${fixture.tilt * 100}%` }} /></i>
                   <small>{index + 1}</small>
                 </button>
               );
@@ -535,7 +507,7 @@ export function StageWindow({ compact, showGroupShortcuts }: WindowProps) {
           )}
         </div>
       )}
-      {(!compact || showGroupShortcuts) && <GroupStrip />}
+      {(!compact ? groupsVisible : showGroupShortcuts) && <GroupStrip />}
     </div>
   );
 }

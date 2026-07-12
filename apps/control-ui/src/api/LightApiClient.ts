@@ -6,6 +6,8 @@ import type {
   PlaybackSnapshot,
   ServerEvent,
   SessionResponse,
+  ScreenConfiguration,
+  ScreenSnapshot,
   ShowEntry,
   VersionedObject,
 } from "./types";
@@ -50,6 +52,7 @@ export class LightApiClient {
   constructor(private readonly baseUrl = defaultServerUrl()) {}
 
   get currentSession() { return this.session; }
+  restoreSession(session: SessionResponse) { this.session = session; }
   setDeskToken(token: string) { this.deskToken = token.trim(); const storage = browserStorage(); if (this.deskToken) storage?.setItem("light.desk-token", this.deskToken); else storage?.removeItem("light.desk-token"); }
   private boundaryHeaders(headers = new Headers()) { if (this.deskToken) headers.set("x-light-desk-token", this.deskToken); return headers; }
 
@@ -67,6 +70,7 @@ export class LightApiClient {
       body: JSON.stringify({ username, client_id: clientId, desk_id: storage?.getItem("light.control-desk") ?? null }),
     }, false);
     this.session = session;
+    storage?.setItem("light.primary-session", JSON.stringify(session));
     if (session.desk) storage?.setItem("light.control-desk", session.desk.id);
     return session;
   }
@@ -113,6 +117,10 @@ export class LightApiClient {
   playbacks(): Promise<PlaybackSnapshot> {
     return this.request("/api/v1/playbacks");
   }
+  screens(): Promise<ScreenSnapshot> { return this.request("/api/v1/screens"); }
+  putScreen(screen: ScreenConfiguration): Promise<ScreenConfiguration> { return this.request(`/api/v1/screens/${screen.id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(screen) }); }
+  deleteScreen(id: string): Promise<void> { return this.request(`/api/v1/screens/${id}`, { method: "DELETE" }); }
+  setScreenPage(id: string, page: number) { return this.request(`/api/v1/screens/${id}/page`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ page }) }); }
 
   visualization(preload = false): Promise<import("./types").VisualizationSnapshot> {
     return this.request(`/api/v1/visualization${preload ? "?preload=true" : ""}`);

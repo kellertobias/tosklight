@@ -21,6 +21,8 @@ import type {
   PatchLayer,
   PatchedFixture,
   PlaybackSnapshot,
+  ScreenConfiguration,
+  ScreenSnapshot,
   SessionResponse,
   ShowEntry,
   StoredGroup,
@@ -74,6 +76,10 @@ interface ServerContextValue {
   patch: PatchSnapshot | null;
   patchLayers: VersionedObject<PatchLayer>[];
   playbacks: PlaybackSnapshot | null;
+  screens: ScreenSnapshot | null;
+  saveScreen: (screen: ScreenConfiguration) => Promise<void>;
+  deleteScreen: (id: string) => Promise<void>;
+  setScreenPage: (id: string, page: number) => Promise<void>;
   shows: ShowEntry[];
   configuration: DeskConfiguration | null;
   fixtureLibrary: FixtureDefinition[];
@@ -208,6 +214,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
   const [patch, setPatch] = useState<PatchSnapshot | null>(null);
   const [patchLayers, setPatchLayers] = useState<VersionedObject<PatchLayer>[]>([]);
   const [playbacks, setPlaybacks] = useState<PlaybackSnapshot | null>(null);
+  const [screens, setScreens] = useState<ScreenSnapshot | null>(null);
   const [shows, setShows] = useState<ShowEntry[]>([]);
   const [configuration, setConfiguration] = useState<DeskConfiguration | null>(
     null,
@@ -316,7 +323,10 @@ export function ServerProvider({ children }: PropsWithChildren) {
           enabled.find((candidate) => candidate.name === remembered) ??
           enabled.find((candidate) => candidate.name === "Operator") ??
           enabled[0];
-        const nextSession = await client.login(user.name);
+        const screenWindow = new URLSearchParams(window.location.search).has("screen");
+        const restored = screenWindow ? JSON.parse(localStorage.getItem("light.primary-session") ?? "null") as SessionResponse | null : null;
+        const nextSession = restored ?? await client.login(user.name);
+        if (restored) client.restoreSession(restored);
         localStorage.setItem("light.operator", user.name);
         let effectiveBootstrap = initial;
         if (!initial.active_show) {
@@ -334,6 +344,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
           nextConfiguration,
           nextMedia,
           nextFixtureLibrary,
+          nextScreens,
         ] = await Promise.all([
           client.patch(),
           client.playbacks(),
@@ -342,6 +353,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
           client.configuration(),
           client.mediaServers(),
           client.fixtureLibrary(),
+          client.screens(),
         ]);
         if (cancelled) return;
         setSession(nextSession);
@@ -351,6 +363,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
         setConfiguration(nextConfiguration.configuration);
         setMediaServers(nextMedia.fixtures);
         setFixtureLibrary(nextFixtureLibrary);
+        setScreens(nextScreens);
         await loadShowObjects(
           effectiveBootstrap.active_show_error ? null : effectiveBootstrap.active_show?.id ?? null,
           nextSession.user.id,
@@ -365,7 +378,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
           if (["show_object_changed", "preset_stored", "preload_stored"].includes(event.kind)) setShowDirty(true);
           if (["show_opened", "show_rolled_back"].includes(event.kind)) setShowDirty(false);
           if (
-            ["playback_changed", "show_opened", "show_object_changed", "preload_stored"].includes(
+            ["playback_changed", "playback_page_changed", "show_opened", "show_object_changed", "preload_stored"].includes(
               event.kind,
             )
           ) {
@@ -374,6 +387,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
               .then(setPlaybacks)
               .catch(() => undefined);
           }
+          if (["screen_configuration_changed", "screen_page_changed", "playback_page_changed", "show_opened"].includes(event.kind)) void client.screens().then(setScreens).catch(() => undefined);
           if (
             [
               "show_opened",
@@ -510,6 +524,10 @@ export function ServerProvider({ children }: PropsWithChildren) {
       patch,
       patchLayers,
       playbacks,
+      screens,
+      saveScreen: async (screen) => { try { await client.putScreen(screen); setScreens(await client.screens()); setError(null); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } },
+      deleteScreen: async (id) => { try { await client.deleteScreen(id); setScreens(await client.screens()); setError(null); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } },
+      setScreenPage: async (id, page) => { try { await client.setScreenPage(id, page); setScreens(await client.screens()); setError(null); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } },
       shows,
       configuration,
       fixtureLibrary,

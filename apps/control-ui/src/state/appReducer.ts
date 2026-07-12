@@ -9,6 +9,13 @@ export type Action =
   | { type: "SET_PANE_SETTINGS"; id: string | null }
   | { type: "SET_PANE_RECT"; id: string; rect: Partial<GridRect> }
   | { type: "SET_PANE_GROUP_SHORTCUTS"; id: string; value: boolean }
+  | { type: "SET_PANE_STAGE_OPTION"; id: string; option: "stageView" | "followPreload"; value: AppState["stageView"] | boolean }
+  | { type: "SET_STAGE_MODE"; value: AppState["stageMode"] }
+  | { type: "SET_STAGE_VIEW"; value: AppState["stageView"] }
+  | { type: "SET_STAGE_NAVIGATION"; zoom?: number; panX?: number; panY?: number; orbitX?: number; orbitY?: number }
+  | { type: "OPEN_GROUPS_FROM_STAGE"; origin?: "builtin" | "desk" }
+  | { type: "RETURN_TO_STAGE" }
+  | { type: "SET_BLACKOUT"; value: boolean }
   | { type: "TOGGLE_MAXIMIZE"; id: string }
   | { type: "REMOVE_PANE"; id: string }
   | { type: "OPEN_DESK_SETTINGS"; id: string | null }
@@ -65,6 +72,15 @@ export const initialState: AppState = {
   touchScrollbars: false,
   deskSettingsOpen: false,
   deskSettingsId: null,
+  stageMode: "select",
+  stageView: "2d",
+  stageZoom: 1,
+  stagePanX: 0,
+  stagePanY: 0,
+  stageOrbitX: 0,
+  stageOrbitY: 0,
+  groupsReturnToStage: null,
+  blackout: false,
 };
 
 const clamp = (value: number, minimum: number, maximum: number) => Math.max(minimum, Math.min(maximum, value));
@@ -76,6 +92,9 @@ export function appReducer(state: AppState, action: Action): AppState {
       : { ...state, dockMode: "builtins", builtIn: state.lastBuiltIn };
     case "OPEN_DESK": return { ...state, activeDeskId: action.id, builtIn: null, dockMode: "desks", savingDesk: false };
     case "OPEN_BUILTIN": return { ...state, builtIn: action.kind, lastBuiltIn: action.kind, dockMode: "builtins" };
+    case "OPEN_GROUPS_FROM_STAGE": return { ...state, builtIn: "groups", lastBuiltIn: "groups", dockMode: "builtins", groupsReturnToStage: action.origin ?? "builtin" };
+    case "RETURN_TO_STAGE": return state.groupsReturnToStage === "desk" ? { ...state, builtIn: null, dockMode: "desks", groupsReturnToStage: null } : { ...state, builtIn: "stage", lastBuiltIn: "stage", dockMode: "builtins", groupsReturnToStage: null };
+    case "SET_BLACKOUT": return { ...state, blackout: action.value };
     case "TOGGLE_CONTROL_MODE": return { ...state, controlMode: state.controlMode === "programmer" ? "playbacks" : "programmer" };
     case "SET_PANE_SETTINGS": return { ...state, paneSettingsId: action.id };
     case "TOGGLE_MAXIMIZE": return { ...state, maximizedPaneId: state.maximizedPaneId === action.id ? null : action.id };
@@ -121,6 +140,10 @@ export function appReducer(state: AppState, action: Action): AppState {
       }),
     };
     case "SET_PANE_GROUP_SHORTCUTS": return { ...state, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, showGroupShortcuts: action.value } : pane) }) };
+    case "SET_PANE_STAGE_OPTION": return { ...state, stageView: action.option === "stageView" ? action.value as AppState["stageView"] : state.stageView, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, [action.option]: action.value } : pane) }) };
+    case "SET_STAGE_MODE": return { ...state, stageMode: action.value };
+    case "SET_STAGE_VIEW": return { ...state, stageView: action.value };
+    case "SET_STAGE_NAVIGATION": return { ...state, stageZoom: action.zoom ?? state.stageZoom, stagePanX: action.panX ?? state.stagePanX, stagePanY: action.panY ?? state.stagePanY, stageOrbitX: action.orbitX ?? state.stageOrbitX, stageOrbitY: action.orbitY ?? state.stageOrbitY };
     case "REMOVE_PANE": return { ...state, paneSettingsId: null, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: desk.panes.filter((pane) => pane.id !== action.id) }) };
     case "OPEN_DESK_SETTINGS": return { ...state, deskSettingsOpen: Boolean(action.id), deskSettingsId: action.id };
     case "UPDATE_DESK": return { ...state, desks: state.desks.map((desk) => desk.id === action.id ? { ...desk, name: action.name ?? desk.name, icon: action.icon ?? desk.icon } : desk) };

@@ -10,10 +10,12 @@ import { PreloadStoreModal } from "../modals/PreloadStoreModal";
 import { ModalEscapeManager } from "../input/ModalEscapeManager";
 import { StoreSettingsModal } from "../modals/StoreSettingsModal";
 import { ShowRecoveryModal } from "../modals/ShowRecoveryModal";
+import { ScreenWindowManager } from "./ScreenWindowManager";
 
 export function AppShell() {
   return <div className="app-shell">
     <LayoutPersistence />
+    <ScreenWindowManager />
     <ModalEscapeManager />
     <LeftDock />
     <WorkspaceView />

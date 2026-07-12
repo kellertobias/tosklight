@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { useApp } from "../../state/AppContext";
 
-export function GroupsPoolButton({ shortcutsVisible, onToggleShortcuts }: { shortcutsVisible: boolean; onToggleShortcuts: () => void }) {
+export function GroupsPoolButton({ shortcutsVisible, onToggleShortcuts, fromStage = false, stageOrigin = "builtin" }: { shortcutsVisible: boolean; onToggleShortcuts: () => void; fromStage?: boolean; stageOrigin?: "builtin" | "desk" }) {
   const { dispatch } = useApp();
   const timer = useRef<number | null>(null);
   const held = useRef(false);
@@ -23,7 +23,7 @@ export function GroupsPoolButton({ shortcutsVisible, onToggleShortcuts }: { shor
     onPointerCancel={cancel}
     onContextMenu={(event) => event.preventDefault()}
     onClick={() => {
-      if (!held.current) dispatch({ type: "OPEN_BUILTIN", kind: "groups" });
+      if (!held.current) dispatch(fromStage ? { type: "OPEN_GROUPS_FROM_STAGE", origin: stageOrigin } : { type: "OPEN_BUILTIN", kind: "groups" });
       held.current = false;
     }}
   >Groups</button>;

@@ -11,6 +11,7 @@ import {
   disposeScene,
   type Stage3dFixture,
 } from "./stage3dScene";
+import { useApp } from "../state/AppContext";
 
 interface Props {
   fixtures: Stage3dFixture[];
@@ -33,6 +34,7 @@ export function Stage3dCanvas({
   onMove,
   onMoveEnd,
 }: Props) {
+  const { state, dispatch } = useApp();
   const host = useRef<HTMLDivElement>(null);
   const cameraPosition = useRef(new THREE.Vector3(0, 3.2, 12));
   const cameraTarget = useRef(new THREE.Vector3(0, 1.8, -4));
@@ -123,14 +125,23 @@ export function Stage3dCanvas({
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.replaceChildren(renderer.domElement);
     const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 100);
-    camera.position.copy(cameraPosition.current);
+    const orbitRadius = Math.max(2, 12 / Math.max(.2, state.stageZoom));
+    const azimuth = THREE.MathUtils.degToRad(state.stageOrbitX);
+    const elevation = THREE.MathUtils.degToRad(18 + state.stageOrbitY);
+    camera.position.set(Math.sin(azimuth) * orbitRadius, 1.8 + Math.sin(elevation) * orbitRadius, -4 + Math.cos(azimuth) * Math.cos(elevation) * orbitRadius);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.copy(cameraTarget.current);
     controls.enableDamping = true;
-    controls.addEventListener("change", () => {
+    const rememberCamera = () => {
       cameraPosition.current.copy(camera.position);
       cameraTarget.current.copy(controls.target);
-    });
+    };
+    const publishCamera = () => {
+      const offset = camera.position.clone().sub(controls.target);
+      dispatch({ type: "SET_STAGE_NAVIGATION", zoom: 12 / Math.max(2, offset.length()), orbitX: THREE.MathUtils.radToDeg(Math.atan2(offset.x, offset.z)), orbitY: THREE.MathUtils.radToDeg(Math.asin(offset.y / offset.length())) - 18 });
+    };
+    controls.addEventListener("change", rememberCamera);
+    controls.addEventListener("end", publishCamera);
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     let dragging: {
@@ -228,6 +239,8 @@ export function Stage3dCanvas({
       cancelAnimationFrame(frame);
       observer.disconnect();
       controls.dispose();
+      controls.removeEventListener("change", rememberCamera);
+      controls.removeEventListener("end", publishCamera);
       renderer.domElement.removeEventListener("pointerdown", down);
       renderer.domElement.removeEventListener("pointermove", move);
       renderer.domElement.removeEventListener("pointerup", up);
@@ -236,7 +249,7 @@ export function Stage3dCanvas({
       renderer.forceContextLoss();
       renderer.dispose();
     };
-  }, [fixtures, assets, renderVisualization, selected, setup]);
+  }, [fixtures, assets, renderVisualization, selected, setup, state.stageZoom, state.stageOrbitX, state.stageOrbitY, dispatch]);
 
   return <div className="stage-3d-canvas" ref={host} />;
 }

@@ -18,6 +18,8 @@ export type BuiltInWindow =
 export type ControlMode = "programmer" | "playbacks";
 export type DockMode = "desks" | "builtins";
 export type ValueSource = "programmer" | "playback" | "default";
+export type StageMode = "select" | "setup" | "navigate";
+export type StageView = "2d" | "3d";
 
 export interface GridRect {
   x: number;
@@ -31,6 +33,8 @@ export interface PaneModel extends GridRect {
   kind: BuiltInWindow;
   title: string;
   showGroupShortcuts?: boolean;
+  stageView?: StageView;
+  followPreload?: boolean;
 }
 
 export interface DeskModel {
@@ -102,4 +106,13 @@ export interface AppState {
   touchScrollbars: boolean;
   deskSettingsOpen: boolean;
   deskSettingsId: string | null;
+  stageMode: StageMode;
+  stageView: StageView;
+  stageZoom: number;
+  stagePanX: number;
+  stagePanY: number;
+  stageOrbitX: number;
+  stageOrbitY: number;
+  groupsReturnToStage: "builtin" | "desk" | null;
+  blackout: boolean;
 }

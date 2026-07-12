@@ -3,6 +3,7 @@ import { useApp } from "../../state/AppContext";
 import { useServer } from "../../api/ServerContext";
 import type { VisualizationSnapshot } from "../../api/types";
 import { VerticalTouchFader } from "./VerticalTouchFader";
+import { StageCommandControls } from "./StageCommandControls";
 
 const families = {
   Intensity: ["intensity", "shutter", "strobe", "master"],
@@ -139,6 +140,7 @@ export function ParameterControls() {
     }
     return macros;
   }, [server.patch, server.selectedFixtures]);
+  if (state.stageMode !== "select" && (state.builtIn === "stage" || state.desks.find((desk) => desk.id === state.activeDeskId)?.panes.some((pane) => pane.kind === "stage"))) return <StageCommandControls />;
   return (
     <div className="parameter-controls">
       <div className="family-tabs">

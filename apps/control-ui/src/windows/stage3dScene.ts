@@ -133,9 +133,16 @@ export function buildStageScene(
     const coneGeometry = new THREE.ConeGeometry(radius, distance, 32, 1, true);
     coneGeometry.translate(0, -distance / 2, 0);
     const volume = new THREE.Mesh(coneGeometry, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: intensity * (.035 + focus * .055), side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
-    const outline = new THREE.LineSegments(new THREE.EdgesGeometry(coneGeometry, 28), new THREE.LineBasicMaterial({ color, transparent: true, opacity: .28 + intensity * .55 }));
+    const activeBeam = intensity > .001;
+    const guideColor = activeBeam ? color : new THREE.Color(0x7b858d);
+    const guideMaterial = activeBeam
+      ? new THREE.LineBasicMaterial({ color: guideColor, transparent: true, opacity: .28 + intensity * .55 })
+      : new THREE.LineDashedMaterial({ color: guideColor, transparent: true, opacity: .3, dashSize: .18, gapSize: .14 });
+    const outline = new THREE.LineSegments(new THREE.EdgesGeometry(coneGeometry, 28), guideMaterial);
+    if (!activeBeam) outline.computeLineDistances();
     const centerGeometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, -distance, 0)]);
-    const center = new THREE.Line(centerGeometry, new THREE.LineBasicMaterial({ color, transparent: true, opacity: .55 }));
+    const center = new THREE.Line(centerGeometry, activeBeam ? new THREE.LineBasicMaterial({ color, transparent: true, opacity: .45 + intensity * .4 }) : new THREE.LineDashedMaterial({ color: 0x7b858d, transparent: true, opacity: .35, dashSize: .18, gapSize: .14 }));
+    if (!activeBeam) center.computeLineDistances();
     beam.add(volume, outline, center);
     const gobo = capabilityName(item.fixture, "gobo", attributes.get("gobo"));
     if (gobo && gobo.toLowerCase() !== "open") {

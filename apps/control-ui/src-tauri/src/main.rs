@@ -1,7 +1,22 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::{fs::OpenOptions, net::{SocketAddr, TcpStream}, path::{Path, PathBuf}, process::{Child, Command, Stdio}, sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}}, thread, time::{Duration, Instant}};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
+use serde::Serialize;
+
+#[derive(Serialize)] struct ConsoleDisplay { id:String, name:String }
+fn monitor_id(monitor:&tauri::window::Monitor)->String { let p=monitor.position();let s=monitor.size();format!("{}|{},{}|{}x{}",monitor.name().map(String::as_str).unwrap_or("Display"),p.x,p.y,s.width,s.height) }
+#[tauri::command] fn list_console_displays(app:tauri::AppHandle)->Result<Vec<ConsoleDisplay>,String>{app.available_monitors().map_err(|e|e.to_string()).map(|items|items.into_iter().map(|m|ConsoleDisplay{id:monitor_id(&m),name:m.name().cloned().unwrap_or_else(||"Display".into())}).collect())}
+#[tauri::command] fn close_console_screen(app:tauri::AppHandle,screen_id:String)->Result<(),String>{if let Some(window)=app.get_webview_window(&format!("screen-{screen_id}")){window.close().map_err(|e|e.to_string())?;}Ok(())}
+#[tauri::command] fn hide_console_screen(app:tauri::AppHandle,screen_id:String)->Result<(),String>{if let Some(window)=app.get_webview_window(&format!("screen-{screen_id}")){window.hide().map_err(|e|e.to_string())?;}Ok(())}
+#[tauri::command] fn open_console_screen(app:tauri::AppHandle,screen_id:String,title:String,display_id:Option<String>,bounds:Option<serde_json::Value>,fullscreen:bool)->Result<(),String>{
+    let label=format!("screen-{screen_id}");if let Some(window)=app.get_webview_window(&label){window.show().map_err(|e|e.to_string())?;return Ok(());}
+    let monitors=app.available_monitors().map_err(|e|e.to_string())?;let monitor=display_id.as_ref().and_then(|id|monitors.iter().find(|m|monitor_id(m)==*id));if display_id.is_some()&&monitor.is_none(){return Ok(());}
+    let mut builder=tauri::WebviewWindowBuilder::new(&app,label,tauri::WebviewUrl::App(format!("index.html?screen={screen_id}").into())).title(title).inner_size(1200.0,800.0).resizable(true);
+    if let Some(value)=bounds { let x=value.get("x").and_then(|v|v.as_f64());let y=value.get("y").and_then(|v|v.as_f64());let w=value.get("width").and_then(|v|v.as_f64());let h=value.get("height").and_then(|v|v.as_f64());if let (Some(x),Some(y),Some(w),Some(h))=(x,y,w,h){builder=builder.position(x,y).inner_size(w.max(640.0),h.max(480.0));} }
+    else if let Some(monitor)=monitor { let p=monitor.position();builder=builder.position(f64::from(p.x)+20.0,f64::from(p.y)+20.0); }
+    builder.fullscreen(fullscreen).build().map_err(|e|e.to_string())?;Ok(())
+}
 
 struct ServerProcess { child: Arc<Mutex<Option<Child>>>, stop: Arc<AtomicBool> }
 
@@ -46,6 +61,7 @@ fn launch_server(app: &tauri::AppHandle) -> Result<Option<Child>, Box<dyn std::e
 
 fn main() {
     tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![list_console_displays,open_console_screen,close_console_screen,hide_console_screen])
         .setup(|app| {
             let child = launch_server(app.handle()).map_err(|error| { eprintln!("failed to start bundled Light server: {error}"); error })?;
             let process = ServerProcess { child: Arc::new(Mutex::new(child)), stop: Arc::new(AtomicBool::new(false)) };
@@ -58,6 +74,6 @@ fn main() {
             app.manage(process);
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("failed to run ToskLight control UI");
+        .build(tauri::generate_context!()).expect("failed to build ToskLight control UI")
+        .run(|handle,event| { if matches!(event,tauri::RunEvent::ExitRequested { .. }) { let _=handle.emit("app-shutting-down",()); } });
 }

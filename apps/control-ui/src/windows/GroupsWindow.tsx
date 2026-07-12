@@ -78,7 +78,7 @@ export function GroupsWindow({ compact }: WindowProps) {
 
   return (
     <div className="pool-window group-pool-window">
-      {!compact && <header className="window-toolbar"><h1>Group Pool <small>{server.selectedFixtures.length} fixtures selected · ordered</small></h1><span className="spacer" /><button onClick={() => dispatch({ type: "OPEN_BUILTIN", kind: "presets" })}>Presets</button></header>}
+      {!compact && <header className="window-toolbar"><h1>Group Pool <small>{server.selectedFixtures.length} fixtures selected · ordered</small></h1><span className="spacer" />{state.groupsReturnToStage && <button onClick={() => dispatch({ type: "RETURN_TO_STAGE" })}>Back to Stage</button>}<button onClick={() => dispatch({ type: "OPEN_BUILTIN", kind: "presets" })}>Presets</button></header>}
       <div className="card-pool">
         {cards.map((group, index) => (
           <GroupCard

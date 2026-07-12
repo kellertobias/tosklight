@@ -102,7 +102,7 @@ export function CommandLineBar() {
         <span className="mode-icon">{playback ? "▶" : "⌨"}</span>
         <span>
           <b>PROG.</b>
-          <small>PLAY BK</small>
+          <small>PLAYBK</small>
         </span>
       </button>
       <div className="command-field"><input
@@ -120,7 +120,7 @@ export function CommandLineBar() {
         }}
       /><button className="command-escape" onClick={() => replaceCommand("")}>ESC</button>
         <button className={`command-status ${server.status}`} title="Open output and timecode controls" onClick={() => dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: true })}>
-          <span>DMX {server.bootstrap?.frame_rate_hz ?? "—"}Hz</span>
+          <span className={state.blackout ? "blackout-status" : ""}>{state.blackout ? <><i>DMX {server.bootstrap?.frame_rate_hz ?? "—"}Hz</i><b>BLACKOUT</b></> : <>DMX {server.bootstrap?.frame_rate_hz ?? "—"}Hz</>}</span>
           <span>{server.bootstrap?.active_timecode ?? "No TC"}</span>
         </button>
       </div>
