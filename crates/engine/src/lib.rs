@@ -7,16 +7,16 @@ use light_fixture::{
     PatchedFixture, SignalLossPolicy, encode_parameter, mix_color, validate_patch,
 };
 use light_output::{DmxFrame, OutputRoute};
-use light_playback::{CueList, PlaybackEngine, resolve};
+use light_playback::{CueList, PlaybackDefinition, PlaybackEngine, PlaybackPage, PlaybackTarget, resolve};
 use light_programmer::ProgrammerRegistry;
 use light_programmer::{GroupDefinition, resolve_group};
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     sync::{
         Arc,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicU16, AtomicU64, Ordering},
     },
 };
 use thiserror::Error;
@@ -25,6 +25,10 @@ use thiserror::Error;
 pub struct EngineSnapshot {
     pub fixtures: Vec<PatchedFixture>,
     pub cue_lists: Vec<CueList>,
+    #[serde(default)]
+    pub playbacks: Vec<PlaybackDefinition>,
+    #[serde(default)]
+    pub playback_pages: Vec<PlaybackPage>,
     pub routes: Vec<OutputRoute>,
     pub control_mappings: Vec<light_control::ControlMapping>,
     #[serde(default)]
@@ -54,6 +58,22 @@ impl EngineSnapshot {
         }
         for cue_list in &self.cue_lists {
             cue_list.validate().map_err(EngineError::Invalid)?;
+        }
+        let mut playback_numbers = std::collections::HashSet::new();
+        let mut playback_targets = std::collections::HashSet::new();
+        for playback in &self.playbacks {
+            playback.validate().map_err(EngineError::Invalid)?;
+            if !playback_numbers.insert(playback.number) { return Err(EngineError::Invalid("duplicate playback number".into())); }
+            if !playback_targets.insert(playback.target.clone()) { return Err(EngineError::Invalid("a target may only belong to one playback".into())); }
+            match &playback.target {
+                PlaybackTarget::CueList { cue_list_id } if !self.cue_lists.iter().any(|cue| cue.id == *cue_list_id) => return Err(EngineError::Invalid("playback references a missing cue list".into())),
+                PlaybackTarget::Group { group_id } if !self.groups.iter().any(|group| group.id == *group_id) => return Err(EngineError::Invalid("playback references a missing group".into())),
+                _ => {}
+            }
+        }
+        for page in &self.playback_pages {
+            page.validate().map_err(EngineError::Invalid)?;
+            if page.slots.values().any(|number| !playback_numbers.contains(number)) { return Err(EngineError::Invalid("page references a missing playback".into())); }
         }
         for route in &self.routes {
             if route.destination_universe == 0 || route.logical_universe == 0 {
@@ -106,6 +126,18 @@ pub struct Engine {
     playback: RwLock<PlaybackEngine>,
     programmers: ProgrammerRegistry,
     timecode_frame: AtomicU64,
+    programmer_fade_millis: AtomicU64,
+    speed_groups_bpm: [AtomicU16; 5],
+    sequence_master_fade_millis: AtomicU64,
+    programmer_transitions: Mutex<HashMap<(FixtureId, AttributeKey), ProgrammerTransition>>,
+    group_master_flashes: RwLock<HashMap<String, f32>>,
+}
+
+#[derive(Clone)]
+struct ProgrammerTransition {
+    changed_at: chrono::DateTime<chrono::Utc>,
+    from: AttributeValue,
+    target: AttributeValue,
 }
 
 impl Engine {
@@ -115,7 +147,77 @@ impl Engine {
             playback: RwLock::new(PlaybackEngine::default()),
             programmers,
             timecode_frame: AtomicU64::new(u64::MAX),
+            programmer_fade_millis: AtomicU64::new(0),
+            speed_groups_bpm: [
+                AtomicU16::new(120),
+                AtomicU16::new(90),
+                AtomicU16::new(60),
+                AtomicU16::new(30),
+                AtomicU16::new(15),
+            ],
+            sequence_master_fade_millis: AtomicU64::new(0),
+            programmer_transitions: Mutex::new(HashMap::new()),
+            group_master_flashes: RwLock::new(HashMap::new()),
         }
+    }
+
+    pub fn set_control_timing(
+        &self,
+        speed_groups_bpm: [u16; 5],
+        programmer_fade_millis: u64,
+        sequence_master_fade_millis: u64,
+    ) {
+        self.programmer_fade_millis
+            .store(programmer_fade_millis.min(60_000), Ordering::Relaxed);
+        for (target, bpm) in self.speed_groups_bpm.iter().zip(speed_groups_bpm) {
+            target.store(bpm.clamp(1, 999), Ordering::Relaxed);
+        }
+        self.sequence_master_fade_millis
+            .store(sequence_master_fade_millis.min(60_000), Ordering::Relaxed);
+        self.playback
+            .write()
+            .set_control_timing(speed_groups_bpm, sequence_master_fade_millis);
+    }
+
+    fn faded_programmer_value(
+        &self,
+        mut value: TimedValue,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> TimedValue {
+        let duration = self.programmer_fade_millis.load(Ordering::Relaxed);
+        if duration == 0 || value.value.normalized().is_none() {
+            return value;
+        }
+        let key = (value.fixture_id, value.attribute.clone());
+        let mut transitions = self.programmer_transitions.lock();
+        let transition = transitions
+            .entry(key)
+            .or_insert_with(|| ProgrammerTransition {
+                changed_at: value.changed_at,
+                from: AttributeValue::Normalized(0.0),
+                target: value.value.clone(),
+            });
+        let interpolate = |transition: &ProgrammerTransition| {
+            let progress = ((now - transition.changed_at).num_milliseconds().max(0) as f32
+                / duration as f32)
+                .clamp(0.0, 1.0);
+            match (transition.from.normalized(), transition.target.normalized()) {
+                (Some(from), Some(target)) => {
+                    AttributeValue::Normalized(from + (target - from) * progress)
+                }
+                _ => transition.target.clone(),
+            }
+        };
+        if transition.changed_at != value.changed_at {
+            let from = interpolate(transition);
+            *transition = ProgrammerTransition {
+                changed_at: value.changed_at,
+                from,
+                target: value.value.clone(),
+            };
+        }
+        value.value = interpolate(transition);
+        value
     }
 
     pub fn replace_snapshot(&self, snapshot: EngineSnapshot) -> Result<(), EngineError> {
@@ -139,6 +241,12 @@ impl Engine {
             Vec::new()
         };
         let mut playback = PlaybackEngine::default();
+        playback.set_control_timing(
+            self.speed_groups_bpm
+                .each_ref()
+                .map(|bpm| bpm.load(Ordering::Relaxed)),
+            self.sequence_master_fade_millis.load(Ordering::Relaxed),
+        );
         let groups = snapshot
             .groups
             .iter()
@@ -180,6 +288,9 @@ impl Engine {
             }
             playback.register(cue_list).map_err(EngineError::Invalid)?;
         }
+        for definition in snapshot.playbacks.clone() {
+            playback.register_definition(definition).map_err(EngineError::Invalid)?;
+        }
         self.programmers.refresh_live_selections(&groups);
         playback.restore_active(active_playbacks);
         *self.playback.write() = playback;
@@ -198,9 +309,56 @@ impl Engine {
             .store(frame.unwrap_or(u64::MAX), Ordering::Relaxed);
     }
 
+    /// Sets a transient group flash level without changing the group's fader value.
+    pub fn set_group_master_flash(&self, group_id: String, value: f32) {
+        let mut flashes = self.group_master_flashes.write();
+        if value <= 0.0 {
+            flashes.remove(&group_id);
+        } else {
+            flashes.insert(group_id, value.clamp(0.0, 1.0));
+        }
+    }
+
     pub fn render(&self, options: RenderOptions) -> Result<RenderResult, EngineError> {
         let snapshot = self.snapshot.load_full();
         let now = chrono::Utc::now();
+        let resolved = self.resolved_values_at(&snapshot, now);
+        let groups = snapshot
+            .groups
+            .iter()
+            .map(|group| (group.id.clone(), group.clone()))
+            .collect::<HashMap<_, _>>();
+        let group_master_flashes = self.group_master_flashes.read();
+        let mut universes = HashMap::new();
+        for fixture in &snapshot.fixtures {
+            let frame = universes.entry(fixture.universe).or_insert([0; 512]);
+            render_fixture(
+                frame,
+                fixture,
+                &resolved,
+                options,
+                &groups,
+                &group_master_flashes,
+            )?;
+        }
+        Ok(RenderResult {
+            universes,
+            revision: snapshot.revision,
+        })
+    }
+
+    /// Returns the same merged abstract attributes that feed DMX rendering. Consumers such as
+    /// visualizers can use this without attempting to reverse fixture-specific DMX encoding.
+    pub fn resolved_values(&self) -> HashMap<(FixtureId, AttributeKey), AttributeValue> {
+        let snapshot = self.snapshot.load_full();
+        self.resolved_values_at(&snapshot, chrono::Utc::now())
+    }
+
+    fn resolved_values_at(
+        &self,
+        snapshot: &EngineSnapshot,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> HashMap<(FixtureId, AttributeKey), AttributeValue> {
         let mut playback = self.playback.write();
         let timecode = self.timecode_frame.load(Ordering::Relaxed);
         playback.tick(now, (timecode != u64::MAX).then_some(timecode));
@@ -214,6 +372,13 @@ impl Engine {
                         .values
                         .into_iter()
                         .chain(programmer.preload_active)
+                })
+                .map(|value| {
+                    if value.fade {
+                        self.faded_programmer_value(value, now)
+                    } else {
+                        value
+                    }
                 }),
         );
         let groups = snapshot
@@ -243,7 +408,7 @@ impl Engine {
                         .unwrap_or_else(|| vec![fixture_id]);
                     for target in targets {
                         for (attribute, scoped) in &attributes {
-                            contributions.push(TimedValue {
+                            let value = TimedValue {
                                 fixture_id: target,
                                 attribute: attribute.clone(),
                                 value: scoped.value.clone(),
@@ -254,6 +419,12 @@ impl Engine {
                                 } else {
                                     MergeMode::Ltp
                                 },
+                                fade: scoped.fade,
+                            };
+                            contributions.push(if value.fade {
+                                self.faded_programmer_value(value, now)
+                            } else {
+                                value
                             });
                         }
                     }
@@ -288,21 +459,13 @@ impl Engine {
                             } else {
                                 MergeMode::Ltp
                             },
+                            fade: false,
                         });
                     }
                 }
             }
         }
-        let resolved = resolve(contributions);
-        let mut universes = HashMap::new();
-        for fixture in &snapshot.fixtures {
-            let frame = universes.entry(fixture.universe).or_insert([0; 512]);
-            render_fixture(frame, fixture, &resolved, options, &groups)?;
-        }
-        Ok(RenderResult {
-            universes,
-            revision: snapshot.revision,
-        })
+        resolve(contributions)
     }
 }
 fn logical_targets(fixtures: &[PatchedFixture], fixture_id: FixtureId) -> Vec<FixtureId> {
@@ -323,6 +486,7 @@ fn render_fixture(
     resolved: &HashMap<(FixtureId, AttributeKey), AttributeValue>,
     options: RenderOptions,
     groups: &HashMap<String, GroupDefinition>,
+    group_master_flashes: &HashMap<String, f32>,
 ) -> Result<(), EngineError> {
     for head in &fixture.definition.heads {
         let owner = if head.shared {
@@ -344,7 +508,12 @@ fn render_fixture(
                     .filter(|members| {
                         members.contains(&fixture.fixture_id) || members.contains(&owner)
                     })
-                    .map(|_| group.master.clamp(0.0, 1.0))
+                    .map(|_| {
+                        group
+                            .master
+                            .max(group_master_flashes.get(&group.id).copied().unwrap_or(0.0))
+                            .clamp(0.0, 1.0)
+                    })
             })
             .reduce(f32::max)
             .unwrap_or(1.0);
@@ -420,6 +589,9 @@ fn render_fixture(
             if parameter.virtual_dimmer {
                 level *= intensity;
             }
+            if parameter.components.is_empty() {
+                continue;
+            }
             encode_parameter(frame, fixture.address, parameter, level)?;
         }
         for (attribute, value) in &abstract_values {
@@ -489,6 +661,8 @@ mod tests {
                     id: FixtureId::new(),
                     revision: 1,
                     manufacturer: "Test".into(),
+                    device_type: "other".into(),
+                    name: "Cell".into(),
                     model: "Cell".into(),
                     mode: "1ch".into(),
                     footprint: 1,
@@ -499,6 +673,9 @@ mod tests {
                         parameters: vec![parameter],
                     }],
                     color_calibration: None,
+                    physical: Default::default(),
+                    model_asset: None,
+                    icon_asset: None,
                     hazardous: false,
                     direct_control_protocols: Vec::new(),
                     signal_loss_policy: SignalLossPolicy::HoldLast,
@@ -507,6 +684,8 @@ mod tests {
                 universe: 1,
                 address: 1,
                 direct_control: None,
+                location: Default::default(),
+                rotation: Default::default(),
                 logical_heads: vec![PatchedHead {
                     head_index: 1,
                     fixture_id: logical,
@@ -533,6 +712,8 @@ mod tests {
             .replace_snapshot(EngineSnapshot {
                 fixtures: vec![fixture],
                 cue_lists: vec![],
+                playbacks: vec![],
+                playback_pages: vec![],
                 routes: vec![],
                 control_mappings: vec![],
                 groups: vec![],
@@ -542,6 +723,12 @@ mod tests {
         let result = engine.render(RenderOptions::default()).unwrap();
         assert_eq!(result.universes[&1][0], 128);
         assert_eq!(result.revision, 7);
+        assert_eq!(
+            engine
+                .resolved_values()
+                .get(&(logical, AttributeKey::intensity())),
+            Some(&AttributeValue::Normalized(0.5))
+        );
     }
 
     #[test]
@@ -561,6 +748,8 @@ mod tests {
             .replace_snapshot(EngineSnapshot {
                 fixtures: vec![fixture],
                 cue_lists: vec![],
+                playbacks: vec![],
+                playback_pages: vec![],
                 routes: vec![],
                 control_mappings: vec![],
                 groups: vec![],
@@ -609,6 +798,8 @@ mod tests {
             .replace_snapshot(EngineSnapshot {
                 fixtures: vec![fixture],
                 cue_lists: vec![],
+                playbacks: vec![],
+                playback_pages: vec![],
                 routes: vec![],
                 control_mappings: vec![],
                 groups: vec![
@@ -645,6 +836,52 @@ mod tests {
             153
         );
     }
+
+    #[test]
+    fn group_master_flash_is_temporary_and_does_not_move_the_fader() {
+        let programmers = ProgrammerRegistry::default();
+        let session = light_core::SessionId::new();
+        programmers.start(session, light_core::UserId::new());
+        let (fixture, logical) = fixture();
+        let physical = fixture.fixture_id;
+        programmers.set(
+            session,
+            logical,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.8),
+        );
+        let engine = Engine::new(programmers);
+        engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![fixture],
+                groups: vec![GroupDefinition {
+                    id: "front".into(),
+                    name: "Front".into(),
+                    fixtures: vec![physical],
+                    master: 0.25,
+                    playback_fader: Some(1),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            })
+            .unwrap();
+
+        assert_eq!(
+            engine.render(RenderOptions::default()).unwrap().universes[&1][0],
+            51
+        );
+        engine.set_group_master_flash("front".into(), 1.0);
+        assert_eq!(
+            engine.render(RenderOptions::default()).unwrap().universes[&1][0],
+            204
+        );
+        assert_eq!(engine.snapshot().groups[0].master, 0.25);
+        engine.set_group_master_flash("front".into(), 0.0);
+        assert_eq!(
+            engine.render(RenderOptions::default()).unwrap().universes[&1][0],
+            51
+        );
+    }
     #[test]
     fn logical_head_master_does_not_limit_sibling_heads() {
         let programmers = ProgrammerRegistry::default();
@@ -671,6 +908,8 @@ mod tests {
                 id: FixtureId::new(),
                 revision: 1,
                 manufacturer: "Test".into(),
+                device_type: "other".into(),
+                name: "Two cell".into(),
                 model: "Two cell".into(),
                 mode: "2ch".into(),
                 footprint: 2,
@@ -689,6 +928,9 @@ mod tests {
                     },
                 ],
                 color_calibration: None,
+                physical: Default::default(),
+                model_asset: None,
+                icon_asset: None,
                 hazardous: false,
                 direct_control_protocols: vec![],
                 signal_loss_policy: SignalLossPolicy::HoldLast,
@@ -697,6 +939,8 @@ mod tests {
             universe: 1,
             address: 1,
             direct_control: None,
+            location: Default::default(),
+            rotation: Default::default(),
             logical_heads: vec![
                 PatchedHead {
                     head_index: 1,
@@ -926,6 +1170,7 @@ mod tests {
             mode: light_playback::CueListMode::Sequence,
             looped: false,
             chaser_step_millis: 1_000,
+            speed_group: None,
             cues: vec![cue],
         };
         let engine = Engine::new(programmers);
@@ -1002,6 +1247,8 @@ mod tests {
             .replace_snapshot(EngineSnapshot {
                 fixtures: vec![fixture],
                 cue_lists: vec![],
+                playbacks: vec![],
+                playback_pages: vec![],
                 routes: vec![],
                 control_mappings: vec![],
                 groups: vec![],
@@ -1016,5 +1263,28 @@ mod tests {
             })
             .unwrap();
         assert_eq!(rendered.universes[&1][0], 0);
+    }
+
+    #[test]
+    fn programmer_master_fade_interpolates_live_values() {
+        let engine = Engine::new(ProgrammerRegistry::default());
+        engine.set_control_timing([120, 90, 60, 30, 15], 1_000, 0);
+        let now = chrono::Utc::now();
+        let value = TimedValue {
+            fixture_id: FixtureId::new(),
+            attribute: AttributeKey::intensity(),
+            value: AttributeValue::Normalized(1.0),
+            priority: 100,
+            changed_at: now - chrono::Duration::milliseconds(500),
+            merge_mode: MergeMode::Htp,
+            fade: true,
+        };
+        let faded = engine.faded_programmer_value(value, now);
+        assert!(
+            faded
+                .value
+                .normalized()
+                .is_some_and(|level| (level - 0.5).abs() < 0.02)
+        );
     }
 }
