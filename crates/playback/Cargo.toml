@@ -1,0 +1,10 @@
+[package]
+name = "light-playback"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+chrono.workspace = true
+light-core = { path = "../core" }
+serde.workspace = true

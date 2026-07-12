@@ -1,0 +1,13 @@
+[package]
+name = "light-control"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+light-core = { path = "../core" }
+serde.workspace = true
+tokio.workspace = true
+midir.workspace = true

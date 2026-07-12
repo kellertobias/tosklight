@@ -1,0 +1,15 @@
+[package]
+name = "light-programmer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+chrono.workspace = true
+light-core = { path = "../core" }
+parking_lot.workspace = true
+serde.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

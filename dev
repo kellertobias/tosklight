@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+UI_DIR="$ROOT/apps/control-ui"
+DATA_DIR="${LIGHT_DATA_DIR:-$ROOT/light-data}"
+SERVER_PID=""
+
+cleanup() {
+  if [[ -n "$SERVER_PID" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
+    kill "$SERVER_PID" 2>/dev/null || true
+    wait "$SERVER_PID" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT INT TERM
+
+command -v cargo >/dev/null 2>&1 || { echo "error: cargo is required" >&2; exit 1; }
+command -v npm >/dev/null 2>&1 || { echo "error: npm is required" >&2; exit 1; }
+
+mkdir -p "$DATA_DIR"
+
+echo "Starting Light server with Rust hot reload disabled..."
+echo "The Tauri app and UI will hot reload; restart ./dev after backend changes."
+cargo run --manifest-path "$ROOT/Cargo.toml" -p light-server --bin light-server -- \
+  --data-dir "$DATA_DIR" &
+SERVER_PID=$!
+
+echo "Starting Tauri development app..."
+(cd "$UI_DIR" && npm run tauri:dev)

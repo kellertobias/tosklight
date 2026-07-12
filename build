@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+UI_DIR="$ROOT/apps/control-ui"
+TARGET_DIR="$ROOT/target"
+DATA_DIR="${LIGHT_DATA_DIR:-$ROOT/light-data}"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ./build open             Build debug server and app, stop old instances, and open Light
+  ./build archive          Build release server and app, then create separate ZIP archives
+  ./build archive install  Also install and open Light.app in ~/Applications
+EOF
+}
+
+require() {
+  command -v "$1" >/dev/null 2>&1 || {
+    echo "error: required command not found: $1" >&2
+    exit 1
+  }
+}
+
+stop_running() {
+  echo "Stopping running Light instances..."
+  pkill -x light-server 2>/dev/null || true
+  pkill -x light-control-ui 2>/dev/null || true
+  pkill -f "$ROOT/apps/control-ui/node_modules/.bin/vite" 2>/dev/null || true
+  pkill -f "$ROOT/target/debug/light-control-ui" 2>/dev/null || true
+  pkill -f "$ROOT/target/release/light-control-ui" 2>/dev/null || true
+}
+
+wait_for_server() {
+  local pid="$1"
+  local attempts=0
+  while (( attempts < 100 )); do
+    if curl -fsS http://127.0.0.1:5000/api/v1/readiness >/dev/null 2>&1; then
+      return 0
+    fi
+    if ! kill -0 "$pid" 2>/dev/null; then
+      echo "error: Light server exited during startup; see $TARGET_DIR/light-server.log" >&2
+      return 1
+    fi
+    sleep 0.1
+    attempts=$((attempts + 1))
+  done
+  echo "error: timed out waiting for the Light server; see $TARGET_DIR/light-server.log" >&2
+  return 1
+}
+
+start_server() {
+  local binary="$1"
+  mkdir -p "$DATA_DIR" "$TARGET_DIR"
+  nohup "$binary" --data-dir "$DATA_DIR" >"$TARGET_DIR/light-server.log" 2>&1 &
+  local pid=$!
+  echo "$pid" >"$TARGET_DIR/light-server.pid"
+  wait_for_server "$pid"
+}
+
+build_debug_and_open() {
+  require cargo
+  require npm
+  require curl
+  require open
+
+  stop_running
+  echo "Building debug server..."
+  cargo build --manifest-path "$ROOT/Cargo.toml" -p light-server --bin light-server
+  echo "Building debug Tauri app..."
+  (cd "$UI_DIR" && npm run tauri:build -- --debug --bundles app)
+
+  start_server "$TARGET_DIR/debug/light-server"
+  open "$TARGET_DIR/debug/bundle/macos/Light.app"
+  echo "Light is open. Server log: $TARGET_DIR/light-server.log"
+}
+
+archive_release() {
+  local install="${1:-false}"
+  local version platform arch app_path artifact_dir server_zip app_zip
+
+  require cargo
+  require npm
+  require ditto
+  require zip
+
+  version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$ROOT/Cargo.toml" | head -1)"
+  platform="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  arch="$(uname -m)"
+  artifact_dir="$ROOT/artifacts"
+  server_zip="$artifact_dir/light-server-$version-$platform-$arch.zip"
+  app_zip="$artifact_dir/light-app-$version-$platform-$arch.zip"
+
+  echo "Building release UI for the standalone server..."
+  (cd "$UI_DIR" && npm run build)
+  echo "Building release server..."
+  cargo build --manifest-path "$ROOT/Cargo.toml" --release -p light-server --bin light-server
+  echo "Building release Tauri app..."
+  (cd "$UI_DIR" && npm run tauri:build -- --bundles app)
+
+  app_path="$TARGET_DIR/release/bundle/macos/Light.app"
+  mkdir -p "$artifact_dir"
+  rm -f "$server_zip" "$app_zip"
+  (cd "$TARGET_DIR/release" && zip -q "$server_zip" light-server)
+  ditto -c -k --sequesterRsrc --keepParent "$app_path" "$app_zip"
+  echo "Created $server_zip"
+  echo "Created $app_zip"
+
+  if [[ "$install" == true ]]; then
+    require open
+    stop_running
+    mkdir -p "$HOME/Applications"
+    rm -rf "$HOME/Applications/Light.app"
+    ditto "$app_path" "$HOME/Applications/Light.app"
+    open "$HOME/Applications/Light.app"
+    echo "Installed and opened $HOME/Applications/Light.app"
+  fi
+}
+
+case "${1:-}" in
+  open)
+    [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+    build_debug_and_open
+    ;;
+  archive)
+    case "${2:-}" in
+      "") archive_release false ;;
+      install) [[ $# -eq 2 ]] || { usage >&2; exit 2; }; archive_release true ;;
+      *) usage >&2; exit 2 ;;
+    esac
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac

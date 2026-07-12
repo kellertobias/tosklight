@@ -1,0 +1,18 @@
+[package]
+name = "light-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+arc-swap.workspace = true
+chrono.workspace = true
+light-core = { path = "../core" }
+light-control = { path = "../control" }
+light-fixture = { path = "../fixture" }
+light-output = { path = "../output" }
+light-playback = { path = "../playback" }
+light-programmer = { path = "../programmer" }
+parking_lot.workspace = true
+serde.workspace = true
+thiserror.workspace = true
