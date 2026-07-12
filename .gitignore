@@ -1,0 +1,30 @@
+# Rust
+/target/
+
+# Node and frontend build output
+**/node_modules/
+**/dist/
+**/*.tsbuildinfo
+**/test-results/
+**/playwright-report/
+**/coverage/
+
+# Runtime desk/show data
+/light-data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.show
+*.log
+*.pid
+
+# Generated release packages
+/artifacts/
+
+# Local tooling and operating-system files
+.DS_Store
+.env
+.env.*
+!.env.example
+*.profraw
+*.profdata
