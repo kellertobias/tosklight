@@ -5,10 +5,14 @@ import type { WindowProps } from "./windowTypes";
 import { useServer } from "../api/ServerContext";
 import type { VisualizationSnapshot } from "../api/types";
 import { GroupStrip } from "../components/shared/GroupStrip";
+import { SourceLegend } from "../components/shared/SourceLegend";
 import { useApp } from "../state/AppContext";
-import { fixtureTargetIds, fixtureValue } from "./fixtureVisualization";
 import { DataTable, WindowHeader, WindowScrollArea, WindowSettings, type DataTableColumn } from "../components/window-kit";
-import { Input } from "../components/common";
+import { Input, Select } from "../components/common";
+import { activeProgrammerFixtureIds, compareFixtureIds, cueListFixtureIds } from "./fixtureSheetFilters";
+import { fixtureSheetTargets, targetHasAttribute, targetValue } from "./fixtureSheetTargets";
+
+type FixtureOrder = "fixture-id" | "active";
 
 export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps) {
   const server = useServer();
@@ -16,6 +20,9 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
   const [visualization, setVisualization] = useState<VisualizationSnapshot | null>(null);
   const [preloadVisualization, setPreloadVisualization] = useState<VisualizationSnapshot | null>(null);
   const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
+  const [fixtureOrder, setFixtureOrder] = useState<FixtureOrder>("fixture-id");
+  const [activeOnly, setActiveOnly] = useState(false);
+  const [cueListId, setCueListId] = useState("");
   const groupsVisible = compact ? Boolean(showGroupShortcuts) : state.fixtureGroupsVisible;
   useEffect(() => {
     let cancelled = false;
@@ -24,31 +31,51 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
     const timer = window.setInterval(refresh, 250);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [server.readVisualization, state.preload]);
+  const ownProgrammer = server.bootstrap?.active_programmers.find(
+    (programmer) => programmer.user_id === server.session?.user.id,
+  );
+  const activeFixtureIds = activeProgrammerFixtureIds(ownProgrammer, server.groups);
+  const selectedCueList = server.playbacks?.cue_lists.find((cueList) => cueList.id === cueListId);
+  const cueFixtureIds = cueListFixtureIds(selectedCueList, server.groups);
+  const orderedPatch = [...(server.patch?.fixtures ?? [])].sort(compareFixtureIds);
+  const orderedTargets = orderedPatch
+    .flatMap(fixtureSheetTargets)
+    .filter((target) => !activeOnly || activeFixtureIds.has(target.fixtureId))
+    .filter((target) => cueFixtureIds == null || cueFixtureIds.has(target.fixtureId))
+    .sort((a, b) => {
+      if (fixtureOrder === "active") {
+        const activeDifference = Number(activeFixtureIds.has(b.fixtureId)) - Number(activeFixtureIds.has(a.fixtureId));
+        if (activeDifference) return activeDifference;
+      }
+      return compareFixtureIds(a.fixture, b.fixture) || a.order - b.order;
+    });
   const liveFixtures =
-    server.patch?.fixtures.map((patched, index) => {
-      const fixtureIds = fixtureTargetIds(patched);
-      const intensity = fixtureValue(visualization, patched, "intensity");
-      const red = fixtureValue(visualization, patched, "color.red", 1);
-      const green = fixtureValue(visualization, patched, "color.green", 1);
-      const blue = fixtureValue(visualization, patched, "color.blue", 1);
-      const pan = fixtureValue(visualization, patched, "pan");
-      const tilt = fixtureValue(visualization, patched, "tilt");
-      const preloadIntensity = preloadVisualization ? fixtureValue(preloadVisualization, patched, "intensity") : null;
-      const preloadRed = preloadVisualization ? fixtureValue(preloadVisualization, patched, "color.red", 1) : null;
-      const preloadGreen = preloadVisualization ? fixtureValue(preloadVisualization, patched, "color.green", 1) : null;
-      const preloadBlue = preloadVisualization ? fixtureValue(preloadVisualization, patched, "color.blue", 1) : null;
-      const preloadPan = preloadVisualization ? fixtureValue(preloadVisualization, patched, "pan") : null;
-      const preloadTilt = preloadVisualization ? fixtureValue(preloadVisualization, patched, "tilt") : null;
+    orderedTargets.map((target, index) => {
+      const patched = target.fixture;
+      const intensity = targetValue(visualization, target, "intensity");
+      const red = targetValue(visualization, target, "color.red", 1);
+      const green = targetValue(visualization, target, "color.green", 1);
+      const blue = targetValue(visualization, target, "color.blue", 1);
+      const pan = targetValue(visualization, target, "pan");
+      const tilt = targetValue(visualization, target, "tilt");
       const base = fixtures[index % fixtures.length];
-      const hasColor = patched.definition.heads.some((head) => head.parameters.some((parameter) => parameter.attribute.startsWith("color.")));
-      const hasLiveColor = visualization?.values.some((entry) => fixtureIds.includes(entry.fixture_id) && entry.attribute.startsWith("color.")) ?? false;
+      const hasIntensity = targetHasAttribute(target, "intensity");
+      const hasColor = target.heads.some((head) => head.parameters.some((parameter) => parameter.attribute.startsWith("color.")));
+      const hasPosition = targetHasAttribute(target, "pan") || targetHasAttribute(target, "tilt");
+      const preloadIntensity = preloadVisualization && hasIntensity ? targetValue(preloadVisualization, target, "intensity") : null;
+      const preloadRed = preloadVisualization && hasColor ? targetValue(preloadVisualization, target, "color.red", 1) : null;
+      const preloadGreen = preloadVisualization && hasColor ? targetValue(preloadVisualization, target, "color.green", 1) : null;
+      const preloadBlue = preloadVisualization && hasColor ? targetValue(preloadVisualization, target, "color.blue", 1) : null;
+      const preloadPan = preloadVisualization && hasPosition ? targetValue(preloadVisualization, target, "pan") : null;
+      const preloadTilt = preloadVisualization && hasPosition ? targetValue(preloadVisualization, target, "tilt") : null;
+      const hasLiveColor = visualization?.values.some((entry) => entry.fixture_id === target.fixtureId && entry.attribute.startsWith("color.")) ?? false;
       const color = `rgb(${Math.round(red * 255)}, ${Math.round(green * 255)}, ${Math.round(blue * 255)})`;
       return ({
       ...base,
-      id: patched.fixture_number ?? index + 1,
-      name: patched.name || patched.definition.name || patched.definition.model,
+      id: target.displayId,
+      name: target.name,
       type: `${patched.definition.manufacturer} · ${patched.definition.mode} · U${patched.universe}.${patched.address}`,
-      fixtureId: patched.fixture_id,
+      fixtureId: target.fixtureId,
       dimmer: Math.round(intensity * 100),
       color,
       colorLabel: hasColor ? color : "White",
@@ -60,19 +87,17 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
       preloadTilt: preloadTilt == null ? null : Math.round(preloadTilt * 100),
       sources: {
         ...base.sources,
-        dimmer: visualization?.values.some((entry) => fixtureIds.includes(entry.fixture_id) && entry.attribute === "intensity") ? "programmer" as const : "default" as const,
-        color: hasLiveColor ? "programmer" as const : "default" as const,
-        position: visualization?.values.some((entry) => fixtureIds.includes(entry.fixture_id) && (entry.attribute === "pan" || entry.attribute === "tilt")) ? "programmer" as const : "default" as const,
+        dimmer: hasIntensity && visualization?.values.some((entry) => entry.fixture_id === target.fixtureId && entry.attribute === "intensity") ? "programmer" as const : "default" as const,
+        color: hasColor && hasLiveColor ? "programmer" as const : "default" as const,
+        position: hasPosition && visualization?.values.some((entry) => entry.fixture_id === target.fixtureId && (entry.attribute === "pan" || entry.attribute === "tilt")) ? "programmer" as const : "default" as const,
       },
       limitingGroups: server.groups.filter(
         (group) =>
           group.body.playback_fader != null &&
-          (group.body.fixtures.includes(patched.fixture_id) ||
-            patched.logical_heads.some((head) =>
-              group.body.fixtures.includes(head.fixture_id),
-            )) &&
+          group.body.fixtures.includes(target.fixtureId) &&
           (group.body.master ?? 1) < 1,
       ),
+      positionLabel: hasPosition ? undefined : "—",
     });}) ?? [];
   const rows = server.bootstrap
     ? liveFixtures
@@ -96,10 +121,14 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
   ];
   return (
     <div className="fixture-window">
-      {!compact && <WindowHeader title="Fixture Sheet" info={{ primary: `${server.selectedFixtures.length} selected`, secondary: "Programmer · Playback · Default" }} settings onSettings={(anchor) => setSettingsAnchor(anchor.getBoundingClientRect())} />}
+      {!compact && <WindowHeader title="Fixture Sheet" info={{ primary: `${server.selectedFixtures.length} selected`, secondary: <SourceLegend /> }} settings onSettings={(anchor) => setSettingsAnchor(anchor.getBoundingClientRect())} />}
       <WindowScrollArea className="fixture-table"><DataTable columns={columns} rows={visible} rowKey={(fixture) => fixture.fixtureId || String(fixture.id)} selected={(fixture) => Boolean(fixture.fixtureId && server.selectedFixtures.includes(fixture.fixtureId))} activeIndex={activeRow} onActiveIndexChange={setActiveRow} onActivate={(fixture) => fixture.fixtureId && void server.setSelection([fixture.fixtureId])} /></WindowScrollArea>
       {groupsVisible && <GroupStrip />}
-      {settingsAnchor && <WindowSettings modal={false} anchor={settingsAnchor} title="Fixture Sheet Settings" onClose={() => setSettingsAnchor(null)} tabs={[{ id: "groups", label: "Groups", content: <label className="pane-option-toggle"><Input type="checkbox" checked={groupsVisible} onChange={(event) => dispatch({ type: "SET_BUILTIN_GROUPS_VISIBLE", window: "fixtures", value: event.target.checked })}/> Enable group shortcuts</label> }]} />}
+      {settingsAnchor && <WindowSettings modal={false} anchor={settingsAnchor} title="Fixture Sheet Settings" onClose={() => setSettingsAnchor(null)} tabs={[
+        { id: "ordering", label: "Ordering", content: <label className="pane-option-toggle">Order fixtures <Select aria-label="Fixture sheet ordering" value={fixtureOrder} onChange={(event) => setFixtureOrder(event.target.value as FixtureOrder)}><option value="fixture-id">Fixture ID</option><option value="active">Active fixtures first</option></Select></label> },
+        { id: "filters", label: "Filters", content: <><label className="pane-option-toggle"><Input type="checkbox" checked={activeOnly} onChange={(event) => setActiveOnly(event.target.checked)}/> Show active fixtures only</label><label className="pane-option-toggle">Cue list <Select aria-label="Fixture sheet cue list filter" value={cueListId} onChange={(event) => setCueListId(event.target.value)}><option value="">All fixtures</option>{(server.playbacks?.cue_lists ?? []).map((cueList) => <option key={cueList.id} value={cueList.id}>{cueList.name}</option>)}</Select></label></> },
+        { id: "groups", label: "Groups", content: <label className="pane-option-toggle"><Input type="checkbox" checked={groupsVisible} onChange={(event) => dispatch({ type: "SET_BUILTIN_GROUPS_VISIBLE", window: "fixtures", value: event.target.checked })}/> Enable group shortcuts</label> },
+      ]} />}
     </div>
   );
 }

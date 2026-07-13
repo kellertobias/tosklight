@@ -4,9 +4,10 @@ import { ButtonGrid, DataTable, GridButton, WindowHeader, WindowSettings } from 
 
 describe("window kit", () => {
   it("renders two-line information, grouped actions, and Settings last", () => {
-    render(<WindowHeader title="Stage" info={{ primary: "1 selected", secondary: "Shift for range" }} actions={[[{ id: "one", label: "First", onClick: vi.fn() }],[{ id: "two", label: "Second", onClick: vi.fn() }]]} settings onSettings={vi.fn()} />);
+    render(<WindowHeader title="Stage" info={{ primary: "1 selected", secondary: <span className="test-legend">Shift for range</span> }} actions={[[{ id: "one", label: "First", onClick: vi.fn() }],[{ id: "two", label: "Second", onClick: vi.fn() }]]} settings onSettings={vi.fn()} />);
     expect(screen.getByText("Stage")).toBeInTheDocument();
-    expect(screen.getByText("Shift for range").tagName).toBe("SMALL");
+    expect(screen.getByText("Shift for range")).toHaveClass("test-legend");
+    expect(screen.getByText("Shift for range").parentElement?.tagName).toBe("SMALL");
     expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual(["First", "Second", "⚙Settings"]);
   });
   it("switches settings tabs and closes", () => {
