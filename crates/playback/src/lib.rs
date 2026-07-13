@@ -2,9 +2,12 @@
 //! Tracking cue lists, live playback state, phasers, and HTP/LTP arbitration.
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
-use light_core::{AttributeKey, AttributeValue, CueListId, FixtureId, MergeMode, TimedValue};
+use light_core::{
+    AttributeKey, AttributeValue, CueListId, FixtureId, MergeMode, SharedClock, SystemClock,
+    TimedValue,
+};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet}, sync::Arc};
 
 type AttributeAddress = (FixtureId, AttributeKey);
 
@@ -335,21 +338,30 @@ pub struct PlaybackEngine {
     speed_groups_bpm: [u16; 5],
     sequence_master_fade_millis: u64,
     definitions: HashMap<u16, PlaybackDefinition>,
+    clock: SharedClock,
 }
 
 impl Default for PlaybackEngine {
     fn default() -> Self {
+        Self::with_clock(Arc::new(SystemClock))
+    }
+}
+
+impl PlaybackEngine {
+    pub fn with_clock(clock: SharedClock) -> Self {
         Self {
             cue_lists: HashMap::new(),
             active: HashMap::new(),
             speed_groups_bpm: [120, 90, 60, 30, 15],
             sequence_master_fade_millis: 0,
             definitions: HashMap::new(),
+            clock,
         }
     }
-}
 
-impl PlaybackEngine {
+    pub fn clock(&self) -> SharedClock {
+        Arc::clone(&self.clock)
+    }
     pub fn set_control_timing(
         &mut self,
         speed_groups_bpm: [u16; 5],
@@ -440,7 +452,7 @@ impl PlaybackEngine {
             active.master = if on { 1.0 } else { 0.0 };
             if !on { self.active.get_mut(&id).unwrap().enabled=false; }
         } else {
-            active.master_transition = Some(PlaybackMasterTransition { from: active.master, to: if on { 1.0 } else { 0.0 }, started_at: Utc::now(), duration_millis: duration, release_after: !on });
+            active.master_transition = Some(PlaybackMasterTransition { from: active.master, to: if on { 1.0 } else { 0.0 }, started_at: self.clock.now(), duration_millis: duration, release_after: !on });
         }
         Ok(())
     }
@@ -452,7 +464,7 @@ impl PlaybackEngine {
     }
 
     pub fn go(&mut self, id: CueListId) -> Result<&ActivePlayback, String> {
-        self.go_at(id, Utc::now())
+        self.go_at(id, self.clock.now())
     }
 
     pub fn go_at(&mut self, id: CueListId, now: DateTime<Utc>) -> Result<&ActivePlayback, String> {
@@ -498,7 +510,7 @@ impl PlaybackEngine {
     }
 
     pub fn jump(&mut self, id: CueListId, cue_number: f64) -> Result<&ActivePlayback, String> {
-        self.jump_at(id, cue_number, Utc::now())
+        self.jump_at(id, cue_number, self.clock.now())
     }
 
     pub fn jump_at(
@@ -539,7 +551,7 @@ impl PlaybackEngine {
     }
 
     pub fn back(&mut self, id: CueListId) -> Result<&ActivePlayback, String> {
-        self.back_at(id, Utc::now())
+        self.back_at(id, self.clock.now())
     }
     pub fn back_at(
         &mut self,
@@ -555,7 +567,7 @@ impl PlaybackEngine {
         Ok(playback)
     }
     pub fn pause(&mut self, id: CueListId) -> Result<(), String> {
-        self.pause_at(id, Utc::now())
+        self.pause_at(id, self.clock.now())
     }
     pub fn pause_at(&mut self, id: CueListId, now: DateTime<Utc>) -> Result<(), String> {
         let playback = self.active.get_mut(&id).ok_or("cue list is not active")?;
@@ -686,7 +698,7 @@ impl PlaybackEngine {
     }
 
     pub fn contributions(&self) -> Vec<TimedValue> {
-        self.contributions_at(Utc::now())
+        self.contributions_at(self.clock.now())
     }
 
     pub fn contributions_at(&self, now: DateTime<Utc>) -> Vec<TimedValue> {

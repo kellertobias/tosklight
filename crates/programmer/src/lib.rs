@@ -3,7 +3,8 @@
 
 use chrono::{DateTime, Utc};
 use light_core::{
-    AttributeKey, AttributeValue, FixtureId, ProgrammerId, SessionId, TimedValue, UserId,
+    AttributeKey, AttributeValue, FixtureId, ProgrammerId, SessionId, SharedClock, SystemClock,
+    TimedValue, UserId,
 };
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
@@ -127,7 +128,7 @@ impl ProgrammerState {
         }
     }
 
-    fn restore_snapshot(&mut self, snapshot: ProgrammerSnapshot) {
+    fn restore_snapshot(&mut self, snapshot: ProgrammerSnapshot, now: DateTime<Utc>) {
         self.selected = snapshot.selected;
         self.selection_expression = snapshot.selection_expression;
         self.values = snapshot.values;
@@ -141,7 +142,7 @@ impl ProgrammerState {
         self.preview = snapshot.preview;
         self.highlight = snapshot.highlight;
         self.active_context = snapshot.active_context;
-        self.last_activity = Utc::now();
+        self.last_activity = now;
     }
 
     fn checkpoint(&mut self) {
@@ -323,12 +324,35 @@ impl Preset {
         }
     }
 }
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct ProgrammerRegistry {
     states: Arc<RwLock<HashMap<SessionId, ProgrammerState>>>,
     sessions: Arc<RwLock<HashMap<SessionId, SessionId>>>,
+    clock: SharedClock,
+}
+impl Default for ProgrammerRegistry {
+    fn default() -> Self {
+        Self::with_clock(Arc::new(SystemClock))
+    }
 }
 impl ProgrammerRegistry {
+    pub fn with_clock(clock: SharedClock) -> Self {
+        Self {
+            states: Arc::default(),
+            sessions: Arc::default(),
+            clock,
+        }
+    }
+
+    pub fn clock(&self) -> SharedClock {
+        Arc::clone(&self.clock)
+    }
+
+    pub fn reset_all(&self) {
+        self.states.write().clear();
+        self.sessions.write().clear();
+    }
+
     pub fn start(&self, session_id: SessionId, user_id: UserId) -> ProgrammerState {
         let existing = self
             .states
@@ -340,7 +364,7 @@ impl ProgrammerRegistry {
             let mut states = self.states.write();
             let state = states.get_mut(&key).expect("programmer disappeared");
             state.connected = true;
-            state.last_activity = Utc::now();
+            state.last_activity = self.clock.now();
             return state.clone();
         }
         self.sessions.write().insert(session_id, session_id);
@@ -358,7 +382,7 @@ impl ProgrammerRegistry {
             preload_group_pending: HashMap::new(),
             preload_group_active: HashMap::new(),
             connected: true,
-            last_activity: Utc::now(),
+            last_activity: self.clock.now(),
             command_line: String::new(),
             blind: false,
             preview: false,
@@ -399,7 +423,7 @@ impl ProgrammerRegistry {
                 .filter(|fixture| seen.insert(*fixture))
                 .collect();
             state.selection_expression = Some(SelectionExpression::Static);
-            state.last_activity = Utc::now();
+            state.last_activity = self.clock.now();
         }
     }
     pub fn select_expression(
@@ -412,7 +436,7 @@ impl ProgrammerRegistry {
             state.checkpoint();
             state.selected = fixtures;
             state.selection_expression = Some(expression);
-            state.last_activity = Utc::now();
+            state.last_activity = self.clock.now();
         }
     }
     pub fn set(
@@ -459,11 +483,11 @@ impl ProgrammerRegistry {
                 attribute,
                 value,
                 priority: state.priority,
-                changed_at: Utc::now(),
+                changed_at: self.clock.now(),
                 merge_mode,
                 fade,
             });
-            state.last_activity = Utc::now();
+            state.last_activity = self.clock.now();
         }
     }
     pub fn set_group(
@@ -506,11 +530,11 @@ impl ProgrammerRegistry {
             attribute,
             GroupProgrammerValue {
                 value,
-                changed_at: Utc::now(),
+                changed_at: self.clock.now(),
                 fade,
             },
         );
-        state.last_activity = Utc::now();
+        state.last_activity = self.clock.now();
         true
     }
     pub fn activate_preload(&self, session: SessionId) -> bool {
@@ -535,7 +559,7 @@ impl ProgrammerRegistry {
         // GO publishes the prepared values, then returns input to the live
         // programmer. Entering preload again starts the next blind edit.
         state.blind = false;
-        state.last_activity = Utc::now();
+        state.last_activity = self.clock.now();
         true
     }
     pub fn clear_preload_pending(&self, session: SessionId) -> bool {
@@ -546,7 +570,7 @@ impl ProgrammerRegistry {
         state.checkpoint();
         state.preload_pending.clear();
         state.preload_group_pending.clear();
-        state.last_activity = Utc::now();
+        state.last_activity = self.clock.now();
         true
     }
     pub fn release_preload(&self, session: SessionId) -> bool {
@@ -560,7 +584,7 @@ impl ProgrammerRegistry {
         state.preload_group_pending.clear();
         state.preload_group_active.clear();
         state.blind = false;
-        state.last_activity = Utc::now();
+        state.last_activity = self.clock.now();
         true
     }
     pub fn set_preload_group(
@@ -583,11 +607,11 @@ impl ProgrammerRegistry {
                 attribute,
                 GroupProgrammerValue {
                     value,
-                    changed_at: Utc::now(),
+                    changed_at: self.clock.now(),
                     fade: false,
                 },
             );
-        state.last_activity = Utc::now();
+        state.last_activity = self.clock.now();
         true
     }
     pub fn set_command_line(&self, session: SessionId, command_line: String) -> bool {
@@ -597,7 +621,7 @@ impl ProgrammerRegistry {
         };
         state.checkpoint();
         state.command_line = command_line;
-        state.last_activity = Utc::now();
+        state.last_activity = self.clock.now();
         true
     }
     pub fn set_modes(
@@ -625,7 +649,7 @@ impl ProgrammerRegistry {
         if let Some(value) = active_context {
             state.active_context = value;
         }
-        state.last_activity = Utc::now();
+        state.last_activity = self.clock.now();
         true
     }
     pub fn clear_values(&self, session: SessionId) -> bool {
@@ -635,7 +659,7 @@ impl ProgrammerRegistry {
         };
         state.checkpoint();
         state.values.clear();
-        state.last_activity = Utc::now();
+        state.last_activity = self.clock.now();
         true
     }
     pub fn undo(&self, session: SessionId) -> bool {
@@ -647,7 +671,7 @@ impl ProgrammerRegistry {
             return false;
         };
         state.redo.push(state.snapshot());
-        state.restore_snapshot(previous);
+        state.restore_snapshot(previous, self.clock.now());
         true
     }
     pub fn redo(&self, session: SessionId) -> bool {
@@ -659,7 +683,7 @@ impl ProgrammerRegistry {
             return false;
         };
         state.undo.push(state.snapshot());
-        state.restore_snapshot(next);
+        state.restore_snapshot(next, self.clock.now());
         true
     }
     pub fn disconnect(&self, session: SessionId) {
@@ -673,7 +697,7 @@ impl ProgrammerRegistry {
     pub fn connect(&self, session: SessionId) {
         if let Some(state) = self.states.write().get_mut(&self.key(session)) {
             state.connected = true;
-            state.last_activity = Utc::now();
+            state.last_activity = self.clock.now();
         }
     }
     pub fn clear(&self, session: SessionId) -> bool {

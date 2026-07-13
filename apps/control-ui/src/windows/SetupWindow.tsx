@@ -5,7 +5,7 @@ import type { DeskConfiguration } from "../api/types";
 import { configuredServerUrl } from "../api/LightApiClient";
 import { FixtureLibrarySetup } from "../components/setup/FixtureLibrarySetup";
 import { ScreensSetup } from "../components/setup/ScreensSetup";
-import { Button, Input } from "../components/common";
+import { Button, FormLayout, FormField, NumberField, SwitchField, TextField } from "../components/common";
 import { WindowHeader } from "../components/window-kit";
 import { useApp } from "../state/AppContext";
 
@@ -123,7 +123,7 @@ export function SetupWindow(_: WindowProps) {
                 </article>
                 <article>
                   <b>Software keypad shortcuts</b>
-                  <label><Input type="checkbox" checked={state.regularNumberShortcuts} onChange={(event) => dispatch({ type: "SET_REGULAR_NUMBER_SHORTCUTS", value: event.target.checked })}/> Use the regular 0–9 keys as keypad numbers</label>
+                  <SwitchField label="Use the regular 0–9 keys as keypad numbers" checked={state.regularNumberShortcuts} onChange={(event) => dispatch({ type: "SET_REGULAR_NUMBER_SHORTCUTS", value: event.target.checked })}/>
                   <small>Numpad digits and the non-number software shortcuts remain available.</small>
                 </article>
               </div>
@@ -132,11 +132,9 @@ export function SetupWindow(_: WindowProps) {
           {section === 3 && draft && (
             <>
               <h2>Output engine</h2>
-              <div className="configuration-form">
-                <label>
-                  Frame rate
-                  <Input
-                    type="number"
+              <FormLayout className="configuration-form" columns={3} minColumnWidth={190}>
+                  <NumberField
+                    label="Frame rate"
                     min="40"
                     max="44"
                     value={draft.frame_rate_hz}
@@ -146,22 +144,17 @@ export function SetupWindow(_: WindowProps) {
                         frame_rate_hz: Number(event.target.value),
                       })
                     }
+                    description="40–44 Hz"
                   />
-                  <small>40–44 Hz</small>
-                </label>
-                <label>
-                  Output bind address
-                  <Input
+                  <TextField
+                    label="Output bind address"
                     value={draft.output_bind_ip}
                     onChange={(event) =>
                       setDraft({ ...draft, output_bind_ip: event.target.value })
                     }
                   />
-                </label>
-                <label>
-                  Backup retention
-                  <Input
-                    type="number"
+                  <NumberField
+                    label="Backup retention"
                     min="1"
                     max="1000"
                     value={draft.backup_retention}
@@ -172,8 +165,7 @@ export function SetupWindow(_: WindowProps) {
                       })
                     }
                   />
-                </label>
-              </div>
+              </FormLayout>
             </>
           )}
           {section === 4 && (
@@ -197,21 +189,15 @@ export function SetupWindow(_: WindowProps) {
           {section === 5 && (
             <>
               <h2>Network & API</h2>
-              <div className="configuration-form">
-                <label>
-                  Light server URL
-                  <Input
+              <FormLayout className="configuration-form" labelPlacement="side">
+                  <TextField
+                    label="Light server URL"
                     value={serverUrl}
                     onChange={(event) => setServerUrl(event.target.value)}
+                    description="Tauri can use this desk or a remote Light server."
                   />
-                  <small>
-                    Tauri can use this desk or a remote Light server.
-                  </small>
-                </label>
-                <Button onClick={() => server.setServerUrl(serverUrl)}>
-                  Connect to server
-                </Button>
-              </div>
+                <FormField label=""><Button onClick={() => server.setServerUrl(serverUrl)}>Connect to server</Button></FormField>
+              </FormLayout>
               <div className="setup-cards">
                 <section>
                   <b>{configuredServerUrl()}</b>

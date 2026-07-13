@@ -26,6 +26,12 @@ fn monitor_id(monitor:&tauri::window::Monitor)->String { let p=monitor.position(
 // Cmd+Q asks for confirmation once; the second press within the armed state actually quits.
 static QUIT_ARMED:AtomicBool=AtomicBool::new(false);
 #[tauri::command] fn cancel_quit(){QUIT_ARMED.store(false,Ordering::Release);}
+#[tauri::command] fn frontend_ready(app:tauri::AppHandle){
+    if let Some(marker)=std::env::var_os("LIGHT_DESKTOP_TEST_READY_FILE"){
+        let _=std::fs::write(marker,format!("{{\"ready\":true,\"server\":\"{}\"}}",server_address()));
+        if std::env::var_os("LIGHT_DESKTOP_TEST_AUTO_EXIT").is_some(){thread::spawn(move||{thread::sleep(Duration::from_millis(150));app.exit(0);});}
+    }
+}
 fn request_quit(app:&tauri::AppHandle){if QUIT_ARMED.swap(true,Ordering::AcqRel){let _=app.emit("app-shutting-down",());app.exit(0);}else{let _=app.emit("quit-requested",());}}
 #[tauri::command] fn open_console_screen(app:tauri::AppHandle,screen_id:String,title:String,display_id:Option<String>,bounds:Option<serde_json::Value>,fullscreen:bool)->Result<(),String>{
     let label=format!("screen-{screen_id}");if let Some(window)=app.get_webview_window(&label){if !window.is_visible().map_err(|e|e.to_string())? { window.show().map_err(|e|e.to_string())?; } return Ok(());}
@@ -38,15 +44,25 @@ fn request_quit(app:&tauri::AppHandle){if QUIT_ARMED.swap(true,Ordering::AcqRel)
 
 struct ServerProcess { child: Arc<Mutex<Option<Child>>>, stop: Arc<AtomicBool> }
 
-impl Drop for ServerProcess {
-    fn drop(&mut self) {
+impl ServerProcess {
+    fn terminate(&self) {
         self.stop.store(true, Ordering::Release);
         if let Ok(mut child) = self.child.lock() && let Some(child) = child.as_mut() { let _ = child.kill(); let _ = child.wait(); }
     }
 }
 
-fn server_is_running() -> bool {
-    TcpStream::connect_timeout(&SocketAddr::from(([127, 0, 0, 1], 5000)), Duration::from_millis(120)).is_ok()
+impl Drop for ServerProcess {
+    fn drop(&mut self) {
+        self.terminate();
+    }
+}
+
+fn server_address() -> SocketAddr {
+    std::env::var("LIGHT_DESKTOP_TEST_BIND").ok().and_then(|value|value.parse().ok()).unwrap_or_else(||SocketAddr::from(([127,0,0,1],5000)))
+}
+
+fn server_is_running(address:SocketAddr) -> bool {
+    TcpStream::connect_timeout(&address, Duration::from_millis(120)).is_ok()
 }
 
 fn debug_data_dir(executable: &Path) -> Option<PathBuf> {
@@ -54,22 +70,23 @@ fn debug_data_dir(executable: &Path) -> Option<PathBuf> {
 }
 
 fn launch_server(app: &tauri::AppHandle) -> Result<Option<Child>, Box<dyn std::error::Error>> {
-    if server_is_running() { return Ok(None); }
+    let address=server_address();
+    if server_is_running(address) { return Ok(None); }
     let executable = std::env::current_exe()?;
     let directory = executable.parent().ok_or("application executable has no parent directory")?;
     let binary_name = if cfg!(windows) { "light-server.exe" } else { "light-server" };
     let bundled = directory.join(binary_name);
     let server = if bundled.is_file() { bundled } else if cfg!(debug_assertions) { debug_data_dir(&executable).and_then(|data| data.parent().map(|root| root.join("target/debug").join(binary_name))).unwrap_or(bundled) } else { bundled };
     if !server.is_file() { return Err(format!("bundled Light server is missing at {}", server.display()).into()); }
-    let data_dir = if cfg!(debug_assertions) { debug_data_dir(&executable).unwrap_or(app.path().app_data_dir()?) } else { app.path().app_data_dir()? };
+    let data_dir = std::env::var_os("LIGHT_DESKTOP_TEST_DATA_DIR").map(PathBuf::from).unwrap_or(if cfg!(debug_assertions) { debug_data_dir(&executable).unwrap_or(app.path().app_data_dir()?) } else { app.path().app_data_dir()? });
     std::fs::create_dir_all(&data_dir)?;
     let log_path = data_dir.join("light-server.log");
     let stdout = OpenOptions::new().create(true).truncate(true).write(true).open(&log_path)?;
     let stderr = stdout.try_clone()?;
-    let mut child = Command::new(server).arg("--data-dir").arg(&data_dir).stdout(Stdio::from(stdout)).stderr(Stdio::from(stderr)).spawn()?;
+    let mut child = Command::new(server).arg("--data-dir").arg(&data_dir).arg("--bind").arg(address.to_string()).stdout(Stdio::from(stdout)).stderr(Stdio::from(stderr)).spawn()?;
     let deadline = Instant::now() + Duration::from_secs(8);
     while Instant::now() < deadline {
-        if server_is_running() { return Ok(Some(child)); }
+        if server_is_running(address) { return Ok(Some(child)); }
         if let Some(status) = child.try_wait()? { return Err(format!("bundled Light server exited during startup with {status}; see {}", log_path.display()).into()); }
         thread::sleep(Duration::from_millis(100));
     }
@@ -84,7 +101,7 @@ fn main() {
             "quit"=>request_quit(app),
             _=>{}
         }})
-        .invoke_handler(tauri::generate_handler![list_console_displays,open_console_screen,close_console_screen,hide_console_screen,exit_desktop_app,cancel_quit])
+        .invoke_handler(tauri::generate_handler![list_console_displays,open_console_screen,close_console_screen,hide_console_screen,exit_desktop_app,cancel_quit,frontend_ready])
         .setup(|app| {
             let open=tauri::menu::MenuItemBuilder::with_id("open-hardware-controls","Open Hardware Controls").build(app)?;
             let tools=tauri::menu::SubmenuBuilder::new(app,"Tools").item(&open).build()?;
@@ -97,16 +114,21 @@ fn main() {
             }
             menu.append(&tools)?; app.set_menu(menu)?;
             let child = launch_server(app.handle()).map_err(|error| { eprintln!("failed to start bundled Light server: {error}"); error })?;
+            if std::env::var_os("LIGHT_DESKTOP_TEST_BIND").is_some()&&let Some(window)=app.get_webview_window("main"){
+                let url=format!("http://{}",server_address());
+                let script=format!("localStorage.setItem('light.server-url',{});location.reload()",serde_json::to_string(&url)?);
+                window.eval(&script)?;
+            }
             let process = ServerProcess { child: Arc::new(Mutex::new(child)), stop: Arc::new(AtomicBool::new(false)) };
             let watched_child = Arc::clone(&process.child); let stop = Arc::clone(&process.stop); let handle = app.handle().clone();
             thread::spawn(move || while !stop.load(Ordering::Acquire) {
                 thread::sleep(Duration::from_secs(1));
-                let needs_restart = if let Ok(mut child) = watched_child.lock() { match child.as_mut() { Some(child) => child.try_wait().ok().flatten().is_some(), None => !server_is_running() } } else { false };
+                let needs_restart = if let Ok(mut child) = watched_child.lock() { match child.as_mut() { Some(child) => child.try_wait().ok().flatten().is_some(), None => !server_is_running(server_address()) } } else { false };
                 if needs_restart { match launch_server(&handle) { Ok(next) => { if let Ok(mut child) = watched_child.lock() { *child = next; } }, Err(error) => eprintln!("failed to restart bundled Light server: {error}") } }
             });
             app.manage(process);
             Ok(())
         })
         .build(tauri::generate_context!()).expect("failed to build ToskLight control UI")
-        .run(|handle,event| { if matches!(event,tauri::RunEvent::ExitRequested { .. }) { let _=handle.emit("app-shutting-down",()); } });
+        .run(|handle,event| { if matches!(event,tauri::RunEvent::ExitRequested { .. }) { let _=handle.emit("app-shutting-down",());handle.state::<ServerProcess>().terminate(); } });
 }

@@ -24,7 +24,7 @@ use light_control::{
     RtpMidiInput, SmpteTimecode, TimecodeRouter, TimecodeSourceConfig, UdpControlInput,
     UdpInputProtocol, encode_osc_message,
 };
-use light_core::SessionId;
+use light_core::{ApplicationClock, ManualClock, SessionId, SharedClock, SystemClock};
 use light_engine::{Engine, EngineSnapshot, RenderOptions};
 use light_media::{CitpClient, LibraryId, MediaCache, PreviewKey, ThumbnailKey};
 use light_output::{NetworkOutput, OutputHealth, run_scheduler_dynamic};
@@ -83,6 +83,9 @@ struct AppState {
     osc_subscribers: Arc<Mutex<HashMap<String, OscSubscriber>>>,
     osc_feedback: Option<Arc<std::net::UdpSocket>>,
     mvr_imports: Arc<Mutex<HashMap<Uuid, StagedMvrImport>>>,
+    network_output: Option<Arc<NetworkOutput>>,
+    output_sequences: Arc<tokio::sync::Mutex<HashMap<(light_output::Protocol, u16), u8>>>,
+    manual_clock: Option<Arc<ManualClock>>,
 }
 
 #[derive(Clone)]
@@ -475,17 +478,26 @@ async fn main() -> anyhow::Result<()> {
         .init();
     let mut data_dir = PathBuf::from("light-data");
     let mut bind = "127.0.0.1:5000".parse::<SocketAddr>()?;
+    let mut test_bench = false;
+    let mut osc_bind_override = None;
+    let mut output_bind_override = None;
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--data-dir" => data_dir = args.next().context("--data-dir requires a path")?.into(),
             "--bind" => bind = args.next().context("--bind requires an address")?.parse()?,
+            "--test-bench" => test_bench = true,
+            "--osc-bind" => osc_bind_override = Some(args.next().context("--osc-bind requires an address")?.parse()?),
+            "--output-bind-ip" => output_bind_override = Some(args.next().context("--output-bind-ip requires an address")?.parse()?),
             "--help" => {
-                println!("light-server [--data-dir PATH] [--bind ADDRESS]");
+                println!("light-server [--data-dir PATH] [--bind ADDRESS] [--test-bench] [--osc-bind ADDRESS] [--output-bind-ip ADDRESS]");
                 return Ok(());
             }
             _ => anyhow::bail!("unknown option: {arg}"),
         }
+    }
+    if test_bench && !bind.ip().is_loopback() {
+        anyhow::bail!("--test-bench requires a loopback HTTP bind");
     }
     std::fs::create_dir_all(data_dir.join("shows"))?;
     tracing::info!(path=%data_dir.display(), "opening desk data");
@@ -509,12 +521,23 @@ async fn main() -> anyhow::Result<()> {
     if configuration.osc_bind.is_none() {
         configuration.osc_bind = Some(SocketAddr::from(([127, 0, 0, 1], 9000)));
     }
+    if let Some(osc_bind) = osc_bind_override {
+        configuration.osc_bind = Some(osc_bind);
+    }
+    if let Some(output_bind_ip) = output_bind_override {
+        configuration.output_bind_ip = output_bind_ip;
+    }
     configuration
         .validate()
         .map_err(|error| anyhow::anyhow!(error.message))?;
     let active_show = desk.active_show()?;
     tracing::info!(active_show=?active_show.as_ref().map(|show| &show.name), "desk state loaded");
-    let programmers = ProgrammerRegistry::default();
+    let manual_clock = test_bench.then(|| Arc::new(ManualClock::new(fixed_test_time())));
+    let application_clock: SharedClock = manual_clock
+        .as_ref()
+        .map(|clock| Arc::clone(clock) as SharedClock)
+        .unwrap_or_else(|| Arc::new(SystemClock));
+    let programmers = ProgrammerRegistry::with_clock(application_clock);
     let users = desk.users()?;
     for persisted in desk.persisted_sessions()? {
         if !users.iter().any(|user| user.id == persisted.user_id) {
@@ -575,7 +598,10 @@ async fn main() -> anyhow::Result<()> {
     let scheduler_control = Arc::clone(&output_control);
     let scheduler_timecode = Arc::clone(&timecode_router);
     let scheduler = tokio::spawn(async move {
-        run_scheduler_dynamic(scheduler_rate, scheduler_cancel, scheduler_health, || {
+        if test_bench {
+            scheduler_cancel.cancelled().await;
+        } else {
+        run_scheduler_dynamic(scheduler_rate, scheduler_cancel.clone(), scheduler_health, || {
             let engine = Arc::clone(&scheduler_engine);
             let output = Arc::clone(&scheduler_output);
             let sequences = Arc::clone(&scheduler_sequences);
@@ -615,6 +641,7 @@ async fn main() -> anyhow::Result<()> {
             }
         })
         .await;
+        }
         let snapshot = scheduler_engine.snapshot();
         let mut shutdown_options = scheduler_control.lock().options;
         shutdown_options.control_loss_progress = Some(1.0);
@@ -661,6 +688,9 @@ async fn main() -> anyhow::Result<()> {
         osc_subscribers: Arc::new(Mutex::new(HashMap::new())),
         osc_feedback: Some(Arc::new(std::net::UdpSocket::bind("0.0.0.0:0")?)),
         mvr_imports: Arc::new(Mutex::new(HashMap::new())),
+        network_output: Some(Arc::clone(&output)),
+        output_sequences: Arc::clone(&sequences),
+        manual_clock,
     };
     let input_tasks = spawn_control_inputs(&state, output_cancel.clone());
     let app = router(state);
@@ -682,7 +712,8 @@ async fn main() -> anyhow::Result<()> {
 }
 
 fn router(state: AppState) -> Router {
-    Router::new()
+    let test_bench = state.manual_clock.is_some();
+    let mut router = Router::new()
         .merge(help::router::<AppState>())
         .route("/", get(operator_ui))
         .route("/assets/{*path}", get(operator_asset))
@@ -774,7 +805,13 @@ fn router(state: AppState) -> Router {
         .route("/api/v1/master", put(update_master))
         .route("/api/v1/midi/inputs", get(midi_inputs))
         .route("/api/v1/events", get(ws_events))
-        .route("/api/v1/audit", get(audit_events))
+        .route("/api/v1/audit", get(audit_events));
+    if test_bench {
+        router = router
+            .route("/api/v1/test/clock/reset", post(reset_test_clock))
+            .route("/api/v1/test/clock/advance", post(advance_test_clock));
+    }
+    router
         .layer(middleware::from_fn_with_state(state.clone(), desk_boundary))
         .with_state(state)
         .layer(DefaultBodyLimit::max(256 * 1024 * 1024))
@@ -791,6 +828,97 @@ fn router(state: AppState) -> Router {
                 .expose_headers([header::ETAG]),
         )
         .layer(TraceLayer::new_for_http())
+}
+
+fn fixed_test_time() -> chrono::DateTime<chrono::Utc> {
+    chrono::DateTime::parse_from_rfc3339("2020-01-01T00:00:00Z")
+        .expect("fixed test timestamp is valid")
+        .with_timezone(&chrono::Utc)
+}
+
+async fn reset_test_clock(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let clock = state
+        .manual_clock
+        .as_ref()
+        .ok_or_else(|| ApiError::not_found("test clock"))?;
+    clock.set(fixed_test_time());
+    state.programmers.reset_all();
+    state.output_sequences.lock().await.clear();
+    state.osc_subscribers.lock().clear();
+    emit(
+        &state,
+        "hardware_connection_changed",
+        serde_json::json!({"connected":false}),
+    );
+    Ok(Json(serde_json::json!({"now":clock.now()})))
+}
+
+#[derive(Deserialize)]
+struct AdvanceTestClock {
+    #[serde(default)]
+    millis: i64,
+}
+
+async fn advance_test_clock(
+    State(state): State<AppState>,
+    Json(input): Json<AdvanceTestClock>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if !(0..=604_800_000).contains(&input.millis) {
+        return Err(ApiError::bad_request("millis must be within 0-604800000"));
+    }
+    let clock = state
+        .manual_clock
+        .as_ref()
+        .ok_or_else(|| ApiError::not_found("test clock"))?;
+    let now = clock.advance_millis(input.millis);
+    let rendered = state
+        .engine
+        .render(state.output_control.lock().options)
+        .map_err(|error| ApiError::internal(error.to_string()))?;
+    let frames = {
+        let mut control = state.output_control.lock();
+        if control.hold {
+            control.last_frames.clone()
+        } else {
+            let mut frames = rendered.universes;
+            for (&(universe, address), &value) in &control.raw_overrides {
+                if let Some(frame) = frames.get_mut(&universe) {
+                    frame[usize::from(address - 1)] = value;
+                }
+            }
+            control.last_frames = frames.clone();
+            frames
+        }
+    };
+    let snapshot = state.engine.snapshot();
+    let packets = state
+        .network_output
+        .as_ref()
+        .ok_or_else(|| ApiError::unavailable("network output is unavailable"))?
+        .send_routes(
+            &snapshot.routes,
+            &frames,
+            &mut *state.output_sequences.lock().await,
+        )
+        .await
+        .map_err(ApiError::io)?;
+    {
+        let mut health = state
+            .output_health
+            .lock()
+            .expect("output health mutex poisoned");
+        health.frames_sent += 1;
+        health.packets_sent += packets;
+    }
+    send_osc_feedback(&state, true);
+    Ok(Json(serde_json::json!({
+        "now": now,
+        "revision": rendered.revision,
+        "packets_sent": packets,
+        "universes": frames.into_iter().map(|(universe, slots)| serde_json::json!({"universe":universe,"slots":slots.to_vec()})).collect::<Vec<_>>(),
+    })))
 }
 
 async fn list_fixture_library(
@@ -5312,7 +5440,7 @@ fn spawn_control_inputs(
 ) -> Vec<tokio::task::JoinHandle<()>> {
     let configuration = state.configuration.read().clone();
     let mut tasks = Vec::new();
-    {
+    if state.manual_clock.is_none() {
         let state = state.clone();
         let cancel = cancel.clone();
         tasks.push(tokio::spawn(async move{let mut interval=tokio::time::interval(Duration::from_millis(500));loop{tokio::select!{_=cancel.cancelled()=>break,_=interval.tick()=>send_osc_feedback(&state,false)}}}));
@@ -6481,9 +6609,28 @@ mod tests {
                 osc_subscribers: Arc::new(Mutex::new(HashMap::new())),
                 osc_feedback: None,
                 mvr_imports: Arc::new(Mutex::new(HashMap::new())),
+                network_output: None,
+                output_sequences: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+                manual_clock: None,
             },
             data_dir,
         )
+    }
+
+    #[tokio::test]
+    async fn production_router_does_not_expose_test_clock_controls() {
+        let (state, data_dir) = test_state();
+        let response = router(state)
+            .oneshot(
+                Request::post("/api/v1/test/clock/advance")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(r#"{"millis":0}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let _ = std::fs::remove_dir_all(data_dir);
     }
 
     #[test]

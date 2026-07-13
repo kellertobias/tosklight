@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useServer } from "../../api/ServerContext";
 import { configuredServerUrl } from "../../api/LightApiClient";
 import appIcon from "../../../src-tauri/icons/icon.svg";
-import { Button, Input } from "../common";
+import { Button, TextField } from "../common";
 
 export function ConnectionState() {
   const server = useServer();
@@ -58,40 +58,44 @@ export function ConnectionState() {
         <p>{startingBuiltIn ? "Starting built-in server…" : boundaryRequired ? server.error : usesBuiltInServer ? server.error ?? "Built-in server is unavailable." : server.error ?? "Starting a secure operator session…"}</p>
         {startingBuiltIn ? <small>Preparing the show engine and control surface</small> : boundaryRequired ? (
           <form
-            className="desk-token-form"
+            className="connection-form"
             onSubmit={(event) => {
               event.preventDefault();
               if (deskToken.trim()) server.setDeskToken(deskToken);
             }}
           >
-            <Input
+            <TextField
+              label="Desk boundary token"
               autoFocus
-              type="password"
+              secure
+              clearable
               aria-label="Desk boundary token"
               value={deskToken}
               onChange={(event) => setDeskToken(event.target.value)}
               placeholder="Desk token"
             />
-            <Button disabled={!deskToken.trim()}>Connect</Button>
+            <div className="connection-form-actions"><Button disabled={!deskToken.trim()}>Connect</Button></div>
           </form>
         ) : (
           <small>Retrying automatically</small>
         )}
         {isTauri && !startingBuiltIn && (
           <form
-            className="desk-token-form"
+            className="connection-form"
             onSubmit={(event) => {
               event.preventDefault();
               server.setServerUrl(serverUrl);
             }}
           >
-            <Input
+            <TextField
+              label="Server"
+              clearable
               aria-label="Light server URL"
               value={serverUrl}
               onChange={(event) => setServerUrl(event.target.value)}
               placeholder="http://desk.local:5000"
             />
-            <Button>Use server</Button>
+            <div className="connection-form-actions"><Button>Use server</Button></div>
           </form>
         )}
       </div>

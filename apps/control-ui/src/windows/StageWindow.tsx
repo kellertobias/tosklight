@@ -7,7 +7,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type CSSProperties,
 } from "react";
-import { Button, Input, Select } from "../components/common";
+import { Button, FormField, FormLayout, Input, NumberField, Select, SelectField, SwitchField } from "../components/common";
 import { GroupStrip } from "../components/shared/GroupStrip";
 import { fixtures as visualFixtures } from "../data/mockData";
 import { useServer } from "../api/ServerContext";
@@ -336,13 +336,15 @@ export function StageWindow({ compact, paneId, showGroupShortcuts, stageView, fo
         <WindowHeader title="Stage" info={{ primary: `${server.selectedFixtures.length} selected`, secondary: "Tap to select · Shift for range · Control/Command tracks macro" }} actions={[[mode === "setup" ? { id: "import", label: "Import scene", onClick: () => assetInput.current?.click() } : { id: "follow", label: "Follow Preload", active: followPreload, onClick: () => { const now = performance.now(); if (now - lastFollowToggle.current < 400) return; lastFollowToggle.current = now; setDedicatedFollowPreload((current) => !current); } }],[{ id: "select", label: "Select fixtures", active: mode === "select", onClick: () => setMode("select") },{ id: "setup", label: "Setup positions", active: mode === "setup", onClick: () => setMode("setup") },{ id: "navigate", label: "Navigate", active: mode === "navigate", onClick: () => setMode("navigate") }], ...(view === "3d" && mode === "setup" ? [[{ id: "add", label: "Add element", onClick: () => void addBuiltInAsset() }]] : [])]} settings onSettings={(anchor) => { setSettingsAnchor(anchor.getBoundingClientRect()); setOptionsOpen(true); }} />
       )}
       {optionsOpen && !compact && (
-        <WindowSettings modal={false} anchor={settingsAnchor} title="Stage Settings" onClose={() => setOptionsOpen(false)} tabs={[{ id: "stage", label: "Stage", content: <>
-            <label><span>View</span><div className="button-group"><Button className={view === "2d" ? "active" : ""} onClick={() => setView("2d")}>2D</Button><Button disabled={!tauri} className={view === "3d" ? "active" : ""} onClick={() => setView("3d")}>3D</Button></div></label>
-            {view === "3d" && mode === "setup" && <label><span>Built-in element</span><Select aria-label="Built-in stage element" value={builtInAssetId} onChange={(event) => setBuiltInAssetId(event.target.value as BuiltInStageAssetId)}>{BUILT_IN_STAGE_ASSETS.map((asset) => <option key={asset.id} value={asset.id}>{asset.name}</option>)}</Select></label>}
-            <label><span>Groups shortcuts</span><Input type="checkbox" checked={groupsVisible} onChange={(event) => dispatch({ type: "SET_STAGE_OPTIONS", groupsVisible: event.target.checked })}/></label>
-            <label><span>Show Selection</span><Input type="checkbox" checked={state.stageShowSelection} onChange={(event) => dispatch({ type: "SET_STAGE_OPTIONS", showSelection: event.target.checked })}/></label>
-            <label className="stage-brightness-option"><span>Environment brightness <b>{Math.round(state.stageEnvironmentBrightness * 100)}%</b></span><Input type="range" min="0" max="2" step="0.05" value={state.stageEnvironmentBrightness} onChange={(event) => dispatch({ type: "SET_STAGE_OPTIONS", environmentBrightness: Number(event.target.value) })}/></label>
-          </> }]} />
+        <WindowSettings modal={false} anchor={settingsAnchor} title="Stage Settings" onClose={() => setOptionsOpen(false)} tabs={[{ id: "stage", label: "Stage", content: <FormLayout labelPlacement="side">
+            <FormField label="View"><div className="button-group"><Button className={view === "2d" ? "active" : ""} onClick={() => setView("2d")}>2D</Button><Button disabled={!tauri} className={view === "3d" ? "active" : ""} onClick={() => setView("3d")}>3D</Button></div></FormField>
+            {view === "3d" && mode === "setup" && (
+              <SelectField label="Built-in element" value={builtInAssetId} onChange={(value) => setBuiltInAssetId(value)} options={BUILT_IN_STAGE_ASSETS.map((asset) => ({ value: asset.id, label: asset.name }))}/>
+            )}
+            <SwitchField label="Groups shortcuts" checked={groupsVisible} onChange={(event) => dispatch({ type: "SET_STAGE_OPTIONS", groupsVisible: event.target.checked })}/>
+            <SwitchField label="Show Selection" checked={state.stageShowSelection} onChange={(event) => dispatch({ type: "SET_STAGE_OPTIONS", showSelection: event.target.checked })}/>
+            <FormField label={`Environment brightness ${Math.round(state.stageEnvironmentBrightness * 100)}%`}><Input type="range" min="0" max="2" step="0.05" value={state.stageEnvironmentBrightness} onChange={(event) => dispatch({ type: "SET_STAGE_OPTIONS", environmentBrightness: Number(event.target.value) })}/></FormField>
+          </FormLayout> }]} />
       )}
       {view === "3d" ? (
         <div className="stage-canvas stage-canvas-3d">
@@ -407,10 +409,9 @@ export function StageWindow({ compact, paneId, showGroupShortcuts, stageView, fo
                       "rotationZ",
                     ] as const
                   ).map((key) => (
-                    <label key={key}>
-                      {key}
-                      <Input
-                        type="number"
+                    <NumberField key={key}
+                        label={key}
+                        allowDecimal={!key.startsWith("rotation")}
                         step={key.startsWith("rotation") ? 1 : 0.1}
                         value={fixture.position[key]}
                         onChange={(event) =>
@@ -418,7 +419,6 @@ export function StageWindow({ compact, paneId, showGroupShortcuts, stageView, fo
                         }
                         onBlur={() => void save3d()}
                       />
-                    </label>
                   ))}
                 </aside>
               );
@@ -435,8 +435,8 @@ export function StageWindow({ compact, paneId, showGroupShortcuts, stageView, fo
                 if (!asset) return null;
                 const positionKeys = ["x", "y", "z", "rotationX", "rotationY", "rotationZ"] as const;
                 return <>
-                  {positionKeys.map((key) => <label key={key}>{key}<Input type="number" step={key.startsWith("rotation") ? 1 : .1} value={asset.position[key]} onChange={(event) => updateStageAsset(asset.id, { position: { ...asset.position, [key]: Number(event.target.value) } })} onBlur={() => void saveAssets()} /></label>)}
-                  <label>scale<Input type="number" min="0.01" step="0.1" value={asset.scale} onChange={(event) => updateStageAsset(asset.id, { scale: Math.max(.01, Number(event.target.value)) })} onBlur={() => void saveAssets()} /></label>
+                  {positionKeys.map((key) => <NumberField key={key} label={key} allowDecimal={!key.startsWith("rotation")} step={key.startsWith("rotation") ? 1 : .1} value={asset.position[key]} onChange={(event) => updateStageAsset(asset.id, { position: { ...asset.position, [key]: Number(event.target.value) } })} onBlur={() => void saveAssets()} />)}
+                  <NumberField label="scale" allowDecimal min="0.01" step="0.1" value={asset.scale} onChange={(event) => updateStageAsset(asset.id, { scale: Math.max(.01, Number(event.target.value)) })} onBlur={() => void saveAssets()} />
                   <Button onClick={() => removeStageAsset(asset.id)}>Remove element</Button>
                 </>;
               })()}

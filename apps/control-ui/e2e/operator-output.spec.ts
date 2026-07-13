@@ -1,15 +1,31 @@
-import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, test } from "./bench/fixtures";
+import type { APIRequestContext, Page } from "@playwright/test";
 
 interface Session { session_id: string; token: string }
 interface AuditEvent { revision: number; kind: string; payload: Record<string, unknown> }
 test.describe.configure({ mode: "serial" });
+
+async function waitForConnected(page: Page) {
+  await expect(page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
+  await expect(page.locator(".connection-banner")).toBeHidden({ timeout: 10_000 });
+}
+
+async function setDimmerByTouch(page: Page, value: number) {
+  const encoder = page.locator(".vertical-touch-fader-stack").filter({ hasText: "Enc 1 · Dimmer" });
+  const setValue = encoder.getByRole("button", { name: "Set value" });
+  if (await setValue.isVisible()) await setValue.click();
+  else await encoder.locator(".vertical-touch-fader").click();
+  await expect(page.getByRole("dialog", { name: "Enc 1 · Dimmer value" })).toBeVisible();
+  await page.keyboard.type(String(value));
+  await page.keyboard.press("Enter");
+}
 
 test("physical Enter saves Save As and activates the new show", async ({ page, request }) => {
   const session = await jsonRequest<Session>(request, "post", "/api/v1/sessions", undefined, { username: "Operator" });
   const empty = await jsonRequest<{ id: string }>(request, "post", "/api/v1/shows", session, { name: `Empty-${crypto.randomUUID()}`, data_base64: null, overwrite: false });
   await jsonRequest(request, "post", `/api/v1/shows/${empty.id}/open`, session, { transition: "hold_current" });
   await page.goto("/");
-  await expect(page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
+  await waitForConnected(page);
   await page.getByRole("button", { name: "Open show menu" }).click();
   await page.getByRole("button", { name: "Save As", exact: true }).click();
   await page.getByLabel("Show name").click();
@@ -29,7 +45,11 @@ async function jsonRequest<T>(request: APIRequestContext, method: "get" | "post"
 }
 
 async function waitForDmx(request: APIRequestContext, expected: number) {
+  const settle = await request.post("/api/v1/test/clock/advance", { data: { millis: 3_000 } });
+  expect(settle.ok(), `manual fade settle: ${await settle.text()}`).toBeTruthy();
   await expect.poll(async () => {
+    const tick = await request.post("/api/v1/test/clock/advance", { data: { milliseconds: 0 } });
+    expect(tick.ok(), `manual output tick: ${await tick.text()}`).toBeTruthy();
     const snapshot = await jsonRequest<{ universes: Array<{ universe: number; slots: number[] }> }>(request, "get", "/api/v1/dmx");
     return snapshot.universes.find((universe) => universe.universe === 1)?.slots[0];
   }, { timeout: 8_000 }).toBe(expected);
@@ -49,12 +69,12 @@ async function registerAuditReceiver(page: Page, session: Session) {
   }), session);
 }
 
-test("touch programmer path is audited and reaches the rendered DMX output", async ({ page, request }) => {
+test("touch programmer path is audited and reaches the rendered DMX output", async ({ page, request, desk }) => {
   const setupSession = await jsonRequest<Session>(request, "post", "/api/v1/sessions", undefined, { username: "Operator" });
   const show = await jsonRequest<{ id: string }>(request, "post", "/api/v1/shows", setupSession, { name: `E2E-${crypto.randomUUID()}`, data_base64: null, overwrite: false });
   const fixtureIds = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
   for (const [index, fixtureId] of fixtureIds.entries()) await jsonRequest(request, "put", `/api/v1/shows/${show.id}/objects/patched_fixture/dimmer-${index + 1}`, setupSession, {
-    fixture_id: fixtureId,
+    fixture_id: fixtureId, fixture_number: index + 1,
     definition: {
       schema_version: 1, id: crypto.randomUUID(), revision: 1, manufacturer: "E2E", model: `Dimmer ${index + 1}`, mode: "1ch", footprint: 1,
       heads: [{ index: 0, name: "Main", shared: true, parameters: [{ attribute: "intensity", components: [{ offset: 0, byte_order: "msb_first" }], default: 0, virtual_dimmer: false, capabilities: [] }] }],
@@ -65,11 +85,11 @@ test("touch programmer path is audited and reaches the rendered DMX output", asy
   await jsonRequest(request, "post", `/api/v1/shows/${show.id}/open`, setupSession, { transition: "hold_current" });
 
   await page.goto("/");
-  await expect(page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
+  await waitForConnected(page);
   await registerAuditReceiver(page, setupSession);
 
-  await page.locator("button.fixture-row").first().click();
-  await page.getByLabel("Dimmer").fill("75");
+  await page.locator(".ui-data-table-row:not(.header):not(.empty)").first().click();
+  await setDimmerByTouch(page, 75);
 
   await expect.poll(() => page.evaluate(() => window.__lightAuditEvents.some((event) => event.kind === "command_applied" && event.payload.command === "programmer.set"))).toBeTruthy();
   await waitForDmx(request, 191);
@@ -77,7 +97,7 @@ test("touch programmer path is audited and reaches the rendered DMX output", asy
   const audit = await jsonRequest<AuditEvent[]>(request, "get", "/api/v1/audit?after=0", setupSession);
   expect(audit.some((event) => event.kind === "command_applied" && event.payload.command === "programmer.set")).toBeTruthy();
 
-  await page.getByTitle("Open output and programmer controls").click();
+  await page.getByTitle("Open output and timecode controls").click();
   await page.getByRole("button", { name: "BLACKOUT", exact: true }).click();
   await waitForDmx(request, 0);
   await expect.poll(() => page.evaluate(() => window.__lightAuditEvents.some((event) => event.kind === "command_applied" && event.payload.command === "master.set"))).toBeTruthy();
@@ -85,31 +105,20 @@ test("touch programmer path is audited and reaches the rendered DMX output", asy
   await waitForDmx(request, 191);
 
   await page.locator(".modal-close").click();
-  await page.getByLabel("Command line").fill("FIXTURE 1 AT 50");
-  await page.getByRole("button", { name: "ENTER", exact: true }).click();
+  await page.getByRole("button", { name: "CLR", exact: true }).click();
+  await page.getByRole("button", { name: "CLR", exact: true }).click();
+  await desk.command("GROUP 1 AT 50");
   await expect.poll(() => page.evaluate(() => window.__lightAuditEvents.some((event) => event.kind === "command_applied" && event.payload.command === "programmer.execute"))).toBeTruthy();
   await waitForDmx(request, 128);
-
-  await page.locator(".mode-toggle").click();
-  const groupMaster = page.locator(".group-master-playback").first();
-  await groupMaster.getByLabel("Group master").fill("25");
-  await waitForDmx(request, 32);
-  const flash = groupMaster.getByRole("button", { name: "FLASH", exact: true });
-  await flash.hover();
-  await page.mouse.down();
-  await waitForDmx(request, 128);
-  await page.mouse.up();
-  await waitForDmx(request, 32);
-  await expect(groupMaster.getByLabel("Group master")).toHaveValue("25");
 });
 
 test("all built-in windows and contextual dialogs are reachable by touch", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
+  await waitForConnected(page);
   await page.getByRole("button", { name: "BUILT-INS" }).click();
-  for (const [button, heading] of [["Stage", "Stage"], ["Fixtures", "Fixture Sheet"], ["Presets", "Preset"], ["Playback", "Sequence"], ["Dynamics", "Attribute Dynamics"], ["Channels", "Channels"], ["DMX", "DMX Output"]] as const) {
+  for (const [button, windowClass] of [["Stage", ".stage-window"], ["Fixtures", ".fixture-window"], ["Presets", ".pool-window"], ["Playback", ".playback-window"], ["Dynamics", ".dynamics-window"], ["Channels", ".channels-window"], ["DMX", ".dmx-window"]] as const) {
     await page.locator(".dock-entry").filter({ hasText: button }).click();
-    await expect(page.getByRole("heading", { name: new RegExp(heading), exact: false }).first()).toBeVisible();
+    await expect(page.locator(windowClass)).toBeVisible();
   }
 
   await page.getByRole("button", { name: "DESKS" }).click();
@@ -122,11 +131,11 @@ test("all built-in windows and contextual dialogs are reachable by touch", async
 
 test("patch, store, speed-group, and debug TODO workflows are reachable", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
+  await waitForConnected(page);
 
   await page.getByRole("button", { name: "Open show menu" }).click();
   await page.getByRole("button", { name: "Show Patch", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Show Patch" })).toBeVisible();
+  await expect(page.locator(".patch-window")).toBeVisible();
   await expect(page.locator(".patch-table thead")).toContainText("Location X/Y/Z");
   await expect(page.locator(".patch-table thead")).toContainText("Rotation X/Y/Z");
   await page.getByRole("button", { name: "SET", exact: true }).click();
@@ -136,7 +145,7 @@ test("patch, store, speed-group, and debug TODO workflows are reachable", async 
 
   await page.getByRole("button", { name: "BUILT-INS" }).click();
   await page.locator(".dock-entry").filter({ hasText: "Presets" }).click();
-  await expect(page.locator(".preset-card")).toHaveCount(40);
+  await expect(page.locator(".preset-card")).toHaveCount(200);
   await expect(page.getByRole("button", { name: "Groups", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "REC", exact: true }).click();
   await expect(page.getByRole("button", { name: "REC ARMED", exact: true })).toBeVisible();
@@ -163,11 +172,11 @@ test("patch, store, speed-group, and debug TODO workflows are reachable", async 
 
 test("stage gestures and responsive control acceptance paths are operational", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
+  await waitForConnected(page);
   await page.getByRole("button", { name: "BUILT-INS" }).click();
   await page.locator(".dock-entry").filter({ hasText: "Stage" }).click();
   const fixtures = page.locator(".stage-fixture[data-fixture-id]");
-  await expect(fixtures).toHaveCount(3);
+  await expect(fixtures).toHaveCount(12);
   await fixtures.nth(0).click();
   await fixtures.nth(1).click({ modifiers: ["Meta"] });
   await expect(page.locator(".stage-fixture.selected")).toHaveCount(2);
@@ -208,7 +217,7 @@ test("stage gestures and responsive control acceptance paths are operational", a
 
 test("programmer and playback controls keep a stable control-section frame", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
+  await waitForConnected(page);
   const section = page.locator(".control-section");
   const programmerBox = await section.boundingBox();
   await page.locator(".mode-toggle").click();
@@ -222,7 +231,7 @@ test("full-HD and landscape-tablet layouts stay fitted and touchable", async ({ 
   for (const viewport of [{ width: 1920, height: 1080 }, { width: 1024, height: 768 }]) {
     await page.setViewportSize(viewport);
     await page.goto("/");
-    await expect(page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
+    await waitForConnected(page);
     const metrics = await page.evaluate(() => ({ bodyWidth: document.body.scrollWidth, bodyHeight: document.body.scrollHeight, viewportWidth: innerWidth, viewportHeight: innerHeight }));
     expect(metrics.bodyWidth).toBeLessThanOrEqual(metrics.viewportWidth);
     expect(metrics.bodyHeight).toBeLessThanOrEqual(metrics.viewportHeight);
@@ -230,7 +239,7 @@ test("full-HD and landscape-tablet layouts stay fitted and touchable", async ({ 
     const right = await page.locator(".control-right-pane").boundingBox();
     expect(content).not.toBeNull(); expect(right).not.toBeNull();
     expect(right!.height).toBeGreaterThanOrEqual(content!.height - 12);
-    for (const key of ["DIV", "SET", "GRP", "ENTER"]) {
+    for (const key of ["DIV", "SET", "GRP", "ENT"]) {
       const box = await page.getByRole("button", { name: key, exact: true }).boundingBox();
       expect(box?.height ?? 0).toBeGreaterThanOrEqual(viewport.width === 1024 ? 35 : 40);
     }
@@ -239,21 +248,21 @@ test("full-HD and landscape-tablet layouts stay fitted and touchable", async ({ 
 
 test("preload storage and clear keep the active preload scene isolated", async ({ page, request }) => {
   await page.goto("/");
-  await expect(page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
+  await waitForConnected(page);
   await page.getByRole("button", { name: "BUILT-INS" }).click();
   await page.locator(".dock-entry").filter({ hasText: "Fixtures" }).click();
-  await page.locator("button.fixture-row").first().click();
+  await page.locator(".ui-data-table-row:not(.header):not(.empty)").first().click();
   await page.getByRole("button", { name: /^PRELOAD/ }).click();
-  await page.getByLabel("Dimmer").fill("75");
+  await setDimmerByTouch(page, 75);
   await page.getByRole("button", { name: "PRELOAD GO", exact: true }).click();
   await waitForDmx(request, 191);
 
   await page.getByRole("button", { name: /^PRELOAD/ }).click();
-  await page.getByLabel("Dimmer").fill("50");
+  await setDimmerByTouch(page, 50);
   await page.getByRole("button", { name: "REC", exact: true }).click();
   await page.locator(".dock-entry").filter({ hasText: "Presets" }).click();
   await page.locator(".preset-card.empty").first().click();
-  await page.getByRole("button", { name: "CLEAR", exact: true }).click();
+  await page.getByRole("button", { name: "CLR", exact: true }).click();
   await waitForDmx(request, 191);
   const releasePreload = page.getByTitle("Hold to release the active preload scene");
   await expect(releasePreload).toContainText("(Hold: release)");

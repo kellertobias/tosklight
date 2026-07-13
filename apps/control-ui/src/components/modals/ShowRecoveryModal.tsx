@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useServer } from "../../api/ServerContext";
-import { Button } from "../common";
+import { Button, ModalTitleBar } from "../common";
 
 export function ShowRecoveryModal() {
   const server = useServer();
@@ -14,7 +14,7 @@ export function ShowRecoveryModal() {
   };
   return <div className="show-recovery-layer" role="alertdialog" aria-modal="true" aria-label="Show recovery required">
     <section className="show-recovery-card">
-      <h1>Show File Could Not Be Loaded</h1>
+      <ModalTitleBar title="Show File Could Not Be Loaded"/>
       <p>The active show file might be corrupted or incompatible with this version. It has not been changed or deleted.</p>
       <pre>{error}</pre>
       <Button disabled={busy} onClick={() => void initialize()}>{busy ? "Initializing…" : "Initialize New Empty Show"}</Button>

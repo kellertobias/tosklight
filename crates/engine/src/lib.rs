@@ -2,7 +2,7 @@
 //! Deterministic bridge from fixture attributes and playbacks to immutable DMX universe frames.
 
 use arc_swap::ArcSwap;
-use light_core::{AttributeKey, AttributeValue, FixtureId, MergeMode, TimedValue, Universe};
+use light_core::{AttributeKey, AttributeValue, FixtureId, MergeMode, SharedClock, TimedValue, Universe};
 use light_fixture::{
     PatchedFixture, SignalLossPolicy, encode_parameter, mix_color, validate_patch,
 };
@@ -131,6 +131,7 @@ pub struct Engine {
     sequence_master_fade_millis: AtomicU64,
     programmer_transitions: Mutex<HashMap<(FixtureId, AttributeKey), ProgrammerTransition>>,
     group_master_flashes: RwLock<HashMap<String, f32>>,
+    clock: SharedClock,
 }
 
 #[derive(Clone)]
@@ -142,9 +143,10 @@ struct ProgrammerTransition {
 
 impl Engine {
     pub fn new(programmers: ProgrammerRegistry) -> Self {
+        let clock = programmers.clock();
         Self {
             snapshot: ArcSwap::from_pointee(EngineSnapshot::default()),
-            playback: RwLock::new(PlaybackEngine::default()),
+            playback: RwLock::new(PlaybackEngine::with_clock(Arc::clone(&clock))),
             programmers,
             timecode_frame: AtomicU64::new(u64::MAX),
             programmer_fade_millis: AtomicU64::new(0),
@@ -158,6 +160,7 @@ impl Engine {
             sequence_master_fade_millis: AtomicU64::new(0),
             programmer_transitions: Mutex::new(HashMap::new()),
             group_master_flashes: RwLock::new(HashMap::new()),
+            clock,
         }
     }
 
@@ -240,7 +243,7 @@ impl Engine {
         } else {
             Vec::new()
         };
-        let mut playback = PlaybackEngine::default();
+        let mut playback = PlaybackEngine::with_clock(Arc::clone(&self.clock));
         playback.set_control_timing(
             self.speed_groups_bpm
                 .each_ref()
@@ -321,7 +324,7 @@ impl Engine {
 
     pub fn render(&self, options: RenderOptions) -> Result<RenderResult, EngineError> {
         let snapshot = self.snapshot.load_full();
-        let now = chrono::Utc::now();
+        let now = self.clock.now();
         let resolved = self.resolved_values_at(&snapshot, now);
         let groups = snapshot
             .groups
@@ -352,7 +355,7 @@ impl Engine {
     /// visualizers can use this without attempting to reverse fixture-specific DMX encoding.
     pub fn resolved_values(&self) -> HashMap<(FixtureId, AttributeKey), AttributeValue> {
         let snapshot = self.snapshot.load_full();
-        self.resolved_values_at(&snapshot, chrono::Utc::now())
+        self.resolved_values_at(&snapshot, self.clock.now())
     }
 
     fn resolved_values_at(

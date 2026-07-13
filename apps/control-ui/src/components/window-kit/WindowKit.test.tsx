@@ -13,7 +13,7 @@ describe("window kit", () => {
   it("switches settings tabs and closes", () => {
     const close = vi.fn();
     render(<WindowSettings title="Pane Settings" tabs={[{ id: "pane", label: "Pane Settings", content: "Size" },{ id: "pool", label: "Pool", content: "Family" }]} onClose={close} />);
-    fireEvent.click(screen.getByRole("button", { name: "Pool" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Pool" }));
     expect(screen.getByText("Family")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
     expect(close).toHaveBeenCalledOnce();

@@ -8,7 +8,7 @@ import { GroupStrip } from "../components/shared/GroupStrip";
 import { SourceLegend } from "../components/shared/SourceLegend";
 import { useApp } from "../state/AppContext";
 import { DataTable, WindowHeader, WindowScrollArea, WindowSettings, type DataTableColumn } from "../components/window-kit";
-import { Input, Select } from "../components/common";
+import { Select, SwitchField } from "../components/common";
 import { activeProgrammerFixtureIds, compareFixtureIds, cueListFixtureIds } from "./fixtureSheetFilters";
 import { fixtureSheetTargets, targetHasAttribute, targetValue } from "./fixtureSheetTargets";
 
@@ -126,8 +126,8 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
       {groupsVisible && <GroupStrip />}
       {settingsAnchor && <WindowSettings modal={false} anchor={settingsAnchor} title="Fixture Sheet Settings" onClose={() => setSettingsAnchor(null)} tabs={[
         { id: "ordering", label: "Ordering", content: <label className="pane-option-toggle">Order fixtures <Select aria-label="Fixture sheet ordering" value={fixtureOrder} onChange={(event) => setFixtureOrder(event.target.value as FixtureOrder)}><option value="fixture-id">Fixture ID</option><option value="active">Active fixtures first</option></Select></label> },
-        { id: "filters", label: "Filters", content: <><label className="pane-option-toggle"><Input type="checkbox" checked={activeOnly} onChange={(event) => setActiveOnly(event.target.checked)}/> Show active fixtures only</label><label className="pane-option-toggle">Cue list <Select aria-label="Fixture sheet cue list filter" value={cueListId} onChange={(event) => setCueListId(event.target.value)}><option value="">All fixtures</option>{(server.playbacks?.cue_lists ?? []).map((cueList) => <option key={cueList.id} value={cueList.id}>{cueList.name}</option>)}</Select></label></> },
-        { id: "groups", label: "Groups", content: <label className="pane-option-toggle"><Input type="checkbox" checked={groupsVisible} onChange={(event) => dispatch({ type: "SET_BUILTIN_GROUPS_VISIBLE", window: "fixtures", value: event.target.checked })}/> Enable group shortcuts</label> },
+        { id: "filters", label: "Filters", content: <><SwitchField label="Show active fixtures only" checked={activeOnly} onChange={(event) => setActiveOnly(event.target.checked)}/><label className="pane-option-toggle">Cue list <Select aria-label="Fixture sheet cue list filter" value={cueListId} onChange={(event) => setCueListId(event.target.value)}><option value="">All fixtures</option>{(server.playbacks?.cue_lists ?? []).map((cueList) => <option key={cueList.id} value={cueList.id}>{cueList.name}</option>)}</Select></label></> },
+        { id: "groups", label: "Groups", content: <SwitchField label="Enable group shortcuts" checked={groupsVisible} onChange={(event) => dispatch({ type: "SET_BUILTIN_GROUPS_VISIBLE", window: "fixtures", value: event.target.checked })}/> },
       ]} />}
     </div>
   );

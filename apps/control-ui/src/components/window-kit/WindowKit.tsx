@@ -13,7 +13,7 @@ import {
   type Ref,
 } from "react";
 import { createPortal } from "react-dom";
-import { Button } from "../common";
+import { Button, ModalTitleBar } from "../common";
 
 export interface WindowInfo { primary: ReactNode; secondary?: ReactNode }
 export interface WindowAction { id: string; label: ReactNode; onClick: () => void; active?: boolean; disabled?: boolean; ariaLabel?: string }
@@ -47,8 +47,7 @@ export function WindowSettings({ title = "Settings", tabs, initialTab, onClose, 
   const [active, setActive] = useState(initialTab ?? tabs[0]?.id);
   useEffect(() => { if (!tabs.some((tab) => tab.id === active)) setActive(tabs[0]?.id); }, [tabs, active]);
   const panel = <section className={`ui-window-settings ${modal ? "modal" : "popover"}`} style={!modal && anchor ? { top: anchor.bottom + 3, right: Math.max(3, window.innerWidth - anchor.right) } : undefined} role="dialog" aria-modal={modal || undefined} aria-label={title}>
-      <header><h2>{title}</h2><Button className="ui-window-settings-close" aria-label="Close settings" onClick={onClose}>×</Button></header>
-      {tabs.length > 1 && <nav aria-label="Settings sections">{tabs.map((tab) => <Button key={tab.id} className={active === tab.id ? "active" : ""} onClick={() => setActive(tab.id)}>{tab.label}</Button>)}</nav>}
+      <ModalTitleBar title={title} tabs={tabs.length > 1 ? tabs.map(({ id, label }) => ({ id, label })) : undefined} activeTab={active} onTabChange={setActive} closeLabel="Close settings" onClose={onClose}/>
       <div className="ui-window-settings-content">{tabs.find((tab) => tab.id === active)?.content}</div>
     </section>;
   return createPortal(modal ? <div className="ui-window-settings-backdrop" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>{panel}</div> : panel, document.body);

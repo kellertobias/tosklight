@@ -29,7 +29,7 @@ function useModalInput(onKey: (key: string) => void) {
   return root;
 }
 
-export function ModalNumberInput({ value, onChange, onEnter, onEscape, replaceOnFirstInput = false }: { value: string; onChange: (value: string) => void; onEnter: () => void; onEscape: () => void; replaceOnFirstInput?: boolean }) {
+export function ModalNumberInput({ value, onChange, onEnter, onEscape, replaceOnFirstInput = false, allowDecimal = true }: { value: string; onChange: (value: string) => void; onEnter: () => void; onEscape: () => void; replaceOnFirstInput?: boolean; allowDecimal?: boolean }) {
   const replace = useRef(replaceOnFirstInput);
   const press = (key: string) => {
     if (key === "Escape") return onEscape();
@@ -38,10 +38,10 @@ export function ModalNumberInput({ value, onChange, onEnter, onEscape, replaceOn
     if (key === "+" || key === "−") { replace.current = false; return onChange(String((Number(value) || 0) + (key === "+" ? 1 : -1))); }
     if (key === "THRU") return;
     if (/^\d$/.test(key)) { const next = replace.current ? key : value + key; replace.current = false; return onChange(next); }
-    if (key === "." && (replace.current || !value.includes("."))) { const next = replace.current ? "0." : `${value || "0"}.`; replace.current = false; onChange(next); }
+    if (allowDecimal && key === "." && (replace.current || !value.includes("."))) { const next = replace.current ? "0." : `${value || "0"}.`; replace.current = false; onChange(next); }
   };
   const root = useModalInput(press);
-  const keys = ["7", "8", "9", "THRU", "4", "5", "6", "+", "1", "2", "3", "−", ".", "0", "←", "ENTER"];
+  const keys = ["7", "8", "9", "THRU", "4", "5", "6", "+", "1", "2", "3", "−", ...(allowDecimal ? ["."] : []), "0", "←", "ENTER"];
   return <div ref={root} className="modal-number-input numeric-pad" aria-label="Number input keypad">{keys.map((key) => <Button key={key} onClick={() => press(key === "ENTER" ? "Enter" : key)} className={key === "ENTER" ? "enter" : ["THRU", "+", "−", "←"].includes(key) ? "action" : ""}>{key}</Button>)}</div>;
 }
 

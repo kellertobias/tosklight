@@ -1,8 +1,52 @@
-# Typical Workflow Test Definitions
+# Test Bench Coverage Catalog
 
-This topic defines representative operator workflows for future acceptance testing. It is a test plan, not an implemented test suite. Each workflow should eventually be exercised through the real control UI and server, with output checked in the Fixture Sheet, Stage view, and rendered DMX where applicable.
+This is the canonical catalog for automated and manual acceptance coverage. Stable IDs must be retained when scenarios move between Rust integration tests, the Playwright browser bench, or packaged-desktop smoke tests. Every executable scenario records its action surface and oracle so a passing API-only test is never mistaken for UI or wire-protocol coverage.
 
-## Common test show
+Detailed scenario specifications are grouped in [docs/testing](../testing/README.md). The catalog remains the authoritative ID and coverage index; the scenario documents provide the executable setup, actions, timing checkpoints, oracles, and pass conditions.
+
+The Playwright bench runs an isolated server per worker with a fixed application clock. Advancing virtual time renders and transmits one real output frame, allowing fades, chasers, and effects to be tested without wall-clock waits. Production mode continues to stream at its configured frame rate.
+
+## Bench A: twelve dimmers
+
+Patch fixtures 1–12 as one-channel Generic Dimmers on universe 1, addresses 1–12. Unless a scenario explicitly tests patch creation, create this patch through the shared bench fixture.
+
+| Group | Name | Initial ordered members |
+| --- | --- | --- |
+| 1 | All Dimmers | 1–12 |
+| 2 | Odd Dimmers | 1, 3, 5, 7, 9, 11 |
+| 3 | Front Dimmers | 1–4 |
+
+Configure two enabled routes for logical universe 1: Art-Net universe 1 to the bench Art-Net receiver and unicast sACN universe 101 to the bench sACN receiver. A test that changes routing must restore or replace the show rather than mutating another test's fixture.
+
+### DIM-001 — Create and edit an ordered group
+
+- **Surface:** REST setup, Lightning Desk UI, and Group UI.
+- **Actions:** Create group 3 from fixtures 1–4, apply 50%, add fixtures 5 and 6, remove fixture 2, and reorder fixture 6 before fixture 1.
+- **Oracle:** Group membership and order in the API/UI; Art-Net and sACN slots for current members; removed fixtures retain only independently scoped values.
+- **Pass:** Group edits affect group-relative programming immediately without rewriting unrelated fixture values.
+
+### DIM-002 — Command-line group programming
+
+- **Surface:** Lightning Desk keypad/command line.
+- **Actions:** Enter `GROUP 1 AT 50`, advance the configured programmer fade exactly to its boundary, and emit one frame.
+- **Oracle:** Command-applied audit event, selected live group reference, twelve DMX values of 128, Art-Net universe 1, and sACN universe 101.
+- **Pass:** The UI command reaches the engine and both real UDP protocols with identical slot data.
+
+### DIM-003 — Frozen and derived membership
+
+- **Surface:** Lightning Desk command line and Group UI.
+- **Actions:** Create an every-second derived group from group 1 and a frozen snapshot of group 1; insert and remove members in group 1.
+- **Oracle:** Derived membership recalculates from source order while the frozen group remains unchanged and reports missing fixtures.
+- **Pass:** Live/derived and frozen semantics remain distinguishable after source edits.
+
+### DIM-004 — Direct values and group arbitration
+
+- **Surface:** REST programmer API plus UI group programming.
+- **Actions:** Put group 1 at 50%, fixture 1 at 75%, a second programmer at 25%, and vary group master/flash.
+- **Oracle:** Exact HTP output is 191 for fixture 1 and 128 for the remaining members; group master and flash scale/restore without moving stored values.
+- **Pass:** Fixture- and group-scoped contributions merge predictably and identically in logical DMX, Art-Net, and sACN.
+
+## Bench B: mixed theater show
 
 Use a new show with the following fixtures:
 
@@ -23,7 +67,7 @@ Create these starting groups in the listed order:
 
 Before each workflow, clear the command line, selection, programmer, preload, and active playbacks unless the workflow says otherwise. Create or load any named presets and cues that a workflow lists as prerequisites; do not rely on accidental state left by an earlier workflow.
 
-## Workflow 1: Retain a live group reference
+## THE-001 — Retain a live group reference
 
 **Purpose:** Prove that programming stored against a group remains connected to that group's current membership.
 
@@ -42,7 +86,7 @@ Before each workflow, clear the command line, selection, programmer, preload, an
 
 **Pass condition:** Membership can change after programming, and the cue follows the live group reference without duplicating or losing fixture-scoped data.
 
-## Workflow 2: Compare a derived group with a frozen selection
+## THE-002 — Compare a derived group with a frozen selection
 
 **Purpose:** Prove the difference between a live subdivided reference and a static snapshot of group membership.
 
@@ -59,7 +103,7 @@ Before each workflow, clear the command line, selection, programmer, preload, an
 
 **Pass condition:** Derived groups track their source and ordering rule, while frozen selections preserve the captured membership until explicitly refreshed.
 
-## Workflow 3: Program a short theater scene
+## THE-003 — Program a short theater scene
 
 **Purpose:** Exercise a typical theater-programming sequence using reusable presets, tracked cues, and playback.
 
@@ -96,7 +140,7 @@ The scene is a short evening interior: preset, lights up, an actor crosses to ce
 
 **Pass condition:** A programmer can build, store, clear, and replay a complete tracked theater sequence with correct preset recall, timing, navigation, and output.
 
-## Workflow 4: Prepare a change in Preload without disturbing the live scene
+## THE-004 — Prepare a change in Preload without disturbing the live scene
 
 **Purpose:** Prove that an operator can prepare and store the next change while the audience-facing output remains stable.
 
@@ -117,7 +161,7 @@ The scene is a short evening interior: preset, lights up, an actor crosses to ce
 
 **Pass condition:** Pending preload work is isolated from live output, can be stored independently, and can be applied or cleared without corrupting playback state.
 
-## Workflow 5: Save, restart, and resume a show
+## THE-005 — Save, restart, and resume a show
 
 **Purpose:** Verify the normal end-of-session and recovery path using persisted show data and durable operator state.
 
@@ -134,12 +178,33 @@ The scene is a short evening interior: preset, lights up, an actor crosses to ce
 
 **Pass condition:** Restart preserves the portable show and durable user data without silently merging transient programmer values into stored programming.
 
-## Future test implementation notes
+## Required coverage matrix
+
+| IDs | Area | Required cases | Primary oracle |
+| --- | --- | --- | --- |
+| SHOW-001–006 | Show and patch | create/open/save, addressing, overlap rejection, restart, invalid-show recovery, legacy migration | API, restarted server, preserved files |
+| GROUP-001–008 | Groups | ordered CRUD, add/remove, empty, live, derived, frozen, missing source, nested-cycle rejection | group objects, selection, rendered output |
+| PROG-001–008 | Programmer | select, values, fixture override, three-stage clear, undo/redo, preload, masters, two users | programmer state, audit, rendered output |
+| CMD-001–010 | Command line | fixture/group ranges, subsets, `AT`, presets, `REC/DEL/MOV/CPY`, cues, page addressing, invalid grammar | UI result, audit event, show object mutation |
+| CUE-001–012 | Cue/playback | record, tracking, cue-only restore, GO/back, pause, release, delay/fade, follow/wait, loop/chaser, restart position | playback state at exact virtual timestamps |
+| MERGE-001–006 | HTP/LTP | intensity maximum, equal-priority LTP recency, priority override, programmer/playback conflict, release restoration, group/fixture scope | resolved values and exact DMX |
+| DMX-001–010 | Encoding/routes | 0/50/75/100%, multi-byte order, disabled/remapped/multiple routes, ArtDMX headers/sequence, E1.31 headers/priority/sequence, termination | decoded real UDP datagrams |
+| OSC-001–008 | Hardware OSC | subscribe/unsubscribe, connected state, command keys, faders/buttons, full feedback, invalid alias, multiple desks, subscriber isolation | received OSC messages, audit, UDP output |
+| API-001–008 | REST/events | authentication, revision conflict, CRUD, validation failures, WebSocket commands/events, audit ordering, UI/API agreement, shutdown | HTTP status/body, events, audit |
+| TIME-001–008 | Virtual time | zero tick, fade boundaries, pause/resume, follow, chaser speed, effect phase, speed change, seven-day jump | exact virtual timestamp and output frame |
+| DESKTOP-001 | Packaged app | WebView load, session/bootstrap, app-owned server readiness, clean child shutdown | ready marker, HTTP readiness, process exit |
+
+Every catalog entry added later must state setup, action surface, virtual timestamps where relevant, oracle, and pass condition. Protocol scenarios must discard packets captured before their action and assert a newer sequence, preventing stale output from satisfying the test.
+
+## Test implementation rules
 
 When these definitions become executable tests, keep the layers separate:
 
-- Use UI automation for operator actions, visible state, dialogs, and timing controls.
+- Use UI automation for operator actions, visible state, dialogs, and timing controls. Wait for both HTTP bootstrap and the live command WebSocket before interacting.
 - Use server or engine tests for exact reference semantics, tracking, persistence, and restart behavior.
 - Check rendered fixture values or DMX output for every workflow that claims a live lighting result.
 - Give each test its own new show or restore a known fixture so tests cannot pass because another workflow left state behind.
 - Preserve the workflow names and pass conditions so automated failures remain understandable to an operator.
+- Do not use wall-clock sleeps for lighting behavior. Advance the manual application clock and emit a frame; reserve real time only for browser gestures such as long-press recognition.
+- Keep exhaustive interpolation, merge, tracking, and packet-layout combinations in fast Rust tests, with representative Playwright scenarios proving the complete UI/API/OSC-to-UDP path.
+- On failure retain the Playwright trace and screenshot plus the server log, audit tail, virtual time, recent OSC messages, and decoded Art-Net/sACN packets.

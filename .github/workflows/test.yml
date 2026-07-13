@@ -1,0 +1,46 @@
+name: Test
+on:
+  push:
+  pull_request:
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: apps/control-ui/package-lock.json }
+      - run: npm ci
+        working-directory: apps/control-ui
+      - run: ./test unit
+  e2e:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: { shard: [1, 2] }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: apps/control-ui/package-lock.json }
+      - run: npm ci
+        working-directory: apps/control-ui
+      - run: npx playwright install --with-deps chrome
+        working-directory: apps/control-ui
+      - run: ./test e2e --shard=${{ matrix.shard }}/2
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: { name: playwright-${{ matrix.shard }}, path: apps/control-ui/test-results }
+  desktop-smoke:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: apps/control-ui/package-lock.json }
+      - run: npm ci
+        working-directory: apps/control-ui
+      - run: ./test desktop-smoke
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: { name: desktop-smoke-data, path: target/debug/bundle/macos }
