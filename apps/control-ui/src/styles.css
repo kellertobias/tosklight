@@ -91,9 +91,9 @@ html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}button
 .parameter-surfaces{grid-template-columns:repeat(6,minmax(0,1fr));grid-template-rows:minmax(0,1fr)}
 .parameter-placeholder{min-width:0;min-height:0;display:flex;flex-direction:column;padding:8px;border:1px dashed #35414b;border-radius:8px;background:#0c1015;color:#65717b}
 
-/* Compact, edge-to-edge operator chrome. The only draggable area is the small
-   top-left overlay; every pixel to its right remains application surface. */
-.native-drag-strip{position:fixed;z-index:700;left:0;top:0;width:var(--dock-width);height:28px;-webkit-app-region:drag;cursor:grab;background:linear-gradient(180deg,#17212ad9,#0a0d1100)}.native-drag-strip:active{cursor:grabbing}.dock-identity{border:0!important;outline:0!important;background:transparent!important;color:inherit!important}.dock-identity:focus-visible{outline:1px solid var(--line2)!important}.app-mark{background:transparent!important}
+/* Compact, edge-to-edge operator chrome. Native controls occupy one dock-width
+   row; every pixel to their right remains application surface. */
+.native-drag-strip{position:fixed;z-index:700;left:0;top:0;width:var(--dock-width);height:32px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-right:1px solid var(--line);border-bottom:1px solid var(--line);background:#0a0d11}.native-drag-strip button{min-width:0;min-height:0;height:31px;display:grid;place-items:center;padding:0;border:0;border-right:1px solid var(--line);border-radius:0;background:#11171c;color:#87939b}.native-drag-strip button:last-child{border-right:0}.native-drag-strip button:hover{background:#1a232b;color:#d6edf0}.native-drag-strip .native-window-close:hover{background:#7d2328;color:#fff}.native-drag-strip svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.native-window-drag{-webkit-app-region:drag;cursor:grab;touch-action:none;user-select:none}.native-window-drag:active{cursor:grabbing}.dock-identity{border:0!important;outline:0!important;background:transparent!important;color:inherit!important}.dock-identity:focus-visible{outline:1px solid var(--line2)!important}.app-mark{background:transparent!important}
 .desk-pane>header{height:31px;padding:0 0 0 7px;gap:0}.desk-pane>header>b,.desk-pane>header>.pane-stage-status,.desk-pane>header>.source-legend{margin-right:6px}.desk-pane>header button{align-self:stretch;width:auto;min-width:36px;height:30px;margin:0;padding:0 9px;border-width:0 0 0 1px;border-radius:0;background:#171d23}.desk-pane>header button:hover,.desk-pane>header button.active{background:#22303a}.pane-content{height:calc(100% - 31px)}
 .window-toolbar{height:39px;min-height:39px}.window-toolbar button,.window-toolbar .button-group button{height:38px;margin-block:0;border-top:0;border-bottom:0;border-radius:0}.window-toolbar h1{font-size:16px}
 .mode-toggle{width:116px;margin-left:5px}.command-field{margin-right:2px}.command-status{width:142px;margin-left:3px}.command-escape{right:4px;min-width:58px}.command-field .command-input{padding-right:72px}
@@ -317,7 +317,7 @@ html,body,#root{user-select:none}input,textarea,[contenteditable=true]{user-sele
 .left-dock .dock-entry.ui-button:hover{border-color:#25313a;background:#0c1115;color:#a3adb4}
 .left-dock .dock-entry.ui-button.active{border-color:#104650;background:#07171b;color:#48b9c7}
 .dock-clock i small{color:#fff}
-.left-dock{padding-top:0}.workspace-view{padding-top:0}
+.left-dock{padding-top:36px}.workspace-view{padding-top:0}
 
 /* Setup surfaces use the entire workspace and toolbar height. */
 .setup-window main:has(>.fixture-library-setup){padding:0;overflow:hidden}.fixture-library-setup,.fixture-library-columns{width:100%;height:100%}.setup-section-actions{align-self:stretch}.setup-section-actions .console-search{width:auto;min-width:0;flex:1;align-self:stretch}.setup-section-actions .console-search,.setup-section-actions .console-search>div{height:100%}.setup-section-actions .console-search .ui-button,.setup-section-actions .console-search .ui-input,.setup-section-actions>.ui-button{height:100%;min-height:0}.setup-section-actions>.ui-button{padding-inline:14px}.fixture-library-columns{grid-template-columns:minmax(180px,.8fr) minmax(240px,1fr) minmax(320px,1.35fr)}

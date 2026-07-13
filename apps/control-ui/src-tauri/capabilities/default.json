@@ -3,5 +3,11 @@
   "identifier": "default",
   "description": "Default capability for the Light control surface",
   "windows": ["main", "screen-*"],
-  "permissions": ["core:default", "core:window:allow-start-dragging"]
+  "permissions": [
+    "core:default",
+    "core:window:allow-close",
+    "core:window:allow-is-fullscreen",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-start-dragging"
+  ]
 }
