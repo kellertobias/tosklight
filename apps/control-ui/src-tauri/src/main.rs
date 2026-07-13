@@ -23,6 +23,10 @@ fn monitor_id(monitor:&tauri::window::Monitor)->String { let p=monitor.position(
 #[tauri::command] fn close_console_screen(app:tauri::AppHandle,screen_id:String)->Result<(),String>{if let Some(window)=app.get_webview_window(&format!("screen-{screen_id}")){window.close().map_err(|e|e.to_string())?;}Ok(())}
 #[tauri::command] fn hide_console_screen(app:tauri::AppHandle,screen_id:String)->Result<(),String>{if let Some(window)=app.get_webview_window(&format!("screen-{screen_id}")){window.hide().map_err(|e|e.to_string())?;}Ok(())}
 #[tauri::command] fn exit_desktop_app(app:tauri::AppHandle){let _=app.emit("app-shutting-down",());app.exit(0);}
+// Cmd+Q asks for confirmation once; the second press within the armed state actually quits.
+static QUIT_ARMED:AtomicBool=AtomicBool::new(false);
+#[tauri::command] fn cancel_quit(){QUIT_ARMED.store(false,Ordering::Release);}
+fn request_quit(app:&tauri::AppHandle){if QUIT_ARMED.swap(true,Ordering::AcqRel){let _=app.emit("app-shutting-down",());app.exit(0);}else{let _=app.emit("quit-requested",());}}
 #[tauri::command] fn open_console_screen(app:tauri::AppHandle,screen_id:String,title:String,display_id:Option<String>,bounds:Option<serde_json::Value>,fullscreen:bool)->Result<(),String>{
     let label=format!("screen-{screen_id}");if let Some(window)=app.get_webview_window(&label){if !window.is_visible().map_err(|e|e.to_string())? { window.show().map_err(|e|e.to_string())?; } return Ok(());}
     let monitors=app.available_monitors().map_err(|e|e.to_string())?;let monitor=display_id.as_ref().and_then(|id|monitors.iter().find(|m|monitor_id(m)==*id));if display_id.is_some()&&monitor.is_none(){return Ok(());}
@@ -75,12 +79,23 @@ fn launch_server(app: &tauri::AppHandle) -> Result<Option<Child>, Box<dyn std::e
 
 fn main() {
     tauri::Builder::default()
-        .on_menu_event(|_,event|{if event.id().as_ref()=="open-hardware-controls"{if let Err(error)=open_hardware_controls(){eprintln!("failed to open Hardware Controls: {error}");}}})
-        .invoke_handler(tauri::generate_handler![list_console_displays,open_console_screen,close_console_screen,hide_console_screen,exit_desktop_app])
+        .on_menu_event(|app,event|{match event.id().as_ref(){
+            "open-hardware-controls"=>{if let Err(error)=open_hardware_controls(){eprintln!("failed to open Hardware Controls: {error}");}}
+            "quit"=>request_quit(app),
+            _=>{}
+        }})
+        .invoke_handler(tauri::generate_handler![list_console_displays,open_console_screen,close_console_screen,hide_console_screen,exit_desktop_app,cancel_quit])
         .setup(|app| {
             let open=tauri::menu::MenuItemBuilder::with_id("open-hardware-controls","Open Hardware Controls").build(app)?;
             let tools=tauri::menu::SubmenuBuilder::new(app,"Tools").item(&open).build()?;
-            let menu=tauri::menu::MenuBuilder::new(app).items(&[&tools]).build()?; app.set_menu(menu)?;
+            let menu=tauri::menu::Menu::default(app.handle())?;
+            // Swap the predefined Quit item (last entry of the macOS app submenu) for one we can intercept to confirm.
+            #[cfg(target_os="macos")]
+            if let Some(tauri::menu::MenuItemKind::Submenu(app_menu))=menu.items()?.into_iter().next(){
+                if let Some(native_quit)=app_menu.items()?.last(){app_menu.remove(native_quit)?;}
+                app_menu.append(&tauri::menu::MenuItemBuilder::with_id("quit","Quit ToskLight").accelerator("CmdOrCtrl+Q").build(app)?)?;
+            }
+            menu.append(&tools)?; app.set_menu(menu)?;
             let child = launch_server(app.handle()).map_err(|error| { eprintln!("failed to start bundled Light server: {error}"); error })?;
             let process = ServerProcess { child: Arc::new(Mutex::new(child)), stop: Arc::new(AtomicBool::new(false)) };
             let watched_child = Arc::clone(&process.child); let stop = Arc::clone(&process.stop); let handle = app.handle().clone();
