@@ -82,6 +82,11 @@ build_debug_and_open() {
   require open
 
   stop_running
+  echo "Installing UI dependencies..."
+  (cd "$HARDWARE_DIR" && npm ci)
+  (cd "$UI_DIR" && npm ci)
+  echo "Building control UI assets for the server bundle..."
+  (cd "$UI_DIR" && npm run build)
   echo "Building debug server for the app bundle..."
   cargo build --manifest-path "$ROOT/Cargo.toml" -p light-server --bin light-server
   echo "Building debug Tauri app..."
@@ -113,6 +118,9 @@ archive_release() {
   app_zip="$artifact_dir/tosklight-$version-macos-$(uname -m).zip"
   hardware_app_zip="$artifact_dir/tosklight-hardware-controls-$version-macos-$(uname -m).zip"
 
+  echo "Installing UI dependencies..."
+  (cd "$HARDWARE_DIR" && npm ci)
+  (cd "$UI_DIR" && npm ci)
   echo "Building release UI for the standalone server..."
   (cd "$UI_DIR" && npm run build)
   ensure_rust_target aarch64-apple-darwin
