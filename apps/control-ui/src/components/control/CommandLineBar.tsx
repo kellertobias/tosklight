@@ -3,7 +3,7 @@ import { useApp } from "../../state/AppContext";
 import { useServer } from "../../api/ServerContext";
 import { programmerValueCount } from "./programmerActivity";
 import { Button, Input } from "../common";
-import { removeCommandToken } from "./commandLineEditing";
+import { editCommandWithSoftwareKey, softwareKeyFromKeyboard } from "./softwareKeypad";
 
 export function CommandLineBar() {
   const { state, dispatch } = useApp();
@@ -18,6 +18,7 @@ export function CommandLineBar() {
   const storeSuppressUntil = useRef(0);
   const preloadHold = useRef<number | null>(null);
   const preloadHeld = useRef(false);
+  const keyboardFlash = useRef(new Map<string, number>());
   useEffect(() => { if (server.error) setPersistentError(server.error); }, [server.error]);
   useEffect(() => {
     if (commandError && server.error) setCommandError(server.error);
@@ -37,6 +38,7 @@ export function CommandLineBar() {
   const execute = async () => {
     const ok = await server.executeCommandLine();
     setCompleted(ok);
+    if (ok && state.storeArmed) dispatch({ type: "SET_STORE_ARMED", value: false });
     if (!ok) setCommandError(server.error ?? "The command could not be executed.");
   };
   const replaceCommand = (value: string) => {
@@ -44,15 +46,57 @@ export function CommandLineBar() {
     setCommandError(null);
     server.setCommandLine(value);
   };
+  const toggleRecord = () => {
+    const armed = !state.storeArmed;
+    dispatch({ type: "SET_STORE_ARMED", value: armed });
+    if (armed) replaceCommand("RECORD ");
+    else if (/^RECORD\b/i.test(server.commandLine)) replaceCommand(server.commandLine.replace(/^RECORD\s*/i, ""));
+  };
   useEffect(() => {
+    if (hardware) return;
+    const triggerPlaybackButton = (event: KeyboardEvent, slot: number) => {
+      const page = server.playbacks?.pages.find((candidate) => candidate.number === server.playbacks?.active_page);
+      const playbackNumber = page?.slots[String(slot)];
+      const definition = server.playbacks?.pool.find((candidate) => candidate.number === playbackNumber);
+      const action = definition?.buttons[0];
+      if (!definition || !action || action === "none") return;
+      if (action === "flash") {
+        if (event.repeat) return;
+        keyboardFlash.current.set(event.code, definition.number);
+        void server.poolPlaybackAction(definition.number, "flash", { pressed: true });
+      } else {
+        void server.poolPlaybackAction(definition.number, action === "go_minus" ? "go-minus" : action);
+      }
+    };
     const keydown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      if (target?.closest("input,textarea,select,[contenteditable=true]"))
-        return;
+      const commandInput = Boolean(target?.closest(".command-input"));
+      if (!commandInput && target?.closest("input,textarea,select,[contenteditable=true]")) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      const key = event.key.toUpperCase();
-      if (key === "ESCAPE") {
+      if (/^F(?:[1-9]|1[0-3])$/.test(event.key)) {
         event.preventDefault();
+        const number = Number(event.key.slice(1));
+        if (number <= 8) triggerPlaybackButton(event, number);
+        else {
+          const group = String.fromCharCode(65 + number - 9) as "A" | "B" | "C" | "D" | "E";
+          dispatch({ type: "SET_SPEED_GROUP", value: group });
+          window.dispatchEvent(new CustomEvent("light:speed-group-tap", { detail: group }));
+        }
+        return;
+      }
+      if (event.code === "PageUp" || event.code === "PageDown") {
+        event.preventDefault();
+        const current = server.playbacks?.active_page ?? state.playbackPage + 1;
+        const page = Math.max(1, Math.min(state.playbackPageNames.length, current + (event.code === "PageUp" ? 1 : -1)));
+        dispatch({ type: "SET_PLAYBACK_PAGE", page: page - 1 });
+        void server.setPlaybackPage(page);
+        return;
+      }
+      const key = softwareKeyFromKeyboard(event, state.regularNumberShortcuts);
+      if (!key) return;
+      if (key === "ESC") {
+        event.preventDefault();
+        if (document.querySelector("[role=dialog],.stacked-modal-layer")) return;
         if (state.storeArmed) dispatch({ type: "SET_STORE_ARMED", value: false });
         else if (persistentError) {
           setPersistentError(null);
@@ -61,39 +105,32 @@ export function CommandLineBar() {
         } else replaceCommand("");
         return;
       }
-      if (
-        !["ENTER", "BACKSPACE", "T", "A", "F", "."].includes(key) &&
-        !/^\d$/.test(key)
-      )
-        return;
       event.preventDefault();
-      if (key === "ENTER") {
-        void execute();
-        return;
+      if (key === "REC") document.querySelector<HTMLButtonElement>(".global-store-button")?.click();
+      else if (key === "PRE") document.querySelector<HTMLButtonElement>(".preload-button")?.click();
+      else if (key === "CLR" || key === "UND") document.querySelector<HTMLButtonElement>(`[data-keypad-key="${key}"]`)?.click();
+      else if (key === "ENT") void execute();
+      else {
+        const edited = editCommandWithSoftwareKey(completed ? "" : server.commandLine, key);
+        replaceCommand(edited.command);
+        if (edited.execute) void server.executeCommandLine(edited.command);
       }
-      let current = completed ? "" : server.commandLine;
-      if (key === "BACKSPACE") {
-        replaceCommand(removeCommandToken(current));
-        return;
-      }
-      if (/^\d$/.test(key))
-        current = current ? `${current}${key}` : `FIXTURE ${key}`;
-      else if (key === ".") current += ".";
-      else if (key === "T") current = `${current.trim()} THRU `;
-      else if (key === "A") current = `${current.trim()} AT `;
-      else if (key === "F") current = `${current.trim()} FULL`;
-      replaceCommand(current);
+    };
+    const keyup = (event: KeyboardEvent) => {
+      const playbackNumber = keyboardFlash.current.get(event.code);
+      if (playbackNumber == null) return;
+      keyboardFlash.current.delete(event.code);
+      void server.poolPlaybackAction(playbackNumber, "flash", { pressed: false });
     };
     window.addEventListener("keydown", keydown);
-    return () => window.removeEventListener("keydown", keydown);
-  }, [
-    completed,
-    persistentError,
-    state.storeArmed,
-    server.commandLine,
-    server.executeCommandLine,
-    server.setCommandLine,
-  ]);
+    window.addEventListener("keyup", keyup);
+    return () => {
+      window.removeEventListener("keydown", keydown);
+      window.removeEventListener("keyup", keyup);
+      for (const playbackNumber of keyboardFlash.current.values()) void server.poolPlaybackAction(playbackNumber, "flash", { pressed: false });
+      keyboardFlash.current.clear();
+    };
+  }, [hardware, completed, persistentError, state.storeArmed, state.regularNumberShortcuts, state.playbackPage, state.playbackPageNames.length, server.playbacks, server.commandLine, server.poolPlaybackAction, server.setPlaybackPage]);
   return (
     <header
       className={`command-line-bar command-line-left ${playback ? "playback-mode" : ""} ${commandError ? "has-command-error" : ""}`}
@@ -120,7 +157,7 @@ export function CommandLineBar() {
           )
         }
         onKeyDown={(event) => {
-          if (event.key === "Enter") void execute();
+          if (event.key === "Enter") { event.stopPropagation(); void execute(); }
         }}
       />{!hardware && <Button className="command-escape" onClick={() => replaceCommand("")}>ESC</Button>}
         <Button className={`command-status ${server.status}`} title="Open output and timecode controls" onClick={() => dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: true })}>
@@ -135,7 +172,7 @@ export function CommandLineBar() {
       )}
       {errorOpen && persistentError && <div className="persistent-error-popover" role="alertdialog"><header><b><span>▲</span> Desk error</b><Button onClick={() => setErrorOpen(false)}>×</Button></header><pre>{persistentError}</pre><Button onClick={() => { setPersistentError(null); server.dismissError(); setErrorOpen(false); }}>Acknowledge</Button></div>}
       <div className="command-record-preload">
-        <Button className={`global-store-button ${state.storeArmed ? "armed" : hasRecordableContent ? "record-ready" : "record-empty"}`} onPointerDown={() => { storeHeld.current = false; storeHold.current = window.setTimeout(() => { storeHeld.current = true; storeSuppressUntil.current = performance.now() + 1000; dispatch({ type: "SET_MODAL", modal: "storeSettingsOpen", value: true }); }, 650); }} onPointerUp={() => { if (storeHold.current) window.clearTimeout(storeHold.current); storeHold.current = null; }} onPointerCancel={() => { if (storeHold.current) window.clearTimeout(storeHold.current); storeHold.current = null; }} onClick={() => { if (!storeHeld.current && performance.now() >= storeSuppressUntil.current) dispatch({ type: "SET_STORE_ARMED", value: !state.storeArmed }); storeHeld.current = false; }}>{state.storeArmed ? "REC ARMED" : "REC"}</Button>
+        <Button className={`global-store-button ${state.storeArmed ? "armed" : hasRecordableContent ? "record-ready" : "record-empty"}`} onPointerDown={() => { storeHeld.current = false; storeHold.current = window.setTimeout(() => { storeHeld.current = true; storeSuppressUntil.current = performance.now() + 1000; dispatch({ type: "SET_MODAL", modal: "storeSettingsOpen", value: true }); }, 650); }} onPointerUp={() => { if (storeHold.current) window.clearTimeout(storeHold.current); storeHold.current = null; }} onPointerCancel={() => { if (storeHold.current) window.clearTimeout(storeHold.current); storeHold.current = null; }} onClick={() => { if (!storeHeld.current && performance.now() >= storeSuppressUntil.current) toggleRecord(); storeHeld.current = false; }}>{state.storeArmed ? "REC ARMED" : "REC"}</Button>
         <Button
           className={`preload-button ${state.preload === "blind" ? "preload-go" : "preload-enter"}`}
           title={state.preloadActive ? "Hold to release the active preload scene" : undefined}

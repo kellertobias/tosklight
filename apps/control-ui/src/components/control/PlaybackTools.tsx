@@ -28,6 +28,11 @@ export function PlaybackTools() {
     }
   };
   useEffect(() => {
+    const keyboardTap = (event: Event) => tap((event as CustomEvent<"A" | "B" | "C" | "D" | "E">).detail);
+    window.addEventListener("light:speed-group-tap", keyboardTap);
+    return () => window.removeEventListener("light:speed-group-tap", keyboardTap);
+  });
+  useEffect(() => {
     if (!pagePickerOpen) return;
     const close = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;

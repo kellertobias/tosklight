@@ -315,6 +315,10 @@ export class LightApiClient {
     return this.command("programmer.execute", { value });
   }
 
+  undoProgrammer() {
+    return this.command("programmer.undo", {});
+  }
+
   applyPreset(presetId: string) {
     return this.command("preset.apply", { preset_id: presetId });
   }

@@ -110,6 +110,7 @@ export interface AppState {
   midiProfile: boolean;
   debugOpen: boolean;
   touchScrollbars: boolean;
+  regularNumberShortcuts: boolean;
   deskSettingsOpen: boolean;
   deskSettingsId: string | null;
   stageMode: StageMode;

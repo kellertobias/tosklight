@@ -7,6 +7,7 @@ import { FixtureLibrarySetup } from "../components/setup/FixtureLibrarySetup";
 import { ScreensSetup } from "../components/setup/ScreensSetup";
 import { Button, Input } from "../components/common";
 import { WindowHeader } from "../components/window-kit";
+import { useApp } from "../state/AppContext";
 
 const sections = [
   "Shows & recovery",
@@ -21,6 +22,7 @@ const sections = [
 
 export function SetupWindow(_: WindowProps) {
   const server = useServer();
+  const { state, dispatch } = useApp();
   const [section, setSection] = useState(0);
   const [draft, setDraft] = useState<DeskConfiguration | null>(
     server.configuration,
@@ -118,6 +120,11 @@ export function SetupWindow(_: WindowProps) {
                 <article>
                   <b>RTP-MIDI</b>
                   <span>{draft?.rtp_midi_bind ?? "Disabled"}</span>
+                </article>
+                <article>
+                  <b>Software keypad shortcuts</b>
+                  <label><Input type="checkbox" checked={state.regularNumberShortcuts} onChange={(event) => dispatch({ type: "SET_REGULAR_NUMBER_SHORTCUTS", value: event.target.checked })}/> Use the regular 0–9 keys as keypad numbers</label>
+                  <small>Numpad digits and the non-number software shortcuts remain available.</small>
                 </article>
               </div>
             </>

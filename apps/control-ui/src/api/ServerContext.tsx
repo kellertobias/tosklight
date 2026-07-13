@@ -98,7 +98,8 @@ interface ServerContextValue {
   selectedGroupId: string | null;
   refresh: () => Promise<void>;
   setCommandLine: (value: string) => void;
-  executeCommandLine: () => Promise<boolean>;
+  executeCommandLine: (value?: string) => Promise<boolean>;
+  undoProgrammer: () => Promise<void>;
   setSelection: (fixtures: string[]) => Promise<void>;
   setProgrammer: (
     fixtureId: string,
@@ -561,9 +562,9 @@ export function ServerProvider({ children }: PropsWithChildren) {
       selectedGroupId,
       refresh,
       setCommandLine,
-      executeCommandLine: async () => {
+      executeCommandLine: async (value = commandLine) => {
         try {
-          const result = (await client.executeCommandLine(commandLine)) as
+          const result = (await client.executeCommandLine(value)) as
             { programmer?: { selected?: string[] } } | undefined;
           if (result?.programmer?.selected)
             setSelectedFixtures(result.programmer.selected);
@@ -572,6 +573,15 @@ export function ServerProvider({ children }: PropsWithChildren) {
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
           return false;
+        }
+      },
+      undoProgrammer: async () => {
+        try {
+          await client.undoProgrammer();
+          await refresh();
+          setError(null);
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
         }
       },
       setSelection: async (fixtures) => {

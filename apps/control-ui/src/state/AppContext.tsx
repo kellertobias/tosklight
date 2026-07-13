@@ -9,12 +9,12 @@ export function AppProvider({ children }: PropsWithChildren) {
   const [state, dispatch] = useReducer(appReducer, initialState, (fallback) => {
     try {
       const saved = JSON.parse(localStorage.getItem("light.desk-controls") ?? "null") as Partial<typeof fallback> | null;
-      return saved ? { ...fallback, playbackColumns: saved.playbackColumns ?? fallback.playbackColumns, playbackRows: saved.playbackRows ?? fallback.playbackRows } : fallback;
+      return saved ? { ...fallback, playbackColumns: saved.playbackColumns ?? fallback.playbackColumns, playbackRows: saved.playbackRows ?? fallback.playbackRows, regularNumberShortcuts: saved.regularNumberShortcuts ?? fallback.regularNumberShortcuts } : fallback;
     } catch { return fallback; }
   });
   useEffect(() => {
-    localStorage.setItem("light.desk-controls", JSON.stringify({ playbackColumns: state.playbackColumns, playbackRows: state.playbackRows }));
-  }, [state.playbackColumns, state.playbackRows]);
+    localStorage.setItem("light.desk-controls", JSON.stringify({ playbackColumns: state.playbackColumns, playbackRows: state.playbackRows, regularNumberShortcuts: state.regularNumberShortcuts }));
+  }, [state.playbackColumns, state.playbackRows, state.regularNumberShortcuts]);
   useEffect(() => {
     document.documentElement.classList.toggle("touch-scrollbars", state.touchScrollbars);
     return () => document.documentElement.classList.remove("touch-scrollbars");

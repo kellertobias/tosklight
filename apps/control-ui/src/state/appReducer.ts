@@ -43,6 +43,7 @@ export type Action =
   | { type: "OPEN_SPECIAL_DIALOG"; family: AppState["specialDialogFamily"] }
   | { type: "TOGGLE_MIDI_PROFILE" }
   | { type: "TOGGLE_TOUCH_SCROLLBARS" }
+  | { type: "SET_REGULAR_NUMBER_SHORTCUTS"; value: boolean }
   | { type: "SET_STORE_ARMED"; value: boolean }
   | { type: "SET_PATCH_ARMED"; value: boolean }
   | { type: "HYDRATE_LAYOUT"; desks: AppState["desks"]; activeDeskId: string; windowSettings?: Partial<WindowSettings> };
@@ -79,6 +80,7 @@ export const initialState: AppState = {
   midiProfile: false,
   debugOpen: false,
   touchScrollbars: false,
+  regularNumberShortcuts: true,
   deskSettingsOpen: false,
   deskSettingsId: null,
   stageMode: "select",
@@ -201,6 +203,7 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "OPEN_SPECIAL_DIALOG": return { ...state, specialDialogFamily: action.family, specialDialogsOpen: true };
     case "TOGGLE_MIDI_PROFILE": return { ...state, midiProfile: !state.midiProfile };
     case "TOGGLE_TOUCH_SCROLLBARS": return { ...state, touchScrollbars: !state.touchScrollbars };
+    case "SET_REGULAR_NUMBER_SHORTCUTS": return { ...state, regularNumberShortcuts: action.value };
     case "SET_STORE_ARMED": return { ...state, storeArmed: action.value };
     case "SET_PATCH_ARMED": return { ...state, patchSetArmed: action.value };
     default: return state;
