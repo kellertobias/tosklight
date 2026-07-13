@@ -15,7 +15,7 @@ The examples below use the following notation:
 | `[KEY][KEY]` | Press a specific button twice. |
 | `[KEY+]` | Hold a specific button until its action occurs. |
 | `[KEY*]` | An optional button press. It is accepted, but not required. |
-| `1.3` | A specific value; in this example, the same as `[1][DOT][3]`. |
+| `1.3` | A specific value; in this example, the same as `[1][ . ][3]`. |
 | `\|` | Separates alternative command forms. |
 
 ## Available buttons
@@ -23,12 +23,13 @@ The examples below use the following notation:
 | Key | Button | What it does |
 | --- | --- | --- |
 | `[0-9]` | Numbers | Enter numeric values. |
-| `[THRU]` | Thru | Define a range. |
+| `[TRU]` | Thru | Define a range. |
 | `[+]` | Plus | Add to a range or offset a subset. |
 | `[AT]` | At | Separate the selection from the value. |
-| `[DOT]` | Dot | Separate parts, such as `universe.address` or `type.preset`, or enter a decimal point, such as `3.5` meters. |
+| `[ . ]` | Dot | Separate parts, such as `universe.address` or `type.preset`, or enter a decimal point, such as `3.5` meters. |
 | `[DIV]` | Division | Edit a selection when used in the selection part, or separate multiple values when used in the value part. Hold for selection options. |
 | `[GRP]` | Group | Select a group instead of a fixture. Press twice to reference the fixtures in the group rather than the group itself. |
+| `[CUE]` | Cue | Separate a playback address from its cue number. |
 | `[SET]` | Set | Set a value, assign a control, or open a context menu. |
 | `[REC]` | Record | Store cues, presets, and groups. Hold for record options. |
 | `[DEL]` | Delete | Delete a cue, preset, or other supported element. |
@@ -39,11 +40,57 @@ The following buttons usually do not appear in the command line:
 
 | Key | Button | What it does |
 | --- | --- | --- |
-| `[ENTER]` | Enter | Confirm the command. |
+| `[ENT]` | Enter | Confirm the command. |
 | `[PRE]` | Preload | Run Preload or Preload GO. Hold to clear the preload. |
 | `[CLR]` | Clear | Clear the selection first, then the programmer. |
 | `[ESC]` | Escape | Close menus. If all menus are closed, clear the command line. |
-| `[UNDO]` | Undo | Undo the latest programming change, such as storing a preset, recording a cue, or renaming an item. Fader changes and playback executions are not affected. |
+| `[UND]` | Undo | Undo the latest programming change, such as storing a preset, recording a cue, or renaming an item. Fader changes and playback executions are not affected. |
+
+## Typical Layout on the Software Desk:
+
+[SET] [GRP] [CUE] [UND] [CLR]
+
+[DEL] [ 7 ] [ 8 ] [ 9 ] [ + ] 
+
+[MOV] [ 4 ] [ 5 ] [ 6 ] [TRU] 
+
+[CPY] [ 1 ] [ 2 ] [ 3 ] [DIV] 
+
+[<--] [ 0 ] [ . ] [ AT] [ENT]
+
+
+The remaining [REC], [PRE] and [ESC] buttons are located in or next to the command line display.
+
+## Keyboard shortcuts in touch/ software mode.
+
+If no hardware is connected, the following keyboard shortcuts are always active, unless you focus an input field that requires text input. If you focus an input field that requires command input, the keyboard shortcut commands are routed towards that field and [ENT] confirms that field, while [ESC] usually acts as close. If no fields are focused or input modals are open, the keyboard shortcuts always go directly into the main command line.
+
+- Numpad Numbers 0-9 (and by default, but disableable in settings regular 0-9) -> [0] - [9]
+- `ESC` -> [ESC]
+- `Backspace` -> [<--]
+- `ENTER` -> [ENT]
+- `.` -> [ . ]
+- `+` (key right of ü) -> [+]
+- `ß` (key right of the 0) -> [TRU]
+- `^` (key left of 1) -> [PRE]
+- `´` (key right of ß) -> [DIV]
+- `#` (key below +) -> [AT]
+- `DEL` -> [CLR]
+- `HOME` -> [SET]
+- `END`-> [REC]
+- `SHIFT`+ `´` -> [DEL]
+- `SHIFT`+ `+` -> [CPY]
+- `SHIFT`+ `#` -> [MOV]
+- `SHIFT`+ `^` -> [GRP]
+- `SHIFT`+ `?` -> [CUE]
+- `PAGEUP` / `PAGEDN` -> Page Plus and Page Minus for Playback pages
+- `F1` - `F8` -> first (lowest) button of Paged Playback 1-8
+- `F9` - `F13` -> Speed Group A-E
+
+this leaves all letter keys free for regular typing as well as a future feature of custom shortcuts
+
+The software shortcuts are disabled while hardware is connected. `[AT] [AT]` expands to `[AT] [FULL] [ENT]`, and `[ . ] [ . ]` expands to `[AT] 0 [ENT]`.
+
 
 ## Selecting fixtures
 
@@ -52,10 +99,16 @@ A number without `[GRP]` always identifies a fixture. `[ENTER]` completes the se
 | Selection | Command | Result |
 | --- | --- | --- |
 | One fixture | `1 [ENTER]` | Select fixture 1. |
+| Complete multi-head fixture | `100 [ENTER]` | Select master 100.0 followed by every child head. |
+| Multi-head masters | `100.0 [THRU] 110.0 [ENTER]` | Select only the masters of fixtures 100 through 110. |
+| Multi-head children | `100 [THRU] 110 [ENTER]` | Select every child head in the range, excluding the masters. |
+| One child head | `100.2 [ENTER]` | Select only child head 2 of fixture 100. |
 | Fixture range | `1 [THRU] 10 [ENTER]` | Select every existing fixture with an ID from 1 through 10. |
 | Combined ranges | `1 [THRU] 10 [+] 20 [THRU] 30 [ENTER]` | Select every existing fixture from 1 through 10 and from 20 through 30. |
 
 `[+]` extends the current selection. All parts joined with `[+]` form one ordered selection for any subsequent subsetting operation.
+
+Child heads use one-based sub-addresses, while `.0` identifies the shared master. A standalone multi-head fixture ID expands to its master and children. A bare range expands multi-head fixtures to their children so effects run across their individually controllable light sources; a `.0` range selects the masters instead.
 
 ### Subsetting a selection
 
@@ -85,7 +138,7 @@ Double-pressing a group in the Groups pool also dereferences it. A group recorde
 
 ## Setting values
 
-`<selection> [AT] <value> [ENTER]` assigns a value to the selection. A plain number is an intensity value from 0 through 100. A value containing `[DOT]` references a preset.
+`<selection> [AT] <value> [ENTER]` assigns a value to the selection. A plain number is an intensity value from 0 through 100. A value containing `[ . ]` references a preset.
 
 | Value | Example | Result |
 | --- | --- | --- |
@@ -105,21 +158,26 @@ After building a scene in the programmer, press `[REC]` and choose a recordable 
 | Target | Command | Result |
 | --- | --- | --- |
 | UI target | `[REC] <target+>` | Record the programmer into the chosen UI or hardware target. |
-| Numbered preset | `[REC] <preset-type> [DOT] <preset-number> [ENTER]` | Record a preset. Types 0 through 4 are All, Intensity, Color, Position, and Beam. |
+| Numbered preset | `[REC] <preset-type> [ . ] <preset-number> [ENTER]` | Record a preset. Types 0 through 4 are All, Intensity, Color, Position, and Beam. |
 | Numbered group | `[REC] [GRP] <group-number> [ENTER]` | Record the current selection as a group. |
 
 ### Playbacks and cues
 
-`[SET] <playback-number>` addresses a playback by its absolute number. `[SET] <page> [SET] <page-playback>` addresses a playback by its position on a page.
+Playback and cue selection uses one unambiguous address grammar:
+
+- `[SET] <playback-pool-number>` selects an absolute playback.
+- `[SET] <playback-pool-number> [CUE] <cue-number>` selects a cue on an absolute playback.
+- `[SET] <playback-page> [ . ] <playback-paged-number>` selects a playback by its page position.
+- `[SET] <playback-page> [ . ] <playback-paged-number> [CUE] <cue-number>` selects a cue on a page playback.
 
 | Target | Command | Result |
 | --- | --- | --- |
 | Absolute playback | `[REC] [SET] <playback-number> [ENTER]` | Create a cue list on an empty playback, or append a cue when the playback already contains a cue list. |
-| Specific cue | `[REC] [SET] <playback-number> [DOT] <cue-number> [ENTER]` | Record at the specified cue number. |
-| Page playback | `[REC] [SET] <page> [SET] <page-playback> [ENTER]` | Create a cue list or append a cue on a page-relative playback. |
-| Page playback cue | `[REC] [SET] <page> [SET] <page-playback> [DOT] <cue-number> [ENTER]` | Record at a specified cue on a page-relative playback. |
+| Specific cue | `[REC] [SET] <playback-number> [CUE] <cue-number> [ENTER]` | Record at the specified cue number. |
+| Page playback | `[REC] [SET] <page> [ . ] <page-playback> [ENTER]` | Create a cue list or append a cue on a page-relative playback. |
+| Page playback cue | `[REC] [SET] <page> [ . ] <page-playback> [CUE] <cue-number> [ENTER]` | Record at a specified cue on a page-relative playback. |
 
-Additional dotted parts insert cues between existing cue numbers. For example, `[REC] [SET] 1 [DOT] 2 [DOT] 5 [ENTER]` records cue `2.5` on playback 1. More dotted parts may be added when needed. The Playback Sequence view can renumber the sequence later. If the specified cue already exists, a dialog asks whether to merge into it or overwrite it.
+Dots after `[CUE]` form decimal cue numbers. For example, `[REC] [SET] 1 [CUE] 2 [ . ] 5 [ENTER]` records cue `2.5` on playback 1. The Playback Sequence view can renumber the sequence later. If the specified cue already exists, a dialog asks whether to merge into it or overwrite it.
 
 ## Deleting, moving, and copying
 
@@ -127,28 +185,28 @@ Additional dotted parts insert cues between existing cue numbers. For example, `
 
 | Action | Command | Result |
 | --- | --- | --- |
-| Delete | `[DEL] <preset-type> [DOT] <preset-number> [ENTER]` | Delete the specified preset. |
-| Move | `[MOV] <preset-type> [DOT] <preset-number> [AT] <new-preset-number> [ENTER]` | Move the preset within its current type. |
-| Copy | `[CPY] <preset-type> [DOT] <preset-number> [AT] <new-preset-number> [ENTER]` | Copy the preset within its current type. |
+| Delete | `[DEL] <preset-type> [ . ] <preset-number> [ENTER]` | Delete the specified preset. |
+| Move | `[MOV] <preset-type> [ . ] <preset-number> [AT] <new-preset-number> [ENTER]` | Move the preset within its current type. |
+| Copy | `[CPY] <preset-type> [ . ] <preset-number> [AT] <new-preset-number> [ENTER]` | Copy the preset within its current type. |
 
 The destination omits the preset type because command-line copy and move operations cannot change a preset's type.
 
 ### Cues
 
-In a source address, `[SET] <playback-number>` selects an absolute playback and `[SET] <page> [SET] <page-playback>` selects a page-relative playback. After `[AT]`, omit the first `[SET]`: use `<playback-number> [DOT] <cue-number>` for an absolute destination or `<page> [SET] <page-playback> [DOT] <cue-number>` for a page-relative destination.
+Cue source and destination addresses both use the playback selection grammar above. A move or copy therefore has a complete `[SET] ... [CUE] ...` address on each side of `[AT]`.
 
 | Action | Command | Result |
 | --- | --- | --- |
-| Delete an absolute cue | `[DEL] [SET] <playback-number> [DOT] <cue-number> [ENTER]` | Delete a cue from an absolute playback. |
-| Delete a page-relative cue | `[DEL] [SET] <page> [SET] <page-playback> [DOT] <cue-number> [ENTER]` | Delete a cue from a playback on a page. |
-| Move or copy between absolute playbacks | `<operation> [SET] <playback-number> [DOT] <cue-number> [AT] <playback-number> [DOT] <cue-number> [ENTER]` | Move or copy a cue to an absolute playback. `<operation>` is `[MOV]` or `[CPY]`. |
-| Move or copy using pages | `<operation> [SET] <page> [SET] <page-playback> [DOT] <cue-number> [AT] <page> [SET] <page-playback> [DOT] <cue-number> [ENTER]` | Move or copy a cue using page-relative source and destination addresses. Absolute and page-relative addresses may also be mixed. |
+| Delete an absolute cue | `[DEL] [SET] <playback-number> [CUE] <cue-number> [ENTER]` | Delete a cue from an absolute playback. |
+| Delete a page-relative cue | `[DEL] [SET] <page> [ . ] <page-playback> [CUE] <cue-number> [ENTER]` | Delete a cue from a playback on a page. |
+| Move or copy between absolute playbacks | `<operation> [SET] <playback-number> [CUE] <cue-number> [AT] [SET] <playback-number> [CUE] <cue-number> [ENTER]` | Move or copy a cue to an absolute playback. `<operation>` is `[MOV]` or `[CPY]`. |
+| Move or copy using pages | `<operation> [SET] <page> [ . ] <page-playback> [CUE] <cue-number> [AT] [SET] <page> [ . ] <page-playback> [CUE] <cue-number> [ENTER]` | Move or copy a cue using page-relative source and destination addresses. Absolute and page-relative addresses may also be mixed. |
 
 ## Assigning and configuring playbacks
 
 | Action | Command | Result |
 | --- | --- | --- |
-| Assign an absolute playback | `[SET] <playback-number> [AT] <page> [DOT] <page-playback> [ENTER]` | Assign an absolute playback to a position on a page. |
-| Assign a group | `[SET] [GRP] <group-number> [AT] <page> [DOT] <page-playback> [ENTER]` | Assign a group to a position on a page. |
+| Assign an absolute playback | `[SET] <playback-number> [AT] <page> [ . ] <page-playback> [ENTER]` | Assign an absolute playback to a position on a page. |
+| Assign a group | `[SET] [GRP] <group-number> [AT] <page> [ . ] <page-playback> [ENTER]` | Assign a group to a position on a page. |
 | Configure an absolute playback | `[SET] <playback-number> [ENTER]` | Open the playback configuration. |
-| Configure a page playback | `[SET] <page> [DOT] <page-playback> [ENTER]` | Open the configuration for a playback at a position on a page. |
+| Configure a page playback | `[SET] <page> [ . ] <page-playback> [ENTER]` | Open the configuration for a playback at a position on a page. |
