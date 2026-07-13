@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { VisualizationSnapshot } from "../api/types";
-import { cueVisualization, migrateStagePosition } from "./stage3dScene";
+import { buildStageScene, cueVisualization, migrateStagePosition } from "./stage3dScene";
 import { BUILT_IN_STAGE_ASSETS, createBuiltInStageAsset, createBuiltInFixtureModel, inferBuiltInFixtureKind, movingLightTiltRadians } from "./builtInStageModels";
 import * as THREE from "three";
 import type { PatchedFixture } from "../api/types";
@@ -71,6 +71,15 @@ describe("built-in 3D model library", () => {
       expect(sources.length, name).toBeGreaterThan(0);
       expect(sources.every((source) => source.material instanceof THREE.MeshBasicMaterial), name).toBe(true);
     }
+  });
+
+  it("builds a selected Sunstrip scene without invalid outline geometry", () => {
+    const sunstrip = fixture("strip light", "Sunstrip");
+    expect(() => buildStageScene([{
+      fixture: sunstrip,
+      index: 0,
+      position: { x: 0, y: 0, z: 3, rotationX: 0, rotationY: 0, rotationZ: 0 },
+    }], null, new Set([sunstrip.fixture_id]))).not.toThrow();
   });
 
   it("uses one filled central source for a wash mover instead of an LED ring", () => {

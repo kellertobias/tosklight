@@ -202,7 +202,7 @@ function staticFixture(kind: "par" | "fresnel" | "strobe" | "sunstrip", color: T
   const body = new THREE.Group();
   body.position.y = -.42;
   object.add(body);
-  let aperture: THREE.Mesh;
+  let aperture: THREE.Mesh | null = null;
   if (kind === "par") {
     const can = mesh(new THREE.CylinderGeometry(.19, .28, .62, 24));
     can.rotation.z = Math.PI / 2;
@@ -232,7 +232,6 @@ function staticFixture(kind: "par" | "fresnel" | "strobe" | "sunstrip", color: T
     aperture.position.x = .481;
   } else {
     body.add(mesh(new THREE.BoxGeometry(.16, .22, 1.45)));
-    aperture = new THREE.Mesh(new THREE.BufferGeometry(), lightSourceMaterial(color, intensity));
     for (let index = 0; index < 10; index++) {
       const lamp = lightSource(new THREE.CircleGeometry(.052, 20), color, intensity);
       lamp.name = `light-emitting-surface cell-${index + 1}`;
@@ -241,7 +240,7 @@ function staticFixture(kind: "par" | "fresnel" | "strobe" | "sunstrip", color: T
       body.add(lamp);
     }
   }
-  body.add(aperture);
+  if (aperture) body.add(aperture);
   const beamMount = new THREE.Group();
   beamMount.rotation.z = -Math.PI / 2;
   beamMount.position.set(kind === "fresnel" ? .45 : kind === "strobe" ? .49 : kind === "sunstrip" ? .1 : .33, 0, 0);

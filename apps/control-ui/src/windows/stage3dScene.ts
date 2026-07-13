@@ -91,6 +91,9 @@ function fixtureBody(selected: boolean) {
 function addSelectionOutline(object: THREE.Object3D) {
   object.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return;
+    // Some imported or procedural models legitimately contain marker meshes
+    // without vertex data. They cannot produce an EdgesGeometry outline.
+    if (!child.geometry.getAttribute("position")?.count) return;
     const outline = new THREE.LineSegments(
       new THREE.EdgesGeometry(child.geometry),
       new THREE.LineBasicMaterial({ color: 0x378eff }),
