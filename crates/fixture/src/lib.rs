@@ -289,6 +289,39 @@ pub struct PatchedHead {
     pub fixture_id: FixtureId,
 }
 
+/// Rebuild the persisted logical-head mapping from the active fixture definition.
+/// Existing IDs are retained by definition head index so programming remains stable.
+pub fn reconcile_logical_heads(fixture: &mut PatchedFixture) -> bool {
+    let before = fixture
+        .logical_heads
+        .iter()
+        .map(|head| (head.head_index, head.fixture_id))
+        .collect::<Vec<_>>();
+    let mut existing = fixture
+        .logical_heads
+        .drain(..)
+        .map(|head| (head.head_index, head.fixture_id))
+        .collect::<HashMap<_, _>>();
+    fixture.logical_heads = fixture
+        .definition
+        .heads
+        .iter()
+        .filter(|head| !head.shared)
+        .map(|head| PatchedHead {
+            head_index: head.index,
+            fixture_id: existing
+                .remove(&head.index)
+                .unwrap_or_else(FixtureId::new),
+        })
+        .collect();
+    before
+        != fixture
+            .logical_heads
+            .iter()
+            .map(|head| (head.head_index, head.fixture_id))
+            .collect::<Vec<_>>()
+}
+
 #[derive(Debug, Error)]
 pub enum FixtureError {
     #[error("invalid fixture: {0}")]
@@ -1211,6 +1244,40 @@ mod tests {
                 .to_string()
                 .contains("does not support")
         );
+    }
+    #[test]
+    fn logical_head_reconciliation_preserves_matching_ids_and_repairs_shape() {
+        let kept = FixtureId::new();
+        let stale = FixtureId::new();
+        let mut fixture = PatchedFixture {
+            fixture_id: FixtureId::new(),
+            fixture_number: Some(100),
+            name: "Multi".into(),
+            definition: definition(2),
+            universe: Some(1),
+            address: Some(1),
+            layer_id: default_patch_layer(),
+            direct_control: None,
+            location: Default::default(),
+            rotation: Default::default(),
+            logical_heads: vec![
+                PatchedHead { head_index: 0, fixture_id: kept },
+                PatchedHead { head_index: 99, fixture_id: stale },
+            ],
+            multipatch: vec![],
+        };
+        fixture.definition.heads = vec![
+            LogicalHead { index: 10, name: "Master".into(), shared: true, parameters: vec![] },
+            LogicalHead { index: 0, name: "Cell 1".into(), shared: false, parameters: vec![] },
+            LogicalHead { index: 4, name: "Cell 2".into(), shared: false, parameters: vec![] },
+        ];
+        assert!(reconcile_logical_heads(&mut fixture));
+        assert_eq!(fixture.logical_heads.len(), 2);
+        assert_eq!(fixture.logical_heads[0].head_index, 0);
+        assert_eq!(fixture.logical_heads[0].fixture_id, kept);
+        assert_eq!(fixture.logical_heads[1].head_index, 4);
+        assert_ne!(fixture.logical_heads[1].fixture_id, stale);
+        assert!(!reconcile_logical_heads(&mut fixture));
     }
     #[test]
     fn virtual_dimmer_preserves_color_ratios() {

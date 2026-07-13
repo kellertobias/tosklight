@@ -262,10 +262,7 @@ impl Engine {
                     .collect::<std::collections::HashSet<_>>();
                 for change in cue.group_changes.clone() {
                     if let Ok(fixtures) = resolve_group(&change.group_id, &groups) {
-                        for fixture_id in fixtures
-                            .into_iter()
-                            .flat_map(|fixture_id| logical_targets(&snapshot.fixtures, fixture_id))
-                        {
+                        for fixture_id in fixtures {
                             if expanded_addresses.insert((fixture_id, change.attribute.clone())) {
                                 cue.changes.push(light_playback::CueChange {
                                     fixture_id,
@@ -280,9 +277,7 @@ impl Engine {
                 for phaser in &mut cue.phasers {
                     for group_id in &phaser.group_ids {
                         if let Ok(fixtures) = resolve_group(group_id, &groups) {
-                            for fixture in fixtures.into_iter().flat_map(|fixture_id| {
-                                logical_targets(&snapshot.fixtures, fixture_id)
-                            }) {
+                            for fixture in fixtures {
                                 if !phaser.fixture_ids.contains(&fixture) {
                                     phaser.fixture_ids.push(fixture);
                                 }
@@ -402,37 +397,25 @@ impl Engine {
                     continue;
                 };
                 for fixture_id in fixtures {
-                    let targets = snapshot
-                        .fixtures
-                        .iter()
-                        .find(|fixture| fixture.fixture_id == fixture_id)
-                        .map(|fixture| {
-                            std::iter::once(fixture_id)
-                                .chain(fixture.logical_heads.iter().map(|head| head.fixture_id))
-                                .collect::<Vec<_>>()
-                        })
-                        .unwrap_or_else(|| vec![fixture_id]);
-                    for target in targets {
-                        for (attribute, scoped) in &attributes {
-                            let value = TimedValue {
-                                fixture_id: target,
-                                attribute: attribute.clone(),
-                                value: scoped.value.clone(),
-                                priority: programmer.priority,
-                                changed_at: scoped.changed_at,
-                                merge_mode: if attribute.is_intensity() {
-                                    MergeMode::Htp
-                                } else {
-                                    MergeMode::Ltp
-                                },
-                                fade: scoped.fade,
-                            };
-                            contributions.push(if value.fade {
-                                self.faded_programmer_value(value, now)
+                    for (attribute, scoped) in &attributes {
+                        let value = TimedValue {
+                            fixture_id,
+                            attribute: attribute.clone(),
+                            value: scoped.value.clone(),
+                            priority: programmer.priority,
+                            changed_at: scoped.changed_at,
+                            merge_mode: if attribute.is_intensity() {
+                                MergeMode::Htp
                             } else {
-                                value
-                            });
-                        }
+                                MergeMode::Ltp
+                            },
+                            fade: scoped.fade,
+                        };
+                        contributions.push(if value.fade {
+                            self.faded_programmer_value(value, now)
+                        } else {
+                            value
+                        });
                     }
                 }
             }
@@ -442,50 +425,26 @@ impl Engine {
                 continue;
             };
             for fixture_id in fixtures {
-                let targets = snapshot
-                    .fixtures
-                    .iter()
-                    .find(|fixture| fixture.fixture_id == fixture_id)
-                    .map(|fixture| {
-                        std::iter::once(fixture_id)
-                            .chain(fixture.logical_heads.iter().map(|head| head.fixture_id))
-                            .collect::<Vec<_>>()
-                    })
-                    .unwrap_or_else(|| vec![fixture_id]);
-                for target in targets {
-                    for (attribute, value) in &group.programming {
-                        contributions.push(TimedValue {
-                            fixture_id: target,
-                            attribute: attribute.clone(),
-                            value: value.clone(),
-                            priority: 0,
-                            changed_at: now,
-                            merge_mode: if attribute.is_intensity() {
-                                MergeMode::Htp
-                            } else {
-                                MergeMode::Ltp
-                            },
-                            fade: false,
-                        });
-                    }
+                for (attribute, value) in &group.programming {
+                    contributions.push(TimedValue {
+                        fixture_id,
+                        attribute: attribute.clone(),
+                        value: value.clone(),
+                        priority: 0,
+                        changed_at: now,
+                        merge_mode: if attribute.is_intensity() {
+                            MergeMode::Htp
+                        } else {
+                            MergeMode::Ltp
+                        },
+                        fade: false,
+                    });
                 }
             }
         }
         resolve(contributions)
     }
 }
-fn logical_targets(fixtures: &[PatchedFixture], fixture_id: FixtureId) -> Vec<FixtureId> {
-    fixtures
-        .iter()
-        .find(|fixture| fixture.fixture_id == fixture_id)
-        .map(|fixture| {
-            std::iter::once(fixture_id)
-                .chain(fixture.logical_heads.iter().map(|head| head.fixture_id))
-                .collect()
-        })
-        .unwrap_or_else(|| vec![fixture_id])
-}
-
 fn render_fixture(
     frame: &mut DmxFrame,
     fixture: &PatchedFixture,
@@ -512,9 +471,7 @@ fn render_fixture(
             .filter_map(|group| {
                 resolve_group(&group.id, groups)
                     .ok()
-                    .filter(|members| {
-                        members.contains(&fixture.fixture_id) || members.contains(&owner)
-                    })
+                    .filter(|members| members.contains(&owner))
                     .map(|_| {
                         group
                             .master
@@ -762,6 +719,75 @@ mod tests {
     }
 
     #[test]
+    fn parent_programmer_value_does_not_fan_out_to_child_heads() {
+        let programmers = ProgrammerRegistry::default();
+        let session = light_core::SessionId::new();
+        programmers.start(session, light_core::UserId::new());
+        let (fixture, _) = fixture();
+        programmers.set(
+            session,
+            fixture.fixture_id,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(1.0),
+        );
+        let engine = Engine::new(programmers);
+        engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![fixture],
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(
+            engine.render(RenderOptions::default()).unwrap().universes[&1][0],
+            0
+        );
+    }
+
+    #[test]
+    fn master_only_group_fader_does_not_scale_child_heads() {
+        let programmers = ProgrammerRegistry::default();
+        let session = light_core::SessionId::new();
+        programmers.start(session, light_core::UserId::new());
+        let (mut fixture, child) = fixture();
+        fixture.definition.footprint = 2;
+        let mut master_parameter = fixture.definition.heads[0].parameters[0].clone();
+        master_parameter.components[0].offset = 1;
+        fixture.definition.heads.insert(0, LogicalHead {
+            index: 0,
+            name: "Master".into(),
+            shared: true,
+            parameters: vec![master_parameter],
+        });
+        let master = fixture.fixture_id;
+        for fixture_id in [master, child] {
+            programmers.set(
+                session,
+                fixture_id,
+                AttributeKey::intensity(),
+                AttributeValue::Normalized(0.8),
+            );
+        }
+        let engine = Engine::new(programmers);
+        engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![fixture],
+                groups: vec![GroupDefinition {
+                    id: "master".into(),
+                    name: "Master only".into(),
+                    fixtures: vec![master],
+                    master: 0.5,
+                    playback_fader: Some(1),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            })
+            .unwrap();
+        let rendered = engine.render(RenderOptions::default()).unwrap();
+        assert_eq!(rendered.universes[&1][0], 204);
+        assert_eq!(rendered.universes[&1][1], 102);
+    }
+
+    #[test]
     fn grand_master_and_blackout_affect_intensity() {
         let programmers = ProgrammerRegistry::default();
         let session = light_core::SessionId::new();
@@ -816,7 +842,6 @@ mod tests {
         let session = light_core::SessionId::new();
         programmers.start(session, light_core::UserId::new());
         let (fixture, logical) = fixture();
-        let physical = fixture.fixture_id;
         programmers.set(
             session,
             logical,
@@ -836,7 +861,7 @@ mod tests {
                     GroupDefinition {
                         id: "a".into(),
                         name: "A".into(),
-                        fixtures: vec![physical],
+                        fixtures: vec![logical],
                         master: 0.5,
                         playback_fader: Some(1),
                         ..Default::default()
@@ -844,7 +869,7 @@ mod tests {
                     GroupDefinition {
                         id: "b".into(),
                         name: "B".into(),
-                        fixtures: vec![physical],
+                        fixtures: vec![logical],
                         master: 0.75,
                         playback_fader: Some(2),
                         ..Default::default()
@@ -852,7 +877,7 @@ mod tests {
                     GroupDefinition {
                         id: "unassigned".into(),
                         name: "Unassigned".into(),
-                        fixtures: vec![physical],
+                        fixtures: vec![logical],
                         master: 1.0,
                         playback_fader: None,
                         ..Default::default()
@@ -873,7 +898,6 @@ mod tests {
         let session = light_core::SessionId::new();
         programmers.start(session, light_core::UserId::new());
         let (fixture, logical) = fixture();
-        let physical = fixture.fixture_id;
         programmers.set(
             session,
             logical,
@@ -887,7 +911,7 @@ mod tests {
                 groups: vec![GroupDefinition {
                     id: "front".into(),
                     name: "Front".into(),
-                    fixtures: vec![physical],
+                    fixtures: vec![logical],
                     master: 0.25,
                     playback_fader: Some(1),
                     ..Default::default()
@@ -986,18 +1010,14 @@ mod tests {
             ],
             multipatch: vec![],
         };
-        programmers.set(
-            session,
-            first,
-            AttributeKey::intensity(),
-            AttributeValue::Normalized(0.8),
-        );
-        programmers.set(
-            session,
-            second,
-            AttributeKey::intensity(),
-            AttributeValue::Normalized(0.8),
-        );
+        for fixture_id in [first, second] {
+            programmers.set(
+                session,
+                fixture_id,
+                AttributeKey::intensity(),
+                AttributeValue::Normalized(0.8),
+            );
+        }
         let engine = Engine::new(programmers);
         engine
             .replace_snapshot(EngineSnapshot {
@@ -1027,7 +1047,6 @@ mod tests {
         programmers.start(direct_session, light_core::UserId::new());
         let (mut fixture, logical) = fixture();
         fixture.definition.heads[0].parameters[0].attribute = AttributeKey("pan".into());
-        let physical = fixture.fixture_id;
         programmers.set_group(
             group_session,
             "position".into(),
@@ -1047,7 +1066,7 @@ mod tests {
                 groups: vec![GroupDefinition {
                     id: "position".into(),
                     name: "Position".into(),
-                    fixtures: vec![physical],
+                    fixtures: vec![logical],
                     ..Default::default()
                 }],
                 ..Default::default()
@@ -1072,8 +1091,7 @@ mod tests {
     #[test]
     fn empty_group_programming_becomes_effective_when_members_are_added() {
         let programmers = ProgrammerRegistry::default();
-        let (fixture, _logical) = fixture();
-        let physical = fixture.fixture_id;
+        let (fixture, logical) = fixture();
         let engine = Engine::new(programmers);
         let group = GroupDefinition {
             id: "template".into(),
@@ -1101,7 +1119,7 @@ mod tests {
             .replace_snapshot(EngineSnapshot {
                 fixtures: vec![fixture],
                 groups: vec![GroupDefinition {
-                    fixtures: vec![physical],
+                    fixtures: vec![logical],
                     ..group
                 }],
                 revision: 2,
@@ -1142,8 +1160,7 @@ mod tests {
             AttributeKey::intensity(),
             AttributeValue::Normalized(0.6),
         );
-        let (fixture, _) = fixture();
-        let physical = fixture.fixture_id;
+        let (fixture, logical) = fixture();
         let observed = programmers.clone();
         let engine = Engine::new(programmers);
         let group = GroupDefinition {
@@ -1168,7 +1185,7 @@ mod tests {
             .replace_snapshot(EngineSnapshot {
                 fixtures: vec![fixture],
                 groups: vec![GroupDefinition {
-                    fixtures: vec![physical],
+                    fixtures: vec![logical],
                     ..group
                 }],
                 revision: 2,
@@ -1179,14 +1196,13 @@ mod tests {
             engine.render(RenderOptions::default()).unwrap().universes[&1][0],
             153
         );
-        assert_eq!(observed.get(session).unwrap().selected, vec![physical]);
+        assert_eq!(observed.get(session).unwrap().selected, vec![logical]);
         assert!(observed.get(frozen_session).unwrap().selected.is_empty());
     }
     #[test]
     fn explicit_cue_change_wins_when_group_expansion_targets_same_attribute() {
         let programmers = ProgrammerRegistry::default();
         let (fixture, logical) = fixture();
-        let physical = fixture.fixture_id;
         let mut cue = light_playback::Cue::new(1.0);
         cue.changes.push(light_playback::CueChange::set(
             logical,
@@ -1215,7 +1231,7 @@ mod tests {
             groups: vec![GroupDefinition {
                 id: "group".into(),
                 name: "Group".into(),
-                fixtures: vec![physical],
+                fixtures: vec![logical],
                 master: 1.0,
                 playback_fader: None,
                 programming: Default::default(),
@@ -1233,8 +1249,6 @@ mod tests {
         let (first, first_logical) = fixture();
         let (mut second, second_logical) = fixture();
         second.address = Some(2);
-        let first_physical = first.fixture_id;
-        let second_physical = second.fixture_id;
         let list_id = light_core::CueListId::new();
         let mut cue = light_playback::Cue::new(1.0);
         cue.group_changes.push(light_playback::GroupCueChange {
@@ -1267,7 +1281,7 @@ mod tests {
             ..Default::default()
         };
         engine
-            .replace_snapshot(snapshot(vec![first_physical]))
+            .replace_snapshot(snapshot(vec![first_logical]))
             .unwrap();
         engine
             .playback()
@@ -1292,7 +1306,7 @@ mod tests {
         assert_eq!(before.universes[&1][0], 77);
         assert_eq!(before.universes[&1][1], 0);
         engine
-            .replace_snapshot(snapshot(vec![first_physical, second_physical]))
+            .replace_snapshot(snapshot(vec![first_logical, second_logical]))
             .unwrap();
         assert_eq!(engine.playback().read().active().len(), 1);
         let after = engine.render(RenderOptions::default()).unwrap();

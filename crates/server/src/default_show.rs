@@ -14,6 +14,31 @@ pub fn name() -> &'static str {
     DEFAULT_SHOW_NAME
 }
 
+fn trailing_number(name: &str) -> Option<u32> {
+    name.rsplit_once(' ')?.1.parse().ok()
+}
+
+fn default_fixture_number(name: &str) -> Option<u32> {
+    match name {
+        "Middle ACL Set" => Some(28),
+        "Outside ACL Set" => Some(29),
+        "Stage Hazer" => Some(99),
+        "Overhead RGB Multi-patch" => Some(999),
+        _ if name.starts_with("Front Fresnel ") => trailing_number(name),
+        _ if name.starts_with("Back Profile ") => trailing_number(name).map(|value| 100 + value),
+        _ if name.starts_with("Back LED Wash ") => trailing_number(name).map(|value| 200 + value),
+        _ if name.starts_with("Back Trackspot ") => trailing_number(name).map(|value| 300 + value),
+        _ if name.starts_with("Floor RGBW PAR ") => trailing_number(name).map(|value| 400 + value),
+        _ if name.starts_with("Back RGB Sunstrip ") => {
+            trailing_number(name).map(|value| 500 + value)
+        }
+        _ if name.starts_with("Front RGB Strobe ") => {
+            trailing_number(name).map(|value| 600 + value)
+        }
+        _ => None,
+    }
+}
+
 fn parameter(attribute: &str, offset: u16, default: f32) -> Parameter {
     Parameter {
         attribute: AttributeKey(attribute.into()),
@@ -64,8 +89,8 @@ fn definition(name: &str, device_type: &str, attributes: &[&str]) -> FixtureDefi
                         offset as u16,
                         if *attribute == "pan" {
                             0.5
-                    } else if *attribute == "tilt" {
-                        0.5
+                        } else if *attribute == "tilt" {
+                            0.5
                         } else {
                             0.0
                         },
@@ -97,16 +122,60 @@ fn sunstrip_definition() -> FixtureDefinition {
             index,
             name: format!("Cell {}", index + 1),
             shared: false,
-            parameters: ["color.red", "color.green", "color.blue"]
-                .iter()
-                .enumerate()
-                .map(|(component, attribute)| {
-                    parameter(attribute, index * 3 + component as u16, 0.0)
-                })
-                .collect(),
+            parameters: std::iter::once(Parameter {
+                attribute: AttributeKey::intensity(),
+                components: Vec::new(),
+                default: 0.0,
+                virtual_dimmer: true,
+                metadata: ParameterMetadata::default(),
+                capabilities: Vec::new(),
+            })
+            .chain(
+                ["color.red", "color.green", "color.blue"]
+                    .iter()
+                    .enumerate()
+                    .map(|(component, attribute)| {
+                        let mut parameter = parameter(attribute, index * 3 + component as u16, 0.0);
+                        parameter.virtual_dimmer = true;
+                        parameter
+                    }),
+            )
+            .collect(),
         })
         .collect();
     fixture
+}
+
+/// Upgrades an existing built-in show without replacing user programming.
+pub fn upgrade(path: impl AsRef<Path>) -> Result<(), StoreError> {
+    let store = ShowStore::open(path)?;
+    for object in store.objects("patched_fixture")? {
+        let mut fixture: PatchedFixture = serde_json::from_value(object.body)?;
+        let mut changed = false;
+        if fixture.fixture_number.is_none() {
+            fixture.fixture_number = default_fixture_number(&fixture.name);
+            changed = fixture.fixture_number.is_some();
+        }
+        if fixture.name.starts_with("Back RGB Sunstrip ")
+            && !fixture.definition.heads.iter().all(|head| {
+                head.parameters
+                    .iter()
+                    .any(|parameter| parameter.attribute.is_intensity() && parameter.virtual_dimmer)
+            })
+        {
+            fixture.definition = sunstrip_definition();
+            changed = true;
+        }
+        if changed {
+            store.put_object(
+                "patched_fixture",
+                &fixture.fixture_id.0.to_string(),
+                &serde_json::to_value(fixture)?,
+                object.revision,
+            )?;
+        }
+    }
+    Ok(())
 }
 
 fn patched(
@@ -573,6 +642,17 @@ mod tests {
             .find(|fixture| fixture.fixture_number == Some(501))
             .unwrap();
         assert_eq!(sunstrip.logical_heads.len(), 10);
+        assert!(sunstrip.definition.heads.iter().all(|head| {
+            head.parameters.iter().any(|parameter| {
+                parameter.attribute.is_intensity()
+                    && parameter.virtual_dimmer
+                    && parameter.components.is_empty()
+            }) && head
+                .parameters
+                .iter()
+                .filter(|parameter| parameter.attribute.0.starts_with("color."))
+                .all(|parameter| parameter.virtual_dimmer)
+        }));
         assert_eq!(
             crate::resolve_fixture_reference(&fixtures, "501.2").unwrap(),
             sunstrip
@@ -582,6 +662,87 @@ mod tests {
                 .unwrap()
                 .fixture_id
         );
+        assert_eq!(
+            crate::parse_fixture_selection(&fixtures, &["501".into(), ".".into(), "2".into()])
+                .unwrap(),
+            vec![
+                sunstrip
+                    .logical_heads
+                    .iter()
+                    .find(|head| head.head_index == 1)
+                    .unwrap()
+                    .fixture_id
+            ]
+        );
+        let sunstrip_502 = fixtures
+            .iter()
+            .find(|fixture| fixture.fixture_number == Some(502))
+            .unwrap();
+        let children_501 = sunstrip.logical_heads.iter().map(|head| head.fixture_id).collect::<Vec<_>>();
+        let children_502 = sunstrip_502.logical_heads.iter().map(|head| head.fixture_id).collect::<Vec<_>>();
+        assert_eq!(
+            crate::parse_fixture_selection(&fixtures, &["501".into()]).unwrap(),
+            std::iter::once(sunstrip.fixture_id)
+                .chain(children_501.iter().copied())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            crate::parse_fixture_selection(
+                &fixtures,
+                &["501".into(), "THRU".into(), "502".into()],
+            )
+            .unwrap(),
+            children_501
+                .iter()
+                .chain(&children_502)
+                .copied()
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            crate::parse_fixture_selection(
+                &fixtures,
+                &[
+                    "501".into(), ".".into(), "0".into(), "THRU".into(),
+                    "502".into(), ".".into(), "0".into(),
+                ],
+            )
+            .unwrap(),
+            vec![sunstrip.fixture_id, sunstrip_502.fixture_id]
+        );
+        assert_eq!(
+            crate::parse_fixture_selection(
+                &fixtures,
+                &[
+                    "501".into(), ".".into(), "2".into(), "THRU".into(),
+                    "501".into(), ".".into(), "4".into(),
+                ],
+            )
+            .unwrap(),
+            children_501[1..4].to_vec()
+        );
+        assert_eq!(
+            crate::parse_fixture_selection(
+                &fixtures,
+                &["501".into(), "+".into(), "501".into(), ".".into(), "1".into()],
+            )
+            .unwrap(),
+            std::iter::once(sunstrip.fixture_id)
+                .chain(children_501.iter().copied())
+                .collect::<Vec<_>>()
+        );
+        assert!(crate::parse_fixture_selection(
+            &fixtures,
+            &[
+                "501".into(), ".".into(), "1".into(), "THRU".into(),
+                "502".into(), ".".into(), "1".into(),
+            ],
+        )
+        .is_err());
+        assert!(crate::parse_fixture_selection(
+            &fixtures,
+            &["501".into(), "+".into()],
+        )
+        .is_err());
         assert!(crate::resolve_fixture_reference(&fixtures, "501.11").is_err());
         let mut occupied = std::collections::BTreeSet::new();
         for fixture in &fixtures {
