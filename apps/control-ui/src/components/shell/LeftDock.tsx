@@ -7,7 +7,7 @@ import appIcon from "../../../src-tauri/icons/icon.svg";
 import { DeskSettingsModal } from "../modals/DeskSettingsModal";
 import { Button } from "../common";
 
-const builtIns: Array<[BuiltInWindow, string, string]> = [
+export const builtIns: Array<[BuiltInWindow, string, string]> = [
   ["stage", "⌖", "Stage"], ["fixtures", "♙", "Fixtures"],
   ["presets", "▣", "Presets"], ["playback", "▶", "Playback"], ["dynamics", "∿", "Dynamics"],
   ["channels", "▥", "Channels"], ["dmx", "⠿", "DMX"],

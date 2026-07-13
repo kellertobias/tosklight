@@ -1,4 +1,4 @@
-# ToskLight Command Line Reference
+# Command Line Reference
 
 You can program the entire desk from the command line.
 
@@ -52,13 +52,10 @@ A number without `[GRP]` always identifies a fixture. `[ENTER]` completes the se
 | Selection | Command | Result |
 | --- | --- | --- |
 | One fixture | `1 [ENTER]` | Select fixture 1. |
-| One fixture head | `501.2 [ENTER]` | Select head 2 of fixture 501, such as the second RGB cell of a Sunstrip. |
 | Fixture range | `1 [THRU] 10 [ENTER]` | Select every existing fixture with an ID from 1 through 10. |
 | Combined ranges | `1 [THRU] 10 [+] 20 [THRU] 30 [ENTER]` | Select every existing fixture from 1 through 10 and from 20 through 30. |
 
 `[+]` extends the current selection. All parts joined with `[+]` form one ordered selection for any subsequent subsetting operation.
-
-Fixture heads use one-based `fixtureID.headNumber` references. Selecting the parent fixture ID addresses the complete fixture; selecting a head targets only that logical head.
 
 ### Subsetting a selection
 

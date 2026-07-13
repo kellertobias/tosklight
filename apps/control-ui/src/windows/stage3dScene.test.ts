@@ -63,7 +63,7 @@ describe("built-in 3D model library", () => {
   it("gives every fixture family a bright unlit emitting surface", () => {
     for (const [type, name] of [
       ["moving wash", "A7 LED Wash"], ["moving profile", "Profile"], ["wash", "Classic Wash"],
-      ["conventional", "PAR Can"], ["conventional", "PC Fresnel"], ["strobe", "Strobe"], ["strip light", "Sunstrip"],
+      ["scanner", "Mirror Mover"], ["conventional", "PAR Can"], ["conventional", "PC Fresnel"], ["strobe", "Strobe"], ["strip light", "Sunstrip"],
     ]) {
       const model = createBuiltInFixtureModel(fixture(type, name), new THREE.Color(0x55aaff), 1, 0, 0);
       const sources: THREE.Mesh[] = [];
@@ -93,5 +93,20 @@ describe("built-in 3D model library", () => {
     const color = (source!.material as THREE.MeshBasicMaterial).color;
     expect(Math.max(color.r, color.g, color.b)).toBeLessThan(.05);
     expect(Math.max(color.r, color.g, color.b) - Math.min(color.r, color.g, color.b)).toBeLessThan(.02);
+  });
+
+  it("builds a scanner with a fixed source and animated 45-degree mirror", () => {
+    const scanner = fixture("scanner", "Mirror Mover Scanner");
+    expect(inferBuiltInFixtureKind(scanner)).toBe("mirror-scanner");
+    const neutral = createBuiltInFixtureModel(scanner, new THREE.Color("white"), 1, 0, 0);
+    const mirror = neutral.object.getObjectByName("moving-mirror")!;
+    const chassis = neutral.object.getObjectByName("scanner-chassis") as THREE.Mesh;
+    const chassisSize = new THREE.Box3().setFromObject(chassis).getSize(new THREE.Vector3());
+    expect(chassisSize.z / chassisSize.x).toBeCloseTo(3);
+    expect(mirror.parent!.rotation.x).toBeCloseTo(Math.PI / 4);
+    const moved = createBuiltInFixtureModel(scanner, new THREE.Color("white"), 1, .4, movingLightTiltRadians(.75));
+    const movedMirror = moved.object.getObjectByName("moving-mirror")!;
+    expect(movedMirror.parent!.rotation.x).not.toBeCloseTo(Math.PI / 4);
+    expect(moved.beamMount.parent!.rotation.y).toBeCloseTo(.4);
   });
 });

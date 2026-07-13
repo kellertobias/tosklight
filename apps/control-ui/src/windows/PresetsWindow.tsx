@@ -4,12 +4,21 @@ import { useServer } from "../api/ServerContext";
 import { useApp } from "../state/AppContext";
 import { GroupStrip } from "../components/shared/GroupStrip";
 import { GroupsPoolButton } from "../components/shared/GroupsPoolButton";
-import { Button } from "../components/common";
+import { Button, Input } from "../components/common";
+import { ButtonGrid, WindowHeader, WindowScrollArea, WindowSettings } from "../components/window-kit";
+import { useState, type CSSProperties } from "react";
 
-export function PresetsWindow({ compact, showGroupShortcuts }: WindowProps) {
+type PresetCustomization = { title?: string; icon?: string; color?: string };
+export function PresetsWindow({ compact, paneId, showGroupShortcuts, presetFamily, presetPoolColors }: WindowProps) {
   const server = useServer();
   const { state, dispatch } = useApp();
-  const family = state.presetFamily;
+  const family = compact ? (presetFamily ?? state.presetFamily) : state.presetFamily;
+  const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
+  const colorsEnabled = compact ? (presetPoolColors ?? true) : state.presetPoolColors;
+  const [customizations, setCustomizations] = useState<Record<string, PresetCustomization>>(() => { try { return JSON.parse(localStorage.getItem("light.preset-button-customizations") ?? "{}"); } catch { return {}; } });
+  const [configureIndex, setConfigureIndex] = useState<number | null>(null);
+  const [configureDraft, setConfigureDraft] = useState<PresetCustomization>({});
+  const setFamily = (next: typeof state.presetFamily) => dispatch(compact && paneId ? { type: "SET_PANE_PRESET_FAMILY", id: paneId, family: next } : { type: "SET_PRESET_FAMILY", family: next });
   const groupsVisible = compact ? Boolean(showGroupShortcuts) : state.presetGroupsVisible;
   const fallback = server.bootstrap
     ? []
@@ -34,6 +43,7 @@ export function PresetsWindow({ compact, showGroupShortcuts }: WindowProps) {
 
   const activate = (index: number) => {
     const preset = cards[index];
+    if (state.presetSetArmed) { const saved = customizations[String(index + 1)] ?? {}; setConfigureDraft({ title: saved.title ?? preset?.body.name ?? `Preset ${index + 1}`, icon: saved.icon ?? preset?.body.icon ?? "◇", color: saved.color ?? preset?.body.color ?? "#d98236" }); setConfigureIndex(index); dispatch({ type: "SET_PRESET_SET_ARMED", value: false }); return; }
     if (!preset && !state.storeArmed) return;
     if (state.storeArmed) {
       const armedMode = preset ? (window.confirm("Merge current values into this preset? Choose Cancel to overwrite it instead.") ? "merge" : "overwrite") : "overwrite";
@@ -47,34 +57,17 @@ export function PresetsWindow({ compact, showGroupShortcuts }: WindowProps) {
 
   const families = ["All", "Intensity", "Color", "Position", "Beam"];
   return (
-    <div className="pool-window">
-      {!compact && <header className="window-toolbar">
-        <h1>Preset Pools</h1>
-        <span className="spacer" />
-          <div className="preset-toolbar-groups">
-            <div className="preset-family-controls">
-            {families.map((name) => (
-              <Button
-                key={name}
-                onClick={() => dispatch({ type: "SET_PRESET_FAMILY", family: name as typeof state.presetFamily })}
-                className={`preset-family-button family-${name.toLowerCase()} ${family === name ? "active" : ""}`}
-              >
-                {name}
-              </Button>
-            ))}
-            </div>
-            <i className="preset-groups-divider" aria-hidden="true" />
-            <GroupsPoolButton shortcutsVisible={groupsVisible} onToggleShortcuts={() => dispatch({type:"SET_BUILTIN_GROUPS_VISIBLE",window:"presets",value:!groupsVisible})} />
-          </div>
-      </header>}
-      <div className="card-pool">
+    <div className={`pool-window preset-pool-window ${colorsEnabled ? "pool-colors" : "pool-colors-disabled"} pool-family-${family.toLowerCase()}`}>
+      {!compact && <WindowHeader title="Preset Pools" info={{ primary: family === "All" ? "All preset families" : `${family} presets` }} actions={[[...families.map((name) => ({ id: name, label: name, active: family === name, onClick: () => setFamily(name as typeof state.presetFamily) }))],[{ id: "groups", label: "Groups", onClick: () => dispatch({ type: "OPEN_BUILTIN", kind: "groups" }) }]]} settings onSettings={(anchor) => setSettingsAnchor(anchor.getBoundingClientRect())} />}
+      <WindowScrollArea><ButtonGrid className="card-pool">
         {cards.map((preset, index) => {
           const filtered = Boolean(preset && family !== "All" && preset.body.family !== family);
           return (
             <Button
               disabled={filtered}
               key={index + 1}
-              className={`preset-card pool-cell ${preset ? `preset-family-${String(preset.body.family ?? "all").toLowerCase()}` : ""} ${!preset ? "empty" : ""} ${filtered ? "filtered" : ""} ${state.storeArmed ? "store-target" : ""}`}
+              className={`preset-card pool-cell preset-family-${String(preset?.body.family ?? family).toLowerCase()} ${!preset ? "empty" : ""} ${filtered ? "filtered" : ""} ${state.storeArmed ? "store-target" : ""} ${state.presetSetArmed ? "set-target" : ""}`}
+              style={colorsEnabled && customizations[String(index + 1)]?.color ? { "--preset-family": customizations[String(index + 1)].color } as CSSProperties : undefined}
               onClick={() => activate(index)}
             >
               <span className="number">{index + 1}</span>
@@ -86,9 +79,9 @@ export function PresetsWindow({ compact, showGroupShortcuts }: WindowProps) {
                       background: `${preset.body.color ?? "#2cb7d6"}44`,
                     }}
                   >
-                    {preset.body.icon ?? "◇"}
+                    {customizations[String(index + 1)]?.icon ?? preset.body.icon ?? "◇"}
                   </span>
-                  <b>{preset.body.name}</b>
+                  <b>{customizations[String(index + 1)]?.title ?? preset.body.name}</b>
                   <small>
                     {preset.body.family ?? "All"} ·{" "}
                     {Object.keys(preset.body.values).length} fixtures
@@ -96,7 +89,8 @@ export function PresetsWindow({ compact, showGroupShortcuts }: WindowProps) {
                 </>
               ) : filtered ? <small>Other family</small> : (
                 <>
-                  <b>Empty</b>
+                  {customizations[String(index + 1)]?.icon && <span className="preset-art">{customizations[String(index + 1)].icon}</span>}
+                  <b>{customizations[String(index + 1)]?.title ?? "Empty"}</b>
                   <small>
                     {server.selectedFixtures.length
                       ? state.storeArmed
@@ -109,8 +103,10 @@ export function PresetsWindow({ compact, showGroupShortcuts }: WindowProps) {
             </Button>
           );
         })}
-      </div>
+      </ButtonGrid></WindowScrollArea>
       {groupsVisible && <GroupStrip />}
+      {settingsAnchor && <WindowSettings modal={false} anchor={settingsAnchor} title="Preset Settings" onClose={() => setSettingsAnchor(null)} tabs={[{ id: "pool", label: "Pool", content: <><h3>Preset family</h3><div className="button-group">{families.map((name) => <Button key={name} className={family === name ? "active" : ""} onClick={() => setFamily(name as typeof state.presetFamily)}>{name}</Button>)}</div><label className="pane-option-toggle"><Input type="checkbox" checked={colorsEnabled} onChange={(event) => dispatch(compact && paneId ? { type: "SET_PANE_PRESET_COLORS", id: paneId, value: event.target.checked } : { type: "SET_PRESET_POOL_COLORS", value: event.target.checked })}/> Enable pool colors</label></> }]} />}
+      {configureIndex != null && <div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && setConfigureIndex(null)}><section className="nested-modal preset-button-settings" role="dialog" aria-modal="true" aria-label="Configure preset button"><Button className="modal-close" onClick={() => setConfigureIndex(null)}>×</Button><h3>Configure preset {configureIndex + 1}</h3><label>Title<Input value={configureDraft.title ?? ""} onChange={(event) => setConfigureDraft({ ...configureDraft, title: event.target.value })}/></label><label>Icon<Input value={configureDraft.icon ?? ""} maxLength={4} onChange={(event) => setConfigureDraft({ ...configureDraft, icon: event.target.value })}/></label><label>Button color<Input type="color" value={configureDraft.color ?? "#d98236"} onChange={(event) => setConfigureDraft({ ...configureDraft, color: event.target.value })}/></label><footer><Button onClick={() => setConfigureIndex(null)}>Cancel</Button><Button className="primary" onClick={() => { const next = { ...customizations, [String(configureIndex + 1)]: configureDraft }; setCustomizations(next); localStorage.setItem("light.preset-button-customizations", JSON.stringify(next)); setConfigureIndex(null); }}>Save button</Button></footer></section></div>}
     </div>
   );
 }

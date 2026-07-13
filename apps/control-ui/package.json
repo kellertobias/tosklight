@@ -21,6 +21,8 @@
     "jszip": "^3.10.1",
     "react": "latest",
     "react-dom": "latest",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "three": "^0.185.1",
     "vite": "latest"
   },

@@ -10,6 +10,8 @@ export type Action =
   | { type: "SET_PANE_RECT"; id: string; rect: Partial<GridRect> }
   | { type: "SET_PANE_GROUP_SHORTCUTS"; id: string; value: boolean }
   | { type: "SET_PANE_STAGE_OPTION"; id: string; option: "stageView" | "followPreload"; value: AppState["stageView"] | boolean }
+  | { type: "SET_PANE_PRESET_FAMILY"; id: string; family: AppState["presetFamily"] }
+  | { type: "SET_PANE_PRESET_COLORS"; id: string; value: boolean }
   | { type: "SET_STAGE_MODE"; value: AppState["stageMode"] }
   | { type: "SET_STAGE_VIEW"; value: AppState["stageView"] }
   | { type: "SET_STAGE_NAVIGATION"; zoom?: number; panX?: number; panY?: number; orbitX?: number; orbitY?: number }
@@ -35,6 +37,8 @@ export type Action =
   | { type: "SET_PLAYBACK_LAYOUT"; columns: number; rows: number }
   | { type: "SET_PLAYBACK_PAGE"; page: number }
   | { type: "SET_PRESET_FAMILY"; family: AppState["presetFamily"] }
+  | { type: "SET_PRESET_POOL_COLORS"; value: boolean }
+  | { type: "SET_PRESET_SET_ARMED"; value: boolean }
   | { type: "SET_MODAL"; modal: "setupOpen" | "specialDialogsOpen" | "systemControlsOpen" | "preloadStoreOpen" | "debugOpen" | "deskSettingsOpen" | "storeSettingsOpen"; value: boolean }
   | { type: "OPEN_SPECIAL_DIALOG"; family: AppState["specialDialogFamily"] }
   | { type: "TOGGLE_MIDI_PROFILE" }
@@ -62,6 +66,8 @@ export const initialState: AppState = {
   playbackPage: 0,
   playbackPageNames: Array.from({ length: 127 }, (_, index) => index === 0 ? "Main" : `Page ${index + 1}`),
   presetFamily: "All",
+  presetPoolColors: true,
+  presetSetArmed: false,
   setupOpen: false,
   specialDialogsOpen: false,
   specialDialogFamily: "Position",
@@ -125,7 +131,15 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "HYDRATE_LAYOUT": return {
       ...state,
       ...action.windowSettings,
-      desks: action.desks,
+      desks: action.desks.map((desk) => ({ ...desk, panes: desk.panes.map((pane) => {
+        if (pane.kind !== "presets") return pane;
+        const legacyDefault = pane.id === "presets" && pane.title === "Color & Position Presets";
+        return {
+          ...pane,
+          title: legacyDefault ? "All Presets" : pane.title,
+          presetFamily: legacyDefault ? "All" : pane.presetFamily ?? state.presetFamily,
+        };
+      }) })),
       activeDeskId: action.desks.some((desk) => desk.id === action.activeDeskId) ? action.activeDeskId : action.desks[0]?.id ?? state.activeDeskId,
       savingDesk: false,
     };
@@ -152,6 +166,8 @@ export function appReducer(state: AppState, action: Action): AppState {
     };
     case "SET_PANE_GROUP_SHORTCUTS": return { ...state, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, showGroupShortcuts: action.value } : pane) }) };
     case "SET_PANE_STAGE_OPTION": return { ...state, stageView: action.option === "stageView" ? action.value as AppState["stageView"] : state.stageView, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, [action.option]: action.value } : pane) }) };
+    case "SET_PANE_PRESET_FAMILY": return { ...state, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, presetFamily: action.family } : pane) }) };
+    case "SET_PANE_PRESET_COLORS": return { ...state, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, presetPoolColors: action.value } : pane) }) };
     case "SET_STAGE_MODE": return { ...state, stageMode: action.value };
     case "SET_STAGE_VIEW": return { ...state, stageView: action.value };
     case "SET_STAGE_NAVIGATION": return { ...state, stageZoom: action.zoom ?? state.stageZoom, stagePanX: action.panX ?? state.stagePanX, stagePanY: action.panY ?? state.stagePanY, stageOrbitX: action.orbitX ?? state.stageOrbitX, stageOrbitY: action.orbitY ?? state.stageOrbitY };
@@ -168,7 +184,7 @@ export function appReducer(state: AppState, action: Action): AppState {
     }
     case "ADD_WINDOW": {
       if (!state.windowPicker) return state;
-      const pane = { id: `${action.kind}-${Date.now()}`, kind: action.kind, title: action.kind[0].toUpperCase() + action.kind.slice(1), ...state.windowPicker };
+      const pane = { id: `${action.kind}-${Date.now()}`, kind: action.kind, title: action.kind === "help" ? "Help" : action.kind[0].toUpperCase() + action.kind.slice(1), ...state.windowPicker };
       const activeDesk = state.desks.find((desk) => desk.id === state.activeDeskId);
       if (activeDesk?.panes.some((item) => overlaps(pane, item))) return { ...state, windowPicker: null };
       return { ...state, windowPicker: null, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: [...desk.panes, pane] }) };
@@ -179,6 +195,8 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "SET_PLAYBACK_LAYOUT": return { ...state, playbackColumns: clamp(action.columns, 1, 32), playbackRows: clamp(action.rows, 1, 3) };
     case "SET_PLAYBACK_PAGE": return { ...state, playbackPage: clamp(action.page, 0, state.playbackPageNames.length - 1) };
     case "SET_PRESET_FAMILY": return { ...state, presetFamily: action.family };
+    case "SET_PRESET_POOL_COLORS": return { ...state, presetPoolColors: action.value };
+    case "SET_PRESET_SET_ARMED": return { ...state, presetSetArmed: action.value };
     case "SET_MODAL": return { ...state, [action.modal]: action.value };
     case "OPEN_SPECIAL_DIALOG": return { ...state, specialDialogFamily: action.family, specialDialogsOpen: true };
     case "TOGGLE_MIDI_PROFILE": return { ...state, midiProfile: !state.midiProfile };

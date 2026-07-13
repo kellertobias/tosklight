@@ -19,7 +19,6 @@ export function PlaybackTools() {
     const now = performance.now();
     const recent = [...(taps.current[group] ?? []), now].filter((time) => now - time < 3000).slice(-6);
     taps.current[group] = recent;
-    dispatch({ type: "SET_SPEED_GROUP", value: group });
     if (recent.length > 1) {
       const intervals = recent.slice(1).map((time, index) => time - recent[index]);
       const next = Math.round(60000 / (intervals.reduce((sum, value) => sum + value, 0) / intervals.length));
@@ -43,7 +42,7 @@ export function PlaybackTools() {
         {(["A", "B", "C", "D", "E"] as const).map((group, index) => { const bpm = speedBpms[index]; return (
           <Button
             style={{ "--bpm": bpm } as CSSProperties}
-            className={`active ${state.speedGroup === group ? "selected" : ""}`}
+            className="active"
             key={group}
             onClick={() => tap(group)}
           >

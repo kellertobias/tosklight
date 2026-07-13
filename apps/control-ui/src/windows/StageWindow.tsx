@@ -21,6 +21,7 @@ import type { VisualizationSnapshot } from "../api/types";
 import { importStageAssets } from "./stageAssetImport";
 import { useApp } from "../state/AppContext";
 import { BUILT_IN_STAGE_ASSETS, type BuiltInStageAssetId } from "./builtInStageModels";
+import { WindowHeader, WindowSettings } from "../components/window-kit";
 
 const symbols = ["◉", "◈", "◎", "◐", "◇", "◍"];
 type Point = { x: number; y: number };
@@ -36,6 +37,7 @@ export function StageWindow({ compact, paneId, showGroupShortcuts, stageView, fo
   const lastFollowToggle = useRef(0);
   const followPreload = compact ? Boolean(paneFollowPreload) : dedicatedFollowPreload;
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
   const groupsVisible = compact ? Boolean(showGroupShortcuts) : state.stageGroupsVisible;
   const tauri =
     typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -331,55 +333,16 @@ export function StageWindow({ compact, paneId, showGroupShortcuts, stageView, fo
     <div className={`stage-window ${compact ? "compact" : ""}`}>
       <Input ref={assetInput} hidden type="file" accept=".glb,.stl,.3mf,.gdtf" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importAssets(file); event.currentTarget.value = ""; }} />
       {!compact && (
-        <header className="window-toolbar">
-          <div className="stage-selection-status">
-            <b>{server.selectedFixtures.length} selected</b>
-            <small>Tap to select · Shift for range · Control/Command tracks macro</small>
-          </div>
-          <h1 className="stage-centered-title">Stage</h1>
-          <span className="spacer" />
-          {mode === "setup" ? <Button onClick={() => assetInput.current?.click()}>Import scene</Button> : <Button className={followPreload ? "active" : ""} onClick={() => { const now = performance.now(); if (now - lastFollowToggle.current < 400) return; lastFollowToggle.current = now; setDedicatedFollowPreload((current) => !current); }}>Follow Preload</Button>}
-          <div className="button-group">
-            <Button
-              className={mode === "select" ? "active" : ""}
-              onClick={() => setMode("select")}
-            >
-              Select fixtures
-            </Button>
-            <Button
-              className={mode === "setup" ? "active" : ""}
-              onClick={() => setMode("setup")}
-            >
-              Setup positions
-            </Button>
-            <Button
-              className={mode === "navigate" ? "active" : ""}
-              onClick={() => setMode("navigate")}
-            >
-              Navigate
-            </Button>
-          </div>
-          <Button className={optionsOpen ? "active" : ""} onClick={() => setOptionsOpen((open) => !open)}>Options</Button>
-          {view === "3d" && mode === "setup" && (
-            <div className="stage-builtins">
-              <Select aria-label="Built-in stage element" value={builtInAssetId} onChange={(event) => setBuiltInAssetId(event.target.value as BuiltInStageAssetId)}>
-                {BUILT_IN_STAGE_ASSETS.map((asset) => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
-              </Select>
-              <Button onClick={() => void addBuiltInAsset()}>Add element</Button>
-            </div>
-          )}
-        </header>
+        <WindowHeader title="Stage" info={{ primary: `${server.selectedFixtures.length} selected`, secondary: "Tap to select · Shift for range · Control/Command tracks macro" }} actions={[[mode === "setup" ? { id: "import", label: "Import scene", onClick: () => assetInput.current?.click() } : { id: "follow", label: "Follow Preload", active: followPreload, onClick: () => { const now = performance.now(); if (now - lastFollowToggle.current < 400) return; lastFollowToggle.current = now; setDedicatedFollowPreload((current) => !current); } }],[{ id: "select", label: "Select fixtures", active: mode === "select", onClick: () => setMode("select") },{ id: "setup", label: "Setup positions", active: mode === "setup", onClick: () => setMode("setup") },{ id: "navigate", label: "Navigate", active: mode === "navigate", onClick: () => setMode("navigate") }], ...(view === "3d" && mode === "setup" ? [[{ id: "add", label: "Add element", onClick: () => void addBuiltInAsset() }]] : [])]} settings onSettings={(anchor) => { setSettingsAnchor(anchor.getBoundingClientRect()); setOptionsOpen(true); }} />
       )}
       {optionsOpen && !compact && (
-        <div className="stage-options-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) setOptionsOpen(false); }}>
-          <section className="stage-options-panel">
-            <header><h2>Stage Options</h2><Button onClick={() => setOptionsOpen(false)}>×</Button></header>
+        <WindowSettings modal={false} anchor={settingsAnchor} title="Stage Settings" onClose={() => setOptionsOpen(false)} tabs={[{ id: "stage", label: "Stage", content: <>
             <label><span>View</span><div className="button-group"><Button className={view === "2d" ? "active" : ""} onClick={() => setView("2d")}>2D</Button><Button disabled={!tauri} className={view === "3d" ? "active" : ""} onClick={() => setView("3d")}>3D</Button></div></label>
+            {view === "3d" && mode === "setup" && <label><span>Built-in element</span><Select aria-label="Built-in stage element" value={builtInAssetId} onChange={(event) => setBuiltInAssetId(event.target.value as BuiltInStageAssetId)}>{BUILT_IN_STAGE_ASSETS.map((asset) => <option key={asset.id} value={asset.id}>{asset.name}</option>)}</Select></label>}
             <label><span>Groups shortcuts</span><Input type="checkbox" checked={groupsVisible} onChange={(event) => dispatch({ type: "SET_STAGE_OPTIONS", groupsVisible: event.target.checked })}/></label>
             <label><span>Show Selection</span><Input type="checkbox" checked={state.stageShowSelection} onChange={(event) => dispatch({ type: "SET_STAGE_OPTIONS", showSelection: event.target.checked })}/></label>
             <label className="stage-brightness-option"><span>Environment brightness <b>{Math.round(state.stageEnvironmentBrightness * 100)}%</b></span><Input type="range" min="0" max="2" step="0.05" value={state.stageEnvironmentBrightness} onChange={(event) => dispatch({ type: "SET_STAGE_OPTIONS", environmentBrightness: Number(event.target.value) })}/></label>
-          </section>
-        </div>
+          </> }]} />
       )}
       {view === "3d" ? (
         <div className="stage-canvas stage-canvas-3d">

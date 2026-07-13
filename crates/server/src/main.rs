@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod default_show;
+mod help;
 
 use anyhow::Context;
 use axum::extract::ws::{Message, WebSocket};
@@ -634,6 +635,7 @@ async fn main() -> anyhow::Result<()> {
 
 fn router(state: AppState) -> Router {
     Router::new()
+        .merge(help::router::<AppState>())
         .route("/", get(operator_ui))
         .route("/assets/{*path}", get(operator_asset))
         .route("/api/v1/health", get(health))
@@ -794,7 +796,7 @@ async fn desk_boundary(State(state): State<AppState>, request: Request, next: Ne
     let Some(required) = &state.desk_token else {
         return next.run(request).await;
     };
-    if request.uri().path() == "/" || request.uri().path().starts_with("/assets/") {
+    if request.uri().path() == "/" || request.uri().path().starts_with("/assets/") || request.uri().path().starts_with("/api/v1/help/assets/") {
         return next.run(request).await;
     }
     let supplied_header = request
@@ -1733,7 +1735,7 @@ fn apply_mvr_to_store(store:&ShowStore,document:&light_mvr::MvrDocument,definiti
         let fixture_id=ids.get(&source.uuid).and_then(|id|Uuid::parse_str(id).ok()).map(light_core::FixtureId).unwrap_or_else(light_core::FixtureId::new);let (location,rotation)=mvr_transform(source.matrix);let mut universe=source.universe;let mut address=source.address;
         if let Some(MvrResolution::Address{universe:u,address:a})=resolutions.get(&source.uuid){universe=Some(*u);address=Some(*a);} if matches!(resolutions.get(&source.uuid),Some(MvrResolution::ImportUnpatched)){universe=None;address=None;}
         if let (Some(u),Some(a))=(universe,address){let end=a.saturating_add(definition.footprint.saturating_sub(1));let conflict=occupied.iter().find(|(eu,ea,ef,id)|*eu==u&&*id!=fixture_id.0.to_string()&&*ea<=end&&ea.saturating_add(ef.saturating_sub(1))>=a).cloned();if let Some((_,_,_,id))=conflict{if matches!(resolutions.get(&source.uuid),Some(MvrResolution::Replace)){store.delete_object("patched_fixture",&id).map_err(ApiError::store)?;occupied.retain(|item|item.3!=id);}else{universe=None;address=None;warnings.push(format!("{} imported unpatched because its requested address conflicts",source.name));}}}
-        let heads=definition.heads.iter().filter(|h|!h.shared).map(|h|light_fixture::PatchedHead{head_index:h.index,fixture_id:light_core::FixtureId::new()}).collect();let patched=light_fixture::PatchedFixture{fixture_id,name:source.name.clone(),definition:definition.clone(),universe,address,layer_id:source.layer.clone().unwrap_or_else(||"default".into()),direct_control:None,location,rotation,logical_heads:heads,multipatch:Vec::new()};
+        let heads=definition.heads.iter().filter(|h|!h.shared).map(|h|light_fixture::PatchedHead{head_index:h.index,fixture_id:light_core::FixtureId::new()}).collect();let patched=light_fixture::PatchedFixture{fixture_id,fixture_number:source.fixture_id.as_deref().and_then(|value|value.parse().ok()),name:source.name.clone(),definition:definition.clone(),universe,address,layer_id:source.layer.clone().unwrap_or_else(||"default".into()),direct_control:None,location,rotation,logical_heads:heads,multipatch:Vec::new()};
         let id=fixture_id.0.to_string();let current=existing_objects.iter().find(|o|o.id==id).map(|o|o.revision).unwrap_or(0);store.put_object("patched_fixture",&id,&serde_json::to_value(&patched).map_err(|e|ApiError::bad_request(e.to_string()))?,current).map_err(ApiError::store)?;let meta_current=metadata.iter().find(|o|o.id==source.uuid.to_string()).map(|o|o.revision).unwrap_or(0);store.put_object("mvr_fixture",&source.uuid.to_string(),&serde_json::json!({"fixture_id":id,"gdtf_spec":source.gdtf_spec,"gdtf_mode":source.gdtf_mode}),meta_current).map_err(ApiError::store)?;if let (Some(u),Some(a))=(universe,address){occupied.push((u,a,definition.footprint,id));}imported+=1;
     }
     let mut assets=Vec::new();for geometry in &document.geometry{if let Some(data)=document.files.get(&geometry.file_name.to_ascii_lowercase()){let encoded=STANDARD.encode(data);assets.push(serde_json::json!({"id":geometry.uuid,"mvrUuid":geometry.uuid,"name":geometry.name,"format":"glb","dataUrl":format!("data:model/gltf-binary;base64,{encoded}"),"position":{"x":geometry.matrix[9]/1000.0,"y":geometry.matrix[10]/1000.0,"z":geometry.matrix[11]/1000.0,"rotationX":0,"rotationY":0,"rotationZ":0},"scale":1}));}}
@@ -3035,6 +3037,43 @@ fn aligned_normalized(
     })
 }
 
+fn resolve_fixture_reference(
+    fixtures: &[light_fixture::PatchedFixture],
+    reference: &str,
+) -> Result<light_core::FixtureId, String> {
+    let (number, head_number) = match reference.split_once('.') {
+        Some((fixture, head)) => (
+            fixture.parse::<u32>().map_err(|_| "fixture number is invalid")?,
+            Some(head.parse::<u16>().map_err(|_| "head number is invalid")?),
+        ),
+        None => (
+            reference.parse::<u32>().map_err(|_| "fixture number is invalid")?,
+            None,
+        ),
+    };
+    if number == 0 || head_number == Some(0) {
+        return Err("fixture and head numbers start at 1".into());
+    }
+    let fixture = fixtures
+        .iter()
+        .find(|fixture| fixture.fixture_number == Some(number))
+        .or_else(|| {
+            fixtures
+                .get(number.saturating_sub(1) as usize)
+                .filter(|_| fixtures.iter().all(|fixture| fixture.fixture_number.is_none()))
+        })
+        .ok_or_else(|| format!("fixture {number} does not exist"))?;
+    match head_number {
+        None => Ok(fixture.fixture_id),
+        Some(head_number) => fixture
+            .logical_heads
+            .iter()
+            .find(|head| head.head_index + 1 == head_number)
+            .map(|head| head.fixture_id)
+            .ok_or_else(|| format!("fixture {number} has no head {head_number}")),
+    }
+}
+
 fn execute_programmer_command(
     state: &AppState,
     session: &Session,
@@ -3088,35 +3127,47 @@ fn execute_programmer_command(
     {
         return Err("expected FIXTURE or CHANNEL followed by a number".into());
     }
-    let first = tokens[1]
-        .parse::<usize>()
+    let snapshot = state.engine.snapshot();
+    let first_reference = tokens[1].as_str();
+    let first_number = first_reference
+        .split_once('.')
+        .map_or(first_reference, |(number, _)| number)
+        .parse::<u32>()
         .map_err(|_| "fixture number is invalid")?;
     let (last, at_index) = if tokens.get(2).is_some_and(|token| token == "THRU") {
         (
             tokens
                 .get(3)
                 .ok_or("THRU requires an ending fixture")?
-                .parse::<usize>()
+                .parse::<u32>()
                 .map_err(|_| "ending fixture number is invalid")?,
             4,
         )
     } else {
-        (first, 2)
+        (first_number, 2)
     };
-    if first == 0 || last < first {
+    if first_number == 0 || last < first_number {
         return Err("fixture range is invalid".into());
     }
-    let snapshot = state.engine.snapshot();
-    if last > snapshot.fixtures.len() {
-        return Err(format!(
-            "fixture {last} does not exist; patch contains {} fixtures",
-            snapshot.fixtures.len()
-        ));
-    }
-    let fixture_ids = snapshot.fixtures[first - 1..last]
-        .iter()
-        .map(|fixture| fixture.fixture_id)
-        .collect::<Vec<_>>();
+    let fixture_ids = if tokens.get(2).is_some_and(|token| token == "THRU") {
+        let ids = if snapshot.fixtures.iter().all(|fixture| fixture.fixture_number.is_none()) {
+            snapshot.fixtures
+                .get(first_number.saturating_sub(1) as usize..last as usize)
+                .unwrap_or_default()
+                .iter()
+                .map(|fixture| fixture.fixture_id)
+                .collect::<Vec<_>>()
+        } else {
+            snapshot.fixtures.iter().filter_map(|fixture| {
+                let number = fixture.fixture_number?;
+                (number >= first_number && number <= last).then_some(fixture.fixture_id)
+            }).collect::<Vec<_>>()
+        };
+        if ids.is_empty() { return Err(format!("no fixtures exist from {first_number} through {last}")); }
+        ids
+    } else {
+        vec![resolve_fixture_reference(&snapshot.fixtures, first_reference)?]
+    };
     if tokens.len() == at_index {
         state.programmers.select(session.id, fixture_ids.clone());
         state
@@ -3429,7 +3480,7 @@ fn osc_pressed(arguments:&[OscArgument])->bool { arguments.first().map(|v|match 
 fn remove_command_token(value: &str) -> String {
     let trimmed = value.trim_end();
     let Some(last) = trimmed.chars().next_back() else { return String::new(); };
-    if last.is_ascii_digit() || matches!(last, '.' | '-') {
+    if last.is_ascii_digit() || matches!(last, '.' | '-' | '+') {
         let end = trimmed.len() - last.len_utf8();
         return trimmed[..end].trim_end().to_string();
     }
@@ -3451,7 +3502,7 @@ fn handle_programmer_osc(state:&AppState,address:&str,arguments:&[OscArgument],s
         "backspace"=>{if let Some(p)=state.programmers.get(session.id){state.programmers.set_command_line(session.id,remove_command_token(&p.command_line));}},
         "preload"=>{state.programmers.activate_preload(session.id);},
         "escape"|"menu"|"prog-playback"|"record"=>emit(state,"desk_action",serde_json::json!({"desk_alias":parts[1],"session_id":session.id,"action":action,"source":"osc"})),
-        key=>{let token=match key{"grp"|"group"=>"GROUP","thru"=>"THRU","add"=>"ADD","at"=>"AT","dot"=>".","div"=>"DIV","set"=>"SET","rec"=>"RECORD",v if v.starts_with("digit-")=>&v[6..],v=>v};if let Some(p)=state.programmers.get(session.id){let separator=matches!(token,"GROUP"|"THRU"|"ADD"|"AT"|"DIV"|"SET"|"RECORD");state.programmers.set_command_line(session.id,if separator{format!("{} {token} ",p.command_line).split_whitespace().collect::<Vec<_>>().join(" ")+" "}else{format!("{}{token}",p.command_line)});}}
+        key=>{let token=match key{"grp"|"group"=>"GROUP","thru"=>"THRU","plus"|"add"=>"+","at"=>"AT","dot"=>".","div"=>"DIV","set"=>"SET","rec"=>"RECORD",v if v.starts_with("digit-")=>&v[6..],v=>v};if let Some(p)=state.programmers.get(session.id){let separator=matches!(token,"GROUP"|"THRU"|"+"|"AT"|"DIV"|"SET"|"RECORD");state.programmers.set_command_line(session.id,if separator{format!("{} {token} ",p.command_line).split_whitespace().collect::<Vec<_>>().join(" ")+" "}else{format!("{}{token}",p.command_line)});}}
     }
     let _=persist_programmer(state,&session);emit(state,"programmer_changed",serde_json::json!({"session_id":session.id}));
 }
@@ -3986,6 +4037,7 @@ mod tests {
                     name: "Media Server".into(),
                     layer_id: "default".into(),
                     fixture_id,
+                    fixture_number: None,
                     definition: light_fixture::FixtureDefinition {
                         schema_version: 1,
                         id: light_core::FixtureId::new(),
@@ -4549,6 +4601,7 @@ mod tests {
             name: "Media Server".into(),
             layer_id: "default".into(),
             fixture_id: physical,
+            fixture_number: None,
             definition: light_fixture::FixtureDefinition {
                 schema_version: 1,
                 id: light_core::FixtureId::new(),
@@ -5002,6 +5055,7 @@ mod tests {
                 name: name.clone(),
                 layer_id: "default".into(),
                 fixture_id: FixtureId::new(),
+                fixture_number: None,
                 definition: FixtureDefinition {
                     schema_version: 1,
                     id: FixtureId::new(),

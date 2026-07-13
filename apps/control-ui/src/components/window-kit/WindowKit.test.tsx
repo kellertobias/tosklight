@@ -1,0 +1,42 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { ButtonGrid, DataTable, GridButton, WindowHeader, WindowSettings } from ".";
+
+describe("window kit", () => {
+  it("renders two-line information, grouped actions, and Settings last", () => {
+    render(<WindowHeader title="Stage" info={{ primary: "1 selected", secondary: "Shift for range" }} actions={[[{ id: "one", label: "First", onClick: vi.fn() }],[{ id: "two", label: "Second", onClick: vi.fn() }]]} settings onSettings={vi.fn()} />);
+    expect(screen.getByText("Stage")).toBeInTheDocument();
+    expect(screen.getByText("Shift for range").tagName).toBe("SMALL");
+    expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual(["First", "Second", "⚙Settings"]);
+  });
+  it("switches settings tabs and closes", () => {
+    const close = vi.fn();
+    render(<WindowSettings title="Pane Settings" tabs={[{ id: "pane", label: "Pane Settings", content: "Size" },{ id: "pool", label: "Pool", content: "Family" }]} onClose={close} />);
+    fireEvent.click(screen.getByRole("button", { name: "Pool" }));
+    expect(screen.getByText("Family")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
+    expect(close).toHaveBeenCalledOnce();
+  });
+  it("renders built-in settings as an anchored popover without a backdrop", () => {
+    render(<WindowSettings modal={false} anchor={new DOMRect(900, 10, 90, 38)} title="Stage Settings" tabs={[{ id: "stage", label: "Stage", content: "Display" }]} onClose={() => undefined} />);
+    const dialog = screen.getByRole("dialog", { name: "Stage Settings" });
+    expect(dialog).toHaveClass("popover");
+    expect(dialog.closest(".ui-window-settings-backdrop")).toBeNull();
+  });
+  it("keeps selected and active rows independent and navigates empty rows", () => {
+    const active = vi.fn();
+    render(<DataTable rows={[{ id: "one" },{ id: "two" }]} columns={[{ id: "name", header: "Name", render: (row) => row.id }]} rowKey={(row) => row.id} selected={(row) => row.id === "two"} activeIndex={0} onActiveIndexChange={active} emptyRows={1} />);
+    const rows = screen.getAllByRole("row");
+    expect(rows[2]).toHaveClass("selected");
+    expect(rows[1]).toHaveClass("active");
+    fireEvent.keyDown(rows[2], { key: "ArrowDown" });
+    expect(active).toHaveBeenCalledWith(2);
+  });
+  it("exposes button grid states", () => {
+    render(<ButtonGrid><GridButton number="1" primary="Open" state="active"/><GridButton number="2" primary="Empty" state="empty"/><GridButton number="3" primary="Disabled" state="disabled"/><GridButton number="4" primary="Store" state="store-target"/></ButtonGrid>);
+    expect(screen.getByRole("button", { name: /Open/ })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: /Empty/ })).toHaveClass("empty");
+    expect(screen.getByRole("button", { name: /Disabled/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Store/ })).toHaveClass("store-target");
+  });
+});

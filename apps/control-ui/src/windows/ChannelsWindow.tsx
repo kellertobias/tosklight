@@ -6,6 +6,7 @@ import type { WindowProps } from "./windowTypes";
 import { fixtureValue } from "./fixtureVisualization";
 import { createPortal } from "react-dom";
 import { Button } from "../components/common";
+import { FaderView, WindowHeader } from "../components/window-kit";
 
 const PAGE_SIZE = 20;
 
@@ -36,8 +37,8 @@ export function ChannelsWindow({ compact }: WindowProps) {
   const pages = Math.max(8, Math.ceil(channels.length / PAGE_SIZE));
   const visible = Array.from({ length: PAGE_SIZE }, (_, index) => channels[page * PAGE_SIZE + index] ?? null);
   return <div className="channels-window">
-    <header className="window-toolbar"><h1>Channels · Intensity <small>Two-row channel bank</small></h1><span className="spacer" />{!compact && <div className="channel-page-controls"><Button aria-label="Previous channel page" disabled={page === 0} onClick={() => setPage(page - 1)}>←</Button><Button className="channel-page-current" onClick={() => setPagePickerOpen(true)}>{page * PAGE_SIZE + 1}–{(page + 1) * PAGE_SIZE}</Button><Button aria-label="Next channel page" disabled={page >= pages - 1} onClick={() => setPage(page + 1)}>→</Button></div>}</header>
-    <div className="channel-fader-bank">{visible.map((channel, index) => {
+    {!compact && <WindowHeader title="Channels" info={{ primary: "Intensity", secondary: "Two-row channel bank" }} actions={[[{ id: "previous", label: "←", disabled: page === 0, ariaLabel: "Previous channel page", onClick: () => setPage(page - 1) },{ id: "page", label: `${page * PAGE_SIZE + 1}–${(page + 1) * PAGE_SIZE}`, onClick: () => setPagePickerOpen(true) },{ id: "next", label: "→", disabled: page >= pages - 1, ariaLabel: "Next channel page", onClick: () => setPage(page + 1) }]]} />}
+    <FaderView rows={2} className="channel-fader-bank">{visible.map((channel, index) => {
       const number = page * PAGE_SIZE + index + 1;
       return <article className={`channel-fader ${channel ? "" : "empty"} ${channel && server.selectedFixtures.includes(channel.fixture.fixture_id) ? "selected" : ""}`} key={channel?.fixture.fixture_id ?? `empty-${number}`} onClick={() => channel && void server.setSelection([channel.fixture.fixture_id])}>
         <VerticalTouchFader
@@ -49,7 +50,7 @@ export function ChannelsWindow({ compact }: WindowProps) {
           onChange={(value) => channel && void server.setProgrammer(channel.fixture.fixture_id, "intensity", value / 100)}
         />
       </article>;
-    })}</div>
+    })}</FaderView>
     {pagePickerOpen && createPortal(<div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && setPagePickerOpen(false)}><div className="nested-modal channel-page-modal" role="dialog" aria-modal="true" aria-label="Channel pages"><Button className="modal-close" onClick={() => setPagePickerOpen(false)}>×</Button><h3>Channel pages</h3><div>{Array.from({ length: pages }, (_, nextPage) => <Button className={nextPage === page ? "active" : ""} key={nextPage} onClick={() => { setPage(nextPage); setPagePickerOpen(false); }}>{nextPage * PAGE_SIZE + 1}–{(nextPage + 1) * PAGE_SIZE}</Button>)}</div></div></div>, document.body)}
   </div>;
 }

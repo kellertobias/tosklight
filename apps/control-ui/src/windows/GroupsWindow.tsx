@@ -5,6 +5,7 @@ import { useServer } from "../api/ServerContext";
 import type { StoredGroup, VersionedObject } from "../api/types";
 import { useApp } from "../state/AppContext";
 import { Button, Input } from "../components/common";
+import { ButtonGrid, WindowHeader, WindowScrollArea } from "../components/window-kit";
 
 export function GroupsWindow({ compact }: WindowProps) {
   const server = useServer();
@@ -79,8 +80,8 @@ export function GroupsWindow({ compact }: WindowProps) {
 
   return (
     <div className="pool-window group-pool-window">
-      {!compact && <header className="window-toolbar"><h1>Group Pool <small>{server.selectedFixtures.length} fixtures selected · ordered</small></h1><span className="spacer" />{state.groupsReturnToStage && <Button onClick={() => dispatch({ type: "RETURN_TO_STAGE" })}>Back to Stage</Button>}<Button onClick={() => dispatch({ type: "OPEN_BUILTIN", kind: "presets" })}>Presets</Button></header>}
-      <div className="card-pool">
+      {!compact && <WindowHeader title="Group Pool" info={{ primary: `${server.selectedFixtures.length} fixtures selected`, secondary: "Ordered selection" }} actions={[[...(state.groupsReturnToStage ? [{ id: "stage", label: "Back to Stage", onClick: () => dispatch({ type: "RETURN_TO_STAGE" }) }] : [])],[{ id: "presets", label: "Presets", onClick: () => dispatch({ type: "OPEN_BUILTIN", kind: "presets" }) }]]} />}
+      <WindowScrollArea><ButtonGrid className="card-pool">
         {cards.map((group, index) => (
           <GroupCard
             key={index + 1}
@@ -106,12 +107,9 @@ export function GroupsWindow({ compact }: WindowProps) {
               void server.storeGroup(String(index + 1), `Group ${index + 1}`);
               dispatch({ type: "SET_STORE_ARMED", value: false });
             }}
-            setMaster={(value) =>
-              group && void server.setGroupMaster(group.id, value)
-            }
           />
         ))}
-      </div>
+      </ButtonGrid></WindowScrollArea>
       {contextual && (
         <div className="group-context-menu">
           <h3>{contextual.body.name ?? `Group ${contextual.id}`}</h3>
@@ -126,6 +124,7 @@ export function GroupsWindow({ compact }: WindowProps) {
                   .join(" · ")
               : "empty"}
           </small>
+          <label className="group-context-master">Master <strong>{Math.round((contextual.body.master ?? 1) * 100)}%</strong><Input aria-label={`${contextual.body.name ?? `Group ${contextual.id}`} master`} type="range" min="0" max="100" value={(contextual.body.master ?? 1) * 100} onChange={(event) => void server.setGroupMaster(contextual.id, Number(event.target.value) / 100)}/></label>
           <Button
             onClick={() => {
               void server.selectGroup(contextual.id);
@@ -209,7 +208,6 @@ function GroupCard({
   cancelHold,
   openContext,
   select,
-  setMaster,
 }: {
   group: VersionedObject<StoredGroup> | null;
   index: number;
@@ -221,7 +219,6 @@ function GroupCard({
   cancelHold: () => void;
   openContext: () => void;
   select: () => void;
-  setMaster: (value: number) => void;
 }) {
   const missing =
     group?.body.fixtures.filter((fixture) => !patched.has(fixture)).length ?? 0;
@@ -237,12 +234,8 @@ function GroupCard({
         ).length,
       0,
     ) ?? 0;
-  return (
-    <article
-      className={`group-card-shell ${group?.body.derived_from ? "derived" : ""} ${group?.body.frozen_from ? "frozen" : ""}`}
-    >
-      <Button
-        className={`group-card pool-cell ${selected ? "selected" : !group || !group.body.fixtures.length ? "empty" : ""} ${storeArmed && !group ? "store-target" : ""}`}
+  return <Button
+        className={`group-card pool-cell ${group?.body.derived_from ? "derived" : ""} ${group?.body.frozen_from ? "frozen" : ""} ${selected ? "selected" : !group || !group.body.fixtures.length ? "empty" : ""} ${storeArmed && !group ? "store-target" : ""}`}
         onPointerDown={beginHold}
         onPointerUp={cancelHold}
         onPointerCancel={cancelHold}
@@ -279,21 +272,5 @@ function GroupCard({
             <small>{storeArmed ? "Tap to record empty group" : "Press Record to use this slot"}</small>
           </>
         )}
-      </Button>
-      {group && (
-        <label className="group-master">
-          Fader {group.body.playback_fader ?? "—"} · Master{" "}
-          <strong>{Math.round((group.body.master ?? 1) * 100)}%</strong>
-          <Input
-            aria-label={`${group.body.name ?? `Group ${index + 1}`} master`}
-            type="range"
-            min="0"
-            max="100"
-            value={(group.body.master ?? 1) * 100}
-            onChange={(event) => setMaster(Number(event.target.value) / 100)}
-          />
-        </label>
-      )}
-    </article>
-  );
+      </Button>;
 }

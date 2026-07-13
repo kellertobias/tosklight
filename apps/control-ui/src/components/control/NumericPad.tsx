@@ -28,6 +28,7 @@ export function NumericPad() {
       return;
     }
     if (key === "SET" && state.builtIn === "patch") return dispatch({ type: "SET_PATCH_ARMED", value: !state.patchSetArmed });
+    if (key === "SET" && (state.builtIn === "presets" || state.desks.find((desk) => desk.id === state.activeDeskId)?.panes.some((pane) => pane.kind === "presets"))) return dispatch({ type: "SET_PRESET_SET_ARMED", value: !state.presetSetArmed });
     if (key === "ENTER") { setClearStage(0); return void server.executeCommandLine(); }
     const commandKey = key === "GRP" ? "GROUP" : key;
     const token = ["AT", "FULL", "THRU", "GROUP", "SET", "DIV"].includes(commandKey) ? ` ${commandKey} ` : commandKey;
@@ -36,7 +37,7 @@ export function NumericPad() {
   };
   return <div className="numeric-pad">{keys.map((key) => <Button
     onClick={() => press(key)}
-    className={`${["AT", "FULL", "THRU", "GRP", "SET", "DIV", "CLEAR"].includes(key) ? "action" : key === "ENTER" ? "enter" : ""} ${key === "SET" && state.builtIn === "patch" && state.patchSetArmed ? "patch-set-armed" : key === "CLEAR" ? `clear ${clearClass}` : ""}`}
+    className={`${["AT", "FULL", "THRU", "GRP", "SET", "DIV", "CLEAR"].includes(key) ? "action" : key === "ENTER" ? "enter" : ""} ${key === "SET" && ((state.builtIn === "patch" && state.patchSetArmed) || state.presetSetArmed) ? "patch-set-armed" : key === "CLEAR" ? `clear ${clearClass}` : ""}`}
     key={key}
   >{key}</Button>)}</div>;
 }

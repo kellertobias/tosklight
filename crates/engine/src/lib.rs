@@ -663,6 +663,7 @@ mod tests {
         (
             PatchedFixture {
                 fixture_id: physical,
+                fixture_number: None,
                 name: "Cell".into(),
                 layer_id: "default".into(),
                 definition: FixtureDefinition {
@@ -932,6 +933,7 @@ mod tests {
         };
         let fixture = PatchedFixture {
             fixture_id: physical,
+            fixture_number: None,
             name: "Two cell".into(),
             layer_id: "default".into(),
             definition: FixtureDefinition {

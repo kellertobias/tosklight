@@ -13,7 +13,8 @@ export type BuiltInWindow =
   | "channels"
   | "dmx"
   | "patch"
-  | "setup";
+  | "setup"
+  | "help";
 
 export type ControlMode = "programmer" | "playbacks";
 export type DockMode = "desks" | "builtins";
@@ -36,6 +37,8 @@ export interface PaneModel extends GridRect {
   showGroupShortcuts?: boolean;
   stageView?: StageView;
   followPreload?: boolean;
+  presetFamily?: AppState["presetFamily"];
+  presetPoolColors?: boolean;
 }
 
 export interface DeskModel {
@@ -94,6 +97,8 @@ export interface AppState {
   playbackPage: number;
   playbackPageNames: string[];
   presetFamily: "All" | "Intensity" | "Color" | "Position" | "Beam";
+  presetPoolColors: boolean;
+  presetSetArmed: boolean;
   setupOpen: boolean;
   specialDialogsOpen: boolean;
   specialDialogFamily: "Color" | "Position" | "Beam" | "Shapers" | "Control" | "Dynamics";
@@ -129,6 +134,7 @@ export interface WindowSettings {
   builtIn: BuiltInWindow | null;
   lastBuiltIn: BuiltInWindow;
   presetFamily: AppState["presetFamily"];
+  presetPoolColors: boolean;
   playbackColumns: number;
   playbackRows: number;
   playbackPage: number;

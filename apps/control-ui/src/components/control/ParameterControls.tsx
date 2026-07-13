@@ -181,12 +181,12 @@ export function ParameterControls() {
           </div>
         ) : (
           <>{encoderSlots.map((attribute, index) => {
-            if (!attribute) return <div className="parameter-placeholder" aria-label={`Encoder ${index + 1} unassigned`} key={`empty-${index}`}><span>Encoder {index + 1}</span><small>Unassigned</small></div>;
+            if (!attribute) return <div className="parameter-placeholder" aria-label={`Encoder ${index + 1} unassigned`} key={`empty-${index}`}><span>Enc {index + 1}</span><small>Unassigned</small></div>;
             const value = values.get(attribute) ?? 0;
             return (
               <VerticalTouchFader
                 key={attribute}
-                label={labels[attribute] ?? attribute.replaceAll(".", " ")}
+                label={`Enc ${index + 1} · ${labels[attribute] ?? attribute.replaceAll(".", " ")}`}
                 value={value * 100}
                 display={`${Math.round(value * 100)}%`}
                 accentColor={attribute === "color.red" ? "#ff3d45" : attribute === "color.green" ? "#35d568" : attribute === "color.blue" ? "#378eff" : attribute === "color.white" ? "#ffffff" : attribute === "color.amber" ? "#ffb30f" : attribute === "color.uv" ? "#9a55ff" : undefined}

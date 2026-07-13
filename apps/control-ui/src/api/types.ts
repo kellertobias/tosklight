@@ -12,6 +12,10 @@ export interface ShowEntry {
   updated_at: string;
 }
 
+export interface HelpTopicSummary { id: string; title: string }
+export interface HelpCatalog { topics: HelpTopicSummary[]; errors: string[]; live: boolean }
+export interface HelpTopic { id: string; title: string; markdown: string; live: boolean }
+
 export interface MvrImportPreview {
   token: string;
   fixtures: Array<{ uuid: string; name: string; gdtf_spec: string; gdtf_mode: string; universe: number | null; address: number | null; matched: boolean }>;
@@ -80,6 +84,7 @@ export interface ScreenSnapshot { screens: ScreenConfiguration[]; active_pages: 
 
 export interface PatchedFixture {
   fixture_id: string;
+  fixture_number?: number | null;
   name?: string;
   universe: number | null;
   address: number | null;
@@ -188,7 +193,7 @@ export interface PlaybackSnapshot {
   cue_lists: CueList[];
   pool: PlaybackDefinition[];
   pages: PlaybackPage[];
-  active: Array<{ playback_number?: number | null; cue_list_id: string; cue_index: number; paused: boolean; master: number; flash: boolean }>;
+  active: Array<{ playback_number?: number | null; cue_list_id: string; cue_index: number; previous_index?: number | null; paused: boolean; activated_at?: string; master: number; flash: boolean }>;
   desk: ControlDesk;
   active_page: number;
 }

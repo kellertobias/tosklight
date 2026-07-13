@@ -10,6 +10,8 @@ import type {
   ScreenSnapshot,
   ShowEntry,
   VersionedObject,
+  HelpCatalog,
+  HelpTopic,
 } from "./types";
 
 type EventListener = (event: ServerEvent) => void;
@@ -50,6 +52,9 @@ export class LightApiClient {
   private deskToken = browserStorage()?.getItem("light.desk-token") ?? "";
 
   constructor(private readonly baseUrl = defaultServerUrl()) {}
+
+  helpCatalog(): Promise<HelpCatalog> { return this.request("/api/v1/help", {}, false); }
+  helpTopic(id: string): Promise<HelpTopic> { return this.request(`/api/v1/help/topics/${encodeURIComponent(id)}`, {}, false); }
 
   get currentSession() { return this.session; }
   restoreSession(session: SessionResponse) { this.session = session; }

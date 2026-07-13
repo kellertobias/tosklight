@@ -8,6 +8,7 @@ import { removeCommandToken } from "./commandLineEditing";
 export function CommandLineBar() {
   const { state, dispatch } = useApp();
   const server = useServer();
+  const hardware = Boolean(server.bootstrap?.hardware_connected || state.midiProfile);
   const [completed, setCompleted] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(null);
   const [persistentError, setPersistentError] = useState<string | null>(null);
@@ -121,7 +122,7 @@ export function CommandLineBar() {
         onKeyDown={(event) => {
           if (event.key === "Enter") void execute();
         }}
-      /><Button className="command-escape" onClick={() => replaceCommand("")}>ESC</Button>
+      />{!hardware && <Button className="command-escape" onClick={() => replaceCommand("")}>ESC</Button>}
         <Button className={`command-status ${server.status}`} title="Open output and timecode controls" onClick={() => dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: true })}>
           <span className={state.blackout ? "blackout-status" : ""}>{state.blackout ? <><i>DMX {server.bootstrap?.frame_rate_hz ?? "—"}Hz</i><b>BLACKOUT</b></> : <>DMX {server.bootstrap?.frame_rate_hz ?? "—"}Hz</>}</span>
           <span>{server.bootstrap?.active_timecode ?? "No timecode"}</span>

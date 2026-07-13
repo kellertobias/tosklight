@@ -7,14 +7,15 @@ import type { VisualizationSnapshot } from "../api/types";
 import { GroupStrip } from "../components/shared/GroupStrip";
 import { useApp } from "../state/AppContext";
 import { fixtureTargetIds, fixtureValue } from "./fixtureVisualization";
-import { GroupsPoolButton } from "../components/shared/GroupsPoolButton";
-import { Button } from "../components/common";
+import { DataTable, WindowHeader, WindowScrollArea, WindowSettings, type DataTableColumn } from "../components/window-kit";
+import { Input } from "../components/common";
 
 export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps) {
   const server = useServer();
   const { state, dispatch } = useApp();
   const [visualization, setVisualization] = useState<VisualizationSnapshot | null>(null);
   const [preloadVisualization, setPreloadVisualization] = useState<VisualizationSnapshot | null>(null);
+  const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
   const groupsVisible = compact ? Boolean(showGroupShortcuts) : state.fixtureGroupsVisible;
   useEffect(() => {
     let cancelled = false;
@@ -44,8 +45,8 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
       const color = `rgb(${Math.round(red * 255)}, ${Math.round(green * 255)}, ${Math.round(blue * 255)})`;
       return ({
       ...base,
-      id: index + 1,
-      name: patched.definition.name ?? patched.definition.model,
+      id: patched.fixture_number ?? index + 1,
+      name: patched.name || patched.definition.name || patched.definition.model,
       type: `${patched.definition.manufacturer} · ${patched.definition.mode} · U${patched.universe}.${patched.address}`,
       fixtureId: patched.fixture_id,
       dimmer: Math.round(intensity * 100),
@@ -82,104 +83,23 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
         preloadDimmer: null, preloadColor: null, preloadPan: null, preloadTilt: null,
       }));
   const visible = compact ? rows.slice(0, 12) : rows;
+  const [activeRow, setActiveRow] = useState(0);
+  type Row = (typeof visible)[number];
+  const columns: DataTableColumn<Row>[] = [
+    { id: "id", header: "ID", width: "50px", render: (fixture) => fixture.id },
+    { id: "name", header: "Name / type", width: "minmax(190px,1.4fr)", render: (fixture) => <span className="fixture-name"><b>{fixture.name}</b><small>{fixture.type}</small>{fixture.limitingGroups.length > 0 && <em title={fixture.limitingGroups.map((group) => `${group.body.name}: ${Math.round((group.body.master ?? 1) * 100)}%`).join(", ")}>◒ Group master {Math.round(Math.max(...fixture.limitingGroups.map((group) => group.body.master ?? 1)) * 100)}%</em>}</span> },
+    { id: "dimmer", header: "Dimmer", width: "minmax(95px,.7fr)", render: (fixture) => <SourceValue source={fixture.sources.dimmer}><i className="vertical-meter"><i style={{ height: `${fixture.dimmer}%` }} /></i>{fixture.dimmer}%{fixture.preloadDimmer != null && <small className="preload-value">→ {fixture.preloadDimmer}%</small>}</SourceValue> },
+    { id: "color", header: "Color", width: "minmax(105px,1fr)", render: (fixture) => <SourceValue source={fixture.sources.color}><i className="color-dot" style={{ background: fixture.color }} />{fixture.colorLabel}{fixture.preloadColor && <small className="preload-value"><i className="color-dot" style={{ background: fixture.preloadColor }} /> Preload</small>}</SourceValue> },
+    { id: "position", header: "Position", width: "minmax(145px,1.25fr)", render: (fixture) => <SourceValue source={fixture.sources.position}><i className="position-glyph"><i style={{ left: `${fixture.pan % 75}%`, top: `${fixture.tilt % 65}%` }} /></i>{fixture.positionLabel ?? `${fixture.pan}° / ${fixture.tilt}°`}{fixture.preloadPan != null && fixture.preloadTilt != null && <small className="preload-value">→ {fixture.preloadPan} / {fixture.preloadTilt}</small>}</SourceValue> },
+    { id: "beam", header: "Beam", width: "minmax(80px,.8fr)", render: (fixture) => <SourceValue source={fixture.sources.beam}>{fixture.beam}</SourceValue> },
+    { id: "focus", header: "Focus", width: "minmax(80px,.8fr)", render: (fixture) => <SourceValue source={fixture.sources.focus}>{fixture.focus}</SourceValue> },
+  ];
   return (
     <div className="fixture-window">
-      {!compact && <header className="window-toolbar">
-        <h1>
-          Fixture Sheet{" "}
-          {!compact && <small>{server.selectedFixtures.length} selected</small>}
-        </h1>
-        <span className="source-legend">
-          <i className="source-programmer">● Programmer</i>
-          <i className="source-playback">● Playback</i>
-          <i className="source-default">● Default</i>
-        </span>
-        <span className="spacer" />
-        {!compact && (
-          <div className="button-group">
-            <GroupsPoolButton shortcutsVisible={groupsVisible} onToggleShortcuts={() => dispatch({type:"SET_BUILTIN_GROUPS_VISIBLE",window:"fixtures",value:!groupsVisible})} />
-          </div>
-        )}
-      </header>}
-      <div className="fixture-table">
-        <div className="fixture-row fixture-head">
-          <span>ID</span>
-          <span>Name / type</span>
-          <span>Dimmer</span>
-          <span>Color</span>
-          <span>Position</span>
-          <span>Beam</span>
-          <span>Focus</span>
-        </div>
-        {visible.map((fixture) => (
-          <div className={`fixture-row-shell ${fixture.fixtureId && server.selectedFixtures.includes(fixture.fixtureId) ? "selected" : ""}`} key={fixture.fixtureId || fixture.id}>
-          <Button
-            onClick={() =>
-              fixture.fixtureId && void server.setSelection([fixture.fixtureId])
-            }
-            className="fixture-row"
-          >
-            <span>{fixture.id}</span>
-            <span className="fixture-name">
-              <b>{fixture.name}</b>
-              <small>{fixture.type}</small>
-              {fixture.limitingGroups.length > 0 && (
-                <em
-                  title={fixture.limitingGroups
-                    .map(
-                      (group) =>
-                        `${group.body.name}: ${Math.round((group.body.master ?? 1) * 100)}%`,
-                    )
-                    .join(", ")}
-                >
-                  ◒ Group master{" "}
-                  {Math.round(
-                    Math.max(
-                      ...fixture.limitingGroups.map(
-                        (group) => group.body.master ?? 1,
-                      ),
-                    ) * 100,
-                  )}
-                  %
-                </em>
-              )}
-            </span>
-            <SourceValue source={fixture.sources.dimmer}>
-              <i className="vertical-meter">
-                <i style={{ height: `${fixture.dimmer}%` }} />
-              </i>
-              {fixture.dimmer}%
-              {fixture.preloadDimmer != null && <small className="preload-value">→ {fixture.preloadDimmer}%</small>}
-            </SourceValue>
-            <SourceValue source={fixture.sources.color}>
-              <i className="color-dot" style={{ background: fixture.color }} />
-              {fixture.colorLabel}
-              {fixture.preloadColor && <small className="preload-value"><i className="color-dot" style={{ background: fixture.preloadColor }} /> Preload</small>}
-            </SourceValue>
-            <SourceValue source={fixture.sources.position}>
-              <i className="position-glyph">
-                <i
-                  style={{
-                    left: `${fixture.pan % 75}%`,
-                    top: `${fixture.tilt % 65}%`,
-                  }}
-                />
-              </i>
-              {fixture.positionLabel ?? `${fixture.pan}° / ${fixture.tilt}°`}
-              {fixture.preloadPan != null && fixture.preloadTilt != null && <small className="preload-value">→ {fixture.preloadPan} / {fixture.preloadTilt}</small>}
-            </SourceValue>
-            <SourceValue source={fixture.sources.beam}>
-              {fixture.beam}
-            </SourceValue>
-            <SourceValue source={fixture.sources.focus}>
-              {fixture.focus}
-            </SourceValue>
-          </Button>
-          </div>
-        ))}
-        {Array.from({ length: Math.max(0, (compact ? 12 : 24) - visible.length) }, (_, index) => <div className="fixture-row fixture-empty-row" aria-hidden="true" key={`empty-row-${index}`}><span>{visible.length + index + 1}</span><span /><span /><span /><span /><span /><span /></div>)}
-      </div>
+      {!compact && <WindowHeader title="Fixture Sheet" info={{ primary: `${server.selectedFixtures.length} selected`, secondary: "Programmer · Playback · Default" }} settings onSettings={(anchor) => setSettingsAnchor(anchor.getBoundingClientRect())} />}
+      <WindowScrollArea className="fixture-table"><DataTable columns={columns} rows={visible} rowKey={(fixture) => fixture.fixtureId || String(fixture.id)} selected={(fixture) => Boolean(fixture.fixtureId && server.selectedFixtures.includes(fixture.fixtureId))} activeIndex={activeRow} onActiveIndexChange={setActiveRow} onActivate={(fixture) => fixture.fixtureId && void server.setSelection([fixture.fixtureId])} /></WindowScrollArea>
       {groupsVisible && <GroupStrip />}
+      {settingsAnchor && <WindowSettings modal={false} anchor={settingsAnchor} title="Fixture Sheet Settings" onClose={() => setSettingsAnchor(null)} tabs={[{ id: "groups", label: "Groups", content: <label className="pane-option-toggle"><Input type="checkbox" checked={groupsVisible} onChange={(event) => dispatch({ type: "SET_BUILTIN_GROUPS_VISIBLE", window: "fixtures", value: event.target.checked })}/> Enable group shortcuts</label> }]} />}
     </div>
   );
 }

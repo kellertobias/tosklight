@@ -3,7 +3,7 @@ import { useApp } from "../../state/AppContext";
 import { useServer } from "../../api/ServerContext";
 import { VerticalTouchFader } from "../control/VerticalTouchFader";
 import { moveLampPositions, resolveLampPositions } from "./specialPosition";
-import { Button, Input } from "../common";
+import { Button } from "../common";
 
 function hsvToRgb(h: number, s: number, v: number) {
   const i = Math.floor(h * 6),
@@ -151,7 +151,7 @@ export function SpecialDialogsModal() {
         if (event.target === event.currentTarget) close();
       }}
     >
-      <section className="modal-card special-dialog-card">
+      <section className={`modal-card special-dialog-card ${family === "Position" ? "position-special-dialog" : ""}`}>
         <Button className="modal-close" onClick={close}>
           ×
         </Button>
@@ -176,10 +176,8 @@ export function SpecialDialogsModal() {
                 onLostPointerCapture={releasePosition}
               >
                 <i className="joystick-handle" style={{ left: `${50 + joystick.current.x * 38}%`, top: `${50 + joystick.current.y * 38}%` }} />
-                <span>
-                  Relative move · avg Pan {Math.round(pan * 100)}% · Tilt {Math.round(tilt * 100)}%
-                </span>
               </div>
+              <span className="position-trackball-readout">Relative move<br/><b>Avg Pan {Math.round(pan * 100)}%</b><b>Avg Tilt {Math.round(tilt * 100)}%</b></span>
             </div>
           )}
           {family === "Color" && (
@@ -204,22 +202,7 @@ export function SpecialDialogsModal() {
                   }}
                 />
               </div>
-              <label className="brightness-control">Brightness
-              <Input
-                className="brightness-slider"
-                aria-label="Brightness"
-                type="range"
-                min="0"
-                max="1"
-                step=".001"
-                value={brightness}
-                onChange={(event) => {
-                  const value = Number(event.target.value);
-                  setBrightness(value);
-                  void applyColor(hue, saturation, value);
-                }}
-              />
-              </label>
+              <div className="brightness-control"><span>Brightness</span><Button aria-label="Decrease brightness" onClick={() => { const value = Math.max(0, brightness - .05); setBrightness(value); void applyColor(hue, saturation, value); }}>−</Button><b>{Math.round(brightness * 100)}%</b><Button aria-label="Increase brightness" onClick={() => { const value = Math.min(1, brightness + .05); setBrightness(value); void applyColor(hue, saturation, value); }}>+</Button></div>
               <strong style={{ color: swatch }}>{swatch}</strong>
             </div>
           )}

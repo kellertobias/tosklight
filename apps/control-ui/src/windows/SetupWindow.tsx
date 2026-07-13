@@ -6,6 +6,7 @@ import { configuredServerUrl } from "../api/LightApiClient";
 import { FixtureLibrarySetup } from "../components/setup/FixtureLibrarySetup";
 import { ScreensSetup } from "../components/setup/ScreensSetup";
 import { Button, Input } from "../components/common";
+import { WindowHeader } from "../components/window-kit";
 
 const sections = [
   "Shows & recovery",
@@ -35,15 +36,7 @@ export function SetupWindow(_: WindowProps) {
 
   return (
     <div className="setup-window">
-      <header className="window-toolbar">
-        <h1>{section === 6 ? <>Fixture library <small>{server.fixtureLibrary.length} modes</small></> : "Desk Setup"}</h1>
-        <span className="spacer" />
-        {restartRequired && <small className="warning">Restart required</small>}
-        <span id="setup-section-actions" className="setup-section-actions" />
-        <Button disabled={!draft} onClick={() => void save()}>
-          Save changes
-        </Button>
-      </header>
+      <WindowHeader title={section === 6 ? "Fixture library" : "Desk Setup"} info={{ primary: section === 6 ? `${server.fixtureLibrary.length} modes` : sections[section], secondary: restartRequired ? "Restart required" : undefined }} actions={[[{ id: "save", label: "Save changes", disabled: !draft, onClick: () => void save() }]]} />
       <div>
         <nav>
           {sections.map((name, index) => (

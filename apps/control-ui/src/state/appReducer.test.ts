@@ -126,4 +126,26 @@ describe("appReducer", () => {
     const legacy = appReducer(initialState, { type: "HYDRATE_LAYOUT", desks: initialState.desks, activeDeskId: initialState.activeDeskId });
     expect(legacy.stageView).toBe(initialState.stageView);
   });
+
+  it("persists preset family independently on a preset pane and migrates legacy panes", () => {
+    const desks = [{ id: "test", name: "Test", panes: [{ id: "pool", kind: "presets" as const, title: "Presets", x: 1, y: 1, width: 6, height: 6 }] }];
+    const hydrated = appReducer(initialState, { type: "HYDRATE_LAYOUT", desks, activeDeskId: "test" });
+    expect(hydrated.desks[0].panes[0].presetFamily).toBe("All");
+    const color = appReducer(hydrated, { type: "SET_PANE_PRESET_FAMILY", id: "pool", family: "Color" });
+    expect(color.desks[0].panes[0].presetFamily).toBe("Color");
+    expect(color.presetFamily).toBe("All");
+  });
+
+  it("migrates the legacy Programming preset pane to the all-presets pool", () => {
+    const desks = [{ id: "programming", name: "Programming", panes: [{ id: "presets", kind: "presets" as const, title: "Color & Position Presets", x: 1, y: 1, width: 9, height: 18, presetFamily: "Position" as const }] }];
+    const hydrated = appReducer(initialState, { type: "HYDRATE_LAYOUT", desks, activeDeskId: "programming" });
+    expect(hydrated.desks[0].panes[0]).toMatchObject({ title: "All Presets", presetFamily: "All" });
+  });
+
+  it("keeps pool colors and Set configuration mode independently configurable", () => {
+    const plain = appReducer(initialState, { type: "SET_PRESET_POOL_COLORS", value: false });
+    expect(plain.presetPoolColors).toBe(false);
+    const armed = appReducer(plain, { type: "SET_PRESET_SET_ARMED", value: true });
+    expect(armed.presetSetArmed).toBe(true);
+  });
 });

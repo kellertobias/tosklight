@@ -111,6 +111,7 @@ fn sunstrip_definition() -> FixtureDefinition {
 
 fn patched(
     name: String,
+    fixture_number: u32,
     definition: &FixtureDefinition,
     address: u16,
     x: f32,
@@ -120,6 +121,7 @@ fn patched(
 ) -> PatchedFixture {
     PatchedFixture {
         fixture_id: FixtureId::new(),
+        fixture_number: Some(fixture_number),
         name,
         definition: definition.clone(),
         universe: Some(1),
@@ -225,11 +227,18 @@ pub fn initialise(path: impl AsRef<Path>) -> Result<light_core::ShowId, StoreErr
         "strobe",
         &["intensity", "color.red", "color.green", "color.blue"],
     );
+    let scanner = definition(
+        "Trackspot Mirror Scanner",
+        "scanner",
+        &["intensity", "pan", "tilt"],
+    );
+    let hazer = definition("Hazer", "hazer", &["fog", "fan"]);
     let mut fixtures = Vec::new();
     let mut address = 1_u16;
     for (index, x) in [-5.0, -4.0, -3.0, 3.0, 4.0, 5.0].into_iter().enumerate() {
         fixtures.push(patched(
             format!("Front Fresnel {}", index + 1),
+            1 + index as u32,
             &fresnel,
             address,
             x,
@@ -245,6 +254,7 @@ pub fn initialise(path: impl AsRef<Path>) -> Result<light_core::ShowId, StoreErr
     {
         fixtures.push(patched(
             format!("Back Profile {}", index + 1),
+            101 + index as u32,
             &profile,
             address,
             x,
@@ -257,6 +267,7 @@ pub fn initialise(path: impl AsRef<Path>) -> Result<light_core::ShowId, StoreErr
     for (index, x) in [-4.5, -2.25, 0.0, 2.25, 4.5].into_iter().enumerate() {
         fixtures.push(patched(
             format!("Back LED Wash {}", index + 1),
+            201 + index as u32,
             &wash,
             address,
             x,
@@ -269,6 +280,7 @@ pub fn initialise(path: impl AsRef<Path>) -> Result<light_core::ShowId, StoreErr
     for (index, x) in [-5.0, -3.0, -1.0, 1.0, 3.0, 5.0].into_iter().enumerate() {
         fixtures.push(patched(
             format!("Back RGB Sunstrip {}", index + 1),
+            501 + index as u32,
             &sunstrip,
             address,
             x,
@@ -281,6 +293,7 @@ pub fn initialise(path: impl AsRef<Path>) -> Result<light_core::ShowId, StoreErr
     for (index, x) in [-2.1, -0.7, 0.7, 2.1].into_iter().enumerate() {
         fixtures.push(patched(
             format!("Front RGB Strobe {}", index + 1),
+            601 + index as u32,
             &strobe,
             address,
             x,
@@ -293,6 +306,7 @@ pub fn initialise(path: impl AsRef<Path>) -> Result<light_core::ShowId, StoreErr
     for (index, x) in [-5.0, -3.0, -1.0, 1.0, 3.0, 5.0].into_iter().enumerate() {
         fixtures.push(patched(
             format!("Floor RGBW PAR {}", index + 1),
+            401 + index as u32,
             &par,
             address,
             x,
@@ -305,6 +319,7 @@ pub fn initialise(path: impl AsRef<Path>) -> Result<light_core::ShowId, StoreErr
     for (index, x) in [-5.0, -3.0, -1.0, 1.0, 3.0, 5.0].into_iter().enumerate() {
         fixtures.push(patched(
             format!("Floor RGBW PAR {}", index + 7),
+            407 + index as u32,
             &par,
             address,
             x,
@@ -316,6 +331,7 @@ pub fn initialise(path: impl AsRef<Path>) -> Result<light_core::ShowId, StoreErr
     }
     let mut middle_acl = patched(
         "Middle ACL Set".into(),
+        28,
         &acl,
         address,
         -1.4,
@@ -349,6 +365,7 @@ pub fn initialise(path: impl AsRef<Path>) -> Result<light_core::ShowId, StoreErr
     ];
     let mut outside_acl = patched(
         "Outside ACL Set".into(),
+        29,
         &acl,
         address,
         outside_positions[0].0,
@@ -378,6 +395,7 @@ pub fn initialise(path: impl AsRef<Path>) -> Result<light_core::ShowId, StoreErr
     ];
     let mut rgb_grid = patched(
         "Overhead RGB Multi-patch".into(),
+        999,
         &rgb_multipatch,
         address,
         rgb_positions[0].0,
@@ -392,6 +410,30 @@ pub fn initialise(path: impl AsRef<Path>) -> Result<light_core::ShowId, StoreErr
         .map(|(index, (x, y))| multipatch(format!("Overhead RGB {}", index + 1), x, y, 5.2, 0.0))
         .collect();
     fixtures.push(rgb_grid);
+    address += rgb_multipatch.footprint;
+    for (index, x) in [-4.5, -1.5, 1.5, 4.5].into_iter().enumerate() {
+        fixtures.push(patched(
+            format!("Back Trackspot {}", index + 1),
+            301 + index as u32,
+            &scanner,
+            address,
+            x,
+            6.15,
+            3.25,
+            0.0,
+        ));
+        address += scanner.footprint;
+    }
+    fixtures.push(patched(
+        "Stage Hazer".into(),
+        99,
+        &hazer,
+        address,
+        5.5,
+        7.7,
+        0.25,
+        0.0,
+    ));
     let positions3d = fixtures
         .iter()
         .map(|fixture| {
@@ -465,7 +507,7 @@ mod tests {
             .map(|object| serde_json::from_value::<PatchedFixture>(object.body).unwrap())
             .collect::<Vec<_>>();
         light_fixture::validate_patch(&fixtures).unwrap();
-        assert_eq!(fixtures.len(), 44);
+        assert_eq!(fixtures.len(), 49);
         let mut fresnels = fixtures
             .iter()
             .filter(|fixture| fixture.name.starts_with("Front Fresnel"))
@@ -474,10 +516,73 @@ mod tests {
         assert_eq!(
             fresnels
                 .iter()
-                .map(|fixture| fixture.address.unwrap())
+                .map(|fixture| fixture.fixture_number.unwrap())
                 .collect::<Vec<_>>(),
             vec![1, 2, 3, 4, 5, 6]
         );
+        let numbers = fixtures
+            .iter()
+            .map(|fixture| fixture.fixture_number.unwrap())
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(numbers.len(), fixtures.len());
+        for (prefix, expected) in [
+            ("Back Profile", 101..=108),
+            ("Back LED Wash", 201..=205),
+            ("Back Trackspot", 301..=304),
+            ("Floor RGBW PAR", 401..=412),
+            ("Back RGB Sunstrip", 501..=506),
+        ] {
+            let actual = fixtures
+                .iter()
+                .filter(|fixture| fixture.name.starts_with(prefix))
+                .map(|fixture| fixture.fixture_number.unwrap())
+                .collect::<std::collections::BTreeSet<_>>();
+            assert_eq!(actual, expected.collect());
+        }
+        for (name, number) in [
+            ("Stage Hazer", 99),
+            ("Middle ACL Set", 28),
+            ("Outside ACL Set", 29),
+            ("Overhead RGB Multi-patch", 999),
+        ] {
+            assert_eq!(
+                fixtures
+                    .iter()
+                    .find(|fixture| fixture.name == name)
+                    .unwrap()
+                    .fixture_number,
+                Some(number)
+            );
+        }
+        let hazer = fixtures
+            .iter()
+            .find(|fixture| fixture.name == "Stage Hazer")
+            .unwrap();
+        assert_eq!(hazer.address, Some(359));
+        assert_eq!(hazer.definition.footprint, 2);
+        assert_eq!(
+            hazer.definition.heads[0]
+                .parameters
+                .iter()
+                .map(|parameter| parameter.attribute.0.as_str())
+                .collect::<Vec<_>>(),
+            vec!["fog", "fan"]
+        );
+        let sunstrip = fixtures
+            .iter()
+            .find(|fixture| fixture.fixture_number == Some(501))
+            .unwrap();
+        assert_eq!(sunstrip.logical_heads.len(), 10);
+        assert_eq!(
+            crate::resolve_fixture_reference(&fixtures, "501.2").unwrap(),
+            sunstrip
+                .logical_heads
+                .iter()
+                .find(|head| head.head_index == 1)
+                .unwrap()
+                .fixture_id
+        );
+        assert!(crate::resolve_fixture_reference(&fixtures, "501.11").is_err());
         let mut occupied = std::collections::BTreeSet::new();
         for fixture in &fixtures {
             for channel in
@@ -487,7 +592,7 @@ mod tests {
             }
         }
         let layout = store.objects("stage_layout").unwrap().pop().unwrap().body;
-        assert_eq!(layout["positions3d"].as_object().unwrap().len(), 65);
+        assert_eq!(layout["positions3d"].as_object().unwrap().len(), 70);
         assert_eq!(layout["assets"].as_array().unwrap().len(), 8);
         let multipatched = fixtures
             .iter()
@@ -498,6 +603,13 @@ mod tests {
             multipatched
                 .iter()
                 .all(|fixture| fixture.multipatch.len() == 7)
+        );
+        assert_eq!(
+            fixtures
+                .iter()
+                .filter(|fixture| fixture.definition.device_type == "scanner")
+                .count(),
+            4
         );
         drop(store);
         std::fs::remove_file(path).unwrap();

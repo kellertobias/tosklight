@@ -49,7 +49,7 @@ export const initialDesks: DeskModel[] = [
     id: "programming",
     name: "Programming",
     panes: [
-      { id: "presets", kind: "presets", title: "Color & Position Presets", x: 1, y: 1, width: 9, height: 18 },
+      { id: "presets", kind: "presets", title: "All Presets", x: 1, y: 1, width: 9, height: 18, presetFamily: "All" },
       { id: "fixtures", kind: "fixtures", title: "Fixture Sheet", x: 10, y: 1, width: 15, height: 9 },
       { id: "stage", kind: "stage", title: "Stage · Main floor", x: 10, y: 10, width: 15, height: 9 },
     ],

@@ -157,6 +157,9 @@ pub enum SignalLossPolicy {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PatchedFixture {
     pub fixture_id: FixtureId,
+    /// Operator-facing fixture number. This is distinct from the stable internal UUID.
+    #[serde(default)]
+    pub fixture_number: Option<u32>,
     /// Show-local operator name. Definition names remain immutable library metadata.
     #[serde(default)]
     pub name: String,
@@ -423,7 +426,18 @@ pub struct GeneratedPreset {
 
 pub fn validate_patch(fixtures: &[PatchedFixture]) -> Result<(), FixtureError> {
     let mut used: HashMap<Universe, [bool; 512]> = HashMap::new();
+    let mut fixture_numbers = HashMap::new();
     for fixture in fixtures {
+        if let Some(number) = fixture.fixture_number {
+            if number == 0 {
+                return Err(FixtureError::Invalid("fixture IDs start at 1".into()));
+            }
+            if fixture_numbers.insert(number, fixture.fixture_id).is_some() {
+                return Err(FixtureError::Invalid(format!(
+                    "fixture ID {number} is already in use"
+                )));
+            }
+        }
         fixture.definition.validate()?;
         if let Some(endpoint) = &fixture.direct_control {
             if endpoint.port == 0 {
@@ -658,18 +672,18 @@ impl FixtureLibrary {
             )
             .optional()?
             .as_deref()
-            == Some("3")
+            == Some("4")
         {
             return Ok(0);
         }
         let definitions = generic_fixture_definitions();
         let transaction = self.conn.transaction()?;
-        transaction.execute("DELETE FROM fixture_definitions WHERE manufacturer='Generic' AND model IN ('Dimmer','Fogger','Hazer','Fan','Relay','Pan Tilt','RGB LED','RGBW LED','RGBCCT LED','RGBWA LED','RGBWAUV LED','CCT LED','CMY LED','Strobe')", [])?;
+        transaction.execute("DELETE FROM fixture_definitions WHERE manufacturer='Generic' AND model IN ('Dimmer','Fogger','Hazer','Fan','Relay','Pan Tilt','Mirror Mover Scanner','RGB LED','RGBW LED','RGBCCT LED','RGBWA LED','RGBWAUV LED','CCT LED','CMY LED','Strobe')", [])?;
         for fixture in &definitions {
             let json = serde_json::to_string(fixture)?;
             transaction.execute("INSERT INTO fixture_definitions(id,revision,manufacturer,model,mode,definition_json) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(id,revision) DO NOTHING", params![fixture.id.0.to_string(),fixture.revision,fixture.manufacturer,fixture.model,fixture.mode,json])?;
         }
-        transaction.execute("INSERT INTO library_metadata(key,value) VALUES('generic_catalog_version','3') ON CONFLICT(key) DO UPDATE SET value=excluded.value", [])?;
+        transaction.execute("INSERT INTO library_metadata(key,value) VALUES('generic_catalog_version','4') ON CONFLICT(key) DO UPDATE SET value=excluded.value", [])?;
         transaction.commit()?;
         Ok(definitions.len())
     }
@@ -831,6 +845,23 @@ fn led_modes(name: &str, emitters: &[(&str, &str)]) -> Vec<FixtureDefinition> {
     result
 }
 
+fn scanner_definition() -> FixtureDefinition {
+    let mut fixture = generic_definition(
+        "Mirror Mover Scanner",
+        "scanner",
+        "Dimmer, Pan, Tilt".into(),
+        &[("D".into(), "intensity".into()), ("P".into(), "pan".into()), ("T".into(), "tilt".into())],
+        false,
+        1,
+    );
+    for parameter in fixture.heads.iter_mut().flat_map(|head| &mut head.parameters) {
+        if parameter.attribute.0 == "pan" || parameter.attribute.0 == "tilt" { parameter.default = 0.5; }
+    }
+    fixture.physical.pan_range_degrees = Some(180.0);
+    fixture.physical.tilt_range_degrees = Some(120.0);
+    fixture
+}
+
 /// Built-in profiles are normal library entries, grouped as named modes by manufacturer/model.
 pub fn generic_fixture_definitions() -> Vec<FixtureDefinition> {
     let mut result = vec![
@@ -901,6 +932,7 @@ pub fn generic_fixture_definitions() -> Vec<FixtureDefinition> {
             false,
             1,
         ),
+        scanner_definition(),
         generic_definition(
             "Strobe",
             "strobe",
@@ -1082,6 +1114,7 @@ mod tests {
         let def = definition(10);
         let first = PatchedFixture {
             fixture_id: FixtureId::new(),
+            fixture_number: None,
             name: "First".into(),
             definition: def.clone(),
             universe: Some(1),
@@ -1095,6 +1128,7 @@ mod tests {
         };
         let overlap = PatchedFixture {
             fixture_id: FixtureId::new(),
+            fixture_number: None,
             name: "Overlap".into(),
             definition: def.clone(),
             universe: Some(1),
@@ -1109,6 +1143,7 @@ mod tests {
         assert!(validate_patch(&[first.clone(), overlap]).is_err());
         let overflow = PatchedFixture {
             fixture_id: FixtureId::new(),
+            fixture_number: None,
             name: "Overflow".into(),
             definition: def,
             universe: Some(1),
@@ -1126,7 +1161,7 @@ mod tests {
     #[test]
     fn multipatch_reserves_real_addresses_and_allows_visualizer_only_instances() {
         let mut fixture = PatchedFixture {
-            fixture_id: FixtureId::new(), name: "Multi".into(), definition: definition(3), universe: Some(1), address: Some(1),
+            fixture_id: FixtureId::new(), fixture_number: None, name: "Multi".into(), definition: definition(3), universe: Some(1), address: Some(1),
             layer_id: default_patch_layer(), direct_control: None, location: Default::default(), rotation: Default::default(), logical_heads: vec![],
             multipatch: vec![
                 MultiPatchInstance { id: Uuid::new_v4(), name: "Output".into(), universe: Some(1), address: Some(10), location: Default::default(), rotation: Default::default() },
@@ -1150,6 +1185,7 @@ mod tests {
         media_definition.direct_control_protocols = vec![DirectControlProtocol::Citp];
         let parent = PatchedFixture {
             fixture_id: FixtureId::new(),
+            fixture_number: None,
             name: "Media".into(),
             definition: media_definition,
             universe: Some(1),
@@ -1236,7 +1272,8 @@ mod tests {
     #[test]
     fn generic_catalog_groups_named_modes_and_covers_led_permutations() {
         let catalog = generic_fixture_definitions();
-        assert_eq!(catalog.len(), 3_005);
+        assert_eq!(catalog.len(), 3_006);
+        assert!(catalog.iter().any(|fixture| fixture.name == "Mirror Mover Scanner" && fixture.device_type == "scanner"));
         assert!(catalog.iter().all(|fixture| fixture.validate().is_ok()));
         let dimmers = catalog
             .iter()

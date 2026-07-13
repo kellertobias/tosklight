@@ -19,7 +19,7 @@ export const BUILT_IN_STAGE_ASSETS: Array<{ id: BuiltInStageAssetId; name: strin
   { id: "emissive-tube", name: "Emissive tube" },
 ];
 
-export type BuiltInFixtureKind = "wash-led" | "profile" | "wash-classic" | "par" | "fresnel" | "strobe" | "sunstrip";
+export type BuiltInFixtureKind = "wash-led" | "profile" | "wash-classic" | "mirror-scanner" | "par" | "fresnel" | "strobe" | "sunstrip";
 
 const dark = () => new THREE.MeshStandardMaterial({ color: 0x20262b, roughness: .48, metalness: .55 });
 const black = () => new THREE.MeshStandardMaterial({ color: 0x0d1012, roughness: .6, metalness: .35 });
@@ -74,6 +74,7 @@ function lightSource(geometry: THREE.BufferGeometry, color: THREE.Color, intensi
 
 export function inferBuiltInFixtureKind(fixture: PatchedFixture): BuiltInFixtureKind {
   const text = `${fixture.definition.device_type} ${fixture.definition.manufacturer} ${fixture.definition.name} ${fixture.definition.model}`.toLowerCase();
+  if (/mirror mover|moving mirror|mirror scanner|\bscanner\b/.test(text)) return "mirror-scanner";
   if (/sun\s*strip|sunstrip|strip light|striplight/.test(text)) return "sunstrip";
   if (/strobe|blinder|panel/.test(text)) return "strobe";
   if (/fresnel|\bpc\b|theatre|theater/.test(text)) return "fresnel";
@@ -141,6 +142,58 @@ function movingFixture(kind: "wash-led" | "profile" | "wash-classic", color: THR
   return { object, beamMount };
 }
 
+function mirrorScanner(color: THREE.Color, intensity: number, pan: number, tilt: number): BuiltInFixtureModel {
+  const object = new THREE.Group();
+  object.name = "mirror-scanner";
+  // Trackspot-style scanner: a long, fixed optical chassis. Lamp, color and
+  // gobo optics remain inside; only the exposed mirror assembly moves.
+  const chassis = mesh(new THREE.BoxGeometry(.3, .28, .9));
+  chassis.name = "scanner-chassis";
+  chassis.position.set(0, -.17, .18);
+  object.add(chassis);
+  const rearCap = mesh(new THREE.BoxGeometry(.32, .22, .08), black());
+  rearCap.position.set(0, -.17, .66);
+  object.add(rearCap);
+  const lensWell = mesh(new THREE.CylinderGeometry(.105, .105, .025, 28), black());
+  lensWell.position.set(0, -.018, -.2);
+  object.add(lensWell);
+
+  // Fixed lamp/optical train exits upward through the chassis opening.
+  const source = lightSource(new THREE.CircleGeometry(.07, 32), color, intensity);
+  source.rotation.x = -Math.PI / 2;
+  source.position.set(0, -.002, -.2);
+  object.add(source);
+
+  // Two small brackets carry the exposed mirror immediately above the opening.
+  for (const x of [-.12, .12]) {
+    const bracket = mesh(new THREE.BoxGeometry(.025, .22, .035), metal());
+    bracket.position.set(x, .085, -.2);
+    object.add(bracket);
+  }
+  const panGroup = new THREE.Group();
+  panGroup.position.set(0, .185, -.2);
+  panGroup.rotation.y = pan;
+  object.add(panGroup);
+  const tiltGroup = new THREE.Group();
+  // A mirror turns half as far as its reflected ray. Keep the visible plate near
+  // its characteristic 45-degree neutral angle.
+  tiltGroup.rotation.x = Math.PI / 4 + tilt / 2;
+  panGroup.add(tiltGroup);
+  const mirrorFrame = mesh(new THREE.BoxGeometry(.26, .018, .2), black());
+  const mirror = mesh(new THREE.PlaneGeometry(.21, .16), new THREE.MeshBasicMaterial({ color: 0xdde8ed, side: THREE.DoubleSide, toneMapped: false }));
+  mirror.name = "moving-mirror";
+  mirror.rotation.x = -Math.PI / 2;
+  mirror.position.y = -.011;
+  tiltGroup.add(mirrorFrame, mirror);
+
+  const beamMount = new THREE.Group();
+  beamMount.position.y = .018;
+  // Neutral reflection exits horizontally; tilt and pan redirect only the ray.
+  beamMount.rotation.x = Math.PI / 2 - tilt;
+  panGroup.add(beamMount);
+  return { object, beamMount };
+}
+
 function staticFixture(kind: "par" | "fresnel" | "strobe" | "sunstrip", color: THREE.Color, intensity: number): BuiltInFixtureModel {
   const object = new THREE.Group();
   const hanger = boxFrame(kind === "sunstrip" ? 1.25 : .55, .45, .055, .035);
@@ -198,6 +251,7 @@ function staticFixture(kind: "par" | "fresnel" | "strobe" | "sunstrip", color: T
 
 export function createBuiltInFixtureModel(fixture: PatchedFixture, color: THREE.Color, intensity: number, pan: number, tilt: number): BuiltInFixtureModel {
   const kind = inferBuiltInFixtureKind(fixture);
+  if (kind === "mirror-scanner") return mirrorScanner(color, intensity, pan, tilt);
   return kind === "wash-led" || kind === "profile" || kind === "wash-classic"
     ? movingFixture(kind, color, intensity, pan, tilt)
     : staticFixture(kind, color, intensity);
