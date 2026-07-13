@@ -17,12 +17,20 @@ describe("appReducer", () => {
   });
 
   it("keeps resized panes inside the 24 by 18 grid", () => {
-    const changed = appReducer(initialState, {
+    const isolated = { ...initialState, desks: initialState.desks.map((desk, index) => index ? desk : { ...desk, panes: desk.panes.slice(0, 1) }) };
+    const changed = appReducer(isolated, {
       type: "SET_PANE_RECT",
-      id: initialState.desks[0].panes[0].id,
+      id: isolated.desks[0].panes[0].id,
       rect: { x: 23, y: 17, width: 12, height: 12 },
     });
     expect(changed.desks[0].panes[0]).toMatchObject({ x: 23, y: 17, width: 2, height: 2 });
+  });
+
+  it("rejects pane moves and resizes that overlap another pane", () => {
+    const pane = initialState.desks[0].panes[0];
+    const blocker = initialState.desks[0].panes[1];
+    const changed = appReducer(initialState, { type: "SET_PANE_RECT", id: pane.id, rect: { x: blocker.x, y: blocker.y, width: blocker.width, height: blocker.height } });
+    expect(changed.desks[0].panes[0]).toEqual(pane);
   });
 
   it("creates an empty new desk normally and clones when saving as new", () => {
@@ -97,5 +105,25 @@ describe("appReducer", () => {
     const armed = appReducer(initialState, { type: "SET_STORE_ARMED", value: true });
     expect(armed.storeArmed).toBe(true);
     expect(appReducer(armed, { type: "SET_STORE_ARMED", value: false }).storeArmed).toBe(false);
+  });
+
+  it("updates stage presentation options and clamps environment brightness", () => {
+    const hidden = appReducer(initialState, { type: "SET_STAGE_OPTIONS", groupsVisible: false, showSelection: false, environmentBrightness: 3 });
+    expect(hidden.stageGroupsVisible).toBe(false);
+    expect(hidden.stageShowSelection).toBe(false);
+    expect(hidden.stageEnvironmentBrightness).toBe(2);
+    expect(appReducer(hidden, { type: "SET_STAGE_OPTIONS", environmentBrightness: -1 }).stageEnvironmentBrightness).toBe(0);
+  });
+
+  it("hydrates persisted built-in window settings without requiring them in older layouts", () => {
+    const hydrated = appReducer(initialState, { type: "HYDRATE_LAYOUT", desks: initialState.desks, activeDeskId: initialState.activeDeskId, windowSettings: { builtIn: "dmx", dockMode: "builtins", stageView: "3d", dmxDotSize: "large", fixtureGroupsVisible: false, presetGroupsVisible: false } });
+    expect(hydrated.builtIn).toBe("dmx");
+    expect(hydrated.dockMode).toBe("builtins");
+    expect(hydrated.stageView).toBe("3d");
+    expect(hydrated.dmxDotSize).toBe("large");
+    expect(hydrated.fixtureGroupsVisible).toBe(false);
+    expect(hydrated.presetGroupsVisible).toBe(false);
+    const legacy = appReducer(initialState, { type: "HYDRATE_LAYOUT", desks: initialState.desks, activeDeskId: initialState.activeDeskId });
+    expect(legacy.stageView).toBe(initialState.stageView);
   });
 });

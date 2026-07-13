@@ -336,16 +336,16 @@ impl Engine {
         let group_master_flashes = self.group_master_flashes.read();
         let mut universes = HashMap::new();
         for fixture in &snapshot.fixtures {
-            let (Some(universe), Some(_)) = (fixture.universe, fixture.address) else { continue };
-            let frame = universes.entry(universe).or_insert([0; 512]);
-            render_fixture(
-                frame,
-                fixture,
-                &resolved,
-                options,
-                &groups,
-                &group_master_flashes,
-            )?;
+            let mut patches = vec![(fixture.universe, fixture.address)];
+            patches.extend(fixture.multipatch.iter().map(|instance| (instance.universe, instance.address)));
+            for (universe, address) in patches {
+                let (Some(universe), Some(address)) = (universe, address) else { continue };
+                let frame = universes.entry(universe).or_insert([0; 512]);
+                let mut instance = fixture.clone();
+                instance.universe = Some(universe);
+                instance.address = Some(address);
+                render_fixture(frame, &instance, &resolved, options, &groups, &group_master_flashes)?;
+            }
         }
         Ok(RenderResult {
             universes,
@@ -642,7 +642,7 @@ fn apply_safe_values(
 mod tests {
     use super::*;
     use light_fixture::{
-        ByteOrder, ChannelComponent, FixtureDefinition, LogicalHead, Parameter, PatchedHead,
+        ByteOrder, ChannelComponent, FixtureDefinition, LogicalHead, MultiPatchInstance, Parameter, PatchedHead,
     };
     use std::collections::BTreeMap;
 
@@ -699,9 +699,29 @@ mod tests {
                     head_index: 1,
                     fixture_id: logical,
                 }],
+                multipatch: Vec::new(),
             },
             logical,
         )
+    }
+
+    #[test]
+    fn patched_multipatch_instances_duplicate_output_while_visual_only_instances_do_not() {
+        let programmers = ProgrammerRegistry::default();
+        let session = light_core::SessionId::new();
+        programmers.start(session, light_core::UserId::new());
+        let (mut fixture, logical) = fixture();
+        fixture.multipatch = vec![
+            MultiPatchInstance { id: FixtureId::new().0, name: "Patched clone".into(), universe: Some(1), address: Some(8), location: Default::default(), rotation: Default::default() },
+            MultiPatchInstance { id: FixtureId::new().0, name: "Visualizer clone".into(), universe: None, address: None, location: Default::default(), rotation: Default::default() },
+        ];
+        programmers.set(session, logical, AttributeKey::intensity(), AttributeValue::Normalized(0.5));
+        let engine = Engine::new(programmers);
+        engine.replace_snapshot(EngineSnapshot { fixtures: vec![fixture], cue_lists: vec![], playbacks: vec![], playback_pages: vec![], routes: vec![], control_mappings: vec![], groups: vec![], revision: 1 }).unwrap();
+        let result = engine.render(RenderOptions::default()).unwrap();
+        assert_eq!(result.universes[&1][0], 128);
+        assert_eq!(result.universes[&1][7], 128);
+        assert_eq!(result.universes[&1].iter().filter(|value| **value != 0).count(), 2);
     }
 
     #[test]
@@ -962,6 +982,7 @@ mod tests {
                     fixture_id: second,
                 },
             ],
+            multipatch: vec![],
         };
         programmers.set(
             session,

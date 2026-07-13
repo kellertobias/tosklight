@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UI_DIR="$ROOT/apps/control-ui"
+HARDWARE_DIR="$ROOT/apps/hardware-controls"
 TARGET_DIR="$ROOT/target"
 DATA_DIR="${LIGHT_DATA_DIR:-$ROOT/light-data}"
 
@@ -29,6 +30,7 @@ stop_running() {
   pkill -x light-server 2>/dev/null || true
   pkill -x light-control-ui 2>/dev/null || true
   pkill -x ToskLight 2>/dev/null || true
+  pkill -x light-hardware-controls 2>/dev/null || true
   pkill -x Light 2>/dev/null || true
   pkill -f "$ROOT/apps/control-ui/node_modules/.bin/vite" 2>/dev/null || true
   pkill -f "$ROOT/target/debug/light-control-ui" 2>/dev/null || true
@@ -83,6 +85,7 @@ build_debug_and_open() {
   echo "Building debug server for the app bundle..."
   cargo build --manifest-path "$ROOT/Cargo.toml" -p light-server --bin light-server
   echo "Building debug Tauri app..."
+  (cd "$HARDWARE_DIR" && npm run tauri:build -- --debug --bundles app)
   (cd "$UI_DIR" && npm run tauri:build -- --debug --bundles app)
   cp "$TARGET_DIR/debug/light-server" "$TARGET_DIR/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-server"
   echo "Starting development server service..."
@@ -94,7 +97,7 @@ build_debug_and_open() {
 
 archive_release() {
   local install="${1:-false}"
-  local version app_path artifact_dir app_zip universal_server
+  local version app_path hardware_app_path artifact_dir app_zip hardware_app_zip universal_server
 
   require cargo
   require npm
@@ -108,6 +111,7 @@ archive_release() {
   version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$ROOT/Cargo.toml" | head -1)"
   artifact_dir="$ROOT/artifacts"
   app_zip="$artifact_dir/tosklight-$version-macos-$(uname -m).zip"
+  hardware_app_zip="$artifact_dir/tosklight-hardware-controls-$version-macos-$(uname -m).zip"
 
   echo "Building release UI for the standalone server..."
   (cd "$UI_DIR" && npm run build)
@@ -135,9 +139,11 @@ archive_release() {
   cargo zigbuild --manifest-path "$ROOT/Cargo.toml" --release --no-default-features --target aarch64-unknown-linux-musl -p light-server --bin light-server
 
   echo "Building release Tauri app..."
+  (cd "$HARDWARE_DIR" && npm run tauri:build -- --bundles app)
   (cd "$UI_DIR" && npm run tauri:build -- --bundles app)
 
   app_path="$TARGET_DIR/release/bundle/macos/ToskLight.app"
+  hardware_app_path="$TARGET_DIR/release/bundle/macos/ToskLight Hardware Controls.app"
   cp "$universal_server" "$app_path/Contents/MacOS/light-server"
   mkdir -p "$artifact_dir"
   archive_binary "$universal_server" "light-server" "$artifact_dir/light-server-$version-macos-universal.zip"
@@ -147,6 +153,9 @@ archive_release() {
   rm -f "$app_zip"
   ditto -c -k --sequesterRsrc --keepParent "$app_path" "$app_zip"
   echo "Created $app_zip"
+  rm -f "$hardware_app_zip"
+  ditto -c -k --sequesterRsrc --keepParent "$hardware_app_path" "$hardware_app_zip"
+  echo "Created $hardware_app_zip"
 
   if [[ "$install" == true ]]; then
     require open
@@ -154,6 +163,8 @@ archive_release() {
     mkdir -p "$HOME/Applications"
     rm -rf "$HOME/Applications/ToskLight.app"
     ditto "$app_path" "$HOME/Applications/ToskLight.app"
+    rm -rf "$HOME/Applications/ToskLight Hardware Controls.app"
+    ditto "$hardware_app_path" "$HOME/Applications/ToskLight Hardware Controls.app"
     open "$HOME/Applications/ToskLight.app"
     echo "Installed and opened $HOME/Applications/ToskLight.app"
   fi

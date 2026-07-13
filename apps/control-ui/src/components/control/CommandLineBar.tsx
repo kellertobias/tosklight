@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useApp } from "../../state/AppContext";
 import { useServer } from "../../api/ServerContext";
 import { programmerValueCount } from "./programmerActivity";
+import { Button, Input } from "../common";
+import { removeCommandToken } from "./commandLineEditing";
 
 export function CommandLineBar() {
   const { state, dispatch } = useApp();
@@ -12,6 +14,7 @@ export function CommandLineBar() {
   const [errorOpen, setErrorOpen] = useState(false);
   const storeHold = useRef<number | null>(null);
   const storeHeld = useRef(false);
+  const storeSuppressUntil = useRef(0);
   const preloadHold = useRef<number | null>(null);
   const preloadHeld = useRef(false);
   useEffect(() => { if (server.error) setPersistentError(server.error); }, [server.error]);
@@ -69,7 +72,7 @@ export function CommandLineBar() {
       }
       let current = completed ? "" : server.commandLine;
       if (key === "BACKSPACE") {
-        replaceCommand(current.trimEnd().slice(0, -1).trimEnd());
+        replaceCommand(removeCommandToken(current));
         return;
       }
       if (/^\d$/.test(key))
@@ -94,8 +97,8 @@ export function CommandLineBar() {
     <header
       className={`command-line-bar command-line-left ${playback ? "playback-mode" : ""} ${commandError ? "has-command-error" : ""}`}
     >
-      {commandError && <div className="command-error-message" role="alert"><span>{commandError}</span><button onClick={() => { setCommandError(null); server.dismissError(); }}>Acknowledge</button></div>}
-      <button
+      {commandError && <div className="command-error-message" role="alert"><span>{commandError}</span><Button onClick={() => { setCommandError(null); server.dismissError(); }}>Acknowledge</Button></div>}
+      <Button
         className={`mode-toggle ${playback ? "playbacks-active" : ""}`}
         onClick={() => dispatch({ type: "TOGGLE_CONTROL_MODE" })}
       >
@@ -104,8 +107,8 @@ export function CommandLineBar() {
           <b>PROG.</b>
           <small>PLAYBK</small>
         </span>
-      </button>
-      <div className="command-field"><input
+      </Button>
+      <div className="command-field"><Input
         className={`command-input ${state.preload === "blind" ? "blind" : ""} ${completed ? "completed" : ""} ${commandError ? "error" : ""}`}
         aria-label="Command line"
         value={server.commandLine}
@@ -118,38 +121,40 @@ export function CommandLineBar() {
         onKeyDown={(event) => {
           if (event.key === "Enter") void execute();
         }}
-      /><button className="command-escape" onClick={() => replaceCommand("")}>ESC</button>
-        <button className={`command-status ${server.status}`} title="Open output and timecode controls" onClick={() => dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: true })}>
+      /><Button className="command-escape" onClick={() => replaceCommand("")}>ESC</Button>
+        <Button className={`command-status ${server.status}`} title="Open output and timecode controls" onClick={() => dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: true })}>
           <span className={state.blackout ? "blackout-status" : ""}>{state.blackout ? <><i>DMX {server.bootstrap?.frame_rate_hz ?? "—"}Hz</i><b>BLACKOUT</b></> : <>DMX {server.bootstrap?.frame_rate_hz ?? "—"}Hz</>}</span>
-          <span>{server.bootstrap?.active_timecode ?? "No TC"}</span>
-        </button>
+          <span>{server.bootstrap?.active_timecode ?? "No timecode"}</span>
+        </Button>
       </div>
       {completed && (
         <span className="command-complete" aria-label="Command applied">
           ✓
         </span>
       )}
-      {errorOpen && persistentError && <div className="persistent-error-popover" role="alertdialog"><header><b><span>▲</span> Desk error</b><button onClick={() => setErrorOpen(false)}>×</button></header><pre>{persistentError}</pre><button onClick={() => { setPersistentError(null); server.dismissError(); setErrorOpen(false); }}>Acknowledge</button></div>}
-      {!state.midiProfile && <button className={`global-store-button ${state.storeArmed ? "armed" : hasRecordableContent ? "record-ready" : "record-empty"}`} onPointerDown={() => { storeHeld.current = false; storeHold.current = window.setTimeout(() => { storeHeld.current = true; dispatch({ type: "SET_MODAL", modal: "storeSettingsOpen", value: true }); }, 650); }} onPointerUp={() => { if (storeHold.current) window.clearTimeout(storeHold.current); }} onPointerCancel={() => { if (storeHold.current) window.clearTimeout(storeHold.current); }} onClick={() => { if (!storeHeld.current) dispatch({ type: "SET_STORE_ARMED", value: !state.storeArmed }); storeHeld.current = false; }}>{state.storeArmed ? "REC ARMED" : "REC"}</button>}
-      <button
-        className={`preload-button ${state.preload === "blind" ? "preload-go" : "preload-enter"}`}
-        title={state.preloadActive ? "Hold to release the active preload scene" : undefined}
-        onPointerDown={() => {
-          preloadHeld.current = false;
-          if (!state.preloadActive) return;
-          preloadHold.current = window.setTimeout(() => {
-            preloadHeld.current = true;
-            void releasePreload();
-          }, 650);
-        }}
-        onPointerUp={() => { if (preloadHold.current !== null) window.clearTimeout(preloadHold.current); preloadHold.current = null; }}
-        onPointerCancel={() => { if (preloadHold.current !== null) window.clearTimeout(preloadHold.current); preloadHold.current = null; }}
-        onContextMenu={(event) => event.preventDefault()}
-        onClick={() => { if (!preloadHeld.current) void advancePreload(); preloadHeld.current = false; }}
-      >
-        <b>{preloadLabel}</b>
-        {state.preloadActive && <small>(Hold: release)</small>}
-      </button>
+      {errorOpen && persistentError && <div className="persistent-error-popover" role="alertdialog"><header><b><span>▲</span> Desk error</b><Button onClick={() => setErrorOpen(false)}>×</Button></header><pre>{persistentError}</pre><Button onClick={() => { setPersistentError(null); server.dismissError(); setErrorOpen(false); }}>Acknowledge</Button></div>}
+      <div className="command-record-preload">
+        <Button className={`global-store-button ${state.storeArmed ? "armed" : hasRecordableContent ? "record-ready" : "record-empty"}`} onPointerDown={() => { storeHeld.current = false; storeHold.current = window.setTimeout(() => { storeHeld.current = true; storeSuppressUntil.current = performance.now() + 1000; dispatch({ type: "SET_MODAL", modal: "storeSettingsOpen", value: true }); }, 650); }} onPointerUp={() => { if (storeHold.current) window.clearTimeout(storeHold.current); storeHold.current = null; }} onPointerCancel={() => { if (storeHold.current) window.clearTimeout(storeHold.current); storeHold.current = null; }} onClick={() => { if (!storeHeld.current && performance.now() >= storeSuppressUntil.current) dispatch({ type: "SET_STORE_ARMED", value: !state.storeArmed }); storeHeld.current = false; }}>{state.storeArmed ? "REC ARMED" : "REC"}</Button>
+        <Button
+          className={`preload-button ${state.preload === "blind" ? "preload-go" : "preload-enter"}`}
+          title={state.preloadActive ? "Hold to release the active preload scene" : undefined}
+          onPointerDown={() => {
+            preloadHeld.current = false;
+            if (!state.preloadActive) return;
+            preloadHold.current = window.setTimeout(() => {
+              preloadHeld.current = true;
+              void releasePreload();
+            }, 650);
+          }}
+          onPointerUp={() => { if (preloadHold.current !== null) window.clearTimeout(preloadHold.current); preloadHold.current = null; }}
+          onPointerCancel={() => { if (preloadHold.current !== null) window.clearTimeout(preloadHold.current); preloadHold.current = null; }}
+          onContextMenu={(event) => event.preventDefault()}
+          onClick={() => { if (!preloadHeld.current) void advancePreload(); preloadHeld.current = false; }}
+        >
+          <b>{preloadLabel}</b>
+          {state.preloadActive && <small>(Hold: release)</small>}
+        </Button>
+      </div>
     </header>
   );
 }

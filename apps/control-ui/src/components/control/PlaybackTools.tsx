@@ -3,6 +3,7 @@ import { TouchTimeSurface } from "./TouchTimeSurface";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { useServer } from "../../api/ServerContext";
+import { Button } from "../common";
 
 export function PlaybackTools() {
   const { state, dispatch } = useApp();
@@ -10,6 +11,10 @@ export function PlaybackTools() {
   const speedBpms = server.configuration?.speed_groups_bpm ?? [120, 90, 60, 30, 15];
   const [pagePickerOpen, setPagePickerOpen] = useState(false);
   const taps = useRef<Record<string, number[]>>({});
+  useEffect(() => {
+    const active = server.playbacks?.active_page;
+    if (active != null && active - 1 !== state.playbackPage) dispatch({ type: "SET_PLAYBACK_PAGE", page: active - 1 });
+  }, [server.playbacks?.active_page, state.playbackPage, dispatch]);
   const tap = (group: "A" | "B" | "C" | "D" | "E") => {
     const now = performance.now();
     const recent = [...(taps.current[group] ?? []), now].filter((time) => now - time < 3000).slice(-6);
@@ -36,14 +41,14 @@ export function PlaybackTools() {
     <div className="playback-tools">
       <div className="speed-group-stack">
         {(["A", "B", "C", "D", "E"] as const).map((group, index) => { const bpm = speedBpms[index]; return (
-          <button
+          <Button
             style={{ "--bpm": bpm } as CSSProperties}
             className={`active ${state.speedGroup === group ? "selected" : ""}`}
             key={group}
             onClick={() => tap(group)}
           >
             <strong>{group}</strong><small>{bpm}<i>BPM</i></small>
-          </button>
+          </Button>
         ); })}
       </div>
       <div className="cue-fade-master"><TouchTimeSurface
@@ -54,11 +59,11 @@ export function PlaybackTools() {
         onChange={(value) => void server.setControlTiming({ sequence_master_fade_millis: Math.round(value * 1_000) })}
       /></div>
       <div className="playback-page-controls">
-        <button disabled={state.playbackPage === 0} onClick={() => { dispatch({ type: "SET_PLAYBACK_PAGE", page: state.playbackPage - 1 }); void server.setPlaybackPage(state.playbackPage); }}><span>▲</span> PAGE UP</button>
-        <button className="playback-page-current" onClick={() => setPagePickerOpen(true)}><strong>{state.playbackPage + 1}</strong><span>{state.playbackPageNames[state.playbackPage]}</span></button>
-        <button disabled={state.playbackPage === state.playbackPageNames.length - 1} onClick={() => { dispatch({ type: "SET_PLAYBACK_PAGE", page: state.playbackPage + 1 }); void server.setPlaybackPage(state.playbackPage + 2); }}>PAGE DOWN <span>▼</span></button>
+        <Button disabled={state.playbackPage === 0} onClick={() => { dispatch({ type: "SET_PLAYBACK_PAGE", page: state.playbackPage - 1 }); void server.setPlaybackPage(state.playbackPage); }}><span>▲</span> PAGE UP</Button>
+        <Button className="playback-page-current" onClick={() => setPagePickerOpen(true)}><strong>{state.playbackPage + 1}</strong><span>{state.playbackPageNames[state.playbackPage]}</span></Button>
+        <Button disabled={state.playbackPage === state.playbackPageNames.length - 1} onClick={() => { dispatch({ type: "SET_PLAYBACK_PAGE", page: state.playbackPage + 1 }); void server.setPlaybackPage(state.playbackPage + 2); }}>PAGE DOWN <span>▼</span></Button>
       </div>
-      {pagePickerOpen && createPortal(<div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && setPagePickerOpen(false)}><div className="nested-modal playback-page-modal" role="dialog" aria-modal="true" aria-label="Playback pages"><button className="modal-close" onClick={() => setPagePickerOpen(false)}>×</button><h3>Playback pages</h3><div>{(server.playbacks?.pages ?? []).map((item) => <button className={item.number === (server.playbacks?.active_page ?? 1) ? "active" : ""} key={item.number} onClick={() => { dispatch({ type: "SET_PLAYBACK_PAGE", page: item.number - 1 }); void server.setPlaybackPage(item.number); setPagePickerOpen(false); }}><strong>{item.number}</strong><span>{item.name}</span></button>)}</div></div></div>, document.body)}
+      {pagePickerOpen && createPortal(<div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && setPagePickerOpen(false)}><div className="nested-modal playback-page-modal" role="dialog" aria-modal="true" aria-label="Playback pages"><Button className="modal-close" onClick={() => setPagePickerOpen(false)}>×</Button><h3>Playback pages</h3><div>{(server.playbacks?.pages ?? []).map((item) => <Button className={item.number === (server.playbacks?.active_page ?? 1) ? "active" : ""} key={item.number} onClick={() => { dispatch({ type: "SET_PLAYBACK_PAGE", page: item.number - 1 }); void server.setPlaybackPage(item.number); setPagePickerOpen(false); }}><strong>{item.number}</strong><span>{item.name}</span></Button>)}</div></div></div>, document.body)}
     </div>
   );
 }

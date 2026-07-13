@@ -4,6 +4,8 @@ import { useApp } from "../../state/AppContext";
 import { useServer } from "../../api/ServerContext";
 import { DebugModal } from "./DebugModal";
 import { ModalTextKeyboard } from "../input/ModalInputControls";
+import { Button, Input, SelectField } from "../common";
+import type { MvrExportPreview, MvrImportPreview, ShowEntry } from "../../api/types";
 
 export function QuickSetupModal() {
   const { state, dispatch } = useApp();
@@ -11,22 +13,31 @@ export function QuickSetupModal() {
   const [showName, setShowName] = useState("");
   const [saveAsOpen, setSaveAsOpen] = useState(false);
   const [loadOpen, setLoadOpen] = useState(false);
+  const [newShowOpen, setNewShowOpen] = useState(false);
   const [confirmShutdown, setConfirmShutdown] = useState(false);
   const [changeUserOpen, setChangeUserOpen] = useState(false);
   const [newUserName, setNewUserName] = useState("");
   const [destination, setDestination] = useState<"local" | "flash">("local");
   const upload = useRef<HTMLInputElement>(null);
+  const mvrFile = useRef<HTMLInputElement>(null);
+  const [mvrMode, setMvrMode] = useState<"new" | "merge" | "export" | null>(null);
+  const [mvrTarget, setMvrTarget] = useState<ShowEntry | null>(null);
+  const [mvrPreview, setMvrPreview] = useState<MvrImportPreview | null>(null);
+  const [mvrExportPreview, setMvrExportPreview] = useState<MvrExportPreview | null>(null);
+  const [mvrName, setMvrName] = useState("");
+  const [mvrBusy, setMvrBusy] = useState(false);
+  const [mvrResolutions, setMvrResolutions] = useState<Record<string, { action: string; universe?: number; address?: number }>>({});
   const flashDriveConnected = false;
   useEffect(() => {
     if (!state.setupOpen) return;
     const handle = (event: KeyboardEvent) => {
       const keyboardInputOpen = saveAsOpen || changeUserOpen;
-      if (keyboardInputOpen) return;
       if (event.key === "Escape") {
         event.preventDefault(); event.stopImmediatePropagation();
         if (saveAsOpen) setSaveAsOpen(false);
         else if (changeUserOpen) setChangeUserOpen(false);
         else if (loadOpen) setLoadOpen(false);
+        else if (newShowOpen) setNewShowOpen(false);
         else if (confirmShutdown) setConfirmShutdown(false);
         else dispatch({ type: "SET_MODAL", modal: "setupOpen", value: false });
         return;
@@ -40,7 +51,7 @@ export function QuickSetupModal() {
     };
     window.addEventListener("keydown", handle, true);
     return () => window.removeEventListener("keydown", handle, true);
-  }, [state.setupOpen, saveAsOpen, changeUserOpen, loadOpen, confirmShutdown, newUserName]);
+  }, [state.setupOpen, saveAsOpen, changeUserOpen, loadOpen, newShowOpen, confirmShutdown, showName, newUserName]);
   if (!state.setupOpen) return null;
   const close = () => dispatch({ type: "SET_MODAL", modal: "setupOpen", value: false });
   const saveLayout = () => void server.saveDeskLayout({ desks: state.desks, activeDeskId: state.activeDeskId });
@@ -52,21 +63,52 @@ export function QuickSetupModal() {
     setSaveAsOpen(false);
     setShowName("");
   }
+  async function inspectMvr(file: File) {
+    setMvrBusy(true);
+    try { const preview = await server.previewMvr(file, mvrMode === "merge" ? mvrTarget?.id : undefined); setMvrPreview(preview); setMvrName(file.name.replace(/\.mvr$/i, "")); const conflicted = new Set(preview.address_conflicts.map((message) => preview.fixtures.find((fixture) => message.startsWith(fixture.name))?.uuid).filter(Boolean)); setMvrResolutions(Object.fromEntries([...conflicted].map((uuid) => [uuid!, { action: "import_unpatched" }]))); }
+    finally { setMvrBusy(false); }
+  }
+  async function applyMvr() {
+    if (!mvrPreview) return; setMvrBusy(true);
+    try { await server.applyMvr(mvrPreview.token, mvrMode === "new" ? { new_show: { name: mvrName.trim(), open_after_import: true }, resolutions: mvrResolutions } : { existing_show_id: mvrTarget!.id, resolutions: mvrResolutions }); setMvrMode(null); setMvrPreview(null); }
+    finally { setMvrBusy(false); }
+  }
+  async function shutDownDesk() {
+    if (!await server.shutdownServer()) return;
+    if ("__TAURI_INTERNALS__" in window) {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("exit_desktop_app");
+    }
+  }
+  async function inspectExport(show: ShowEntry) { setMvrTarget(show); setMvrBusy(true); try { setMvrExportPreview(await server.previewMvrExport(show.id)); } finally { setMvrBusy(false); } }
+  function openMvrImport(closeSource: () => void) { closeSource(); setMvrMode("new"); setMvrTarget(null); setMvrPreview(null); }
+  function openMvrExport() {
+    setSaveAsOpen(false); setMvrMode("export"); setMvrExportPreview(null);
+    const active = server.bootstrap?.active_show;
+    if (active) void inspectExport(active); else setMvrTarget(null);
+  }
   const stacked = (content: ReactNode, closeLayer: () => void) => createPortal(
     <div className="stacked-modal-layer" onPointerDown={(event) => { if (event.target === event.currentTarget) closeLayer(); }}>{content}</div>,
     document.body,
   );
   return <div className="modal-backdrop" onPointerDown={(event) => { if (event.currentTarget === event.target) close(); }}><section className="modal-card show-modal">
-    <button className="modal-close" onClick={close} aria-label="Close">×</button>
+    <Button className="modal-close" onClick={close} aria-label="Close">×</Button>
     <h2>Show</h2>
-    <div className="show-details"><b>{server.bootstrap?.active_show?.name ?? "No active show"}</b><span>Server connected <strong>{server.status === "connected" ? "Yes" : "No"}</strong></span><span>Show revision <strong>{server.bootstrap?.active_show?.revision ?? "—"}</strong></span><span>Operator <strong>{server.session?.user.name ?? "—"}</strong></span></div>
-    <div className="show-primary-actions"><button onClick={saveLayout}>Save</button><button onClick={() => setSaveAsOpen(true)}>Save As</button><button onClick={() => setLoadOpen(true)}>Load</button><button onClick={() => setChangeUserOpen(true)}>Change User</button><button onClick={() => dispatch({ type: "SET_MODAL", modal: "debugOpen", value: true })}>Debug</button></div>
-    <hr />
-    <div className="modal-actions show-navigation"><button onClick={() => { dispatch({ type: "OPEN_BUILTIN", kind: "patch" }); close(); }}>Show Patch</button><button onClick={() => { dispatch({ type: "OPEN_BUILTIN", kind: "setup" }); close(); }}>Enter Setup</button><button onClick={() => { dispatch({ type: "OPEN_BUILTIN", kind: "dmx" }); close(); }}>DMX</button><button className="danger" onClick={() => setConfirmShutdown(true)}>Shut Down Desk</button></div>
-    {saveAsOpen && stacked(<div className="nested-modal keyboard-modal" role="dialog" aria-modal="true" aria-label="Save show"><button className="modal-close" onClick={() => setSaveAsOpen(false)}>×</button><h3>Save Show As</h3><div className="save-destination"><button className={destination === "local" ? "active" : ""} onClick={() => setDestination("local")}>This desk</button>{flashDriveConnected && <button className={destination === "flash" ? "active" : ""} onClick={() => setDestination("flash")}>Connected flash drive</button>}</div><input className="show-name-input" autoFocus value={showName} onChange={(event) => setShowName(event.target.value)} placeholder="Show name" aria-label="Show name"/><ModalTextKeyboard value={showName} onChange={setShowName} onEnter={() => void saveAs()} onEscape={() => setSaveAsOpen(false)} actionLabel="Save show"/></div>, () => setSaveAsOpen(false))}
-    {loadOpen && stacked(<div className="nested-modal" role="dialog" aria-modal="true" aria-label="Load show"><button className="modal-close" onClick={() => setLoadOpen(false)}>×</button><h3>Load Show</h3><div className="show-library">{server.shows.map((show) => <article key={show.id}><span><b>{show.name}</b><small>Revision {show.revision}</small></span><button onClick={() => { void server.openShow(show.id); setLoadOpen(false); }}>Load</button></article>)}</div><button onClick={() => upload.current?.click()}>Load from flash drive</button><input ref={upload} hidden type="file" accept=".show,application/x-sqlite3" onChange={(event) => { const file = event.target.files?.[0]; if (file) void server.uploadShow(file); event.target.value = ""; }}/></div>, () => setLoadOpen(false))}
-    {changeUserOpen && stacked(<div className="nested-modal keyboard-modal" role="dialog" aria-modal="true" aria-label="Change user"><button className="modal-close" onClick={() => setChangeUserOpen(false)}>×</button><h3>Change User</h3><div className="show-library">{server.bootstrap?.users.filter((user) => user.enabled).map((user) => <article key={user.id}><span><b>{user.name}</b><small>{user.id === server.session?.user.id ? "Current user" : "Use this user's programmer"}</small></span><button disabled={user.id === server.session?.user.id} onClick={() => void server.changeUser(user)}>{user.id === server.session?.user.id ? "Logged in" : "Log in"}</button></article>)}</div><div className="user-create-row"><input value={newUserName} onChange={(event) => setNewUserName(event.target.value)} placeholder="New user name" aria-label="New user name"/></div><ModalTextKeyboard value={newUserName} onChange={setNewUserName} onEnter={() => { if (newUserName.trim()) void server.createUser(newUserName.trim()); }} onEscape={() => setChangeUserOpen(false)} actionLabel="Add user"/></div>, () => setChangeUserOpen(false))}
-    {confirmShutdown && stacked(<div className="nested-modal shutdown-modal" role="alertdialog" aria-modal="true"><button className="modal-close" onClick={() => setConfirmShutdown(false)}>×</button><h3>Shut Down Desk?</h3><p>Hazardous fixtures will be driven to their safe values before the server stops.</p><div className="modal-actions"><button onClick={() => setConfirmShutdown(false)}>Cancel</button><button className="danger" onClick={() => void server.shutdownServer()}>Shut Down Safely</button></div></div>, () => setConfirmShutdown(false))}
+    <div className="show-details"><b>{server.bootstrap?.active_show?.name ?? "No active show"}</b><span>Server connected <strong>{server.status === "connected" ? "Yes" : "No"}</strong></span><span>Show revision <strong>{server.bootstrap?.active_show?.revision ?? "—"}</strong></span><span>Operator <strong>{server.session?.user.name ?? "—"}</strong></span><div className="show-primary-actions"><Button onClick={saveLayout}><span aria-hidden="true">💾</span> Save</Button><Button onClick={() => setSaveAsOpen(true)}><span aria-hidden="true">✎</span> Save As</Button><Button onClick={() => setLoadOpen(true)}><span aria-hidden="true">↥</span> Load</Button><Button onClick={() => setNewShowOpen(true)}><span aria-hidden="true">＋</span> New Show</Button></div></div>
+    <div className="modal-actions show-navigation"><Button onClick={() => { dispatch({ type: "OPEN_BUILTIN", kind: "patch" }); close(); }}><span aria-hidden="true">▦</span> Show Patch</Button><Button onClick={() => { dispatch({ type: "OPEN_BUILTIN", kind: "setup" }); close(); }}><span aria-hidden="true">⚙</span> Enter Setup</Button><Button onClick={() => { dispatch({ type: "OPEN_BUILTIN", kind: "dmx" }); close(); }}><span aria-hidden="true">◉</span> DMX</Button><Button onClick={() => setChangeUserOpen(true)}><span aria-hidden="true">♙</span> Change User</Button><Button onClick={() => dispatch({ type: "SET_MODAL", modal: "debugOpen", value: true })}><span aria-hidden="true">⌁</span> Debug</Button><Button className="danger shutdown-action" onClick={() => setConfirmShutdown(true)}><span aria-hidden="true">⏻</span> Shut Down Desk</Button></div>
+    {saveAsOpen && stacked(<div className="nested-modal keyboard-modal" role="dialog" aria-modal="true" aria-label="Save show"><Button className="modal-mode-switch" onClick={openMvrExport}>Export as MVR</Button><Button className="modal-close" onClick={() => setSaveAsOpen(false)}>×</Button><h3>Save Show As</h3><div className="save-destination"><Button className={destination === "local" ? "active" : ""} onClick={() => setDestination("local")}>This desk</Button>{flashDriveConnected && <Button className={destination === "flash" ? "active" : ""} onClick={() => setDestination("flash")}>Connected flash drive</Button>}</div><Input className="show-name-input" autoFocus value={showName} onChange={(event) => setShowName(event.target.value)} placeholder="Show name" aria-label="Show name"/><ModalTextKeyboard value={showName} onChange={setShowName} onEnter={() => void saveAs()} onEscape={() => setSaveAsOpen(false)} actionLabel="Save show"/></div>, () => setSaveAsOpen(false))}
+    {loadOpen && stacked(<div className="nested-modal" role="dialog" aria-modal="true" aria-label="Load show"><Button className="modal-mode-switch" onClick={() => openMvrImport(() => setLoadOpen(false))}>Load from MVR</Button><Button className="modal-close" onClick={() => setLoadOpen(false)}>×</Button><h3>Load Show</h3><div className="show-library">{server.shows.map((show) => <article key={show.id}><span><b>{show.name}</b><small>Revision {show.revision}</small></span><Button onClick={() => { void server.openShow(show.id); setLoadOpen(false); }}>Load</Button></article>)}</div><Button onClick={() => upload.current?.click()}>Load from flash drive</Button><Input ref={upload} hidden type="file" accept=".show,application/x-sqlite3" onChange={(event) => { const file = event.target.files?.[0]; if (file) void server.uploadShow(file); event.target.value = ""; }}/></div>, () => setLoadOpen(false))}
+    {newShowOpen && stacked(<div className="nested-modal new-show-modal" role="dialog" aria-modal="true" aria-label="New show"><Button className="modal-mode-switch" onClick={() => openMvrImport(() => setNewShowOpen(false))}>Load from MVR</Button><Button className="modal-close" onClick={() => setNewShowOpen(false)}>×</Button><h3>New Show</h3><p>Create and open a new empty show. The current show remains saved on this desk.</p><Button className="primary" onClick={async () => { if (await server.initializeEmptyShow()) setNewShowOpen(false); }}>Create Empty Show</Button></div>, () => setNewShowOpen(false))}
+    {mvrMode && stacked(<div className="nested-modal mvr-modal" role="dialog" aria-modal="true" aria-label="MVR import and export"><Button className="modal-close" onClick={() => setMvrMode(null)}>×</Button><h3>{mvrMode === "new" ? "New Show from MVR" : mvrMode === "merge" ? "Add MVR to Show" : "Export Show as MVR"}</h3>
+      {mvrMode !== "new" && !mvrTarget && <><p>Select any show in the desk library.</p><div className="show-library">{server.shows.map((show) => <article key={show.id}><span><b>{show.name}</b><small>Revision {show.revision}</small></span><Button onClick={() => mvrMode === "export" ? void inspectExport(show) : setMvrTarget(show)}>Select</Button></article>)}</div></>}
+      {mvrMode === "merge" && mvrTarget && !mvrPreview && <><p>Import into <b>{mvrTarget.name}</b>. Existing programming and unmatched scenery are retained.</p><Button className="primary" disabled={mvrBusy} onClick={() => mvrFile.current?.click()}>{mvrBusy ? "Inspecting…" : "Choose MVR file"}</Button></>}
+      {mvrMode === "new" && !mvrPreview && <><p>Create a new show from MVR fixtures, patch, transforms, and scene geometry.</p><Button className="primary" disabled={mvrBusy} onClick={() => mvrFile.current?.click()}>{mvrBusy ? "Inspecting…" : "Choose MVR file"}</Button></>}
+      {mvrPreview && <><div className="mvr-summary"><b>{mvrPreview.fixtures.length} fixtures · {mvrPreview.scenery} scenery objects</b>{mvrPreview.missing_profiles.length > 0 && <p className="modal-warning">{mvrPreview.missing_profiles.length} fixture profiles will be imported as unresolved.</p>}{mvrPreview.address_conflicts.map((warning) => <p className="modal-warning" key={warning}>{warning}</p>)}</div>{mvrMode === "new" && <Input value={mvrName} onChange={(event) => setMvrName(event.target.value)} placeholder="Show name" aria-label="Show name"/>}<div className="mvr-fixture-list">{mvrPreview.fixtures.map((fixture) => { const resolution=mvrResolutions[fixture.uuid]; return <article key={fixture.uuid}><span><b>{fixture.name}</b><small>{fixture.gdtf_spec} · {fixture.gdtf_mode}{fixture.universe && fixture.address ? ` · U${fixture.universe}.${fixture.address}` : " · Unpatched"}</small></span>{mvrPreview.address_conflicts.some((warning) => warning.startsWith(fixture.name)) && <div><SelectField label={`Resolution for ${fixture.name}`} value={resolution?.action ?? "import_unpatched"} options={[{value:"import_unpatched",label:"Import unpatched"},{value:"address",label:"Choose address"},{value:"skip",label:"Skip"},{value:"replace",label:"Replace conflict"}]} onChange={(action) => setMvrResolutions((current) => ({ ...current, [fixture.uuid]: { action, universe: fixture.universe ?? 1, address: fixture.address ?? 1 } }))}/>{resolution?.action === "address" && <div className="mvr-address-fields"><Input type="number" min={1} max={65535} aria-label={`Universe for ${fixture.name}`} value={resolution.universe ?? 1} onChange={(event) => setMvrResolutions((current) => ({...current,[fixture.uuid]:{...current[fixture.uuid],action:"address",universe:Number(event.target.value)}}))}/><Input type="number" min={1} max={512} aria-label={`Address for ${fixture.name}`} value={resolution.address ?? 1} onChange={(event) => setMvrResolutions((current) => ({...current,[fixture.uuid]:{...current[fixture.uuid],action:"address",address:Number(event.target.value)}}))}/></div>}</div>}</article>;})}</div><Button className="primary" disabled={mvrBusy || (mvrMode === "new" && !mvrName.trim())} onClick={() => void applyMvr()}>{mvrBusy ? "Importing…" : mvrMode === "new" ? "Create and Open Show" : `Add to ${mvrTarget?.name}`}</Button></>}
+      {mvrMode === "export" && mvrTarget && mvrExportPreview && <><div className="mvr-summary"><b>{mvrExportPreview.fixtures} fixtures · {mvrExportPreview.scenery} scenery objects</b><p>Not included: {mvrExportPreview.omitted.join(", ")}</p>{mvrExportPreview.warnings.map((warning) => <p className="modal-warning" key={warning}>{warning}</p>)}</div><Button className="primary" onClick={() => { void server.downloadMvr(mvrTarget); setMvrMode(null); }}>Download {mvrTarget.name}.mvr</Button></>}
+      <Input ref={mvrFile} hidden type="file" accept=".mvr,application/zip" onChange={(event) => { const file=event.target.files?.[0]; if(file) void inspectMvr(file); event.currentTarget.value=""; }}/>
+    </div>, () => setMvrMode(null))}
+    {changeUserOpen && stacked(<div className="nested-modal keyboard-modal" role="dialog" aria-modal="true" aria-label="Change user"><Button className="modal-close" onClick={() => setChangeUserOpen(false)}>×</Button><h3>Change User</h3><div className="show-library">{server.bootstrap?.users.filter((user) => user.enabled).map((user) => <article key={user.id}><span><b>{user.name}</b><small>{user.id === server.session?.user.id ? "Current user" : "Use this user's programmer"}</small></span><Button disabled={user.id === server.session?.user.id} onClick={() => void server.changeUser(user)}>{user.id === server.session?.user.id ? "Logged in" : "Log in"}</Button></article>)}</div><div className="user-create-row"><Input value={newUserName} onChange={(event) => setNewUserName(event.target.value)} placeholder="New user name" aria-label="New user name"/></div><ModalTextKeyboard value={newUserName} onChange={setNewUserName} onEnter={() => { if (newUserName.trim()) void server.createUser(newUserName.trim()); }} onEscape={() => setChangeUserOpen(false)} actionLabel="Add user"/></div>, () => setChangeUserOpen(false))}
+    {confirmShutdown && stacked(<div className="nested-modal shutdown-modal" role="alertdialog" aria-modal="true"><Button className="modal-close" onClick={() => setConfirmShutdown(false)}>×</Button><h3>Shut Down Desk?</h3><p>Hazardous fixtures will be driven to their safe values before the server stops. This desk application will then close.</p><div className="modal-actions"><Button onClick={() => setConfirmShutdown(false)}>Cancel</Button><Button className="danger" onClick={() => void shutDownDesk()}>Shut Down Safely</Button></div></div>, () => setConfirmShutdown(false))}
     {server.error && <p className="modal-error">{server.error}</p>}
     <DebugModal />
   </section></div>;

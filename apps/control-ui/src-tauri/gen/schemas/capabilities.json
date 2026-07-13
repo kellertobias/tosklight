@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Default capability for the Light control surface","local":true,"windows":["main","screen-*"],"permissions":["core:default"]}}
+{"default":{"identifier":"default","description":"Default capability for the Light control surface","local":true,"windows":["main","screen-*"],"permissions":["core:default","core:window:allow-start-dragging"]}}

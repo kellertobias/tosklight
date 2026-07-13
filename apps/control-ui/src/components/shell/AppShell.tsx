@@ -11,9 +11,11 @@ import { ModalEscapeManager } from "../input/ModalEscapeManager";
 import { StoreSettingsModal } from "../modals/StoreSettingsModal";
 import { ShowRecoveryModal } from "../modals/ShowRecoveryModal";
 import { ScreenWindowManager } from "./ScreenWindowManager";
+import { NativeDragStrip } from "./NativeDragStrip";
 
 export function AppShell() {
   return <div className="app-shell">
+    <NativeDragStrip />
     <LayoutPersistence />
     <ScreenWindowManager />
     <ModalEscapeManager />

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useServer } from "../../api/ServerContext";
+import { Button } from "../common";
 
 export function ShowRecoveryModal() {
   const server = useServer();
@@ -16,7 +17,7 @@ export function ShowRecoveryModal() {
       <h1>Show File Could Not Be Loaded</h1>
       <p>The active show file might be corrupted or incompatible with this version. It has not been changed or deleted.</p>
       <pre>{error}</pre>
-      <button disabled={busy} onClick={() => void initialize()}>{busy ? "Initializing…" : "Initialize New Empty Show"}</button>
+      <Button disabled={busy} onClick={() => void initialize()}>{busy ? "Initializing…" : "Initialize New Empty Show"}</Button>
       <small>This creates and activates a separate empty show. The damaged file remains available for recovery.</small>
       {server.error && <p className="modal-error">{server.error}</p>}
     </section>

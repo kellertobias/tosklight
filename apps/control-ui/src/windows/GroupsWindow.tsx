@@ -4,6 +4,7 @@ import type { WindowProps } from "./windowTypes";
 import { useServer } from "../api/ServerContext";
 import type { StoredGroup, VersionedObject } from "../api/types";
 import { useApp } from "../state/AppContext";
+import { Button, Input } from "../components/common";
 
 export function GroupsWindow({ compact }: WindowProps) {
   const server = useServer();
@@ -78,7 +79,7 @@ export function GroupsWindow({ compact }: WindowProps) {
 
   return (
     <div className="pool-window group-pool-window">
-      {!compact && <header className="window-toolbar"><h1>Group Pool <small>{server.selectedFixtures.length} fixtures selected · ordered</small></h1><span className="spacer" />{state.groupsReturnToStage && <button onClick={() => dispatch({ type: "RETURN_TO_STAGE" })}>Back to Stage</button>}<button onClick={() => dispatch({ type: "OPEN_BUILTIN", kind: "presets" })}>Presets</button></header>}
+      {!compact && <header className="window-toolbar"><h1>Group Pool <small>{server.selectedFixtures.length} fixtures selected · ordered</small></h1><span className="spacer" />{state.groupsReturnToStage && <Button onClick={() => dispatch({ type: "RETURN_TO_STAGE" })}>Back to Stage</Button>}<Button onClick={() => dispatch({ type: "OPEN_BUILTIN", kind: "presets" })}>Presets</Button></header>}
       <div className="card-pool">
         {cards.map((group, index) => (
           <GroupCard
@@ -125,43 +126,43 @@ export function GroupsWindow({ compact }: WindowProps) {
                   .join(" · ")
               : "empty"}
           </small>
-          <button
+          <Button
             onClick={() => {
               void server.selectGroup(contextual.id);
               setContextGroup(null);
             }}
           >
             Select live group
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => {
               void server.selectGroup(contextual.id, true);
               setContextGroup(null);
             }}
           >
             Select frozen group
-          </button>
+          </Button>
           {contextual.body.frozen_from && (
-            <button
+            <Button
               onClick={() => {
                 void server.refreshFrozenGroup(contextual.id);
                 setContextGroup(null);
               }}
             >
               Refresh frozen snapshot
-            </button>
+            </Button>
           )}
           {contextual.body.derived_from ? (
-            <button
+            <Button
               onClick={() => {
                 void server.detachDerivedGroup(contextual.id);
                 setContextGroup(null);
               }}
             >
               Detach derived group
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
               onClick={() => {
                 const count = Object.keys(
                   contextual.body.programming ?? {},
@@ -180,17 +181,17 @@ export function GroupsWindow({ compact }: WindowProps) {
               }}
             >
               Replace membership with selection
-            </button>
+            </Button>
           )}
-          <button
+          <Button
             onClick={() => {
               void server.undoGroup(contextual.id);
               setContextGroup(null);
             }}
           >
             Undo membership/programming change
-          </button>
-          <button onClick={() => setContextGroup(null)}>Cancel</button>
+          </Button>
+          <Button onClick={() => setContextGroup(null)}>Cancel</Button>
         </div>
       )}
     </div>
@@ -240,7 +241,7 @@ function GroupCard({
     <article
       className={`group-card-shell ${group?.body.derived_from ? "derived" : ""} ${group?.body.frozen_from ? "frozen" : ""}`}
     >
-      <button
+      <Button
         className={`group-card pool-cell ${selected ? "selected" : !group || !group.body.fixtures.length ? "empty" : ""} ${storeArmed && !group ? "store-target" : ""}`}
         onPointerDown={beginHold}
         onPointerUp={cancelHold}
@@ -278,12 +279,12 @@ function GroupCard({
             <small>{storeArmed ? "Tap to record empty group" : "Press Record to use this slot"}</small>
           </>
         )}
-      </button>
+      </Button>
       {group && (
         <label className="group-master">
           Fader {group.body.playback_fader ?? "—"} · Master{" "}
           <strong>{Math.round((group.body.master ?? 1) * 100)}%</strong>
-          <input
+          <Input
             aria-label={`${group.body.name ?? `Group ${index + 1}`} master`}
             type="range"
             min="0"

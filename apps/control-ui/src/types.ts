@@ -20,6 +20,7 @@ export type DockMode = "desks" | "builtins";
 export type ValueSource = "programmer" | "playback" | "default";
 export type StageMode = "select" | "setup" | "navigate";
 export type StageView = "2d" | "3d";
+export type DmxDotSize = "small" | "large";
 
 export interface GridRect {
   x: number;
@@ -113,6 +114,35 @@ export interface AppState {
   stagePanY: number;
   stageOrbitX: number;
   stageOrbitY: number;
+  stageGroupsVisible: boolean;
+  stageShowSelection: boolean;
+  stageEnvironmentBrightness: number;
+  dmxDotSize: DmxDotSize;
+  fixtureGroupsVisible: boolean;
+  presetGroupsVisible: boolean;
   groupsReturnToStage: "builtin" | "desk" | null;
   blackout: boolean;
+}
+
+export interface WindowSettings {
+  dockMode: DockMode;
+  builtIn: BuiltInWindow | null;
+  lastBuiltIn: BuiltInWindow;
+  presetFamily: AppState["presetFamily"];
+  playbackColumns: number;
+  playbackRows: number;
+  playbackPage: number;
+  stageMode: StageMode;
+  stageView: StageView;
+  stageZoom: number;
+  stagePanX: number;
+  stagePanY: number;
+  stageOrbitX: number;
+  stageOrbitY: number;
+  stageGroupsVisible: boolean;
+  stageShowSelection: boolean;
+  stageEnvironmentBrightness: number;
+  dmxDotSize: DmxDotSize;
+  fixtureGroupsVisible: boolean;
+  presetGroupsVisible: boolean;
 }

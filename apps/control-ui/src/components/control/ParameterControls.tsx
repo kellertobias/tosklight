@@ -4,6 +4,7 @@ import { useServer } from "../../api/ServerContext";
 import type { VisualizationSnapshot } from "../../api/types";
 import { VerticalTouchFader } from "./VerticalTouchFader";
 import { StageCommandControls } from "./StageCommandControls";
+import { Button } from "../common";
 
 const families = {
   Intensity: ["intensity", "shutter", "strobe", "master"],
@@ -145,30 +146,30 @@ export function ParameterControls() {
     <div className="parameter-controls">
       <div className="family-tabs">
         {(Object.keys(families) as Family[]).map((name) => (
-            <button
+            <Button
               onClick={() => setFamily(name)}
               className={family === name ? "active" : ""}
               key={name}
             >
               {name}
-            </button>
+            </Button>
           ))}
         <span className="family-spacer" />
-        {family === "Position" && <button className="align-cycle" onClick={() => {
+        {family === "Position" && <Button className="align-cycle" onClick={() => {
           const modes = ["left", "right", "center", "out"] as const;
           const mode = modes[alignIndex];
           void server.alignSelection("pan", mode);
           setAlignIndex((alignIndex + 1) % modes.length);
-        }}>Align {(["Left", "Right", "Center", "Out"] as const)[alignIndex]}</button>}
+        }}>Align {(["Left", "Right", "Center", "Out"] as const)[alignIndex]}</Button>}
         {specialFamilies.has(family as SpecialFamily) && (
-            <button
+            <Button
               className="special-dialogs"
               onClick={() => dispatch({ type: "OPEN_SPECIAL_DIALOG", family: family as SpecialFamily })}
             >
               ◇ Special Dialog
-            </button>
+            </Button>
         )}
-        <button onClick={() => setDynamicsMode(!dynamicsMode)} className={`dynamics-family ${dynamicsMode ? "active" : ""}`}>Dynamics</button>
+        <Button onClick={() => setDynamicsMode(!dynamicsMode)} className={`dynamics-family ${dynamicsMode ? "active" : ""}`}>Dynamics</Button>
       </div>
       <div className="parameter-surfaces">
         {!server.selectedFixtures.length && !server.selectedGroupId ? (
@@ -190,6 +191,7 @@ export function ParameterControls() {
                 display={`${Math.round(value * 100)}%`}
                 accentColor={attribute === "color.red" ? "#ff3d45" : attribute === "color.green" ? "#35d568" : attribute === "color.blue" ? "#378eff" : attribute === "color.white" ? "#ffffff" : attribute === "color.amber" ? "#ffb30f" : attribute === "color.uv" ? "#9a55ff" : undefined}
                 mode={dynamicsMode ? "Dynamics" : undefined}
+                directInput
                 onChange={(next) => void applyParameter(attribute, next / 100)}
               />
             );

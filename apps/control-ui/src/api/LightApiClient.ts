@@ -186,6 +186,28 @@ export class LightApiClient {
     return response.blob();
   }
 
+  async previewMvr(file: File, showId?: string): Promise<import("./types").MvrImportPreview> {
+    if (!this.session) throw new Error("A server session is required");
+    const query = showId ? `?show_id=${encodeURIComponent(showId)}` : "";
+    const headers = this.boundaryHeaders(new Headers({ authorization: `Bearer ${this.session.token}`, "content-type": "application/octet-stream" }));
+    const response = await fetch(`${this.baseUrl}/api/v1/mvr/imports/preview${query}`, { method: "POST", headers, body: file });
+    if (!response.ok) throw new Error(await response.text());
+    return response.json();
+  }
+
+  applyMvr(token: string, input: { new_show?: { name: string; open_after_import: boolean }; existing_show_id?: string; resolutions?: Record<string, { action: string; universe?: number; address?: number }> }): Promise<import("./types").MvrApplyResult> {
+    return this.request(`/api/v1/mvr/imports/${token}/apply`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) });
+  }
+
+  mvrExportPreview(id: string): Promise<import("./types").MvrExportPreview> { return this.request(`/api/v1/shows/${id}/mvr/preview`); }
+  async downloadMvr(id: string): Promise<Blob> {
+    if (!this.session) throw new Error("A server session is required");
+    const headers = this.boundaryHeaders(new Headers({ authorization: `Bearer ${this.session.token}` }));
+    const response = await fetch(`${this.baseUrl}/api/v1/shows/${id}/mvr`, { headers });
+    if (!response.ok) throw new Error(await response.text());
+    return response.blob();
+  }
+
   configuration(): Promise<{ configuration: DeskConfiguration; output_health: import("./types").OutputHealth }> {
     return this.request("/api/v1/configuration", {}, false);
   }

@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Default capability for the Light control surface",
   "windows": ["main", "screen-*"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "core:window:allow-start-dragging"]
 }

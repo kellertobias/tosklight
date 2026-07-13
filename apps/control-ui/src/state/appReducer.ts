@@ -1,4 +1,4 @@
-import { GRID_COLUMNS, GRID_ROWS, type AppState, type BuiltInWindow, type GridRect } from "../types";
+import { GRID_COLUMNS, GRID_ROWS, type AppState, type BuiltInWindow, type GridRect, type WindowSettings } from "../types";
 import { initialDesks } from "../data/mockData";
 
 export type Action =
@@ -13,6 +13,9 @@ export type Action =
   | { type: "SET_STAGE_MODE"; value: AppState["stageMode"] }
   | { type: "SET_STAGE_VIEW"; value: AppState["stageView"] }
   | { type: "SET_STAGE_NAVIGATION"; zoom?: number; panX?: number; panY?: number; orbitX?: number; orbitY?: number }
+  | { type: "SET_STAGE_OPTIONS"; groupsVisible?: boolean; showSelection?: boolean; environmentBrightness?: number }
+  | { type: "SET_DMX_DOT_SIZE"; value: AppState["dmxDotSize"] }
+  | { type: "SET_BUILTIN_GROUPS_VISIBLE"; window: "fixtures" | "presets"; value: boolean }
   | { type: "OPEN_GROUPS_FROM_STAGE"; origin?: "builtin" | "desk" }
   | { type: "RETURN_TO_STAGE" }
   | { type: "SET_BLACKOUT"; value: boolean }
@@ -38,7 +41,7 @@ export type Action =
   | { type: "TOGGLE_TOUCH_SCROLLBARS" }
   | { type: "SET_STORE_ARMED"; value: boolean }
   | { type: "SET_PATCH_ARMED"; value: boolean }
-  | { type: "HYDRATE_LAYOUT"; desks: AppState["desks"]; activeDeskId: string };
+  | { type: "HYDRATE_LAYOUT"; desks: AppState["desks"]; activeDeskId: string; windowSettings?: Partial<WindowSettings> };
 
 export const initialState: AppState = {
   dockMode: "desks",
@@ -79,11 +82,18 @@ export const initialState: AppState = {
   stagePanY: 0,
   stageOrbitX: 0,
   stageOrbitY: 0,
+  stageGroupsVisible: true,
+  stageShowSelection: true,
+  stageEnvironmentBrightness: 1,
+  dmxDotSize: typeof globalThis.matchMedia === "function" && globalThis.matchMedia("(pointer: coarse)").matches ? "large" : "small",
+  fixtureGroupsVisible: true,
+  presetGroupsVisible: true,
   groupsReturnToStage: null,
   blackout: false,
 };
 
 const clamp = (value: number, minimum: number, maximum: number) => Math.max(minimum, Math.min(maximum, value));
+const overlaps = (a: GridRect, b: GridRect) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 
 export function appReducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -114,6 +124,7 @@ export function appReducer(state: AppState, action: Action): AppState {
     }
     case "HYDRATE_LAYOUT": return {
       ...state,
+      ...action.windowSettings,
       desks: action.desks,
       activeDeskId: action.desks.some((desk) => desk.id === action.activeDeskId) ? action.activeDeskId : action.desks[0]?.id ?? state.activeDeskId,
       savingDesk: false,
@@ -128,15 +139,15 @@ export function appReducer(state: AppState, action: Action): AppState {
     }
     case "SET_PANE_RECT": return {
       ...state,
-      desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : {
-        ...desk,
-        panes: desk.panes.map((pane) => pane.id !== action.id ? pane : {
-          ...pane,
-          x: clamp(action.rect.x ?? pane.x, 1, GRID_COLUMNS),
-          y: clamp(action.rect.y ?? pane.y, 1, GRID_ROWS),
-          width: clamp(action.rect.width ?? pane.width, 1, GRID_COLUMNS - clamp(action.rect.x ?? pane.x, 1, GRID_COLUMNS) + 1),
-          height: clamp(action.rect.height ?? pane.height, 1, GRID_ROWS - clamp(action.rect.y ?? pane.y, 1, GRID_ROWS) + 1),
-        }),
+      desks: state.desks.map((desk) => {
+        if (desk.id !== state.activeDeskId) return desk;
+        const pane = desk.panes.find((item) => item.id === action.id);
+        if (!pane) return desk;
+        const x = clamp(action.rect.x ?? pane.x, 1, GRID_COLUMNS);
+        const y = clamp(action.rect.y ?? pane.y, 1, GRID_ROWS);
+        const candidate = { ...pane, x, y, width: clamp(action.rect.width ?? pane.width, 1, GRID_COLUMNS - x + 1), height: clamp(action.rect.height ?? pane.height, 1, GRID_ROWS - y + 1) };
+        if (desk.panes.some((item) => item.id !== pane.id && overlaps(candidate, item))) return desk;
+        return { ...desk, panes: desk.panes.map((item) => item.id === pane.id ? candidate : item) };
       }),
     };
     case "SET_PANE_GROUP_SHORTCUTS": return { ...state, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, showGroupShortcuts: action.value } : pane) }) };
@@ -144,6 +155,9 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "SET_STAGE_MODE": return { ...state, stageMode: action.value };
     case "SET_STAGE_VIEW": return { ...state, stageView: action.value };
     case "SET_STAGE_NAVIGATION": return { ...state, stageZoom: action.zoom ?? state.stageZoom, stagePanX: action.panX ?? state.stagePanX, stagePanY: action.panY ?? state.stagePanY, stageOrbitX: action.orbitX ?? state.stageOrbitX, stageOrbitY: action.orbitY ?? state.stageOrbitY };
+    case "SET_STAGE_OPTIONS": return { ...state, stageGroupsVisible: action.groupsVisible ?? state.stageGroupsVisible, stageShowSelection: action.showSelection ?? state.stageShowSelection, stageEnvironmentBrightness: clamp(action.environmentBrightness ?? state.stageEnvironmentBrightness, 0, 2) };
+    case "SET_DMX_DOT_SIZE": return { ...state, dmxDotSize: action.value };
+    case "SET_BUILTIN_GROUPS_VISIBLE": return action.window === "fixtures" ? { ...state, fixtureGroupsVisible: action.value } : { ...state, presetGroupsVisible: action.value };
     case "REMOVE_PANE": return { ...state, paneSettingsId: null, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: desk.panes.filter((pane) => pane.id !== action.id) }) };
     case "OPEN_DESK_SETTINGS": return { ...state, deskSettingsOpen: Boolean(action.id), deskSettingsId: action.id };
     case "UPDATE_DESK": return { ...state, desks: state.desks.map((desk) => desk.id === action.id ? { ...desk, name: action.name ?? desk.name, icon: action.icon ?? desk.icon } : desk) };
@@ -155,6 +169,8 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "ADD_WINDOW": {
       if (!state.windowPicker) return state;
       const pane = { id: `${action.kind}-${Date.now()}`, kind: action.kind, title: action.kind[0].toUpperCase() + action.kind.slice(1), ...state.windowPicker };
+      const activeDesk = state.desks.find((desk) => desk.id === state.activeDeskId);
+      if (activeDesk?.panes.some((item) => overlaps(pane, item))) return { ...state, windowPicker: null };
       return { ...state, windowPicker: null, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: [...desk.panes, pane] }) };
     }
     case "ADVANCE_PRELOAD": return { ...state, preload: state.preload === "blind" ? "output" : "blind", preloadActive: state.preload === "blind" ? true : state.preloadActive };

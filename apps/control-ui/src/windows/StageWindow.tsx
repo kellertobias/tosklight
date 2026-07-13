@@ -7,6 +7,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type CSSProperties,
 } from "react";
+import { Button, Input, Select } from "../components/common";
 import { GroupStrip } from "../components/shared/GroupStrip";
 import { fixtures as visualFixtures } from "../data/mockData";
 import { useServer } from "../api/ServerContext";
@@ -19,12 +20,12 @@ import type { StageAsset, StagePosition3d } from "../api/ServerContext";
 import type { VisualizationSnapshot } from "../api/types";
 import { importStageAssets } from "./stageAssetImport";
 import { useApp } from "../state/AppContext";
-import { GroupsPoolButton } from "../components/shared/GroupsPoolButton";
+import { BUILT_IN_STAGE_ASSETS, type BuiltInStageAssetId } from "./builtInStageModels";
 
 const symbols = ["◉", "◈", "◎", "◐", "◇", "◍"];
 type Point = { x: number; y: number };
 
-export function StageWindow({ compact, showGroupShortcuts, stageView, followPreload: paneFollowPreload }: WindowProps) {
+export function StageWindow({ compact, paneId, showGroupShortcuts, stageView, followPreload: paneFollowPreload }: WindowProps) {
   const server = useServer();
   const { state, dispatch } = useApp();
   const mode = state.stageMode;
@@ -32,8 +33,10 @@ export function StageWindow({ compact, showGroupShortcuts, stageView, followPrel
   const view = compact ? (stageView ?? state.stageView) : state.stageView;
   const setView = (value: "2d" | "3d") => dispatch({ type: "SET_STAGE_VIEW", value });
   const [dedicatedFollowPreload, setDedicatedFollowPreload] = useState(false);
+  const lastFollowToggle = useRef(0);
   const followPreload = compact ? Boolean(paneFollowPreload) : dedicatedFollowPreload;
-  const [groupsVisible, setGroupsVisible] = useState(!compact);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const groupsVisible = compact ? Boolean(showGroupShortcuts) : state.stageGroupsVisible;
   const tauri =
     typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
   const zoom = state.stageZoom;
@@ -44,6 +47,8 @@ export function StageWindow({ compact, showGroupShortcuts, stageView, followPrel
     Record<string, StagePosition3d>
   >({});
   const [assets, setAssets] = useState<StageAsset[]>([]);
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [builtInAssetId, setBuiltInAssetId] = useState<BuiltInStageAssetId>("truss-1m");
   const assetsRef = useRef(assets);
   const assetInput = useRef<HTMLInputElement>(null);
   const positions3dRef = useRef(positions3d);
@@ -63,6 +68,12 @@ export function StageWindow({ compact, showGroupShortcuts, stageView, followPrel
     width: number;
     height: number;
   } | null>(null);
+
+  useEffect(() => {
+    const openImport = (event: Event) => { if (!(event instanceof CustomEvent) || !event.detail || event.detail === paneId) assetInput.current?.click(); };
+    window.addEventListener("light:import-stage-scene", openImport);
+    return () => window.removeEventListener("light:import-stage-scene", openImport);
+  }, [paneId]);
 
   useEffect(() => {
     positionsRef.current = positions;
@@ -133,13 +144,17 @@ export function StageWindow({ compact, showGroupShortcuts, stageView, followPrel
   const columns = compact ? 6 : 8;
   const fixtures3d = useMemo(
     () =>
-      (server.patch?.fixtures ?? []).map((fixture, index) => ({
-        fixture,
-        index,
-        position:
-          positions3d[fixture.fixture_id] ??
-          migrateStagePosition(positions[fixture.fixture_id], index),
-      })),
+      (server.patch?.fixtures ?? []).flatMap((fixture, fixtureIndex) => {
+        const physical = [{ id: fixture.fixture_id, location: fixture.location, rotation: fixture.rotation }, ...(fixture.multipatch ?? [])];
+        return physical.map((instance, instanceIndex) => {
+          const index = fixtureIndex * 16 + instanceIndex;
+          const stored = positions3d[instance.id];
+          const located = instance.location && (instance.location.x || instance.location.y || instance.location.z)
+            ? { x: instance.location.x / 1000, y: instance.location.y / 1000, z: instance.location.z / 1000, rotationX: instance.rotation?.x ?? 0, rotationY: instance.rotation?.y ?? 0, rotationZ: instance.rotation?.z ?? 0 }
+            : null;
+          return { fixture, instanceId: instance.id, index, position: stored ?? located ?? migrateStagePosition(instanceIndex ? undefined : positions[fixture.fixture_id], index) };
+        });
+      }),
     [server.patch, positions3d, positions],
   );
   const save3d = () =>
@@ -160,6 +175,32 @@ export function StageWindow({ compact, showGroupShortcuts, stageView, followPrel
       positions3d: positions3dRef.current,
       assets: next,
     });
+  };
+  const addBuiltInAsset = async () => {
+    const definition = BUILT_IN_STAGE_ASSETS.find((item) => item.id === builtInAssetId)!;
+    const nextAsset: StageAsset = {
+      id: crypto.randomUUID(), name: definition.name, format: "builtin", builtinId: builtInAssetId,
+      position: { x: 0, y: 4, z: builtInAssetId === "stage-2x1m" ? .5 : 3, rotationX: 0, rotationY: 0, rotationZ: 0 },
+      scale: 1,
+    };
+    const next = [...assetsRef.current, nextAsset];
+    assetsRef.current = next;
+    setAssets(next);
+    setSelectedAssetId(nextAsset.id);
+    await server.saveStageLayout({ version: 2, positions: positionsRef.current, positions3d: positions3dRef.current, assets: next });
+  };
+  const updateStageAsset = (assetId: string, update: Partial<StageAsset>) => {
+    const next = assetsRef.current.map((asset) => asset.id === assetId ? { ...asset, ...update } : asset);
+    assetsRef.current = next;
+    setAssets(next);
+  };
+  const saveAssets = () => server.saveStageLayout({ version: 2, positions: positionsRef.current, positions3d: positions3dRef.current, assets: assetsRef.current });
+  const removeStageAsset = (assetId: string) => {
+    const next = assetsRef.current.filter((asset) => asset.id !== assetId);
+    assetsRef.current = next;
+    setAssets(next);
+    setSelectedAssetId(null);
+    void server.saveStageLayout({ version: 2, positions: positionsRef.current, positions3d: positions3dRef.current, assets: next });
   };
 
   const selectFixture = (
@@ -288,67 +329,57 @@ export function StageWindow({ compact, showGroupShortcuts, stageView, followPrel
 
   return (
     <div className={`stage-window ${compact ? "compact" : ""}`}>
+      <Input ref={assetInput} hidden type="file" accept=".glb,.stl,.3mf,.gdtf" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importAssets(file); event.currentTarget.value = ""; }} />
       {!compact && (
         <header className="window-toolbar">
-          <h1>
-            Stage <small>{server.selectedFixtures.length} selected · Tap to select · Shift range · Ctrl/Command track macro</small>
-          </h1>
+          <div className="stage-selection-status">
+            <b>{server.selectedFixtures.length} selected</b>
+            <small>Tap to select · Shift for range · Control/Command tracks macro</small>
+          </div>
+          <h1 className="stage-centered-title">Stage</h1>
           <span className="spacer" />
-          <button className={followPreload ? "active" : ""} onClick={() => setDedicatedFollowPreload(!dedicatedFollowPreload)}>Follow Preload</button>
-          {tauri && (
-            <div className="button-group">
-              <button
-                className={view === "2d" ? "active" : ""}
-                onClick={() => setView("2d")}
-              >
-                2D
-              </button>
-              <button
-                className={view === "3d" ? "active" : ""}
-                onClick={() => setView("3d")}
-              >
-                3D
-              </button>
-            </div>
-          )}
+          {mode === "setup" ? <Button onClick={() => assetInput.current?.click()}>Import scene</Button> : <Button className={followPreload ? "active" : ""} onClick={() => { const now = performance.now(); if (now - lastFollowToggle.current < 400) return; lastFollowToggle.current = now; setDedicatedFollowPreload((current) => !current); }}>Follow Preload</Button>}
           <div className="button-group">
-            <button
+            <Button
               className={mode === "select" ? "active" : ""}
               onClick={() => setMode("select")}
             >
               Select fixtures
-            </button>
-            <button
+            </Button>
+            <Button
               className={mode === "setup" ? "active" : ""}
               onClick={() => setMode("setup")}
             >
               Setup positions
-            </button>
-            <button
+            </Button>
+            <Button
               className={mode === "navigate" ? "active" : ""}
               onClick={() => setMode("navigate")}
             >
               Navigate
-            </button>
+            </Button>
           </div>
-          <GroupsPoolButton fromStage shortcutsVisible={groupsVisible} onToggleShortcuts={() => setGroupsVisible(!groupsVisible)} />
-          {view === "3d" && (
-            <>
-              <input
-                ref={assetInput}
-                hidden
-                type="file"
-                accept=".glb,.stl,.3mf,.mvr,.gdtf"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) void importAssets(file);
-                  event.currentTarget.value = "";
-                }}
-              />
-              <button onClick={() => assetInput.current?.click()}>Import scene</button>
-            </>
+          <Button className={optionsOpen ? "active" : ""} onClick={() => setOptionsOpen((open) => !open)}>Options</Button>
+          {view === "3d" && mode === "setup" && (
+            <div className="stage-builtins">
+              <Select aria-label="Built-in stage element" value={builtInAssetId} onChange={(event) => setBuiltInAssetId(event.target.value as BuiltInStageAssetId)}>
+                {BUILT_IN_STAGE_ASSETS.map((asset) => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
+              </Select>
+              <Button onClick={() => void addBuiltInAsset()}>Add element</Button>
+            </div>
           )}
         </header>
+      )}
+      {optionsOpen && !compact && (
+        <div className="stage-options-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) setOptionsOpen(false); }}>
+          <section className="stage-options-panel">
+            <header><h2>Stage Options</h2><Button onClick={() => setOptionsOpen(false)}>×</Button></header>
+            <label><span>View</span><div className="button-group"><Button className={view === "2d" ? "active" : ""} onClick={() => setView("2d")}>2D</Button><Button disabled={!tauri} className={view === "3d" ? "active" : ""} onClick={() => setView("3d")}>3D</Button></div></label>
+            <label><span>Groups shortcuts</span><Input type="checkbox" checked={groupsVisible} onChange={(event) => dispatch({ type: "SET_STAGE_OPTIONS", groupsVisible: event.target.checked })}/></label>
+            <label><span>Show Selection</span><Input type="checkbox" checked={state.stageShowSelection} onChange={(event) => dispatch({ type: "SET_STAGE_OPTIONS", showSelection: event.target.checked })}/></label>
+            <label className="stage-brightness-option"><span>Environment brightness <b>{Math.round(state.stageEnvironmentBrightness * 100)}%</b></span><Input type="range" min="0" max="2" step="0.05" value={state.stageEnvironmentBrightness} onChange={(event) => dispatch({ type: "SET_STAGE_OPTIONS", environmentBrightness: Number(event.target.value) })}/></label>
+          </section>
+        </div>
       )}
       {view === "3d" ? (
         <div className="stage-canvas stage-canvas-3d">
@@ -358,6 +389,8 @@ export function StageWindow({ compact, showGroupShortcuts, stageView, followPrel
             visualization={visualization}
             selected={server.selectedFixtures}
             setup={mode === "setup"}
+            showSelection={state.stageShowSelection}
+            environmentBrightness={state.stageEnvironmentBrightness}
             onSelect={(fixtureId, additive) =>
               void server.setSelection(
                 additive
@@ -413,7 +446,7 @@ export function StageWindow({ compact, showGroupShortcuts, stageView, followPrel
                   ).map((key) => (
                     <label key={key}>
                       {key}
-                      <input
+                      <Input
                         type="number"
                         step={key.startsWith("rotation") ? 1 : 0.1}
                         value={fixture.position[key]}
@@ -427,6 +460,25 @@ export function StageWindow({ compact, showGroupShortcuts, stageView, followPrel
                 </aside>
               );
             })()}
+          {mode === "setup" && assets.length > 0 && (
+            <aside className="stage-3d-asset-inspector">
+              <b>Scene elements</b>
+              <Select value={selectedAssetId ?? ""} onChange={(event) => setSelectedAssetId(event.target.value || null)}>
+                <option value="">Select element…</option>
+                {assets.map((asset) => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
+              </Select>
+              {(() => {
+                const asset = assets.find((item) => item.id === selectedAssetId);
+                if (!asset) return null;
+                const positionKeys = ["x", "y", "z", "rotationX", "rotationY", "rotationZ"] as const;
+                return <>
+                  {positionKeys.map((key) => <label key={key}>{key}<Input type="number" step={key.startsWith("rotation") ? 1 : .1} value={asset.position[key]} onChange={(event) => updateStageAsset(asset.id, { position: { ...asset.position, [key]: Number(event.target.value) } })} onBlur={() => void saveAssets()} /></label>)}
+                  <label>scale<Input type="number" min="0.01" step="0.1" value={asset.scale} onChange={(event) => updateStageAsset(asset.id, { scale: Math.max(.01, Number(event.target.value)) })} onBlur={() => void saveAssets()} /></label>
+                  <Button onClick={() => removeStageAsset(asset.id)}>Remove element</Button>
+                </>;
+              })()}
+            </aside>
+          )}
         </div>
       ) : (
         <div
@@ -458,7 +510,7 @@ export function StageWindow({ compact, showGroupShortcuts, stageView, followPrel
                 rotation: index * 23 - 70,
               };
               return (
-                <button
+                <Button
                   data-fixture-id={fixture.fixtureId || undefined}
                   onClick={(event) => selectFixture(fixture.fixtureId, event)}
                   onPointerDown={(event) => {
@@ -481,7 +533,7 @@ export function StageWindow({ compact, showGroupShortcuts, stageView, followPrel
                     setDraggingFixture(null);
                   }}
                   key={fixture.fixtureId || index}
-                  className={`stage-fixture ${server.selectedFixtures.includes(fixture.fixtureId) ? "selected" : ""}`}
+                  className={`stage-fixture ${state.stageShowSelection && server.selectedFixtures.includes(fixture.fixtureId) ? "selected" : ""}`}
                   style={{
                     left: `${position.x}%`,
                     top: `${position.y}%`,
@@ -494,7 +546,7 @@ export function StageWindow({ compact, showGroupShortcuts, stageView, followPrel
                   <span>{fixture.icon ? <img src={fixture.icon} alt="" /> : symbols[index % symbols.length]}<i className="lamp-color-dot" style={{ background: fixture.color }} /></span>
                   <i className={`lamp-position-line ${fixture.dimmer > 0 ? "active" : "inactive"}`} style={{ transform: `rotate(${fixture.pan * 360 - 180}deg)`, color: fixture.dimmer > 0 ? fixture.color : undefined }}><i style={{ left: `${fixture.tilt * 100}%` }} /></i>
                   <small>{index + 1}</small>
-                </button>
+                </Button>
               );
             })}
           </div>
@@ -507,7 +559,7 @@ export function StageWindow({ compact, showGroupShortcuts, stageView, followPrel
           )}
         </div>
       )}
-      {(!compact ? groupsVisible : showGroupShortcuts) && <GroupStrip />}
+      {groupsVisible && <GroupStrip />}
     </div>
   );
 }

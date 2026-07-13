@@ -12,6 +12,7 @@ import {
   type Stage3dFixture,
 } from "./stage3dScene";
 import { useApp } from "../state/AppContext";
+import { createBuiltInStageAsset } from "./builtInStageModels";
 
 interface Props {
   fixtures: Stage3dFixture[];
@@ -19,6 +20,8 @@ interface Props {
   visualization: VisualizationSnapshot | null;
   selected: string[];
   setup: boolean;
+  showSelection: boolean;
+  environmentBrightness: number;
   onSelect: (fixtureId: string, additive: boolean) => void;
   onMove: (fixtureId: string, position: StagePosition3d) => void;
   onMoveEnd: (fixtureId: string, position: StagePosition3d) => void;
@@ -30,6 +33,8 @@ export function Stage3dCanvas({
   visualization,
   selected,
   setup,
+  showSelection,
+  environmentBrightness,
   onSelect,
   onMove,
   onMoveEnd,
@@ -54,7 +59,8 @@ export function Stage3dCanvas({
     const { scene, fixtureObjects } = buildStageScene(
       fixtures,
       renderVisualization,
-      new Set(selected),
+      showSelection ? new Set(selected) : new Set(),
+      environmentBrightness,
     );
     let assetCancelled = false;
     const decode = (value: string) =>
@@ -66,13 +72,13 @@ export function Stage3dCanvas({
         if (assetCancelled) return;
         new GLTFLoader().parse(buffer, "", (gltf) => {
           if (assetCancelled) return;
-          const root = fixtureObjects.get(item.fixture.fixture_id);
+          const root = fixtureObjects.get(item.instanceId ?? item.fixture.fixture_id);
           if (!root) return;
           const placeholder = root.getObjectByName("fixture-placeholder");
           if (placeholder) root.remove(placeholder);
           const model = gltf.scene;
           model.name = "fixture-model";
-          model.traverse((object) => { object.userData.fixtureId = item.fixture.fixture_id; });
+          model.traverse((object) => { object.userData.fixtureId = item.fixture.fixture_id; object.userData.instanceId = item.instanceId ?? item.fixture.fixture_id; });
           const box = new THREE.Box3().setFromObject(model);
           const size = box.getSize(new THREE.Vector3());
           const desiredHeight = (item.fixture.definition.physical.height_millimetres ?? 600) / 1000;
@@ -87,7 +93,20 @@ export function Stage3dCanvas({
       }).catch(() => undefined);
     }
     for (const asset of assets)
-      void decode(asset.dataUrl)
+      asset.format === "builtin" && asset.builtinId
+        ? (() => {
+            const object = createBuiltInStageAsset(asset.builtinId);
+            object.name = `asset:${asset.id}`;
+            object.position.set(asset.position.x, asset.position.z, -asset.position.y);
+            object.rotation.set(
+              THREE.MathUtils.degToRad(asset.position.rotationX),
+              THREE.MathUtils.degToRad(asset.position.rotationZ),
+              THREE.MathUtils.degToRad(asset.position.rotationY),
+            );
+            object.scale.setScalar(asset.scale);
+            scene.add(object);
+          })()
+        : asset.dataUrl && void decode(asset.dataUrl)
         .then((buffer) => {
           if (assetCancelled) return;
           const apply = (object: THREE.Object3D) => {
@@ -145,7 +164,8 @@ export function Stage3dCanvas({
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     let dragging: {
-      id: string;
+      fixtureId: string;
+      instanceId: string;
       root: THREE.Object3D;
       y: number;
       offset: THREE.Vector3;
@@ -153,7 +173,7 @@ export function Stage3dCanvas({
       additive: boolean;
     } | null = null;
     const positionById = new Map(
-      fixtures.map((item) => [item.fixture.fixture_id, item.position]),
+      fixtures.map((item) => [item.instanceId ?? item.fixture.fixture_id, item.position]),
     );
     const updatePointer = (event: PointerEvent) => {
       const box = renderer.domElement.getBoundingClientRect();
@@ -177,15 +197,17 @@ export function Stage3dCanvas({
       let root: THREE.Object3D | null = hit.object;
       while (root && !root.userData.fixtureId) root = root.parent;
       const id = root?.userData.fixtureId as string;
+      const instanceId = (root?.userData.instanceId as string) || id;
       const additive = event.metaKey || event.ctrlKey;
       if (!setup) callbacks.current.onSelect(id, additive);
       if (setup && root) {
         dragging = {
-          id,
+          fixtureId: id,
+          instanceId,
           root,
           y: root.position.y,
           offset: root.position.clone().sub(hit.point),
-          pending: positionById.get(id)!,
+          pending: positionById.get(instanceId)!,
           additive,
         };
         controls.enabled = false;
@@ -199,15 +221,15 @@ export function Stage3dCanvas({
       const point = new THREE.Vector3();
       if (!raycaster.ray.intersectPlane(plane, point)) return;
       point.add(dragging.offset);
-      const current = positionById.get(dragging.id)!;
+      const current = positionById.get(dragging.instanceId)!;
       dragging.root.position.copy(point);
       dragging.pending = { ...current, x: point.x, y: -point.z, z: point.y };
     };
     const up = () => {
       if (dragging) {
-        callbacks.current.onSelect(dragging.id, dragging.additive);
-        callbacks.current.onMove(dragging.id, dragging.pending);
-        callbacks.current.onMoveEnd(dragging.id, dragging.pending);
+        callbacks.current.onSelect(dragging.fixtureId, dragging.additive);
+        callbacks.current.onMove(dragging.instanceId, dragging.pending);
+        callbacks.current.onMoveEnd(dragging.instanceId, dragging.pending);
       }
       dragging = null;
       controls.enabled = true;
@@ -249,7 +271,7 @@ export function Stage3dCanvas({
       renderer.forceContextLoss();
       renderer.dispose();
     };
-  }, [fixtures, assets, renderVisualization, selected, setup, state.stageZoom, state.stageOrbitX, state.stageOrbitY, dispatch]);
+  }, [fixtures, assets, renderVisualization, selected, setup, showSelection, environmentBrightness, state.stageZoom, state.stageOrbitX, state.stageOrbitY, dispatch]);
 
   return <div className="stage-3d-canvas" ref={host} />;
 }

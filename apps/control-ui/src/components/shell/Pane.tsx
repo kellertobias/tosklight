@@ -4,6 +4,7 @@ import { useApp } from "../../state/AppContext";
 import { windowRegistry } from "../../windows/WindowRegistry";
 import { useServer } from "../../api/ServerContext";
 import { GroupsPoolButton } from "../shared/GroupsPoolButton";
+import { Button } from "../common";
 
 export function Pane({
   pane,
@@ -18,6 +19,7 @@ export function Pane({
   const server = useServer();
   const drag = useRef<{ pointerId: number; left: number; top: number } | null>(null);
   const resize = useRef<{ pointerId: number; left: number; top: number } | null>(null);
+  const lastFollowToggle = useRef(0);
   const Window = windowRegistry[pane.kind];
   const style = {
     gridColumn: `${pane.x} / span ${pane.width}`,
@@ -33,20 +35,15 @@ export function Pane({
       {pane.kind === "stage" && <span className="pane-stage-status">{server.selectedFixtures.length} selected · Tap to select · Shift range · Ctrl/Command track macro</span>}
       {pane.kind === "fixtures" && <span className="source-legend"><i className="source-programmer">● Programmer</i><i className="source-playback">● Playback</i><i className="source-default">● Default</i></span>}
       <span className="spacer" />
-        {pane.kind === "stage" && <button className={pane.followPreload ? "active pane-follow-preload" : "pane-follow-preload"} onClick={() => dispatch({ type: "SET_PANE_STAGE_OPTION", id: pane.id, option: "followPreload", value: !pane.followPreload })}>Follow Preload</button>}
+        {pane.kind === "stage" && (state.stageMode === "setup" ? <Button onClick={() => window.dispatchEvent(new CustomEvent("light:import-stage-scene", { detail: pane.id }))}>Import Scene</Button> : <Button className={pane.followPreload ? "active pane-follow-preload" : "pane-follow-preload"} onClick={() => { const now = performance.now(); if (now - lastFollowToggle.current < 400) return; lastFollowToggle.current = now; dispatch({ type: "SET_PANE_STAGE_OPTION", id: pane.id, option: "followPreload", value: !pane.followPreload }); }}>Follow Preload</Button>)}
         {pane.kind === "stage" && <GroupsPoolButton fromStage stageOrigin="desk" shortcutsVisible={Boolean(pane.showGroupShortcuts)} onToggleShortcuts={() => dispatch({ type: "SET_PANE_GROUP_SHORTCUTS", id: pane.id, value: !pane.showGroupShortcuts })} />}
-        <button
-          aria-label={`Maximize ${pane.title}`}
-          onClick={() => dispatch({ type: "TOGGLE_MAXIMIZE", id: pane.id })}
-        >
-          ↗
-        </button>
-        <button
+        <Button
+          className="pane-settings-button"
           aria-label={`Pane settings for ${pane.title}`}
           onClick={() => dispatch({ type: "SET_PANE_SETTINGS", id: pane.id })}
         >
-          ⚙
-        </button>
+          <span aria-hidden="true">⚙</span><span>Settings</span>
+        </Button>
       </header>
       <div className="pane-content">
         <Window compact paneId={pane.id} showGroupShortcuts={Boolean(pane.showGroupShortcuts)} stageView={pane.stageView ?? state.stageView} followPreload={Boolean(pane.followPreload)} />

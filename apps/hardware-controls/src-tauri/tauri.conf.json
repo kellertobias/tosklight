@@ -1,0 +1,9 @@
+{
+  "$schema":"https://schema.tauri.app/config/2",
+  "productName":"ToskLight Hardware Controls",
+  "version":"0.1.0",
+  "identifier":"de.tokenet.tosklight.hardware-controls",
+  "build":{"beforeDevCommand":"npm run dev","devUrl":"http://127.0.0.1:4176","beforeBuildCommand":"npm run build","frontendDist":"../dist"},
+  "app":{"windows":[{"title":"ToskLight Hardware Controls","width":1600,"height":950,"minWidth":1024,"minHeight":640}],"security":{"csp":null}},
+  "bundle":{"active":true,"targets":"all","icon":["../../control-ui/src-tauri/icons/icon.png"]}
+}

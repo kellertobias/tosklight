@@ -4,8 +4,8 @@ import { useServer } from "../api/ServerContext";
 import type { DeskConfiguration } from "../api/types";
 import { configuredServerUrl } from "../api/LightApiClient";
 import { FixtureLibrarySetup } from "../components/setup/FixtureLibrarySetup";
-import { useApp } from "../state/AppContext";
 import { ScreensSetup } from "../components/setup/ScreensSetup";
+import { Button, Input } from "../components/common";
 
 const sections = [
   "Shows & recovery",
@@ -14,27 +14,19 @@ const sections = [
   "Outputs",
   "Timecode",
   "Network & API",
-  "Safety",
-  "Diagnostics",
   "Fixture library",
-  "Playback layout",
-  "Screens",
+  "Screens & playback",
 ];
 
 export function SetupWindow(_: WindowProps) {
   const server = useServer();
-  const { state, dispatch } = useApp();
   const [section, setSection] = useState(0);
   const [draft, setDraft] = useState<DeskConfiguration | null>(
     server.configuration,
   );
   const [restartRequired, setRestartRequired] = useState(false);
   const [serverUrl, setServerUrl] = useState(configuredServerUrl());
-  const [deskButtons, setDeskButtons] = useState(3);
-  const [deskName, setDeskName] = useState("");
-  const [deskAlias, setDeskAlias] = useState("");
   useEffect(() => setDraft(server.configuration), [server.configuration]);
-  useEffect(() => { if (server.session?.desk) { setDeskButtons(server.session.desk.buttons); setDeskName(server.session.desk.name); setDeskAlias(server.session.desk.osc_alias); dispatch({ type: "SET_PLAYBACK_LAYOUT", columns: server.session.desk.columns, rows: server.session.desk.rows }); } }, [server.session?.desk, dispatch]);
 
   const save = async () => {
     if (!draft) return;
@@ -44,24 +36,24 @@ export function SetupWindow(_: WindowProps) {
   return (
     <div className="setup-window">
       <header className="window-toolbar">
-        <h1>Desk Setup</h1>
+        <h1>{section === 6 ? <>Fixture library <small>{server.fixtureLibrary.length} modes</small></> : "Desk Setup"}</h1>
         <span className="spacer" />
         {restartRequired && <small className="warning">Restart required</small>}
         <span id="setup-section-actions" className="setup-section-actions" />
-        <button disabled={!draft} onClick={() => void save()}>
+        <Button disabled={!draft} onClick={() => void save()}>
           Save changes
-        </button>
+        </Button>
       </header>
       <div>
         <nav>
           {sections.map((name, index) => (
-            <button
+            <Button
               onClick={() => setSection(index)}
               className={index === section ? "active" : ""}
               key={name}
             >
               {name}
-            </button>
+            </Button>
           ))}
         </nav>
         <main>
@@ -105,9 +97,9 @@ export function SetupWindow(_: WindowProps) {
                         : user.id}
                     </small>
                     {user.enabled && user.id !== server.session?.user.id && (
-                      <button onClick={() => server.switchUser(user.name)}>
+                      <Button onClick={() => server.switchUser(user.name)}>
                         Use this operator
-                      </button>
+                      </Button>
                     )}
                   </article>
                 ))}
@@ -143,7 +135,7 @@ export function SetupWindow(_: WindowProps) {
               <div className="configuration-form">
                 <label>
                   Frame rate
-                  <input
+                  <Input
                     type="number"
                     min="40"
                     max="44"
@@ -159,7 +151,7 @@ export function SetupWindow(_: WindowProps) {
                 </label>
                 <label>
                   Output bind address
-                  <input
+                  <Input
                     value={draft.output_bind_ip}
                     onChange={(event) =>
                       setDraft({ ...draft, output_bind_ip: event.target.value })
@@ -168,7 +160,7 @@ export function SetupWindow(_: WindowProps) {
                 </label>
                 <label>
                   Backup retention
-                  <input
+                  <Input
                     type="number"
                     min="1"
                     max="1000"
@@ -208,7 +200,7 @@ export function SetupWindow(_: WindowProps) {
               <div className="configuration-form">
                 <label>
                   Light server URL
-                  <input
+                  <Input
                     value={serverUrl}
                     onChange={(event) => setServerUrl(event.target.value)}
                   />
@@ -216,9 +208,9 @@ export function SetupWindow(_: WindowProps) {
                     Tauri can use this desk or a remote Light server.
                   </small>
                 </label>
-                <button onClick={() => server.setServerUrl(serverUrl)}>
+                <Button onClick={() => server.setServerUrl(serverUrl)}>
                   Connect to server
-                </button>
+                </Button>
               </div>
               <div className="setup-cards">
                 <section>
@@ -236,45 +228,8 @@ export function SetupWindow(_: WindowProps) {
               </div>
             </>
           )}
-          {section === 6 && (
-            <>
-              <h2>Safety</h2>
-              <p>
-                Fixture safety values and hazardous-device signal-loss policies
-                are loaded from the active show and fixture definitions.
-              </p>
-            </>
-          )}
-          {section === 7 && (
-            <>
-              <h2>Diagnostics</h2>
-              <div className="setup-cards">
-                <section>
-                  <b>
-                    {server.bootstrap?.output_health.frame_hz.toFixed(1) ?? "—"}{" "}
-                    Hz
-                  </b>
-                  <small>Current frame rate</small>
-                </section>
-                <section>
-                  <b>
-                    {server.bootstrap?.output_health.deadline_misses ?? 0}{" "}
-                    misses
-                  </b>
-                  <small>Scheduler deadlines</small>
-                </section>
-                <section>
-                  <b>
-                    {server.bootstrap?.output_health.send_errors ?? 0} errors
-                  </b>
-                  <small>Network output</small>
-                </section>
-              </div>
-            </>
-          )}
-          {section === 9 && <><h2>Playback desk</h2><p>Each client remembers a physical desk identity. Clients and OSC components joined to the same desk share its active page.</p><div className="setup-list">{server.bootstrap?.desks.map((desk) => <article key={desk.id}><b>{desk.name}</b><span>/{desk.osc_alias}/ · {desk.columns}×{desk.rows} · {desk.buttons} buttons</span><small>{desk.id === server.session?.desk.id ? "Current desk" : desk.id}</small>{desk.id !== server.session?.desk.id && <button onClick={() => server.selectControlDesk(desk.id)}>Join this desk</button>}</article>)}</div><div className="configuration-form"><label>Name<input value={deskName} onChange={(event) => setDeskName(event.target.value)}/></label><label>OSC alias<input value={deskAlias} onChange={(event) => setDeskAlias(event.target.value)}/></label><label>Playbacks per row<input type="number" min="1" max="32" value={state.playbackColumns} onChange={(event) => dispatch({ type: "SET_PLAYBACK_LAYOUT", columns: Number(event.target.value), rows: state.playbackRows })}/></label><label>Rows<input type="number" min="1" max="3" value={state.playbackRows} onChange={(event) => dispatch({ type: "SET_PLAYBACK_LAYOUT", columns: state.playbackColumns, rows: Number(event.target.value) })}/></label><label>Visible buttons<input type="number" min="0" max="3" value={deskButtons} onChange={(event) => setDeskButtons(Number(event.target.value))}/></label><button onClick={() => server.session?.desk && void server.updateControlDesk({ ...server.session.desk, name: deskName, osc_alias: deskAlias, columns: state.playbackColumns, rows: state.playbackRows, buttons: deskButtons })}>Save desk layout</button><small>{state.playbackColumns * state.playbackRows} playback slots total · OSC prefix /light/{server.session?.desk.osc_alias ?? "desk"}/</small></div></>}
-          {section === 10 && <ScreensSetup/>}
-          {section === 8 && <FixtureLibrarySetup />}
+          {section === 6 && <FixtureLibrarySetup />}
+          {section === 7 && <ScreensSetup/>}
           {server.error && <p className="modal-error">{server.error}</p>}
         </main>
       </div>

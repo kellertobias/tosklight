@@ -34,6 +34,7 @@ import type {
 export interface StoredDeskLayout {
   desks: DeskModel[];
   activeDeskId: string;
+  windowSettings?: Partial<import("../types").WindowSettings>;
 }
 export interface StagePosition3d {
   x: number;
@@ -46,8 +47,9 @@ export interface StagePosition3d {
 export interface StageAsset {
   id: string;
   name: string;
-  format: "glb" | "stl" | "3mf";
-  dataUrl: string;
+  format: "glb" | "stl" | "3mf" | "builtin";
+  dataUrl?: string;
+  builtinId?: import("../windows/builtInStageModels").BuiltInStageAssetId;
   position: StagePosition3d;
   scale: number;
 }
@@ -90,6 +92,7 @@ interface ServerContextValue {
   cueObjects: VersionedObject<Record<string, unknown>>[];
   deskLayout: VersionedObject<StoredDeskLayout> | null;
   stageLayout: VersionedObject<StoredStageLayout> | null;
+  unresolvedMvrFixtures: VersionedObject<Record<string, unknown>>[];
   commandLine: string;
   selectedFixtures: string[];
   selectedGroupId: string | null;
@@ -130,6 +133,10 @@ interface ServerContextValue {
   ) => Promise<void>;
   rollbackShow: () => Promise<void>;
   downloadShow: (show: ShowEntry) => Promise<void>;
+  previewMvr: (file: File, showId?: string) => Promise<import("./types").MvrImportPreview>;
+  applyMvr: (token: string, input: { new_show?: { name: string; open_after_import: boolean }; existing_show_id?: string; resolutions?: Record<string, { action: string; universe?: number; address?: number }> }) => Promise<import("./types").MvrApplyResult>;
+  previewMvrExport: (showId: string) => Promise<import("./types").MvrExportPreview>;
+  downloadMvr: (show: ShowEntry) => Promise<void>;
   saveConfiguration: (configuration: DeskConfiguration) => Promise<boolean>;
   setControlTiming: (input: Partial<Pick<DeskConfiguration, "speed_groups_bpm" | "programmer_fade_millis" | "sequence_master_fade_millis">>) => Promise<void>;
   saveDeskLayout: (layout: StoredDeskLayout) => Promise<void>;
@@ -179,7 +186,7 @@ interface ServerContextValue {
   ) => Promise<void>;
   switchUser: (name: string) => void;
   exportPaperwork: () => void;
-  shutdownServer: () => Promise<void>;
+  shutdownServer: () => Promise<boolean>;
   clearProgrammer: (sessionId: string) => Promise<void>;
   clearProgrammerValues: () => Promise<void>;
   setMaster: (grandMaster?: number, blackout?: boolean) => Promise<void>;
@@ -234,6 +241,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
     useState<VersionedObject<StoredDeskLayout> | null>(null);
   const [stageLayout, setStageLayout] =
     useState<VersionedObject<StoredStageLayout> | null>(null);
+  const [unresolvedMvrFixtures, setUnresolvedMvrFixtures] = useState<VersionedObject<Record<string, unknown>>[]>([]);
   const [commandLine, setCommandLineState] = useState("");
   const [selectedFixtures, setSelectedFixtures] = useState<string[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
@@ -259,9 +267,10 @@ export function ServerProvider({ children }: PropsWithChildren) {
         setCueObjects([]);
         setDeskLayout(null);
         setStageLayout(null);
+        setUnresolvedMvrFixtures([]);
         return;
       }
-      const [nextGroups, nextPresets, nextCueObjects, layouts, stageLayouts, nextPatchLayers] =
+      const [nextGroups, nextPresets, nextCueObjects, layouts, stageLayouts, nextPatchLayers, unresolvedMvr] =
         await Promise.all([
           client.objects<StoredGroup>(showId, "group"),
           client.objects<StoredPreset>(showId, "preset"),
@@ -271,6 +280,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
             : Promise.resolve([]),
           client.objects<StoredStageLayout>(showId, "stage_layout"),
           client.objects<PatchLayer>(showId, "patch_layer"),
+          client.objects<Record<string, unknown>>(showId, "unresolved_mvr_fixture"),
         ]);
       setGroups(nextGroups);
       setPresets(nextPresets);
@@ -278,6 +288,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
       setDeskLayout(layouts.find((item) => item.id === userId) ?? null);
       setStageLayout(stageLayouts.find((item) => item.id === "main") ?? null);
       setPatchLayers(nextPatchLayers.length ? nextPatchLayers : [{ kind: "patch_layer", id: "default", revision: 0, updated_at: "", body: { id: "default", name: "Default", order: 0 } }]);
+      setUnresolvedMvrFixtures(unresolvedMvr);
     },
     [client],
   );
@@ -331,8 +342,8 @@ export function ServerProvider({ children }: PropsWithChildren) {
         let effectiveBootstrap = initial;
         if (!initial.active_show) {
           const library = await client.shows();
-          const empty = library.find((show) => show.name === "Empty Show") ?? await client.createShow("Empty Show");
-          await client.openShow(empty.id, "hold_current");
+          const defaultShow = library.find((show) => show.name === "Default Stage Show") ?? await client.createShow("Default Stage Show");
+          await client.openShow(defaultShow.id, "hold_current");
           effectiveBootstrap = await client.bootstrap();
           setBootstrap(effectiveBootstrap);
         }
@@ -397,12 +408,18 @@ export function ServerProvider({ children }: PropsWithChildren) {
               "session_disconnected",
               "programmer_changed",
               "programmer_cleared",
+              "hardware_connection_changed",
             ].includes(event.kind)
           ) {
             void client
               .bootstrap()
               .then((next) => {
                 setBootstrap(next);
+                const own = next.active_programmers.find((programmer) => programmer.user_id === nextSession.user.id);
+                if (own) {
+                  setCommandLineState(own.command_line ?? "");
+                  setSelectedFixtures(own.selected ?? []);
+                }
                 void loadShowObjects(
                   next.active_show?.id ?? null,
                   nextSession.user.id,
@@ -538,6 +555,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
       cueObjects,
       deskLayout,
       stageLayout,
+      unresolvedMvrFixtures,
       commandLine,
       selectedFixtures,
       selectedGroupId,
@@ -727,6 +745,16 @@ export function ServerProvider({ children }: PropsWithChildren) {
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
         }
+      },
+      previewMvr: (file, showId) => client.previewMvr(file, showId),
+      applyMvr: async (token, input) => {
+        try { const result = await client.applyMvr(token, input); await refresh(); setShows(await client.shows()); setShowDirty(false); setError(null); return result; }
+        catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); throw reason; }
+      },
+      previewMvrExport: (showId) => client.mvrExportPreview(showId),
+      downloadMvr: async (show) => {
+        try { const blob = await client.downloadMvr(show.id); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `${show.name}.mvr`; anchor.click(); URL.revokeObjectURL(url); setError(null); }
+        catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
       },
       saveConfiguration: async (next) => {
         try {
@@ -1214,8 +1242,11 @@ export function ServerProvider({ children }: PropsWithChildren) {
       shutdownServer: async () => {
         try {
           await client.shutdown();
+          setError(null);
+          return true;
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
+          return false;
         }
       },
       clearProgrammer: async (sessionId) => {
@@ -1348,7 +1379,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
         const body = {
           fixture_id, name: input.name,
           definition: input.definition,
-          universe: input.universe, address: input.address, layer_id: input.layer_id ?? "default", direct_control: null, location: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, logical_heads: [],
+          universe: input.universe, address: input.address, layer_id: input.layer_id ?? "default", direct_control: null, location: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, logical_heads: [], multipatch: [],
         };
         await client.putObject(bootstrap.active_show.id, "patched_fixture", fixture_id, body, 0);
         await refresh(); setError(null); return fixture_id;
@@ -1390,6 +1421,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
       cueObjects,
       deskLayout,
       stageLayout,
+      unresolvedMvrFixtures,
       commandLine,
       selectedFixtures,
       selectedGroupId,

@@ -1,11 +1,13 @@
 import * as THREE from "three";
 import type { AttributeValue, PatchedFixture, VisualizationSnapshot } from "../api/types";
 import type { StagePosition3d } from "../api/ServerContext";
+import { createBuiltInFixtureModel, movingLightTiltRadians } from "./builtInStageModels";
 
 export interface Stage3dFixture {
   fixture: PatchedFixture;
   position: StagePosition3d;
   index: number;
+  instanceId?: string;
 }
 
 function normalized(value: AttributeValue | undefined, fallback: number) {
@@ -86,14 +88,28 @@ function fixtureBody(selected: boolean) {
   return group;
 }
 
+function addSelectionOutline(object: THREE.Object3D) {
+  object.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return;
+    const outline = new THREE.LineSegments(
+      new THREE.EdgesGeometry(child.geometry),
+      new THREE.LineBasicMaterial({ color: 0x378eff }),
+    );
+    outline.name = "selection-outline";
+    outline.scale.setScalar(1.025);
+    child.add(outline);
+  });
+}
+
 export function buildStageScene(
   fixtures: Stage3dFixture[],
   snapshot: VisualizationSnapshot | null,
   selected: Set<string> = new Set(),
+  environmentBrightness = 1,
 ) {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x080b0f);
-  scene.add(new THREE.HemisphereLight(0xa9c8dc, 0x11151a, 1.5));
+  scene.background = new THREE.Color(0x080b0f).lerp(new THREE.Color(0x26323a), environmentBrightness * .18);
+  scene.add(new THREE.HemisphereLight(0xa9c8dc, 0x11151a, environmentBrightness * 1.5));
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(12, 8), new THREE.MeshStandardMaterial({ color: 0x151b20, roughness: .9 }));
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(0, 0, -4);
@@ -108,28 +124,43 @@ export function buildStageScene(
     const id = item.fixture.fixture_id;
     const attributes = byFixture.get(id) ?? new Map<string, AttributeValue>();
     const root = new THREE.Group();
-    root.name = `fixture:${id}`;
+    const instanceId = item.instanceId ?? id;
+    root.name = `fixture:${id}:${instanceId}`;
     root.userData.fixtureId = id;
+    root.userData.instanceId = instanceId;
     root.position.set(item.position.x, item.position.z, -item.position.y);
     root.rotation.set(
       THREE.MathUtils.degToRad(item.position.rotationX),
       THREE.MathUtils.degToRad(item.position.rotationZ),
       THREE.MathUtils.degToRad(item.position.rotationY),
     );
-    root.add(fixtureBody(selected.has(id)));
-
     const intensity = (snapshot?.blackout ? 0 : normalized(attributes.get("intensity"), parameterDefault(item.fixture, "intensity", 0))) * (snapshot?.grand_master ?? 1);
     const pan = (normalized(attributes.get("pan"), parameterDefault(item.fixture, "pan", .5)) - .5) * Math.PI * 2;
-    const tilt = normalized(attributes.get("tilt"), parameterDefault(item.fixture, "tilt", .2)) * Math.PI * .92;
+    const tilt = movingLightTiltRadians(normalized(attributes.get("tilt"), parameterDefault(item.fixture, "tilt", .5)));
     const zoom = normalized(attributes.get("zoom"), parameterDefault(item.fixture, "zoom", .35));
     const focus = normalized(attributes.get("focus"), parameterDefault(item.fixture, "focus", .65));
     const color = xyzToColor(attributes.get("color"), attributes);
     const distance = 7;
     const radius = Math.tan(THREE.MathUtils.degToRad(4 + zoom * 23)) * distance;
-    const direction = new THREE.Vector3(Math.sin(pan) * Math.sin(tilt), -Math.cos(tilt), Math.cos(pan) * Math.sin(tilt)).normalize();
+    let beamParent: THREE.Object3D;
+    if (item.fixture.definition.model_asset) {
+      const placeholder = fixtureBody(selected.has(id));
+      root.add(placeholder);
+      beamParent = root;
+    } else {
+      const model = createBuiltInFixtureModel(item.fixture, color, intensity, pan, tilt);
+      model.object.name = "fixture-placeholder";
+      if (selected.has(id)) addSelectionOutline(model.object);
+      root.add(model.object);
+      beamParent = model.beamMount;
+    }
     const beam = new THREE.Group();
-    beam.position.y = -.62;
-    beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), direction);
+    if (beamParent === root) {
+      beam.position.y = -.62;
+      // Match the built-in yoke: local tilt is around X, followed by pan around Y.
+      const direction = new THREE.Vector3(-Math.sin(pan) * Math.sin(tilt), -Math.cos(tilt), -Math.cos(pan) * Math.sin(tilt)).normalize();
+      beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), direction);
+    }
     const coneGeometry = new THREE.ConeGeometry(radius, distance, 32, 1, true);
     coneGeometry.translate(0, -distance / 2, 0);
     const volume = new THREE.Mesh(coneGeometry, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: intensity * (.035 + focus * .055), side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
@@ -152,9 +183,9 @@ export function buildStageScene(
         beam.add(new THREE.Line(line, new THREE.LineBasicMaterial({ color, transparent: true, opacity: intensity * .45 })));
       }
     }
-    root.add(beam);
+    beamParent.add(beam);
     scene.add(root);
-    fixtureObjects.set(id, root);
+    fixtureObjects.set(instanceId, root);
   }
   return { scene, fixtureObjects };
 }

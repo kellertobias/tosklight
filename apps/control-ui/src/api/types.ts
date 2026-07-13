@@ -12,6 +12,17 @@ export interface ShowEntry {
   updated_at: string;
 }
 
+export interface MvrImportPreview {
+  token: string;
+  fixtures: Array<{ uuid: string; name: string; gdtf_spec: string; gdtf_mode: string; universe: number | null; address: number | null; matched: boolean }>;
+  scenery: number;
+  missing_profiles: string[];
+  warnings: string[];
+  address_conflicts: string[];
+}
+export interface MvrExportPreview { fixtures: number; scenery: number; embedded_profiles: number; missing_profiles: string[]; omitted: string[]; warnings: string[]; }
+export interface MvrApplyResult { show: ShowEntry; imported_fixtures: number; unresolved_fixtures: number; imported_scenery: number; opened: boolean; warnings: string[]; }
+
 export interface OutputHealth {
   frames_sent: number;
   packets_sent: number;
@@ -49,6 +60,7 @@ export interface BootstrapSnapshot {
   active_timecode_source: string | null;
   active_timecode: string | null;
   active_show_error: string | null;
+  hardware_connected: boolean;
 }
 
 export interface SessionResponse {
@@ -77,6 +89,16 @@ export interface PatchedFixture {
   logical_heads: Array<{ fixture_id: string; head_index: number }>;
   location?: { x: number; y: number; z: number };
   rotation?: { x: number; y: number; z: number };
+  multipatch?: MultiPatchInstance[];
+}
+
+export interface MultiPatchInstance {
+  id: string;
+  name: string;
+  universe: number | null;
+  address: number | null;
+  location: { x: number; y: number; z: number };
+  rotation: { x: number; y: number; z: number };
 }
 
 export interface FixtureDefinition {

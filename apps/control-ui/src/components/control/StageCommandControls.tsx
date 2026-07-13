@@ -3,6 +3,7 @@ import { useServer } from "../../api/ServerContext";
 import { VerticalTouchFader } from "./VerticalTouchFader";
 import type { StagePosition3d } from "../../api/ServerContext";
 import { migrateStagePosition } from "../../windows/stage3dScene";
+import { Button } from "../common";
 
 const fields: Array<{ key: keyof StagePosition3d; label: string; scale: number; offset: number }> = [
   { key: "x", label: "X Position", scale: 20, offset: 10 }, { key: "y", label: "Y Position", scale: 20, offset: 0 }, { key: "z", label: "Z Position", scale: 20, offset: 10 },
@@ -12,7 +13,7 @@ const fields: Array<{ key: keyof StagePosition3d; label: string; scale: number; 
 export function StageCommandControls() {
   const { state, dispatch } = useApp();
   const server = useServer();
-  if (state.stageMode === "navigate") return <div className="parameter-controls stage-command-controls"><div className="family-tabs"><button className="active">Navigate Stage</button></div><div className="parameter-surfaces">
+  if (state.stageMode === "navigate") return <div className="parameter-controls stage-command-controls"><div className="family-tabs"><Button className="active">Navigate Stage</Button></div><div className="parameter-surfaces">
     <VerticalTouchFader label="Zoom" value={state.stageZoom * 100} maximum={200} onChange={(value) => dispatch({ type: "SET_STAGE_NAVIGATION", zoom: Math.max(.2, value / 100) })}/>
     <VerticalTouchFader label="X Pan" mode="Press-turn: Y" value={state.stagePanX + 100} maximum={200} display={String(Math.round(state.stagePanX))} onChange={(value) => dispatch({ type: "SET_STAGE_NAVIGATION", panX: value - 100 })}/>
     {state.stageView === "3d" && <VerticalTouchFader label="Orbit" mode="Press-turn: tilt" value={state.stageOrbitX + 180} maximum={360} display={`${Math.round(state.stageOrbitX)}°`} onChange={(value) => dispatch({ type: "SET_STAGE_NAVIGATION", orbitX: value - 180 })}/>}<div className="parameter-placeholder"><span>Y Pan</span><small>Press and turn X Pan</small></div>{state.stageView === "3d" && <div className="parameter-placeholder"><span>Orbit tilt</span><small>Press and turn Orbit</small></div>}
@@ -27,5 +28,5 @@ export function StageCommandControls() {
     for (const id of selected) if (nextPositions[id]) nextPositions[id] = { ...nextPositions[id], [key]: nextPositions[id][key] + delta };
     void server.saveStageLayout({ version: 2, positions: server.stageLayout?.body.positions ?? {}, positions3d: nextPositions, assets: server.stageLayout?.body.assets ?? [] });
   };
-  return <div className="parameter-controls stage-command-controls"><div className="family-tabs"><button className="active">Setup Positions</button></div><div className="parameter-surfaces six-encoders">{fields.map((field) => <VerticalTouchFader key={field.key} label={field.label} disabled={!first} maximum={field.scale} value={(first?.[field.key] ?? 0) + field.offset} display={first ? `${first[field.key].toFixed(field.key.startsWith("rotation") ? 0 : 1)}${field.key.startsWith("rotation") ? "°" : " m"}` : "No position"} onChange={(value) => update(field.key, value - field.offset)}/>)}</div></div>;
+  return <div className="parameter-controls stage-command-controls"><div className="family-tabs"><Button className="active">Setup Positions</Button></div><div className="parameter-surfaces six-encoders">{fields.map((field) => <VerticalTouchFader key={field.key} label={field.label} disabled={!first} maximum={field.scale} value={(first?.[field.key] ?? 0) + field.offset} display={first ? `${first[field.key].toFixed(field.key.startsWith("rotation") ? 0 : 1)}${field.key.startsWith("rotation") ? "°" : " m"}` : "No position"} onChange={(value) => update(field.key, value - field.offset)}/>)}</div></div>;
 }

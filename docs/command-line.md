@@ -27,6 +27,7 @@ The use following buttons usually do not show up in the command line
 In the following section we use the following syntax:
 - `<part>`: a part of a command that usually consists of multiple button presses
 - `<part*>`: a part of a command that is entered via the touch screen, by pressing somewhere in the UI
+- `<part+>`: a part of a command that is either a software element or a physical button (e.g. a playback button)
 - `[KEY]`: a specific button press
 - `[KEY][KEY]`: a specific button pressed twice
 - `[KEY*]`: a specific button held until the action happens
@@ -37,4 +38,21 @@ In the following section we use the following syntax:
 ## Structure of a command
 
 - Setting Values: <selection> [AT] <value> [ENTER] 
-- Recording Groups: <selection> [REC] <target*> | <selection> [REC] <target> [ENTER]
+  is setting the selection at this selected value. the value can be either an intensity value, a preset or a complex value
+
+- Recording Groups: <selection> [REC] <target*> | <selection> [REC] ([GRP]) <number> [ENTER]
+  is storing the selection onto a group slot, either by selecting in the UI or by referencing the number
+
+- Recording Presets & Cues: <set-values> [REC] <target+> | <set-values> [REC] <preset-type>.<preset-number>
+  records whatever we currently have in the programmer onto the selected preset
+
+- Setting Attributes: [SET] <target*> | [SET] 1.4 <target*>
+  Opens the set attribute modal or directly sets the attribute to the given value
+
+- Assigning Playbacks: [SET] <target*> <target+> | [SET] [GRP] <number> <target+> | [SET] [GRP] <number> [AT] <page>.<playback> | [SET] <playback-number> [AT] <page>.<playback>
+  Assigns an element to a playback
+
+- Configuring Playbacks: [SET] <playback-number> | [SET] <page>.<playback>
+  Opens the config modal for the given playback
+
+-

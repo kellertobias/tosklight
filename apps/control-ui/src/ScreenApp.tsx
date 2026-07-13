@@ -5,16 +5,18 @@ import { LeftDock } from "./components/shell/LeftDock";
 import { WorkspaceView } from "./components/shell/WorkspaceView";
 import { PlaybackFaderBank } from "./components/control/PlaybackFaderBank";
 import type { ScreenConfiguration } from "./api/types";
+import { Button } from "./components/common";
+import { NativeDragStrip } from "./components/shell/NativeDragStrip";
 
 function ScreenPageControls({ screen, page }: { screen: ScreenConfiguration; page: number }) {
   const server = useServer();
   const [picker, setPicker] = useState(false);
   const setPage = (next: number) => screen.page_mode === "independent" && void server.setScreenPage(screen.id, next);
   return <div className="screen-page-controls">
-    <button disabled={screen.page_mode !== "independent" || page <= 1} onClick={() => setPage(page - 1)}>▲ PAGE UP</button>
-    <button onClick={() => screen.page_mode === "independent" && setPicker(true)}><strong>{page}</strong><span>{server.playbacks?.pages.find((item) => item.number === page)?.name ?? `Page ${page}`}</span></button>
-    <button disabled={screen.page_mode !== "independent" || page >= 127} onClick={() => setPage(page + 1)}>PAGE DOWN ▼</button>
-    {picker && <div className="screen-page-picker"><button onClick={() => setPicker(false)}>×</button>{(server.playbacks?.pages ?? []).map((item) => <button className={item.number === page ? "active" : ""} key={item.number} onClick={() => { setPage(item.number); setPicker(false); }}>{item.number} · {item.name}</button>)}</div>}
+    <Button disabled={screen.page_mode !== "independent" || page <= 1} onClick={() => setPage(page - 1)}>▲ PAGE UP</Button>
+    <Button onClick={() => screen.page_mode === "independent" && setPicker(true)}><strong>{page}</strong><span>{server.playbacks?.pages.find((item) => item.number === page)?.name ?? `Page ${page}`}</span></Button>
+    <Button disabled={screen.page_mode !== "independent" || page >= 127} onClick={() => setPage(page + 1)}>PAGE DOWN ▼</Button>
+    {picker && <div className="screen-page-picker"><Button onClick={() => setPicker(false)}>×</Button>{(server.playbacks?.pages ?? []).map((item) => <Button className={item.number === page ? "active" : ""} key={item.number} onClick={() => { setPage(item.number); setPicker(false); }}>{item.number} · {item.name}</Button>)}</div>}
   </div>;
 }
 
@@ -29,6 +31,7 @@ function ScreenSurface({ id }: { id: string }) {
   if (!screen) return <main className="screen-loading">Loading screen…</main>;
   const page = server.screens?.active_pages[id] ?? server.playbacks?.active_page ?? 1;
   return <div className={`screen-shell ${screen.show_dock ? "with-dock" : ""} ${screen.show_playbacks ? "with-playbacks" : ""}`}>
+    <NativeDragStrip />
     {screen.show_dock && <LeftDock />}
     <WorkspaceView />
     {screen.show_playbacks && <section className="screen-playbacks">

@@ -10,6 +10,7 @@ use std::{
     path::Path,
 };
 use thiserror::Error;
+use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -177,6 +178,25 @@ pub struct PatchedFixture {
     pub rotation: FixtureVector,
     #[serde(default)]
     pub logical_heads: Vec<PatchedHead>,
+    /// Additional physical instances controlled and selected as this fixture.
+    /// An instance without a universe/address exists in the visualizer only.
+    #[serde(default)]
+    pub multipatch: Vec<MultiPatchInstance>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MultiPatchInstance {
+    pub id: Uuid,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub universe: Option<Universe>,
+    #[serde(default)]
+    pub address: Option<DmxAddress>,
+    #[serde(default)]
+    pub location: FixtureLocation,
+    #[serde(default)]
+    pub rotation: FixtureVector,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -423,31 +443,22 @@ pub fn validate_patch(fixtures: &[PatchedFixture]) -> Result<(), FixtureError> {
                 )));
             }
         }
-        let (Some(universe), Some(address)) = (fixture.universe, fixture.address) else {
-            continue;
-        };
-        if address == 0
-            || usize::from(address) + usize::from(fixture.definition.footprint) - 1 > 512
-        {
-            return Err(FixtureError::Invalid(format!(
-                "fixture {} exceeds universe {}",
-                fixture.fixture_id.0, universe
-            )));
-        }
-        let slots = used.entry(universe).or_insert([false; 512]);
-        let start = usize::from(address - 1);
-        for (offset, slot) in slots[start..start + usize::from(fixture.definition.footprint)]
-            .iter_mut()
-            .enumerate()
-        {
-            if *slot {
-                return Err(FixtureError::Invalid(format!(
-                    "patch overlap at universe {} address {}",
-                    universe,
-                    start + offset + 1
-                )));
+        let mut patches = vec![(fixture.universe, fixture.address, fixture.fixture_id.0.to_string())];
+        patches.extend(fixture.multipatch.iter().map(|instance| (instance.universe, instance.address, instance.id.to_string())));
+        for (universe, address, instance) in patches {
+            if universe.is_some() != address.is_some() {
+                return Err(FixtureError::Invalid(format!("multipatch instance {instance} must set both universe and address or neither")));
             }
-            *slot = true;
+            let (Some(universe), Some(address)) = (universe, address) else { continue };
+            if address == 0 || usize::from(address) + usize::from(fixture.definition.footprint) - 1 > 512 {
+                return Err(FixtureError::Invalid(format!("fixture instance {instance} exceeds universe {universe}")));
+            }
+            let slots = used.entry(universe).or_insert([false; 512]);
+            let start = usize::from(address - 1);
+            for (offset, slot) in slots[start..start + usize::from(fixture.definition.footprint)].iter_mut().enumerate() {
+                if *slot { return Err(FixtureError::Invalid(format!("patch overlap at universe {} address {}", universe, start + offset + 1))); }
+                *slot = true;
+            }
         }
     }
     Ok(())
@@ -587,15 +598,20 @@ pub struct FixtureLibrary {
 impl FixtureLibrary {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, FixtureError> {
         let conn = Connection::open(path)?;
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; CREATE TABLE IF NOT EXISTS fixture_definitions(id TEXT NOT NULL,revision INTEGER NOT NULL,manufacturer TEXT NOT NULL,model TEXT NOT NULL,mode TEXT NOT NULL,definition_json TEXT NOT NULL,PRIMARY KEY(id,revision));")?;
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; CREATE TABLE IF NOT EXISTS fixture_definitions(id TEXT NOT NULL,revision INTEGER NOT NULL,manufacturer TEXT NOT NULL,model TEXT NOT NULL,mode TEXT NOT NULL,definition_json TEXT NOT NULL,source_gdtf BLOB,PRIMARY KEY(id,revision));")?;
+        if !conn.prepare("SELECT source_gdtf FROM fixture_definitions LIMIT 0").is_ok() { conn.execute("ALTER TABLE fixture_definitions ADD COLUMN source_gdtf BLOB",[])?; }
         Ok(Self { conn })
     }
     pub fn import_json(&self, json: &str) -> Result<FixtureDefinition, FixtureError> {
+        self.import_json_with_source(json, None)
+    }
+    pub fn import_json_with_source(&self, json: &str, source_gdtf: Option<&[u8]>) -> Result<FixtureDefinition, FixtureError> {
         let fixture: FixtureDefinition = serde_json::from_str(json)?;
         fixture.validate()?;
-        self.conn.execute("INSERT INTO fixture_definitions(id,revision,manufacturer,model,mode,definition_json) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(id,revision) DO UPDATE SET manufacturer=excluded.manufacturer,model=excluded.model,mode=excluded.mode,definition_json=excluded.definition_json",params![fixture.id.0.to_string(),fixture.revision,fixture.manufacturer,fixture.model,fixture.mode,json])?;
+        self.conn.execute("INSERT INTO fixture_definitions(id,revision,manufacturer,model,mode,definition_json,source_gdtf) VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(id,revision) DO UPDATE SET manufacturer=excluded.manufacturer,model=excluded.model,mode=excluded.mode,definition_json=excluded.definition_json,source_gdtf=COALESCE(excluded.source_gdtf,fixture_definitions.source_gdtf)",params![fixture.id.0.to_string(),fixture.revision,fixture.manufacturer,fixture.model,fixture.mode,json,source_gdtf])?;
         Ok(fixture)
     }
+    pub fn source_gdtf(&self,id:FixtureId,revision:u32)->Result<Option<Vec<u8>>,FixtureError>{self.conn.query_row("SELECT source_gdtf FROM fixture_definitions WHERE id=?1 AND revision=?2",params![id.0.to_string(),revision],|row|row.get(0)).optional().map(|value|value.flatten()).map_err(Into::into)}
     pub fn export_json(
         &self,
         id: FixtureId,
@@ -1075,6 +1091,7 @@ mod tests {
             location: Default::default(),
             rotation: Default::default(),
             logical_heads: vec![],
+            multipatch: vec![],
         };
         let overlap = PatchedFixture {
             fixture_id: FixtureId::new(),
@@ -1087,6 +1104,7 @@ mod tests {
             location: Default::default(),
             rotation: Default::default(),
             logical_heads: vec![],
+            multipatch: vec![],
         };
         assert!(validate_patch(&[first.clone(), overlap]).is_err());
         let overflow = PatchedFixture {
@@ -1100,9 +1118,26 @@ mod tests {
             location: Default::default(),
             rotation: Default::default(),
             logical_heads: vec![],
+            multipatch: vec![],
         };
         assert!(validate_patch(&[overflow]).is_err());
         assert!(validate_patch(&[first]).is_ok());
+    }
+    #[test]
+    fn multipatch_reserves_real_addresses_and_allows_visualizer_only_instances() {
+        let mut fixture = PatchedFixture {
+            fixture_id: FixtureId::new(), name: "Multi".into(), definition: definition(3), universe: Some(1), address: Some(1),
+            layer_id: default_patch_layer(), direct_control: None, location: Default::default(), rotation: Default::default(), logical_heads: vec![],
+            multipatch: vec![
+                MultiPatchInstance { id: Uuid::new_v4(), name: "Output".into(), universe: Some(1), address: Some(10), location: Default::default(), rotation: Default::default() },
+                MultiPatchInstance { id: Uuid::new_v4(), name: "Visual".into(), universe: None, address: None, location: Default::default(), rotation: Default::default() },
+            ],
+        };
+        assert!(validate_patch(std::slice::from_ref(&fixture)).is_ok());
+        fixture.multipatch[1].universe = Some(1);
+        assert!(validate_patch(std::slice::from_ref(&fixture)).is_err());
+        fixture.multipatch[1].address = Some(2);
+        assert!(validate_patch(&[fixture]).is_err());
     }
     #[test]
     fn media_server_layers_inherit_parent_direct_control_endpoint() {
@@ -1127,6 +1162,7 @@ mod tests {
                 head_index: 1,
                 fixture_id: FixtureId::new(),
             }],
+            multipatch: vec![],
         };
         validate_patch(std::slice::from_ref(&parent)).unwrap();
         assert_eq!(parent.direct_control, Some(endpoint));

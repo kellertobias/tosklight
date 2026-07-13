@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+mod default_show;
+
 use anyhow::Context;
 use axum::extract::ws::{Message, WebSocket};
 use axum::{
@@ -15,8 +17,9 @@ use base64::{
     Engine as _,
     engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
 };
+use bytes::Bytes;
 use light_control::{
-    ControlAction, ControlEvent, ControlInput, FrameRate, MidiControlInput, OscArgument,
+    ControlAction, ControlEvent, ControlInput, FrameRate, MidiControlInput, OscArgument, encode_osc_message,
     RtpMidiInput, SmpteTimecode, TimecodeRouter, TimecodeSourceConfig, UdpControlInput,
     UdpInputProtocol,
 };
@@ -76,7 +79,45 @@ struct AppState {
     media_cache: Arc<Mutex<MediaCache>>,
     media_status: Arc<RwLock<HashMap<light_core::FixtureId, MediaServerStatus>>>,
     input_locks: Arc<Mutex<HashMap<String, (light_core::UserId, Instant)>>>,
+    osc_subscribers: Arc<Mutex<HashMap<String, OscSubscriber>>>,
+    osc_feedback: Option<Arc<std::net::UdpSocket>>,
+    mvr_imports: Arc<Mutex<HashMap<Uuid, StagedMvrImport>>>,
 }
+
+#[derive(Clone)]
+struct StagedMvrImport { document: light_mvr::MvrDocument, created: Instant }
+
+#[derive(Deserialize, Default)]
+struct MvrPreviewQuery { show_id: Option<Uuid> }
+
+#[derive(Clone, Serialize)]
+struct MvrImportPreview {
+    token: Uuid,
+    fixtures: Vec<MvrPreviewFixture>,
+    scenery: usize,
+    missing_profiles: Vec<String>,
+    warnings: Vec<String>,
+    address_conflicts: Vec<String>,
+}
+#[derive(Clone, Serialize)]
+struct MvrPreviewFixture { uuid: Uuid, name: String, gdtf_spec: String, gdtf_mode: String, universe: Option<u16>, address: Option<u16>, matched: bool }
+
+#[derive(Deserialize)]
+struct ApplyMvrImport { new_show: Option<NewMvrShow>, existing_show_id: Option<Uuid>, #[serde(default)] resolutions: HashMap<Uuid, MvrResolution> }
+#[derive(Deserialize)]
+struct NewMvrShow { name: String, #[serde(default = "default_true")] open_after_import: bool }
+#[derive(Deserialize)]
+#[serde(tag="action", rename_all="snake_case")]
+enum MvrResolution { Import, Skip, ImportUnpatched, Replace, Address { universe:u16, address:u16 } }
+
+#[derive(Serialize)]
+struct ApplyMvrResult { show: ShowEntry, imported_fixtures: usize, unresolved_fixtures: usize, imported_scenery: usize, opened: bool, warnings: Vec<String> }
+
+#[derive(Serialize)]
+struct MvrExportPreview { fixtures: usize, scenery: usize, embedded_profiles: usize, missing_profiles: Vec<String>, omitted: Vec<String>, warnings: Vec<String> }
+
+#[derive(Clone)]
+struct OscSubscriber { desk_alias: String, target: SocketAddr, command_source: SocketAddr, session_id: SessionId, last_seen: Instant }
 
 #[derive(RustEmbed)]
 #[folder = "../../apps/control-ui/dist"]
@@ -265,6 +306,7 @@ struct Bootstrap {
     active_timecode_source: Option<String>,
     active_timecode: Option<String>,
     active_show_error: Option<String>,
+    hardware_connected: bool,
 }
 
 fn default_speed_groups() -> [u16; 5] {
@@ -313,7 +355,7 @@ impl Default for DeskConfiguration {
         Self {
             frame_rate_hz: 44,
             output_bind_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-            osc_bind: None,
+            osc_bind: Some(SocketAddr::from(([127, 0, 0, 1], 9000))),
             art_timecode_bind: None,
             midi_inputs: Vec::new(),
             rtp_midi_bind: None,
@@ -410,11 +452,14 @@ async fn main() -> anyhow::Result<()> {
         );
     }
     tracing::info!("fixture library ready");
-    let configuration: DeskConfiguration = desk
+    let mut configuration: DeskConfiguration = desk
         .setting("server_configuration")?
         .map(|json| serde_json::from_str(&json))
         .transpose()?
         .unwrap_or_default();
+    if configuration.osc_bind.is_none() {
+        configuration.osc_bind=Some(SocketAddr::from(([127,0,0,1],9000)));
+    }
     configuration
         .validate()
         .map_err(|error| anyhow::anyhow!(error.message))?;
@@ -564,6 +609,9 @@ async fn main() -> anyhow::Result<()> {
         media_cache: Arc::new(Mutex::new(MediaCache::default())),
         media_status: Arc::new(RwLock::new(HashMap::new())),
         input_locks: Arc::new(Mutex::new(HashMap::new())),
+        osc_subscribers: Arc::new(Mutex::new(HashMap::new())),
+        osc_feedback: Some(Arc::new(std::net::UdpSocket::bind("0.0.0.0:0")?)),
+        mvr_imports: Arc::new(Mutex::new(HashMap::new())),
     };
     let input_tasks = spawn_control_inputs(&state, output_cancel.clone());
     let app = router(state);
@@ -633,6 +681,10 @@ fn router(state: AppState) -> Router {
         .route("/api/v1/shows/{id}", delete(delete_show))
         .route("/api/v1/shows/{id}/open", post(open_show))
         .route("/api/v1/shows/{id}/download", get(download_show))
+        .route("/api/v1/mvr/imports/preview", post(preview_mvr_import))
+        .route("/api/v1/mvr/imports/{token}/apply", post(apply_mvr_import))
+        .route("/api/v1/shows/{id}/mvr/preview", get(preview_mvr_export))
+        .route("/api/v1/shows/{id}/mvr", get(export_mvr))
         .route("/api/v1/shows/{id}/objects/{kind}", get(list_objects))
         .route(
             "/api/v1/shows/{id}/objects/{kind}/{object_id}",
@@ -856,6 +908,7 @@ async fn bootstrap(State(state): State<AppState>) -> Json<Bootstrap> {
         active_timecode_source,
         active_timecode,
         active_show_error: state.active_show_error.read().clone(),
+        hardware_connected: !state.osc_subscribers.lock().is_empty(),
     })
 }
 async fn patch_snapshot(State(state): State<AppState>) -> Json<serde_json::Value> {
@@ -1460,7 +1513,11 @@ async fn upload_show(
         }
         std::fs::rename(&staged, &path).map_err(ApiError::io)?;
     } else if !path.exists() {
-        initialise_show(&path, &input.name).map_err(ApiError::store)?;
+        if input.name == default_show::name() {
+            default_show::initialise(&path).map_err(ApiError::store)?;
+        } else {
+            initialise_show(&path, &input.name).map_err(ApiError::store)?;
+        }
     }
     let entry = state
         .desk
@@ -1634,6 +1691,74 @@ async fn download_show(
     )
         .into_response())
 }
+
+async fn preview_mvr_import(
+    State(state): State<AppState>, Query(query): Query<MvrPreviewQuery>, headers: HeaderMap, body: Bytes,
+) -> Result<Json<MvrImportPreview>, ApiError> {
+    let _session=authenticate(&state,&headers)?;
+    let document=light_mvr::read(&body).map_err(|error|ApiError::bad_request(error.to_string()))?;
+    let (definitions,_)=mvr_definitions(&state,&document)?;
+    let mut existing=Vec::new();
+    if let Some(id)=query.show_id {
+        if let Some(show)=state.desk.lock().show(light_core::ShowId(id)).map_err(ApiError::store)? { existing=ShowStore::open(show.path).map_err(ApiError::store)?.objects("patched_fixture").map_err(ApiError::store)?.into_iter().filter_map(|o|serde_json::from_value::<light_fixture::PatchedFixture>(o.body).ok()).collect(); }
+    }
+    let missing_profiles=document.fixtures.iter().filter(|f|resolve_mvr_definition(&definitions,f).is_none()).map(|f|format!("{} · {}",f.gdtf_spec,f.gdtf_mode)).collect::<std::collections::BTreeSet<_>>().into_iter().collect::<Vec<_>>();
+    let mut address_conflicts=Vec::new();
+    for fixture in &document.fixtures { if let (Some(u),Some(a),Some(definition))=(fixture.universe,fixture.address,resolve_mvr_definition(&definitions,fixture)) { let end=a.saturating_add(definition.footprint.saturating_sub(1)); if existing.iter().any(|e|e.universe==Some(u)&&e.address.is_some_and(|start|start<=end&&start.saturating_add(e.definition.footprint.saturating_sub(1))>=a)){address_conflicts.push(format!("{} conflicts at universe {} address {}-{}",fixture.name,u,a,end));} } }
+    let token=Uuid::new_v4(); let now=Instant::now(); let mut imports=state.mvr_imports.lock(); imports.retain(|_,item|now.duration_since(item.created)<Duration::from_secs(30*60)); imports.insert(token,StagedMvrImport{document:document.clone(),created:now});
+    Ok(Json(MvrImportPreview{token,fixtures:document.fixtures.iter().map(|f|MvrPreviewFixture{uuid:f.uuid,name:f.name.clone(),gdtf_spec:f.gdtf_spec.clone(),gdtf_mode:f.gdtf_mode.clone(),universe:f.universe,address:f.address,matched:resolve_mvr_definition(&definitions,f).is_some()}).collect(),scenery:document.geometry.len(),missing_profiles,warnings:address_conflicts.clone(),address_conflicts}))
+}
+
+fn resolve_mvr_definition(definitions:&[light_fixture::FixtureDefinition], fixture:&light_mvr::MvrFixture)->Option<light_fixture::FixtureDefinition>{
+    let spec=fixture.gdtf_spec.rsplit('/').next().unwrap_or(&fixture.gdtf_spec).trim_end_matches(".gdtf");
+    definitions.iter().find(|d|d.mode.eq_ignore_ascii_case(&fixture.gdtf_mode)&&(d.model.eq_ignore_ascii_case(spec)||d.name.eq_ignore_ascii_case(spec)||format!("{}@{}",d.manufacturer,d.model).eq_ignore_ascii_case(spec))).cloned()
+}
+
+fn mvr_definitions(state:&AppState,document:&light_mvr::MvrDocument)->Result<(Vec<light_fixture::FixtureDefinition>,Vec<(light_fixture::FixtureDefinition,Vec<u8>)>),ApiError>{
+    let mut definitions=state.fixture_library.lock().definitions().map_err(ApiError::fixture)?;let mut imported=Vec::new();
+    for fixture in &document.fixtures{if resolve_mvr_definition(&definitions,fixture).is_some(){continue;}let name=fixture.gdtf_spec.to_ascii_lowercase();let Some(bytes)=document.files.get(&name).or_else(||document.files.iter().find(|(path,_)|path.ends_with(&format!("/{name}"))).map(|(_,data)|data))else{continue};let Ok(modes)=light_mvr::read_gdtf(bytes)else{continue};for mode in modes{let footprint=mode.channels.iter().flat_map(|c|c.offsets.iter()).max().copied().unwrap_or(0)+1;let parameters=mode.channels.into_iter().map(|channel|{let normalized=channel.attribute.replace(' ',".").replace('_',".").to_ascii_lowercase();light_fixture::Parameter{attribute:light_core::AttributeKey(normalized.clone()),components:channel.offsets.into_iter().map(|offset|light_fixture::ChannelComponent{offset,byte_order:light_fixture::ByteOrder::MsbFirst}).collect(),default:0.0,virtual_dimmer:false,metadata:light_fixture::ParameterMetadata{wrap:normalized.contains("pan"),..Default::default()},capabilities:Vec::new()}}).collect();let definition=light_fixture::FixtureDefinition{schema_version:1,id:light_core::FixtureId::new(),revision:1,manufacturer:mode.manufacturer,device_type:"other".into(),name:mode.model.clone(),model:mode.model,mode:mode.name,footprint,heads:vec![light_fixture::LogicalHead{index:0,name:"Main".into(),shared:true,parameters}],color_calibration:None,physical:Default::default(),model_asset:None,icon_asset:None,hazardous:false,direct_control_protocols:Vec::new(),signal_loss_policy:light_fixture::SignalLossPolicy::HoldLast,safe_values:Default::default()};definitions.push(definition.clone());imported.push((definition,bytes.clone()));}}
+    Ok((definitions,imported))
+}
+
+fn mvr_transform(matrix:[f64;12])->(light_fixture::FixtureLocation,light_fixture::FixtureVector){
+    let location=light_fixture::FixtureLocation{x:matrix[9].round().clamp(f64::from(i32::MIN),f64::from(i32::MAX)) as i32,y:matrix[10].round().clamp(f64::from(i32::MIN),f64::from(i32::MAX)) as i32,z:matrix[11].round().clamp(f64::from(i32::MIN),f64::from(i32::MAX)) as i32};
+    let rotation=light_fixture::FixtureVector{x:(matrix[9].atan2(matrix[10]).to_degrees()) as f32,y:(-matrix[8].asin().to_degrees()) as f32,z:(matrix[4].atan2(matrix[0]).to_degrees()) as f32}; (location,rotation)
+}
+
+fn apply_mvr_to_store(store:&ShowStore,document:&light_mvr::MvrDocument,definitions:&[light_fixture::FixtureDefinition],resolutions:&HashMap<Uuid,MvrResolution>)->Result<(usize,usize,Vec<String>),ApiError>{
+    let existing_objects=store.objects("patched_fixture").map_err(ApiError::store)?; let mut occupied:Vec<(u16,u16,u16,String)>=existing_objects.iter().filter_map(|o|serde_json::from_value::<light_fixture::PatchedFixture>(o.body.clone()).ok().and_then(|f|Some((f.universe?,f.address?,f.definition.footprint,o.id.clone())))).collect();
+    let metadata=store.objects("mvr_fixture").map_err(ApiError::store)?; let ids:HashMap<Uuid,String>=metadata.iter().filter_map(|o|Uuid::parse_str(&o.id).ok().and_then(|uuid|o.body.get("fixture_id")?.as_str().map(|id|(uuid,id.to_owned())))).collect();
+    let mut imported=0;let mut unresolved=0;let mut warnings=Vec::new();
+    for source in &document.fixtures { if matches!(resolutions.get(&source.uuid),Some(MvrResolution::Skip)){continue;} let Some(definition)=resolve_mvr_definition(definitions,source) else { let current=store.objects("unresolved_mvr_fixture").map_err(ApiError::store)?.into_iter().find(|o|o.id==source.uuid.to_string()).map(|o|o.revision).unwrap_or(0);store.put_object("unresolved_mvr_fixture",&source.uuid.to_string(),&serde_json::to_value(source).map_err(|e|ApiError::bad_request(e.to_string()))?,current).map_err(ApiError::store)?;unresolved+=1;warnings.push(format!("{} requires {} mode {}",source.name,source.gdtf_spec,source.gdtf_mode));continue;};
+        let fixture_id=ids.get(&source.uuid).and_then(|id|Uuid::parse_str(id).ok()).map(light_core::FixtureId).unwrap_or_else(light_core::FixtureId::new);let (location,rotation)=mvr_transform(source.matrix);let mut universe=source.universe;let mut address=source.address;
+        if let Some(MvrResolution::Address{universe:u,address:a})=resolutions.get(&source.uuid){universe=Some(*u);address=Some(*a);} if matches!(resolutions.get(&source.uuid),Some(MvrResolution::ImportUnpatched)){universe=None;address=None;}
+        if let (Some(u),Some(a))=(universe,address){let end=a.saturating_add(definition.footprint.saturating_sub(1));let conflict=occupied.iter().find(|(eu,ea,ef,id)|*eu==u&&*id!=fixture_id.0.to_string()&&*ea<=end&&ea.saturating_add(ef.saturating_sub(1))>=a).cloned();if let Some((_,_,_,id))=conflict{if matches!(resolutions.get(&source.uuid),Some(MvrResolution::Replace)){store.delete_object("patched_fixture",&id).map_err(ApiError::store)?;occupied.retain(|item|item.3!=id);}else{universe=None;address=None;warnings.push(format!("{} imported unpatched because its requested address conflicts",source.name));}}}
+        let heads=definition.heads.iter().filter(|h|!h.shared).map(|h|light_fixture::PatchedHead{head_index:h.index,fixture_id:light_core::FixtureId::new()}).collect();let patched=light_fixture::PatchedFixture{fixture_id,name:source.name.clone(),definition:definition.clone(),universe,address,layer_id:source.layer.clone().unwrap_or_else(||"default".into()),direct_control:None,location,rotation,logical_heads:heads,multipatch:Vec::new()};
+        let id=fixture_id.0.to_string();let current=existing_objects.iter().find(|o|o.id==id).map(|o|o.revision).unwrap_or(0);store.put_object("patched_fixture",&id,&serde_json::to_value(&patched).map_err(|e|ApiError::bad_request(e.to_string()))?,current).map_err(ApiError::store)?;let meta_current=metadata.iter().find(|o|o.id==source.uuid.to_string()).map(|o|o.revision).unwrap_or(0);store.put_object("mvr_fixture",&source.uuid.to_string(),&serde_json::json!({"fixture_id":id,"gdtf_spec":source.gdtf_spec,"gdtf_mode":source.gdtf_mode}),meta_current).map_err(ApiError::store)?;if let (Some(u),Some(a))=(universe,address){occupied.push((u,a,definition.footprint,id));}imported+=1;
+    }
+    let mut assets=Vec::new();for geometry in &document.geometry{if let Some(data)=document.files.get(&geometry.file_name.to_ascii_lowercase()){let encoded=STANDARD.encode(data);assets.push(serde_json::json!({"id":geometry.uuid,"mvrUuid":geometry.uuid,"name":geometry.name,"format":"glb","dataUrl":format!("data:model/gltf-binary;base64,{encoded}"),"position":{"x":geometry.matrix[9]/1000.0,"y":geometry.matrix[10]/1000.0,"z":geometry.matrix[11]/1000.0,"rotationX":0,"rotationY":0,"rotationZ":0},"scale":1}));}}
+    if !assets.is_empty(){let layouts=store.objects("stage_layout").map_err(ApiError::store)?;let existing=layouts.iter().find(|o|o.id=="main");let mut body=existing.map(|o|o.body.clone()).unwrap_or_else(||serde_json::json!({"version":2,"positions":{},"positions3d":{},"assets":[]}));let list=body.get_mut("assets").and_then(|v|v.as_array_mut()).ok_or_else(||ApiError::bad_request("stage layout assets are invalid"))?;for asset in assets{let uuid=asset["mvrUuid"].clone();if let Some(slot)=list.iter_mut().find(|a|a.get("mvrUuid")==Some(&uuid)){*slot=asset}else{list.push(asset)}}store.put_object("stage_layout","main",&body,existing.map(|o|o.revision).unwrap_or(0)).map_err(ApiError::store)?;}
+    Ok((imported,unresolved,warnings))
+}
+
+async fn apply_mvr_import(State(state):State<AppState>,Path(token):Path<Uuid>,headers:HeaderMap,Json(input):Json<ApplyMvrImport>)->Result<Json<ApplyMvrResult>,ApiError>{
+    let _session=authenticate(&state,&headers)?;let staged=state.mvr_imports.lock().remove(&token).ok_or_else(||ApiError::not_found("MVR import preview"))?;if staged.created.elapsed()>Duration::from_secs(30*60){return Err(ApiError::bad_request("MVR import preview expired"));}
+    if input.new_show.is_some()==input.existing_show_id.is_some(){return Err(ApiError::bad_request("choose exactly one MVR import destination"));}
+    let (entry,is_new,open_after)=if let Some(new)=input.new_show{validate_show_name(&new.name)?;let path=state.data_dir.join("shows").join(format!("{}.show",new.name));if path.exists(){return Err(ApiError::conflict("a show with that name already exists"));}initialise_show(&path,&new.name).map_err(ApiError::store)?;(state.desk.lock().upsert_show(&new.name,&path.display().to_string(),false).map_err(ApiError::store)?,true,new.open_after_import)}else{let id=light_core::ShowId(input.existing_show_id.unwrap());(state.desk.lock().show(id).map_err(ApiError::store)?.ok_or_else(||ApiError::not_found("show"))?,false,false)};
+    let temporary=state.data_dir.join("shows").join(format!(".mvr-{}.show",Uuid::new_v4()));ShowStore::open(&entry.path).map_err(ApiError::store)?.backup_to(&temporary).map_err(ApiError::store)?;let (definitions,new_definitions)=mvr_definitions(&state,&staged.document)?;let result=(||{let store=ShowStore::open(&temporary).map_err(ApiError::store)?;let applied=apply_mvr_to_store(&store,&staged.document,&definitions,&input.resolutions)?;validate_show_file(&temporary).map_err(ApiError::store)?;let probe=ShowEntry{path:temporary.display().to_string(),..entry.clone()};load_engine_snapshot(&probe).map_err(ApiError::bad_request)?.validate().map_err(|e|ApiError::bad_request(e.to_string()))?;Ok::<_,ApiError>(applied)})();let (imported,unresolved,warnings)=match result{Ok(v)=>v,Err(e)=>{let _=std::fs::remove_file(&temporary);if is_new{let _=state.desk.lock().remove_show(entry.id);let _=std::fs::remove_file(&entry.path);}return Err(e)}};if !is_new{backup_show(&state,&entry)?;}std::fs::rename(&temporary,&entry.path).map_err(ApiError::io)?;for (definition,source) in new_definitions{let json=serde_json::to_string(&definition).map_err(|e|ApiError::internal(e.to_string()))?;state.fixture_library.lock().import_json_with_source(&json,Some(&source)).map_err(ApiError::fixture)?;}
+    let should_open=open_after||state.active_show.read().as_ref().is_some_and(|s|s.id==entry.id);if should_open{let compiled=load_engine_snapshot(&entry).map_err(ApiError::bad_request)?;let _lock=state.activation_lock.lock().await;activate_snapshot(&state,compiled,&Transition::HoldCurrent,None).await?;state.desk.lock().set_active_show(Some(entry.id)).map_err(ApiError::store)?;*state.active_show.write()=Some(entry.clone());}
+    emit(&state,"mvr_imported",serde_json::json!({"show":entry,"fixtures":imported,"unresolved":unresolved,"scenery":staged.document.geometry.len()}));Ok(Json(ApplyMvrResult{show:entry,imported_fixtures:imported,unresolved_fixtures:unresolved,imported_scenery:staged.document.geometry.len(),opened:should_open,warnings}))
+}
+
+fn build_mvr_export(state:&AppState,id:Uuid)->Result<(ShowEntry,light_mvr::MvrDocument,MvrExportPreview),ApiError>{
+    let entry=state.desk.lock().show(light_core::ShowId(id)).map_err(ApiError::store)?.ok_or_else(||ApiError::not_found("show"))?;let store=ShowStore::open(&entry.path).map_err(ApiError::store)?;let metas:HashMap<String,serde_json::Value>=store.objects("mvr_fixture").map_err(ApiError::store)?.into_iter().filter_map(|o|{let id=o.body.get("fixture_id")?.as_str()?.to_owned();Some((id,o.body))}).collect();let fixtures=store.objects("patched_fixture").map_err(ApiError::store)?.into_iter().filter_map(|o|serde_json::from_value::<light_fixture::PatchedFixture>(o.body).ok().map(|f|(o.id,f))).collect::<Vec<_>>();let mut doc=light_mvr::MvrDocument::default();let mut missing=Vec::new();
+    let mut embedded=0;for (id,f) in &fixtures{let meta=metas.get(id);let gdtf=meta.and_then(|m|m.get("gdtf_spec")).and_then(|v|v.as_str()).map(str::to_owned).unwrap_or_else(||format!("{}@{}.gdtf",f.definition.manufacturer,f.definition.model));if let Some(source)=state.fixture_library.lock().source_gdtf(f.definition.id,f.definition.revision).map_err(ApiError::fixture)?{doc.files.entry(gdtf.to_ascii_lowercase()).or_insert(source);embedded+=1;}else{missing.push(format!("{} · {}",f.definition.manufacturer,f.definition.model));}let uuid=metas.iter().find(|(_,m)|m.get("fixture_id").and_then(|v|v.as_str())==Some(id)).and_then(|(uuid,_)|Uuid::parse_str(uuid).ok()).unwrap_or(f.fixture_id.0);let rx=f64::from(f.rotation.x).to_radians();let ry=f64::from(f.rotation.y).to_radians();let rz=f64::from(f.rotation.z).to_radians();let (sx,cx)=rx.sin_cos();let (sy,cy)=ry.sin_cos();let (sz,cz)=rz.sin_cos();doc.fixtures.push(light_mvr::MvrFixture{uuid,name:if f.name.is_empty(){f.definition.name.clone()}else{f.name.clone()},fixture_id:Some(id.clone()),gdtf_spec:gdtf,gdtf_mode:f.definition.mode.clone(),universe:f.universe,address:f.address,matrix:[cy*cz,cz*sx*sy-cx*sz,sx*sz+cx*cz*sy,cy*sz,cx*cz+sx*sy*sz,cx*sy*sz-cz*sx,-sy,cy*sx,cx*cy,f64::from(f.location.x),f64::from(f.location.y),f64::from(f.location.z)],layer:Some(f.layer_id.clone()),class:None});}
+    if let Some(layout)=store.objects("stage_layout").map_err(ApiError::store)?.into_iter().find(|o|o.id=="main"){if let Some(assets)=layout.body.get("assets").and_then(|v|v.as_array()){for asset in assets{let Some(url)=asset.get("dataUrl").and_then(|v|v.as_str())else{continue};let Some(data)=url.split_once(',').and_then(|(_,v)|STANDARD.decode(v).ok())else{continue};let uuid=asset.get("mvrUuid").or_else(||asset.get("id")).and_then(|v|v.as_str()).and_then(|v|Uuid::parse_str(v).ok()).unwrap_or_else(Uuid::new_v4);let file=format!("{}.glb",uuid);let p=&asset["position"];doc.geometry.push(light_mvr::MvrGeometry{uuid,name:asset.get("name").and_then(|v|v.as_str()).unwrap_or("Geometry").into(),file_name:file.clone(),matrix:[1.,0.,0.,0.,1.,0.,0.,0.,1.,p["x"].as_f64().unwrap_or(0.)*1000.,p["y"].as_f64().unwrap_or(0.)*1000.,p["z"].as_f64().unwrap_or(0.)*1000.],layer:None,class:None});doc.files.insert(file.to_ascii_lowercase(),data);}}}
+    let warnings=if missing.is_empty(){vec![]}else{vec!["Some fixture profiles have no retained source GDTF and are referenced but not embedded".into()]};let preview=MvrExportPreview{fixtures:doc.fixtures.len(),scenery:doc.geometry.len(),embedded_profiles:embedded,missing_profiles:missing,omitted:vec!["cues, presets, playbacks, users, and desk layouts".into()],warnings};Ok((entry,doc,preview))
+}
+async fn preview_mvr_export(State(state):State<AppState>,Path(id):Path<Uuid>,headers:HeaderMap)->Result<Json<MvrExportPreview>,ApiError>{let _=authenticate(&state,&headers)?;Ok(Json(build_mvr_export(&state,id)?.2))}
+async fn export_mvr(State(state):State<AppState>,Path(id):Path<Uuid>,headers:HeaderMap)->Result<Response,ApiError>{let _=authenticate(&state,&headers)?;let (entry,doc,_)=build_mvr_export(&state,id)?;let data=light_mvr::write(&doc).map_err(|e|ApiError::internal(e.to_string()))?;Ok(([(header::CONTENT_TYPE,"application/zip"),(header::CONTENT_DISPOSITION,&format!("attachment; filename=\"{}.mvr\"",entry.name))],data).into_response())}
+
 async fn list_objects(
     State(state): State<AppState>,
     Path((id, kind)): Path<(Uuid, String)>,
@@ -3154,6 +3279,10 @@ fn spawn_control_inputs(
 ) -> Vec<tokio::task::JoinHandle<()>> {
     let configuration = state.configuration.read().clone();
     let mut tasks = Vec::new();
+    {
+        let state=state.clone();let cancel=cancel.clone();
+        tasks.push(tokio::spawn(async move{let mut interval=tokio::time::interval(Duration::from_millis(500));loop{tokio::select!{_=cancel.cancelled()=>break,_=interval.tick()=>send_osc_feedback(&state,false)}}}));
+    }
     for (address, protocol) in [
         (configuration.osc_bind, UdpInputProtocol::Osc),
         (
@@ -3210,7 +3339,7 @@ fn handle_control_event(state: &AppState, event: ControlEvent) {
     if let ControlEvent::Timecode(timecode) = &event {
         ingest_timecode(state, timecode.clone());
     }
-    if let ControlEvent::Osc { address, arguments } = &event
+    if let ControlEvent::Osc { address, arguments, .. } = &event
         && let Some(configuration) = &state.configuration.read().osc_timecode
         && &configuration.address == address
         && let [
@@ -3238,8 +3367,14 @@ fn handle_control_event(state: &AppState, event: ControlEvent) {
             },
         );
     }
-    if let ControlEvent::Osc { address, arguments } = &event {
-        handle_playback_osc(state, address, arguments);
+    if let ControlEvent::Osc { address, arguments, source } = &event {
+        if !handle_subscription_osc(state, address, arguments, source.as_deref()) {
+            handle_playback_osc(state, address, arguments);
+            handle_programmer_osc(state, address, arguments, source.as_deref());
+            handle_timing_osc(state, address, arguments);
+            handle_encoder_osc(state, address, arguments);
+        }
+        send_osc_feedback(state, false);
     }
     let mappings = state.engine.snapshot().control_mappings.clone();
     for mapping in mappings.iter().filter(|mapping| mapping.matches(&event)) {
@@ -3273,6 +3408,94 @@ fn handle_control_event(state: &AppState, event: ControlEvent) {
     );
 }
 
+fn handle_subscription_osc(state: &AppState, address: &str, arguments: &[OscArgument], source: Option<&str>) -> bool {
+    if address != "/light/subscribe" && address != "/light/unsubscribe" { return false; }
+    let Some(client_id)=arguments.first().and_then(|v|match v{OscArgument::String(v)=>Some(v.clone()),_=>None}) else{return true;};
+    if address == "/light/unsubscribe" { state.osc_subscribers.lock().remove(&client_id); emit(state,"hardware_connection_changed",serde_json::json!({"connected":!state.osc_subscribers.lock().is_empty()})); return true; }
+    let Some(desk_alias)=arguments.get(1).and_then(|v|match v{OscArgument::String(v)=>Some(v.clone()),_=>None}) else{return true;};
+    let Some(port)=arguments.get(2).and_then(|v|match v{OscArgument::Int(v)=>u16::try_from(*v).ok(),_=>None}) else{return true;};
+    let Some(command_source)=source.and_then(|v|v.parse::<SocketAddr>().ok()) else{return true;}; let mut target=command_source; target.set_port(port);
+    let Some(desk)=osc_control_desk(state,&desk_alias) else{return true;}; let desk_alias=desk.osc_alias.clone();
+    let existing=state.osc_subscribers.lock().get(&client_id).cloned();let attached_session={let sessions=state.sessions.read();sessions.values().find(|session|session.connected&&session.desk.id==desk.id).map(|session|session.id)};let session_id=existing.map(|s|s.session_id).or(attached_session).unwrap_or_else(||{
+        let Some(user)=state.desk.lock().users().ok().and_then(|u|u.into_iter().find(|u|u.enabled)) else{return SessionId::new();}; let id=SessionId::new();let session=Session{id,user:user.clone(),token:Uuid::new_v4().to_string(),connected:true,desk:desk.clone()};state.programmers.start(id,user.id);state.sessions.write().insert(id,session);id
+    });
+    state.osc_subscribers.lock().insert(client_id,OscSubscriber{desk_alias,target,command_source,session_id,last_seen:Instant::now()});
+    emit(state,"hardware_connection_changed",serde_json::json!({"connected":true}));
+    send_osc_feedback(state,true); true
+}
+
+fn osc_pressed(arguments:&[OscArgument])->bool { arguments.first().map(|v|match v{OscArgument::Bool(v)=>*v,OscArgument::Int(v)=>*v!=0,OscArgument::Float(v)=>*v>0.0,OscArgument::String(v)=>v!="0"&&v!="false"}).unwrap_or(true) }
+
+fn remove_command_token(value: &str) -> String {
+    let trimmed = value.trim_end();
+    let Some(last) = trimmed.chars().next_back() else { return String::new(); };
+    if last.is_ascii_digit() || matches!(last, '.' | '-') {
+        let end = trimmed.len() - last.len_utf8();
+        return trimmed[..end].trim_end().to_string();
+    }
+    let mut start = trimmed.len();
+    for (index, character) in trimmed.char_indices().rev() {
+        if character.is_ascii_alphabetic() { start = index; } else { break; }
+    }
+    trimmed[..start].trim_end().to_string()
+}
+
+fn handle_programmer_osc(state:&AppState,address:&str,arguments:&[OscArgument],source:Option<&str>) {
+    let parts=address.trim_matches('/').split('/').collect::<Vec<_>>();
+    if parts.len()<4||parts[0]!="light"||parts[2]!="programmer"||!osc_pressed(arguments){return;}
+    let source=source.and_then(|v|v.parse::<SocketAddr>().ok());let subscriber=state.osc_subscribers.lock().values().find(|s|Some(s.command_source)==source).cloned();let Some(subscriber)=subscriber else{return;};let Some(session)=state.sessions.read().get(&subscriber.session_id).cloned() else{return;};let action=parts[3];
+    match action {
+        "enter"=>{if let Some(programmer)=state.programmers.get(session.id){let _=execute_programmer_command(state,&session,&programmer.command_line);state.programmers.set_command_line(session.id,String::new());}},
+        "clear"=>{if let Some(p)=state.programmers.get(session.id){if !p.command_line.is_empty(){state.programmers.set_command_line(session.id,String::new());}else if !p.selected.is_empty(){state.programmers.select(session.id,vec![]);}else{state.programmers.clear_values(session.id);}}},
+        "undo"=>{state.programmers.undo(session.id);},
+        "backspace"=>{if let Some(p)=state.programmers.get(session.id){state.programmers.set_command_line(session.id,remove_command_token(&p.command_line));}},
+        "preload"=>{state.programmers.activate_preload(session.id);},
+        "escape"|"menu"|"prog-playback"|"record"=>emit(state,"desk_action",serde_json::json!({"desk_alias":parts[1],"session_id":session.id,"action":action,"source":"osc"})),
+        key=>{let token=match key{"grp"|"group"=>"GROUP","thru"=>"THRU","add"=>"ADD","at"=>"AT","dot"=>".","div"=>"DIV","set"=>"SET","rec"=>"RECORD",v if v.starts_with("digit-")=>&v[6..],v=>v};if let Some(p)=state.programmers.get(session.id){let separator=matches!(token,"GROUP"|"THRU"|"ADD"|"AT"|"DIV"|"SET"|"RECORD");state.programmers.set_command_line(session.id,if separator{format!("{} {token} ",p.command_line).split_whitespace().collect::<Vec<_>>().join(" ")+" "}else{format!("{}{token}",p.command_line)});}}
+    }
+    let _=persist_programmer(state,&session);emit(state,"programmer_changed",serde_json::json!({"session_id":session.id}));
+}
+
+fn handle_timing_osc(state:&AppState,address:&str,arguments:&[OscArgument]){
+    let parts=address.trim_matches('/').split('/').collect::<Vec<_>>();let numeric=arguments.first().and_then(|v|match v{OscArgument::Float(v)=>Some(*v),OscArgument::Int(v)=>Some(*v as f32),_=>None});
+    if parts.len()==4&&parts[0]=="light"&&parts[2]=="programmer"&&matches!(parts[3],"prog-fade"|"cue-fade")&&let Some(value)=numeric{let mut config=state.configuration.write();if parts[3]=="prog-fade"{config.programmer_fade_millis=(value.clamp(0.0,1.0)*20_000.0)as u64;}else{config.sequence_master_fade_millis=(value.clamp(0.0,1.0)*60_000.0)as u64;}state.engine.set_control_timing(config.speed_groups_bpm,config.programmer_fade_millis,config.sequence_master_fade_millis);}
+    if parts.len()==5&&parts[0]=="light"&&parts[2]=="speed-group"&&parts[4]=="encoder"&&let Ok(group)=parts[3].parse::<usize>()&&let Some(value)=numeric&&group>0&&group<=5{let mut config=state.configuration.write();config.speed_groups_bpm[group-1]=(value.round()as u16).clamp(1,999);state.engine.set_control_timing(config.speed_groups_bpm,config.programmer_fade_millis,config.sequence_master_fade_millis);}
+}
+
+fn handle_encoder_osc(state:&AppState,address:&str,arguments:&[OscArgument]){
+    let parts=address.trim_matches('/').split('/').collect::<Vec<_>>();
+    let value=arguments.first().and_then(|argument|match argument{OscArgument::String(value)=>Some(value.as_str()),_=>None});
+    let valid=value.is_some_and(|value|matches!(value,"up"|"down"|"left"|"right"|"press"));if !valid||parts.first()!=Some(&"light"){return;}
+    let control=if parts.len()==4&&parts[2]=="encode"&&parts[3].parse::<u8>().is_ok_and(|number|(1..=6).contains(&number)){format!("encode/{}",parts[3])}else if parts.len()==3&&parts[2]=="nav"{"nav".into()}else{return;};
+    emit(state,"desk_action",serde_json::json!({"desk_alias":parts[1],"control":control,"value":value,"source":"osc"}));
+}
+
+fn send_osc(state:&AppState,target:SocketAddr,address:String,arguments:Vec<OscArgument>){if let (Some(socket),Ok(packet))=(&state.osc_feedback,encode_osc_message(&address,&arguments)){let _=socket.send_to(&packet,target);}}
+
+fn osc_control_desk(state:&AppState,alias:&str)->Option<ControlDesk>{let store=state.desk.lock();if alias.eq_ignore_ascii_case("main")||alias.is_empty(){store.desks().ok()?.into_iter().next()}else{store.control_desk_by_alias(alias).ok().flatten()}}
+
+fn send_osc_feedback(state:&AppState,_full:bool){
+    let now=Instant::now(); let before=state.osc_subscribers.lock().len(); state.osc_subscribers.lock().retain(|_,s|now.duration_since(s.last_seen)<Duration::from_secs(20)); let after=state.osc_subscribers.lock().len(); if before!=after { emit(state,"hardware_connection_changed",serde_json::json!({"connected":after>0})); }
+    let subscribers=state.osc_subscribers.lock().values().cloned().collect::<Vec<_>>();
+    let Some(show)=state.active_show.read().clone() else{return;}; let snapshot=state.engine.snapshot(); let active=state.engine.playback().read().active();
+    for subscriber in subscribers {
+        let Ok(Some(desk))=state.desk.lock().control_desk_by_alias(&subscriber.desk_alias) else{continue;};
+        let page=state.desk.lock().desk_page(desk.id,show.id).unwrap_or(1);
+        send_osc(state,subscriber.target,format!("/light/{}/feedback/page",subscriber.desk_alias),vec![OscArgument::Int(i32::from(page))]);
+        let page_definition=snapshot.playback_pages.iter().find(|p|p.number==page);
+        for slot in 1u8..=96 {
+            let number=page_definition.and_then(|p|p.slots.get(&slot)).copied();
+            let running=number.and_then(|n|active.iter().find(|a|a.playback_number==Some(n))); let level=running.map(|a|a.master).unwrap_or(0.0);
+            send_osc(state,subscriber.target,format!("/light/{}/feedback/paged-playback/{slot}/fader",subscriber.desk_alias),vec![OscArgument::Float(level)]);
+            let button_count=if slot<=20{3}else{1}; for button in 1..=button_count {
+                let (r,g,b,state_name)=if running.is_some(){(0.10,0.85,0.35,"on")}else if number.is_some(){(0.12,0.42,0.95,"off")}else{(0.18,0.20,0.23,"off")};
+                send_osc(state,subscriber.target,format!("/light/{}/feedback/paged-playback/{slot}/button/{button}",subscriber.desk_alias),vec![OscArgument::Float(r),OscArgument::Float(g),OscArgument::Float(b),OscArgument::String(state_name.into())]);
+            }
+        }
+        for (index,bpm) in state.configuration.read().speed_groups_bpm.iter().enumerate(){send_osc(state,subscriber.target,format!("/light/{}/feedback/speed-group/{}",subscriber.desk_alias,index+1),vec![OscArgument::Int(i32::from(*bpm)),OscArgument::Float(0.0),OscArgument::Float(0.75),OscArgument::Float(0.95),OscArgument::String("on".into())]);}
+    }
+}
+
 fn handle_playback_osc(state: &AppState, address: &str, arguments: &[OscArgument]) {
     let parts = address.trim_matches('/').split('/').collect::<Vec<_>>();
     let pressed = arguments.first().map(|argument| match argument { OscArgument::Bool(value) => *value, OscArgument::Int(value) => *value != 0, OscArgument::Float(value) => *value > 0.0, OscArgument::String(value) => value != "0" && value != "false" }).unwrap_or(true);
@@ -3280,7 +3503,7 @@ fn handle_playback_osc(state: &AppState, address: &str, arguments: &[OscArgument
     if parts.len()==3 && parts.first()==Some(&"light") && parts.get(2)==Some(&"page") {
         let Some(page)=arguments.first().and_then(|argument| match argument { OscArgument::Int(value) => u8::try_from(*value).ok(), OscArgument::Float(value) if value.is_finite() => Some(*value as u8), _ => None }) else{return;};
         let Some(show)=state.active_show.read().clone() else{return;};
-        let desk={state.desk.lock().control_desk_by_alias(parts[1]).ok().flatten()};
+        let desk=osc_control_desk(state,parts[1]);
         if let Some(desk)=desk { let _=state.desk.lock().set_desk_page(desk.id,show.id,page); emit(state,"playback_page_changed",serde_json::json!({"desk_id":desk.id,"page":page})); }
         return;
     }
@@ -3289,7 +3512,7 @@ fn handle_playback_osc(state: &AppState, address: &str, arguments: &[OscArgument
     } else if parts.len()>=5 && parts.first()==Some(&"light") && parts.get(2)==Some(&"paged-playback") {
         let Ok(slot)=parts[3].parse::<u8>() else{return;};
         let Some(show)=state.active_show.read().clone() else{return;};
-        let Ok(Some(desk))=state.desk.lock().control_desk_by_alias(parts[1]) else{return;};
+        let Some(desk)=osc_control_desk(state,parts[1]) else{return;};
         let page_number=state.desk.lock().desk_page(desk.id,show.id).unwrap_or(1);
         let snapshot=state.engine.snapshot();
         let Some(number)=snapshot.playback_pages.iter().find(|page|page.number==page_number).and_then(|page|page.slots.get(&slot)).copied() else{return;};
@@ -3554,6 +3777,15 @@ mod tests {
     fn test_control_desk() -> ControlDesk { ControlDesk { id: Uuid::nil(), name: "Test desk".into(), osc_alias: "test-desk".into(), columns: 8, rows: 1, buttons: 3 } }
 
     #[test]
+    fn command_backspace_removes_words_as_tokens_and_numbers_as_characters() {
+        let mut value = "GROUP 1 THRU 6 AT 88".to_string();
+        for expected in ["GROUP 1 THRU 6 AT 8", "GROUP 1 THRU 6 AT", "GROUP 1 THRU 6", "GROUP 1 THRU", "GROUP 1", "GROUP", ""] {
+            value = remove_command_token(&value);
+            assert_eq!(value, expected);
+        }
+    }
+
+    #[test]
     fn legacy_four_speed_group_configuration_gains_group_e() {
         let configuration: DeskConfiguration =
             serde_json::from_value(serde_json::json!({"speed_groups_bpm":[101,102,103,104]}))
@@ -3627,6 +3859,9 @@ mod tests {
                 media_cache: Arc::new(Mutex::new(MediaCache::default())),
                 media_status: Arc::new(RwLock::new(HashMap::new())),
                 input_locks: Arc::new(Mutex::new(HashMap::new())),
+                osc_subscribers: Arc::new(Mutex::new(HashMap::new())),
+                osc_feedback: None,
+                mvr_imports: Arc::new(Mutex::new(HashMap::new())),
             },
             data_dir,
         )
@@ -3789,6 +4024,7 @@ mod tests {
                         head_index: 1,
                         fixture_id: light_core::FixtureId::new(),
                     }],
+                    multipatch: vec![],
                 }],
                 revision: 1,
                 ..EngineSnapshot::default()
@@ -4354,6 +4590,7 @@ mod tests {
             location: Default::default(),
             rotation: Default::default(),
             logical_heads: vec![],
+            multipatch: vec![],
         };
         let cue_list_id = light_core::CueListId::new();
         let mut cue = light_playback::Cue::new(1.0);
@@ -4796,6 +5033,7 @@ mod tests {
                 location: Default::default(),
                 rotation: Default::default(),
                 logical_heads: vec![],
+                multipatch: vec![],
             }
         }
         fn dimmer(name: &str, address: u16) -> PatchedFixture {

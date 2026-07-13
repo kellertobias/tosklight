@@ -4,15 +4,29 @@ use std::{fs::OpenOptions, net::{SocketAddr, TcpStream}, path::{Path, PathBuf}, 
 use tauri::{Emitter, Manager};
 use serde::Serialize;
 
+fn open_hardware_controls() -> Result<(), String> {
+    let executable=std::env::current_exe().map_err(|e|e.to_string())?;
+    #[cfg(target_os="macos")]
+    {
+        let debug=executable.ancestors().find(|p|p.file_name().is_some_and(|n|n=="target")).map(|target|target.join("debug/bundle/macos/ToskLight Hardware Controls.app"));
+        let installed=std::env::var_os("HOME").map(PathBuf::from).map(|home|home.join("Applications/ToskLight Hardware Controls.app"));
+        let app=debug.filter(|p|p.exists()).or_else(||installed.filter(|p|p.exists())).ok_or("ToskLight Hardware Controls.app is not installed or built")?;
+        Command::new("open").arg(app).spawn().map_err(|e|e.to_string())?; return Ok(());
+    }
+    #[cfg(not(target_os="macos"))]
+    { Command::new(executable.with_file_name(if cfg!(windows){"light-hardware-controls.exe"}else{"light-hardware-controls"})).spawn().map_err(|e|e.to_string())?; Ok(()) }
+}
+
 #[derive(Serialize)] struct ConsoleDisplay { id:String, name:String }
 fn monitor_id(monitor:&tauri::window::Monitor)->String { let p=monitor.position();let s=monitor.size();format!("{}|{},{}|{}x{}",monitor.name().map(String::as_str).unwrap_or("Display"),p.x,p.y,s.width,s.height) }
 #[tauri::command] fn list_console_displays(app:tauri::AppHandle)->Result<Vec<ConsoleDisplay>,String>{app.available_monitors().map_err(|e|e.to_string()).map(|items|items.into_iter().map(|m|ConsoleDisplay{id:monitor_id(&m),name:m.name().cloned().unwrap_or_else(||"Display".into())}).collect())}
 #[tauri::command] fn close_console_screen(app:tauri::AppHandle,screen_id:String)->Result<(),String>{if let Some(window)=app.get_webview_window(&format!("screen-{screen_id}")){window.close().map_err(|e|e.to_string())?;}Ok(())}
 #[tauri::command] fn hide_console_screen(app:tauri::AppHandle,screen_id:String)->Result<(),String>{if let Some(window)=app.get_webview_window(&format!("screen-{screen_id}")){window.hide().map_err(|e|e.to_string())?;}Ok(())}
+#[tauri::command] fn exit_desktop_app(app:tauri::AppHandle){let _=app.emit("app-shutting-down",());app.exit(0);}
 #[tauri::command] fn open_console_screen(app:tauri::AppHandle,screen_id:String,title:String,display_id:Option<String>,bounds:Option<serde_json::Value>,fullscreen:bool)->Result<(),String>{
-    let label=format!("screen-{screen_id}");if let Some(window)=app.get_webview_window(&label){window.show().map_err(|e|e.to_string())?;return Ok(());}
+    let label=format!("screen-{screen_id}");if let Some(window)=app.get_webview_window(&label){if !window.is_visible().map_err(|e|e.to_string())? { window.show().map_err(|e|e.to_string())?; } return Ok(());}
     let monitors=app.available_monitors().map_err(|e|e.to_string())?;let monitor=display_id.as_ref().and_then(|id|monitors.iter().find(|m|monitor_id(m)==*id));if display_id.is_some()&&monitor.is_none(){return Ok(());}
-    let mut builder=tauri::WebviewWindowBuilder::new(&app,label,tauri::WebviewUrl::App(format!("index.html?screen={screen_id}").into())).title(title).inner_size(1200.0,800.0).resizable(true);
+    let mut builder=tauri::WebviewWindowBuilder::new(&app,label,tauri::WebviewUrl::App(format!("index.html?screen={screen_id}").into())).title(title).inner_size(1200.0,800.0).resizable(true).decorations(false);
     if let Some(value)=bounds { let x=value.get("x").and_then(|v|v.as_f64());let y=value.get("y").and_then(|v|v.as_f64());let w=value.get("width").and_then(|v|v.as_f64());let h=value.get("height").and_then(|v|v.as_f64());if let (Some(x),Some(y),Some(w),Some(h))=(x,y,w,h){builder=builder.position(x,y).inner_size(w.max(640.0),h.max(480.0));} }
     else if let Some(monitor)=monitor { let p=monitor.position();builder=builder.position(f64::from(p.x)+20.0,f64::from(p.y)+20.0); }
     builder.fullscreen(fullscreen).build().map_err(|e|e.to_string())?;Ok(())
@@ -61,8 +75,12 @@ fn launch_server(app: &tauri::AppHandle) -> Result<Option<Child>, Box<dyn std::e
 
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![list_console_displays,open_console_screen,close_console_screen,hide_console_screen])
+        .on_menu_event(|_,event|{if event.id().as_ref()=="open-hardware-controls"{if let Err(error)=open_hardware_controls(){eprintln!("failed to open Hardware Controls: {error}");}}})
+        .invoke_handler(tauri::generate_handler![list_console_displays,open_console_screen,close_console_screen,hide_console_screen,exit_desktop_app])
         .setup(|app| {
+            let open=tauri::menu::MenuItemBuilder::with_id("open-hardware-controls","Open Hardware Controls").build(app)?;
+            let tools=tauri::menu::SubmenuBuilder::new(app,"Tools").item(&open).build()?;
+            let menu=tauri::menu::MenuBuilder::new(app).items(&[&tools]).build()?; app.set_menu(menu)?;
             let child = launch_server(app.handle()).map_err(|error| { eprintln!("failed to start bundled Light server: {error}"); error })?;
             let process = ServerProcess { child: Arc::new(Mutex::new(child)), stop: Arc::new(AtomicBool::new(false)) };
             let watched_child = Arc::clone(&process.child); let stop = Arc::clone(&process.stop); let handle = app.handle().clone();

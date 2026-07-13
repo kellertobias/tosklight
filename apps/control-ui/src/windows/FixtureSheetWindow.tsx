@@ -8,13 +8,14 @@ import { GroupStrip } from "../components/shared/GroupStrip";
 import { useApp } from "../state/AppContext";
 import { fixtureTargetIds, fixtureValue } from "./fixtureVisualization";
 import { GroupsPoolButton } from "../components/shared/GroupsPoolButton";
+import { Button } from "../components/common";
 
 export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps) {
   const server = useServer();
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   const [visualization, setVisualization] = useState<VisualizationSnapshot | null>(null);
   const [preloadVisualization, setPreloadVisualization] = useState<VisualizationSnapshot | null>(null);
-  const [groupsVisible, setGroupsVisible] = useState(!compact);
+  const groupsVisible = compact ? Boolean(showGroupShortcuts) : state.fixtureGroupsVisible;
   useEffect(() => {
     let cancelled = false;
     const refresh = () => void Promise.all([server.readVisualization(), state.preload !== "idle" ? server.readVisualization(true) : Promise.resolve(null)]).then(([next, preload]) => { if (!cancelled) { setVisualization(next); setPreloadVisualization(preload); } }).catch(() => undefined);
@@ -96,7 +97,7 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
         <span className="spacer" />
         {!compact && (
           <div className="button-group">
-            <GroupsPoolButton shortcutsVisible={groupsVisible} onToggleShortcuts={() => setGroupsVisible(!groupsVisible)} />
+            <GroupsPoolButton shortcutsVisible={groupsVisible} onToggleShortcuts={() => dispatch({type:"SET_BUILTIN_GROUPS_VISIBLE",window:"fixtures",value:!groupsVisible})} />
           </div>
         )}
       </header>}
@@ -111,12 +112,12 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
           <span>Focus</span>
         </div>
         {visible.map((fixture) => (
-          <button
+          <div className={`fixture-row-shell ${fixture.fixtureId && server.selectedFixtures.includes(fixture.fixtureId) ? "selected" : ""}`} key={fixture.fixtureId || fixture.id}>
+          <Button
             onClick={() =>
               fixture.fixtureId && void server.setSelection([fixture.fixtureId])
             }
-            className={`fixture-row ${fixture.fixtureId && server.selectedFixtures.includes(fixture.fixtureId) ? "selected" : ""}`}
-            key={fixture.fixtureId || fixture.id}
+            className="fixture-row"
           >
             <span>{fixture.id}</span>
             <span className="fixture-name">
@@ -173,11 +174,12 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
             <SourceValue source={fixture.sources.focus}>
               {fixture.focus}
             </SourceValue>
-          </button>
+          </Button>
+          </div>
         ))}
         {Array.from({ length: Math.max(0, (compact ? 12 : 24) - visible.length) }, (_, index) => <div className="fixture-row fixture-empty-row" aria-hidden="true" key={`empty-row-${index}`}><span>{visible.length + index + 1}</span><span /><span /><span /><span /><span /><span /></div>)}
       </div>
-      {(compact ? showGroupShortcuts : groupsVisible) && <GroupStrip />}
+      {groupsVisible && <GroupStrip />}
     </div>
   );
 }

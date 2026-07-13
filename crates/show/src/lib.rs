@@ -577,6 +577,8 @@ impl ShowStore {
         .collect()
     }
 
+    pub fn delete_object(&self, kind:&str, id:&str)->Result<bool,StoreError>{Ok(self.conn.execute("DELETE FROM objects WHERE kind=?1 AND id=?2",params![kind,id])?==1)}
+
     pub fn put_user_layout(
         &self,
         user_id: UserId,

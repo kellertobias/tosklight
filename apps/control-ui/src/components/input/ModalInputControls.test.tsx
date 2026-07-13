@@ -10,9 +10,9 @@ function TextHarness({ enter, escape }: { enter: () => void; escape: () => void 
   return <div className="modal-backdrop"><output aria-label="value">{value}</output><ModalTextKeyboard value={value} onChange={setValue} onEnter={enter} onEscape={escape}/></div>;
 }
 
-function NumberHarness({ enter, escape }: { enter: () => void; escape: () => void }) {
-  const [value, setValue] = useState("");
-  return <div className="modal-backdrop"><output aria-label="value">{value}</output><ModalNumberInput value={value} onChange={setValue} onEnter={enter} onEscape={escape}/></div>;
+function NumberHarness({ enter, escape, initial = "", replaceOnFirstInput = false }: { enter: () => void; escape: () => void; initial?: string; replaceOnFirstInput?: boolean }) {
+  const [value, setValue] = useState(initial);
+  return <div className="modal-backdrop"><output aria-label="value">{value}</output><ModalNumberInput value={value} onChange={setValue} onEnter={enter} onEscape={escape} replaceOnFirstInput={replaceOnFirstInput}/></div>;
 }
 
 describe("modal input controls", () => {
@@ -43,5 +43,15 @@ describe("modal input controls", () => {
     expect(screen.getByLabelText("value")).toHaveTextContent("12.5");
     fireEvent.keyDown(window, { key: "Enter" }); fireEvent.keyDown(window, { key: "Escape" });
     expect(enter).toHaveBeenCalledOnce(); expect(escape).toHaveBeenCalledOnce();
+  });
+
+  it("uses the operator num-block layout and replaces an existing value on first entry", () => {
+    render(<NumberHarness enter={vi.fn()} escape={vi.fn()} initial="62.8" replaceOnFirstInput/>);
+    expect(screen.getByRole("button", { name: "THRU" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "+" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "−" })).toBeVisible();
+    fireEvent.keyDown(window, { key: "9" });
+    fireEvent.keyDown(window, { key: "5" });
+    expect(screen.getByLabelText("value")).toHaveTextContent("95");
   });
 });

@@ -1,0 +1,2 @@
+.native-drag-strip{cursor:grab;pointer-events:auto;touch-action:none;user-select:none}.native-drag-strip:active{cursor:grabbing}
+.desk-pane>header{height:36px;min-height:36px}.desk-pane>header .ui-button{height:35px;min-height:35px}.desk-pane>header .pane-settings-button{min-width:88px;display:flex;align-items:center;justify-content:center;gap:6px;padding:0 10px}.pane-settings-button>span:first-child{width:16px;display:grid;place-items:center;line-height:1}.pane-settings-button>span:last-child{font-size:11px;font-weight:700}.pane-content{height:calc(100% - 36px)}

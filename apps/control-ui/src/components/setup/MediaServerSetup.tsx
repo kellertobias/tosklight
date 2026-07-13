@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useServer } from "../../api/ServerContext";
 import type { MediaServerFixture, PatchedFixture } from "../../api/types";
+import { Button, Input } from "../common";
 
 type Draft = { ip: string; port: number };
 
@@ -30,8 +31,8 @@ function MediaServerCard({ fixture, status, draft, preview, busy, live, setDraft
   const statusText = status?.status.online ? "● Online" : fixture.direct_control ? "● Offline" : supportsCitp ? "Not configured" : "Profile has no CITP capability";
   return <article className="media-server-card">
     <header><b>{name}</b><span className={status?.status.online ? "online" : "offline"}>{statusText}</span></header>
-    <div className="media-endpoint-form"><label>IP address<input disabled={!supportsCitp} aria-label={`${name} CITP IP address`} value={draft.ip} placeholder="192.168.1.50" onChange={(event) => setDraft({ ...draft, ip: event.target.value })}/></label><label>Port<input disabled={!supportsCitp} aria-label={`${name} CITP port`} type="number" min="1" max="65535" value={draft.port} onChange={(event) => setDraft({ ...draft, port: Number(event.target.value) })}/></label><button disabled={!supportsCitp || busy} onClick={() => void save(draft)}>{draft.ip.trim() ? "Save endpoint" : "Disable CITP"}</button></div>
-    {fixture.direct_control && <div className="media-actions"><button className={live ? "active" : ""} disabled={busy} onClick={() => void toggleLive()}>{live ? "Stop live preview" : "Start live preview"}</button><button disabled={busy} onClick={() => void refreshThumbnails()}>Refresh thumbnails 1–16</button></div>}
+    <div className="media-endpoint-form"><label>IP address<Input disabled={!supportsCitp} aria-label={`${name} CITP IP address`} value={draft.ip} placeholder="192.168.1.50" onChange={(event) => setDraft({ ...draft, ip: event.target.value })}/></label><label>Port<Input disabled={!supportsCitp} aria-label={`${name} CITP port`} type="number" min="1" max="65535" value={draft.port} onChange={(event) => setDraft({ ...draft, port: Number(event.target.value) })}/></label><Button disabled={!supportsCitp || busy} onClick={() => void save(draft)}>{draft.ip.trim() ? "Save endpoint" : "Disable CITP"}</Button></div>
+    {fixture.direct_control && <div className="media-actions"><Button className={live ? "active" : ""} disabled={busy} onClick={() => void toggleLive()}>{live ? "Stop live preview" : "Start live preview"}</Button><Button disabled={busy} onClick={() => void refreshThumbnails()}>Refresh thumbnails 1–16</Button></div>}
     {preview ? <img className="media-preview" src={preview} alt={`${name} live CITP output preview`}/> : <div className="media-preview media-preview-empty">{status?.status.last_error ? <><b>Preview unavailable</b><small>{status.status.last_error}</small></> : "No cached preview"}</div>}
     <small>{fixture.logical_heads.length} logical layers · {status?.status.last_success ? `Last response ${new Date(status.status.last_success).toLocaleString()}` : "No successful response yet"}</small>
   </article>;

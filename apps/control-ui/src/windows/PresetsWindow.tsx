@@ -1,16 +1,16 @@
-import { useState } from "react";
 import { presets } from "../data/mockData";
 import type { WindowProps } from "./windowTypes";
 import { useServer } from "../api/ServerContext";
 import { useApp } from "../state/AppContext";
 import { GroupStrip } from "../components/shared/GroupStrip";
 import { GroupsPoolButton } from "../components/shared/GroupsPoolButton";
+import { Button } from "../components/common";
 
 export function PresetsWindow({ compact, showGroupShortcuts }: WindowProps) {
   const server = useServer();
   const { state, dispatch } = useApp();
   const family = state.presetFamily;
-  const [groupsVisible, setGroupsVisible] = useState(!compact);
+  const groupsVisible = compact ? Boolean(showGroupShortcuts) : state.presetGroupsVisible;
   const fallback = server.bootstrap
     ? []
     : presets
@@ -27,7 +27,7 @@ export function PresetsWindow({ compact, showGroupShortcuts }: WindowProps) {
         }));
   const stored = server.bootstrap?.active_show ? server.presets : fallback;
   const cards = Array.from(
-    { length: 40 },
+    { length: Math.max(200, ...stored.map((preset) => Number(preset.id) || 0)) },
     (_, index) =>
       stored.find((preset) => preset.id === String(index + 1)) ?? null,
   );
@@ -51,27 +51,30 @@ export function PresetsWindow({ compact, showGroupShortcuts }: WindowProps) {
       {!compact && <header className="window-toolbar">
         <h1>Preset Pools</h1>
         <span className="spacer" />
-          <>
+          <div className="preset-toolbar-groups">
+            <div className="preset-family-controls">
             {families.map((name) => (
-              <button
+              <Button
                 key={name}
                 onClick={() => dispatch({ type: "SET_PRESET_FAMILY", family: name as typeof state.presetFamily })}
-                className={family === name ? "active" : ""}
+                className={`preset-family-button family-${name.toLowerCase()} ${family === name ? "active" : ""}`}
               >
                 {name}
-              </button>
+              </Button>
             ))}
-            <GroupsPoolButton shortcutsVisible={groupsVisible} onToggleShortcuts={() => setGroupsVisible(!groupsVisible)} />
-          </>
+            </div>
+            <i className="preset-groups-divider" aria-hidden="true" />
+            <GroupsPoolButton shortcutsVisible={groupsVisible} onToggleShortcuts={() => dispatch({type:"SET_BUILTIN_GROUPS_VISIBLE",window:"presets",value:!groupsVisible})} />
+          </div>
       </header>}
       <div className="card-pool">
         {cards.map((preset, index) => {
           const filtered = Boolean(preset && family !== "All" && preset.body.family !== family);
           return (
-            <button
+            <Button
               disabled={filtered}
               key={index + 1}
-              className={`preset-card pool-cell ${!preset ? "empty" : ""} ${filtered ? "filtered" : ""} ${state.storeArmed ? "store-target" : ""}`}
+              className={`preset-card pool-cell ${preset ? `preset-family-${String(preset.body.family ?? "all").toLowerCase()}` : ""} ${!preset ? "empty" : ""} ${filtered ? "filtered" : ""} ${state.storeArmed ? "store-target" : ""}`}
               onClick={() => activate(index)}
             >
               <span className="number">{index + 1}</span>
@@ -103,11 +106,11 @@ export function PresetsWindow({ compact, showGroupShortcuts }: WindowProps) {
                   </small>
                 </>
               )}
-            </button>
+            </Button>
           );
         })}
       </div>
-      {(compact ? showGroupShortcuts : groupsVisible) && <GroupStrip />}
+      {groupsVisible && <GroupStrip />}
     </div>
   );
 }

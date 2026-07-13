@@ -5,6 +5,7 @@ import { VerticalTouchFader } from "../components/control/VerticalTouchFader";
 import type { WindowProps } from "./windowTypes";
 import { fixtureValue } from "./fixtureVisualization";
 import { createPortal } from "react-dom";
+import { Button } from "../components/common";
 
 const PAGE_SIZE = 20;
 
@@ -35,7 +36,7 @@ export function ChannelsWindow({ compact }: WindowProps) {
   const pages = Math.max(8, Math.ceil(channels.length / PAGE_SIZE));
   const visible = Array.from({ length: PAGE_SIZE }, (_, index) => channels[page * PAGE_SIZE + index] ?? null);
   return <div className="channels-window">
-    <header className="window-toolbar"><h1>Channels · Intensity <small>Two-row channel bank</small></h1><span className="spacer" />{!compact && <div className="channel-page-controls"><button aria-label="Previous channel page" disabled={page === 0} onClick={() => setPage(page - 1)}>←</button><button className="channel-page-current" onClick={() => setPagePickerOpen(true)}>{page * PAGE_SIZE + 1}–{(page + 1) * PAGE_SIZE}</button><button aria-label="Next channel page" disabled={page >= pages - 1} onClick={() => setPage(page + 1)}>→</button></div>}</header>
+    <header className="window-toolbar"><h1>Channels · Intensity <small>Two-row channel bank</small></h1><span className="spacer" />{!compact && <div className="channel-page-controls"><Button aria-label="Previous channel page" disabled={page === 0} onClick={() => setPage(page - 1)}>←</Button><Button className="channel-page-current" onClick={() => setPagePickerOpen(true)}>{page * PAGE_SIZE + 1}–{(page + 1) * PAGE_SIZE}</Button><Button aria-label="Next channel page" disabled={page >= pages - 1} onClick={() => setPage(page + 1)}>→</Button></div>}</header>
     <div className="channel-fader-bank">{visible.map((channel, index) => {
       const number = page * PAGE_SIZE + index + 1;
       return <article className={`channel-fader ${channel ? "" : "empty"} ${channel && server.selectedFixtures.includes(channel.fixture.fixture_id) ? "selected" : ""}`} key={channel?.fixture.fixture_id ?? `empty-${number}`} onClick={() => channel && void server.setSelection([channel.fixture.fixture_id])}>
@@ -49,6 +50,6 @@ export function ChannelsWindow({ compact }: WindowProps) {
         />
       </article>;
     })}</div>
-    {pagePickerOpen && createPortal(<div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && setPagePickerOpen(false)}><div className="nested-modal channel-page-modal" role="dialog" aria-modal="true" aria-label="Channel pages"><button className="modal-close" onClick={() => setPagePickerOpen(false)}>×</button><h3>Channel pages</h3><div>{Array.from({ length: pages }, (_, nextPage) => <button className={nextPage === page ? "active" : ""} key={nextPage} onClick={() => { setPage(nextPage); setPagePickerOpen(false); }}>{nextPage * PAGE_SIZE + 1}–{(nextPage + 1) * PAGE_SIZE}</button>)}</div></div></div>, document.body)}
+    {pagePickerOpen && createPortal(<div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && setPagePickerOpen(false)}><div className="nested-modal channel-page-modal" role="dialog" aria-modal="true" aria-label="Channel pages"><Button className="modal-close" onClick={() => setPagePickerOpen(false)}>×</Button><h3>Channel pages</h3><div>{Array.from({ length: pages }, (_, nextPage) => <Button className={nextPage === page ? "active" : ""} key={nextPage} onClick={() => { setPage(nextPage); setPagePickerOpen(false); }}>{nextPage * PAGE_SIZE + 1}–{(nextPage + 1) * PAGE_SIZE}</Button>)}</div></div></div>, document.body)}
   </div>;
 }

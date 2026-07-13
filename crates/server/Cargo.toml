@@ -13,11 +13,13 @@ native-midi = ["light-control/native-midi", "light-engine/native-midi"]
 anyhow.workspace = true
 axum.workspace = true
 base64.workspace = true
+bytes.workspace = true
 chrono.workspace = true
 light-core = { path = "../core" }
 light-control = { path = "../control", default-features = false }
 light-engine = { path = "../engine", default-features = false }
 light-media = { path = "../media" }
+light-mvr = { path = "../mvr" }
 light-fixture = { path = "../fixture" }
 light-output = { path = "../output" }
 light-playback = { path = "../playback" }

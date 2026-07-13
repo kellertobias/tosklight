@@ -1,0 +1,13 @@
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { Button, CheckboxField, NumberField, SelectField, SwitchField, TextField } from "./controls";
+afterEach(cleanup);
+
+describe("shared controls",()=>{
+  it("defaults buttons to a safe type and exposes semantic states",()=>{render(<Button variant="danger" loading>Delete</Button>);const button=screen.getByRole("button");expect(button).toHaveAttribute("type","button");expect(button).toBeDisabled();expect(button).toHaveClass("ui-danger");expect(button).toHaveAttribute("aria-busy","true");});
+  it("associates field labels and errors",()=>{render(<TextField label="Name" error="Required" required/>);const input=screen.getByLabelText(/Name/);expect(input).toHaveAttribute("aria-invalid","true");expect(screen.getByRole("alert")).toHaveTextContent("Required");});
+  it("opens a number-pad modal beside every number field",()=>{render(<NumberField label="Rows" min={1} max={3}/>);expect(screen.getByLabelText("Rows")).toHaveAttribute("type","number");fireEvent.click(screen.getByRole("button",{name:"Open number pad"}));expect(screen.getByRole("dialog",{name:"Number input"})).toBeInTheDocument();fireEvent.click(screen.getByRole("button",{name:"3"}));fireEvent.click(screen.getByRole("button",{name:"ENTER"}));expect(screen.queryByRole("dialog")).not.toBeInTheDocument();});
+  it("operates checkbox and switch controls",()=>{const change=vi.fn();render(<><CheckboxField label="Dock" aria-label="Dock" onChange={change}/><SwitchField label="Fullscreen" aria-label="Fullscreen" onChange={change}/></>);fireEvent.click(screen.getByRole("checkbox",{name:"Dock"}));fireEvent.click(screen.getByRole("switch",{name:"Fullscreen"}));expect(change).toHaveBeenCalledTimes(2);});
+  it("opens the touch picker, selects, and restores focus",()=>{const change=vi.fn();render(<SelectField label="Mode" value="main" options={[{value:"main",label:"Main"},{value:"own",label:"Own"}]} onChange={change}/>);const trigger=screen.getByRole("button",{name:/Main/});fireEvent.click(trigger);fireEvent.click(screen.getByRole("option",{name:"Own"}));expect(change).toHaveBeenCalledWith("own");expect(trigger).toHaveFocus();});
+  it("dismisses the touch picker with escape",()=>{render(<SelectField label="Mode" value="main" options={[{value:"main",label:"Main"}]} onChange={()=>undefined}/>);const trigger=screen.getByRole("button",{name:/Main/});fireEvent.click(trigger);fireEvent.keyDown(window,{key:"Escape"});expect(screen.queryByRole("listbox")).not.toBeInTheDocument();expect(trigger).toHaveFocus();});
+});

@@ -3,6 +3,7 @@ import { useApp } from "../../state/AppContext";
 import { useServer } from "../../api/ServerContext";
 import { VerticalTouchFader } from "../control/VerticalTouchFader";
 import { moveLampPositions, resolveLampPositions } from "./specialPosition";
+import { Button, Input } from "../common";
 
 function hsvToRgb(h: number, s: number, v: number) {
   const i = Math.floor(h * 6),
@@ -151,9 +152,9 @@ export function SpecialDialogsModal() {
       }}
     >
       <section className="modal-card special-dialog-card">
-        <button className="modal-close" onClick={close}>
+        <Button className="modal-close" onClick={close}>
           ×
-        </button>
+        </Button>
         <h2>{family} · Special Dialog</h2>
         <p>{server.selectedFixtures.length} fixtures selected</p>
         <div className="special-dialog-content">
@@ -204,7 +205,7 @@ export function SpecialDialogsModal() {
                 />
               </div>
               <label className="brightness-control">Brightness
-              <input
+              <Input
                 className="brightness-slider"
                 aria-label="Brightness"
                 type="range"
@@ -229,18 +230,18 @@ export function SpecialDialogsModal() {
                   {family} page {beamPage + 1}
                 </b>
                 <span className="spacer" />
-                <button
+                <Button
                   disabled={beamPage === 0}
                   onClick={() => setBeamPage(beamPage - 1)}
                 >
                   ←
-                </button>
-                <button
+                </Button>
+                <Button
                   disabled={(beamPage + 1) * 4 >= beamAttributes.length}
                   onClick={() => setBeamPage(beamPage + 1)}
                 >
                   →
-                </button>
+                </Button>
               </header>
               <div>
                 {pageAttributes.length ? (
@@ -263,21 +264,21 @@ export function SpecialDialogsModal() {
           )}
           {family === "Control" && (
             <div className="special-action-grid">
-              <button onClick={() => void apply("control.lamp", 1)}>
+              <Button onClick={() => void apply("control.lamp", 1)}>
                 Lamp On
-              </button>
-              <button onClick={() => void apply("control.lamp", 0)}>
+              </Button>
+              <Button onClick={() => void apply("control.lamp", 0)}>
                 Lamp Off
-              </button>
-              <button
+              </Button>
+              <Button
                 className="danger"
                 onClick={() => void apply("control.reset", 1)}
               >
                 Reset
-              </button>
-              <button onClick={() => void apply("control.fan", 0.5)}>
+              </Button>
+              <Button onClick={() => void apply("control.fan", 0.5)}>
                 Fan Auto
-              </button>
+              </Button>
             </div>
           )}
           {family === "Dynamics" && (

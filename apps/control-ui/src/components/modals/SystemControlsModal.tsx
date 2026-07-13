@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useServer } from "../../api/ServerContext";
 import { useApp } from "../../state/AppContext";
 import { HorizontalTouchFader } from "../control/HorizontalTouchFader";
+import { Button } from "../common";
 
 export function SystemControlsModal() {
   const { state, dispatch } = useApp();
@@ -30,8 +31,8 @@ export function SystemControlsModal() {
   if (!state.systemControlsOpen) return null;
   const close = () => dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: false });
   return <div className="modal-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) close(); }}><section className="modal-card system-controls-card">
-    <header className="system-controls-header"><h2>Output & Timecode Controls</h2><button className="modal-close" onClick={close}>×</button></header>
-    <section className="master-controls"><HorizontalTouchFader label="Grand master" value={master} onChange={(value) => { setMaster(value); void server.setMaster(value / 100, undefined); }}/><button className={blackout ? "danger active" : "danger"} onClick={() => { const next = !blackout; setBlackout(next); dispatch({ type: "SET_BLACKOUT", value: next }); void server.setMaster(undefined, next); }}>{blackout ? "RELEASE BLACKOUT" : "BLACKOUT"}</button><button className="lamp-on-all" disabled={!server.selectedFixtures.length} onClick={() => void allLampsOn()}>All Lamps On</button></section>{lampResult && <p className="lamp-command-result">{lampResult}</p>}
-    <h3>Active programmers</h3><div className="programmer-list">{server.bootstrap?.active_programmers.map((programmer) => <article key={programmer.user_id}><span><b>{programmer.user_id === server.session?.user.id ? `${server.session.user.name} · Current user` : `User ${programmer.user_id.slice(0, 8)}`}</b><small>{programmer.selected.length} fixtures · {programmer.values.length} values · {programmer.connected ? "Connected" : "Disconnected"}</small></span><button className="danger" onClick={() => void server.clearProgrammer(programmer.session_id)}>Clear</button></article>)}{!server.bootstrap?.active_programmers.length && <p className="empty-window-message">No active programmers.</p>}</div>
+    <header className="system-controls-header"><h2>Output & Timecode Controls</h2><Button className="modal-close" onClick={close}>×</Button></header>
+    <section className="master-controls"><HorizontalTouchFader label="Grand master" value={master} onChange={(value) => { setMaster(value); void server.setMaster(value / 100, undefined); }}/><Button className={blackout ? "danger active" : "danger"} onClick={() => { const next = !blackout; setBlackout(next); dispatch({ type: "SET_BLACKOUT", value: next }); void server.setMaster(undefined, next); }}>{blackout ? "RELEASE BLACKOUT" : "BLACKOUT"}</Button><Button className="lamp-on-all" disabled={!server.selectedFixtures.length} onClick={() => void allLampsOn()}>All Lamps On</Button></section>{lampResult && <p className="lamp-command-result">{lampResult}</p>}
+    <h3>Active programmers</h3><div className="programmer-list">{server.bootstrap?.active_programmers.map((programmer) => <article key={programmer.user_id}><span><b>{programmer.user_id === server.session?.user.id ? `${server.session.user.name} · Current user` : `User ${programmer.user_id.slice(0, 8)}`}</b><small>{programmer.selected.length} fixtures · {programmer.values.length} values · {programmer.connected ? "Connected" : "Disconnected"}</small></span><Button className="danger" onClick={() => void server.clearProgrammer(programmer.session_id)}>Clear</Button></article>)}{!server.bootstrap?.active_programmers.length && <p className="empty-window-message">No active programmers.</p>}</div>
   </section></div>;
 }

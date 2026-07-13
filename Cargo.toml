@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
   "apps/control-ui/src-tauri",
+  "apps/hardware-controls/src-tauri",
   "crates/core",
   "crates/fixture",
   "crates/show",
@@ -11,6 +12,7 @@ members = [
   "crates/control",
   "crates/engine",
   "crates/media",
+  "crates/mvr",
   "crates/server",
 ]
 
@@ -43,6 +45,8 @@ midir = "0.11"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1.16", features = ["v4", "serde"] }
+quick-xml = "0.38"
+zip = { version = "4.6", default-features = false, features = ["deflate"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

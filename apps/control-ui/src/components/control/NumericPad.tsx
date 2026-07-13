@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useServer } from "../../api/ServerContext";
 import { useApp } from "../../state/AppContext";
 import { programmerValueCount } from "./programmerActivity";
+import { Button } from "../common";
+import { removeCommandToken } from "./commandLineEditing";
 
 const keys = ["GRP", "SET", "DIV", "CLEAR", "7", "8", "9", "AT", "4", "5", "6", "FULL", "1", "2", "3", "THRU", ".", "0", "←", "ENTER"];
 
@@ -14,7 +16,7 @@ export function NumericPad() {
   const clearClass = clearStage === 2 ? "clear-warning" : hasClearContent ? "clear-active" : "clear-idle";
   useEffect(() => { if (server.selectedFixtures.length) setClearStage(0); }, [server.selectedFixtures]);
   const press = (key: string) => {
-    if (key === "←") return server.setCommandLine(server.commandLine.slice(0, -1));
+    if (key === "←") return server.setCommandLine(removeCommandToken(server.commandLine));
     if (key === "CLEAR") {
       if (state.storeArmed) dispatch({ type: "SET_STORE_ARMED", value: false });
       server.setCommandLine("");
@@ -32,9 +34,9 @@ export function NumericPad() {
     server.setCommandLine(`${server.commandLine}${token}`.replace(/\s+/g, " ").trimStart());
     setClearStage(0);
   };
-  return <div className="numeric-pad">{keys.map((key) => <button
+  return <div className="numeric-pad">{keys.map((key) => <Button
     onClick={() => press(key)}
     className={`${["AT", "FULL", "THRU", "GRP", "SET", "DIV", "CLEAR"].includes(key) ? "action" : key === "ENTER" ? "enter" : ""} ${key === "SET" && state.builtIn === "patch" && state.patchSetArmed ? "patch-set-armed" : key === "CLEAR" ? `clear ${clearClass}` : ""}`}
     key={key}
-  >{key}</button>)}</div>;
+  >{key}</Button>)}</div>;
 }

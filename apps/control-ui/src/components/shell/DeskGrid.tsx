@@ -4,6 +4,7 @@ import { useApp } from "../../state/AppContext";
 import { Pane } from "./Pane";
 import { WindowPicker } from "../modals/WindowPicker";
 import { PaneSettingsModal } from "../modals/PaneSettingsModal";
+import { Button } from "../common";
 
 export function DeskGrid({ desk }: { desk: DeskModel }) {
   const { state, dispatch } = useApp();
@@ -17,7 +18,7 @@ export function DeskGrid({ desk }: { desk: DeskModel }) {
   };
   return <div className={`desk-grid ${state.paneSettingsId ? "editing" : ""}`} ref={ref} onPointerDown={(event) => { if (event.target === event.currentTarget) openAtPointer(event); }}>
     {desk.panes.map((pane) => <Pane key={pane.id} pane={pane} maximized={state.maximizedPaneId === pane.id} editing={state.paneSettingsId === pane.id} />)}
-    {empty && <button className="empty-desk" onPointerDown={openAtPointer}><b>24 × 18 desk grid</b><span>Tap a grid cell to open a window</span></button>}
+    {empty && <Button className="empty-desk" onPointerDown={openAtPointer}><b>24 × 18 desk grid</b><span>Tap a grid cell to open a window</span></Button>}
     <WindowPicker />
     <PaneSettingsModal />
   </div>;

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useServer } from "../../api/ServerContext";
 import { configuredServerUrl } from "../../api/LightApiClient";
 import appIcon from "../../../src-tauri/icons/icon.svg";
+import { Button, Input } from "../common";
 
 export function ConnectionState() {
   const server = useServer();
@@ -63,7 +64,7 @@ export function ConnectionState() {
               if (deskToken.trim()) server.setDeskToken(deskToken);
             }}
           >
-            <input
+            <Input
               autoFocus
               type="password"
               aria-label="Desk boundary token"
@@ -71,7 +72,7 @@ export function ConnectionState() {
               onChange={(event) => setDeskToken(event.target.value)}
               placeholder="Desk token"
             />
-            <button disabled={!deskToken.trim()}>Connect</button>
+            <Button disabled={!deskToken.trim()}>Connect</Button>
           </form>
         ) : (
           <small>Retrying automatically</small>
@@ -84,13 +85,13 @@ export function ConnectionState() {
               server.setServerUrl(serverUrl);
             }}
           >
-            <input
+            <Input
               aria-label="Light server URL"
               value={serverUrl}
               onChange={(event) => setServerUrl(event.target.value)}
               placeholder="http://desk.local:5000"
             />
-            <button>Use server</button>
+            <Button>Use server</Button>
           </form>
         )}
       </div>

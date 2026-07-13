@@ -1,0 +1,9 @@
+{
+  "name": "@light/hardware-controls",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {"dev":"vite --host 127.0.0.1","build":"tsc -b && vite build","typecheck":"tsc -b --pretty false","tauri":"tauri","tauri:dev":"tauri dev","tauri:build":"tauri build"},
+  "dependencies": {"@tauri-apps/api":"^2.11.1","@vitejs/plugin-react":"latest","react":"latest","react-dom":"latest","vite":"latest"},
+  "devDependencies": {"@tauri-apps/cli":"^2.11.4","@types/react":"latest","@types/react-dom":"latest","typescript":"latest"}
+}
