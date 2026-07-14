@@ -18,6 +18,7 @@ import { Button, ModalTitleBar } from "../common";
 export interface WindowInfo { primary: ReactNode; secondary?: ReactNode }
 export interface WindowAction { id: string; label: ReactNode; onClick: () => void; active?: boolean; disabled?: boolean; ariaLabel?: string }
 export interface WindowSettingsTab { id: string; label: string; content: ReactNode }
+export interface WindowEmptyState { title: ReactNode; description?: ReactNode; icon?: ReactNode; action?: ReactNode }
 
 const WindowSettingsContext = createContext<(() => void) | null>(null);
 export const useWindowSettings = () => useContext(WindowSettingsContext);
@@ -82,10 +83,11 @@ export function WindowFrame({ title, info, actions, settingsTabs = [], settingsT
   </WindowSettingsContext.Provider>;
 }
 
-export function WindowScrollArea({ children, className = "" }: { children: ReactNode; className?: string }) {
+export function WindowScrollArea({ children, className = "", emptyState }: { children?: ReactNode; className?: string; emptyState?: WindowEmptyState | null }) {
   const scroller = useRef<HTMLDivElement>(null);
   const [metrics, setMetrics] = useState({ top: 0, size: 1, overflow: false });
   const drag = useRef<{ pointerId: number; startY: number; startScroll: number } | null>(null);
+  const hasEmptyState = emptyState != null;
   const measure = () => {
     const node = scroller.current;
     if (!node) return;
@@ -95,20 +97,26 @@ export function WindowScrollArea({ children, className = "" }: { children: React
   useLayoutEffect(() => {
     const node = scroller.current;
     if (!node) return;
+    if (typeof ResizeObserver === "undefined") { measure(); return; }
     const observer = new ResizeObserver(measure);
     observer.observe(node);
     if (node.firstElementChild) observer.observe(node.firstElementChild);
     measure();
     return () => observer.disconnect();
-  }, []);
+  }, [hasEmptyState]);
   const move = (event: PointerEvent<HTMLButtonElement>) => {
     const active = drag.current, node = scroller.current;
     if (!active || !node || active.pointerId !== event.pointerId) return;
     const track = event.currentTarget.parentElement?.clientHeight ?? 1;
     node.scrollTop = active.startScroll + (event.clientY - active.startY) / Math.max(track * (1 - metrics.size), 1) * (node.scrollHeight - node.clientHeight);
   };
-  return <div className={`ui-window-scroll-area ${metrics.overflow ? "overflowing" : ""} ${className}`}>
-    <div ref={scroller} className="ui-window-scroller" onScroll={measure}>{children}</div>
+  return <div className={`ui-window-scroll-area ${metrics.overflow ? "overflowing" : ""} ${hasEmptyState ? "empty" : ""} ${className}`}>
+    <div ref={scroller} className="ui-window-scroller" onScroll={measure}>{hasEmptyState ? <div className="ui-window-empty-state" role="status">
+      {emptyState.icon != null && <span className="icon" aria-hidden="true">{emptyState.icon}</span>}
+      <strong>{emptyState.title}</strong>
+      {emptyState.description != null && <p>{emptyState.description}</p>}
+      {emptyState.action != null && <div className="action">{emptyState.action}</div>}
+    </div> : children}</div>
     {metrics.overflow && <div className="ui-touch-scrollbar" onPointerDown={(event) => {
       if (event.target !== event.currentTarget || !scroller.current) return;
       const rect = event.currentTarget.getBoundingClientRect();

@@ -72,7 +72,6 @@ interface ServerContextValue {
   readServerLogs: () => Promise<Array<{ revision: number; kind: string; payload: unknown }>>;
   bootstrap: BootstrapSnapshot | null;
   session: SessionResponse | null;
-  showDirty: boolean;
   createUser: (name: string) => Promise<void>;
   changeUser: (user: import("./types").DeskUser) => Promise<void>;
   patch: PatchSnapshot | null;
@@ -132,6 +131,9 @@ interface ServerContextValue {
     id: string,
     transition?: "hold_current" | "timed_fade" | "safe_blackout",
   ) => Promise<void>;
+  listShowRevisions: (id: string) => Promise<import("./types").ShowRevision[]>;
+  saveShowRevision: (name: string) => Promise<import("./types").ShowRevision | null>;
+  openShowRevision: (id: string, revision: number) => Promise<boolean>;
   rollbackShow: () => Promise<void>;
   downloadShow: (show: ShowEntry) => Promise<void>;
   previewMvr: (file: File, showId?: string) => Promise<import("./types").MvrImportPreview>;
@@ -218,7 +220,6 @@ export function ServerProvider({ children }: PropsWithChildren) {
   const [error, setError] = useState<string | null>(null);
   const [bootstrap, setBootstrap] = useState<BootstrapSnapshot | null>(null);
   const [session, setSession] = useState<SessionResponse | null>(null);
-  const [showDirty, setShowDirty] = useState(false);
   const [patch, setPatch] = useState<PatchSnapshot | null>(null);
   const [patchLayers, setPatchLayers] = useState<VersionedObject<PatchLayer>[]>([]);
   const [playbacks, setPlaybacks] = useState<PlaybackSnapshot | null>(null);
@@ -387,8 +388,6 @@ export function ServerProvider({ children }: PropsWithChildren) {
         setSelectedFixtures(ownProgrammer?.selected ?? []);
         unsubscribe = client.onEvent((event) => {
           if (event.kind === "desk_action" && (event.payload as { action?: string })?.action === "set") window.dispatchEvent(new CustomEvent("light:desk-action", { detail: "set" }));
-          if (["show_object_changed", "preset_stored", "preload_stored"].includes(event.kind)) setShowDirty(true);
-          if (["show_opened", "show_rolled_back"].includes(event.kind)) setShowDirty(false);
           if (
             ["playback_changed", "playback_page_changed", "show_opened", "show_object_changed", "preload_stored"].includes(
               event.kind,
@@ -521,7 +520,6 @@ export function ServerProvider({ children }: PropsWithChildren) {
       readServerLogs: () => client.auditEvents(),
       bootstrap,
       session,
-      showDirty,
       createUser: async (name) => {
         try {
           setError(null);
@@ -683,7 +681,6 @@ export function ServerProvider({ children }: PropsWithChildren) {
           } else created = await client.createShow(name);
           await client.openShow(created.id, "hold_current");
           await refresh();
-          setShowDirty(false);
           setError(null);
           return true;
         } catch (reason) {
@@ -699,7 +696,6 @@ export function ServerProvider({ children }: PropsWithChildren) {
           const created = await client.createShow(name);
           await client.openShow(created.id, "hold_current");
           await refresh();
-          setShowDirty(false);
           setError(null);
           return true;
         } catch (reason) {
@@ -727,10 +723,41 @@ export function ServerProvider({ children }: PropsWithChildren) {
         try {
           await client.openShow(id, transition);
           await refresh();
-          setShowDirty(false);
           setError(null);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      },
+      listShowRevisions: async (id) => {
+        try {
+          const revisions = await client.showRevisions(id);
+          setError(null);
+          return revisions;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return [];
+        }
+      },
+      saveShowRevision: async (name) => {
+        try {
+          if (!bootstrap?.active_show) throw new Error("Open a show before saving a named revision");
+          const revision = await client.saveShowRevision(bootstrap.active_show.id, name);
+          setError(null);
+          return revision;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return null;
+        }
+      },
+      openShowRevision: async (id, revision) => {
+        try {
+          await client.openShowRevision(id, revision);
+          await refresh();
+          setError(null);
+          return true;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return false;
         }
       },
       rollbackShow: async () => {
@@ -758,7 +785,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
       },
       previewMvr: (file, showId) => client.previewMvr(file, showId),
       applyMvr: async (token, input) => {
-        try { const result = await client.applyMvr(token, input); await refresh(); setShows(await client.shows()); setShowDirty(false); setError(null); return result; }
+        try { const result = await client.applyMvr(token, input); await refresh(); setShows(await client.shows()); setError(null); return result; }
         catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); throw reason; }
       },
       previewMvrExport: (showId) => client.mvrExportPreview(showId),
@@ -807,7 +834,6 @@ export function ServerProvider({ children }: PropsWithChildren) {
             layouts.find((item) => item.id === session.user.id) ?? null,
           );
           setError(null);
-          setShowDirty(false);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
         }
@@ -904,12 +930,12 @@ export function ServerProvider({ children }: PropsWithChildren) {
             throw new Error("Open a show before storing a dynamic");
           const target = cueObjects[0];
           if (!target)
-            throw new Error("Create a cue list before storing a dynamic");
+            throw new Error("Create a Cuelist before storing a dynamic");
           const body = structuredClone(target.body) as {
             cues?: Array<{ phasers?: unknown[] }>;
           };
           const cue = body.cues?.[0];
-          if (!cue) throw new Error("The cue list needs at least one cue");
+          if (!cue) throw new Error("The Cuelist needs at least one Cue");
           const phasers = (cue.phasers ??= []);
           phasers.push({
             fixture_ids: selectedGroupId ? [] : selectedFixtures,
@@ -942,14 +968,14 @@ export function ServerProvider({ children }: PropsWithChildren) {
       },
       storePlayback: async (slot, cueListId) => {
         try {
-          if (!bootstrap?.active_show || !session) throw new Error("Open a show before storing a cue");
+          if (!bootstrap?.active_show || !session) throw new Error("Open a show before storing a Cue");
           const programmers = await client.programmers();
           const programmer = programmers.find((item) => item.user_id === session.user.id);
           if (!programmer) throw new Error("The current programmer is unavailable");
           const objects = await client.objects<import("./types").CueList>(bootstrap.active_show.id, "cue_list");
           const existing = cueListId ? objects.find((item) => item.id === cueListId) : undefined;
           const id = existing?.id ?? crypto.randomUUID();
-          const current = existing?.body ?? { id, name: `Playback ${slot + 1}`, priority: 50, mode: "sequence" as const, looped: false, chaser_step_millis: 1000, speed_group: null, cues: [] };
+          const current = existing?.body ?? { id, name: `Cuelist ${slot + 1}`, priority: 50, mode: "sequence" as const, looped: false, chaser_step_millis: 1000, speed_group: null, cues: [] };
           const active = playbacks?.active.find((item) => item.cue_list_id === id);
           const mergeActive = localStorage.getItem("light.store-merge-active-cue") === "true" && active && current.cues[active.cue_index];
           const cueNumber = mergeActive ? current.cues[active.cue_index].number : current.cues.length ? Math.max(...current.cues.map((cue) => cue.number)) + 1 : 1;
@@ -965,7 +991,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
           if (!playbackObject) {
             const used = new Set(playbackObjects.map((item) => item.body.number));
             const number = Array.from({ length: 1000 }, (_, index) => index + 1).find((candidate) => !used.has(candidate));
-            if (!number) throw new Error("The playback pool is full");
+            if (!number) throw new Error("The Cuelist Pool is full");
             const body: import("./types").PlaybackDefinition = { number, name: current.name, target: { type: "cue_list", cue_list_id: id }, buttons: ["go", "go_minus", "flash"], fader: "master", go_activates: true, auto_off: true, xfade_millis: 0 };
             await client.putObject(bootstrap.active_show.id, "playback", String(number), body, 0);
             playbackObject = { kind: "playback", id: String(number), body, revision: 1, updated_at: "" };
@@ -1419,7 +1445,6 @@ export function ServerProvider({ children }: PropsWithChildren) {
       error,
       bootstrap,
       session,
-      showDirty,
       patch,
       playbacks,
       shows,

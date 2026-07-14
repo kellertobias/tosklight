@@ -6,6 +6,13 @@ export type BuiltInWindow =
   | "groups"
   | "fixtures"
   | "presets"
+  | "cuelists"
+  | "cuelist_pool"
+  | "cues"
+  // Persisted layout aliases from before the Cuelist terminology migration.
+  | "qlists"
+  | "qlist_pool"
+  | "qs"
   | "playback"
   | "playback_pool"
   | "cue_list"
@@ -14,7 +21,8 @@ export type BuiltInWindow =
   | "dmx"
   | "patch"
   | "setup"
-  | "help";
+  | "help"
+  | "development";
 
 export type ControlMode = "programmer" | "playbacks";
 export type DockMode = "desks" | "builtins";
@@ -22,6 +30,7 @@ export type ValueSource = "programmer" | "playback" | "default";
 export type StageMode = "select" | "setup" | "navigate";
 export type StageView = "2d" | "3d";
 export type DmxDotSize = "small" | "large";
+export type DevelopmentView = "forms" | "faders" | "buttons";
 
 export interface GridRect {
   x: number;
@@ -39,6 +48,7 @@ export interface PaneModel extends GridRect {
   followPreload?: boolean;
   presetFamily?: AppState["presetFamily"];
   presetPoolColors?: boolean;
+  developmentView?: DevelopmentView;
 }
 
 export interface DeskModel {
@@ -99,6 +109,10 @@ export interface AppState {
   presetFamily: "All" | "Intensity" | "Color" | "Position" | "Beam";
   presetPoolColors: boolean;
   presetSetArmed: boolean;
+  cuelistBuiltInView: "pool" | "cues";
+  cuelistBuiltInNumber: number | null;
+  cueListSetArmed: boolean;
+  cueListSetTarget: number | null;
   setupOpen: boolean;
   specialDialogsOpen: boolean;
   specialDialogFamily: "Color" | "Position" | "Beam" | "Shapers" | "Control" | "Dynamics";

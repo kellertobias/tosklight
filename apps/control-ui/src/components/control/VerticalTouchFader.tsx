@@ -1,11 +1,14 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Button, Input } from "../common";
+import { Button, Input, type ButtonProps } from "../common";
 import { ModalNumberInput } from "../input/ModalInputControls";
 import { useServer } from "../../api/ServerContext";
 import { useApp } from "../../state/AppContext";
 
-export function VerticalTouchFader({ label, value, maximum = 100, display, disabled = false, accentColor, mode, directInput = false, onChange }: { label: string; value: number; maximum?: number; display?: string; disabled?: boolean; accentColor?: string; mode?: string; directInput?: boolean; onChange?: (value: number) => void }) {
+export interface VerticalTouchFaderAction extends Omit<ButtonProps, "children"> { id: string; label: ReactNode }
+export interface VerticalTouchFaderProps { label: string; value: number; maximum?: number; display?: string; disabled?: boolean; accentColor?: string; mode?: string; directInput?: boolean; actions?: VerticalTouchFaderAction[]; onChange?: (value: number) => void }
+
+export function VerticalTouchFader({ label, value, maximum = 100, display, disabled = false, accentColor, mode, directInput = false, actions = [], onChange }: VerticalTouchFaderProps) {
   const server = useServer(); const { state } = useApp(); const hardware = Boolean(server.bootstrap?.hardware_connected || state.midiProfile);
   const [localValue, setLocalValue] = useState(value);
   const [inputOpen, setInputOpen] = useState(false); const [inputValue, setInputValue] = useState("");
@@ -42,5 +45,10 @@ export function VerticalTouchFader({ label, value, maximum = 100, display, disab
     <span>{label}{mode && <small>{mode}</small>}</span><strong>{display === undefined ? `${Math.round(localValue)}%` : display.replace(/^[\d.]+/, String(Math.round(localValue)))}</strong>
     <Input aria-label={label} disabled={disabled || (hardware && directInput)} type="range" min="0" max={maximum} step="0.1" value={localValue} onWheel={(event) => { event.preventDefault(); event.currentTarget.blur(); }} onPointerDown={() => { interacting.current = true; }} onPointerUp={finish} onPointerCancel={finish} onBlur={() => { if (interacting.current) finish(); }} onInput={(event) => emit(Number(event.currentTarget.value))}/>
   </label>;
-  return <div className={`vertical-touch-fader-stack ${directInput && !hardware ? "has-set-value" : ""}`}>{fader}{directInput && !hardware && <Button type="button" className="set-value-button" onClick={openInput}>Set value</Button>}{inputOpen && createPortal(<div className="stacked-modal-layer" onClick={(event)=>event.stopPropagation()} onPointerDown={(event)=>event.target===event.currentTarget&&setInputOpen(false)}><section className="nested-modal direct-value-modal" role="dialog" aria-modal="true" aria-label={`${label} value`}><Button className="modal-close" aria-label="Close attribute value" onClick={()=>setInputOpen(false)}>×</Button><h3>{label}</h3><strong>{inputValue || "0"}</strong><ModalNumberInput value={inputValue} onChange={setInputValue} onEnter={submitInput} onEscape={()=>setInputOpen(false)} replaceOnFirstInput/></section></div>,document.body)}</div>;
+  const visibleActions = [...(directInput && !hardware ? [{ id: "set-value", label: "Set value", onClick: openInput, className: "set-value-button" } satisfies VerticalTouchFaderAction] : []), ...actions].slice(0, 3);
+  return <div className={`vertical-touch-fader-stack ${visibleActions.length ? "has-actions" : ""}`}>
+    {fader}
+    {visibleActions.length > 0 && <div className="vertical-touch-fader-actions" style={{ "--fader-action-count": visibleActions.length } as CSSProperties}>{visibleActions.map(({ id, label: actionLabel, ...props }) => <Button type="button" {...props} key={id}>{actionLabel}</Button>)}</div>}
+    {inputOpen && createPortal(<div className="stacked-modal-layer" onClick={(event)=>event.stopPropagation()} onPointerDown={(event)=>event.target===event.currentTarget&&setInputOpen(false)}><section className="nested-modal direct-value-modal" role="dialog" aria-modal="true" aria-label={`${label} value`}><Button className="modal-close" aria-label="Close attribute value" onClick={()=>setInputOpen(false)}>×</Button><h3>{label}</h3><strong>{inputValue || "0"}</strong><ModalNumberInput value={inputValue} onChange={setInputValue} onEnter={submitInput} onEscape={()=>setInputOpen(false)} replaceOnFirstInput/></section></div>,document.body)}
+  </div>;
 }

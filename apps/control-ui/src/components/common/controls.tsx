@@ -172,10 +172,10 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(functi
     update(next === "" || next === "-" || Number.isNaN(parsed) ? "" : String(clampNumber(parsed, min, max)));
   };
   return <span className={`ui-number-control ${showStepButtons ? "with-steppers" : "without-steppers"}`}>
-    {showStepButtons && <Button size="compact" iconOnly className="ui-number-minus" aria-label="Decrease value" disabled={disabled || readOnly} onClick={() => bump(-1)}>−</Button>}
+    {showStepButtons && <Button size="compact" iconOnly className="ui-number-minus" aria-label="Decrease value" disabled={disabled || readOnly} onClick={() => bump(-1)}><span className="ui-step-icon" aria-hidden="true">−</span></Button>}
     <input {...props} ref={native} type="text" inputMode={allowDecimal ? "decimal" : "numeric"} value={value} defaultValue={defaultValue} onChange={(event) => { const next = normalize(event.target.value); if (next !== event.target.value) event.target.value = next; onValueChange?.(next); onChange?.(event); }} onBlur={(event) => { commit(event.target.value); props.onBlur?.(event); }} disabled={disabled} readOnly={readOnly} className={`ui-input ${className}`.trim()}/>
-    {showStepButtons && <Button size="compact" iconOnly className="ui-number-plus" aria-label="Increase value" disabled={disabled || readOnly} onClick={() => bump(1)}>+</Button>}
-    <Button size="compact" iconOnly className="ui-input-keyboard" aria-label="Open number pad" disabled={disabled || readOnly} onClick={() => setOpen(true)}><span className="ui-numpad-icon" aria-hidden="true">▦</span></Button>
+    {showStepButtons && <Button size="compact" iconOnly className="ui-number-plus" aria-label="Increase value" disabled={disabled || readOnly} onClick={() => bump(1)}><span className="ui-step-icon" aria-hidden="true">+</span></Button>}
+    <Button size="compact" iconOnly className="ui-input-keyboard" aria-label="Open number pad" disabled={disabled || readOnly} onClick={() => setOpen(true)}><span className="ui-keyboard-icon" aria-hidden="true">⌨</span></Button>
     {open && (
       <InputModal kind="number" value={current} allowDecimal={allowDecimal} label={keyboardLabel ?? props["aria-label"]} onCommit={(next) => { commit(next); setOpen(false); requestAnimationFrame(() => native.current?.focus()); }} onCancel={() => { setOpen(false); requestAnimationFrame(() => native.current?.focus()); }}/>
     )}
@@ -219,6 +219,39 @@ export const TextAreaField = forwardRef<HTMLTextAreaElement, TextareaHTMLAttribu
 
 export interface SelectOption<T extends string = string> { value: T; label: ReactNode; disabled?: boolean }
 
+export interface MultiValueToggleProps<T extends string> {
+  value: T;
+  options: SelectOption<T>[];
+  onChange: (value: T) => void;
+  disabled?: boolean;
+  ariaLabel?: string;
+  className?: string;
+}
+
+export function MultiValueToggle<T extends string>({ value, options, onChange, disabled = false, ariaLabel = "Options", className = "" }: MultiValueToggleProps<T>) {
+  return <div className={`ui-multi-value-toggle ${className}`.trim()} role="radiogroup" aria-label={ariaLabel}>
+    {options.map((option) => <Button
+      role="radio"
+      aria-checked={option.value === value}
+      active={option.value === value}
+      disabled={disabled || option.disabled}
+      key={option.value}
+      onClick={() => onChange(option.value)}
+    >{option.label}</Button>)}
+  </div>;
+}
+
+export function MultiValueToggleField<T extends string>({ label, description, error, labelPlacement, ...props }: MultiValueToggleProps<T> & {
+  label?: ReactNode;
+  description?: ReactNode;
+  error?: ReactNode;
+  labelPlacement?: LabelPlacement;
+}) {
+  return <FormField label={label} description={description} error={error} labelPlacement={labelPlacement}>
+    <MultiValueToggle {...props} ariaLabel={props.ariaLabel ?? (typeof label === "string" ? label : undefined)}/>
+  </FormField>;
+}
+
 export function SelectField<T extends string>({ label, value, options, onChange, description, error, disabled, size = "default", className = "", labelPlacement }: {
   label?: ReactNode;
   value: T;
@@ -237,10 +270,16 @@ export function SelectField<T extends string>({ label, value, options, onChange,
   const button = useRef<HTMLButtonElement>(null);
   const place = () => {
     const box = button.current?.getBoundingClientRect();
-    if (!box) return;
-    const below = window.innerHeight - box.bottom;
+    const layoutWidth = button.current?.offsetWidth;
+    const layoutHeight = button.current?.offsetHeight;
+    if (!box || !layoutWidth || !layoutHeight) return;
+    const left = box.left - (layoutWidth - box.width) / 2;
+    const top = box.top - (layoutHeight - box.height) / 2;
+    const bottom = top + layoutHeight;
+    const popupWidth = Math.max(layoutWidth, 240);
+    const below = window.innerHeight - bottom;
     const maxHeight = Math.max(160, Math.min(440, below > 220 ? below - 8 : box.top - 8));
-    setPosition({ left: Math.max(8, Math.min(box.left, window.innerWidth - Math.max(box.width, 240) - 8)), top: below > 220 ? box.bottom + 4 : undefined, bottom: below <= 220 ? window.innerHeight - box.top + 4 : undefined, width: Math.max(box.width, 240), maxHeight });
+    setPosition({ left: Math.max(8, Math.min(left, window.innerWidth - popupWidth - 8)), top: below > 220 ? bottom + 4 : undefined, bottom: below <= 220 ? window.innerHeight - top + 4 : undefined, width: popupWidth, maxHeight });
   };
   useEffect(() => {
     if (!open) return;
@@ -257,8 +296,8 @@ export function SelectField<T extends string>({ label, value, options, onChange,
   }, [open, active, options, onChange]);
   const chosen = options.find((item) => item.value === value);
   return <FormField label={label} description={description} error={error} className={className} labelPlacement={labelPlacement}>
-    <Button ref={button} className="ui-select-trigger" size={size} disabled={disabled} aria-haspopup="listbox" aria-expanded={open} onClick={() => { if (!open) place(); setOpen(!open); }}><span>{chosen?.label ?? value}</span><i aria-hidden="true">▾</i></Button>
-    {open && createPortal(<div className="ui-select-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) { setOpen(false); button.current?.focus(); } }}><div className="ui-select-options" style={position} role="listbox" aria-label={typeof label === "string" ? label : "Options"}>{options.map((option, index) => <Button role="option" aria-selected={option.value === value} active={option.value === value || index === active} disabled={option.disabled} key={option.value} onPointerMove={() => setActive(index)} onClick={() => { onChange(option.value); setOpen(false); button.current?.focus(); }}>{option.label}</Button>)}</div></div>, document.body)}
+    <Button ref={button} className="ui-select-trigger" size={size} disabled={disabled} aria-haspopup="listbox" aria-expanded={open} onClick={() => { if (!open) place(); setOpen(!open); }}><span>{chosen?.label ?? value}</span><i aria-hidden="true">▼</i></Button>
+    {open && createPortal(<div className="ui-select-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) { setOpen(false); button.current?.focus(); } }}><div className="ui-select-options" style={position} role="listbox" aria-label={typeof label === "string" ? label : "Options"}>{options.map((option, index) => <Button role="option" aria-selected={option.value === value} active={option.value === value} className={index === active ? "is-highlighted" : ""} disabled={option.disabled} key={option.value} onPointerMove={() => setActive(index)} onClick={() => { onChange(option.value); setOpen(false); button.current?.focus(); }}>{option.label}</Button>)}</div></div>, document.body)}
   </FormField>;
 }
 
@@ -274,12 +313,20 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
   return <><select {...props} ref={native} value={selected} onChange={onChange} disabled={disabled} className="ui-visually-hidden-select" aria-hidden="true" tabIndex={-1}>{children}</select><SelectField label={ariaLabel} className={className} value={selected} disabled={disabled} options={options} onChange={(next) => { if (native.current) native.current.value = next; onChange?.({ target: native.current, currentTarget: native.current } as ChangeEvent<HTMLSelectElement>); }}/></>;
 });
 
-type CheckProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "size"> & { label: ReactNode; description?: ReactNode; error?: ReactNode };
-export const CheckboxField = forwardRef<HTMLInputElement, CheckProps>(function CheckboxField({ label, description, error, className = "", ...props }, ref) {
-  return <label className={`ui-check ${error ? "has-error" : ""} ${className}`.trim()}><input {...props} ref={ref} type="checkbox"/><span className="ui-check-mark" aria-hidden="true">✓</span><span><b>{label}</b>{description && <small>{description}</small>}{error && <small className="ui-field-error">{error}</small>}</span></label>;
+type CheckProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "size"> & { label: ReactNode; description?: ReactNode; error?: ReactNode; labelPlacement?: LabelPlacement };
+export const CheckboxField = forwardRef<HTMLInputElement, CheckProps>(function CheckboxField({ label, description, error, labelPlacement, className = "", id, "aria-label": ariaLabel, ...props }, ref) {
+  const generated = useId();
+  const fieldId = id ?? generated;
+  return <FormField label={label} description={description} error={error} htmlFor={fieldId} labelPlacement={labelPlacement} className={className}>
+    <label className="ui-check-control"><input {...props} ref={ref} id={fieldId} aria-label={ariaLabel ?? (typeof label === "string" ? label : undefined)} type="checkbox"/><span className="ui-check-mark" aria-hidden="true">✓</span><span className="ui-check-state">{props.checked ? "Checked" : "Unchecked"}</span></label>
+  </FormField>;
 });
-export const SwitchField = forwardRef<HTMLInputElement, CheckProps>(function SwitchField({ label, description, error, className = "", ...props }, ref) {
-  return <label className={`ui-switch ${error ? "has-error" : ""} ${className}`.trim()}><input {...props} ref={ref} type="checkbox" role="switch"/><span className="ui-switch-track" aria-hidden="true"><i/></span><span><b>{label}</b>{description && <small>{description}</small>}{error && <small className="ui-field-error">{error}</small>}</span></label>;
+export const SwitchField = forwardRef<HTMLInputElement, CheckProps>(function SwitchField({ label, description, error, labelPlacement, className = "", id, "aria-label": ariaLabel, ...props }, ref) {
+  const generated = useId();
+  const fieldId = id ?? generated;
+  return <FormField label={label} description={description} error={error} htmlFor={fieldId} labelPlacement={labelPlacement} className={className}>
+    <label className="ui-switch-control"><input {...props} ref={ref} id={fieldId} aria-label={ariaLabel ?? (typeof label === "string" ? label : undefined)} type="checkbox" role="switch"/><span className="ui-switch-track" aria-hidden="true"><i/></span><span className="ui-check-state">{props.checked ? "On" : "Off"}</span></label>
+  </FormField>;
 });
 
 export const DEFAULT_ICONS = ["⊞", "⌂", "★", "◉", "▶", "▣", "⚙", "◇", "◆", "●", "○", "✦", "☀", "◐", "▰", "⌖"];

@@ -7,6 +7,11 @@ export function LayoutPersistence() {
   const { state, dispatch } = useApp();
   const appliedRevision = useRef<number | null>(null);
   const hydrated = useRef(false);
+  const saveDeskLayout = useRef(server.saveDeskLayout);
+
+  useEffect(() => {
+    saveDeskLayout.current = server.saveDeskLayout;
+  }, [server.saveDeskLayout]);
 
   useEffect(() => {
     if (!server.deskLayout) { if (server.bootstrap?.active_show) hydrated.current = true; return; }
@@ -24,7 +29,7 @@ export function LayoutPersistence() {
 
   useEffect(() => {
     if (!hydrated.current || !server.bootstrap?.active_show) return;
-    const timer = window.setTimeout(() => void server.saveDeskLayout({ desks: state.desks, activeDeskId: state.activeDeskId, windowSettings: {
+    const timer = window.setTimeout(() => void saveDeskLayout.current({ desks: state.desks, activeDeskId: state.activeDeskId, windowSettings: {
       dockMode: state.dockMode, builtIn: state.builtIn, lastBuiltIn: state.lastBuiltIn, presetFamily: state.presetFamily, presetPoolColors: state.presetPoolColors,
       playbackColumns: state.playbackColumns, playbackRows: state.playbackRows, playbackPage: state.playbackPage,
       stageMode: state.stageMode, stageView: state.stageView, stageZoom: state.stageZoom, stagePanX: state.stagePanX, stagePanY: state.stagePanY,
@@ -33,7 +38,7 @@ export function LayoutPersistence() {
       fixtureGroupsVisible: state.fixtureGroupsVisible, presetGroupsVisible: state.presetGroupsVisible,
     } }), 600);
     return () => window.clearTimeout(timer);
-  }, [state.desks, state.activeDeskId, state.dockMode, state.builtIn, state.lastBuiltIn, state.presetFamily, state.presetPoolColors, state.playbackColumns, state.playbackRows, state.playbackPage, state.stageMode, state.stageView, state.stageZoom, state.stagePanX, state.stagePanY, state.stageOrbitX, state.stageOrbitY, state.stageGroupsVisible, state.stageShowSelection, state.stageEnvironmentBrightness, state.dmxDotSize, state.fixtureGroupsVisible, state.presetGroupsVisible, server]);
+  }, [state.desks, state.activeDeskId, state.dockMode, state.builtIn, state.lastBuiltIn, state.presetFamily, state.presetPoolColors, state.playbackColumns, state.playbackRows, state.playbackPage, state.stageMode, state.stageView, state.stageZoom, state.stagePanX, state.stagePanY, state.stageOrbitX, state.stageOrbitY, state.stageGroupsVisible, state.stageShowSelection, state.stageEnvironmentBrightness, state.dmxDotSize, state.fixtureGroupsVisible, state.presetGroupsVisible, server.bootstrap?.active_show?.id]);
 
   return null;
 }

@@ -72,7 +72,7 @@ export function SetupWindow(_: WindowProps) {
                 <section>
                   <b>{server.status}</b>
                   <small>
-                    Revision {server.bootstrap?.active_show?.revision ?? "—"}
+                    {server.bootstrap?.active_show ? "Autosave active" : "No active show"}
                   </small>
                 </section>
               </div>

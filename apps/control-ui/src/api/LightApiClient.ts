@@ -16,9 +16,19 @@ import type {
 
 type EventListener = (event: ServerEvent) => void;
 
-function browserStorage(): Storage | null {
+function persistentBrowserStorage(): Storage | null {
   const storage = globalThis.localStorage;
   return storage && typeof storage.getItem === "function" ? storage : null;
+}
+
+function browserSessionStorage(): Storage | null {
+  const storage = globalThis.sessionStorage;
+  return storage && typeof storage.getItem === "function" ? storage : null;
+}
+
+function browserStorage(): Storage | null {
+  const session = browserSessionStorage();
+  return session?.getItem("light.test-server-url") ? session : persistentBrowserStorage();
 }
 
 interface CommandResponse {
@@ -33,7 +43,7 @@ interface CommandResponse {
 export function defaultServerUrl(location = window.location): string {
   const configured = import.meta.env.VITE_LIGHT_SERVER_URL as string | undefined;
   if (configured) return configured.replace(/\/$/, "");
-  if (location.protocol === "tauri:") return (browserStorage()?.getItem("light.server-url") || "http://127.0.0.1:5000").replace(/\/$/, "");
+  if (location.protocol === "tauri:") return (browserSessionStorage()?.getItem("light.test-server-url") || persistentBrowserStorage()?.getItem("light.server-url") || "http://127.0.0.1:5000").replace(/\/$/, "");
   return location.origin;
 }
 
@@ -174,6 +184,26 @@ export class LightApiClient {
     });
   }
 
+  showRevisions(id: string): Promise<import("./types").ShowRevision[]> {
+    return this.request(`/api/v1/shows/${id}/revisions`);
+  }
+
+  saveShowRevision(id: string, name: string): Promise<import("./types").ShowRevision> {
+    return this.request(`/api/v1/shows/${id}/revisions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+  }
+
+  openShowRevision(id: string, revision: number): Promise<ShowEntry> {
+    return this.request(`/api/v1/shows/${id}/revisions/${revision}/open`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ transition: "safe_blackout" }),
+    });
+  }
+
   rollbackShow(): Promise<ShowEntry> {
     return this.request("/api/v1/shows/rollback", {
       method: "POST",
@@ -289,7 +319,7 @@ export class LightApiClient {
     return this.command(`playback.${action}`, { cue_list_id: cueListId });
   }
   poolPlaybackAction(number: number, action: "on" | "off" | "toggle" | "go" | "go-minus" | "flash" | "master" | "xfade-on" | "xfade-off", input: { value?: number; pressed?: boolean } = {}) {
-    return this.request(`/api/v1/playback-pool/${number}/${action}`, { method: action === "master" ? "PUT" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) });
+    return this.request(`/api/v1/cuelists/${number}/${action}`, { method: action === "master" ? "PUT" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) });
   }
   setPlaybackPage(deskId: string, page: number) { return this.request(`/api/v1/control-desks/${deskId}/page`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ page }) }); }
   updateControlDesk(desk: import("./types").ControlDesk) { return this.request<import("./types").ControlDesk>(`/api/v1/control-desks/${desk.id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(desk) }); }

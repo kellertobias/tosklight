@@ -5,15 +5,17 @@ import { StageWindow } from "./StageWindow";
 import { GroupsWindow } from "./GroupsWindow";
 import { FixtureSheetWindow } from "./FixtureSheetWindow";
 import { PresetsWindow } from "./PresetsWindow";
-import { PlaybackWindow } from "./PlaybackWindow";
+import { CuelistWindow } from "./CuelistWindow";
 import { DynamicsWindow } from "./DynamicsWindow";
 import { ChannelsWindow } from "./ChannelsWindow";
 import { DmxWindow } from "./DmxWindow";
 import { SetupWindow } from "./SetupWindow";
 import { PatchWindow } from "./PatchWindow";
 import { HelpWindow } from "./HelpWindow";
+import { DevelopmentWindow } from "./DevelopmentWindow";
 
 export const windowRegistry: Record<BuiltInWindow, ComponentType<WindowProps>> = {
   stage: StageWindow, groups: GroupsWindow, fixtures: FixtureSheetWindow, presets: PresetsWindow,
-  playback: PlaybackWindow, playback_pool: (props) => <PlaybackWindow {...props} playbackTab="pool"/>, cue_list: (props) => <PlaybackWindow {...props} playbackTab="cues"/>, dynamics: DynamicsWindow, channels: ChannelsWindow, dmx: DmxWindow, patch: PatchWindow, setup: SetupWindow, help: HelpWindow,
+  cuelists: CuelistWindow, cuelist_pool: (props) => <CuelistWindow {...props} cueListTab="pool"/>, cues: (props) => <CuelistWindow {...props} cueListTab="cues"/>,
+  qlists: CuelistWindow, qlist_pool: (props) => <CuelistWindow {...props} cueListTab="pool"/>, qs: (props) => <CuelistWindow {...props} cueListTab="cues"/>, playback: CuelistWindow, playback_pool: (props) => <CuelistWindow {...props} cueListTab="pool"/>, cue_list: (props) => <CuelistWindow {...props} cueListTab="cues"/>, dynamics: DynamicsWindow, channels: ChannelsWindow, dmx: DmxWindow, patch: PatchWindow, setup: SetupWindow, help: HelpWindow, development: DevelopmentWindow,
 };

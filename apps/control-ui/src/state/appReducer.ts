@@ -1,4 +1,4 @@
-import { GRID_COLUMNS, GRID_ROWS, type AppState, type BuiltInWindow, type GridRect, type WindowSettings } from "../types";
+import { GRID_COLUMNS, GRID_ROWS, type AppState, type BuiltInWindow, type DevelopmentView, type GridRect, type WindowSettings } from "../types";
 import { initialDesks } from "../data/mockData";
 
 export type Action =
@@ -12,6 +12,7 @@ export type Action =
   | { type: "SET_PANE_STAGE_OPTION"; id: string; option: "stageView" | "followPreload"; value: AppState["stageView"] | boolean }
   | { type: "SET_PANE_PRESET_FAMILY"; id: string; family: AppState["presetFamily"] }
   | { type: "SET_PANE_PRESET_COLORS"; id: string; value: boolean }
+  | { type: "SET_PANE_DEVELOPMENT_VIEW"; id: string; value: DevelopmentView }
   | { type: "SET_STAGE_MODE"; value: AppState["stageMode"] }
   | { type: "SET_STAGE_VIEW"; value: AppState["stageView"] }
   | { type: "SET_STAGE_NAVIGATION"; zoom?: number; panX?: number; panY?: number; orbitX?: number; orbitY?: number }
@@ -39,6 +40,10 @@ export type Action =
   | { type: "SET_PRESET_FAMILY"; family: AppState["presetFamily"] }
   | { type: "SET_PRESET_POOL_COLORS"; value: boolean }
   | { type: "SET_PRESET_SET_ARMED"; value: boolean }
+  | { type: "OPEN_BUILTIN_CUELIST"; number: number }
+  | { type: "SET_BUILTIN_CUELIST_VIEW"; value: "pool" | "cues" }
+  | { type: "SET_CUELIST_SET_ARMED"; value: boolean }
+  | { type: "SET_CUELIST_SET_TARGET"; value: number | null }
   | { type: "SET_MODAL"; modal: "setupOpen" | "specialDialogsOpen" | "systemControlsOpen" | "preloadStoreOpen" | "debugOpen" | "deskSettingsOpen" | "storeSettingsOpen"; value: boolean }
   | { type: "OPEN_SPECIAL_DIALOG"; family: AppState["specialDialogFamily"] }
   | { type: "TOGGLE_MIDI_PROFILE" }
@@ -69,6 +74,10 @@ export const initialState: AppState = {
   presetFamily: "All",
   presetPoolColors: true,
   presetSetArmed: false,
+  cuelistBuiltInView: "pool",
+  cuelistBuiltInNumber: null,
+  cueListSetArmed: false,
+  cueListSetTarget: null,
   setupOpen: false,
   specialDialogsOpen: false,
   specialDialogFamily: "Position",
@@ -102,6 +111,14 @@ export const initialState: AppState = {
 
 const clamp = (value: number, minimum: number, maximum: number) => Math.max(minimum, Math.min(maximum, value));
 const overlaps = (a: GridRect, b: GridRect) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+const cueListWindowKind = (kind: BuiltInWindow): BuiltInWindow => kind === "playback" || kind === "qlists" ? "cuelists" : kind === "playback_pool" || kind === "qlist_pool" ? "cuelist_pool" : kind === "cue_list" || kind === "qs" ? "cues" : kind;
+const cueListWindowTitle = (title: string, kind: BuiltInWindow) => {
+  if (kind === "cuelists") return "Cuelists";
+  if (kind === "cuelist_pool") return "Cuelist Pool";
+  if (kind !== "cues") return title;
+  if (/^(cue list|sequence)$/i.test(title)) return "Cues · Cuelist";
+  return title.replace(/^Qs\s*·\s*/i, "Cues · ").replace(/QList/g, "Cuelist");
+};
 
 export function appReducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -109,7 +126,11 @@ export function appReducer(state: AppState, action: Action): AppState {
       ? { ...state, dockMode: "desks", builtIn: null }
       : { ...state, dockMode: "builtins", builtIn: state.lastBuiltIn };
     case "OPEN_DESK": return { ...state, activeDeskId: action.id, builtIn: null, dockMode: "desks", savingDesk: false };
-    case "OPEN_BUILTIN": return { ...state, builtIn: action.kind, lastBuiltIn: action.kind, dockMode: "builtins" };
+    case "OPEN_BUILTIN": {
+      const kind = cueListWindowKind(action.kind);
+      if (kind === "cuelists" && state.builtIn === "cuelists" && state.cuelistBuiltInView === "cues") return { ...state, cuelistBuiltInView: "pool", dockMode: "builtins" };
+      return { ...state, builtIn: kind, lastBuiltIn: kind, dockMode: "builtins" };
+    }
     case "OPEN_GROUPS_FROM_STAGE": return { ...state, builtIn: "groups", lastBuiltIn: "groups", dockMode: "builtins", groupsReturnToStage: action.origin ?? "builtin" };
     case "RETURN_TO_STAGE": return state.groupsReturnToStage === "desk" ? { ...state, builtIn: null, dockMode: "desks", groupsReturnToStage: null } : { ...state, builtIn: "stage", lastBuiltIn: "stage", dockMode: "builtins", groupsReturnToStage: null };
     case "SET_BLACKOUT": return { ...state, blackout: action.value };
@@ -133,11 +154,15 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "HYDRATE_LAYOUT": return {
       ...state,
       ...action.windowSettings,
+      builtIn: action.windowSettings?.builtIn == null ? action.windowSettings?.builtIn ?? state.builtIn : cueListWindowKind(action.windowSettings.builtIn),
+      lastBuiltIn: cueListWindowKind(action.windowSettings?.lastBuiltIn ?? state.lastBuiltIn),
       desks: action.desks.map((desk) => ({ ...desk, panes: desk.panes.map((pane) => {
-        if (pane.kind !== "presets") return pane;
+        const kind = cueListWindowKind(pane.kind);
+        const migrated = { ...pane, kind, title: cueListWindowTitle(pane.title, kind) };
+        if (pane.kind !== "presets") return migrated;
         const legacyDefault = pane.id === "presets" && pane.title === "Color & Position Presets";
         return {
-          ...pane,
+          ...migrated,
           title: legacyDefault ? "All Presets" : pane.title,
           presetFamily: legacyDefault ? "All" : pane.presetFamily ?? state.presetFamily,
         };
@@ -170,6 +195,7 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "SET_PANE_STAGE_OPTION": return { ...state, stageView: action.option === "stageView" ? action.value as AppState["stageView"] : state.stageView, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, [action.option]: action.value } : pane) }) };
     case "SET_PANE_PRESET_FAMILY": return { ...state, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, presetFamily: action.family } : pane) }) };
     case "SET_PANE_PRESET_COLORS": return { ...state, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, presetPoolColors: action.value } : pane) }) };
+    case "SET_PANE_DEVELOPMENT_VIEW": return { ...state, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, developmentView: action.value } : pane) }) };
     case "SET_STAGE_MODE": return { ...state, stageMode: action.value };
     case "SET_STAGE_VIEW": return { ...state, stageView: action.value };
     case "SET_STAGE_NAVIGATION": return { ...state, stageZoom: action.zoom ?? state.stageZoom, stagePanX: action.panX ?? state.stagePanX, stagePanY: action.panY ?? state.stagePanY, stageOrbitX: action.orbitX ?? state.stageOrbitX, stageOrbitY: action.orbitY ?? state.stageOrbitY };
@@ -186,7 +212,8 @@ export function appReducer(state: AppState, action: Action): AppState {
     }
     case "ADD_WINDOW": {
       if (!state.windowPicker) return state;
-      const pane = { id: `${action.kind}-${Date.now()}`, kind: action.kind, title: action.kind === "help" ? "Help" : action.kind[0].toUpperCase() + action.kind.slice(1), ...state.windowPicker };
+      const kind = cueListWindowKind(action.kind);
+      const pane = { id: `${kind}-${Date.now()}`, kind, title: kind === "help" ? "Help" : kind === "development" ? "Development" : cueListWindowTitle(kind[0].toUpperCase() + kind.slice(1), kind), ...state.windowPicker };
       const activeDesk = state.desks.find((desk) => desk.id === state.activeDeskId);
       if (activeDesk?.panes.some((item) => overlaps(pane, item))) return { ...state, windowPicker: null };
       return { ...state, windowPicker: null, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: [...desk.panes, pane] }) };
@@ -199,6 +226,10 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "SET_PRESET_FAMILY": return { ...state, presetFamily: action.family };
     case "SET_PRESET_POOL_COLORS": return { ...state, presetPoolColors: action.value };
     case "SET_PRESET_SET_ARMED": return { ...state, presetSetArmed: action.value };
+    case "OPEN_BUILTIN_CUELIST": return { ...state, cuelistBuiltInView: "cues", cuelistBuiltInNumber: action.number };
+    case "SET_BUILTIN_CUELIST_VIEW": return { ...state, cuelistBuiltInView: action.value };
+    case "SET_CUELIST_SET_ARMED": return { ...state, cueListSetArmed: action.value, cueListSetTarget: action.value ? state.cueListSetTarget : null };
+    case "SET_CUELIST_SET_TARGET": return { ...state, cueListSetArmed: action.value != null, cueListSetTarget: action.value };
     case "SET_MODAL": return { ...state, [action.modal]: action.value };
     case "OPEN_SPECIAL_DIALOG": return { ...state, specialDialogFamily: action.family, specialDialogsOpen: true };
     case "TOGGLE_MIDI_PROFILE": return { ...state, midiProfile: !state.midiProfile };

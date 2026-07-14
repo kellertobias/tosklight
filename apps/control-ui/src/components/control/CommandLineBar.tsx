@@ -48,6 +48,7 @@ export function CommandLineBar() {
   };
   const toggleRecord = () => {
     const armed = !state.storeArmed;
+    if (armed && state.cueListSetArmed) dispatch({ type: "SET_CUELIST_SET_ARMED", value: false });
     dispatch({ type: "SET_STORE_ARMED", value: armed });
     if (armed) replaceCommand("RECORD ");
     else if (/^RECORD\b/i.test(server.commandLine)) replaceCommand(server.commandLine.replace(/^RECORD\s*/i, ""));
@@ -98,6 +99,7 @@ export function CommandLineBar() {
         event.preventDefault();
         if (document.querySelector("[role=dialog],.stacked-modal-layer")) return;
         if (state.storeArmed) dispatch({ type: "SET_STORE_ARMED", value: false });
+        else if (state.cueListSetArmed) dispatch({ type: "SET_CUELIST_SET_ARMED", value: false });
         else if (persistentError) {
           setPersistentError(null);
           setErrorOpen(false);
@@ -130,7 +132,7 @@ export function CommandLineBar() {
       for (const playbackNumber of keyboardFlash.current.values()) void server.poolPlaybackAction(playbackNumber, "flash", { pressed: false });
       keyboardFlash.current.clear();
     };
-  }, [hardware, completed, persistentError, state.storeArmed, state.regularNumberShortcuts, state.playbackPage, state.playbackPageNames.length, server.playbacks, server.commandLine, server.poolPlaybackAction, server.setPlaybackPage]);
+  }, [hardware, completed, persistentError, state.storeArmed, state.cueListSetArmed, state.regularNumberShortcuts, state.playbackPage, state.playbackPageNames.length, server.playbacks, server.commandLine, server.poolPlaybackAction, server.setPlaybackPage]);
   return (
     <header
       className={`command-line-bar command-line-left ${playback ? "playback-mode" : ""} ${commandError ? "has-command-error" : ""}`}

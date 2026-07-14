@@ -1,22 +1,12 @@
-import { useState } from "react";
-import { useServer } from "../api/ServerContext";
+import { WindowScrollArea } from "../components/window-kit";
 import type { WindowProps } from "./windowTypes";
-import { Button, Input, Select } from "../components/common";
-import { WindowHeader } from "../components/window-kit";
 
-const items = [["Dimmer sine", "Relative · 30 BPM"], ["Color chase", "Absolute · 60 BPM"], ["Pan fan", "Relative · 15 BPM"], ["Random sparkle", "Absolute · 120 BPM"]];
-type WaveTab = "Dimmer" | "Waveform" | "Steps" | "Distribution";
-
-export function DynamicsWindow({ compact }: WindowProps) {
-  const server = useServer();
-  const [active, setActive] = useState(0), [tab, setTab] = useState<WaveTab>("Dimmer");
-  const [speed, setSpeed] = useState(30), [width, setWidth] = useState(50), [direction, setDirection] = useState("Forward");
+export function DynamicsWindow(_: WindowProps) {
   return <div className="dynamics-window">
-    {!compact && <WindowHeader title="Attribute Dynamics" info={{ primary: items[active][0], secondary: "Normal value-stack objects" }} actions={[[{ id: "record", label: "Record to first cue", disabled: !server.cueObjects.length || (!server.selectedFixtures.length && !server.selectedGroupId), onClick: () => void server.storeDynamic(speed, width, direction) }]]} />}
-    <div className="dynamics-layout">
-      <aside>{items.map(([name, description], index) => <Button onClick={() => setActive(index)} className={index === active ? "active" : ""} key={name}><b>{name}</b><small>{description}</small></Button>)}</aside>
-      <main><div className="wave-tabs">{(["Dimmer", "Waveform", "Steps", "Distribution"] as WaveTab[]).map((name) => <Button onClick={() => setTab(name)} className={tab === name ? "active" : ""} key={name}>{name}</Button>)}</div><svg className="waveform" viewBox="0 0 800 300" preserveAspectRatio="none" aria-label={`${tab} sine waveform`}><path d="M0 150 C65 10 135 10 200 150 S335 290 400 150 S535 10 600 150 S735 290 800 150" fill="none" stroke="currentColor" strokeWidth="5"/></svg><div className="dynamic-steps"><section><b>Step 1</b><small>Value 0%</small></section><section><b>Step 2</b><small>Value 100%</small></section><section><b>Fixture phase</b><small>0° → 360°</small></section></div></main>
-      {!compact && <aside className="dynamic-properties"><b>Dynamic properties</b><label>Mode<span>Relative</span></label><label>Speed<strong>{speed} BPM</strong><Input aria-label="Dynamic speed" type="range" min="1" max="240" value={speed} onChange={(event) => setSpeed(Number(event.target.value))}/></label><label>Width<strong>{width}%</strong><Input aria-label="Dynamic width" type="range" min="1" max="100" value={width} onChange={(event) => setWidth(Number(event.target.value))}/></label><label>Direction<Select value={direction} onChange={(event) => setDirection(event.target.value)}><option>Forward</option><option>Reverse</option><option>Ping-pong</option><option>Random</option></Select></label><label>Grouping<span>{server.selectedGroupId ? `Live group ${server.selectedGroupId}` : `${server.selectedFixtures.length} ordered fixtures`}</span></label></aside>}
-    </div>
+    <WindowScrollArea emptyState={{
+      title: "Dynamics is a future feature",
+      description: "Dynamics is currently being conceptualized.",
+      icon: "∿",
+    }} />
   </div>;
 }

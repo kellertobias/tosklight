@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { HelpCatalog, HelpTopic } from "../api/types";
+import type { HelpCatalog, HelpCatalogEntry, HelpTopic } from "../api/types";
 import { LightApiClient } from "../api/LightApiClient";
-import { Button } from "../components/common";
 import type { WindowProps } from "./windowTypes";
 import { prepareHelpMarkdown, safeHelpUrl } from "./helpMarkdown";
 import { WindowHeader, WindowScrollArea } from "../components/window-kit";
@@ -30,10 +29,61 @@ export function HelpMarkdown({ markdown }: { markdown: string }) {
   >{prepareHelpMarkdown(markdown)}</ReactMarkdown>;
 }
 
+function containsTopic(items: HelpCatalogEntry[], id: string): boolean {
+  return items.some((item) => item.id === id || containsTopic(item.children, id));
+}
+
+function firstTopic(items: HelpCatalogEntry[]): string | null {
+  for (const item of items) {
+    if (item.id) return item.id;
+    const child = firstTopic(item.children);
+    if (child) return child;
+  }
+  return null;
+}
+
+export function HelpNavigation({
+  entries,
+  expanded,
+  selected,
+  depth = 0,
+  onSelect,
+  onToggle,
+}: {
+  entries: HelpCatalogEntry[];
+  expanded: Set<string>;
+  selected: string | null;
+  depth?: number;
+  onSelect: (id: string) => void;
+  onToggle: (id: string) => void;
+}) {
+  return entries.map((entry) => {
+    const open = entry.kind === "folder" && expanded.has(entry.id ?? entry.title);
+    const key = entry.id ?? `folder:${entry.title}`;
+    return <div className="help-nav-entry" key={key}>
+      <div className={`help-nav-row ${entry.kind}`} style={{ paddingLeft: `${10 + depth * 18}px` }}>
+        {entry.id
+          ? <button className={`help-nav-title ${entry.id === selected ? "active" : ""}`} onClick={() => onSelect(entry.id!)}>{entry.title}</button>
+          : <span className="help-nav-title">{entry.title}</span>}
+        {entry.kind === "folder" && <button
+          className={`help-nav-chevron ${open ? "open" : ""}`}
+          aria-label={`${open ? "Collapse" : "Expand"} ${entry.title}`}
+          aria-expanded={open}
+          onClick={() => onToggle(key)}
+        ><span aria-hidden="true">›</span></button>}
+      </div>
+      {open && <div className="help-nav-children">
+        <HelpNavigation entries={entry.children} expanded={expanded} selected={selected} depth={depth + 1} onSelect={onSelect} onToggle={onToggle}/>
+      </div>}
+    </div>;
+  });
+}
+
 export function HelpWindow({ compact }: WindowProps) {
   const client = useMemo(() => new LightApiClient(), []);
   const [catalog, setCatalog] = useState<HelpCatalog | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [topic, setTopic] = useState<HelpTopic | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,7 +91,7 @@ export function HelpWindow({ compact }: WindowProps) {
     try {
       const next = await client.helpCatalog();
       setCatalog(next);
-      setSelected((current) => current && next.topics.some((item) => item.id === current) ? current : next.topics[0]?.id ?? null);
+      setSelected((current) => current && containsTopic(next.topics, current) ? current : firstTopic(next.topics));
       setError(null);
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
   }, [client]);
@@ -58,11 +108,19 @@ export function HelpWindow({ compact }: WindowProps) {
     return () => window.clearInterval(timer);
   }, [catalog?.live, selected, loadCatalog, loadTopic]);
 
+  const toggleFolder = useCallback((id: string) => {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
   return <div className={`help-window ${compact ? "compact" : ""}`}>
     {!compact && <WindowHeader title="Help" info={catalog?.live ? { primary: "Live documentation" } : undefined} />}
     <div className="help-layout">
       <nav aria-label="Help topics">
-        {catalog?.topics.map((item) => <Button key={item.id} className={item.id === selected ? "active" : ""} onClick={() => setSelected(item.id)}>{item.title}</Button>)}
+        {catalog && <HelpNavigation entries={catalog.topics} expanded={expanded} selected={selected} onSelect={setSelected} onToggle={toggleFolder}/>}
         {catalog && catalog.topics.length === 0 && <p>No help topics found.</p>}
       </nav>
       <WindowScrollArea><main className="help-content">

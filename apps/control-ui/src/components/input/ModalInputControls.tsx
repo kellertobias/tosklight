@@ -35,14 +35,27 @@ export function ModalNumberInput({ value, onChange, onEnter, onEscape, replaceOn
     if (key === "Escape") return onEscape();
     if (key === "Enter") return onEnter();
     if (key === "Backspace" || key === "←") { const next = replace.current ? "" : value.slice(0, -1); replace.current = false; return onChange(next); }
-    if (key === "+" || key === "−") { replace.current = false; return onChange(String((Number(value) || 0) + (key === "+" ? 1 : -1))); }
+    if (key === "+" || key === "−" || key === "-") { replace.current = false; return onChange(String((Number(value) || 0) + (key === "+" ? 1 : -1))); }
     if (key === "THRU") return;
     if (/^\d$/.test(key)) { const next = replace.current ? key : value + key; replace.current = false; return onChange(next); }
     if (allowDecimal && key === "." && (replace.current || !value.includes("."))) { const next = replace.current ? "0." : `${value || "0"}.`; replace.current = false; onChange(next); }
   };
   const root = useModalInput(press);
-  const keys = ["7", "8", "9", "THRU", "4", "5", "6", "+", "1", "2", "3", "−", ...(allowDecimal ? ["."] : []), "0", "←", "ENTER"];
-  return <div ref={root} className="modal-number-input numeric-pad" aria-label="Number input keypad">{keys.map((key) => <Button key={key} onClick={() => press(key === "ENTER" ? "Enter" : key)} className={key === "ENTER" ? "enter" : ["THRU", "+", "−", "←"].includes(key) ? "action" : ""}>{key}</Button>)}</div>;
+  // Keep the same five-column geometry as the software programmer num block:
+  // action column, three digits, then the operator column.
+  const rows = [
+    ["−", "7", "8", "9", "+"],
+    ["ESC", "4", "5", "6", "THRU"],
+    ["DIV", "1", "2", "3", "ENTER"],
+    ["←", "0", ".", "AT"],
+  ];
+  return <div ref={root} className="modal-number-input numeric-pad" aria-label="Number input keypad">{rows.flatMap((row, rowIndex) => row.map((key, columnIndex) => <Button
+    data-keypad-key={key}
+    key={key}
+    style={{ gridColumn: columnIndex + 1, gridRow: key === "ENTER" ? `${rowIndex + 1} / span 2` : rowIndex + 1 }}
+    onClick={() => press(key === "ENTER" ? "Enter" : key === "ESC" ? "Escape" : key)}
+    className={key === "ENTER" ? "enter modal-number-input-enter" : ["ESC", "THRU", "DIV", "AT", "+", "−", "←"].includes(key) ? "action" : ""}
+  >{key}</Button>))}</div>;
 }
 
 const physicalRows = [

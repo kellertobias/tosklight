@@ -12,8 +12,20 @@ export interface ShowEntry {
   updated_at: string;
 }
 
-export interface HelpTopicSummary { id: string; title: string }
-export interface HelpCatalog { topics: HelpTopicSummary[]; errors: string[]; live: boolean }
+export interface ShowRevision {
+  show_id: string;
+  revision: number;
+  name: string;
+  created_at: string;
+}
+
+export interface HelpCatalogEntry {
+  id: string | null;
+  title: string;
+  kind: "folder" | "topic";
+  children: HelpCatalogEntry[];
+}
+export interface HelpCatalog { topics: HelpCatalogEntry[]; errors: string[]; live: boolean }
 export interface HelpTopic { id: string; title: string; markdown: string; live: boolean }
 
 export interface MvrImportPreview {

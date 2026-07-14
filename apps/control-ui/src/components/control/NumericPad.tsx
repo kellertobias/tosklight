@@ -19,6 +19,7 @@ export function NumericPad() {
   const press = (key: SoftwareKey) => {
     if (key === "CLR") {
       if (state.storeArmed) dispatch({ type: "SET_STORE_ARMED", value: false });
+      if (state.cueListSetArmed) dispatch({ type: "SET_CUELIST_SET_ARMED", value: false });
       server.setCommandLine("");
       if (state.preload !== "idle") { void server.preloadAction("clear"); return; }
       if (clearStage === 0 && !hasClearContent) return;
@@ -28,6 +29,10 @@ export function NumericPad() {
       return;
     }
     if (key === "SET" && state.builtIn === "patch") return dispatch({ type: "SET_PATCH_ARMED", value: !state.patchSetArmed });
+    if (key === "SET" && document.querySelector(".cuelist-window.pool-window")) {
+      if (state.storeArmed) dispatch({ type: "SET_STORE_ARMED", value: false });
+      return dispatch({ type: "SET_CUELIST_SET_ARMED", value: !state.cueListSetArmed });
+    }
     if (key === "SET" && (state.builtIn === "presets" || state.desks.find((desk) => desk.id === state.activeDeskId)?.panes.some((pane) => pane.kind === "presets"))) return dispatch({ type: "SET_PRESET_SET_ARMED", value: !state.presetSetArmed });
     if (key === "UND") { setClearStage(0); return void server.undoProgrammer(); }
     if (key === "ENT") {
@@ -42,7 +47,7 @@ export function NumericPad() {
   return <div className="numeric-pad">{keys.map((key) => <Button
     onClick={() => press(key)}
     data-keypad-key={key}
-    className={`${["AT", "TRU", "GRP", "SET", "DIV", "CUE", "UND", "DEL", "MOV", "CPY", "+", "CLR"].includes(key) ? "action" : key === "ENT" ? "enter" : ""} ${key === "SET" && ((state.builtIn === "patch" && state.patchSetArmed) || state.presetSetArmed) ? "patch-set-armed" : key === "CLR" ? `clear ${clearClass}` : ""}`}
+    className={`${["AT", "TRU", "GRP", "SET", "DIV", "CUE", "UND", "DEL", "MOV", "CPY", "+", "CLR"].includes(key) ? "action" : key === "ENT" ? "enter" : ""} ${key === "SET" && ((state.builtIn === "patch" && state.patchSetArmed) || state.presetSetArmed || state.cueListSetArmed) ? "patch-set-armed" : key === "CLR" ? `clear ${clearClass}` : ""}`}
     key={key}
   >{labels[key] ?? key}</Button>)}</div>;
 }

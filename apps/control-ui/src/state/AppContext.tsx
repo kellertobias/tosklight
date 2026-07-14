@@ -20,10 +20,10 @@ export function AppProvider({ children }: PropsWithChildren) {
     return () => document.documentElement.classList.remove("touch-scrollbars");
   }, [state.touchScrollbars]);
   useEffect(() => {
-    const deskAction = (event: Event) => { if ((event as CustomEvent<string>).detail !== "set") return; if (state.builtIn === "patch") dispatch({ type: "SET_PATCH_ARMED", value: !state.patchSetArmed }); else if (state.builtIn === "presets" || state.desks.find((desk) => desk.id === state.activeDeskId)?.panes.some((pane) => pane.kind === "presets")) dispatch({ type: "SET_PRESET_SET_ARMED", value: !state.presetSetArmed }); };
+    const deskAction = (event: Event) => { if ((event as CustomEvent<string>).detail !== "set") return; if (state.builtIn === "patch") dispatch({ type: "SET_PATCH_ARMED", value: !state.patchSetArmed }); else if (document.querySelector(".cuelist-window.pool-window")) { if (state.storeArmed) dispatch({ type: "SET_STORE_ARMED", value: false }); dispatch({ type: "SET_CUELIST_SET_ARMED", value: !state.cueListSetArmed }); } else if (state.builtIn === "presets" || state.desks.find((desk) => desk.id === state.activeDeskId)?.panes.some((pane) => pane.kind === "presets")) dispatch({ type: "SET_PRESET_SET_ARMED", value: !state.presetSetArmed }); };
     window.addEventListener("light:desk-action", deskAction);
     return () => window.removeEventListener("light:desk-action", deskAction);
-  }, [state.builtIn, state.patchSetArmed, state.presetSetArmed, state.desks, state.activeDeskId]);
+  }, [state.builtIn, state.patchSetArmed, state.presetSetArmed, state.cueListSetArmed, state.storeArmed, state.desks, state.activeDeskId]);
   const value = useMemo(() => ({ state, dispatch }), [state]);
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

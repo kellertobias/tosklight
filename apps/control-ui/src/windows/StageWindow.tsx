@@ -7,7 +7,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type CSSProperties,
 } from "react";
-import { Button, FormField, FormLayout, Input, NumberField, Select, SelectField, SwitchField } from "../components/common";
+import { Button, FormLayout, HorizontalFaderField, Input, MultiValueToggleField, NumberField, Select, SelectField, SwitchField } from "../components/common";
 import { GroupStrip } from "../components/shared/GroupStrip";
 import { fixtures as visualFixtures } from "../data/mockData";
 import { useServer } from "../api/ServerContext";
@@ -337,13 +337,13 @@ export function StageWindow({ compact, paneId, showGroupShortcuts, stageView, fo
       )}
       {optionsOpen && !compact && (
         <WindowSettings modal={false} anchor={settingsAnchor} title="Stage Settings" onClose={() => setOptionsOpen(false)} tabs={[{ id: "stage", label: "Stage", content: <FormLayout labelPlacement="side">
-            <FormField label="View"><div className="button-group"><Button className={view === "2d" ? "active" : ""} onClick={() => setView("2d")}>2D</Button><Button disabled={!tauri} className={view === "3d" ? "active" : ""} onClick={() => setView("3d")}>3D</Button></div></FormField>
+            <MultiValueToggleField label="View" value={view} onChange={setView} options={[{ value: "2d", label: "2D" }, { value: "3d", label: "3D", disabled: !tauri }]}/>
             {view === "3d" && mode === "setup" && (
               <SelectField label="Built-in element" value={builtInAssetId} onChange={(value) => setBuiltInAssetId(value)} options={BUILT_IN_STAGE_ASSETS.map((asset) => ({ value: asset.id, label: asset.name }))}/>
             )}
             <SwitchField label="Groups shortcuts" checked={groupsVisible} onChange={(event) => dispatch({ type: "SET_STAGE_OPTIONS", groupsVisible: event.target.checked })}/>
             <SwitchField label="Show Selection" checked={state.stageShowSelection} onChange={(event) => dispatch({ type: "SET_STAGE_OPTIONS", showSelection: event.target.checked })}/>
-            <FormField label={`Environment brightness ${Math.round(state.stageEnvironmentBrightness * 100)}%`}><Input type="range" min="0" max="2" step="0.05" value={state.stageEnvironmentBrightness} onChange={(event) => dispatch({ type: "SET_STAGE_OPTIONS", environmentBrightness: Number(event.target.value) })}/></FormField>
+            <HorizontalFaderField label="Environment brightness" value={state.stageEnvironmentBrightness} minimum={0} maximum={2} step={0.05} display={`${Math.round(state.stageEnvironmentBrightness * 100)}%`} onChange={(environmentBrightness) => dispatch({ type: "SET_STAGE_OPTIONS", environmentBrightness })}/>
           </FormLayout> }]} />
       )}
       {view === "3d" ? (

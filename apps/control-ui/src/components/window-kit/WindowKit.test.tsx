@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { ButtonGrid, DataTable, GridButton, WindowHeader, WindowSettings } from ".";
+import { ButtonGrid, DataTable, GridButton, WindowHeader, WindowScrollArea, WindowSettings } from ".";
 
 describe("window kit", () => {
   it("renders two-line information, grouped actions, and Settings last", () => {
@@ -39,5 +39,11 @@ describe("window kit", () => {
     expect(screen.getByRole("button", { name: /Empty/ })).toHaveClass("empty");
     expect(screen.getByRole("button", { name: /Disabled/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Store/ })).toHaveClass("store-target");
+  });
+  it("shows the unified empty state instead of window content", () => {
+    render(<WindowScrollArea emptyState={{ title: "Nothing here", description: "Add an item to get started.", icon: "◇" }}><span>Hidden content</span></WindowScrollArea>);
+    expect(screen.getByRole("status")).toHaveTextContent("Nothing here");
+    expect(screen.getByText("Add an item to get started.")).toBeInTheDocument();
+    expect(screen.queryByText("Hidden content")).not.toBeInTheDocument();
   });
 });

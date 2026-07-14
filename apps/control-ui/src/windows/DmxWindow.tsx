@@ -11,7 +11,7 @@ interface Slot { universe: number; address: number; value: number }
 export function dmxChannelsPerRow(width: number, size: "small" | "large") {
   const target = size === "large" ? 42 : 9;
   const usable = Math.max(160, width - 72);
-  return Math.max(1, Math.min(64, Math.floor((usable + 3) / (target + 3))));
+  return Math.max(1, Math.min(512, Math.floor((usable + 3) / (target + 3))));
 }
 
 export function DmxWindow({ compact }: WindowProps) {

@@ -1,5 +1,5 @@
 import { useServer } from "../../api/ServerContext";
-import { VerticalTouchFader } from "./VerticalTouchFader";
+import { VerticalTouchFader, type VerticalTouchFaderAction } from "./VerticalTouchFader";
 import { useApp } from "../../state/AppContext";
 import { playbackSlotNumbers } from "./playbackProjection";
 import { Button } from "../common";
@@ -19,47 +19,57 @@ function HardwareCueRows({ cues, cueIndex, activatedAt, compact }: { cues: Cue[]
 export interface PlaybackFaderBankProps { pageNumber?: number; firstSlot?: number; count?: number; rows?: number; buttons?: number }
 export function PlaybackFaderBank({ pageNumber, firstSlot = 1, count, rows, buttons }: PlaybackFaderBankProps = {}) {
   const server = useServer();
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   const hardware = Boolean(server.bootstrap?.hardware_connected || state.midiProfile);
   const pageSize = count ?? state.playbackColumns * state.playbackRows;
   const rowCount = rows ?? state.playbackRows;
   const columns = Math.ceil(pageSize / rowCount);
-  const page = server.playbacks?.pages.find((candidate) => candidate.number === (pageNumber ?? server.playbacks?.active_page ?? state.playbackPage + 1));
+  const activePageNumber = pageNumber ?? server.playbacks?.active_page ?? state.playbackPage + 1;
+  const page = server.playbacks?.pages.find((candidate) => candidate.number === activePageNumber);
+  const assignmentPending = state.cueListSetTarget != null;
+  const assignPlayback = async (slot: number) => {
+    if (state.cueListSetTarget == null) return;
+    const ok = await server.executeCommandLine(`SET ${state.cueListSetTarget} AT ${activePageNumber}.${slot}`);
+    if (!ok) return;
+    await server.refresh();
+    dispatch({ type: "SET_CUELIST_SET_ARMED", value: false });
+  };
   const slots = playbackSlotNumbers(page, firstSlot, pageSize).map((number) => {
-    const playback = server.playbacks?.pool.find((candidate) => candidate.number === number) ?? null;
+    const playback = server.playbacks?.pool.find((candidate) => candidate.number === number && candidate.target.type === "cue_list") ?? null;
     const cueListId = playback?.target.type === "cue_list" ? playback.target.cue_list_id : null;
-    const groupId = playback?.target.type === "group" ? playback.target.group_id : null;
     const cue = cueListId ? server.playbacks?.cue_lists.find((candidate) => candidate.id === cueListId) ?? null : null;
-    const group = groupId ? server.groups.find((candidate) => candidate.id === groupId) ?? null : null;
-    return { playback, cue, group };
+    return { playback, cue };
   });
   return <div className="playback-fader-bank" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rowCount}, minmax(0, 1fr))` }}>
-    {slots.map(({ playback, cue, group }, index) => {
+    {slots.map(({ playback, cue }, index) => {
       const active = playback ? server.playbacks?.active.find((item) => item.playback_number === playback.number) : undefined;
-      const value = group ? Math.round((group.body.master ?? 0) * 100) : Math.round((active?.master ?? 0) * 100);
+      const value = Math.round((active?.master ?? 0) * 100);
       const actions = (playback?.buttons ?? ["none", "none", "none"]).slice(0, hardware ? 3 : buttons ?? server.playbacks?.desk.buttons ?? 3);
-      const actionButtons = actions.map((action, button) => <Button key={button} disabled={!playback || action === "none"}
-        onClick={() => playback && action !== "flash" && action !== "none" && void server.poolPlaybackAction(playback.number, action === "go_minus" ? "go-minus" : action)}
-        onPointerDown={(event) => { if (!playback || action !== "flash") return; event.currentTarget.setPointerCapture(event.pointerId); void server.poolPlaybackAction(playback.number, "flash", { pressed: true }); }}
-        onPointerUp={() => playback && action === "flash" && void server.poolPlaybackAction(playback.number, "flash", { pressed: false })}
-        onPointerCancel={() => playback && action === "flash" && void server.poolPlaybackAction(playback.number, "flash", { pressed: false })}
-        onLostPointerCapture={() => playback && action === "flash" && void server.poolPlaybackAction(playback.number, "flash", { pressed: false })}>
-        {action === "go_minus" ? "GO −" : action.toUpperCase()}
-      </Button>);
+      const faderActions: VerticalTouchFaderAction[] = actions.map((action, button) => ({ id: `${button}-${action}`, label: action === "go_minus" ? "GO −" : action.toUpperCase(), disabled: assignmentPending || !playback || action === "none",
+        onClick: () => playback && action !== "flash" && action !== "none" && void server.poolPlaybackAction(playback.number, action === "go_minus" ? "go-minus" : action),
+        onPointerDown: (event) => { if (!playback || action !== "flash") return; event.currentTarget.setPointerCapture(event.pointerId); void server.poolPlaybackAction(playback.number, "flash", { pressed: true }); },
+        onPointerUp: () => playback && action === "flash" && void server.poolPlaybackAction(playback.number, "flash", { pressed: false }),
+        onPointerCancel: () => playback && action === "flash" && void server.poolPlaybackAction(playback.number, "flash", { pressed: false }),
+        onLostPointerCapture: () => playback && action === "flash" && void server.poolPlaybackAction(playback.number, "flash", { pressed: false }),
+      }));
+      const actionButtons = faderActions.map(({ id, label, ...props }) => <Button {...props} key={id}>{label}</Button>);
+      const assignmentTarget = assignmentPending && <Button className="playback-assignment-target" aria-label={`Assign Cuelist ${state.cueListSetTarget} to page ${activePageNumber} playback ${firstSlot + index}`} onClick={() => void assignPlayback(firstSlot + index)}><b>Assign Cuelist {state.cueListSetTarget}</b><small>to playback {activePageNumber}.{firstSlot + index}</small></Button>;
       if (hardware) {
         const cueIndex = active?.cue_index ?? -1;
-        return <article className={`hardware-playback-card ${active ? "running" : ""} ${group ? "group-master-playback" : ""} ${!playback ? "empty" : ""}`} key={playback?.number ?? `empty-${index}`}>
+        return <article className={`hardware-playback-card ${active ? "running" : ""} ${!playback ? "empty" : ""} ${assignmentPending ? "assignment-pending" : ""}`} key={playback?.number ?? `empty-${index}`}>
+          {assignmentTarget}
           <header><b>{playback?.name ?? "—"}</b><strong>{page?.number ?? pageNumber ?? state.playbackPage + 1}.{firstSlot + index}</strong></header>
           {cue ? <HardwareCueRows cues={cue.cues} cueIndex={cueIndex} activatedAt={active?.activated_at} compact={rowCount === 2} /> : <div className="hardware-cue-list single" />}
           <div className="hardware-playback-controls"><footer>{actionButtons}</footer><div className="hardware-fader" style={{ "--hardware-fader-level": `${value}%` } as CSSProperties}><i/><b>{value}%</b></div></div>
         </article>;
       }
-      return <article className={`${active ? "running" : ""} ${group ? "group-master-playback" : ""} ${!playback ? "empty" : ""}`} key={playback?.number ?? `empty-${index}`}>
+      return <article className={`${active ? "running" : ""} ${!playback ? "empty" : ""} ${assignmentPending ? "assignment-pending" : ""}`} key={playback?.number ?? `empty-${index}`}>
+        {assignmentTarget}
         <b>{firstSlot + index} · {playback?.name ?? "—"}</b>
-        <VerticalTouchFader disabled={!playback || playback.fader === "speed"} label={playback?.fader ?? "Empty"} value={value}
+        <VerticalTouchFader disabled={assignmentPending || !playback || playback.fader === "speed"} label={playback?.fader ?? "Empty"} value={value}
           display={active && cue ? `Cue ${active.cue_index + 1} · ${value}%` : playback ? `${value}%` : "Empty"}
+          actions={faderActions}
           onChange={(next) => playback && void server.poolPlaybackAction(playback.number, "master", { value: next / 100 })}/>
-        <footer>{actionButtons}</footer>
       </article>;
     })}
   </div>;

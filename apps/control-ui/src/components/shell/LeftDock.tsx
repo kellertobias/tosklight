@@ -6,11 +6,13 @@ import { useServer } from "../../api/ServerContext";
 import appIcon from "../../../src-tauri/icons/icon.svg";
 import { DeskSettingsModal } from "../modals/DeskSettingsModal";
 import { Button } from "../common";
+import { getShowIndicator } from "./showIndicator";
 
 export const builtIns: Array<[BuiltInWindow, string, string]> = [
   ["stage", "⌖", "Stage"], ["fixtures", "♙", "Fixtures"],
-  ["presets", "▣", "Presets"], ["playback", "▶", "Playback"], ["dynamics", "∿", "Dynamics"],
+  ["presets", "▣", "Presets"], ["cuelists", "▶", "Cuelists"], ["dynamics", "∿", "Dynamics"],
   ["channels", "▥", "Channels"], ["dmx", "⠿", "DMX"],
+  ["development", "⚒", "Development"],
 ];
 
 export function LeftDock() {
@@ -19,8 +21,9 @@ export function LeftDock() {
   const longPress = useRef<number | null>(null);
   const held = useRef(false);
   const suppressUntil = useRef(0);
+  const showIndicator = getShowIndicator(server.status);
   return <aside className="left-dock">
-    <Button className="dock-identity" aria-label="Open show menu" onClick={() => dispatch({ type: "SET_MODAL", modal: "setupOpen", value: true })}><span className="app-mark"><img src={appIcon} alt="" /></span><Clock/><b><span className={server.showDirty ? "show-dirty-dot" : "connection-dot"}>●</span> {server.bootstrap?.active_show?.name ?? "Show"}</b></Button>
+    <Button className="dock-identity" aria-label={`Open show menu. ${showIndicator.label}`} title={`${showIndicator.label}. ${showIndicator.detail}`} onClick={() => dispatch({ type: "SET_MODAL", modal: "setupOpen", value: true })}><span className="app-mark"><img src={appIcon} alt="" /></span><Clock/><b><span className={`show-status-dot ${showIndicator.className}`} aria-hidden="true">●</span> {server.bootstrap?.active_show?.name ?? "Show"}</b></Button>
     <Button className={`dock-section-key ${state.dockMode === "desks" ? "active" : ""}`} onClick={() => dispatch({ type: "SET_DOCK_MODE", mode: "desks" })}>DESKS</Button>
     {state.dockMode === "desks" && <div className="dock-list dock-list-enter">{state.desks.map((desk) => <Button key={desk.id} className={`dock-entry ${state.activeDeskId === desk.id ? "active" : ""}`} onPointerDown={() => { held.current = false; longPress.current = window.setTimeout(() => { held.current = true; suppressUntil.current = performance.now() + 1000; dispatch({ type: "OPEN_DESK_SETTINGS", id: desk.id }); }, 650); }} onPointerUp={() => { if (longPress.current) window.clearTimeout(longPress.current); longPress.current = null; }} onPointerCancel={() => { if (longPress.current) window.clearTimeout(longPress.current); longPress.current = null; }} onClick={() => { if (!held.current && performance.now() >= suppressUntil.current) dispatch({ type: "OPEN_DESK", id: desk.id }); held.current = false; }}><span>{desk.icon ?? "⊞"}</span>{desk.name}</Button>)}<Button className="dock-entry" onClick={() => dispatch({ type: "NEW_DESK" })}><span>＋</span>New desk</Button></div>}
     <Button className={`dock-section-key builtins-key ${state.dockMode === "builtins" ? "active" : ""}`} onClick={() => dispatch({ type: "SET_DOCK_MODE", mode: "builtins" })}>BUILT-INS</Button>

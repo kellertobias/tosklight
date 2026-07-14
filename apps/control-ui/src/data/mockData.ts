@@ -54,6 +54,6 @@ export const initialDesks: DeskModel[] = [
       { id: "stage", kind: "stage", title: "Stage · Main floor", x: 10, y: 10, width: 15, height: 9 },
     ],
   },
-  { id: "playback", name: "Playback desk", panes: [{ id: "playback-main", kind: "playback", title: "Main Show", x: 1, y: 1, width: 24, height: 18 }] },
+  { id: "playback", name: "Cuelists", panes: [{ id: "cuelists-main", kind: "cuelists", title: "Cuelists", x: 1, y: 1, width: 24, height: 18 }] },
   { id: "patch", name: "Patch desk", panes: [{ id: "dmx-main", kind: "dmx", title: "DMX Output", x: 1, y: 1, width: 24, height: 18 }] },
 ];

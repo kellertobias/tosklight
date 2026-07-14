@@ -115,6 +115,13 @@ describe("appReducer", () => {
     expect(appReducer(hidden, { type: "SET_STAGE_OPTIONS", environmentBrightness: -1 }).stageEnvironmentBrightness).toBe(0);
   });
 
+  it("persists the selected Development catalog on its pane", () => {
+    const desks = [{ id: "test", name: "Test", panes: [{ id: "development", kind: "development" as const, title: "Development", x: 1, y: 1, width: 8, height: 8 }] }];
+    const hydrated = appReducer(initialState, { type: "HYDRATE_LAYOUT", desks, activeDeskId: "test" });
+    const updated = appReducer(hydrated, { type: "SET_PANE_DEVELOPMENT_VIEW", id: "development", value: "faders" });
+    expect(updated.desks[0].panes[0].developmentView).toBe("faders");
+  });
+
   it("hydrates persisted built-in window settings without requiring them in older layouts", () => {
     const hydrated = appReducer(initialState, { type: "HYDRATE_LAYOUT", desks: initialState.desks, activeDeskId: initialState.activeDeskId, windowSettings: { builtIn: "dmx", dockMode: "builtins", stageView: "3d", dmxDotSize: "large", fixtureGroupsVisible: false, presetGroupsVisible: false } });
     expect(hydrated.builtIn).toBe("dmx");
@@ -147,5 +154,29 @@ describe("appReducer", () => {
     expect(plain.presetPoolColors).toBe(false);
     const armed = appReducer(plain, { type: "SET_PRESET_SET_ARMED", value: true });
     expect(armed.presetSetArmed).toBe(true);
+  });
+
+  it("keeps the selected pool playback while Set waits for a fader target", () => {
+    const armed = appReducer(initialState, { type: "SET_CUELIST_SET_ARMED", value: true });
+    const selected = appReducer(armed, { type: "SET_CUELIST_SET_TARGET", value: 42 });
+    expect(selected.cueListSetArmed).toBe(true);
+    expect(selected.cueListSetTarget).toBe(42);
+    expect(appReducer(selected, { type: "SET_CUELIST_SET_ARMED", value: false }).cueListSetTarget).toBeNull();
+  });
+
+  it("returns the Cuelists built-in to the pool when its button is clicked from a Cuelist", () => {
+    const opened = appReducer(initialState, { type: "OPEN_BUILTIN", kind: "cuelists" });
+    const inside = appReducer(opened, { type: "OPEN_BUILTIN_CUELIST", number: 7 });
+    const returned = appReducer(inside, { type: "OPEN_BUILTIN", kind: "cuelists" });
+    expect(returned).toMatchObject({ builtIn: "cuelists", cuelistBuiltInView: "pool", cuelistBuiltInNumber: 7 });
+  });
+
+  it("reopens the remembered Cuelist from another screen before returning to the pool", () => {
+    const opened = appReducer(initialState, { type: "OPEN_BUILTIN", kind: "cuelists" });
+    const inside = appReducer(opened, { type: "OPEN_BUILTIN_CUELIST", number: 12 });
+    const elsewhere = appReducer(inside, { type: "OPEN_BUILTIN", kind: "fixtures" });
+    const reopened = appReducer(elsewhere, { type: "OPEN_BUILTIN", kind: "cuelists" });
+    expect(reopened).toMatchObject({ builtIn: "cuelists", cuelistBuiltInView: "cues", cuelistBuiltInNumber: 12 });
+    expect(appReducer(reopened, { type: "OPEN_BUILTIN", kind: "cuelists" }).cuelistBuiltInView).toBe("pool");
   });
 });

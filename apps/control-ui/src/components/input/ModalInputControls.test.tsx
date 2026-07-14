@@ -10,9 +10,9 @@ function TextHarness({ enter, escape }: { enter: () => void; escape: () => void 
   return <div className="modal-backdrop"><output aria-label="value">{value}</output><ModalTextKeyboard value={value} onChange={setValue} onEnter={enter} onEscape={escape}/></div>;
 }
 
-function NumberHarness({ enter, escape, initial = "", replaceOnFirstInput = false }: { enter: () => void; escape: () => void; initial?: string; replaceOnFirstInput?: boolean }) {
+function NumberHarness({ enter, escape, initial = "", replaceOnFirstInput = false, allowDecimal = true }: { enter: () => void; escape: () => void; initial?: string; replaceOnFirstInput?: boolean; allowDecimal?: boolean }) {
   const [value, setValue] = useState(initial);
-  return <div className="modal-backdrop"><output aria-label="value">{value}</output><ModalNumberInput value={value} onChange={setValue} onEnter={enter} onEscape={escape} replaceOnFirstInput={replaceOnFirstInput}/></div>;
+  return <div className="modal-backdrop"><output aria-label="value">{value}</output><ModalNumberInput value={value} onChange={setValue} onEnter={enter} onEscape={escape} replaceOnFirstInput={replaceOnFirstInput} allowDecimal={allowDecimal}/></div>;
 }
 
 describe("modal input controls", () => {
@@ -47,11 +47,29 @@ describe("modal input controls", () => {
 
   it("uses the operator num-block layout and replaces an existing value on first entry", () => {
     render(<NumberHarness enter={vi.fn()} escape={vi.fn()} initial="62.8" replaceOnFirstInput/>);
-    expect(screen.getByRole("button", { name: "THRU" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "+" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "−" })).toBeVisible();
+    const keypad = screen.getByLabelText("Number input keypad");
+    expect([...keypad.children].map((key) => key.textContent)).toEqual([
+      "−", "7", "8", "9", "+",
+      "ESC", "4", "5", "6", "THRU",
+      "DIV", "1", "2", "3", "ENTER",
+      "←", "0", ".", "AT",
+    ]);
+    expect(screen.getByRole("button", { name: "ENTER" })).toHaveStyle({ gridRow: "3 / span 2" });
     fireEvent.keyDown(window, { key: "9" });
     fireEvent.keyDown(window, { key: "5" });
     expect(screen.getByLabelText("value")).toHaveTextContent("95");
+  });
+
+  it("keeps the dot in its fixed num-block position when decimals are not accepted", () => {
+    render(<NumberHarness enter={vi.fn()} escape={vi.fn()} allowDecimal={false}/>);
+    fireEvent.click(screen.getByRole("button", { name: "." }));
+    expect(screen.getByLabelText("value")).toBeEmptyDOMElement();
+  });
+
+  it("closes the number input from its ESC button", () => {
+    const escape = vi.fn();
+    render(<NumberHarness enter={vi.fn()} escape={escape}/>);
+    fireEvent.click(screen.getByRole("button", { name: "ESC" }));
+    expect(escape).toHaveBeenCalledOnce();
   });
 });
