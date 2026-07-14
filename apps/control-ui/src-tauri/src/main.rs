@@ -114,10 +114,14 @@ fn main() {
             }
             menu.append(&tools)?; app.set_menu(menu)?;
             let child = launch_server(app.handle()).map_err(|error| { eprintln!("failed to start bundled Light server: {error}"); error })?;
-            if std::env::var_os("LIGHT_DESKTOP_TEST_BIND").is_some()&&let Some(window)=app.get_webview_window("main"){
+            if let Some(window)=app.get_webview_window("main"){
                 let url=format!("http://{}",server_address());
-                let script=format!("localStorage.setItem('light.server-url',{});location.reload()",serde_json::to_string(&url)?);
-                window.eval(&script)?;
+                let encoded=serde_json::to_string(&url)?;
+                if std::env::var_os("LIGHT_DESKTOP_TEST_BIND").is_some(){
+                    window.eval(&format!("sessionStorage.setItem('light.test-server-url',{encoded});location.reload()"))?;
+                }else if cfg!(debug_assertions){
+                    window.eval(&format!("if(localStorage.getItem('light.server-url')!=={encoded}){{localStorage.setItem('light.server-url',{encoded});location.reload()}}"))?;
+                }
             }
             let process = ServerProcess { child: Arc::new(Mutex::new(child)), stop: Arc::new(AtomicBool::new(false)) };
             let watched_child = Arc::clone(&process.child); let stop = Arc::clone(&process.stop); let handle = app.handle().clone();

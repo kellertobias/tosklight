@@ -8,6 +8,7 @@
 **/test-results/
 **/playwright-report/
 **/coverage/
+/.pnpm-store/
 
 # Runtime desk/show data
 /light-data/

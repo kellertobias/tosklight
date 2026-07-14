@@ -4,10 +4,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UI="$ROOT/apps/control-ui"
 
-usage(){ echo "Usage: ./test {unit|e2e|desktop-smoke|all}"; }
+usage(){ echo "Usage: ./test {unit|e2e|e2e-api|e2e-ui|e2e-supplemental|desktop-smoke|all}"; }
 build_e2e(){ (cd "$UI" && npm run build); cargo build --manifest-path "$ROOT/Cargo.toml" -p light-server --no-default-features; }
 unit(){ cargo test --manifest-path "$ROOT/Cargo.toml" --workspace --exclude light-control-ui --exclude light-hardware-controls --no-default-features; (cd "$UI" && npm test); }
 e2e(){ build_e2e; (cd "$UI" && npm run test:e2e -- "$@"); }
+e2e_api(){ e2e --grep '@api' "$@"; }
+e2e_ui(){ e2e --grep '@ui' "$@"; }
+e2e_supplemental(){ e2e --pass-with-no-tests --grep-invert '@api|@ui' "$@"; }
 desktop_smoke(){
   [[ "$(uname -s)" == Darwin ]] || { echo "desktop-smoke requires macOS" >&2; exit 2; }
   build_e2e
@@ -20,6 +23,9 @@ command="${1:-}"; shift || true
 case "$command" in
   unit) unit ;;
   e2e) e2e "$@" ;;
+  e2e-api) e2e_api "$@" ;;
+  e2e-ui) e2e_ui "$@" ;;
+  e2e-supplemental) e2e_supplemental "$@" ;;
   desktop-smoke) desktop_smoke ;;
   all) unit; e2e "$@" ;;
   *) usage >&2; exit 2 ;;

@@ -1,35 +1,41 @@
-import { test, expect } from "./bench/fixtures";
+import { expect, test } from "./bench/fixtures";
+import { pairedScenario } from "./bench/pairedScenario";
 
-test("Lightning Desk command line reaches exact Art-Net and sACN output", async ({ bench, desk, show }) => {
-  await desk.open(bench.baseUrl);
-  const artnetMark = bench.artnet.mark();
-  const sacnMark = bench.sacn.mark();
-  await desk.command("GROUP 1 AT 50");
-  await bench.waitForGroupProgrammer("1", 0.5);
-  const tick = await bench.tick(3_000);
-  expect(tick.now).toBe("2020-01-01T00:00:03Z");
-  expect(tick.packets_sent).toBe(2);
-  const artnet = await bench.artnet.nextAfter(artnetMark, "artnet", 1);
-  const sacn = await bench.sacn.nextAfter(sacnMark, "sacn", 101);
-  expect(Array.from(artnet.slots.slice(0, show.fixtureIds.length))).toEqual(Array(12).fill(128));
-  expect(Array.from(sacn.slots.slice(0, show.fixtureIds.length))).toEqual(Array(12).fill(128));
-  expect(artnet.sequence).toBe(1);
-  expect(sacn.sequence).toBe(1);
-  expect(sacn.priority).toBe(100);
-  expect(sacn.terminated).toBe(false);
-});
+interface OutputMarks { artnet: number; sacn: number }
 
-test("REST programmer changes use the same real protocol path", async ({ bench, api, show }) => {
-  const mark = bench.artnet.mark();
-  await api.request("POST", "/api/v1/programmer/set", { fixture_id: show.fixtureIds[0], attribute: "intensity", value: 0.75 });
-  const tick = await bench.tick(30_000);
-  expect(tick.now).toBe("2020-01-01T00:00:30Z");
-  const packet = await bench.artnet.nextAfter(mark, "artnet", 1);
-  expect(packet.slots[0]).toBe(191);
-  expect(Array.from(packet.slots.slice(1, 12))).toEqual(Array(11).fill(0));
-});
+function pairedGroupOutput(id: string, percent: number, expectedByte: number) {
+  pairedScenario<OutputMarks>({
+    id,
+    title: `group programming at ${percent}% reaches identical application and wire output`,
+    arrange: ({ bench }) => ({ artnet: bench.artnet.mark(), sacn: bench.sacn.mark() }),
+    api: async ({ api }, _marks) => {
+      await api.command("programmer.group.set", { group_id: "1", attribute: "intensity", value: percent / 100 });
+    },
+    ui: async ({ bench, desk }, _marks) => {
+      await desk.open(bench.baseUrl);
+      await desk.command(`GROUP 1 AT ${percent}`);
+    },
+    assert: async ({ bench, show }, marks) => {
+      await bench.waitForGroupProgrammer("1", percent / 100);
+      const tick = await bench.tick(3_000);
+      expect(tick.now).toBe("2020-01-01T00:00:03Z");
+      expect(tick.packets_sent).toBe(2);
+      const artnet = await bench.artnet.nextAfter(marks.artnet, "artnet", 1);
+      const sacn = await bench.sacn.nextAfter(marks.sacn, "sacn", 101);
+      expect(Array.from(artnet.slots.slice(0, show.fixtureIds.length))).toEqual(Array(12).fill(expectedByte));
+      expect(Array.from(sacn.slots.slice(0, show.fixtureIds.length))).toEqual(Array(12).fill(expectedByte));
+      expect(artnet.sequence).toBe(1);
+      expect(sacn.sequence).toBe(1);
+      expect(sacn.priority).toBe(100);
+      expect(sacn.terminated).toBe(false);
+    },
+  });
+}
 
-test("OSC hardware commands receive feedback and drive output", async ({ bench, show }) => {
+pairedGroupOutput("DIM-002", 50, 128);
+pairedGroupOutput("OSC-002", 25, 64);
+
+test("OSC-002 @osc › hardware command matches the paired API and UI contract", async ({ bench, show }) => {
   const hardware = await bench.osc();
   try {
     const alias = show.session.desk.osc_alias;
@@ -54,7 +60,7 @@ test("OSC hardware commands receive feedback and drive output", async ({ bench, 
   }
 });
 
-test("test clock rejects invalid advances", async ({ bench }) => {
+test("BENCH-001 @bench › test clock rejects invalid advances", async ({ bench }) => {
   const response = await fetch(`${bench.baseUrl}/api/v1/test/clock/advance`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ millis: -1 }),
   });

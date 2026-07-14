@@ -116,7 +116,7 @@ test("all built-in windows and contextual dialogs are reachable by touch", async
   await page.goto("/");
   await waitForConnected(page);
   await page.getByRole("button", { name: "BUILT-INS" }).click();
-  for (const [button, windowClass] of [["Stage", ".stage-window"], ["Fixtures", ".fixture-window"], ["Presets", ".pool-window"], ["Playback", ".playback-window"], ["Dynamics", ".dynamics-window"], ["Channels", ".channels-window"], ["DMX", ".dmx-window"]] as const) {
+  for (const [button, windowClass] of [["Stage", ".stage-window"], ["Fixtures", ".fixture-window"], ["Presets", ".pool-window"], ["QLists", ".qlist-window"], ["Dynamics", ".dynamics-window"], ["Channels", ".channels-window"], ["DMX", ".dmx-window"]] as const) {
     await page.locator(".dock-entry").filter({ hasText: button }).click();
     await expect(page.locator(windowClass)).toBeVisible();
   }
@@ -151,18 +151,17 @@ test("patch, store, speed-group, and debug TODO workflows are reachable", async 
   await expect(page.getByRole("button", { name: "REC ARMED", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: "REC", exact: true })).toBeVisible();
-  await expect(page.locator(".show-dirty-dot")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Open show menu\. Show active/ })).toBeVisible();
   await page.getByRole("button", { name: "REC", exact: true }).click();
   await page.locator(".preset-card.empty").first().click();
-  await expect(page.locator(".show-dirty-dot")).toBeVisible();
 
   await page.locator(".mode-toggle").click();
   await expect(page.locator(".speed-group-stack button")).toHaveCount(5);
   await page.locator(".mode-toggle").click();
 
   await page.getByRole("button", { name: "Open show menu" }).click();
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.locator(".show-dirty-dot")).toHaveCount(0);
+  await expect(page.getByRole("status")).toContainText("Show active");
+  await expect(page.getByRole("status")).toContainText("Changes are saved automatically as they are made.");
   await page.getByRole("button", { name: "Debug", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Debug" })).toBeVisible();
   await expect(page.getByText("Server event log")).toBeVisible();

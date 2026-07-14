@@ -1,0 +1,198 @@
+import type { Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
+import fs from "node:fs/promises";
+import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
+import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
+
+interface VersionedObject<T = Record<string, unknown>> {
+  kind: string;
+  id: string;
+  revision: number;
+  body: T;
+}
+
+interface ShowEntry { id: string; name: string }
+
+const OBJECT_KINDS = [
+  "patch_layer", "patched_fixture", "group", "route", "stage_layout",
+  "cue_list", "playback", "playback_page", "user_layout",
+] as const;
+
+test.describe("docs/testing/00-generate-show-files.md", () => {
+  test("SHOW-000 @api › Save As produces independent reusable show files", async ({ api }) => {
+    const canonical = await createCanonicalShows(api);
+
+    const compactCopy = await copyShow(api, canonical.compact, "show-000-compact-copy");
+    await expectActiveShow(api, "show-000-compact-copy");
+    await assertCompactRig(api, compactCopy.id);
+    await expect(showSnapshot(api, compactCopy.id)).resolves.toEqual(await showSnapshot(api, canonical.compact.id));
+    await renameGroup(api, compactCopy.id, "4", "Center Spot Copy");
+    await openShow(api, canonical.compact.id);
+    expect((await objects(api, canonical.compact.id, "group")).find((group) => group.id === "4")?.body.name).toBe("Center Spot");
+
+    const defaultCopy = await copyShow(api, canonical.defaultStage, "show-000-default-copy");
+    await expectActiveShow(api, "show-000-default-copy");
+    await assertDefaultStage(api, defaultCopy.id);
+    await expect(showSnapshot(api, defaultCopy.id)).resolves.toEqual(await showSnapshot(api, canonical.defaultStage.id));
+    await createEmptyGroup(api, defaultCopy.id, "900", "Copy Marker");
+    await openShow(api, canonical.defaultStage.id);
+    expect((await objects(api, canonical.defaultStage.id, "group")).some((group) => group.id === "900")).toBe(false);
+  });
+
+  test("SHOW-000 @ui › Save As produces independent reusable show files", async ({ api, desk, page }) => {
+    const canonical = await createCanonicalShows(api);
+
+    await openShow(api, canonical.compact.id);
+    await desk.open(api.baseUrl);
+    await saveAsThroughUi(page, "show-000-compact-copy");
+    const compactCopy = await showNamed(api, "show-000-compact-copy");
+    await assertCompactRig(api, compactCopy.id);
+    await expect(showSnapshot(api, compactCopy.id)).resolves.toEqual(await showSnapshot(api, canonical.compact.id));
+    await renameGroup(api, compactCopy.id, "4", "Center Spot Copy");
+    await loadThroughUi(page, "compact-rig");
+    expect((await objects(api, canonical.compact.id, "group")).find((group) => group.id === "4")?.body.name).toBe("Center Spot");
+
+    await loadThroughUi(page, "Default Stage Show");
+    await saveAsThroughUi(page, "show-000-default-copy");
+    const defaultCopy = await showNamed(api, "show-000-default-copy");
+    await assertDefaultStage(api, defaultCopy.id);
+    await expect(showSnapshot(api, defaultCopy.id)).resolves.toEqual(await showSnapshot(api, canonical.defaultStage.id));
+    await createEmptyGroup(api, defaultCopy.id, "900", "Copy Marker");
+    await loadThroughUi(page, "Default Stage Show");
+    expect((await objects(api, canonical.defaultStage.id, "group")).some((group) => group.id === "900")).toBe(false);
+  });
+});
+
+async function createCanonicalShows(api: ApiDriver) {
+  const [compactBytes, defaultStageBytes] = await Promise.all([
+    fs.readFile(new URL("./fixtures/compact-rig.show", import.meta.url)),
+    fs.readFile(new URL("./fixtures/default-stage.show", import.meta.url)),
+  ]);
+  const compact = await api.request<ShowEntry>("POST", "/api/v1/shows", {
+    name: "compact-rig", data_base64: compactBytes.toString("base64"), overwrite: false,
+  });
+  const defaultStage = await api.request<ShowEntry>("POST", "/api/v1/shows", {
+    name: "Default Stage Show", data_base64: defaultStageBytes.toString("base64"), overwrite: false,
+  });
+  return { compact, defaultStage };
+}
+
+async function copyShow(api: ApiDriver, source: ShowEntry, name: string): Promise<ShowEntry> {
+  const data_base64 = (await downloadShow(api, source.id)).toString("base64");
+  const copy = await api.request<ShowEntry>("POST", "/api/v1/shows", { name, data_base64, overwrite: false });
+  await openShow(api, copy.id);
+  return copy;
+}
+
+async function downloadShow(api: ApiDriver, id: string): Promise<Buffer> {
+  const response = await fetch(`${api.baseUrl}/api/v1/shows/${id}/download`, {
+    headers: { authorization: `Bearer ${api.session?.token}` },
+  });
+  expect(response.ok).toBe(true);
+  return Buffer.from(await response.arrayBuffer());
+}
+
+async function saveAsThroughUi(page: Page, name: string): Promise<void> {
+  await openShowMenu(page);
+  await page.getByRole("button", { name: "Save As", exact: true }).click();
+  await page.getByRole("textbox", { name: "Show name" }).fill(name);
+  await page.getByRole("button", { name: "Save show", exact: true }).click();
+  await expect(page.locator(".dock-identity b")).toContainText(name);
+}
+
+async function loadThroughUi(page: Page, name: string): Promise<void> {
+  await openShowMenu(page);
+  await page.getByRole("button", { name: "Load", exact: true }).click();
+  const entry = page.locator(".show-library article").filter({ has: page.getByText(name, { exact: true }) });
+  await entry.getByRole("button", { name: "Load Latest Autosave" }).click();
+  await expect(page.locator(".dock-identity b")).toContainText(name);
+}
+
+async function openShowMenu(page: Page): Promise<void> {
+  if (!await page.locator(".show-modal").isVisible()) {
+    await page.getByRole("button", { name: /Open show menu/ }).click();
+  }
+}
+
+async function assertCompactRig(api: ApiDriver, showId: string): Promise<void> {
+  const fixtures = await objects(api, showId, "patched_fixture");
+  expect(fixtures).toHaveLength(16);
+  const layers = (await objects(api, showId, "patch_layer")).map((layer) => layer.body.name);
+  expect(layers).toEqual(expect.arrayContaining(["Dimmers", "LEDs"]));
+  const byNumber = new Map(fixtures.map((fixture) => [fixture.body.fixture_number, fixture.body]));
+  for (let number = 1; number <= 12; number += 1) {
+    expect(byNumber.get(number)).toMatchObject({ universe: 1, address: number, layer_id: "dimmers" });
+  }
+  for (const [index, number] of [21, 22, 23, 24].entries()) {
+    const fixture = byNumber.get(number);
+    expect(fixture).toMatchObject({ name: `RGB LED ${index + 1}`, universe: 1, address: 13 + index * 3, layer_id: "leds" });
+    const parameters = fixture.definition.heads[0].parameters;
+    expect(parameters.find((parameter: Record<string, unknown>) => parameter.attribute === "intensity")).toMatchObject({ virtual_dimmer: true, components: [] });
+  }
+  const groups = await objects(api, showId, "group");
+  expect(groups.map((item) => [item.id, item.body.name, item.body.fixtures.length])).toEqual([
+    ["1", "All Dimmers", 12], ["2", "Odd Dimmers", 6], ["3", "Front Dimmers", 4], ["4", "Center Spot", 0],
+  ]);
+  await assertRoutes(api, showId);
+}
+
+async function assertDefaultStage(api: ApiDriver, showId: string): Promise<void> {
+  const fixtures = await objects(api, showId, "patched_fixture");
+  expect(fixtures).toHaveLength(49);
+  expect(fixtures.some((fixture) => fixture.body.name === "Stage Hazer")).toBe(true);
+  expect(fixtures.some((fixture) => fixture.body.name === "Overhead RGB Multi-patch")).toBe(true);
+  expect(fixtures.filter((fixture) => String(fixture.body.name).startsWith("Back RGB Sunstrip "))).toHaveLength(6);
+  const stage = await objects(api, showId, "stage_layout");
+  expect(stage).toHaveLength(1);
+  expect(Object.keys(stage[0].body.positions3d as object).length).toBeGreaterThan(49);
+  await assertRoutes(api, showId);
+}
+
+async function assertRoutes(api: ApiDriver, showId: string): Promise<void> {
+  const routes = await objects(api, showId, "route");
+  expect(routes.map((route) => [route.body.protocol, route.body.logical_universe, route.body.destination_universe, route.body.enabled])).toEqual([
+    ["art_net", 1, 1, true], ["sacn", 1, 101, true],
+  ]);
+}
+
+async function showSnapshot(api: ApiDriver, showId: string) {
+  const entries = await Promise.all(OBJECT_KINDS.map(async (kind) => [kind, await objects(api, showId, kind)] as const));
+  return Object.fromEntries(entries.map(([kind, values]) => [kind, values.map(({ id, body }) => ({ id, body }))]));
+}
+
+async function objects(api: ApiDriver, showId: string, kind: string): Promise<VersionedObject[]> {
+  const result = await api.request<VersionedObject[]>("GET", `/api/v1/shows/${showId}/objects/${kind}`, undefined, false);
+  return result.sort((left, right) => left.id.localeCompare(right.id, undefined, { numeric: true }));
+}
+
+async function put(api: ApiDriver, showId: string, kind: string, id: string, body: unknown, revision = 0): Promise<void> {
+  await api.request("PUT", `/api/v1/shows/${showId}/objects/${kind}/${id}`, body, true, revision);
+}
+
+async function renameGroup(api: ApiDriver, showId: string, id: string, name: string): Promise<void> {
+  const stored = (await objects(api, showId, "group")).find((group) => group.id === id);
+  expect(stored).toBeDefined();
+  await put(api, showId, "group", id, { ...stored!.body, name }, stored!.revision);
+}
+
+async function createEmptyGroup(api: ApiDriver, showId: string, id: string, name: string): Promise<void> {
+  await put(api, showId, "group", id, group(name, [], null));
+}
+
+async function openShow(api: ApiDriver, id: string): Promise<void> {
+  await api.request("POST", `/api/v1/shows/${id}/open`, { transition: "hold_current" });
+}
+
+async function showNamed(api: ApiDriver, name: string): Promise<ShowEntry> {
+  const show = (await api.request<ShowEntry[]>("GET", "/api/v1/shows", undefined, false)).find((entry) => entry.name === name);
+  expect(show).toBeDefined();
+  return show!;
+}
+
+async function expectActiveShow(api: ApiDriver, name: string): Promise<void> {
+  const bootstrap = await api.request<{ active_show: ShowEntry | null }>("GET", "/api/v1/bootstrap", undefined, false);
+  expect(bootstrap.active_show?.name).toBe(name);
+}
+
+function group(name: string, fixtures: string[], playback_fader: number | null) {
+  return { name, fixtures, derived_from: null, frozen_from: null, programming: {}, master: 1, playback_fader };
+}

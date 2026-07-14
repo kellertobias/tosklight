@@ -17,7 +17,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix: { shard: [1, 2] }
+      matrix:
+        include:
+          - { suite: api, shard: 1/1, artifact: api }
+          - { suite: ui, shard: 1/1, artifact: ui }
+          - { suite: supplemental, shard: 1/1, artifact: supplemental }
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -27,10 +31,12 @@ jobs:
         working-directory: apps/control-ui
       - run: npx playwright install --with-deps chrome
         working-directory: apps/control-ui
-      - run: ./test e2e --shard=${{ matrix.shard }}/2
+      - run: ./test e2e-${{ matrix.suite }} --shard=${{ matrix.shard }}
       - uses: actions/upload-artifact@v4
         if: failure()
-        with: { name: playwright-${{ matrix.shard }}, path: apps/control-ui/test-results }
+        with:
+          name: playwright-${{ matrix.artifact }}
+          path: test-results
   desktop-smoke:
     runs-on: macos-14
     steps:

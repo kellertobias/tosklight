@@ -1,10 +1,12 @@
-import { test as base } from "@playwright/test";
+import { test as base, type PlaywrightTestArgs } from "@playwright/test";
 import { ApiDriver } from "./api";
 import { DeskDriver } from "./desk";
 import { LightBench, type TestShow } from "./lightBench";
 
-interface TestFixtures { api: ApiDriver; desk: DeskDriver; show: TestShow }
-interface WorkerFixtures { bench: LightBench }
+export interface TestFixtures { api: ApiDriver; desk: DeskDriver; show: TestShow }
+export interface WorkerFixtures { bench: LightBench }
+export type BenchContractContext = Pick<TestFixtures, "api" | "show"> & WorkerFixtures & Pick<PlaywrightTestArgs, "request">;
+export type BenchUiContext = BenchContractContext & Pick<TestFixtures, "desk"> & Pick<PlaywrightTestArgs, "page">;
 
 export const test = base.extend<TestFixtures, WorkerFixtures>({
   bench: [async ({}, use, workerInfo) => {

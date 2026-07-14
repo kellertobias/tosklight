@@ -82,7 +82,7 @@ export class OscHardware {
       const message = parseOscMessage(packet);
       if (message) {
         this.messages.push(message);
-        if (this.messages.length > 5_000) this.messages.shift();
+        if (this.messages.length > 25_000) this.messages.splice(0, 5_000);
       }
     });
   }
