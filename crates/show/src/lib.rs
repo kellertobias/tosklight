@@ -9,7 +9,7 @@ use std::path::Path;
 use thiserror::Error;
 use uuid::Uuid;
 
-const DESK_SCHEMA_VERSION: i64 = 4;
+const DESK_SCHEMA_VERSION: i64 = 5;
 const SHOW_SCHEMA_VERSION: i64 = 3;
 
 #[derive(Debug, Error)]
@@ -71,6 +71,16 @@ pub struct ShowEntry {
     pub path: String,
     pub revision: Revision,
     pub updated_at: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ShowRevision {
+    pub show_id: ShowId,
+    pub revision: Revision,
+    pub name: String,
+    #[serde(skip_serializing)]
+    pub path: String,
+    pub created_at: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -368,6 +378,78 @@ impl DeskStore {
             == 1)
     }
 
+    pub fn show_revisions(&self, show_id: ShowId) -> Result<Vec<ShowRevision>, StoreError> {
+        let mut statement = self.conn.prepare(
+            "SELECT revision,name,path,created_at FROM show_revisions WHERE show_id=?1 ORDER BY revision DESC",
+        )?;
+        let rows = statement.query_map([show_id.0.to_string()], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })?;
+        rows.map(|row| {
+            let (revision, name, path, created_at) = row?;
+            Ok(ShowRevision {
+                show_id,
+                revision: revision as u64,
+                name,
+                path,
+                created_at,
+            })
+        })
+        .collect()
+    }
+
+    pub fn show_revision(
+        &self,
+        show_id: ShowId,
+        revision: Revision,
+    ) -> Result<Option<ShowRevision>, StoreError> {
+        Ok(self
+            .show_revisions(show_id)?
+            .into_iter()
+            .find(|candidate| candidate.revision == revision))
+    }
+
+    pub fn add_show_revision(
+        &mut self,
+        show_id: ShowId,
+        name: &str,
+        path: &str,
+    ) -> Result<ShowRevision, StoreError> {
+        let name = name.trim();
+        if name.is_empty() || name.len() > 120 {
+            return Err(StoreError::Invalid(
+                "revision name must contain 1-120 characters".into(),
+            ));
+        }
+        if self.show(show_id)?.is_none() {
+            return Err(StoreError::Invalid("show does not exist".into()));
+        }
+        let transaction = self.conn.transaction()?;
+        let revision = transaction.query_row(
+            "SELECT COALESCE(MAX(revision),0)+1 FROM show_revisions WHERE show_id=?1",
+            [show_id.0.to_string()],
+            |row| row.get::<_, i64>(0),
+        )?;
+        let created_at = Utc::now().to_rfc3339();
+        transaction.execute(
+            "INSERT INTO show_revisions(show_id,revision,name,path,created_at) VALUES(?1,?2,?3,?4,?5)",
+            params![show_id.0.to_string(), revision, name, path, created_at],
+        )?;
+        transaction.commit()?;
+        Ok(ShowRevision {
+            show_id,
+            revision: revision as u64,
+            name: name.to_owned(),
+            path: path.to_owned(),
+            created_at,
+        })
+    }
+
     pub fn set_setting(&self, key: &str, value: &str) -> Result<(), StoreError> {
         self.conn.execute("INSERT INTO settings(key,value) VALUES (?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value", params![key, value])?;
         Ok(())
@@ -627,6 +709,7 @@ fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
     tx.execute_batch(r#"CREATE TABLE IF NOT EXISTS schema_info(version INTEGER NOT NULL); INSERT INTO schema_info(version) SELECT 0 WHERE NOT EXISTS(SELECT 1 FROM schema_info);
       CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,name TEXT NOT NULL UNIQUE COLLATE NOCASE,enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN(0,1)));
       CREATE TABLE IF NOT EXISTS show_library(id TEXT PRIMARY KEY,name TEXT NOT NULL UNIQUE COLLATE NOCASE,path TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS show_revisions(show_id TEXT NOT NULL,revision INTEGER NOT NULL,name TEXT NOT NULL,path TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(show_id,revision),FOREIGN KEY(show_id) REFERENCES show_library(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS control_desks(id TEXT PRIMARY KEY,name TEXT NOT NULL,osc_alias TEXT NOT NULL UNIQUE COLLATE NOCASE,columns_count INTEGER NOT NULL DEFAULT 8,rows_count INTEGER NOT NULL DEFAULT 1,buttons_count INTEGER NOT NULL DEFAULT 3);
       CREATE TABLE IF NOT EXISTS control_desk_pages(desk_id TEXT NOT NULL,show_id TEXT NOT NULL,page INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(desk_id,show_id),FOREIGN KEY(desk_id) REFERENCES control_desks(id) ON DELETE CASCADE);
@@ -729,6 +812,36 @@ mod tests {
         let loaded = desk.persisted_sessions().unwrap();
         assert_eq!(loaded[0].id, session.id);
         assert_eq!(loaded[0].user_id, user.id);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn named_show_revisions_are_numbered_and_survive_reopen() {
+        let path = temporary("named-revisions");
+        let show_path = temporary("named-revision-show");
+        let revision_path = temporary("named-revision-snapshot");
+        let show_id = {
+            let mut desk = DeskStore::open(&path).unwrap();
+            let entry = desk
+                .upsert_show("Tour", show_path.to_str().unwrap(), false)
+                .unwrap();
+            let first = desk
+                .add_show_revision(entry.id, "Before experiments", revision_path.to_str().unwrap())
+                .unwrap();
+            let second = desk
+                .add_show_revision(entry.id, "Approved", revision_path.to_str().unwrap())
+                .unwrap();
+            assert_eq!(first.revision, 1);
+            assert_eq!(second.revision, 2);
+            entry.id
+        };
+        let desk = DeskStore::open(&path).unwrap();
+        let revisions = desk.show_revisions(show_id).unwrap();
+        assert_eq!(revisions.len(), 2);
+        assert_eq!(revisions[0].revision, 2);
+        assert_eq!(revisions[0].name, "Approved");
+        assert_eq!(desk.show_revision(show_id, 1).unwrap().unwrap().name, "Before experiments");
+        drop(desk);
         let _ = fs::remove_file(path);
     }
 

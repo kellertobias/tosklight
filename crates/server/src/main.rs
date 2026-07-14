@@ -30,8 +30,8 @@ use light_media::{CitpClient, LibraryId, MediaCache, PreviewKey, ThumbnailKey};
 use light_output::{NetworkOutput, OutputHealth, run_scheduler_dynamic};
 use light_programmer::ProgrammerRegistry;
 use light_show::{
-    ControlDesk, DeskStore, DeskUser, PersistedSession, ScreenConfiguration, ShowEntry, ShowStore,
-    initialise_show, validate_show_file,
+    ControlDesk, DeskStore, DeskUser, PersistedSession, ScreenConfiguration, ShowEntry,
+    ShowRevision, ShowStore, initialise_show, validate_show_file,
 };
 use parking_lot::{Mutex, RwLock};
 use rust_embed::RustEmbed;
@@ -287,6 +287,10 @@ struct UploadShow {
 struct OpenShow {
     transition: Option<Transition>,
     transition_millis: Option<u64>,
+}
+#[derive(Deserialize)]
+struct SaveShowRevision {
+    name: String,
 }
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -762,6 +766,14 @@ fn router(state: AppState) -> Router {
         .route("/api/v1/shows/{id}", delete(delete_show))
         .route("/api/v1/shows/{id}/open", post(open_show))
         .route("/api/v1/shows/{id}/download", get(download_show))
+        .route(
+            "/api/v1/shows/{id}/revisions",
+            get(list_show_revisions).post(save_show_revision),
+        )
+        .route(
+            "/api/v1/shows/{id}/revisions/{revision}/open",
+            post(open_show_revision),
+        )
         .route("/api/v1/mvr/imports/preview", post(preview_mvr_import))
         .route("/api/v1/mvr/imports/{token}/apply", post(apply_mvr_import))
         .route("/api/v1/shows/{id}/mvr/preview", get(preview_mvr_export))
@@ -781,6 +793,16 @@ fn router(state: AppState) -> Router {
         )
         .route("/api/v1/shows/{id}/preload/store", post(store_preload))
         .route("/api/v1/playbacks/{id}/{action}", post(playback_action))
+        .route("/api/v1/cuelists/{number}", get(pool_playback_state))
+        .route(
+            "/api/v1/cuelists/{number}/{action}",
+            post(pool_playback_action).put(pool_playback_action),
+        )
+        .route("/api/v1/qlists/{number}", get(pool_playback_state))
+        .route(
+            "/api/v1/qlists/{number}/{action}",
+            post(pool_playback_action).put(pool_playback_action),
+        )
         .route("/api/v1/playback-pool/{number}", get(pool_playback_state))
         .route(
             "/api/v1/playback-pool/{number}/{action}",
@@ -788,6 +810,10 @@ fn router(state: AppState) -> Router {
         )
         .route("/api/v1/control-desks/{id}/page", put(update_desk_page))
         .route("/api/v1/control-desks/{id}", put(update_control_desk))
+        .route(
+            "/api/v1/control-desks/{id}/page-playbacks/{slot}/{action}",
+            post(paged_playback_action).put(paged_playback_action),
+        )
         .route(
             "/api/v1/control-desks/{id}/paged-playbacks/{slot}/{action}",
             post(paged_playback_action).put(paged_playback_action),
@@ -1541,19 +1567,26 @@ async fn create_session(
         .ok_or_else(|| ApiError::not_found("enabled user"))?;
     let desk = {
         let store = state.desk.lock();
-        input
-            .desk_id
-            .and_then(|id| store.control_desk(id).ok().flatten())
-            .map(Ok)
-            .unwrap_or_else(|| {
-                let client = input.client_id.unwrap_or_else(Uuid::new_v4);
-                let suffix = client.simple().to_string();
-                store.add_desk(
-                    &format!("Client {}", &suffix[..6]),
-                    &format!("desk-{}", &suffix[..8]),
-                )
-            })
-            .map_err(ApiError::store)?
+        let remembered = match input.desk_id {
+            Some(id) => store.control_desk(id).map_err(ApiError::store)?,
+            None => None,
+        };
+        if let Some(desk) = remembered {
+            desk
+        } else {
+            let client = input.client_id.unwrap_or_else(Uuid::new_v4);
+            let suffix = client.simple().to_string();
+            let alias = format!("desk-{}", &suffix[..8]);
+            match store
+                .control_desk_by_alias(&alias)
+                .map_err(ApiError::store)?
+            {
+                Some(desk) => desk,
+                None => store
+                    .add_desk(&format!("Client {}", &suffix[..6]), &alias)
+                    .map_err(ApiError::store)?,
+            }
+        }
     };
     let session = Session {
         id: SessionId::new(),
@@ -1668,6 +1701,135 @@ async fn close_session(
 async fn list_shows(State(state): State<AppState>) -> Result<Json<Vec<ShowEntry>>, ApiError> {
     Ok(Json(state.desk.lock().library().map_err(ApiError::store)?))
 }
+async fn list_show_revisions(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<ShowRevision>>, ApiError> {
+    let _session = authenticate(&state, &headers)?;
+    let id = light_core::ShowId(id);
+    if state.desk.lock().show(id).map_err(ApiError::store)?.is_none() {
+        return Err(ApiError::not_found("show"));
+    }
+    Ok(Json(
+        state
+            .desk
+            .lock()
+            .show_revisions(id)
+            .map_err(ApiError::store)?,
+    ))
+}
+async fn save_show_revision(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+    Json(input): Json<SaveShowRevision>,
+) -> Result<(StatusCode, Json<ShowRevision>), ApiError> {
+    let _session = authenticate(&state, &headers)?;
+    let id = light_core::ShowId(id);
+    let entry = state
+        .desk
+        .lock()
+        .show(id)
+        .map_err(ApiError::store)?
+        .ok_or_else(|| ApiError::not_found("show"))?;
+    if input.name.trim().is_empty() || input.name.trim().len() > 120 {
+        return Err(ApiError::bad_request(
+            "revision name must contain 1-120 characters",
+        ));
+    }
+    let directory = state
+        .data_dir
+        .join("revisions")
+        .join(entry.id.0.to_string());
+    std::fs::create_dir_all(&directory).map_err(ApiError::io)?;
+    let destination = directory.join(format!("{}.show", Uuid::new_v4()));
+    ShowStore::open(&entry.path)
+        .map_err(ApiError::store)?
+        .backup_to(&destination)
+        .map_err(ApiError::store)?;
+    let revision = match state.desk.lock().add_show_revision(
+        entry.id,
+        input.name.trim(),
+        &destination.display().to_string(),
+    ) {
+        Ok(revision) => revision,
+        Err(error) => {
+            let _ = std::fs::remove_file(destination);
+            return Err(ApiError::store(error));
+        }
+    };
+    emit(
+        &state,
+        "show_revision_saved",
+        serde_json::json!({"show_id":entry.id,"revision":revision}),
+    );
+    Ok((StatusCode::CREATED, Json(revision)))
+}
+async fn open_show_revision(
+    State(state): State<AppState>,
+    Path((id, revision)): Path<(Uuid, u64)>,
+    headers: HeaderMap,
+    Json(input): Json<OpenShow>,
+) -> Result<Json<ShowEntry>, ApiError> {
+    let _session = authenticate(&state, &headers)?;
+    let id = light_core::ShowId(id);
+    let entry = state
+        .desk
+        .lock()
+        .show(id)
+        .map_err(ApiError::store)?
+        .ok_or_else(|| ApiError::not_found("show"))?;
+    let saved_revision = state
+        .desk
+        .lock()
+        .show_revision(id, revision)
+        .map_err(ApiError::store)?
+        .ok_or_else(|| ApiError::not_found("show revision"))?;
+    if !FsPath::new(&saved_revision.path).exists() {
+        return Err(ApiError::bad_request("saved show revision is unavailable"));
+    }
+    validate_show_file(&saved_revision.path).map_err(ApiError::store)?;
+    let revision_entry = ShowEntry {
+        path: saved_revision.path.clone(),
+        ..entry.clone()
+    };
+    let compiled = load_engine_snapshot(&revision_entry).map_err(ApiError::internal)?;
+    compiled
+        .validate()
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    let _activation = state.activation_lock.lock().await;
+    backup_show(&state, &entry)?;
+    ShowStore::open(&saved_revision.path)
+        .map_err(ApiError::store)?
+        .backup_to(&entry.path)
+        .map_err(ApiError::store)?;
+    let previous = state.active_show.read().clone();
+    let transition = input.transition.unwrap_or(Transition::SafeBlackout);
+    activate_snapshot(&state, compiled, &transition, input.transition_millis).await?;
+    state
+        .desk
+        .lock()
+        .set_active_show(Some(entry.id))
+        .map_err(ApiError::store)?;
+    if let Some(previous) = &previous
+        && previous.id != entry.id
+    {
+        state
+            .desk
+            .lock()
+            .set_setting("previous_active_show_id", &previous.id.0.to_string())
+            .map_err(ApiError::store)?;
+    }
+    *state.active_show.write() = Some(entry.clone());
+    *state.active_show_error.write() = None;
+    emit(
+        &state,
+        "show_opened",
+        serde_json::json!({"show":entry,"saved_revision":saved_revision,"transition":transition}),
+    );
+    Ok(Json(entry))
+}
 async fn upload_show(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -1749,11 +1911,23 @@ async fn delete_show(
         .show(id)
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("show"))?;
+    let revisions = state
+        .desk
+        .lock()
+        .show_revisions(id)
+        .map_err(ApiError::store)?;
     state.desk.lock().remove_show(id).map_err(ApiError::store)?;
     if let Err(error) = std::fs::remove_file(&entry.path)
         && error.kind() != std::io::ErrorKind::NotFound
     {
         return Err(ApiError::io(error));
+    }
+    for revision in revisions {
+        if let Err(error) = std::fs::remove_file(revision.path)
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            return Err(ApiError::io(error));
+        }
     }
     emit(&state, "show_deleted", serde_json::json!({"show_id":id}));
     Ok(StatusCode::NO_CONTENT)
@@ -2943,7 +3117,7 @@ async fn store_preload(
                 .map_err(ApiError::store)?
                 .into_iter()
                 .find(|object| object.id == input.target_id)
-                .ok_or_else(|| ApiError::not_found("cue list"))?;
+                .ok_or_else(|| ApiError::not_found("Cuelist"))?;
             let mut cue_list: light_playback::CueList = serde_json::from_value(object.body)
                 .map_err(|error| ApiError::bad_request(error.to_string()))?;
             let number = input
@@ -3313,14 +3487,7 @@ async fn paged_playback_action(
         .lock()
         .desk_page(id, show.id)
         .map_err(ApiError::store)?;
-    let number = state
-        .engine
-        .snapshot()
-        .playback_pages
-        .iter()
-        .find(|page| page.number == page_number)
-        .and_then(|page| page.slots.get(&slot))
-        .copied()
+    let number = cuelist_for_page_playback(&state.engine.snapshot(), page_number, slot)
         .ok_or_else(|| ApiError::not_found("paged playback"))?;
     pool_playback_action(State(state), Path((number, action)), headers, input).await
 }
@@ -4675,9 +4842,9 @@ fn cue_list_for_playback(
         .iter()
         .find(|item| item.number == playback)
         .cloned()
-        .ok_or_else(|| format!("playback {playback} does not exist"))?;
+        .ok_or_else(|| format!("Cuelist {playback} does not exist"))?;
     let light_playback::PlaybackTarget::CueList { cue_list_id } = definition.target else {
-        return Err(format!("playback {playback} does not contain a cue list"));
+        return Err(format!("Cuelist {playback} does not contain Cues"));
     };
     let id = cue_list_id.0.to_string();
     let object = store
@@ -4685,7 +4852,7 @@ fn cue_list_for_playback(
         .map_err(|error| error.to_string())?
         .into_iter()
         .find(|object| object.id == id)
-        .ok_or("cue list does not exist")?;
+        .ok_or("Cuelist does not exist")?;
     let cue_list =
         serde_json::from_value(object.body.clone()).map_err(|error| error.to_string())?;
     Ok((definition, object, cue_list))
@@ -4716,7 +4883,7 @@ fn store_cue_at(
             .unwrap_or_else(|| list.cues.last().map_or(1.0, |cue| cue.number.floor() + 1.0));
         if list.cues.iter().any(|cue| cue.number == number) {
             return Err(format!(
-                "cue {number} already exists; merge or overwrite confirmation is required"
+                "Cue {number} already exists; merge or overwrite confirmation is required"
             ));
         }
         list.cues.push(programmer_cue(&programmer, number));
@@ -4731,13 +4898,13 @@ fn store_cue_at(
             .map_err(|error| error.to_string())?;
     } else {
         if !(1..=light_playback::MAX_PLAYBACKS).contains(&playback) {
-            return Err("playback number must be within 1-1000".into());
+            return Err("Cuelist number must be within 1-1000".into());
         }
         let cue_list_id = light_core::CueListId::new();
         let number = requested.unwrap_or(1.0);
         let list = light_playback::CueList {
             id: cue_list_id,
-            name: format!("Playback {playback}"),
+            name: format!("Cuelist {playback}"),
             priority: 0,
             mode: light_playback::CueListMode::Sequence,
             looped: false,
@@ -4901,7 +5068,7 @@ fn execute_show_command(
         if operation == "DELETE" {
             source_list.cues.remove(position);
             if source_list.cues.is_empty() {
-                return Err("cannot delete the only cue; delete the cue list from the playback configuration instead".into());
+                return Err("cannot delete the only Cue; delete the Cuelist from its configuration instead".into());
             }
             store
                 .put_object(
@@ -5033,51 +5200,7 @@ fn execute_set_command(state: &AppState, tokens: &[String]) -> Result<usize, Str
     if let Some(at) = at {
         let (entry, store) = active_show_store(state)?;
         if tokens.first().is_some_and(|token| token == "GROUP") {
-            let group_id = tokens.get(1).ok_or("group number is required")?;
-            if !state
-                .engine
-                .snapshot()
-                .groups
-                .iter()
-                .any(|group| &group.id == group_id)
-            {
-                return Err(format!("group {group_id} does not exist"));
-            }
-            let (page, slot) = parse_page_slot(&tokens[at + 1..])?;
-            let playback = state
-                .engine
-                .snapshot()
-                .playbacks
-                .iter()
-                .map(|item| item.number)
-                .max()
-                .unwrap_or(0)
-                + 1;
-            let definition = light_playback::PlaybackDefinition {
-                number: playback,
-                name: format!("Group {group_id}"),
-                target: light_playback::PlaybackTarget::Group {
-                    group_id: group_id.clone(),
-                },
-                buttons: [
-                    light_playback::PlaybackButtonAction::On,
-                    light_playback::PlaybackButtonAction::Off,
-                    light_playback::PlaybackButtonAction::Flash,
-                ],
-                fader: light_playback::PlaybackFaderMode::Master,
-                go_activates: true,
-                auto_off: false,
-                xfade_millis: 0,
-            };
-            store
-                .put_object(
-                    "playback",
-                    &playback.to_string(),
-                    &serde_json::to_value(definition).map_err(|error| error.to_string())?,
-                    0,
-                )
-                .map_err(|error| error.to_string())?;
-            assign_page_slot(&store, &state.engine.snapshot(), page, slot, playback)?;
+            return Err("playback pages accept Cuelists only; store the group in a Cuelist first".into());
         } else {
             let playback = tokens
                 .first()
@@ -5091,7 +5214,10 @@ fn execute_set_command(state: &AppState, tokens: &[String]) -> Result<usize, Str
                 .iter()
                 .any(|item| item.number == playback)
             {
-                return Err(format!("playback {playback} does not exist"));
+                return Err(format!("Cuelist {playback} does not exist"));
+            }
+            if !state.engine.snapshot().playbacks.iter().any(|item| item.number == playback && matches!(item.target, light_playback::PlaybackTarget::CueList { .. })) {
+                return Err(format!("Cuelist {playback} cannot be assigned to a playback"));
             }
             let (page, slot) = parse_page_slot(&tokens[at + 1..])?;
             assign_page_slot(&store, &state.engine.snapshot(), page, slot, playback)?;
@@ -5952,15 +6078,17 @@ fn send_osc_feedback(state: &AppState, _full: bool) {
             let number = page_definition.and_then(|p| p.slots.get(&slot)).copied();
             let running = number.and_then(|n| active.iter().find(|a| a.playback_number == Some(n)));
             let level = running.map(|a| a.master).unwrap_or(0.0);
-            send_osc(
-                state,
-                subscriber.target,
-                format!(
-                    "/light/{}/feedback/paged-playback/{slot}/fader",
-                    subscriber.desk_alias
-                ),
-                vec![OscArgument::Float(level)],
-            );
+            for name in ["page-playback", "paged-playback"] {
+                send_osc(
+                    state,
+                    subscriber.target,
+                    format!(
+                        "/light/{}/feedback/{name}/{slot}/fader",
+                        subscriber.desk_alias
+                    ),
+                    vec![OscArgument::Float(level)],
+                );
+            }
             let button_count = if slot <= 20 { 3 } else { 1 };
             for button in 1..=button_count {
                 let (r, g, b, state_name) = if running.is_some() {
@@ -5970,20 +6098,22 @@ fn send_osc_feedback(state: &AppState, _full: bool) {
                 } else {
                     (0.18, 0.20, 0.23, "off")
                 };
-                send_osc(
-                    state,
-                    subscriber.target,
-                    format!(
-                        "/light/{}/feedback/paged-playback/{slot}/button/{button}",
-                        subscriber.desk_alias
-                    ),
-                    vec![
-                        OscArgument::Float(r),
-                        OscArgument::Float(g),
-                        OscArgument::Float(b),
-                        OscArgument::String(state_name.into()),
-                    ],
-                );
+                for name in ["page-playback", "paged-playback"] {
+                    send_osc(
+                        state,
+                        subscriber.target,
+                        format!(
+                            "/light/{}/feedback/{name}/{slot}/button/{button}",
+                            subscriber.desk_alias
+                        ),
+                        vec![
+                            OscArgument::Float(r),
+                            OscArgument::Float(g),
+                            OscArgument::Float(b),
+                            OscArgument::String(state_name.into()),
+                        ],
+                    );
+                }
             }
         }
         for (index, bpm) in state
@@ -6011,6 +6141,31 @@ fn send_osc_feedback(state: &AppState, _full: bool) {
             );
         }
     }
+}
+
+fn cuelist_for_page_playback(
+    snapshot: &EngineSnapshot,
+    page_number: u8,
+    slot: u8,
+) -> Option<u16> {
+    let number = snapshot
+        .playback_pages
+        .iter()
+        .find(|page| page.number == page_number)?
+        .slots
+        .get(&slot)
+        .copied()?;
+    snapshot
+        .playbacks
+        .iter()
+        .any(|definition| {
+            definition.number == number
+                && matches!(
+                    definition.target,
+                    light_playback::PlaybackTarget::CueList { .. }
+                )
+        })
+        .then_some(number)
 }
 
 fn handle_playback_osc(state: &AppState, address: &str, arguments: &[OscArgument]) {
@@ -6051,81 +6206,63 @@ fn handle_playback_osc(state: &AppState, address: &str, arguments: &[OscArgument
         }
         return;
     }
-    let (number, action_index) =
-        if parts.len() >= 4 && parts.first() == Some(&"light") && parts.get(1) == Some(&"playback")
-        {
-            let Ok(number) = parts[2].parse::<u16>() else {
-                return;
-            };
-            (number, 3)
-        } else if parts.len() >= 5
-            && parts.first() == Some(&"light")
-            && parts.get(2) == Some(&"paged-playback")
-        {
-            let Ok(slot) = parts[3].parse::<u8>() else {
-                return;
-            };
-            let Some(show) = state.active_show.read().clone() else {
-                return;
-            };
-            let Some(desk) = osc_control_desk(state, parts[1]) else {
-                return;
-            };
-            let page_number = state.desk.lock().desk_page(desk.id, show.id).unwrap_or(1);
-            let snapshot = state.engine.snapshot();
-            let Some(number) = snapshot
-                .playback_pages
-                .iter()
-                .find(|page| page.number == page_number)
-                .and_then(|page| page.slots.get(&slot))
-                .copied()
-            else {
-                return;
-            };
-            (number, 4)
-        } else {
+    let (number, action_index) = if parts.len() >= 5
+        && parts.first() == Some(&"light")
+        && parts.get(1) == Some(&"playback")
+    {
+        let (Ok(page), Ok(slot)) = (parts[2].parse::<u8>(), parts[3].parse::<u8>()) else {
             return;
         };
-    if let Some(definition) = state
+        let snapshot = state.engine.snapshot();
+        let Some(number) = cuelist_for_page_playback(&snapshot, page, slot) else {
+            return;
+        };
+        (number, 4)
+    } else if parts.len() >= 4
+        && parts.first() == Some(&"light")
+        && parts
+            .get(1)
+            .is_some_and(|name| *name == "cuelist" || *name == "qlist" || *name == "playback")
+    {
+        let Ok(number) = parts[2].parse::<u16>() else {
+            return;
+        };
+        (number, 3)
+    } else if parts.len() >= 5
+        && parts.first() == Some(&"light")
+        && parts.get(2).is_some_and(|name| *name == "page-playback" || *name == "paged-playback")
+    {
+        let Ok(slot) = parts[3].parse::<u8>() else {
+            return;
+        };
+        let Some(show) = state.active_show.read().clone() else {
+            return;
+        };
+        let Some(desk) = osc_control_desk(state, parts[1]) else {
+            return;
+        };
+        let page_number = state.desk.lock().desk_page(desk.id, show.id).unwrap_or(1);
+        let snapshot = state.engine.snapshot();
+        let Some(number) = cuelist_for_page_playback(&snapshot, page_number, slot) else {
+            return;
+        };
+        (number, 4)
+    } else {
+        return;
+    };
+    if !state
         .engine
         .snapshot()
         .playbacks
         .iter()
-        .find(|playback| playback.number == number)
-        .cloned()
-        && let light_playback::PlaybackTarget::Group { group_id } = definition.target
+        .any(|definition| {
+            definition.number == number
+                && matches!(
+                    definition.target,
+                    light_playback::PlaybackTarget::CueList { .. }
+                )
+        })
     {
-        let action = if parts[action_index] == "button" && parts.len() == action_index + 2 {
-            parts[action_index + 1]
-                .parse::<usize>()
-                .ok()
-                .and_then(|button| definition.buttons.get(button.saturating_sub(1)))
-                .copied()
-                .unwrap_or_default()
-        } else {
-            light_playback::PlaybackButtonAction::None
-        };
-        let requested = match (parts[action_index], action, pressed) {
-            ("on", _, true) | (_, light_playback::PlaybackButtonAction::On, true) => Some(1.0),
-            ("off", _, true) | (_, light_playback::PlaybackButtonAction::Off, true) => Some(0.0),
-            ("master" | "fader", _, _) => value,
-            _ => None,
-        };
-        if parts[action_index] == "flash" || action == light_playback::PlaybackButtonAction::Flash {
-            state
-                .engine
-                .set_group_master_flash(group_id, if pressed { 1.0 } else { 0.0 });
-        } else if let Some(master) = requested {
-            let mut snapshot = (*state.engine.snapshot()).clone();
-            if let Some(group) = snapshot
-                .groups
-                .iter_mut()
-                .find(|group| group.id == group_id)
-            {
-                group.master = master.clamp(0.0, 1.0);
-                let _ = state.engine.replace_snapshot(snapshot);
-            }
-        }
         return;
     }
     let mut playback = state.engine.playback().write();
@@ -6185,6 +6322,47 @@ fn reconcile_show_logical_heads(entry: &ShowEntry) -> Result<(), String> {
                     &serde_json::to_value(fixture).map_err(|error| error.to_string())?,
                     object.revision,
                 )
+                .map_err(|error| error.to_string())?;
+        }
+    }
+    let legacy_group_playbacks = store
+        .objects("playback")
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .filter_map(|object| {
+            serde_json::from_value::<light_playback::PlaybackDefinition>(object.body)
+                .ok()
+                .filter(|definition| matches!(definition.target, light_playback::PlaybackTarget::Group { .. }))
+                .map(|definition| (object.id, definition.number))
+        })
+        .collect::<Vec<_>>();
+    if !legacy_group_playbacks.is_empty() {
+        let legacy_numbers = legacy_group_playbacks
+            .iter()
+            .map(|(_, number)| *number)
+            .collect::<std::collections::HashSet<_>>();
+        for object in store
+            .objects("playback_page")
+            .map_err(|error| error.to_string())?
+        {
+            let mut page = serde_json::from_value::<light_playback::PlaybackPage>(object.body)
+                .map_err(|error| error.to_string())?;
+            let previous = page.slots.len();
+            page.slots.retain(|_, number| !legacy_numbers.contains(number));
+            if page.slots.len() != previous {
+                store
+                    .put_object(
+                        "playback_page",
+                        &object.id,
+                        &serde_json::to_value(page).map_err(|error| error.to_string())?,
+                        object.revision,
+                    )
+                    .map_err(|error| error.to_string())?;
+            }
+        }
+        for (id, _) in legacy_group_playbacks {
+            store
+                .delete_object("playback", &id)
                 .map_err(|error| error.to_string())?;
         }
     }
@@ -6292,40 +6470,12 @@ fn load_engine_snapshot_with_override(
                 xfade_millis: 0,
             })
             .collect();
-        let offset = playbacks.len();
-        playbacks.extend(
-            groups
-                .iter()
-                .filter(|group| group.playback_fader.is_some())
-                .take(1_000 - offset)
-                .enumerate()
-                .map(|(index, group)| light_playback::PlaybackDefinition {
-                    number: (offset + index + 1) as u16,
-                    name: group.name.clone(),
-                    target: light_playback::PlaybackTarget::Group {
-                        group_id: group.id.clone(),
-                    },
-                    buttons: [
-                        light_playback::PlaybackButtonAction::On,
-                        light_playback::PlaybackButtonAction::Off,
-                        light_playback::PlaybackButtonAction::Flash,
-                    ],
-                    fader: light_playback::PlaybackFaderMode::Master,
-                    go_activates: true,
-                    auto_off: false,
-                    xfade_millis: 0,
-                }),
-        );
     }
     if playback_pages.is_empty() {
         playback_pages.push(light_playback::PlaybackPage {
             number: 1,
             name: "Main".into(),
-            slots: playbacks
-                .iter()
-                .take(127)
-                .map(|playback| (playback.number as u8, playback.number))
-                .collect(),
+            slots: HashMap::new(),
         });
     }
     Ok(EngineSnapshot {
@@ -6847,6 +6997,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn login_reuses_client_desk_when_remembered_desk_is_stale() {
+        let (state, data_dir) = test_state();
+        let app = router(state);
+        let client_id = Uuid::new_v4();
+        let login = |desk_id: Option<Uuid>| {
+            let app = app.clone();
+            async move {
+                app.oneshot(
+                    Request::post("/api/v1/sessions")
+                        .header(header::CONTENT_TYPE, "application/json")
+                        .body(Body::from(
+                            serde_json::json!({"username":"Operator","client_id":client_id,"desk_id":desk_id}).to_string(),
+                        ))
+                        .unwrap(),
+                )
+                .await
+                .unwrap()
+            }
+        };
+        let first = login(None).await;
+        assert_eq!(first.status(), StatusCode::OK);
+        let first_desk = json(first).await["desk"]["id"].clone();
+        let second = login(Some(Uuid::new_v4())).await;
+        assert_eq!(second.status(), StatusCode::OK);
+        assert_eq!(json(second).await["desk"]["id"], first_desk);
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+
+    #[tokio::test]
     async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
         use tokio::io::AsyncWriteExt;
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -7292,6 +7471,90 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::CREATED);
         json(response).await
+    }
+
+    #[tokio::test]
+    async fn named_revision_restores_a_manual_snapshot_over_newer_autosaves() {
+        let (state, data_dir) = test_state();
+        let app = router(state);
+        let (token, _) = login(&app, "Operator").await;
+        let show = create_show(&app, &token, "Revision restore").await;
+        let show_id = show["id"].as_str().unwrap();
+        let first = app
+            .clone()
+            .oneshot(
+                Request::put(format!(
+                    "/api/v1/shows/{show_id}/objects/user_layout/operator"
+                ))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::IF_MATCH, "0")
+                .body(Body::from(r#"{"marker":"manual"}"#))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(first.status(), StatusCode::OK);
+        let saved = app
+            .clone()
+            .oneshot(
+                Request::post(format!("/api/v1/shows/{show_id}/revisions"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::from(r#"{"name":"Before experiment"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(saved.status(), StatusCode::CREATED);
+        let saved = json(saved).await;
+        assert_eq!(saved["revision"], 1);
+        assert_eq!(saved["name"], "Before experiment");
+        assert!(saved.get("path").is_none());
+        let autosaved = app
+            .clone()
+            .oneshot(
+                Request::put(format!(
+                    "/api/v1/shows/{show_id}/objects/user_layout/operator"
+                ))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::IF_MATCH, "1")
+                .body(Body::from(r#"{"marker":"autosave"}"#))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(autosaved.status(), StatusCode::OK);
+        let restored = app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/api/v1/shows/{show_id}/revisions/1/open"
+                ))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::from(r#"{"transition":"hold_current"}"#))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(restored.status(), StatusCode::OK);
+        let objects = app
+            .oneshot(
+                Request::get(format!(
+                    "/api/v1/shows/{show_id}/objects/user_layout"
+                ))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(objects.status(), StatusCode::OK);
+        let objects = json(objects).await;
+        assert_eq!(objects[0]["body"]["marker"], "manual");
+        let _ = std::fs::remove_dir_all(data_dir);
     }
     async fn put_show_object(
         app: &Router,
