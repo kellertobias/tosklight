@@ -6,6 +6,7 @@ import { LightApiClient } from "../api/LightApiClient";
 import type { WindowProps } from "./windowTypes";
 import { prepareHelpMarkdown, safeHelpUrl } from "./helpMarkdown";
 import { WindowHeader, WindowScrollArea } from "../components/window-kit";
+import { Button } from "../components/common";
 
 export function HelpMarkdown({ markdown }: { markdown: string }) {
   return <ReactMarkdown
@@ -63,14 +64,14 @@ export function HelpNavigation({
     return <div className="help-nav-entry" key={key}>
       <div className={`help-nav-row ${entry.kind}`} style={{ paddingLeft: `${10 + depth * 18}px` }}>
         {entry.id
-          ? <button className={`help-nav-title ${entry.id === selected ? "active" : ""}`} onClick={() => onSelect(entry.id!)}>{entry.title}</button>
+          ? <Button className={`help-nav-title ${entry.id === selected ? "active" : ""}`} onClick={() => onSelect(entry.id!)}>{entry.title}</Button>
           : <span className="help-nav-title">{entry.title}</span>}
-        {entry.kind === "folder" && <button
+        {entry.kind === "folder" && <Button
           className={`help-nav-chevron ${open ? "open" : ""}`}
           aria-label={`${open ? "Collapse" : "Expand"} ${entry.title}`}
           aria-expanded={open}
           onClick={() => onToggle(key)}
-        ><span aria-hidden="true">›</span></button>}
+        ><span aria-hidden="true">›</span></Button>}
       </div>
       {open && <div className="help-nav-children">
         <HelpNavigation entries={entry.children} expanded={expanded} selected={selected} depth={depth + 1} onSelect={onSelect} onToggle={onToggle}/>
