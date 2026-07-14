@@ -4,12 +4,14 @@ These scenarios focus on behavior that is slow or flaky under wall time and on f
 
 ## How to run this file
 
-Timing cases run in `--test-bench`; persistence cases use a dedicated serial fixture and real temporary files. Before restart, record file hashes, active show ID, revision, programmer/playback state, and expected output. After restart, wait independently for readiness and bootstrap. Desktop cases launch the packaged app as a child process with unique data and port environment variables and assert process ownership explicitly.
+Timing cases run in `--test-bench`; persistence cases use a dedicated serial fixture and real temporary files. Every case loads a canonical show, immediately uses Save As to create its named working copy, and applies mutations only to that copy. Before restart, record file hashes, active show ID, revision, programmer/playback state, and expected output. After restart, wait independently for readiness and bootstrap. Desktop cases launch the packaged app as a child process with unique data and port environment variables and assert process ownership explicitly.
 
 ## TIME-001 — Zero tick emits without advancing
 
 **Priority:** P0  
 **Primary layer:** Server E2E
+
+**Starting show:** Load canonical `compact-rig.show`, immediately Save As `time-001.show`, and use the active copy for this scenario.
 
 **Actions:** Reset the clock, program an immediate value, mark all receivers, and advance by 0 ms twice.
 
@@ -21,6 +23,8 @@ Timing cases run in `--test-bench`; persistence cases use a dedicated serial fix
 
 **Priority:** P0  
 **Primary layer:** Rust integration plus selected E2E
+
+**Starting show:** Load canonical `compact-rig.show`, immediately Save As `time-002.show`, and use dimmer fixture 1 in the active copy.
 
 **Setup:** Fade intensity from 0 to 100% over 3,000 ms.
 
@@ -35,6 +39,8 @@ Timing cases run in `--test-bench`; persistence cases use a dedicated serial fix
 **Priority:** P1  
 **Primary layer:** Rust integration
 
+**Starting show:** Load canonical `default-stage.show`, immediately Save As `time-003.show`, and use the active copy. Create a new cue list on fixtures 501.1–501.10 for the chaser and use fixture 501's color emitters for the periodic effect.
+
 **Cases:** Advance one step at a time, jump across several steps, change speed mid-step, pause/resume, and jump seven days. Repeat for a periodic effect phase.
 
 **Assertions:** The result is defined by virtual timestamp and configured phase rules, not by the number or duration of scheduler iterations. Large jumps do not create an unbounded catch-up loop.
@@ -46,7 +52,9 @@ Timing cases run in `--test-bench`; persistence cases use a dedicated serial fix
 **Priority:** P0  
 **Primary layer:** Serial server E2E
 
-**Setup:** Create Bench A, edit groups, record cues, save, leave a playback active, and place an unrecorded value in the durable user's programmer.
+**Starting show:** Load canonical `compact-rig.show`, immediately Save As `show-001.show`, and use the active copy for this scenario.
+
+**Setup:** Edit the loaded groups, record cues, save, leave a playback active, and place an unrecorded value in the durable user's programmer.
 
 **Actions:** Stop the server cleanly, start a new process against the same temporary data directory, reconnect, and open the show.
 
@@ -59,6 +67,8 @@ Timing cases run in `--test-bench`; persistence cases use a dedicated serial fix
 **Priority:** P1  
 **Primary layer:** Storage integration
 
+**Starting show:** For each injected-failure case, load canonical `compact-rig.show`, immediately Save As `show-002-<case>.show`, and use only that active copy. Save one valid baseline edit before injecting the failure on the next save.
+
 **Actions:** Inject failure before replacement, during temporary-file write, and after replacement but before backup cleanup.
 
 **Assertions:** On restart the server opens either the complete old revision or complete new revision, never truncated or mixed JSON. Recovery and backup choice are logged and exposed to the operator.
@@ -70,7 +80,9 @@ Timing cases run in `--test-bench`; persistence cases use a dedicated serial fix
 **Priority:** P0  
 **Primary layer:** Server integration
 
-**Setup:** Persist a malformed, schema-invalid, or referentially invalid active show while retaining a valid backup or another library show.
+**Starting show:** For each invalid-show case, load canonical `compact-rig.show`, immediately Save As `show-003-<case>.show`, retain an untouched backup of that working copy, and then make the active copy malformed, schema-invalid, or referentially invalid.
+
+**Setup:** Persist the mutated active copy while retaining the valid compact-show backup or a separately imported fresh copy.
 
 **Assertions:** Server readiness succeeds, output remains safe, bootstrap reports the active-show error, and the operator can select a valid show. The invalid file is not overwritten merely by startup.
 
@@ -80,6 +92,8 @@ Timing cases run in `--test-bench`; persistence cases use a dedicated serial fix
 
 **Priority:** P1  
 **Primary layer:** Fixture-based Rust integration
+
+**Starting show:** For each migration case, load canonical `compact-rig.show`, immediately Save As `show-004-<case>.show`, rewrite only the named fields in the active copy into the representative historical shape, and save that derived legacy fixture before testing migration.
 
 **Cases:** Load representative old shows missing newer fixture numbers, group fields, playback fields, route fields, and virtual-dimmer metadata. Save and reopen the migrated result.
 
@@ -92,6 +106,8 @@ Timing cases run in `--test-bench`; persistence cases use a dedicated serial fix
 **Priority:** P0  
 **Primary layer:** macOS packaged smoke
 
+**Starting show:** Load canonical `default-stage.show`, immediately Save As `desktop-001.show` in the packaged app's temporary data directory, and make that working copy the active show before launch.
+
 **Actions:** Launch the bundled Tauri app with a temporary data directory and unique loopback port.
 
 **Assertions:** The app-owned server reaches readiness; the WebView connects, bootstraps a session, and renders the desk; the frontend-ready marker is written; quitting the app terminates its exact child server; the loopback port closes within the process deadline.
@@ -102,6 +118,8 @@ Timing cases run in `--test-bench`; persistence cases use a dedicated serial fix
 
 **Priority:** P2  
 **Primary layer:** macOS process integration
+
+**Starting show:** Load canonical `default-stage.show`, immediately Save As `desktop-002.show`, and start the independent server with that working copy as its active show.
 
 **Setup:** Start a server independently, then launch the desktop app configured to use it.
 

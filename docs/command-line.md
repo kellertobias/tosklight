@@ -131,18 +131,18 @@ After building a scene in the programmer, press `[REC]` and choose a recordable 
 | Numbered preset | `[REC] <preset-type> [DOT] <preset-number> [ENTER]` | Record a preset. Types 0 through 4 are All, Intensity, Color, Position, and Beam. |
 | Numbered group | `[REC] [GRP] <group-number> [ENTER]` | Record the current selection as a group. |
 
-### Playbacks and cues
+### Cuelists, Cues, and playbacks
 
-Playback and cue selection uses one address grammar: `[SET] <playback-number>` selects an absolute playback, `[SET] <playback-number> [CUE] <cue-number>` selects one of its cues, `[SET] <page> [DOT] <page-playback>` selects a playback by page position, and adding `[CUE] <cue-number>` selects one of that playback's cues.
+Cuelist and Cue selection uses one address grammar. A playback is the page slot containing the fader and buttons; a Cuelist is the ordered collection of Cues assigned to that playback. `[SET] <Cuelist-number>` selects a Cuelist, while `[SET] <page> [DOT] <playback-number>` selects a playback by page position. Adding `[CUE] <Cue-number>` selects a Cue in the addressed Cuelist.
 
 | Target | Command | Result |
 | --- | --- | --- |
-| Absolute playback | `[REC] [SET] <playback-number> [ENTER]` | Create a cue list on an empty playback, or append a cue when the playback already contains a cue list. |
-| Specific cue | `[REC] [SET] <playback-number> [CUE] <cue-number> [ENTER]` | Record at the specified cue number. |
-| Page playback | `[REC] [SET] <page> [DOT] <page-playback> [ENTER]` | Create a cue list or append a cue on a page-relative playback. |
-| Page playback cue | `[REC] [SET] <page> [DOT] <page-playback> [CUE] <cue-number> [ENTER]` | Record at a specified cue on a page-relative playback. |
+| Cuelist | `[REC] [SET] <Cuelist-number> [ENTER]` | Create a Cuelist in an empty pool slot, or append a Cue to an existing Cuelist. The Cuelist remains unassigned. |
+| Specific Cue | `[REC] [SET] <Cuelist-number> [CUE] <Cue-number> [ENTER]` | Record at the specified Cue number. |
+| Page playback | `[REC] [SET] <page> [DOT] <playback-number> [ENTER]` | Append a Cue to the Cuelist assigned to that playback. |
+| Cue on a page playback | `[REC] [SET] <page> [DOT] <playback-number> [CUE] <Cue-number> [ENTER]` | Record at a specified Cue in the assigned Cuelist. |
 
-Dots after `[CUE]` form decimal cue numbers. For example, `[REC] [SET] 1 [CUE] 2 [DOT] 5 [ENTER]` records cue `2.5` on playback 1. The Playback Sequence view can renumber the sequence later. If the specified cue already exists, a dialog asks whether to merge into it or overwrite it.
+Dots after `[CUE]` form decimal Cue numbers. For example, `[REC] [SET] 1 [CUE] 2 [DOT] 5 [ENTER]` records Cue `2.5` in Cuelist 1. The `Cues · Cuelist1` view can renumber the Cuelist later. If the specified Cue already exists, a dialog asks whether to merge into it or overwrite it.
 
 ## Deleting, moving, and copying
 
@@ -158,20 +158,29 @@ The destination omits the preset type because command-line copy and move operati
 
 ### Cues
 
-Cue source and destination addresses both use the complete `[SET] ... [CUE] ...` playback-selection grammar.
+Cue source and destination addresses both use the complete `[SET] ... [CUE] ...` Cuelist/playback selection grammar.
 
 | Action | Command | Result |
 | --- | --- | --- |
-| Delete an absolute cue | `[DEL] [SET] <playback-number> [CUE] <cue-number> [ENTER]` | Delete a cue from an absolute playback. |
-| Delete a page-relative cue | `[DEL] [SET] <page> [DOT] <page-playback> [CUE] <cue-number> [ENTER]` | Delete a cue from a playback on a page. |
-| Move or copy between absolute playbacks | `<operation> [SET] <playback-number> [CUE] <cue-number> [AT] [SET] <playback-number> [CUE] <cue-number> [ENTER]` | Move or copy a cue to an absolute playback. `<operation>` is `[MOV]` or `[CPY]`. |
-| Move or copy using pages | `<operation> [SET] <page> [DOT] <page-playback> [CUE] <cue-number> [AT] [SET] <page> [DOT] <page-playback> [CUE] <cue-number> [ENTER]` | Move or copy a cue using page-relative source and destination addresses. Absolute and page-relative addresses may also be mixed. |
+| Delete a Cue from a Cuelist | `[DEL] [SET] <Cuelist-number> [CUE] <Cue-number> [ENTER]` | Delete a Cue from a Cuelist. |
+| Delete a Cue through a playback | `[DEL] [SET] <page> [DOT] <playback-number> [CUE] <Cue-number> [ENTER]` | Delete a Cue from the Cuelist assigned to a playback. |
+| Move or copy between Cuelists | `<operation> [SET] <Cuelist-number> [CUE] <Cue-number> [AT] [SET] <Cuelist-number> [CUE] <Cue-number> [ENTER]` | Move or copy a Cue between Cuelists. `<operation>` is `[MOV]` or `[CPY]`. |
+| Move or copy using playbacks | `<operation> [SET] <page> [DOT] <playback-number> [CUE] <Cue-number> [AT] [SET] <page> [DOT] <playback-number> [CUE] <Cue-number> [ENTER]` | Move or copy a Cue using page-relative playback source and destination addresses. Cuelist and playback addresses may be mixed. |
 
 ## Assigning and configuring playbacks
 
+On the touch UI, press `[SET]`, tap an existing entry in the Cuelist Pool, then tap the target playback fader. The selected Cuelist replaces the current assignment at that page position. Playback pages accept Cuelists only; groups remain in the Groups pool.
+
 | Action | Command | Result |
 | --- | --- | --- |
-| Assign an absolute playback | `[SET] <playback-number> [AT] <page> [DOT] <page-playback> [ENTER]` | Assign an absolute playback to a position on a page. |
-| Assign a group | `[SET] [GRP] <group-number> [AT] <page> [DOT] <page-playback> [ENTER]` | Assign a group to a position on a page. |
-| Configure an absolute playback | `[SET] <playback-number> [ENTER]` | Open the playback configuration. |
-| Configure a page playback | `[SET] <page> [DOT] <page-playback> [ENTER]` | Open the configuration for a playback at a position on a page. |
+| Assign a Cuelist | `[SET] <Cuelist-number> [AT] <page> [DOT] <playback-number> [ENTER]` | Assign a Cuelist to a playback on a page. |
+| Configure a Cuelist | `[SET] <Cuelist-number> [ENTER]` | Open the Cuelist configuration. |
+| Configure a page playback | `[SET] <page> [DOT] <playback-number> [ENTER]` | Open the configuration for the playback at that page position. |
+
+## OSC playback addressing
+
+- `/light/{desk}/page-playback/{playback}/{fader-or-button}` addresses a numbered playback on the page currently active for that desk or screen.
+- `/light/playback/{page}/{playback}/{fader-or-button}` addresses that page and playback globally, independent of every desk's current page.
+- `/light/cuelist/{Cuelist}/{action}` directly operates a Cuelist when a page playback is not the intended target.
+
+The hardware simulator uses `page-playback`. The former `paged-playback`, `/light/qlist/{number}/{action}`, and direct `/light/playback/{Cuelist}/{action}` forms remain compatibility aliases for existing integrations.

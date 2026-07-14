@@ -96,6 +96,22 @@ The software shortcuts are disabled while hardware is connected. `[AT] [AT]` exp
 
 A number without `[GRP]` always identifies a fixture. `[ENTER]` completes the selection. Fixture IDs that do not exist are ignored; they do not make the command fail.
 
+### Building a selection across the desk
+
+Selection is additive until you use or clear it. You can select one fixture, then another fixture, then a group, and all of them remain selected. This works the same way with Stage clicks, a Stage marquee, Fixture Sheet rows, the Groups pool, and command-line selections. You do not need to hold a modifier key when moving between those surfaces.
+
+Each additional selection behaves like adding another range with `[+]`. Fixtures and groups can be combined, and overlapping fixtures appear only once in the resolved selection. Group selections remain identifiable as group references.
+
+The selection stays open while you are only selecting. It closes when you do any of the following:
+
+- Add or change a programmer value, including a command-line value.
+- Move an encoder or recall a preset for the selection.
+- Press `[CLR]` once to clear the selection explicitly.
+
+Applying a value does not immediately hide or deselect the fixtures. It marks the current selection as used. The next fixture or group you select replaces those used targets and begins a new additive selection. Values already applied to the previous fixtures remain in the programmer.
+
+For example, select fixture 1 in the Fixture Sheet, marquee fixtures 2 through 4 on the Stage, and then select group 2. The complete combined selection remains active. Set its intensity, then select fixture 21: fixture 21 starts a new selection. Alternatively, press `[CLR]` once before selecting fixture 21 to clear the old selection explicitly without clearing its programmed values.
+
 | Selection | Command | Result |
 | --- | --- | --- |
 | One fixture | `1 [ENTER]` | Select fixture 1. |
@@ -151,7 +167,7 @@ Double-pressing a group in the Groups pool also dereferences it. A group recorde
 
 ## Recording
 
-After building a scene in the programmer, press `[REC]` and choose a recordable target in the UI. Targets include presets, groups, and playbacks in their pools, as well as playback buttons and faders on physical or simulated hardware.
+After building a scene in the programmer, press `[REC]` and choose a recordable target in the UI. Targets include presets, groups, and Cuelists in their pools, as well as playback buttons and faders on physical or simulated hardware. Recording a Cuelist in the pool does not assign it to any playback page.
 
 ### Presets and groups
 
@@ -161,23 +177,23 @@ After building a scene in the programmer, press `[REC]` and choose a recordable 
 | Numbered preset | `[REC] <preset-type> [ . ] <preset-number> [ENTER]` | Record a preset. Types 0 through 4 are All, Intensity, Color, Position, and Beam. |
 | Numbered group | `[REC] [GRP] <group-number> [ENTER]` | Record the current selection as a group. |
 
-### Playbacks and cues
+### Cuelists, Cues, and playbacks
 
-Playback and cue selection uses one unambiguous address grammar:
+Cuelist and Cue selection uses one unambiguous address grammar. A playback is the page slot containing the fader and buttons; a Cuelist is the ordered collection of Cues assigned to that playback.
 
-- `[SET] <playback-pool-number>` selects an absolute playback.
-- `[SET] <playback-pool-number> [CUE] <cue-number>` selects a cue on an absolute playback.
-- `[SET] <playback-page> [ . ] <playback-paged-number>` selects a playback by its page position.
-- `[SET] <playback-page> [ . ] <playback-paged-number> [CUE] <cue-number>` selects a cue on a page playback.
+- `[SET] <Cuelist-number>` selects a Cuelist.
+- `[SET] <Cuelist-number> [CUE] <Cue-number>` selects a Cue in that Cuelist.
+- `[SET] <playback-page> [ . ] <playback-number>` selects a playback by its page position.
+- `[SET] <playback-page> [ . ] <playback-number> [CUE] <Cue-number>` selects a Cue in the Cuelist assigned to that playback.
 
 | Target | Command | Result |
 | --- | --- | --- |
-| Absolute playback | `[REC] [SET] <playback-number> [ENTER]` | Create a cue list on an empty playback, or append a cue when the playback already contains a cue list. |
-| Specific cue | `[REC] [SET] <playback-number> [CUE] <cue-number> [ENTER]` | Record at the specified cue number. |
-| Page playback | `[REC] [SET] <page> [ . ] <page-playback> [ENTER]` | Create a cue list or append a cue on a page-relative playback. |
-| Page playback cue | `[REC] [SET] <page> [ . ] <page-playback> [CUE] <cue-number> [ENTER]` | Record at a specified cue on a page-relative playback. |
+| Cuelist | `[REC] [SET] <Cuelist-number> [ENTER]` | Create a Cuelist in an empty pool slot, or append a Cue to an existing Cuelist. The Cuelist remains unassigned. |
+| Specific Cue | `[REC] [SET] <Cuelist-number> [CUE] <Cue-number> [ENTER]` | Record at the specified Cue number. |
+| Page playback | `[REC] [SET] <page> [ . ] <playback-number> [ENTER]` | Append a Cue to the Cuelist assigned to that playback. |
+| Cue on a page playback | `[REC] [SET] <page> [ . ] <playback-number> [CUE] <Cue-number> [ENTER]` | Record at a specified Cue in the assigned Cuelist. |
 
-Dots after `[CUE]` form decimal cue numbers. For example, `[REC] [SET] 1 [CUE] 2 [ . ] 5 [ENTER]` records cue `2.5` on playback 1. The Playback Sequence view can renumber the sequence later. If the specified cue already exists, a dialog asks whether to merge into it or overwrite it.
+Dots after `[CUE]` form decimal Cue numbers. For example, `[REC] [SET] 1 [CUE] 2 [ . ] 5 [ENTER]` records Cue `2.5` in Cuelist 1. The `Cues · Cuelist1` view can renumber the Cuelist later. If the specified Cue already exists, a dialog asks whether to merge into it or overwrite it.
 
 ## Deleting, moving, and copying
 
@@ -193,20 +209,29 @@ The destination omits the preset type because command-line copy and move operati
 
 ### Cues
 
-Cue source and destination addresses both use the playback selection grammar above. A move or copy therefore has a complete `[SET] ... [CUE] ...` address on each side of `[AT]`.
+Cue source and destination addresses both use the Cuelist/playback selection grammar above. A move or copy therefore has a complete `[SET] ... [CUE] ...` address on each side of `[AT]`.
 
 | Action | Command | Result |
 | --- | --- | --- |
-| Delete an absolute cue | `[DEL] [SET] <playback-number> [CUE] <cue-number> [ENTER]` | Delete a cue from an absolute playback. |
-| Delete a page-relative cue | `[DEL] [SET] <page> [ . ] <page-playback> [CUE] <cue-number> [ENTER]` | Delete a cue from a playback on a page. |
-| Move or copy between absolute playbacks | `<operation> [SET] <playback-number> [CUE] <cue-number> [AT] [SET] <playback-number> [CUE] <cue-number> [ENTER]` | Move or copy a cue to an absolute playback. `<operation>` is `[MOV]` or `[CPY]`. |
-| Move or copy using pages | `<operation> [SET] <page> [ . ] <page-playback> [CUE] <cue-number> [AT] [SET] <page> [ . ] <page-playback> [CUE] <cue-number> [ENTER]` | Move or copy a cue using page-relative source and destination addresses. Absolute and page-relative addresses may also be mixed. |
+| Delete a Cue from a Cuelist | `[DEL] [SET] <Cuelist-number> [CUE] <Cue-number> [ENTER]` | Delete a Cue from a Cuelist. |
+| Delete a Cue through a playback | `[DEL] [SET] <page> [ . ] <playback-number> [CUE] <Cue-number> [ENTER]` | Delete a Cue from the Cuelist assigned to a playback. |
+| Move or copy between Cuelists | `<operation> [SET] <Cuelist-number> [CUE] <Cue-number> [AT] [SET] <Cuelist-number> [CUE] <Cue-number> [ENTER]` | Move or copy a Cue between Cuelists. `<operation>` is `[MOV]` or `[CPY]`. |
+| Move or copy using playbacks | `<operation> [SET] <page> [ . ] <playback-number> [CUE] <Cue-number> [AT] [SET] <page> [ . ] <playback-number> [CUE] <Cue-number> [ENTER]` | Move or copy a Cue using page-relative playback source and destination addresses. Cuelist and playback addresses may be mixed. |
 
 ## Assigning and configuring playbacks
 
+On the touch UI, press `[SET]`, tap an existing entry in the Cuelist Pool, then tap the target playback fader. The selected Cuelist replaces the current assignment at that page position. Playback pages accept Cuelists only; groups remain in the Groups pool.
+
 | Action | Command | Result |
 | --- | --- | --- |
-| Assign an absolute playback | `[SET] <playback-number> [AT] <page> [ . ] <page-playback> [ENTER]` | Assign an absolute playback to a position on a page. |
-| Assign a group | `[SET] [GRP] <group-number> [AT] <page> [ . ] <page-playback> [ENTER]` | Assign a group to a position on a page. |
-| Configure an absolute playback | `[SET] <playback-number> [ENTER]` | Open the playback configuration. |
-| Configure a page playback | `[SET] <page> [ . ] <page-playback> [ENTER]` | Open the configuration for a playback at a position on a page. |
+| Assign a Cuelist | `[SET] <Cuelist-number> [AT] <page> [ . ] <playback-number> [ENTER]` | Assign a Cuelist to a playback on a page. |
+| Configure a Cuelist | `[SET] <Cuelist-number> [ENTER]` | Open the Cuelist configuration. |
+| Configure a page playback | `[SET] <page> [ . ] <playback-number> [ENTER]` | Open the configuration for the playback at that page position. |
+
+## OSC playback addressing
+
+- `/light/{desk}/page-playback/{playback}/{fader-or-button}` addresses a numbered playback on the page currently active for that desk or screen.
+- `/light/playback/{page}/{playback}/{fader-or-button}` addresses that page and playback globally, independent of every desk's current page.
+- `/light/cuelist/{Cuelist}/{action}` directly operates a Cuelist when a page playback is not the intended target.
+
+The hardware simulator uses `page-playback`. The former `paged-playback`, `/light/qlist/{number}/{action}`, and direct `/light/playback/{Cuelist}/{action}` forms remain compatibility aliases for existing integrations.

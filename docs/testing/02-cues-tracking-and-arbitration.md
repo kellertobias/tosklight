@@ -1,26 +1,28 @@
 # Cues, Tracking, and Arbitration
 
-Use Bench B for color and position cases. Use Bench A when intensity-only values make the expected result easier to prove.
+Use `default-stage.show` for these cue, color, position, and arbitration cases.
 
 ## How to run this file
 
-Build the complete cue list through the surface named by the scenario, then clear the programmer and release playback before verification. Capture the expected tracked state from cue data, not from the current output. For each GO, jump, pause, or release, wait for the playback revision, advance to exact virtual checkpoints, and compare playback state, resolved attributes, and received DMX.
+Before every scenario, load canonical `default-stage.show`, immediately use Save As with the filename stated by that scenario, and use only the active working copy. Where a scenario uses group numbers, create group 1 `Front Fresnels` from fixtures 1–6, group 2 `Back Profiles` from fixtures 101–108, and group 3 `Back LED Washes` from fixtures 201–205 as part of that scenario's setup. Build the cue list through the named surface, then clear the programmer and release playback before verification. Capture expected tracked state from cue data, not current output. For each GO, jump, pause, or release, wait for the playback revision, advance to exact virtual checkpoints, and compare playback state, resolved attributes, and received DMX.
 
 ## CUE-001 — Record and replay a tracked cue sequence
 
 **Priority:** P0  
 **Primary layer:** Playwright E2E
 
-**Setup:** No programmer or playback is active. Create an empty sequence on playback 1.
+**Starting show:** Load canonical `default-stage.show`, immediately Save As `cue-001.show`, and use the active copy for this scenario.
+
+**Setup:** Create groups 1–3 as described above. No programmer or playback is active. Create an empty sequence on playback 1.
 
 **Actions:**
 
-1. Record cue 1 with Front Wash at 40%, Profiles at 30%, and a warm color.
-2. Record cue 2 changing only Profiles to 70%.
+1. Record cue 1 with Front Fresnels at 40%, Back Profiles at 30%, and a warm color on the Back Profiles.
+2. Record cue 2 changing only Back Profiles to 70%.
 3. Record cue 3 changing only the color to blue.
 4. Clear the programmer, release the playback, and run cues 1–3.
 
-**Assertions:** Cue 2 retains the cue 1 Front Wash value and warm color. Cue 3 retains the cue 2 intensities while changing only color. Current/next UI, playback API, resolved attributes, and UDP output agree.
+**Assertions:** Cue 2 retains the cue 1 Front Fresnel value and warm Back Profile color. Cue 3 retains the cue 2 intensities while changing only color. Current/next UI, playback API, resolved attributes, and UDP output agree.
 
 **Pass condition:** Omitted values track forward and playback reconstruction does not depend on residual programmer state.
 
@@ -29,7 +31,9 @@ Build the complete cue list through the surface named by the scenario, then clea
 **Priority:** P0  
 **Primary layer:** Rust integration plus selected E2E
 
-**Setup:** Cue 1 sets group 1 to 30%. Cue 2 is recorded cue-only at 80%. Cue 3 changes an unrelated attribute or fixture.
+**Starting show:** Load canonical `default-stage.show`, immediately Save As `cue-002.show`, and use the active copy for this scenario.
+
+**Setup:** Create group 1 `Front Fresnels` from fixtures 1–6. Cue 1 sets group 1 to 30%. Cue 2 is recorded cue-only at 80%. Cue 3 changes an unrelated attribute or fixture.
 
 **Actions:** Run cues sequentially and then jump directly to each cue from release.
 
@@ -42,7 +46,9 @@ Build the complete cue list through the surface named by the scenario, then clea
 **Priority:** P0  
 **Primary layer:** Playwright E2E
 
-**Setup:** Cue 1 is 0%; cue 2 is 100% with a 4,000 ms fade.
+**Starting show:** Load canonical `default-stage.show`, immediately Save As `cue-003.show`, and use the active copy for this scenario.
+
+**Setup:** Create group 1 `Front Fresnels` from fixtures 1–6. Cue 1 puts group 1 at 0%; cue 2 puts it at 100% with a 4,000 ms fade.
 
 **Actions and virtual checkpoints:**
 
@@ -61,7 +67,9 @@ Build the complete cue list through the surface named by the scenario, then clea
 **Priority:** P1  
 **Primary layer:** Rust integration
 
-**Setup:** A cue has a 1,000 ms delay, 3,000 ms intensity fade, and 2,000 ms LTP fade.
+**Starting show:** Load canonical `default-stage.show`, immediately Save As `cue-004.show`, and use the active copy for this scenario.
+
+**Setup:** Create group 2 `Back Profiles` from fixtures 101–108. Record a cue for that group with a 1,000 ms delay, 3,000 ms intensity fade, and 2,000 ms color/position LTP fade.
 
 **Checkpoints:** Assert immediately before, exactly at, and immediately after the delay and both fade endpoints.
 
@@ -74,7 +82,9 @@ Build the complete cue list through the surface named by the scenario, then clea
 **Priority:** P1  
 **Primary layer:** Rust integration plus selected E2E
 
-**Setup:** Cue 1 follows to cue 2 after 5,000 ms. Cue 2 waits for an explicit GO before cue 3.
+**Starting show:** Load canonical `default-stage.show`, immediately Save As `cue-005.show`, and use the active copy for this scenario.
+
+**Setup:** Create group 1 `Front Fresnels` from fixtures 1–6. Record cue 1 to follow to cue 2 after 5,000 ms; cue 2 waits for an explicit GO before cue 3.
 
 **Actions:** Advance to 4,999 ms, 5,000 ms, and then by a seven-day jump.
 
@@ -86,6 +96,8 @@ Build the complete cue list through the surface named by the scenario, then clea
 
 **Priority:** P0  
 **Primary layer:** Rust/API integration
+
+**Starting show:** Load canonical `default-stage.show`, immediately Save As `merge-001.show`, and use the active copy for this scenario.
 
 **Cases:**
 
@@ -104,7 +116,9 @@ Build the complete cue list through the surface named by the scenario, then clea
 **Priority:** P1  
 **Primary layer:** Rust integration plus selected E2E
 
-**Setup:** Two playbacks and one programmer contribute intensity, color, and position to overlapping fixtures.
+**Starting show:** Load canonical `default-stage.show`, immediately Save As `merge-002.show`, and use the active copy for this scenario.
+
+**Setup:** Use Back Profiles 101–108. Two playbacks and one programmer contribute intensity, color, and position to overlapping fixtures.
 
 **Actions:** Activate sources in different orders, change playback masters, release each source, and repeat with direct cue jumps.
 

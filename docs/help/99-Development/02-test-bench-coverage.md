@@ -2,31 +2,38 @@
 
 This is the canonical catalog for automated and manual acceptance coverage. Stable IDs must be retained when scenarios move between Rust integration tests, the Playwright browser bench, or packaged-desktop smoke tests. Every executable scenario records its action surface and oracle so a passing API-only test is never mistaken for UI or wire-protocol coverage.
 
-Detailed scenario specifications are grouped in [docs/testing](../testing/README.md). The catalog remains the authoritative ID and coverage index; the scenario documents provide the executable setup, actions, timing checkpoints, oracles, and pass conditions.
+Detailed scenario specifications are grouped in [docs/testing](../../testing/README.md). The catalog remains the authoritative ID and coverage index; the scenario documents provide the executable setup, actions, timing checkpoints, oracles, and pass conditions.
 
 The Playwright bench runs an isolated server per worker with a fixed application clock. Advancing virtual time renders and transmits one real output frame, allowing fades, chasers, and effects to be tested without wall-clock waits. Production mode continues to stream at its configured frame rate.
 
-## Bench A: twelve dimmers
+## SHOW-000: copy a reusable show with Save As
 
-Patch fixtures 1–12 as one-channel Generic Dimmers on universe 1, addresses 1–12. Unless a scenario explicitly tests patch creation, create this patch through the shared bench fixture.
+The suite retains canonical `compact-rig.show` and `default-stage.show` fixtures instead of regenerating them before each run. Run [SHOW-000](../../testing/00-generate-show-files.md) first to prove Save As creates an independent copy without altering its canonical source. Every scenario below loads one canonical file, immediately saves it under the scenario-specific name, and uses only that active working copy.
+
+## Compact Rig: twelve dimmers and four RGB LEDs
+
+Canonical `compact-rig.show` contains fixtures 1–12 as one-channel Generic Dimmers on universe 1, addresses 1–12, on patch layer `Dimmers`. RGB LED fixtures 21–24 use `RGB virtual dimmer` mode at addresses 13, 16, 19, and 22 on patch layer `LEDs`.
 
 | Group | Name | Initial ordered members |
 | --- | --- | --- |
 | 1 | All Dimmers | 1–12 |
 | 2 | Odd Dimmers | 1, 3, 5, 7, 9, 11 |
 | 3 | Front Dimmers | 1–4 |
+| 4 | Center Spot | Empty |
 
 Configure two enabled routes for logical universe 1: Art-Net universe 1 to the bench Art-Net receiver and unicast sACN universe 101 to the bench sACN receiver. A test that changes routing must restore or replace the show rather than mutating another test's fixture.
 
 ### DIM-001 — Create and edit an ordered group
 
+- **Starting show:** Load canonical `compact-rig.show`, immediately Save As `dim-001.show`, and use the active copy.
 - **Surface:** REST setup, Lightning Desk UI, and Group UI.
-- **Actions:** Create group 3 from fixtures 1–4, apply 50%, add fixtures 5 and 6, remove fixture 2, and reorder fixture 6 before fixture 1.
+- **Actions:** Use existing group 3 with fixtures 1–4, apply 50%, add fixtures 5 and 6, remove fixture 2, and reorder fixture 6 before fixture 1.
 - **Oracle:** Group membership and order in the API/UI; Art-Net and sACN slots for current members; removed fixtures retain only independently scoped values.
 - **Pass:** Group edits affect group-relative programming immediately without rewriting unrelated fixture values.
 
 ### DIM-002 — Command-line group programming
 
+- **Starting show:** Load canonical `compact-rig.show`, immediately Save As `dim-002.show`, and use the active copy.
 - **Surface:** Lightning Desk keypad/command line.
 - **Actions:** Enter `GROUP 1 AT 50`, advance the configured programmer fade exactly to its boundary, and emit one frame.
 - **Oracle:** Command-applied audit event, selected live group reference, twelve DMX values of 128, Art-Net universe 1, and sACN universe 101.
@@ -34,6 +41,7 @@ Configure two enabled routes for logical universe 1: Art-Net universe 1 to the b
 
 ### DIM-003 — Frozen and derived membership
 
+- **Starting show:** Load canonical `compact-rig.show`, immediately Save As `dim-003.show`, and use the active copy.
 - **Surface:** Lightning Desk command line and Group UI.
 - **Actions:** Create an every-second derived group from group 1 and a frozen snapshot of group 1; insert and remove members in group 1.
 - **Oracle:** Derived membership recalculates from source order while the frozen group remains unchanged and reports missing fixtures.
@@ -41,52 +49,69 @@ Configure two enabled routes for logical universe 1: Art-Net universe 1 to the b
 
 ### DIM-004 — Direct values and group arbitration
 
+- **Starting show:** Load canonical `compact-rig.show`, immediately Save As `dim-004.show`, and use the active copy.
 - **Surface:** REST programmer API plus UI group programming.
 - **Actions:** Put group 1 at 50%, fixture 1 at 75%, a second programmer at 25%, and vary group master/flash.
 - **Oracle:** Exact HTP output is 191 for fixture 1 and 128 for the remaining members; group master and flash scale/restore without moving stored values.
 - **Pass:** Fixture- and group-scoped contributions merge predictably and identically in logical DMX, Art-Net, and sACN.
 
-## Bench B: mixed theater show
+### PROG-001 — Additive selection until use or Clear
 
-Use a new show with the following fixtures:
+- **Starting show:** Load canonical `compact-rig.show`, immediately Save As `prog-001.show`, and use the active copy.
+- **Surface:** Stage clicks and marquee, Fixture Sheet, Group UI, Lightning Desk command/value controls, encoders, and preset recall.
+- **Actions:** Select fixtures and groups successively across surfaces without programming a value; apply a value; select again; build another selection and recall a preset; then press `CLR` once and select again.
+- **Oracle:** Programmer selection open/used state, ordered source references, normalized deduplicated fixture targets, visible selection indicators, and preserved programmer values.
+- **Pass:** Selections accumulate across all surfaces as implicit `+` operations until a value/encoder/preset edit consumes the current selection or first-stage `CLR` clears it; the next selection then replaces the old targets and starts a new additive selection.
+
+## Default Stage Show
+
+Canonical `default-stage.show` contains the complete 49-record built-in patch:
 
 | Fixture IDs | Name | Capabilities |
 | --- | --- | --- |
-| 1–4 | Front Wash | Dimmer |
-| 11–16 | Overhead Profile | Intensity, pan, tilt, color |
-| 21–28 | Cyc | Intensity, RGB color |
+| 1–6 | Front Fresnels | Intensity |
+| 101–108 | Back Profiles | Intensity, pan, tilt, RGB color |
+| 201–205 | Back LED Washes | Intensity, pan, tilt, RGB color |
+| 401–412 | Floor RGBW PARs | Intensity and RGBW color |
+| 501–506 | Back RGB Sunstrips | Ten logical RGB heads with virtual dimmers |
+| 601–604 | Front RGB Strobes | Intensity and RGB color |
+| 28, 29, 99, 301–304, 999 | ACL sets, hazer, Trackspots, and RGB multipatch | Built-in utility, movement, and multipatch capabilities |
 
-Create these starting groups in the listed order:
+At the start of each theater workflow, create only the groups it uses from this fresh show copy. The common groups are:
 
 | Group | Name | Members |
 | --- | --- | --- |
-| 1 | Front Wash | 1–4 |
-| 2 | Profiles | 11–16 |
-| 3 | Cyc | 21–28 |
-| 4 | All Stage | 1–4, 11–16, 21–28 |
+| 1 | Front Fresnels | 1–6 |
+| 2 | Back Profiles | 101–108 |
+| 3 | Back LED Washes | 201–205 |
+| 4 | All Stage | 1–6, 101–108, 201–205, 401–412, 501–506, 601–604 |
 
 Before each workflow, clear the command line, selection, programmer, preload, and active playbacks unless the workflow says otherwise. Create or load any named presets and cues that a workflow lists as prerequisites; do not rely on accidental state left by an earlier workflow.
 
 ## THE-001 — Retain a live group reference
 
+**Starting show:** Load canonical `default-stage.show`, immediately Save As `the-001.show`, use the active copy, and then create common group 2 as listed above.
+
 **Purpose:** Prove that programming stored against a group remains connected to that group's current membership.
 
 1. Select group 2 by reference with `[GRP] 2 [ENTER]`.
-   - **Expect:** Profiles 11–16 are selected in their group order, and the selection is identified as a live group reference.
+   - **Expect:** Back Profiles 101–108 are selected in their group order, and the selection is identified as a live group reference.
 2. Set intensity to 60% and choose a visible blue color.
-   - **Expect:** All six profiles show the programmed intensity and color; unrelated fixtures are unchanged.
+   - **Expect:** All eight profiles show the programmed intensity and color; unrelated fixtures are unchanged.
 3. Record the look as cue 1 on an empty playback.
-   - **Expect:** The cue stores group-relative changes, not six copied fixture changes.
+   - **Expect:** The cue stores group-relative changes, not eight copied fixture changes.
 4. Clear the programmer and run cue 1.
-   - **Expect:** Profiles 11–16 reproduce the look from playback.
-5. Patch a compatible profile as fixture 17 and add it to group 2 after fixture 16.
-   - **Expect:** The group reports seven ordered members without requiring the cue to be rerecorded.
+   - **Expect:** Back Profiles 101–108 reproduce the look from playback.
+5. Patch a compatible `ToskLight Built-in / Profile Moving Light / DPTRGB` as fixture 109 on universe 1 at address 361 and add it to group 2 after fixture 108.
+   - **Expect:** The group reports nine ordered members without requiring the cue to be rerecorded.
 6. Observe the still-running cue, or release and run it again if required by the chosen playback state.
-   - **Expect:** Fixture 17 receives the same group-relative intensity and color. Fixtures removed from group 2 stop receiving that group-relative playback data, while unrelated fixture-scoped values remain intact.
+   - **Expect:** Fixture 109 receives the same group-relative intensity and color. Fixtures removed from group 2 stop receiving that group-relative playback data, while unrelated fixture-scoped values remain intact.
 
 **Pass condition:** Membership can change after programming, and the cue follows the live group reference without duplicating or losing fixture-scoped data.
 
 ## THE-002 — Compare a derived group with a frozen selection
+
+**Starting show:** Load canonical `default-stage.show`, immediately Save As `the-002.show`, use the active copy, and then create common group 4 as listed above.
 
 **Purpose:** Prove the difference between a live subdivided reference and a static snapshot of group membership.
 
@@ -96,7 +121,7 @@ Before each workflow, clear the command line, selection, programmer, preload, an
    - **Expect:** Group 5 retains group 4 as its source and retains the every-second derivation rule.
 3. Select the current members of group 4 as individual fixtures with `[GRP][GRP] 4 [ENTER]` and record them as group 6, named `All Stage Snapshot`.
    - **Expect:** Group 6 contains a frozen or static ordered membership and does not retain a live membership link to group 4.
-4. Add fixture 17 to group 4 in a position where it changes the alternating pattern.
+4. Add fixture 999 to group 4 in a position where it changes the alternating pattern.
    - **Expect:** Group 5 recalculates from the new group 4 order. Group 6 remains unchanged.
 5. Remove one original member of group 4.
    - **Expect:** Group 5 recalculates again. Group 6 still identifies its original member, including a warning if that member is no longer patched.
@@ -105,12 +130,14 @@ Before each workflow, clear the command line, selection, programmer, preload, an
 
 ## THE-003 — Program a short theater scene
 
+**Starting show:** Load canonical `default-stage.show`, immediately Save As `the-003.show`, use the active copy, and then create common groups 1–4 as listed above.
+
 **Purpose:** Exercise a typical theater-programming sequence using reusable presets, tracked cues, and playback.
 
 The scene is a short evening interior: preset, lights up, an actor crosses to center, the room cools, and blackout.
 
 1. Build and record reusable presets:
-   - Record a warm color preset for groups 1 and 2.
+   - Record a warm color preset for groups 2 and 3; group 1 has intensity only.
    - Record a cool blue color preset for groups 2 and 3.
    - Record a center-stage position preset for group 2.
    - **Expect:** Each preset contains only its intended attribute family and can be recalled on compatible fixtures.
@@ -142,6 +169,8 @@ The scene is a short evening interior: preset, lights up, an actor crosses to ce
 
 ## THE-004 — Prepare a change in Preload without disturbing the live scene
 
+**Starting show:** Load canonical `default-stage.show`, immediately Save As `the-004.show`, use the active copy, create common groups 1–4, and recreate cues 1–5 exactly as described in THE-003 before beginning this scenario.
+
 **Purpose:** Prove that an operator can prepare and store the next change while the audience-facing output remains stable.
 
 1. Run cue 2 from the theater scene workflow and note its live values.
@@ -163,15 +192,17 @@ The scene is a short evening interior: preset, lights up, an actor crosses to ce
 
 ## THE-005 — Save, restart, and resume a show
 
+**Starting show:** Load canonical `default-stage.show`, immediately Save As `the-005.show`, use the active copy, create common groups 1–4, and recreate the presets and cues from THE-003 before beginning this scenario.
+
 **Purpose:** Verify the normal end-of-session and recovery path using persisted show data and durable operator state.
 
-1. Save the common test show after creating groups, presets, and the theater cue list.
+1. Save the common test show after creating groups, presets, and the theater Cuelist.
    - **Expect:** The dirty indicator clears only after the persisted show changes are saved.
 2. Leave cue 3 active and place a distinct fixture value in the programmer without recording it.
    - **Expect:** Playback and programmer values are visibly distinguishable.
 3. Stop and restart the real server and control application, then reconnect as the same user.
    - **Expect:** Startup succeeds without replacing the show, and the same active show opens.
-4. Inspect patch, groups, presets, cue list, playback position, and programmer.
+4. Inspect patch, groups, presets, Cuelist, playback position, and programmer.
    - **Expect:** Persisted show objects reload with their ordering and references intact; the durable user's programmer returns; the running cue index and playback state follow the product's documented restart policy.
 5. Clear the programmer and run the theater sequence again.
    - **Expect:** Playback output matches the pre-restart show data and no temporary programmer value has been written into a cue.
@@ -182,7 +213,7 @@ The scene is a short evening interior: preset, lights up, an actor crosses to ce
 
 | IDs | Area | Required cases | Primary oracle |
 | --- | --- | --- | --- |
-| SHOW-001–006 | Show and patch | create/open/save, addressing, overlap rejection, restart, invalid-show recovery, legacy migration | API, restarted server, preserved files |
+| SHOW-000–006 | Show and patch | Save As copy isolation, create/open/save, addressing, overlap rejection, restart, invalid-show recovery, legacy migration | independent files, API, restarted server, preserved files |
 | GROUP-001–008 | Groups | ordered CRUD, add/remove, empty, live, derived, frozen, missing source, nested-cycle rejection | group objects, selection, rendered output |
 | PROG-001–008 | Programmer | select, values, fixture override, three-stage clear, undo/redo, preload, masters, two users | programmer state, audit, rendered output |
 | CMD-001–010 | Command line | fixture/group ranges, subsets, `AT`, presets, `REC/DEL/MOV/CPY`, cues, page addressing, invalid grammar | UI result, audit event, show object mutation |
