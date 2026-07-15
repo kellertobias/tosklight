@@ -1,6 +1,16 @@
-# Light
+<p align="center">
+  <img src="apps/control-ui/src-tauri/icons/icon.png" alt="Light application icon" width="96" height="96">
+</p>
 
-`light` is a headless-first show-lighting engine and control server. It uses portable SQLite show files, user-owned programmers shared across that user's devices, tracked cue lists, calibrated fixture attributes, and Art-Net/sACN network output.
+<h1 align="center">Light</h1>
+
+`light` is a show-lighting desk, engine, and control server for programming fixtures, groups, cue lists, playback faders, and Art-Net/sACN output from one portable show file. The operator UI is built around a command line, live programmer, fixture sheet, 3D stage view, cue list pool, and playback section so the same show can be edited from the desktop app or browser-connected desks.
+
+Start with the [quickstart help](docs/help/00-quickstart.markdown) or browse the full [operator help](docs/help).
+
+![Light programming desk with fixture selection, group shortcuts, 3D stage preview, and live programmer](docs/help/assets/screenshots/default-desk-overview.png)
+
+![Light Cuelist pool with playback assignment controls](docs/help/assets/screenshots/cuelist-playback.png)
 
 ## Run the server
 

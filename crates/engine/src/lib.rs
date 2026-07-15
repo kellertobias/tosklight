@@ -2,12 +2,16 @@
 //! Deterministic bridge from fixture attributes and playbacks to immutable DMX universe frames.
 
 use arc_swap::ArcSwap;
-use light_core::{AttributeKey, AttributeValue, FixtureId, MergeMode, SharedClock, TimedValue, Universe};
+use light_core::{
+    AttributeKey, AttributeValue, FixtureId, MergeMode, SharedClock, TimedValue, Universe,
+};
 use light_fixture::{
     PatchedFixture, SignalLossPolicy, encode_parameter, mix_color, validate_patch,
 };
 use light_output::{DmxFrame, OutputRoute};
-use light_playback::{CueList, PlaybackDefinition, PlaybackEngine, PlaybackPage, PlaybackTarget, resolve};
+use light_playback::{
+    CueList, PlaybackDefinition, PlaybackEngine, PlaybackPage, PlaybackTarget, resolve,
+};
 use light_programmer::ProgrammerRegistry;
 use light_programmer::{GroupDefinition, resolve_group};
 use parking_lot::{Mutex, RwLock};
@@ -63,17 +67,43 @@ impl EngineSnapshot {
         let mut playback_targets = std::collections::HashSet::new();
         for playback in &self.playbacks {
             playback.validate().map_err(EngineError::Invalid)?;
-            if !playback_numbers.insert(playback.number) { return Err(EngineError::Invalid("duplicate playback number".into())); }
-            if !playback_targets.insert(playback.target.clone()) { return Err(EngineError::Invalid("a target may only belong to one playback".into())); }
+            if !playback_numbers.insert(playback.number) {
+                return Err(EngineError::Invalid("duplicate playback number".into()));
+            }
+            if !playback_targets.insert(playback.target.clone()) {
+                return Err(EngineError::Invalid(
+                    "a target may only belong to one playback".into(),
+                ));
+            }
             match &playback.target {
-                PlaybackTarget::CueList { cue_list_id } if !self.cue_lists.iter().any(|cue| cue.id == *cue_list_id) => return Err(EngineError::Invalid("playback references a missing cue list".into())),
-                PlaybackTarget::Group { group_id } if !self.groups.iter().any(|group| group.id == *group_id) => return Err(EngineError::Invalid("playback references a missing group".into())),
+                PlaybackTarget::CueList { cue_list_id }
+                    if !self.cue_lists.iter().any(|cue| cue.id == *cue_list_id) =>
+                {
+                    return Err(EngineError::Invalid(
+                        "playback references a missing cue list".into(),
+                    ));
+                }
+                PlaybackTarget::Group { group_id }
+                    if !self.groups.iter().any(|group| group.id == *group_id) =>
+                {
+                    return Err(EngineError::Invalid(
+                        "playback references a missing group".into(),
+                    ));
+                }
                 _ => {}
             }
         }
         for page in &self.playback_pages {
             page.validate().map_err(EngineError::Invalid)?;
-            if page.slots.values().any(|number| !playback_numbers.contains(number)) { return Err(EngineError::Invalid("page references a missing playback".into())); }
+            if page
+                .slots
+                .values()
+                .any(|number| !playback_numbers.contains(number))
+            {
+                return Err(EngineError::Invalid(
+                    "page references a missing playback".into(),
+                ));
+            }
         }
         for route in &self.routes {
             if route.destination_universe == 0 || route.logical_universe == 0 {
@@ -182,12 +212,18 @@ impl Engine {
             .set_control_timing(speed_groups_bpm, sequence_master_fade_millis);
     }
 
+    pub fn clear_programmer_transitions(&self) {
+        self.programmer_transitions.lock().clear();
+    }
+
     fn faded_programmer_value(
         &self,
         mut value: TimedValue,
         now: chrono::DateTime<chrono::Utc>,
     ) -> TimedValue {
-        let duration = self.programmer_fade_millis.load(Ordering::Relaxed);
+        let duration = value
+            .fade_millis
+            .unwrap_or_else(|| self.programmer_fade_millis.load(Ordering::Relaxed));
         if duration == 0 || value.value.normalized().is_none() {
             return value;
         }
@@ -201,9 +237,9 @@ impl Engine {
                 target: value.value.clone(),
             });
         let interpolate = |transition: &ProgrammerTransition| {
-            let progress = ((now - transition.changed_at).num_milliseconds().max(0) as f32
-                / duration as f32)
-                .clamp(0.0, 1.0);
+            let elapsed = (now - transition.changed_at).num_milliseconds().max(0) as u64;
+            let elapsed = elapsed.saturating_sub(value.delay_millis.unwrap_or(0));
+            let progress = (elapsed as f32 / duration as f32).clamp(0.0, 1.0);
             match (transition.from.normalized(), transition.target.normalized()) {
                 (Some(from), Some(target)) => {
                     AttributeValue::Normalized(from + (target - from) * progress)
@@ -211,7 +247,7 @@ impl Engine {
                 _ => transition.target.clone(),
             }
         };
-        if transition.changed_at != value.changed_at {
+        if transition.changed_at != value.changed_at || transition.target != value.value {
             let from = interpolate(transition);
             *transition = ProgrammerTransition {
                 changed_at: value.changed_at,
@@ -272,6 +308,8 @@ impl Engine {
                                     attribute: change.attribute.clone(),
                                     value: change.value.clone(),
                                     automatic_restore: false,
+                                    fade_millis: change.fade_millis,
+                                    delay_millis: change.delay_millis,
                                 });
                             }
                         }
@@ -292,7 +330,9 @@ impl Engine {
             playback.register(cue_list).map_err(EngineError::Invalid)?;
         }
         for definition in snapshot.playbacks.clone() {
-            playback.register_definition(definition).map_err(EngineError::Invalid)?;
+            playback
+                .register_definition(definition)
+                .map_err(EngineError::Invalid)?;
         }
         self.programmers.refresh_live_selections(&groups);
         playback.restore_active(active_playbacks);
@@ -335,14 +375,28 @@ impl Engine {
         let mut universes = HashMap::new();
         for fixture in &snapshot.fixtures {
             let mut patches = vec![(fixture.universe, fixture.address)];
-            patches.extend(fixture.multipatch.iter().map(|instance| (instance.universe, instance.address)));
+            patches.extend(
+                fixture
+                    .multipatch
+                    .iter()
+                    .map(|instance| (instance.universe, instance.address)),
+            );
             for (universe, address) in patches {
-                let (Some(universe), Some(address)) = (universe, address) else { continue };
+                let (Some(universe), Some(address)) = (universe, address) else {
+                    continue;
+                };
                 let frame = universes.entry(universe).or_insert([0; 512]);
                 let mut instance = fixture.clone();
                 instance.universe = Some(universe);
                 instance.address = Some(address);
-                render_fixture(frame, &instance, &resolved, options, &groups, &group_master_flashes)?;
+                render_fixture(
+                    frame,
+                    &instance,
+                    &resolved,
+                    options,
+                    &groups,
+                    &group_master_flashes,
+                )?;
             }
         }
         Ok(RenderResult {
@@ -407,12 +461,10 @@ impl Engine {
                             value: scoped.value.clone(),
                             priority: programmer.priority,
                             changed_at: scoped.changed_at,
-                            merge_mode: if attribute.is_intensity() {
-                                MergeMode::Htp
-                            } else {
-                                MergeMode::Ltp
-                            },
+                            merge_mode: MergeMode::Ltp,
                             fade: scoped.fade,
+                            fade_millis: scoped.fade_millis,
+                            delay_millis: scoped.delay_millis,
                         };
                         contributions.push(if value.fade {
                             self.faded_programmer_value(value, now)
@@ -441,6 +493,8 @@ impl Engine {
                             MergeMode::Ltp
                         },
                         fade: false,
+                        fade_millis: None,
+                        delay_millis: None,
                     });
                 }
             }
@@ -456,7 +510,9 @@ fn render_fixture(
     groups: &HashMap<String, GroupDefinition>,
     group_master_flashes: &HashMap<String, f32>,
 ) -> Result<(), EngineError> {
-    let Some(address) = fixture.address else { return Ok(()) };
+    let Some(address) = fixture.address else {
+        return Ok(());
+    };
     for head in &fixture.definition.heads {
         let owner = if head.shared {
             fixture.fixture_id
@@ -602,7 +658,8 @@ fn apply_safe_values(
 mod tests {
     use super::*;
     use light_fixture::{
-        ByteOrder, ChannelComponent, FixtureDefinition, LogicalHead, MultiPatchInstance, Parameter, PatchedHead,
+        ByteOrder, ChannelComponent, FixtureDefinition, LogicalHead, MultiPatchInstance, Parameter,
+        PatchedHead,
     };
     use std::collections::BTreeMap;
 
@@ -673,16 +730,52 @@ mod tests {
         programmers.start(session, light_core::UserId::new());
         let (mut fixture, logical) = fixture();
         fixture.multipatch = vec![
-            MultiPatchInstance { id: FixtureId::new().0, name: "Patched clone".into(), universe: Some(1), address: Some(8), location: Default::default(), rotation: Default::default() },
-            MultiPatchInstance { id: FixtureId::new().0, name: "Visualizer clone".into(), universe: None, address: None, location: Default::default(), rotation: Default::default() },
+            MultiPatchInstance {
+                id: FixtureId::new().0,
+                name: "Patched clone".into(),
+                universe: Some(1),
+                address: Some(8),
+                location: Default::default(),
+                rotation: Default::default(),
+            },
+            MultiPatchInstance {
+                id: FixtureId::new().0,
+                name: "Visualizer clone".into(),
+                universe: None,
+                address: None,
+                location: Default::default(),
+                rotation: Default::default(),
+            },
         ];
-        programmers.set(session, logical, AttributeKey::intensity(), AttributeValue::Normalized(0.5));
+        programmers.set(
+            session,
+            logical,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.5),
+        );
         let engine = Engine::new(programmers);
-        engine.replace_snapshot(EngineSnapshot { fixtures: vec![fixture], cue_lists: vec![], playbacks: vec![], playback_pages: vec![], routes: vec![], control_mappings: vec![], groups: vec![], revision: 1 }).unwrap();
+        engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![fixture],
+                cue_lists: vec![],
+                playbacks: vec![],
+                playback_pages: vec![],
+                routes: vec![],
+                control_mappings: vec![],
+                groups: vec![],
+                revision: 1,
+            })
+            .unwrap();
         let result = engine.render(RenderOptions::default()).unwrap();
         assert_eq!(result.universes[&1][0], 128);
         assert_eq!(result.universes[&1][7], 128);
-        assert_eq!(result.universes[&1].iter().filter(|value| **value != 0).count(), 2);
+        assert_eq!(
+            result.universes[&1]
+                .iter()
+                .filter(|value| **value != 0)
+                .count(),
+            2
+        );
     }
 
     #[test]
@@ -755,12 +848,15 @@ mod tests {
         fixture.definition.footprint = 2;
         let mut master_parameter = fixture.definition.heads[0].parameters[0].clone();
         master_parameter.components[0].offset = 1;
-        fixture.definition.heads.insert(0, LogicalHead {
-            index: 0,
-            name: "Master".into(),
-            shared: true,
-            parameters: vec![master_parameter],
-        });
+        fixture.definition.heads.insert(
+            0,
+            LogicalHead {
+                index: 0,
+                name: "Master".into(),
+                shared: true,
+                parameters: vec![master_parameter],
+            },
+        );
         let master = fixture.fixture_id;
         for fixture_id in [master, child] {
             programmers.set(
@@ -1216,6 +1312,8 @@ mod tests {
             group_id: "group".into(),
             attribute: AttributeKey::intensity(),
             value: Some(AttributeValue::Normalized(0.5)),
+            fade_millis: None,
+            delay_millis: None,
         });
         let cue_list = light_playback::CueList {
             id: light_core::CueListId::new(),
@@ -1228,22 +1326,24 @@ mod tests {
             cues: vec![cue],
         };
         let engine = Engine::new(programmers);
-        engine.replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
-            cue_lists: vec![cue_list],
-            groups: vec![GroupDefinition {
-                id: "group".into(),
-                name: "Group".into(),
-                fixtures: vec![logical],
-                master: 1.0,
-                playback_fader: None,
-                programming: Default::default(),
-                derived_from: None,
-                frozen_from: None,
-            }],
-            revision: 1,
-            ..Default::default()
-        }).expect("overlapping group and fixture cue values must compile");
+        engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![fixture],
+                cue_lists: vec![cue_list],
+                groups: vec![GroupDefinition {
+                    id: "group".into(),
+                    name: "Group".into(),
+                    fixtures: vec![logical],
+                    master: 1.0,
+                    playback_fader: None,
+                    programming: Default::default(),
+                    derived_from: None,
+                    frozen_from: None,
+                }],
+                revision: 1,
+                ..Default::default()
+            })
+            .expect("overlapping group and fixture cue values must compile");
     }
 
     #[test]
@@ -1258,6 +1358,8 @@ mod tests {
             group_id: "live".into(),
             attribute: AttributeKey::intensity(),
             value: Some(AttributeValue::Normalized(0.6)),
+            fade_millis: None,
+            delay_millis: None,
         });
         let list = light_playback::CueList {
             id: list_id,
@@ -1322,6 +1424,63 @@ mod tests {
     }
 
     #[test]
+    fn unpatched_group_member_keeps_programming_but_outputs_no_dmx() {
+        let programmers = ProgrammerRegistry::default();
+        let session = light_core::SessionId::new();
+        programmers.start(session, light_core::UserId::new());
+        programmers.set_group(
+            session,
+            "look".into(),
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.5),
+        );
+        let (patched, patched_logical) = fixture();
+        let (mut unpatched, unpatched_logical) = fixture();
+        unpatched.universe = None;
+        unpatched.address = None;
+        let group = GroupDefinition {
+            id: "look".into(),
+            name: "Look".into(),
+            fixtures: vec![patched_logical, unpatched_logical],
+            master: 1.0,
+            playback_fader: None,
+            ..Default::default()
+        };
+        let snapshot = |unpatched_fixture: PatchedFixture| EngineSnapshot {
+            fixtures: vec![patched.clone(), unpatched_fixture],
+            cue_lists: vec![],
+            playbacks: vec![],
+            playback_pages: vec![],
+            routes: vec![],
+            control_mappings: vec![],
+            groups: vec![group.clone()],
+            revision: 1,
+        };
+        let engine = Engine::new(programmers);
+        engine
+            .replace_snapshot(snapshot(unpatched.clone()))
+            .unwrap();
+        let resolved = engine.resolved_values();
+        assert_eq!(
+            resolved
+                .get(&(unpatched_logical, AttributeKey::intensity()))
+                .and_then(AttributeValue::normalized),
+            Some(0.5),
+        );
+        assert_eq!(group.fixtures, vec![patched_logical, unpatched_logical]);
+        let rendered = engine.render(RenderOptions::default()).unwrap();
+        assert_eq!(rendered.universes[&1][0], 128);
+        assert_eq!(rendered.universes[&1][1], 0);
+
+        unpatched.universe = Some(1);
+        unpatched.address = Some(2);
+        engine.replace_snapshot(snapshot(unpatched)).unwrap();
+        let repatched = engine.render(RenderOptions::default()).unwrap();
+        assert_eq!(repatched.universes[&1][0], 128);
+        assert_eq!(repatched.universes[&1][1], 128);
+    }
+
+    #[test]
     fn hazardous_fixture_defaults_to_immediate_safe_on_control_loss() {
         let programmers = ProgrammerRegistry::default();
         let session = light_core::SessionId::new();
@@ -1374,6 +1533,8 @@ mod tests {
             changed_at: now - chrono::Duration::milliseconds(500),
             merge_mode: MergeMode::Htp,
             fade: true,
+            fade_millis: None,
+            delay_millis: None,
         };
         let faded = engine.faded_programmer_value(value, now);
         assert!(

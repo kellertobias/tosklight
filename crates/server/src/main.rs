@@ -169,6 +169,7 @@ struct OscSubscriber {
     command_source: SocketAddr,
     session_id: SessionId,
     last_seen: Instant,
+    shifted: bool,
 }
 
 #[derive(RustEmbed)]
@@ -491,10 +492,24 @@ async fn main() -> anyhow::Result<()> {
             "--data-dir" => data_dir = args.next().context("--data-dir requires a path")?.into(),
             "--bind" => bind = args.next().context("--bind requires an address")?.parse()?,
             "--test-bench" => test_bench = true,
-            "--osc-bind" => osc_bind_override = Some(args.next().context("--osc-bind requires an address")?.parse()?),
-            "--output-bind-ip" => output_bind_override = Some(args.next().context("--output-bind-ip requires an address")?.parse()?),
+            "--osc-bind" => {
+                osc_bind_override = Some(
+                    args.next()
+                        .context("--osc-bind requires an address")?
+                        .parse()?,
+                )
+            }
+            "--output-bind-ip" => {
+                output_bind_override = Some(
+                    args.next()
+                        .context("--output-bind-ip requires an address")?
+                        .parse()?,
+                )
+            }
             "--help" => {
-                println!("light-server [--data-dir PATH] [--bind ADDRESS] [--test-bench] [--osc-bind ADDRESS] [--output-bind-ip ADDRESS]");
+                println!(
+                    "light-server [--data-dir PATH] [--bind ADDRESS] [--test-bench] [--osc-bind ADDRESS] [--output-bind-ip ADDRESS]"
+                );
                 return Ok(());
             }
             _ => anyhow::bail!("unknown option: {arg}"),
@@ -605,46 +620,51 @@ async fn main() -> anyhow::Result<()> {
         if test_bench {
             scheduler_cancel.cancelled().await;
         } else {
-        run_scheduler_dynamic(scheduler_rate, scheduler_cancel.clone(), scheduler_health, || {
-            let engine = Arc::clone(&scheduler_engine);
-            let output = Arc::clone(&scheduler_output);
-            let sequences = Arc::clone(&scheduler_sequences);
-            let control = Arc::clone(&scheduler_control);
-            let timecode = Arc::clone(&scheduler_timecode);
-            async move {
-                let current = { timecode.lock().poll_loss().cloned() };
-                engine.set_timecode_frame(current.map(|timecode| {
-                    let fps = u64::from(timecode.rate.nominal_frames());
-                    (u64::from(timecode.hours) * 3600
-                        + u64::from(timecode.minutes) * 60
-                        + u64::from(timecode.seconds))
-                        * fps
-                        + u64::from(timecode.frames)
-                }));
-                let options = control.lock().options;
-                let rendered = engine.render(options).map_err(io::Error::other)?;
-                let snapshot = engine.snapshot();
-                let frames = {
-                    let mut control = control.lock();
-                    if control.hold {
-                        control.last_frames.clone()
-                    } else {
-                        let mut frames = rendered.universes;
-                        for (&(universe, address), &value) in &control.raw_overrides {
-                            if let Some(frame) = frames.get_mut(&universe) {
-                                frame[usize::from(address - 1)] = value;
+            run_scheduler_dynamic(
+                scheduler_rate,
+                scheduler_cancel.clone(),
+                scheduler_health,
+                || {
+                    let engine = Arc::clone(&scheduler_engine);
+                    let output = Arc::clone(&scheduler_output);
+                    let sequences = Arc::clone(&scheduler_sequences);
+                    let control = Arc::clone(&scheduler_control);
+                    let timecode = Arc::clone(&scheduler_timecode);
+                    async move {
+                        let current = { timecode.lock().poll_loss().cloned() };
+                        engine.set_timecode_frame(current.map(|timecode| {
+                            let fps = u64::from(timecode.rate.nominal_frames());
+                            (u64::from(timecode.hours) * 3600
+                                + u64::from(timecode.minutes) * 60
+                                + u64::from(timecode.seconds))
+                                * fps
+                                + u64::from(timecode.frames)
+                        }));
+                        let options = control.lock().options;
+                        let rendered = engine.render(options).map_err(io::Error::other)?;
+                        let snapshot = engine.snapshot();
+                        let frames = {
+                            let mut control = control.lock();
+                            if control.hold {
+                                control.last_frames.clone()
+                            } else {
+                                let mut frames = rendered.universes;
+                                for (&(universe, address), &value) in &control.raw_overrides {
+                                    if let Some(frame) = frames.get_mut(&universe) {
+                                        frame[usize::from(address - 1)] = value;
+                                    }
+                                }
+                                control.last_frames = frames.clone();
+                                frames
                             }
-                        }
-                        control.last_frames = frames.clone();
-                        frames
+                        };
+                        output
+                            .send_routes(&snapshot.routes, &frames, &mut *sequences.lock().await)
+                            .await
                     }
-                };
-                output
-                    .send_routes(&snapshot.routes, &frames, &mut *sequences.lock().await)
-                    .await
-            }
-        })
-        .await;
+                },
+            )
+            .await;
         }
         let snapshot = scheduler_engine.snapshot();
         let mut shutdown_options = scheduler_control.lock().options;
@@ -871,6 +891,7 @@ async fn reset_test_clock(
         .ok_or_else(|| ApiError::not_found("test clock"))?;
     clock.set(fixed_test_time());
     state.programmers.reset_all();
+    state.engine.clear_programmer_transitions();
     state.output_sequences.lock().await.clear();
     state.osc_subscribers.lock().clear();
     emit(
@@ -1708,7 +1729,13 @@ async fn list_show_revisions(
 ) -> Result<Json<Vec<ShowRevision>>, ApiError> {
     let _session = authenticate(&state, &headers)?;
     let id = light_core::ShowId(id);
-    if state.desk.lock().show(id).map_err(ApiError::store)?.is_none() {
+    if state
+        .desk
+        .lock()
+        .show(id)
+        .map_err(ApiError::store)?
+        .is_none()
+    {
         return Err(ApiError::not_found("show"));
     }
     Ok(Json(
@@ -2872,8 +2899,8 @@ async fn put_object(
         let mut fixture = serde_json::from_value::<light_fixture::PatchedFixture>(body)
             .map_err(|error| ApiError::bad_request(error.to_string()))?;
         light_fixture::reconcile_logical_heads(&mut fixture);
-        body = serde_json::to_value(fixture)
-            .map_err(|error| ApiError::internal(error.to_string()))?;
+        body =
+            serde_json::to_value(fixture).map_err(|error| ApiError::internal(error.to_string()))?;
     }
     if state
         .active_show
@@ -3159,6 +3186,8 @@ async fn store_preload(
                         group_id: group_id.clone(),
                         attribute: attribute.clone(),
                         value: Some(scoped.value.clone()),
+                        fade_millis: scoped.fade_millis,
+                        delay_millis: scoped.delay_millis,
                     });
                 }
             }
@@ -4525,6 +4554,27 @@ fn parse_fixture_selection(
         .iter()
         .position(|token| token == "DIV")
         .unwrap_or(tokens.len());
+    if let Some(minus) = tokens[..div].iter().position(|token| token == "-") {
+        if minus == 0 || minus + 1 == div {
+            return Err("- requires fixture selections on both sides".into());
+        }
+        let mut selected = parse_fixture_selection(fixtures, &tokens[..minus])?;
+        let mut start = minus + 1;
+        while start < div {
+            let end = tokens[start..div]
+                .iter()
+                .position(|token| token == "-")
+                .map_or(div, |offset| start + offset);
+            if start == end {
+                return Err("- requires a fixture selection".into());
+            }
+            let removed = parse_fixture_selection(fixtures, &tokens[start..end])?;
+            selected.retain(|fixture| !removed.contains(fixture));
+            start = end + 1;
+        }
+        let rule = parse_subset_rule(&tokens[div..])?;
+        return Ok(light_programmer::apply_selection_rule(&selected, &rule));
+    }
     let mut selected = Vec::new();
     let mut index = 0;
     while index < div {
@@ -4556,14 +4606,13 @@ fn parse_fixture_selection(
                 }
                 (Some(0), Some(0)) => {
                     for number in first.number..=last.number {
-                        let fixture_id = resolve_fixture_reference(fixtures, &format!("{number}.0"))?;
+                        let fixture_id =
+                            resolve_fixture_reference(fixtures, &format!("{number}.0"))?;
                         push_unique(&mut selected, fixture_id);
                     }
                 }
                 (Some(first_head), Some(last_head))
-                    if first.number == last.number
-                        && first_head > 0
-                        && last_head >= first_head =>
+                    if first.number == last.number && first_head > 0 && last_head >= first_head =>
                 {
                     for head in first_head..=last_head {
                         let fixture_id = resolve_fixture_reference(
@@ -4608,6 +4657,63 @@ fn parse_fixture_selection(
     }
     let rule = parse_subset_rule(&tokens[div..])?;
     Ok(light_programmer::apply_selection_rule(&selected, &rule))
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct CommandTiming {
+    fade_millis: Option<u64>,
+    delay_millis: Option<u64>,
+}
+
+fn command_time_millis(token: &str) -> Result<u64, String> {
+    let seconds = token
+        .parse::<f64>()
+        .map_err(|_| "TIME and DELAY require seconds")?;
+    if !seconds.is_finite() || seconds < 0.0 || seconds > 86_400.0 {
+        return Err("TIME and DELAY must be within 0-86400 seconds".into());
+    }
+    Ok((seconds * 1_000.0).round() as u64)
+}
+
+fn command_time_at(tokens: &[String], index: usize) -> Result<(u64, usize), String> {
+    let whole = tokens.get(index).ok_or("TIME and DELAY require seconds")?;
+    if tokens.get(index + 1).is_some_and(|token| token == ".") {
+        let fraction = tokens
+            .get(index + 2)
+            .ok_or("time decimal requires digits after the dot")?;
+        return Ok((command_time_millis(&format!("{whole}.{fraction}"))?, 3));
+    }
+    Ok((command_time_millis(whole)?, 1))
+}
+
+fn extract_command_timing(tokens: &[String]) -> Result<(Vec<String>, CommandTiming), String> {
+    let mut command = Vec::with_capacity(tokens.len());
+    let mut timing = CommandTiming::default();
+    let mut index = 0;
+    while index < tokens.len() {
+        match tokens[index].as_str() {
+            "TIME" if tokens.get(index + 1).is_some_and(|token| token == "TIME") => {
+                let (value, used) = command_time_at(tokens, index + 2)?;
+                timing.delay_millis = Some(value);
+                index += 2 + used;
+            }
+            "TIME" => {
+                let (value, used) = command_time_at(tokens, index + 1)?;
+                timing.fade_millis = Some(value);
+                index += 1 + used;
+            }
+            "DELAY" => {
+                let (value, used) = command_time_at(tokens, index + 1)?;
+                timing.delay_millis = Some(value);
+                index += 1 + used;
+            }
+            _ => {
+                command.push(tokens[index].clone());
+                index += 1;
+            }
+        }
+    }
+    Ok((command, timing))
 }
 
 fn active_show_store(state: &AppState) -> Result<(ShowEntry, ShowStore), String> {
@@ -4747,7 +4853,10 @@ fn parse_playback_address(
     };
     let cue = if tokens.get(index).is_some_and(|token| token == "CUE") {
         index += 1;
-        let mut cue = tokens.get(index).ok_or("CUE requires a cue number")?.clone();
+        let mut cue = tokens
+            .get(index)
+            .ok_or("CUE requires a cue number")?
+            .clone();
         index += 1;
         while tokens.get(index).is_some_and(|token| token == ".") {
             cue.push('.');
@@ -4796,17 +4905,23 @@ fn programmer_preset(
 fn programmer_cue(
     programmer: &light_programmer::ProgrammerState,
     number: f64,
+    timing: CommandTiming,
 ) -> light_playback::Cue {
     let mut cue = light_playback::Cue::new(number);
+    cue.fade_millis = timing.fade_millis.unwrap_or(0);
+    cue.delay_millis = timing.delay_millis.unwrap_or(0);
     cue.changes = programmer
         .values
         .iter()
         .map(|value| {
-            light_playback::CueChange::set(
+            let mut change = light_playback::CueChange::set(
                 value.fixture_id,
                 value.attribute.clone(),
                 value.value.clone(),
-            )
+            );
+            change.fade_millis = value.fade_millis;
+            change.delay_millis = value.delay_millis;
+            change
         })
         .collect();
     cue.group_changes = programmer
@@ -4819,6 +4934,8 @@ fn programmer_cue(
                     group_id: group.clone(),
                     attribute: attribute.clone(),
                     value: Some(value.value.clone()),
+                    fade_millis: value.fade_millis,
+                    delay_millis: value.delay_millis,
                 })
         })
         .collect();
@@ -4858,11 +4975,20 @@ fn cue_list_for_playback(
     Ok((definition, object, cue_list))
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RecordOperation {
+    Overwrite,
+    Merge,
+    Subtract,
+}
+
 fn store_cue_at(
     state: &AppState,
     session: &Session,
     playback: u16,
     requested: Option<f64>,
+    timing: CommandTiming,
+    operation: RecordOperation,
 ) -> Result<(), String> {
     let (entry, store) = active_show_store(state)?;
     let snapshot = state.engine.snapshot();
@@ -4870,8 +4996,12 @@ fn store_cue_at(
         .programmers
         .get(session.id)
         .ok_or("programmer does not exist")?;
-    if programmer.values.is_empty() && programmer.group_values.is_empty() {
+    let programmer_is_empty = programmer.values.is_empty() && programmer.group_values.is_empty();
+    if programmer_is_empty && operation != RecordOperation::Subtract {
         return Err("the programmer has no values to record".into());
+    }
+    if operation != RecordOperation::Overwrite && requested.is_none() {
+        return Err("RECORD + and RECORD - require an explicit CUE target".into());
     }
     if let Some(definition) = snapshot
         .playbacks
@@ -4881,12 +5011,63 @@ fn store_cue_at(
         let (_, object, mut list) = cue_list_for_playback(&store, &snapshot, definition.number)?;
         let number = requested
             .unwrap_or_else(|| list.cues.last().map_or(1.0, |cue| cue.number.floor() + 1.0));
-        if list.cues.iter().any(|cue| cue.number == number) {
-            return Err(format!(
-                "Cue {number} already exists; merge or overwrite confirmation is required"
-            ));
+        if let Some(position) = list.cues.iter().position(|cue| cue.number == number) {
+            if operation == RecordOperation::Subtract && programmer_is_empty {
+                list.cues.remove(position);
+                if list.cues.is_empty() {
+                    return Err(
+                        "cannot delete the only Cue; delete the Cuelist from its configuration instead"
+                            .into(),
+                    );
+                }
+            } else {
+                let incoming = programmer_cue(&programmer, number, timing);
+                let cue = &mut list.cues[position];
+                match operation {
+                    RecordOperation::Overwrite => {
+                        cue.changes = incoming.changes;
+                        cue.group_changes = incoming.group_changes;
+                        cue.phasers = incoming.phasers;
+                        cue.fade_millis = incoming.fade_millis;
+                        cue.delay_millis = incoming.delay_millis;
+                    }
+                    RecordOperation::Merge => {
+                        for change in incoming.changes {
+                            cue.changes.retain(|existing| {
+                                existing.fixture_id != change.fixture_id
+                                    || existing.attribute != change.attribute
+                            });
+                            cue.changes.push(change);
+                        }
+                        for change in incoming.group_changes {
+                            cue.group_changes.retain(|existing| {
+                                existing.group_id != change.group_id
+                                    || existing.attribute != change.attribute
+                            });
+                            cue.group_changes.push(change);
+                        }
+                    }
+                    RecordOperation::Subtract => {
+                        cue.changes.retain(|existing| {
+                            !incoming.changes.iter().any(|remove| {
+                                existing.fixture_id == remove.fixture_id
+                                    && existing.attribute == remove.attribute
+                            })
+                        });
+                        cue.group_changes.retain(|existing| {
+                            !incoming.group_changes.iter().any(|remove| {
+                                existing.group_id == remove.group_id
+                                    && existing.attribute == remove.attribute
+                            })
+                        });
+                    }
+                }
+            }
+        } else if operation == RecordOperation::Subtract {
+            return Err(format!("Cue {number} does not exist"));
+        } else {
+            list.cues.push(programmer_cue(&programmer, number, timing));
         }
-        list.cues.push(programmer_cue(&programmer, number));
         list.cues.sort_by(|a, b| a.number.total_cmp(&b.number));
         store
             .put_object(
@@ -4897,6 +5078,9 @@ fn store_cue_at(
             )
             .map_err(|error| error.to_string())?;
     } else {
+        if operation == RecordOperation::Subtract {
+            return Err(format!("Cuelist {playback} does not exist"));
+        }
         if !(1..=light_playback::MAX_PLAYBACKS).contains(&playback) {
             return Err("Cuelist number must be within 1-1000".into());
         }
@@ -4910,7 +5094,7 @@ fn store_cue_at(
             looped: false,
             chaser_step_millis: 1_000,
             speed_group: None,
-            cues: vec![programmer_cue(&programmer, number)],
+            cues: vec![programmer_cue(&programmer, number, timing)],
         };
         let definition = light_playback::PlaybackDefinition {
             number: playback,
@@ -4950,6 +5134,7 @@ fn execute_show_command(
     state: &AppState,
     session: &Session,
     tokens: &[String],
+    timing: CommandTiming,
 ) -> Result<usize, String> {
     let operation = match tokens[0].as_str() {
         "REC" => "RECORD",
@@ -4958,49 +5143,141 @@ fn execute_show_command(
         "CPY" => "COPY",
         value => value,
     };
-    let body = &tokens[1..];
+    let mut body = &tokens[1..];
     let snapshot = state.engine.snapshot();
     if operation == "RECORD" {
+        let record_operation = match body.first().map(String::as_str) {
+            Some("+") => {
+                body = &body[1..];
+                RecordOperation::Merge
+            }
+            Some("-") => {
+                body = &body[1..];
+                RecordOperation::Subtract
+            }
+            _ => RecordOperation::Overwrite,
+        };
         if body.first().is_some_and(|token| token == "GROUP") {
             if body.len() != 2 {
-                return Err("expected RECORD GROUP <group-number>".into());
+                return Err("expected RECORD [ + | - ] GROUP <group-number>".into());
             }
             let id = body[1].clone();
             let programmer = state
                 .programmers
                 .get(session.id)
                 .ok_or("programmer does not exist")?;
-            let mut group = light_programmer::GroupDefinition {
-                id: id.clone(),
-                name: format!("Group {id}"),
-                fixtures: programmer.selected.clone(),
-                ..Default::default()
-            };
-            match programmer.selection_expression {
-                Some(light_programmer::SelectionExpression::LiveGroup { group_id, rule }) => {
-                    group.derived_from = Some(light_programmer::DerivedGroup {
-                        source_group_id: group_id,
-                        rule,
-                    })
-                }
-                Some(light_programmer::SelectionExpression::FrozenGroup {
-                    group_id,
-                    source_revision,
-                }) => {
-                    group.frozen_from = Some(light_programmer::FrozenGroup {
-                        source_group_id: group_id,
-                        source_revision,
-                        captured_at: chrono::Utc::now(),
-                    })
-                }
-                _ => {}
-            }
             let (entry, store) = active_show_store(state)?;
             let existing = store
                 .objects("group")
                 .map_err(|error| error.to_string())?
                 .into_iter()
                 .find(|object| object.id == id);
+            if record_operation == RecordOperation::Subtract && programmer.selected.is_empty() {
+                let existing = existing.ok_or_else(|| format!("group {id} does not exist"))?;
+                if let Some(dependent) = snapshot.groups.iter().find(|group| {
+                    group
+                        .derived_from
+                        .as_ref()
+                        .is_some_and(|derived| derived.source_group_id == id)
+                }) {
+                    return Err(format!(
+                        "cannot delete group {id}; derived group {} depends on it",
+                        dependent.id
+                    ));
+                }
+                store
+                    .delete_object("group", &existing.id)
+                    .map_err(|error| error.to_string())?;
+                refresh_command_show(state, &entry)?;
+                return Ok(1);
+            }
+            let existing_group = existing
+                .as_ref()
+                .map(|object| {
+                    serde_json::from_value::<light_programmer::GroupDefinition>(object.body.clone())
+                        .map_err(|error| error.to_string())
+                })
+                .transpose()?;
+            if record_operation != RecordOperation::Overwrite && existing_group.is_none() {
+                return Err(format!("group {id} does not exist"));
+            }
+            let existing_membership = if existing_group.is_some() {
+                let groups = snapshot
+                    .groups
+                    .iter()
+                    .cloned()
+                    .map(|group| (group.id.clone(), group))
+                    .collect::<HashMap<_, _>>();
+                light_programmer::resolve_group(&id, &groups)?
+            } else {
+                Vec::new()
+            };
+            let mut group = existing_group.unwrap_or_else(|| light_programmer::GroupDefinition {
+                id: id.clone(),
+                name: format!("Group {id}"),
+                ..Default::default()
+            });
+            match record_operation {
+                RecordOperation::Overwrite => {
+                    group.fixtures = programmer.selected.clone();
+                    group.derived_from = None;
+                    group.frozen_from = None;
+                    match programmer.selection_expression.clone() {
+                        Some(light_programmer::SelectionExpression::LiveGroup {
+                            group_id,
+                            rule,
+                        }) if group_id != id => {
+                            group.derived_from = Some(light_programmer::DerivedGroup {
+                                source_group_id: group_id,
+                                rule,
+                            });
+                        }
+                        Some(light_programmer::SelectionExpression::FrozenGroup {
+                            group_id,
+                            source_revision,
+                        }) if group_id != id => {
+                            group.frozen_from = Some(light_programmer::FrozenGroup {
+                                source_group_id: group_id,
+                                source_revision,
+                                captured_at: chrono::Utc::now(),
+                            });
+                        }
+                        _ => {}
+                    }
+                }
+                RecordOperation::Merge => {
+                    group.fixtures = existing_membership;
+                    for fixture in &programmer.selected {
+                        if !group.fixtures.contains(fixture) {
+                            group.fixtures.push(*fixture);
+                        }
+                    }
+                    group.derived_from = None;
+                    group.frozen_from = None;
+                }
+                RecordOperation::Subtract => {
+                    group.fixtures = existing_membership;
+                    group
+                        .fixtures
+                        .retain(|fixture| !programmer.selected.contains(fixture));
+                    group.derived_from = None;
+                    group.frozen_from = None;
+                }
+            }
+            if group.derived_from.is_some() {
+                let mut groups = snapshot
+                    .groups
+                    .iter()
+                    .cloned()
+                    .map(|candidate| (candidate.id.clone(), candidate))
+                    .collect::<HashMap<_, _>>();
+                groups.insert(id.clone(), group.clone());
+                if light_programmer::resolve_group(&id, &groups).is_err() {
+                    group.derived_from = None;
+                    group.frozen_from = None;
+                    group.fixtures = programmer.selected.clone();
+                }
+            }
             store
                 .put_object(
                     "group",
@@ -5017,8 +5294,20 @@ fn execute_show_command(
             if used != body.len() {
                 return Err("unexpected tokens after cue target".into());
             }
-            store_cue_at(state, session, address.playback, address.cue)?;
+            store_cue_at(
+                state,
+                session,
+                address.playback,
+                address.cue,
+                timing,
+                record_operation,
+            )?;
             return Ok(1);
+        }
+        if record_operation != RecordOperation::Overwrite {
+            return Err(
+                "RECORD + and RECORD - currently require GROUP or SET ... CUE targets".into(),
+            );
         }
         let id = command_preset_id(body)?;
         let programmer = state
@@ -5050,6 +5339,31 @@ fn execute_show_command(
         return execute_set_command(state, body);
     }
     let (entry, store) = active_show_store(state)?;
+    if operation == "DELETE" && body.first().is_some_and(|token| token == "GROUP") {
+        if body.len() != 2 {
+            return Err("expected DELETE GROUP <group-number>".into());
+        }
+        let id = &body[1];
+        if let Some(dependent) = snapshot.groups.iter().find(|group| {
+            group
+                .derived_from
+                .as_ref()
+                .is_some_and(|derived| &derived.source_group_id == id)
+        }) {
+            return Err(format!(
+                "cannot delete group {id}; derived group {} depends on it",
+                dependent.id
+            ));
+        }
+        if !snapshot.groups.iter().any(|group| &group.id == id) {
+            return Err(format!("group {id} does not exist"));
+        }
+        store
+            .delete_object("group", id)
+            .map_err(|error| error.to_string())?;
+        refresh_command_show(state, &entry)?;
+        return Ok(1);
+    }
     if body.first().is_some_and(|token| token == "SET") {
         let at = body.iter().position(|token| token == "AT");
         let source_tokens = at.map_or(body, |index| &body[..index]);
@@ -5068,7 +5382,10 @@ fn execute_show_command(
         if operation == "DELETE" {
             source_list.cues.remove(position);
             if source_list.cues.is_empty() {
-                return Err("cannot delete the only Cue; delete the Cuelist from its configuration instead".into());
+                return Err(
+                    "cannot delete the only Cue; delete the Cuelist from its configuration instead"
+                        .into(),
+                );
             }
             store
                 .put_object(
@@ -5084,7 +5401,9 @@ fn execute_show_command(
             if used != body.len() - at - 1 {
                 return Err("unexpected cue destination tokens".into());
             }
-            let destination_cue = destination.cue.ok_or("cue destination requires CUE <cue-number>")?;
+            let destination_cue = destination
+                .cue
+                .ok_or("cue destination requires CUE <cue-number>")?;
             let mut cue = source_list.cues[position].clone();
             cue.number = destination_cue;
             if destination.playback == source.playback {
@@ -5200,7 +5519,9 @@ fn execute_set_command(state: &AppState, tokens: &[String]) -> Result<usize, Str
     if let Some(at) = at {
         let (entry, store) = active_show_store(state)?;
         if tokens.first().is_some_and(|token| token == "GROUP") {
-            return Err("playback pages accept Cuelists only; store the group in a Cuelist first".into());
+            return Err(
+                "playback pages accept Cuelists only; store the group in a Cuelist first".into(),
+            );
         } else {
             let playback = tokens
                 .first()
@@ -5216,8 +5537,13 @@ fn execute_set_command(state: &AppState, tokens: &[String]) -> Result<usize, Str
             {
                 return Err(format!("Cuelist {playback} does not exist"));
             }
-            if !state.engine.snapshot().playbacks.iter().any(|item| item.number == playback && matches!(item.target, light_playback::PlaybackTarget::CueList { .. })) {
-                return Err(format!("Cuelist {playback} cannot be assigned to a playback"));
+            if !state.engine.snapshot().playbacks.iter().any(|item| {
+                item.number == playback
+                    && matches!(item.target, light_playback::PlaybackTarget::CueList { .. })
+            }) {
+                return Err(format!(
+                    "Cuelist {playback} cannot be assigned to a playback"
+                ));
             }
             let (page, slot) = parse_page_slot(&tokens[at + 1..])?;
             assign_page_slot(&store, &state.engine.snapshot(), page, slot, playback)?;
@@ -5289,28 +5615,182 @@ fn assign_page_slot(
     Ok(())
 }
 
+fn parse_group_mixed_selection(
+    snapshot: &EngineSnapshot,
+    tokens: &[String],
+) -> Result<Vec<light_core::FixtureId>, String> {
+    fn push_unique(target: &mut Vec<light_core::FixtureId>, fixture: light_core::FixtureId) {
+        if !target.contains(&fixture) {
+            target.push(fixture);
+        }
+    }
+    fn remove_fixture(target: &mut Vec<light_core::FixtureId>, fixture: light_core::FixtureId) {
+        target.retain(|candidate| *candidate != fixture);
+    }
+    fn fixture_by_number(
+        snapshot: &EngineSnapshot,
+        token: &str,
+    ) -> Result<light_core::FixtureId, String> {
+        let number = token
+            .parse::<u32>()
+            .map_err(|_| "fixture number is invalid")?;
+        snapshot
+            .fixtures
+            .iter()
+            .find(|fixture| fixture.fixture_number == Some(number))
+            .map(|fixture| fixture.fixture_id)
+            .ok_or_else(|| format!("fixture {number} does not exist"))
+    }
+    fn group_members(
+        snapshot: &EngineSnapshot,
+        groups: &HashMap<String, light_programmer::GroupDefinition>,
+        id: &str,
+        skip_missing: bool,
+    ) -> Result<Vec<light_core::FixtureId>, String> {
+        if skip_missing && !groups.contains_key(id) {
+            return Ok(Vec::new());
+        }
+        light_programmer::resolve_group(id, groups)
+            .map_err(|error| {
+                if skip_missing && error.contains("does not exist") {
+                    String::new()
+                } else {
+                    error
+                }
+            })
+            .and_then(|members| {
+                if members.is_empty() && skip_missing && !groups.contains_key(id) {
+                    Ok(Vec::new())
+                } else {
+                    let valid = snapshot
+                        .fixtures
+                        .iter()
+                        .map(|fixture| fixture.fixture_id)
+                        .collect::<Vec<_>>();
+                    Ok(members
+                        .into_iter()
+                        .filter(|fixture| valid.contains(fixture))
+                        .collect())
+                }
+            })
+    }
+
+    let groups = snapshot
+        .groups
+        .iter()
+        .map(|group| (group.id.clone(), group.clone()))
+        .collect::<HashMap<_, _>>();
+    let mut selected = Vec::new();
+    let mut index = 0;
+    let mut operation = "+";
+    while index < tokens.len() {
+        match tokens[index].as_str() {
+            "+" | "-" => {
+                operation = tokens[index].as_str();
+                index += 1;
+            }
+            token => {
+                if tokens
+                    .get(index + 1)
+                    .is_some_and(|candidate| candidate == "THRU")
+                {
+                    let end = tokens
+                        .get(index + 2)
+                        .ok_or("THRU requires an end group")?
+                        .parse::<i32>()
+                        .map_err(|_| "group number is invalid")?;
+                    let start = token
+                        .parse::<i32>()
+                        .map_err(|_| "group number is invalid")?;
+                    let step = if start <= end { 1 } else { -1 };
+                    let mut current = start;
+                    loop {
+                        for fixture in group_members(snapshot, &groups, &current.to_string(), true)?
+                        {
+                            if operation == "-" {
+                                remove_fixture(&mut selected, fixture);
+                            } else {
+                                push_unique(&mut selected, fixture);
+                            }
+                        }
+                        if current == end {
+                            break;
+                        }
+                        current += step;
+                    }
+                    index += 3;
+                } else if operation == "-" {
+                    remove_fixture(&mut selected, fixture_by_number(snapshot, token)?);
+                    index += 1;
+                } else if selected.is_empty() {
+                    for fixture in group_members(snapshot, &groups, token, false)? {
+                        push_unique(&mut selected, fixture);
+                    }
+                    index += 1;
+                } else {
+                    push_unique(&mut selected, fixture_by_number(snapshot, token)?);
+                    index += 1;
+                }
+            }
+        }
+    }
+    Ok(selected)
+}
+
 fn execute_programmer_command(
     state: &AppState,
     session: &Session,
     command_line: &str,
 ) -> Result<usize, String> {
-    let spaced = command_line.replace('.', " . ").replace('+', " + ");
-    let tokens = spaced
+    let spaced = command_line
+        .replace('.', " . ")
+        .replace('+', " + ")
+        .replace('-', " - ");
+    let raw_tokens = spaced
         .split_whitespace()
         .map(|token| token.to_ascii_uppercase())
         .collect::<Vec<_>>();
+    let (tokens, timing) = extract_command_timing(&raw_tokens)?;
     if tokens.is_empty() {
         return Err("the command line is empty".into());
+    }
+    if tokens.first().is_some_and(|token| token == "AT") {
+        return apply_current_selection_value(state, session, &tokens[1..], timing);
     }
     if matches!(
         tokens[0].as_str(),
         "RECORD" | "REC" | "DELETE" | "DEL" | "MOVE" | "MOV" | "COPY" | "CPY" | "SET"
     ) {
-        return execute_show_command(state, session, &tokens);
+        return execute_show_command(state, session, &tokens, timing);
     }
     if tokens.first().is_some_and(|token| token == "GROUP") {
         let frozen = tokens.get(1).is_some_and(|token| token == "GROUP");
         let id_index = if frozen { 2 } else { 1 };
+        let at_index = tokens
+            .iter()
+            .position(|token| token == "AT")
+            .unwrap_or(tokens.len());
+        if !frozen
+            && at_index == tokens.len()
+            && tokens[id_index..at_index]
+                .iter()
+                .any(|token| matches!(token.as_str(), "THRU" | "+" | "-"))
+            && !tokens[id_index..at_index]
+                .iter()
+                .any(|token| token == "DIV")
+        {
+            let snapshot = state.engine.snapshot();
+            let fixtures = parse_group_mixed_selection(&snapshot, &tokens[id_index..at_index])?;
+            state.programmers.select_expression(
+                session.id,
+                fixtures.clone(),
+                light_programmer::SelectionExpression::Static,
+            );
+            state
+                .programmers
+                .set_command_line(session.id, command_line.to_owned());
+            return Ok(fixtures.len());
+        }
         let group_id = tokens
             .get(id_index)
             .ok_or("GROUP requires a group number")?
@@ -5322,10 +5802,6 @@ fn execute_programmer_command(
             .map(|group| (group.id.clone(), group.clone()))
             .collect::<HashMap<_, _>>();
         let base = light_programmer::resolve_group(&group_id, &groups)?;
-        let at_index = tokens
-            .iter()
-            .position(|token| token == "AT")
-            .unwrap_or(tokens.len());
         let rule = parse_subset_rule(&tokens[id_index + 1..at_index])?;
         let fixtures = light_programmer::apply_selection_rule(&base, &rule);
         let expression = if frozen {
@@ -5352,8 +5828,14 @@ fn execute_programmer_command(
                     &fixtures,
                 )?;
             } else {
-                let level = value.first().ok_or("AT requires a level")?;
-                let percent = if level == "FULL" {
+                let relative = value.len() == 2 && matches!(value[0].as_str(), "+" | "-");
+                if relative && !frozen {
+                    return Err("relative group values require GROUP GROUP so each fixture keeps its own offset".into());
+                }
+                let level = value
+                    .get(usize::from(relative))
+                    .ok_or("AT requires a level")?;
+                let percent = if level == "FULL" && !relative {
                     100.0
                 } else {
                     level
@@ -5364,20 +5846,36 @@ fn execute_programmer_command(
                     return Err("level must be within 0-100".into());
                 }
                 if frozen {
+                    let resolved = state.engine.resolved_values();
                     for fixture in &fixtures {
-                        state.programmers.set_faded(
+                        let target = if relative {
+                            let current = resolved
+                                .get(&(*fixture, light_core::AttributeKey::intensity()))
+                                .and_then(light_core::AttributeValue::normalized)
+                                .unwrap_or(0.0)
+                                * 100.0;
+                            (current + if value[0] == "+" { percent } else { -percent })
+                                .clamp(0.0, 100.0)
+                        } else {
+                            percent
+                        };
+                        state.programmers.set_faded_with_timing(
                             session.id,
                             *fixture,
                             light_core::AttributeKey::intensity(),
-                            light_core::AttributeValue::Normalized(percent / 100.0),
+                            light_core::AttributeValue::Normalized(target / 100.0),
+                            timing.fade_millis,
+                            timing.delay_millis,
                         );
                     }
                 } else {
-                    state.programmers.set_group_faded(
+                    state.programmers.set_group_faded_with_timing(
                         session.id,
                         group_id.clone(),
                         light_core::AttributeKey::intensity(),
                         light_core::AttributeValue::Normalized(percent / 100.0),
+                        timing.fade_millis,
+                        timing.delay_millis,
                     );
                 }
             }
@@ -5414,8 +5912,11 @@ fn execute_programmer_command(
         )?;
         return Ok(fixture_ids.len());
     }
-    let level_token = value.first().ok_or("AT requires a level")?;
-    let percent = if level_token == "FULL" {
+    let relative = value.len() == 2 && matches!(value[0].as_str(), "+" | "-");
+    let level_token = value
+        .get(usize::from(relative))
+        .ok_or("AT requires a level")?;
+    let percent = if level_token == "FULL" && !relative {
         100.0
     } else {
         level_token
@@ -5429,15 +5930,107 @@ fn execute_programmer_command(
     state
         .programmers
         .set_command_line(session.id, command_line.to_owned());
+    let resolved = relative.then(|| state.engine.resolved_values());
     for fixture_id in &fixture_ids {
-        state.programmers.set_faded(
+        let target = if let Some(resolved) = &resolved {
+            let current = resolved
+                .get(&(*fixture_id, light_core::AttributeKey::intensity()))
+                .and_then(light_core::AttributeValue::normalized)
+                .unwrap_or(0.0)
+                * 100.0;
+            (current + if value[0] == "+" { percent } else { -percent }).clamp(0.0, 100.0)
+        } else {
+            percent
+        };
+        state.programmers.set_faded_with_timing(
             session.id,
             *fixture_id,
             light_core::AttributeKey::intensity(),
-            light_core::AttributeValue::Normalized(percent / 100.0),
+            light_core::AttributeValue::Normalized(target / 100.0),
+            timing.fade_millis,
+            timing.delay_millis,
         );
     }
     Ok(fixture_ids.len())
+}
+
+fn apply_current_selection_value(
+    state: &AppState,
+    session: &Session,
+    value: &[String],
+    timing: CommandTiming,
+) -> Result<usize, String> {
+    let current = state
+        .programmers
+        .get(session.id)
+        .ok_or("programmer does not exist")?;
+    if current.selected.is_empty() {
+        return Err("AT requires a current selection".into());
+    }
+    if value.len() == 3 && value[1] == "." {
+        apply_command_preset(
+            state,
+            session,
+            &format!("{}.{}", value[0], value[2]),
+            &current.selected,
+        )?;
+        return Ok(current.selected.len());
+    }
+    let relative = value.len() == 2 && matches!(value[0].as_str(), "+" | "-");
+    let level_token = value
+        .get(usize::from(relative))
+        .ok_or("AT requires a level")?;
+    let percent = if level_token == "FULL" && !relative {
+        100.0
+    } else {
+        level_token
+            .parse::<f32>()
+            .map_err(|_| "level must be a percentage or FULL")?
+    };
+    if !percent.is_finite() || !(0.0..=100.0).contains(&percent) {
+        return Err("level must be within 0-100".into());
+    }
+    if let Some(light_programmer::SelectionExpression::LiveGroup { group_id, .. }) =
+        current.selection_expression.clone()
+    {
+        if relative {
+            return Err(
+                "relative group values require GROUP GROUP so each fixture keeps its own offset"
+                    .into(),
+            );
+        }
+        state.programmers.set_group_faded_with_timing(
+            session.id,
+            group_id,
+            light_core::AttributeKey::intensity(),
+            light_core::AttributeValue::Normalized(percent / 100.0),
+            timing.fade_millis,
+            timing.delay_millis,
+        );
+        return Ok(current.selected.len());
+    }
+    let resolved = relative.then(|| state.engine.resolved_values());
+    for fixture_id in &current.selected {
+        let target = if let Some(resolved) = &resolved {
+            let current = resolved
+                .get(&(*fixture_id, light_core::AttributeKey::intensity()))
+                .and_then(light_core::AttributeValue::normalized)
+                .unwrap_or(0.0)
+                * 100.0;
+            (current + if value[0] == "+" { percent } else { -percent }).clamp(0.0, 100.0)
+        } else {
+            percent
+        };
+        state.programmers.set_faded_with_timing(
+            session.id,
+            *fixture_id,
+            light_core::AttributeKey::intensity(),
+            light_core::AttributeValue::Normalized(target / 100.0),
+            timing.fade_millis,
+            timing.delay_millis,
+        );
+    }
+    Ok(current.selected.len())
 }
 fn authenticate(state: &AppState, headers: &HeaderMap) -> Result<Session, ApiError> {
     let token = headers
@@ -5791,6 +6384,7 @@ fn handle_subscription_osc(
             command_source,
             session_id,
             last_seen: Instant::now(),
+            shifted: false,
         },
     );
     emit(
@@ -5859,6 +6453,37 @@ fn handle_programmer_osc(
         return;
     };
     let action = parts[3];
+    if action == "shift" {
+        if let Some(source) = source {
+            if let Some(target) = state
+                .osc_subscribers
+                .lock()
+                .values_mut()
+                .find(|candidate| candidate.command_source == source)
+            {
+                target.shifted = !target.shifted;
+            }
+        }
+        return;
+    }
+    if subscriber.shifted && action.starts_with("digit-") {
+        if let Some(source) = source {
+            if let Some(target) = state
+                .osc_subscribers
+                .lock()
+                .values_mut()
+                .find(|candidate| candidate.command_source == source)
+            {
+                target.shifted = false;
+            }
+        }
+        emit(
+            state,
+            "desk_action",
+            serde_json::json!({"desk_alias":parts[1],"session_id":session.id,"action":format!("shift-{}", &action[6..]),"source":"osc"}),
+        );
+        return;
+    }
     match action {
         "enter" => {
             if let Some(programmer) = state.programmers.get(session.id) {
@@ -5904,7 +6529,10 @@ fn handle_programmer_osc(
                 "grp" | "group" => "GROUP",
                 "thru" => "THRU",
                 "plus" | "add" => "+",
+                "minus" | "subtract" => "-",
                 "at" => "AT",
+                "time" => "TIME",
+                "delay" => "DELAY",
                 "dot" => ".",
                 "div" => "DIV",
                 "set" => "SET",
@@ -5915,7 +6543,16 @@ fn handle_programmer_osc(
             if let Some(p) = state.programmers.get(session.id) {
                 let separator = matches!(
                     token,
-                    "GROUP" | "THRU" | "+" | "AT" | "DIV" | "SET" | "RECORD"
+                    "GROUP"
+                        | "THRU"
+                        | "+"
+                        | "-"
+                        | "AT"
+                        | "TIME"
+                        | "DELAY"
+                        | "DIV"
+                        | "SET"
+                        | "RECORD"
                 );
                 state.programmers.set_command_line(
                     session.id,
@@ -6143,11 +6780,7 @@ fn send_osc_feedback(state: &AppState, _full: bool) {
     }
 }
 
-fn cuelist_for_page_playback(
-    snapshot: &EngineSnapshot,
-    page_number: u8,
-    slot: u8,
-) -> Option<u16> {
+fn cuelist_for_page_playback(snapshot: &EngineSnapshot, page_number: u8, slot: u8) -> Option<u16> {
     let number = snapshot
         .playback_pages
         .iter()
@@ -6206,63 +6839,58 @@ fn handle_playback_osc(state: &AppState, address: &str, arguments: &[OscArgument
         }
         return;
     }
-    let (number, action_index) = if parts.len() >= 5
-        && parts.first() == Some(&"light")
-        && parts.get(1) == Some(&"playback")
-    {
-        let (Ok(page), Ok(slot)) = (parts[2].parse::<u8>(), parts[3].parse::<u8>()) else {
+    let (number, action_index) =
+        if parts.len() >= 5 && parts.first() == Some(&"light") && parts.get(1) == Some(&"playback")
+        {
+            let (Ok(page), Ok(slot)) = (parts[2].parse::<u8>(), parts[3].parse::<u8>()) else {
+                return;
+            };
+            let snapshot = state.engine.snapshot();
+            let Some(number) = cuelist_for_page_playback(&snapshot, page, slot) else {
+                return;
+            };
+            (number, 4)
+        } else if parts.len() >= 4
+            && parts.first() == Some(&"light")
+            && parts
+                .get(1)
+                .is_some_and(|name| *name == "cuelist" || *name == "qlist" || *name == "playback")
+        {
+            let Ok(number) = parts[2].parse::<u16>() else {
+                return;
+            };
+            (number, 3)
+        } else if parts.len() >= 5
+            && parts.first() == Some(&"light")
+            && parts
+                .get(2)
+                .is_some_and(|name| *name == "page-playback" || *name == "paged-playback")
+        {
+            let Ok(slot) = parts[3].parse::<u8>() else {
+                return;
+            };
+            let Some(show) = state.active_show.read().clone() else {
+                return;
+            };
+            let Some(desk) = osc_control_desk(state, parts[1]) else {
+                return;
+            };
+            let page_number = state.desk.lock().desk_page(desk.id, show.id).unwrap_or(1);
+            let snapshot = state.engine.snapshot();
+            let Some(number) = cuelist_for_page_playback(&snapshot, page_number, slot) else {
+                return;
+            };
+            (number, 4)
+        } else {
             return;
         };
-        let snapshot = state.engine.snapshot();
-        let Some(number) = cuelist_for_page_playback(&snapshot, page, slot) else {
-            return;
-        };
-        (number, 4)
-    } else if parts.len() >= 4
-        && parts.first() == Some(&"light")
-        && parts
-            .get(1)
-            .is_some_and(|name| *name == "cuelist" || *name == "qlist" || *name == "playback")
-    {
-        let Ok(number) = parts[2].parse::<u16>() else {
-            return;
-        };
-        (number, 3)
-    } else if parts.len() >= 5
-        && parts.first() == Some(&"light")
-        && parts.get(2).is_some_and(|name| *name == "page-playback" || *name == "paged-playback")
-    {
-        let Ok(slot) = parts[3].parse::<u8>() else {
-            return;
-        };
-        let Some(show) = state.active_show.read().clone() else {
-            return;
-        };
-        let Some(desk) = osc_control_desk(state, parts[1]) else {
-            return;
-        };
-        let page_number = state.desk.lock().desk_page(desk.id, show.id).unwrap_or(1);
-        let snapshot = state.engine.snapshot();
-        let Some(number) = cuelist_for_page_playback(&snapshot, page_number, slot) else {
-            return;
-        };
-        (number, 4)
-    } else {
-        return;
-    };
-    if !state
-        .engine
-        .snapshot()
-        .playbacks
-        .iter()
-        .any(|definition| {
-            definition.number == number
-                && matches!(
-                    definition.target,
-                    light_playback::PlaybackTarget::CueList { .. }
-                )
-        })
-    {
+    if !state.engine.snapshot().playbacks.iter().any(|definition| {
+        definition.number == number
+            && matches!(
+                definition.target,
+                light_playback::PlaybackTarget::CueList { .. }
+            )
+    }) {
         return;
     }
     let mut playback = state.engine.playback().write();
@@ -6332,7 +6960,12 @@ fn reconcile_show_logical_heads(entry: &ShowEntry) -> Result<(), String> {
         .filter_map(|object| {
             serde_json::from_value::<light_playback::PlaybackDefinition>(object.body)
                 .ok()
-                .filter(|definition| matches!(definition.target, light_playback::PlaybackTarget::Group { .. }))
+                .filter(|definition| {
+                    matches!(
+                        definition.target,
+                        light_playback::PlaybackTarget::Group { .. }
+                    )
+                })
                 .map(|definition| (object.id, definition.number))
         })
         .collect::<Vec<_>>();
@@ -6348,7 +6981,8 @@ fn reconcile_show_logical_heads(entry: &ShowEntry) -> Result<(), String> {
             let mut page = serde_json::from_value::<light_playback::PlaybackPage>(object.body)
                 .map_err(|error| error.to_string())?;
             let previous = page.slots.len();
-            page.slots.retain(|_, number| !legacy_numbers.contains(number));
+            page.slots
+                .retain(|_, number| !legacy_numbers.contains(number));
             if page.slots.len() != previous {
                 store
                     .put_object(
@@ -6652,7 +7286,8 @@ mod tests {
             .into_iter()
             .find(|object| object.body["fixture_number"] == 501)
             .unwrap();
-        let mut fixture = serde_json::from_value::<light_fixture::PatchedFixture>(object.body).unwrap();
+        let mut fixture =
+            serde_json::from_value::<light_fixture::PatchedFixture>(object.body).unwrap();
         fixture.logical_heads.clear();
         store
             .put_object(
@@ -6677,9 +7312,14 @@ mod tests {
             .into_iter()
             .find(|candidate| candidate.id == object.id)
             .unwrap();
-        let repaired_fixture = serde_json::from_value::<light_fixture::PatchedFixture>(repaired.body).unwrap();
+        let repaired_fixture =
+            serde_json::from_value::<light_fixture::PatchedFixture>(repaired.body).unwrap();
         assert_eq!(repaired_fixture.logical_heads.len(), 10);
-        let ids = repaired_fixture.logical_heads.iter().map(|head| head.fixture_id).collect::<Vec<_>>();
+        let ids = repaired_fixture
+            .logical_heads
+            .iter()
+            .map(|head| head.fixture_id)
+            .collect::<Vec<_>>();
         reconcile_show_logical_heads(&entry).unwrap();
         let stable = ShowStore::open(&path)
             .unwrap()
@@ -6688,8 +7328,16 @@ mod tests {
             .into_iter()
             .find(|candidate| candidate.id == object.id)
             .unwrap();
-        let stable_fixture = serde_json::from_value::<light_fixture::PatchedFixture>(stable.body).unwrap();
-        assert_eq!(stable_fixture.logical_heads.iter().map(|head| head.fixture_id).collect::<Vec<_>>(), ids);
+        let stable_fixture =
+            serde_json::from_value::<light_fixture::PatchedFixture>(stable.body).unwrap();
+        assert_eq!(
+            stable_fixture
+                .logical_heads
+                .iter()
+                .map(|head| head.fixture_id)
+                .collect::<Vec<_>>(),
+            ids
+        );
         let _ = std::fs::remove_dir_all(directory);
     }
     use axum::{body::Body, http::Request};
@@ -6863,6 +7511,157 @@ mod tests {
     }
 
     #[test]
+    fn record_group_supports_overwrite_merge_subtract_and_empty_source_delete() {
+        let (state, data_dir) = test_state();
+        let user = state.desk.lock().users().unwrap().remove(0);
+        let session = Session {
+            id: SessionId::new(),
+            user: user.clone(),
+            token: "test".into(),
+            connected: true,
+            desk: test_control_desk(),
+        };
+        state.programmers.start(session.id, user.id);
+        let show_path = data_dir.join("shows/record-group.show");
+        let show_id = initialise_show(&show_path, "Record Group").unwrap();
+        let entry = ShowEntry {
+            id: show_id,
+            name: "Record Group".into(),
+            path: show_path.display().to_string(),
+            revision: 0,
+            updated_at: String::new(),
+        };
+        let fixtures = (0..4)
+            .map(|_| light_core::FixtureId::new())
+            .collect::<Vec<_>>();
+        let store = ShowStore::open(&show_path).unwrap();
+        store
+            .put_object(
+                "group",
+                "3",
+                &serde_json::to_value(light_programmer::GroupDefinition {
+                    id: "3".into(),
+                    name: "Kept name".into(),
+                    fixtures: fixtures[..2].to_vec(),
+                    master: 0.4,
+                    ..Default::default()
+                })
+                .unwrap(),
+                0,
+            )
+            .unwrap();
+        *state.active_show.write() = Some(entry.clone());
+        state
+            .engine
+            .replace_snapshot(load_engine_snapshot(&entry).unwrap())
+            .unwrap();
+
+        state.programmers.select_expression(
+            session.id,
+            fixtures[..3].to_vec(),
+            light_programmer::SelectionExpression::LiveGroup {
+                group_id: "3".into(),
+                rule: light_programmer::SelectionRule::All,
+            },
+        );
+        execute_programmer_command(&state, &session, "RECORD GROUP 3").unwrap();
+        let read_group = || {
+            let object = ShowStore::open(&show_path)
+                .unwrap()
+                .objects("group")
+                .unwrap()
+                .into_iter()
+                .find(|object| object.id == "3")
+                .unwrap();
+            serde_json::from_value::<light_programmer::GroupDefinition>(object.body).unwrap()
+        };
+        let overwritten = read_group();
+        assert_eq!(overwritten.fixtures, fixtures[..3]);
+        assert_eq!(overwritten.name, "Kept name");
+        assert_eq!(overwritten.master, 0.4);
+        assert!(overwritten.derived_from.is_none());
+
+        let group_3_revision = ShowStore::open(&show_path)
+            .unwrap()
+            .objects("group")
+            .unwrap()
+            .into_iter()
+            .find(|object| object.id == "3")
+            .unwrap()
+            .revision;
+        ShowStore::open(&show_path)
+            .unwrap()
+            .put_object(
+                "group",
+                "4",
+                &serde_json::to_value(light_programmer::GroupDefinition {
+                    id: "4".into(),
+                    name: "Derived from 3".into(),
+                    derived_from: Some(light_programmer::DerivedGroup {
+                        source_group_id: "3".into(),
+                        rule: light_programmer::SelectionRule::All,
+                    }),
+                    ..Default::default()
+                })
+                .unwrap(),
+                0,
+            )
+            .unwrap();
+        state
+            .engine
+            .replace_snapshot(load_engine_snapshot(&entry).unwrap())
+            .unwrap();
+        state.programmers.select_expression(
+            session.id,
+            fixtures[..3].to_vec(),
+            light_programmer::SelectionExpression::LiveGroup {
+                group_id: "4".into(),
+                rule: light_programmer::SelectionRule::All,
+            },
+        );
+        execute_programmer_command(&state, &session, "RECORD GROUP 3").unwrap();
+        assert!(read_group().derived_from.is_none());
+        assert!(
+            ShowStore::open(&show_path)
+                .unwrap()
+                .objects("group")
+                .unwrap()
+                .into_iter()
+                .find(|object| object.id == "3")
+                .unwrap()
+                .revision
+                > group_3_revision
+        );
+
+        state.programmers.select(session.id, []);
+        assert!(execute_programmer_command(&state, &session, "RECORD - GROUP 3").is_err());
+        execute_programmer_command(&state, &session, "DELETE GROUP 4").unwrap();
+
+        state
+            .programmers
+            .select(session.id, [fixtures[2], fixtures[3]]);
+        execute_programmer_command(&state, &session, "RECORD + GROUP 3").unwrap();
+        assert_eq!(read_group().fixtures, fixtures);
+
+        state
+            .programmers
+            .select(session.id, [fixtures[1], fixtures[3]]);
+        execute_programmer_command(&state, &session, "RECORD - GROUP 3").unwrap();
+        assert_eq!(read_group().fixtures, vec![fixtures[0], fixtures[2]]);
+
+        state.programmers.select(session.id, []);
+        execute_programmer_command(&state, &session, "RECORD - GROUP 3").unwrap();
+        assert!(
+            ShowStore::open(&show_path)
+                .unwrap()
+                .objects("group")
+                .unwrap()
+                .is_empty()
+        );
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+
+    #[test]
     fn command_line_contract_supports_subsets_preset_lifecycle_and_cue_list_creation() {
         let (state, data_dir) = test_state();
         let user = state.desk.lock().users().unwrap().remove(0);
@@ -6898,21 +7697,11 @@ mod tests {
             .replace_snapshot(load_engine_snapshot(&entry).unwrap())
             .unwrap();
         execute_programmer_command(&state, &session, "GROUP 1 DIV 2 + 1").unwrap();
-        execute_programmer_command(&state, &session, "GROUP 1 AT 50").unwrap();
-        assert!(
-            state
-                .programmers
-                .get(session.id)
-                .unwrap()
-                .group_values
-                .contains_key("1")
-        );
-        state.programmers.set_group_faded(
-            session.id,
-            "1".into(),
-            light_core::AttributeKey::intensity(),
-            light_core::AttributeValue::Normalized(0.5),
-        );
+        execute_programmer_command(&state, &session, "GROUP 1 AT 50 DELAY 1 TIME 2").unwrap();
+        let programmer = state.programmers.get(session.id).unwrap();
+        let timed_group = &programmer.group_values["1"][&light_core::AttributeKey::intensity()];
+        assert_eq!(timed_group.fade_millis, Some(2_000));
+        assert_eq!(timed_group.delay_millis, Some(1_000));
 
         execute_programmer_command(&state, &session, "RECORD 0.1").unwrap();
         execute_programmer_command(&state, &session, "COPY 0.1 AT 2").unwrap();
@@ -6927,7 +7716,7 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(preset_ids, vec!["0.3"]);
 
-        execute_programmer_command(&state, &session, "RECORD SET 25").unwrap();
+        execute_programmer_command(&state, &session, "RECORD SET 25 TIME 3 DELAY 1.5").unwrap();
         execute_programmer_command(&state, &session, "RECORD SET 25 CUE 2.5").unwrap();
         let snapshot = state.engine.snapshot();
         let (_, _, cue_list) =
@@ -6939,6 +7728,80 @@ mod tests {
                 .map(|cue| cue.number)
                 .collect::<Vec<_>>(),
             vec![1.0, 2.5]
+        );
+        assert_eq!(cue_list.cues[0].fade_millis, 3_000);
+        assert_eq!(cue_list.cues[0].delay_millis, 1_500);
+        assert_eq!(cue_list.cues[0].group_changes[0].fade_millis, Some(2_000));
+        assert_eq!(cue_list.cues[0].group_changes[0].delay_millis, Some(1_000));
+
+        let color = light_core::AttributeKey("color.emitter.red".into());
+        let set_only_color = || {
+            let mut programmer = state.programmers.get(session.id).unwrap();
+            programmer.values.clear();
+            programmer.group_values.clear();
+            state.programmers.restore(programmer);
+            assert!(state.programmers.set_group(
+                session.id,
+                "1".into(),
+                color.clone(),
+                light_core::AttributeValue::Normalized(0.5),
+            ));
+        };
+        set_only_color();
+        execute_programmer_command(&state, &session, "RECORD + SET 25 CUE 2.5").unwrap();
+        let (_, _, cue_list) = cue_list_for_playback(
+            &ShowStore::open(&show_path).unwrap(),
+            &state.engine.snapshot(),
+            25,
+        )
+        .unwrap();
+        let merged = cue_list.cues.iter().find(|cue| cue.number == 2.5).unwrap();
+        assert_eq!(merged.group_changes.len(), 2);
+
+        execute_programmer_command(&state, &session, "RECORD - SET 25 CUE 2.5").unwrap();
+        let (_, _, cue_list) = cue_list_for_playback(
+            &ShowStore::open(&show_path).unwrap(),
+            &state.engine.snapshot(),
+            25,
+        )
+        .unwrap();
+        let subtracted = cue_list.cues.iter().find(|cue| cue.number == 2.5).unwrap();
+        assert_eq!(subtracted.group_changes.len(), 1);
+        assert_eq!(
+            subtracted.group_changes[0].attribute,
+            light_core::AttributeKey::intensity()
+        );
+
+        set_only_color();
+        execute_programmer_command(&state, &session, "RECORD SET 25 CUE 2.5").unwrap();
+        let (_, _, cue_list) = cue_list_for_playback(
+            &ShowStore::open(&show_path).unwrap(),
+            &state.engine.snapshot(),
+            25,
+        )
+        .unwrap();
+        let overwritten = cue_list.cues.iter().find(|cue| cue.number == 2.5).unwrap();
+        assert_eq!(overwritten.group_changes.len(), 1);
+        assert_eq!(overwritten.group_changes[0].attribute, color);
+
+        let mut programmer = state.programmers.get(session.id).unwrap();
+        programmer.values.clear();
+        programmer.group_values.clear();
+        state.programmers.restore(programmer);
+        execute_programmer_command(&state, &session, "RECORD - SET 25 CUE 2.5").unwrap();
+        let (_, _, cue_list) = cue_list_for_playback(
+            &ShowStore::open(&show_path).unwrap(),
+            &state.engine.snapshot(),
+            25,
+        )
+        .unwrap();
+        assert_eq!(
+            cue_list
+                .cues
+                .iter()
+                .map(|cue| cue.number)
+                .collect::<Vec<_>>(),
+            vec![1.0]
         );
         let _ = std::fs::remove_dir_all(data_dir);
     }
@@ -6968,6 +7831,80 @@ mod tests {
         let old_entangled = ["SET", "4", "SET", "7", ".", "12"].map(String::from);
         let (_, used) = parse_playback_address(&old_entangled, true, &snapshot).unwrap();
         assert_ne!(used, old_entangled.len());
+    }
+
+    #[test]
+    fn fixture_selection_accepts_minus_before_subsetting() {
+        let tokens = ["1", "THRU", "10", "-", "5", "DIV", "2"].map(String::from);
+        assert!(parse_fixture_selection(&[], &tokens).is_ok());
+        let malformed = ["-", "5"].map(String::from);
+        assert_eq!(
+            parse_fixture_selection(&[], &malformed).unwrap_err(),
+            "- requires fixture selections on both sides"
+        );
+    }
+
+    #[test]
+    fn osc_exposes_time_minus_and_latched_shift_keys() {
+        let (state, data_dir) = test_state();
+        let user = state.desk.lock().users().unwrap().remove(0);
+        let session = Session {
+            id: SessionId::new(),
+            user: user.clone(),
+            token: "osc-test".into(),
+            connected: true,
+            desk: test_control_desk(),
+        };
+        state.programmers.start(session.id, user.id);
+        state.sessions.write().insert(session.id, session.clone());
+        let source: SocketAddr = "127.0.0.1:9010".parse().unwrap();
+        state.osc_subscribers.lock().insert(
+            "test".into(),
+            OscSubscriber {
+                desk_alias: "main".into(),
+                target: source,
+                command_source: source,
+                session_id: session.id,
+                last_seen: Instant::now(),
+                shifted: false,
+            },
+        );
+        let pressed = [OscArgument::Bool(true)];
+        handle_programmer_osc(
+            &state,
+            "/light/main/programmer/time",
+            &pressed,
+            Some("127.0.0.1:9010"),
+        );
+        handle_programmer_osc(
+            &state,
+            "/light/main/programmer/minus",
+            &pressed,
+            Some("127.0.0.1:9010"),
+        );
+        assert_eq!(
+            state.programmers.get(session.id).unwrap().command_line,
+            "TIME - "
+        );
+        handle_programmer_osc(
+            &state,
+            "/light/main/programmer/shift",
+            &pressed,
+            Some("127.0.0.1:9010"),
+        );
+        assert!(state.osc_subscribers.lock()["test"].shifted);
+        handle_programmer_osc(
+            &state,
+            "/light/main/programmer/digit-1",
+            &pressed,
+            Some("127.0.0.1:9010"),
+        );
+        assert!(!state.osc_subscribers.lock()["test"].shifted);
+        assert_eq!(
+            state.programmers.get(session.id).unwrap().command_line,
+            "TIME - "
+        );
+        let _ = std::fs::remove_dir_all(data_dir);
     }
 
     async fn json(response: Response) -> serde_json::Value {
@@ -7529,25 +8466,21 @@ mod tests {
         let restored = app
             .clone()
             .oneshot(
-                Request::post(format!(
-                    "/api/v1/shows/{show_id}/revisions/1/open"
-                ))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::from(r#"{"transition":"hold_current"}"#))
-                .unwrap(),
+                Request::post(format!("/api/v1/shows/{show_id}/revisions/1/open"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::from(r#"{"transition":"hold_current"}"#))
+                    .unwrap(),
             )
             .await
             .unwrap();
         assert_eq!(restored.status(), StatusCode::OK);
         let objects = app
             .oneshot(
-                Request::get(format!(
-                    "/api/v1/shows/{show_id}/objects/user_layout"
-                ))
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::empty())
-                .unwrap(),
+                Request::get(format!("/api/v1/shows/{show_id}/objects/user_layout"))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
             )
             .await
             .unwrap();
@@ -8344,6 +9277,8 @@ mod tests {
                     group_id: group_id.clone(),
                     attribute: attribute.clone(),
                     value: Some(value.clone()),
+                    fade_millis: None,
+                    delay_millis: None,
                 })
             })
             .collect();

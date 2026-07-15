@@ -2,7 +2,7 @@
 
 These documents expand the stable IDs in the [canonical test catalog](../help/99-Development/02-test-bench-coverage.md) into executable scenarios. They describe behavior to test; they do not imply that every scenario is implemented yet.
 
-Only `00-generate-show-files.md` currently has Playwright coverage. The executable specs live in the repository-root `tests/` folder; the remaining scenario documents are specifications only.
+`00-generate-show-files.md` and `01-foundational-dimmers-and-groups.md` have Playwright coverage in the repository-root `tests/` folder. The remaining scenario documents are specifications only until matching specs are added there.
 
 ## Scenario documents
 
@@ -15,7 +15,7 @@ Only `00-generate-show-files.md` currently has Playwright coverage. The executab
 
 ## Common conventions
 
-- **Compact Rig** means the maintained canonical `compact-rig.show`: twelve dimmers numbered 1–12 on layer `Dimmers`, four RGB LEDs with virtual dimmers numbered 21–24 on layer `LEDs`, and empty group 4 named `Center Spot`.
+- **Compact Rig** means the maintained canonical `compact-rig.show`: twelve dimmers numbered 1–12 on layer `Dimmers`, four RGB LEDs with virtual dimmers numbered 21–24 on layer `LEDs`, and a stored empty Group 4 named `Center Spot`.
 - **Default Stage Show** means the maintained canonical `default-stage.show` containing the complete built-in default rig.
 - Every scenario begins with a **Starting show** line. It loads one canonical file, immediately uses Save As with a unique scenario-specific filename, and performs the test only against that active working copy.
 - Never modify a canonical file in place and never reuse a working copy from another scenario. Each browser scenario also starts with a fresh session/programmer, a reset virtual clock at `2020-01-01T00:00:00Z`, empty receiver buffers, and no OSC subscribers.
@@ -23,6 +23,22 @@ Only `00-generate-show-files.md` currently has Playwright coverage. The executab
 - Lighting durations are virtual. A test may use wall time only for browser mechanics such as long-press recognition and process startup deadlines.
 - Exact DMX conversion uses the production encoder. Representative expectations include 0% = 0, 25% = 64, 50% = 128, 75% = 191, and 100% = 255.
 - Cross-surface tests should prove a representative path end to end. Exhaustive permutations belong in Rust unit or integration tests.
+
+### Literal operator-action notation
+
+The procedures in these files are intentionally literal. A tester must not fill in an omitted selection, recording, or confirmation step from experience with another console.
+
+- **Click** means one ordinary primary-button click or one finger tap. Do not hold Command, Control, Shift, or another modifier unless the procedure explicitly says so.
+- Consecutive fixture and group clicks are additive while the selection is still current. For example, click fixture 5 and then fixture 6 to obtain the ordered selection `5, 6`. A value change, encoder move, or preset recall applies to the current selection without immediately deselecting it. The next fixture or group click starts a new selection while previously programmed values remain active; a leading `[+]` continues the current selection instead.
+- `[KEY]` means press the named Lightning Desk keypad key once. Text such as `5 [+] 6 [ENTER]` is the exact key order, not a summary of the resulting command line.
+- For a Group term, the first `[GRP]` press displays `GROUP`. A second consecutive `[GRP]` press replaces `GROUP` with `DEGRP`; it does not append a second word. `DEGRP <number>` dereferences only that Group term into its current individual fixtures. Merely using Group as the persistent default mode never dereferences a Group.
+- **Press `[REC]`, then click target** means arm Record first and then click the named pool cell. When a populated existing Group is the target, the recording dialog presents three explicit actions: **Merge**, **Overwrite**, and **Cancel**. Merge and Overwrite perform the named operation; Cancel closes the dialog, disarms Record, and makes no change. Empty pool cells and stored empty Groups record directly without asking for Merge or Overwrite.
+- **Merge Group** retains the existing ordered members and appends only selected fixtures that are not already members. **Overwrite Group** replaces the complete ordered membership with the current resolved selection.
+- In a fully entered command, `[REC]` without a modifier overwrites, `[REC] [+]` merges, and `[REC] [-]` subtracts. Group operations use the current selection; Cue operations use the fixture/group attribute addresses currently active in the programmer. Record-minus with an empty applicable source deletes the explicit Group or Cue target. It must have the same persisted result as the corresponding `[DEL]` command.
+- `[-]` subtracts the fixture or range on its right from the ordered selection on its left. Retained fixtures keep their relative order. If a subtracted fixture is added again later with `[+]`, it is a new addition at the end of the selection rather than returning to its former position. For example, `[GRP] [3] [-] [2] [+] [2] [ENTER]` resolves Group 3 without fixture 2 and then appends fixture 2 at the end.
+- To persist a subtracted or reordered Group selection without a dedicated Group editor, press `[REC]`, click the Group target, and choose **Overwrite**, or enter `[REC] [GRP] <number> [ENTER]`, to store the resolved order. To remove the current selection directly from an existing Group, enter `[REC] [-] [GRP] <number> [ENTER]`. A full manual rebuild remains available when the requested reorder cannot be expressed through ordered subtraction and addition.
+- A procedure labelled **Harness only** has no operator control. Execute the listed REST, WebSocket, OSC, virtual-clock, process, or file-fixture operation in the test driver. Do not replace it with an unrelated UI gesture.
+- A procedure labelled **UI capability required** describes an intended operator workflow for which the named control is not currently available. The `@ui` case is expected to remain unimplemented or fail at that exact step until the capability exists; the API/Rust variant may still be runnable.
 
 ## Mandatory API and UI pairing
 

@@ -19,6 +19,10 @@ pub struct GroupProgrammerValue {
     pub changed_at: DateTime<Utc>,
     #[serde(default)]
     pub fade: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fade_millis: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delay_millis: Option<u64>,
 }
 impl<'de> Deserialize<'de> for GroupProgrammerValue {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
@@ -30,6 +34,10 @@ impl<'de> Deserialize<'de> for GroupProgrammerValue {
                 changed_at: DateTime<Utc>,
                 #[serde(default)]
                 fade: bool,
+                #[serde(default)]
+                fade_millis: Option<u64>,
+                #[serde(default)]
+                delay_millis: Option<u64>,
             },
             Legacy(AttributeValue),
         }
@@ -38,15 +46,21 @@ impl<'de> Deserialize<'de> for GroupProgrammerValue {
                 value,
                 changed_at,
                 fade,
+                fade_millis,
+                delay_millis,
             } => Self {
                 value,
                 changed_at,
                 fade,
+                fade_millis,
+                delay_millis,
             },
             Repr::Legacy(value) => Self {
                 value,
                 changed_at: Utc::now(),
                 fade: false,
+                fade_millis: None,
+                delay_millis: None,
             },
         })
     }
@@ -457,6 +471,25 @@ impl ProgrammerRegistry {
     ) {
         self.set_with_fade(session, fixture_id, attribute, value, true);
     }
+    pub fn set_faded_with_timing(
+        &self,
+        session: SessionId,
+        fixture_id: FixtureId,
+        attribute: AttributeKey,
+        value: AttributeValue,
+        fade_millis: Option<u64>,
+        delay_millis: Option<u64>,
+    ) {
+        self.set_with_timing(
+            session,
+            fixture_id,
+            attribute,
+            value,
+            true,
+            fade_millis,
+            delay_millis,
+        );
+    }
     fn set_with_fade(
         &self,
         session: SessionId,
@@ -465,13 +498,21 @@ impl ProgrammerRegistry {
         value: AttributeValue,
         fade: bool,
     ) {
+        self.set_with_timing(session, fixture_id, attribute, value, fade, None, None);
+    }
+    fn set_with_timing(
+        &self,
+        session: SessionId,
+        fixture_id: FixtureId,
+        attribute: AttributeKey,
+        value: AttributeValue,
+        fade: bool,
+        fade_millis: Option<u64>,
+        delay_millis: Option<u64>,
+    ) {
         if let Some(state) = self.states.write().get_mut(&self.key(session)) {
             state.checkpoint();
-            let merge_mode = if attribute.is_intensity() {
-                light_core::MergeMode::Htp
-            } else {
-                light_core::MergeMode::Ltp
-            };
+            let merge_mode = light_core::MergeMode::Ltp;
             let values = if state.blind {
                 &mut state.preload_pending
             } else {
@@ -486,6 +527,8 @@ impl ProgrammerRegistry {
                 changed_at: self.clock.now(),
                 merge_mode,
                 fade,
+                fade_millis,
+                delay_millis,
             });
             state.last_activity = self.clock.now();
         }
@@ -508,6 +551,25 @@ impl ProgrammerRegistry {
     ) -> bool {
         self.set_group_with_fade(session, group_id, attribute, value, true)
     }
+    pub fn set_group_faded_with_timing(
+        &self,
+        session: SessionId,
+        group_id: String,
+        attribute: AttributeKey,
+        value: AttributeValue,
+        fade_millis: Option<u64>,
+        delay_millis: Option<u64>,
+    ) -> bool {
+        self.set_group_with_timing(
+            session,
+            group_id,
+            attribute,
+            value,
+            true,
+            fade_millis,
+            delay_millis,
+        )
+    }
     fn set_group_with_fade(
         &self,
         session: SessionId,
@@ -515,6 +577,18 @@ impl ProgrammerRegistry {
         attribute: AttributeKey,
         value: AttributeValue,
         fade: bool,
+    ) -> bool {
+        self.set_group_with_timing(session, group_id, attribute, value, fade, None, None)
+    }
+    fn set_group_with_timing(
+        &self,
+        session: SessionId,
+        group_id: String,
+        attribute: AttributeKey,
+        value: AttributeValue,
+        fade: bool,
+        fade_millis: Option<u64>,
+        delay_millis: Option<u64>,
     ) -> bool {
         let mut states = self.states.write();
         let Some(state) = states.get_mut(&self.key(session)) else {
@@ -532,6 +606,8 @@ impl ProgrammerRegistry {
                 value,
                 changed_at: self.clock.now(),
                 fade,
+                fade_millis,
+                delay_millis,
             },
         );
         state.last_activity = self.clock.now();
@@ -609,6 +685,8 @@ impl ProgrammerRegistry {
                     value,
                     changed_at: self.clock.now(),
                     fade: false,
+                    fade_millis: None,
+                    delay_millis: None,
                 },
             );
         state.last_activity = self.clock.now();
@@ -659,6 +737,7 @@ impl ProgrammerRegistry {
         };
         state.checkpoint();
         state.values.clear();
+        state.group_values.clear();
         state.last_activity = self.clock.now();
         true
     }
