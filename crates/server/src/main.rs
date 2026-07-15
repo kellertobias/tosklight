@@ -6953,53 +6953,6 @@ fn reconcile_show_logical_heads(entry: &ShowEntry) -> Result<(), String> {
                 .map_err(|error| error.to_string())?;
         }
     }
-    let legacy_group_playbacks = store
-        .objects("playback")
-        .map_err(|error| error.to_string())?
-        .into_iter()
-        .filter_map(|object| {
-            serde_json::from_value::<light_playback::PlaybackDefinition>(object.body)
-                .ok()
-                .filter(|definition| {
-                    matches!(
-                        definition.target,
-                        light_playback::PlaybackTarget::Group { .. }
-                    )
-                })
-                .map(|definition| (object.id, definition.number))
-        })
-        .collect::<Vec<_>>();
-    if !legacy_group_playbacks.is_empty() {
-        let legacy_numbers = legacy_group_playbacks
-            .iter()
-            .map(|(_, number)| *number)
-            .collect::<std::collections::HashSet<_>>();
-        for object in store
-            .objects("playback_page")
-            .map_err(|error| error.to_string())?
-        {
-            let mut page = serde_json::from_value::<light_playback::PlaybackPage>(object.body)
-                .map_err(|error| error.to_string())?;
-            let previous = page.slots.len();
-            page.slots
-                .retain(|_, number| !legacy_numbers.contains(number));
-            if page.slots.len() != previous {
-                store
-                    .put_object(
-                        "playback_page",
-                        &object.id,
-                        &serde_json::to_value(page).map_err(|error| error.to_string())?,
-                        object.revision,
-                    )
-                    .map_err(|error| error.to_string())?;
-            }
-        }
-        for (id, _) in legacy_group_playbacks {
-            store
-                .delete_object("playback", &id)
-                .map_err(|error| error.to_string())?;
-        }
-    }
     Ok(())
 }
 fn compile_active_show_for_startup(engine: &Engine, entry: &ShowEntry) -> Option<String> {

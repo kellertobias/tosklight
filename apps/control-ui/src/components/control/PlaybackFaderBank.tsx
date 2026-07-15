@@ -35,15 +35,17 @@ export function PlaybackFaderBank({ pageNumber, firstSlot = 1, count, rows, butt
     dispatch({ type: "SET_CUELIST_SET_ARMED", value: false });
   };
   const slots = playbackSlotNumbers(page, firstSlot, pageSize).map((number) => {
-    const playback = server.playbacks?.pool.find((candidate) => candidate.number === number && candidate.target.type === "cue_list") ?? null;
+    const playback = server.playbacks?.pool.find((candidate) => candidate.number === number) ?? null;
     const cueListId = playback?.target.type === "cue_list" ? playback.target.cue_list_id : null;
     const cue = cueListId ? server.playbacks?.cue_lists.find((candidate) => candidate.id === cueListId) ?? null : null;
-    return { playback, cue };
+    const groupId = playback?.target.type === "group" ? playback.target.group_id : null;
+    const group = groupId ? server.groups.find((candidate) => candidate.id === groupId) ?? null : null;
+    return { playback, cue, group };
   });
   return <div className="playback-fader-bank" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rowCount}, minmax(0, 1fr))` }}>
-    {slots.map(({ playback, cue }, index) => {
+    {slots.map(({ playback, cue, group }, index) => {
       const active = playback ? server.playbacks?.active.find((item) => item.playback_number === playback.number) : undefined;
-      const value = Math.round((active?.master ?? 0) * 100);
+      const value = Math.round((group ? group.body.master ?? 1 : active?.master ?? 0) * 100);
       const actions = (playback?.buttons ?? ["none", "none", "none"]).slice(0, hardware ? 3 : buttons ?? server.playbacks?.desk.buttons ?? 3);
       const faderActions: VerticalTouchFaderAction[] = actions.map((action, button) => ({ id: `${button}-${action}`, label: action === "go_minus" ? "GO −" : action.toUpperCase(), disabled: assignmentPending || !playback || action === "none",
         onClick: () => playback && action !== "flash" && action !== "none" && void server.poolPlaybackAction(playback.number, action === "go_minus" ? "go-minus" : action),
@@ -59,15 +61,15 @@ export function PlaybackFaderBank({ pageNumber, firstSlot = 1, count, rows, butt
         return <article className={`hardware-playback-card ${active ? "running" : ""} ${!playback ? "empty" : ""} ${assignmentPending ? "assignment-pending" : ""}`} key={playback?.number ?? `empty-${index}`}>
           {assignmentTarget}
           <header><b>{playback?.name ?? "—"}</b><strong>{page?.number ?? pageNumber ?? state.playbackPage + 1}.{firstSlot + index}</strong></header>
-          {cue ? <HardwareCueRows cues={cue.cues} cueIndex={cueIndex} activatedAt={active?.activated_at} compact={rowCount === 2} /> : <div className="hardware-cue-list single" />}
+          {cue ? <HardwareCueRows cues={cue.cues} cueIndex={cueIndex} activatedAt={active?.activated_at} compact={rowCount === 2} /> : group ? <div className="hardware-cue-list single"><div className="hardware-cue-row current"><i/><span>GRP</span><b>{group.body.name ?? `Group ${group.id}`}</b><small>{value}% master</small></div></div> : <div className="hardware-cue-list single" />}
           <div className="hardware-playback-controls"><footer>{actionButtons}</footer><div className="hardware-fader" style={{ "--hardware-fader-level": `${value}%` } as CSSProperties}><i/><b>{value}%</b></div></div>
         </article>;
       }
       return <article className={`${active ? "running" : ""} ${!playback ? "empty" : ""} ${assignmentPending ? "assignment-pending" : ""}`} key={playback?.number ?? `empty-${index}`}>
         {assignmentTarget}
         <b>{firstSlot + index} · {playback?.name ?? "—"}</b>
-        <VerticalTouchFader disabled={assignmentPending || !playback || playback.fader === "speed"} label={playback?.fader ?? "Empty"} value={value}
-          display={active && cue ? `Cue ${active.cue_index + 1} · ${value}%` : playback ? `${value}%` : "Empty"}
+        <VerticalTouchFader disabled={assignmentPending || !playback || playback.fader === "speed"} label={group ? "group master" : playback?.fader ?? "Empty"} value={value}
+          display={active && cue ? `Cue ${active.cue_index + 1} · ${value}%` : group ? `${value}% master` : playback ? `${value}%` : "Empty"}
           actions={faderActions}
           onChange={(next) => playback && void server.poolPlaybackAction(playback.number, "master", { value: next / 100 })}/>
       </article>;

@@ -10,7 +10,7 @@ Start with the [quickstart help](docs/help/00-quickstart.markdown) or browse the
 
 ![Light programming desk with fixture selection, group shortcuts, 3D stage preview, and live programmer](docs/help/assets/screenshots/default-desk-overview.png)
 
-![Light Cuelist pool with playback assignment controls](docs/help/assets/screenshots/cuelist-playback.png)
+![Light Cuelist detail with playback faders and group masters](docs/help/assets/screenshots/cuelist-playback.png)
 
 ## Run the server
 
