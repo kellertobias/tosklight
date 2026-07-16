@@ -296,7 +296,9 @@ impl Engine {
     ) -> Result<(), EngineError> {
         snapshot.validate()?;
         let active_playbacks = if preserve_playback {
-            self.playback.read().active()
+            self.playback
+                .read()
+                .active_for_snapshot(&snapshot.cue_lists, self.clock.now())
         } else {
             Vec::new()
         };
@@ -1346,8 +1348,15 @@ mod tests {
             priority: 10,
             mode: light_playback::CueListMode::Sequence,
             looped: false,
+            intensity_priority_mode: light_playback::IntensityPriorityMode::Htp,
+            wrap_mode: Some(light_playback::WrapMode::Off),
+            restart_mode: light_playback::RestartMode::FirstCue,
+            force_cue_timing: false,
+            disable_cue_timing: false,
             chaser_step_millis: 1_000,
+            chaser_xfade_millis: 0,
             speed_group: None,
+            speed_multiplier: 1.0,
             cues: vec![cue],
         };
         let engine = Engine::new(programmers);
@@ -1392,8 +1401,15 @@ mod tests {
             priority: 10,
             mode: light_playback::CueListMode::Sequence,
             looped: false,
+            intensity_priority_mode: light_playback::IntensityPriorityMode::Htp,
+            wrap_mode: Some(light_playback::WrapMode::Off),
+            restart_mode: light_playback::RestartMode::FirstCue,
+            force_cue_timing: false,
+            disable_cue_timing: false,
             chaser_step_millis: 1_000,
+            chaser_xfade_millis: 0,
             speed_group: None,
+            speed_multiplier: 1.0,
             cues: vec![cue],
         };
         let engine = Engine::new(programmers);

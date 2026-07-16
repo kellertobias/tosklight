@@ -5,31 +5,31 @@ import type { DeskConfiguration } from "../api/types";
 import { configuredServerUrl } from "../api/LightApiClient";
 import { FixtureLibrarySetup } from "../components/setup/FixtureLibrarySetup";
 import { ScreensSetup } from "../components/setup/ScreensSetup";
-import { Button, FormLayout, FormField, NumberField, SwitchField, TextField } from "../components/common";
+import { Button, FormLayout, FormField, Input, NumberField, SelectField, SwitchField, TextAreaField, TextField } from "../components/common";
 import { WindowHeader } from "../components/window-kit";
 import { useApp } from "../state/AppContext";
 
-const sections = [
-  "Shows & recovery",
-  "Users & sessions",
-  "Inputs",
-  "Outputs",
-  "Timecode",
-  "Network & API",
-  "Fixture library",
-  "Screens & playback",
-];
+const sections = ["Shows & recovery", "Users & sessions", "Inputs", "Outputs", "Timecode", "Network & API", "Fixture library", "Screens & playback", "Desk Lock"];
 
 export function SetupWindow(_: WindowProps) {
   const server = useServer();
   const { state, dispatch } = useApp();
   const [section, setSection] = useState(0);
-  const [draft, setDraft] = useState<DeskConfiguration | null>(
-    server.configuration,
-  );
+  const [draft, setDraft] = useState<DeskConfiguration | null>(server.configuration);
   const [restartRequired, setRestartRequired] = useState(false);
   const [serverUrl, setServerUrl] = useState(configuredServerUrl());
+  const [lockMessage, setLockMessage] = useState(server.deskLock?.message ?? "Desk locked");
+  const [lockWallpaper, setLockWallpaper] = useState<string | null>(server.deskLock?.wallpaper ?? null);
+  const [unlockMode, setUnlockMode] = useState<"button" | "pin">(server.deskLock?.unlock_mode ?? "button");
+  const [lockPin, setLockPin] = useState("");
   useEffect(() => setDraft(server.configuration), [server.configuration]);
+  useEffect(() => {
+    if (server.deskLock) {
+      setLockMessage(server.deskLock.message);
+      setLockWallpaper(server.deskLock.wallpaper);
+      setUnlockMode(server.deskLock.unlock_mode);
+    }
+  }, [server.deskLock]);
 
   const save = async () => {
     if (!draft) return;
@@ -38,15 +38,27 @@ export function SetupWindow(_: WindowProps) {
 
   return (
     <div className="setup-window">
-      <WindowHeader title={section === 6 ? "Fixture library" : "Desk Setup"} info={{ primary: section === 6 ? `${server.fixtureLibrary.length} modes` : sections[section], secondary: restartRequired ? "Restart required" : undefined }} actions={[[{ id: "save", label: "Save changes", disabled: !draft, onClick: () => void save() }]]} />
+      <WindowHeader
+        title={section === 6 ? "Fixture library" : "Desk Setup"}
+        info={{
+          primary: section === 6 ? `${server.fixtureLibrary.length} modes` : sections[section],
+          secondary: restartRequired ? "Restart required" : undefined,
+        }}
+        actions={[
+          [
+            {
+              id: "save",
+              label: "Save changes",
+              disabled: !draft,
+              onClick: () => void save(),
+            },
+          ],
+        ]}
+      />
       <div>
         <nav>
           {sections.map((name, index) => (
-            <Button
-              onClick={() => setSection(index)}
-              className={index === section ? "active" : ""}
-              key={name}
-            >
+            <Button onClick={() => setSection(index)} className={index === section ? "active" : ""} key={name}>
               {name}
             </Button>
           ))}
@@ -57,13 +69,8 @@ export function SetupWindow(_: WindowProps) {
               <h2>Shows & recovery</h2>
               <div className="setup-cards">
                 <section>
-                  <b>
-                    {server.bootstrap?.active_show?.name ?? "No show loaded"}
-                  </b>
-                  <small>
-                    {server.bootstrap?.active_show?.updated_at ??
-                      "Choose a show from the library"}
-                  </small>
+                  <b>{server.bootstrap?.active_show?.name ?? "No show loaded"}</b>
+                  <small>{server.bootstrap?.active_show?.updated_at ?? "Choose a show from the library"}</small>
                 </section>
                 <section>
                   <b>{server.shows.length} library shows</b>
@@ -71,9 +78,7 @@ export function SetupWindow(_: WindowProps) {
                 </section>
                 <section>
                   <b>{server.status}</b>
-                  <small>
-                    {server.bootstrap?.active_show ? "Autosave active" : "No active show"}
-                  </small>
+                  <small>{server.bootstrap?.active_show ? "Autosave active" : "No active show"}</small>
                 </section>
               </div>
             </>
@@ -86,16 +91,8 @@ export function SetupWindow(_: WindowProps) {
                   <article key={user.id}>
                     <b>{user.name}</b>
                     <span>{user.enabled ? "Enabled" : "Disabled"}</span>
-                    <small>
-                      {user.id === server.session?.user.id
-                        ? "Current operator"
-                        : user.id}
-                    </small>
-                    {user.enabled && user.id !== server.session?.user.id && (
-                      <Button onClick={() => server.switchUser(user.name)}>
-                        Use this operator
-                      </Button>
-                    )}
+                    <small>{user.id === server.session?.user.id ? "Current operator" : user.id}</small>
+                    {user.enabled && user.id !== server.session?.user.id && <Button onClick={() => server.switchUser(user.name)}>Use this operator</Button>}
                   </article>
                 ))}
               </div>
@@ -105,19 +102,44 @@ export function SetupWindow(_: WindowProps) {
             <>
               <h2>Inputs</h2>
               <div className="setup-list">
-                {draft && <article>
-                  <b>Preload capture</b>
-                  <SwitchField label="Preload programmer changes" checked={draft.preload_programmer_changes} onChange={(event) => setDraft({ ...draft, preload_programmer_changes: event.target.checked })}/>
-                  <SwitchField label="Preload physical playback actions" checked={draft.preload_physical_playback_actions} onChange={(event) => setDraft({ ...draft, preload_physical_playback_actions: event.target.checked })}/>
-                  <SwitchField label="Preload virtual playback actions" checked={draft.preload_virtual_playback_actions} onChange={(event) => setDraft({ ...draft, preload_virtual_playback_actions: event.target.checked })}/>
-                </article>}
+                {draft && (
+                  <article>
+                    <b>Preload capture</b>
+                    <SwitchField
+                      label="Preload programmer changes"
+                      checked={draft.preload_programmer_changes}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          preload_programmer_changes: event.target.checked,
+                        })
+                      }
+                    />
+                    <SwitchField
+                      label="Preload physical playback actions"
+                      checked={draft.preload_physical_playback_actions}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          preload_physical_playback_actions: event.target.checked,
+                        })
+                      }
+                    />
+                    <SwitchField
+                      label="Preload virtual playback actions"
+                      checked={draft.preload_virtual_playback_actions}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          preload_virtual_playback_actions: event.target.checked,
+                        })
+                      }
+                    />
+                  </article>
+                )}
                 <article>
                   <b>MIDI inputs</b>
-                  <span>
-                    {draft?.midi_inputs.length
-                      ? draft.midi_inputs.join(", ")
-                      : "No MIDI inputs selected"}
-                  </span>
+                  <span>{draft?.midi_inputs.length ? draft.midi_inputs.join(", ") : "No MIDI inputs selected"}</span>
                 </article>
                 <article>
                   <b>OSC</b>
@@ -129,7 +151,16 @@ export function SetupWindow(_: WindowProps) {
                 </article>
                 <article>
                   <b>Software keypad shortcuts</b>
-                  <SwitchField label="Use the regular 0–9 keys as keypad numbers" checked={state.regularNumberShortcuts} onChange={(event) => dispatch({ type: "SET_REGULAR_NUMBER_SHORTCUTS", value: event.target.checked })}/>
+                  <SwitchField
+                    label="Use the regular 0–9 keys as keypad numbers"
+                    checked={state.regularNumberShortcuts}
+                    onChange={(event) =>
+                      dispatch({
+                        type: "SET_REGULAR_NUMBER_SHORTCUTS",
+                        value: event.target.checked,
+                      })
+                    }
+                  />
                   <small>Numpad digits and the non-number software shortcuts remain available.</small>
                 </article>
               </div>
@@ -139,38 +170,32 @@ export function SetupWindow(_: WindowProps) {
             <>
               <h2>Output engine</h2>
               <FormLayout className="configuration-form" columns={3} minColumnWidth={190}>
-                  <NumberField
-                    label="Frame rate"
-                    min="40"
-                    max="44"
-                    value={draft.frame_rate_hz}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        frame_rate_hz: Number(event.target.value),
-                      })
-                    }
-                    description="40–44 Hz"
-                  />
-                  <TextField
-                    label="Output bind address"
-                    value={draft.output_bind_ip}
-                    onChange={(event) =>
-                      setDraft({ ...draft, output_bind_ip: event.target.value })
-                    }
-                  />
-                  <NumberField
-                    label="Backup retention"
-                    min="1"
-                    max="1000"
-                    value={draft.backup_retention}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        backup_retention: Number(event.target.value),
-                      })
-                    }
-                  />
+                <NumberField
+                  label="Frame rate"
+                  min="40"
+                  max="44"
+                  value={draft.frame_rate_hz}
+                  onChange={(event) =>
+                    setDraft({
+                      ...draft,
+                      frame_rate_hz: Number(event.target.value),
+                    })
+                  }
+                  description="40–44 Hz"
+                />
+                <TextField label="Output bind address" value={draft.output_bind_ip} onChange={(event) => setDraft({ ...draft, output_bind_ip: event.target.value })} />
+                <NumberField
+                  label="Backup retention"
+                  min="1"
+                  max="1000"
+                  value={draft.backup_retention}
+                  onChange={(event) =>
+                    setDraft({
+                      ...draft,
+                      backup_retention: Number(event.target.value),
+                    })
+                  }
+                />
               </FormLayout>
             </>
           )}
@@ -182,11 +207,7 @@ export function SetupWindow(_: WindowProps) {
                   <article key={source.source_prefix}>
                     <b>{source.source_prefix}</b>
                     <span>Priority {source.priority}</span>
-                    <small>
-                      {source.fallback
-                        ? "Fallback allowed"
-                        : "Explicit source only"}
-                    </small>
+                    <small>{source.fallback ? "Fallback allowed" : "Explicit source only"}</small>
                   </article>
                 ))}
               </div>
@@ -196,13 +217,10 @@ export function SetupWindow(_: WindowProps) {
             <>
               <h2>Network & API</h2>
               <FormLayout className="configuration-form" labelPlacement="side">
-                  <TextField
-                    label="Light server URL"
-                    value={serverUrl}
-                    onChange={(event) => setServerUrl(event.target.value)}
-                    description="Tauri can use this desk or a remote Light server."
-                  />
-                <FormField label=""><Button onClick={() => server.setServerUrl(serverUrl)}>Connect to server</Button></FormField>
+                <TextField label="Light server URL" value={serverUrl} onChange={(event) => setServerUrl(event.target.value)} description="Tauri can use this desk or a remote Light server." />
+                <FormField label="">
+                  <Button onClick={() => server.setServerUrl(serverUrl)}>Connect to server</Button>
+                </FormField>
               </FormLayout>
               <div className="setup-cards">
                 <section>
@@ -221,7 +239,58 @@ export function SetupWindow(_: WindowProps) {
             </>
           )}
           {section === 6 && <FixtureLibrarySetup />}
-          {section === 7 && <ScreensSetup/>}
+          {section === 7 && <ScreensSetup />}
+          {section === 8 && (
+            <>
+              <h2>Desk Lock</h2>
+              <p>Locking this desk blocks every connected screen and its assigned hardware without changing playback, programmer, or output state.</p>
+              <FormLayout labelPlacement="side">
+                <TextAreaField label="Lock message" value={lockMessage} onChange={(event) => setLockMessage(event.target.value)} />
+                <SelectField
+                  label="Unlock control"
+                  value={unlockMode}
+                  onChange={setUnlockMode}
+                  options={[
+                    { value: "button", label: "Unlock button" },
+                    { value: "pin", label: "PIN required" },
+                  ]}
+                />
+                {unlockMode === "pin" && <TextField label="New PIN" secure inputMode="numeric" value={lockPin} description="4–12 digits. Leave empty to retain the configured PIN." onChange={(event) => setLockPin(event.target.value.replace(/\D/g, ""))} />}
+                <FormField label="Wallpaper">
+                  <Input
+                    aria-label="Lock wallpaper"
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = () => setLockWallpaper(String(reader.result));
+                      reader.readAsDataURL(file);
+                    }}
+                  />
+                  {lockWallpaper && <Button onClick={() => setLockWallpaper(null)}>Use default wallpaper</Button>}
+                </FormField>
+              </FormLayout>
+              <div className="modal-actions">
+                <Button
+                  onClick={() =>
+                    void server.configureDeskLock({
+                      message: lockMessage,
+                      wallpaper: lockWallpaper,
+                      unlock_mode: unlockMode,
+                      ...(lockPin ? { pin: lockPin } : {}),
+                    })
+                  }
+                >
+                  Save Lock Configuration
+                </Button>
+                <Button className="danger" onClick={() => void server.lockDesk()}>
+                  Lock Desk
+                </Button>
+              </div>
+            </>
+          )}
           {server.error && <p className="modal-error">{server.error}</p>}
         </main>
       </div>

@@ -37,6 +37,7 @@ use light_show::{
 use parking_lot::{Mutex, RwLock};
 use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::{
     collections::{HashMap, VecDeque},
     env, io,
@@ -279,6 +280,32 @@ struct SessionResponse {
     user: DeskUser,
     desk: ControlDesk,
 }
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+struct DeskLockConfiguration {
+    locked: bool,
+    message: String,
+    wallpaper: Option<String>,
+    unlock_mode: String,
+    pin_salt: Option<String>,
+    pin_hash: Option<String>,
+}
+
+impl Default for DeskLockConfiguration {
+    fn default() -> Self {
+        Self { locked: false, message: "Desk locked".into(), wallpaper: None, unlock_mode: "button".into(), pin_salt: None, pin_hash: None }
+    }
+}
+
+#[derive(Serialize)]
+struct DeskLockResponse { locked: bool, message: String, wallpaper: Option<String>, unlock_mode: String }
+
+#[derive(Deserialize)]
+struct DeskLockUpdate { message: String, wallpaper: Option<String>, unlock_mode: String, pin: Option<String> }
+
+#[derive(Deserialize)]
+struct DeskUnlockInput { pin: Option<String> }
 #[derive(Deserialize)]
 struct UploadShow {
     name: String,
@@ -797,6 +824,10 @@ fn router(state: AppState) -> Router {
         )
         .route("/api/v1/sessions", post(create_session))
         .route("/api/v1/sessions/{id}", delete(close_session))
+        .route("/api/v1/desk-lock", get(desk_lock).put(update_desk_lock))
+        .route("/api/v1/desk-lock/lock", post(lock_desk))
+        .route("/api/v1/desk-lock/unlock", post(unlock_desk))
+        .route("/api/v1/desk-lock/force-unlock", post(force_unlock_desk))
         .route("/api/v1/users", post(create_user))
         .route("/api/v1/users/{id}", put(update_user).delete(delete_user))
         .route("/api/v1/shows", get(list_shows).post(upload_show))
@@ -878,6 +909,7 @@ fn router(state: AppState) -> Router {
             .route("/api/v1/test/output/failure", post(set_test_output_failure));
     }
     router
+        .layer(middleware::from_fn_with_state(state.clone(), desk_lock_boundary))
         .layer(middleware::from_fn_with_state(state.clone(), desk_boundary))
         .with_state(state)
         .layer(DefaultBodyLimit::max(256 * 1024 * 1024))
@@ -1097,6 +1129,111 @@ async fn desk_boundary(State(state): State<AppState>, request: Request, next: Ne
     } else {
         ApiError::unauthorized("desk boundary token is required").into_response()
     }
+}
+
+fn desk_lock_key(id: Uuid) -> String { format!("desk_lock:{id}") }
+
+fn read_desk_lock(state: &AppState, id: Uuid) -> DeskLockConfiguration {
+    state.desk.lock().setting(&desk_lock_key(id)).ok().flatten()
+        .and_then(|value| serde_json::from_str(&value).ok()).unwrap_or_default()
+}
+
+fn write_desk_lock(state: &AppState, id: Uuid, configuration: &DeskLockConfiguration) -> Result<(), ApiError> {
+    let value = serde_json::to_string(configuration).map_err(|error| ApiError::internal(error.to_string()))?;
+    state.desk.lock().set_setting(&desk_lock_key(id), &value).map_err(ApiError::store)
+}
+
+fn desk_lock_response(configuration: DeskLockConfiguration) -> DeskLockResponse {
+    DeskLockResponse { locked: configuration.locked, message: configuration.message, wallpaper: configuration.wallpaper, unlock_mode: configuration.unlock_mode }
+}
+
+fn pin_hash(salt: &str, pin: &str) -> String {
+    let digest = Sha256::digest(format!("{salt}:{pin}").as_bytes());
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+async fn desk_lock_boundary(State(state): State<AppState>, request: Request, next: Next) -> Response {
+    let path = request.uri().path();
+    if request.method() == Method::GET
+        || request.method() == Method::OPTIONS
+        || path == "/api/v1/sessions"
+        || path.starts_with("/api/v1/desk-lock")
+    {
+        return next.run(request).await;
+    }
+    let session = request.headers().get(header::AUTHORIZATION).and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer ")).and_then(|token| authenticate_token(&state, token).ok());
+    if session.as_ref().is_some_and(|session| read_desk_lock(&state, session.desk.id).locked) {
+        return ApiError::conflict("desk is locked").into_response();
+    }
+    next.run(request).await
+}
+
+async fn desk_lock(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<DeskLockResponse>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    Ok(Json(desk_lock_response(read_desk_lock(&state, session.desk.id))))
+}
+
+async fn update_desk_lock(State(state): State<AppState>, headers: HeaderMap, Json(input): Json<DeskLockUpdate>) -> Result<Json<DeskLockResponse>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    let mut configuration = read_desk_lock(&state, session.desk.id);
+    if configuration.locked { return Err(ApiError::conflict("unlock the desk before changing its lock configuration")); }
+    if !matches!(input.unlock_mode.as_str(), "button" | "pin") { return Err(ApiError::bad_request("unlock mode must be button or pin")); }
+    if input.message.len() > 500 { return Err(ApiError::bad_request("lock message must not exceed 500 characters")); }
+    configuration.message = input.message;
+    configuration.wallpaper = input.wallpaper.filter(|value| !value.trim().is_empty());
+    configuration.unlock_mode = input.unlock_mode;
+    if configuration.unlock_mode == "pin" {
+        if let Some(pin) = input.pin {
+            if !(4..=12).contains(&pin.len()) || !pin.chars().all(|character| character.is_ascii_digit()) { return Err(ApiError::bad_request("PIN must contain 4-12 digits")); }
+            let salt = Uuid::new_v4().to_string();
+            configuration.pin_hash = Some(pin_hash(&salt, &pin));
+            configuration.pin_salt = Some(salt);
+        }
+        if configuration.pin_hash.is_none() { return Err(ApiError::bad_request("PIN required mode needs a configured PIN")); }
+    } else {
+        configuration.pin_hash = None;
+        configuration.pin_salt = None;
+    }
+    write_desk_lock(&state, session.desk.id, &configuration)?;
+    emit(&state, "desk_lock_changed", serde_json::json!({"desk_id":session.desk.id,"locked":false}));
+    Ok(Json(desk_lock_response(configuration)))
+}
+
+async fn lock_desk(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<DeskLockResponse>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    let mut configuration = read_desk_lock(&state, session.desk.id);
+    configuration.locked = true;
+    write_desk_lock(&state, session.desk.id, &configuration)?;
+    emit(&state, "desk_lock_changed", serde_json::json!({"desk_id":session.desk.id,"locked":true}));
+    Ok(Json(desk_lock_response(configuration)))
+}
+
+async fn unlock_desk(State(state): State<AppState>, headers: HeaderMap, Json(input): Json<DeskUnlockInput>) -> Result<Json<DeskLockResponse>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    let mut configuration = read_desk_lock(&state, session.desk.id);
+    if configuration.unlock_mode == "pin" {
+        let Some(pin) = input.pin else { return Err(ApiError::unauthorized("PIN is required")); };
+        let valid = configuration.pin_salt.as_deref().zip(configuration.pin_hash.as_deref())
+            .is_some_and(|(salt, expected)| pin_hash(salt, &pin) == expected);
+        if !valid { return Err(ApiError::unauthorized("incorrect PIN")); }
+    }
+    configuration.locked = false;
+    write_desk_lock(&state, session.desk.id, &configuration)?;
+    emit(&state, "desk_lock_changed", serde_json::json!({"desk_id":session.desk.id,"locked":false}));
+    Ok(Json(desk_lock_response(configuration)))
+}
+
+async fn force_unlock_desk(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<DeskLockResponse>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    let supplied = headers.get("x-light-admin-recovery").and_then(|value| value.to_str().ok());
+    let expected = env::var("LIGHT_ADMIN_RECOVERY_TOKEN").ok();
+    if expected.as_deref().is_none_or(|expected| supplied != Some(expected)) { return Err(ApiError::unauthorized("administrative recovery token is required")); }
+    let mut configuration = read_desk_lock(&state, session.desk.id);
+    configuration.locked = false;
+    write_desk_lock(&state, session.desk.id, &configuration)?;
+    emit(&state, "desk_lock_changed", serde_json::json!({"desk_id":session.desk.id,"locked":false,"forced":true}));
+    Ok(Json(desk_lock_response(configuration)))
 }
 
 async fn operator_ui() -> Response {
@@ -3914,6 +4051,9 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
         payload: None,
         error: Some(message),
     };
+    if read_desk_lock(state, session.desk.id).locked {
+        return fail("desk is locked".into());
+    }
     if command.protocol_version != 1 {
         return fail("unsupported protocol_version".into());
     }
@@ -5243,6 +5383,13 @@ fn store_cue_at(
             looped: false,
             chaser_step_millis: 1_000,
             speed_group: None,
+            intensity_priority_mode: light_playback::IntensityPriorityMode::Htp,
+            wrap_mode: Some(light_playback::WrapMode::Off),
+            restart_mode: light_playback::RestartMode::FirstCue,
+            force_cue_timing: false,
+            disable_cue_timing: false,
+            chaser_xfade_millis: 0,
+            speed_multiplier: 1.0,
             cues: vec![programmer_cue(&programmer, number, timing)],
         };
         let definition = light_playback::PlaybackDefinition {
@@ -6596,6 +6743,11 @@ fn handle_control_event(state: &AppState, event: ControlEvent) {
     if let ControlEvent::Timecode(timecode) = &event {
         ingest_timecode(state, timecode.clone());
     }
+    let input_locked = if let ControlEvent::Osc { address, .. } = &event {
+        let parts = address.trim_matches('/').split('/').collect::<Vec<_>>();
+        parts.get(1).and_then(|alias| osc_control_desk(state, alias))
+            .is_some_and(|desk| read_desk_lock(state, desk.id).locked)
+    } else { false };
     if let ControlEvent::Osc {
         address, arguments, ..
     } = &event
@@ -6632,7 +6784,7 @@ fn handle_control_event(state: &AppState, event: ControlEvent) {
         source,
     } = &event
     {
-        if !handle_subscription_osc(state, address, arguments, source.as_deref()) {
+        if !handle_subscription_osc(state, address, arguments, source.as_deref()) && !input_locked {
             handle_playback_osc(state, address, arguments);
             handle_programmer_osc(state, address, arguments, source.as_deref());
             handle_timing_osc(state, address, arguments);
@@ -6640,6 +6792,7 @@ fn handle_control_event(state: &AppState, event: ControlEvent) {
         }
         send_osc_feedback(state, false);
     }
+    if input_locked { return; }
     let mappings = state.engine.snapshot().control_mappings.clone();
     for mapping in mappings.iter().filter(|mapping| mapping.matches(&event)) {
         match mapping.action {
@@ -7111,6 +7264,12 @@ fn send_osc_feedback(state: &AppState, _full: bool) {
         else {
             continue;
         };
+        send_osc(
+            state,
+            subscriber.target,
+            format!("/light/{}/feedback/locked", subscriber.desk_alias),
+            vec![OscArgument::Bool(read_desk_lock(state, desk.id).locked)],
+        );
         let page = state.desk.lock().desk_page(desk.id, show.id).unwrap_or(1);
         send_osc(
             state,
@@ -8376,6 +8535,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn desk_lock_is_persisted_scoped_and_enforced_by_the_server() {
+        let (state, data_dir) = test_state();
+        let second = state.desk.lock().add_desk("Second", "second").unwrap();
+        let app = router(state.clone());
+        let (token, _) = login(&app, "Operator").await;
+        let configure = app.clone().oneshot(Request::put("/api/v1/desk-lock").header(header::AUTHORIZATION, format!("Bearer {token}")).header(header::CONTENT_TYPE,"application/json").body(Body::from(r#"{"message":"Call the operator","wallpaper":null,"unlock_mode":"pin","pin":"1234"}"#)).unwrap()).await.unwrap();
+        assert_eq!(configure.status(), StatusCode::OK);
+        let lock = app.clone().oneshot(Request::post("/api/v1/desk-lock/lock").header(header::AUTHORIZATION, format!("Bearer {token}")).header(header::CONTENT_TYPE,"application/json").body(Body::from("{}")).unwrap()).await.unwrap();
+        assert_eq!(lock.status(), StatusCode::OK);
+        assert!(read_desk_lock(&state, state.sessions.read().values().find(|session| session.token == token).unwrap().desk.id).locked);
+        let desk_id = state.sessions.read().values().find(|session| session.token == token).unwrap().desk.id;
+        let reopened = DeskStore::open(data_dir.join("desk.sqlite")).unwrap();
+        let persisted: DeskLockConfiguration = serde_json::from_str(&reopened.setting(&desk_lock_key(desk_id)).unwrap().unwrap()).unwrap();
+        assert!(persisted.locked, "a server restart must reopen the desk as locked");
+        let blocked = app.clone().oneshot(Request::put("/api/v1/master").header(header::AUTHORIZATION, format!("Bearer {token}")).header(header::CONTENT_TYPE,"application/json").body(Body::from(r#"{"grand_master":0.5}"#)).unwrap()).await.unwrap();
+        assert_eq!(blocked.status(), StatusCode::CONFLICT);
+        let wrong = app.clone().oneshot(Request::post("/api/v1/desk-lock/unlock").header(header::AUTHORIZATION, format!("Bearer {token}")).header(header::CONTENT_TYPE,"application/json").body(Body::from(r#"{"pin":"9999"}"#)).unwrap()).await.unwrap();
+        assert_eq!(wrong.status(), StatusCode::UNAUTHORIZED);
+
+        let second_login = app.clone().oneshot(Request::post("/api/v1/sessions").header(header::CONTENT_TYPE,"application/json").body(Body::from(serde_json::json!({"username":"Operator","desk_id":second.id}).to_string())).unwrap()).await.unwrap();
+        let second_token = json(second_login).await["token"].as_str().unwrap().to_owned();
+        let unaffected = app.clone().oneshot(Request::put("/api/v1/master").header(header::AUTHORIZATION, format!("Bearer {second_token}")).header(header::CONTENT_TYPE,"application/json").body(Body::from(r#"{"grand_master":0.5}"#)).unwrap()).await.unwrap();
+        assert_eq!(unaffected.status(), StatusCode::OK);
+
+        let unlock = app.oneshot(Request::post("/api/v1/desk-lock/unlock").header(header::AUTHORIZATION, format!("Bearer {token}")).header(header::CONTENT_TYPE,"application/json").body(Body::from(r#"{"pin":"1234"}"#)).unwrap()).await.unwrap();
+        assert_eq!(unlock.status(), StatusCode::OK);
+        let stored = state.desk.lock().setting(&desk_lock_key(state.sessions.read().values().find(|session| session.token == token).unwrap().desk.id)).unwrap().unwrap();
+        assert!(!stored.contains("1234"));
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+
+    #[tokio::test]
     async fn login_reuses_client_desk_when_remembered_desk_is_stale() {
         let (state, data_dir) = test_state();
         let app = router(state);
@@ -9126,8 +9317,15 @@ mod tests {
             priority: 10,
             mode: light_playback::CueListMode::Sequence,
             looped: false,
+            intensity_priority_mode: light_playback::IntensityPriorityMode::Htp,
+            wrap_mode: Some(light_playback::WrapMode::Off),
+            restart_mode: light_playback::RestartMode::FirstCue,
+            force_cue_timing: false,
+            disable_cue_timing: false,
             chaser_step_millis: 1_000,
+            chaser_xfade_millis: 0,
             speed_group: None,
+            speed_multiplier: 1.0,
             cues: vec![cue],
         };
         let route = light_output::OutputRoute {
@@ -9730,8 +9928,15 @@ mod tests {
             priority: 0,
             mode: CueListMode::Sequence,
             looped: false,
+            intensity_priority_mode: light_playback::IntensityPriorityMode::Htp,
+            wrap_mode: Some(light_playback::WrapMode::Off),
+            restart_mode: light_playback::RestartMode::FirstCue,
+            force_cue_timing: false,
+            disable_cue_timing: false,
             chaser_step_millis: 1_000,
+            chaser_xfade_millis: 0,
             speed_group: None,
+            speed_multiplier: 1.0,
             cues: vec![cue],
         };
         let cue_object_id = cue_list_id.0.to_string();

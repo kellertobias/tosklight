@@ -1,13 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type PropsWithChildren,
-} from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type PropsWithChildren } from "react";
 import { LightApiClient, saveServerUrl } from "./LightApiClient";
 import type { DeskModel } from "../types";
 import type {
@@ -75,10 +66,23 @@ interface ServerContextValue {
   fileEntries: (root: string, path?: string, hidden?: boolean) => Promise<import("./types").FileDirectory>;
   readTextFile: (root: string, path: string) => Promise<import("./types").TextDocument>;
   saveTextFile: (root: string, path: string, text: string, revision: string | null) => Promise<import("./types").TextDocument>;
-  fileOperation: (root: string, input: { operation: "create_file" | "create_folder" | "rename" | "copy" | "move" | "delete"; sources?: string[]; destination?: string; name?: string; replace?: boolean }) => Promise<{ paths: string[] }>;
+  fileOperation: (
+    root: string,
+    input: {
+      operation: "create_file" | "create_folder" | "rename" | "copy" | "move" | "delete";
+      sources?: string[];
+      destination?: string;
+      name?: string;
+      replace?: boolean;
+    },
+  ) => Promise<{ paths: string[] }>;
   fileContent: (root: string, path: string) => Promise<Blob>;
   bootstrap: BootstrapSnapshot | null;
   session: SessionResponse | null;
+  deskLock: import("./types").DeskLockState | null;
+  configureDeskLock: (input: { message: string; wallpaper: string | null; unlock_mode: "button" | "pin"; pin?: string }) => Promise<boolean>;
+  lockDesk: () => Promise<void>;
+  unlockDesk: (pin?: string) => Promise<boolean>;
   createUser: (name: string) => Promise<void>;
   changeUser: (user: import("./types").DeskUser) => Promise<void>;
   patch: PatchSnapshot | null;
@@ -95,7 +99,7 @@ interface ServerContextValue {
   mediaPreviewUrls: Record<string, string>;
   groups: VersionedObject<StoredGroup>[];
   presets: VersionedObject<StoredPreset>[];
-  cueObjects: VersionedObject<Record<string, unknown>>[];
+  cueObjects: VersionedObject<import("./types").CueList>[];
   deskLayout: VersionedObject<StoredDeskLayout> | null;
   stageLayout: VersionedObject<StoredStageLayout> | null;
   unresolvedMvrFixtures: VersionedObject<Record<string, unknown>>[];
@@ -110,45 +114,47 @@ interface ServerContextValue {
   executeCommandLine: (value?: string) => Promise<boolean>;
   undoProgrammer: () => Promise<void>;
   setSelection: (fixtures: string[]) => Promise<void>;
-  setProgrammer: (
-    fixtureId: string,
-    attribute: string,
-    value: number,
-  ) => Promise<void>;
+  setProgrammer: (fixtureId: string, attribute: string, value: number) => Promise<void>;
   setGroupValue: (attribute: string, value: number) => Promise<void>;
   setPreloadGroupValue: (attribute: string, value: number) => Promise<void>;
-  playbackAction: (
-    cueListId: string,
-    action: "go" | "back" | "pause" | "release",
+  playbackAction: (cueListId: string, action: "go" | "back" | "pause" | "release") => Promise<void>;
+  poolPlaybackAction: (
+    number: number,
+    action: "on" | "off" | "toggle" | "go" | "go-minus" | "fast-forward" | "fast-rewind" | "temp" | "swap" | "select" | "select-contents" | "learn" | "double" | "half" | "pause" | "blackout" | "pause-dynamics" | "flash" | "master" | "xfade-on" | "xfade-off",
+    input?: {
+      value?: number;
+      pressed?: boolean;
+      surface?: "physical" | "virtual";
+    },
   ) => Promise<void>;
-  poolPlaybackAction: (number: number, action: "on" | "off" | "toggle" | "go" | "go-minus" | "fast-forward" | "fast-rewind" | "temp" | "swap" | "select" | "select-contents" | "learn" | "double" | "half" | "pause" | "blackout" | "pause-dynamics" | "flash" | "master" | "xfade-on" | "xfade-off", input?: { value?: number; pressed?: boolean; surface?: "physical" | "virtual" }) => Promise<void>;
   setPlaybackPage: (page: number) => Promise<void>;
   updateControlDesk: (desk: import("./types").ControlDesk) => Promise<void>;
   selectControlDesk: (id: string) => void;
   savePlaybackDefinition: (playback: import("./types").PlaybackDefinition) => Promise<void>;
+  saveCueList: (cueList: import("./types").CueList, revision: number) => Promise<boolean>;
   unassignPagePlayback: (page: number, slot: number) => Promise<boolean>;
   readDmx: () => Promise<DmxSnapshot>;
   readVisualization: (preload?: boolean) => Promise<VisualizationSnapshot>;
-  setDmxOverride: (
-    universe: number,
-    address: number,
-    value: number | null,
-  ) => Promise<void>;
+  setDmxOverride: (universe: number, address: number, value: number | null) => Promise<void>;
   createShow: (name: string) => Promise<void>;
   saveShowAs: (name: string) => Promise<boolean>;
   initializeEmptyShow: () => Promise<boolean>;
   uploadShow: (file: File, overwrite?: boolean) => Promise<void>;
-  openShow: (
-    id: string,
-    transition?: "hold_current" | "timed_fade" | "safe_blackout",
-  ) => Promise<void>;
+  openShow: (id: string, transition?: "hold_current" | "timed_fade" | "safe_blackout") => Promise<void>;
   listShowRevisions: (id: string) => Promise<import("./types").ShowRevision[]>;
   saveShowRevision: (name: string) => Promise<import("./types").ShowRevision | null>;
   openShowRevision: (id: string, revision: number) => Promise<boolean>;
   rollbackShow: () => Promise<void>;
   downloadShow: (show: ShowEntry) => Promise<void>;
   previewMvr: (file: File, showId?: string) => Promise<import("./types").MvrImportPreview>;
-  applyMvr: (token: string, input: { new_show?: { name: string; open_after_import: boolean }; existing_show_id?: string; resolutions?: Record<string, { action: string; universe?: number; address?: number }> }) => Promise<import("./types").MvrApplyResult>;
+  applyMvr: (
+    token: string,
+    input: {
+      new_show?: { name: string; open_after_import: boolean };
+      existing_show_id?: string;
+      resolutions?: Record<string, { action: string; universe?: number; address?: number }>;
+    },
+  ) => Promise<import("./types").MvrApplyResult>;
   previewMvrExport: (showId: string) => Promise<import("./types").MvrExportPreview>;
   downloadMvr: (show: ShowEntry) => Promise<void>;
   saveConfiguration: (configuration: DeskConfiguration) => Promise<boolean>;
@@ -156,19 +162,10 @@ interface ServerContextValue {
   saveDeskLayout: (layout: StoredDeskLayout) => Promise<void>;
   saveStageLayout: (layout: StoredStageLayout) => Promise<void>;
   applyGroup: (id: string) => Promise<void>;
-  selectGroup: (
-    id: string,
-    frozen?: boolean,
-    rule?: Record<string, unknown>,
-  ) => Promise<void>;
+  selectGroup: (id: string, frozen?: boolean, rule?: Record<string, unknown>) => Promise<void>;
   selectionMacro: (rule: Record<string, unknown>) => Promise<void>;
-  alignSelection: (
-    attribute: string,
-    mode: "left" | "right" | "center" | "out",
-  ) => Promise<void>;
-  preloadAction: (
-    action: "enter" | "go" | "clear" | "release",
-  ) => Promise<void>;
+  alignSelection: (attribute: string, mode: "left" | "right" | "center" | "out") => Promise<void>;
+  preloadAction: (action: "enter" | "go" | "clear" | "release") => Promise<void>;
   storePreload: (
     input: {
       target: "preset" | "cue";
@@ -179,11 +176,7 @@ interface ServerContextValue {
     },
     revision: number,
   ) => Promise<boolean>;
-  storeDynamic: (
-    speed: number,
-    width: number,
-    direction: string,
-  ) => Promise<void>;
+  storeDynamic: (speed: number, width: number, direction: string) => Promise<void>;
   storePlayback: (slot: number, cueListId?: string) => Promise<void>;
   storeGroup: (id: string, name: string, mode?: "merge" | "overwrite") => Promise<void>;
   setGroupMaster: (id: string, master: number) => Promise<void>;
@@ -192,12 +185,7 @@ interface ServerContextValue {
   refreshFrozenGroup: (id: string) => Promise<void>;
   detachDerivedGroup: (id: string) => Promise<void>;
   applyPreset: (id: string) => Promise<void>;
-  storePreset: (
-    id: string,
-    name: string,
-    mode: "merge" | "overwrite" | "add_missing_fixtures",
-    family?: string,
-  ) => Promise<void>;
+  storePreset: (id: string, name: string, mode: "merge" | "overwrite" | "add_missing_fixtures", family?: string) => Promise<void>;
   switchUser: (name: string) => void;
   exportPaperwork: () => void;
   shutdownServer: () => Promise<boolean>;
@@ -207,15 +195,8 @@ interface ServerContextValue {
   setDeskToken: (token: string) => void;
   setServerUrl: (url: string) => void;
   refreshMediaPreview: (fixtureId: string, source?: number) => Promise<boolean>;
-  refreshMediaThumbnails: (
-    fixtureId: string,
-    elements: number[],
-  ) => Promise<void>;
-  configureMediaServer: (
-    fixtureId: string,
-    ipAddress: string | null,
-    port?: number,
-  ) => Promise<void>;
+  refreshMediaThumbnails: (fixtureId: string, elements: number[]) => Promise<void>;
+  configureMediaServer: (fixtureId: string, ipAddress: string | null, port?: number) => Promise<void>;
   saveFixtureDefinition: (definition: FixtureDefinition) => Promise<boolean>;
   deleteFixtureDefinition: (id: string, revision: number) => Promise<void>;
   patchFixture: (input: { name: string; definition: FixtureDefinition; universe: number | null; address: number | null; layer_id?: string }) => Promise<string | null>;
@@ -231,29 +212,22 @@ export function ServerProvider({ children }: PropsWithChildren) {
   const [error, setError] = useState<string | null>(null);
   const [bootstrap, setBootstrap] = useState<BootstrapSnapshot | null>(null);
   const [session, setSession] = useState<SessionResponse | null>(null);
+  const [deskLock, setDeskLock] = useState<import("./types").DeskLockState | null>(null);
   const [patch, setPatch] = useState<PatchSnapshot | null>(null);
   const [patchLayers, setPatchLayers] = useState<VersionedObject<PatchLayer>[]>([]);
   const [playbacks, setPlaybacks] = useState<PlaybackSnapshot | null>(null);
   const [screens, setScreens] = useState<ScreenSnapshot | null>(null);
   const [shows, setShows] = useState<ShowEntry[]>([]);
-  const [configuration, setConfiguration] = useState<DeskConfiguration | null>(
-    null,
-  );
+  const [configuration, setConfiguration] = useState<DeskConfiguration | null>(null);
   const [fixtureLibrary, setFixtureLibrary] = useState<FixtureDefinition[]>([]);
   const [mediaServers, setMediaServers] = useState<MediaServerFixture[]>([]);
-  const [mediaPreviewUrls, setMediaPreviewUrls] = useState<
-    Record<string, string>
-  >({});
+  const [mediaPreviewUrls, setMediaPreviewUrls] = useState<Record<string, string>>({});
   const mediaPreviewUrlsRef = useRef<Record<string, string>>({});
   const [groups, setGroups] = useState<VersionedObject<StoredGroup>[]>([]);
   const [presets, setPresets] = useState<VersionedObject<StoredPreset>[]>([]);
-  const [cueObjects, setCueObjects] = useState<
-    VersionedObject<Record<string, unknown>>[]
-  >([]);
-  const [deskLayout, setDeskLayout] =
-    useState<VersionedObject<StoredDeskLayout> | null>(null);
-  const [stageLayout, setStageLayout] =
-    useState<VersionedObject<StoredStageLayout> | null>(null);
+  const [cueObjects, setCueObjects] = useState<VersionedObject<import("./types").CueList>[]>([]);
+  const [deskLayout, setDeskLayout] = useState<VersionedObject<StoredDeskLayout> | null>(null);
+  const [stageLayout, setStageLayout] = useState<VersionedObject<StoredStageLayout> | null>(null);
   const [unresolvedMvrFixtures, setUnresolvedMvrFixtures] = useState<VersionedObject<Record<string, unknown>>[]>([]);
   const [commandTargetMode, setCommandTargetMode] = useState<CommandTargetMode>("FIXTURE");
   const commandTargetModeRef = useRef<CommandTargetMode>("FIXTURE");
@@ -263,14 +237,29 @@ export function ServerProvider({ children }: PropsWithChildren) {
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   useEffect(
     () => () => {
-      for (const url of Object.values(mediaPreviewUrlsRef.current))
-        URL.revokeObjectURL(url);
+      for (const url of Object.values(mediaPreviewUrlsRef.current)) URL.revokeObjectURL(url);
     },
     [],
   );
   useEffect(() => {
-    for (const url of Object.values(mediaPreviewUrlsRef.current))
-      URL.revokeObjectURL(url);
+    if (!session) return;
+    let cancelled = false;
+    const refreshLock = () =>
+      void client
+        .deskLock()
+        .then((value) => {
+          if (!cancelled) setDeskLock(value);
+        })
+        .catch(() => undefined);
+    refreshLock();
+    const timer = window.setInterval(refreshLock, 500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [client, session]);
+  useEffect(() => {
+    for (const url of Object.values(mediaPreviewUrlsRef.current)) URL.revokeObjectURL(url);
     mediaPreviewUrlsRef.current = {};
     setMediaPreviewUrls({});
   }, [bootstrap?.active_show?.id]);
@@ -286,24 +275,33 @@ export function ServerProvider({ children }: PropsWithChildren) {
         setUnresolvedMvrFixtures([]);
         return;
       }
-      const [nextGroups, nextPresets, nextCueObjects, layouts, stageLayouts, nextPatchLayers, unresolvedMvr] =
-        await Promise.all([
-          client.objects<StoredGroup>(showId, "group"),
-          client.objects<StoredPreset>(showId, "preset"),
-          client.objects<Record<string, unknown>>(showId, "cue_list"),
-          userId
-            ? client.objects<StoredDeskLayout>(showId, "user_layout")
-            : Promise.resolve([]),
-          client.objects<StoredStageLayout>(showId, "stage_layout"),
-          client.objects<PatchLayer>(showId, "patch_layer"),
-          client.objects<Record<string, unknown>>(showId, "unresolved_mvr_fixture"),
-        ]);
+      const [nextGroups, nextPresets, nextCueObjects, layouts, stageLayouts, nextPatchLayers, unresolvedMvr] = await Promise.all([
+        client.objects<StoredGroup>(showId, "group"),
+        client.objects<StoredPreset>(showId, "preset"),
+        client.objects<import("./types").CueList>(showId, "cue_list"),
+        userId ? client.objects<StoredDeskLayout>(showId, "user_layout") : Promise.resolve([]),
+        client.objects<StoredStageLayout>(showId, "stage_layout"),
+        client.objects<PatchLayer>(showId, "patch_layer"),
+        client.objects<Record<string, unknown>>(showId, "unresolved_mvr_fixture"),
+      ]);
       setGroups(nextGroups);
       setPresets(nextPresets);
       setCueObjects(nextCueObjects);
       setDeskLayout(layouts.find((item) => item.id === userId) ?? null);
       setStageLayout(stageLayouts.find((item) => item.id === "main") ?? null);
-      setPatchLayers(nextPatchLayers.length ? nextPatchLayers : [{ kind: "patch_layer", id: "default", revision: 0, updated_at: "", body: { id: "default", name: "Default", order: 0 } }]);
+      setPatchLayers(
+        nextPatchLayers.length
+          ? nextPatchLayers
+          : [
+              {
+                kind: "patch_layer",
+                id: "default",
+                revision: 0,
+                updated_at: "",
+                body: { id: "default", name: "Default", order: 0 },
+              },
+            ],
+      );
       setUnresolvedMvrFixtures(unresolvedMvr);
     },
     [client],
@@ -317,12 +315,8 @@ export function ServerProvider({ children }: PropsWithChildren) {
     setShows(await client.shows());
     setConfiguration((await client.configuration()).configuration);
     setFixtureLibrary(await client.fixtureLibrary());
-    if (client.currentSession)
-      setMediaServers((await client.mediaServers()).fixtures);
-    await loadShowObjects(
-      nextBootstrap.active_show?.id ?? null,
-      client.currentSession?.user.id ?? null,
-    );
+    if (client.currentSession) setMediaServers((await client.mediaServers()).fixtures);
+    await loadShowObjects(nextBootstrap.active_show?.id ?? null, client.currentSession?.user.id ?? null);
   }, [client, loadShowObjects]);
 
   useEffect(() => {
@@ -343,47 +337,27 @@ export function ServerProvider({ children }: PropsWithChildren) {
         if (cancelled) return;
         setBootstrap(initial);
         const enabled = initial.users.filter((user) => user.enabled);
-        if (!enabled.length)
-          throw new Error("No enabled desk user is configured");
+        if (!enabled.length) throw new Error("No enabled desk user is configured");
         const remembered = localStorage.getItem("light.operator");
-        const user =
-          enabled.find((candidate) => candidate.name === remembered) ??
-          enabled.find((candidate) => candidate.name === "Operator") ??
-          enabled[0];
+        const user = enabled.find((candidate) => candidate.name === remembered) ?? enabled.find((candidate) => candidate.name === "Operator") ?? enabled[0];
         const screenWindow = new URLSearchParams(window.location.search).has("screen");
-        const restored = screenWindow ? JSON.parse(localStorage.getItem("light.primary-session") ?? "null") as SessionResponse | null : null;
-        const nextSession = restored ?? await client.login(user.name);
+        const restored = screenWindow ? (JSON.parse(localStorage.getItem("light.primary-session") ?? "null") as SessionResponse | null) : null;
+        const nextSession = restored ?? (await client.login(user.name));
         if (restored) client.restoreSession(restored);
+        const nextDeskLock = await client.deskLock();
         localStorage.setItem("light.operator", user.name);
         let effectiveBootstrap = initial;
-        if (!initial.active_show) {
+        if (!initial.active_show && !nextDeskLock.locked) {
           const library = await client.shows();
-          const defaultShow = library.find((show) => show.name === "Default Stage Show") ?? await client.createShow("Default Stage Show");
+          const defaultShow = library.find((show) => show.name === "Default Stage Show") ?? (await client.createShow("Default Stage Show"));
           await client.openShow(defaultShow.id, "hold_current");
           effectiveBootstrap = await client.bootstrap();
           setBootstrap(effectiveBootstrap);
         }
-        const [
-          nextPatch,
-          nextPlaybacks,
-          programmers,
-          nextShows,
-          nextConfiguration,
-          nextMedia,
-          nextFixtureLibrary,
-          nextScreens,
-        ] = await Promise.all([
-          client.patch(),
-          client.playbacks(),
-          client.programmers(),
-          client.shows(),
-          client.configuration(),
-          client.mediaServers(),
-          client.fixtureLibrary(),
-          client.screens(),
-        ]);
+        const [nextPatch, nextPlaybacks, programmers, nextShows, nextConfiguration, nextMedia, nextFixtureLibrary, nextScreens] = await Promise.all([client.patch(), client.playbacks(), client.programmers(), client.shows(), client.configuration(), client.mediaServers(), client.fixtureLibrary(), client.screens()]);
         if (cancelled) return;
         setSession(nextSession);
+        setDeskLock(nextDeskLock);
         setPatch(nextPatch);
         setPlaybacks(nextPlaybacks);
         setShows(nextShows);
@@ -391,13 +365,8 @@ export function ServerProvider({ children }: PropsWithChildren) {
         setMediaServers(nextMedia.fixtures);
         setFixtureLibrary(nextFixtureLibrary);
         setScreens(nextScreens);
-        await loadShowObjects(
-          effectiveBootstrap.active_show_error ? null : effectiveBootstrap.active_show?.id ?? null,
-          nextSession.user.id,
-        );
-        const ownProgrammer = programmers.find(
-          (programmer) => programmer.session_id === nextSession.session_id,
-        );
+        await loadShowObjects(effectiveBootstrap.active_show_error ? null : (effectiveBootstrap.active_show?.id ?? null), nextSession.user.id);
+        const ownProgrammer = programmers.find((programmer) => programmer.session_id === nextSession.session_id);
         const restoredCommand = ownProgrammer?.command_line?.trim() || commandTargetModeRef.current;
         const restoredTarget = restoredCommand === "GROUP" ? "GROUP" : restoredCommand === "FIXTURE" ? "FIXTURE" : commandTargetModeRef.current;
         commandTargetModeRef.current = restoredTarget;
@@ -406,30 +375,29 @@ export function ServerProvider({ children }: PropsWithChildren) {
         setCommandLinePristine(restoredCommand === restoredTarget);
         setSelectedFixtures(ownProgrammer?.selected ?? []);
         unsubscribe = client.onEvent((event) => {
-          if (event.kind === "desk_action" && (event.payload as { action?: string })?.action) window.dispatchEvent(new CustomEvent("light:desk-action", { detail: (event.payload as { action: string }).action }));
-          if (
-            ["playback_changed", "playback_page_changed", "show_opened", "show_object_changed", "preload_stored"].includes(
-              event.kind,
-            )
-          ) {
+          if (event.kind === "desk_lock_changed")
+            void client
+              .deskLock()
+              .then(setDeskLock)
+              .catch(() => undefined);
+          if (event.kind === "desk_action" && (event.payload as { action?: string })?.action)
+            window.dispatchEvent(
+              new CustomEvent("light:desk-action", {
+                detail: (event.payload as { action: string }).action,
+              }),
+            );
+          if (["playback_changed", "playback_page_changed", "show_opened", "show_object_changed", "preload_stored"].includes(event.kind)) {
             void client
               .playbacks()
               .then(setPlaybacks)
               .catch(() => undefined);
           }
-          if (["screen_configuration_changed", "screen_page_changed", "playback_page_changed", "show_opened"].includes(event.kind)) void client.screens().then(setScreens).catch(() => undefined);
-          if (
-            [
-              "show_opened",
-              "show_rolled_back",
-              "server_configuration_changed",
-              "session_started",
-              "session_disconnected",
-              "programmer_changed",
-              "programmer_cleared",
-              "hardware_connection_changed",
-            ].includes(event.kind)
-          ) {
+          if (["screen_configuration_changed", "screen_page_changed", "playback_page_changed", "show_opened"].includes(event.kind))
+            void client
+              .screens()
+              .then(setScreens)
+              .catch(() => undefined);
+          if (["show_opened", "show_rolled_back", "server_configuration_changed", "session_started", "session_disconnected", "programmer_changed", "programmer_cleared", "hardware_connection_changed"].includes(event.kind)) {
             void client
               .bootstrap()
               .then((next) => {
@@ -441,10 +409,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
                   setCommandLinePristine(restoredCommand === commandTargetModeRef.current);
                   setSelectedFixtures(own.selected ?? []);
                 }
-                void loadShowObjects(
-                  next.active_show?.id ?? null,
-                  nextSession.user.id,
-                );
+                void loadShowObjects(next.active_show?.id ?? null, nextSession.user.id);
               })
               .catch(() => undefined);
           }
@@ -455,28 +420,17 @@ export function ServerProvider({ children }: PropsWithChildren) {
               .catch(() => undefined);
           }
           if (event.kind === "fixture_library_changed") {
-            void client.fixtureLibrary().then(setFixtureLibrary).catch(() => undefined);
+            void client
+              .fixtureLibrary()
+              .then(setFixtureLibrary)
+              .catch(() => undefined);
           }
-          if (
-            [
-              "show_uploaded",
-              "show_deleted",
-              "show_opened",
-              "show_rolled_back",
-            ].includes(event.kind)
-          )
+          if (["show_uploaded", "show_deleted", "show_opened", "show_rolled_back"].includes(event.kind))
             void client
               .shows()
               .then(setShows)
               .catch(() => undefined);
-          if (
-            [
-              "show_opened",
-              "media_thumbnails_refreshed",
-              "media_preview_refreshed",
-              "media_server_offline",
-            ].includes(event.kind)
-          )
+          if (["show_opened", "media_thumbnails_refreshed", "media_preview_refreshed", "media_server_offline"].includes(event.kind))
             void client
               .mediaServers()
               .then((next) => setMediaServers(next.fixtures))
@@ -484,21 +438,13 @@ export function ServerProvider({ children }: PropsWithChildren) {
           if (["show_object_changed", "preset_stored", "preload_stored"].includes(event.kind))
             void client
               .bootstrap()
-              .then((next) =>
-                loadShowObjects(
-                  next.active_show?.id ?? null,
-                  nextSession.user.id,
-                ),
-              )
+              .then((next) => loadShowObjects(next.active_show?.id ?? null, nextSession.user.id))
               .catch(() => undefined);
           if (["show_opened", "show_object_changed"].includes(event.kind))
             void client
               .programmers()
               .then((states) => {
-                const own = states.find(
-                  (programmer) =>
-                    programmer.user_id === nextSession.user.id,
-                );
+                const own = states.find((programmer) => programmer.user_id === nextSession.user.id);
                 if (own) setSelectedFixtures(own.selected);
               })
               .catch(() => undefined);
@@ -527,9 +473,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
       const next = value.trim() ? value : commandTargetModeRef.current;
       setCommandLineState(next);
       setCommandLinePristine(pristine || !value.trim());
-      void client
-        .setCommandLine(next)
-        .catch((reason) => setError(String(reason)));
+      void client.setCommandLine(next).catch((reason) => setError(String(reason)));
     },
     [client],
   );
@@ -550,6 +494,35 @@ export function ServerProvider({ children }: PropsWithChildren) {
       fileContent: (root, path) => client.fileContent(root, path),
       bootstrap,
       session,
+      deskLock,
+      configureDeskLock: async (input) => {
+        try {
+          setDeskLock(await client.configureDeskLock(input));
+          setError(null);
+          return true;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return false;
+        }
+      },
+      lockDesk: async () => {
+        try {
+          setDeskLock(await client.lockDesk());
+          setError(null);
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      },
+      unlockDesk: async (pin) => {
+        try {
+          setDeskLock(await client.unlockDesk(pin));
+          setError(null);
+          return true;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return false;
+        }
+      },
       createUser: async (name) => {
         try {
           setError(null);
@@ -571,9 +544,33 @@ export function ServerProvider({ children }: PropsWithChildren) {
       patchLayers,
       playbacks,
       screens,
-      saveScreen: async (screen) => { try { await client.putScreen(screen); setScreens(await client.screens()); setError(null); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } },
-      deleteScreen: async (id) => { try { await client.deleteScreen(id); setScreens(await client.screens()); setError(null); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } },
-      setScreenPage: async (id, page) => { try { await client.setScreenPage(id, page); setScreens(await client.screens()); setError(null); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } },
+      saveScreen: async (screen) => {
+        try {
+          await client.putScreen(screen);
+          setScreens(await client.screens());
+          setError(null);
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      },
+      deleteScreen: async (id) => {
+        try {
+          await client.deleteScreen(id);
+          setScreens(await client.screens());
+          setError(null);
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      },
+      setScreenPage: async (id, page) => {
+        try {
+          await client.setScreenPage(id, page);
+          setScreens(await client.screens());
+          setError(null);
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      },
       shows,
       configuration,
       fixtureLibrary,
@@ -608,14 +605,19 @@ export function ServerProvider({ children }: PropsWithChildren) {
             return true;
           }
           const result = (await client.executeCommandLine(value)) as
-            { programmer?: { selected?: string[]; selection_expression?: { type?: string; group_id?: string } | null } } | undefined;
+            | {
+                programmer?: {
+                  selected?: string[];
+                  selection_expression?: {
+                    type?: string;
+                    group_id?: string;
+                  } | null;
+                };
+              }
+            | undefined;
           if (result?.programmer?.selected) {
             setSelectedFixtures(result.programmer.selected);
-            setSelectedGroupId(
-              result.programmer.selection_expression?.type === "live_group"
-                ? (result.programmer.selection_expression.group_id ?? null)
-                : null,
-            );
+            setSelectedGroupId(result.programmer.selection_expression?.type === "live_group" ? (result.programmer.selection_expression.group_id ?? null) : null);
           }
           const target = defaultCommandLine(commandTargetModeRef.current);
           setCommandLineState(target);
@@ -661,10 +663,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
       },
       setGroupValue: async (attribute, level) => {
         try {
-          if (!selectedGroupId)
-            throw new Error(
-              "Select a live group before setting group-relative values",
-            );
+          if (!selectedGroupId) throw new Error("Select a live group before setting group-relative values");
           await client.setGroupProgrammer(selectedGroupId, attribute, level);
           setError(null);
         } catch (reason) {
@@ -673,10 +672,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
       },
       setPreloadGroupValue: async (attribute, level) => {
         try {
-          if (!selectedGroupId)
-            throw new Error(
-              "Select a live group before setting group-relative preload values",
-            );
+          if (!selectedGroupId) throw new Error("Select a live group before setting group-relative preload values");
           await client.setPreloadGroup(selectedGroupId, attribute, level);
           setError(null);
         } catch (reason) {
@@ -697,16 +693,60 @@ export function ServerProvider({ children }: PropsWithChildren) {
           await client.poolPlaybackAction(number, action, input);
           setPlaybacks(await client.playbacks());
           setError(null);
-        } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+        }
       },
       setPlaybackPage: async (page) => {
         if (!playbacks?.desk) return;
-        try { await client.setPlaybackPage(playbacks.desk.id, page); setPlaybacks(await client.playbacks()); setError(null); }
-        catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+        try {
+          await client.setPlaybackPage(playbacks.desk.id, page);
+          setPlaybacks(await client.playbacks());
+          setError(null);
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+        }
       },
-      updateControlDesk: async (desk) => { try { const updated = await client.updateControlDesk(desk); setSession((current) => current ? { ...current, desk: updated } : current); setBootstrap(await client.bootstrap()); setPlaybacks((current) => current ? { ...current, desk: updated } : current); setError(null); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } },
-      selectControlDesk: (id) => { localStorage.setItem("light.control-desk", id); window.location.reload(); },
-      savePlaybackDefinition: async (playback) => { if (!bootstrap?.active_show) return; try { const objects = await client.objects<import("./types").PlaybackDefinition>(bootstrap.active_show.id, "playback"); const existing = objects.find((item) => item.body.number === playback.number); await client.putObject(bootstrap.active_show.id, "playback", String(playback.number), playback, existing?.revision ?? 0); await refresh(); setError(null); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } },
+      updateControlDesk: async (desk) => {
+        try {
+          const updated = await client.updateControlDesk(desk);
+          setSession((current) => (current ? { ...current, desk: updated } : current));
+          setBootstrap(await client.bootstrap());
+          setPlaybacks((current) => (current ? { ...current, desk: updated } : current));
+          setError(null);
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      },
+      selectControlDesk: (id) => {
+        localStorage.setItem("light.control-desk", id);
+        window.location.reload();
+      },
+      savePlaybackDefinition: async (playback) => {
+        if (!bootstrap?.active_show) return;
+        try {
+          const objects = await client.objects<import("./types").PlaybackDefinition>(bootstrap.active_show.id, "playback");
+          const existing = objects.find((item) => item.body.number === playback.number);
+          await client.putObject(bootstrap.active_show.id, "playback", String(playback.number), playback, existing?.revision ?? 0);
+          await refresh();
+          setError(null);
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      },
+      saveCueList: async (cueList, revision) => {
+        if (!bootstrap?.active_show) return false;
+        try {
+          await client.putObject(bootstrap.active_show.id, "cue_list", cueList.id, cueList, revision);
+          await refresh();
+          await loadShowObjects(bootstrap.active_show.id, session?.user.id ?? null);
+          setError(null);
+          return true;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return false;
+        }
+      },
       unassignPagePlayback: async (pageNumber, slot) => {
         if (!bootstrap?.active_show) return false;
         try {
@@ -784,11 +824,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
           const bytes = new Uint8Array(await file.arrayBuffer());
           let binary = "";
           for (const byte of bytes) binary += String.fromCharCode(byte);
-          await client.createShow(
-            file.name.replace(/\.show$/i, ""),
-            btoa(binary),
-            overwrite,
-          );
+          await client.createShow(file.name.replace(/\.show$/i, ""), btoa(binary), overwrite);
           setShows(await client.shows());
           setError(null);
         } catch (reason) {
@@ -861,13 +897,31 @@ export function ServerProvider({ children }: PropsWithChildren) {
       },
       previewMvr: (file, showId) => client.previewMvr(file, showId),
       applyMvr: async (token, input) => {
-        try { const result = await client.applyMvr(token, input); await refresh(); setShows(await client.shows()); setError(null); return result; }
-        catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); throw reason; }
+        try {
+          const result = await client.applyMvr(token, input);
+          await refresh();
+          setShows(await client.shows());
+          setError(null);
+          return result;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          throw reason;
+        }
       },
       previewMvrExport: (showId) => client.mvrExportPreview(showId),
       downloadMvr: async (show) => {
-        try { const blob = await client.downloadMvr(show.id); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `${show.name}.mvr`; anchor.click(); URL.revokeObjectURL(url); setError(null); }
-        catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+        try {
+          const blob = await client.downloadMvr(show.id);
+          const url = URL.createObjectURL(blob);
+          const anchor = document.createElement("a");
+          anchor.href = url;
+          anchor.download = `${show.name}.mvr`;
+          anchor.click();
+          URL.revokeObjectURL(url);
+          setError(null);
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+        }
       },
       saveConfiguration: async (next) => {
         try {
@@ -883,7 +937,10 @@ export function ServerProvider({ children }: PropsWithChildren) {
       setControlTiming: async (input) => {
         if (!configuration) return;
         try {
-          const result = await client.updateConfiguration({ ...configuration, ...input });
+          const result = await client.updateConfiguration({
+            ...configuration,
+            ...input,
+          });
           setConfiguration(result.configuration);
           setError(null);
         } catch (reason) {
@@ -892,23 +949,11 @@ export function ServerProvider({ children }: PropsWithChildren) {
       },
       saveDeskLayout: async (layout) => {
         try {
-          if (!bootstrap?.active_show || !session)
-            throw new Error("Open a show before saving a desk layout");
+          if (!bootstrap?.active_show || !session) throw new Error("Open a show before saving a desk layout");
           const revision = deskLayout?.revision ?? 0;
-          await client.putObject(
-            bootstrap.active_show.id,
-            "user_layout",
-            session.user.id,
-            layout,
-            revision,
-          );
-          const layouts = await client.objects<StoredDeskLayout>(
-            bootstrap.active_show.id,
-            "user_layout",
-          );
-          setDeskLayout(
-            layouts.find((item) => item.id === session.user.id) ?? null,
-          );
+          await client.putObject(bootstrap.active_show.id, "user_layout", session.user.id, layout, revision);
+          const layouts = await client.objects<StoredDeskLayout>(bootstrap.active_show.id, "user_layout");
+          setDeskLayout(layouts.find((item) => item.id === session.user.id) ?? null);
           setError(null);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
@@ -916,19 +961,9 @@ export function ServerProvider({ children }: PropsWithChildren) {
       },
       saveStageLayout: async (layout) => {
         try {
-          if (!bootstrap?.active_show)
-            throw new Error("Open a show before saving stage positions");
-          await client.putObject(
-            bootstrap.active_show.id,
-            "stage_layout",
-            "main",
-            layout,
-            stageLayout?.revision ?? 0,
-          );
-          const layouts = await client.objects<StoredStageLayout>(
-            bootstrap.active_show.id,
-            "stage_layout",
-          );
+          if (!bootstrap?.active_show) throw new Error("Open a show before saving stage positions");
+          await client.putObject(bootstrap.active_show.id, "stage_layout", "main", layout, stageLayout?.revision ?? 0);
+          const layouts = await client.objects<StoredStageLayout>(bootstrap.active_show.id, "stage_layout");
           setStageLayout(layouts.find((item) => item.id === "main") ?? null);
           setError(null);
         } catch (reason) {
@@ -989,8 +1024,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
       },
       storePreload: async (input, revision) => {
         try {
-          if (!bootstrap?.active_show)
-            throw new Error("Open a show before storing preload data");
+          if (!bootstrap?.active_show) throw new Error("Open a show before storing preload data");
           await client.storePreload(bootstrap.active_show.id, input, revision);
           await refresh();
           setError(null);
@@ -1002,11 +1036,9 @@ export function ServerProvider({ children }: PropsWithChildren) {
       },
       storeDynamic: async (speed, width, direction) => {
         try {
-          if (!bootstrap?.active_show)
-            throw new Error("Open a show before storing a dynamic");
+          if (!bootstrap?.active_show) throw new Error("Open a show before storing a dynamic");
           const target = cueObjects[0];
-          if (!target)
-            throw new Error("Create a Cuelist before storing a dynamic");
+          if (!target) throw new Error("Create a Cuelist before storing a dynamic");
           const body = structuredClone(target.body) as {
             cues?: Array<{ phasers?: unknown[] }>;
           };
@@ -1029,13 +1061,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
               width: width / 100,
             },
           });
-          await client.putObject(
-            bootstrap.active_show.id,
-            "cue_list",
-            target.id,
-            body,
-            target.revision,
-          );
+          await client.putObject(bootstrap.active_show.id, "cue_list", target.id, body, target.revision);
           await refresh();
           setError(null);
         } catch (reason) {
@@ -1051,16 +1077,72 @@ export function ServerProvider({ children }: PropsWithChildren) {
           const objects = await client.objects<import("./types").CueList>(bootstrap.active_show.id, "cue_list");
           const existing = cueListId ? objects.find((item) => item.id === cueListId) : undefined;
           const id = existing?.id ?? crypto.randomUUID();
-          const current = existing?.body ?? { id, name: `Cuelist ${slot + 1}`, priority: 50, mode: "sequence" as const, looped: false, chaser_step_millis: 1000, speed_group: null, cues: [] };
+          const current = existing?.body ?? {
+            id,
+            name: `Cuelist ${slot + 1}`,
+            priority: 50,
+            mode: "sequence" as const,
+            looped: false,
+            intensity_priority_mode: "htp" as const,
+            wrap_mode: "off" as const,
+            restart_mode: "first_cue" as const,
+            force_cue_timing: false,
+            disable_cue_timing: false,
+            chaser_step_millis: 1000,
+            chaser_xfade_millis: 0,
+            speed_group: null,
+            speed_multiplier: 1,
+            cues: [],
+          };
           const active = playbacks?.active.find((item) => item.cue_list_id === id);
           const mergeActive = localStorage.getItem("light.store-merge-active-cue") === "true" && active && current.cues[active.cue_index];
           const cueNumber = mergeActive ? current.cues[active.cue_index].number : current.cues.length ? Math.max(...current.cues.map((cue) => cue.number)) + 1 : 1;
-          const changes = (programmer.values as Array<{ fixture_id: string; attribute: string; value: import("./types").AttributeValue; fade_millis?: number; delay_millis?: number }>).map((value) => ({ fixture_id: value.fixture_id, attribute: value.attribute, value: value.value, ...(value.fade_millis == null ? {} : { fade_millis: value.fade_millis }), ...(value.delay_millis == null ? {} : { delay_millis: value.delay_millis }) }));
-          const group_changes = Object.entries(programmer.group_values ?? {}).flatMap(([group_id, attributes]) => Object.entries(attributes).map(([attribute, value]) => ({ group_id, attribute, value: value.value as import("./types").AttributeValue, ...(value.fade_millis == null ? {} : { fade_millis: value.fade_millis }), ...(value.delay_millis == null ? {} : { delay_millis: value.delay_millis }) })));
+          const changes = (
+            programmer.values as Array<{
+              fixture_id: string;
+              attribute: string;
+              value: import("./types").AttributeValue;
+              fade_millis?: number;
+              delay_millis?: number;
+            }>
+          ).map((value) => ({
+            fixture_id: value.fixture_id,
+            attribute: value.attribute,
+            value: value.value,
+            ...(value.fade_millis == null ? {} : { fade_millis: value.fade_millis }),
+            ...(value.delay_millis == null ? {} : { delay_millis: value.delay_millis }),
+          }));
+          const group_changes = Object.entries(programmer.group_values ?? {}).flatMap(([group_id, attributes]) =>
+            Object.entries(attributes).map(([attribute, value]) => ({
+              group_id,
+              attribute,
+              value: value.value as import("./types").AttributeValue,
+              ...(value.fade_millis == null ? {} : { fade_millis: value.fade_millis }),
+              ...(value.delay_millis == null ? {} : { delay_millis: value.delay_millis }),
+            })),
+          );
           const previousCue = mergeActive ? current.cues[active.cue_index] : null;
-          const mergeChanges = <T extends { fixture_id?: string; group_id?: string; attribute: string }>(previous: T[], incoming: T[]) => [...previous.filter((old) => !incoming.some((next) => next.attribute === old.attribute && next.fixture_id === old.fixture_id && next.group_id === old.group_id)), ...incoming];
-          const cue = { number: cueNumber, name: previousCue?.name ?? `Cue ${cueNumber}`, fade_millis: previousCue?.fade_millis ?? 0, delay_millis: previousCue?.delay_millis ?? 0, trigger: previousCue?.trigger ?? { type: "manual" }, changes: mergeChanges(previousCue?.changes ?? [], changes), group_changes: mergeChanges(previousCue?.group_changes ?? [], group_changes), phasers: previousCue?.phasers ?? [] };
-          const cues = mergeActive ? current.cues.map((existingCue, index) => index === active.cue_index ? cue : existingCue) : [...current.cues, cue];
+          const mergeChanges = <
+            T extends {
+              fixture_id?: string;
+              group_id?: string;
+              attribute: string;
+            },
+          >(
+            previous: T[],
+            incoming: T[],
+          ) => [...previous.filter((old) => !incoming.some((next) => next.attribute === old.attribute && next.fixture_id === old.fixture_id && next.group_id === old.group_id)), ...incoming];
+          const cue = {
+            number: cueNumber,
+            name: previousCue?.name ?? `Cue ${cueNumber}`,
+            fade_millis: previousCue?.fade_millis ?? 0,
+            delay_millis: previousCue?.delay_millis ?? 0,
+            trigger: previousCue?.trigger ?? { type: "manual" },
+            changes: mergeChanges(previousCue?.changes ?? [], changes),
+            group_changes: mergeChanges(previousCue?.group_changes ?? [], group_changes),
+            phasers: previousCue?.phasers ?? [],
+          };
+          const cues = mergeActive ? current.cues.map((existingCue, index) => (index === active.cue_index ? cue : existingCue)) : [...current.cues, cue];
           await client.putObject(bootstrap.active_show.id, "cue_list", id, { ...current, cues }, existing?.revision ?? 0);
           const playbackObjects = await client.objects<import("./types").PlaybackDefinition>(bootstrap.active_show.id, "playback");
           let playbackObject = playbackObjects.find((item) => item.body.target.type === "cue_list" && item.body.target.cue_list_id === id);
@@ -1068,27 +1150,55 @@ export function ServerProvider({ children }: PropsWithChildren) {
             const used = new Set(playbackObjects.map((item) => item.body.number));
             const number = Array.from({ length: 1000 }, (_, index) => index + 1).find((candidate) => !used.has(candidate));
             if (!number) throw new Error("The Cuelist Pool is full");
-            const body: import("./types").PlaybackDefinition = { number, name: current.name, target: { type: "cue_list", cue_list_id: id }, buttons: ["go", "go_minus", "flash"], fader: "master", go_activates: true, auto_off: true, xfade_millis: 0 };
+            const body: import("./types").PlaybackDefinition = {
+              number,
+              name: current.name,
+              target: { type: "cue_list", cue_list_id: id },
+              buttons: ["go", "go_minus", "flash"],
+              fader: "master",
+              go_activates: true,
+              auto_off: true,
+              xfade_millis: 0,
+            };
             await client.putObject(bootstrap.active_show.id, "playback", String(number), body, 0);
-            playbackObject = { kind: "playback", id: String(number), body, revision: 1, updated_at: "" };
+            playbackObject = {
+              kind: "playback",
+              id: String(number),
+              body,
+              revision: 1,
+              updated_at: "",
+            };
           }
           const pageNumber = playbacks?.active_page ?? 1;
           const pages = await client.objects<import("./types").PlaybackPage>(bootstrap.active_show.id, "playback_page");
           const pageObject = pages.find((item) => item.body.number === pageNumber);
-          const page = pageObject?.body ?? { number: pageNumber, name: pageNumber === 1 ? "Main" : `Page ${pageNumber}`, slots: {} };
-          await client.putObject(bootstrap.active_show.id, "playback_page", String(pageNumber), { ...page, slots: { ...page.slots, [slot + 1]: playbackObject.body.number } }, pageObject?.revision ?? 0);
-          await refresh(); setError(null);
-        } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+          const page = pageObject?.body ?? {
+            number: pageNumber,
+            name: pageNumber === 1 ? "Main" : `Page ${pageNumber}`,
+            slots: {},
+          };
+          await client.putObject(
+            bootstrap.active_show.id,
+            "playback_page",
+            String(pageNumber),
+            {
+              ...page,
+              slots: { ...page.slots, [slot + 1]: playbackObject.body.number },
+            },
+            pageObject?.revision ?? 0,
+          );
+          await refresh();
+          setError(null);
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+        }
       },
       storeGroup: async (id, name, mode = "overwrite") => {
         try {
-          if (!bootstrap?.active_show || !session)
-            throw new Error("Open a show before storing groups");
+          if (!bootstrap?.active_show || !session) throw new Error("Open a show before storing groups");
           const existing = groups.find((item) => item.id === id);
           const programmers = await client.programmers();
-          const programmer = programmers.find(
-            (item) => item.user_id === session.user.id,
-          );
+          const programmer = programmers.find((item) => item.user_id === session.user.id);
           const expression = programmer?.selection_expression;
           const derived_from =
             expression?.type === "live_group" && expression.group_id
@@ -1106,11 +1216,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
                 }
               : (existing?.body.frozen_from ?? null);
           const numericId = Number(id);
-          const scoped = Object.fromEntries(
-            Object.entries(programmer?.group_values?.[id] ?? {}).map(
-              ([attribute, value]) => [attribute, value.value],
-            ),
-          );
+          const scoped = Object.fromEntries(Object.entries(programmer?.group_values?.[id] ?? {}).map(([attribute, value]) => [attribute, value.value]));
           const programming = {
             ...(existing?.body.programming ?? {}),
             ...scoped,
@@ -1120,26 +1226,13 @@ export function ServerProvider({ children }: PropsWithChildren) {
             name,
             fixtures: mode === "merge" ? [...new Set([...(existing?.body.fixtures ?? []), ...selectedFixtures])] : selectedFixtures,
             master: existing?.body.master ?? 1,
-            playback_fader:
-              existing?.body.playback_fader ??
-              (numericId >= 1 && numericId <= 8 ? numericId : null),
+            playback_fader: existing?.body.playback_fader ?? (numericId >= 1 && numericId <= 8 ? numericId : null),
             programming,
             derived_from,
             frozen_from,
           };
-          await client.putObject(
-            bootstrap.active_show.id,
-            "group",
-            id,
-            body,
-            existing?.revision ?? 0,
-          );
-          setGroups(
-            await client.objects<StoredGroup>(
-              bootstrap.active_show.id,
-              "group",
-            ),
-          );
+          await client.putObject(bootstrap.active_show.id, "group", id, body, existing?.revision ?? 0);
+          setGroups(await client.objects<StoredGroup>(bootstrap.active_show.id, "group"));
           setError(null);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
@@ -1148,7 +1241,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
       setGroupMaster: async (id, master) => {
         try {
           await client.setGroupMaster(id, master);
-          setGroups((current) => current.map((group) => group.id === id ? { ...group, body: { ...group.body, master } } : group));
+          setGroups((current) => current.map((group) => (group.id === id ? { ...group, body: { ...group.body, master } } : group)));
           setError(null);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
@@ -1164,22 +1257,11 @@ export function ServerProvider({ children }: PropsWithChildren) {
       },
       undoGroup: async (id) => {
         try {
-          if (!bootstrap?.active_show)
-            throw new Error("Open a show before undoing a group change");
+          if (!bootstrap?.active_show) throw new Error("Open a show before undoing a group change");
           const existing = groups.find((item) => item.id === id);
           if (!existing) throw new Error("Group does not exist");
-          await client.undoObject(
-            bootstrap.active_show.id,
-            "group",
-            id,
-            existing.revision,
-          );
-          setGroups(
-            await client.objects<StoredGroup>(
-              bootstrap.active_show.id,
-              "group",
-            ),
-          );
+          await client.undoObject(bootstrap.active_show.id, "group", id, existing.revision);
+          setGroups(await client.objects<StoredGroup>(bootstrap.active_show.id, "group"));
           setError(null);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
@@ -1187,12 +1269,10 @@ export function ServerProvider({ children }: PropsWithChildren) {
       },
       refreshFrozenGroup: async (id) => {
         try {
-          if (!bootstrap?.active_show)
-            throw new Error("Open a show before refreshing a frozen group");
+          if (!bootstrap?.active_show) throw new Error("Open a show before refreshing a frozen group");
           const existing = groups.find((item) => item.id === id);
           const sourceId = existing?.body.frozen_from?.source_group_id;
-          if (!existing || !sourceId)
-            throw new Error("Group is not a frozen group");
+          if (!existing || !sourceId) throw new Error("Group is not a frozen group");
           const result = (await client.selectGroup(sourceId, true)) as {
             programmer?: { selected?: string[] };
           };
@@ -1212,12 +1292,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
             },
             existing.revision,
           );
-          setGroups(
-            await client.objects<StoredGroup>(
-              bootstrap.active_show.id,
-              "group",
-            ),
-          );
+          setGroups(await client.objects<StoredGroup>(bootstrap.active_show.id, "group"));
           setSelectedFixtures(fixtures);
           setError(null);
         } catch (reason) {
@@ -1226,24 +1301,11 @@ export function ServerProvider({ children }: PropsWithChildren) {
       },
       detachDerivedGroup: async (id) => {
         try {
-          if (!bootstrap?.active_show)
-            throw new Error("Open a show before detaching a derived group");
+          if (!bootstrap?.active_show) throw new Error("Open a show before detaching a derived group");
           const existing = groups.find((item) => item.id === id);
-          if (!existing?.body.derived_from)
-            throw new Error("Group is not derived");
-          await client.putObject(
-            bootstrap.active_show.id,
-            "group",
-            id,
-            { ...existing.body, derived_from: null },
-            existing.revision,
-          );
-          setGroups(
-            await client.objects<StoredGroup>(
-              bootstrap.active_show.id,
-              "group",
-            ),
-          );
+          if (!existing?.body.derived_from) throw new Error("Group is not derived");
+          await client.putObject(bootstrap.active_show.id, "group", id, { ...existing.body, derived_from: null }, existing.revision);
+          setGroups(await client.objects<StoredGroup>(bootstrap.active_show.id, "group"));
           setError(null);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
@@ -1251,10 +1313,8 @@ export function ServerProvider({ children }: PropsWithChildren) {
       },
       applyPreset: async (id) => {
         try {
-          const result = (await client.applyPreset(id)) as
-            { programmer?: { selected?: string[] } } | undefined;
-          if (result?.programmer?.selected)
-            setSelectedFixtures(result.programmer.selected);
+          const result = (await client.applyPreset(id)) as { programmer?: { selected?: string[] } } | undefined;
+          if (result?.programmer?.selected) setSelectedFixtures(result.programmer.selected);
           setError(null);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
@@ -1262,31 +1322,12 @@ export function ServerProvider({ children }: PropsWithChildren) {
       },
       storePreset: async (id, name, mode, family = "All") => {
         try {
-          if (!bootstrap?.active_show || !session)
-            throw new Error("Open a show before storing presets");
+          if (!bootstrap?.active_show || !session) throw new Error("Open a show before storing presets");
           const programmers = await client.programmers();
-          const programmer = programmers.find(
-            (item) => item.user_id === session.user.id,
-          );
-          if (!programmer)
-            throw new Error("The current programmer is unavailable");
+          const programmer = programmers.find((item) => item.user_id === session.user.id);
+          if (!programmer) throw new Error("The current programmer is unavailable");
           const values: Record<string, Record<string, unknown>> = {};
-          const group_values: Record<
-            string,
-            Record<string, unknown>
-          > = Object.fromEntries(
-            Object.entries(programmer.group_values ?? {}).map(
-              ([group, attributes]) => [
-                group,
-                Object.fromEntries(
-                  Object.entries(attributes).map(([attribute, value]) => [
-                    attribute,
-                    value.value,
-                  ]),
-                ),
-              ],
-            ),
-          );
+          const group_values: Record<string, Record<string, unknown>> = Object.fromEntries(Object.entries(programmer.group_values ?? {}).map(([group, attributes]) => [group, Object.fromEntries(Object.entries(attributes).map(([attribute, value]) => [attribute, value.value]))]));
           const includesAttribute = (attribute: string) => {
             const normalized = family.toLowerCase();
             if (normalized === "all") return true;
@@ -1306,19 +1347,8 @@ export function ServerProvider({ children }: PropsWithChildren) {
           }
           for (const [group, attributes] of Object.entries(group_values)) for (const attribute of Object.keys(attributes)) if (!includesAttribute(attribute)) delete attributes[attribute];
           const existing = presets.find((item) => item.id === id);
-          await client.storePreset(
-            bootstrap.active_show.id,
-            id,
-            { name, values, group_values, family },
-            mode,
-            existing?.revision ?? 0,
-          );
-          setPresets(
-            await client.objects<StoredPreset>(
-              bootstrap.active_show.id,
-              "preset",
-            ),
-          );
+          await client.storePreset(bootstrap.active_show.id, id, { name, values, group_values, family }, mode, existing?.revision ?? 0);
+          setPresets(await client.objects<StoredPreset>(bootstrap.active_show.id, "preset"));
           setError(null);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
@@ -1420,13 +1450,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
           setError(null);
           return true;
         } catch (reason) {
-          setMediaServers(
-            (
-              await client
-                .mediaServers()
-                .catch(() => ({ fixtures: mediaServers }))
-            ).fixtures,
-          );
+          setMediaServers((await client.mediaServers().catch(() => ({ fixtures: mediaServers }))).fixtures);
           setError(reason instanceof Error ? reason.message : String(reason));
           return false;
         }
@@ -1437,91 +1461,108 @@ export function ServerProvider({ children }: PropsWithChildren) {
           setMediaServers((await client.mediaServers()).fixtures);
           setError(null);
         } catch (reason) {
-          setMediaServers(
-            (
-              await client
-                .mediaServers()
-                .catch(() => ({ fixtures: mediaServers }))
-            ).fixtures,
-          );
+          setMediaServers((await client.mediaServers().catch(() => ({ fixtures: mediaServers }))).fixtures);
           setError(reason instanceof Error ? reason.message : String(reason));
         }
       },
-    configureMediaServer: async (fixtureId, ipAddress, port = 4811) => {
+      configureMediaServer: async (fixtureId, ipAddress, port = 4811) => {
         try {
-          if (!bootstrap?.active_show)
-            throw new Error("Open a show before configuring media servers");
-          const fixtures = await client.objects<
-            import("./types").PatchedFixture
-          >(bootstrap.active_show.id, "patched_fixture");
-          const object = fixtures.find(
-            (candidate) => candidate.body.fixture_id === fixtureId,
-          );
+          if (!bootstrap?.active_show) throw new Error("Open a show before configuring media servers");
+          const fixtures = await client.objects<import("./types").PatchedFixture>(bootstrap.active_show.id, "patched_fixture");
+          const object = fixtures.find((candidate) => candidate.body.fixture_id === fixtureId);
           if (!object) throw new Error("Patched fixture object was not found");
-          const direct_control = ipAddress
-            ? { protocol: "citp" as const, ip_address: ipAddress, port }
-            : null;
-          await client.putObject(
-            bootstrap.active_show.id,
-            "patched_fixture",
-            object.id,
-            { ...object.body, direct_control },
-            object.revision,
-          );
+          const direct_control = ipAddress ? { protocol: "citp" as const, ip_address: ipAddress, port } : null;
+          await client.putObject(bootstrap.active_show.id, "patched_fixture", object.id, { ...object.body, direct_control }, object.revision);
           setPatch(await client.patch());
           setMediaServers((await client.mediaServers()).fixtures);
           setError(null);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
-      }
-    },
-    saveFixtureDefinition: async (definition) => {
-      try { await client.putFixtureDefinition(definition); setFixtureLibrary(await client.fixtureLibrary()); setError(null); return true; }
-      catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); return false; }
-    },
-    deleteFixtureDefinition: async (id, revision) => {
-      try { await client.deleteFixtureDefinition(id, revision); setFixtureLibrary(await client.fixtureLibrary()); setError(null); }
-      catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
-    },
-    patchFixture: async (input) => {
-      try {
-        if (!bootstrap?.active_show) throw new Error("No active show is available");
-        if ((input.universe == null) !== (input.address == null)) throw new Error("Universe and address must both be set or both be empty");
-        if (input.universe != null && input.address != null && (input.universe < 1 || input.address < 1 || input.address + input.definition.footprint - 1 > 512)) throw new Error("The fixture must fit within universe addresses 1–512");
-        const fixture_id = crypto.randomUUID();
-        const body = {
-          fixture_id, name: input.name,
-          definition: input.definition,
-          universe: input.universe, address: input.address, layer_id: input.layer_id ?? "default", direct_control: null, location: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, logical_heads: [], multipatch: [],
-        };
-        await client.putObject(bootstrap.active_show.id, "patched_fixture", fixture_id, body, 0);
-        await refresh(); setError(null); return fixture_id;
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : String(reason)); return null;
-      }
-    },
-    updatePatchedFixture: async (fixtureId, changes) => {
-      try {
-        if (!bootstrap?.active_show) throw new Error("No active show is available");
-        const objects = await client.objects<PatchedFixture>(bootstrap.active_show.id, "patched_fixture");
-        const object = objects.find((candidate) => candidate.id === fixtureId);
-        if (!object) throw new Error("Patched fixture object was not found");
-        await client.putObject(bootstrap.active_show.id, "patched_fixture", fixtureId, { ...object.body, ...changes }, object.revision);
-        await refresh(); setError(null); return true;
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : String(reason)); return false;
-      }
-    },
-    savePatchLayer: async (layer) => {
-      try { if (!bootstrap?.active_show) throw new Error("No active show is available"); const existing = patchLayers.find((item) => item.id === layer.id); await client.putObject(bootstrap.active_show.id, "patch_layer", layer.id, layer, existing?.revision ?? 0); await loadShowObjects(bootstrap.active_show.id, session?.user.id ?? null); setError(null); return true; }
-      catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); return false; }
-    },
+        }
+      },
+      saveFixtureDefinition: async (definition) => {
+        try {
+          await client.putFixtureDefinition(definition);
+          setFixtureLibrary(await client.fixtureLibrary());
+          setError(null);
+          return true;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return false;
+        }
+      },
+      deleteFixtureDefinition: async (id, revision) => {
+        try {
+          await client.deleteFixtureDefinition(id, revision);
+          setFixtureLibrary(await client.fixtureLibrary());
+          setError(null);
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      },
+      patchFixture: async (input) => {
+        try {
+          if (!bootstrap?.active_show) throw new Error("No active show is available");
+          if ((input.universe == null) !== (input.address == null)) throw new Error("Universe and address must both be set or both be empty");
+          if (input.universe != null && input.address != null && (input.universe < 1 || input.address < 1 || input.address + input.definition.footprint - 1 > 512)) throw new Error("The fixture must fit within universe addresses 1–512");
+          const fixture_id = crypto.randomUUID();
+          const body = {
+            fixture_id,
+            name: input.name,
+            definition: input.definition,
+            universe: input.universe,
+            address: input.address,
+            layer_id: input.layer_id ?? "default",
+            direct_control: null,
+            location: { x: 0, y: 0, z: 0 },
+            rotation: { x: 0, y: 0, z: 0 },
+            logical_heads: [],
+            multipatch: [],
+          };
+          await client.putObject(bootstrap.active_show.id, "patched_fixture", fixture_id, body, 0);
+          await refresh();
+          setError(null);
+          return fixture_id;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return null;
+        }
+      },
+      updatePatchedFixture: async (fixtureId, changes) => {
+        try {
+          if (!bootstrap?.active_show) throw new Error("No active show is available");
+          const objects = await client.objects<PatchedFixture>(bootstrap.active_show.id, "patched_fixture");
+          const object = objects.find((candidate) => candidate.id === fixtureId);
+          if (!object) throw new Error("Patched fixture object was not found");
+          await client.putObject(bootstrap.active_show.id, "patched_fixture", fixtureId, { ...object.body, ...changes }, object.revision);
+          await refresh();
+          setError(null);
+          return true;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return false;
+        }
+      },
+      savePatchLayer: async (layer) => {
+        try {
+          if (!bootstrap?.active_show) throw new Error("No active show is available");
+          const existing = patchLayers.find((item) => item.id === layer.id);
+          await client.putObject(bootstrap.active_show.id, "patch_layer", layer.id, layer, existing?.revision ?? 0);
+          await loadShowObjects(bootstrap.active_show.id, session?.user.id ?? null);
+          setError(null);
+          return true;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return false;
+        }
+      },
     }),
     [
       status,
       error,
       bootstrap,
       session,
+      deskLock,
       patch,
       playbacks,
       shows,
@@ -1546,9 +1587,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
     ],
   );
 
-  return (
-    <ServerContext.Provider value={value}>{children}</ServerContext.Provider>
-  );
+  return <ServerContext.Provider value={value}>{children}</ServerContext.Provider>;
 }
 
 export function useServer() {

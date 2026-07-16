@@ -37,3 +37,7 @@ After a successful unlock, all connected screens return to the normal desk inter
 Lock-screen configuration is desk-persistent rather than show-persistent. The current locked state must be authoritative for the desk and synchronized across all connected screens and hardware gateways. Planning before implementation must define whether a desk remains locked across an application or server restart, how authorized users recover from a forgotten PIN, and which administrative path can configure or force-unlock a desk without weakening the normal lock screen.
 
 PINs must not be stored or exposed as plaintext. Configuration changes and unlock attempts should be handled by the authoritative desk service so that hiding or bypassing the browser lock screen cannot restore control while the desk remains locked.
+
+## Implemented persistence and recovery policy
+
+The locked state and lock-screen configuration persist with the control desk across server restarts. The server enforces the lock for REST, WebSocket, and desk-addressed OSC input; browsers merely render the authoritative state. PINs are stored as salted SHA-256 digests. A forgotten PIN can be force-unlocked only through the server endpoint with the separately configured `LIGHT_ADMIN_RECOVERY_TOKEN`; the normal lock screen never exposes that path or token. Input received while locked is discarded rather than buffered, and normal live-input ownership/takeover begins again only after unlock.

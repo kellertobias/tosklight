@@ -3,6 +3,7 @@ import { AppShell } from "./components/shell/AppShell";
 import { QuitConfirmOverlay } from "./components/modals/QuitConfirmOverlay";
 import { ServerProvider, useServer } from "./api/ServerContext";
 import { useEffect } from "react";
+import { DeskLockOverlay } from "./components/modals/DeskLockOverlay";
 
 function DesktopReady() {
   const server = useServer();
@@ -14,5 +15,14 @@ function DesktopReady() {
 }
 
 export function App() {
-  return <ServerProvider><DesktopReady/><AppProvider><AppShell /><QuitConfirmOverlay /></AppProvider></ServerProvider>;
+  return (
+    <ServerProvider>
+      <DesktopReady />
+      <AppProvider>
+        <AppShell />
+        <QuitConfirmOverlay />
+      </AppProvider>
+      <DeskLockOverlay />
+    </ServerProvider>
+  );
 }

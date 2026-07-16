@@ -1,18 +1,4 @@
-import type {
-  BootstrapSnapshot,
-  DmxSnapshot,
-  DeskConfiguration,
-  PatchSnapshot,
-  PlaybackSnapshot,
-  ServerEvent,
-  SessionResponse,
-  ScreenConfiguration,
-  ScreenSnapshot,
-  ShowEntry,
-  VersionedObject,
-  HelpCatalog,
-  HelpTopic,
-} from "./types";
+import type { BootstrapSnapshot, DmxSnapshot, DeskConfiguration, PatchSnapshot, PlaybackSnapshot, ServerEvent, SessionResponse, ScreenConfiguration, ScreenSnapshot, ShowEntry, VersionedObject, HelpCatalog, HelpTopic } from "./types";
 
 type EventListener = (event: ServerEvent) => void;
 
@@ -47,7 +33,9 @@ export function defaultServerUrl(location = window.location): string {
   return location.origin;
 }
 
-export function configuredServerUrl() { return defaultServerUrl(); }
+export function configuredServerUrl() {
+  return defaultServerUrl();
+}
 export function saveServerUrl(value: string) {
   const url = new URL(value.trim());
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("Server URL must use http or https");
@@ -58,24 +46,81 @@ export class LightApiClient {
   private session: SessionResponse | null = null;
   private socket: WebSocket | null = null;
   private listeners = new Set<EventListener>();
-  private pending = new Map<string, { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: number }>();
+  private pending = new Map<
+    string,
+    {
+      resolve: (value: unknown) => void;
+      reject: (error: Error) => void;
+      timer: number;
+    }
+  >();
   private deskToken = browserStorage()?.getItem("light.desk-token") ?? "";
 
   constructor(private readonly baseUrl = defaultServerUrl()) {}
 
-  helpCatalog(): Promise<HelpCatalog> { return this.request("/api/v1/help", {}, false); }
-  helpTopic(id: string): Promise<HelpTopic> { return this.request(`/api/v1/help/topics/${encodeURIComponent(id)}`, {}, false); }
-  fileRoots(): Promise<import("./types").FileRoot[]> { return this.request("/api/v1/files/roots"); }
-  fileEntries(root: string, path = "", hidden = false): Promise<import("./types").FileDirectory> { return this.request(`/api/v1/files/${encodeURIComponent(root)}/entries?path=${encodeURIComponent(path)}&hidden=${hidden}`); }
-  readTextFile(root: string, path: string): Promise<import("./types").TextDocument> { return this.request(`/api/v1/files/${encodeURIComponent(root)}/text?path=${encodeURIComponent(path)}`); }
-  saveTextFile(root: string, path: string, text: string, revision: string | null): Promise<import("./types").TextDocument> { return this.request(`/api/v1/files/${encodeURIComponent(root)}/text`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ path, text, revision }) }); }
-  fileOperation(root: string, input: { operation: "create_file" | "create_folder" | "rename" | "copy" | "move" | "delete"; sources?: string[]; destination?: string; name?: string; replace?: boolean }): Promise<{ paths: string[] }> { return this.request(`/api/v1/files/${encodeURIComponent(root)}/operations`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sources: [], ...input }) }); }
-  async fileContent(root: string, path: string): Promise<Blob> { if (!this.session) throw new Error("A server session is required"); const response = await fetch(`${this.baseUrl}/api/v1/files/${encodeURIComponent(root)}/content?path=${encodeURIComponent(path)}`, { headers: this.boundaryHeaders(new Headers({ authorization: `Bearer ${this.session.token}` })) }); if (!response.ok) throw new Error(await response.text()); return response.blob(); }
+  helpCatalog(): Promise<HelpCatalog> {
+    return this.request("/api/v1/help", {}, false);
+  }
+  helpTopic(id: string): Promise<HelpTopic> {
+    return this.request(`/api/v1/help/topics/${encodeURIComponent(id)}`, {}, false);
+  }
+  fileRoots(): Promise<import("./types").FileRoot[]> {
+    return this.request("/api/v1/files/roots");
+  }
+  fileEntries(root: string, path = "", hidden = false): Promise<import("./types").FileDirectory> {
+    return this.request(`/api/v1/files/${encodeURIComponent(root)}/entries?path=${encodeURIComponent(path)}&hidden=${hidden}`);
+  }
+  readTextFile(root: string, path: string): Promise<import("./types").TextDocument> {
+    return this.request(`/api/v1/files/${encodeURIComponent(root)}/text?path=${encodeURIComponent(path)}`);
+  }
+  saveTextFile(root: string, path: string, text: string, revision: string | null): Promise<import("./types").TextDocument> {
+    return this.request(`/api/v1/files/${encodeURIComponent(root)}/text`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path, text, revision }),
+    });
+  }
+  fileOperation(
+    root: string,
+    input: {
+      operation: "create_file" | "create_folder" | "rename" | "copy" | "move" | "delete";
+      sources?: string[];
+      destination?: string;
+      name?: string;
+      replace?: boolean;
+    },
+  ): Promise<{ paths: string[] }> {
+    return this.request(`/api/v1/files/${encodeURIComponent(root)}/operations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sources: [], ...input }),
+    });
+  }
+  async fileContent(root: string, path: string): Promise<Blob> {
+    if (!this.session) throw new Error("A server session is required");
+    const response = await fetch(`${this.baseUrl}/api/v1/files/${encodeURIComponent(root)}/content?path=${encodeURIComponent(path)}`, {
+      headers: this.boundaryHeaders(new Headers({ authorization: `Bearer ${this.session.token}` })),
+    });
+    if (!response.ok) throw new Error(await response.text());
+    return response.blob();
+  }
 
-  get currentSession() { return this.session; }
-  restoreSession(session: SessionResponse) { this.session = session; }
-  setDeskToken(token: string) { this.deskToken = token.trim(); const storage = browserStorage(); if (this.deskToken) storage?.setItem("light.desk-token", this.deskToken); else storage?.removeItem("light.desk-token"); }
-  private boundaryHeaders(headers = new Headers()) { if (this.deskToken) headers.set("x-light-desk-token", this.deskToken); return headers; }
+  get currentSession() {
+    return this.session;
+  }
+  restoreSession(session: SessionResponse) {
+    this.session = session;
+  }
+  setDeskToken(token: string) {
+    this.deskToken = token.trim();
+    const storage = browserStorage();
+    if (this.deskToken) storage?.setItem("light.desk-token", this.deskToken);
+    else storage?.removeItem("light.desk-token");
+  }
+  private boundaryHeaders(headers = new Headers()) {
+    if (this.deskToken) headers.set("x-light-desk-token", this.deskToken);
+    return headers;
+  }
 
   async bootstrap(): Promise<BootstrapSnapshot> {
     return this.request("/api/v1/bootstrap", {}, false);
@@ -84,12 +129,23 @@ export class LightApiClient {
   async login(username: string): Promise<SessionResponse> {
     const storage = browserStorage();
     let clientId = storage?.getItem("light.client-id");
-    if (!clientId) { clientId = crypto.randomUUID(); storage?.setItem("light.client-id", clientId); }
-    const session = await this.request<SessionResponse>("/api/v1/sessions", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username, client_id: clientId, desk_id: storage?.getItem("light.control-desk") ?? null }),
-    }, false);
+    if (!clientId) {
+      clientId = crypto.randomUUID();
+      storage?.setItem("light.client-id", clientId);
+    }
+    const session = await this.request<SessionResponse>(
+      "/api/v1/sessions",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          username,
+          client_id: clientId,
+          desk_id: storage?.getItem("light.control-desk") ?? null,
+        }),
+      },
+      false,
+    );
     this.session = session;
     storage?.setItem("light.primary-session", JSON.stringify(session));
     if (session.desk) storage?.setItem("light.control-desk", session.desk.id);
@@ -101,7 +157,9 @@ export class LightApiClient {
     if (!session) return;
     try {
       const response = await fetch(`${this.baseUrl}/api/v1/sessions/${session.session_id}`, {
-        method: "DELETE", keepalive: true, headers: this.boundaryHeaders(new Headers({ authorization: `Bearer ${session.token}` })),
+        method: "DELETE",
+        keepalive: true,
+        headers: this.boundaryHeaders(new Headers({ authorization: `Bearer ${session.token}` })),
       });
       if (!response.ok && response.status !== 404) throw new Error(await response.text());
     } finally {
@@ -127,21 +185,41 @@ export class LightApiClient {
 
   putFixtureDefinition(definition: import("./types").FixtureDefinition) {
     return this.request<import("./types").FixtureDefinition>("/api/v1/fixture-library", {
-      method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(definition),
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(definition),
     });
   }
 
   deleteFixtureDefinition(id: string, revision: number) {
-    return this.request<void>(`/api/v1/fixture-library/${id}/${revision}`, { method: "DELETE" });
+    return this.request<void>(`/api/v1/fixture-library/${id}/${revision}`, {
+      method: "DELETE",
+    });
   }
 
   playbacks(): Promise<PlaybackSnapshot> {
     return this.request("/api/v1/playbacks");
   }
-  screens(): Promise<ScreenSnapshot> { return this.request("/api/v1/screens"); }
-  putScreen(screen: ScreenConfiguration): Promise<ScreenConfiguration> { return this.request(`/api/v1/screens/${screen.id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(screen) }); }
-  deleteScreen(id: string): Promise<void> { return this.request(`/api/v1/screens/${id}`, { method: "DELETE" }); }
-  setScreenPage(id: string, page: number) { return this.request(`/api/v1/screens/${id}/page`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ page }) }); }
+  screens(): Promise<ScreenSnapshot> {
+    return this.request("/api/v1/screens");
+  }
+  putScreen(screen: ScreenConfiguration): Promise<ScreenConfiguration> {
+    return this.request(`/api/v1/screens/${screen.id}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(screen),
+    });
+  }
+  deleteScreen(id: string): Promise<void> {
+    return this.request(`/api/v1/screens/${id}`, { method: "DELETE" });
+  }
+  setScreenPage(id: string, page: number) {
+    return this.request(`/api/v1/screens/${id}/page`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ page }),
+    });
+  }
 
   visualization(preload = false): Promise<import("./types").VisualizationSnapshot> {
     return this.request(`/api/v1/visualization${preload ? "?preload=true" : ""}`);
@@ -151,23 +229,41 @@ export class LightApiClient {
     return this.request("/api/v1/dmx", {}, false);
   }
 
-  mediaServers(): Promise<{ fixtures: import("./types").MediaServerFixture[] }> {
+  mediaServers(): Promise<{
+    fixtures: import("./types").MediaServerFixture[];
+  }> {
     return this.request("/api/v1/media");
   }
 
   refreshMediaPreview(fixtureId: string, source = 0, width = 320, height = 180) {
-    return this.request<{ fixture_id: string; source: number; format: string; width: number; height: number }>(`/api/v1/media/${fixtureId}/preview/refresh`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source, width, height }) });
+    return this.request<{
+      fixture_id: string;
+      source: number;
+      format: string;
+      width: number;
+      height: number;
+    }>(`/api/v1/media/${fixtureId}/preview/refresh`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ source, width, height }),
+    });
   }
 
   async mediaPreview(fixtureId: string, source = 0): Promise<Blob> {
     if (!this.session) throw new Error("A server session is required");
-    const response = await fetch(`${this.baseUrl}/api/v1/media/${fixtureId}/preview/${source}`, { headers: this.boundaryHeaders(new Headers({ authorization: `Bearer ${this.session.token}` })) });
+    const response = await fetch(`${this.baseUrl}/api/v1/media/${fixtureId}/preview/${source}`, {
+      headers: this.boundaryHeaders(new Headers({ authorization: `Bearer ${this.session.token}` })),
+    });
     if (!response.ok) throw new Error(await response.text());
     return response.blob();
   }
 
   refreshMediaThumbnails(fixtureId: string, elements: number[], width = 128, height = 72) {
-    return this.request<{ fixture_id: string; count: number }>(`/api/v1/media/${fixtureId}/thumbnails/refresh`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ library_type: 1, elements, width, height }) });
+    return this.request<{ fixture_id: string; count: number }>(`/api/v1/media/${fixtureId}/thumbnails/refresh`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ library_type: 1, elements, width, height }),
+    });
   }
 
   shows(): Promise<ShowEntry[]> {
@@ -230,26 +326,49 @@ export class LightApiClient {
   async previewMvr(file: File, showId?: string): Promise<import("./types").MvrImportPreview> {
     if (!this.session) throw new Error("A server session is required");
     const query = showId ? `?show_id=${encodeURIComponent(showId)}` : "";
-    const headers = this.boundaryHeaders(new Headers({ authorization: `Bearer ${this.session.token}`, "content-type": "application/octet-stream" }));
+    const headers = this.boundaryHeaders(
+      new Headers({
+        authorization: `Bearer ${this.session.token}`,
+        "content-type": "application/octet-stream",
+      }),
+    );
     const response = await fetch(`${this.baseUrl}/api/v1/mvr/imports/preview${query}`, { method: "POST", headers, body: file });
     if (!response.ok) throw new Error(await response.text());
     return response.json();
   }
 
-  applyMvr(token: string, input: { new_show?: { name: string; open_after_import: boolean }; existing_show_id?: string; resolutions?: Record<string, { action: string; universe?: number; address?: number }> }): Promise<import("./types").MvrApplyResult> {
-    return this.request(`/api/v1/mvr/imports/${token}/apply`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) });
+  applyMvr(
+    token: string,
+    input: {
+      new_show?: { name: string; open_after_import: boolean };
+      existing_show_id?: string;
+      resolutions?: Record<string, { action: string; universe?: number; address?: number }>;
+    },
+  ): Promise<import("./types").MvrApplyResult> {
+    return this.request(`/api/v1/mvr/imports/${token}/apply`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
   }
 
-  mvrExportPreview(id: string): Promise<import("./types").MvrExportPreview> { return this.request(`/api/v1/shows/${id}/mvr/preview`); }
+  mvrExportPreview(id: string): Promise<import("./types").MvrExportPreview> {
+    return this.request(`/api/v1/shows/${id}/mvr/preview`);
+  }
   async downloadMvr(id: string): Promise<Blob> {
     if (!this.session) throw new Error("A server session is required");
     const headers = this.boundaryHeaders(new Headers({ authorization: `Bearer ${this.session.token}` }));
-    const response = await fetch(`${this.baseUrl}/api/v1/shows/${id}/mvr`, { headers });
+    const response = await fetch(`${this.baseUrl}/api/v1/shows/${id}/mvr`, {
+      headers,
+    });
     if (!response.ok) throw new Error(await response.text());
     return response.blob();
   }
 
-  configuration(): Promise<{ configuration: DeskConfiguration; output_health: import("./types").OutputHealth }> {
+  configuration(): Promise<{
+    configuration: DeskConfiguration;
+    output_health: import("./types").OutputHealth;
+  }> {
     return this.request("/api/v1/configuration", {}, false);
   }
 
@@ -265,6 +384,31 @@ export class LightApiClient {
     return this.request("/api/v1/shutdown", { method: "POST" });
   }
 
+  deskLock(): Promise<import("./types").DeskLockState> {
+    return this.request("/api/v1/desk-lock");
+  }
+  configureDeskLock(input: { message: string; wallpaper: string | null; unlock_mode: "button" | "pin"; pin?: string }): Promise<import("./types").DeskLockState> {
+    return this.request("/api/v1/desk-lock", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  }
+  lockDesk(): Promise<import("./types").DeskLockState> {
+    return this.request("/api/v1/desk-lock/lock", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+  }
+  unlockDesk(pin?: string): Promise<import("./types").DeskLockState> {
+    return this.request("/api/v1/desk-lock/unlock", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pin }),
+    });
+  }
+
   objects<T>(showId: string, kind: string): Promise<VersionedObject<T>[]> {
     return this.request(`/api/v1/shows/${showId}/objects/${encodeURIComponent(kind)}`, {}, false);
   }
@@ -272,7 +416,10 @@ export class LightApiClient {
   putObject<T>(showId: string, kind: string, id: string, body: T, revision: number): Promise<{ revision: number }> {
     return this.request(`/api/v1/shows/${showId}/objects/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`, {
       method: "PUT",
-      headers: { "content-type": "application/json", "if-match": String(revision) },
+      headers: {
+        "content-type": "application/json",
+        "if-match": String(revision),
+      },
       body: JSON.stringify(body),
     });
   }
@@ -294,7 +441,9 @@ export class LightApiClient {
   }
 
   clearProgrammer(sessionId: string) {
-    return this.request(`/api/v1/programmers/${sessionId}/clear`, { method: "POST" });
+    return this.request(`/api/v1/programmers/${sessionId}/clear`, {
+      method: "POST",
+    });
   }
   clearProgrammerValues() {
     return this.command("programmer.clear", {});
@@ -311,10 +460,35 @@ export class LightApiClient {
   align(attribute: string, mode: "left" | "right" | "center" | "out", from = 0, to = 1) {
     return this.command("programmer.align", { attribute, mode, from, to });
   }
-  preload(action: "enter" | "go" | "clear" | "release") { return this.command(`preload.${action}`, {}); }
-  setPreloadGroup(groupId: string, attribute: string, value: number) { return this.command("preload.group.set", { group_id: groupId, attribute, value }); }
-  storePreload(showId: string, input: { target: "preset" | "cue"; target_id: string; cue_number?: number; name?: string; mode?: "merge" | "overwrite" | "add_missing_fixtures" }, revision: number) {
-    return this.request(`/api/v1/shows/${showId}/preload/store`, { method: "POST", headers: { "content-type": "application/json", "if-match": String(revision) }, body: JSON.stringify(input) });
+  preload(action: "enter" | "go" | "clear" | "release") {
+    return this.command(`preload.${action}`, {});
+  }
+  setPreloadGroup(groupId: string, attribute: string, value: number) {
+    return this.command("preload.group.set", {
+      group_id: groupId,
+      attribute,
+      value,
+    });
+  }
+  storePreload(
+    showId: string,
+    input: {
+      target: "preset" | "cue";
+      target_id: string;
+      cue_number?: number;
+      name?: string;
+      mode?: "merge" | "overwrite" | "add_missing_fixtures";
+    },
+    revision: number,
+  ) {
+    return this.request(`/api/v1/shows/${showId}/preload/store`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "if-match": String(revision),
+      },
+      body: JSON.stringify(input),
+    });
   }
 
   undoObject(showId: string, kind: string, id: string, revision: number) {
@@ -324,20 +498,56 @@ export class LightApiClient {
   playbackAction(cueListId: string, action: "go" | "back" | "pause" | "release") {
     return this.command(`playback.${action}`, { cue_list_id: cueListId });
   }
-  poolPlaybackAction(number: number, action: "on" | "off" | "toggle" | "go" | "go-minus" | "fast-forward" | "fast-rewind" | "temp" | "swap" | "select" | "select-contents" | "learn" | "double" | "half" | "pause" | "blackout" | "pause-dynamics" | "flash" | "master" | "xfade-on" | "xfade-off", input: { value?: number; pressed?: boolean; surface?: "physical" | "virtual" } = {}) {
-    return this.request(`/api/v1/cuelists/${number}/${action}`, { method: action === "master" ? "PUT" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) });
+  poolPlaybackAction(
+    number: number,
+    action: "on" | "off" | "toggle" | "go" | "go-minus" | "fast-forward" | "fast-rewind" | "temp" | "swap" | "select" | "select-contents" | "learn" | "double" | "half" | "pause" | "blackout" | "pause-dynamics" | "flash" | "master" | "xfade-on" | "xfade-off",
+    input: {
+      value?: number;
+      pressed?: boolean;
+      surface?: "physical" | "virtual";
+    } = {},
+  ) {
+    return this.request(`/api/v1/cuelists/${number}/${action}`, {
+      method: action === "master" ? "PUT" : "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
   }
-  setPlaybackPage(deskId: string, page: number) { return this.request(`/api/v1/control-desks/${deskId}/page`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ page }) }); }
-  updateControlDesk(desk: import("./types").ControlDesk) { return this.request<import("./types").ControlDesk>(`/api/v1/control-desks/${desk.id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(desk) }); }
+  setPlaybackPage(deskId: string, page: number) {
+    return this.request(`/api/v1/control-desks/${deskId}/page`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ page }),
+    });
+  }
+  updateControlDesk(desk: import("./types").ControlDesk) {
+    return this.request<import("./types").ControlDesk>(`/api/v1/control-desks/${desk.id}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(desk),
+    });
+  }
 
   setProgrammer(fixtureId: string, attribute: string, value: number) {
-    return this.command("programmer.set", { fixture_id: fixtureId, attribute, value });
+    return this.command("programmer.set", {
+      fixture_id: fixtureId,
+      attribute,
+      value,
+    });
   }
   setGroupProgrammer(groupId: string, attribute: string, value: number) {
-    return this.command("programmer.group.set", { group_id: groupId, attribute, value });
+    return this.command("programmer.group.set", {
+      group_id: groupId,
+      attribute,
+      value,
+    });
   }
-  setGroupMaster(groupId: string, value: number) { return this.command("group.master.set", { group_id: groupId, value }); }
-  setGroupMasterFlash(groupId: string, value: number) { return this.command("group.master.flash", { group_id: groupId, value }); }
+  setGroupMaster(groupId: string, value: number) {
+    return this.command("group.master.set", { group_id: groupId, value });
+  }
+  setGroupMasterFlash(groupId: string, value: number) {
+    return this.command("group.master.flash", { group_id: groupId, value });
+  }
 
   setSelection(fixtures: string[]) {
     return this.command("selection.set", { fixtures });
@@ -363,10 +573,24 @@ export class LightApiClient {
     return this.command("preset.apply", { preset_id: presetId });
   }
 
-  storePreset(showId: string, presetId: string, preset: { name: string; family?: string; values: Record<string, Record<string, unknown>>; group_values?: Record<string, Record<string, unknown>> }, mode: "merge" | "overwrite" | "add_missing_fixtures", revision: number) {
+  storePreset(
+    showId: string,
+    presetId: string,
+    preset: {
+      name: string;
+      family?: string;
+      values: Record<string, Record<string, unknown>>;
+      group_values?: Record<string, Record<string, unknown>>;
+    },
+    mode: "merge" | "overwrite" | "add_missing_fixtures",
+    revision: number,
+  ) {
     return this.request(`/api/v1/shows/${showId}/presets/${encodeURIComponent(presetId)}/store`, {
       method: "POST",
-      headers: { "content-type": "application/json", "if-match": String(revision) },
+      headers: {
+        "content-type": "application/json",
+        "if-match": String(revision),
+      },
       body: JSON.stringify({ mode, preset }),
     });
   }
@@ -445,7 +669,10 @@ export class LightApiClient {
       if (!this.session) throw new Error("A server session is required");
       headers.set("authorization", `Bearer ${this.session.token}`);
     }
-    const response = await fetch(`${this.baseUrl}${path}`, { ...init, headers });
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      ...init,
+      headers,
+    });
     if (!response.ok) {
       const body = await response.text();
       throw new Error(body || `${response.status} ${response.statusText}`);
@@ -453,5 +680,10 @@ export class LightApiClient {
     if (response.status === 204) return undefined as T;
     return response.json() as Promise<T>;
   }
-  private base64Url(value: string) { const bytes = new TextEncoder().encode(value); let binary = ""; for (const byte of bytes) binary += String.fromCharCode(byte); return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, ""); }
+  private base64Url(value: string) {
+    const bytes = new TextEncoder().encode(value);
+    let binary = "";
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+  }
 }
