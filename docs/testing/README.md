@@ -81,6 +81,17 @@ Every automated scenario should follow the same visible structure:
 5. **Advance application time.** Move to each stated virtual timestamp and request exactly one output frame. Record the returned virtual time and packet sequences.
 6. **Run the shared assertions.** Both variants call the same normalized state and wire-output oracle. The UI variant may add visible-state assertions, but it may not weaken or replace the shared contract. Negative assertions use a bounded packet/event window.
 7. **Clean up.** Unsubscribe OSC clients, close sockets and pages, stop the worker server, and remove the temporary directory. Packaged-app tests additionally prove child-process shutdown.
+
+## Visual inspection recording
+
+Run `./test record` to produce one narrated 1920×1080 WebM walkthrough at `artifacts/visual-inspection/light-visual-inspection.webm`. This is intentionally separate from the fast catalog. The recording keeps the complete desk application visible and adds external observer panels for:
+
+- OSC packets sent by the simulated physical controller and decoded feedback returned by the subscribed desk alias;
+- the desk-local command line after each UI or OSC button press;
+- logical DMX values from `/api/v1/dmx`; and
+- the actual UDP values received from the configured Art-Net and sACN outputs.
+
+The recording is supplementary evidence. The normal Playwright assertions remain authoritative because video timing and encoding are not used as synchronization or pass criteria.
 8. **Follow up.** If the primary scenario passes, run its listed boundary or alternate-surface cases. If it fails, retain the standard artifacts and identify the first layer where actual state diverged.
 
 In these documents, **Assertions** are the exact checks made by the test. **Pass condition** is the product-level conclusion supported by those checks. **Follow-ups** are deliberately separate tests or failure investigations, not extra unbounded work inside the primary scenario.
