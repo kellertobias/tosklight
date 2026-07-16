@@ -15,6 +15,7 @@ export type Action =
   | { type: "SET_PANE_DEVELOPMENT_VIEW"; id: string; value: DevelopmentView }
   | { type: "SET_VIRTUAL_PLAYBACK_GRID"; id: string; rows: number; columns: number }
   | { type: "SET_VIRTUAL_PLAYBACK_CELL"; id: string; index: number; playbackNumber?: number | null; action?: "go" | "toggle" }
+  | { type: "SET_TEXT_EDITOR_FILE"; id: string; root: string; path: string }
   | { type: "SET_STAGE_MODE"; value: AppState["stageMode"] }
   | { type: "SET_STAGE_VIEW"; value: AppState["stageView"] }
   | { type: "SET_STAGE_NAVIGATION"; zoom?: number; panX?: number; panY?: number; orbitX?: number; orbitY?: number }
@@ -223,7 +224,7 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "ADD_WINDOW": {
       if (!state.windowPicker) return state;
       const kind = cueListWindowKind(action.kind);
-      const pane = { id: `${kind}-${Date.now()}`, kind, title: kind === "help" ? "Help" : kind === "development" ? "Development" : kind === "virtual_playbacks" ? "Virtual Playbacks" : cueListWindowTitle(kind[0].toUpperCase() + kind.slice(1), kind), ...(kind === "virtual_playbacks" ? { virtualPlaybackRows: 2, virtualPlaybackColumns: 2, virtualPlaybackCells: [] } : {}), ...state.windowPicker };
+      const pane = { id: `${kind}-${Date.now()}`, kind, title: kind === "help" ? "Help" : kind === "development" ? "Development" : kind === "virtual_playbacks" ? "Virtual Playbacks" : kind === "file_manager" ? "File Manager" : kind === "text_editor" ? "Text Editor" : cueListWindowTitle(kind[0].toUpperCase() + kind.slice(1), kind), ...(kind === "virtual_playbacks" ? { virtualPlaybackRows: 2, virtualPlaybackColumns: 2, virtualPlaybackCells: [] } : {}), ...state.windowPicker };
       const activeDesk = state.desks.find((desk) => desk.id === state.activeDeskId);
       if (activeDesk?.panes.some((item) => overlaps(pane, item))) return { ...state, windowPicker: null };
       return { ...state, windowPicker: null, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: [...desk.panes, pane] }) };
@@ -247,6 +248,7 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "TOGGLE_TOUCH_SCROLLBARS": return { ...state, touchScrollbars: !state.touchScrollbars };
     case "TOGGLE_SECTION_NAMES": return { ...state, showSectionNames: !state.showSectionNames };
     case "SET_REGULAR_NUMBER_SHORTCUTS": return { ...state, regularNumberShortcuts: action.value };
+    case "SET_TEXT_EDITOR_FILE": return { ...state, desks: state.desks.map((desk) => ({ ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, textFileRoot: action.root, textFilePath: action.path } : pane) })) };
     case "SET_STORE_ARMED": return { ...state, storeArmed: action.value };
     case "SET_SHIFT_ARMED": return { ...state, shiftArmed: action.value };
     case "SET_PATCH_ARMED": return { ...state, patchSetArmed: action.value };

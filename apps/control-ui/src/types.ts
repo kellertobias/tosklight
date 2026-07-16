@@ -23,7 +23,9 @@ export type BuiltInWindow =
   | "setup"
   | "help"
   | "development"
-  | "virtual_playbacks";
+  | "virtual_playbacks"
+  | "file_manager"
+  | "text_editor";
 
 export type ControlMode = "programmer" | "playbacks";
 export type DockMode = "desks" | "builtins";
@@ -53,6 +55,8 @@ export interface PaneModel extends GridRect {
   virtualPlaybackRows?: number;
   virtualPlaybackColumns?: number;
   virtualPlaybackCells?: Array<{ playbackNumber: number | null; action: "go" | "toggle" }>;
+  textFileRoot?: string;
+  textFilePath?: string;
 }
 
 export interface DeskModel {

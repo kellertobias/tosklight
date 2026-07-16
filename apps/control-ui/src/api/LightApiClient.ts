@@ -65,6 +65,12 @@ export class LightApiClient {
 
   helpCatalog(): Promise<HelpCatalog> { return this.request("/api/v1/help", {}, false); }
   helpTopic(id: string): Promise<HelpTopic> { return this.request(`/api/v1/help/topics/${encodeURIComponent(id)}`, {}, false); }
+  fileRoots(): Promise<import("./types").FileRoot[]> { return this.request("/api/v1/files/roots"); }
+  fileEntries(root: string, path = "", hidden = false): Promise<import("./types").FileDirectory> { return this.request(`/api/v1/files/${encodeURIComponent(root)}/entries?path=${encodeURIComponent(path)}&hidden=${hidden}`); }
+  readTextFile(root: string, path: string): Promise<import("./types").TextDocument> { return this.request(`/api/v1/files/${encodeURIComponent(root)}/text?path=${encodeURIComponent(path)}`); }
+  saveTextFile(root: string, path: string, text: string, revision: string | null): Promise<import("./types").TextDocument> { return this.request(`/api/v1/files/${encodeURIComponent(root)}/text`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ path, text, revision }) }); }
+  fileOperation(root: string, input: { operation: "create_file" | "create_folder" | "rename" | "copy" | "move" | "delete"; sources?: string[]; destination?: string; name?: string; replace?: boolean }): Promise<{ paths: string[] }> { return this.request(`/api/v1/files/${encodeURIComponent(root)}/operations`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sources: [], ...input }) }); }
+  async fileContent(root: string, path: string): Promise<Blob> { if (!this.session) throw new Error("A server session is required"); const response = await fetch(`${this.baseUrl}/api/v1/files/${encodeURIComponent(root)}/content?path=${encodeURIComponent(path)}`, { headers: this.boundaryHeaders(new Headers({ authorization: `Bearer ${this.session.token}` })) }); if (!response.ok) throw new Error(await response.text()); return response.blob(); }
 
   get currentSession() { return this.session; }
   restoreSession(session: SessionResponse) { this.session = session; }

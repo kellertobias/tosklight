@@ -71,6 +71,12 @@ interface ServerContextValue {
   dismissError: () => void;
   simulateError: (message: string | null) => void;
   readServerLogs: () => Promise<Array<{ revision: number; kind: string; payload: unknown }>>;
+  fileRoots: () => Promise<import("./types").FileRoot[]>;
+  fileEntries: (root: string, path?: string, hidden?: boolean) => Promise<import("./types").FileDirectory>;
+  readTextFile: (root: string, path: string) => Promise<import("./types").TextDocument>;
+  saveTextFile: (root: string, path: string, text: string, revision: string | null) => Promise<import("./types").TextDocument>;
+  fileOperation: (root: string, input: { operation: "create_file" | "create_folder" | "rename" | "copy" | "move" | "delete"; sources?: string[]; destination?: string; name?: string; replace?: boolean }) => Promise<{ paths: string[] }>;
+  fileContent: (root: string, path: string) => Promise<Blob>;
   bootstrap: BootstrapSnapshot | null;
   session: SessionResponse | null;
   createUser: (name: string) => Promise<void>;
@@ -536,6 +542,12 @@ export function ServerProvider({ children }: PropsWithChildren) {
       dismissError: () => setError(null),
       simulateError: (message) => setError(message),
       readServerLogs: () => client.auditEvents(),
+      fileRoots: () => client.fileRoots(),
+      fileEntries: (root, path, hidden) => client.fileEntries(root, path, hidden),
+      readTextFile: (root, path) => client.readTextFile(root, path),
+      saveTextFile: (root, path, text, revision) => client.saveTextFile(root, path, text, revision),
+      fileOperation: (root, input) => client.fileOperation(root, input),
+      fileContent: (root, path) => client.fileContent(root, path),
       bootstrap,
       session,
       createUser: async (name) => {

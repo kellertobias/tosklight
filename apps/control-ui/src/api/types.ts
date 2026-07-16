@@ -27,6 +27,10 @@ export interface HelpCatalogEntry {
 }
 export interface HelpCatalog { topics: HelpCatalogEntry[]; errors: string[]; live: boolean }
 export interface HelpTopic { id: string; title: string; markdown: string; live: boolean }
+export interface FileRoot { id: string; label: string; icon: string; removable: boolean; writable: boolean }
+export interface FileEntry { name: string; path: string; kind: "folder" | "file"; size: number; modified_millis: number | null; created_millis: number | null; hidden: boolean; writable: boolean }
+export interface FileDirectory { root_id: string; path: string; entries: FileEntry[] }
+export interface TextDocument { root_id: string; path: string; text: string; revision: string; read_only: boolean }
 
 export interface MvrImportPreview {
   token: string;
@@ -261,6 +265,7 @@ export interface DeskConfiguration {
   preload_programmer_changes: boolean;
   preload_physical_playback_actions: boolean;
   preload_virtual_playback_actions: boolean;
+  file_manager_roots: Array<{ id: string; label: string; path: string; icon?: string }>;
 }
 
 export interface StoredGroup {

@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod default_show;
+mod file_manager;
 mod help;
 
 use anyhow::Context;
@@ -404,6 +405,7 @@ struct DeskConfiguration {
     preload_programmer_changes: bool,
     preload_physical_playback_actions: bool,
     preload_virtual_playback_actions: bool,
+    file_manager_roots: Vec<file_manager::ConfiguredRoot>,
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct OscTimecodeConfig {
@@ -453,6 +455,7 @@ impl Default for DeskConfiguration {
             preload_programmer_changes: true,
             preload_physical_playback_actions: true,
             preload_virtual_playback_actions: false,
+            file_manager_roots: Vec::new(),
         }
     }
 }
@@ -477,6 +480,15 @@ impl DeskConfiguration {
             return Err(ApiError::bad_request(
                 "fade times must be 0-60000 milliseconds",
             ));
+        }
+        let mut root_ids = std::collections::HashSet::new();
+        for root in &self.file_manager_roots {
+            if root.id.trim().is_empty() || root.label.trim().is_empty() || !root.path.is_absolute() {
+                return Err(ApiError::bad_request("File Manager roots require a stable ID, label, and absolute server path"));
+            }
+            if !root_ids.insert(&root.id) {
+                return Err(ApiError::bad_request("File Manager root IDs must be unique"));
+            }
         }
         Ok(())
     }
@@ -858,6 +870,7 @@ fn router(state: AppState) -> Router {
         .route("/api/v1/midi/inputs", get(midi_inputs))
         .route("/api/v1/events", get(ws_events))
         .route("/api/v1/audit", get(audit_events));
+    router = router.merge(file_manager::router());
     if test_bench {
         router = router
             .route("/api/v1/test/clock/reset", post(reset_test_clock))
@@ -7573,6 +7586,12 @@ impl ApiError {
     fn unauthorized(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::UNAUTHORIZED,
+            message: message.into(),
+        }
+    }
+    fn forbidden(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::FORBIDDEN,
             message: message.into(),
         }
     }
