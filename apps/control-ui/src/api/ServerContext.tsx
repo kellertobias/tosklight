@@ -120,10 +120,11 @@ interface ServerContextValue {
   playbackAction: (cueListId: string, action: "go" | "back" | "pause" | "release") => Promise<void>;
   poolPlaybackAction: (
     number: number,
-    action: "on" | "off" | "toggle" | "go" | "go-minus" | "fast-forward" | "fast-rewind" | "temp" | "swap" | "select" | "select-contents" | "learn" | "double" | "half" | "pause" | "blackout" | "pause-dynamics" | "flash" | "master" | "xfade-on" | "xfade-off",
+    action: "on" | "off" | "toggle" | "go" | "go-minus" | "go-to" | "load" | "fast-forward" | "fast-rewind" | "temp" | "swap" | "select" | "select-contents" | "learn" | "double" | "half" | "pause" | "blackout" | "pause-dynamics" | "flash" | "master" | "xfade-on" | "xfade-off",
     input?: {
       value?: number;
       pressed?: boolean;
+      cue_number?: number;
       surface?: "physical" | "virtual";
     },
   ) => Promise<void>;

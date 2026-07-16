@@ -2,7 +2,7 @@
 
 ## Status
 
-This is a planned feature. Do not implement or enable acceptance coverage until the command grammar, selected-playback state, playback runtime, documentation, and tests can be changed together.
+Implemented across the command grammar, desk-local selected-playback state, concrete playback runtime, UI/API/OSC feedback, operator documentation, Rust tests, and visible Playwright coverage in `tests/09-cue-go-to-load.spec.ts`.
 
 ## Operator intent
 

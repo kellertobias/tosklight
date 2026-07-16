@@ -164,7 +164,7 @@ Before every scenario, load its named canonical show, immediately use Save As wi
 **Priority:** P1
 **Primary layer:** Playwright E2E plus server integration
 
-**Implementation status:** Specification only. Shift-Z may enter `SELECT`, but do not mark this scenario implemented until playback selection, active-playback state, Shift-4 resolution, and implicit Cue recording all exist.
+**Implementation status:** Implemented. Selection is persisted by desk and show, not by user: sessions attached to the same desk share it, while two desks used by the same user remain independent.
 
 **Starting show:** Load canonical `default-stage.show`, immediately Save As `cue-006-active-playback.show`, and use the active copy for this scenario.
 
@@ -185,6 +185,26 @@ Before every scenario, load its named canonical show, immediately use Save As wi
 **Assertions:** Shift-Z produces `SELECT` without executing selection. Touching a playback establishes exactly one active playback for the operator session. Shift-4 and an address-omitting `[REC] [CUE] <number> [ENTER]` both resolve through that same selection. Playback execution order never changes it implicitly, and an explicit playback or Cuelist address takes precedence.
 
 **Pass condition:** The active playback is a deliberate operator choice and is the single shared default for Cue details and Cue recording when no playback/Cuelist address is supplied.
+
+## CUE-014 — Go To and Load a Cue on a concrete playback
+
+**Priority:** P0
+**Primary layer:** Visible Playwright E2E plus Rust playback/server integration
+
+**Starting show:** Load canonical `compact-rig.show`, immediately Save As `cue-014-go-to-load.show`, create one three-Cue Cuelist with visible tracked intensity changes, assign it to two concrete playbacks, and assign both to page 1.
+
+**Detailed procedure:**
+
+1. Enter `SELECT` with physical Shift-Z and touch playback 2. Verify the touch selects it without firing its button, and then run playback 1. The explicit selection remains playback 2.
+2. Return to the programmer keypad and enter `[CUE] 3 [ENTER]`. Playback 2 activates, its fader becomes full, and Cue 3 becomes current using normal effective timing. Playback 1 remains an independent instance even though both target the same Cuelist.
+3. Enter `[CUE] [CUE] 2 [ENTER]`. Current Cue, fader, activation, and DMX do not change. Every playback-state surface reports Cue 2 as a loaded effective next Cue distinct from the ordinary next Cue.
+4. Press forward GO. Cue 2 executes, the Load is consumed, and ordinary sequence progression resumes from Cue 2. Load another Cue, press GO minus, and verify the Load remains. Press Off and verify it clears.
+5. Repeat Go To and Load with explicit pool and page/playback forms. Try a missing Cue, missing selection on another desk, missing playback, and a bare Cuelist shared by multiple playbacks. Every rejection is atomic.
+6. Repeat Go To under Grand Master 50% and Blackout. Confirm neither control is bypassed. Reopen the show after Load and verify transient loaded state is not persisted.
+
+**Assertions:** Stable Cue identity survives renumbering, deleting a loaded Cue clears it, API and playback UI expose current/normal-next/effective-next/loaded state, and same-user sessions share selection only when attached to the same desk.
+
+**Pass condition:** Go To and Load operate on exactly one concrete playback with tracked timing and output safety, and all UI/API/OSC feedback agrees with authoritative runtime state.
 
 ## CUE-007 — Explicit tracked-off values block an inserted on Cue
 

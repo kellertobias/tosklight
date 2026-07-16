@@ -7,12 +7,16 @@ use light_core::{
     TimedValue,
 };
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
 
 type AttributeAddress = (FixtureId, AttributeKey);
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+enum PlaybackKey { Number(u16), CueList(CueListId) }
 
 pub const MAX_PLAYBACKS: u16 = 1_000;
 pub const MAX_PLAYBACK_PAGES: u8 = 127;
@@ -170,6 +174,8 @@ impl CueChange {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Cue {
+    #[serde(default = "Uuid::new_v4")]
+    pub id: Uuid,
     pub number: f64,
     pub name: String,
     pub changes: Vec<CueChange>,
@@ -196,6 +202,7 @@ pub struct GroupCueChange {
 impl Cue {
     pub fn new(number: f64) -> Self {
         Self {
+            id: Uuid::new_v4(),
             number,
             name: String::new(),
             changes: Vec::new(),
@@ -417,9 +424,26 @@ pub struct ActivePlayback {
     #[serde(default)]
     pub tracking_wrap: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_cue_id: Option<Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_cue_number: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub deleted_cue_hold: Option<DeletedCueHold>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loaded_cue_id: Option<Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loaded_cue_number: Option<f64>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct PlaybackRuntimeStatus {
+    #[serde(flatten)]
+    pub playback: ActivePlayback,
+    pub normal_next_cue_id: Option<Uuid>,
+    pub normal_next_cue_number: Option<f64>,
+    pub effective_next_cue_id: Option<Uuid>,
+    pub effective_next_cue_number: Option<f64>,
+    pub effective_next_is_loaded: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -446,7 +470,7 @@ fn default_master() -> f32 {
 #[derive(Clone, Debug)]
 pub struct PlaybackEngine {
     cue_lists: HashMap<CueListId, CueList>,
-    active: HashMap<CueListId, ActivePlayback>,
+    active: HashMap<PlaybackKey, ActivePlayback>,
     speed_groups_bpm: [u16; 5],
     sequence_master_fade_millis: u64,
     definitions: HashMap<u16, PlaybackDefinition>,
@@ -501,17 +525,21 @@ impl PlaybackEngine {
         if self.definitions.contains_key(&definition.number) {
             return Err("duplicate playback number".into());
         }
-        if self
-            .definitions
-            .values()
-            .any(|other| other.target == definition.target)
-        {
-            return Err("a cue list or group may only belong to one playback".into());
-        }
-        if let PlaybackTarget::CueList { cue_list_id } = definition.target
-            && !self.cue_lists.contains_key(&cue_list_id)
-        {
-            return Err("playback cue list does not exist".into());
+        let cue_list_id = match &definition.target {
+            PlaybackTarget::CueList { cue_list_id } => Some(*cue_list_id),
+            _ => None,
+        };
+        if let Some(cue_list_id) = cue_list_id {
+            if !self.cue_lists.contains_key(&cue_list_id) {
+                return Err("playback cue list does not exist".into());
+            }
+            let first_assignment = !self.definitions.values().any(|existing| matches!(existing.target, PlaybackTarget::CueList { cue_list_id: existing_id } if existing_id == cue_list_id));
+            if first_assignment
+                && let Some(mut playback) = self.active.remove(&PlaybackKey::CueList(cue_list_id))
+            {
+                playback.playback_number = Some(definition.number);
+                self.active.insert(PlaybackKey::Number(definition.number), playback);
+            }
         }
         self.definitions.insert(definition.number, definition);
         Ok(())
@@ -530,14 +558,12 @@ impl PlaybackEngine {
         let PlaybackTarget::CueList { cue_list_id } = definition.target else {
             return Err("group playback does not have cues".into());
         };
-        let was_active = self
-            .active
-            .get(&cue_list_id)
-            .is_some_and(|playback| playback.enabled);
-        self.go(cue_list_id)?;
+        let key = PlaybackKey::Number(number);
+        let was_active = self.active.get(&key).is_some_and(|playback| playback.enabled);
+        self.go_at_key(key, cue_list_id, self.clock.now())?;
         let result = self
             .active
-            .get_mut(&cue_list_id)
+            .get_mut(&key)
             .expect("go inserted active playback");
         result.playback_number = Some(number);
         if definition.go_activates && !was_active {
@@ -546,31 +572,65 @@ impl PlaybackEngine {
         }
         self.auto_off_overwritten();
         self.active
-            .get(&cue_list_id)
+            .get(&key)
             .ok_or_else(|| "playback was automatically switched off".into())
     }
 
     pub fn back_playback(&mut self, number: u16) -> Result<&ActivePlayback, String> {
         let id = self.cue_list_for(number)?;
-        self.back(id)
+        self.back_at_key(PlaybackKey::Number(number), id, self.clock.now())
+    }
+
+    pub fn goto_playback(&mut self, number: u16, cue_number: f64) -> Result<&ActivePlayback, String> {
+        let id = self.cue_list_for(number)?;
+        if !self.cue_lists[&id].cues.iter().any(|cue| cue.number == cue_number) { return Err("cue does not exist".into()); }
+        let key = PlaybackKey::Number(number);
+        self.jump_at_key(key, id, cue_number, self.clock.now())?;
+        let playback = self.active.get_mut(&key).unwrap();
+        playback.playback_number = Some(number);
+        playback.master = 1.0;
+        playback.enabled = true;
+        playback.loaded_cue_id = None;
+        playback.loaded_cue_number = None;
+        self.auto_off_overwritten();
+        self.active.get(&key).ok_or_else(|| "playback was automatically switched off".into())
+    }
+
+    pub fn load_playback(&mut self, number: u16, cue_number: f64) -> Result<&ActivePlayback, String> {
+        let id = self.cue_list_for(number)?;
+        let cue = self.cue_lists[&id].cues.iter().find(|cue| cue.number == cue_number).ok_or("cue does not exist")?;
+        let key = PlaybackKey::Number(number);
+        let playback = self.active.entry(key).or_insert(ActivePlayback {
+            playback_number: Some(number), cue_list_id: id, cue_index: 0, previous_index: None,
+            paused: false, activated_at: self.clock.now(), paused_at: None, master: 0.0, flash: false,
+            master_transition: None, temporary: false, enabled: false, flash_restore_off: false,
+            tracking_wrap: false, current_cue_id: None, current_cue_number: None, deleted_cue_hold: None,
+            loaded_cue_id: None, loaded_cue_number: None,
+        });
+        playback.playback_number = Some(number);
+        playback.loaded_cue_id = Some(cue.id);
+        playback.loaded_cue_number = Some(cue.number);
+        Ok(playback)
     }
 
     pub fn on(&mut self, number: u16) -> Result<(), String> {
         let id = self.cue_list_for(number)?;
-        if !self.active.contains_key(&id) {
-            self.go(id)?;
+        let key = PlaybackKey::Number(number);
+        if !self.active.contains_key(&key) {
+            self.go_at_key(key, id, self.clock.now())?;
         }
         if self.cue_lists[&id].restart_mode == RestartMode::FirstCue
-            && self.active.get(&id).is_some_and(|active| !active.enabled)
+            && self.active.get(&key).is_some_and(|active| !active.enabled)
         {
-            let active = self.active.get_mut(&id).unwrap();
+            let active = self.active.get_mut(&key).unwrap();
             active.previous_index = None;
             active.cue_index = 0;
+            active.current_cue_id = Some(self.cue_lists[&id].cues[0].id);
             active.current_cue_number = Some(self.cue_lists[&id].cues[0].number);
             active.deleted_cue_hold = None;
             active.activated_at = self.clock.now();
         }
-        let active = self.active.get_mut(&id).unwrap();
+        let active = self.active.get_mut(&key).unwrap();
         active.playback_number = Some(number);
         active.master = 1.0;
         active.enabled = true;
@@ -581,25 +641,27 @@ impl PlaybackEngine {
     }
 
     pub fn off(&mut self, number: u16) -> Result<bool, String> {
-        let id = self.cue_list_for(number)?;
+        self.cue_list_for(number)?;
         Ok(self
             .active
-            .get_mut(&id)
+            .get_mut(&PlaybackKey::Number(number))
             .map(|playback| {
                 let was = playback.enabled;
                 playback.enabled = false;
                 playback.flash = false;
                 playback.master_transition = None;
                 playback.deleted_cue_hold = None;
+                playback.loaded_cue_id = None;
+                playback.loaded_cue_number = None;
                 was
             })
             .unwrap_or(false))
     }
     pub fn toggle(&mut self, number: u16) -> Result<bool, String> {
-        let id = self.cue_list_for(number)?;
+        self.cue_list_for(number)?;
         if self
             .active
-            .get(&id)
+            .get(&PlaybackKey::Number(number))
             .is_some_and(|playback| playback.enabled)
         {
             self.off(number)?;
@@ -614,11 +676,12 @@ impl PlaybackEngine {
             return Err("playback master must be within 0-1".into());
         }
         let id = self.cue_list_for(number)?;
-        if value > 0.0 && !self.active.contains_key(&id) {
-            self.go(id)?;
+        let key = PlaybackKey::Number(number);
+        if value > 0.0 && !self.active.contains_key(&key) {
+            self.go_at_key(key, id, self.clock.now())?;
         }
         let temporary = self.definitions[&number].fader == PlaybackFaderMode::Temp;
-        if let Some(active) = self.active.get_mut(&id) {
+        if let Some(active) = self.active.get_mut(&key) {
             active.playback_number = Some(number);
             active.master = value;
             active.master_transition = None;
@@ -632,10 +695,11 @@ impl PlaybackEngine {
     }
     pub fn set_flash(&mut self, number: u16, pressed: bool) -> Result<(), String> {
         let id = self.cue_list_for(number)?;
-        if pressed && !self.active.contains_key(&id) {
-            self.go(id)?;
+        let key = PlaybackKey::Number(number);
+        if pressed && !self.active.contains_key(&key) {
+            self.go_at_key(key, id, self.clock.now())?;
         }
-        if let Some(active) = self.active.get_mut(&id) {
+        if let Some(active) = self.active.get_mut(&key) {
             active.playback_number = Some(number);
             if pressed {
                 active.flash_restore_off = !active.enabled;
@@ -684,11 +748,12 @@ impl PlaybackEngine {
             .ok_or("playback does not exist")?
             .xfade_millis;
         let id = self.cue_list_for(number)?;
-        if on && !self.active.contains_key(&id) {
-            self.go(id)?;
-            self.active.get_mut(&id).unwrap().master = 0.0;
+        let key = PlaybackKey::Number(number);
+        if on && !self.active.contains_key(&key) {
+            self.go_at_key(key, id, self.clock.now())?;
+            self.active.get_mut(&key).unwrap().master = 0.0;
         }
-        let active = self.active.get_mut(&id).ok_or("playback is not active")?;
+        let active = self.active.get_mut(&key).ok_or("playback is not active")?;
         if on {
             active.enabled = true;
         }
@@ -696,7 +761,7 @@ impl PlaybackEngine {
         if duration == 0 {
             active.master = if on { 1.0 } else { 0.0 };
             if !on {
-                self.active.get_mut(&id).unwrap().enabled = false;
+                self.active.get_mut(&key).unwrap().enabled = false;
             }
         } else {
             active.master_transition = Some(PlaybackMasterTransition {
@@ -724,13 +789,30 @@ impl PlaybackEngine {
         }
     }
 
+    fn key_for_cue_list(&self, id: CueListId) -> Result<PlaybackKey, String> {
+        let assigned = self.definitions.values().filter_map(|definition| match definition.target {
+            PlaybackTarget::CueList { cue_list_id } if cue_list_id == id => Some(definition.number),
+            _ => None,
+        }).collect::<Vec<_>>();
+        match assigned.as_slice() {
+            [] => Ok(PlaybackKey::CueList(id)),
+            [number] => Ok(PlaybackKey::Number(*number)),
+            _ => Err("cue list is assigned to multiple playbacks; address a concrete playback".into()),
+        }
+    }
+
     pub fn go(&mut self, id: CueListId) -> Result<&ActivePlayback, String> {
         self.go_at(id, self.clock.now())
     }
 
     pub fn go_at(&mut self, id: CueListId, now: DateTime<Utc>) -> Result<&ActivePlayback, String> {
+        let key = self.key_for_cue_list(id)?;
+        self.go_at_key(key, id, now)
+    }
+
+    fn go_at_key(&mut self, key: PlaybackKey, id: CueListId, now: DateTime<Utc>) -> Result<&ActivePlayback, String> {
         let cue_list = self.cue_lists.get(&id).ok_or("cue list does not exist")?;
-        let playback = match self.active.entry(id) {
+        let playback = match self.active.entry(key) {
             std::collections::hash_map::Entry::Vacant(entry) => entry.insert(ActivePlayback {
                 playback_number: None,
                 cue_list_id: id,
@@ -746,17 +828,34 @@ impl PlaybackEngine {
                 enabled: true,
                 flash_restore_off: false,
                 tracking_wrap: false,
+                current_cue_id: Some(cue_list.cues[0].id),
                 current_cue_number: Some(cue_list.cues[0].number),
                 deleted_cue_hold: None,
+                loaded_cue_id: None,
+                loaded_cue_number: None,
             }),
             std::collections::hash_map::Entry::Occupied(entry) => {
                 let playback = entry.into_mut();
+                if let Some(loaded) = playback.loaded_cue_id.take() {
+                    let index = cue_list.cues.iter().position(|cue| cue.id == loaded).ok_or("loaded cue no longer exists")?;
+                    if playback.enabled && playback.current_cue_number.is_some() { playback.previous_index = Some(playback.cue_index); } else { playback.previous_index = None; }
+                    playback.cue_index = index;
+                    playback.current_cue_id = Some(cue_list.cues[index].id);
+                    playback.current_cue_number = Some(cue_list.cues[index].number);
+                    playback.loaded_cue_number = None;
+                    playback.tracking_wrap = false;
+                    playback.paused = false;
+                    playback.paused_at = None;
+                    playback.activated_at = now;
+                    return Ok(playback);
+                }
                 if let Some(hold) = playback.deleted_cue_hold.take() {
                     if let Some(next) = hold.next_number
                         && let Some(index) = cue_list.cues.iter().position(|cue| cue.number == next)
                     {
                         playback.previous_index = None;
                         playback.cue_index = index;
+                        playback.current_cue_id = Some(cue_list.cues[index].id);
                         playback.current_cue_number = Some(next);
                         playback.tracking_wrap = false;
                         playback.activated_at = now;
@@ -783,6 +882,7 @@ impl PlaybackEngine {
                     playback.activated_at = now;
                 }
                 playback.current_cue_number = Some(cue_list.cues[playback.cue_index].number);
+                playback.current_cue_id = Some(cue_list.cues[playback.cue_index].id);
                 playback
             }
         };
@@ -799,13 +899,18 @@ impl PlaybackEngine {
         cue_number: f64,
         now: DateTime<Utc>,
     ) -> Result<&ActivePlayback, String> {
+        let key = self.key_for_cue_list(id)?;
+        self.jump_at_key(key, id, cue_number, now)
+    }
+
+    fn jump_at_key(&mut self, key: PlaybackKey, id: CueListId, cue_number: f64, now: DateTime<Utc>) -> Result<&ActivePlayback, String> {
         let cue_list = self.cue_lists.get(&id).ok_or("cue list does not exist")?;
         let index = cue_list
             .cues
             .iter()
             .position(|cue| cue.number == cue_number)
             .ok_or("cue does not exist")?;
-        let playback = self.active.entry(id).or_insert(ActivePlayback {
+        let playback = self.active.entry(key).or_insert(ActivePlayback {
             playback_number: None,
             cue_list_id: id,
             cue_index: index,
@@ -820,15 +925,21 @@ impl PlaybackEngine {
             enabled: true,
             flash_restore_off: false,
             tracking_wrap: false,
+            current_cue_id: Some(cue_list.cues[index].id),
             current_cue_number: Some(cue_list.cues[index].number),
             deleted_cue_hold: None,
+            loaded_cue_id: None,
+            loaded_cue_number: None,
         });
         if playback.cue_index != index {
             playback.previous_index = Some(playback.cue_index);
         }
         playback.cue_index = index;
+        playback.current_cue_id = Some(cue_list.cues[index].id);
         playback.current_cue_number = Some(cue_number);
         playback.deleted_cue_hold = None;
+        playback.loaded_cue_id = None;
+        playback.loaded_cue_number = None;
         playback.tracking_wrap = false;
         playback.paused = false;
         playback.paused_at = None;
@@ -844,13 +955,18 @@ impl PlaybackEngine {
         id: CueListId,
         now: DateTime<Utc>,
     ) -> Result<&ActivePlayback, String> {
-        let playback = self.active.get_mut(&id).ok_or("cue list is not active")?;
+        let key = self.key_for_cue_list(id)?;
+        self.back_at_key(key, id, now)
+    }
+    fn back_at_key(&mut self, key: PlaybackKey, id: CueListId, now: DateTime<Utc>) -> Result<&ActivePlayback, String> {
+        let playback = self.active.get_mut(&key).ok_or("cue list is not active")?;
         if let Some(hold) = playback.deleted_cue_hold.take() {
             if let Some(previous) = hold.previous_number
                 && let Some(index) = self.cue_lists[&id].cues.iter().position(|cue| cue.number == previous)
             {
                 playback.previous_index = None;
                 playback.cue_index = index;
+                playback.current_cue_id = Some(self.cue_lists[&id].cues[index].id);
                 playback.current_cue_number = Some(previous);
                 playback.tracking_wrap = false;
                 playback.activated_at = now;
@@ -863,6 +979,7 @@ impl PlaybackEngine {
         }
         playback.previous_index = Some(playback.cue_index);
         playback.cue_index = playback.cue_index.saturating_sub(1);
+        playback.current_cue_id = Some(self.cue_lists[&id].cues[playback.cue_index].id);
         playback.current_cue_number = Some(self.cue_lists[&id].cues[playback.cue_index].number);
         playback.tracking_wrap = false;
         playback.activated_at = now;
@@ -874,7 +991,8 @@ impl PlaybackEngine {
         self.pause_at(id, self.clock.now())
     }
     pub fn pause_at(&mut self, id: CueListId, now: DateTime<Utc>) -> Result<(), String> {
-        let playback = self.active.get_mut(&id).ok_or("cue list is not active")?;
+        let key = self.key_for_cue_list(id)?;
+        let playback = self.active.get_mut(&key).ok_or("cue list is not active")?;
         if !playback.paused {
             playback.paused = true;
             playback.paused_at = Some(now);
@@ -882,7 +1000,7 @@ impl PlaybackEngine {
         Ok(())
     }
     pub fn release(&mut self, id: CueListId) -> bool {
-        self.active.remove(&id).is_some()
+        self.key_for_cue_list(id).ok().is_some_and(|key| self.active.remove(&key).is_some())
     }
     pub fn active(&self) -> Vec<ActivePlayback> {
         self.active
@@ -891,16 +1009,49 @@ impl PlaybackEngine {
             .cloned()
             .collect()
     }
+    pub fn runtime(&self) -> Vec<ActivePlayback> {
+        let mut runtime = self.active.values().cloned().collect::<Vec<_>>();
+        runtime.sort_by_key(|playback| playback.playback_number.unwrap_or(u16::MAX));
+        runtime
+    }
+    pub fn runtime_status(&self) -> Vec<PlaybackRuntimeStatus> {
+        self.runtime().into_iter().map(|playback| {
+            let cue_list = self.cue_lists.get(&playback.cue_list_id);
+            let normal = cue_list.and_then(|list| {
+                if let Some(hold) = &playback.deleted_cue_hold {
+                    return hold.next_number.and_then(|number| list.cues.iter().find(|cue| cue.number == number));
+                }
+                if playback.current_cue_id.is_none() && playback.current_cue_number.is_none() {
+                    return list.cues.first();
+                }
+                let index = playback.current_cue_id
+                    .and_then(|id| list.cues.iter().position(|cue| cue.id == id))
+                    .or_else(|| playback.current_cue_number.and_then(|number| list.cues.iter().position(|cue| cue.number == number)))
+                    .unwrap_or(playback.cue_index.min(list.cues.len().saturating_sub(1)));
+                list.cues.get(index + 1).or_else(|| (list.effective_wrap_mode() != WrapMode::Off).then(|| list.cues.first()).flatten())
+            });
+            let loaded = cue_list.and_then(|list| playback.loaded_cue_id.and_then(|id| list.cues.iter().find(|cue| cue.id == id)));
+            let effective = loaded.or(normal);
+            PlaybackRuntimeStatus {
+                normal_next_cue_id: normal.map(|cue| cue.id),
+                normal_next_cue_number: normal.map(|cue| cue.number),
+                effective_next_cue_id: effective.map(|cue| cue.id),
+                effective_next_cue_number: effective.map(|cue| cue.number),
+                effective_next_is_loaded: loaded.is_some(),
+                playback,
+            }
+        }).collect()
+    }
 
     fn auto_off_overwritten(&mut self) {
         let full: Vec<_> = self
             .active
-            .values()
-            .filter(|p| p.enabled && p.master >= 1.0 && !p.flash && !p.temporary)
-            .map(|p| (p.cue_list_id, p.activated_at))
+            .iter()
+            .filter(|(_, p)| p.enabled && p.master >= 1.0 && !p.flash && !p.temporary)
+            .map(|(key, p)| (*key, p.cue_list_id, p.activated_at))
             .collect();
         let mut release = Vec::new();
-        for playback in self.active.values() {
+        for (own_key, playback) in &self.active {
             if !playback.enabled {
                 continue;
             }
@@ -916,13 +1067,13 @@ impl PlaybackEngine {
             }
             let own_list = &self.cue_lists[&playback.cue_list_id];
             let covered = own.iter().all(|(address, own_value)| {
-                full.iter().any(|(other, changed)| {
-                    if *other == playback.cue_list_id {
+                full.iter().any(|(other_key, other, changed)| {
+                    if other_key == own_key {
                         return false;
                     }
                     let other_list = &self.cue_lists[other];
                     let Some(other_value) = other_list
-                        .state_at_index(self.active[other].cue_index)
+                        .state_at_index(self.active[other_key].cue_index)
                         .get(address)
                         .cloned()
                     else {
@@ -939,11 +1090,11 @@ impl PlaybackEngine {
                 })
             });
             if covered {
-                release.push(playback.cue_list_id);
+                release.push(*own_key);
             }
         }
-        for id in release {
-            if let Some(playback) = self.active.get_mut(&id) {
+        for key in release {
+            if let Some(playback) = self.active.get_mut(&key) {
                 playback.enabled = false;
             }
         }
@@ -957,34 +1108,54 @@ impl PlaybackEngine {
                 continue;
             };
             if playback.deleted_cue_hold.is_none()
-                && let Some(number) = playback.current_cue_number
-                && let Some(index) = cue_list.cues.iter().position(|cue| cue.number == number)
+                && let Some(index) = playback.current_cue_id
+                    .and_then(|id| cue_list.cues.iter().position(|cue| cue.id == id))
+                    .or_else(|| playback.current_cue_number.and_then(|number| cue_list.cues.iter().position(|cue| cue.number == number)))
             {
                 playback.cue_index = index;
+                playback.current_cue_id = Some(cue_list.cues[index].id);
+                playback.current_cue_number = Some(cue_list.cues[index].number);
             } else {
                 playback.cue_index = playback.cue_index.min(last);
             }
             playback.previous_index = playback.previous_index.map(|index| index.min(last));
-            self.active.insert(playback.cue_list_id, playback);
+            if let Some(loaded) = playback.loaded_cue_id
+                && let Some(cue) = cue_list.cues.iter().find(|cue| cue.id == loaded)
+            {
+                playback.loaded_cue_number = Some(cue.number);
+            } else if playback.loaded_cue_id.is_some() {
+                playback.loaded_cue_id = None;
+                playback.loaded_cue_number = None;
+            }
+            let key = playback.playback_number.map(PlaybackKey::Number).unwrap_or(PlaybackKey::CueList(playback.cue_list_id));
+            self.active.insert(key, playback);
         }
     }
 
     pub fn active_for_snapshot(&self, next_lists: &[CueList], now: DateTime<Utc>) -> Vec<ActivePlayback> {
-        self.active.values().cloned().map(|mut playback| {
+        self.active.iter().map(|(key, value)| {
+            let mut playback = value.clone();
             let Some(old_list) = self.cue_lists.get(&playback.cue_list_id) else { return playback; };
-            let number = playback.current_cue_number.or_else(|| old_list.cues.get(playback.cue_index).map(|cue| cue.number));
+            let infer_legacy_current = playback.enabled || playback.current_cue_number.is_some() || playback.current_cue_id.is_some();
+            let current_id = playback.current_cue_id.or_else(|| infer_legacy_current.then(|| old_list.cues.get(playback.cue_index).map(|cue| cue.id)).flatten());
+            playback.current_cue_id = current_id;
+            let number = playback.current_cue_number.or_else(|| infer_legacy_current.then(|| old_list.cues.get(playback.cue_index).map(|cue| cue.number)).flatten());
             playback.current_cue_number = number;
             let Some(number) = number else { return playback; };
             let Some(next) = next_lists.iter().find(|list| list.id == playback.cue_list_id) else { return playback; };
-            if next.cues.iter().any(|cue| cue.number == number) { return playback; }
+            if let Some(index) = current_id.and_then(|id| next.cues.iter().position(|cue| cue.id == id)) {
+                playback.cue_index = index;
+                playback.current_cue_number = Some(next.cues[index].number);
+                return playback;
+            }
             let previous_number = next.cues.iter().filter(|cue| cue.number < number).next_back().map(|cue| cue.number);
             let next_number = next.cues.iter().find(|cue| cue.number > number).map(|cue| cue.number);
             let mut isolated = PlaybackEngine {
-                cue_lists: self.cue_lists.clone(), active: HashMap::from([(playback.cue_list_id, playback.clone())]),
+                cue_lists: self.cue_lists.clone(), active: HashMap::from([(*key, playback.clone())]),
                 speed_groups_bpm: self.speed_groups_bpm, sequence_master_fade_millis: self.sequence_master_fade_millis,
                 definitions: self.definitions.clone(), clock: Arc::clone(&self.clock),
             };
-            isolated.active.get_mut(&playback.cue_list_id).unwrap().deleted_cue_hold = None;
+            isolated.active.get_mut(key).unwrap().deleted_cue_hold = None;
             playback.deleted_cue_hold = Some(DeletedCueHold { deleted_number: number, previous_number, next_number, contributions: isolated.contributions_at(now) });
             playback
         }).collect()
@@ -992,7 +1163,7 @@ impl PlaybackEngine {
 
     pub fn tick(&mut self, now: DateTime<Utc>, timecode_frame: Option<u64>) {
         let mut transition_releases = Vec::new();
-        for playback in self.active.values_mut() {
+        for (key, playback) in &mut self.active {
             let Some(transition) = playback.master_transition.clone() else {
                 continue;
             };
@@ -1007,23 +1178,21 @@ impl PlaybackEngine {
             if progress >= 1.0 {
                 playback.master_transition = None;
                 if transition.release_after {
-                    transition_releases.push(playback.cue_list_id);
+                    transition_releases.push(*key);
                 }
             }
         }
-        for id in transition_releases {
-            if let Some(playback) = self.active.get_mut(&id) {
+        for key in transition_releases {
+            if let Some(playback) = self.active.get_mut(&key) {
                 playback.enabled = false;
             }
         }
         let ids: Vec<_> = self.active.keys().copied().collect();
-        for id in ids {
-            let Some(cue_list) = self.cue_lists.get(&id) else {
+        for key in ids {
+            let Some(playback) = self.active.get_mut(&key) else {
                 continue;
             };
-            let Some(playback) = self.active.get_mut(&id) else {
-                continue;
-            };
+            let Some(cue_list) = self.cue_lists.get(&playback.cue_list_id) else { continue; };
             if !playback.enabled {
                 continue;
             }
@@ -1046,6 +1215,7 @@ impl PlaybackEngine {
             {
                 playback.previous_index = Some(playback.cue_index);
                 playback.cue_index = index;
+                playback.current_cue_id = Some(cue_list.cues[index].id);
                 playback.current_cue_number = Some(cue_list.cues[index].number);
                 playback.deleted_cue_hold = None;
                 playback.activated_at = now;
@@ -1087,6 +1257,7 @@ impl PlaybackEngine {
                     playback.tracking_wrap = cue_list.effective_wrap_mode() == WrapMode::Tracking;
                 }
                 playback.current_cue_number = Some(cue_list.cues[playback.cue_index].number);
+                playback.current_cue_id = Some(cue_list.cues[playback.cue_index].id);
                 playback.activated_at = now;
             }
         }
@@ -1995,6 +2166,89 @@ mod tests {
         engine.go_at(high_id, started).unwrap();
         engine.go_at(low_id, started + ChronoDuration::milliseconds(1)).unwrap();
         assert_eq!(resolve(engine.contributions_at(started + ChronoDuration::milliseconds(1)))[&(fixture, AttributeKey::intensity())], AttributeValue::Normalized(0.2));
+    }
+
+    #[test]
+    fn concrete_playbacks_share_a_cuelist_but_keep_independent_runtime() {
+        let fixture = FixtureId::new();
+        let mut one = Cue::new(1.0); one.changes.push(value(fixture, "intensity", 0.1));
+        let mut two = Cue::new(2.0); two.changes.push(value(fixture, "intensity", 0.5));
+        let mut three = Cue::new(3.0); three.changes.push(value(fixture, "intensity", 0.9));
+        let cue_list = list(vec![one, two, three]);
+        let id = cue_list.id;
+        let mut engine = PlaybackEngine::default();
+        engine.register(cue_list).unwrap();
+        engine.register_definition(definition(1, id)).unwrap();
+        engine.register_definition(definition(2, id)).unwrap();
+        engine.goto_playback(1, 2.0).unwrap();
+        engine.goto_playback(2, 3.0).unwrap();
+        let runtime = engine.runtime();
+        assert_eq!(runtime.iter().find(|item| item.playback_number == Some(1)).unwrap().current_cue_number, Some(2.0));
+        assert_eq!(runtime.iter().find(|item| item.playback_number == Some(2)).unwrap().current_cue_number, Some(3.0));
+        assert!(engine.go(id).unwrap_err().contains("multiple playbacks"));
+    }
+
+    #[test]
+    fn load_is_silent_consumed_by_go_and_cleared_by_off() {
+        let fixture = FixtureId::new();
+        let mut one = Cue::new(1.0); one.changes.push(value(fixture, "intensity", 0.1));
+        let mut two = Cue::new(2.0); two.changes.push(value(fixture, "intensity", 0.5));
+        let mut three = Cue::new(3.0); three.changes.push(value(fixture, "intensity", 0.9));
+        let cue_list = list(vec![one, two, three]);
+        let id = cue_list.id;
+        let mut engine = PlaybackEngine::default();
+        engine.register(cue_list).unwrap();
+        engine.register_definition(definition(1, id)).unwrap();
+        engine.load_playback(1, 2.0).unwrap();
+        assert!(engine.active().is_empty());
+        assert!(engine.contributions().is_empty());
+        assert_eq!(engine.runtime()[0].loaded_cue_number, Some(2.0));
+        engine.go_playback(1).unwrap();
+        assert_eq!(engine.active()[0].current_cue_number, Some(2.0));
+        assert_eq!(engine.active()[0].loaded_cue_number, None);
+        engine.go_playback(1).unwrap();
+        assert_eq!(engine.active()[0].current_cue_number, Some(3.0));
+        engine.load_playback(1, 1.0).unwrap();
+        engine.back_playback(1).unwrap();
+        assert_eq!(engine.active()[0].loaded_cue_number, Some(1.0), "GO minus deliberately preserves Load");
+        engine.off(1).unwrap();
+        assert_eq!(engine.runtime()[0].loaded_cue_number, None);
+    }
+
+    #[test]
+    fn loaded_feedback_tracks_stable_identity_through_renumber_and_deletion() {
+        let original = list(vec![Cue::new(1.0), Cue::new(2.0), Cue::new(3.0)]);
+        let id = original.id;
+        let loaded_id = original.cues[1].id;
+        let mut engine = PlaybackEngine::default();
+        engine.register(original.clone()).unwrap();
+        engine.register_definition(definition(1, id)).unwrap();
+        engine.load_playback(1, 2.0).unwrap();
+        let status = engine.runtime_status().remove(0);
+        assert_eq!((status.normal_next_cue_number, status.effective_next_cue_number, status.effective_next_is_loaded), (Some(1.0), Some(2.0), true));
+
+        let mut renumbered = original.clone();
+        renumbered.cues[1].number = 8.0;
+        renumbered.cues.sort_by(|left, right| left.number.total_cmp(&right.number));
+        let active = engine.active_for_snapshot(&[renumbered.clone()], Utc::now());
+        let mut restored = PlaybackEngine::default();
+        restored.register(renumbered.clone()).unwrap();
+        restored.register_definition(definition(1, id)).unwrap();
+        restored.restore_active(active);
+        let status = restored.runtime_status().remove(0);
+        assert_eq!(status.playback.loaded_cue_id, Some(loaded_id));
+        assert_eq!(status.effective_next_cue_number, Some(8.0));
+
+        renumbered.cues.retain(|cue| cue.id != loaded_id);
+        let active = restored.active_for_snapshot(&[renumbered.clone()], Utc::now());
+        let mut deleted = PlaybackEngine::default();
+        deleted.register(renumbered).unwrap();
+        deleted.register_definition(definition(1, id)).unwrap();
+        deleted.restore_active(active);
+        let status = deleted.runtime_status().remove(0);
+        assert_eq!(status.playback.loaded_cue_id, None);
+        assert!(!status.effective_next_is_loaded);
+        assert_eq!(status.effective_next_cue_number, Some(1.0));
     }
 
     #[test]

@@ -9,7 +9,7 @@ use std::path::Path;
 use thiserror::Error;
 use uuid::Uuid;
 
-const DESK_SCHEMA_VERSION: i64 = 5;
+const DESK_SCHEMA_VERSION: i64 = 6;
 const SHOW_SCHEMA_VERSION: i64 = 3;
 
 #[derive(Debug, Error)]
@@ -259,6 +259,17 @@ impl DeskStore {
             return Err(StoreError::Invalid("page must be within 1-127".into()));
         }
         self.conn.execute("INSERT INTO control_desk_pages(desk_id,show_id,page) VALUES (?1,?2,?3) ON CONFLICT(desk_id,show_id) DO UPDATE SET page=excluded.page",params![desk.to_string(),show.0.to_string(),page])?;
+        Ok(())
+    }
+    pub fn selected_playback(&self, desk: Uuid, show: ShowId) -> Result<Option<u16>, StoreError> {
+        self.conn.query_row("SELECT playback FROM control_desk_selections WHERE desk_id=?1 AND show_id=?2", params![desk.to_string(),show.0.to_string()], |row| row.get(0)).optional().map_err(Into::into)
+    }
+    pub fn set_selected_playback(&self, desk: Uuid, show: ShowId, playback: Option<u16>) -> Result<(), StoreError> {
+        if playback.is_some_and(|number| !(1..=1_000).contains(&number)) { return Err(StoreError::Invalid("playback must be within 1-1000".into())); }
+        match playback {
+            Some(number) => { self.conn.execute("INSERT INTO control_desk_selections(desk_id,show_id,playback) VALUES (?1,?2,?3) ON CONFLICT(desk_id,show_id) DO UPDATE SET playback=excluded.playback", params![desk.to_string(),show.0.to_string(),number])?; }
+            None => { self.conn.execute("DELETE FROM control_desk_selections WHERE desk_id=?1 AND show_id=?2", params![desk.to_string(),show.0.to_string()])?; }
+        }
         Ok(())
     }
 
@@ -884,6 +895,7 @@ fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
       CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS control_desks(id TEXT PRIMARY KEY,name TEXT NOT NULL,osc_alias TEXT NOT NULL UNIQUE COLLATE NOCASE,columns_count INTEGER NOT NULL DEFAULT 8,rows_count INTEGER NOT NULL DEFAULT 1,buttons_count INTEGER NOT NULL DEFAULT 3);
       CREATE TABLE IF NOT EXISTS control_desk_pages(desk_id TEXT NOT NULL,show_id TEXT NOT NULL,page INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(desk_id,show_id),FOREIGN KEY(desk_id) REFERENCES control_desks(id) ON DELETE CASCADE);
+      CREATE TABLE IF NOT EXISTS control_desk_selections(desk_id TEXT NOT NULL,show_id TEXT NOT NULL,playback INTEGER NOT NULL,PRIMARY KEY(desk_id,show_id),FOREIGN KEY(desk_id) REFERENCES control_desks(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS screens(id TEXT PRIMARY KEY,name TEXT NOT NULL,layout_json TEXT NOT NULL DEFAULT '{"desks":[],"activeDeskId":""}',show_dock INTEGER NOT NULL DEFAULT 1,show_playbacks INTEGER NOT NULL DEFAULT 1,playback_count INTEGER NOT NULL DEFAULT 8,playback_rows INTEGER NOT NULL DEFAULT 1,first_playback_slot INTEGER NOT NULL DEFAULT 1,page_mode TEXT NOT NULL DEFAULT 'follow_main',show_page_controls INTEGER NOT NULL DEFAULT 1,desired_open INTEGER NOT NULL DEFAULT 0,display_id TEXT,bounds_json TEXT,fullscreen INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS screen_pages(screen_id TEXT NOT NULL,show_id TEXT NOT NULL,page INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(screen_id,show_id),FOREIGN KEY(screen_id) REFERENCES screens(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,token TEXT NOT NULL,programmer_json TEXT NOT NULL,connected INTEGER NOT NULL CHECK(connected IN(0,1)),updated_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id));"#)?;
@@ -1081,6 +1093,29 @@ mod tests {
         assert_eq!(desk.desk_page(control.id, second).unwrap(), 1);
         assert!(desk.set_desk_page(control.id, first, 128).is_err());
         drop(desk);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn selected_playback_is_persisted_per_desk_and_show() {
+        let path = temporary("selected-playback");
+        let first_show = ShowId::new();
+        let second_show = ShowId::new();
+        let (first_desk, second_desk) = {
+            let store = DeskStore::open(&path).unwrap();
+            let first = store.add_desk("Front", "front").unwrap();
+            let second = store.add_desk("Backup", "backup").unwrap();
+            store.set_selected_playback(first.id, first_show, Some(17)).unwrap();
+            store.set_selected_playback(second.id, first_show, Some(23)).unwrap();
+            (first.id, second.id)
+        };
+        let store = DeskStore::open(&path).unwrap();
+        assert_eq!(store.selected_playback(first_desk, first_show).unwrap(), Some(17));
+        assert_eq!(store.selected_playback(second_desk, first_show).unwrap(), Some(23));
+        assert_eq!(store.selected_playback(first_desk, second_show).unwrap(), None);
+        store.set_selected_playback(first_desk, first_show, None).unwrap();
+        assert_eq!(store.selected_playback(first_desk, first_show).unwrap(), None);
+        drop(store);
         let _ = fs::remove_file(path);
     }
 

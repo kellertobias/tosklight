@@ -43,6 +43,17 @@ describe("software keypad", () => {
     expect(editCommandWithSoftwareKey("1 AT 100 ", "-")).toEqual({ command: "1 AT 100 - ", execute: false });
   });
 
+  it("builds selected-playback Go To and Load Cue commands", () => {
+    let goTo = editTargetedCommandWithSoftwareKey("FIXTURE", "CUE", "FIXTURE", true);
+    goTo = editTargetedCommandWithSoftwareKey(goTo.command, "8", "FIXTURE", goTo.pristine);
+    expect(goTo.command).toBe("CUE 8");
+
+    let load = editTargetedCommandWithSoftwareKey("FIXTURE", "CUE", "FIXTURE", true);
+    load = editTargetedCommandWithSoftwareKey(load.command, "CUE", "FIXTURE", load.pristine);
+    load = editTargetedCommandWithSoftwareKey(load.command, "8", "FIXTURE", load.pristine);
+    expect(load.command).toBe("CUE CUE 8");
+  });
+
   it("enters SELECT from its software shortcut without selecting a playback", () => {
     expect(editTargetedCommandWithSoftwareKey("FIXTURE", "SELECT", "FIXTURE", true)).toEqual({
       command: "SELECT", execute: false, pristine: false,

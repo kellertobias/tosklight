@@ -85,16 +85,10 @@ impl EngineSnapshot {
             cue_list.validate().map_err(EngineError::Invalid)?;
         }
         let mut playback_numbers = std::collections::HashSet::new();
-        let mut playback_targets = std::collections::HashSet::new();
         for playback in &self.playbacks {
             playback.validate().map_err(EngineError::Invalid)?;
             if !playback_numbers.insert(playback.number) {
                 return Err(EngineError::Invalid("duplicate playback number".into()));
-            }
-            if !playback_targets.insert(playback.target.clone()) {
-                return Err(EngineError::Invalid(
-                    "a target may only belong to one playback".into(),
-                ));
             }
             match &playback.target {
                 PlaybackTarget::CueList { cue_list_id }

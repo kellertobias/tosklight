@@ -311,6 +311,7 @@ export interface PatchLayer {
 }
 
 export interface Cue {
+  id?: string;
   number: number;
   name: string;
   fade_millis: number;
@@ -379,9 +380,16 @@ export interface PlaybackSnapshot {
     activated_at?: string;
     master: number;
     flash: boolean;
+    enabled?: boolean;
+    current_cue_number?: number | null;
+    loaded_cue_number?: number | null;
+    normal_next_cue_number?: number | null;
+    effective_next_cue_number?: number | null;
+    effective_next_is_loaded?: boolean;
   }>;
   desk: ControlDesk;
   active_page: number;
+  selected_playback?: number | null;
 }
 
 export type PlaybackButtonAction = "on" | "off" | "toggle" | "go" | "go_minus" | "fast_forward" | "fast_rewind" | "flash" | "temp" | "swap" | "select" | "select_contents" | "learn" | "double" | "half" | "pause" | "blackout" | "pause_dynamics" | "none";

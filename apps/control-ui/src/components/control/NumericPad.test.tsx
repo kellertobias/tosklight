@@ -21,7 +21,7 @@ const server = {
   executeCommandLine: vi.fn().mockResolvedValue(true),
   setCommandLine: vi.fn(),
   setControlTiming: vi.fn(),
-  playbacks: { active: [{ playback_number: 42, cue_list_id: "main", cue_index: 0, paused: false, master: 1, flash: false }] },
+  playbacks: { selected_playback: 42, active: [{ playback_number: 7, cue_list_id: "running", cue_index: 0, paused: false, master: 1, flash: false }] },
 };
 const state = {
   storeArmed: false,
@@ -64,7 +64,7 @@ describe("NumericPad layout", () => {
     expect(screen.getByRole("button", { name: "ENT" })).toHaveStyle({ gridColumn: "4", gridRow: "5 / span 1" });
   });
 
-  it("routes Shift shortcuts to built-ins, the active playback, and stored desks", () => {
+  it("routes Shift shortcuts to built-ins, the explicitly selected playback, and stored desks", () => {
     render(<NumericPad/>);
     const shifted = (key: string) => {
       fireEvent.click(screen.getByRole("button", { name: "SHIFT" }));

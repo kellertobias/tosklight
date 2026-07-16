@@ -69,7 +69,7 @@ export function NumericPad() {
         return;
       }
       if (key === "4") {
-        const activePlayback = server.playbacks?.active.find((item) => item.playback_number != null)?.playback_number;
+        const activePlayback = server.playbacks?.selected_playback;
         dispatch({ type: "OPEN_BUILTIN", kind: "cuelists" });
         if (activePlayback != null) dispatch({ type: "OPEN_BUILTIN_CUELIST", number: activePlayback });
         return;

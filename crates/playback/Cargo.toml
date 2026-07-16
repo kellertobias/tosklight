@@ -8,6 +8,7 @@ license.workspace = true
 chrono.workspace = true
 light-core = { path = "../core" }
 serde.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true

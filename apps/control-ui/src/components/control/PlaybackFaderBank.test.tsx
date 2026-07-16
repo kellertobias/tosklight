@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   executeCommandLine: vi.fn(),
   refresh: vi.fn(),
   poolPlaybackAction: vi.fn(),
+  resetCommandLine: vi.fn(),
+  commandLine: "FIXTURE",
   unassignPagePlayback: vi.fn(),
   state: {
     midiProfile: null,
@@ -34,6 +36,8 @@ vi.mock("../../api/ServerContext", () => ({
     bootstrap: { hardware_connected: false },
     playbacks: mocks.playbacks,
     groups: [],
+    commandLine: mocks.commandLine,
+    resetCommandLine: mocks.resetCommandLine,
     executeCommandLine: mocks.executeCommandLine,
     refresh: mocks.refresh,
     poolPlaybackAction: mocks.poolPlaybackAction,
@@ -58,6 +62,8 @@ describe("PlaybackFaderBank Set assignment", () => {
     mocks.executeCommandLine.mockReset().mockResolvedValue(true);
     mocks.refresh.mockReset().mockResolvedValue(undefined);
     mocks.poolPlaybackAction.mockReset();
+    mocks.resetCommandLine.mockReset();
+    mocks.commandLine = "FIXTURE";
     mocks.unassignPagePlayback.mockReset().mockResolvedValue(true);
     Object.assign(mocks.state, { cueListSetTarget: 12, cueListSetArmed: true, playbackSetArmed: false, shiftArmed: false });
     mocks.playbacks.pages[0].slots = {};
@@ -94,6 +100,18 @@ describe("PlaybackFaderBank Set assignment", () => {
     fireEvent.click(screen.getByRole("button", { name: "GO" }));
     expect(screen.getByRole("dialog", { name: "Playback Configuration" })).toBeInTheDocument();
     expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
+  });
+
+  it("uses SELECT then a playback touch without firing the playback button", async () => {
+    assignPlayback();
+    mocks.commandLine = "SELECT";
+    mocks.poolPlaybackAction.mockResolvedValue(undefined);
+    render(<PlaybackFaderBank count={1}/>);
+    fireEvent.click(screen.getByRole("button", { name: "GO" }));
+    await waitFor(() => expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "select"));
+    expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(1);
+    expect(mocks.refresh).toHaveBeenCalledOnce();
+    expect(mocks.resetCommandLine).toHaveBeenCalledOnce();
   });
 
   it("recognizes the marked click produced by a playback right-click", () => {

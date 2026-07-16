@@ -1270,7 +1270,7 @@ async fn health() -> Json<serde_json::Value> {
 }
 async fn version() -> Json<serde_json::Value> {
     Json(
-        serde_json::json!({"service":"light-server","version":env!("CARGO_PKG_VERSION"),"api_version":"v1","show_schema":3,"desk_schema":4}),
+        serde_json::json!({"service":"light-server","version":env!("CARGO_PKG_VERSION"),"api_version":"v1","show_schema":3,"desk_schema":6}),
     )
 }
 async fn readiness(State(state): State<AppState>) -> Result<Json<serde_json::Value>, ApiError> {
@@ -3104,6 +3104,12 @@ async fn put_object(
         body =
             serde_json::to_value(fixture).map_err(|error| ApiError::internal(error.to_string()))?;
     }
+    if kind == "cue_list" {
+        let cue_list = serde_json::from_value::<light_playback::CueList>(body)
+            .map_err(|error| ApiError::bad_request(error.to_string()))?;
+        body = serde_json::to_value(cue_list)
+            .map_err(|error| ApiError::internal(error.to_string()))?;
+    }
     let active = state
         .active_show
         .read()
@@ -3492,14 +3498,16 @@ async fn playbacks(
         .as_ref()
         .and_then(|show| state.desk.lock().desk_page(session.desk.id, show.id).ok())
         .unwrap_or(1);
+    let selected_playback = state.active_show.read().as_ref().and_then(|show| state.desk.lock().selected_playback(session.desk.id, show.id).ok().flatten());
     Ok(Json(
-        serde_json::json!({"cue_lists":snapshot.cue_lists,"pool":snapshot.playbacks,"pages":snapshot.playback_pages,"active":state.engine.playback().read().active(),"desk":session.desk,"active_page":active_page}),
+        serde_json::json!({"cue_lists":snapshot.cue_lists,"pool":snapshot.playbacks,"pages":snapshot.playback_pages,"active":state.engine.playback().read().runtime_status(),"desk":session.desk,"active_page":active_page,"selected_playback":selected_playback}),
     ))
 }
 
 #[derive(Default, Deserialize)]
 struct PoolPlaybackInput {
     value: Option<f32>,
+    cue_number: Option<f64>,
     pressed: Option<bool>,
     surface: Option<String>,
 }
@@ -3789,7 +3797,11 @@ async fn pool_playback_action(
         );
         return Ok(Json(serde_json::json!({"pending":true,"playback":definition})));
     }
-    if let light_playback::PlaybackTarget::Group { group_id } = &definition.target {
+    if action == "select" {
+        let show = state.active_show.read().clone().ok_or_else(|| ApiError::bad_request("no show is open"))?;
+        state.desk.lock().set_selected_playback(session.desk.id, show.id, Some(number)).map_err(ApiError::store)?;
+        emit(&state, "playback_selected", serde_json::json!({"desk_id":session.desk.id,"playback_number":number}));
+    } else if let light_playback::PlaybackTarget::Group { group_id } = &definition.target {
         let value = match action.as_str() {
             "on" => 1.0,
             "off" => 0.0,
@@ -3838,7 +3850,7 @@ async fn pool_playback_action(
     );
     let snapshot = state.engine.snapshot();
     Ok(Json(
-        serde_json::json!({"playback":definition,"active":state.engine.playback().read().active(),"groups":snapshot.groups}),
+        serde_json::json!({"playback":definition,"active":state.engine.playback().read().runtime_status(),"groups":snapshot.groups}),
     ))
 }
 
@@ -3863,6 +3875,8 @@ fn execute_pool_playback_action(
             .map_err(ApiError::bad_request)?; }
         "xfade-on" => { engine.xfade(number, true).map_err(ApiError::bad_request)?; }
         "xfade-off" => { engine.xfade(number, false).map_err(ApiError::bad_request)?; }
+        "go-to" => { engine.goto_playback(number, input.cue_number.ok_or_else(|| ApiError::bad_request("cue_number is required"))?).map_err(ApiError::bad_request)?; }
+        "load" => { engine.load_playback(number, input.cue_number.ok_or_else(|| ApiError::bad_request("cue_number is required"))?).map_err(ApiError::bad_request)?; }
         _ => return Err(ApiError::not_found("playback action")),
     }
     Ok(())
@@ -5588,6 +5602,15 @@ fn execute_show_command(
             refresh_command_show(state, &entry)?;
             return Ok(programmer.selected.len());
         }
+        if body.first().is_some_and(|token| token == "CUE") {
+            let show = state.active_show.read().clone().ok_or("no show is open")?;
+            let playback = state.desk.lock().selected_playback(session.desk.id, show.id)
+                .map_err(|error| error.to_string())?
+                .ok_or("no playback is selected; use RECORD SET <playback> CUE <cue>")?;
+            let number = parse_command_cue_number(&body[1..])?;
+            store_cue_at(state, session, playback, Some(number), timing, record_operation)?;
+            return Ok(1);
+        }
         if body.first().is_some_and(|token| token == "SET") {
             let (address, used) = parse_playback_address(body, true, &snapshot)?;
             if used != body.len() {
@@ -6101,6 +6124,36 @@ fn spread_position(points: &[f32], index: usize, count: usize) -> f32 {
     points[left] + (points[right] - points[left]) * (position - left as f32)
 }
 
+fn parse_command_cue_number(tokens: &[String]) -> Result<f64, String> {
+    if tokens.is_empty() { return Err("CUE requires a cue number".into()); }
+    let value = tokens.join("");
+    let number = value.parse::<f64>().map_err(|_| "cue number is invalid")?;
+    if !number.is_finite() || number <= 0.0 { return Err("cue number must be positive".into()); }
+    Ok(number)
+}
+
+fn execute_cue_operation(state: &AppState, session: &Session, tokens: &[String]) -> Result<usize, String> {
+    let load = tokens.get(1).is_some_and(|token| token == "CUE");
+    let start = if load { 2 } else { 1 };
+    let snapshot = state.engine.snapshot();
+    let (playback, cue_number) = if tokens.get(start).is_some_and(|token| token == "SET") {
+        let (address, consumed) = parse_playback_address(&tokens[start..], true, &snapshot)?;
+        if start + consumed != tokens.len() { return Err("unexpected tokens after Cue address".into()); }
+        (address.playback, address.cue.ok_or("explicit Cue address requires CUE and a Cue number")?)
+    } else {
+        let show = state.active_show.read().clone().ok_or("no show is open")?;
+        let selected = state.desk.lock().selected_playback(session.desk.id, show.id).map_err(|error| error.to_string())?
+            .ok_or("no playback is selected; select a playback or use CUE SET <playback> CUE <cue>")?;
+        (selected, parse_command_cue_number(&tokens[start..])?)
+    };
+    if !snapshot.playbacks.iter().any(|definition| definition.number == playback) { return Err(format!("playback {playback} does not exist")); }
+    let mut engine = state.engine.playback().write();
+    if load { engine.load_playback(playback, cue_number)?; } else { engine.goto_playback(playback, cue_number)?; }
+    drop(engine);
+    emit(state, "playback_changed", serde_json::json!({"playback_number":playback,"action":if load {"load"} else {"go-to"},"cue_number":cue_number,"session_id":session.id}));
+    Ok(1)
+}
+
 fn execute_programmer_command(
     state: &AppState,
     session: &Session,
@@ -6138,6 +6191,9 @@ fn execute_programmer_command(
     let (tokens, timing) = extract_command_timing(&raw_tokens)?;
     if tokens.is_empty() {
         return Err("the command line is empty".into());
+    }
+    if tokens.first().is_some_and(|token| token == "CUE") {
+        return execute_cue_operation(state, session, &tokens);
     }
     if tokens.first().is_some_and(|token| token == "AT") {
         return apply_current_selection_value(state, session, &tokens[1..], timing);
@@ -7002,12 +7058,13 @@ fn edit_osc_programmer_command(command: &str, key: &str, target: &str) -> String
         "dot" => ".",
         "div" => "DIV",
         "set" => "SET",
+        "cue" => "CUE",
         "rec" => "RECORD",
         value => value,
     };
     if matches!(
         token,
-        "GROUP" | "THRU" | "+" | "-" | "AT" | "TIME" | "DELAY" | "DIV" | "SET" | "RECORD"
+        "GROUP" | "THRU" | "+" | "-" | "AT" | "TIME" | "DELAY" | "DIV" | "SET" | "CUE" | "RECORD"
     ) {
         format!("{trimmed} {token}")
             .split_whitespace()
@@ -7255,7 +7312,7 @@ fn send_osc_feedback(state: &AppState, _full: bool) {
         return;
     };
     let snapshot = state.engine.snapshot();
-    let active = state.engine.playback().read().active();
+    let runtime = state.engine.playback().read().runtime_status();
     for subscriber in subscribers {
         let Ok(Some(desk)) = state
             .desk
@@ -7271,6 +7328,7 @@ fn send_osc_feedback(state: &AppState, _full: bool) {
             vec![OscArgument::Bool(read_desk_lock(state, desk.id).locked)],
         );
         let page = state.desk.lock().desk_page(desk.id, show.id).unwrap_or(1);
+        let selected_playback = state.desk.lock().selected_playback(desk.id, show.id).ok().flatten();
         send_osc(
             state,
             subscriber.target,
@@ -7289,7 +7347,7 @@ fn send_osc_feedback(state: &AppState, _full: bool) {
             vec![OscArgument::String(command_line.clone())],
         );
         for key in [
-            "group", "at", "thru", "plus", "minus", "time", "delay", "record", "clear", "enter",
+            "group", "at", "thru", "plus", "minus", "time", "delay", "cue", "record", "clear", "enter",
             "preload",
         ] {
             let token = match key {
@@ -7312,8 +7370,8 @@ fn send_osc_feedback(state: &AppState, _full: bool) {
         let page_definition = snapshot.playback_pages.iter().find(|p| p.number == page);
         for slot in 1u8..=96 {
             let number = page_definition.and_then(|p| p.slots.get(&slot)).copied();
-            let running = number.and_then(|n| active.iter().find(|a| a.playback_number == Some(n)));
-            let level = running.map(|a| a.master).unwrap_or(0.0);
+            let running = number.and_then(|n| runtime.iter().find(|a| a.playback.playback_number == Some(n)));
+            let level = running.filter(|a| a.playback.enabled).map(|a| a.playback.master).unwrap_or(0.0);
             for name in ["page-playback", "paged-playback"] {
                 send_osc(
                     state,
@@ -7325,9 +7383,17 @@ fn send_osc_feedback(state: &AppState, _full: bool) {
                     vec![OscArgument::Float(level)],
                 );
             }
+            for name in ["page-playback", "paged-playback"] {
+                let prefix = format!("/light/{}/feedback/{name}/{slot}", subscriber.desk_alias);
+                send_osc(state, subscriber.target, format!("{prefix}/selected"), vec![OscArgument::Bool(number == selected_playback)]);
+                send_osc(state, subscriber.target, format!("{prefix}/current-cue"), vec![OscArgument::Float(running.and_then(|item| item.playback.current_cue_number).unwrap_or(-1.0) as f32)]);
+                send_osc(state, subscriber.target, format!("{prefix}/normal-next-cue"), vec![OscArgument::Float(running.and_then(|item| item.normal_next_cue_number).unwrap_or(-1.0) as f32)]);
+                send_osc(state, subscriber.target, format!("{prefix}/effective-next-cue"), vec![OscArgument::Float(running.and_then(|item| item.effective_next_cue_number).unwrap_or(-1.0) as f32)]);
+                send_osc(state, subscriber.target, format!("{prefix}/loaded-next"), vec![OscArgument::Bool(running.is_some_and(|item| item.effective_next_is_loaded))]);
+            }
             let button_count = if slot <= 20 { 3 } else { 1 };
             for button in 1..=button_count {
-                let (r, g, b, state_name) = if running.is_some() {
+                let (r, g, b, state_name) = if running.is_some_and(|item| item.playback.enabled) {
                     (0.10, 0.85, 0.35, "on")
                 } else if number.is_some() {
                     (0.12, 0.42, 0.95, "off")
@@ -7492,6 +7558,19 @@ fn handle_playback_osc(state: &AppState, address: &str, arguments: &[OscArgument
     }) {
         return;
     }
+    let select_button = parts[action_index] == "button" && parts.len() == action_index + 2
+        && parts[action_index + 1].parse::<usize>().ok().and_then(|button| button.checked_sub(1))
+            .and_then(|button| state.engine.snapshot().playbacks.iter().find(|definition| definition.number == number).and_then(|definition| definition.buttons.get(button).copied()))
+            .is_some_and(|action| action == light_playback::PlaybackButtonAction::Select);
+    if (parts[action_index] == "select" || select_button) && pressed {
+        let Some(show) = state.active_show.read().clone() else { return; };
+        let alias = if parts.get(2).is_some_and(|part| *part == "page-playback" || *part == "paged-playback") { parts[1] } else { "main" };
+        let Some(desk) = osc_control_desk(state, alias) else { return; };
+        if state.desk.lock().set_selected_playback(desk.id, show.id, Some(number)).is_ok() {
+            emit(state, "playback_selected", serde_json::json!({"desk_id":desk.id,"playback_number":number,"source":"osc"}));
+        }
+        return;
+    }
     let mut playback = state.engine.playback().write();
     let _ = match parts[action_index] {
         "go" if pressed => playback.go_playback(number).map(|_| ()),
@@ -7530,6 +7609,7 @@ fn load_engine_snapshot(entry: &ShowEntry) -> Result<EngineSnapshot, String> {
         default_show::upgrade(&entry.path).map_err(|error| error.to_string())?;
     }
     reconcile_show_logical_heads(entry)?;
+    reconcile_show_cue_identities(entry)?;
     load_engine_snapshot_with_override(entry, None)
 }
 
@@ -7551,6 +7631,23 @@ fn reconcile_show_logical_heads(entry: &ShowEntry) -> Result<(), String> {
                 )
                 .map_err(|error| error.to_string())?;
         }
+    }
+    Ok(())
+}
+fn reconcile_show_cue_identities(entry: &ShowEntry) -> Result<(), String> {
+    let store = ShowStore::open(&entry.path).map_err(|error| error.to_string())?;
+    for object in store.objects("cue_list").map_err(|error| error.to_string())? {
+        let missing_identity = object.body.get("cues").and_then(serde_json::Value::as_array)
+            .is_some_and(|cues| cues.iter().any(|cue| cue.get("id").and_then(serde_json::Value::as_str).is_none()));
+        if !missing_identity { continue; }
+        let cue_list = serde_json::from_value::<light_playback::CueList>(object.body)
+            .map_err(|error| error.to_string())?;
+        store.put_object(
+            "cue_list",
+            &object.id,
+            &serde_json::to_value(cue_list).map_err(|error| error.to_string())?,
+            object.revision,
+        ).map_err(|error| error.to_string())?;
     }
     Ok(())
 }
@@ -7920,6 +8017,41 @@ mod tests {
         );
         let _ = std::fs::remove_dir_all(directory);
     }
+
+    #[test]
+    fn opening_a_legacy_show_persists_stable_cue_identities_once() {
+        let directory = std::env::temp_dir().join(format!("light-cue-id-repair-{}", Uuid::new_v4()));
+        let path = directory.join("repair.show");
+        std::fs::create_dir_all(&directory).unwrap();
+        let show_id = default_show::initialise(&path).unwrap();
+        let store = ShowStore::open(&path).unwrap();
+        let list = light_playback::CueList {
+            id: light_core::CueListId::new(), name: "Legacy".into(), priority: 0,
+            mode: light_playback::CueListMode::Sequence, looped: false,
+            chaser_step_millis: 1_000, speed_group: None,
+            intensity_priority_mode: light_playback::IntensityPriorityMode::Htp,
+            wrap_mode: Some(light_playback::WrapMode::Off),
+            restart_mode: light_playback::RestartMode::FirstCue,
+            force_cue_timing: false, disable_cue_timing: false,
+            chaser_xfade_millis: 0, speed_multiplier: 1.0,
+            cues: vec![light_playback::Cue::new(1.0), light_playback::Cue::new(2.0)],
+        };
+        let mut legacy = serde_json::to_value(list).unwrap();
+        for cue in legacy["cues"].as_array_mut().unwrap() {
+            cue.as_object_mut().unwrap().remove("id");
+        }
+        store.put_object("cue_list", "legacy", &legacy, 0).unwrap();
+        let entry = ShowEntry { id: show_id, name: "Repair".into(), path: path.display().to_string(), revision: 0, updated_at: String::new() };
+        reconcile_show_cue_identities(&entry).unwrap();
+        let repaired = ShowStore::open(&path).unwrap().objects("cue_list").unwrap().into_iter().next().unwrap();
+        let ids = repaired.body["cues"].as_array().unwrap().iter()
+            .map(|cue| cue["id"].as_str().unwrap().to_owned()).collect::<Vec<_>>();
+        reconcile_show_cue_identities(&entry).unwrap();
+        let stable = ShowStore::open(&path).unwrap().objects("cue_list").unwrap().into_iter().next().unwrap();
+        assert_eq!(stable.revision, repaired.revision);
+        assert_eq!(stable.body["cues"].as_array().unwrap().iter().map(|cue| cue["id"].as_str().unwrap().to_owned()).collect::<Vec<_>>(), ids);
+        let _ = std::fs::remove_dir_all(directory);
+    }
     use axum::{body::Body, http::Request};
     use http_body_util::BodyExt;
     use tower::ServiceExt;
@@ -8245,12 +8377,13 @@ mod tests {
     fn command_line_contract_supports_subsets_preset_lifecycle_and_cue_list_creation() {
         let (state, data_dir) = test_state();
         let user = state.desk.lock().users().unwrap().remove(0);
+        let control_desk = state.desk.lock().add_desk("Commands", "commands").unwrap();
         let session = Session {
             id: SessionId::new(),
             user: user.clone(),
             token: "test".into(),
             connected: true,
-            desk: test_control_desk(),
+            desk: control_desk,
         };
         state.programmers.start(session.id, user.id);
         let show_path = data_dir.join("shows/commands.show");
@@ -8313,6 +8446,11 @@ mod tests {
         assert_eq!(cue_list.cues[0].delay_millis, 1_500);
         assert_eq!(cue_list.cues[0].group_changes[0].fade_millis, Some(2_000));
         assert_eq!(cue_list.cues[0].group_changes[0].delay_millis, Some(1_000));
+
+        state.desk.lock().set_selected_playback(session.desk.id, show_id, Some(25)).unwrap();
+        execute_programmer_command(&state, &session, "RECORD CUE 7").unwrap();
+        let (_, _, selected_list) = cue_list_for_playback(&ShowStore::open(&show_path).unwrap(), &state.engine.snapshot(), 25).unwrap();
+        assert!(selected_list.cues.iter().any(|cue| cue.number == 7.0));
 
         let color = light_core::AttributeKey("color.emitter.red".into());
         let set_only_color = || {
@@ -8381,7 +8519,7 @@ mod tests {
                 .iter()
                 .map(|cue| cue.number)
                 .collect::<Vec<_>>(),
-            vec![1.0]
+            vec![1.0, 7.0]
         );
         let _ = std::fs::remove_dir_all(data_dir);
     }
@@ -8411,6 +8549,65 @@ mod tests {
         let old_entangled = ["SET", "4", "SET", "7", ".", "12"].map(String::from);
         let (_, used) = parse_playback_address(&old_entangled, true, &snapshot).unwrap();
         assert_ne!(used, old_entangled.len());
+    }
+
+    #[test]
+    fn cue_commands_use_the_desk_selected_concrete_playback() {
+        let (state, data_dir) = test_state();
+        let (user, first_desk, second_desk) = {
+            let store = state.desk.lock();
+            let user = store.users().unwrap().remove(0);
+            let first = store.add_desk("Front", "front").unwrap();
+            let second = store.add_desk("Wing", "wing").unwrap();
+            (user, first, second)
+        };
+        let show_id = light_core::ShowId::new();
+        *state.active_show.write() = Some(ShowEntry { id: show_id, name: "Selection".into(), path: data_dir.join("selection.show").display().to_string(), revision: 0, updated_at: String::new() });
+        let list_id = light_core::CueListId::new();
+        let list = light_playback::CueList {
+            id: list_id, name: "Shared".into(), priority: 0,
+            mode: light_playback::CueListMode::Sequence, looped: false,
+            chaser_step_millis: 1_000, speed_group: None,
+            intensity_priority_mode: light_playback::IntensityPriorityMode::Htp,
+            wrap_mode: Some(light_playback::WrapMode::Off), restart_mode: light_playback::RestartMode::FirstCue,
+            force_cue_timing: false, disable_cue_timing: false, chaser_xfade_millis: 0, speed_multiplier: 1.0,
+            cues: vec![light_playback::Cue::new(1.0), light_playback::Cue::new(2.0), light_playback::Cue::new(3.0)],
+        };
+        let definition = |number| light_playback::PlaybackDefinition {
+            number, name: format!("Playback {number}"),
+            target: light_playback::PlaybackTarget::CueList { cue_list_id: list_id },
+            buttons: [light_playback::PlaybackButtonAction::GoMinus, light_playback::PlaybackButtonAction::Go, light_playback::PlaybackButtonAction::Flash],
+            fader: light_playback::PlaybackFaderMode::Master, go_activates: true, auto_off: false,
+            xfade_millis: 0, color: "#20c997".into(), flash_release: light_playback::FlashReleaseMode::ReleaseAll,
+            protect_from_swap: false,
+        };
+        state.engine.replace_snapshot(EngineSnapshot {
+            cue_lists: vec![list], playbacks: vec![definition(1), definition(2)],
+            playback_pages: vec![light_playback::PlaybackPage { number: 4, name: "Page 4".into(), slots: HashMap::from([(7, 2)]) }],
+            ..Default::default()
+        }).unwrap();
+        state.desk.lock().set_selected_playback(first_desk.id, show_id, Some(1)).unwrap();
+        state.desk.lock().set_selected_playback(second_desk.id, show_id, Some(2)).unwrap();
+        state.desk.lock().set_desk_page(first_desk.id, show_id, 4).unwrap();
+        handle_playback_osc(&state, "/light/front/page-playback/7/select", &[OscArgument::Bool(true)]);
+        assert_eq!(state.desk.lock().selected_playback(first_desk.id, show_id).unwrap(), Some(2));
+        state.desk.lock().set_selected_playback(first_desk.id, show_id, Some(1)).unwrap();
+        let first = Session { id: SessionId::new(), user: user.clone(), token: "first".into(), connected: true, desk: first_desk };
+        let second = Session { id: SessionId::new(), user, token: "second".into(), connected: true, desk: second_desk };
+        execute_programmer_command(&state, &first, "CUE 2").unwrap();
+        execute_programmer_command(&state, &second, "CUE 3").unwrap();
+        execute_programmer_command(&state, &first, "CUE CUE 1").unwrap();
+        let runtime = state.engine.playback().read().runtime();
+        let first_runtime = runtime.iter().find(|item| item.playback_number == Some(1)).unwrap();
+        let second_runtime = runtime.iter().find(|item| item.playback_number == Some(2)).unwrap();
+        assert_eq!((first_runtime.current_cue_number, first_runtime.loaded_cue_number), (Some(2.0), Some(1.0)));
+        assert_eq!((second_runtime.current_cue_number, second_runtime.loaded_cue_number), (Some(3.0), None));
+        execute_programmer_command(&state, &first, "CUE SET 2 CUE 1").unwrap();
+        execute_programmer_command(&state, &first, "CUE CUE SET 4 . 7 CUE 2").unwrap();
+        let second_runtime = state.engine.playback().read().runtime().into_iter().find(|item| item.playback_number == Some(2)).unwrap();
+        assert_eq!((second_runtime.current_cue_number, second_runtime.loaded_cue_number), (Some(1.0), Some(2.0)));
+        assert_eq!(state.desk.lock().selected_playback(first.desk.id, show_id).unwrap(), Some(1));
+        let _ = std::fs::remove_dir_all(data_dir);
     }
 
     #[test]
