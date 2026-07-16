@@ -390,7 +390,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
           nextSession.user.id,
         );
         const ownProgrammer = programmers.find(
-          (programmer) => programmer.user_id === nextSession.user.id,
+          (programmer) => programmer.session_id === nextSession.session_id,
         );
         const restoredCommand = ownProgrammer?.command_line?.trim() || commandTargetModeRef.current;
         const restoredTarget = restoredCommand === "GROUP" ? "GROUP" : restoredCommand === "FIXTURE" ? "FIXTURE" : commandTargetModeRef.current;
@@ -428,7 +428,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
               .bootstrap()
               .then((next) => {
                 setBootstrap(next);
-                const own = next.active_programmers.find((programmer) => programmer.user_id === nextSession.user.id);
+                const own = next.active_programmers.find((programmer) => programmer.session_id === nextSession.session_id);
                 if (own) {
                   const restoredCommand = own.command_line?.trim() || commandTargetModeRef.current;
                   setCommandLineState(restoredCommand);
@@ -611,7 +611,9 @@ export function ServerProvider({ children }: PropsWithChildren) {
           setError(null);
           return true;
         } catch (reason) {
-          setError(reason instanceof Error ? reason.message : String(reason));
+          const message = reason instanceof Error ? reason.message : String(reason);
+          setError(message);
+          window.dispatchEvent(new CustomEvent("light:command-error", { detail: message }));
           return false;
         }
       },

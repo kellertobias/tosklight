@@ -342,6 +342,7 @@ impl Preset {
 pub struct ProgrammerRegistry {
     states: Arc<RwLock<HashMap<SessionId, ProgrammerState>>>,
     sessions: Arc<RwLock<HashMap<SessionId, SessionId>>>,
+    command_lines: Arc<RwLock<HashMap<SessionId, String>>>,
     clock: SharedClock,
 }
 impl Default for ProgrammerRegistry {
@@ -354,6 +355,7 @@ impl ProgrammerRegistry {
         Self {
             states: Arc::default(),
             sessions: Arc::default(),
+            command_lines: Arc::default(),
             clock,
         }
     }
@@ -365,6 +367,7 @@ impl ProgrammerRegistry {
     pub fn reset_all(&self) {
         self.states.write().clear();
         self.sessions.write().clear();
+        self.command_lines.write().clear();
     }
 
     pub fn start(&self, session_id: SessionId, user_id: UserId) -> ProgrammerState {
@@ -375,11 +378,20 @@ impl ProgrammerRegistry {
             .find_map(|(key, state)| (state.user_id == user_id).then_some(*key));
         if let Some(key) = existing {
             self.sessions.write().insert(session_id, key);
+            self.command_lines.write().entry(session_id).or_default();
             let mut states = self.states.write();
             let state = states.get_mut(&key).expect("programmer disappeared");
             state.connected = true;
             state.last_activity = self.clock.now();
-            return state.clone();
+            let mut projected = state.clone();
+            projected.session_id = session_id;
+            projected.command_line = self
+                .command_lines
+                .read()
+                .get(&session_id)
+                .cloned()
+                .unwrap_or_default();
+            return projected;
         }
         self.sessions.write().insert(session_id, session_id);
         let state = ProgrammerState {
@@ -406,19 +418,30 @@ impl ProgrammerRegistry {
             redo: vec![],
         };
         self.states.write().insert(session_id, state.clone());
+        self.command_lines.write().insert(session_id, String::new());
         state
     }
     pub fn restore(&self, state: ProgrammerState) {
-        let existing = {
-            self.states
-                .read()
-                .iter()
-                .find_map(|(key, current)| (current.user_id == state.user_id).then_some(*key))
-        };
+        let session_id = state.session_id;
+        self.command_lines
+            .write()
+            .insert(session_id, state.command_line.clone());
+        let existing = self
+            .states
+            .read()
+            .iter()
+            .find_map(|(key, current)| (current.user_id == state.user_id).then_some(*key));
         if let Some(existing) = existing {
-            self.states.write().insert(existing, state);
+            self.sessions.write().insert(session_id, existing);
+            let mut shared = state;
+            shared.session_id = existing;
+            shared.command_line.clear();
+            self.states.write().insert(existing, shared);
         } else {
-            self.states.write().insert(state.session_id, state);
+            self.sessions.write().insert(session_id, session_id);
+            let mut shared = state;
+            shared.command_line.clear();
+            self.states.write().insert(session_id, shared);
         }
     }
     fn key(&self, session: SessionId) -> SessionId {
@@ -693,13 +716,13 @@ impl ProgrammerRegistry {
         true
     }
     pub fn set_command_line(&self, session: SessionId, command_line: String) -> bool {
-        let mut states = self.states.write();
-        let Some(state) = states.get_mut(&self.key(session)) else {
+        if !self.sessions.read().contains_key(&session) {
             return false;
-        };
-        state.checkpoint();
-        state.command_line = command_line;
-        state.last_activity = self.clock.now();
+        }
+        self.command_lines.write().insert(session, command_line);
+        if let Some(state) = self.states.write().get_mut(&self.key(session)) {
+            state.last_activity = self.clock.now();
+        }
         true
     }
     pub fn set_modes(
@@ -787,8 +810,30 @@ impl ProgrammerRegistry {
     pub fn active(&self) -> Vec<ProgrammerState> {
         self.states.read().values().cloned().collect()
     }
+    pub fn active_for_sessions(&self) -> Vec<ProgrammerState> {
+        let states = self.states.read();
+        let command_lines = self.command_lines.read();
+        self.sessions
+            .read()
+            .iter()
+            .filter_map(|(session, key)| {
+                let mut state = states.get(key)?.clone();
+                state.session_id = *session;
+                state.command_line = command_lines.get(session).cloned().unwrap_or_default();
+                Some(state)
+            })
+            .collect()
+    }
     pub fn get(&self, session: SessionId) -> Option<ProgrammerState> {
-        self.states.read().get(&self.key(session)).cloned()
+        let mut state = self.states.read().get(&self.key(session)).cloned()?;
+        state.session_id = session;
+        state.command_line = self
+            .command_lines
+            .read()
+            .get(&session)
+            .cloned()
+            .unwrap_or_default();
+        Some(state)
     }
     pub fn refresh_live_selections(&self, groups: &HashMap<String, GroupDefinition>) {
         for state in self.states.write().values_mut() {
@@ -842,7 +887,7 @@ mod tests {
         assert!(registry.get(second).unwrap().group_values.is_empty());
     }
     #[test]
-    fn sessions_for_the_same_user_share_one_programmer() {
+    fn sessions_for_the_same_user_share_values_but_keep_command_lines_local() {
         let registry = ProgrammerRegistry::default();
         let user = UserId::new();
         let first = SessionId::new();
@@ -853,6 +898,16 @@ mod tests {
         registry.start(second, user);
         assert_eq!(registry.active().len(), 1);
         assert_eq!(registry.get(second).unwrap().selected, vec![fixture]);
+        assert!(registry.set_command_line(first, "GROUP 1 +".into()));
+        assert!(registry.set_command_line(second, "GROUP 2 +".into()));
+        let mut command_lines = registry
+            .active_for_sessions()
+            .into_iter()
+            .map(|state| state.command_line)
+            .collect::<Vec<_>>();
+        command_lines.sort();
+        assert_eq!(command_lines, ["GROUP 1 +", "GROUP 2 +"]);
+        assert_eq!(registry.get(second).unwrap().command_line, "GROUP 2 +");
         registry.disconnect(first);
         assert!(registry.get(second).unwrap().connected);
         registry.disconnect(second);
@@ -874,6 +929,7 @@ mod tests {
         restored.restore(first_state);
         restored.restore(second_state);
         assert_eq!(restored.active().len(), 1);
+        assert_eq!(restored.active_for_sessions().len(), 2);
     }
     #[test]
     fn legacy_group_programmer_values_migrate_with_a_timestamp() {

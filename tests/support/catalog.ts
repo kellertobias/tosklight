@@ -75,6 +75,10 @@ export function commandKeys(value: string): string[] {
     if (token === "GROUP") return ["GRP"];
     if (token === "DEGRP") return ["GRP", "GRP"];
     if (token === "THRU") return ["TRU"];
+    if (token === "RECORD") return ["REC"];
+    if (token === "DELETE") return ["DEL"];
+    if (token === "MOVE") return ["MOV"];
+    if (token === "COPY") return ["CPY"];
     if (token === "GO-") return ["GO −"];
     if (/^\d+$/.test(token)) return [...token];
     return [token];

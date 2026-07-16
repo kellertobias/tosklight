@@ -49,20 +49,20 @@ describe("software keypad", () => {
     });
   });
 
-  it("starts with the persistent fixture prefix and prefixes a fixture after a Group term", () => {
+  it("starts with the persistent fixture prefix and continues the current Group scope", () => {
     expect(editTargetedCommandWithSoftwareKey("FIXTURE", "7", "FIXTURE", true)).toEqual({
       command: "F7", execute: false, pristine: false,
     });
     expect(editTargetedCommandWithSoftwareKey("G7 + ", "8", "FIXTURE", false)).toEqual({
-      command: "G7 + F8", execute: false, pristine: false,
+      command: "G7 + G8", execute: false, pristine: false,
     });
   });
 
-  it("uses short Group terms and lets GRP override Fixture mode after plus", () => {
+  it("uses short Group terms and lets GRP override the current scope after plus", () => {
     const group = editTargetedCommandWithSoftwareKey("G7 + ", "GRP", "FIXTURE", false);
-    expect(group).toEqual({ command: "G7 + G", execute: false, pristine: false });
+    expect(group).toEqual({ command: "G7 + F", execute: false, pristine: false });
     expect(editTargetedCommandWithSoftwareKey(group.command, "8", "FIXTURE", group.pristine)).toEqual({
-      command: "G7 + G8", execute: false, pristine: false,
+      command: "G7 + F8", execute: false, pristine: false,
     });
   });
 

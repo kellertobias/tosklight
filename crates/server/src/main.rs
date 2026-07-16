@@ -801,7 +801,7 @@ fn router(state: AppState) -> Router {
         .route("/api/v1/shows/{id}/objects/{kind}", get(list_objects))
         .route(
             "/api/v1/shows/{id}/objects/{kind}/{object_id}",
-            put(put_object),
+            get(get_object).put(put_object),
         )
         .route(
             "/api/v1/shows/{id}/objects/{kind}/{object_id}/undo",
@@ -1159,7 +1159,7 @@ async fn bootstrap(State(state): State<AppState>) -> Json<Bootstrap> {
         users,
         desks,
         active_show: state.active_show.read().clone(),
-        active_programmers: state.programmers.active(),
+        active_programmers: state.programmers.active_for_sessions(),
         frame_rate_hz: state.output_rate.load(Ordering::Relaxed),
         output_health: state
             .output_health
@@ -1731,8 +1731,8 @@ async fn close_session(
     let Some(session) = state.sessions.write().remove(&id) else {
         return Err(ApiError::not_found("session"));
     };
-    state.programmers.disconnect(id);
     persist_programmer(&state, &session)?;
+    state.programmers.disconnect(id);
     emit(
         &state,
         "session_disconnected",
@@ -2901,6 +2901,31 @@ async fn list_objects(
             .map_err(ApiError::store)?,
     ))
 }
+async fn get_object(
+    State(state): State<AppState>,
+    Path((id, kind, object_id)): Path<(Uuid, String, String)>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    let _session = authenticate(&state, &headers)?;
+    let entry = state
+        .desk
+        .lock()
+        .show(light_core::ShowId(id))
+        .map_err(ApiError::store)?
+        .ok_or_else(|| ApiError::not_found("show"))?;
+    let object = ShowStore::open(entry.path)
+        .map_err(ApiError::store)?
+        .objects(&kind)
+        .map_err(ApiError::store)?
+        .into_iter()
+        .find(|object| object.id == object_id)
+        .ok_or_else(|| ApiError::not_found("show object"))?;
+    Ok((
+        [(header::ETAG, format!("\"{}\"", object.revision))],
+        Json(object),
+    )
+        .into_response())
+}
 async fn put_object(
     State(state): State<AppState>,
     Path((id, kind, object_id)): Path<(Uuid, String, String)>,
@@ -3667,7 +3692,7 @@ async fn pool_playback_action(
 async fn list_programmers(
     State(state): State<AppState>,
 ) -> Json<Vec<light_programmer::ProgrammerState>> {
-    Json(state.programmers.active())
+    Json(state.programmers.active_for_sessions())
 }
 async fn audit_events(
     State(state): State<AppState>,
@@ -3703,8 +3728,8 @@ async fn clear_programmer(
         tracing::error!(%error, "failed to remove persisted programmer");
         return Ok(StatusCode::INTERNAL_SERVER_ERROR);
     }
-    // A programmer belongs to a user. Recreate one empty programmer and bind
-    // every currently connected session for that user to it.
+    // Values belong to the user's shared programmer. Recreate that value layer
+    // while keeping a desk-local command projection for every live session.
     if let Some(user_id) = user_id {
         let connected = state
             .sessions
@@ -3816,13 +3841,10 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
         }
     };
     if disconnected {
-        state.programmers.disconnect(session.id);
+        // Closing an event socket does not close the authenticated control-desk
+        // session. Short-lived API command sockets and browser reconnects must
+        // retain the desk-local command line and the user's shared programmer.
         let _ = persist_programmer(&state, &session);
-        emit(
-            &state,
-            "session_disconnected",
-            serde_json::json!({"session_id":session.id}),
-        );
     }
 }
 
@@ -5881,6 +5903,46 @@ fn execute_programmer_command(
             .iter()
             .position(|token| token == "AT")
             .unwrap_or(tokens.len());
+        let explicit_group_ids = tokens[..at_index]
+            .windows(2)
+            .filter(|pair| pair[0] == "GROUP" && pair[1] != "GROUP")
+            .map(|pair| pair[1].clone())
+            .collect::<Vec<_>>();
+        if !frozen && at_index < tokens.len() && explicit_group_ids.len() > 1 {
+            let snapshot = state.engine.snapshot();
+            let fixtures = parse_group_mixed_selection(&snapshot, &tokens[1..at_index], true)?;
+            let value = &tokens[at_index + 1..];
+            let level = value.first().ok_or("AT requires a level")?;
+            let percent = if level == "FULL" {
+                100.0
+            } else {
+                level
+                    .parse::<f32>()
+                    .map_err(|_| "level must be a percentage or FULL")?
+            };
+            if !percent.is_finite() || !(0.0..=100.0).contains(&percent) {
+                return Err("level must be within 0-100".into());
+            }
+            if value.len() != 1 {
+                return Err("unexpected tokens after level".into());
+            }
+            for group_id in explicit_group_ids {
+                state.programmers.set_group_faded_with_timing(
+                    session.id,
+                    group_id,
+                    light_core::AttributeKey::intensity(),
+                    light_core::AttributeValue::Normalized(percent / 100.0),
+                    timing.fade_millis,
+                    timing.delay_millis,
+                );
+            }
+            state.programmers.select_expression(
+                session.id,
+                fixtures.clone(),
+                light_programmer::SelectionExpression::Static,
+            );
+            return Ok(fixtures.len());
+        }
         if !frozen
             && at_index == tokens.len()
             && tokens[id_index..at_index]
@@ -6546,6 +6608,94 @@ fn remove_command_token(value: &str) -> String {
     trimmed[..start].trim_end().to_string()
 }
 
+fn osc_continuation_scope(command: &str) -> char {
+    command
+        .split_whitespace()
+        .rev()
+        .find_map(|token| {
+            let mut characters = token.chars();
+            let scope = characters.next()?.to_ascii_uppercase();
+            (matches!(scope, 'F' | 'G') && characters.next().is_some_and(|c| c.is_ascii_digit()))
+                .then_some(scope)
+        })
+        .unwrap_or_else(|| {
+            if command
+                .trim_start()
+                .to_ascii_uppercase()
+                .starts_with("GROUP")
+            {
+                'G'
+            } else {
+                'F'
+            }
+        })
+}
+
+fn edit_osc_programmer_command(command: &str, key: &str) -> String {
+    let trimmed = command.trim();
+    if let Some(digit) = key.strip_prefix("digit-") {
+        if trimmed.is_empty() {
+            return format!("F{digit}");
+        }
+        if trimmed.eq_ignore_ascii_case("GROUP") {
+            return format!("G{digit}");
+        }
+        if trimmed.ends_with(['+', '-']) {
+            return format!("{trimmed} {}{digit}", osc_continuation_scope(trimmed));
+        }
+        if trimmed.ends_with(['F', 'G', 'f', 'g']) {
+            return format!("{trimmed}{digit}");
+        }
+        if trimmed
+            .chars()
+            .last()
+            .is_some_and(|c| c.is_ascii_alphabetic())
+        {
+            return format!("{trimmed} {digit}");
+        }
+        return format!("{trimmed}{digit}");
+    }
+    if matches!(key, "grp" | "group") {
+        if trimmed.is_empty() {
+            return "GROUP".into();
+        }
+        if trimmed.ends_with(['+', '-']) {
+            let scope = if osc_continuation_scope(trimmed) == 'G' {
+                'F'
+            } else {
+                'G'
+            };
+            return format!("{trimmed} {scope}");
+        }
+    }
+    let token = match key {
+        "grp" | "group" => "GROUP",
+        "thru" => "THRU",
+        "plus" | "add" => "+",
+        "minus" | "subtract" => "-",
+        "at" => "AT",
+        "time" => "TIME",
+        "delay" => "DELAY",
+        "dot" => ".",
+        "div" => "DIV",
+        "set" => "SET",
+        "rec" => "RECORD",
+        value => value,
+    };
+    if matches!(
+        token,
+        "GROUP" | "THRU" | "+" | "-" | "AT" | "TIME" | "DELAY" | "DIV" | "SET" | "RECORD"
+    ) {
+        format!("{trimmed} {token}")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            + " "
+    } else {
+        format!("{trimmed}{token}")
+    }
+}
+
 fn handle_programmer_osc(
     state: &AppState,
     address: &str,
@@ -6645,46 +6795,10 @@ fn handle_programmer_osc(
             serde_json::json!({"desk_alias":parts[1],"session_id":session.id,"action":action,"source":"osc"}),
         ),
         key => {
-            let token = match key {
-                "grp" | "group" => "GROUP",
-                "thru" => "THRU",
-                "plus" | "add" => "+",
-                "minus" | "subtract" => "-",
-                "at" => "AT",
-                "time" => "TIME",
-                "delay" => "DELAY",
-                "dot" => ".",
-                "div" => "DIV",
-                "set" => "SET",
-                "rec" => "RECORD",
-                v if v.starts_with("digit-") => &v[6..],
-                v => v,
-            };
             if let Some(p) = state.programmers.get(session.id) {
-                let separator = matches!(
-                    token,
-                    "GROUP"
-                        | "THRU"
-                        | "+"
-                        | "-"
-                        | "AT"
-                        | "TIME"
-                        | "DELAY"
-                        | "DIV"
-                        | "SET"
-                        | "RECORD"
-                );
                 state.programmers.set_command_line(
                     session.id,
-                    if separator {
-                        format!("{} {token} ", p.command_line)
-                            .split_whitespace()
-                            .collect::<Vec<_>>()
-                            .join(" ")
-                            + " "
-                    } else {
-                        format!("{}{token}", p.command_line)
-                    },
+                    edit_osc_programmer_command(&p.command_line, key),
                 );
             }
         }
@@ -6830,6 +6944,38 @@ fn send_osc_feedback(state: &AppState, _full: bool) {
             format!("/light/{}/feedback/page", subscriber.desk_alias),
             vec![OscArgument::Int(i32::from(page))],
         );
+        let programmer = state.programmers.get(subscriber.session_id);
+        let command_line = programmer
+            .as_ref()
+            .map(|programmer| programmer.command_line.clone())
+            .unwrap_or_default();
+        send_osc(
+            state,
+            subscriber.target,
+            format!("/light/{}/feedback/command-line", subscriber.desk_alias),
+            vec![OscArgument::String(command_line.clone())],
+        );
+        for key in [
+            "group", "at", "thru", "plus", "minus", "time", "delay", "record", "clear", "enter",
+            "preload",
+        ] {
+            let token = match key {
+                "group" => "GROUP".to_owned(),
+                "thru" => "THRU".to_owned(),
+                "plus" => "+".to_owned(),
+                "minus" => "-".to_owned(),
+                "record" => "RECORD".to_owned(),
+                other => other.to_ascii_uppercase(),
+            };
+            send_osc(
+                state,
+                subscriber.target,
+                format!("/light/{}/feedback/programmer/{key}", subscriber.desk_alias),
+                vec![OscArgument::Bool(
+                    command_line.split_whitespace().any(|part| part == token),
+                )],
+            );
+        }
         let page_definition = snapshot.playback_pages.iter().find(|p| p.number == page);
         for slot in 1u8..=96 {
             let number = page_definition.and_then(|p| p.slots.get(&slot)).copied();
@@ -7333,6 +7479,21 @@ mod tests {
             value = remove_command_token(&value);
             assert_eq!(value, expected);
         }
+    }
+
+    #[test]
+    fn osc_keypad_uses_the_same_scoped_selection_edits_as_the_ui() {
+        let mut value = edit_osc_programmer_command("", "grp");
+        value = edit_osc_programmer_command(&value, "digit-7");
+        value = edit_osc_programmer_command(&value, "plus");
+        value = edit_osc_programmer_command(&value, "digit-8");
+        assert_eq!(value, "G7 + G8");
+
+        let override_scope = edit_osc_programmer_command("G7 +", "grp");
+        assert_eq!(
+            edit_osc_programmer_command(&override_scope, "digit-8"),
+            "G7 + F8"
+        );
     }
 
     #[test]

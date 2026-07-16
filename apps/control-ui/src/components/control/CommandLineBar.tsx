@@ -23,8 +23,17 @@ export function CommandLineBar() {
   useEffect(() => {
     if (commandError && server.error) setCommandError(server.error);
   }, [server.error, commandError]);
+  useEffect(() => {
+    const showCommandError = (event: Event) => {
+      const message = (event as CustomEvent<string>).detail;
+      setCompleted(false);
+      setCommandError(message || "The command could not be executed.");
+    };
+    window.addEventListener("light:command-error", showCommandError);
+    return () => window.removeEventListener("light:command-error", showCommandError);
+  }, []);
   const playback = state.controlMode === "playbacks";
-  const ownProgrammer = server.bootstrap?.active_programmers.find((programmer) => programmer.user_id === server.session?.user.id);
+  const ownProgrammer = server.bootstrap?.active_programmers.find((programmer) => programmer.session_id === server.session?.session_id);
   const hasRecordableContent = server.selectedFixtures.length > 0 || programmerValueCount(ownProgrammer) > 0 || state.preload !== "idle" || state.preloadActive;
   const preloadLabel = state.preload === "blind" ? "PRELOAD GO" : "PRELOAD";
   const advancePreload = async () => {

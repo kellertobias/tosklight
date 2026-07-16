@@ -312,6 +312,8 @@ To configure an assigned page playback, press `[SET]` and then tap the playback,
 
 Every keypad key is also accepted at `/light/{desk}/programmer/{key}` with a pressed value. The new inputs are `minus` (alias `subtract`), `time`, `delay`, and `shift`; digits use `digit-0` through `digit-9`. OSC `[SHIFT]` is latched exactly like the software key, so `shift` followed by `digit-1` opens Stage. Existing inputs such as `plus`, `at`, `thru`, `set`, `record`, `enter`, and `backspace` continue to use the same address family.
 
+The desk alias scopes interaction, not ownership of programmer values. A Tauri or browser desk and the OSC controllers subscribed to its alias share one in-progress command line, page, and button state, so a physical key continues the command visible in that desk UI exactly as an on-screen key would. Different desk aliases keep those partial interactions separate. After a command is completed, its values land in the logged-in user's programmer and are therefore visible in every session for that same user, including sessions attached to other desks.
+
 - `/light/{desk}/page-playback/{playback}/{fader-or-button}` addresses a numbered playback on the page currently active for that desk or screen.
 - `/light/playback/{page}/{playback}/{fader-or-button}` addresses that page and playback globally, independent of every desk's current page.
 - `/light/cuelist/{Cuelist}/{action}` directly operates a Cuelist when a page playback is not the intended target.

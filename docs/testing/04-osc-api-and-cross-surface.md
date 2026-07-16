@@ -8,6 +8,8 @@ Before every scenario, load canonical `compact-rig.show`, immediately use Save A
 
 A **desk** in these tests is one combined operator surface: a Tauri application plus every OSC controller, such as an Arduino, subscribed to that application's desk alias. Those inputs share one authoritative page, command line, programmer, and playback state. A second Tauri application with a different desk alias is a separate desk and may have its own OSC controller without leaking partially entered commands or page changes across desks.
 
+“Programmer” and “desk” are intentionally different scopes. Programmer values belong to the user, so once a completed command lands a value in the programmer, every session for that user sees the same value layer. An unfinished command, key/button state, and active page belong to the desk. Two desks logged in as the same user therefore share landed programmer values but retain independent partial command lines; OSC joins the interaction state of the desk alias to which it subscribed.
+
 OSC scenarios still receive the mandatory `@api` and `@ui` variants for their operator-visible behavior. The `@osc` variant is a third adapter test using the same expected application and DMX state. This distinguishes a server contract failure, a browser adapter failure, and an OSC transport or alias failure.
 
 ## OSC-001 — Subscribe and receive deterministic full feedback
@@ -107,11 +109,11 @@ OSC scenarios still receive the mandatory `@api` and `@ui` variants for their op
 2. In Tauri A, press `[GRP] [7] [+]`. Do not press `[ENTER]`. Verify A's visible command line and A's OSC command-line feedback both show `G7 +`.
 3. From OSC client A, press only the physical `8` button, sending `/light/{desk-a}/programmer/digit-8` with pressed `true`. Verify Tauri A immediately shows `G7 + G8`; it must not create a second hidden OSC-only command line or replace the partial UI command.
 4. Continue from either surface with `[AT] [5] [0] [ENTER]`. Verify the one combined command applies 50% to Groups 7 and 8, clears or restores the command line consistently on Tauri A and OSC feedback, and produces one programmer mutation.
-5. Throughout steps 2–4, verify Tauri B and OSC client B retain their own unchanged command line, programmer, and page.
+5. Throughout steps 2–4, verify Tauri B and OSC client B retain their own unchanged partial command line and page. If both desks use the same user, the completed value from step 4 appears in that user's shared programmer on B as well; it must not alter B's unfinished desk command.
 6. Start simultaneous partial commands: enter `[GRP] [7] [+]` in Tauri A and `[GRP] [1] [+]` in Tauri B. Press physical `2` on OSC client B and verify only desk B becomes `G1 + G2` while A remains `G7 +`. Then press physical `8` on OSC client A and verify only desk A becomes `G7 + G8` while B remains `G1 + G2`.
 7. Disconnect and reconnect OSC client A to desk A's alias. Verify the initial feedback burst restores A's current page, command line, and programmer state. Reconnect it intentionally to desk B's alias and prove subsequent input joins desk B instead; association is determined by the subscribed desk alias, not by hardware identity or source IP.
 
-**Assertions:** UI key presses and OSC key presses addressed to one desk alias are serialized through the same command-line state machine and are visible on both surfaces after every key. A completed mixed-surface command produces exactly one authoritative programmer mutation and one resulting output state. Different desk aliases isolate partial commands, programmer state, page selection, and feedback even when both Tauri applications use the same light server.
+**Assertions:** UI key presses and OSC key presses addressed to one desk alias are serialized through the same command-line state machine and are visible on both surfaces after every key. A completed mixed-surface command produces exactly one authoritative programmer mutation and one resulting output state. Different desk aliases isolate partial commands, page selection, and feedback even when both Tauri applications use the same light server. Sessions for the same user share the landed programmer value without sharing those desk-local interaction states.
 
 **Pass condition:** Each Tauri application and its attached OSC hardware behave as one physical light-control desk, while a second application and its hardware behave as an independent desk.
 

@@ -25,6 +25,7 @@ These documents expand the stable IDs in the [canonical test catalog](../help/99
 - Lighting durations are virtual. A test may use wall time only for browser mechanics such as long-press recognition and process startup deadlines.
 - Exact DMX conversion uses the production encoder. Representative expectations include 0% = 0, 25% = 64, 50% = 128, 75% = 191, and 100% = 255.
 - Cross-surface tests should prove a representative path end to end. Exhaustive permutations belong in Rust unit or integration tests.
+- Programmer values belong to the logged-in user and are shared across that user's sessions. Desk interaction state is separate: each control desk keeps its own in-progress command line, page, and button state. OSC input subscribed to a desk alias joins that desk's UI interaction state; completing a value command then writes into the user's shared programmer.
 
 ### Literal operator-action notation
 
