@@ -255,6 +255,9 @@ export interface DeskConfiguration {
   speed_groups_bpm: [number, number, number, number, number];
   programmer_fade_millis: number;
   sequence_master_fade_millis: number;
+  preload_programmer_changes: boolean;
+  preload_physical_playback_actions: boolean;
+  preload_virtual_playback_actions: boolean;
 }
 
 export interface StoredGroup {

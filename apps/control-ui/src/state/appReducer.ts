@@ -13,6 +13,8 @@ export type Action =
   | { type: "SET_PANE_PRESET_FAMILY"; id: string; family: AppState["presetFamily"] }
   | { type: "SET_PANE_PRESET_COLORS"; id: string; value: boolean }
   | { type: "SET_PANE_DEVELOPMENT_VIEW"; id: string; value: DevelopmentView }
+  | { type: "SET_VIRTUAL_PLAYBACK_GRID"; id: string; rows: number; columns: number }
+  | { type: "SET_VIRTUAL_PLAYBACK_CELL"; id: string; index: number; playbackNumber?: number | null; action?: "go" | "toggle" }
   | { type: "SET_STAGE_MODE"; value: AppState["stageMode"] }
   | { type: "SET_STAGE_VIEW"; value: AppState["stageView"] }
   | { type: "SET_STAGE_NAVIGATION"; zoom?: number; panX?: number; panY?: number; orbitX?: number; orbitY?: number }
@@ -202,6 +204,8 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "SET_PANE_PRESET_FAMILY": return { ...state, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, presetFamily: action.family } : pane) }) };
     case "SET_PANE_PRESET_COLORS": return { ...state, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, presetPoolColors: action.value } : pane) }) };
     case "SET_PANE_DEVELOPMENT_VIEW": return { ...state, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, developmentView: action.value } : pane) }) };
+    case "SET_VIRTUAL_PLAYBACK_GRID": return { ...state, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, virtualPlaybackRows: clamp(action.rows, 1, 12), virtualPlaybackColumns: clamp(action.columns, 1, 12) } : pane) }) };
+    case "SET_VIRTUAL_PLAYBACK_CELL": return { ...state, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: desk.panes.map((pane) => { if (pane.id !== action.id) return pane; const cells = [...(pane.virtualPlaybackCells ?? [])]; const current = cells[action.index] ?? { playbackNumber: null, action: "go" as const }; cells[action.index] = { playbackNumber: action.playbackNumber === undefined ? current.playbackNumber : action.playbackNumber, action: action.action ?? current.action }; return { ...pane, virtualPlaybackCells: cells }; }) }) };
     case "SET_STAGE_MODE": return { ...state, stageMode: action.value };
     case "SET_STAGE_VIEW": return { ...state, stageView: action.value };
     case "SET_STAGE_NAVIGATION": return { ...state, stageZoom: action.zoom ?? state.stageZoom, stagePanX: action.panX ?? state.stagePanX, stagePanY: action.panY ?? state.stagePanY, stageOrbitX: action.orbitX ?? state.stageOrbitX, stageOrbitY: action.orbitY ?? state.stageOrbitY };
@@ -219,7 +223,7 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "ADD_WINDOW": {
       if (!state.windowPicker) return state;
       const kind = cueListWindowKind(action.kind);
-      const pane = { id: `${kind}-${Date.now()}`, kind, title: kind === "help" ? "Help" : kind === "development" ? "Development" : cueListWindowTitle(kind[0].toUpperCase() + kind.slice(1), kind), ...state.windowPicker };
+      const pane = { id: `${kind}-${Date.now()}`, kind, title: kind === "help" ? "Help" : kind === "development" ? "Development" : kind === "virtual_playbacks" ? "Virtual Playbacks" : cueListWindowTitle(kind[0].toUpperCase() + kind.slice(1), kind), ...(kind === "virtual_playbacks" ? { virtualPlaybackRows: 2, virtualPlaybackColumns: 2, virtualPlaybackCells: [] } : {}), ...state.windowPicker };
       const activeDesk = state.desks.find((desk) => desk.id === state.activeDeskId);
       if (activeDesk?.panes.some((item) => overlaps(pane, item))) return { ...state, windowPicker: null };
       return { ...state, windowPicker: null, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: [...desk.panes, pane] }) };

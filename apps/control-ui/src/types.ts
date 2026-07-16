@@ -22,7 +22,8 @@ export type BuiltInWindow =
   | "patch"
   | "setup"
   | "help"
-  | "development";
+  | "development"
+  | "virtual_playbacks";
 
 export type ControlMode = "programmer" | "playbacks";
 export type DockMode = "desks" | "builtins";
@@ -49,6 +50,9 @@ export interface PaneModel extends GridRect {
   presetFamily?: AppState["presetFamily"];
   presetPoolColors?: boolean;
   developmentView?: DevelopmentView;
+  virtualPlaybackRows?: number;
+  virtualPlaybackColumns?: number;
+  virtualPlaybackCells?: Array<{ playbackNumber: number | null; action: "go" | "toggle" }>;
 }
 
 export interface DeskModel {

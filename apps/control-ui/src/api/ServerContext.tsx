@@ -115,7 +115,7 @@ interface ServerContextValue {
     cueListId: string,
     action: "go" | "back" | "pause" | "release",
   ) => Promise<void>;
-  poolPlaybackAction: (number: number, action: "on" | "off" | "toggle" | "go" | "go-minus" | "flash" | "master" | "xfade-on" | "xfade-off", input?: { value?: number; pressed?: boolean }) => Promise<void>;
+  poolPlaybackAction: (number: number, action: "on" | "off" | "toggle" | "go" | "go-minus" | "flash" | "master" | "xfade-on" | "xfade-off", input?: { value?: number; pressed?: boolean; surface?: "physical" | "virtual" }) => Promise<void>;
   setPlaybackPage: (page: number) => Promise<void>;
   updateControlDesk: (desk: import("./types").ControlDesk) => Promise<void>;
   selectControlDesk: (id: string) => void;

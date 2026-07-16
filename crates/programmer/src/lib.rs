@@ -12,6 +12,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 const HISTORY_LIMIT: usize = 100;
+fn default_true() -> bool { true }
 
 #[derive(Clone, Debug, Serialize)]
 pub struct GroupProgrammerValue {
@@ -67,6 +68,13 @@ impl<'de> Deserialize<'de> for GroupProgrammerValue {
 }
 type GroupProgrammerValues = HashMap<String, HashMap<AttributeKey, GroupProgrammerValue>>;
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct PreloadPlaybackAction {
+    pub playback_number: u16,
+    pub action: String,
+    pub surface: String,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub struct ProgrammerSnapshot {
@@ -78,8 +86,10 @@ pub struct ProgrammerSnapshot {
     pub preload_active: Vec<TimedValue>,
     pub preload_group_pending: GroupProgrammerValues,
     pub preload_group_active: GroupProgrammerValues,
+    pub preload_playback_pending: Vec<PreloadPlaybackAction>,
     pub command_line: String,
     pub blind: bool,
+    pub preload_capture_programmer: bool,
     pub preview: bool,
     pub highlight: bool,
     pub active_context: Option<String>,
@@ -105,12 +115,16 @@ pub struct ProgrammerState {
     pub preload_group_pending: GroupProgrammerValues,
     #[serde(default)]
     pub preload_group_active: GroupProgrammerValues,
+    #[serde(default)]
+    pub preload_playback_pending: Vec<PreloadPlaybackAction>,
     pub connected: bool,
     pub last_activity: DateTime<Utc>,
     #[serde(default)]
     pub command_line: String,
     #[serde(default)]
     pub blind: bool,
+    #[serde(default = "default_true")]
+    pub preload_capture_programmer: bool,
     #[serde(default)]
     pub preview: bool,
     #[serde(default)]
@@ -134,8 +148,10 @@ impl ProgrammerState {
             preload_active: self.preload_active.clone(),
             preload_group_pending: self.preload_group_pending.clone(),
             preload_group_active: self.preload_group_active.clone(),
+            preload_playback_pending: self.preload_playback_pending.clone(),
             command_line: self.command_line.clone(),
             blind: self.blind,
+            preload_capture_programmer: self.preload_capture_programmer,
             preview: self.preview,
             highlight: self.highlight,
             active_context: self.active_context.clone(),
@@ -151,8 +167,10 @@ impl ProgrammerState {
         self.preload_active = snapshot.preload_active;
         self.preload_group_pending = snapshot.preload_group_pending;
         self.preload_group_active = snapshot.preload_group_active;
+        self.preload_playback_pending = snapshot.preload_playback_pending;
         self.command_line = snapshot.command_line;
         self.blind = snapshot.blind;
+        self.preload_capture_programmer = snapshot.preload_capture_programmer;
         self.preview = snapshot.preview;
         self.highlight = snapshot.highlight;
         self.active_context = snapshot.active_context;
@@ -414,10 +432,12 @@ impl ProgrammerRegistry {
             preload_active: vec![],
             preload_group_pending: HashMap::new(),
             preload_group_active: HashMap::new(),
+            preload_playback_pending: vec![],
             connected: true,
             last_activity: self.clock.now(),
             command_line: String::new(),
             blind: false,
+            preload_capture_programmer: true,
             preview: false,
             highlight: false,
             active_context: None,
@@ -554,7 +574,7 @@ impl ProgrammerRegistry {
         if let Some(state) = self.states.write().get_mut(&self.key(session)) {
             state.checkpoint();
             let merge_mode = light_core::MergeMode::Ltp;
-            let values = if state.blind {
+            let values = if state.blind && state.preload_capture_programmer {
                 &mut state.preload_pending
             } else {
                 &mut state.values
@@ -636,7 +656,7 @@ impl ProgrammerRegistry {
             return false;
         };
         state.checkpoint();
-        let target = if state.blind {
+        let target = if state.blind && state.preload_capture_programmer {
             &mut state.preload_group_pending
         } else {
             &mut state.group_values
@@ -679,6 +699,38 @@ impl ProgrammerRegistry {
         state.last_activity = self.clock.now();
         true
     }
+
+    pub fn queue_preload_playback_action(
+        &self,
+        session: SessionId,
+        playback_number: u16,
+        action: String,
+        surface: String,
+    ) -> bool {
+        let mut states = self.states.write();
+        let Some(state) = states.get_mut(&self.key(session)) else {
+            return false;
+        };
+        state.checkpoint();
+        state.preload_playback_pending.push(PreloadPlaybackAction {
+            playback_number,
+            action,
+            surface,
+        });
+        state.last_activity = self.clock.now();
+        true
+    }
+
+    pub fn take_preload_playback_actions(
+        &self,
+        session: SessionId,
+    ) -> Vec<PreloadPlaybackAction> {
+        let mut states = self.states.write();
+        let Some(state) = states.get_mut(&self.key(session)) else {
+            return Vec::new();
+        };
+        std::mem::take(&mut state.preload_playback_pending)
+    }
     pub fn clear_preload_pending(&self, session: SessionId) -> bool {
         let mut states = self.states.write();
         let Some(state) = states.get_mut(&self.key(session)) else {
@@ -687,6 +739,7 @@ impl ProgrammerRegistry {
         state.checkpoint();
         state.preload_pending.clear();
         state.preload_group_pending.clear();
+        state.preload_playback_pending.clear();
         state.last_activity = self.clock.now();
         true
     }
@@ -700,6 +753,7 @@ impl ProgrammerRegistry {
         state.preload_active.clear();
         state.preload_group_pending.clear();
         state.preload_group_active.clear();
+        state.preload_playback_pending.clear();
         state.blind = false;
         state.last_activity = self.clock.now();
         true
@@ -784,6 +838,18 @@ impl ProgrammerRegistry {
         if let Some(value) = active_context {
             state.active_context = value;
         }
+        state.last_activity = self.clock.now();
+        true
+    }
+
+    pub fn arm_preload(&self, session: SessionId, capture_programmer: bool) -> bool {
+        let mut states = self.states.write();
+        let Some(state) = states.get_mut(&self.key(session)) else {
+            return false;
+        };
+        state.checkpoint();
+        state.blind = true;
+        state.preload_capture_programmer = capture_programmer;
         state.last_activity = self.clock.now();
         true
     }

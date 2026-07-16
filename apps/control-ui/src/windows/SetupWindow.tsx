@@ -105,6 +105,12 @@ export function SetupWindow(_: WindowProps) {
             <>
               <h2>Inputs</h2>
               <div className="setup-list">
+                {draft && <article>
+                  <b>Preload capture</b>
+                  <SwitchField label="Preload programmer changes" checked={draft.preload_programmer_changes} onChange={(event) => setDraft({ ...draft, preload_programmer_changes: event.target.checked })}/>
+                  <SwitchField label="Preload physical playback actions" checked={draft.preload_physical_playback_actions} onChange={(event) => setDraft({ ...draft, preload_physical_playback_actions: event.target.checked })}/>
+                  <SwitchField label="Preload virtual playback actions" checked={draft.preload_virtual_playback_actions} onChange={(event) => setDraft({ ...draft, preload_virtual_playback_actions: event.target.checked })}/>
+                </article>}
                 <article>
                   <b>MIDI inputs</b>
                   <span>

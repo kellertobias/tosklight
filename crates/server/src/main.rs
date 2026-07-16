@@ -401,6 +401,9 @@ struct DeskConfiguration {
     speed_groups_bpm: [u16; 5],
     programmer_fade_millis: u64,
     sequence_master_fade_millis: u64,
+    preload_programmer_changes: bool,
+    preload_physical_playback_actions: bool,
+    preload_virtual_playback_actions: bool,
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct OscTimecodeConfig {
@@ -447,6 +450,9 @@ impl Default for DeskConfiguration {
             speed_groups_bpm: default_speed_groups(),
             programmer_fade_millis: 3_000,
             sequence_master_fade_millis: 3_000,
+            preload_programmer_changes: true,
+            preload_physical_playback_actions: true,
+            preload_virtual_playback_actions: false,
         }
     }
 }
@@ -3345,6 +3351,7 @@ async fn playbacks(
 struct PoolPlaybackInput {
     value: Option<f32>,
     pressed: Option<bool>,
+    surface: Option<String>,
 }
 async fn pool_playback_state(
     State(state): State<AppState>,
@@ -3606,6 +3613,32 @@ async fn pool_playback_action(
         .find(|playback| playback.number == number)
         .cloned()
         .ok_or_else(|| ApiError::not_found("playback"))?;
+    let surface = input.surface.as_deref().unwrap_or("physical");
+    let capture = state
+        .programmers
+        .get(session.id)
+        .is_some_and(|programmer| programmer.blind)
+        && matches!(action.as_str(), "go" | "go-minus" | "back" | "on" | "off" | "toggle" | "temp-on" | "temp-off")
+        && if surface == "virtual" {
+            state.configuration.read().preload_virtual_playback_actions
+        } else {
+            state.configuration.read().preload_physical_playback_actions
+        };
+    if capture {
+        state.programmers.queue_preload_playback_action(
+            session.id,
+            number,
+            if action == "back" { "go-minus".into() } else { action.clone() },
+            surface.to_owned(),
+        );
+        persist_programmer(&state, &session)?;
+        emit(
+            &state,
+            "programmer_changed",
+            serde_json::json!({"session_id":session.id,"preload_playback_action":action,"playback_number":number,"surface":surface}),
+        );
+        return Ok(Json(serde_json::json!({"pending":true,"playback":definition})));
+    }
     if let light_playback::PlaybackTarget::Group { group_id } = &definition.target {
         let value = match action.as_str() {
             "on" => 1.0,
@@ -3646,38 +3679,7 @@ async fn pool_playback_action(
                 .map_err(|error| ApiError::bad_request(error.to_string()))?;
         }
     } else {
-        let mut engine = state.engine.playback().write();
-        match action.as_str() {
-            "go" => {
-                engine.go_playback(number).map_err(ApiError::bad_request)?;
-            }
-            "go-minus" | "back" => {
-                engine
-                    .back_playback(number)
-                    .map_err(ApiError::bad_request)?;
-            }
-            "on" => engine.on(number).map_err(ApiError::bad_request)?,
-            "off" => {
-                engine.off(number).map_err(ApiError::bad_request)?;
-            }
-            "toggle" => {
-                engine.toggle(number).map_err(ApiError::bad_request)?;
-            }
-            "master" => engine
-                .set_master(
-                    number,
-                    input
-                        .value
-                        .ok_or_else(|| ApiError::bad_request("master value is required"))?,
-                )
-                .map_err(ApiError::bad_request)?,
-            "flash" => engine
-                .set_flash(number, input.pressed.unwrap_or(true))
-                .map_err(ApiError::bad_request)?,
-            "xfade-on" => engine.xfade(number, true).map_err(ApiError::bad_request)?,
-            "xfade-off" => engine.xfade(number, false).map_err(ApiError::bad_request)?,
-            _ => return Err(ApiError::not_found("playback action")),
-        }
+        execute_pool_playback_action(&state, number, &action, &input)?;
     }
     emit(
         &state,
@@ -3688,6 +3690,32 @@ async fn pool_playback_action(
     Ok(Json(
         serde_json::json!({"playback":definition,"active":state.engine.playback().read().active(),"groups":snapshot.groups}),
     ))
+}
+
+fn execute_pool_playback_action(
+    state: &AppState,
+    number: u16,
+    action: &str,
+    input: &PoolPlaybackInput,
+) -> Result<(), ApiError> {
+    let mut engine = state.engine.playback().write();
+    match action {
+        "go" => { engine.go_playback(number).map_err(ApiError::bad_request)?; }
+        "go-minus" | "back" => { engine.back_playback(number).map_err(ApiError::bad_request)?; }
+        "on" | "temp-on" => { engine.on(number).map_err(ApiError::bad_request)?; }
+        "off" | "temp-off" => { engine.off(number).map_err(ApiError::bad_request)?; }
+        "toggle" => { engine.toggle(number).map_err(ApiError::bad_request)?; }
+        "master" => { engine
+            .set_master(number, input.value.ok_or_else(|| ApiError::bad_request("master value is required"))?)
+            .map_err(ApiError::bad_request)?; }
+        "flash" => { engine
+            .set_flash(number, input.pressed.unwrap_or(true))
+            .map_err(ApiError::bad_request)?; }
+        "xfade-on" => { engine.xfade(number, true).map_err(ApiError::bad_request)?; }
+        "xfade-off" => { engine.xfade(number, false).map_err(ApiError::bad_request)?; }
+        _ => return Err(ApiError::not_found("playback action")),
+    }
+    Ok(())
 }
 async fn list_programmers(
     State(state): State<AppState>,
@@ -4146,9 +4174,8 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
             Ok(serde_json::json!({"cleared":true}))
         }
         "preload.enter" => {
-            state
-                .programmers
-                .set_modes(session.id, Some(true), None, None, None);
+            let capture_programmer = state.configuration.read().preload_programmer_changes;
+            state.programmers.arm_preload(session.id, capture_programmer);
             persist_programmer(state, session).map_err(|e| e.message)?;
             Ok(serde_json::json!({"blind":true}))
         }
@@ -4175,6 +4202,15 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
         }
         "preload.go" => {
             state.programmers.activate_preload(session.id);
+            for pending in state.programmers.take_preload_playback_actions(session.id) {
+                execute_pool_playback_action(
+                    state,
+                    pending.playback_number,
+                    &pending.action,
+                    &PoolPlaybackInput::default(),
+                )
+                .map_err(|error| error.message)?;
+            }
             persist_programmer(state, session).map_err(|e| e.message)?;
             Ok(serde_json::json!({"active":true,"programmer":state.programmers.get(session.id)}))
         }
