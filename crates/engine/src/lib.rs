@@ -2329,6 +2329,72 @@ mod tests {
     }
 
     #[test]
+    fn move_in_black_obeys_same_priority_ltp_and_numeric_priority() {
+        let started = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+        let clock = Arc::new(ManualClock::new(started));
+        let shared: SharedClock = clock.clone();
+        let programmers = ProgrammerRegistry::with_clock(shared);
+        let (fixture, logical) = moving_fixture(1, true, 0);
+        let mut snapshot = mib_snapshot(vec![fixture], &[logical]);
+
+        let mut newer_list = snapshot.cue_lists[0].clone();
+        newer_list.id = light_core::CueListId::new();
+        newer_list.name = "Newer MIB".into();
+        newer_list.cues[2]
+            .changes
+            .iter_mut()
+            .find(|change| change.attribute == AttributeKey("pan".into()))
+            .unwrap()
+            .value = Some(AttributeValue::Normalized(0.4));
+        let mut newer_playback = snapshot.playbacks[0].clone();
+        newer_playback.number = 2;
+        newer_playback.name = "Newer MIB".into();
+        newer_playback.target = PlaybackTarget::CueList {
+            cue_list_id: newer_list.id,
+        };
+        snapshot.cue_lists.push(newer_list);
+        snapshot.playbacks.push(newer_playback);
+
+        let engine = Engine::new(programmers);
+        engine.replace_snapshot(snapshot.clone()).unwrap();
+        for playback in [1, 2] {
+            engine.playback().write().go_playback(playback).unwrap();
+            engine.playback().write().go_playback(playback).unwrap();
+        }
+
+        clock.set(started + ChronoDuration::milliseconds(2_000));
+        engine.resolved_values();
+        clock.set(started + ChronoDuration::milliseconds(5_000));
+        engine.resolved_values();
+
+        snapshot.cue_lists[1].cues[2]
+            .changes
+            .iter_mut()
+            .find(|change| change.attribute == AttributeKey("pan".into()))
+            .unwrap()
+            .value = Some(AttributeValue::Normalized(0.6));
+        snapshot.revision += 1;
+        engine.replace_snapshot(snapshot.clone()).unwrap();
+        engine.resolved_values();
+
+        clock.set(started + ChronoDuration::milliseconds(6_500));
+        let values = engine.resolved_values();
+        assert!(
+            (normalized(&values, logical, "pan") - 0.5).abs() < 0.001,
+            "the recalculated same-priority MIB target is the newer LTP source"
+        );
+
+        snapshot.cue_lists[0].priority = 20;
+        snapshot.revision += 1;
+        engine.replace_snapshot(snapshot).unwrap();
+        let values = engine.resolved_values();
+        assert!(
+            (normalized(&values, logical, "pan") - 0.8).abs() < 0.001,
+            "numeric priority overrides a newer lower-priority MIB source"
+        );
+    }
+
+    #[test]
     fn programmer_master_fade_interpolates_live_values() {
         let engine = Engine::new(ProgrammerRegistry::default());
         engine.set_control_timing([120, 90, 60, 30, 15], 1_000, 0);
