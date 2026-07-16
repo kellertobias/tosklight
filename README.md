@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="apps/control-ui/src-tauri/icons/icon.png" alt="Light application icon" width="96" height="96">
+  <img src="apps/control-ui/src-tauri/icons/icon.png" alt="ToskLight application icon" width="96" height="96">
 </p>
 
-<h1 align="center">Light</h1>
+<h1 align="center">ToskLight</h1>
 
-`light` is a show-lighting desk, engine, and control server for programming fixtures, groups, cue lists, playback faders, and Art-Net/sACN output from one portable show file. The operator UI is built around a command line, live programmer, fixture sheet, 3D stage view, cue list pool, and playback section so the same show can be edited from the desktop app or browser-connected desks.
+`tosk-light` is a show-lighting desk, engine, and control server for programming fixtures, groups, cue lists, playback faders, and Art-Net/sACN output from one portable show file. The operator UI is built around a command line, live programmer, fixture sheet, 3D stage view, cue list pool, and playback section so the same show can be edited from the desktop app or browser-connected desks.
 
 Start with the [quickstart help](docs/help/00-quickstart.markdown) or browse the full [operator help](docs/help).
 

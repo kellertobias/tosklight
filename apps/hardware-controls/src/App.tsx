@@ -25,8 +25,20 @@ function ControlButton({ label, lamp = dark, onDown, onUp, className = "" }: { l
   </button>;
 }
 
+function WheelSafeRange(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const range = input.current;
+    if (!range) return;
+    const rejectWheel = (event: WheelEvent) => { event.preventDefault(); range.blur(); };
+    range.addEventListener("wheel", rejectWheel, { passive: false });
+    return () => range.removeEventListener("wheel", rejectWheel);
+  }, []);
+  return <input {...props} ref={input} type="range"/>;
+}
+
 function TouchFader({ label, value, display, onChange, className = "" }: { label: string; value: number; display: string; onChange: (value: number) => void; className?: string }) {
-  return <label className={`touch-fader ${className}`} style={{ "--fader-level": value } as React.CSSProperties}><span>{label}</span><strong>{display}</strong><input type="range" min="0" max="1" step=".001" value={value} onChange={(event) => onChange(Number(event.target.value))}/></label>;
+  return <label className={`touch-fader ${className}`} style={{ "--fader-level": value } as React.CSSProperties}><span>{label}</span><strong>{display}</strong><WheelSafeRange min="0" max="1" step=".001" value={value} onChange={(event) => onChange(Number(event.target.value))}/></label>;
 }
 
 interface PlaybackProps { slot: number; levels: Record<number, number>; lamps: Record<string, Lamp>; send: (path: string, args: unknown[]) => void; buttons?: 1 | 3; }
@@ -76,7 +88,7 @@ export function App() {
   const send = (path: string, args: unknown[]) => void invoke("send_control", { path, args });
   const action = (name: string, down: boolean) => send(oscPaths.programmer(name), [down]);
   const key = (label: string, className = "", actionName = label.toLowerCase()) => <ControlButton className={`key-${actionName === "." ? "dot" : actionName} ${className}`} label={label} onDown={() => action(actionName, true)} onUp={() => action(actionName, false)}/>;
-  const speedGroups = <section className="speed-groups"><h2>Speed groups</h2>{[1, 2, 3, 4, 5].map((number) => <div className="encoder" key={number}><ControlButton label={`SPEED ${number}`} lamp={lamps[`speed/${number}`]} onDown={() => send(oscPaths.speedGroupButton(number), [true])} onUp={() => send(oscPaths.speedGroupButton(number), [false])}/><input type="range" min="1" max="999" defaultValue={120} onChange={(event) => send(oscPaths.speedGroupEncoder(number), [Number(event.target.value)])}/></div>)}</section>;
+  const speedGroups = <section className="speed-groups"><h2>Speed groups</h2>{[1, 2, 3, 4, 5].map((number) => <div className="encoder" key={number}><ControlButton label={`SPEED ${number}`} lamp={lamps[`speed/${number}`]} onDown={() => send(oscPaths.speedGroupButton(number), [true])} onUp={() => send(oscPaths.speedGroupButton(number), [false])}/><WheelSafeRange min="1" max="999" defaultValue={120} onChange={(event) => send(oscPaths.speedGroupEncoder(number), [Number(event.target.value)])}/></div>)}</section>;
 
   return <main><header><h1>ToskLight <span>Hardware Controls</span></h1><i className={connected ? "connected" : ""}>{connected ? `● Connected · page ${page}` : "○ Connecting…"}</i></header>
     <nav><button className={tab === "console" ? "active" : ""} onClick={() => setTab("console")}>Playback Console</button><button className={tab === "grid" ? "active" : ""} onClick={() => setTab("grid")}>Button Grid 41–90</button><button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}>Settings</button>{tab === "console" && <label><input type="checkbox" checked={top} onChange={(event) => { setTop(event.target.checked); localStorage.setItem("tosklight.hardware", JSON.stringify({ host, port: Number(port), desk, top: event.target.checked })); }}/> Show 21–40</label>}</nav>

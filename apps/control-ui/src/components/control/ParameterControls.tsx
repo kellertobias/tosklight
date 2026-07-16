@@ -31,6 +31,18 @@ const families = {
 } as const;
 type Family = keyof typeof families;
 type SpecialFamily = "Color" | "Position" | "Beam" | "Shapers" | "Control";
+const alignModes = ["out", "center", "left", "right"] as const;
+type AlignMode = typeof alignModes[number];
+const compactFamilyLabels: Record<Family, string> = {
+  Intensity: "Int",
+  Color: "Col",
+  Position: "Pos",
+  Beam: "Beam",
+  Shapers: "Shapr",
+  Focus: "Focus",
+  Control: "Ctrl",
+  Media: "Media",
+};
 const labels: Record<string, string> = {
   intensity: "Dimmer",
   shutter: "Shutter",
@@ -57,11 +69,18 @@ const specialFamilies = new Set<SpecialFamily>([
   "Control",
 ]);
 
+function FamilyLabel({ full, compact }: { full: string; compact: string }) {
+  return <>
+    <span className="family-label-full" aria-hidden="true">{full}</span>
+    <span className="family-label-compact" aria-hidden="true">{compact}</span>
+  </>;
+}
+
 export function ParameterControls() {
   const { state, dispatch } = useApp();
   const server = useServer();
   const [family, setFamily] = useState<Family>("Intensity");
-  const [alignIndex, setAlignIndex] = useState(0);
+  const [alignMode, setAlignMode] = useState<AlignMode | null>(null);
   const [dynamicsMode, setDynamicsMode] = useState(false);
   const [visualization, setVisualization] =
     useState<VisualizationSnapshot | null>(null);
@@ -148,28 +167,35 @@ export function ParameterControls() {
         {(Object.keys(families) as Family[]).map((name) => (
             <Button
               onClick={() => setFamily(name)}
-              className={family === name ? "active" : ""}
+              className={`attribute-family ${family === name ? "active" : ""}`}
               key={name}
+              aria-label={name}
             >
-              {name}
+              <FamilyLabel full={name} compact={compactFamilyLabels[name]} />
             </Button>
           ))}
         <span className="family-spacer" />
-        {family === "Position" && <Button className="align-cycle" onClick={() => {
-          const modes = ["left", "right", "center", "out"] as const;
-          const mode = modes[alignIndex];
-          void server.alignSelection("pan", mode);
-          setAlignIndex((alignIndex + 1) % modes.length);
-        }}>Align {(["Left", "Right", "Center", "Out"] as const)[alignIndex]}</Button>}
+        {family === "Position" && <Button aria-label={`Align ${alignMode ? alignMode[0].toUpperCase() + alignMode.slice(1) : "Off"}`} className={`align-cycle ${alignMode ? "align-active" : "align-off"}`} onClick={(event) => {
+          if (event.shiftKey || state.shiftArmed) {
+            setAlignMode(null);
+            if (state.shiftArmed) dispatch({ type: "SET_SHIFT_ARMED", value: false });
+            return;
+          }
+          const next = alignModes[(alignMode == null ? 0 : alignModes.indexOf(alignMode) + 1) % alignModes.length];
+          void server.alignSelection("pan", next);
+          setAlignMode(next);
+        }}><span className="align-label-full"><span>Align</span><span>{alignMode ? alignMode[0].toUpperCase() + alignMode.slice(1) : "Off"}</span></span><span className="align-label-compact"><span>Align</span><span>{alignMode ? alignMode[0].toUpperCase() + alignMode.slice(1) : "Off"}</span></span></Button>}
         {specialFamilies.has(family as SpecialFamily) && (
             <Button
               className="special-dialogs"
+              aria-label="Special Dialog"
               onClick={() => dispatch({ type: "OPEN_SPECIAL_DIALOG", family: family as SpecialFamily })}
             >
-              ◇ Special Dialog
+              <span className="special-dialog-label-full"><span>Special</span><span>Dialog</span></span>
+              <span className="special-dialog-label-compact">Spcl</span>
             </Button>
         )}
-        <Button onClick={() => setDynamicsMode(!dynamicsMode)} className={`dynamics-family ${dynamicsMode ? "active" : ""}`}>Dynamics</Button>
+        <Button aria-label="Dynamics" onClick={() => setDynamicsMode(!dynamicsMode)} className={`dynamics-family ${dynamicsMode ? "active" : ""}`}><FamilyLabel full="Dynamics" compact="Dyn" /></Button>
       </div>
       <div className="parameter-surfaces">
         {!server.selectedFixtures.length && !server.selectedGroupId ? (

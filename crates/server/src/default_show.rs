@@ -39,6 +39,37 @@ fn default_fixture_number(name: &str) -> Option<u32> {
     }
 }
 
+fn default_patch(name: &str) -> Option<(u16, u16)> {
+    match name {
+        "Middle ACL Set" => Some((1, 11)),
+        "Outside ACL Set" => Some((1, 12)),
+        "Stage Hazer" => Some((1, 13)),
+        "Overhead RGB Multi-patch" => Some((4, 1)),
+        _ if name.starts_with("Front Fresnel ") => {
+            trailing_number(name).map(|number| (1, number as u16))
+        }
+        _ if name.starts_with("Back Profile ") => {
+            trailing_number(name).map(|number| (2, 1 + (number as u16 - 1) * 6))
+        }
+        _ if name.starts_with("Back LED Wash ") => {
+            trailing_number(name).map(|number| (2, 49 + (number as u16 - 1) * 6))
+        }
+        _ if name.starts_with("Back Trackspot ") => {
+            trailing_number(name).map(|number| (2, 79 + (number as u16 - 1) * 3))
+        }
+        _ if name.starts_with("Floor RGBW PAR ") => {
+            trailing_number(name).map(|number| (3, 1 + (number as u16 - 1) * 5))
+        }
+        _ if name.starts_with("Back RGB Sunstrip ") => {
+            trailing_number(name).map(|number| (3, 61 + (number as u16 - 1) * 30))
+        }
+        _ if name.starts_with("Front RGB Strobe ") => {
+            trailing_number(name).map(|number| (3, 241 + (number as u16 - 1) * 4))
+        }
+        _ => None,
+    }
+}
+
 fn parameter(attribute: &str, offset: u16, default: f32) -> Parameter {
     Parameter {
         attribute: AttributeKey(attribute.into()),
@@ -149,8 +180,19 @@ fn sunstrip_definition() -> FixtureDefinition {
 /// Upgrades an existing built-in show without replacing user programming.
 pub fn upgrade(path: impl AsRef<Path>) -> Result<(), StoreError> {
     let store = ShowStore::open(path)?;
-    for object in store.objects("patched_fixture")? {
-        let mut fixture: PatchedFixture = serde_json::from_value(object.body)?;
+    let fixtures = store
+        .objects("patched_fixture")?
+        .into_iter()
+        .map(|object| {
+            let fixture = serde_json::from_value::<PatchedFixture>(object.body.clone())?;
+            Ok((object, fixture))
+        })
+        .collect::<Result<Vec<_>, StoreError>>()?;
+    let migrate_single_universe_patch = fixtures.len() == 49
+        && fixtures
+            .iter()
+            .all(|(_, fixture)| fixture.universe == Some(1));
+    for (object, mut fixture) in fixtures {
         let mut changed = false;
         if fixture.fixture_number.is_none() {
             fixture.fixture_number = default_fixture_number(&fixture.name);
@@ -165,6 +207,13 @@ pub fn upgrade(path: impl AsRef<Path>) -> Result<(), StoreError> {
         {
             fixture.definition = sunstrip_definition();
             changed = true;
+        }
+        if migrate_single_universe_patch {
+            if let Some((universe, address)) = default_patch(&fixture.name) {
+                fixture.universe = Some(universe);
+                fixture.address = Some(address);
+                changed = true;
+            }
         }
         if changed {
             store.put_object(
@@ -182,18 +231,18 @@ fn patched(
     name: String,
     fixture_number: u32,
     definition: &FixtureDefinition,
-    address: u16,
     x: f32,
     y: f32,
     z: f32,
     rotation_y: f32,
 ) -> PatchedFixture {
+    let (universe, address) = default_patch(&name).expect("built-in fixture has a default patch");
     PatchedFixture {
         fixture_id: FixtureId::new(),
         fixture_number: Some(fixture_number),
         name,
         definition: definition.clone(),
-        universe: Some(1),
+        universe: Some(universe),
         address: Some(address),
         layer_id: "default".into(),
         direct_control: None,
@@ -303,19 +352,16 @@ pub fn initialise(path: impl AsRef<Path>) -> Result<light_core::ShowId, StoreErr
     );
     let hazer = definition("Hazer", "hazer", &["fog", "fan"]);
     let mut fixtures = Vec::new();
-    let mut address = 1_u16;
     for (index, x) in [-5.0, -4.0, -3.0, 3.0, 4.0, 5.0].into_iter().enumerate() {
         fixtures.push(patched(
             format!("Front Fresnel {}", index + 1),
             1 + index as u32,
             &fresnel,
-            address,
             x,
             1.0,
             4.65,
             0.0,
         ));
-        address += fresnel.footprint;
     }
     for (index, x) in [-5.25, -3.75, -2.25, -0.75, 0.75, 2.25, 3.75, 5.25]
         .into_iter()
@@ -325,90 +371,68 @@ pub fn initialise(path: impl AsRef<Path>) -> Result<light_core::ShowId, StoreErr
             format!("Back Profile {}", index + 1),
             101 + index as u32,
             &profile,
-            address,
             x,
             7.0,
             4.65,
             0.0,
         ));
-        address += profile.footprint;
     }
     for (index, x) in [-4.5, -2.25, 0.0, 2.25, 4.5].into_iter().enumerate() {
         fixtures.push(patched(
             format!("Back LED Wash {}", index + 1),
             201 + index as u32,
             &wash,
-            address,
             x,
             7.0,
             4.65,
             0.0,
         ));
-        address += wash.footprint;
     }
     for (index, x) in [-5.0, -3.0, -1.0, 1.0, 3.0, 5.0].into_iter().enumerate() {
         fixtures.push(patched(
             format!("Back RGB Sunstrip {}", index + 1),
             501 + index as u32,
             &sunstrip,
-            address,
             x,
             7.75,
             2.1,
             0.0,
         ));
-        address += sunstrip.footprint;
     }
     for (index, x) in [-2.1, -0.7, 0.7, 2.1].into_iter().enumerate() {
         fixtures.push(patched(
             format!("Front RGB Strobe {}", index + 1),
             601 + index as u32,
             &strobe,
-            address,
             x,
             0.9,
             4.7,
             0.0,
         ));
-        address += strobe.footprint;
     }
     for (index, x) in [-5.0, -3.0, -1.0, 1.0, 3.0, 5.0].into_iter().enumerate() {
         fixtures.push(patched(
             format!("Floor RGBW PAR {}", index + 1),
             401 + index as u32,
             &par,
-            address,
             x,
             2.5,
             0.3,
             -90.0,
         ));
-        address += par.footprint;
     }
     for (index, x) in [-5.0, -3.0, -1.0, 1.0, 3.0, 5.0].into_iter().enumerate() {
         fixtures.push(patched(
             format!("Floor RGBW PAR {}", index + 7),
             407 + index as u32,
             &par,
-            address,
             x,
             5.0,
             0.3,
             -90.0,
         ));
-        address += par.footprint;
     }
-    let mut middle_acl = patched(
-        "Middle ACL Set".into(),
-        28,
-        &acl,
-        address,
-        -1.4,
-        6.6,
-        3.8,
-        -32.0,
-    );
-    address += acl.footprint;
+    let mut middle_acl = patched("Middle ACL Set".into(), 28, &acl, -1.4, 6.6, 3.8, -32.0);
     middle_acl.multipatch = (1..8)
         .map(|index| {
             let x = -1.4 + index as f32 * 0.4;
@@ -436,13 +460,11 @@ pub fn initialise(path: impl AsRef<Path>) -> Result<light_core::ShowId, StoreErr
         "Outside ACL Set".into(),
         29,
         &acl,
-        address,
         outside_positions[0].0,
         6.65,
         3.8,
         outside_positions[0].1,
     );
-    address += acl.footprint;
     outside_acl.multipatch = outside_positions
         .into_iter()
         .enumerate()
@@ -466,7 +488,6 @@ pub fn initialise(path: impl AsRef<Path>) -> Result<light_core::ShowId, StoreErr
         "Overhead RGB Multi-patch".into(),
         999,
         &rgb_multipatch,
-        address,
         rgb_positions[0].0,
         rgb_positions[0].1,
         5.2,
@@ -479,25 +500,21 @@ pub fn initialise(path: impl AsRef<Path>) -> Result<light_core::ShowId, StoreErr
         .map(|(index, (x, y))| multipatch(format!("Overhead RGB {}", index + 1), x, y, 5.2, 0.0))
         .collect();
     fixtures.push(rgb_grid);
-    address += rgb_multipatch.footprint;
     for (index, x) in [-4.5, -1.5, 1.5, 4.5].into_iter().enumerate() {
         fixtures.push(patched(
             format!("Back Trackspot {}", index + 1),
             301 + index as u32,
             &scanner,
-            address,
             x,
             6.15,
             3.25,
             0.0,
         ));
-        address += scanner.footprint;
     }
     fixtures.push(patched(
         "Stage Hazer".into(),
         99,
         &hazer,
-        address,
         5.5,
         7.7,
         0.25,
@@ -627,7 +644,7 @@ mod tests {
             .iter()
             .find(|fixture| fixture.name == "Stage Hazer")
             .unwrap();
-        assert_eq!(hazer.address, Some(359));
+        assert_eq!((hazer.universe, hazer.address), (Some(1), Some(13)));
         assert_eq!(hazer.definition.footprint, 2);
         assert_eq!(
             hazer.definition.heads[0]
@@ -678,8 +695,16 @@ mod tests {
             .iter()
             .find(|fixture| fixture.fixture_number == Some(502))
             .unwrap();
-        let children_501 = sunstrip.logical_heads.iter().map(|head| head.fixture_id).collect::<Vec<_>>();
-        let children_502 = sunstrip_502.logical_heads.iter().map(|head| head.fixture_id).collect::<Vec<_>>();
+        let children_501 = sunstrip
+            .logical_heads
+            .iter()
+            .map(|head| head.fixture_id)
+            .collect::<Vec<_>>();
+        let children_502 = sunstrip_502
+            .logical_heads
+            .iter()
+            .map(|head| head.fixture_id)
+            .collect::<Vec<_>>();
         assert_eq!(
             crate::parse_fixture_selection(&fixtures, &["501".into()]).unwrap(),
             std::iter::once(sunstrip.fixture_id)
@@ -702,8 +727,13 @@ mod tests {
             crate::parse_fixture_selection(
                 &fixtures,
                 &[
-                    "501".into(), ".".into(), "0".into(), "THRU".into(),
-                    "502".into(), ".".into(), "0".into(),
+                    "501".into(),
+                    ".".into(),
+                    "0".into(),
+                    "THRU".into(),
+                    "502".into(),
+                    ".".into(),
+                    "0".into(),
                 ],
             )
             .unwrap(),
@@ -713,8 +743,13 @@ mod tests {
             crate::parse_fixture_selection(
                 &fixtures,
                 &[
-                    "501".into(), ".".into(), "2".into(), "THRU".into(),
-                    "501".into(), ".".into(), "4".into(),
+                    "501".into(),
+                    ".".into(),
+                    "2".into(),
+                    "THRU".into(),
+                    "501".into(),
+                    ".".into(),
+                    "4".into(),
                 ],
             )
             .unwrap(),
@@ -723,33 +758,76 @@ mod tests {
         assert_eq!(
             crate::parse_fixture_selection(
                 &fixtures,
-                &["501".into(), "+".into(), "501".into(), ".".into(), "1".into()],
+                &[
+                    "501".into(),
+                    "+".into(),
+                    "501".into(),
+                    ".".into(),
+                    "1".into()
+                ],
             )
             .unwrap(),
             std::iter::once(sunstrip.fixture_id)
                 .chain(children_501.iter().copied())
                 .collect::<Vec<_>>()
         );
-        assert!(crate::parse_fixture_selection(
-            &fixtures,
-            &[
-                "501".into(), ".".into(), "1".into(), "THRU".into(),
-                "502".into(), ".".into(), "1".into(),
-            ],
-        )
-        .is_err());
-        assert!(crate::parse_fixture_selection(
-            &fixtures,
-            &["501".into(), "+".into()],
-        )
-        .is_err());
+        assert!(
+            crate::parse_fixture_selection(
+                &fixtures,
+                &[
+                    "501".into(),
+                    ".".into(),
+                    "1".into(),
+                    "THRU".into(),
+                    "502".into(),
+                    ".".into(),
+                    "1".into(),
+                ],
+            )
+            .is_err()
+        );
+        assert!(crate::parse_fixture_selection(&fixtures, &["501".into(), "+".into()],).is_err());
         assert!(crate::resolve_fixture_reference(&fixtures, "501.11").is_err());
+        for (name, expected_universe, expected_address) in [
+            ("Front Fresnel 1", 1, 1),
+            ("Front Fresnel 6", 1, 6),
+            ("Middle ACL Set", 1, 11),
+            ("Outside ACL Set", 1, 12),
+            ("Back Profile 1", 2, 1),
+            ("Back LED Wash 1", 2, 49),
+            ("Back Trackspot 1", 2, 79),
+            ("Floor RGBW PAR 1", 3, 1),
+            ("Back RGB Sunstrip 1", 3, 61),
+            ("Front RGB Strobe 1", 3, 241),
+            ("Overhead RGB Multi-patch", 4, 1),
+        ] {
+            let fixture = fixtures
+                .iter()
+                .find(|fixture| fixture.name == name)
+                .unwrap();
+            assert_eq!(
+                (fixture.universe, fixture.address),
+                (Some(expected_universe), Some(expected_address)),
+                "unexpected patch for {name}"
+            );
+        }
+        assert_eq!(
+            fixtures
+                .iter()
+                .filter_map(|fixture| fixture.universe)
+                .collect::<std::collections::BTreeSet<_>>(),
+            std::collections::BTreeSet::from([1, 2, 3, 4])
+        );
         let mut occupied = std::collections::BTreeSet::new();
         for fixture in &fixtures {
             for channel in
                 fixture.address.unwrap()..fixture.address.unwrap() + fixture.definition.footprint
             {
-                assert!(occupied.insert(channel), "overlap at {channel}");
+                assert!(
+                    occupied.insert((fixture.universe.unwrap(), channel)),
+                    "overlap at {}.{channel}",
+                    fixture.universe.unwrap()
+                );
             }
         }
         let layout = store.objects("stage_layout").unwrap().pop().unwrap().body;
@@ -773,6 +851,52 @@ mod tests {
             4
         );
         drop(store);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn upgrades_the_legacy_single_universe_default_patch() {
+        let path = std::env::temp_dir().join(format!(
+            "tosklight-default-show-upgrade-{}.show",
+            uuid::Uuid::new_v4()
+        ));
+        initialise(&path).unwrap();
+        let store = ShowStore::open(&path).unwrap();
+        for object in store.objects("patched_fixture").unwrap() {
+            let mut fixture: PatchedFixture = serde_json::from_value(object.body).unwrap();
+            fixture.universe = Some(1);
+            store
+                .put_object(
+                    "patched_fixture",
+                    &object.id,
+                    &serde_json::to_value(fixture).unwrap(),
+                    object.revision,
+                )
+                .unwrap();
+        }
+        drop(store);
+
+        upgrade(&path).unwrap();
+
+        let fixtures = ShowStore::open(&path)
+            .unwrap()
+            .objects("patched_fixture")
+            .unwrap()
+            .into_iter()
+            .map(|object| serde_json::from_value::<PatchedFixture>(object.body).unwrap())
+            .collect::<Vec<_>>();
+        for (name, expected) in [
+            ("Middle ACL Set", (Some(1), Some(11))),
+            ("Back Profile 1", (Some(2), Some(1))),
+            ("Floor RGBW PAR 1", (Some(3), Some(1))),
+            ("Overhead RGB Multi-patch", (Some(4), Some(1))),
+        ] {
+            let fixture = fixtures
+                .iter()
+                .find(|fixture| fixture.name == name)
+                .unwrap();
+            assert_eq!((fixture.universe, fixture.address), expected);
+        }
         std::fs::remove_file(path).unwrap();
     }
 }

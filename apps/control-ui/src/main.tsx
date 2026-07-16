@@ -9,7 +9,9 @@ import "./hardware.css";
 import "./chrome.css";
 import "./hardware-dense.css";
 import { UiKitCatalog } from "./components/window-kit/UiKitCatalog";
+import { enableSetOnContextMenu } from "./disableContextMenu";
 
+enableSetOnContextMenu();
 const screenId = new URLSearchParams(window.location.search).get("screen");
 const uiKit = import.meta.env.DEV && new URLSearchParams(window.location.search).get("ui-kit") === "1";
 createRoot(document.getElementById("root")!).render(

@@ -45,15 +45,29 @@ describe("modal input controls", () => {
     expect(enter).toHaveBeenCalledOnce(); expect(escape).toHaveBeenCalledOnce();
   });
 
+  it("uses minus as a sign toggle for negative placement values", () => {
+    render(<NumberHarness enter={vi.fn()} escape={vi.fn()} replaceOnFirstInput/>);
+    fireEvent.click(screen.getByRole("button", { name: "−" }));
+    fireEvent.keyDown(window, { key: "5" });
+    expect(screen.getByLabelText("value")).toHaveTextContent("-5");
+    fireEvent.click(screen.getByRole("button", { name: "−" }));
+    expect(screen.getByLabelText("value")).toHaveTextContent("5");
+  });
+
   it("uses the operator num-block layout and replaces an existing value on first entry", () => {
     render(<NumberHarness enter={vi.fn()} escape={vi.fn()} initial="62.8" replaceOnFirstInput/>);
     const keypad = screen.getByLabelText("Number input keypad");
     expect([...keypad.children].map((key) => key.textContent)).toEqual([
-      "−", "7", "8", "9", "+",
-      "ESC", "4", "5", "6", "THRU",
+      "ESC", "7", "8", "9", "←",
+      "+", "4", "5", "6", "THRU",
       "DIV", "1", "2", "3", "ENTER",
-      "←", "0", ".", "AT",
+      "−", ".", "0", "AT",
     ]);
+    expect(screen.getByRole("button", { name: "ESC" })).toHaveStyle({ gridColumn: "1", gridRow: "1" });
+    expect(screen.getByRole("button", { name: "←" })).toHaveStyle({ gridColumn: "5", gridRow: "1" });
+    expect(screen.getByRole("button", { name: "+" })).toHaveStyle({ gridColumn: "1", gridRow: "2" });
+    expect(screen.getByRole("button", { name: "THRU" })).toHaveStyle({ gridColumn: "5", gridRow: "2" });
+    expect(screen.getByRole("button", { name: "AT" })).toHaveStyle({ gridColumn: "4", gridRow: "4" });
     expect(screen.getByRole("button", { name: "ENTER" })).toHaveStyle({ gridRow: "3 / span 2" });
     fireEvent.keyDown(window, { key: "9" });
     fireEvent.keyDown(window, { key: "5" });

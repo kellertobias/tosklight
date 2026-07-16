@@ -88,54 +88,54 @@ The fully entered command `[REC] [GRP] [3] [ENTER]` overwrites; `[REC] [+] [GRP]
 
 **Starting show:** Load canonical `compact-rig.show`, immediately Save As `cmd-001.show`, and use the active copy for this scenario.
 
-**Setup:** Keep Group 3 as fixtures `1, 2, 3, 4` in that order. Set Group 4 to fixtures `9, 10` and Group 5 to fixtures `5, 6, 7, 8`, each in that order. Begin with an empty selection, an empty command line, and Fixture as the default target mode.
+**Setup:** Keep Group 3 as fixtures `1, 2, 3, 4` in that order. Set Group 4 to fixtures `9, 10` and Group 5 to fixtures `5, 6, 7, 8`, each in that order. Begin with an empty selection and programmer, and Fixture as the default target mode.
 
-**Mode, placeholder, and dereference rule:** A bare number is interpreted using the persistent default target mode. The initial mode is Fixture. Entering only `[GRP] [ENTER]` toggles the default between Group and Fixture without selecting anything. After every toggle, the command line is empty and its visible placeholder identifies the active default as `GROUP` or `FIXTURE`. An explicit `[GRP]` inside a selection applies to the Group term or Group range that follows it; it does not permanently change the default mode and does not leak across `[+]` into a later unprefixed term. Group default mode does not dereference Groups. Only pressing `[GRP]` twice for a particular term dereferences that term. The first press displays `GROUP`; the second press removes that text and replaces it with `DEGRP` rather than appending another `GROUP`.
+**Mode, prefix, and dereference rule:** With no active command, the command line contains the full persistent default `FIXTURE` or `GROUP`. Once a selection starts, Fixture and Group terms shorten to `F` and `G`. Bare numbers always use the persistent default: `[1] [+] [2] [ENTER]` displays `F1 + F2` in Fixture mode and `G1 + G2` in Group mode. Entering only `[GRP] [ENTER]` toggles the persistent default without selecting anything. For any numbered selection term, whether it is the first term or follows an operator, `[GRP]` selects the opposite of the persistent default for that term only. Fixture mode therefore turns `[GRP] [1] [+] [2]` into `G1 + F2`, while Group mode turns the same keys into `F1 + G2`. `[CLR]` and `[ESC]` restore the full current default, and an opposite-type term never changes it. This inversion does not apply to storage commands: `[REC] [+] [GRP] [3]` remains `RECORD + GROUP 3`. In Fixture mode, pressing `[GRP]` twice for a Group term dereferences it to `DEGRP`.
 
 **Exact UI procedure:** After every completed selection below, inspect the result and then press `[CLR]` exactly once before continuing. That Clear is part of the test and prevents a previous open selection from accumulating into the next case.
 
-1. Confirm the initial command-line placeholder identifies `FIXTURE` and the command line is empty.
+1. Confirm the command line initially contains exactly `FIXTURE`.
 2. Press `[GRP] [ENTER]`.
-   - **Expect:** No fixture is selected, the persistent default mode becomes Group, and the empty command line's placeholder identifies `GROUP`.
-3. Press `[GRP]` once and inspect the command line before pressing anything else.
-   - **Expect:** The command line contains exactly `GROUP`.
-4. Press `[3] [ENTER]`.
-   - **Expect:** Group 3 is selected as a live Group reference. Entering an explicit `GROUP 3` while the persistent default is already Group must not be interpreted as a double-Group press and must not dereference it. After execution, the command clears and the placeholder still identifies `GROUP`.
-5. Press `[CLR]`, then press `[GRP]` once.
-   - **Expect:** The command line contains exactly `GROUP`.
-6. Without entering a number, press `[GRP]` a second consecutive time.
-   - **Expect:** The command line changes from `GROUP` to exactly `DEGRP`. It must not display `GROUP GROUP`, and it must not toggle the persistent default mode.
-7. Press `[3] [ENTER]`.
-   - **Expect:** The current members of Group 3—fixtures `1, 2, 3, 4`—are selected as individual fixture sources. No live Group 3 source remains in the selection. After execution, the persistent default and placeholder remain `GROUP`.
-8. Press `[CLR]`, then enter `[GRP] [GRP] [3] [+] [5] [ENTER]`, pausing after each `[GRP]` to assert the same `GROUP` then `DEGRP` text transition.
-   - **Expect:** Only Group 3 is dereferenced. The ordered sources are `Fixture 1, Fixture 2, Fixture 3, Fixture 4, Group 5`; Group 5 remains a live reference because the `DEGRP` scope ended before `[+]`. The resolved fixtures are `1, 2, 3, 4, 5, 6, 7, 8`.
-9. Press `[CLR]`, then press `[3] [+] [5] [ENTER]`.
-   - **Expect:** The command is interpreted as Group 3 plus Group 5. The ordered source list is `Group 3, Group 5`; the resolved selected fixtures are `1, 2, 3, 4, 5, 6, 7, 8`.
-10. Press `[CLR]`, then press `[GRP] [ENTER]`.
-   - **Expect:** The selection is empty, the persistent default mode becomes Fixture, and the empty command line's placeholder identifies `FIXTURE`.
-11. Press `[3] [+] [5] [ENTER]`.
-   - **Expect:** Only fixtures 3 and 5 are selected, in that order. Neither term is stored as a Group reference.
-12. Press `[CLR]`, then press `[GRP] [3] [+] [5] [ENTER]`.
-   - **Expect:** Group 3 is selected by live reference and the unprefixed term after `[+]` uses the persistent Fixture default. The ordered source list is `Group 3, Fixture 5`; the resolved selected fixtures are `1, 2, 3, 4, 5`.
-13. Press `[CLR]`, then press `[GRP] [3] [+] [GRP] [5] [ENTER]`.
-   - **Expect:** Both terms are explicit live Group references. The ordered source list is `Group 3, Group 5`; the resolved selected fixtures are `1, 2, 3, 4, 5, 6, 7, 8`.
+   - **Expect:** No fixture is selected, the persistent default mode becomes Group, and the command line contains exactly `GROUP`.
+3. Press `[1] [+] [2] [ENTER]`.
+   - **Expect:** The command reads `G1 + G2` and selects Group 1 plus Group 2 as live Group references. After execution, the command line returns to exactly `GROUP`.
+4. Press `[CLR]`, then press `[GRP]` once and inspect the command line before entering a number.
+   - **Expect:** The pending term is `FIXTURE`, because Group is already the persistent default and `[GRP]` requests the opposite address type for this term. The persistent default remains Group.
+5. Press `[1] [+] [2] [ENTER]`.
+   - **Expect:** The completed command reads `F1 + G2`. Fixture 1 and live Group 2 are selected; the unprefixed term after Plus returns to the Group default.
+6. Press `[CLR]`, then press `[GRP] [1] [+] [GRP] [2] [ENTER]`.
+   - **Expect:** The command reads `F1 + F2`; fixtures 1 and 2 are selected. Each `[GRP]` applies Fixture addressing only to its own term, and the persistent default remains Group.
+7. Press `[CLR]`, then press `[3] [THRU] [5] [ENTER]`.
+   - **Expect:** The command reads `G3 THRU 5`; the Group range selects Groups 3, 4, and 5.
+8. Press `[CLR]`, then press `[3] [THRU] [5] [+] [GRP] [6] [ENTER]`.
+   - **Expect:** The command reads `G3 THRU 5 + F6`. The Group range ends before `[+]`, and `[GRP]` explicitly makes the final term Fixture 6.
+9. Press `[CLR]`, then press `[GRP] [ENTER]`.
+   - **Expect:** The selection is empty, the persistent default mode becomes Fixture, and the command line contains exactly `FIXTURE`.
+10. Press `[1] [+] [2] [ENTER]`.
+   - **Expect:** The command reads `F1 + F2`; only fixtures 1 and 2 are selected.
+11. Press `[CLR]`, then press `[GRP] [1] [+] [2] [ENTER]`.
+   - **Expect:** The command reads `G1 + F2`. Group 1 is selected by live reference and Fixture 2 is added; `[GRP]` affects only the first term.
+12. Press `[CLR]`, then press `[GRP] [1] [+] [GRP] [2] [ENTER]`.
+   - **Expect:** The command reads `G1 + G2`; both terms are live Group references.
+13. Press `[CLR]`, then enter `[GRP] [GRP] [3] [+] [GRP] [5] [ENTER]`, pausing after the first two `[GRP]` presses to inspect the transition.
+   - **Expect:** In Fixture default mode, the first `[GRP]` starts a Group term and the second changes that term to `DEGRP`. The visible command is `DEGRP 3 + G5`. Only Group 3 is dereferenced; Group 5 remains a live reference because its own single `[GRP]` selects the opposite of Fixture default. The resolved fixtures are `1, 2, 3, 4, 5, 6, 7, 8`.
 14. Press `[CLR]`, then press `[GRP] [3] [THRU] [5] [ENTER]`.
-   - **Expect:** `[THRU]` continues the explicit Group range, selecting Group 3, Group 4, and Group 5 by live reference. The resolved ordered fixture selection is `1, 2, 3, 4, 9, 10, 5, 6, 7, 8`.
+   - **Expect:** The command reads `G3 THRU 5`; the explicit Group range selects Groups 3, 4, and 5 while the persistent default remains Fixture.
 15. Press `[CLR]`, then press `[GRP] [3] [THRU] [5] [+] [6] [ENTER]`.
-   - **Expect:** The Group range ends before `[+]`. The final unprefixed `6` uses the persistent Fixture default, so the ordered sources are `Group 3, Group 4, Group 5, Fixture 6`. Fixture 6 already occurs through Group 5 and therefore appears only once in the normalized resolved selection.
-16. Press `[CLR]` and confirm the placeholder still identifies `FIXTURE`. The explicit `GROUP` and `DEGRP` terms must not have toggled or otherwise changed the persistent default.
+   - **Expect:** The command reads `G3 THRU 5 + F6`. The Group range ends before `[+]`, and the unprefixed final term uses the Fixture default.
+16. Press `[CLR]`, then `[ESC]`, and confirm the command line still contains exactly `FIXTURE` after each action. The explicit `GROUP` and `DEGRP` terms must not have toggled or otherwise changed the persistent default.
 
 **API variant:** Drive the same mode-toggle and command-token operations through the versioned command API. After every operation, assert the same persistent mode, command-line text/placeholder model, ordered source references, normalized targets, and selection revision as the UI variant.
 
 **Assertions:**
 
 - `[GRP] [ENTER]` is a mode toggle, not an empty or invalid Group selection, and each press changes the persistent default exactly once.
-- The visible placeholder agrees with the stored default mode after the command line clears.
-- Group default mode and an explicit single `[GRP]` term retain live Group references; neither implicitly dereferences a Group.
-- On a consecutive double press, the first `[GRP]` displays `GROUP` and the second replaces it with `DEGRP`. `DEGRP <number>` resolves that Group into individual fixture sources.
+- The visible editable prefix agrees with the stored default mode after execution, Clear, and Escape.
+- Bare numbered terms use the persistent default and show its one-letter prefix once selection begins: Fixture mode produces `F` terms and Group mode produces live `G` references.
+- A single `[GRP]` selects the opposite of the persistent default for one numbered selection term: it enters a live Group term from Fixture mode and a Fixture term from Group mode. It never changes the persistent default unless it is completed alone with `[ENTER]`.
+- In Fixture default mode, a consecutive double press changes the pending Group term to `DEGRP`. `DEGRP <number>` resolves that Group into individual fixture sources.
 - `DEGRP` applies only to its own term. A later Group-default or explicit `GROUP` term in the same expression remains live.
-- Bare numbers use the current default mode. Explicit `[GRP]` terms override that default only for their own term or range.
-- `[+]` terminates an explicit Group term or Group range, so a later unprefixed number returns to the persistent default mode.
+- At the start of a selection and after an operator, `[GRP]` inverts the default for that selection term, except when `GROUP` is a Record target.
 - `[GRP] 3 [THRU] 5` expands Group numbers 3, 4, and 5 rather than fixture numbers 3 through 5.
 - Source order and live Group references remain visible in programmer state, while overlapping resolved fixtures are deduplicated without changing the source list.
 

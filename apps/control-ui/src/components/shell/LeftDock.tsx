@@ -12,7 +12,6 @@ export const builtIns: Array<[BuiltInWindow, string, string]> = [
   ["stage", "⌖", "Stage"], ["fixtures", "♙", "Fixtures"],
   ["presets", "▣", "Presets"], ["cuelists", "▶", "Cuelists"], ["dynamics", "∿", "Dynamics"],
   ["channels", "▥", "Channels"], ["dmx", "⠿", "DMX"],
-  ["development", "⚒", "Development"],
 ];
 
 export function LeftDock() {

@@ -40,6 +40,15 @@ describe("window kit", () => {
     expect(screen.getByRole("button", { name: /Disabled/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Store/ })).toHaveClass("store-target");
   });
+  it("uses the resolved column width for every button-grid row", () => {
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const width = this.tagName === "BUTTON" ? 117.25 : 400;
+      return { x: 0, y: 0, top: 0, right: width, bottom: width, left: 0, width, height: width, toJSON: () => ({}) };
+    });
+    render(<ButtonGrid><GridButton number="1" primary="One"/><GridButton number="2" primary="Two"/></ButtonGrid>);
+    expect(screen.getByRole("button", { name: /One/ }).parentElement).toHaveStyle({ "--grid-row-size": "117.25px" });
+    rect.mockRestore();
+  });
   it("shows the unified empty state instead of window content", () => {
     render(<WindowScrollArea emptyState={{ title: "Nothing here", description: "Add an item to get started.", icon: "◇" }}><span>Hidden content</span></WindowScrollArea>);
     expect(screen.getByRole("status")).toHaveTextContent("Nothing here");

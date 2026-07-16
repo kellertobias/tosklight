@@ -35,19 +35,20 @@ export function ModalNumberInput({ value, onChange, onEnter, onEscape, replaceOn
     if (key === "Escape") return onEscape();
     if (key === "Enter") return onEnter();
     if (key === "Backspace" || key === "←") { const next = replace.current ? "" : value.slice(0, -1); replace.current = false; return onChange(next); }
-    if (key === "+" || key === "−" || key === "-") { replace.current = false; return onChange(String((Number(value) || 0) + (key === "+" ? 1 : -1))); }
+    if (key === "−" || key === "-") { const next = replace.current ? "-" : value.startsWith("-") ? value.slice(1) : `-${value || "0"}`; replace.current = false; return onChange(next); }
+    if (key === "+") { replace.current = false; return onChange(value.startsWith("-") ? value.slice(1) : value); }
     if (key === "THRU") return;
     if (/^\d$/.test(key)) { const next = replace.current ? key : value + key; replace.current = false; return onChange(next); }
     if (allowDecimal && key === "." && (replace.current || !value.includes("."))) { const next = replace.current ? "0." : `${value || "0"}.`; replace.current = false; onChange(next); }
   };
   const root = useModalInput(press);
-  // Keep the same five-column geometry as the software programmer num block:
-  // action column, three digits, then the operator column.
+  // Modal number pads keep a fixed five-column, four-row geometry. Attribute
+  // value dialogs may place an optional touch fader beside this grid.
   const rows = [
-    ["−", "7", "8", "9", "+"],
-    ["ESC", "4", "5", "6", "THRU"],
+    ["ESC", "7", "8", "9", "←"],
+    ["+", "4", "5", "6", "THRU"],
     ["DIV", "1", "2", "3", "ENTER"],
-    ["←", "0", ".", "AT"],
+    ["−", ".", "0", "AT"],
   ];
   return <div ref={root} className="modal-number-input numeric-pad" aria-label="Number input keypad">{rows.flatMap((row, rowIndex) => row.map((key, columnIndex) => <Button
     data-keypad-key={key}

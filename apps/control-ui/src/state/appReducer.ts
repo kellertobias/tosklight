@@ -44,12 +44,15 @@ export type Action =
   | { type: "SET_BUILTIN_CUELIST_VIEW"; value: "pool" | "cues" }
   | { type: "SET_CUELIST_SET_ARMED"; value: boolean }
   | { type: "SET_CUELIST_SET_TARGET"; value: number | null }
+  | { type: "SET_PLAYBACK_SET_ARMED"; value: boolean }
   | { type: "SET_MODAL"; modal: "setupOpen" | "specialDialogsOpen" | "systemControlsOpen" | "preloadStoreOpen" | "debugOpen" | "deskSettingsOpen" | "storeSettingsOpen"; value: boolean }
   | { type: "OPEN_SPECIAL_DIALOG"; family: AppState["specialDialogFamily"] }
   | { type: "TOGGLE_MIDI_PROFILE" }
   | { type: "TOGGLE_TOUCH_SCROLLBARS" }
+  | { type: "TOGGLE_SECTION_NAMES" }
   | { type: "SET_REGULAR_NUMBER_SHORTCUTS"; value: boolean }
   | { type: "SET_STORE_ARMED"; value: boolean }
+  | { type: "SET_SHIFT_ARMED"; value: boolean }
   | { type: "SET_PATCH_ARMED"; value: boolean }
   | { type: "HYDRATE_LAYOUT"; desks: AppState["desks"]; activeDeskId: string; windowSettings?: Partial<WindowSettings> };
 
@@ -78,17 +81,20 @@ export const initialState: AppState = {
   cuelistBuiltInNumber: null,
   cueListSetArmed: false,
   cueListSetTarget: null,
+  playbackSetArmed: false,
   setupOpen: false,
   specialDialogsOpen: false,
   specialDialogFamily: "Position",
   systemControlsOpen: false,
   preloadStoreOpen: false,
   storeArmed: false,
+  shiftArmed: false,
   storeSettingsOpen: false,
   patchSetArmed: false,
   midiProfile: false,
   debugOpen: false,
   touchScrollbars: false,
+  showSectionNames: false,
   regularNumberShortcuts: true,
   deskSettingsOpen: false,
   deskSettingsId: null,
@@ -230,12 +236,15 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "SET_BUILTIN_CUELIST_VIEW": return { ...state, cuelistBuiltInView: action.value };
     case "SET_CUELIST_SET_ARMED": return { ...state, cueListSetArmed: action.value, cueListSetTarget: action.value ? state.cueListSetTarget : null };
     case "SET_CUELIST_SET_TARGET": return { ...state, cueListSetArmed: action.value != null, cueListSetTarget: action.value };
+    case "SET_PLAYBACK_SET_ARMED": return { ...state, playbackSetArmed: action.value };
     case "SET_MODAL": return { ...state, [action.modal]: action.value };
     case "OPEN_SPECIAL_DIALOG": return { ...state, specialDialogFamily: action.family, specialDialogsOpen: true };
     case "TOGGLE_MIDI_PROFILE": return { ...state, midiProfile: !state.midiProfile };
     case "TOGGLE_TOUCH_SCROLLBARS": return { ...state, touchScrollbars: !state.touchScrollbars };
+    case "TOGGLE_SECTION_NAMES": return { ...state, showSectionNames: !state.showSectionNames };
     case "SET_REGULAR_NUMBER_SHORTCUTS": return { ...state, regularNumberShortcuts: action.value };
     case "SET_STORE_ARMED": return { ...state, storeArmed: action.value };
+    case "SET_SHIFT_ARMED": return { ...state, shiftArmed: action.value };
     case "SET_PATCH_ARMED": return { ...state, patchSetArmed: action.value };
     default: return state;
   }

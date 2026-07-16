@@ -138,8 +138,15 @@ async function assertCompactRig(api: ApiDriver, showId: string): Promise<void> {
 async function assertDefaultStage(api: ApiDriver, showId: string): Promise<void> {
   const fixtures = await objects(api, showId, "patched_fixture");
   expect(fixtures).toHaveLength(49);
-  expect(fixtures.some((fixture) => fixture.body.name === "Stage Hazer")).toBe(true);
-  expect(fixtures.some((fixture) => fixture.body.name === "Overhead RGB Multi-patch")).toBe(true);
+  const byNumber = new Map(fixtures.map((fixture) => [fixture.body.fixture_number, fixture.body]));
+  for (const [number, universe, address] of [
+    [1, 1, 1], [6, 1, 6], [28, 1, 11], [29, 1, 12], [99, 1, 13],
+    [101, 2, 1], [201, 2, 49], [301, 2, 79],
+    [401, 3, 1], [501, 3, 61], [601, 3, 241], [999, 4, 1],
+  ]) {
+    expect(byNumber.get(number)).toMatchObject({ universe, address });
+  }
+  expect(new Set(fixtures.map((fixture) => fixture.body.universe))).toEqual(new Set([1, 2, 3, 4]));
   expect(fixtures.filter((fixture) => String(fixture.body.name).startsWith("Back RGB Sunstrip "))).toHaveLength(6);
   const stage = await objects(api, showId, "stage_layout");
   expect(stage).toHaveLength(1);

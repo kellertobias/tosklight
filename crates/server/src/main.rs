@@ -4550,6 +4550,24 @@ fn parse_fixture_selection(
     fixtures: &[light_fixture::PatchedFixture],
     tokens: &[String],
 ) -> Result<Vec<light_core::FixtureId>, String> {
+    if tokens.iter().any(|token| {
+        matches!(
+            token.as_str(),
+            "FIXTURE" | "FIXTURES" | "CHANNEL" | "CHANNELS"
+        )
+    }) {
+        let normalized = tokens
+            .iter()
+            .filter(|token| {
+                !matches!(
+                    token.as_str(),
+                    "FIXTURE" | "FIXTURES" | "CHANNEL" | "CHANNELS"
+                )
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        return parse_fixture_selection(fixtures, &normalized);
+    }
     let div = tokens
         .iter()
         .position(|token| token == "DIV")
@@ -5618,6 +5636,7 @@ fn assign_page_slot(
 fn parse_group_mixed_selection(
     snapshot: &EngineSnapshot,
     tokens: &[String],
+    default_to_group: bool,
 ) -> Result<Vec<light_core::FixtureId>, String> {
     fn push_unique(target: &mut Vec<light_core::FixtureId>, fixture: light_core::FixtureId) {
         if !target.contains(&fixture) {
@@ -5680,13 +5699,33 @@ fn parse_group_mixed_selection(
         .iter()
         .map(|group| (group.id.clone(), group.clone()))
         .collect::<HashMap<_, _>>();
+    #[derive(Clone, Copy)]
+    enum TermKind {
+        Fixture,
+        Group,
+    }
+
     let mut selected = Vec::new();
     let mut index = 0;
     let mut operation = "+";
+    let mut term_kind = if default_to_group {
+        TermKind::Group
+    } else {
+        TermKind::Fixture
+    };
     while index < tokens.len() {
         match tokens[index].as_str() {
             "+" | "-" => {
                 operation = tokens[index].as_str();
+                term_kind = TermKind::Fixture;
+                index += 1;
+            }
+            "GROUP" => {
+                term_kind = TermKind::Group;
+                index += 1;
+            }
+            "FIXTURE" | "FIXTURES" | "CHANNEL" | "CHANNELS" => {
+                term_kind = TermKind::Fixture;
                 index += 1;
             }
             token => {
@@ -5696,17 +5735,22 @@ fn parse_group_mixed_selection(
                 {
                     let end = tokens
                         .get(index + 2)
-                        .ok_or("THRU requires an end group")?
+                        .ok_or("THRU requires an end reference")?
                         .parse::<i32>()
-                        .map_err(|_| "group number is invalid")?;
-                    let start = token
-                        .parse::<i32>()
-                        .map_err(|_| "group number is invalid")?;
+                        .map_err(|_| "range end is invalid")?;
+                    let start = token.parse::<i32>().map_err(|_| "range start is invalid")?;
                     let step = if start <= end { 1 } else { -1 };
                     let mut current = start;
                     loop {
-                        for fixture in group_members(snapshot, &groups, &current.to_string(), true)?
-                        {
+                        let fixtures = match term_kind {
+                            TermKind::Group => {
+                                group_members(snapshot, &groups, &current.to_string(), true)?
+                            }
+                            TermKind::Fixture => {
+                                vec![fixture_by_number(snapshot, &current.to_string())?]
+                            }
+                        };
+                        for fixture in fixtures {
                             if operation == "-" {
                                 remove_fixture(&mut selected, fixture);
                             } else {
@@ -5719,16 +5763,18 @@ fn parse_group_mixed_selection(
                         current += step;
                     }
                     index += 3;
-                } else if operation == "-" {
-                    remove_fixture(&mut selected, fixture_by_number(snapshot, token)?);
-                    index += 1;
-                } else if selected.is_empty() {
-                    for fixture in group_members(snapshot, &groups, token, false)? {
-                        push_unique(&mut selected, fixture);
-                    }
-                    index += 1;
                 } else {
-                    push_unique(&mut selected, fixture_by_number(snapshot, token)?);
+                    let fixtures = match term_kind {
+                        TermKind::Group => group_members(snapshot, &groups, token, false)?,
+                        TermKind::Fixture => vec![fixture_by_number(snapshot, token)?],
+                    };
+                    for fixture in fixtures {
+                        if operation == "-" {
+                            remove_fixture(&mut selected, fixture);
+                        } else {
+                            push_unique(&mut selected, fixture);
+                        }
+                    }
                     index += 1;
                 }
             }
@@ -5746,10 +5792,31 @@ fn execute_programmer_command(
         .replace('.', " . ")
         .replace('+', " + ")
         .replace('-', " - ");
-    let raw_tokens = spaced
+    let mut raw_tokens = Vec::new();
+    for token in spaced
         .split_whitespace()
         .map(|token| token.to_ascii_uppercase())
-        .collect::<Vec<_>>();
+    {
+        if token == "DEGRP" {
+            raw_tokens.extend(["GROUP".to_owned(), "GROUP".to_owned()]);
+            continue;
+        }
+        if token == "F" || token == "G" {
+            raw_tokens.push(if token == "F" { "FIXTURE" } else { "GROUP" }.to_owned());
+            continue;
+        }
+        if token.len() > 1 && matches!(token.as_bytes()[0], b'F' | b'G') {
+            let (prefix, number) = token.split_at(1);
+            if matches!(prefix, "F" | "G") {
+                if number.chars().all(|character| character.is_ascii_digit()) {
+                    raw_tokens.push(if prefix == "F" { "FIXTURE" } else { "GROUP" }.to_owned());
+                    raw_tokens.push(number.to_owned());
+                    continue;
+                }
+            }
+        }
+        raw_tokens.push(token);
+    }
     let (tokens, timing) = extract_command_timing(&raw_tokens)?;
     if tokens.is_empty() {
         return Err("the command line is empty".into());
@@ -5780,7 +5847,8 @@ fn execute_programmer_command(
                 .any(|token| token == "DIV")
         {
             let snapshot = state.engine.snapshot();
-            let fixtures = parse_group_mixed_selection(&snapshot, &tokens[id_index..at_index])?;
+            let fixtures =
+                parse_group_mixed_selection(&snapshot, &tokens[id_index..at_index], true)?;
             state.programmers.select_expression(
                 session.id,
                 fixtures.clone(),
@@ -5894,7 +5962,13 @@ fn execute_programmer_command(
         .iter()
         .position(|token| token == "AT")
         .unwrap_or(tokens.len());
-    let fixture_ids = parse_fixture_selection(&snapshot.fixtures, &tokens[start..at_index])?;
+    let fixture_ids = if at_index == tokens.len()
+        && tokens[start..at_index].iter().any(|token| token == "GROUP")
+    {
+        parse_group_mixed_selection(&snapshot, &tokens[start..at_index], false)?
+    } else {
+        parse_fixture_selection(&snapshot.fixtures, &tokens[start..at_index])?
+    };
     if at_index == tokens.len() {
         state.programmers.select(session.id, fixture_ids.clone());
         state
@@ -6466,7 +6540,9 @@ fn handle_programmer_osc(
         }
         return;
     }
-    if subscriber.shifted && action.starts_with("digit-") {
+    if subscriber.shifted
+        && (action.starts_with("digit-") || matches!(action, "clear" | "delete" | "del"))
+    {
         if let Some(source) = source {
             if let Some(target) = state
                 .osc_subscribers
@@ -6480,7 +6556,7 @@ fn handle_programmer_osc(
         emit(
             state,
             "desk_action",
-            serde_json::json!({"desk_alias":parts[1],"session_id":session.id,"action":format!("shift-{}", &action[6..]),"source":"osc"}),
+            serde_json::json!({"desk_alias":parts[1],"session_id":session.id,"action":format!("shift-{}", action.strip_prefix("digit-").unwrap_or(action)),"source":"osc"}),
         );
         return;
     }
@@ -7798,7 +7874,7 @@ mod tests {
     }
 
     #[test]
-    fn osc_exposes_time_minus_and_latched_shift_keys() {
+    fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
         let (state, data_dir) = test_state();
         let user = state.desk.lock().users().unwrap().remove(0);
         let session = Session {
@@ -7857,6 +7933,27 @@ mod tests {
             state.programmers.get(session.id).unwrap().command_line,
             "TIME - "
         );
+        handle_programmer_osc(
+            &state,
+            "/light/main/programmer/shift",
+            &pressed,
+            Some("127.0.0.1:9010"),
+        );
+        handle_programmer_osc(
+            &state,
+            "/light/main/programmer/clear",
+            &pressed,
+            Some("127.0.0.1:9010"),
+        );
+        assert!(!state.osc_subscribers.lock()["test"].shifted);
+        assert_eq!(
+            state.programmers.get(session.id).unwrap().command_line,
+            "TIME - "
+        );
+        let events = state.audit_events.lock();
+        let shifted_clear = events.back().unwrap();
+        assert_eq!(shifted_clear.kind, "desk_action");
+        assert_eq!(shifted_clear.payload["action"], "shift-clear");
         let _ = std::fs::remove_dir_all(data_dir);
     }
 

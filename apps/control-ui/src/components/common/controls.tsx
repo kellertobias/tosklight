@@ -92,12 +92,13 @@ function emitInputValue(
   onChange?.({ target: input, currentTarget: input } as ChangeEvent<HTMLInputElement>);
 }
 
-function InputModal({ kind, value, allowDecimal = false, secure = false, label, onCommit, onCancel }: {
+function InputModal({ kind, value, allowDecimal = false, secure = false, label, unit, onCommit, onCancel }: {
   kind: "text" | "number";
   value: string;
   allowDecimal?: boolean;
   secure?: boolean;
   label?: string;
+  unit?: ReactNode;
   onCommit: (value: string) => void;
   onCancel: () => void;
 }) {
@@ -105,7 +106,7 @@ function InputModal({ kind, value, allowDecimal = false, secure = false, label, 
   return createPortal(<div className="stacked-modal-layer ui-input-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && onCancel()}>
     <section className={`nested-modal ${kind === "text" ? "keyboard-modal" : "number-field-modal"}`} role="dialog" aria-modal="true" aria-label={label ?? (kind === "text" ? "Text input" : "Number input")}>
       <ModalTitleBar title={label ?? (kind === "text" ? "Text input" : "Number input")} closeLabel="Close input" onClose={onCancel}/>
-      <input className="ui-input" type={secure ? "password" : "text"} aria-label={`${label ?? kind} value`} value={draft} readOnly/>
+      {kind === "number" && unit ? <div className="modal-number-value"><input className="ui-input" type="text" aria-label={`${label ?? kind} value`} value={draft} readOnly/><span aria-label="Unit">{unit}</span></div> : <input className="ui-input" type={secure ? "password" : "text"} aria-label={`${label ?? kind} value`} value={draft} readOnly/>}
       {kind === "text"
         ? <ModalTextKeyboard value={draft} onChange={setDraft} onEnter={() => onCommit(draft)} onEscape={onCancel}/>
         : <ModalNumberInput value={draft} allowDecimal={allowDecimal} onChange={setDraft} onEnter={() => onCommit(draft)} onEscape={onCancel}/>
@@ -146,6 +147,7 @@ export interface NumberInputProps extends Omit<InputHTMLAttributes<HTMLInputElem
   showStepButtons?: boolean;
   keyboardLabel?: string;
   onValueChange?: (value: string) => void;
+  unit?: ReactNode;
 }
 
 function clampNumber(value: number, min: NumberInputProps["min"], max: NumberInputProps["max"]) {
@@ -153,7 +155,7 @@ function clampNumber(value: number, min: NumberInputProps["min"], max: NumberInp
 }
 
 export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(function NumberInput(
-  { className = "", value, defaultValue, onChange, onValueChange, allowDecimal = false, showStepButtons = true, keyboardLabel, disabled, readOnly, min, max, step = 1, ...props },
+  { className = "", value, defaultValue, onChange, onValueChange, allowDecimal = false, showStepButtons = true, keyboardLabel, unit, disabled, readOnly, min, max, step = 1, ...props },
   ref,
 ) {
   const [open, setOpen] = useState(false);
@@ -177,7 +179,7 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(functi
     {showStepButtons && <Button size="compact" iconOnly className="ui-number-plus" aria-label="Increase value" disabled={disabled || readOnly} onClick={() => bump(1)}><span className="ui-step-icon" aria-hidden="true">+</span></Button>}
     <Button size="compact" iconOnly className="ui-input-keyboard" aria-label="Open number pad" disabled={disabled || readOnly} onClick={() => setOpen(true)}><span className="ui-keyboard-icon" aria-hidden="true">⌨</span></Button>
     {open && (
-      <InputModal kind="number" value={current} allowDecimal={allowDecimal} label={keyboardLabel ?? props["aria-label"]} onCommit={(next) => { commit(next); setOpen(false); requestAnimationFrame(() => native.current?.focus()); }} onCancel={() => { setOpen(false); requestAnimationFrame(() => native.current?.focus()); }}/>
+      <InputModal kind="number" value={current} allowDecimal={allowDecimal} label={keyboardLabel ?? props["aria-label"]} unit={unit} onCommit={(next) => { commit(next); setOpen(false); requestAnimationFrame(() => native.current?.focus()); }} onCancel={() => { setOpen(false); requestAnimationFrame(() => native.current?.focus()); }}/>
     )}
   </span>;
 });
@@ -187,8 +189,25 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   showStepButtons?: boolean;
 }
 
+const WheelSafeRangeInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function WheelSafeRangeInput({ className = "", onWheel: _onWheel, ...props }, ref) {
+  const native = useRef<HTMLInputElement>(null);
+  useImperativeHandle(ref, () => native.current!);
+  useEffect(() => {
+    const input = native.current;
+    if (!input) return;
+    const rejectWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      input.blur();
+    };
+    input.addEventListener("wheel", rejectWheel, { passive: false });
+    return () => input.removeEventListener("wheel", rejectWheel);
+  }, []);
+  return <input {...props} ref={native} type="range" className={`ui-native-control ${className}`.trim()}/>;
+});
+
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input({ className = "", type = "text", allowDecimal, showStepButtons, ...props }, ref) {
   if (type === "number") return <NumberInput {...props} allowDecimal={allowDecimal} showStepButtons={showStepButtons} className={className} ref={ref}/>;
+  if (type === "range") return <WheelSafeRangeInput {...props} className={className} ref={ref}/>;
   const native = ["checkbox", "radio", "range", "file", "color", "hidden"].includes(type);
   return <input ref={ref} type={type} className={`${native ? "ui-native-control" : "ui-input"} ${className}`.trim()} {...props}/>;
 });

@@ -6,7 +6,7 @@ import { Button } from "../common";
 import { ModalNumberInput } from "../input/ModalInputControls";
 import { VerticalTouchFader } from "./VerticalTouchFader";
 
-export type DualEncoderValue = { label: string; value: number; maximum: number; display: string; onChange: (value: number) => void };
+export type DualEncoderValue = { label: string; value: number; maximum: number; display: string; inputOffset?: number; onChange: (value: number) => void };
 
 export function DualVerticalTouchFader({ encoder, primary, secondary }: { encoder: string; primary: DualEncoderValue; secondary: DualEncoderValue }) {
   const server = useServer();
@@ -18,16 +18,17 @@ export function DualVerticalTouchFader({ encoder, primary, secondary }: { encode
   const select = (target: "primary" | "secondary") => {
     const value = target === "primary" ? primary : secondary;
     setEditing(target);
-    setInputValue(String(Number(value.value.toFixed(1))));
+    setInputValue(String(Number((value.value - (value.inputOffset ?? 0)).toFixed(1))));
   };
   const submit = () => {
-    const next = Math.max(0, Math.min(selected.maximum, Number(inputValue)));
-    if (Number.isFinite(next)) selected.onChange(next);
+    const entered = Number(inputValue);
+    const next = Math.max(0, Math.min(selected.maximum, entered + (selected.inputOffset ?? 0)));
+    if (Number.isFinite(entered)) selected.onChange(next);
     setEditing(null);
   };
   if (!hardware) return <div className="dual-touch-encoder" aria-label={`${encoder}: ${primary.label}, press-turn ${secondary.label}`}>
-    <VerticalTouchFader label={`${encoder} · ${primary.label}`} value={primary.value} maximum={primary.maximum} display={primary.display} directInput onChange={primary.onChange}/>
-    <VerticalTouchFader label={`Press-turn · ${secondary.label}`} value={secondary.value} maximum={secondary.maximum} display={secondary.display} directInput onChange={secondary.onChange}/>
+    <VerticalTouchFader label={`${encoder} · ${primary.label}`} value={primary.value} maximum={primary.maximum} display={primary.display} directInput directInputOffset={primary.inputOffset} onChange={primary.onChange}/>
+    <VerticalTouchFader label={`Press-turn · ${secondary.label}`} value={secondary.value} maximum={secondary.maximum} display={secondary.display} directInput directInputOffset={secondary.inputOffset} onChange={secondary.onChange}/>
   </div>;
   return <>
     <Button className="dual-hardware-encoder" aria-label={`${encoder}: edit ${primary.label} or ${secondary.label}`} onClick={() => select("primary")}>

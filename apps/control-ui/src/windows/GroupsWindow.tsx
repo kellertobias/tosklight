@@ -6,11 +6,13 @@ import type { StoredGroup, VersionedObject } from "../api/types";
 import { useApp } from "../state/AppContext";
 import { Button, Input } from "../components/common";
 import { ButtonGrid, WindowHeader, WindowScrollArea } from "../components/window-kit";
+import { RecordModeDialog, type RecordMode } from "../components/shared/RecordModeDialog";
 
 export function GroupsWindow({ compact }: WindowProps) {
   const server = useServer();
   const { state, dispatch } = useApp();
   const [contextGroup, setContextGroup] = useState<string | null>(null);
+  const [recordGroup, setRecordGroup] = useState<string | null>(null);
   const hold = useRef<number | null>(null);
   const fallback = (
     server.bootstrap
@@ -39,7 +41,7 @@ export function GroupsWindow({ compact }: WindowProps) {
     (_, index) =>
       stored.find((group) => group.id === String(index + 1)) ?? null,
   );
-  const patched = new Set(
+  const knownFixtureIds = new Set(
     server.patch?.fixtures.flatMap((fixture) => [
       fixture.fixture_id,
       ...fixture.logical_heads.map((head) => head.fixture_id),
@@ -73,6 +75,25 @@ export function GroupsWindow({ compact }: WindowProps) {
     }
   }
   const contextual = stored.find((group) => group.id === contextGroup);
+  const recordTarget = stored.find((group) => group.id === recordGroup);
+  const cancelRecording = () => {
+    setRecordGroup(null);
+    dispatch({ type: "SET_STORE_ARMED", value: false });
+  };
+  const recordExistingGroup = (mode: RecordMode) => {
+    if (!recordTarget) return cancelRecording();
+    void recordGroupCommand(recordTarget.id, mode);
+    setRecordGroup(null);
+    dispatch({ type: "SET_STORE_ARMED", value: false });
+  };
+  const runCommand = (command: string, refresh = false) => {
+    void server.executeCommandLine(command).then((ok) => {
+      if (ok && refresh) void server.refresh();
+    });
+  };
+  const recordGroupCommand = (id: string, mode: RecordMode = "overwrite") => {
+    runCommand(mode === "merge" ? `RECORD + GROUP ${id}` : `RECORD GROUP ${id}`, true);
+  };
   const cancelHold = () => {
     if (hold.current) window.clearTimeout(hold.current);
     hold.current = null;
@@ -87,7 +108,7 @@ export function GroupsWindow({ compact }: WindowProps) {
             key={index + 1}
             group={group}
             index={index}
-            patched={patched}
+            knownFixtureIds={knownFixtureIds}
             capabilities={capabilities}
             selected={server.selectedGroupId === group?.id}
             storeArmed={state.storeArmed}
@@ -101,10 +122,18 @@ export function GroupsWindow({ compact }: WindowProps) {
             cancelHold={cancelHold}
             openContext={() => group && setContextGroup(group.id)}
             select={() => {
-              if (group && !state.storeArmed) return void server.selectGroup(group.id);
-              if (group && state.storeArmed) { const mode = window.confirm("Merge the current selection into this group? Choose Cancel to overwrite it instead.") ? "merge" : "overwrite"; void server.storeGroup(group.id, group.body.name ?? `Group ${group.id}`, mode); dispatch({ type: "SET_STORE_ARMED", value: false }); return; }
+              if (group && !state.storeArmed) return runCommand(`GROUP ${group.id}`);
+              if (group && state.storeArmed) {
+                if (!group.body.fixtures.length) {
+                  recordGroupCommand(group.id);
+                  dispatch({ type: "SET_STORE_ARMED", value: false });
+                } else {
+                  setRecordGroup(group.id);
+                }
+                return;
+              }
               if (!state.storeArmed) return;
-              void server.storeGroup(String(index + 1), `Group ${index + 1}`);
+              recordGroupCommand(String(index + 1));
               dispatch({ type: "SET_STORE_ARMED", value: false });
             }}
           />
@@ -127,7 +156,7 @@ export function GroupsWindow({ compact }: WindowProps) {
           <label className="group-context-master">Master <strong>{Math.round((contextual.body.master ?? 1) * 100)}%</strong><Input aria-label={`${contextual.body.name ?? `Group ${contextual.id}`} master`} type="range" min="0" max="100" value={(contextual.body.master ?? 1) * 100} onChange={(event) => void server.setGroupMaster(contextual.id, Number(event.target.value) / 100)}/></label>
           <Button
             onClick={() => {
-              void server.selectGroup(contextual.id);
+              runCommand(`GROUP ${contextual.id}`);
               setContextGroup(null);
             }}
           >
@@ -135,7 +164,7 @@ export function GroupsWindow({ compact }: WindowProps) {
           </Button>
           <Button
             onClick={() => {
-              void server.selectGroup(contextual.id, true);
+              runCommand(`GROUP GROUP ${contextual.id}`);
               setContextGroup(null);
             }}
           >
@@ -172,10 +201,7 @@ export function GroupsWindow({ compact }: WindowProps) {
                     `Replace membership and apply ${count} stored attributes to the new members?`,
                   )
                 )
-                  void server.storeGroup(
-                    contextual.id,
-                    contextual.body.name ?? `Group ${contextual.id}`,
-                  );
+                  recordGroupCommand(contextual.id);
                 setContextGroup(null);
               }}
             >
@@ -193,6 +219,13 @@ export function GroupsWindow({ compact }: WindowProps) {
           <Button onClick={() => setContextGroup(null)}>Cancel</Button>
         </div>
       )}
+      {recordTarget && (
+        <RecordModeDialog
+          target={recordTarget.body.name ?? `Group ${recordTarget.id}`}
+          onChoose={recordExistingGroup}
+          onCancel={cancelRecording}
+        />
+      )}
     </div>
   );
 }
@@ -200,7 +233,7 @@ export function GroupsWindow({ compact }: WindowProps) {
 function GroupCard({
   group,
   index,
-  patched,
+  knownFixtureIds,
   capabilities,
   selected,
   storeArmed,
@@ -211,7 +244,7 @@ function GroupCard({
 }: {
   group: VersionedObject<StoredGroup> | null;
   index: number;
-  patched: Set<string>;
+  knownFixtureIds: Set<string>;
   capabilities: Map<string, Set<string>>;
   selected: boolean;
   storeArmed: boolean;
@@ -221,7 +254,7 @@ function GroupCard({
   select: () => void;
 }) {
   const missing =
-    group?.body.fixtures.filter((fixture) => !patched.has(fixture)).length ?? 0;
+    group?.body.fixtures.filter((fixture) => !knownFixtureIds.has(fixture)).length ?? 0;
   const attributes = Object.keys(group?.body.programming ?? {});
   const unsupported =
     group?.body.fixtures.reduce(
@@ -254,7 +287,7 @@ function GroupCard({
                 ? `${group.body.fixtures.length} fixtures · ordered`
                 : "⚠ Group is empty"}
             </small>
-            {missing > 0 && <em>⚠ {missing} missing/unpatched</em>}
+            {missing > 0 && <em>⚠ {missing} missing</em>}
             {attributes.length > 0 && (
               <em>{attributes.length} portable attributes</em>
             )}

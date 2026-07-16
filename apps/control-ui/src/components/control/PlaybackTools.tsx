@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { useServer } from "../../api/ServerContext";
 import { Button } from "../common";
+import { ProgrammerFadeFader } from "./ProgrammerFadeFader";
 
 export function PlaybackTools() {
   const { state, dispatch } = useApp();
@@ -43,18 +44,12 @@ export function PlaybackTools() {
   }, [pagePickerOpen]);
   return (
     <div className="playback-tools">
-      <div className="speed-group-stack">
-        {(["A", "B", "C", "D", "E"] as const).map((group, index) => { const bpm = speedBpms[index]; return (
-          <Button
-            style={{ "--bpm": bpm } as CSSProperties}
-            className="active"
-            key={group}
-            onClick={() => tap(group)}
-          >
-            <strong>{group}</strong><small>{bpm}<i>BPM</i></small>
-          </Button>
-        ); })}
+      <div className="playback-page-controls">
+        <Button className="playback-page-chevron" aria-label="Previous playback page" disabled={state.playbackPage === 0} onClick={() => { dispatch({ type: "SET_PLAYBACK_PAGE", page: state.playbackPage - 1 }); void server.setPlaybackPage(state.playbackPage); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 15 7-7 7 7"/></svg></Button>
+        <Button className="playback-page-current" aria-label={`Select playback page. Page ${state.playbackPage + 1} ${state.playbackPageNames[state.playbackPage]}`} onClick={() => setPagePickerOpen(true)}><span>Page</span><strong>{state.playbackPage + 1}</strong><small>{state.playbackPageNames[state.playbackPage]}</small></Button>
+        <Button className="playback-page-chevron" aria-label="Next playback page" disabled={state.playbackPage === state.playbackPageNames.length - 1} onClick={() => { dispatch({ type: "SET_PLAYBACK_PAGE", page: state.playbackPage + 1 }); void server.setPlaybackPage(state.playbackPage + 2); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 9 7 7 7-7"/></svg></Button>
       </div>
+      <ProgrammerFadeFader/>
       <div className="cue-fade-master"><TouchTimeSurface
         label="Cue Fade"
         value={(server.configuration?.sequence_master_fade_millis ?? 3_000) / 1_000}
@@ -62,10 +57,20 @@ export function PlaybackTools() {
         display={`${((server.configuration?.sequence_master_fade_millis ?? 3_000) / 1_000).toFixed(1)} s`}
         onChange={(value) => void server.setControlTiming({ sequence_master_fade_millis: Math.round(value * 1_000) })}
       /></div>
-      <div className="playback-page-controls">
-        <Button disabled={state.playbackPage === 0} onClick={() => { dispatch({ type: "SET_PLAYBACK_PAGE", page: state.playbackPage - 1 }); void server.setPlaybackPage(state.playbackPage); }}><span>▲</span> PAGE UP</Button>
-        <Button className="playback-page-current" onClick={() => setPagePickerOpen(true)}><strong>{state.playbackPage + 1}</strong><span>{state.playbackPageNames[state.playbackPage]}</span></Button>
-        <Button disabled={state.playbackPage === state.playbackPageNames.length - 1} onClick={() => { dispatch({ type: "SET_PLAYBACK_PAGE", page: state.playbackPage + 1 }); void server.setPlaybackPage(state.playbackPage + 2); }}>PAGE DOWN <span>▼</span></Button>
+      <div className="speed-group-stack">
+        {(["A", "B", "C", "D", "E"] as const).map((group, index) => { const bpm = speedBpms[index]; return (
+          <Button
+            style={{ "--bpm": bpm } as CSSProperties}
+            className="active"
+            aria-label={`Speed group ${group}, ${bpm} BPM`}
+            key={group}
+            onClick={() => tap(group)}
+          >
+            <strong className="speed-group-label">{group}</strong>
+            <span className="speed-group-value">{bpm}</span>
+            <small className="speed-group-unit">BPM</small>
+          </Button>
+        ); })}
       </div>
       {pagePickerOpen && createPortal(<div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && setPagePickerOpen(false)}><div className="nested-modal playback-page-modal" role="dialog" aria-modal="true" aria-label="Playback pages"><Button className="modal-close" onClick={() => setPagePickerOpen(false)}>×</Button><h3>Playback pages</h3><div>{(server.playbacks?.pages ?? []).map((item) => <Button className={item.number === (server.playbacks?.active_page ?? 1) ? "active" : ""} key={item.number} onClick={() => { dispatch({ type: "SET_PLAYBACK_PAGE", page: item.number - 1 }); void server.setPlaybackPage(item.number); setPagePickerOpen(false); }}><strong>{item.number}</strong><span>{item.name}</span></Button>)}</div></div></div>, document.body)}
     </div>

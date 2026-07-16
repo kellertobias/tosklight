@@ -2,10 +2,10 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useApp } from "../../state/AppContext";
 import { useServer } from "../../api/ServerContext";
-import { DebugModal } from "./DebugModal";
 import { Button, Input, ModalTitleBar, NumberField, SelectField, TextInput } from "../common";
 import type { MvrExportPreview, MvrImportPreview, ShowEntry, ShowRevision } from "../../api/types";
 import { getShowIndicator } from "../shell/showIndicator";
+import { screenForAddAction } from "../setup/screenConfiguration";
 
 export function QuickSetupModal() {
   const { state, dispatch } = useApp();
@@ -114,6 +114,14 @@ export function QuickSetupModal() {
       await invoke("exit_desktop_app");
     }
   }
+  async function addScreen() {
+    const screen = screenForAddAction(server.screens?.screens ?? [], {
+      desks: state.desks,
+      activeDeskId: state.activeDeskId,
+    });
+    await server.saveScreen(screen);
+    close();
+  }
   async function inspectExport(show: ShowEntry) { setMvrTarget(show); setMvrBusy(true); try { setMvrExportPreview(await server.previewMvrExport(show.id)); } finally { setMvrBusy(false); } }
   function openMvrImport(closeSource: () => void) { closeSource(); setMvrMode("new"); setMvrTarget(null); setMvrPreview(null); }
   function openMvrExport() {
@@ -128,6 +136,7 @@ export function QuickSetupModal() {
   return <div className="modal-backdrop" onPointerDown={(event) => { if (event.currentTarget === event.target) close(); }}><section className="modal-card show-modal">
     <ModalTitleBar title="Show" closeLabel="Close Show" onClose={close} actions={<>
       <Button onClick={() => setChangeUserOpen(true)}><span aria-hidden="true">♙</span> Change User</Button>
+      {"__TAURI_INTERNALS__" in window && <Button onClick={() => void addScreen()}><span aria-hidden="true">▣</span> Add Screen</Button>}
       <Button onClick={() => dispatch({ type: "SET_MODAL", modal: "debugOpen", value: true })}><span aria-hidden="true">⌁</span> Desk Status</Button>
     </>}/>
     <div className="show-details"><b>{server.bootstrap?.active_show?.name ?? "No active show"}</b><div className={`show-status-explanation ${showIndicator.className}`} role="status"><span className="show-status-dot" aria-hidden="true">●</span><span><strong>{showIndicator.label}</strong><small>{showIndicator.detail}</small></span></div><span>Server connected <strong>{server.status === "connected" ? "Yes" : "No"}</strong></span><span>Latest named revision <strong>{activeRevisions[0] ? `${activeRevisions[0].revision} · ${activeRevisions[0].name}` : "None"}</strong></span><span>Operator <strong>{server.session?.user.name ?? "—"}</strong></span><div className="show-primary-actions"><Button onClick={() => setRevisionOpen(true)}><span aria-hidden="true">💾</span> Save Named Revision</Button><Button onClick={() => setSaveAsOpen(true)}><span aria-hidden="true">✎</span> Save As</Button><Button onClick={() => void openLoadMenu()}><span aria-hidden="true">↥</span> Load</Button><Button onClick={() => setNewShowOpen(true)}><span aria-hidden="true">＋</span> New Show</Button></div></div>
@@ -148,6 +157,5 @@ export function QuickSetupModal() {
     {changeUserOpen && stacked(<div className="nested-modal" role="dialog" aria-modal="true" aria-label="Change user"><Button className="modal-close" onClick={() => setChangeUserOpen(false)}>×</Button><h3>Change User</h3><div className="show-library">{server.bootstrap?.users.filter((user) => user.enabled).map((user) => <article key={user.id}><span><b>{user.name}</b><small>{user.id === server.session?.user.id ? "Current user" : "Use this user's programmer"}</small></span><Button disabled={user.id === server.session?.user.id} onClick={() => void server.changeUser(user)}>{user.id === server.session?.user.id ? "Logged in" : "Log in"}</Button></article>)}</div><div className="user-create-row"><TextInput clearable value={newUserName} onChange={(event) => setNewUserName(event.target.value)} onKeyboardCommit={(value) => { if (value.trim()) void server.createUser(value.trim()); }} placeholder="New user name" aria-label="New user name"/><Button variant="primary" disabled={!newUserName.trim()} onClick={() => void server.createUser(newUserName.trim())}>Add user</Button></div></div>, () => setChangeUserOpen(false))}
     {confirmShutdown && stacked(<div className="nested-modal shutdown-modal" role="alertdialog" aria-modal="true"><Button className="modal-close" onClick={() => setConfirmShutdown(false)}>×</Button><h3>Shut Down Desk?</h3><p>Hazardous fixtures will be driven to their safe values before the server stops. This desk application will then close.</p><div className="modal-actions"><Button onClick={() => setConfirmShutdown(false)}>Cancel</Button><Button className="danger" onClick={() => void shutDownDesk()}>Shut Down Safely</Button></div></div>, () => setConfirmShutdown(false))}
     {server.error && <p className="modal-error">{server.error}</p>}
-    <DebugModal />
   </section></div>;
 }

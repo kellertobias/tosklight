@@ -80,12 +80,24 @@ pub enum ControlTrigger {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ControlAction {
-    CueGo { cue_list_id: CueListId },
-    CueBack { cue_list_id: CueListId },
-    CuePause { cue_list_id: CueListId },
-    CueRelease { cue_list_id: CueListId },
-    Blackout { enabled: bool },
-    GrandMaster { level: f32 },
+    CueGo {
+        cue_list_id: CueListId,
+    },
+    CueBack {
+        cue_list_id: CueListId,
+    },
+    CuePause {
+        cue_list_id: CueListId,
+    },
+    CueRelease {
+        cue_list_id: CueListId,
+    },
+    Blackout {
+        enabled: bool,
+    },
+    GrandMaster {
+        level: f32,
+    },
     /// Routes the desk's global SET key to connected operator surfaces.
     DeskSet,
 }
@@ -453,10 +465,18 @@ impl ControlInput for UdpControlInput {
         loop {
             let (length, source) = self.socket.recv_from(&mut self.buffer).await.ok()?;
             let result = match self.protocol {
-                UdpInputProtocol::Osc => parse_osc_message(&self.buffer[..length]).map(|event| match event {
-                    ControlEvent::Osc { address, arguments, .. } => ControlEvent::Osc { address, arguments, source: Some(source.to_string()) },
-                    event => event,
-                }),
+                UdpInputProtocol::Osc => {
+                    parse_osc_message(&self.buffer[..length]).map(|event| match event {
+                        ControlEvent::Osc {
+                            address, arguments, ..
+                        } => ControlEvent::Osc {
+                            address,
+                            arguments,
+                            source: Some(source.to_string()),
+                        },
+                        event => event,
+                    })
+                }
                 UdpInputProtocol::ArtTimeCode => {
                     parse_art_timecode(&self.buffer[..length], &source.to_string())
                         .map(ControlEvent::Timecode)
@@ -698,12 +718,22 @@ pub fn encode_osc_message(address: &str, arguments: &[OscArgument]) -> Result<Ve
     fn push_string(packet: &mut Vec<u8>, value: &str) {
         packet.extend_from_slice(value.as_bytes());
         packet.push(0);
-        while !packet.len().is_multiple_of(4) { packet.push(0); }
+        while !packet.len().is_multiple_of(4) {
+            packet.push(0);
+        }
     }
     let mut packet = Vec::new();
     push_string(&mut packet, address);
     let mut tags = String::from(",");
-    for argument in arguments { tags.push(match argument { OscArgument::Int(_) => 'i', OscArgument::Float(_) => 'f', OscArgument::String(_) => 's', OscArgument::Bool(true) => 'T', OscArgument::Bool(false) => 'F' }); }
+    for argument in arguments {
+        tags.push(match argument {
+            OscArgument::Int(_) => 'i',
+            OscArgument::Float(_) => 'f',
+            OscArgument::String(_) => 's',
+            OscArgument::Bool(true) => 'T',
+            OscArgument::Bool(false) => 'F',
+        });
+    }
     push_string(&mut packet, &tags);
     for argument in arguments {
         match argument {
@@ -812,9 +842,21 @@ mod tests {
 
     #[test]
     fn encoded_osc_message_round_trips_supported_arguments() {
-        let arguments=vec![OscArgument::Int(7),OscArgument::Float(0.5),OscArgument::String("slow".into()),OscArgument::Bool(false)];
-        let packet=encode_osc_message("/light/test",&arguments).unwrap();
-        assert_eq!(parse_osc_message(&packet).unwrap(),ControlEvent::Osc{address:"/light/test".into(),arguments,source:None});
+        let arguments = vec![
+            OscArgument::Int(7),
+            OscArgument::Float(0.5),
+            OscArgument::String("slow".into()),
+            OscArgument::Bool(false),
+        ];
+        let packet = encode_osc_message("/light/test", &arguments).unwrap();
+        assert_eq!(
+            parse_osc_message(&packet).unwrap(),
+            ControlEvent::Osc {
+                address: "/light/test".into(),
+                arguments,
+                source: None
+            }
+        );
     }
 
     fn tc(source: &str) -> SmpteTimecode {

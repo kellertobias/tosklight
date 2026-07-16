@@ -3,8 +3,8 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::{fmt::Debug, sync::Arc, time::Instant};
 use std::sync::RwLock;
+use std::{fmt::Debug, sync::Arc, time::Instant};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -104,6 +104,12 @@ pub struct TimedValue {
     /// Whether this direct-entry value should use the configured programmer fade.
     #[serde(default)]
     pub fade: bool,
+    /// A command-specific fade override. `None` keeps the configured programmer fade.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fade_millis: Option<u64>,
+    /// A command-specific delay before the value starts fading.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delay_millis: Option<u64>,
 }
 
 #[derive(Debug, Error)]
@@ -149,7 +155,9 @@ pub struct ManualClock {
 
 impl ManualClock {
     pub fn new(now: DateTime<Utc>) -> Self {
-        Self { now: RwLock::new(now) }
+        Self {
+            now: RwLock::new(now),
+        }
     }
 
     pub fn set(&self, now: DateTime<Utc>) {
@@ -187,10 +195,15 @@ mod clock_tests {
 
     #[test]
     fn manual_application_time_only_moves_when_advanced() {
-        let start = DateTime::parse_from_rfc3339("2020-01-01T00:00:00Z").unwrap().with_timezone(&Utc);
+        let start = DateTime::parse_from_rfc3339("2020-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
         let clock = ManualClock::new(start);
         assert_eq!(clock.now(), start);
         assert_eq!(clock.now(), start);
-        assert_eq!(clock.advance_millis(30_000), start + chrono::Duration::seconds(30));
+        assert_eq!(
+            clock.advance_millis(30_000),
+            start + chrono::Duration::seconds(30)
+        );
     }
 }

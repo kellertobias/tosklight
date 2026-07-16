@@ -10,3 +10,11 @@ describe("Help window registration", () => {
     expect(builtIns.some(([kind]) => kind === "help")).toBe(false);
   });
 });
+
+describe("Development window registration", () => {
+  it("remains routable and pane-capable but is omitted from the Built-ins dock", () => {
+    expect(windowRegistry.development).toBeDefined();
+    expect(windowChoices.some(([kind]) => kind === "development")).toBe(true);
+    expect(builtIns.some(([kind]) => kind === "development")).toBe(false);
+  });
+});

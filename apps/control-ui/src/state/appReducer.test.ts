@@ -164,6 +164,12 @@ describe("appReducer", () => {
     expect(appReducer(selected, { type: "SET_CUELIST_SET_ARMED", value: false }).cueListSetTarget).toBeNull();
   });
 
+  it("arms and clears playback configuration Set selection", () => {
+    const armed = appReducer(initialState, { type: "SET_PLAYBACK_SET_ARMED", value: true });
+    expect(armed.playbackSetArmed).toBe(true);
+    expect(appReducer(armed, { type: "SET_PLAYBACK_SET_ARMED", value: false }).playbackSetArmed).toBe(false);
+  });
+
   it("returns the Cuelists built-in to the pool when its button is clicked from a Cuelist", () => {
     const opened = appReducer(initialState, { type: "OPEN_BUILTIN", kind: "cuelists" });
     const inside = appReducer(opened, { type: "OPEN_BUILTIN_CUELIST", number: 7 });

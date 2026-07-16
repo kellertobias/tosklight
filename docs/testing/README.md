@@ -8,10 +8,12 @@ These documents expand the stable IDs in the [canonical test catalog](../help/99
 
 - [Reusable show files and Save As](00-generate-show-files.md) defines the two maintained canonical fixtures and first proves that Save As creates independent working copies.
 - [Foundational dimmers and groups](01-foundational-dimmers-and-groups.md) covers patching, ordered groups, live references, direct values, clear stages, and exact DMX.
-- [Cues, tracking, and arbitration](02-cues-tracking-and-arbitration.md) covers recording, tracking, cue-only, fades, navigation, HTP, and LTP.
+- [Cues, tracking, and arbitration](02-cues-tracking-and-arbitration.md) covers recording, tracking, cue-only, fades, navigation, Cuelist settings, Move in Black, HTP, and LTP.
 - [Network output protocols](03-network-output-protocols.md) covers real Art-Net and sACN packets, routing, sequence numbers, priorities, and termination.
 - [OSC, API, and cross-surface agreement](04-osc-api-and-cross-surface.md) covers OSC hardware behavior, REST revisions, WebSocket/audit events, and equivalent commands.
 - [Virtual time, persistence, and recovery](05-virtual-time-persistence-and-recovery.md) covers exact timing boundaries, restart behavior, corrupt data, and packaged desktop ownership.
+- [Preload modes and virtual playbacks](06-preload-modes-and-virtual-playbacks.md) covers the three independent Preload capture domains, all eight Settings combinations, physical and virtual playback action queues, Programmer Fade execution, and programmer-only release.
+- [Playback Configuration](07-playback-configuration.md) covers Set-plus-playback modal entry, assignments, colors, clearing, type-specific layouts, Cuelist controls, Master/X-fade/Temp faders, and temporary LTP/Swap behavior.
 
 ## Common conventions
 

@@ -2,7 +2,7 @@
 
 This is the canonical catalog for automated and manual acceptance coverage. Stable IDs must be retained when scenarios move between Rust integration tests, the Playwright browser bench, or packaged-desktop smoke tests. Every executable scenario records its action surface and oracle so a passing API-only test is never mistaken for UI or wire-protocol coverage.
 
-Detailed scenario specifications are grouped in [docs/testing](../../testing/README.md). The catalog remains the authoritative ID and coverage index; the scenario documents provide the executable setup, actions, timing checkpoints, oracles, and pass conditions.
+Detailed scenario specifications are grouped in [docs/testing](../../testing/README.md). The catalog remains the authoritative ID and coverage index; the scenario documents provide the executable setup, literal button/click order, actions, timing checkpoints, oracles, and pass conditions. The short **Actions** entries in this catalog are summaries, not manual procedures; do not infer missing operator gestures from them.
 
 The Playwright bench runs an isolated server per worker with a fixed application clock. Advancing virtual time renders and transmits one real output frame, allowing fades, chasers, and effects to be tested without wall-clock waits. Production mode continues to stream at its configured frame rate.
 
@@ -27,9 +27,9 @@ Configure two enabled routes for logical universe 1: Art-Net universe 1 to the b
 
 - **Starting show:** Load canonical `compact-rig.show`, immediately Save As `dim-001.show`, and use the active copy.
 - **Surface:** REST setup, Lightning Desk UI, and Group UI.
-- **Actions:** Use existing group 3 with fixtures 1–4, apply 50%, add fixtures 5 and 6, remove fixture 2, and reorder fixture 6 before fixture 1.
+- **Actions:** Use existing Group 3 with fixtures 1–4, apply 50%, add fixtures 5 and 6, subtract fixture 2, then add fixture 2 again and prove it is appended at the end.
 - **Oracle:** Group membership and order in the API/UI; Art-Net and sACN slots for current members; removed fixtures retain only independently scoped values.
-- **Pass:** Group edits affect group-relative programming immediately without rewriting unrelated fixture values.
+- **Pass:** Group edits affect group-relative programming immediately; subtraction preserves retained order and a later re-addition appends the removed member.
 
 ### DIM-002 — Command-line group programming
 
@@ -39,29 +39,45 @@ Configure two enabled routes for logical universe 1: Art-Net universe 1 to the b
 - **Oracle:** Command-applied audit event, selected live group reference, twelve DMX values of 128, Art-Net universe 1, and sACN universe 101.
 - **Pass:** The UI command reaches the engine and both real UDP protocols with identical slot data.
 
+### CMD-001 — Fixture and Group default modes
+
+- **Starting show:** Load canonical `compact-rig.show`, immediately Save As `cmd-001.show`, and use the active copy.
+- **Surface:** Lightning Desk keypad/command line plus the versioned command API.
+- **Actions:** Toggle the persistent default with `GROUP ENTER`; prove Group mode and `GROUP 3` retain live references; prove a second consecutive Group press replaces `GROUP` with `DEGRP` and dereferences only that term; then mix Fixture and Group additions and ranges.
+- **Oracle:** Visible command text and placeholder, persistent default mode, ordered live versus dereferenced source references, normalized deduplicated targets, programmer selection, and command audit.
+- **Pass:** Mode toggles, live Group references, scoped dereferencing, and explicit prefixes have deterministic behavior across `+` and `THRU` without changing the default accidentally.
+
+### PROG-002 — Ordered value spreading
+
+- **Starting show:** Load a fresh copy of canonical `compact-rig.show` for every spread case and use Group 1 with ten ordered fixtures.
+- **Surface:** Lightning Desk keypad/command line plus engine interpolation and real output.
+- **Actions:** Enter uniform `0`, ascending `0 THRU 100`, descending `100 THRU 0`, and multi-point `100 THRU 0 THRU 100` intensity commands; cover both live `GROUP` references and dereferenced `DEGRP`/`GROUP GROUP` fixture captures; reserve empty cases for color and position spreads.
+- **Oracle:** Ordered normalized programmer values before quantization, address shape (group-relative spread versus fixture-scoped values), Fixture Sheet values, logical output, and matching Art-Net/sACN slots.
+- **Pass:** Intensity spreads preserve target order, endpoints, direction, symmetry, and equal intervals. Live Group spreads recalculate when group membership changes and remain group-relative in Cue/Preset storage; dereferenced spreads stay attached to the captured fixtures. Unresolved center and complex-value rules remain explicitly documented rather than guessed.
+
 ### DIM-003 — Frozen and derived membership
 
 - **Starting show:** Load canonical `compact-rig.show`, immediately Save As `dim-003.show`, and use the active copy.
 - **Surface:** Lightning Desk command line and Group UI.
 - **Actions:** Create an every-second derived group from group 1 and a frozen snapshot of group 1; insert and remove members in group 1.
-- **Oracle:** Derived membership recalculates from source order while the frozen group remains unchanged and reports missing fixtures.
+- **Oracle:** Derived membership recalculates from source order while the frozen group remains unchanged; only genuinely deleted fixture references are reported missing.
 - **Pass:** Live/derived and frozen semantics remain distinguishable after source edits.
 
 ### DIM-004 — Direct values and group arbitration
 
 - **Starting show:** Load canonical `compact-rig.show`, immediately Save As `dim-004.show`, and use the active copy.
 - **Surface:** REST programmer API plus UI group programming.
-- **Actions:** Put group 1 at 50%, fixture 1 at 75%, a second programmer at 25%, and vary group master/flash.
-- **Oracle:** Exact HTP output is 191 for fixture 1 and 128 for the remaining members; group master and flash scale/restore without moving stored values.
-- **Pass:** Fixture- and group-scoped contributions merge predictably and identically in logical DMX, Art-Net, and sACN.
+- **Actions:** Put Group 1 at 50%, fixture 1 at 75%, fixture 1 at 25%, repeat Group 1 at 50%, release each source, and then cover second-programmer/playback arbitration in MERGE scenarios.
+- **Oracle:** Inside one programmer, the newer fixture or Group programmer value wins by LTP even when the newer value is lower; release falls back to the remaining active source; cue/playback HTP remains covered separately.
+- **Pass:** Fixture- and group-scoped programmer contributions resolve by LTP within one programmer, while cross-source HTP/LTP arbitration remains isolated in MERGE coverage.
 
-### PROG-001 — Additive selection until use or Clear
+### PROG-001 — Selection persists through value entry until replaced or cleared
 
 - **Starting show:** Load canonical `compact-rig.show`, immediately Save As `prog-001.show`, and use the active copy.
 - **Surface:** Stage clicks and marquee, Fixture Sheet, Group UI, Lightning Desk command/value controls, encoders, and preset recall.
-- **Actions:** Select fixtures and groups successively across surfaces without programming a value; apply a value; select again; build another selection and recall a preset; then press `CLR` once and select again.
-- **Oracle:** Programmer selection open/used state, ordered source references, normalized deduplicated fixture targets, visible selection indicators, and preserved programmer values.
-- **Pass:** Selections accumulate across all surfaces as implicit `+` operations until a value/encoder/preset edit consumes the current selection or first-stage `CLR` clears it; the next selection then replaces the old targets and starts a new additive selection.
+- **Actions:** Select fixtures and groups successively across surfaces, apply repeated values without reselecting, start a replacement selection, use leading `+` to continue a prior selection after a value edit, then press `CLR` once and select again.
+- **Oracle:** Current programmer selection state, ordered source references, normalized deduplicated fixture targets, visible selection indicators, leading-plus continuation, and preserved programmer values.
+- **Pass:** Selections accumulate across all surfaces as implicit `+` operations, value/encoder/preset edits leave the selection current, the next non-plus selection replaces the old targets, leading `+` continues them, and first-stage `CLR` clears only the selection.
 
 ## Default Stage Show
 
@@ -69,13 +85,15 @@ Canonical `default-stage.show` contains the complete 49-record built-in patch:
 
 | Fixture IDs | Name | Capabilities |
 | --- | --- | --- |
-| 1–6 | Front Fresnels | Intensity |
-| 101–108 | Back Profiles | Intensity, pan, tilt, RGB color |
-| 201–205 | Back LED Washes | Intensity, pan, tilt, RGB color |
-| 401–412 | Floor RGBW PARs | Intensity and RGBW color |
-| 501–506 | Back RGB Sunstrips | Ten logical RGB heads with virtual dimmers |
-| 601–604 | Front RGB Strobes | Intensity and RGB color |
-| 28, 29, 99, 301–304, 999 | ACL sets, hazer, Trackspots, and RGB multipatch | Built-in utility, movement, and multipatch capabilities |
+| 1–6 | Front Fresnels (`1.1`–`1.6`) | Intensity |
+| 101–108 | Back Profiles (universe 2 from `2.1`) | Intensity, pan, tilt, RGB color |
+| 201–205 | Back LED Washes (universe 2 from `2.49`) | Intensity, pan, tilt, RGB color |
+| 401–412 | Floor RGBW PARs (universe 3 from `3.1`) | Intensity and RGBW color |
+| 501–506 | Back RGB Sunstrips (universe 3 from `3.61`) | Ten logical RGB heads with virtual dimmers |
+| 601–604 | Front RGB Strobes (universe 3 from `3.241`) | Intensity and RGB color |
+| 28, 29, 99 | ACL sets (`1.11`, `1.12`) and hazer (`1.13`) | Built-in utility capabilities |
+| 301–304 | Back Trackspots (universe 2 from `2.79`) | Movement and intensity |
+| 999 | Overhead RGB multipatch (`4.1`) | Intensity and RGB color |
 
 At the start of each theater workflow, create only the groups it uses from this fresh show copy. The common groups are:
 
@@ -124,7 +142,7 @@ Before each workflow, clear the command line, selection, programmer, preload, an
 4. Add fixture 999 to group 4 in a position where it changes the alternating pattern.
    - **Expect:** Group 5 recalculates from the new group 4 order. Group 6 remains unchanged.
 5. Remove one original member of group 4.
-   - **Expect:** Group 5 recalculates again. Group 6 still identifies its original member, including a warning if that member is no longer patched.
+   - **Expect:** Group 5 recalculates again. Group 6 still identifies its original member, including a warning only if that member no longer exists in the show.
 
 **Pass condition:** Derived groups track their source and ordering rule, while frozen selections preserve the captured membership until explicitly refreshed.
 
@@ -190,6 +208,8 @@ The scene is a short evening interior: preset, lights up, an actor crosses to ce
 
 **Pass condition:** Pending preload work is isolated from live output, can be stored independently, and can be applied or cleared without corrupting playback state.
 
+The complete capture-domain contract is specified by [PRELOAD-001–006](../../testing/06-preload-modes-and-virtual-playbacks.md): independent programmer, physical-playback, and virtual-playback switches; all eight combinations; ordered action capture; Programmer Fade execution; Virtual Playbacks as a future pane; and programmer-only Preload Release.
+
 ## THE-005 — Save, restart, and resume a show
 
 **Starting show:** Load canonical `default-stage.show`, immediately Save As `the-005.show`, use the active copy, create common groups 1–4, and recreate the presets and cues from THE-003 before beginning this scenario.
@@ -209,15 +229,36 @@ The scene is a short evening interior: preset, lights up, an actor crosses to ce
 
 **Pass condition:** Restart preserves the portable show and durable user data without silently merging transient programmer values into stored programming.
 
+## CMD-002 — Set and synchronize speed groups
+
+- **Starting show:** Load canonical `default-stage.show`, immediately Save As `cmd-002-speed-groups.show`, and use the active copy.
+- **Surface:** Lightning Desk keypad/command line and Speed Group controls.
+- **Actions:** Enter `SHIFT TIME` to display `SPD GRP`; address groups 1–5 as A–E; set integer and decimal-comma BPM values with `+`; synchronize two groups with `<source> AT <target>`; then break synchronization once by direct BPM entry and once by tap tempo.
+- **Oracle:** Exact visible command text, A–E BPM values and precision, active synchronization relationship, and aligned beat phase until the documented break action.
+- **Pass:** The shortcut addresses every Speed Group correctly, synchronization copies source speed and phase to the target, and direct entry or tapping either linked group returns the pair to independent operation.
+- **Status:** Specification only; executable coverage must not be claimed before the command and synchronization model are implemented.
+
+## CUE-006 — Select an active playback
+
+- **Starting show:** Load canonical `default-stage.show`, immediately Save As `cue-006-active-playback.show`, and use the active copy.
+- **Surface:** Touch/software keyboard, playback controls, command line, and Cuelist details.
+- **Actions:** Press Shift-Z to enter `SELECT`, touch page 1 playback 2, run a different playback, open Shift-4 Cue details, and enter `RECORD CUE 7` without an explicit playback or Cuelist Pool address.
+- **Oracle:** Exact `SELECT` command text before the playback touch, one explicit active-playback identity, Shift-4 opening that playback's Cuelist, and Cue 7 stored only in the active playback's assigned Cuelist.
+- **Pass:** Playback selection is deliberate and remains the shared default for Cue details and address-omitting Cue recording; running another playback does not steal selection, and explicit addresses still take precedence.
+- **Status:** Specification only; Shift-Z command entry exists, but playback selection and all active-playback resolution remain intentionally unimplemented until this scenario receives executable coverage.
+
 ## Required coverage matrix
 
 | IDs | Area | Required cases | Primary oracle |
 | --- | --- | --- | --- |
 | SHOW-000–006 | Show and patch | Save As copy isolation, create/open/save, addressing, overlap rejection, restart, invalid-show recovery, legacy migration | independent files, API, restarted server, preserved files |
 | GROUP-001–008 | Groups | ordered CRUD, add/remove, empty, live, derived, frozen, missing source, nested-cycle rejection | group objects, selection, rendered output |
-| PROG-001–008 | Programmer | select, values, fixture override, three-stage clear, undo/redo, preload, masters, two users | programmer state, audit, rendered output |
-| CMD-001–010 | Command line | fixture/group ranges, subsets, `AT`, presets, `REC/DEL/MOV/CPY`, cues, page addressing, invalid grammar | UI result, audit event, show object mutation |
-| CUE-001–012 | Cue/playback | record, tracking, cue-only restore, GO/back, pause, release, delay/fade, follow/wait, loop/chaser, restart position | playback state at exact virtual timestamps |
+| PROG-001–008 | Programmer | select, values, fixture override, two-stage clear, undo/redo, preload, masters, two users | programmer state, audit, rendered output |
+| PRELOAD-001–006 | Preload | programmer-only blind values, physical action queue, virtual-playback pane/actions, all eight capture masks, atomic combined GO, programmer-only release | pending entries, one commit timestamp, playback runtime, rendered output |
+| PBK-001–006 | Playback configuration | Set interception on every playback control, assignment/color/clear persistence, type-safe button and fader layouts, Cuelist actions, Master/X-fade/Temp, Flash/Temp LTP restoration, Swap protection, specialized masters | persisted playback definition, action verb, playback runtime, temporary ownership, master state, exact output |
+| CMD-001–010 | Command line | fixture/group ranges, subsets, `AT`, presets, `REC/DEL/MOV/CPY`, cues, `SPD GRP`, page addressing, invalid grammar | UI result, audit event, show object mutation |
+| CUE-001–013 | Cue/playback | record, tracking, cue-only restore, active-Cue deletion with held output/navigation, GO/back, pause, release, per-value/Cue timing, GO/FOLLOW/TIME triggers, Cuelist View editing and transactional renumbering, Chaser/Speed Group settings, Intensity HTP/LTP, wrapping, First/Continue restart, timing bypass | playback state, persisted Cuelist data, exact virtual timestamps, UI selection without execution |
+| MIB-001 | Move in Black | per-fixture enable/default, safety delay after resolved zero, future lit-position lookup, disabled comparison, cancellation, Cue-edit invalidation | patch persistence, normalized MIB runtime state, exact Position DMX boundaries |
 | MERGE-001–006 | HTP/LTP | intensity maximum, equal-priority LTP recency, priority override, programmer/playback conflict, release restoration, group/fixture scope | resolved values and exact DMX |
 | DMX-001–010 | Encoding/routes | 0/50/75/100%, multi-byte order, disabled/remapped/multiple routes, ArtDMX headers/sequence, E1.31 headers/priority/sequence, termination | decoded real UDP datagrams |
 | OSC-001–008 | Hardware OSC | subscribe/unsubscribe, connected state, command keys, faders/buttons, full feedback, invalid alias, multiple desks, subscriber isolation | received OSC messages, audit, UDP output |

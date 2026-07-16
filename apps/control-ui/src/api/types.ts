@@ -61,7 +61,7 @@ export interface ProgrammerState {
   preview: boolean;
   highlight: boolean;
   values: unknown[];
-  group_values?: Record<string, Record<string, { value: unknown; changed_at: string }>>;
+  group_values?: Record<string, Record<string, { value: unknown; changed_at: string; fade?: boolean; fade_millis?: number; delay_millis?: number }>>;
   selection_expression?: { type: string; group_id?: string; source_revision?: number; rule?: { type: string; n?: number; offset?: number } };
 }
 
@@ -171,8 +171,8 @@ export interface Cue {
   fade_millis: number;
   delay_millis: number;
   trigger: { type: string; [key: string]: unknown };
-  changes: Array<{ fixture_id: string; attribute: string; value: AttributeValue | null }>;
-  group_changes?: Array<{ group_id: string; attribute: string; value: AttributeValue | null }>;
+  changes: Array<{ fixture_id: string; attribute: string; value: AttributeValue | null; fade_millis?: number; delay_millis?: number }>;
+  group_changes?: Array<{ group_id: string; attribute: string; value: AttributeValue | null; fade_millis?: number; delay_millis?: number }>;
   phasers?: unknown[];
 }
 

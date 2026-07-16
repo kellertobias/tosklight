@@ -7,6 +7,7 @@
 .help-nav-row { display: flex; align-items: stretch; min-height: 42px; padding-right: 8px; }
 .help-nav-row.topic { min-height: 38px; }
 .help-nav-title { flex: 1; min-width: 0; padding: 8px 10px; border: 0; border-radius: 5px; background: transparent; color: var(--text); font: inherit; font-weight: 650; text-align: left; cursor: pointer; }
+.help-nav-row .help-nav-title { display: flex; align-items: center; justify-content: flex-start; width: 100%; }
 .help-nav-row.topic .help-nav-title { font-weight: 450; }
 .help-nav-title:hover { background: var(--panel2); }
 .help-nav-title.active { color: var(--cyan); background: #10242b; }

@@ -1,13 +1,42 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { WindowProps } from "./windowTypes";
 import { useServer } from "../api/ServerContext";
-import type { DmxSnapshot } from "../api/types";
-import { Button, Input } from "../components/common";
+import type { DmxSnapshot, PatchedFixture } from "../api/types";
+import { Button } from "../components/common";
 import { useApp } from "../state/AppContext";
 import { WindowHeader, WindowScrollArea, WindowSettings } from "../components/window-kit";
-import { ModalNumberInput } from "../components/input/ModalInputControls";
+import { TouchValueButton } from "../components/control/VerticalTouchFader";
 
 interface Slot { universe: number; address: number; value: number }
+export interface DmxFixtureChannel {
+  fixture: PatchedFixture;
+  fixtureChannel: number;
+  attribute: string;
+  component: string | null;
+}
+
+export function fixtureChannelAt(fixtures: PatchedFixture[], universe: number, address: number): DmxFixtureChannel | null {
+  for (const fixture of fixtures) {
+    const patches = [{ universe: fixture.universe, address: fixture.address }, ...(fixture.multipatch ?? [])];
+    const patch = patches.find((item) => item.universe === universe && item.address != null && address >= item.address && address < item.address + fixture.definition.footprint);
+    if (!patch?.address) continue;
+    const offset = address - patch.address;
+    for (const head of fixture.definition.heads) {
+      for (const parameter of head.parameters) {
+        const componentIndex = parameter.components.findIndex((component) => component.offset === offset);
+        if (componentIndex < 0) continue;
+        const component = parameter.components.length > 1
+          ? (componentIndex === 0 ? "coarse" : componentIndex === 1 ? "fine" : `byte ${componentIndex + 1}`)
+          : null;
+        return { fixture, fixtureChannel: offset + 1, attribute: parameter.attribute, component };
+      }
+    }
+    return { fixture, fixtureChannel: offset + 1, attribute: "Unassigned", component: null };
+  }
+  return null;
+}
+
+const dipWeights = [1, 2, 4, 8, 16, 32, 64, 128, 256];
 export function dmxChannelsPerRow(width: number, size: "small" | "large") {
   const target = size === "large" ? 42 : 9;
   const usable = Math.max(160, width - 72);
@@ -21,8 +50,6 @@ export function DmxWindow({ compact }: WindowProps) {
   const [snapshot, setSnapshot] = useState<DmxSnapshot | null>(null);
   const [view, setView] = useState<"values" | "sources" | "routes">("values");
   const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
-  const [valueInputOpen, setValueInputOpen] = useState(false);
-  const [valueInput, setValueInput] = useState("");
   const valuesHost = useRef<HTMLElement>(null);
   const [valuesWidth, setValuesWidth] = useState(900);
 
@@ -53,7 +80,13 @@ export function DmxWindow({ compact }: WindowProps) {
     return [...values].sort((a, b) => a - b).slice(0, compact ? 2 : 8);
   }, [snapshot, server.patch, compact]);
 
-  const fixtureFor = (universe: number, address: number) => server.patch?.fixtures.find((fixture) => [{universe:fixture.universe,address:fixture.address}, ...(fixture.multipatch ?? [])].some((patch) => patch.universe === universe && patch.address != null && address >= patch.address && address < patch.address + fixture.definition.footprint));
+  useEffect(() => {
+    if (!slot || !snapshot) return;
+    const value = snapshot.universes.find((frame) => frame.universe === slot.universe)?.slots[slot.address - 1] ?? 0;
+    setSlot((current) => current && current.universe === slot.universe && current.address === slot.address && current.value !== value ? { ...current, value } : current);
+  }, [snapshot, slot?.universe, slot?.address]);
+
+  const selectedFixtureChannel = slot ? fixtureChannelAt(server.patch?.fixtures ?? [], slot.universe, slot.address) : null;
   const override = (value: number | null) => {
     if (!slot) return;
     if (value !== null) setSlot({ ...slot, value });
@@ -74,7 +107,6 @@ export function DmxWindow({ compact }: WindowProps) {
           return <Button key={address} aria-label={`Universe ${universe}, address ${address}, value ${value}`} className={`${value > 210 ? "high" : value > 90 ? "mid" : value > 20 ? "low" : ""} ${slot?.universe === universe && slot.address === address ? "selected" : ""}`} onClick={() => setSlot({ universe, address, value })}/>;
         })}</div></div>)}
       </section>;
-    })}{view === "sources" && <div className="dmx-detail-list"><h2>Diagnostic overrides</h2>{snapshot?.overrides.length ? snapshot.overrides.map((item) => <article key={`${item.universe}-${item.address}`}><b>Universe {item.universe} · Address {item.address}</b><span>{item.value}</span><Button onClick={() => void server.setDmxOverride(item.universe, item.address, null)}>Release</Button></article>) : <div className="empty-window-message">No raw DMX overrides are active.</div>}</div>}{view === "routes" && <div className="dmx-detail-list"><h2>Universe routes</h2>{server.patch?.routes.length ? server.patch.routes.map((route, index) => <article key={index}><b>Logical {route.logical_universe} → {route.protocol} {route.destination_universe}</b><span>{route.destination ?? "Multicast"}</span><small>{route.enabled ? "Enabled" : "Disabled"}</small></article>) : <div className="empty-window-message">No output routes are configured.</div>}</div>}</main></WindowScrollArea><aside className="dmx-info-pane">{slot ? <><b>Selected channel</b><section><strong>U{slot.universe} · {slot.address}</strong><small>0x{slot.address.toString(16).toUpperCase().padStart(3, "0")}</small><p>{fixtureFor(slot.universe, slot.address)?.definition.model ?? "Unpatched slot"}</p></section><Button className="dmx-value-input" onClick={() => { setValueInput(String(slot.value)); setValueInputOpen(true); }}><small>Raw value</small><strong>{slot.value}</strong></Button><Button onClick={() => override(null)}>Release override</Button></> : <><b>Output summary</b><section>Frame rate <span>{server.bootstrap?.output_health.frame_hz.toFixed(1) ?? "—"} Hz</span></section><section>Packets <span>{server.bootstrap?.output_health.packets_sent ?? 0}</span></section><section>Errors <span>{server.bootstrap?.output_health.send_errors ?? 0}</span></section></>}</aside></div>
-    {valueInputOpen && slot && <div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && setValueInputOpen(false)}><section className="nested-modal direct-value-modal" role="dialog" aria-modal="true" aria-label="DMX channel value"><Button className="modal-close" onClick={() => setValueInputOpen(false)}>×</Button><h3>U{slot.universe} · Channel {slot.address}</h3><strong>{valueInput || "0"}</strong><ModalNumberInput value={valueInput} onChange={setValueInput} onEnter={() => { override(Math.max(0, Math.min(255, Number(valueInput) || 0))); setValueInputOpen(false); }} onEscape={() => setValueInputOpen(false)} replaceOnFirstInput/></section></div>}
+    })}{view === "sources" && <div className="dmx-detail-list"><h2>Diagnostic overrides</h2>{snapshot?.overrides.length ? snapshot.overrides.map((item) => <article key={`${item.universe}-${item.address}`}><b>Universe {item.universe} · Address {item.address}</b><span>{item.value}</span><Button onClick={() => void server.setDmxOverride(item.universe, item.address, null)}>Release</Button></article>) : <div className="empty-window-message">No raw DMX overrides are active.</div>}</div>}{view === "routes" && <div className="dmx-detail-list"><h2>Universe routes</h2>{server.patch?.routes.length ? server.patch.routes.map((route, index) => <article key={index}><b>Logical {route.logical_universe} → {route.protocol} {route.destination_universe}</b><span>{route.destination ?? "Multicast"}</span><small>{route.enabled ? "Enabled" : "Disabled"}</small></article>) : <div className="empty-window-message">No output routes are configured.</div>}</div>}</main></WindowScrollArea><aside className="dmx-info-pane">{slot ? <><header className="dmx-info-header"><b>Selected channel</b><Button size="compact" onClick={() => setSlot(null)}>Deselect</Button></header><section className="dmx-address-card"><strong>Universe {slot.universe} · Channel {slot.address}</strong><small>DMX address {slot.address} · 0x{slot.address.toString(16).toUpperCase().padStart(3, "0")}</small><div className="dmx-dip-switches" aria-label={`DIP switches for DMX address ${slot.address}`}>{dipWeights.map((weight) => <span className={slot.address & weight ? "on" : ""} key={weight}><i aria-hidden="true"/><small>{weight}</small></span>)}</div></section><section className="dmx-fixture-card"><b>Fixture</b>{selectedFixtureChannel ? <dl><dt>Fixture ID</dt><dd>{selectedFixtureChannel.fixture.fixture_number ?? selectedFixtureChannel.fixture.fixture_id}</dd><dt>Name</dt><dd>{selectedFixtureChannel.fixture.name || selectedFixtureChannel.fixture.definition.name || "—"}</dd><dt>Type</dt><dd>{selectedFixtureChannel.fixture.definition.device_type || "—"}</dd><dt>Fixture channel</dt><dd>{selectedFixtureChannel.fixtureChannel} of {selectedFixtureChannel.fixture.definition.footprint}</dd><dt>Attribute</dt><dd>{selectedFixtureChannel.attribute}{selectedFixtureChannel.component ? ` · ${selectedFixtureChannel.component}` : ""}</dd></dl> : <p>Fixture: Empty</p>}</section><div className="dmx-raw-value"><TouchValueButton label="Raw value" value={slot.value} maximum={255} display={String(Math.round(slot.value))} onChange={(value) => override(Math.round(value))}/></div><Button fullWidth onClick={() => override(null)}>Release override</Button></> : <><b>Output summary</b><section>Frame rate <span>{server.bootstrap?.output_health.frame_hz.toFixed(1) ?? "—"} Hz</span></section><section>Packets <span>{server.bootstrap?.output_health.packets_sent ?? 0}</span></section><section>Errors <span>{server.bootstrap?.output_health.send_errors ?? 0}</span></section></>}</aside></div>
   </div>;
 }

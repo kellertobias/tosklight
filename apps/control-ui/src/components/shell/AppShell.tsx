@@ -12,10 +12,13 @@ import { StoreSettingsModal } from "../modals/StoreSettingsModal";
 import { ShowRecoveryModal } from "../modals/ShowRecoveryModal";
 import { ScreenWindowManager } from "./ScreenWindowManager";
 import { NativeDragStrip } from "./NativeDragStrip";
+import { SectionNameMap } from "./SectionNameMap";
+import { DebugModal } from "../modals/DebugModal";
 
 export function AppShell() {
   return <div className="app-shell">
     <NativeDragStrip />
+    <SectionNameMap />
     <LayoutPersistence />
     <ScreenWindowManager />
     <ModalEscapeManager />
@@ -23,6 +26,7 @@ export function AppShell() {
     <WorkspaceView />
     <ControlSection />
     <QuickSetupModal />
+    <DebugModal />
     <SpecialDialogsModal />
     <SystemControlsModal />
     <PreloadStoreModal />

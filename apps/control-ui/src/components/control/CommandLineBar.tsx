@@ -3,7 +3,7 @@ import { useApp } from "../../state/AppContext";
 import { useServer } from "../../api/ServerContext";
 import { programmerValueCount } from "./programmerActivity";
 import { Button, Input } from "../common";
-import { editCommandWithSoftwareKey, softwareKeyFromKeyboard } from "./softwareKeypad";
+import { editTargetedCommandWithSoftwareKey, softwareKeyFromKeyboard } from "./softwareKeypad";
 
 export function CommandLineBar() {
   const { state, dispatch } = useApp();
@@ -41,10 +41,10 @@ export function CommandLineBar() {
     if (ok && state.storeArmed) dispatch({ type: "SET_STORE_ARMED", value: false });
     if (!ok) setCommandError(server.error ?? "The command could not be executed.");
   };
-  const replaceCommand = (value: string) => {
+  const replaceCommand = (value: string, pristine = false) => {
     setCompleted(false);
     setCommandError(null);
-    server.setCommandLine(value);
+    server.setCommandLine(value, pristine);
   };
   const toggleRecord = () => {
     const armed = !state.storeArmed;
@@ -53,6 +53,17 @@ export function CommandLineBar() {
     if (armed) replaceCommand("RECORD ");
     else if (/^RECORD\b/i.test(server.commandLine)) replaceCommand(server.commandLine.replace(/^RECORD\s*/i, ""));
   };
+  useEffect(() => {
+    const openRunningMenu = (event: KeyboardEvent) => {
+      if (event.code !== "Delete" || !event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input,textarea,select,[contenteditable=true]") && !target.closest(".command-input")) return;
+      event.preventDefault();
+      dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: true });
+    };
+    window.addEventListener("keydown", openRunningMenu);
+    return () => window.removeEventListener("keydown", openRunningMenu);
+  }, [dispatch]);
   useEffect(() => {
     if (hardware) return;
     const triggerPlaybackButton = (event: KeyboardEvent, slot: number) => {
@@ -70,6 +81,7 @@ export function CommandLineBar() {
       }
     };
     const keydown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       const target = event.target as HTMLElement | null;
       const commandInput = Boolean(target?.closest(".command-input"));
       if (!commandInput && target?.closest("input,textarea,select,[contenteditable=true]")) return;
@@ -104,7 +116,7 @@ export function CommandLineBar() {
           setPersistentError(null);
           setErrorOpen(false);
           server.dismissError();
-        } else replaceCommand("");
+        } else replaceCommand("", true);
         return;
       }
       event.preventDefault();
@@ -113,8 +125,13 @@ export function CommandLineBar() {
       else if (key === "CLR" || key === "UND") document.querySelector<HTMLButtonElement>(`[data-keypad-key="${key}"]`)?.click();
       else if (key === "ENT") void execute();
       else {
-        const edited = editCommandWithSoftwareKey(completed ? "" : server.commandLine, key);
-        replaceCommand(edited.command);
+        const edited = editTargetedCommandWithSoftwareKey(
+          completed ? server.commandTargetMode : server.commandLine,
+          key,
+          server.commandTargetMode,
+          completed || server.commandLinePristine,
+        );
+        replaceCommand(edited.command, edited.pristine);
         if (edited.execute) void server.executeCommandLine(edited.command);
       }
     };
@@ -132,7 +149,7 @@ export function CommandLineBar() {
       for (const playbackNumber of keyboardFlash.current.values()) void server.poolPlaybackAction(playbackNumber, "flash", { pressed: false });
       keyboardFlash.current.clear();
     };
-  }, [hardware, completed, persistentError, state.storeArmed, state.cueListSetArmed, state.regularNumberShortcuts, state.playbackPage, state.playbackPageNames.length, server.playbacks, server.commandLine, server.poolPlaybackAction, server.setPlaybackPage]);
+  }, [hardware, completed, persistentError, state.storeArmed, state.cueListSetArmed, state.regularNumberShortcuts, state.playbackPage, state.playbackPageNames.length, server.playbacks, server.commandLine, server.commandTargetMode, server.commandLinePristine, server.poolPlaybackAction, server.setPlaybackPage]);
   return (
     <header
       className={`command-line-bar command-line-left ${playback ? "playback-mode" : ""} ${commandError ? "has-command-error" : ""}`}
@@ -152,19 +169,19 @@ export function CommandLineBar() {
         className={`command-input ${state.preload === "blind" ? "blind" : ""} ${completed ? "completed" : ""} ${commandError ? "error" : ""}`}
         aria-label="Command line"
         value={server.commandLine}
-        placeholder="FIXTURE 1 THRU 8 AT 75"
+        placeholder=""
         onChange={(event) =>
           replaceCommand(
-            completed ? event.target.value.slice(-1) : event.target.value,
+            completed ? `${server.commandTargetMode} ${event.target.value.slice(-1)}` : event.target.value,
           )
         }
         onKeyDown={(event) => {
           if (event.key === "Enter") { event.stopPropagation(); void execute(); }
         }}
-      />{!hardware && <Button className="command-escape" onClick={() => replaceCommand("")}>ESC</Button>}
-        <Button className={`command-status ${server.status}`} title="Open output and timecode controls" onClick={() => dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: true })}>
-          <span className={state.blackout ? "blackout-status" : ""}>{state.blackout ? <><i>DMX {server.bootstrap?.frame_rate_hz ?? "—"}Hz</i><b>BLACKOUT</b></> : <>DMX {server.bootstrap?.frame_rate_hz ?? "—"}Hz</>}</span>
-          <span>{server.bootstrap?.active_timecode ?? "No timecode"}</span>
+      />{!hardware && <Button className="command-escape" onClick={() => replaceCommand("", true)}>ESC</Button>}
+        <Button aria-label={`DMX ${server.bootstrap?.frame_rate_hz ?? "—"}Hz; ${server.bootstrap?.active_timecode ?? "No Timecode"}. Open running and output controls`} className={`command-status ${server.status}`} title="Open running and output controls" onClick={() => dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: true })}>
+          <span className={state.blackout ? "blackout-status" : ""}>{state.blackout ? <><i><span className="status-label-full">DMX </span>{server.bootstrap?.frame_rate_hz ?? "—"}Hz</i><b>BLACKOUT</b></> : <><span className="status-label-full">DMX {server.bootstrap?.frame_rate_hz ?? "—"}Hz</span><span className="status-label-compact">{server.bootstrap?.frame_rate_hz ?? "—"}Hz</span></>}</span>
+          <span>{server.bootstrap?.active_timecode ?? <><span className="status-label-full">No Timecode</span><span className="status-label-compact">No TC</span></>}</span>
         </Button>
       </div>
       {completed && (

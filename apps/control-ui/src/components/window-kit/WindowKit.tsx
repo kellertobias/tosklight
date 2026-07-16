@@ -145,7 +145,28 @@ export function DataTable<T>({ columns, rows, rowKey, selected, activeIndex, onA
 }
 
 export function ButtonGrid({ children, minimum = 88, className = "", style, ref }: { children: ReactNode; minimum?: number; className?: string; style?: CSSProperties; ref?: Ref<HTMLDivElement> }) {
-  return <div ref={ref} className={`ui-button-grid ${className}`} style={{ "--grid-cell-min": `${minimum}px`, ...style } as CSSProperties}>{children}</div>;
+  const host = useRef<HTMLDivElement>(null);
+  const setHost = (node: HTMLDivElement | null) => {
+    host.current = node;
+    if (typeof ref === "function") ref(node);
+    else if (ref) (ref as { current: HTMLDivElement | null }).current = node;
+  };
+  useLayoutEffect(() => {
+    const node = host.current;
+    if (!node) return;
+    const measure = () => {
+      const width = node.firstElementChild?.getBoundingClientRect().width ?? 0;
+      if (width <= 0) return;
+      const rowSize = `${Math.round(width * 1000) / 1000}px`;
+      if (node.style.getPropertyValue("--grid-row-size") !== rowSize) node.style.setProperty("--grid-row-size", rowSize);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [children, minimum]);
+  return <div ref={setHost} className={`ui-button-grid ${className}`} style={{ "--grid-cell-min": `${minimum}px`, ...style } as CSSProperties}>{children}</div>;
 }
 export function GridButton({ number, primary, secondary, icon, state = "filled", onClick }: { number: ReactNode; primary?: ReactNode; secondary?: ReactNode; icon?: ReactNode; state?: "empty" | "filled" | "disabled" | "active" | "selected" | "store-target"; onClick?: () => void }) {
   return <Button disabled={state === "disabled"} className={`ui-grid-button ${state}`} onClick={onClick}><span className="number">{number}</span>{primary != null && <b>{primary}</b>}{secondary != null && <small>{secondary}</small>}{icon != null && <span className="icon">{icon}</span>}</Button>;

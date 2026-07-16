@@ -232,7 +232,11 @@ impl<'de> Deserialize<'de> for FixtureLocation {
             z: i32,
         }
         let stored = StoredLocation::deserialize(deserializer)?;
-        Ok(Self { x: stored.x, y: stored.y, z: stored.z })
+        Ok(Self {
+            x: stored.x,
+            y: stored.y,
+            z: stored.z,
+        })
     }
 }
 
@@ -244,7 +248,9 @@ where
     impl<'de> serde::de::Visitor<'de> for CoordinateVisitor {
         type Value = i32;
         fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            formatter.write_str("an integer millimetre coordinate or a legacy floating-point metre coordinate")
+            formatter.write_str(
+                "an integer millimetre coordinate or a legacy floating-point metre coordinate",
+            )
         }
         fn visit_i64<E: serde::de::Error>(self, value: i64) -> Result<i32, E> {
             i32::try_from(value).map_err(E::custom)
@@ -254,8 +260,13 @@ where
         }
         fn visit_f64<E: serde::de::Error>(self, value: f64) -> Result<i32, E> {
             let millimetres = value * 1_000.0;
-            if !millimetres.is_finite() || millimetres < f64::from(i32::MIN) || millimetres > f64::from(i32::MAX) {
-                return Err(E::custom("legacy fixture location is outside the supported range"));
+            if !millimetres.is_finite()
+                || millimetres < f64::from(i32::MIN)
+                || millimetres > f64::from(i32::MAX)
+            {
+                return Err(E::custom(
+                    "legacy fixture location is outside the supported range",
+                ));
             }
             Ok(millimetres.round() as i32)
         }
@@ -263,7 +274,9 @@ where
     deserializer.deserialize_any(CoordinateVisitor)
 }
 
-fn default_patch_layer() -> String { "default".into() }
+fn default_patch_layer() -> String {
+    "default".into()
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct DirectControlEndpoint {
@@ -309,9 +322,7 @@ pub fn reconcile_logical_heads(fixture: &mut PatchedFixture) -> bool {
         .filter(|head| !head.shared)
         .map(|head| PatchedHead {
             head_index: head.index,
-            fixture_id: existing
-                .remove(&head.index)
-                .unwrap_or_else(FixtureId::new),
+            fixture_id: existing.remove(&head.index).unwrap_or_else(FixtureId::new),
         })
         .collect();
     before
@@ -490,20 +501,46 @@ pub fn validate_patch(fixtures: &[PatchedFixture]) -> Result<(), FixtureError> {
                 )));
             }
         }
-        let mut patches = vec![(fixture.universe, fixture.address, fixture.fixture_id.0.to_string())];
-        patches.extend(fixture.multipatch.iter().map(|instance| (instance.universe, instance.address, instance.id.to_string())));
+        let mut patches = vec![(
+            fixture.universe,
+            fixture.address,
+            fixture.fixture_id.0.to_string(),
+        )];
+        patches.extend(
+            fixture
+                .multipatch
+                .iter()
+                .map(|instance| (instance.universe, instance.address, instance.id.to_string())),
+        );
         for (universe, address, instance) in patches {
             if universe.is_some() != address.is_some() {
-                return Err(FixtureError::Invalid(format!("multipatch instance {instance} must set both universe and address or neither")));
+                return Err(FixtureError::Invalid(format!(
+                    "multipatch instance {instance} must set both universe and address or neither"
+                )));
             }
-            let (Some(universe), Some(address)) = (universe, address) else { continue };
-            if address == 0 || usize::from(address) + usize::from(fixture.definition.footprint) - 1 > 512 {
-                return Err(FixtureError::Invalid(format!("fixture instance {instance} exceeds universe {universe}")));
+            let (Some(universe), Some(address)) = (universe, address) else {
+                continue;
+            };
+            if address == 0
+                || usize::from(address) + usize::from(fixture.definition.footprint) - 1 > 512
+            {
+                return Err(FixtureError::Invalid(format!(
+                    "fixture instance {instance} exceeds universe {universe}"
+                )));
             }
             let slots = used.entry(universe).or_insert([false; 512]);
             let start = usize::from(address - 1);
-            for (offset, slot) in slots[start..start + usize::from(fixture.definition.footprint)].iter_mut().enumerate() {
-                if *slot { return Err(FixtureError::Invalid(format!("patch overlap at universe {} address {}", universe, start + offset + 1))); }
+            for (offset, slot) in slots[start..start + usize::from(fixture.definition.footprint)]
+                .iter_mut()
+                .enumerate()
+            {
+                if *slot {
+                    return Err(FixtureError::Invalid(format!(
+                        "patch overlap at universe {} address {}",
+                        universe,
+                        start + offset + 1
+                    )));
+                }
                 *slot = true;
             }
         }
@@ -646,19 +683,45 @@ impl FixtureLibrary {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, FixtureError> {
         let conn = Connection::open(path)?;
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; CREATE TABLE IF NOT EXISTS fixture_definitions(id TEXT NOT NULL,revision INTEGER NOT NULL,manufacturer TEXT NOT NULL,model TEXT NOT NULL,mode TEXT NOT NULL,definition_json TEXT NOT NULL,source_gdtf BLOB,PRIMARY KEY(id,revision));")?;
-        if !conn.prepare("SELECT source_gdtf FROM fixture_definitions LIMIT 0").is_ok() { conn.execute("ALTER TABLE fixture_definitions ADD COLUMN source_gdtf BLOB",[])?; }
+        if !conn
+            .prepare("SELECT source_gdtf FROM fixture_definitions LIMIT 0")
+            .is_ok()
+        {
+            conn.execute(
+                "ALTER TABLE fixture_definitions ADD COLUMN source_gdtf BLOB",
+                [],
+            )?;
+        }
         Ok(Self { conn })
     }
     pub fn import_json(&self, json: &str) -> Result<FixtureDefinition, FixtureError> {
         self.import_json_with_source(json, None)
     }
-    pub fn import_json_with_source(&self, json: &str, source_gdtf: Option<&[u8]>) -> Result<FixtureDefinition, FixtureError> {
+    pub fn import_json_with_source(
+        &self,
+        json: &str,
+        source_gdtf: Option<&[u8]>,
+    ) -> Result<FixtureDefinition, FixtureError> {
         let fixture: FixtureDefinition = serde_json::from_str(json)?;
         fixture.validate()?;
         self.conn.execute("INSERT INTO fixture_definitions(id,revision,manufacturer,model,mode,definition_json,source_gdtf) VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(id,revision) DO UPDATE SET manufacturer=excluded.manufacturer,model=excluded.model,mode=excluded.mode,definition_json=excluded.definition_json,source_gdtf=COALESCE(excluded.source_gdtf,fixture_definitions.source_gdtf)",params![fixture.id.0.to_string(),fixture.revision,fixture.manufacturer,fixture.model,fixture.mode,json,source_gdtf])?;
         Ok(fixture)
     }
-    pub fn source_gdtf(&self,id:FixtureId,revision:u32)->Result<Option<Vec<u8>>,FixtureError>{self.conn.query_row("SELECT source_gdtf FROM fixture_definitions WHERE id=?1 AND revision=?2",params![id.0.to_string(),revision],|row|row.get(0)).optional().map(|value|value.flatten()).map_err(Into::into)}
+    pub fn source_gdtf(
+        &self,
+        id: FixtureId,
+        revision: u32,
+    ) -> Result<Option<Vec<u8>>, FixtureError> {
+        self.conn
+            .query_row(
+                "SELECT source_gdtf FROM fixture_definitions WHERE id=?1 AND revision=?2",
+                params![id.0.to_string(), revision],
+                |row| row.get(0),
+            )
+            .optional()
+            .map(|value| value.flatten())
+            .map_err(Into::into)
+    }
     pub fn export_json(
         &self,
         id: FixtureId,
@@ -883,12 +946,22 @@ fn scanner_definition() -> FixtureDefinition {
         "Mirror Mover Scanner",
         "scanner",
         "Dimmer, Pan, Tilt".into(),
-        &[("D".into(), "intensity".into()), ("P".into(), "pan".into()), ("T".into(), "tilt".into())],
+        &[
+            ("D".into(), "intensity".into()),
+            ("P".into(), "pan".into()),
+            ("T".into(), "tilt".into()),
+        ],
         false,
         1,
     );
-    for parameter in fixture.heads.iter_mut().flat_map(|head| &mut head.parameters) {
-        if parameter.attribute.0 == "pan" || parameter.attribute.0 == "tilt" { parameter.default = 0.5; }
+    for parameter in fixture
+        .heads
+        .iter_mut()
+        .flat_map(|head| &mut head.parameters)
+    {
+        if parameter.attribute.0 == "pan" || parameter.attribute.0 == "tilt" {
+            parameter.default = 0.5;
+        }
     }
     fixture.physical.pan_range_degrees = Some(180.0);
     fixture.physical.tilt_range_degrees = Some(120.0);
@@ -1063,11 +1136,23 @@ mod tests {
 
     #[test]
     fn reads_legacy_metre_locations_and_current_millimetre_locations() {
-        let legacy: FixtureLocation = serde_json::from_str(r#"{"x":1.25,"y":-0.5,"z":0.00000001}"#).unwrap();
-        assert_eq!(legacy, FixtureLocation { x: 1_250, y: -500, z: 0 });
-        let current: FixtureLocation = serde_json::from_str(r#"{"x":1250,"y":-500,"z":0}"#).unwrap();
+        let legacy: FixtureLocation =
+            serde_json::from_str(r#"{"x":1.25,"y":-0.5,"z":0.00000001}"#).unwrap();
+        assert_eq!(
+            legacy,
+            FixtureLocation {
+                x: 1_250,
+                y: -500,
+                z: 0
+            }
+        );
+        let current: FixtureLocation =
+            serde_json::from_str(r#"{"x":1250,"y":-500,"z":0}"#).unwrap();
         assert_eq!(current, legacy);
-        assert_eq!(serde_json::to_string(&current).unwrap(), r#"{"x":1250,"y":-500,"z":0}"#);
+        assert_eq!(
+            serde_json::to_string(&current).unwrap(),
+            r#"{"x":1250,"y":-500,"z":0}"#
+        );
     }
 
     fn definition(footprint: u16) -> FixtureDefinition {
@@ -1194,11 +1279,34 @@ mod tests {
     #[test]
     fn multipatch_reserves_real_addresses_and_allows_visualizer_only_instances() {
         let mut fixture = PatchedFixture {
-            fixture_id: FixtureId::new(), fixture_number: None, name: "Multi".into(), definition: definition(3), universe: Some(1), address: Some(1),
-            layer_id: default_patch_layer(), direct_control: None, location: Default::default(), rotation: Default::default(), logical_heads: vec![],
+            fixture_id: FixtureId::new(),
+            fixture_number: None,
+            name: "Multi".into(),
+            definition: definition(3),
+            universe: Some(1),
+            address: Some(1),
+            layer_id: default_patch_layer(),
+            direct_control: None,
+            location: Default::default(),
+            rotation: Default::default(),
+            logical_heads: vec![],
             multipatch: vec![
-                MultiPatchInstance { id: Uuid::new_v4(), name: "Output".into(), universe: Some(1), address: Some(10), location: Default::default(), rotation: Default::default() },
-                MultiPatchInstance { id: Uuid::new_v4(), name: "Visual".into(), universe: None, address: None, location: Default::default(), rotation: Default::default() },
+                MultiPatchInstance {
+                    id: Uuid::new_v4(),
+                    name: "Output".into(),
+                    universe: Some(1),
+                    address: Some(10),
+                    location: Default::default(),
+                    rotation: Default::default(),
+                },
+                MultiPatchInstance {
+                    id: Uuid::new_v4(),
+                    name: "Visual".into(),
+                    universe: None,
+                    address: None,
+                    location: Default::default(),
+                    rotation: Default::default(),
+                },
             ],
         };
         assert!(validate_patch(std::slice::from_ref(&fixture)).is_ok());
@@ -1261,15 +1369,36 @@ mod tests {
             location: Default::default(),
             rotation: Default::default(),
             logical_heads: vec![
-                PatchedHead { head_index: 0, fixture_id: kept },
-                PatchedHead { head_index: 99, fixture_id: stale },
+                PatchedHead {
+                    head_index: 0,
+                    fixture_id: kept,
+                },
+                PatchedHead {
+                    head_index: 99,
+                    fixture_id: stale,
+                },
             ],
             multipatch: vec![],
         };
         fixture.definition.heads = vec![
-            LogicalHead { index: 10, name: "Master".into(), shared: true, parameters: vec![] },
-            LogicalHead { index: 0, name: "Cell 1".into(), shared: false, parameters: vec![] },
-            LogicalHead { index: 4, name: "Cell 2".into(), shared: false, parameters: vec![] },
+            LogicalHead {
+                index: 10,
+                name: "Master".into(),
+                shared: true,
+                parameters: vec![],
+            },
+            LogicalHead {
+                index: 0,
+                name: "Cell 1".into(),
+                shared: false,
+                parameters: vec![],
+            },
+            LogicalHead {
+                index: 4,
+                name: "Cell 2".into(),
+                shared: false,
+                parameters: vec![],
+            },
         ];
         assert!(reconcile_logical_heads(&mut fixture));
         assert_eq!(fixture.logical_heads.len(), 2);
@@ -1340,7 +1469,12 @@ mod tests {
     fn generic_catalog_groups_named_modes_and_covers_led_permutations() {
         let catalog = generic_fixture_definitions();
         assert_eq!(catalog.len(), 3_006);
-        assert!(catalog.iter().any(|fixture| fixture.name == "Mirror Mover Scanner" && fixture.device_type == "scanner"));
+        assert!(
+            catalog
+                .iter()
+                .any(|fixture| fixture.name == "Mirror Mover Scanner"
+                    && fixture.device_type == "scanner")
+        );
         assert!(catalog.iter().all(|fixture| fixture.validate().is_ok()));
         let dimmers = catalog
             .iter()

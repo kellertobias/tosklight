@@ -1,19 +1,180 @@
-#![cfg_attr(not(debug_assertions),windows_subsystem="windows")]
-use light_control::{ControlEvent,OscArgument,encode_osc_message,parse_osc_message};
-use serde::Serialize; use std::{net::{SocketAddr,UdpSocket},sync::{Arc,Mutex,atomic::{AtomicBool,Ordering}},thread,time::Duration}; use tauri::{Emitter,Manager};
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+use light_control::{ControlEvent, OscArgument, encode_osc_message, parse_osc_message};
+use serde::Serialize;
+use std::{
+    net::{SocketAddr, UdpSocket},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread,
+    time::Duration,
+};
+use tauri::{Emitter, Manager};
 
-struct OscClient{socket:Arc<UdpSocket>,target:SocketAddr,desk:String,id:String,stop:Arc<AtomicBool>}
-#[derive(Default)]struct ClientState(Mutex<Option<OscClient>>);
-impl Drop for OscClient{fn drop(&mut self){self.stop.store(true,Ordering::Release);let _=send(&self.socket,self.target,"/light/unsubscribe",vec![OscArgument::String(self.id.clone())]);}}
-#[derive(Serialize,Clone)]struct Feedback{address:String,arguments:Vec<OscArgument>}
-fn send(socket:&UdpSocket,target:SocketAddr,address:&str,args:Vec<OscArgument>)->Result<(),String>{let packet=encode_osc_message(address,&args).map_err(|e|e.to_string())?;socket.send_to(&packet,target).map_err(|e|e.to_string())?;Ok(())}
-fn subscribe(client:&OscClient)->Result<(),String>{let port=client.socket.local_addr().map_err(|e|e.to_string())?.port();send(&client.socket,client.target,"/light/subscribe",vec![OscArgument::String(client.id.clone()),OscArgument::String(client.desk.clone()),OscArgument::Int(i32::from(port)),OscArgument::Int(1)])}
-#[tauri::command]fn connect_osc(app:tauri::AppHandle,state:tauri::State<ClientState>,host:String,port:u16,desk:String)->Result<(),String>{
- let target=format!("{host}:{port}").parse::<SocketAddr>().map_err(|e|e.to_string())?;let socket=Arc::new(UdpSocket::bind("0.0.0.0:0").map_err(|e|e.to_string())?);socket.set_read_timeout(Some(Duration::from_millis(500))).map_err(|e|e.to_string())?;let stop=Arc::new(AtomicBool::new(false));let client=OscClient{socket:Arc::clone(&socket),target,desk,id:uuid::Uuid::new_v4().to_string(),stop:Arc::clone(&stop)};subscribe(&client)?;
- let read_socket=Arc::clone(&socket);let handle=app.clone();let read_stop=Arc::clone(&stop);thread::spawn(move||{let mut buffer=[0u8;65535];while !read_stop.load(Ordering::Acquire){if let Ok((length,_))=read_socket.recv_from(&mut buffer)&&let Ok(ControlEvent::Osc{address,arguments,..})=parse_osc_message(&buffer[..length]){let _=handle.emit("osc-feedback",Feedback{address,arguments});}}});
- let heartbeat_socket=Arc::clone(&socket);let heartbeat_stop=Arc::clone(&stop);let heartbeat_id=client.id.clone();let heartbeat_desk=client.desk.clone();thread::spawn(move||while !heartbeat_stop.load(Ordering::Acquire){thread::sleep(Duration::from_secs(2));if let Ok(port)=heartbeat_socket.local_addr().map(|v|v.port()){let _=send(&heartbeat_socket,target,"/light/subscribe",vec![OscArgument::String(heartbeat_id.clone()),OscArgument::String(heartbeat_desk.clone()),OscArgument::Int(i32::from(port)),OscArgument::Int(1)]);}});
- *state.0.lock().map_err(|_|"OSC client lock is poisoned")?=Some(client);Ok(())
+struct OscClient {
+    socket: Arc<UdpSocket>,
+    target: SocketAddr,
+    desk: String,
+    id: String,
+    stop: Arc<AtomicBool>,
 }
-fn json_argument(value:serde_json::Value)->Result<OscArgument,String>{match value{serde_json::Value::Bool(v)=>Ok(OscArgument::Bool(v)),serde_json::Value::Number(v)=>if let Some(i)=v.as_i64(){Ok(OscArgument::Int(i32::try_from(i).map_err(|_|"integer is outside OSC range")?))}else{Ok(OscArgument::Float(v.as_f64().ok_or("invalid OSC number")? as f32))},serde_json::Value::String(v)=>Ok(OscArgument::String(v)),_=>Err("OSC arguments must be booleans, numbers, or strings".into())}}
-#[tauri::command]fn send_control(state:tauri::State<ClientState>,path:String,args:Vec<serde_json::Value>)->Result<(),String>{let guard=state.0.lock().map_err(|_|"OSC client lock is poisoned")?;let client=guard.as_ref().ok_or("connect to a Light server first")?;let address=format!("/light/{}/{}",client.desk,path.trim_matches('/'));send(&client.socket,client.target,&address,args.into_iter().map(json_argument).collect::<Result<Vec<_>,_>>()?)}
-fn main(){tauri::Builder::default().manage(ClientState::default()).invoke_handler(tauri::generate_handler![connect_osc,send_control]).setup(|app|{if let Some(window)=app.get_webview_window("main"){let _=window.show();}Ok(())}).run(tauri::generate_context!()).expect("failed to run ToskLight Hardware Controls")}
+#[derive(Default)]
+struct ClientState(Mutex<Option<OscClient>>);
+impl Drop for OscClient {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Release);
+        let _ = send(
+            &self.socket,
+            self.target,
+            "/light/unsubscribe",
+            vec![OscArgument::String(self.id.clone())],
+        );
+    }
+}
+#[derive(Serialize, Clone)]
+struct Feedback {
+    address: String,
+    arguments: Vec<OscArgument>,
+}
+fn send(
+    socket: &UdpSocket,
+    target: SocketAddr,
+    address: &str,
+    args: Vec<OscArgument>,
+) -> Result<(), String> {
+    let packet = encode_osc_message(address, &args).map_err(|e| e.to_string())?;
+    socket.send_to(&packet, target).map_err(|e| e.to_string())?;
+    Ok(())
+}
+fn subscribe(client: &OscClient) -> Result<(), String> {
+    let port = client
+        .socket
+        .local_addr()
+        .map_err(|e| e.to_string())?
+        .port();
+    send(
+        &client.socket,
+        client.target,
+        "/light/subscribe",
+        vec![
+            OscArgument::String(client.id.clone()),
+            OscArgument::String(client.desk.clone()),
+            OscArgument::Int(i32::from(port)),
+            OscArgument::Int(1),
+        ],
+    )
+}
+#[tauri::command]
+fn connect_osc(
+    app: tauri::AppHandle,
+    state: tauri::State<ClientState>,
+    host: String,
+    port: u16,
+    desk: String,
+) -> Result<(), String> {
+    let target = format!("{host}:{port}")
+        .parse::<SocketAddr>()
+        .map_err(|e| e.to_string())?;
+    let socket = Arc::new(UdpSocket::bind("0.0.0.0:0").map_err(|e| e.to_string())?);
+    socket
+        .set_read_timeout(Some(Duration::from_millis(500)))
+        .map_err(|e| e.to_string())?;
+    let stop = Arc::new(AtomicBool::new(false));
+    let client = OscClient {
+        socket: Arc::clone(&socket),
+        target,
+        desk,
+        id: uuid::Uuid::new_v4().to_string(),
+        stop: Arc::clone(&stop),
+    };
+    subscribe(&client)?;
+    let read_socket = Arc::clone(&socket);
+    let handle = app.clone();
+    let read_stop = Arc::clone(&stop);
+    thread::spawn(move || {
+        let mut buffer = [0u8; 65535];
+        while !read_stop.load(Ordering::Acquire) {
+            if let Ok((length, _)) = read_socket.recv_from(&mut buffer)
+                && let Ok(ControlEvent::Osc {
+                    address, arguments, ..
+                }) = parse_osc_message(&buffer[..length])
+            {
+                let _ = handle.emit("osc-feedback", Feedback { address, arguments });
+            }
+        }
+    });
+    let heartbeat_socket = Arc::clone(&socket);
+    let heartbeat_stop = Arc::clone(&stop);
+    let heartbeat_id = client.id.clone();
+    let heartbeat_desk = client.desk.clone();
+    thread::spawn(move || {
+        while !heartbeat_stop.load(Ordering::Acquire) {
+            thread::sleep(Duration::from_secs(2));
+            if let Ok(port) = heartbeat_socket.local_addr().map(|v| v.port()) {
+                let _ = send(
+                    &heartbeat_socket,
+                    target,
+                    "/light/subscribe",
+                    vec![
+                        OscArgument::String(heartbeat_id.clone()),
+                        OscArgument::String(heartbeat_desk.clone()),
+                        OscArgument::Int(i32::from(port)),
+                        OscArgument::Int(1),
+                    ],
+                );
+            }
+        }
+    });
+    *state.0.lock().map_err(|_| "OSC client lock is poisoned")? = Some(client);
+    Ok(())
+}
+fn json_argument(value: serde_json::Value) -> Result<OscArgument, String> {
+    match value {
+        serde_json::Value::Bool(v) => Ok(OscArgument::Bool(v)),
+        serde_json::Value::Number(v) => {
+            if let Some(i) = v.as_i64() {
+                Ok(OscArgument::Int(
+                    i32::try_from(i).map_err(|_| "integer is outside OSC range")?,
+                ))
+            } else {
+                Ok(OscArgument::Float(
+                    v.as_f64().ok_or("invalid OSC number")? as f32
+                ))
+            }
+        }
+        serde_json::Value::String(v) => Ok(OscArgument::String(v)),
+        _ => Err("OSC arguments must be booleans, numbers, or strings".into()),
+    }
+}
+#[tauri::command]
+fn send_control(
+    state: tauri::State<ClientState>,
+    path: String,
+    args: Vec<serde_json::Value>,
+) -> Result<(), String> {
+    let guard = state.0.lock().map_err(|_| "OSC client lock is poisoned")?;
+    let client = guard.as_ref().ok_or("connect to a Light server first")?;
+    let address = format!("/light/{}/{}", client.desk, path.trim_matches('/'));
+    send(
+        &client.socket,
+        client.target,
+        &address,
+        args.into_iter()
+            .map(json_argument)
+            .collect::<Result<Vec<_>, _>>()?,
+    )
+}
+fn main() {
+    tauri::Builder::default()
+        .manage(ClientState::default())
+        .invoke_handler(tauri::generate_handler![connect_osc, send_control])
+        .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+            }
+            Ok(())
+        })
+        .run(tauri::generate_context!())
+        .expect("failed to run ToskLight Hardware Controls")
+}

@@ -65,11 +65,82 @@ test.describe("docs/testing/01-foundational-dimmers-and-groups.md", () => {
   test("DIM-002 @ui › visible Lightning Desk keypad reaches exact fade boundary", async ({ api, bench, desk, page }) => {
     await loadCompactRig(api, bench, "dim-002-ui");
     await desk.open(api.baseUrl);
-    await pressCommand(page, "GROUP 1 AT 50");
+    await pressCommand(page, "GROUP 1 AT 50", "G1 AT 50");
     await expectProgrammer(api, (programmer) => expect(normalized(programmer.group_values["1"][INTENSITY].value)).toBe(0.5));
     await expectSlotsAfterTick(bench, 2_999, Array(12).fill(127));
     await expectSlotsAfterTick(bench, 1, Array(12).fill(128));
     await expectSlotsAfterTick(bench, 1, Array(12).fill(128));
+  });
+
+  test("CMD-001 @ui › persistent fixture and group prefixes survive Enter, Clear, and Escape", async ({ api, bench, desk, page }) => {
+    await loadCompactRig(api, bench, "cmd-001-ui");
+    await desk.open(api.baseUrl);
+    const commandLine = page.getByLabel("Command line");
+    const press = async (key: string) => page.getByRole("button", { name: key, exact: true }).click();
+    const controlSection = await page.locator(".control-section").boundingBox();
+    const programmerRight = await page.locator(".control-right-pane").boundingBox();
+    expect(programmerRight?.width).toBeCloseTo(384, 0);
+    expect((controlSection!.x + controlSection!.width) - (programmerRight!.x + programmerRight!.width)).toBeLessThanOrEqual(6);
+
+    await page.getByRole("button", { name: /Prog\. Fade/ }).click();
+    const fadeDialog = page.getByRole("dialog", { name: "Prog. Fade value" });
+    await expect(fadeDialog.getByRole("slider", { name: "Prog. Fade" })).toBeVisible();
+    await expect(fadeDialog.getByLabel("Number input keypad")).toBeVisible();
+    await fadeDialog.getByRole("button", { name: "Close attribute value" }).click();
+    await expect(page.getByRole("slider", { name: "Prog. Fade" })).toHaveCount(0);
+
+    await page.locator(".mode-toggle").click();
+    await expect(page.getByRole("slider", { name: "Prog. Fade" })).toBeVisible();
+    await expect(page.getByRole("slider", { name: "Cue Fade" })).toBeVisible();
+    const playbackRight = await page.locator(".control-right-pane").boundingBox();
+    expect(playbackRight?.width).toBeCloseTo(384, 0);
+    expect(playbackRight?.x).toBeCloseTo(programmerRight!.x, 0);
+    await page.locator(".mode-toggle").click();
+    await expect(page.getByRole("slider", { name: "Prog. Fade" })).toHaveCount(0);
+
+    await expect(commandLine).toHaveValue("FIXTURE");
+    await press("GRP");
+    await expect(commandLine).toHaveValue("GROUP");
+    await press("ENT");
+    await expect(commandLine).toHaveValue("GROUP");
+    await press("CLR");
+    await expect(commandLine).toHaveValue("GROUP");
+    await page.getByRole("button", { name: "ESC", exact: true }).click();
+    await expect(commandLine).toHaveValue("GROUP");
+
+    for (const key of ["7", "+", "8"]) await press(key);
+    await expect(commandLine).toHaveValue("G7 + G8");
+    await page.getByRole("button", { name: "ESC", exact: true }).click();
+    for (const key of ["7", "+", "GRP", "8"]) await press(key);
+    await expect(commandLine).toHaveValue("G7 + F8");
+    await page.getByRole("button", { name: "ESC", exact: true }).click();
+
+    await press("GRP");
+    await press("ENT");
+    await expect(commandLine).toHaveValue("FIXTURE");
+    for (const key of ["7", "+", "8"]) await press(key);
+    await expect(commandLine).toHaveValue("F7 + F8");
+    await page.getByRole("button", { name: "ESC", exact: true }).click();
+    for (const key of ["GRP", "7", "+", "8"]) await press(key);
+    await expect(commandLine).toHaveValue("G7 + F8");
+    await page.getByRole("button", { name: "ESC", exact: true }).click();
+    for (const key of ["GRP", "7", "+", "GRP", "8"]) await press(key);
+    await expect(commandLine).toHaveValue("G7 + G8");
+    await page.getByRole("button", { name: "ESC", exact: true }).click();
+    for (const key of ["7", "+", "GRP", "8"]) await press(key);
+    await expect(commandLine).toHaveValue("F7 + G8");
+
+    await page.getByRole("button", { name: "ESC", exact: true }).click();
+    for (const key of ["GRP", "3", "+", "5"]) await press(key);
+    await expect(commandLine).toHaveValue("G3 + F5");
+    await press("ENT");
+    await expect(commandLine).toHaveValue("FIXTURE");
+    await expectSelectedNumbers(api, [1, 2, 3, 4, 5]);
+
+    for (const key of ["5", "+", "GRP", "3"]) await press(key);
+    await expect(commandLine).toHaveValue("F5 + G3");
+    await press("ENT");
+    await expectSelectedNumbers(api, [5, 1, 2, 3, 4]);
   });
 
   test("GROUP-003 @api › derived group follows source order edits", async ({ api, bench }) => {
@@ -171,7 +242,7 @@ test.describe("docs/testing/01-foundational-dimmers-and-groups.md", () => {
     await desk.open(api.baseUrl);
     const clear = page.getByRole("button", { name: "CLR", exact: true });
 
-    await pressCommand(page, "GROUP 1");
+    await pressCommand(page, "GROUP 1", "G1");
     await expectProgrammer(api, (programmer) => expect(programmer.selected).toHaveLength(12));
     await clear.click();
     await expectProgrammer(api, (programmer) => {
@@ -180,7 +251,7 @@ test.describe("docs/testing/01-foundational-dimmers-and-groups.md", () => {
       expect(Object.keys(programmer.group_values)).toHaveLength(0);
     });
 
-    await pressCommand(page, "1 + 2 AT 75");
+    await pressCommand(page, "1 + 2 AT 75", "F1 + F2 AT 75");
     await expectSelectedNumbers(api, [1, 2]);
     await pressCommand(page, "AT 50");
     await expectProgrammer(api, (programmer) => {
@@ -238,13 +309,13 @@ async function commandError(api: ApiDriver, value: string): Promise<string> {
   throw new Error(`Expected command to fail: ${value}`);
 }
 
-async function pressCommand(page: Page, value: string): Promise<void> {
+async function pressCommand(page: Page, value: string, visibleValue = value): Promise<void> {
   const commandLine = page.getByLabel("Command line");
   await page.getByRole("button", { name: "ESC", exact: true }).click();
   for (const key of commandKeys(value)) {
     await page.getByRole("button", { name: key, exact: true }).click();
   }
-  await expect(commandLine).toHaveValue(value);
+  await expect(commandLine).toHaveValue(visibleValue);
   await page.getByRole("button", { name: "ENT", exact: true }).click();
 }
 

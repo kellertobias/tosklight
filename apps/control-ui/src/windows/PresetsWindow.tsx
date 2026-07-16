@@ -7,6 +7,7 @@ import { GroupsPoolButton } from "../components/shared/GroupsPoolButton";
 import { Button, ColorPickerField, FormLayout, IconPickerField, SwitchField, TextField } from "../components/common";
 import { ButtonGrid, WindowHeader, WindowScrollArea, WindowSettings } from "../components/window-kit";
 import { useState, type CSSProperties } from "react";
+import { RecordModeDialog, type RecordMode } from "../components/shared/RecordModeDialog";
 
 type PresetCustomization = { title?: string; icon?: string; color?: string };
 export function PresetsWindow({ compact, paneId, showGroupShortcuts, presetFamily, presetPoolColors }: WindowProps) {
@@ -18,6 +19,7 @@ export function PresetsWindow({ compact, paneId, showGroupShortcuts, presetFamil
   const [customizations, setCustomizations] = useState<Record<string, PresetCustomization>>(() => { try { return JSON.parse(localStorage.getItem("light.preset-button-customizations") ?? "{}"); } catch { return {}; } });
   const [configureIndex, setConfigureIndex] = useState<number | null>(null);
   const [configureDraft, setConfigureDraft] = useState<PresetCustomization>({});
+  const [recordPresetIndex, setRecordPresetIndex] = useState<number | null>(null);
   const setFamily = (next: typeof state.presetFamily) => dispatch(compact && paneId ? { type: "SET_PANE_PRESET_FAMILY", id: paneId, family: next } : { type: "SET_PRESET_FAMILY", family: next });
   const groupsVisible = compact ? Boolean(showGroupShortcuts) : state.presetGroupsVisible;
   const fallback = server.bootstrap
@@ -41,15 +43,25 @@ export function PresetsWindow({ compact, paneId, showGroupShortcuts, presetFamil
       stored.find((preset) => preset.id === String(index + 1)) ?? null,
   );
 
+  const cancelRecording = () => {
+    setRecordPresetIndex(null);
+    dispatch({ type: "SET_STORE_ARMED", value: false });
+  };
+  const recordPreset = (index: number, mode: RecordMode) => {
+    const preset = cards[index];
+    if (state.preload !== "idle") void server.storePreload({ target: "preset", target_id: String(index + 1), name: preset?.body.name ?? `Preset ${index + 1}`, mode }, preset && "revision" in preset ? preset.revision : 0);
+    else void server.storePreset(String(index + 1), preset?.body.name ?? `Preset ${index + 1}`, mode, preset?.body.family ?? family);
+    setRecordPresetIndex(null);
+    dispatch({ type: "SET_STORE_ARMED", value: false });
+  };
+
   const activate = (index: number) => {
     const preset = cards[index];
     if (state.presetSetArmed) { const saved = customizations[String(index + 1)] ?? {}; setConfigureDraft({ title: saved.title ?? preset?.body.name ?? `Preset ${index + 1}`, icon: saved.icon ?? preset?.body.icon ?? "◇", color: saved.color ?? preset?.body.color ?? "#d98236" }); setConfigureIndex(index); dispatch({ type: "SET_PRESET_SET_ARMED", value: false }); return; }
     if (!preset && !state.storeArmed) return;
     if (state.storeArmed) {
-      const armedMode = preset ? (window.confirm("Merge current values into this preset? Choose Cancel to overwrite it instead.") ? "merge" : "overwrite") : "overwrite";
-      if (state.preload !== "idle") void server.storePreload({ target: "preset", target_id: String(index + 1), name: preset?.body.name ?? `Preset ${index + 1}`, mode: armedMode }, preset && "revision" in preset ? preset.revision : 0);
-      else void server.storePreset(String(index + 1), preset?.body.name ?? `Preset ${index + 1}`, armedMode, preset?.body.family ?? family);
-      dispatch({ type: "SET_STORE_ARMED", value: false });
+      if (preset) setRecordPresetIndex(index);
+      else recordPreset(index, "overwrite");
     } else if (preset) {
       void server.applyPreset(preset.id);
     }
@@ -106,6 +118,7 @@ export function PresetsWindow({ compact, paneId, showGroupShortcuts, presetFamil
       </ButtonGrid></WindowScrollArea>
       {groupsVisible && <GroupStrip />}
       {settingsAnchor && <WindowSettings modal={false} anchor={settingsAnchor} title="Preset Settings" onClose={() => setSettingsAnchor(null)} tabs={[{ id: "pool", label: "Pool", content: <><h3>Preset family</h3><div className="button-group">{families.map((name) => <Button key={name} className={family === name ? "active" : ""} onClick={() => setFamily(name as typeof state.presetFamily)}>{name}</Button>)}</div><SwitchField label="Enable pool colors" checked={colorsEnabled} onChange={(event) => dispatch(compact && paneId ? { type: "SET_PANE_PRESET_COLORS", id: paneId, value: event.target.checked } : { type: "SET_PRESET_POOL_COLORS", value: event.target.checked })}/></> }]} />}
+      {recordPresetIndex != null && cards[recordPresetIndex] && <RecordModeDialog target={cards[recordPresetIndex].body.name ?? `Preset ${recordPresetIndex + 1}`} onChoose={(mode) => recordPreset(recordPresetIndex, mode)} onCancel={cancelRecording}/>}
       {configureIndex != null && <div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && setConfigureIndex(null)}><section className="nested-modal preset-button-settings" role="dialog" aria-modal="true" aria-label="Configure preset button"><Button className="modal-close" onClick={() => setConfigureIndex(null)}>×</Button><h3>Configure preset {configureIndex + 1}</h3><FormLayout labelPlacement="side"><TextField label="Title" clearable value={configureDraft.title ?? ""} onChange={(event) => setConfigureDraft({ ...configureDraft, title: event.target.value })}/><IconPickerField label="Icon" value={configureDraft.icon ?? "◇"} onChange={(icon) => setConfigureDraft({ ...configureDraft, icon })}/><ColorPickerField label="Button color" value={configureDraft.color ?? "#d98236"} onChange={(color) => setConfigureDraft({ ...configureDraft, color })}/></FormLayout><footer><Button onClick={() => setConfigureIndex(null)}>Cancel</Button><Button className="primary" onClick={() => { const next = { ...customizations, [String(configureIndex + 1)]: configureDraft }; setCustomizations(next); localStorage.setItem("light.preset-button-customizations", JSON.stringify(next)); setConfigureIndex(null); }}>Save button</Button></footer></section></div>}
     </div>
   );
