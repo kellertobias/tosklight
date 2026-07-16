@@ -91,30 +91,31 @@ OSC scenarios still receive the mandatory `@api` and `@ui` variants for their op
 
 **Pass condition:** Invalid input returns or logs a useful failure where possible, never panics, never mutates unrelated state, and never broadcasts feedback to another client.
 
-## OSC-006 — Tauri UI and OSC hardware form one desk
+## OSC-005 — Tauri UI and OSC hardware form one desk
 
-**Priority:** P0  
+**Priority:** P0
+
 **Primary layer:** Tauri/UDP E2E
 
 **Implementation status:** Specified here; do not add the automated test until the OSC test pass is scheduled.
 
-**Starting show:** Load canonical `compact-rig.show`, immediately Save As `osc-006.show`, and use the active copy for this scenario. Ensure Groups 7, 8, 1, and 2 exist and resolve to distinguishable fixtures.
+**Starting show:** Load canonical `compact-rig.show`, immediately Save As `osc-005.show`, and use the active copy for this scenario. Ensure Groups 7, 8, 1, and 2 exist and resolve to distinguishable fixtures.
 
 **Detailed procedure:**
 
 1. Start Tauri application A as desk A and subscribe Arduino/OSC client A to desk A's alias. Start Tauri application B as desk B with a different alias and subscribe Arduino/OSC client B to desk B's alias.
 2. In Tauri A, press `[GRP] [7] [+]`. Do not press `[ENTER]`. Verify A's visible command line and A's OSC command-line feedback both show `G7 +`.
-3. From OSC client A, send `/light/{desk-a}/programmer/group` and `/light/{desk-a}/programmer/digit-8`, both pressed. Verify Tauri A immediately shows `G7 + G8`; it must not create a second hidden OSC-only command line or replace the partial UI command.
+3. From OSC client A, press only the physical `8` button, sending `/light/{desk-a}/programmer/digit-8` with pressed `true`. Verify Tauri A immediately shows `G7 + G8`; it must not create a second hidden OSC-only command line or replace the partial UI command.
 4. Continue from either surface with `[AT] [5] [0] [ENTER]`. Verify the one combined command applies 50% to Groups 7 and 8, clears or restores the command line consistently on Tauri A and OSC feedback, and produces one programmer mutation.
 5. Throughout steps 2–4, verify Tauri B and OSC client B retain their own unchanged command line, programmer, and page.
-6. In Tauri B, press `[GRP] [1] [+]`; from OSC client B send `group` and `digit-2`. Verify only desk B displays `G1 + G2`. Then send a digit from OSC client A and prove it continues desk A's current command context, not desk B's.
+6. Start simultaneous partial commands: enter `[GRP] [7] [+]` in Tauri A and `[GRP] [1] [+]` in Tauri B. Press physical `2` on OSC client B and verify only desk B becomes `G1 + G2` while A remains `G7 +`. Then press physical `8` on OSC client A and verify only desk A becomes `G7 + G8` while B remains `G1 + G2`.
 7. Disconnect and reconnect OSC client A to desk A's alias. Verify the initial feedback burst restores A's current page, command line, and programmer state. Reconnect it intentionally to desk B's alias and prove subsequent input joins desk B instead; association is determined by the subscribed desk alias, not by hardware identity or source IP.
 
 **Assertions:** UI key presses and OSC key presses addressed to one desk alias are serialized through the same command-line state machine and are visible on both surfaces after every key. A completed mixed-surface command produces exactly one authoritative programmer mutation and one resulting output state. Different desk aliases isolate partial commands, programmer state, page selection, and feedback even when both Tauri applications use the same light server.
 
 **Pass condition:** Each Tauri application and its attached OSC hardware behave as one physical light-control desk, while a second application and its hardware behave as an independent desk.
 
-## OSC-005 — Current-page and absolute playback addressing
+## OSC-006 — Current-page and explicit-page playback addressing
 
 **Priority:** P0
 
@@ -122,7 +123,7 @@ OSC scenarios still receive the mandatory `@api` and `@ui` variants for their op
 
 **Implementation status:** Specified here; do not add the automated test until the OSC test pass is scheduled.
 
-**Starting show:** Load canonical `compact-rig.show`, immediately Save As `osc-005.show`, and use the active copy for this scenario.
+**Starting show:** Load canonical `compact-rig.show`, immediately Save As `osc-006.show`, and use the active copy for this scenario.
 
 **Detailed procedure:**
 
@@ -227,8 +228,8 @@ Before each variant's action, mark its event/OSC/UDP observers. After the accept
 | OSC-002 | Repeat with faders, playback buttons, and key-up/key-down semantics. | Compare received key event, parsed command, programmer mutation, then UDP output. |
 | OSC-003 | Reuse a client ID, disconnect without unsubscribe, and test expiry policy. | Inspect subscriber registry and per-target feedback logs. |
 | OSC-004 | Fuzz address and argument shapes within bounded packet sizes. | Confirm no revision/audit mutation and retain malformed raw packet bytes. |
-| OSC-005 | Add three independent screen aliases, sparse page assignments, unassigned Cuelists, and legacy-alias compatibility. | Compare each alias's active page, resolved page/slot assignment, selected Cuelist, and emitted canonical feedback address. |
-| OSC-006 | Interleave every keypad token across UI and OSC, reconnect mid-command, and attach multiple hardware clients to one desk alias. | Compare the authoritative command line after every key, the acting desk/session identity, mutation count, and feedback recipients. |
+| OSC-005 | Interleave every keypad token across UI and OSC, reconnect mid-command, and attach multiple hardware clients to one desk alias. | Compare the authoritative command line after every key, the acting desk/session identity, mutation count, and feedback recipients. |
+| OSC-006 | Add three independent screen aliases, sparse page assignments, unassigned Cuelists, and legacy-alias compatibility. | Compare each alias's active page, resolved page/slot assignment, selected Cuelist, and emitted canonical feedback address. |
 | API-001 | Test concurrent writers and token invalidation after session shutdown. | Compare pre/post object and revision; failed writes must be byte-for-byte unchanged. |
 | API-002 | Reconnect the event socket and request audit from the last seen revision. | Compare response revision, broadcast revision, and audit revision. |
 | CROSS-001 | Add fixture selection, cue GO, and group membership as further equivalence families. | Normalize surface-specific metadata before diffing application state. |
