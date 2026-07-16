@@ -127,7 +127,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     title: "Group CRUD produces ordered audit and object events",
     arrange: async ({ api, bench }, surface) => {
       await loadCanonicalCopy(api, bench, `api-002-${surface}`);
-      return { auditBefore: (await audit(api)).length };
+      return { auditBefore: (await audit(api)).at(-1)?.revision ?? 0 };
     },
     api: async ({ api }) => {
       const fixtures = await fixtureIdsByNumber(api);
@@ -147,7 +147,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     },
     assert: async ({ api }, state) => {
       expect((await objects(api, "group")).some((entry) => entry.id === "90")).toBe(false);
-      const events = (await audit(api)).slice(state.auditBefore);
+      const events = await api.request<any[]>("GET", `/api/v1/audit?after=${state.auditBefore}`);
       expect(events.filter((event: any) => /group|show_object|command/.test(event.kind)).length).toBeGreaterThanOrEqual(3);
     },
   });

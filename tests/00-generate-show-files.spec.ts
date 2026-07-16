@@ -20,17 +20,19 @@ const OBJECT_KINDS = [
 test.describe("docs/testing/00-generate-show-files.md", () => {
   test("SHOW-000 @api › Save As produces independent reusable show files", async ({ api }) => {
     const canonical = await createCanonicalShows(api);
+    const compactCopyName = `show-000-compact-copy-${crypto.randomUUID()}`;
+    const defaultCopyName = `show-000-default-copy-${crypto.randomUUID()}`;
 
-    const compactCopy = await copyShow(api, canonical.compact, "show-000-compact-copy");
-    await expectActiveShow(api, "show-000-compact-copy");
+    const compactCopy = await copyShow(api, canonical.compact, compactCopyName);
+    await expectActiveShow(api, compactCopyName);
     await assertCompactRig(api, compactCopy.id);
     await expect(showSnapshot(api, compactCopy.id)).resolves.toEqual(await showSnapshot(api, canonical.compact.id));
     await renameGroup(api, compactCopy.id, "4", "Center Spot Copy");
     await openShow(api, canonical.compact.id);
     expect((await objects(api, canonical.compact.id, "group")).find((group) => group.id === "4")?.body.name).toBe("Center Spot");
 
-    const defaultCopy = await copyShow(api, canonical.defaultStage, "show-000-default-copy");
-    await expectActiveShow(api, "show-000-default-copy");
+    const defaultCopy = await copyShow(api, canonical.defaultStage, defaultCopyName);
+    await expectActiveShow(api, defaultCopyName);
     await assertDefaultStage(api, defaultCopy.id);
     await expect(showSnapshot(api, defaultCopy.id)).resolves.toEqual(await showSnapshot(api, canonical.defaultStage.id));
     await createEmptyGroup(api, defaultCopy.id, "900", "Copy Marker");
@@ -40,38 +42,41 @@ test.describe("docs/testing/00-generate-show-files.md", () => {
 
   test("SHOW-000 @ui › Save As produces independent reusable show files", async ({ api, desk, page }) => {
     const canonical = await createCanonicalShows(api);
+    const compactCopyName = `show-000-compact-copy-${crypto.randomUUID()}`;
+    const defaultCopyName = `show-000-default-copy-${crypto.randomUUID()}`;
 
     await openShow(api, canonical.compact.id);
     await desk.open(api.baseUrl);
-    await saveAsThroughUi(page, "show-000-compact-copy");
-    const compactCopy = await showNamed(api, "show-000-compact-copy");
+    await saveAsThroughUi(page, compactCopyName);
+    const compactCopy = await showNamed(api, compactCopyName);
     await assertCompactRig(api, compactCopy.id);
     await expect(showSnapshot(api, compactCopy.id)).resolves.toEqual(await showSnapshot(api, canonical.compact.id));
     await renameGroup(api, compactCopy.id, "4", "Center Spot Copy");
-    await loadThroughUi(page, "compact-rig");
+    await loadThroughUi(page, canonical.compact.name);
     expect((await objects(api, canonical.compact.id, "group")).find((group) => group.id === "4")?.body.name).toBe("Center Spot");
 
-    await loadThroughUi(page, "Default Stage Show");
-    await saveAsThroughUi(page, "show-000-default-copy");
-    const defaultCopy = await showNamed(api, "show-000-default-copy");
+    await loadThroughUi(page, canonical.defaultStage.name);
+    await saveAsThroughUi(page, defaultCopyName);
+    const defaultCopy = await showNamed(api, defaultCopyName);
     await assertDefaultStage(api, defaultCopy.id);
     await expect(showSnapshot(api, defaultCopy.id)).resolves.toEqual(await showSnapshot(api, canonical.defaultStage.id));
     await createEmptyGroup(api, defaultCopy.id, "900", "Copy Marker");
-    await loadThroughUi(page, "Default Stage Show");
+    await loadThroughUi(page, canonical.defaultStage.name);
     expect((await objects(api, canonical.defaultStage.id, "group")).some((group) => group.id === "900")).toBe(false);
   });
 });
 
 async function createCanonicalShows(api: ApiDriver) {
+  const suffix = crypto.randomUUID();
   const [compactBytes, defaultStageBytes] = await Promise.all([
     fs.readFile(new URL("./fixtures/compact-rig.show", import.meta.url)),
     fs.readFile(new URL("./fixtures/default-stage.show", import.meta.url)),
   ]);
   const compact = await api.request<ShowEntry>("POST", "/api/v1/shows", {
-    name: "compact-rig", data_base64: compactBytes.toString("base64"), overwrite: false,
+    name: `compact-rig-${suffix}`, data_base64: compactBytes.toString("base64"), overwrite: false,
   });
   const defaultStage = await api.request<ShowEntry>("POST", "/api/v1/shows", {
-    name: "Default Stage Show", data_base64: defaultStageBytes.toString("base64"), overwrite: false,
+    name: `Default Stage Show ${suffix}`, data_base64: defaultStageBytes.toString("base64"), overwrite: false,
   });
   return { compact, defaultStage };
 }
