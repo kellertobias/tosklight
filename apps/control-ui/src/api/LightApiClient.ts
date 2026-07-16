@@ -341,6 +341,10 @@ export class LightApiClient {
     return this.command("programmer.command_line", { value });
   }
 
+  setCommandTarget(value: "FIXTURE" | "GROUP") {
+    return this.command("programmer.command_target", { value });
+  }
+
   executeCommandLine(value: string) {
     return this.command("programmer.execute", { value });
   }

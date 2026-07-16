@@ -590,6 +590,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
             setCommandTargetMode(nextTarget);
             setCommandLineState(nextTarget);
             setCommandLinePristine(true);
+            await client.setCommandTarget(nextTarget);
             await client.setCommandLine(nextTarget);
             setError(null);
             return true;

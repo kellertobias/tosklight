@@ -3888,6 +3888,7 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
             | "programmer.group.set"
             | "programmer.align"
             | "programmer.command_line"
+            | "programmer.command_target"
             | "programmer.execute"
             | "programmer.clear"
             | "programmer.undo"
@@ -4198,6 +4199,21 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
                 serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
             state.programmers.set_command_line(session.id, input.value);
             persist_programmer(state, session).map_err(|e| e.message)?;
+            Ok(serde_json::json!({"updated":true}))
+        }
+        "programmer.command_target" => {
+            #[derive(Deserialize)]
+            struct Input {
+                value: String,
+            }
+            let input: Input =
+                serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
+            if !state
+                .programmers
+                .set_command_target(session.id, input.value.to_ascii_uppercase())
+            {
+                return Err("command target must be FIXTURE or GROUP".into());
+            }
             Ok(serde_json::json!({"updated":true}))
         }
         "programmer.execute" => {
@@ -5908,7 +5924,16 @@ fn execute_programmer_command(
             .filter(|pair| pair[0] == "GROUP" && pair[1] != "GROUP")
             .map(|pair| pair[1].clone())
             .collect::<Vec<_>>();
-        if !frozen && at_index < tokens.len() && explicit_group_ids.len() > 1 {
+        let mixes_address_types = tokens[..at_index].iter().any(|token| {
+            matches!(
+                token.as_str(),
+                "FIXTURE" | "FIXTURES" | "CHANNEL" | "CHANNELS"
+            )
+        });
+        if !frozen
+            && at_index < tokens.len()
+            && (explicit_group_ids.len() > 1 || mixes_address_types)
+        {
             let snapshot = state.engine.snapshot();
             let fixtures = parse_group_mixed_selection(&snapshot, &tokens[1..at_index], true)?;
             let value = &tokens[at_index + 1..];
@@ -5926,10 +5951,32 @@ fn execute_programmer_command(
             if value.len() != 1 {
                 return Err("unexpected tokens after level".into());
             }
+            let groups = snapshot
+                .groups
+                .iter()
+                .map(|group| (group.id.clone(), group.clone()))
+                .collect::<HashMap<_, _>>();
+            let mut group_members = Vec::new();
             for group_id in explicit_group_ids {
+                if let Ok(members) = light_programmer::resolve_group(&group_id, &groups) {
+                    group_members.extend(members);
+                }
                 state.programmers.set_group_faded_with_timing(
                     session.id,
                     group_id,
+                    light_core::AttributeKey::intensity(),
+                    light_core::AttributeValue::Normalized(percent / 100.0),
+                    timing.fade_millis,
+                    timing.delay_millis,
+                );
+            }
+            for fixture in fixtures
+                .iter()
+                .filter(|fixture| !group_members.contains(fixture))
+            {
+                state.programmers.set_faded_with_timing(
+                    session.id,
+                    *fixture,
                     light_core::AttributeKey::intensity(),
                     light_core::AttributeValue::Normalized(percent / 100.0),
                     timing.fade_millis,
@@ -6608,31 +6655,9 @@ fn remove_command_token(value: &str) -> String {
     trimmed[..start].trim_end().to_string()
 }
 
-fn osc_continuation_scope(command: &str) -> char {
-    command
-        .split_whitespace()
-        .rev()
-        .find_map(|token| {
-            let mut characters = token.chars();
-            let scope = characters.next()?.to_ascii_uppercase();
-            (matches!(scope, 'F' | 'G') && characters.next().is_some_and(|c| c.is_ascii_digit()))
-                .then_some(scope)
-        })
-        .unwrap_or_else(|| {
-            if command
-                .trim_start()
-                .to_ascii_uppercase()
-                .starts_with("GROUP")
-            {
-                'G'
-            } else {
-                'F'
-            }
-        })
-}
-
-fn edit_osc_programmer_command(command: &str, key: &str) -> String {
+fn edit_osc_programmer_command(command: &str, key: &str, target: &str) -> String {
     let trimmed = command.trim();
+    let default_scope = if target == "GROUP" { 'G' } else { 'F' };
     if let Some(digit) = key.strip_prefix("digit-") {
         if trimmed.is_empty() {
             return format!("F{digit}");
@@ -6641,7 +6666,7 @@ fn edit_osc_programmer_command(command: &str, key: &str) -> String {
             return format!("G{digit}");
         }
         if trimmed.ends_with(['+', '-']) {
-            return format!("{trimmed} {}{digit}", osc_continuation_scope(trimmed));
+            return format!("{trimmed} {default_scope}{digit}");
         }
         if trimmed.ends_with(['F', 'G', 'f', 'g']) {
             return format!("{trimmed}{digit}");
@@ -6660,11 +6685,7 @@ fn edit_osc_programmer_command(command: &str, key: &str) -> String {
             return "GROUP".into();
         }
         if trimmed.ends_with(['+', '-']) {
-            let scope = if osc_continuation_scope(trimmed) == 'G' {
-                'F'
-            } else {
-                'G'
-            };
+            let scope = if default_scope == 'G' { 'F' } else { 'G' };
             return format!("{trimmed} {scope}");
         }
     }
@@ -6798,7 +6819,11 @@ fn handle_programmer_osc(
             if let Some(p) = state.programmers.get(session.id) {
                 state.programmers.set_command_line(
                     session.id,
-                    edit_osc_programmer_command(&p.command_line, key),
+                    edit_osc_programmer_command(
+                        &p.command_line,
+                        key,
+                        &state.programmers.command_target(session.id),
+                    ),
                 );
             }
         }
@@ -7483,16 +7508,20 @@ mod tests {
 
     #[test]
     fn osc_keypad_uses_the_same_scoped_selection_edits_as_the_ui() {
-        let mut value = edit_osc_programmer_command("", "grp");
-        value = edit_osc_programmer_command(&value, "digit-7");
-        value = edit_osc_programmer_command(&value, "plus");
-        value = edit_osc_programmer_command(&value, "digit-8");
-        assert_eq!(value, "G7 + G8");
+        let mut value = edit_osc_programmer_command("", "grp", "FIXTURE");
+        value = edit_osc_programmer_command(&value, "digit-7", "FIXTURE");
+        value = edit_osc_programmer_command(&value, "plus", "FIXTURE");
+        value = edit_osc_programmer_command(&value, "digit-8", "FIXTURE");
+        assert_eq!(value, "G7 + F8");
 
-        let override_scope = edit_osc_programmer_command("G7 +", "grp");
+        let override_scope = edit_osc_programmer_command("G7 +", "grp", "FIXTURE");
         assert_eq!(
-            edit_osc_programmer_command(&override_scope, "digit-8"),
-            "G7 + F8"
+            edit_osc_programmer_command(&override_scope, "digit-8", "FIXTURE"),
+            "G7 + G8"
+        );
+        assert_eq!(
+            edit_osc_programmer_command("G7 +", "digit-8", "GROUP"),
+            "G7 + G8"
         );
     }
 

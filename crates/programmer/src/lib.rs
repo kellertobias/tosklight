@@ -343,6 +343,7 @@ pub struct ProgrammerRegistry {
     states: Arc<RwLock<HashMap<SessionId, ProgrammerState>>>,
     sessions: Arc<RwLock<HashMap<SessionId, SessionId>>>,
     command_lines: Arc<RwLock<HashMap<SessionId, String>>>,
+    command_targets: Arc<RwLock<HashMap<SessionId, String>>>,
     clock: SharedClock,
 }
 impl Default for ProgrammerRegistry {
@@ -356,6 +357,7 @@ impl ProgrammerRegistry {
             states: Arc::default(),
             sessions: Arc::default(),
             command_lines: Arc::default(),
+            command_targets: Arc::default(),
             clock,
         }
     }
@@ -368,6 +370,7 @@ impl ProgrammerRegistry {
         self.states.write().clear();
         self.sessions.write().clear();
         self.command_lines.write().clear();
+        self.command_targets.write().clear();
     }
 
     pub fn start(&self, session_id: SessionId, user_id: UserId) -> ProgrammerState {
@@ -379,6 +382,10 @@ impl ProgrammerRegistry {
         if let Some(key) = existing {
             self.sessions.write().insert(session_id, key);
             self.command_lines.write().entry(session_id).or_default();
+            self.command_targets
+                .write()
+                .entry(session_id)
+                .or_insert_with(|| "FIXTURE".into());
             let mut states = self.states.write();
             let state = states.get_mut(&key).expect("programmer disappeared");
             state.connected = true;
@@ -419,6 +426,9 @@ impl ProgrammerRegistry {
         };
         self.states.write().insert(session_id, state.clone());
         self.command_lines.write().insert(session_id, String::new());
+        self.command_targets
+            .write()
+            .insert(session_id, "FIXTURE".into());
         state
     }
     pub fn restore(&self, state: ProgrammerState) {
@@ -426,6 +436,14 @@ impl ProgrammerRegistry {
         self.command_lines
             .write()
             .insert(session_id, state.command_line.clone());
+        self.command_targets.write().insert(
+            session_id,
+            if state.command_line.trim().eq_ignore_ascii_case("GROUP") {
+                "GROUP".into()
+            } else {
+                "FIXTURE".into()
+            },
+        );
         let existing = self
             .states
             .read()
@@ -725,6 +743,22 @@ impl ProgrammerRegistry {
         }
         true
     }
+    pub fn command_target(&self, session: SessionId) -> String {
+        self.command_targets
+            .read()
+            .get(&session)
+            .cloned()
+            .unwrap_or_else(|| "FIXTURE".into())
+    }
+    pub fn set_command_target(&self, session: SessionId, target: String) -> bool {
+        if !self.sessions.read().contains_key(&session)
+            || !matches!(target.as_str(), "FIXTURE" | "GROUP")
+        {
+            return false;
+        }
+        self.command_targets.write().insert(session, target);
+        true
+    }
     pub fn set_modes(
         &self,
         session: SessionId,
@@ -900,6 +934,9 @@ mod tests {
         assert_eq!(registry.get(second).unwrap().selected, vec![fixture]);
         assert!(registry.set_command_line(first, "GROUP 1 +".into()));
         assert!(registry.set_command_line(second, "GROUP 2 +".into()));
+        assert!(registry.set_command_target(first, "GROUP".into()));
+        assert_eq!(registry.command_target(first), "GROUP");
+        assert_eq!(registry.command_target(second), "FIXTURE");
         let mut command_lines = registry
             .active_for_sessions()
             .into_iter()

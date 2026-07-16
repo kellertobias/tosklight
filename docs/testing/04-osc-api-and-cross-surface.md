@@ -101,16 +101,16 @@ OSC scenarios still receive the mandatory `@api` and `@ui` variants for their op
 
 **Implementation status:** Specified here; do not add the automated test until the OSC test pass is scheduled.
 
-**Starting show:** Load canonical `compact-rig.show`, immediately Save As `osc-005.show`, and use the active copy for this scenario. Ensure Groups 7, 8, 1, and 2 exist and resolve to distinguishable fixtures.
+**Starting show:** Load canonical `compact-rig.show`, immediately Save As `osc-005.show`, and use the active copy for this scenario. Ensure Groups 7 and 1 exist and that fixtures 8 and 2 are patched so mixed Group/Fixture terms are distinguishable.
 
 **Detailed procedure:**
 
 1. Start Tauri application A as desk A and subscribe Arduino/OSC client A to desk A's alias. Start Tauri application B as desk B with a different alias and subscribe Arduino/OSC client B to desk B's alias.
-2. In Tauri A, press `[GRP] [7] [+]`. Do not press `[ENTER]`. Verify A's visible command line and A's OSC command-line feedback both show `G7 +`.
-3. From OSC client A, press only the physical `8` button, sending `/light/{desk-a}/programmer/digit-8` with pressed `true`. Verify Tauri A immediately shows `G7 + G8`; it must not create a second hidden OSC-only command line or replace the partial UI command.
-4. Continue from either surface with `[AT] [5] [0] [ENTER]`. Verify the one combined command applies 50% to Groups 7 and 8, clears or restores the command line consistently on Tauri A and OSC feedback, and produces one programmer mutation.
+2. With Tauri A in its default Fixture mode, press `[GRP] [7] [+]`. Do not press `[ENTER]`. Verify A's visible command line and A's OSC command-line feedback both show `G7 +`.
+3. From OSC client A, press only the physical `8` button, sending `/light/{desk-a}/programmer/digit-8` with pressed `true`. Verify Tauri A immediately shows `G7 + F8`, exactly as pressing the on-screen `8` in Fixture mode would; it must not create a second hidden OSC-only command line or replace the partial UI command.
+4. Continue from either surface with `[AT] [5] [0] [ENTER]`. Verify the one combined command applies 50% to Group 7 and fixture 8, clears or restores the command line consistently on Tauri A and OSC feedback, and produces one programmer mutation.
 5. Throughout steps 2–4, verify Tauri B and OSC client B retain their own unchanged partial command line and page. If both desks use the same user, the completed value from step 4 appears in that user's shared programmer on B as well; it must not alter B's unfinished desk command.
-6. Start simultaneous partial commands: enter `[GRP] [7] [+]` in Tauri A and `[GRP] [1] [+]` in Tauri B. Press physical `2` on OSC client B and verify only desk B becomes `G1 + G2` while A remains `G7 +`. Then press physical `8` on OSC client A and verify only desk A becomes `G7 + G8` while B remains `G1 + G2`.
+6. Start simultaneous partial commands in Fixture mode: enter `[GRP] [7] [+]` in Tauri A and `[GRP] [1] [+]` in Tauri B. Press physical `2` on OSC client B and verify only desk B becomes `G1 + F2` while A remains `G7 +`. Then press physical `8` on OSC client A and verify only desk A becomes `G7 + F8` while B remains `G1 + F2`. Repeat once after toggling one desk to Group default mode and prove its bare physical digit uses `G`, matching that desk's UI default without affecting the other desk.
 7. Disconnect and reconnect OSC client A to desk A's alias. Verify the initial feedback burst restores A's current page, command line, and programmer state. Reconnect it intentionally to desk B's alias and prove subsequent input joins desk B instead; association is determined by the subscribed desk alias, not by hardware identity or source IP.
 
 **Assertions:** UI key presses and OSC key presses addressed to one desk alias are serialized through the same command-line state machine and are visible on both surfaces after every key. A completed mixed-surface command produces exactly one authoritative programmer mutation and one resulting output state. Different desk aliases isolate partial commands, page selection, and feedback even when both Tauri applications use the same light server. Sessions for the same user share the landed programmer value without sharing those desk-local interaction states.

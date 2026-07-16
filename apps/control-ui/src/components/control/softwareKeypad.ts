@@ -40,12 +40,6 @@ function shortTarget(target: CommandTargetMode): "F" | "G" {
   return target === "FIXTURE" ? "F" : "G";
 }
 
-function continuationTarget(command: string, fallback: CommandTargetMode): "F" | "G" {
-  const scopedTerms = [...command.matchAll(/(?:^|\s)([FG])\d/gi)];
-  return (scopedTerms.at(-1)?.[1]?.toUpperCase() as "F" | "G" | undefined)
-    ?? (/^\s*GROUP\b/i.test(command) ? "G" : shortTarget(fallback));
-}
-
 export function softwareKeyFromKeyboard(
   event: Pick<KeyboardEvent, "code" | "key" | "shiftKey">,
   regularNumbers: boolean,
@@ -112,7 +106,7 @@ export function editTargetedCommandWithSoftwareKey(
 
   const selectionCommand = /^\s*(?:F\d|G\d|FIXTURE\b|GROUP\b|DEGRP\b)/i.test(command);
   if (key === "GRP" && selectionCommand && /(?:\+|-)\s*$/.test(command)) {
-    const override = continuationTarget(command, target) === "G" ? "F" : "G";
+    const override = target === "GROUP" ? "F" : "G";
     return { command: `${command.trimEnd()} ${override}`, execute: false, pristine: false };
   }
   if (key === "GRP" && /(?:^|\s)(?:GROUP|G|F)\s*$/i.test(command)) {
@@ -141,7 +135,7 @@ export function editTargetedCommandWithSoftwareKey(
   const shortPrefixAwaitingNumber = /^\d$/.test(token) && /(?:^|\s)[FG]$/i.test(command);
   const digitAfterWord = /^\d$/.test(token) && /[A-EH-Z]$/i.test(command);
   const nextToken = /^\d$/.test(token) && selectionContinuation
-    ? `${continuationTarget(command, target)}${token}`
+    ? `${shortTarget(target)}${token}`
     : shortPrefixAwaitingNumber ? token
     : digitAfterWord ? ` ${token}` : token;
   return {

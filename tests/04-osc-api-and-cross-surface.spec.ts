@@ -248,15 +248,17 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     const uiSession = await browserSession(page);
     const hardware = await bench.osc();
     try {
-      for (const key of ["GRP", "1", "+"]) await page.getByRole("button", { name: key, exact: true }).click();
+      for (const key of ["GRP", "3", "+"]) await page.getByRole("button", { name: key, exact: true }).click();
       await hardware.subscribe("osc-005-mixed", uiSession.desk.osc_alias);
-      await hardware.send(`/light/${uiSession.desk.osc_alias}/programmer/digit-2`, [true]);
-      await expect(page.getByLabel("Command line")).toHaveValue("G1 + G2");
+      await hardware.send(`/light/${uiSession.desk.osc_alias}/programmer/digit-5`, [true]);
+      await expect(page.getByLabel("Command line")).toHaveValue("G3 + F5");
       await hardware.send("/light/unsubscribe", ["osc-005-mixed"]);
       await expect(page.getByRole("button", { name: "AT", exact: true })).toBeVisible();
       for (const key of ["AT", "5", "0", "ENT"]) await page.getByRole("button", { name: key, exact: true }).click();
       const art = bench.artnet.mark(); await bench.tick(3_000);
-      expect(Array.from((await bench.artnet.nextAfter(art, "artnet", 1)).slots.slice(0, 12))).toEqual(Array(12).fill(128));
+      expect(Array.from((await bench.artnet.nextAfter(art, "artnet", 1)).slots.slice(0, 12))).toEqual([
+        128, 128, 128, 128, 128, 0, 0, 0, 0, 0, 0, 0,
+      ]);
     } finally { hardware.close(); }
   });
 
