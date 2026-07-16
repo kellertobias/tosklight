@@ -15,11 +15,16 @@ export function HelpMarkdown({ markdown }: { markdown: string }) {
     components={{
       code({ className, children, ...props }) {
         const value = String(children).replace(/\n$/, "");
+        if (!className && value.startsWith("help-keyboard:")) {
+          return <span className="help-key keyboard-key"><small>keyboard</small><kbd>{value.slice(14)}</kbd></span>;
+        }
         if (!className && value.startsWith("help-key:")) {
           const key = value.slice(9);
           const modifier = key.length > 1 ? key.at(-1) : undefined;
           const state = modifier === "+" ? "held" : modifier === "*" ? "optional" : "";
-          return <span className={`help-key ${state}`.trim()}><kbd>{state ? key.slice(0, -1) : key}</kbd>{state && <small>{state === "held" ? "hold" : "optional"}</small>}</span>;
+          const label = state ? key.slice(0, -1) : key;
+          const category = /^(?:\d|0-9|\.)$/.test(label) ? "number" : label === "CLR" ? "clear" : label === "REC" ? "record" : "command";
+          return <span className={`help-key desk-key desk-key-${category} ${state}`.trim()}><kbd>{label}</kbd>{state && <small>{state === "held" ? "hold" : "optional"}</small>}</span>;
         }
         if (!className && value.startsWith("help-placeholder:")) return <span className="help-placeholder">&lt;{value.slice(17)}&gt;</span>;
         return <code className={className} {...props}>{children}</code>;

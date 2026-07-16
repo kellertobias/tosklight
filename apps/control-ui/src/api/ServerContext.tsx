@@ -28,6 +28,10 @@ export interface StoredDeskLayout {
   activeDeskId: string;
   windowSettings?: Partial<import("../types").WindowSettings>;
 }
+
+export function deskLayoutScopeKey(showId: string | null | undefined, userId: string | null | undefined) {
+  return showId && userId ? `${showId}:${userId}` : null;
+}
 export interface StagePosition3d {
   x: number;
   y: number;
@@ -64,19 +68,29 @@ interface ServerContextValue {
   readServerLogs: () => Promise<Array<{ revision: number; kind: string; payload: unknown }>>;
   fileRoots: () => Promise<import("./types").FileRoot[]>;
   fileEntries: (root: string, path?: string, hidden?: boolean) => Promise<import("./types").FileDirectory>;
+  fileMetadata: (root: string, path: string) => Promise<import("./types").FileMetadata>;
+  readFileNote: (root: string, path: string) => Promise<import("./types").FileNativeNote>;
+  saveFileNote: (root: string, path: string, note: string) => Promise<import("./types").FileNativeNote>;
   readTextFile: (root: string, path: string) => Promise<import("./types").TextDocument>;
   saveTextFile: (root: string, path: string, text: string, revision: string | null) => Promise<import("./types").TextDocument>;
   fileOperation: (
     root: string,
     input: {
-      operation: "create_file" | "create_folder" | "rename" | "copy" | "move" | "delete";
+      operation: "create_file" | "create_folder" | "rename" | "copy" | "move" | "trash" | "delete";
       sources?: string[];
       destination?: string;
+      destination_root_id?: string;
       name?: string;
       replace?: boolean;
+      conflict?: import("./types").FileConflictChoice;
+      apply_to_all?: boolean;
     },
-  ) => Promise<{ paths: string[] }>;
+  ) => Promise<import("./types").FileOperationResult>;
   fileContent: (root: string, path: string) => Promise<Blob>;
+  fileStreamUrl: (root: string, path: string) => Promise<string>;
+  fileThumbnail: (root: string, path: string, maxSize?: number) => Promise<Blob>;
+  claimFileInput: (instanceId: string, action: import("./types").FileInputAction, origin: "pending" | "toolbar") => Promise<import("./types").FileInputContext>;
+  releaseFileInput: (instanceId: string) => Promise<void>;
   bootstrap: BootstrapSnapshot | null;
   session: SessionResponse | null;
   deskLock: import("./types").DeskLockState | null;
@@ -101,6 +115,7 @@ interface ServerContextValue {
   presets: VersionedObject<StoredPreset>[];
   cueObjects: VersionedObject<import("./types").CueList>[];
   deskLayout: VersionedObject<StoredDeskLayout> | null;
+  deskLayoutScope: string | null;
   stageLayout: VersionedObject<StoredStageLayout> | null;
   unresolvedMvrFixtures: VersionedObject<Record<string, unknown>>[];
   commandLine: string;
@@ -160,6 +175,10 @@ interface ServerContextValue {
   downloadMvr: (show: ShowEntry) => Promise<void>;
   saveConfiguration: (configuration: DeskConfiguration) => Promise<boolean>;
   setControlTiming: (input: Partial<Pick<DeskConfiguration, "speed_groups_bpm" | "programmer_fade_millis" | "sequence_master_fade_millis">>) => Promise<void>;
+  speedGroup: (group: import("./types").SpeedGroupId) => Promise<import("./types").SpeedGroupSoundState>;
+  updateSpeedGroup: (group: import("./types").SpeedGroupId, configuration: import("./types").SoundToLightConfig) => Promise<import("./types").SpeedGroupSoundState>;
+  observeSpeedGroup: (group: import("./types").SpeedGroupId, observation: import("./types").SoundObservation) => Promise<import("./types").SpeedGroupSoundState>;
+  speedGroupAction: (group: import("./types").SpeedGroupId, input: import("./types").SpeedGroupActionInput) => Promise<import("./types").SpeedGroupSoundState>;
   saveDeskLayout: (layout: StoredDeskLayout) => Promise<void>;
   saveStageLayout: (layout: StoredStageLayout) => Promise<void>;
   applyGroup: (id: string) => Promise<void>;
@@ -228,6 +247,8 @@ export function ServerProvider({ children }: PropsWithChildren) {
   const [presets, setPresets] = useState<VersionedObject<StoredPreset>[]>([]);
   const [cueObjects, setCueObjects] = useState<VersionedObject<import("./types").CueList>[]>([]);
   const [deskLayout, setDeskLayout] = useState<VersionedObject<StoredDeskLayout> | null>(null);
+  const [deskLayoutScope, setDeskLayoutScope] = useState<string | null>(null);
+  const showObjectsRequest = useRef(0);
   const [stageLayout, setStageLayout] = useState<VersionedObject<StoredStageLayout> | null>(null);
   const [unresolvedMvrFixtures, setUnresolvedMvrFixtures] = useState<VersionedObject<Record<string, unknown>>[]>([]);
   const [commandTargetMode, setCommandTargetMode] = useState<CommandTargetMode>("FIXTURE");
@@ -267,13 +288,18 @@ export function ServerProvider({ children }: PropsWithChildren) {
 
   const loadShowObjects = useCallback(
     async (showId: string | null, userId: string | null) => {
+      const request = ++showObjectsRequest.current;
+      const scope = deskLayoutScopeKey(showId, userId);
+      setDeskLayoutScope((loaded) => loaded === scope ? loaded : null);
       if (!showId) {
+        if (request !== showObjectsRequest.current) return;
         setGroups([]);
         setPresets([]);
         setCueObjects([]);
         setDeskLayout(null);
         setStageLayout(null);
         setUnresolvedMvrFixtures([]);
+        setDeskLayoutScope(null);
         return;
       }
       const [nextGroups, nextPresets, nextCueObjects, layouts, stageLayouts, nextPatchLayers, unresolvedMvr] = await Promise.all([
@@ -285,10 +311,12 @@ export function ServerProvider({ children }: PropsWithChildren) {
         client.objects<PatchLayer>(showId, "patch_layer"),
         client.objects<Record<string, unknown>>(showId, "unresolved_mvr_fixture"),
       ]);
+      if (request !== showObjectsRequest.current) return;
       setGroups(nextGroups);
       setPresets(nextPresets);
       setCueObjects(nextCueObjects);
       setDeskLayout(layouts.find((item) => item.id === userId) ?? null);
+      setDeskLayoutScope(scope);
       setStageLayout(stageLayouts.find((item) => item.id === "main") ?? null);
       setPatchLayers(
         nextPatchLayers.length
@@ -381,12 +409,18 @@ export function ServerProvider({ children }: PropsWithChildren) {
               .deskLock()
               .then(setDeskLock)
               .catch(() => undefined);
-          if (event.kind === "desk_action" && (event.payload as { action?: string })?.action)
-            window.dispatchEvent(
-              new CustomEvent("light:desk-action", {
-                detail: (event.payload as { action: string }).action,
-              }),
-            );
+          if (event.kind === "desk_action" && (event.payload as { action?: string; session_id?: string })?.action) {
+            const action = event.payload as { action: string; session_id?: string };
+            if (!action.session_id || action.session_id === nextSession.session_id)
+              window.dispatchEvent(new CustomEvent("light:desk-action", { detail: action.action }));
+          }
+          if (event.kind === "file_input_action") {
+            const action = event.payload as { action?: string; instance_id?: string; session_id?: string };
+            if (action.action && action.instance_id && action.session_id === nextSession.session_id)
+              window.dispatchEvent(new CustomEvent("light:file-manager-input", { detail: action }));
+          }
+          if (event.kind === "file_operation_completed")
+            window.dispatchEvent(new CustomEvent("light:file-operation", { detail: event.payload }));
           if (["playback_changed", "playback_page_changed", "show_opened", "show_object_changed", "preload_stored"].includes(event.kind)) {
             void client
               .playbacks()
@@ -489,10 +523,17 @@ export function ServerProvider({ children }: PropsWithChildren) {
       readServerLogs: () => client.auditEvents(),
       fileRoots: () => client.fileRoots(),
       fileEntries: (root, path, hidden) => client.fileEntries(root, path, hidden),
+      fileMetadata: (root, path) => client.fileMetadata(root, path),
+      readFileNote: (root, path) => client.readFileNote(root, path),
+      saveFileNote: (root, path, note) => client.saveFileNote(root, path, note),
       readTextFile: (root, path) => client.readTextFile(root, path),
       saveTextFile: (root, path, text, revision) => client.saveTextFile(root, path, text, revision),
       fileOperation: (root, input) => client.fileOperation(root, input),
       fileContent: (root, path) => client.fileContent(root, path),
+      fileStreamUrl: (root, path) => client.fileStreamUrl(root, path),
+      fileThumbnail: (root, path, maxSize) => client.fileThumbnail(root, path, maxSize),
+      claimFileInput: (instanceId, action, origin) => client.claimFileInput(instanceId, action, origin),
+      releaseFileInput: (instanceId) => client.releaseFileInput(instanceId),
       bootstrap,
       session,
       deskLock,
@@ -581,6 +622,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
       presets,
       cueObjects,
       deskLayout,
+      deskLayoutScope,
       stageLayout,
       unresolvedMvrFixtures,
       commandLine,
@@ -946,6 +988,28 @@ export function ServerProvider({ children }: PropsWithChildren) {
           setError(null);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      },
+      speedGroup: (group) => client.speedGroup(group),
+      updateSpeedGroup: async (group, next) => {
+        try {
+          const result = await client.updateSpeedGroup(group, next);
+          setError(null);
+          return result;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          throw reason;
+        }
+      },
+      observeSpeedGroup: (group, observation) => client.observeSpeedGroup(group, observation),
+      speedGroupAction: async (group, input) => {
+        try {
+          const result = await client.speedGroupAction(group, input);
+          setError(null);
+          return result;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          throw reason;
         }
       },
       saveDeskLayout: async (layout) => {
@@ -1574,6 +1638,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
       presets,
       cueObjects,
       deskLayout,
+      deskLayoutScope,
       stageLayout,
       unresolvedMvrFixtures,
       commandLine,

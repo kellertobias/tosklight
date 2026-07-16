@@ -30,7 +30,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     api.session = show.session;
     await use(api);
   },
-  desk: async ({ page }, use) => { await use(new DeskDriver(page)); },
+  desk: async ({ page }, use, testInfo) => { await use(new DeskDriver(page, testInfo.title)); },
 });
 
 export { expect } from "@playwright/test";

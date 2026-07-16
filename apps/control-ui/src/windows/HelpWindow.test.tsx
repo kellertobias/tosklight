@@ -5,10 +5,14 @@ import { HelpMarkdown, HelpNavigation } from "./HelpWindow";
 
 describe("help key rendering", () => {
   it("renders normal and numeric-range keys as keycaps", () => {
-    render(<HelpMarkdown markdown={"[AT] [+] [0-9]"}/>);
+    const { container } = render(<HelpMarkdown markdown={"[AT] [+] [0-9] [.] [CLR] [REC]"}/>);
     expect(screen.getByText("AT", { selector: "kbd" })).toBeInTheDocument();
     expect(screen.getByText("+", { selector: "kbd" })).toBeInTheDocument();
     expect(screen.getByText("0-9", { selector: "kbd" })).toBeInTheDocument();
+    expect(container.querySelectorAll(".desk-key-number")).toHaveLength(2);
+    expect(container.querySelector(".desk-key-clear kbd")).toHaveTextContent("CLR");
+    expect(container.querySelector(".desk-key-record kbd")).toHaveTextContent("REC");
+    expect(container.querySelector(".desk-key-command kbd")).toHaveTextContent("AT");
   });
 
   it("labels held and optional keycaps", () => {
@@ -19,6 +23,14 @@ describe("help key rendering", () => {
     expect(within(held).getByText("hold")).toBeInTheDocument();
     expect(within(optional).getByText("GRP", { selector: "kbd" })).toBeInTheDocument();
     expect(within(optional).getByText("optional")).toBeInTheDocument();
+  });
+
+  it("visually distinguishes computer keyboard keys", () => {
+    const { container } = render(<HelpMarkdown markdown={"[KBD:ENTER] presses [ENT]"}/>);
+    const keyboard = container.querySelector(".help-key.keyboard-key") as HTMLElement;
+    expect(within(keyboard).getByText("keyboard")).toBeInTheDocument();
+    expect(within(keyboard).getByText("ENTER", { selector: "kbd" })).toBeInTheDocument();
+    expect(screen.getByText("ENT", { selector: "kbd" })).toBeInTheDocument();
   });
 });
 

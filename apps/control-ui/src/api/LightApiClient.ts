@@ -70,6 +70,19 @@ export class LightApiClient {
   fileEntries(root: string, path = "", hidden = false): Promise<import("./types").FileDirectory> {
     return this.request(`/api/v1/files/${encodeURIComponent(root)}/entries?path=${encodeURIComponent(path)}&hidden=${hidden}`);
   }
+  fileMetadata(root: string, path: string): Promise<import("./types").FileMetadata> {
+    return this.request(`/api/v1/files/${encodeURIComponent(root)}/metadata?path=${encodeURIComponent(path)}`);
+  }
+  readFileNote(root: string, path: string): Promise<import("./types").FileNativeNote> {
+    return this.request(`/api/v1/files/${encodeURIComponent(root)}/notes?path=${encodeURIComponent(path)}`);
+  }
+  saveFileNote(root: string, path: string, note: string): Promise<import("./types").FileNativeNote> {
+    return this.request(`/api/v1/files/${encodeURIComponent(root)}/notes`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path, note }),
+    });
+  }
   readTextFile(root: string, path: string): Promise<import("./types").TextDocument> {
     return this.request(`/api/v1/files/${encodeURIComponent(root)}/text?path=${encodeURIComponent(path)}`);
   }
@@ -83,13 +96,16 @@ export class LightApiClient {
   fileOperation(
     root: string,
     input: {
-      operation: "create_file" | "create_folder" | "rename" | "copy" | "move" | "delete";
+      operation: "create_file" | "create_folder" | "rename" | "copy" | "move" | "trash" | "delete";
       sources?: string[];
       destination?: string;
+      destination_root_id?: string;
       name?: string;
       replace?: boolean;
+      conflict?: import("./types").FileConflictChoice;
+      apply_to_all?: boolean;
     },
-  ): Promise<{ paths: string[] }> {
+  ): Promise<import("./types").FileOperationResult> {
     return this.request(`/api/v1/files/${encodeURIComponent(root)}/operations`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -103,6 +119,36 @@ export class LightApiClient {
     });
     if (!response.ok) throw new Error(await response.text());
     return response.blob();
+  }
+  async fileStreamUrl(root: string, path: string): Promise<string> {
+    const response = await this.request<{ ticket: string }>(`/api/v1/files/${encodeURIComponent(root)}/stream-ticket`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path }),
+    });
+    return `${this.baseUrl}/api/v1/files/${encodeURIComponent(root)}/content?path=${encodeURIComponent(path)}&ticket=${encodeURIComponent(response.ticket)}`;
+  }
+  async fileThumbnail(root: string, path: string, maxSize = 256): Promise<Blob> {
+    if (!this.session) throw new Error("A server session is required");
+    const response = await fetch(`${this.baseUrl}/api/v1/files/${encodeURIComponent(root)}/thumbnail?path=${encodeURIComponent(path)}&max_size=${maxSize}`, {
+      headers: this.boundaryHeaders(new Headers({ authorization: `Bearer ${this.session.token}` })),
+    });
+    if (!response.ok) throw new Error(await response.text());
+    return response.blob();
+  }
+  claimFileInput(
+    instanceId: string,
+    action: import("./types").FileInputAction,
+    origin: "pending" | "toolbar",
+  ): Promise<import("./types").FileInputContext> {
+    return this.request("/api/v1/files/input-context", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ instance_id: instanceId, action, origin }),
+    });
+  }
+  releaseFileInput(instanceId: string): Promise<void> {
+    return this.request(`/api/v1/files/input-context?instance_id=${encodeURIComponent(instanceId)}`, { method: "DELETE" });
   }
 
   get currentSession() {
@@ -377,6 +423,43 @@ export class LightApiClient {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(configuration),
+    });
+  }
+
+  speedGroup(group: import("./types").SpeedGroupId): Promise<import("./types").SpeedGroupSoundState> {
+    return this.request(`/api/v1/speed-groups/${group}`);
+  }
+
+  updateSpeedGroup(
+    group: import("./types").SpeedGroupId,
+    configuration: import("./types").SoundToLightConfig,
+  ): Promise<import("./types").SpeedGroupSoundState> {
+    return this.request(`/api/v1/speed-groups/${group}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(configuration),
+    });
+  }
+
+  observeSpeedGroup(
+    group: import("./types").SpeedGroupId,
+    observation: import("./types").SoundObservation,
+  ): Promise<import("./types").SpeedGroupSoundState> {
+    return this.request(`/api/v1/speed-groups/${group}/observation`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(observation),
+    });
+  }
+
+  speedGroupAction(
+    group: import("./types").SpeedGroupId,
+    input: import("./types").SpeedGroupActionInput,
+  ): Promise<import("./types").SpeedGroupSoundState> {
+    return this.request(`/api/v1/speed-groups/${group}/action`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
     });
   }
 

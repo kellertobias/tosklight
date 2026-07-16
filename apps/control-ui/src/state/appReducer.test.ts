@@ -122,6 +122,14 @@ describe("appReducer", () => {
     expect(updated.desks[0].panes[0].developmentView).toBe("faders");
   });
 
+  it("persists only non-authoritative Text Editor view state in the pane layout", () => {
+    const desks = [{ id: "notes", name: "Notes", panes: [{ id: "editor", kind: "text_editor" as const, title: "Text Editor", x: 1, y: 1, width: 8, height: 8, textFileRoot: "shows", textFilePath: "run.md" }] }];
+    const hydrated = appReducer(initialState, { type: "HYDRATE_LAYOUT", desks, activeDeskId: "notes" });
+    const updated = appReducer(hydrated, { type: "SET_TEXT_EDITOR_VIEW", id: "editor", root: "shows", path: "run.md", selectionStart: 12, selectionEnd: 16, scrollTop: 240 });
+    expect(updated.desks[0].panes[0].textEditorView).toEqual({ root: "shows", path: "run.md", selectionStart: 12, selectionEnd: 16, scrollTop: 240 });
+    expect(updated.desks[0].panes[0]).not.toHaveProperty("text");
+  });
+
   it("hydrates persisted built-in window settings without requiring them in older layouts", () => {
     const hydrated = appReducer(initialState, { type: "HYDRATE_LAYOUT", desks: initialState.desks, activeDeskId: initialState.activeDeskId, windowSettings: { builtIn: "dmx", dockMode: "builtins", stageView: "3d", dmxDotSize: "large", fixtureGroupsVisible: false, presetGroupsVisible: false } });
     expect(hydrated.builtIn).toBe("dmx");

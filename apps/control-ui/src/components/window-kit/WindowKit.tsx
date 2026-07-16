@@ -23,9 +23,10 @@ export interface WindowEmptyState { title: ReactNode; description?: ReactNode; i
 const WindowSettingsContext = createContext<(() => void) | null>(null);
 export const useWindowSettings = () => useContext(WindowSettingsContext);
 
-export function WindowHeader({ title, info, actions = [], settings, onSettings, dragHandleProps }: {
+export function WindowHeader({ title, info, toolbar, actions = [], settings, onSettings, dragHandleProps }: {
   title: ReactNode;
   info?: WindowInfo;
+  toolbar?: ReactNode;
   actions?: WindowAction[][];
   settings?: boolean;
   onSettings?: (anchor: HTMLElement) => void;
@@ -35,6 +36,7 @@ export function WindowHeader({ title, info, actions = [], settings, onSettings, 
     <strong className="ui-window-title">{title}</strong>
     {info && <span className="ui-window-info"><b>{info.primary}</b>{info.secondary != null && <small>{info.secondary}</small>}</span>}
     <span className="ui-window-header-spacer" />
+    {toolbar}
     <div className="ui-window-action-groups">
       {actions.filter((group) => group.length).map((group, groupIndex) => <div className="ui-window-action-group" key={groupIndex}>
         {group.map((action) => <Button key={action.id} aria-label={action.ariaLabel} disabled={action.disabled} className={action.active ? "active" : ""} onClick={action.onClick}>{action.label}</Button>)}

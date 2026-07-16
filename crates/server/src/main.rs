@@ -2,6 +2,7 @@
 
 mod default_show;
 mod file_manager;
+mod file_manager_support;
 mod help;
 
 use anyhow::Context;
@@ -24,6 +25,9 @@ use light_control::{
     ControlAction, ControlEvent, ControlInput, FrameRate, MidiControlInput, OscArgument,
     RtpMidiInput, SmpteTimecode, TimecodeRouter, TimecodeSourceConfig, UdpControlInput,
     UdpInputProtocol, encode_osc_message,
+};
+use light_control::speed::{
+    SoundObservation, SoundToLightConfig, SpeedGroupController, SpeedSnapshot,
 };
 use light_core::{ApplicationClock, ManualClock, SessionId, SharedClock, SystemClock};
 use light_engine::{Engine, EngineSnapshot, RenderOptions};
@@ -82,12 +86,34 @@ struct AppState {
     media_cache: Arc<Mutex<MediaCache>>,
     media_status: Arc<RwLock<HashMap<light_core::FixtureId, MediaServerStatus>>>,
     input_locks: Arc<Mutex<HashMap<String, (light_core::UserId, Instant)>>>,
+    file_input_contexts: Arc<Mutex<HashMap<SessionId, file_manager::FileInputContext>>>,
     osc_subscribers: Arc<Mutex<HashMap<String, OscSubscriber>>>,
     osc_feedback: Option<Arc<std::net::UdpSocket>>,
     mvr_imports: Arc<Mutex<HashMap<Uuid, StagedMvrImport>>>,
     network_output: Option<Arc<NetworkOutput>>,
     output_sequences: Arc<tokio::sync::Mutex<HashMap<(light_output::Protocol, u16), u8>>>,
     manual_clock: Option<Arc<ManualClock>>,
+    speed_groups: Arc<Mutex<[SpeedGroupController; 5]>>,
+    sound_capture_owners: Arc<Mutex<[Option<SoundCaptureOwner>; 5]>>,
+}
+
+#[derive(Clone, Copy)]
+struct SoundCaptureOwner {
+    desk_id: Uuid,
+    last_seen_millis: u64,
+}
+
+#[derive(Serialize)]
+struct SpeedGroupResponse {
+    group: String,
+    configuration: SoundToLightConfig,
+    snapshot: SpeedSnapshot,
+}
+
+#[derive(Deserialize)]
+struct SpeedGroupActionInput {
+    action: String,
+    captured_at_millis: Option<u64>,
 }
 
 #[derive(Clone)]
@@ -397,6 +423,9 @@ struct Bootstrap {
 fn default_speed_groups() -> [u16; 5] {
     [120, 90, 60, 30, 15]
 }
+fn default_sound_to_light() -> [SoundToLightConfig; 5] {
+    std::array::from_fn(|_| SoundToLightConfig::default())
+}
 fn deserialize_speed_groups<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<[u16; 5], D::Error> {
@@ -427,6 +456,8 @@ struct DeskConfiguration {
         deserialize_with = "deserialize_speed_groups"
     )]
     speed_groups_bpm: [u16; 5],
+    #[serde(default = "default_sound_to_light")]
+    speed_group_sound_to_light: [SoundToLightConfig; 5],
     programmer_fade_millis: u64,
     sequence_master_fade_millis: u64,
     preload_programmer_changes: bool,
@@ -477,6 +508,7 @@ impl Default for DeskConfiguration {
             osc_timecode: None,
             backup_retention: 20,
             speed_groups_bpm: default_speed_groups(),
+            speed_group_sound_to_light: default_sound_to_light(),
             programmer_fade_millis: 3_000,
             sequence_master_fade_millis: 3_000,
             preload_programmer_changes: true,
@@ -502,6 +534,11 @@ impl DeskConfiguration {
             return Err(ApiError::bad_request(
                 "speed_groups_bpm values must be 1-999",
             ));
+        }
+        for sound in &self.speed_group_sound_to_light {
+            sound
+                .validate()
+                .map_err(|error| ApiError::bad_request(error.to_string()))?;
         }
         if self.programmer_fade_millis > 60_000 || self.sequence_master_fade_millis > 60_000 {
             return Err(ApiError::bad_request(
@@ -594,6 +631,13 @@ async fn main() -> anyhow::Result<()> {
     configuration
         .validate()
         .map_err(|error| anyhow::anyhow!(error.message))?;
+    let speed_groups = Arc::new(Mutex::new(std::array::from_fn(|index| {
+        SpeedGroupController::new(
+            f64::from(configuration.speed_groups_bpm[index]),
+            configuration.speed_group_sound_to_light[index].clone(),
+        )
+        .expect("validated Speed Group configuration")
+    })));
     let active_show = desk.active_show()?;
     tracing::info!(active_show=?active_show.as_ref().map(|show| &show.name), "desk state loaded");
     let manual_clock = test_bench.then(|| Arc::new(ManualClock::new(fixed_test_time())));
@@ -754,13 +798,17 @@ async fn main() -> anyhow::Result<()> {
         media_cache: Arc::new(Mutex::new(MediaCache::default())),
         media_status: Arc::new(RwLock::new(HashMap::new())),
         input_locks: Arc::new(Mutex::new(HashMap::new())),
+        file_input_contexts: Arc::new(Mutex::new(HashMap::new())),
         osc_subscribers: Arc::new(Mutex::new(HashMap::new())),
         osc_feedback: Some(Arc::new(std::net::UdpSocket::bind("0.0.0.0:0")?)),
         mvr_imports: Arc::new(Mutex::new(HashMap::new())),
         network_output: Some(Arc::clone(&output)),
         output_sequences: Arc::clone(&sequences),
         manual_clock,
+        speed_groups,
+        sound_capture_owners: Arc::new(Mutex::new([None; 5])),
     };
+    refresh_speed_group_engine(&state);
     let input_tasks = spawn_control_inputs(&state, output_cancel.clone());
     let app = router(state);
     tracing::info!(%bind, "starting light control server");
@@ -821,6 +869,18 @@ fn router(state: AppState) -> Router {
         .route(
             "/api/v1/configuration",
             get(configuration).put(update_configuration),
+        )
+        .route(
+            "/api/v1/speed-groups/{group}",
+            get(speed_group).put(update_speed_group),
+        )
+        .route(
+            "/api/v1/speed-groups/{group}/observation",
+            post(observe_speed_group),
+        )
+        .route(
+            "/api/v1/speed-groups/{group}/action",
+            post(speed_group_action),
         )
         .route("/api/v1/sessions", post(create_session))
         .route("/api/v1/sessions/{id}", delete(close_session))
@@ -921,9 +981,10 @@ fn router(state: AppState) -> Router {
                     header::AUTHORIZATION,
                     header::CONTENT_TYPE,
                     header::IF_MATCH,
+                    header::RANGE,
                     header::HeaderName::from_static("x-light-desk-token"),
                 ])
-                .expose_headers([header::ETAG]),
+                .expose_headers([header::ETAG, header::ACCEPT_RANGES, header::CONTENT_RANGE, header::CONTENT_LENGTH]),
         )
         .layer(TraceLayer::new_for_http())
 }
@@ -946,6 +1007,18 @@ async fn reset_test_clock(
     state.engine.clear_programmer_transitions();
     state.output_sequences.lock().await.clear();
     state.osc_subscribers.lock().clear();
+    {
+        let configuration = state.configuration.read().clone();
+        *state.speed_groups.lock() = std::array::from_fn(|index| {
+            SpeedGroupController::new(
+                f64::from(configuration.speed_groups_bpm[index]),
+                configuration.speed_group_sound_to_light[index].clone(),
+            )
+            .expect("validated Speed Group configuration")
+        });
+        *state.sound_capture_owners.lock() = [None; 5];
+    }
+    refresh_speed_group_engine(&state);
     emit(
         &state,
         "hardware_connection_changed",
@@ -972,6 +1045,7 @@ async fn advance_test_clock(
         .as_ref()
         .ok_or_else(|| ApiError::not_found("test clock"))?;
     let now = clock.advance_millis(input.millis);
+    refresh_speed_group_engine(&state);
     let rendered = state
         .engine
         .render(state.output_control.lock().options)
@@ -1100,9 +1174,17 @@ async fn desk_boundary(State(state): State<AppState>, request: Request, next: Ne
     let Some(required) = &state.desk_token else {
         return next.run(request).await;
     };
+    let ticketed_file_stream = request.method() == Method::GET
+        && request.uri().path().starts_with("/api/v1/files/")
+        && request.uri().path().ends_with("/content")
+        && request.uri().query().is_some_and(|query| query.split('&').any(|part| part.starts_with("ticket=") && part.len() > "ticket=".len()));
     if request.uri().path() == "/"
         || request.uri().path().starts_with("/assets/")
         || request.uri().path().starts_with("/api/v1/help/assets/")
+        // Native audio elements cannot attach the desk-boundary header. The
+        // content handler still validates the path-bound, expiring stream
+        // capability and its active authenticated session.
+        || ticketed_file_stream
     {
         return next.run(request).await;
     }
@@ -1286,8 +1368,12 @@ async fn diagnostics(
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let _session = authenticate(&state, &headers)?;
+    // Refresh derived runtime state at the same application timestamp before exposing it. This is
+    // especially important under the manually advanced Playwright clock, where no output frame is
+    // guaranteed to have rendered between two exact MIB checkpoints.
+    let _ = state.engine.resolved_values();
     Ok(Json(
-        serde_json::json!({"output":state.output_health.lock().expect("output health mutex poisoned").clone(),"event_queue_pressure":state.events.len(),"active_programmers":state.programmers.active(),"active_playbacks":state.engine.playback().read().active(),"timecode_source":state.timecode_router.lock().active_source(),"media_servers":state.media_status.read().clone(),"snapshot_revision":state.engine.snapshot().revision}),
+        serde_json::json!({"output":state.output_health.lock().expect("output health mutex poisoned").clone(),"event_queue_pressure":state.events.len(),"active_programmers":state.programmers.active(),"active_playbacks":state.engine.playback().read().active(),"move_in_black":state.engine.move_in_black_runtime(),"timecode_source":state.timecode_router.lock().active_source(),"media_servers":state.media_status.read().clone(),"snapshot_revision":state.engine.snapshot().revision}),
     ))
 }
 async fn bootstrap(State(state): State<AppState>) -> Json<Bootstrap> {
@@ -1699,6 +1785,214 @@ async fn configuration(State(state): State<AppState>) -> Json<serde_json::Value>
         serde_json::json!({"configuration":state.configuration.read().clone(),"output_health":state.output_health.lock().expect("output health mutex poisoned").clone()}),
     )
 }
+
+fn speed_group_index(group: &str) -> Result<usize, ApiError> {
+    match group.to_ascii_uppercase().as_str() {
+        "A" | "1" => Ok(0),
+        "B" | "2" => Ok(1),
+        "C" | "3" => Ok(2),
+        "D" | "4" => Ok(3),
+        "E" | "5" => Ok(4),
+        _ => Err(ApiError::bad_request("Speed Group must be A-E")),
+    }
+}
+
+fn speed_group_name(index: usize) -> String {
+    char::from(b'A' + index as u8).to_string()
+}
+
+fn application_millis(state: &AppState) -> u64 {
+    state
+        .engine
+        .playback()
+        .read()
+        .clock()
+        .now()
+        .timestamp_millis()
+        .max(0) as u64
+}
+
+/// Propagates the authoritative Speed Group controllers into both chaser scheduling and runtime
+/// pause state. The controller retains the useful BPM while paused; the engine receives a
+/// separate phase-advancing flag so resuming does not lose that rate.
+fn refresh_speed_group_engine(state: &AppState) -> [SpeedSnapshot; 5] {
+    let now = application_millis(state);
+    let snapshots = {
+        let controllers = state.speed_groups.lock();
+        std::array::from_fn(|index| controllers[index].snapshot(now))
+    };
+    let timing = state.configuration.read().clone();
+    let effective_bpm = snapshots.map(|snapshot| {
+        snapshot
+            .effective_bpm
+            .round()
+            .clamp(1.0, 999.0) as u16
+    });
+    state.engine.set_control_timing(
+        effective_bpm,
+        timing.programmer_fade_millis,
+        timing.sequence_master_fade_millis,
+    );
+    state
+        .engine
+        .set_speed_groups_paused(snapshots.map(|snapshot| !snapshot.phase_advancing));
+    snapshots
+}
+
+fn persist_server_configuration(state: &AppState) -> Result<(), ApiError> {
+    let configuration = state.configuration.read().clone();
+    let encoded = serde_json::to_string(&configuration)
+        .map_err(|error| ApiError::internal(error.to_string()))?;
+    state
+        .desk
+        .lock()
+        .set_setting("server_configuration", &encoded)
+        .map_err(ApiError::store)
+}
+
+fn speed_group_response(
+    state: &AppState,
+    index: usize,
+    snapshots: [SpeedSnapshot; 5],
+) -> SpeedGroupResponse {
+    let configuration = state.speed_groups.lock()[index].sound_config().clone();
+    SpeedGroupResponse {
+        group: speed_group_name(index),
+        configuration,
+        snapshot: snapshots[index],
+    }
+}
+
+async fn speed_group(
+    State(state): State<AppState>,
+    Path(group): Path<String>,
+    headers: HeaderMap,
+) -> Result<Json<SpeedGroupResponse>, ApiError> {
+    let _session = authenticate(&state, &headers)?;
+    let index = speed_group_index(&group)?;
+    let snapshots = refresh_speed_group_engine(&state);
+    Ok(Json(speed_group_response(&state, index, snapshots)))
+}
+
+async fn update_speed_group(
+    State(state): State<AppState>,
+    Path(group): Path<String>,
+    headers: HeaderMap,
+    Json(configuration): Json<SoundToLightConfig>,
+) -> Result<Json<SpeedGroupResponse>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    let index = speed_group_index(&group)?;
+    configuration
+        .validate()
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    state.speed_groups.lock()[index]
+        .set_sound_config(configuration.clone())
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    state.configuration.write().speed_group_sound_to_light[index] = configuration.clone();
+    if !configuration.enabled {
+        state.sound_capture_owners.lock()[index] = None;
+    }
+    persist_server_configuration(&state)?;
+    let snapshots = refresh_speed_group_engine(&state);
+    emit(
+        &state,
+        "speed_group_changed",
+        serde_json::json!({"group":speed_group_name(index),"desk_id":session.desk.id,"configuration":configuration}),
+    );
+    Ok(Json(speed_group_response(&state, index, snapshots)))
+}
+
+async fn observe_speed_group(
+    State(state): State<AppState>,
+    Path(group): Path<String>,
+    headers: HeaderMap,
+    Json(mut observation): Json<SoundObservation>,
+) -> Result<Json<SpeedGroupResponse>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    let index = speed_group_index(&group)?;
+    let now = application_millis(&state);
+    if !state.speed_groups.lock()[index].sound_config().enabled {
+        return Err(ApiError::conflict(
+            "enable Sound to Light before submitting observations",
+        ));
+    }
+    {
+        let mut owners = state.sound_capture_owners.lock();
+        if owners[index].is_some_and(|owner| {
+            owner.desk_id != session.desk.id
+                && now.saturating_sub(owner.last_seen_millis) <= 3_000
+        }) {
+            return Err(ApiError::conflict(
+                "this Speed Group is receiving audio from another desk",
+            ));
+        }
+        owners[index] = Some(SoundCaptureOwner {
+            desk_id: session.desk.id,
+            last_seen_millis: now,
+        });
+    }
+    // Browser clocks and capture callback timestamps are not comparable across desks. The server
+    // stamps every accepted sample with the shared application clock used by playback.
+    observation.captured_at_millis = now;
+    state.speed_groups.lock()[index].observe_sound(observation);
+    let snapshots = refresh_speed_group_engine(&state);
+    emit(
+        &state,
+        "speed_group_sound_observed",
+        serde_json::json!({"group":speed_group_name(index),"desk_id":session.desk.id,"snapshot":snapshots[index]}),
+    );
+    Ok(Json(speed_group_response(&state, index, snapshots)))
+}
+
+async fn speed_group_action(
+    State(state): State<AppState>,
+    Path(group): Path<String>,
+    headers: HeaderMap,
+    Json(input): Json<SpeedGroupActionInput>,
+) -> Result<Json<SpeedGroupResponse>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    let index = speed_group_index(&group)?;
+    let now = application_millis(&state);
+    let mut controller = state.speed_groups.lock();
+    match input.action.as_str() {
+        "learn" => {
+            // The optional browser timestamp is deliberately advisory only; all desk surfaces use
+            // the same application clock so an attached OSC surface and the UI behave identically.
+            let _browser_timestamp = input.captured_at_millis;
+            controller[index].tap_learn(now);
+        }
+        "double" => controller[index].double(),
+        "half" => controller[index].half(),
+        "pause" => {
+            controller[index].toggle_paused();
+        }
+        _ => {
+            return Err(ApiError::bad_request(
+                "Speed Group action must be learn, double, half, or pause",
+            ));
+        }
+    }
+    let manual_bpm = controller[index].manual_bpm().round().clamp(1.0, 999.0) as u16;
+    let sound = controller[index].sound_config().clone();
+    drop(controller);
+    {
+        let mut configuration = state.configuration.write();
+        configuration.speed_groups_bpm[index] = manual_bpm;
+        configuration.speed_group_sound_to_light[index] = sound;
+    }
+    if input.action == "learn" {
+        state.sound_capture_owners.lock()[index] = None;
+    }
+    persist_server_configuration(&state)?;
+    let snapshots = refresh_speed_group_engine(&state);
+    emit(
+        &state,
+        "speed_group_action",
+        serde_json::json!({"group":speed_group_name(index),"desk_id":session.desk.id,"action":input.action,"snapshot":snapshots[index]}),
+    );
+    Ok(Json(speed_group_response(&state, index, snapshots)))
+}
+
 async fn midi_inputs(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -1711,20 +2005,32 @@ async fn midi_inputs(
 async fn update_configuration(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(configuration): Json<DeskConfiguration>,
+    Json(mut configuration): Json<DeskConfiguration>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let _session = authenticate(&state, &headers)?;
     configuration.validate()?;
     let previous = state.configuration.read().clone();
-    state
-        .desk
-        .lock()
-        .set_setting(
-            "server_configuration",
-            &serde_json::to_string(&configuration)
-                .map_err(|error| ApiError::internal(error.to_string()))?,
-        )
-        .map_err(ApiError::store)?;
+    {
+        let mut controllers = state.speed_groups.lock();
+        for index in 0..controllers.len() {
+            if configuration.speed_groups_bpm[index] != previous.speed_groups_bpm[index] {
+                // A direct value entered through Configuration is the same manual action as the
+                // Speed Group UI or OSC surface and therefore takes ownership from Sound.
+                controllers[index]
+                    .set_manual_bpm(f64::from(configuration.speed_groups_bpm[index]))
+                    .map_err(|error| ApiError::bad_request(error.to_string()))?;
+                configuration.speed_group_sound_to_light[index].enabled = false;
+                state.sound_capture_owners.lock()[index] = None;
+            } else {
+                controllers[index]
+                    .set_manual_fallback_bpm(f64::from(configuration.speed_groups_bpm[index]))
+                    .map_err(|error| ApiError::bad_request(error.to_string()))?;
+            }
+            controllers[index]
+                .set_sound_config(configuration.speed_group_sound_to_light[index].clone())
+                .map_err(|error| ApiError::bad_request(error.to_string()))?;
+        }
+    }
     state
         .output_rate
         .store(configuration.frame_rate_hz, Ordering::Relaxed);
@@ -1732,17 +2038,14 @@ async fn update_configuration(
         .timecode_router
         .lock()
         .configure(configuration.timecode_sources.clone());
-    state.engine.set_control_timing(
-        configuration.speed_groups_bpm,
-        configuration.programmer_fade_millis,
-        configuration.sequence_master_fade_millis,
-    );
     let requires_restart = configuration.output_bind_ip != previous.output_bind_ip
         || configuration.osc_bind != previous.osc_bind
         || configuration.art_timecode_bind != previous.art_timecode_bind
         || configuration.midi_inputs != previous.midi_inputs
         || configuration.rtp_midi_bind != previous.rtp_midi_bind;
     *state.configuration.write() = configuration.clone();
+    persist_server_configuration(&state)?;
+    refresh_speed_group_engine(&state);
     emit(
         &state,
         "server_configuration_changed",
@@ -1887,6 +2190,7 @@ async fn close_session(
     let Some(session) = state.sessions.write().remove(&id) else {
         return Err(ApiError::not_found("session"));
     };
+    file_manager::release_session_input(&state, &session, "session_closed");
     persist_programmer(&state, &session)?;
     state.programmers.disconnect(id);
     emit(
@@ -2633,6 +2937,18 @@ fn apply_mvr_to_store(
                 fixture_id: light_core::FixtureId::new(),
             })
             .collect();
+        let existing_mib = existing_objects
+            .iter()
+            .find(|object| object.id == fixture_id.0.to_string())
+            .and_then(|object| {
+                serde_json::from_value::<light_fixture::PatchedFixture>(object.body.clone()).ok()
+            })
+            .map(|fixture| {
+                (
+                    fixture.move_in_black_enabled,
+                    fixture.move_in_black_delay_millis,
+                )
+            });
         let patched = light_fixture::PatchedFixture {
             fixture_id,
             fixture_number: source
@@ -2648,6 +2964,10 @@ fn apply_mvr_to_store(
             location,
             rotation,
             logical_heads: heads,
+            // MIB is show-local extension data. Reimporting the same MVR fixture updates its
+            // exchange fields without silently resetting the operator's safety settings.
+            move_in_black_enabled: existing_mib.map_or(true, |settings| settings.0),
+            move_in_black_delay_millis: existing_mib.map_or(0, |settings| settings.1),
             multipatch: Vec::new(),
         };
         let id = fixture_id.0.to_string();
@@ -3142,8 +3462,9 @@ async fn put_object(
         let candidate =
             load_engine_snapshot_with_override(&entry, Some((&kind, &object_id, &body)))
                 .map_err(ApiError::internal)?;
-        candidate
-            .validate()
+        state
+            .engine
+            .validate_snapshot_for_runtime(&candidate)
             .map_err(|error| ApiError::bad_request(error.to_string()))?;
     }
     let store = ShowStore::open(&entry.path).map_err(ApiError::store)?;
@@ -3801,6 +4122,14 @@ async fn pool_playback_action(
         let show = state.active_show.read().clone().ok_or_else(|| ApiError::bad_request("no show is open"))?;
         state.desk.lock().set_selected_playback(session.desk.id, show.id, Some(number)).map_err(ApiError::store)?;
         emit(&state, "playback_selected", serde_json::json!({"desk_id":session.desk.id,"playback_number":number}));
+    } else if let light_playback::PlaybackTarget::SpeedGroup { group } = &definition.target {
+        apply_speed_group_playback_action(
+            &state,
+            group,
+            &action,
+            &input,
+            definition.fader,
+        )?;
     } else if let light_playback::PlaybackTarget::Group { group_id } = &definition.target {
         let value = match action.as_str() {
             "on" => 1.0,
@@ -3852,6 +4181,89 @@ async fn pool_playback_action(
     Ok(Json(
         serde_json::json!({"playback":definition,"active":state.engine.playback().read().runtime_status(),"groups":snapshot.groups}),
     ))
+}
+
+fn apply_speed_group_playback_action(
+    state: &AppState,
+    group: &str,
+    action: &str,
+    input: &PoolPlaybackInput,
+    fader: light_playback::PlaybackFaderMode,
+) -> Result<(), ApiError> {
+    let index = speed_group_index(group)?;
+    let now = application_millis(state);
+    let mut controllers = state.speed_groups.lock();
+    match action {
+        "learn" => {
+            controllers[index].tap_learn(now);
+            state.sound_capture_owners.lock()[index] = None;
+        }
+        "double" => controllers[index].double(),
+        "half" => controllers[index].half(),
+        "pause" => {
+            controllers[index].toggle_paused();
+        }
+        "master" => {
+            let value = input
+                .value
+                .ok_or_else(|| ApiError::bad_request("master value is required"))?;
+            if !value.is_finite() || !(0.0..=1.0).contains(&value) {
+                return Err(ApiError::bad_request(
+                    "playback master must be within 0-1",
+                ));
+            }
+            match fader {
+                light_playback::PlaybackFaderMode::DirectBpm => {
+                    if value == 0.0 {
+                        controllers[index].set_paused(true);
+                    } else {
+                        controllers[index]
+                            .set_manual_bpm(f64::from(value) * 300.0)
+                            .map_err(|error| ApiError::bad_request(error.to_string()))?;
+                        controllers[index].set_paused(false);
+                        state.sound_capture_owners.lock()[index] = None;
+                    }
+                }
+                light_playback::PlaybackFaderMode::CenteredRelative => {
+                    let scale = 4_f64.powf((f64::from(value) - 0.5) * 2.0);
+                    controllers[index]
+                        .set_speed_master_scale(scale)
+                        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+                }
+                light_playback::PlaybackFaderMode::LearnedPercentage
+                | light_playback::PlaybackFaderMode::Speed => {
+                    controllers[index]
+                        .set_speed_master_scale(f64::from(value))
+                        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+                    controllers[index].set_paused(value == 0.0);
+                }
+                _ => {
+                    return Err(ApiError::bad_request(
+                        "the configured fader mode is not available for a Speed Group",
+                    ));
+                }
+            }
+        }
+        _ => {
+            return Err(ApiError::bad_request(
+                "action is not available for a Speed Group playback",
+            ));
+        }
+    }
+    let manual_bpm = controllers[index]
+        .manual_bpm()
+        .round()
+        .clamp(1.0, 999.0) as u16;
+    let sound = controllers[index].sound_config().clone();
+    drop(controllers);
+    {
+        let mut configuration = state.configuration.write();
+        configuration.speed_groups_bpm[index] = manual_bpm;
+        configuration.speed_group_sound_to_light[index] = sound;
+    }
+    persist_server_configuration(state)?;
+    refresh_speed_group_engine(state);
+    Ok(())
 }
 
 fn execute_pool_playback_action(
@@ -4033,6 +4445,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
         }
     };
     if disconnected {
+        file_manager::release_session_input(&state, &session, "connection_lost");
         // Closing an event socket does not close the authenticated control-desk
         // session. Short-lived API command sockets and browser reconnects must
         // retain the desk-local command line and the user's shared programmer.
@@ -6739,9 +7152,20 @@ fn spawn_control_inputs(
     let configuration = state.configuration.read().clone();
     let mut tasks = Vec::new();
     if state.manual_clock.is_none() {
-        let state = state.clone();
-        let cancel = cancel.clone();
-        tasks.push(tokio::spawn(async move{let mut interval=tokio::time::interval(Duration::from_millis(500));loop{tokio::select!{_=cancel.cancelled()=>break,_=interval.tick()=>send_osc_feedback(&state,false)}}}));
+        let feedback_state = state.clone();
+        let feedback_cancel = cancel.clone();
+        tasks.push(tokio::spawn(async move{let mut interval=tokio::time::interval(Duration::from_millis(500));loop{tokio::select!{_=feedback_cancel.cancelled()=>break,_=interval.tick()=>send_osc_feedback(&feedback_state,false)}}}));
+        let refresh_state = state.clone();
+        let refresh_cancel = cancel.clone();
+        tasks.push(tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_millis(50));
+            loop {
+                tokio::select! {
+                    _ = refresh_cancel.cancelled() => break,
+                    _ = interval.tick() => { refresh_speed_group_engine(&refresh_state); }
+                }
+            }
+        }));
     }
     for (address, protocol) in [
         (configuration.osc_bind, UdpInputProtocol::Osc),
@@ -7016,6 +7440,18 @@ fn remove_command_token(value: &str) -> String {
 fn edit_osc_programmer_command(command: &str, key: &str, target: &str) -> String {
     let trimmed = command.trim();
     let default_scope = if target == "GROUP" { 'G' } else { 'F' };
+    let pending_file_action = match key {
+        "set" => Some("SET"),
+        "cpy" | "copy" => Some("COPY"),
+        "mov" | "move" => Some("MOVE"),
+        "del" | "delete" => Some("DELETE"),
+        _ => None,
+    };
+    if let Some(action) = pending_file_action
+        && (trimmed.is_empty() || matches!(trimmed, "FIXTURE" | "GROUP"))
+    {
+        return action.into();
+    }
     if let Some(digit) = key.strip_prefix("digit-") {
         if trimmed.is_empty() {
             return format!("F{digit}");
@@ -7134,6 +7570,9 @@ fn handle_programmer_osc(
         );
         return;
     }
+    if file_manager::route_osc_input(state, &session, action) {
+        return;
+    }
     match action {
         "enter" => {
             if let Some(programmer) = state.programmers.get(session.id) {
@@ -7214,11 +7653,9 @@ fn handle_timing_osc(state: &AppState, address: &str, arguments: &[OscArgument])
         } else {
             config.sequence_master_fade_millis = (value.clamp(0.0, 1.0) * 60_000.0) as u64;
         }
-        state.engine.set_control_timing(
-            config.speed_groups_bpm,
-            config.programmer_fade_millis,
-            config.sequence_master_fade_millis,
-        );
+        drop(config);
+        let _ = persist_server_configuration(state);
+        refresh_speed_group_engine(state);
     }
     if parts.len() == 5
         && parts[0] == "light"
@@ -7229,13 +7666,23 @@ fn handle_timing_osc(state: &AppState, address: &str, arguments: &[OscArgument])
         && group > 0
         && group <= 5
     {
-        let mut config = state.configuration.write();
-        config.speed_groups_bpm[group - 1] = (value.round() as u16).clamp(1, 999);
-        state.engine.set_control_timing(
-            config.speed_groups_bpm,
-            config.programmer_fade_millis,
-            config.sequence_master_fade_millis,
-        );
+        let index = group - 1;
+        let bpm = f64::from(value).round().clamp(1.0, 999.0);
+        if state.speed_groups.lock()[index].set_manual_bpm(bpm).is_ok() {
+            let sound = state.speed_groups.lock()[index].sound_config().clone();
+            let mut config = state.configuration.write();
+            config.speed_groups_bpm[index] = bpm as u16;
+            config.speed_group_sound_to_light[index] = sound;
+            drop(config);
+            state.sound_capture_owners.lock()[index] = None;
+            let _ = persist_server_configuration(state);
+            refresh_speed_group_engine(state);
+            emit(
+                state,
+                "speed_group_changed",
+                serde_json::json!({"group":speed_group_name(index),"desk_alias":parts[1],"source":"osc","manual_bpm":bpm}),
+            );
+        }
     }
 }
 
@@ -7456,13 +7903,7 @@ fn cuelist_for_page_playback(snapshot: &EngineSnapshot, page_number: u8, slot: u
     snapshot
         .playbacks
         .iter()
-        .any(|definition| {
-            definition.number == number
-                && matches!(
-                    definition.target,
-                    light_playback::PlaybackTarget::CueList { .. }
-                )
-        })
+        .any(|definition| definition.number == number)
         .then_some(number)
 }
 
@@ -7549,15 +7990,16 @@ fn handle_playback_osc(state: &AppState, address: &str, arguments: &[OscArgument
         } else {
             return;
         };
-    if !state.engine.snapshot().playbacks.iter().any(|definition| {
-        definition.number == number
-            && matches!(
-                definition.target,
-                light_playback::PlaybackTarget::CueList { .. }
-            )
-    }) {
+    let Some(definition) = state
+        .engine
+        .snapshot()
+        .playbacks
+        .iter()
+        .find(|definition| definition.number == number)
+        .cloned()
+    else {
         return;
-    }
+    };
     let select_button = parts[action_index] == "button" && parts.len() == action_index + 2
         && parts[action_index + 1].parse::<usize>().ok().and_then(|button| button.checked_sub(1))
             .and_then(|button| state.engine.snapshot().playbacks.iter().find(|definition| definition.number == number).and_then(|definition| definition.buttons.get(button).copied()))
@@ -7568,6 +8010,53 @@ fn handle_playback_osc(state: &AppState, address: &str, arguments: &[OscArgument
         let Some(desk) = osc_control_desk(state, alias) else { return; };
         if state.desk.lock().set_selected_playback(desk.id, show.id, Some(number)).is_ok() {
             emit(state, "playback_selected", serde_json::json!({"desk_id":desk.id,"playback_number":number,"source":"osc"}));
+        }
+        return;
+    }
+    if let light_playback::PlaybackTarget::SpeedGroup { group } = &definition.target {
+        let mapped = if parts[action_index] == "button" && parts.len() == action_index + 2 {
+            parts[action_index + 1]
+                .parse::<usize>()
+                .ok()
+                .and_then(|button| button.checked_sub(1))
+                .and_then(|button| definition.buttons.get(button))
+                .and_then(|action| match action {
+                    light_playback::PlaybackButtonAction::Learn => Some("learn"),
+                    light_playback::PlaybackButtonAction::Double => Some("double"),
+                    light_playback::PlaybackButtonAction::Half => Some("half"),
+                    light_playback::PlaybackButtonAction::Pause => Some("pause"),
+                    _ => None,
+                })
+        } else {
+            match parts[action_index] {
+                "learn" => Some("learn"),
+                "double" => Some("double"),
+                "half" => Some("half"),
+                "pause" => Some("pause"),
+                "master" | "fader" => Some("master"),
+                _ => None,
+            }
+        };
+        if pressed || mapped == Some("master") {
+            if let Some(action) = mapped {
+                let input = PoolPlaybackInput {
+                    value,
+                    pressed: Some(pressed),
+                    ..PoolPlaybackInput::default()
+                };
+                let _ = apply_speed_group_playback_action(
+                    state,
+                    group,
+                    action,
+                    &input,
+                    definition.fader,
+                );
+                emit(
+                    state,
+                    "playback_changed",
+                    serde_json::json!({"playback_number":number,"action":action,"source":"osc"}),
+                );
+            }
         }
         return;
     }
@@ -7945,6 +8434,10 @@ mod tests {
             serde_json::from_value(serde_json::json!({"speed_groups_bpm":[101,102,103,104]}))
                 .unwrap();
         assert_eq!(configuration.speed_groups_bpm, [101, 102, 103, 104, 15]);
+        assert_eq!(
+            configuration.speed_group_sound_to_light,
+            default_sound_to_light()
+        );
         let five: DeskConfiguration =
             serde_json::from_value(serde_json::json!({"speed_groups_bpm":[1,2,3,4,5]})).unwrap();
         assert_eq!(five.speed_groups_bpm, [1, 2, 3, 4, 5]);
@@ -8116,12 +8609,21 @@ mod tests {
                 media_cache: Arc::new(Mutex::new(MediaCache::default())),
                 media_status: Arc::new(RwLock::new(HashMap::new())),
                 input_locks: Arc::new(Mutex::new(HashMap::new())),
+                file_input_contexts: Arc::new(Mutex::new(HashMap::new())),
                 osc_subscribers: Arc::new(Mutex::new(HashMap::new())),
                 osc_feedback: None,
                 mvr_imports: Arc::new(Mutex::new(HashMap::new())),
                 network_output: None,
                 output_sequences: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
                 manual_clock: None,
+                speed_groups: Arc::new(Mutex::new(std::array::from_fn(|index| {
+                    SpeedGroupController::new(
+                        f64::from(default_speed_groups()[index]),
+                        SoundToLightConfig::default(),
+                    )
+                    .unwrap()
+                }))),
+                sound_capture_owners: Arc::new(Mutex::new([None; 5])),
             },
             data_dir,
         )
@@ -8732,6 +9234,174 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn sound_to_light_is_authoritative_per_speed_group_and_capture_is_desk_scoped() {
+        let (state, data_dir) = test_state();
+        let app = router(state.clone());
+        let (token, _) = login(&app, "Operator").await;
+        let primary_desk = state
+            .sessions
+            .read()
+            .values()
+            .find(|session| session.token == token)
+            .unwrap()
+            .desk
+            .id;
+
+        let enabled = SoundToLightConfig {
+            enabled: true,
+            smoothing: 0.0,
+            ..SoundToLightConfig::default()
+        };
+        let updated = app
+            .clone()
+            .oneshot(
+                Request::put("/api/v1/speed-groups/A")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(serde_json::to_vec(&enabled).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(updated.status(), StatusCode::OK);
+
+        let observation = serde_json::json!({
+            "captured_at_millis": 1,
+            "source_available": true,
+            "usable_signal": true,
+            "level": 0.8,
+            "selected_band_level": 0.7,
+            "detected_bpm": 120.0,
+            "confidence": 0.95
+        });
+        let observed = app
+            .clone()
+            .oneshot(
+                Request::post("/api/v1/speed-groups/A/observation")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(observation.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(observed.status(), StatusCode::OK);
+        let observed = json(observed).await;
+        assert_eq!(observed["snapshot"]["source"], "sound");
+        assert_eq!(observed["snapshot"]["effective_bpm"], 120.0);
+
+        // Two browser sessions attached to one desk are alternate surfaces of that same desk and
+        // may therefore feed the same analyzer lease.
+        let same_desk_login = app
+            .clone()
+            .oneshot(
+                Request::post("/api/v1/sessions")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({"username":"Operator","desk_id":primary_desk})
+                            .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let same_desk_token = json(same_desk_login).await["token"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let same_desk_observation = app
+            .clone()
+            .oneshot(
+                Request::post("/api/v1/speed-groups/A/observation")
+                    .header(
+                        header::AUTHORIZATION,
+                        format!("Bearer {same_desk_token}"),
+                    )
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(observation.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(same_desk_observation.status(), StatusCode::OK);
+
+        let other_desk = state.desk.lock().add_desk("Other", "other").unwrap();
+        let other_login = app
+            .clone()
+            .oneshot(
+                Request::post("/api/v1/sessions")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({"username":"Operator","desk_id":other_desk.id})
+                            .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let other_token = json(other_login).await["token"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let contested = app
+            .clone()
+            .oneshot(
+                Request::post("/api/v1/speed-groups/A/observation")
+                    .header(header::AUTHORIZATION, format!("Bearer {other_token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(observation.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(contested.status(), StatusCode::CONFLICT);
+
+        // A direct/manual value from any attached surface takes ownership and remains the stable
+        // fallback instead of silently retaining Sound mode.
+        let mut direct = state.configuration.read().clone();
+        direct.speed_groups_bpm[0] = 111;
+        let direct_response = app
+            .clone()
+            .oneshot(
+                Request::put("/api/v1/configuration")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(serde_json::to_vec(&direct).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(direct_response.status(), StatusCode::OK);
+        let current = app
+            .oneshot(
+                Request::get("/api/v1/speed-groups/A")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let current = json(current).await;
+        assert_eq!(current["snapshot"]["source"], "manual");
+        assert_eq!(current["snapshot"]["effective_bpm"], 111.0);
+        assert_eq!(current["configuration"]["enabled"], false);
+        assert!(state.sound_capture_owners.lock()[0].is_none());
+
+        let persisted: DeskConfiguration = serde_json::from_str(
+            &state
+                .desk
+                .lock()
+                .setting("server_configuration")
+                .unwrap()
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(persisted.speed_groups_bpm[0], 111);
+        assert!(!persisted.speed_group_sound_to_light[0].enabled);
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+
+    #[tokio::test]
     async fn desk_lock_is_persisted_scoped_and_enforced_by_the_server() {
         let (state, data_dir) = test_state();
         let second = state.desk.lock().add_desk("Second", "second").unwrap();
@@ -8845,6 +9515,8 @@ mod tests {
                         head_index: 1,
                         fixture_id: light_core::FixtureId::new(),
                     }],
+                    move_in_black_enabled: true,
+                    move_in_black_delay_millis: 0,
                     multipatch: vec![],
                 }],
                 revision: 1,
@@ -9499,6 +10171,8 @@ mod tests {
             location: Default::default(),
             rotation: Default::default(),
             logical_heads: vec![],
+            move_in_black_enabled: true,
+            move_in_black_delay_millis: 0,
             multipatch: vec![],
         };
         let cue_list_id = light_core::CueListId::new();
@@ -9950,6 +10624,8 @@ mod tests {
                 location: Default::default(),
                 rotation: Default::default(),
                 logical_heads: vec![],
+                move_in_black_enabled: true,
+                move_in_black_delay_millis: 0,
                 multipatch: vec![],
             }
         }

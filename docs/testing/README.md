@@ -2,7 +2,7 @@
 
 These documents expand the stable IDs in the [canonical test catalog](../help/99-Development/02-test-bench-coverage.md) into executable scenarios. They describe behavior to test; they do not imply that every scenario is implemented yet.
 
-`00-generate-show-files.md` and `01-foundational-dimmers-and-groups.md` have Playwright coverage in the repository-root `tests/` folder. The remaining scenario documents are specifications only until matching specs are added there.
+Executable Playwright coverage lives in the repository-root `tests/` folder. A scenario document remains a specification until a matching stable-ID spec is present; the canonical coverage catalog records that status.
 
 ## Scenario documents
 
@@ -14,6 +14,7 @@ These documents expand the stable IDs in the [canonical test catalog](../help/99
 - [Virtual time, persistence, and recovery](05-virtual-time-persistence-and-recovery.md) covers exact timing boundaries, restart behavior, corrupt data, and packaged desktop ownership.
 - [Preload modes and virtual playbacks](06-preload-modes-and-virtual-playbacks.md) covers the three independent Preload capture domains, all eight Settings combinations, physical and virtual playback action queues, Programmer Fade execution, and programmer-only release.
 - [Playback Configuration](07-playback-configuration.md) covers Set-plus-playback modal entry, assignments, colors, clearing, type-specific layouts, Cuelist controls, Master/X-fade/Temp faders, and temporary LTP/Swap behavior.
+- [Sound to Light](08-sound-to-light.md) covers browser/desk-local audio assignment, deterministic recorded input, portable response configuration, authoritative Speed Group mapping, manual controls, and signal-loss fallback.
 
 ## Common conventions
 
@@ -84,14 +85,16 @@ Every automated scenario should follow the same visible structure:
 
 ## Visual inspection recording
 
-Run `./test record` to produce one narrated 1920×1080 WebM walkthrough at `artifacts/visual-inspection/light-visual-inspection.webm`. This is intentionally separate from the fast catalog. The recording keeps the complete desk application visible and adds external observer panels for:
+Run `./test record` to execute the complete Playwright catalog in serial recording mode. Every browser test receives its own 1920×1080 video under `test-results/`, with deliberately slowed browser actions and a non-interactive narration bar showing the scenario ID, current phase, purpose, recent desk/OSC-related events, and current logical DMX output. After the run, ffmpeg joins those clips into `artifacts/visual-inspection/light-ui-test-catalog.webm`, so the entire browser-tested catalog can be watched as one reel rather than inspecting only one test.
+
+The catalog also includes the more detailed narrated walkthrough at `artifacts/visual-inspection/light-visual-inspection.webm`. That chapter keeps the complete desk application visible and adds expanded external observer panels for:
 
 - OSC packets sent by the simulated physical controller and decoded feedback returned by the subscribed desk alias;
 - the desk-local command line after each UI or OSC button press;
 - logical DMX values from `/api/v1/dmx`; and
 - the actual UDP values received from the configured Art-Net and sACN outputs.
 
-The recording is supplementary evidence. The normal Playwright assertions remain authoritative because video timing and encoding are not used as synchronization or pass criteria.
+The recording run is intentionally slower than the normal suite. Override the defaults with `LIGHT_VISUAL_SLOW_MO=<milliseconds>` and `LIGHT_VISUAL_STEP_PAUSE=<milliseconds>` when a still slower inspection copy is useful. API-only cases have no browser surface and therefore add assertions but no video clip; their paired UI cases show the corresponding application workflow. Recordings are supplementary evidence. The normal Playwright assertions remain authoritative because video timing and encoding are not used as synchronization or pass criteria.
 8. **Follow up.** If the primary scenario passes, run its listed boundary or alternate-surface cases. If it fails, retain the standard artifacts and identify the first layer where actual state diverged.
 
 In these documents, **Assertions** are the exact checks made by the test. **Pass condition** is the product-level conclusion supported by those checks. **Follow-ups** are deliberately separate tests or failure investigations, not extra unbounded work inside the primary scenario.

@@ -164,7 +164,8 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(functi
   const current = String(value ?? native.current?.value ?? defaultValue ?? "");
   const normalize = (next: string) => {
     const filtered = allowDecimal ? next.replace(/[^\d.-]/g, "") : next.replace(/[^\d-]/g, "");
-    if (filtered === "" || filtered === "-" || (allowDecimal && /^-?\d*\.?\d*$/.test(filtered))) return filtered;
+    if (filtered === "" || filtered === "-") return filtered;
+    if (allowDecimal ? /^-?\d*\.?\d*$/.test(filtered) : /^-?\d+$/.test(filtered)) return filtered;
     return current;
   };
   const update = (next: string) => emitInputValue(native.current, normalize(next), onChange, onValueChange);

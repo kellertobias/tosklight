@@ -1,21 +1,41 @@
-# Quickstart
+# Quick Start
 
-Lightning is organized around a show file, patched fixtures, the programmer, and playbacks.
+ToskLight is organized around a desk configuration, a portable show file, one programmer per operator, and playbacks that turn stored programming into live output.
 
-## Create or open the show
+![The default programming desk with fixture selection, group shortcuts, 3D Stage, and the live programmer](assets/screenshots/default-desk-overview.png)
 
-Open the **Show** menu and choose **New Show**, or load an existing show file. Lightning saves changes to the active show automatically, and reopening the show resumes its latest autosaved state.
+## Set up the desk
 
-Choose **Save Named Revision** before an experiment or other important milestone. Named revisions are numbered manual restore points; autosave continues after creating one. In **Load Show**, choose **Load Latest Autosave** to resume current work or load a named revision to restore that saved point.
+- Install and start ToskLight, then open **Desk Setup** from the Show menu.
+- In **Screens & playback**, assign each connected screen and choose whether its playback page follows the main page or remains independent.
+- In **Inputs**, enable only the MIDI, RTP-MIDI, OSC, and software-keypad controls used on this desk.
+- In **Outputs**, set the engine frame rate and bind address, then create and verify Art-Net or sACN universe routes in **DMX**.
 
-## Patch fixtures
+Continue with [Installation and First Start](02-installation.md), [Application Layout and Window Manager](01-application-layout.md), and [Desk Setup](10-Desk-Setup/index.md).
 
-Open **Show Patch**, choose the required fixture type and mode, and assign fixture IDs and DMX addresses. Check the patch before programming so fixture selection and output addresses match the production plan.
+## Create or patch the show
 
-## Build the first look
+- Open the Show menu and choose **New Show**, **Load Show**, or import an MVR as a new show.
+- In **Fixture library**, import GDTF profiles or create a local fixture and its DMX modes.
+- Open **Patch**, choose a fixture mode, and enter fixture IDs and DMX addresses. Add multi-patch instances only when one logical fixture drives more than one physical address.
+- Open **Stage**, switch to **Setup positions**, and place fixtures and scenery in the 2D or 3D plan.
+- Export an MVR after checking unresolved fixtures, retained GDTF sources, addressing, and scenery.
 
-Select fixtures from the fixture sheet or stage, set their intensity and other attributes, and record the result as a cue or preset. Clear the programmer after recording to confirm that the stored result plays back on its own.
+Continue with [Show File Setup](20-Show-Setup/index.md), [Shows, Revisions, and MVR](20-Show-Setup/02-shows-revisions-and-mvr.md), and [Fixture Library](20-Show-Setup/03-fixture-library.md).
 
-## Put the Cuelist on a playback
+## Program and run the show
 
-Assign the Cuelist to a playback, run through its Cues, and check fade times, tracking, and output before using it in a production.
+- Select fixtures from Stage, Fixtures, Groups, or the command line; set intensity and attributes in the programmer.
+- Record reusable Groups and Presets, then record Cues into a Cuelist.
+- Assign the Cuelist or a Group to playback controls and configure its fader and button actions.
+- Clear the programmer and run the Cues with GO. Check tracking, fade/delay, HTP/LTP ownership, output, and release behavior.
+- Use Preload when changes or playback actions must be prepared without immediately changing the live scene.
+
+Continue with [The Programmer](30-Programmer/index.md), [Programming Cues](30-Programmer/03-programming-cues.md), and [Running a Show](40-Running-a-Show/index.md).
+
+## Before doors
+
+- Save a named revision, then load the latest autosave again to prove recovery.
+- Check the active user, selected show, output routes, universe values, and playback page.
+- Run every Cuelist in order, including GO minus, pause, release, follow/timecode triggers, and Preload where used.
+- Keep the generated PDF manual with the release or open **Help** from the Show menu during operation.

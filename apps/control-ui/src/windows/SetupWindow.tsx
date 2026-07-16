@@ -4,12 +4,13 @@ import { useServer } from "../api/ServerContext";
 import type { DeskConfiguration } from "../api/types";
 import { configuredServerUrl } from "../api/LightApiClient";
 import { FixtureLibrarySetup } from "../components/setup/FixtureLibrarySetup";
+import { FileManagerRootsSetup, fileManagerRootsValidationError } from "../components/setup/FileManagerRootsSetup";
 import { ScreensSetup } from "../components/setup/ScreensSetup";
 import { Button, FormLayout, FormField, Input, NumberField, SelectField, SwitchField, TextAreaField, TextField } from "../components/common";
 import { WindowHeader } from "../components/window-kit";
 import { useApp } from "../state/AppContext";
 
-const sections = ["Shows & recovery", "Users & sessions", "Inputs", "Outputs", "Timecode", "Network & API", "Fixture library", "Screens & playback", "Desk Lock"];
+const sections = ["Shows & recovery", "Users & sessions", "Inputs", "Outputs", "Timecode", "Network & API", "Fixture library", "Screens & playback", "File Manager", "Desk Lock"];
 
 export function SetupWindow(_: WindowProps) {
   const server = useServer();
@@ -22,6 +23,7 @@ export function SetupWindow(_: WindowProps) {
   const [lockWallpaper, setLockWallpaper] = useState<string | null>(server.deskLock?.wallpaper ?? null);
   const [unlockMode, setUnlockMode] = useState<"button" | "pin">(server.deskLock?.unlock_mode ?? "button");
   const [lockPin, setLockPin] = useState("");
+  const fileManagerRootError = draft ? fileManagerRootsValidationError(draft.file_manager_roots) : null;
   useEffect(() => setDraft(server.configuration), [server.configuration]);
   useEffect(() => {
     if (server.deskLock) {
@@ -44,12 +46,13 @@ export function SetupWindow(_: WindowProps) {
           primary: section === 6 ? `${server.fixtureLibrary.length} modes` : sections[section],
           secondary: restartRequired ? "Restart required" : undefined,
         }}
+        toolbar={section === 6 ? <div id="setup-section-actions" className="setup-section-actions" /> : undefined}
         actions={[
           [
             {
               id: "save",
               label: "Save changes",
-              disabled: !draft,
+              disabled: !draft || Boolean(fileManagerRootError),
               onClick: () => void save(),
             },
           ],
@@ -241,6 +244,16 @@ export function SetupWindow(_: WindowProps) {
           {section === 6 && <FixtureLibrarySetup />}
           {section === 7 && <ScreensSetup />}
           {section === 8 && (
+            <>
+              <h2>File Manager</h2>
+              {draft && <FileManagerRootsSetup
+                roots={draft.file_manager_roots}
+                onChange={(file_manager_roots) => setDraft({ ...draft, file_manager_roots })}
+                onOpen={() => dispatch({ type: "OPEN_BUILTIN", kind: "file_manager" })}
+              />}
+            </>
+          )}
+          {section === 9 && (
             <>
               <h2>Desk Lock</h2>
               <p>Locking this desk blocks every connected screen and its assigned hardware without changing playback, programmer, or output state.</p>

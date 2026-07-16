@@ -42,6 +42,15 @@ export interface FileRoot {
   icon: string;
   removable: boolean;
   writable: boolean;
+  capabilities?: FileSystemCapabilities;
+}
+export interface FileSystemCapabilities {
+  created_time: boolean;
+  hidden_attributes: boolean;
+  native_notes: boolean;
+  trash: boolean;
+  range_streaming: boolean;
+  thumbnails: boolean;
 }
 export interface FileEntry {
   name: string;
@@ -52,11 +61,45 @@ export interface FileEntry {
   created_millis: number | null;
   hidden: boolean;
   writable: boolean;
+  mime?: string;
+  note_supported?: boolean;
+  trash_supported?: boolean;
 }
 export interface FileDirectory {
   root_id: string;
   path: string;
   entries: FileEntry[];
+}
+export interface FileMetadata extends FileEntry {
+  root_id: string;
+  capabilities: FileSystemCapabilities;
+}
+export interface FileNativeNote {
+  root_id: string;
+  path: string;
+  supported: boolean;
+  note: string | null;
+}
+export type FileConflictChoice = "replace" | "keep_both" | "skip";
+export interface FileOperationResult {
+  paths: string[];
+  complete: boolean;
+  items: Array<{
+    source_root_id: string;
+    source: string;
+    destination_root_id: string | null;
+    destination: string | null;
+    status: "completed" | "skipped" | "failed";
+    error: string | null;
+  }>;
+}
+export type FileInputAction = "rename" | "copy" | "move" | "delete";
+export interface FileInputContext {
+  instance_id: string;
+  action: FileInputAction;
+  session_id: string;
+  desk_id: string;
+  expires_in_millis: number;
 }
 export interface TextDocument {
   root_id: string;
@@ -214,6 +257,8 @@ export interface PatchedFixture {
   location?: { x: number; y: number; z: number };
   rotation?: { x: number; y: number; z: number };
   multipatch?: MultiPatchInstance[];
+  move_in_black_enabled?: boolean;
+  move_in_black_delay_millis?: number;
 }
 
 export interface MultiPatchInstance {
@@ -453,6 +498,79 @@ export interface DeskConfiguration {
     path: string;
     icon?: string;
   }>;
+}
+
+export type SpeedGroupId = "A" | "B" | "C" | "D" | "E";
+
+export type FrequencyPreset = "sub" | "low" | "mid" | "high" | "full_range";
+
+export type FrequencySelection =
+  | { type: "preset"; preset: FrequencyPreset }
+  | { type: "custom"; low_hz: number; high_hz: number };
+
+export interface SoundToLightConfig {
+  enabled: boolean;
+  analysis_mode: "tempo_bpm";
+  frequency: FrequencySelection;
+  input_gain_db: number;
+  confidence_threshold: number;
+  smoothing: number;
+  minimum_bpm: number;
+  maximum_bpm: number;
+  signal_hold_millis: number;
+  multiplier: number;
+}
+
+export interface SoundObservation {
+  captured_at_millis: number;
+  source_available: boolean;
+  usable_signal: boolean;
+  level: number;
+  selected_band_level: number;
+  detected_bpm: number | null;
+  confidence: number;
+}
+
+export type SoundLossReason =
+  | "source_unavailable"
+  | "no_usable_signal"
+  | "low_confidence"
+  | "tempo_outside_range"
+  | "waiting_for_analysis";
+
+export type SoundStatus =
+  | { state: "disabled" }
+  | { state: "active"; detected_bpm: number; confidence: number }
+  | { state: "holding"; reason: SoundLossReason; remaining_millis: number }
+  | { state: "manual_fallback"; reason: SoundLossReason };
+
+export interface SpeedSnapshot {
+  manual_bpm: number;
+  sound_bpm: number | null;
+  effective_bpm: number;
+  source: "manual" | "sound" | "held_sound" | "manual_fallback";
+  sound_status: SoundStatus;
+  paused: boolean;
+  phase_advancing: boolean;
+  speed_master_scale: number;
+  sound_multiplier: number;
+  source_available: boolean;
+  usable_signal: boolean;
+  input_level: number;
+  selected_band_level: number;
+}
+
+export interface SpeedGroupSoundState {
+  group: SpeedGroupId;
+  configuration: SoundToLightConfig;
+  snapshot: SpeedSnapshot;
+}
+
+export type SpeedGroupAction = "learn" | "double" | "half" | "pause";
+
+export interface SpeedGroupActionInput {
+  action: SpeedGroupAction;
+  captured_at_millis?: number;
 }
 
 export interface StoredGroup {

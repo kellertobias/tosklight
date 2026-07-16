@@ -3,12 +3,17 @@ import { prepareHelpMarkdown, safeHelpUrl } from "./helpMarkdown";
 
 describe("help Markdown extensions", () => {
   it("marks keys, held and optional keys, and placeholders", () => {
-    const output = prepareHelpMarkdown("[AT][ENTER] [+] [CLR+] [GRP*] [0-9] <selection> <target+> `[1]` `[.]`");
+    const output = prepareHelpMarkdown("[AT][ENTER] [+] [CLR+] [GRP*] [0-9] [ . ] [ ^ ] [−] [KBD:ENTER] <selection> <target+> `[1]` `[.]` [MVR](mvr.md)");
     expect(output).toContain("`help-key:AT``help-key:ENTER`");
     expect(output).toContain("`help-key:CLR+`");
     expect(output).toContain("`help-key:GRP*`");
     expect(output).toContain("`help-key:+`");
     expect(output).toContain("`help-key:0-9`");
+    expect(output).toContain("`help-key:.`");
+    expect(output).toContain("`help-key:^`");
+    expect(output).toContain("`help-key:−`");
+    expect(output).toContain("`help-keyboard:ENTER`");
+    expect(output).toContain("[MVR](mvr.md)");
     expect(output).toContain("`help-placeholder:selection`");
     expect(output).toContain("`help-placeholder:target+`");
     expect(output).toContain("`help-key:1`");

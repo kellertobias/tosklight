@@ -10,7 +10,8 @@ use light_fixture::{
 };
 use light_output::{DmxFrame, OutputRoute};
 use light_playback::{
-    CueList, PlaybackDefinition, PlaybackEngine, PlaybackPage, PlaybackTarget, resolve,
+    ActivePlayback, CueList, MoveInBlackCandidate, PlaybackDefinition, PlaybackEngine,
+    PlaybackPage, PlaybackTarget, resolve,
 };
 use light_programmer::ProgrammerRegistry;
 use light_programmer::{GroupDefinition, resolve_group};
@@ -20,7 +21,7 @@ use std::{
     collections::HashMap,
     sync::{
         Arc,
-        atomic::{AtomicU16, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU16, AtomicU64, Ordering},
     },
 };
 use thiserror::Error;
@@ -158,6 +159,42 @@ pub struct RenderResult {
     pub revision: u64,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MoveInBlackState {
+    Disabled,
+    Blocked,
+    Delaying,
+    Moving,
+    Completed,
+    Cancelled,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct MoveInBlackPosition {
+    pub attribute: AttributeKey,
+    pub current: AttributeValue,
+    pub target: AttributeValue,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct MoveInBlackDiagnostic {
+    pub fixture_id: FixtureId,
+    pub playback_number: Option<u16>,
+    pub cue_list_id: light_core::CueListId,
+    pub current_cue_id: uuid::Uuid,
+    pub current_cue_number: f64,
+    pub target_cue_id: uuid::Uuid,
+    pub target_cue_number: f64,
+    pub state: MoveInBlackState,
+    pub positions: Vec<MoveInBlackPosition>,
+    pub dark_since: Option<chrono::DateTime<chrono::Utc>>,
+    pub delay_deadline: Option<chrono::DateTime<chrono::Utc>>,
+    pub movement_started_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub movement_ends_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub cancellation_reason: Option<String>,
+}
+
 #[derive(Debug, Error)]
 pub enum EngineError {
     #[error("snapshot validation failed: {0}")]
@@ -173,10 +210,36 @@ pub struct Engine {
     timecode_frame: AtomicU64,
     programmer_fade_millis: AtomicU64,
     speed_groups_bpm: [AtomicU16; 5],
+    speed_groups_paused: [AtomicBool; 5],
     sequence_master_fade_millis: AtomicU64,
     programmer_transitions: Mutex<HashMap<(FixtureId, AttributeKey), ProgrammerTransition>>,
+    move_in_black: Mutex<HashMap<MoveInBlackKey, MoveInBlackRuntime>>,
     group_master_flashes: RwLock<HashMap<String, f32>>,
     clock: SharedClock,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct MoveInBlackKey {
+    playback_number: Option<u16>,
+    cue_list_id: light_core::CueListId,
+    fixture_id: FixtureId,
+}
+
+#[derive(Clone)]
+struct MoveInBlackRuntime {
+    candidate: MoveInBlackCandidate,
+    enabled: bool,
+    delay_millis: u64,
+    state: MoveInBlackState,
+    dark_since: Option<chrono::DateTime<chrono::Utc>>,
+    delay_deadline: Option<chrono::DateTime<chrono::Utc>>,
+    movement_started_at: Option<chrono::DateTime<chrono::Utc>>,
+    movement_ends_at: Option<chrono::DateTime<chrono::Utc>>,
+    from: HashMap<AttributeKey, AttributeValue>,
+    current: HashMap<AttributeKey, AttributeValue>,
+    changed_at: chrono::DateTime<chrono::Utc>,
+    handoff_until: Option<chrono::DateTime<chrono::Utc>>,
+    cancellation_reason: Option<String>,
 }
 
 #[derive(Clone)]
@@ -202,8 +265,10 @@ impl Engine {
                 AtomicU16::new(30),
                 AtomicU16::new(15),
             ],
+            speed_groups_paused: std::array::from_fn(|_| AtomicBool::new(false)),
             sequence_master_fade_millis: AtomicU64::new(0),
             programmer_transitions: Mutex::new(HashMap::new()),
+            move_in_black: Mutex::new(HashMap::new()),
             group_master_flashes: RwLock::new(HashMap::new()),
             clock,
         }
@@ -227,8 +292,334 @@ impl Engine {
             .set_control_timing(speed_groups_bpm, sequence_master_fade_millis);
     }
 
+    pub fn set_speed_groups_paused(&self, paused: [bool; 5]) {
+        for (target, paused) in self.speed_groups_paused.iter().zip(paused) {
+            target.store(paused, Ordering::Relaxed);
+        }
+        self.playback.write().set_speed_groups_paused(paused);
+    }
+
     pub fn clear_programmer_transitions(&self) {
         self.programmer_transitions.lock().clear();
+    }
+
+    pub fn move_in_black_runtime(&self) -> Vec<MoveInBlackDiagnostic> {
+        let mut diagnostics = self
+            .move_in_black
+            .lock()
+            .values()
+            .map(|runtime| {
+                let mut positions = runtime
+                    .candidate
+                    .values
+                    .iter()
+                    .map(|value| MoveInBlackPosition {
+                        attribute: value.attribute.clone(),
+                        current: runtime
+                            .current
+                            .get(&value.attribute)
+                            .cloned()
+                            .unwrap_or_else(|| value.current.clone()),
+                        target: value.target.clone(),
+                    })
+                    .collect::<Vec<_>>();
+                positions.sort_by(|left, right| left.attribute.cmp(&right.attribute));
+                MoveInBlackDiagnostic {
+                    fixture_id: runtime.candidate.fixture_id,
+                    playback_number: runtime.candidate.playback_number,
+                    cue_list_id: runtime.candidate.cue_list_id,
+                    current_cue_id: runtime.candidate.current_cue_id,
+                    current_cue_number: runtime.candidate.current_cue_number,
+                    target_cue_id: runtime.candidate.target_cue_id,
+                    target_cue_number: runtime.candidate.target_cue_number,
+                    state: runtime.state,
+                    positions,
+                    dark_since: runtime.dark_since,
+                    delay_deadline: runtime.delay_deadline,
+                    movement_started_at: runtime.movement_started_at,
+                    movement_ends_at: runtime.movement_ends_at,
+                    cancellation_reason: runtime.cancellation_reason.clone(),
+                }
+            })
+            .collect::<Vec<_>>();
+        diagnostics.sort_by(|left, right| {
+            left.playback_number
+                .cmp(&right.playback_number)
+                .then_with(|| left.fixture_id.0.cmp(&right.fixture_id.0))
+        });
+        diagnostics
+    }
+
+    fn move_in_black_contributions(
+        &self,
+        snapshot: &EngineSnapshot,
+        candidates: Vec<MoveInBlackCandidate>,
+        active: &[ActivePlayback],
+        base_resolved: &HashMap<(FixtureId, AttributeKey), AttributeValue>,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Vec<TimedValue> {
+        let mut runtimes = self.move_in_black.lock();
+        let mut present = std::collections::HashSet::new();
+        for candidate in candidates {
+            let key = MoveInBlackKey {
+                playback_number: candidate.playback_number,
+                cue_list_id: candidate.cue_list_id,
+                fixture_id: candidate.fixture_id,
+            };
+            present.insert(key);
+            let patch = snapshot.fixtures.iter().find(|fixture| {
+                fixture.fixture_id == candidate.fixture_id
+                    || fixture
+                        .logical_heads
+                        .iter()
+                        .any(|head| head.fixture_id == candidate.fixture_id)
+            });
+            let enabled = patch.is_some_and(|fixture| fixture.move_in_black_enabled);
+            let delay_millis = patch
+                .map(|fixture| fixture.move_in_black_delay_millis)
+                .unwrap_or_default();
+            let base_position = candidate
+                .values
+                .iter()
+                .map(|value| {
+                    (
+                        value.attribute.clone(),
+                        base_resolved
+                            .get(&(candidate.fixture_id, value.attribute.clone()))
+                            .cloned()
+                            .unwrap_or_else(|| value.current.clone()),
+                    )
+                })
+                .collect::<HashMap<_, _>>();
+            let resolved_intensity = base_resolved
+                .iter()
+                .filter(|((fixture_id, attribute), _)| {
+                    *fixture_id == candidate.fixture_id && attribute.is_intensity()
+                })
+                .filter_map(|(_, value)| value.normalized())
+                .fold(0.0_f32, f32::max);
+
+            let runtime = runtimes.entry(key).or_insert_with(|| MoveInBlackRuntime {
+                candidate: candidate.clone(),
+                enabled,
+                delay_millis,
+                state: if enabled {
+                    MoveInBlackState::Blocked
+                } else {
+                    MoveInBlackState::Disabled
+                },
+                dark_since: None,
+                delay_deadline: None,
+                movement_started_at: None,
+                movement_ends_at: None,
+                from: base_position.clone(),
+                current: base_position.clone(),
+                changed_at: now,
+                handoff_until: None,
+                cancellation_reason: None,
+            });
+
+            let candidate_changed = runtime.candidate != candidate;
+            let enabled_changed = runtime.enabled != enabled;
+            let delay_changed = runtime.delay_millis != delay_millis;
+            if candidate_changed {
+                let previous = move_in_black_values_at(runtime, now);
+                let was_dark = runtime.dark_since;
+                runtime.candidate = candidate;
+                runtime.from = if was_dark.is_some() {
+                    previous
+                } else {
+                    base_position.clone()
+                };
+                runtime.current = runtime.from.clone();
+                runtime.movement_started_at = None;
+                runtime.movement_ends_at = None;
+                runtime.handoff_until = None;
+                runtime.changed_at = now;
+                runtime.cancellation_reason = Some("future_target_recalculated".into());
+            }
+            runtime.enabled = enabled;
+            runtime.delay_millis = delay_millis;
+
+            if !enabled {
+                runtime.state = MoveInBlackState::Disabled;
+                runtime.dark_since = None;
+                runtime.delay_deadline = None;
+                runtime.movement_started_at = None;
+                runtime.movement_ends_at = None;
+                runtime.handoff_until = None;
+                runtime.from = base_position.clone();
+                runtime.current = base_position;
+                runtime.cancellation_reason = None;
+                continue;
+            }
+
+            if resolved_intensity > 0.0 {
+                if runtime.dark_since.is_some() {
+                    runtime.cancellation_reason = Some("resolved_intensity_above_zero".into());
+                } else {
+                    runtime.cancellation_reason = None;
+                }
+                runtime.state = MoveInBlackState::Blocked;
+                runtime.dark_since = None;
+                runtime.delay_deadline = None;
+                runtime.movement_started_at = None;
+                runtime.movement_ends_at = None;
+                runtime.handoff_until = None;
+                runtime.from = base_position.clone();
+                runtime.current = base_position;
+                continue;
+            }
+
+            if enabled_changed || runtime.dark_since.is_none() {
+                runtime.dark_since = Some(now);
+                runtime.delay_deadline = Some(
+                    now + chrono::Duration::milliseconds(delay_millis.min(i64::MAX as u64) as i64),
+                );
+                runtime.movement_started_at = None;
+                runtime.movement_ends_at = None;
+                runtime.from = base_position.clone();
+                runtime.current = base_position;
+                runtime.changed_at = now;
+                runtime.cancellation_reason = None;
+            } else if delay_changed {
+                let dark_since = runtime.dark_since.expect("dark runtime has a start");
+                runtime.delay_deadline = Some(
+                    dark_since
+                        + chrono::Duration::milliseconds(
+                            delay_millis.min(i64::MAX as u64) as i64,
+                        ),
+                );
+                runtime.movement_started_at = None;
+                runtime.movement_ends_at = None;
+                runtime.from = base_position;
+                runtime.changed_at = now;
+            }
+
+            let deadline = runtime.delay_deadline.expect("dark runtime has a deadline");
+            if now < deadline {
+                runtime.state = MoveInBlackState::Delaying;
+                runtime.current = runtime.from.clone();
+                continue;
+            }
+            if runtime.movement_started_at.is_none() {
+                let started_at = if candidate_changed { now } else { deadline };
+                let longest_fade = runtime
+                    .candidate
+                    .values
+                    .iter()
+                    .map(|value| value.fade_millis)
+                    .max()
+                    .unwrap_or(0);
+                runtime.movement_started_at = Some(started_at);
+                runtime.movement_ends_at = Some(
+                    started_at
+                        + chrono::Duration::milliseconds(
+                            longest_fade.min(i64::MAX as u64) as i64,
+                        ),
+                );
+                runtime.changed_at = started_at;
+            }
+            runtime.current = move_in_black_values_at(runtime, now);
+            runtime.state = if runtime
+                .movement_ends_at
+                .is_some_and(|ends_at| now >= ends_at)
+            {
+                MoveInBlackState::Completed
+            } else {
+                MoveInBlackState::Moving
+            };
+        }
+
+        for (key, runtime) in runtimes.iter_mut() {
+            if present.contains(key) {
+                continue;
+            }
+            if !runtime.enabled {
+                runtime.state = MoveInBlackState::Disabled;
+                runtime.cancellation_reason = None;
+                continue;
+            }
+            let target_active = active.iter().find(|playback| {
+                playback.enabled
+                    && playback.playback_number == key.playback_number
+                    && playback.cue_list_id == key.cue_list_id
+                    && playback.current_cue_id == Some(runtime.candidate.target_cue_id)
+            });
+            if let Some(playback) = target_active
+                && matches!(
+                    runtime.state,
+                    MoveInBlackState::Moving | MoveInBlackState::Completed
+                )
+            {
+                if runtime.handoff_until.is_none() {
+                    let current = move_in_black_values_at(runtime, now);
+                    let longest_fade = runtime
+                        .candidate
+                        .values
+                        .iter()
+                        .map(|value| value.fade_millis)
+                        .max()
+                        .unwrap_or(0);
+                    runtime.from = current;
+                    runtime.movement_started_at = Some(playback.activated_at);
+                    runtime.movement_ends_at = Some(
+                        playback.activated_at
+                            + chrono::Duration::milliseconds(
+                                longest_fade.min(i64::MAX as u64) as i64,
+                            ),
+                    );
+                    runtime.handoff_until = runtime.movement_ends_at;
+                    runtime.changed_at = playback.activated_at + chrono::Duration::microseconds(1);
+                    runtime.cancellation_reason = None;
+                }
+                runtime.current = move_in_black_values_at(runtime, now);
+                runtime.state = if move_in_black_is_at_target(runtime)
+                    || runtime.handoff_until.is_some_and(|until| now >= until)
+                {
+                    MoveInBlackState::Completed
+                } else {
+                    MoveInBlackState::Moving
+                };
+            } else if runtime.state != MoveInBlackState::Cancelled {
+                runtime.state = MoveInBlackState::Cancelled;
+                runtime.handoff_until = None;
+                runtime.cancellation_reason = Some(if active.iter().any(|playback| {
+                    playback.playback_number == key.playback_number
+                        && playback.cue_list_id == key.cue_list_id
+                }) {
+                    "future_target_invalidated".into()
+                } else {
+                    "cuelist_released".into()
+                });
+            }
+        }
+
+        runtimes
+            .iter()
+            .filter(|(key, runtime)| {
+                runtime.enabled
+                    && (present.contains(key)
+                        || runtime.handoff_until.is_some_and(|until| now < until))
+                    && matches!(
+                        runtime.state,
+                        MoveInBlackState::Moving | MoveInBlackState::Completed
+                    )
+            })
+            .flat_map(|(_, runtime)| {
+                runtime.current.iter().map(|(attribute, value)| TimedValue {
+                    fixture_id: runtime.candidate.fixture_id,
+                    attribute: attribute.clone(),
+                    value: value.clone(),
+                    priority: runtime.candidate.priority,
+                    changed_at: runtime.changed_at,
+                    merge_mode: MergeMode::Ltp,
+                    fade: false,
+                    fade_millis: None,
+                    delay_millis: None,
+                })
+            })
+            .collect()
     }
 
     fn faded_programmer_value(
@@ -277,6 +668,18 @@ impl Engine {
     pub fn replace_snapshot(&self, snapshot: EngineSnapshot) -> Result<(), EngineError> {
         self.replace_snapshot_with_playback_policy(snapshot, true)
     }
+
+    /// Validates every runtime-dependent part of a candidate snapshot without mutating the live
+    /// engine. Server persistence uses this preflight so an invalid Chaser or playback assignment
+    /// cannot be written first and rejected only during the subsequent live-engine refresh.
+    pub fn validate_snapshot_for_runtime(
+        &self,
+        snapshot: &EngineSnapshot,
+    ) -> Result<(), EngineError> {
+        snapshot.validate()?;
+        self.compile_playback(snapshot).map(|_| ())
+    }
+
     pub fn replace_snapshot_releasing_playback(
         &self,
         snapshot: EngineSnapshot,
@@ -296,12 +699,29 @@ impl Engine {
         } else {
             Vec::new()
         };
+        let (mut playback, groups) = self.compile_playback(&snapshot)?;
+        self.programmers.refresh_live_selections(&groups);
+        playback.restore_active(active_playbacks);
+        *self.playback.write() = playback;
+        self.snapshot.store(Arc::new(snapshot));
+        Ok(())
+    }
+
+    fn compile_playback(
+        &self,
+        snapshot: &EngineSnapshot,
+    ) -> Result<(PlaybackEngine, HashMap<String, GroupDefinition>), EngineError> {
         let mut playback = PlaybackEngine::with_clock(Arc::clone(&self.clock));
         playback.set_control_timing(
             self.speed_groups_bpm
                 .each_ref()
                 .map(|bpm| bpm.load(Ordering::Relaxed)),
             self.sequence_master_fade_millis.load(Ordering::Relaxed),
+        );
+        playback.set_speed_groups_paused(
+            self.speed_groups_paused
+                .each_ref()
+                .map(|paused| paused.load(Ordering::Relaxed)),
         );
         let groups = snapshot
             .groups
@@ -354,11 +774,7 @@ impl Engine {
                 .register_definition(definition)
                 .map_err(EngineError::Invalid)?;
         }
-        self.programmers.refresh_live_selections(&groups);
-        playback.restore_active(active_playbacks);
-        *self.playback.write() = playback;
-        self.snapshot.store(Arc::new(snapshot));
-        Ok(())
+        Ok((playback, groups))
     }
 
     pub fn snapshot(&self) -> Arc<EngineSnapshot> {
@@ -437,10 +853,16 @@ impl Engine {
         snapshot: &EngineSnapshot,
         now: chrono::DateTime<chrono::Utc>,
     ) -> HashMap<(FixtureId, AttributeKey), AttributeValue> {
-        let mut playback = self.playback.write();
         let timecode = self.timecode_frame.load(Ordering::Relaxed);
-        playback.tick(now, (timecode != u64::MAX).then_some(timecode));
-        let mut contributions = playback.contributions_at(now);
+        let (mut contributions, move_in_black_candidates, active_playbacks) = {
+            let mut playback = self.playback.write();
+            playback.tick(now, (timecode != u64::MAX).then_some(timecode));
+            (
+                playback.contributions_at(now),
+                playback.move_in_black_candidates(),
+                playback.runtime(),
+            )
+        };
         contributions.extend(
             self.programmers
                 .active()
@@ -520,8 +942,62 @@ impl Engine {
                 }
             }
         }
+        let base_resolved = resolve(contributions.clone());
+        contributions.extend(self.move_in_black_contributions(
+            snapshot,
+            move_in_black_candidates,
+            &active_playbacks,
+            &base_resolved,
+            now,
+        ));
         resolve(contributions)
     }
+}
+
+fn move_in_black_values_at(
+    runtime: &MoveInBlackRuntime,
+    now: chrono::DateTime<chrono::Utc>,
+) -> HashMap<AttributeKey, AttributeValue> {
+    let Some(started_at) = runtime.movement_started_at else {
+        return runtime.from.clone();
+    };
+    runtime
+        .candidate
+        .values
+        .iter()
+        .map(|target| {
+            let from = runtime
+                .from
+                .get(&target.attribute)
+                .unwrap_or(&target.current);
+            let elapsed = (now - started_at).num_milliseconds().max(0) as u64;
+            let progress = if target.fade_millis == 0 {
+                1.0
+            } else {
+                (elapsed as f32 / target.fade_millis as f32).clamp(0.0, 1.0)
+            };
+            let value = match (from.normalized(), target.target.normalized()) {
+                (Some(from), Some(to)) => {
+                    AttributeValue::Normalized(from + (to - from) * progress)
+                }
+                _ if progress >= 1.0 => target.target.clone(),
+                _ => from.clone(),
+            };
+            (target.attribute.clone(), value)
+        })
+        .collect()
+}
+
+fn move_in_black_is_at_target(runtime: &MoveInBlackRuntime) -> bool {
+    runtime.candidate.values.iter().all(|target| {
+        runtime
+            .current
+            .get(&target.attribute)
+            .is_some_and(|current| match (current.normalized(), target.target.normalized()) {
+                (Some(current), Some(target)) => (current - target).abs() <= f32::EPSILON * 8.0,
+                _ => current == &target.target,
+            })
+    })
 }
 fn render_fixture(
     frame: &mut DmxFrame,
@@ -678,11 +1154,17 @@ fn apply_safe_values(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::{Duration as ChronoDuration, TimeZone, Utc};
+    use light_core::{ApplicationClock, ManualClock, SessionId, UserId};
     use light_fixture::{
         ByteOrder, ChannelComponent, FixtureDefinition, LogicalHead, MultiPatchInstance, Parameter,
         PatchedHead,
     };
-    use std::collections::BTreeMap;
+    use light_playback::{
+        Cue, CueChange, CueListMode, IntensityPriorityMode, PlaybackButtonAction,
+        PlaybackFaderMode, RestartMode, WrapMode,
+    };
+    use std::{collections::BTreeMap, sync::Arc};
 
     fn fixture() -> (PatchedFixture, FixtureId) {
         let physical = FixtureId::new();
@@ -739,9 +1221,130 @@ mod tests {
                     fixture_id: logical,
                 }],
                 multipatch: Vec::new(),
+                move_in_black_enabled: true,
+                move_in_black_delay_millis: 0,
             },
             logical,
         )
+    }
+
+    fn moving_fixture(
+        address: u16,
+        enabled: bool,
+        delay_millis: u64,
+    ) -> (PatchedFixture, FixtureId) {
+        let (mut fixture, logical) = fixture();
+        fixture.address = Some(address);
+        fixture.definition.footprint = 2;
+        fixture.definition.heads[0].parameters.push(Parameter {
+            attribute: AttributeKey("pan".into()),
+            components: vec![ChannelComponent {
+                offset: 1,
+                byte_order: ByteOrder::MsbFirst,
+            }],
+            default: 0.0,
+            virtual_dimmer: false,
+            metadata: light_fixture::ParameterMetadata::default(),
+            capabilities: vec![],
+        });
+        fixture.move_in_black_enabled = enabled;
+        fixture.move_in_black_delay_millis = delay_millis;
+        (fixture, logical)
+    }
+
+    fn mib_snapshot(
+        fixtures: Vec<PatchedFixture>,
+        fixture_ids: &[FixtureId],
+    ) -> EngineSnapshot {
+        let mut first = Cue::new(1.0);
+        let mut dark = Cue::new(2.0);
+        dark.fade_millis = 2_000;
+        let mut lit = Cue::new(3.0);
+        for fixture_id in fixture_ids {
+            first.changes.push(CueChange::set(
+                *fixture_id,
+                AttributeKey::intensity(),
+                AttributeValue::Normalized(1.0),
+            ));
+            first.changes.push(CueChange::set(
+                *fixture_id,
+                AttributeKey("pan".into()),
+                AttributeValue::Normalized(0.2),
+            ));
+            dark.changes.push(CueChange::set(
+                *fixture_id,
+                AttributeKey::intensity(),
+                AttributeValue::Normalized(0.0),
+            ));
+            lit.changes.push(CueChange::set(
+                *fixture_id,
+                AttributeKey::intensity(),
+                AttributeValue::Normalized(1.0),
+            ));
+            let mut position = CueChange::set(
+                *fixture_id,
+                AttributeKey("pan".into()),
+                AttributeValue::Normalized(0.8),
+            );
+            position.fade_millis = Some(3_000);
+            lit.changes.push(position);
+        }
+        let cue_list = CueList {
+            id: light_core::CueListId::new(),
+            name: "MIB".into(),
+            priority: 10,
+            mode: CueListMode::Sequence,
+            looped: false,
+            chaser_step_millis: 1_000,
+            speed_group: None,
+            intensity_priority_mode: IntensityPriorityMode::Htp,
+            wrap_mode: Some(WrapMode::Off),
+            restart_mode: RestartMode::FirstCue,
+            force_cue_timing: false,
+            disable_cue_timing: false,
+            chaser_xfade_millis: 0,
+            speed_multiplier: 1.0,
+            cues: vec![first, dark, lit],
+        };
+        let playback = PlaybackDefinition {
+            number: 1,
+            name: "MIB".into(),
+            target: PlaybackTarget::CueList {
+                cue_list_id: cue_list.id,
+            },
+            buttons: [
+                PlaybackButtonAction::Go,
+                PlaybackButtonAction::GoMinus,
+                PlaybackButtonAction::Flash,
+            ],
+            fader: PlaybackFaderMode::Master,
+            go_activates: true,
+            auto_off: true,
+            xfade_millis: 0,
+            color: "#20c997".into(),
+            flash_release: light_playback::FlashReleaseMode::ReleaseAll,
+            protect_from_swap: false,
+        };
+        EngineSnapshot {
+            fixtures,
+            cue_lists: vec![cue_list],
+            playbacks: vec![playback],
+            playback_pages: vec![],
+            routes: vec![],
+            control_mappings: vec![],
+            groups: vec![],
+            revision: 1,
+        }
+    }
+
+    fn normalized(
+        values: &HashMap<(FixtureId, AttributeKey), AttributeValue>,
+        fixture_id: FixtureId,
+        attribute: &str,
+    ) -> f32 {
+        values[&(fixture_id, AttributeKey(attribute.into()))]
+            .normalized()
+            .unwrap()
     }
 
     #[test]
@@ -1129,6 +1732,8 @@ mod tests {
                 },
             ],
             multipatch: vec![],
+            move_in_black_enabled: true,
+            move_in_black_delay_millis: 0,
         };
         for fixture_id in [first, second] {
             programmers.set(
@@ -1553,6 +2158,174 @@ mod tests {
             })
             .unwrap();
         assert_eq!(rendered.universes[&1][0], 0);
+    }
+
+    #[test]
+    fn move_in_black_waits_for_resolved_darkness_then_prepositions_only_enabled_fixture() {
+        let started = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+        let clock = Arc::new(ManualClock::new(started));
+        let shared: SharedClock = clock.clone();
+        let programmers = ProgrammerRegistry::with_clock(shared);
+        let (enabled_fixture, enabled) = moving_fixture(1, true, 1_000);
+        let (disabled_fixture, disabled) = moving_fixture(10, false, 1_000);
+        let engine = Engine::new(programmers);
+        engine
+            .replace_snapshot(mib_snapshot(
+                vec![enabled_fixture, disabled_fixture],
+                &[enabled, disabled],
+            ))
+            .unwrap();
+        engine.playback().write().go_playback(1).unwrap();
+        engine.playback().write().go_playback(1).unwrap();
+
+        clock.set(started + ChronoDuration::milliseconds(1_999));
+        let values = engine.resolved_values();
+        assert!(normalized(&values, enabled, "intensity") > 0.0);
+        assert_eq!(normalized(&values, enabled, "pan"), 0.2);
+        let runtime = engine.move_in_black_runtime();
+        assert_eq!(
+            runtime
+                .iter()
+                .find(|item| item.fixture_id == enabled)
+                .unwrap()
+                .state,
+            MoveInBlackState::Blocked
+        );
+
+        clock.set(started + ChronoDuration::milliseconds(2_000));
+        let values = engine.resolved_values();
+        assert_eq!(normalized(&values, enabled, "intensity"), 0.0);
+        let runtime = engine.move_in_black_runtime();
+        let enabled_runtime = runtime
+            .iter()
+            .find(|item| item.fixture_id == enabled)
+            .unwrap();
+        assert_eq!(enabled_runtime.state, MoveInBlackState::Delaying);
+        assert_eq!(enabled_runtime.dark_since, Some(clock.now()));
+        assert_eq!(
+            enabled_runtime.delay_deadline,
+            Some(started + ChronoDuration::milliseconds(3_000))
+        );
+        assert_eq!(
+            runtime
+                .iter()
+                .find(|item| item.fixture_id == disabled)
+                .unwrap()
+                .state,
+            MoveInBlackState::Disabled
+        );
+
+        clock.set(started + ChronoDuration::milliseconds(2_999));
+        assert_eq!(normalized(&engine.resolved_values(), enabled, "pan"), 0.2);
+        clock.set(started + ChronoDuration::milliseconds(3_000));
+        assert_eq!(normalized(&engine.resolved_values(), enabled, "pan"), 0.2);
+        assert_eq!(
+            engine
+                .move_in_black_runtime()
+                .iter()
+                .find(|item| item.fixture_id == enabled)
+                .unwrap()
+                .movement_started_at,
+            Some(started + ChronoDuration::milliseconds(3_000))
+        );
+
+        clock.set(started + ChronoDuration::milliseconds(4_500));
+        let values = engine.resolved_values();
+        assert!((normalized(&values, enabled, "pan") - 0.5).abs() < 0.001);
+        assert_eq!(normalized(&values, disabled, "pan"), 0.2);
+
+        clock.set(started + ChronoDuration::milliseconds(6_000));
+        let values = engine.resolved_values();
+        assert!((normalized(&values, enabled, "pan") - 0.8).abs() < 0.001);
+        assert_eq!(normalized(&values, disabled, "pan"), 0.2);
+        assert_eq!(
+            engine
+                .move_in_black_runtime()
+                .iter()
+                .find(|item| item.fixture_id == enabled)
+                .unwrap()
+                .state,
+            MoveInBlackState::Completed
+        );
+
+        engine.playback().write().go_playback(1).unwrap();
+        let values = engine.resolved_values();
+        assert!(
+            (normalized(&values, enabled, "pan") - 0.8).abs() < 0.001,
+            "the completed hidden move must hand off without jumping back"
+        );
+        assert_eq!(normalized(&values, disabled, "pan"), 0.2);
+    }
+
+    #[test]
+    fn move_in_black_is_blocked_and_restarts_its_delay_after_intensity_returns() {
+        let started = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+        let clock = Arc::new(ManualClock::new(started));
+        let shared: SharedClock = clock.clone();
+        let programmers = ProgrammerRegistry::with_clock(shared);
+        let session = SessionId::new();
+        programmers.start(session, UserId::new());
+        let (fixture, logical) = moving_fixture(1, true, 1_000);
+        let engine = Engine::new(programmers.clone());
+        engine
+            .replace_snapshot(mib_snapshot(vec![fixture], &[logical]))
+            .unwrap();
+        engine.playback().write().go_playback(1).unwrap();
+        engine.playback().write().go_playback(1).unwrap();
+        programmers.set(
+            session,
+            logical,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.2),
+        );
+
+        clock.set(started + ChronoDuration::milliseconds(5_000));
+        engine.resolved_values();
+        let runtime = engine.move_in_black_runtime();
+        let runtime = runtime.iter().find(|item| item.fixture_id == logical).unwrap();
+        assert_eq!(runtime.state, MoveInBlackState::Blocked);
+        assert_eq!(runtime.dark_since, None);
+
+        programmers.clear(session);
+        engine.resolved_values();
+        let runtime = engine.move_in_black_runtime();
+        let runtime = runtime.iter().find(|item| item.fixture_id == logical).unwrap();
+        assert_eq!(runtime.dark_since, Some(clock.now()));
+        assert_eq!(
+            runtime.delay_deadline,
+            Some(started + ChronoDuration::milliseconds(6_000))
+        );
+
+        clock.set(started + ChronoDuration::milliseconds(5_500));
+        programmers.start(session, UserId::new());
+        programmers.set(
+            session,
+            logical,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.2),
+        );
+        engine.resolved_values();
+        assert_eq!(
+            engine
+                .move_in_black_runtime()
+                .iter()
+                .find(|item| item.fixture_id == logical)
+                .unwrap()
+                .state,
+            MoveInBlackState::Blocked
+        );
+
+        clock.set(started + ChronoDuration::milliseconds(6_000));
+        programmers.clear(session);
+        engine.resolved_values();
+        let runtime = engine.move_in_black_runtime();
+        let runtime = runtime.iter().find(|item| item.fixture_id == logical).unwrap();
+        assert_eq!(runtime.dark_since, Some(clock.now()));
+        assert_eq!(
+            runtime.delay_deadline,
+            Some(started + ChronoDuration::milliseconds(7_000)),
+            "returning to dark starts a fresh complete delay"
+        );
     }
 
     #[test]

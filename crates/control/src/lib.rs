@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 //! Normalized control and timecode parsing shared by local MIDI, RTP-MIDI, OSC, and Art-Net adapters.
 
+pub mod speed;
+
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use light_core::CueListId;

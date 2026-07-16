@@ -238,6 +238,15 @@ The complete capture-domain contract is specified by [PRELOAD-001–006](../../t
 - **Pass:** The shortcut addresses every Speed Group correctly, synchronization copies source speed and phase to the target, and direct entry or tapping either linked group returns the pair to independent operation.
 - **Status:** Specification only; executable coverage must not be claimed before the command and synchronization model are implemented.
 
+## SOUND-001 — Drive a Speed Group from a desk-local audio input
+
+- **Starting show:** Load canonical `compact-rig.show`, immediately Save As separate `sound-001-api.show` and `sound-001-ui.show` working copies, and begin with Sound-to-Light disabled on Speed Group A.
+- **Surface:** Paired authenticated Speed Group API and the Playback Tools Sound-to-Light modal with deterministic Web Audio input.
+- **Actions:** Select a browser/desk-local recorded 120 BPM kick input; enable Tempo/BPM analysis; configure a 45–140 Hz band, gain, confidence, smoothing, accepted tempo range, hold, and a 2× ratio; then wait for the server's authoritative Sound source.
+- **Oracle:** Exact persisted response configuration without a device ID, browser-local desk/group device mapping, permission/source/signal status, live meters, accepted Sound BPM near 120, and effective Speed Group rate near 240 BPM.
+- **Pass:** A reproducible browser analyzer drives the shared authoritative Speed Group while machine-specific input identity remains local and preview cannot publish before Apply.
+- **Detailed scenario:** [SOUND-001](../../testing/08-sound-to-light.md)
+
 ## CUE-006 — Select an active playback
 
 - **Starting show:** Load canonical `default-stage.show`, immediately Save As `cue-006-active-playback.show`, and use the active copy.
@@ -258,6 +267,7 @@ The complete capture-domain contract is specified by [PRELOAD-001–006](../../t
 | PBK-001–006 | Playback configuration | Set interception on every playback control, assignment/color/clear persistence, type-safe button and fader layouts, Cuelist actions, Master/X-fade/Temp, Flash/Temp LTP restoration, Swap protection, specialized masters | persisted playback definition, action verb, playback runtime, temporary ownership, master state, exact output |
 | CMD-001–010 | Command line | fixture/group ranges, subsets, `AT`, presets, `REC/DEL/MOV/CPY`, cues, `SPD GRP`, page addressing, invalid grammar | UI result, audit event, show object mutation |
 | CUE-001–013 | Cue/playback | record, tracking, cue-only restore, active-Cue deletion with held output/navigation, GO/back, pause, release, per-value/Cue timing, GO/FOLLOW/TIME triggers, Cuelist View editing and transactional renumbering, Chaser/Speed Group settings, Intensity HTP/LTP, wrapping, First/Continue restart, timing bypass | playback state, persisted Cuelist data, exact virtual timestamps, UI selection without execution |
+| SOUND-001 | Sound to Light | desk/browser-local input, permission and source state, frequency/gain/confidence/smoothing/range/hold/ratio configuration, recorded 120 BPM analysis, authoritative mapping, manual fallback and ownership boundaries | persisted Speed Group config, local device mapping, live analysis, authoritative Speed snapshot |
 | MIB-001 | Move in Black | per-fixture enable/default, safety delay after resolved zero, future lit-position lookup, disabled comparison, cancellation, Cue-edit invalidation | patch persistence, normalized MIB runtime state, exact Position DMX boundaries |
 | MERGE-001–006 | HTP/LTP | intensity maximum, equal-priority LTP recency, priority override, programmer/playback conflict, release restoration, group/fixture scope | resolved values and exact DMX |
 | DMX-001–010 | Encoding/routes | 0/50/75/100%, multi-byte order, disabled/remapped/multiple routes, ArtDMX headers/sequence, E1.31 headers/priority/sequence, termination | decoded real UDP datagrams |

@@ -1,8 +1,10 @@
 export function prepareHelpMarkdown(markdown: string): string {
   return markdown
-    .replace(/`\[([+]|[A-Z0-9.][A-Z0-9._ -]*[+*]?)\]`/g, (_, key: string) => `\`help-key:${key}\``)
+    .replace(/`\[KBD:([^\]\n]+)\]`/g, (_, key: string) => `\`help-keyboard:${key}\``)
+    .replace(/\[KBD:([^\]\n]+)\]/g, (_, key: string) => `\`help-keyboard:${key}\``)
+    .replace(/`\[\s*([+\-−^.]|[A-Z0-9.][A-Z0-9._ ←-]*[+*]?)\s*\]`/g, (_, key: string) => `\`help-key:${key.trim()}\``)
     .replace(/`<([a-z][a-z0-9._+-]*\*?)>`/g, (_, placeholder: string) => `\`help-placeholder:${placeholder}\``)
-    .replace(/\[([+]|[A-Z0-9.][A-Z0-9._ -]*[+*]?)\]/g, (_, key: string) => `\`help-key:${key}\``)
+    .replace(/\[\s*([+\-−^.]|[A-Z0-9.][A-Z0-9._ ←-]*[+*]?)\s*\](?!\()/g, (_, key: string) => `\`help-key:${key.trim()}\``)
     .replace(/<([a-z][a-z0-9._+-]*\*?)>/g, (_, placeholder: string) => `\`help-placeholder:${placeholder}\``);
 }
 

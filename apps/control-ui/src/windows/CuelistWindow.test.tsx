@@ -102,7 +102,8 @@ describe("CuelistWindow pool recording", () => {
     ];
     render(<CuelistWindow />);
     fireEvent.click(screen.getByText("Main").closest("button")!);
-    expect(screen.getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(["Preview image", "Cue number", "Cue name", "Trigger", "Fade time"]);
+    expect(screen.getByText("Cuelist View · Cuelist 1 · Main")).toBeInTheDocument();
+    expect(screen.getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(["Preview", "No.", "Name", "Trigger", "Fade"]);
     fireEvent.click(screen.getByText("Opening"));
     expect(screen.queryByRole("button", { name: "GO −" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "TOGGLE" })).not.toBeInTheDocument();

@@ -59,6 +59,13 @@ impl AttributeKey {
     pub fn is_intensity(&self) -> bool {
         self.0 == "intensity" || self.0.ends_with(".intensity")
     }
+    pub fn is_position(&self) -> bool {
+        self.0 == "pan"
+            || self.0 == "tilt"
+            || self.0.starts_with("position.")
+            || self.0.ends_with(".pan")
+            || self.0.ends_with(".tilt")
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]

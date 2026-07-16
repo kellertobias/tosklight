@@ -7,7 +7,23 @@ import { Button, FormLayout, NumberField, SelectField, SwitchField, TextField, T
 import { ButtonGrid, WindowHeader, WindowScrollArea } from "../components/window-kit";
 import { useApp } from "../state/AppContext";
 
-function CuelistSettings({ object, close, save }: { object: VersionedObject<CueList>; close: () => void; save: (cueList: CueList, revision: number) => Promise<boolean> }) {
+function cueTriggerKind(cue: Cue | null | undefined): "go" | "follow" | "time" {
+  if (cue?.trigger.type === "manual") return "go";
+  if (cue?.trigger.type === "follow" && Number(cue.trigger.delay_millis ?? 0) === 0) return "follow";
+  return "time";
+}
+
+function CuelistSettings({
+  object,
+  speedGroupsBpm,
+  close,
+  save,
+}: {
+  object: VersionedObject<CueList>;
+  speedGroupsBpm: number[];
+  close: () => void;
+  save: (cueList: CueList, revision: number) => Promise<boolean>;
+}) {
   const [draft, setDraft] = useState<CueList>({
     ...object.body,
     intensity_priority_mode: object.body.intensity_priority_mode ?? "htp",
@@ -18,25 +34,67 @@ function CuelistSettings({ object, close, save }: { object: VersionedObject<CueL
     chaser_xfade_millis: object.body.chaser_xfade_millis ?? 0,
     speed_multiplier: object.body.speed_multiplier ?? 1,
   });
+  const draftRef = useRef(draft);
+  const priorityInputRef = useRef<HTMLInputElement>(null);
   const [renumberOpen, setRenumberOpen] = useState(false);
   const [startCue, setStartCue] = useState("");
-  const update = <K extends keyof CueList>(key: K, value: CueList[K]) => setDraft((current) => ({ ...current, [key]: value }));
+  const [settingsError, setSettingsError] = useState("");
+  const [renumberError, setRenumberError] = useState("");
+  const replaceDraft = (next: CueList) => {
+    draftRef.current = next;
+    setDraft(next);
+  };
+  const update = <K extends keyof CueList>(key: K, value: CueList[K]) =>
+    replaceDraft({ ...draftRef.current, [key]: value });
   const submit = async () => {
-    if (await save(draft, object.revision)) close();
+    setSettingsError("");
+    const priority = Number(priorityInputRef.current?.value ?? object.body.priority);
+    if (!Number.isInteger(priority) || priority < -32_768 || priority > 32_767) {
+      setSettingsError("Numeric priority must be a whole number from -32768 to 32767.");
+      return;
+    }
+    const next = { ...draftRef.current, priority };
+    if (next.mode === "chaser") {
+      const groupIndex = next.speed_group ? next.speed_group.charCodeAt(0) - 65 : -1;
+      const stepMillis =
+        groupIndex >= 0
+          ? Math.round(60_000 / Math.max(1, speedGroupsBpm[groupIndex] ?? 120) / Math.max(0.01, next.speed_multiplier ?? 1))
+          : (next.chaser_step_millis ?? 1_000);
+      if ((next.chaser_xfade_millis ?? 0) > stepMillis) {
+        setSettingsError(`Chaser X-fade must not exceed the effective ${stepMillis} ms step duration.`);
+        return;
+      }
+    }
+    if (await save(next, object.revision)) close();
+    else setSettingsError("Unable to save Cuelist settings. Check the values or refresh after a revision conflict.");
   };
   const renumber = async () => {
     const start = startCue.trim() === "" ? 1 : Number(startCue);
-    if (!Number.isSafeInteger(start) || start <= 0) return;
+    if (!Number.isSafeInteger(start) || start <= 0 || start + object.body.cues.length - 1 > Number.MAX_SAFE_INTEGER) {
+      setRenumberError("Start Cue must be a positive whole number whose resulting Cue numbers are safe integers.");
+      return;
+    }
     const next = {
-      ...draft,
-      cues: draft.cues.map((cue, index) => ({ ...cue, number: start + index })),
+      ...object.body,
+      cues: object.body.cues.map((cue, index) => ({ ...cue, number: start + index })),
     };
+    setRenumberError("");
     if (await save(next, object.revision)) {
-      setDraft(next);
       setRenumberOpen(false);
       close();
-    }
+    } else setRenumberError("Renumbering was not applied. Refresh after a revision conflict and try again.");
   };
+  useEffect(() => {
+    if (!renumberOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setRenumberOpen(false);
+      setRenumberError("");
+    };
+    window.addEventListener("keydown", closeOnEscape, true);
+    return () => window.removeEventListener("keydown", closeOnEscape, true);
+  }, [renumberOpen]);
   return (
     <div className="modal-backdrop cuelist-settings-backdrop" onPointerDown={(event) => event.target === event.currentTarget && close()}>
       <section className="modal-card cuelist-settings-modal" role="dialog" aria-label="Cuelist Settings">
@@ -48,13 +106,27 @@ function CuelistSettings({ object, close, save }: { object: VersionedObject<CueL
           <SelectField
             label="Mode"
             value={draft.mode}
-            onChange={(value) => update("mode", value)}
+            onChange={(value) => {
+              const current = draftRef.current;
+              replaceDraft({
+                ...current,
+                mode: value,
+                speed_group: value === "chaser" && current.speed_group == null ? "A" : current.speed_group,
+              });
+            }}
             options={[
               { value: "sequence", label: "Sequence" },
               { value: "chaser", label: "Chaser" },
             ]}
           />
-          <NumberField label="Numeric priority" value={draft.priority} onChange={(event) => update("priority", Number(event.target.value))} />
+          <NumberField
+            label="Numeric priority"
+            allowDecimal
+            min="-32768"
+            max="32767"
+            defaultValue={object.body.priority}
+            ref={priorityInputRef}
+          />
           <SelectField
             label="Intensity priority mode"
             value={draft.intensity_priority_mode ?? "htp"}
@@ -89,12 +161,23 @@ function CuelistSettings({ object, close, save }: { object: VersionedObject<CueL
             <>
               <SelectField
                 label="Speed Group"
-                value={draft.speed_group ?? "A"}
-                onChange={(value) => update("speed_group", value)}
-                options={(["A", "B", "C", "D", "E"] as const).map((value) => ({
-                  value,
-                  label: value,
-                }))}
+                value={draft.speed_group ?? "legacy"}
+                onChange={(value) => update("speed_group", value === "legacy" ? null : value)}
+                options={[
+                  ...(draft.speed_group == null
+                    ? [
+                        {
+                          value: "legacy" as const,
+                          label: `Legacy fixed step (${(draft.chaser_step_millis ?? 1_000) / 1_000} s)`,
+                          disabled: true,
+                        },
+                      ]
+                    : []),
+                  ...(["A", "B", "C", "D", "E"] as const).map((value) => ({
+                    value,
+                    label: value,
+                  })),
+                ]}
               />
               <SelectField
                 label="Speed multiplier"
@@ -105,10 +188,11 @@ function CuelistSettings({ object, close, save }: { object: VersionedObject<CueL
                   label: `${value}×`,
                 }))}
               />
-              <NumberField label="Chaser X-fade" unit="s" allowDecimal min="0" value={(draft.chaser_xfade_millis ?? 0) / 1000} onChange={(event) => update("chaser_xfade_millis", Number(event.target.value) * 1000)} />
+              <NumberField label="Chaser X-fade" unit="s" allowDecimal min="0" value={(draft.chaser_xfade_millis ?? 0) / 1000} onChange={(event) => update("chaser_xfade_millis", Math.round(Number(event.target.value) * 1000))} />
             </>
           )}
         </FormLayout>
+        {settingsError && <p className="ui-field-error" role="alert">{settingsError}</p>}
         <div className="modal-actions three">
           <Button onClick={close}>Cancel</Button>
           <Button disabled={!draft.cues.length} onClick={() => setRenumberOpen(true)}>
@@ -117,19 +201,45 @@ function CuelistSettings({ object, close, save }: { object: VersionedObject<CueL
           <Button onClick={() => void submit()}>Save</Button>
         </div>
         {renumberOpen && (
-          <div className="modal-backdrop" onPointerDown={(event) => event.target === event.currentTarget && setRenumberOpen(false)}>
+          <div
+            className="modal-backdrop"
+            onPointerDown={(event) => {
+              if (event.target !== event.currentTarget) return;
+              setRenumberOpen(false);
+              setRenumberError("");
+            }}
+          >
             <form
               className="modal-card"
+              role="dialog"
+              aria-modal="true"
               aria-label="Renumber Cues"
               onSubmit={(event) => {
                 event.preventDefault();
                 void renumber();
               }}
             >
+              <Button
+                className="modal-close"
+                aria-label="Close Renumber Cues"
+                onClick={() => {
+                  setRenumberOpen(false);
+                  setRenumberError("");
+                }}
+              >
+                ×
+              </Button>
               <h2>Renumber Cues</h2>
-              <NumberField label="Start Cue" min="1" step="1" value={startCue} onChange={(event) => setStartCue(event.target.value)} />
+              <NumberField label="Start Cue" allowDecimal step="1" value={startCue} onChange={(event) => setStartCue(event.target.value)} />
+              {renumberError && <p className="ui-field-error" role="alert">{renumberError}</p>}
               <div className="modal-actions">
-                <Button type="button" onClick={() => setRenumberOpen(false)}>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setRenumberOpen(false);
+                    setRenumberError("");
+                  }}
+                >
                   Cancel
                 </Button>
                 <Button type="submit">Renumber</Button>
@@ -165,6 +275,8 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
   const cues = cueList?.cues ?? [];
   const [selectedCue, setSelectedCue] = useState(0);
   const [cueDraft, setCueDraft] = useState<Cue | null>(null);
+  const [cueEditError, setCueEditError] = useState("");
+  const cueSavePending = useRef("");
   const tauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
   const [thumbnails, setThumbnails] = useState<Record<number, string>>({});
   const pool = (server.playbacks?.pool ?? []).filter((definition) => definition.target.type === "cue_list");
@@ -248,15 +360,26 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
   useEffect(() => {
     setCueDraft(cues[selectedCue] ? { ...cues[selectedCue] } : null);
   }, [selectedCue, cues]);
-  const saveCue = async () => {
-    if (!cueDraft || !selectedCueObject) return;
-    await server.saveCueList(
+  useEffect(() => {
+    setSelectedCue((current) => Math.min(current, Math.max(0, cues.length - 1)));
+  }, [cueList?.id, cues.length]);
+  const saveCue = async (nextCue = cueDraft) => {
+    if (!nextCue || !selectedCueObject) return;
+    const saveKey = `${selectedCueObject.id}:${selectedCue}:${JSON.stringify(nextCue)}`;
+    if (cueSavePending.current === saveKey) return;
+    cueSavePending.current = saveKey;
+    setCueEditError("");
+    const saved = await server.saveCueList(
       {
         ...selectedCueObject.body,
-        cues: selectedCueObject.body.cues.map((cue, index) => (index === selectedCue ? cueDraft : cue)),
+        cues: selectedCueObject.body.cues.map((cue, index) => (index === selectedCue ? nextCue : cue)),
       },
       selectedCueObject.revision,
     );
+    if (!saved) {
+      cueSavePending.current = "";
+      setCueEditError("Cue edit was not saved. Check the value or refresh after a revision conflict.");
+    }
   };
   const deleteCue = async () => {
     if (!selectedCueObject || selectedCueObject.body.cues.length <= 1) return;
@@ -265,7 +388,14 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
       setSelectedCue(Math.min(selectedCue, cues.length - 1));
     }
   };
-  const settings = settingsOpen && settingsCueObject && <CuelistSettings object={settingsCueObject} close={() => setSettingsOpen(false)} save={server.saveCueList} />;
+  const settings = settingsOpen && settingsCueObject && (
+    <CuelistSettings
+      object={settingsCueObject}
+      speedGroupsBpm={server.configuration?.speed_groups_bpm ?? [120, 90, 60, 30, 15]}
+      close={() => setSettingsOpen(false)}
+      save={server.saveCueList}
+    />
+  );
   if (tab === "pool")
     return (
       <div className="cuelist-window cuelist-pool-window pool-window">
@@ -373,13 +503,13 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
         {settings}
       </div>
     );
-  const triggerKind = cueDraft?.trigger.type === "manual" ? "go" : cueDraft?.trigger.type === "follow" && Number(cueDraft.trigger.delay_millis ?? 0) === 0 ? "follow" : "time";
+  const triggerKind = cueTriggerKind(cueDraft);
   const triggerMillis = Number(cueDraft?.trigger.delay_millis ?? 0);
   return (
     <div className="cuelist-window">
       {!compact && (
         <WindowHeader
-          title={`Cues · ${cueList?.name ?? `Cuelist ${selectedCuelist}`}`}
+          title={`Cuelist View · Cuelist ${selectedCuelist}${cueList?.name ? ` · ${cueList.name}` : ""}`}
           info={{
             primary: active ? "Running" : "Ready",
             secondary: `Revision ${selectedCueObject?.revision ?? 0}${cueList ? ` · ${cueList.mode} · priority ${cueList.priority}` : ""}`,
@@ -417,11 +547,11 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
               <table className="cue-table">
                 <thead>
                   <tr>
-                    <th>Preview image</th>
-                    <th>Cue number</th>
-                    <th>Cue name</th>
+                    <th>Preview</th>
+                    <th>No.</th>
+                    <th>Name</th>
                     <th>Trigger</th>
-                    <th>Fade time</th>
+                    <th>Fade</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -443,7 +573,7 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
                         <b>{cue.number}</b>
                       </td>
                       <td>{cue.name || `Cue ${cue.number}`}</td>
-                      <td>{cue.trigger.type === "manual" ? "GO" : cue.trigger.type.toUpperCase()}</td>
+                      <td>{cueTriggerKind(cue).toUpperCase()}</td>
                       <td>{(cue.fade_millis / 1000).toFixed(3).replace(/\.?0+$/, "")} s</td>
                     </tr>
                   ))}
@@ -465,9 +595,9 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
                     label="Title"
                     value={cueDraft.name}
                     onChange={(event) => setCueDraft({ ...cueDraft, name: event.target.value })}
-                    onBlur={() => void saveCue()}
+                    onBlur={(event) => void saveCue({ ...cueDraft, name: event.currentTarget.value })}
                     onKeyDown={(event) => {
-                      if (event.key === "Enter") void saveCue();
+                      if (event.key === "Enter") void saveCue({ ...cueDraft, name: event.currentTarget.value });
                     }}
                   />
                   <NumberField
@@ -479,10 +609,22 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
                     onChange={(event) =>
                       setCueDraft({
                         ...cueDraft,
-                        fade_millis: Number(event.target.value) * 1000,
+                        fade_millis: Math.round(Number(event.target.value) * 1000),
                       })
                     }
-                    onBlur={() => void saveCue()}
+                    onBlur={(event) =>
+                      void saveCue({
+                        ...cueDraft,
+                        fade_millis: Math.round(Number(event.currentTarget.value) * 1000),
+                      })
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter")
+                        void saveCue({
+                          ...cueDraft,
+                          fade_millis: Math.round(Number(event.currentTarget.value) * 1000),
+                        });
+                    }}
                   />
                   <NumberField
                     label="Delay"
@@ -493,10 +635,22 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
                     onChange={(event) =>
                       setCueDraft({
                         ...cueDraft,
-                        delay_millis: Number(event.target.value) * 1000,
+                        delay_millis: Math.round(Number(event.target.value) * 1000),
                       })
                     }
-                    onBlur={() => void saveCue()}
+                    onBlur={(event) =>
+                      void saveCue({
+                        ...cueDraft,
+                        delay_millis: Math.round(Number(event.currentTarget.value) * 1000),
+                      })
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter")
+                        void saveCue({
+                          ...cueDraft,
+                          delay_millis: Math.round(Number(event.currentTarget.value) * 1000),
+                        });
+                    }}
                   />
                   <SelectField
                     label="Trigger"
@@ -505,14 +659,7 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
                       const trigger = value === "go" ? { type: "manual" } : value === "follow" ? { type: "follow", delay_millis: 0 } : { type: "wait", delay_millis: triggerMillis };
                       const next = { ...cueDraft, trigger };
                       setCueDraft(next);
-                      if (selectedCueObject)
-                        void server.saveCueList(
-                          {
-                            ...selectedCueObject.body,
-                            cues: selectedCueObject.body.cues.map((cue, index) => (index === selectedCue ? next : cue)),
-                          },
-                          selectedCueObject.revision,
-                        );
+                      void saveCue(next);
                     }}
                     options={[
                       { value: "go", label: "GO" },
@@ -532,14 +679,33 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
                           ...cueDraft,
                           trigger: {
                             type: "wait",
-                            delay_millis: Number(event.target.value) * 1000,
+                            delay_millis: Math.round(Number(event.target.value) * 1000),
                           },
                         })
                       }
-                      onBlur={() => void saveCue()}
+                      onBlur={(event) =>
+                        void saveCue({
+                          ...cueDraft,
+                          trigger: {
+                            type: "wait",
+                            delay_millis: Math.round(Number(event.currentTarget.value) * 1000),
+                          },
+                        })
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter")
+                          void saveCue({
+                            ...cueDraft,
+                            trigger: {
+                              type: "wait",
+                              delay_millis: Math.round(Number(event.currentTarget.value) * 1000),
+                            },
+                          });
+                      }}
                     />
                   )}
                 </FormLayout>
+                {cueEditError && <p className="ui-field-error" role="alert">{cueEditError}</p>}
                 <Button className="large-danger danger" disabled={cues.length <= 1} onClick={() => void deleteCue()}>
                   Delete Cue
                 </Button>

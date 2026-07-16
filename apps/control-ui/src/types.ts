@@ -57,6 +57,13 @@ export interface PaneModel extends GridRect {
   virtualPlaybackCells?: Array<{ playbackNumber: number | null; action: "go" | "toggle" }>;
   textFileRoot?: string;
   textFilePath?: string;
+  textEditorView?: {
+    root: string;
+    path: string;
+    selectionStart: number;
+    selectionEnd: number;
+    scrollTop: number;
+  };
 }
 
 export interface DeskModel {

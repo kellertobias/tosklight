@@ -6,18 +6,23 @@ import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
 import type { Page } from "@playwright/test";
 
 test.describe.configure({ mode: "serial" });
-test.setTimeout(60_000);
+test.setTimeout(180_000);
 test.use({ viewport: { width: 1600, height: 1100 } });
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SCREENSHOT_DIR = path.join(ROOT, "docs/help/assets/screenshots");
+const PANE_SCREENSHOT_DIR = path.join(SCREENSHOT_DIR, "panes");
+const WORKFLOW_SCREENSHOT_DIR = path.join(SCREENSHOT_DIR, "workflows");
 
 interface ShowEntry { id: string; name: string }
 interface VersionedObject<T = Record<string, unknown>> { id: string; revision: number; body: T }
 interface PatchedFixtureBody { fixture_id: string; fixture_number?: number; logical_heads?: Array<{ fixture_id: string }> }
 
 test("captures help and README screenshots from the default show desk", async ({ page, desk, api }) => {
+  page.setDefaultTimeout(12_000);
   await fs.mkdir(SCREENSHOT_DIR, { recursive: true });
+  await fs.mkdir(PANE_SCREENSHOT_DIR, { recursive: true });
+  await fs.mkdir(WORKFLOW_SCREENSHOT_DIR, { recursive: true });
   await openSeededDefaultStageShow(api);
 
   await desk.open(api.baseUrl);
@@ -30,6 +35,7 @@ test("captures help and README screenshots from the default show desk", async ({
   await expect(page.locator(".control-section")).toContainText("50%");
   await expect(page.locator("canvas")).toBeVisible();
   await page.waitForTimeout(500);
+  await page.locator(".programmer-number-block").screenshot({ path: shot("software-keypad.png") });
   await page.screenshot({ path: shot("default-desk-overview.png"), fullPage: true });
 
   await openCuelistDetailWithPlayback(page);
@@ -43,17 +49,51 @@ test("captures help and README screenshots from the default show desk", async ({
   await expect(page.locator(".fixture-window")).toBeVisible();
   await page.screenshot({ path: shot("fixture-sheet-programmer.png"), fullPage: true });
 
+  await captureWorkflowReference(page);
+  await capturePaneReference(page);
+
   await page.getByRole("button", { name: /Open show menu/ }).click();
   await page.getByRole("button", { name: "Help", exact: true }).click();
   await expect(page.locator(".help-window")).toBeVisible();
   await page.screenshot({ path: shot("help-command-line.png"), fullPage: true });
 
-  await expect.poll(async () => (await fs.readdir(SCREENSHOT_DIR)).filter((file) => file.endsWith(".png")).length).toBeGreaterThanOrEqual(4);
+  await expect.poll(async () => (await fs.readdir(PANE_SCREENSHOT_DIR)).filter((file) => file.endsWith(".png")).length).toBe(30);
+  await expect.poll(async () => (await fs.readdir(WORKFLOW_SCREENSHOT_DIR)).filter((file) => file.endsWith(".png")).sort()).toEqual(workflowScreenshots);
 });
 
 function shot(file: string): string {
   return path.join(SCREENSHOT_DIR, file);
 }
+
+function workflowShot(file: string): string {
+  return path.join(WORKFLOW_SCREENSHOT_DIR, file);
+}
+
+const workflowScreenshots = [
+  "desk-setup-inputs.png",
+  "desk-setup-lock.png",
+  "desk-setup-network-api.png",
+  "desk-setup-output-engine.png",
+  "desk-setup-screens.png",
+  "desk-setup-shows-recovery.png",
+  "desk-setup-timecode.png",
+  "desk-setup-users.png",
+  "dmx-routes.png",
+  "fixture-library-create.png",
+  "fixture-library-import.png",
+  "fixture-library.png",
+  "fixture-sheet-settings-filters.png",
+  "fixture-sheet-settings-ordering.png",
+  "mvr-export.png",
+  "mvr-new-show.png",
+  "patch-add-fixture.png",
+  "show-change-user.png",
+  "show-load-revisions.png",
+  "show-menu.png",
+  "show-patch.png",
+  "stage-settings.png",
+  "stage-setup-2d.png",
+].sort();
 
 async function openSeededDefaultStageShow(api: ApiDriver): Promise<ShowEntry> {
   const bytes = await fs.readFile(new URL("./fixtures/default-stage.show", import.meta.url));
@@ -65,6 +105,142 @@ async function openSeededDefaultStageShow(api: ApiDriver): Promise<ShowEntry> {
   await seedScreenshotProgramming(api, show.id);
   await api.request("POST", `/api/v1/shows/${show.id}/open`, { transition: "hold_current" });
   return show;
+}
+
+const paneReference = [
+  ["presets", "Preset pool", "presets", "Pool"],
+  ["groups", "Group pool", "groups", null],
+  ["fixtures", "Fixture sheet", "fixtures", "Shortcuts"],
+  ["stage", "Stage", "stage", "Stage"],
+  ["cuelist_pool", "Cuelist Pool", "cuelist-pool", null],
+  ["cues", "Cues · Cuelist", "cues", null],
+  ["cuelists", "Cuelists (tabs)", "cuelists", null],
+  ["virtual_playbacks", "Virtual Playbacks", "virtual-playbacks", "Virtual Playbacks"],
+  ["file_manager", "File Manager", "file-manager", null],
+  ["text_editor", "Text Editor", "text-editor", null],
+  ["channels", "Channels", "channels", null],
+  ["dynamics", "Dynamics", "dynamics", null],
+  ["dmx", "DMX output", "dmx", null],
+  ["help", "Help", "help", null],
+  ["development", "Development", "development", "Development"],
+] as const;
+
+async function captureWorkflowReference(page: Page) {
+  const openShowMenu = async () => {
+    await page.getByRole("button", { name: /Open show menu/ }).click();
+    await expect(page.locator(".show-modal")).toBeVisible();
+  };
+  const closeNested = async (selector: string) => {
+    const modal = page.locator(selector);
+    await modal.locator(".modal-close").click();
+    await expect(modal).toBeHidden();
+  };
+
+  await openShowMenu();
+  await page.locator(".show-modal").screenshot({ path: workflowShot("show-menu.png") });
+  await page.getByRole("button", { name: "Load", exact: true }).click();
+  await page.getByRole("dialog", { name: "Load show" }).screenshot({ path: workflowShot("show-load-revisions.png") });
+  await closeNested(".load-show-modal");
+  await page.getByRole("button", { name: /Change User/ }).click();
+  await page.getByRole("dialog", { name: "Change user" }).screenshot({ path: workflowShot("show-change-user.png") });
+  await closeNested('[role="dialog"][aria-label="Change user"]');
+  await page.getByRole("button", { name: "New Show", exact: true }).click();
+  await page.getByRole("button", { name: "Load from MVR", exact: true }).click();
+  await page.getByRole("dialog", { name: "MVR import and export" }).screenshot({ path: workflowShot("mvr-new-show.png") });
+  await closeNested(".mvr-modal");
+  await page.getByRole("button", { name: "Save As", exact: true }).click();
+  await page.getByRole("button", { name: "Export as MVR", exact: true }).click();
+  await page.getByRole("dialog", { name: "MVR import and export" }).screenshot({ path: workflowShot("mvr-export.png") });
+  await closeNested(".mvr-modal");
+  await page.getByRole("button", { name: "Show Patch", exact: true }).click();
+
+  await expect(page.locator(".patch-window")).toBeVisible();
+  await page.locator(".patch-window").screenshot({ path: workflowShot("show-patch.png") });
+  await page.getByRole("button", { name: "+ Add fixture", exact: true }).click();
+  await expect(page.locator(".fixture-browser-modal")).toBeVisible();
+  await page.locator(".fixture-browser-modal").screenshot({ path: workflowShot("patch-add-fixture.png") });
+  await page.locator(".fixture-browser-modal header button").click();
+
+  await openShowMenu();
+  await page.getByRole("button", { name: "Enter Setup", exact: true }).click();
+  await expect(page.locator(".setup-window")).toBeVisible();
+  const setupSections = [
+    ["Shows & recovery", "desk-setup-shows-recovery.png"],
+    ["Users & sessions", "desk-setup-users.png"],
+    ["Inputs", "desk-setup-inputs.png"],
+    ["Outputs", "desk-setup-output-engine.png"],
+    ["Timecode", "desk-setup-timecode.png"],
+    ["Network & API", "desk-setup-network-api.png"],
+    ["Screens & playback", "desk-setup-screens.png"],
+    ["Desk Lock", "desk-setup-lock.png"],
+  ] as const;
+  for (const [section, file] of setupSections) {
+    await page.locator(".setup-window nav").getByRole("button", { name: section, exact: true }).click();
+    await page.locator(".setup-window").screenshot({ path: workflowShot(file) });
+  }
+  await page.locator(".setup-window nav").getByRole("button", { name: "Fixture library", exact: true }).click();
+  await expect(page.locator(".fixture-library-setup")).toBeVisible();
+  await page.locator(".setup-window").screenshot({ path: workflowShot("fixture-library.png") });
+  await page.getByRole("button", { name: "Create fixture", exact: true }).click();
+  await page.locator(".fixture-editor-modal").screenshot({ path: workflowShot("fixture-library-create.png") });
+  await page.locator(".fixture-editor-modal header button").click();
+  await page.getByRole("button", { name: "Import GDTF", exact: true }).click();
+  await page.locator(".gdtf-import-modal").screenshot({ path: workflowShot("fixture-library-import.png") });
+  await page.locator(".gdtf-import-modal header button").click();
+
+  await page.getByRole("button", { name: "BUILT-INS" }).click();
+  await page.locator(".dock-entry").filter({ hasText: "Stage" }).click();
+  await page.getByRole("button", { name: "Setup positions", exact: true }).click();
+  await expect(page.locator(".stage-window")).toBeVisible();
+  await page.locator(".stage-window").screenshot({ path: workflowShot("stage-setup-2d.png") });
+  await page.locator(".stage-window").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("dialog", { name: "Stage Settings" }).screenshot({ path: workflowShot("stage-settings.png") });
+  await page.getByRole("dialog", { name: "Stage Settings" }).getByRole("button", { name: "Close settings" }).click();
+
+  await page.locator(".dock-entry").filter({ hasText: "Fixtures" }).click();
+  await page.locator(".fixture-window").getByRole("button", { name: "Settings" }).click();
+  const fixtureSettings = page.getByRole("dialog", { name: "Fixture Sheet Settings" });
+  await fixtureSettings.screenshot({ path: workflowShot("fixture-sheet-settings-ordering.png") });
+  await fixtureSettings.getByRole("tab", { name: "Filters", exact: true }).click();
+  await fixtureSettings.screenshot({ path: workflowShot("fixture-sheet-settings-filters.png") });
+  await fixtureSettings.getByRole("button", { name: "Close settings" }).click();
+
+  await page.locator(".dock-entry").filter({ hasText: "DMX" }).click();
+  await page.locator(".dmx-window").getByRole("button", { name: "Routes", exact: true }).click();
+  await page.locator(".dmx-window").screenshot({ path: workflowShot("dmx-routes.png") });
+}
+
+async function capturePaneReference(page: Page) {
+  await page.getByRole("button", { name: "DESKS" }).click();
+  await page.getByRole("button", { name: /New desk/ }).click();
+  await expect(page.locator(".empty-desk")).toBeVisible();
+  for (const [, title, slug, settingsTab] of paneReference) {
+    await page.locator(".empty-desk").click({ position: { x: 10, y: 10 } });
+    await page.getByRole("button", { name: title, exact: true }).click();
+    const pane = page.locator(".desk-pane");
+    await expect(pane).toBeVisible();
+    const gridBox = await page.locator(".desk-grid").boundingBox();
+    const resizeBox = await pane.locator(".pane-resize-handle").boundingBox();
+    if (!gridBox || !resizeBox) throw new Error(`Cannot resize ${title} for its documentation screenshot`);
+    await page.mouse.move(resizeBox.x + resizeBox.width / 2, resizeBox.y + resizeBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(gridBox.x + gridBox.width - 3, gridBox.y + gridBox.height - 3);
+    await page.mouse.up();
+    await page.waitForTimeout(150);
+    await pane.screenshot({ path: paneShot(`${slug}.png`) });
+    await pane.getByRole("button", { name: "Settings" }).click();
+    const dialog = page.getByRole("dialog", { name: "Pane Settings" });
+    await expect(dialog).toBeVisible();
+    if (settingsTab) await dialog.getByRole("tab", { name: settingsTab, exact: true }).click();
+    await dialog.screenshot({ path: paneShot(`${slug}-settings.png`) });
+    if (settingsTab) await dialog.getByRole("tab", { name: "Pane Settings", exact: true }).click();
+    await dialog.getByRole("button", { name: "Remove pane" }).click();
+    await expect(page.locator(".empty-desk")).toBeVisible();
+  }
+}
+
+function paneShot(file: string): string {
+  return path.join(PANE_SCREENSHOT_DIR, file);
 }
 
 async function seedScreenshotProgramming(api: ApiDriver, showId: string) {

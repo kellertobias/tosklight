@@ -1,0 +1,300 @@
+import type { Locator, Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
+import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
+import fs from "node:fs/promises";
+import path from "node:path";
+
+test.describe("docs/planned features/16-file-manager.md", () => {
+  test("FILE-016 @api › confined file services authenticate, stream ranges, expose native capabilities, and resolve conflicts", async ({ api, bench, request }) => {
+    const unauthenticated = await request.get(`${bench.baseUrl}/api/v1/files/roots`);
+    expect(unauthenticated.status()).toBe(401);
+    const authorization = { authorization: `Bearer ${api.session!.token}` };
+    const rootsResponse = await request.get(`${bench.baseUrl}/api/v1/files/roots`, { headers: authorization });
+    expect(rootsResponse.status()).toBe(200);
+    const roots = await rootsResponse.json() as Array<Record<string, any>>;
+    expect(roots).toEqual(expect.arrayContaining([expect.objectContaining({ id: "shows", label: "Shows", removable: false })]));
+    expect(roots[0]).not.toHaveProperty("path");
+    expect(roots[0].capabilities).toEqual(expect.objectContaining({ range_streaming: true, thumbnails: true, native_notes: expect.any(Boolean), trash: expect.any(Boolean) }));
+
+    const workspace = `file-contract-${crypto.randomUUID()}`;
+    try {
+      await api.request("POST", "/api/v1/files/shows/operations", { operation: "create_folder", sources: [], destination: "", name: workspace });
+      await api.request("POST", "/api/v1/files/shows/operations", { operation: "create_folder", sources: [], destination: workspace, name: "Destination" });
+      await api.request("POST", "/api/v1/files/shows/operations", { operation: "create_file", sources: [], destination: workspace, name: "range.txt" });
+      await api.request("POST", "/api/v1/files/shows/operations", { operation: "create_file", sources: [], destination: workspace, name: ".hidden" });
+      const document = await api.request<any>("GET", `/api/v1/files/shows/text?path=${encodeURIComponent(`${workspace}/range.txt`)}`);
+      await api.request("PUT", "/api/v1/files/shows/text", { path: `${workspace}/range.txt`, text: "0123456789", revision: document.revision });
+
+      const ordinary = await api.request<any>("GET", `/api/v1/files/shows/entries?path=${encodeURIComponent(workspace)}`);
+      expect(ordinary.entries.map((entry: any) => entry.name)).not.toContain(".hidden");
+      const withHidden = await api.request<any>("GET", `/api/v1/files/shows/entries?path=${encodeURIComponent(workspace)}&hidden=true`);
+      expect(withHidden.entries.map((entry: any) => entry.name)).toContain(".hidden");
+
+      const traversal = await request.get(`${bench.baseUrl}/api/v1/files/shows/entries?path=${encodeURIComponent("../")}`, { headers: authorization });
+      expect(traversal.status()).toBe(400);
+      const range = await request.get(`${bench.baseUrl}/api/v1/files/shows/content?path=${encodeURIComponent(`${workspace}/range.txt`)}`, { headers: { ...authorization, range: "bytes=2-5" } });
+      expect(range.status()).toBe(206);
+      expect(range.headers()["accept-ranges"]).toBe("bytes");
+      expect(range.headers()["content-range"]).toBe("bytes 2-5/10");
+      expect(await range.text()).toBe("2345");
+      const suffix = await request.get(`${bench.baseUrl}/api/v1/files/shows/content?path=${encodeURIComponent(`${workspace}/range.txt`)}`, { headers: { ...authorization, range: "bytes=-3" } });
+      expect(await suffix.text()).toBe("789");
+
+      const metadata = await api.request<any>("GET", `/api/v1/files/shows/metadata?path=${encodeURIComponent(`${workspace}/range.txt`)}`);
+      expect(metadata).toEqual(expect.objectContaining({ name: "range.txt", mime: "text/plain; charset=utf-8" }));
+      expect(metadata.created_millis === null || typeof metadata.created_millis === "number").toBe(true);
+      if (metadata.note_supported) {
+        await api.request("PUT", "/api/v1/files/shows/notes", { path: `${workspace}/range.txt`, note: "Operator metadata" });
+        const note = await api.request<any>("GET", `/api/v1/files/shows/notes?path=${encodeURIComponent(`${workspace}/range.txt`)}`);
+        expect(note).toEqual(expect.objectContaining({ supported: true, note: "Operator metadata" }));
+        const names = (await api.request<any>("GET", `/api/v1/files/shows/entries?path=${encodeURIComponent(workspace)}&hidden=true`)).entries.map((entry: any) => entry.name as string);
+        expect(names.some((name: string) => /tosklight.*note|\.note/i.test(name))).toBe(false);
+      }
+
+      await api.request("POST", "/api/v1/files/shows/operations", { operation: "copy", sources: [`${workspace}/range.txt`], destination: `${workspace}/Destination` });
+      const conflict = await request.post(`${bench.baseUrl}/api/v1/files/shows/operations`, { headers: { ...authorization, "content-type": "application/json" }, data: { operation: "copy", sources: [`${workspace}/range.txt`], destination: `${workspace}/Destination` } });
+      expect(conflict.status()).toBe(409);
+      const keepBoth = await api.request<any>("POST", "/api/v1/files/shows/operations", { operation: "copy", sources: [`${workspace}/range.txt`], destination: `${workspace}/Destination`, conflict: "keep_both", apply_to_all: true });
+      expect(keepBoth).toEqual(expect.objectContaining({ complete: true, paths: expect.arrayContaining([`${workspace}/Destination/range copy.txt`]) }));
+
+      await api.command("programmer.command_line", { value: "COPY" });
+      const claimed = await api.request<any>("POST", "/api/v1/files/input-context", { instance_id: "acceptance-file-manager", action: "copy", origin: "pending" });
+      expect(claimed).toEqual(expect.objectContaining({ instance_id: "acceptance-file-manager", action: "copy", session_id: api.session!.session_id, desk_id: api.session!.desk.id }));
+      const programmers = await api.request<any[]>("GET", "/api/v1/programmers");
+      expect(programmers.find((programmer) => programmer.session_id === api.session!.session_id)?.command_line).toBe("");
+      const competingClaim = await request.post(`${bench.baseUrl}/api/v1/files/input-context`, { headers: { ...authorization, "content-type": "application/json" }, data: { instance_id: "another-pane", action: "copy", origin: "toolbar" } });
+      expect(competingClaim.status()).toBe(409);
+      await api.request("DELETE", "/api/v1/files/input-context?instance_id=acceptance-file-manager");
+      expect(await api.request("GET", "/api/v1/files/input-context")).toBeNull();
+    } finally {
+      await api.request("POST", "/api/v1/files/shows/operations", { operation: "delete", sources: [workspace] }).catch(() => undefined);
+    }
+  });
+
+  test("FILE-016 @ui › three-column browsing and file operations share one visible state machine", async ({ api, bench, desk, page }) => {
+    const showsRoot = (await api.request<any[]>("GET", "/api/v1/files/roots")).find((root) => root.id === "shows");
+    const workspace = `file-manager-${crypto.randomUUID()}`;
+    const destination = `${workspace}/Destination`;
+    await api.request("POST", "/api/v1/files/shows/operations", { operation: "create_folder", sources: [], destination: "", name: workspace });
+    await api.request("POST", "/api/v1/files/shows/operations", { operation: "create_folder", sources: [], destination: workspace, name: "Destination" });
+    await api.request("POST", "/api/v1/files/shows/operations", { operation: "create_file", sources: [], destination: workspace, name: "alpha.txt" });
+    await api.request("POST", "/api/v1/files/shows/operations", { operation: "create_file", sources: [], destination: workspace, name: ".operator-note" });
+    await fs.writeFile(path.join(bench.dataDir, "shows", workspace, "walk-in.wav"), minimalWave());
+
+    await desk.open(bench.baseUrl);
+    await addFileManagerPane(page);
+    const manager = page.locator(".desk-pane").filter({ hasText: "File Manager" });
+    await expect(manager.locator(".file-columns")).toBeVisible();
+    await expect(manager.getByRole("heading", { name: "Locations" })).toBeVisible();
+    await expect(manager.getByRole("heading", { name: "Properties" })).toBeVisible();
+
+    await manager.getByRole("button", { name: `${workspace}, folder` }).dblclick();
+    await expect(manager.getByRole("navigation", { name: "Breadcrumb" })).toContainText(workspace);
+    const visibleRows = manager.locator("main[aria-label='Directory contents'] > button");
+    await expect(visibleRows).toHaveCount(3);
+    await expect(visibleRows.nth(0)).toHaveAttribute("aria-label", "Destination, folder");
+    await expect(visibleRows.nth(1)).toHaveAttribute("aria-label", "alpha.txt, file");
+    await expect(visibleRows.nth(2)).toHaveAttribute("aria-label", "walk-in.wav, file");
+
+    await manager.getByRole("button", { name: "walk-in.wav, file" }).click();
+    const player = propertiesFor(manager).getByLabel("Audio preview of walk-in.wav");
+    await expect(player).toHaveAttribute("src", /ticket=/);
+    await expect(player).not.toHaveAttribute("src", /^blob:/);
+    const streamed = await player.evaluate(async (audio: HTMLAudioElement) => {
+      const response = await fetch(audio.src, { headers: { Range: "bytes=0-3" } });
+      return {
+        status: response.status,
+        range: response.headers.get("content-range"),
+        bytes: [...new Uint8Array(await response.arrayBuffer())],
+      };
+    });
+    expect(streamed).toEqual({ status: 206, range: `bytes 0-3/${minimalWave().length}`, bytes: [82, 73, 70, 70] });
+
+    await manager.getByRole("button", { name: "Show hidden files" }).click();
+    await expect(manager.getByRole("button", { name: ".operator-note, file" })).toBeVisible();
+    await manager.getByRole("button", { name: "alpha.txt, file" }).click();
+    const properties = manager.getByRole("complementary", { name: "Selection properties" });
+    await expect(properties).toContainText("alpha.txt");
+    if (showsRoot?.capabilities?.native_notes) {
+      await expect(properties.getByLabel("Notes")).toBeEnabled();
+      await properties.getByLabel("Notes").fill("UI native note");
+      await properties.getByRole("button", { name: "Save Note" }).click();
+      await expect(manager.getByRole("status")).toContainText("Native filesystem note saved");
+    } else {
+      await expect(properties.getByLabel("Notes")).toBeDisabled();
+    }
+
+    await manager.getByRole("button", { name: "Copy" }).click();
+    await expect(manager.getByRole("button", { name: "Copy Here" })).toBeVisible();
+    await expect(manager.getByRole("button", { name: "Rename" })).toHaveCount(0);
+    await manager.getByRole("button", { name: "Destination, folder" }).dblclick();
+    await manager.getByRole("button", { name: "Copy Here" }).click();
+    await expect.poll(async () => (await api.request<any>("GET", `/api/v1/files/shows/entries?path=${encodeURIComponent(destination)}`)).entries.map((entry: any) => entry.name)).toContain("alpha.txt");
+
+    await manager.getByRole("button", { name: "alpha.txt, file" }).click();
+    await manager.getByRole("button", { name: "Copy" }).click();
+    await manager.getByRole("button", { name: "Copy Here" }).click();
+    const conflict = manager.getByRole("dialog", { name: "Resolve name conflict" });
+    await expect(conflict.getByRole("button", { name: "Replace" })).toBeVisible();
+    await expect(conflict.getByRole("button", { name: "Skip" })).toBeVisible();
+    await conflict.getByRole("button", { name: "Keep Both" }).click();
+    await expect(manager.getByRole("button", { name: "alpha copy.txt, file" })).toBeVisible();
+
+    const copied = manager.getByRole("button", { name: "alpha.txt, file" });
+    await copied.click();
+    await manager.getByRole("button", { name: "Rename" }).click();
+    await manager.getByLabel("New name").fill("renamed.txt");
+    await manager.getByRole("button", { name: "Rename" }).click();
+    await expect(manager.getByRole("button", { name: "renamed.txt, file" })).toBeVisible();
+
+    await manager.getByRole("button", { name: "renamed.txt, file" }).click();
+    await manager.getByRole("button", { name: "Delete" }).click();
+    const confirmation = manager.getByRole("dialog", { name: /Confirm (?:move to trash|permanent deletion)/ });
+    await expect(confirmation).toContainText(/platform Trash|deletion is permanent/);
+    await confirmation.getByRole("button", { name: "Cancel" }).click();
+    await expect(manager.getByRole("button", { name: "renamed.txt, file" })).toBeVisible();
+    await manager.getByRole("button", { name: "Delete" }).click();
+    await manager.getByRole("button", { name: /Move to Trash|Delete Permanently/ }).click();
+    await expect(manager.getByRole("button", { name: "renamed.txt, file" })).toHaveCount(0);
+
+    await manager.getByRole("button", { name: "Grid view" }).click();
+    await expect(manager.locator("main.file-grid")).toBeVisible();
+    await manager.getByRole("button", { name: "Back", exact: true }).click();
+    await manager.getByRole("button", { name: "Forward", exact: true }).click();
+    await expect(manager.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Destination");
+
+    await api.request("POST", "/api/v1/files/shows/operations", { operation: "delete", sources: [workspace] });
+  });
+
+  test("FILE-016 @ui › Setup adds, edits, opens, and removes configured roots without exposing server paths", async ({ api, bench, desk, page }) => {
+    const configuredPath = path.join(bench.dataDir, "operator-files");
+    await fs.mkdir(configuredPath, { recursive: true });
+    await fs.writeFile(path.join(configuredPath, "tour.txt"), "Tour notes");
+    await desk.open(bench.baseUrl);
+    await enterFileManagerSetup(page);
+
+    await expect(page.getByText("Built-in default · Desk Shows directory · ID: shows")).toBeVisible();
+    await page.getByRole("button", { name: "Add configured root" }).click();
+    await page.getByLabel(/^Label/).fill("Operator Files");
+    await page.getByLabel(/^Absolute server path/).fill(configuredPath);
+    await page.getByRole("button", { name: "Folder", exact: true }).click();
+    await page.getByRole("option", { name: "Network" }).click();
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/configuration")).configuration.file_manager_roots)
+      .toEqual([{ id: "location-1", label: "Operator Files", path: configuredPath, icon: "network" }]);
+
+    await page.getByLabel(/^Label/).fill("Tour Files");
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/configuration")).configuration.file_manager_roots[0].label)
+      .toBe("Tour Files");
+    await page.getByRole("button", { name: "Open File Manager Workspace" }).click();
+    await expect(page.locator(".file-manager").getByRole("button", { name: /Tour Files/ })).toBeVisible();
+    await expect(page.locator(".file-manager")).not.toContainText(configuredPath);
+    await expect(page.locator(".left-dock")).not.toContainText("File Manager");
+
+    await enterFileManagerSetup(page);
+    await page.getByRole("button", { name: "Remove" }).click();
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/configuration")).configuration.file_manager_roots)
+      .toEqual([]);
+    const roots = await api.request<any[]>("GET", "/api/v1/files/roots");
+    expect(roots).toEqual(expect.arrayContaining([expect.objectContaining({ id: "shows", label: "Shows" })]));
+  });
+
+  test("FILE-016 @ui › hosted picker supports every target, cardinality, filter, initial location, Select, ENTER, and ESC", async ({ bench, desk, page }) => {
+    const workspace = `picker-${crypto.randomUUID()}`;
+    const directory = path.join(bench.dataDir, "shows", workspace);
+    await fs.mkdir(path.join(directory, "Folder"), { recursive: true });
+    await fs.writeFile(path.join(directory, "allowed.txt"), "allowed");
+    await fs.writeFile(path.join(directory, "blocked.png"), "not really an image");
+    await desk.open(bench.baseUrl);
+
+    await openHostedPicker(page, { target: "files", multiple: false, allowedExtensions: ["txt"], initialRootId: "shows", initialDirectory: workspace });
+    let dialog = page.getByRole("dialog", { name: "Choose files or folders" });
+    await expect(dialog.getByRole("navigation", { name: "Breadcrumb" })).toContainText(workspace);
+    await dialog.getByRole("button", { name: "blocked.png, file" }).click();
+    await expect(dialog.getByRole("button", { name: "Select", exact: true })).toBeDisabled();
+    await expect.poll(() => pickerResult(page)).toBe("pending");
+    await dialog.getByRole("button", { name: "allowed.txt, file" }).click();
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Select", exact: true })).toBeEnabled();
+    await page.keyboard.press("Enter");
+    await expect(dialog).toHaveCount(0);
+    await expect.poll(async () => (await pickerResult(page) as any[])[0]?.entry?.path).toBe(`${workspace}/allowed.txt`);
+
+    await openHostedPicker(page, { target: "folders", multiple: false, initialRootId: "shows", initialDirectory: workspace });
+    dialog = page.getByRole("dialog", { name: "Choose files or folders" });
+    await dialog.getByRole("button", { name: "Folder, folder" }).click();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect.poll(() => pickerResult(page)).toBe("cancelled");
+
+    await openHostedPicker(page, { target: "either", multiple: true, initialRootId: "shows", initialDirectory: workspace });
+    dialog = page.getByRole("dialog", { name: "Choose files or folders" });
+    await dialog.getByRole("button", { name: "Folder, folder" }).click();
+    await dialog.getByRole("button", { name: "allowed.txt, file" }).click({ modifiers: ["ControlOrMeta"] });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Select", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect.poll(async () => (await pickerResult(page) as any[]).map((selection) => selection.entry.path).sort())
+      .toEqual([`${workspace}/Folder`, `${workspace}/allowed.txt`].sort());
+  });
+});
+
+function propertiesFor(manager: Locator) {
+  return manager.getByRole("complementary", { name: "Selection properties" });
+}
+
+async function enterFileManagerSetup(page: Page) {
+  await page.getByRole("button", { name: /Open show menu/ }).click();
+  await page.getByRole("button", { name: "Enter Setup", exact: true }).click();
+  await page.locator(".setup-window nav").getByRole("button", { name: "File Manager", exact: true }).click();
+}
+
+async function openHostedPicker(page: Page, configuration: Record<string, unknown>) {
+  await page.evaluate((options) => {
+    const state = window as Window & { __filePickerResult?: unknown };
+    state.__filePickerResult = "pending";
+    window.dispatchEvent(new CustomEvent("light:open-file-manager-picker", { detail: {
+      ...options,
+      onSelect: (selection: unknown[]) => { state.__filePickerResult = selection; },
+      onCancel: () => { state.__filePickerResult = "cancelled"; },
+    } }));
+  }, configuration);
+}
+
+function pickerResult(page: Page) {
+  return page.evaluate(() => (window as Window & { __filePickerResult?: unknown }).__filePickerResult);
+}
+
+function minimalWave() {
+  return Buffer.from([
+    0x52, 0x49, 0x46, 0x46, 0x25, 0x00, 0x00, 0x00,
+    0x57, 0x41, 0x56, 0x45, 0x66, 0x6d, 0x74, 0x20,
+    0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
+    0x40, 0x1f, 0x00, 0x00, 0x40, 0x1f, 0x00, 0x00,
+    0x01, 0x00, 0x08, 0x00, 0x64, 0x61, 0x74, 0x61,
+    0x01, 0x00, 0x00, 0x00, 0x80,
+  ]);
+}
+
+async function addFileManagerPane(page: Page) {
+  await page.getByRole("button", { name: "DESKS" }).click();
+  await page.getByRole("button", { name: /New desk/ }).click();
+  const grid = page.locator(".desk-grid");
+  const box = await grid.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.click(box!.x + Math.min(180, box!.width / 4), box!.y + Math.min(120, box!.height / 4));
+  await expect(page.getByRole("heading", { name: "Open Window" })).toBeVisible();
+  await page.getByRole("button", { name: "File Manager", exact: true }).click();
+  const pane = page.locator(".desk-pane").filter({ hasText: "File Manager" });
+  await expect(pane).toBeVisible();
+  const gridBox = await grid.boundingBox();
+  const handleBox = await pane.locator(".pane-resize-handle").boundingBox();
+  expect(gridBox).not.toBeNull();
+  expect(handleBox).not.toBeNull();
+  await page.mouse.move(handleBox!.x + handleBox!.width / 2, handleBox!.y + handleBox!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(gridBox!.x + gridBox!.width * 0.95, gridBox!.y + gridBox!.height * 0.9, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(async () => (await pane.boundingBox())?.width ?? 0).toBeGreaterThan(900);
+}

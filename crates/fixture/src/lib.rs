@@ -185,6 +185,16 @@ pub struct PatchedFixture {
     /// An instance without a universe/address exists in the visualizer only.
     #[serde(default)]
     pub multipatch: Vec<MultiPatchInstance>,
+    /// Preposition Position-family attributes for the next lit Cue while dark.
+    #[serde(default = "default_true")]
+    pub move_in_black_enabled: bool,
+    /// Safety delay measured from the resolved-dark boundary.
+    #[serde(default)]
+    pub move_in_black_delay_millis: u64,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1243,6 +1253,8 @@ mod tests {
             rotation: Default::default(),
             logical_heads: vec![],
             multipatch: vec![],
+            move_in_black_enabled: true,
+            move_in_black_delay_millis: 0,
         };
         let overlap = PatchedFixture {
             fixture_id: FixtureId::new(),
@@ -1257,6 +1269,8 @@ mod tests {
             rotation: Default::default(),
             logical_heads: vec![],
             multipatch: vec![],
+            move_in_black_enabled: true,
+            move_in_black_delay_millis: 0,
         };
         assert!(validate_patch(&[first.clone(), overlap]).is_err());
         let overflow = PatchedFixture {
@@ -1272,6 +1286,8 @@ mod tests {
             rotation: Default::default(),
             logical_heads: vec![],
             multipatch: vec![],
+            move_in_black_enabled: true,
+            move_in_black_delay_millis: 0,
         };
         assert!(validate_patch(&[overflow]).is_err());
         assert!(validate_patch(&[first]).is_ok());
@@ -1308,6 +1324,8 @@ mod tests {
                     rotation: Default::default(),
                 },
             ],
+            move_in_black_enabled: true,
+            move_in_black_delay_millis: 0,
         };
         assert!(validate_patch(std::slice::from_ref(&fixture)).is_ok());
         fixture.multipatch[1].universe = Some(1);
@@ -1340,6 +1358,8 @@ mod tests {
                 fixture_id: FixtureId::new(),
             }],
             multipatch: vec![],
+            move_in_black_enabled: true,
+            move_in_black_delay_millis: 0,
         };
         validate_patch(std::slice::from_ref(&parent)).unwrap();
         assert_eq!(parent.direct_control, Some(endpoint));
@@ -1379,6 +1399,8 @@ mod tests {
                 },
             ],
             multipatch: vec![],
+            move_in_black_enabled: true,
+            move_in_black_delay_millis: 0,
         };
         fixture.definition.heads = vec![
             LogicalHead {
@@ -1542,5 +1564,23 @@ mod tests {
         assert!(catalog.iter().any(
             |fixture| fixture.name == "RGBWAUV LED" && fixture.mode == "UAWGBR virtual dimmer"
         ));
+    }
+
+    #[test]
+    fn legacy_patch_defaults_move_in_black_on_and_round_trips_explicit_settings() {
+        let legacy = serde_json::json!({
+            "fixture_id": FixtureId::new(),
+            "definition": definition(2)
+        });
+        let mut fixture: PatchedFixture = serde_json::from_value(legacy).unwrap();
+        assert!(fixture.move_in_black_enabled);
+        assert_eq!(fixture.move_in_black_delay_millis, 0);
+
+        fixture.move_in_black_enabled = false;
+        fixture.move_in_black_delay_millis = 1_250;
+        let restored: PatchedFixture =
+            serde_json::from_value(serde_json::to_value(fixture).unwrap()).unwrap();
+        assert!(!restored.move_in_black_enabled);
+        assert_eq!(restored.move_in_black_delay_millis, 1_250);
     }
 }

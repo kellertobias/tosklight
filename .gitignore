@@ -21,6 +21,8 @@
 
 # Generated release packages
 /artifacts/
+/output/
+/tmp/
 
 # Local tooling and operating-system files
 .DS_Store

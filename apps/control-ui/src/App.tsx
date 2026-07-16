@@ -4,6 +4,7 @@ import { QuitConfirmOverlay } from "./components/modals/QuitConfirmOverlay";
 import { ServerProvider, useServer } from "./api/ServerContext";
 import { useEffect } from "react";
 import { DeskLockOverlay } from "./components/modals/DeskLockOverlay";
+import { FileManagerPickerHost } from "./windows/FileManagerPickerHost";
 
 function DesktopReady() {
   const server = useServer();
@@ -21,6 +22,7 @@ export function App() {
       <AppProvider>
         <AppShell />
         <QuitConfirmOverlay />
+        <FileManagerPickerHost />
       </AppProvider>
       <DeskLockOverlay />
     </ServerProvider>

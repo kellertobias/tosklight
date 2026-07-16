@@ -355,8 +355,8 @@ mod tests {
     fn builds_nested_catalog_from_folder_indexes() {
         let (topics, errors) = build_catalog(vec![
             ("00-quickstart.markdown".into(), "# Quickstart".into()),
-            ("01-Show-Setup/index.md".into(), "# Show Setup".into()),
-            ("01-Show-Setup/01-patch.md".into(), "# Patch".into()),
+            ("20-Show-Setup/index.md".into(), "# Show File Setup".into()),
+            ("20-Show-Setup/01-patch.md".into(), "# Patch".into()),
             ("99-Development/index.md".into(), "# Development".into()),
             (
                 "99-Development/01-open.md".into(),
@@ -367,13 +367,13 @@ mod tests {
         assert_eq!(topics.len(), 3);
         assert_eq!(topics[0].title, "Quickstart");
         assert_eq!(topics[0].id.as_deref(), Some("00-quickstart.markdown"));
-        assert_eq!(topics[1].title, "Show Setup");
-        assert_eq!(topics[1].id.as_deref(), Some("01-Show-Setup/index.md"));
+        assert_eq!(topics[1].title, "Show File Setup");
+        assert_eq!(topics[1].id.as_deref(), Some("20-Show-Setup/index.md"));
         assert_eq!(topics[1].children[0].title, "Patch");
         assert_eq!(topics[2].title, "Development");
     }
     #[test]
     fn embedded_help_contains_nested_command_line_topic() {
-        assert!(EmbeddedHelp::iter().any(|path| path == "02-Programming/01-command-line.md"));
+        assert!(EmbeddedHelp::iter().any(|path| path == "30-Programmer/01-command-line.md"));
     }
 }

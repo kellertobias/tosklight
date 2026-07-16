@@ -266,6 +266,8 @@ fn patched(
             })
             .collect(),
         multipatch: Vec::new(),
+        move_in_black_enabled: true,
+        move_in_black_delay_millis: 0,
     }
 }
 

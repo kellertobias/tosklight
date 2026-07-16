@@ -16,6 +16,7 @@ export type Action =
   | { type: "SET_VIRTUAL_PLAYBACK_GRID"; id: string; rows: number; columns: number }
   | { type: "SET_VIRTUAL_PLAYBACK_CELL"; id: string; index: number; playbackNumber?: number | null; action?: "go" | "toggle" }
   | { type: "SET_TEXT_EDITOR_FILE"; id: string; root: string; path: string }
+  | { type: "SET_TEXT_EDITOR_VIEW"; id: string; root: string; path: string; selectionStart: number; selectionEnd: number; scrollTop: number }
   | { type: "SET_STAGE_MODE"; value: AppState["stageMode"] }
   | { type: "SET_STAGE_VIEW"; value: AppState["stageView"] }
   | { type: "SET_STAGE_NAVIGATION"; zoom?: number; panX?: number; panY?: number; orbitX?: number; orbitY?: number }
@@ -249,6 +250,7 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "TOGGLE_SECTION_NAMES": return { ...state, showSectionNames: !state.showSectionNames };
     case "SET_REGULAR_NUMBER_SHORTCUTS": return { ...state, regularNumberShortcuts: action.value };
     case "SET_TEXT_EDITOR_FILE": return { ...state, desks: state.desks.map((desk) => ({ ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, textFileRoot: action.root, textFilePath: action.path } : pane) })) };
+    case "SET_TEXT_EDITOR_VIEW": return { ...state, desks: state.desks.map((desk) => ({ ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, textEditorView: { root: action.root, path: action.path, selectionStart: action.selectionStart, selectionEnd: action.selectionEnd, scrollTop: action.scrollTop } } : pane) })) };
     case "SET_STORE_ARMED": return { ...state, storeArmed: action.value };
     case "SET_SHIFT_ARMED": return { ...state, shiftArmed: action.value };
     case "SET_PATCH_ARMED": return { ...state, patchSetArmed: action.value };

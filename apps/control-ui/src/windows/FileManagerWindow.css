@@ -1,0 +1,222 @@
+.file-manager {
+  container: file-manager / inline-size;
+  position: relative;
+}
+
+.file-manager .file-toolbar {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.file-manager .file-toolbar nav {
+  min-width: 8rem;
+}
+
+.file-manager .file-toolbar nav button {
+  flex: none;
+}
+
+.file-manager .file-navigation-toggle,
+.file-manager .file-info-toggle {
+  display: none;
+}
+
+.file-manager .file-operation-actions,
+.file-manager .file-picker-actions {
+  display: flex;
+  flex: none;
+  gap: 0.35rem;
+}
+
+.file-manager .file-message {
+  background: #31445a;
+  color: #eef6ff;
+}
+
+.file-manager .file-message.is-busy {
+  background: #604c20;
+}
+
+.file-manager .file-roots h3,
+.file-manager .file-properties h3 {
+  margin-block: 0 0.6rem;
+}
+
+.file-manager .file-tree-root,
+.file-manager .file-tree-branch {
+  display: block;
+}
+
+.file-manager .file-tree-loading {
+  display: block;
+  padding: 0.35rem 0.75rem;
+  opacity: 0.7;
+}
+
+.file-manager .file-list-head {
+  position: sticky;
+  z-index: 1;
+  top: -0.4rem;
+  background: var(--surface, #181b20);
+  border-bottom: 1px solid #39404a;
+}
+
+.file-manager .file-list > button,
+.file-manager .file-grid > button {
+  min-height: 2.75rem;
+  touch-action: manipulation;
+}
+
+.file-manager .file-grid > button {
+  padding: 0.5rem;
+}
+
+.file-manager .file-item-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.file-manager .file-item-name > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-manager.fm-grid .file-item-name {
+  min-height: 5.5rem;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+}
+
+.file-manager .file-item-icon {
+  font-size: 1.35rem;
+}
+
+.file-manager .file-thumbnail {
+  width: 100%;
+  height: 4.5rem;
+  border-radius: 0.2rem;
+  object-fit: cover;
+}
+
+.file-manager .picker-invalid {
+  opacity: 0.55;
+}
+
+.file-manager .file-empty-directory {
+  padding: 1rem;
+  opacity: 0.75;
+}
+
+.file-manager .file-properties dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.file-manager .file-notes {
+  display: grid;
+  gap: 0.3rem;
+  margin-block: 0.75rem;
+}
+
+.file-manager .file-notes textarea {
+  min-height: 4.5rem;
+}
+
+.file-manager .file-preview {
+  display: block;
+  margin-top: 0.75rem;
+}
+
+.file-manager .file-operation-panel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem;
+  border-top: 1px solid #56616e;
+  background: #20252c;
+}
+
+.file-manager .file-operation-panel strong {
+  flex: none;
+}
+
+.file-manager .file-operation-panel .ui-text-control {
+  flex: 1;
+}
+
+.file-manager .file-confirmation {
+  position: absolute;
+  z-index: 8;
+  inset: 50% auto auto 50%;
+  width: min(30rem, calc(100% - 2rem));
+  padding: 1rem;
+  transform: translate(-50%, -50%);
+  border: 1px solid #73808f;
+  border-radius: 0.35rem;
+  background: #20252c;
+  box-shadow: 0 1rem 3rem #000c;
+}
+
+.file-manager .file-confirmation h3 {
+  margin-top: 0;
+}
+
+.file-manager .file-confirmation > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+@container file-manager (max-width: 52rem) {
+  .file-manager .file-navigation-toggle,
+  .file-manager .file-info-toggle {
+    display: inline-flex;
+  }
+
+  .file-manager .file-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .file-manager .file-roots,
+  .file-manager .file-properties {
+    display: none;
+    border: 0;
+  }
+
+  .file-manager.fm-navigation-open .file-roots,
+  .file-manager.fm-info-open .file-properties {
+    display: block;
+    grid-row: 1;
+  }
+
+  .file-manager.fm-navigation-open main,
+  .file-manager.fm-info-open main {
+    display: none;
+  }
+}
+
+@container file-manager (max-width: 38rem) {
+  .file-manager .file-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .file-manager .file-toolbar nav {
+    order: 10;
+    width: 100%;
+  }
+
+  .file-manager .file-list-head,
+  .file-manager .file-list > button {
+    grid-template-columns: minmax(9rem, 1fr) 4.5rem;
+  }
+
+  .file-manager .file-list-head > :nth-child(n + 3),
+  .file-manager .file-list > button > :nth-child(n + 3) {
+    display: none;
+  }
+}

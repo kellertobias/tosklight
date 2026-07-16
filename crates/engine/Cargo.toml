@@ -20,3 +20,4 @@ light-programmer = { path = "../programmer" }
 parking_lot.workspace = true
 serde.workspace = true
 thiserror.workspace = true
+uuid.workspace = true

@@ -12,9 +12,20 @@ usage() {
   cat <<'EOF'
 Usage:
   ./build open             Build debug server and app, stop old instances, and open ToskLight
+  ./build manual           Build PDF and deployable HTML manuals from docs/help Markdown
   ./build archive          Create self-contained server archives for macOS, Windows, Linux AMD64, and Linux ARM64
   ./build archive install  Also install and open ToskLight.app in ~/Applications
 EOF
+}
+
+build_manual() {
+  require python3
+  PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" python3 "$ROOT/tools/build_manual.py"
+  PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" python3 "$ROOT/tools/verify_manual.py" "$ROOT/output/pdf/tosklight-manual.pdf"
+  PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" python3 "$ROOT/tools/build_html_manual.py"
+  PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" python3 "$ROOT/tools/verify_html_manual.py" \
+    "$ROOT/output/html/tosklight-manual" \
+    "$ROOT/output/html/tosklight-manual-html.zip"
 }
 
 require() {
@@ -206,6 +217,10 @@ archive_binary() {
 }
 
 case "${1:-}" in
+  manual)
+    [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+    build_manual
+    ;;
   open)
     [[ $# -eq 1 ]] || { usage >&2; exit 2; }
     build_debug_and_open

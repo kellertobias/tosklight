@@ -97,4 +97,62 @@ describe("LightApiClient", () => {
     const client = new LightApiClient("http://desk.local"); client.setDeskToken("desk secret"); await client.login("Operator");
     expect((fetchMock.mock.calls[0][1].headers as Headers).get("x-light-desk-token")).toBe("desk secret");
   });
+
+  it("uses the typed Sound-to-Light REST contract without sending a browser device ID", async () => {
+    const configuration = {
+      enabled: true,
+      analysis_mode: "tempo_bpm" as const,
+      frequency: { type: "preset" as const, preset: "low" as const },
+      input_gain_db: 3,
+      confidence_threshold: 0.7,
+      smoothing: 0.25,
+      minimum_bpm: 50,
+      maximum_bpm: 200,
+      signal_hold_millis: 1_500,
+      multiplier: 2,
+    };
+    const state = {
+      group: "A",
+      configuration,
+      snapshot: {
+        manual_bpm: 100,
+        sound_bpm: null,
+        effective_bpm: 100,
+        source: "manual",
+        sound_status: { state: "disabled" },
+        paused: false,
+        phase_advancing: true,
+        speed_master_scale: 1,
+        sound_multiplier: 2,
+        source_available: false,
+        usable_signal: false,
+        input_level: 0,
+        selected_band_level: 0,
+      },
+    };
+    const response = () => new Response(JSON.stringify(state), { status: 200, headers: { "content-type": "application/json" } });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ session_id: "session-a", token: "token-a", user: { id: "user-a", name: "Operator", enabled: true }, desk: { id: "desk-a" } }), { status: 200, headers: { "content-type": "application/json" } }))
+      .mockImplementation(() => Promise.resolve(response()));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new LightApiClient("http://desk.local");
+    await client.login("Operator");
+    await client.speedGroup("A");
+    await client.updateSpeedGroup("A", configuration);
+    await client.observeSpeedGroup("A", { captured_at_millis: 100, source_available: true, usable_signal: true, level: 0.5, selected_band_level: 0.8, detected_bpm: 120, confidence: 0.9 });
+    await client.speedGroupAction("A", { action: "learn", captured_at_millis: 101 });
+
+    expect(fetchMock.mock.calls.slice(1).map((call) => call[0])).toEqual([
+      "http://desk.local/api/v1/speed-groups/A",
+      "http://desk.local/api/v1/speed-groups/A",
+      "http://desk.local/api/v1/speed-groups/A/observation",
+      "http://desk.local/api/v1/speed-groups/A/action",
+    ]);
+    expect(fetchMock.mock.calls[2][1].method).toBe("PUT");
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual(configuration);
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).not.toHaveProperty("device_id");
+    expect(fetchMock.mock.calls[3][1].method).toBe("POST");
+    expect(JSON.parse(fetchMock.mock.calls[3][1].body)).toMatchObject({ detected_bpm: 120, confidence: 0.9 });
+    expect(JSON.parse(fetchMock.mock.calls[4][1].body)).toEqual({ action: "learn", captured_at_millis: 101 });
+  });
 });

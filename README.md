@@ -27,9 +27,19 @@ Set `LIGHT_DESK_TOKEN` when exposing the server on a LAN. API clients then send 
 ```sh
 ./dev                    # server + Tauri app with UI hot reload
 ./build open             # debug builds, stop old instances, and open the app
+./build manual           # PDF and deployable HTML manuals from docs/help Markdown
 ./build archive          # self-contained server ZIPs for macOS, Windows, Linux AMD64, and Linux ARM64
 ./build archive install  # build archives and install/open ~/Applications/ToskLight.app
 ```
+
+The generated manuals are written to `output/pdf/tosklight-manual.pdf` and
+`output/html/tosklight-manual/index.html`. The webhost-ready package is
+`output/html/tosklight-manual-html.zip`; extract it directly into a document
+root to deploy the single-page manual and its images.
+Use `./test help-screenshots` to intentionally refresh the application images
+consumed by the Help window, PDF, and HTML manual. See the
+[manual authoring guide](docs/manual/README.md) for the Markdown and screenshot
+contract.
 
 `./build archive` ships the web UI inside each `light-server` binary. It creates a
 universal macOS binary plus Windows, Linux AMD64, and Linux ARM64 binaries in
