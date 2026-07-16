@@ -129,7 +129,7 @@ export function editTargetedCommandWithSoftwareKey(
   if (/^\d$/.test(token) && /^\s*GROUP\s*$/i.test(command)) {
     return { command: `G${token}`, execute: false, pristine: false };
   }
-  const selectionContinuation = selectionCommand
+  const selectionContinuation = (selectionCommand || /^\s*\+\s*$/.test(command))
     && /(?:\+|-)\s*$/.test(command)
     && !/\bAT\b[^]*$/i.test(command);
   const shortPrefixAwaitingNumber = /^\d$/.test(token) && /(?:^|\s)[FG]$/i.test(command);

@@ -72,6 +72,8 @@ pub struct Xyz {
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum AttributeValue {
     Normalized(f32),
+    /// Normalized control points distributed over an ordered Group membership.
+    Spread(Vec<f32>),
     Discrete(String),
     ColorXyz(Xyz),
     RawDmx(u8),

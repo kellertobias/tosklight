@@ -5865,6 +5865,43 @@ fn parse_group_mixed_selection(
     Ok(selected)
 }
 
+fn parse_spread_points(tokens: &[String]) -> Result<Vec<f32>, String> {
+    if tokens.len() < 3 || tokens.len().is_multiple_of(2) {
+        return Err("a spread requires levels separated by THRU".into());
+    }
+    let mut points = Vec::with_capacity(tokens.len().div_ceil(2));
+    for (index, token) in tokens.iter().enumerate() {
+        if index % 2 == 1 {
+            if token != "THRU" {
+                return Err("spread control points must be separated by THRU".into());
+            }
+            continue;
+        }
+        let percent = if token == "FULL" {
+            100.0
+        } else {
+            token
+                .parse::<f32>()
+                .map_err(|_| "spread levels must be percentages or FULL")?
+        };
+        if !percent.is_finite() || !(0.0..=100.0).contains(&percent) {
+            return Err("spread levels must be within 0-100".into());
+        }
+        points.push(percent / 100.0);
+    }
+    Ok(points)
+}
+
+fn spread_position(points: &[f32], index: usize, count: usize) -> f32 {
+    if points.len() == 1 || count <= 1 {
+        return points[0];
+    }
+    let position = index as f32 * (points.len() - 1) as f32 / (count - 1) as f32;
+    let left = position.floor() as usize;
+    let right = position.ceil() as usize;
+    points[left] + (points[right] - points[left]) * (position - left as f32)
+}
+
 fn execute_programmer_command(
     state: &AppState,
     session: &Session,
@@ -6048,6 +6085,32 @@ fn execute_programmer_command(
                     &format!("{}.{}", value[0], value[2]),
                     &fixtures,
                 )?;
+            } else if value.iter().any(|token| token == "THRU") {
+                let points = parse_spread_points(value)?;
+                if frozen {
+                    let count = fixtures.len();
+                    for (index, fixture) in fixtures.iter().enumerate() {
+                        state.programmers.set_faded_with_timing(
+                            session.id,
+                            *fixture,
+                            light_core::AttributeKey::intensity(),
+                            light_core::AttributeValue::Normalized(spread_position(
+                                &points, index, count,
+                            )),
+                            timing.fade_millis,
+                            timing.delay_millis,
+                        );
+                    }
+                } else {
+                    state.programmers.set_group_faded_with_timing(
+                        session.id,
+                        group_id.clone(),
+                        light_core::AttributeKey::intensity(),
+                        light_core::AttributeValue::Spread(points),
+                        timing.fade_millis,
+                        timing.delay_millis,
+                    );
+                }
             } else {
                 let relative = value.len() == 2 && matches!(value[0].as_str(), "+" | "-");
                 if relative && !frozen {
@@ -6103,10 +6166,15 @@ fn execute_programmer_command(
         }
         return Ok(fixtures.len());
     }
-    let start = usize::from(matches!(
-        tokens[0].as_str(),
-        "FIXTURE" | "FIXTURES" | "CHANNEL" | "CHANNELS"
-    ));
+    let continuing = tokens[0] == "+";
+    let start = if continuing {
+        1
+    } else {
+        usize::from(matches!(
+            tokens[0].as_str(),
+            "FIXTURE" | "FIXTURES" | "CHANNEL" | "CHANNELS"
+        ))
+    };
     if tokens.len() <= start {
         return Err("expected a fixture number".into());
     }
@@ -6115,13 +6183,26 @@ fn execute_programmer_command(
         .iter()
         .position(|token| token == "AT")
         .unwrap_or(tokens.len());
-    let fixture_ids = if at_index == tokens.len()
+    let mut fixture_ids = if at_index == tokens.len()
         && tokens[start..at_index].iter().any(|token| token == "GROUP")
     {
         parse_group_mixed_selection(&snapshot, &tokens[start..at_index], false)?
     } else {
         parse_fixture_selection(&snapshot.fixtures, &tokens[start..at_index])?
     };
+    if continuing {
+        let current = state
+            .programmers
+            .get(session.id)
+            .ok_or("programmer does not exist")?;
+        let mut combined = current.selected;
+        for fixture in fixture_ids {
+            if !combined.contains(&fixture) {
+                combined.push(fixture);
+            }
+        }
+        fixture_ids = combined;
+    }
     if at_index == tokens.len() {
         state.programmers.select(session.id, fixture_ids.clone());
         state
@@ -6137,6 +6218,22 @@ fn execute_programmer_command(
             &format!("{}.{}", value[0], value[2]),
             &fixture_ids,
         )?;
+        return Ok(fixture_ids.len());
+    }
+    if value.iter().any(|token| token == "THRU") {
+        let points = parse_spread_points(value)?;
+        let count = fixture_ids.len();
+        state.programmers.select(session.id, fixture_ids.clone());
+        for (index, fixture_id) in fixture_ids.iter().enumerate() {
+            state.programmers.set_faded_with_timing(
+                session.id,
+                *fixture_id,
+                light_core::AttributeKey::intensity(),
+                light_core::AttributeValue::Normalized(spread_position(&points, index, count)),
+                timing.fade_millis,
+                timing.delay_millis,
+            );
+        }
         return Ok(fixture_ids.len());
     }
     let relative = value.len() == 2 && matches!(value[0].as_str(), "+" | "-");

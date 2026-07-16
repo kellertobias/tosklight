@@ -1,6 +1,7 @@
 import type { Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
 import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
 import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
+import { loadCanonicalCopy } from "./support/catalog";
 
 interface VersionedObject<T = Record<string, any>> {
   kind: string;
@@ -274,13 +275,135 @@ test.describe("docs/testing/01-foundational-dimmers-and-groups.md", () => {
     });
     await expectSlotsAfterTick(bench, 0, Array(12).fill(0));
   });
+
+  test("DIM-001 @ui › visible Group edits retain the live reference and ordered membership", async ({ api, bench, desk, page }) => {
+    await loadCompactRig(api, bench, "dim-001-ui");
+    await desk.open(api.baseUrl);
+    await pressCommand(page, "GROUP 3 AT 50", "G3 AT 50");
+    await pressCommand(page, "5 + 6", "F5 + F6");
+    await pressCommand(page, "RECORD + GROUP 3", "RECORD + GROUP 3");
+    await expectGroupNumbers(api, "3", [1, 2, 3, 4, 5, 6]);
+    await expectProgrammer(api, (state) => expect(state.group_values["3"]?.[INTENSITY]).toBeDefined());
+    await expectSlotsAfterTick(bench, 3_000, [128, 128, 128, 128, 128, 128]);
+  });
+
+  test("CMD-001 @api › desk-local target mode scopes partial command terms", async ({ api, bench }) => {
+    await loadCompactRig(api, bench, "cmd-001-api");
+    await api.command("programmer.command_target", { value: "GROUP" });
+    await api.command("programmer.command_line", { value: "G1 + G2" });
+    let state = await programmer(api);
+    expect(state.command_line).toBe("G1 + G2");
+    await command(api, state.command_line);
+    await expectSelectedNumbers(api, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+
+    await api.command("programmer.command_target", { value: "FIXTURE" });
+    await api.command("programmer.command_line", { value: "G3 + F5" });
+    state = await programmer(api);
+    expect(state.command_line).toBe("G3 + F5");
+    await command(api, state.command_line);
+    await expectSelectedNumbers(api, [1, 2, 3, 4, 5]);
+  });
+
+  test("GROUP-003 @ui › derived Group selection follows an externally reordered source", async ({ api, bench, desk, page }) => {
+    await loadCompactRig(api, bench, "group-003-ui");
+    await desk.open(api.baseUrl);
+    await pressCommand(page, "GROUP 1 DIV 2", "G1 DIV 2");
+    await pressCommand(page, "RECORD GROUP 5", "RECORD GROUP 5");
+    await overwriteGroupByNumbers(api, "1", [12, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11]);
+    await pressCommand(page, "GROUP 5", "G5");
+    await expectSelectedNumbers(api, [12, 2, 5, 7, 9, 11]);
+  });
+
+  test("GROUP-004 @ui › frozen Group remains stable after source and patch edits", async ({ api, bench, desk, page }) => {
+    await loadCompactRig(api, bench, "group-004-ui");
+    await desk.open(api.baseUrl);
+    const fixtures = await fixtureIdsByNumber(api);
+    await pressCommand(page, "DEGRP 1", "DEGRP 1");
+    await pressCommand(page, "RECORD GROUP 5", "RECORD GROUP 5");
+    await overwriteGroupByNumbers(api, "1", [12, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11]);
+    await unpatchFixture(api, fixtures[3]);
+    await pressCommand(page, "GROUP 5 AT 50", "G5 AT 50");
+    await expectGroupNumbers(api, "5", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    await expectSlotsAfterTick(bench, 3_000, [128, 128, 0, 128, 128, 128, 128, 128, 128, 128, 128, 128]);
+  });
+
+  test("GROUP-005 @ui › stored empty Group is valid while a deleted Group is rejected visibly", async ({ api, bench, desk, page }) => {
+    await loadCompactRig(api, bench, "group-005-ui");
+    await desk.open(api.baseUrl);
+    await pressCommand(page, "GROUP 4 AT 50", "G4 AT 50");
+    await expectProgrammer(api, (state) => expect(state.group_values["4"]?.[INTENSITY]).toBeDefined());
+    await expectSlotsAfterTick(bench, 3_000, Array(12).fill(0));
+    await command(api, "DELETE GROUP 4");
+    await pressCommand(page, "GROUP 4", "G4");
+    await expect(page.getByLabel("Command line")).toHaveClass(/error/);
+    await expectSlotsAfterTick(bench, 0, Array(12).fill(0));
+  });
+
+  for (const surface of ["api", "ui"] as const) {
+    test(`PROG-001 @${surface} › values retain selection, replacement starts fresh, and leading Plus continues`, async ({ api, bench, desk, page }) => {
+      await loadCompactRig(api, bench, `prog-001-${surface}`);
+      if (surface === "ui") {
+        await desk.open(api.baseUrl);
+        await pressCommand(page, "1 + 2 AT 50", "F1 + F2 AT 50");
+        await pressCommand(page, "AT 25", "AT 25");
+        await pressCommand(page, "3 AT 75", "F3 AT 75");
+        await pressCommand(page, "+ 4 AT 100", "+F4 AT 100");
+      } else {
+        await command(api, "1 + 2 AT 50");
+        await command(api, "AT 25");
+        await command(api, "3 AT 75");
+        await command(api, "+ 4 AT 100");
+      }
+      await expectSelectedNumbers(api, [3, 4]);
+      await expectSlotsAfterTick(bench, 3_000, [64, 64, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0]);
+    });
+
+    test(`PROG-002 @${surface} › ascending spread follows ordered Group membership`, async ({ api, bench, desk, page }) => {
+      await loadCompactRig(api, bench, `prog-002-${surface}`);
+      await overwriteGroupByNumbers(api, "1", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      if (surface === "ui") {
+        await desk.open(api.baseUrl);
+        await pressCommand(page, "GROUP 1 AT 0 THRU 100", "G1 AT 0 THRU 100");
+      } else {
+        await command(api, "GROUP 1 AT 0 THRU 100");
+      }
+      await expectProgrammer(api, (state) => {
+        expect(state.group_values["1"]?.[INTENSITY]?.value).toMatchObject({ kind: "spread", value: [0, 1] });
+        expect(state.values).toHaveLength(0);
+      });
+      await expectSlotsAfterTick(bench, 3_000, [0, 28, 57, 85, 113, 142, 170, 198, 227, 255, 0, 0]);
+      await overwriteGroupByNumbers(api, "1", [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      await expectSlotsAfterTick(bench, 0, [26, 51, 77, 102, 128, 153, 179, 204, 230, 255, 0, 0]);
+    });
+  }
+
+  test("PROG-003 @ui › newer fixture and Group values arbitrate LTP", async ({ api, bench, desk, page }) => {
+    await loadCompactRig(api, bench, "prog-003-ui");
+    await desk.open(api.baseUrl);
+    await pressCommand(page, "GROUP 1 AT 50", "G1 AT 50");
+    await pressCommand(page, "1 AT 25", "F1 AT 25");
+    await expectSlotsAfterTick(bench, 3_000, [64, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128]);
+    await pressCommand(page, "GROUP 1 AT 50", "G1 AT 50");
+    await expectSlotsAfterTick(bench, 3_000, Array(12).fill(128));
+  });
+
+  test("PROG-004 @api › selection and programmer values clear in distinct stages", async ({ api, bench }) => {
+    await loadCompactRig(api, bench, "prog-004-api");
+    await command(api, "1 + 2 AT 50");
+    await select(api, []);
+    await expectProgrammer(api, (state) => {
+      expect(state.selected).toHaveLength(0);
+      expect(state.values).toHaveLength(2);
+    });
+    await expectSlotsAfterTick(bench, 3_000, [128, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    await api.command("programmer.clear", {});
+    await expectProgrammer(api, (state) => expect(state.values).toHaveLength(0));
+    await expectSlotsAfterTick(bench, 0, Array(12).fill(0));
+  });
 });
 
-async function loadCompactRig(api: ApiDriver, bench: any, _name: string): Promise<void> {
-  await api.request("POST", "/api/v1/test/clock/reset", undefined, false);
-  bench.artnet.reset();
-  bench.sacn.reset();
-  await api.login();
+async function loadCompactRig(api: ApiDriver, bench: any, name: string): Promise<void> {
+  await loadCanonicalCopy(api, bench, name);
   await api.command("selection.set", { fixtures: [] });
   await api.command("programmer.clear", {});
   const group4 = (await objects(api, "group")).find((group) => group.id === "4");
@@ -324,6 +447,9 @@ function commandKeys(value: string): string[] {
     if (token === "GROUP") return ["GRP"];
     if (token === "DEGRP") return ["GRP", "GRP"];
     if (token === "THRU") return ["TRU"];
+    if (token === "RECORD") return ["REC"];
+    if (token === "DELETE") return ["DEL"];
+    if (token === "DIV") return ["DIV"];
     if (/^\d+$/.test(token)) return [...token];
     return [token];
   });

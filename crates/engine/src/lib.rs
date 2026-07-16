@@ -25,6 +25,27 @@ use std::{
 };
 use thiserror::Error;
 
+fn value_for_ordered_position(
+    value: &AttributeValue,
+    index: usize,
+    count: usize,
+) -> AttributeValue {
+    let AttributeValue::Spread(points) = value else {
+        return value.clone();
+    };
+    if points.is_empty() {
+        return AttributeValue::Normalized(0.0);
+    }
+    if points.len() == 1 || count <= 1 {
+        return AttributeValue::Normalized(points[0]);
+    }
+    let position = index as f32 * (points.len() - 1) as f32 / (count - 1) as f32;
+    let left = position.floor() as usize;
+    let right = position.ceil() as usize;
+    let progress = position - left as f32;
+    AttributeValue::Normalized(points[left] + (points[right] - points[left]) * progress)
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct EngineSnapshot {
     pub fixtures: Vec<PatchedFixture>,
@@ -301,12 +322,15 @@ impl Engine {
                     .collect::<std::collections::HashSet<_>>();
                 for change in cue.group_changes.clone() {
                     if let Ok(fixtures) = resolve_group(&change.group_id, &groups) {
-                        for fixture_id in fixtures {
+                        let count = fixtures.len();
+                        for (index, fixture_id) in fixtures.into_iter().enumerate() {
                             if expanded_addresses.insert((fixture_id, change.attribute.clone())) {
                                 cue.changes.push(light_playback::CueChange {
                                     fixture_id,
                                     attribute: change.attribute.clone(),
-                                    value: change.value.clone(),
+                                    value: change.value.as_ref().map(|value| {
+                                        value_for_ordered_position(value, index, count)
+                                    }),
                                     automatic_restore: false,
                                     fade_millis: change.fade_millis,
                                     delay_millis: change.delay_millis,
@@ -453,12 +477,13 @@ impl Engine {
                 let Ok(fixtures) = resolve_group(&group_id, &groups) else {
                     continue;
                 };
-                for fixture_id in fixtures {
+                let count = fixtures.len();
+                for (index, fixture_id) in fixtures.into_iter().enumerate() {
                     for (attribute, scoped) in &attributes {
                         let value = TimedValue {
                             fixture_id,
                             attribute: attribute.clone(),
-                            value: scoped.value.clone(),
+                            value: value_for_ordered_position(&scoped.value, index, count),
                             priority: programmer.priority,
                             changed_at: scoped.changed_at,
                             merge_mode: MergeMode::Ltp,

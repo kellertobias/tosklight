@@ -58,6 +58,15 @@ describe("software keypad", () => {
     });
   });
 
+  it("prefixes a leading Plus continuation with the persistent target", () => {
+    expect(editTargetedCommandWithSoftwareKey("+", "4", "FIXTURE", false)).toEqual({
+      command: "+F4", execute: false, pristine: false,
+    });
+    expect(editTargetedCommandWithSoftwareKey("+", "4", "GROUP", false)).toEqual({
+      command: "+G4", execute: false, pristine: false,
+    });
+  });
+
   it("uses short Group terms and lets GRP override Fixture mode after plus", () => {
     const group = editTargetedCommandWithSoftwareKey("G7 + ", "GRP", "FIXTURE", false);
     expect(group).toEqual({ command: "G7 + G", execute: false, pristine: false });
