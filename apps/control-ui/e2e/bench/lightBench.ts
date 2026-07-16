@@ -31,6 +31,21 @@ export class LightBench {
     this.artnet = await DmxReceiver.bind();
     this.sacn = await DmxReceiver.bind();
     this.baseUrl = `http://127.0.0.1:${httpPort}`;
+    await this.spawnServer();
+  }
+
+  async restart(): Promise<void> {
+    if (this.process && this.process.exitCode === null) {
+      const exited = new Promise<void>((resolve) => this.process?.once("exit", () => resolve()));
+      this.process.kill("SIGKILL");
+      await Promise.race([exited, new Promise<void>((resolve) => setTimeout(resolve, 1_000))]);
+    }
+    this.process = undefined;
+    await this.spawnServer();
+  }
+
+  private async spawnServer(): Promise<void> {
+    const httpPort = Number(new URL(this.baseUrl).port);
     this.process = spawn(SERVER, [
       "--data-dir", this.dataDir,
       "--bind", `127.0.0.1:${httpPort}`,
