@@ -23,6 +23,10 @@ pub const MAX_PAGE_SLOTS: u8 = 127;
 pub enum PlaybackTarget {
     CueList { cue_list_id: CueListId },
     Group { group_id: String },
+    SpeedGroup { group: String },
+    ProgrammerFade,
+    CueFade,
+    GrandMaster,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -33,7 +37,19 @@ pub enum PlaybackButtonAction {
     Toggle,
     Go,
     GoMinus,
+    FastForward,
+    FastRewind,
     Flash,
+    Temp,
+    Swap,
+    Select,
+    SelectContents,
+    Learn,
+    Double,
+    Half,
+    Pause,
+    Blackout,
+    PauseDynamics,
     #[default]
     None,
 }
@@ -45,7 +61,15 @@ pub enum PlaybackFaderMode {
     Master,
     Temp,
     Speed,
+    XFade,
+    DirectBpm,
+    CenteredRelative,
+    LearnedPercentage,
 }
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FlashReleaseMode { #[default] ReleaseAll, ReleaseIntensityOnly }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PlaybackDefinition {
@@ -62,11 +86,18 @@ pub struct PlaybackDefinition {
     pub auto_off: bool,
     #[serde(default)]
     pub xfade_millis: u64,
+    #[serde(default = "default_playback_color")]
+    pub color: String,
+    #[serde(default)]
+    pub flash_release: FlashReleaseMode,
+    #[serde(default)]
+    pub protect_from_swap: bool,
 }
 
 fn default_true() -> bool {
     true
 }
+fn default_playback_color() -> String { "#20c997".into() }
 
 impl PlaybackDefinition {
     pub fn validate(&self) -> Result<(), String> {
@@ -550,7 +581,7 @@ impl PlaybackEngine {
             .buttons
             .get(button.checked_sub(1).ok_or("button must be within 1-3")? as usize)
             .ok_or("button must be within 1-3")?;
-        if !pressed && action != PlaybackButtonAction::Flash {
+        if !pressed && !matches!(action, PlaybackButtonAction::Flash | PlaybackButtonAction::Swap) {
             return Ok(());
         }
         match action {
@@ -559,7 +590,12 @@ impl PlaybackEngine {
             PlaybackButtonAction::Toggle => self.toggle(number).map(|_| ()),
             PlaybackButtonAction::Go => self.go_playback(number).map(|_| ()),
             PlaybackButtonAction::GoMinus => self.back_playback(number).map(|_| ()),
+            PlaybackButtonAction::FastForward => self.go_playback(number).map(|_| ()),
+            PlaybackButtonAction::FastRewind => self.back_playback(number).map(|_| ()),
             PlaybackButtonAction::Flash => self.set_flash(number, pressed),
+            PlaybackButtonAction::Temp => if pressed { self.toggle(number).map(|_| ()) } else { Ok(()) },
+            PlaybackButtonAction::Swap => self.set_flash(number, pressed),
+            PlaybackButtonAction::Select | PlaybackButtonAction::SelectContents | PlaybackButtonAction::Learn | PlaybackButtonAction::Double | PlaybackButtonAction::Half | PlaybackButtonAction::Pause | PlaybackButtonAction::Blackout | PlaybackButtonAction::PauseDynamics => Ok(()),
             PlaybackButtonAction::None => Ok(()),
         }
     }
@@ -606,6 +642,7 @@ impl PlaybackEngine {
             PlaybackTarget::Group { .. } => {
                 Err("operation is not available for a group playback".into())
             }
+            _ => Err("operation is not available for this playback function".into()),
         }
     }
 
@@ -1227,6 +1264,9 @@ mod tests {
             go_activates: true,
             auto_off: true,
             xfade_millis: 0,
+            color: default_playback_color(),
+            flash_release: FlashReleaseMode::default(),
+            protect_from_swap: false,
         }
     }
 

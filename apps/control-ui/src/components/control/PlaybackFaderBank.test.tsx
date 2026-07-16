@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PlaybackFaderBank } from "./PlaybackFaderBank";
+import { Button } from "../common";
 
 const mocks = vi.hoisted(() => ({
   dispatch: vi.fn(),
@@ -47,7 +48,7 @@ vi.mock("../../state/AppContext", () => ({
   }),
 }));
 
-vi.mock("./VerticalTouchFader", () => ({ VerticalTouchFader: ({ actions = [] }: { actions?: Array<{ id: string; label: string; onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void }> }) => <div>Fader{actions.map((action) => <button key={action.id} onClick={action.onClick}>{action.label}</button>)}</div> }));
+vi.mock("./VerticalTouchFader", () => ({ VerticalTouchFader: ({ actions = [] }: { actions?: Array<{ id: string; label: string; onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void }> }) => <div>Fader{actions.map((action) => <Button key={action.id} onClick={action.onClick}>{action.label}</Button>)}</div> }));
 
 afterEach(cleanup);
 
@@ -82,8 +83,8 @@ describe("PlaybackFaderBank Set assignment", () => {
     mocks.state.playbackSetArmed = true;
     render(<PlaybackFaderBank count={1}/>);
     fireEvent.click(screen.getByRole("button", { name: "Configure page 1 playback 1" }));
-    expect(screen.getByRole("dialog", { name: "Configure playback 1.1" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Unassign Playback" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Playback Configuration" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Clear Playback" })).toBeInTheDocument();
   });
 
   it("opens configuration when SHIFT is followed by the first playback button", () => {
@@ -91,7 +92,7 @@ describe("PlaybackFaderBank Set assignment", () => {
     mocks.state.shiftArmed = true;
     render(<PlaybackFaderBank count={1}/>);
     fireEvent.click(screen.getByRole("button", { name: "GO" }));
-    expect(screen.getByRole("dialog", { name: "Configure playback 1.1" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Playback Configuration" })).toBeInTheDocument();
     expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
   });
 
@@ -102,7 +103,7 @@ describe("PlaybackFaderBank Set assignment", () => {
     const click = new MouseEvent("click", { bubbles: true, cancelable: true });
     Object.defineProperty(click, "lightSetShortcut", { value: true });
     fireEvent(playback, click);
-    expect(screen.getByRole("dialog", { name: "Configure playback 1.1" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Playback Configuration" })).toBeInTheDocument();
   });
 
   it("unassigns the page slot and closes the configuration modal", async () => {
@@ -110,8 +111,9 @@ describe("PlaybackFaderBank Set assignment", () => {
     mocks.state.playbackSetArmed = true;
     render(<PlaybackFaderBank count={1}/>);
     fireEvent.click(screen.getByRole("button", { name: "Configure page 1 playback 1" }));
-    fireEvent.click(screen.getByRole("button", { name: "Unassign Playback" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear Playback" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm Clear Playback" }));
     await waitFor(() => expect(mocks.unassignPagePlayback).toHaveBeenCalledWith(1, 1));
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Configure playback 1.1" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Playback Configuration" })).not.toBeInTheDocument());
   });
 });

@@ -318,7 +318,7 @@ export class LightApiClient {
   playbackAction(cueListId: string, action: "go" | "back" | "pause" | "release") {
     return this.command(`playback.${action}`, { cue_list_id: cueListId });
   }
-  poolPlaybackAction(number: number, action: "on" | "off" | "toggle" | "go" | "go-minus" | "flash" | "master" | "xfade-on" | "xfade-off", input: { value?: number; pressed?: boolean; surface?: "physical" | "virtual" } = {}) {
+  poolPlaybackAction(number: number, action: "on" | "off" | "toggle" | "go" | "go-minus" | "fast-forward" | "fast-rewind" | "temp" | "swap" | "select" | "select-contents" | "learn" | "double" | "half" | "pause" | "blackout" | "pause-dynamics" | "flash" | "master" | "xfade-on" | "xfade-off", input: { value?: number; pressed?: boolean; surface?: "physical" | "virtual" } = {}) {
     return this.request(`/api/v1/cuelists/${number}/${action}`, { method: action === "master" ? "PUT" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) });
   }
   setPlaybackPage(deskId: string, page: number) { return this.request(`/api/v1/control-desks/${deskId}/page`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ page }) }); }

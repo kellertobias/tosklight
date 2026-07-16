@@ -210,16 +210,19 @@ export interface PlaybackSnapshot {
   active_page: number;
 }
 
-export type PlaybackButtonAction = "on" | "off" | "toggle" | "go" | "go_minus" | "flash" | "none";
+export type PlaybackButtonAction = "on" | "off" | "toggle" | "go" | "go_minus" | "fast_forward" | "fast_rewind" | "flash" | "temp" | "swap" | "select" | "select_contents" | "learn" | "double" | "half" | "pause" | "blackout" | "pause_dynamics" | "none";
 export interface PlaybackDefinition {
   number: number;
   name: string;
-  target: { type: "cue_list"; cue_list_id: string } | { type: "group"; group_id: string };
+  target: { type: "cue_list"; cue_list_id: string } | { type: "group"; group_id: string } | { type: "speed_group"; group: string } | { type: "programmer_fade" } | { type: "cue_fade" } | { type: "grand_master" };
   buttons: [PlaybackButtonAction, PlaybackButtonAction, PlaybackButtonAction];
-  fader: "master" | "temp" | "speed";
+  fader: "master" | "temp" | "speed" | "x_fade" | "direct_bpm" | "centered_relative" | "learned_percentage";
   go_activates: boolean;
   auto_off: boolean;
   xfade_millis: number;
+  color?: string;
+  flash_release?: "release_all" | "release_intensity_only";
+  protect_from_swap?: boolean;
 }
 export interface PlaybackPage { number: number; name: string; slots: Record<string, number>; }
 

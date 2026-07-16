@@ -86,7 +86,7 @@ export function CommandLineBar() {
         keyboardFlash.current.set(event.code, definition.number);
         void server.poolPlaybackAction(definition.number, "flash", { pressed: true });
       } else {
-        void server.poolPlaybackAction(definition.number, action === "go_minus" ? "go-minus" : action);
+        void server.poolPlaybackAction(definition.number, action.replaceAll("_", "-") as Parameters<typeof server.poolPlaybackAction>[1]);
       }
     };
     const keydown = (event: KeyboardEvent) => {

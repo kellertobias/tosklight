@@ -5245,6 +5245,9 @@ fn store_cue_at(
             go_activates: true,
             auto_off: true,
             xfade_millis: 0,
+            color: "#20c997".into(),
+            flash_release: light_playback::FlashReleaseMode::default(),
+            protect_from_swap: false,
         };
         store
             .put_object(
@@ -7479,6 +7482,9 @@ fn load_engine_snapshot_with_override(
                 go_activates: true,
                 auto_off: true,
                 xfade_millis: 0,
+                color: "#20c997".into(),
+                flash_release: light_playback::FlashReleaseMode::default(),
+                protect_from_swap: false,
             })
             .collect();
     }

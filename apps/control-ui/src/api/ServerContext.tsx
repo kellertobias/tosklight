@@ -115,7 +115,7 @@ interface ServerContextValue {
     cueListId: string,
     action: "go" | "back" | "pause" | "release",
   ) => Promise<void>;
-  poolPlaybackAction: (number: number, action: "on" | "off" | "toggle" | "go" | "go-minus" | "flash" | "master" | "xfade-on" | "xfade-off", input?: { value?: number; pressed?: boolean; surface?: "physical" | "virtual" }) => Promise<void>;
+  poolPlaybackAction: (number: number, action: "on" | "off" | "toggle" | "go" | "go-minus" | "fast-forward" | "fast-rewind" | "temp" | "swap" | "select" | "select-contents" | "learn" | "double" | "half" | "pause" | "blackout" | "pause-dynamics" | "flash" | "master" | "xfade-on" | "xfade-off", input?: { value?: number; pressed?: boolean; surface?: "physical" | "virtual" }) => Promise<void>;
   setPlaybackPage: (page: number) => Promise<void>;
   updateControlDesk: (desk: import("./types").ControlDesk) => Promise<void>;
   selectControlDesk: (id: string) => void;
@@ -701,6 +701,8 @@ export function ServerProvider({ children }: PropsWithChildren) {
           const pages = await client.objects<import("./types").PlaybackPage>(bootstrap.active_show.id, "playback_page");
           const page = pages.find((item) => item.body.number === pageNumber);
           if (!page || page.body.slots[String(slot)] == null) return true;
+          const playbackNumber = page.body.slots[String(slot)];
+          await client.poolPlaybackAction(playbackNumber, "off").catch(() => undefined);
           const slots = { ...page.body.slots };
           delete slots[String(slot)];
           await client.putObject(bootstrap.active_show.id, "playback_page", page.id, { ...page.body, slots }, page.revision);

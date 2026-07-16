@@ -44,6 +44,7 @@ export function PlaybackTools() {
   }, [pagePickerOpen]);
   return (
     <div className="playback-tools">
+      <Button className={state.playbackSetArmed ? "active" : ""} onClick={() => dispatch({ type: "SET_PLAYBACK_SET_ARMED", value: !state.playbackSetArmed })}>SET</Button>
       <div className="playback-page-controls">
         <Button className="playback-page-chevron" aria-label="Previous playback page" disabled={state.playbackPage === 0} onClick={() => { dispatch({ type: "SET_PLAYBACK_PAGE", page: state.playbackPage - 1 }); void server.setPlaybackPage(state.playbackPage); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 15 7-7 7 7"/></svg></Button>
         <Button className="playback-page-current" aria-label={`Select playback page. Page ${state.playbackPage + 1} ${state.playbackPageNames[state.playbackPage]}`} onClick={() => setPagePickerOpen(true)}><span>Page</span><strong>{state.playbackPage + 1}</strong><small>{state.playbackPageNames[state.playbackPage]}</small></Button>

@@ -28,6 +28,7 @@ describe("PlaybackTools", () => {
     const { container } = render(<PlaybackTools/>);
     const tools = container.querySelector(".playback-tools")!;
     expect([...tools.children].map((child) => child.className)).toEqual([
+      "ui-button ui-secondary ui-default",
       "playback-page-controls",
       "programmer-fade-fader full",
       "cue-fade-master",
