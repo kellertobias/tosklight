@@ -5,10 +5,10 @@ use async_trait::async_trait;
 use light_core::Universe;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     io,
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::atomic::{AtomicU16, Ordering},
+    sync::atomic::{AtomicU16, AtomicU64, Ordering},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -100,6 +100,8 @@ pub struct NetworkOutput {
     cid: [u8; 16],
     source_name: String,
     sacn_priority: u8,
+    injected_failures: Mutex<HashSet<SocketAddr>>,
+    send_errors: AtomicU64,
 }
 
 #[derive(Clone, Debug)]
@@ -124,7 +126,26 @@ impl NetworkOutput {
             cid,
             source_name: source_name.into(),
             sacn_priority: 100,
+            injected_failures: Mutex::new(HashSet::new()),
+            send_errors: AtomicU64::new(0),
         })
+    }
+
+    /// Test-bench seam for deterministic route-scoped send failures.
+    pub fn inject_failure(&self, destination: SocketAddr, enabled: bool) {
+        let mut failures = self
+            .injected_failures
+            .lock()
+            .expect("output failure mutex poisoned");
+        if enabled {
+            failures.insert(destination);
+        } else {
+            failures.remove(&destination);
+        }
+    }
+
+    pub fn take_send_errors(&self) -> u64 {
+        self.send_errors.swap(0, Ordering::Relaxed)
     }
 
     pub async fn send_routes(
@@ -141,17 +162,43 @@ impl NetworkOutput {
             &self.source_name,
             self.sacn_priority,
         )?;
+        let mut sent = 0_u64;
+        let mut first_error = None;
         for packet in &packets {
-            match packet.protocol {
-                Protocol::ArtNet => {
-                    self.artnet
-                        .send_to(&packet.bytes, packet.destination)
-                        .await?
+            let injected = self
+                .injected_failures
+                .lock()
+                .expect("output failure mutex poisoned")
+                .contains(&packet.destination);
+            let result = if injected {
+                Err(io::Error::other(format!(
+                    "injected output failure for {}",
+                    packet.destination
+                )))
+            } else {
+                match packet.protocol {
+                    Protocol::ArtNet => {
+                        self.artnet.send_to(&packet.bytes, packet.destination).await
+                    }
+                    Protocol::Sacn => self.sacn.send_to(&packet.bytes, packet.destination).await,
                 }
-                Protocol::Sacn => self.sacn.send_to(&packet.bytes, packet.destination).await?,
+            };
+            match result {
+                Ok(_) => sent += 1,
+                Err(error) => {
+                    self.send_errors.fetch_add(1, Ordering::Relaxed);
+                    if first_error.is_none() {
+                        first_error = Some(error);
+                    }
+                }
             };
         }
-        Ok(packets.len() as u64)
+        if sent == 0
+            && let Some(error) = first_error
+        {
+            return Err(error);
+        }
+        Ok(sent)
     }
 
     pub async fn terminate_routes(

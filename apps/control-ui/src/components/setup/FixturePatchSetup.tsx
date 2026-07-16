@@ -14,7 +14,7 @@ type MultiPatchEdit = { fixtureId: string; instanceId: string; kind: "address" |
 export function FixturePatchSetup({ onMedia }: { onMedia?: () => void } = {}) {
   const server = useServer(); const { state, dispatch } = useApp();
   const layers = [...server.patchLayers].sort((a,b) => a.body.order - b.body.order).map((item) => item.body);
-  const [activeLayer, setActiveLayer] = useState("default"); const [selectedFixture, setSelectedFixture] = useState<string | null>(null);
+  const [activeLayer, setActiveLayer] = useState("all"); const [selectedFixture, setSelectedFixture] = useState<string | null>(null);
   const [browserOpen, setBrowserOpen] = useState(false); const [placementOpen, setPlacementOpen] = useState(false);
   const [layerModal, setLayerModal] = useState<"add" | "select" | null>(null); const [layerName, setLayerName] = useState("");
   const [query, setQuery] = useState(""); const [submitted, setSubmitted] = useState(""); const [typeFilter, setTypeFilter] = useState(""); const [manufacturer, setManufacturer] = useState("");

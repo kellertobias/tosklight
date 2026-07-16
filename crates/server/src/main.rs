@@ -855,7 +855,8 @@ fn router(state: AppState) -> Router {
     if test_bench {
         router = router
             .route("/api/v1/test/clock/reset", post(reset_test_clock))
-            .route("/api/v1/test/clock/advance", post(advance_test_clock));
+            .route("/api/v1/test/clock/advance", post(advance_test_clock))
+            .route("/api/v1/test/output/failure", post(set_test_output_failure));
     }
     router
         .layer(middleware::from_fn_with_state(state.clone(), desk_boundary))
@@ -940,10 +941,11 @@ async fn advance_test_clock(
         }
     };
     let snapshot = state.engine.snapshot();
-    let packets = state
+    let output = state
         .network_output
         .as_ref()
-        .ok_or_else(|| ApiError::unavailable("network output is unavailable"))?
+        .ok_or_else(|| ApiError::unavailable("network output is unavailable"))?;
+    let packets = output
         .send_routes(
             &snapshot.routes,
             &frames,
@@ -958,6 +960,7 @@ async fn advance_test_clock(
             .expect("output health mutex poisoned");
         health.frames_sent += 1;
         health.packets_sent += packets;
+        health.send_errors += output.take_send_errors();
     }
     send_osc_feedback(&state, true);
     Ok(Json(serde_json::json!({
@@ -966,6 +969,24 @@ async fn advance_test_clock(
         "packets_sent": packets,
         "universes": frames.into_iter().map(|(universe, slots)| serde_json::json!({"universe":universe,"slots":slots.to_vec()})).collect::<Vec<_>>(),
     })))
+}
+
+#[derive(Deserialize)]
+struct TestOutputFailure {
+    destination: SocketAddr,
+    enabled: bool,
+}
+
+async fn set_test_output_failure(
+    State(state): State<AppState>,
+    Json(input): Json<TestOutputFailure>,
+) -> Result<StatusCode, ApiError> {
+    state
+        .network_output
+        .as_ref()
+        .ok_or_else(|| ApiError::unavailable("network output is unavailable"))?
+        .inject_failure(input.destination, input.enabled);
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn list_fixture_library(
@@ -2902,12 +2923,35 @@ async fn put_object(
         body =
             serde_json::to_value(fixture).map_err(|error| ApiError::internal(error.to_string()))?;
     }
-    if state
+    let active = state
         .active_show
         .read()
         .as_ref()
-        .is_some_and(|active| active.id == show_id)
-    {
+        .is_some_and(|active| active.id == show_id);
+    let route_to_terminate = if active && kind == "route" {
+        let store = ShowStore::open(&entry.path).map_err(ApiError::store)?;
+        let previous = store
+            .objects("route")
+            .map_err(ApiError::store)?
+            .into_iter()
+            .find(|object| object.id == object_id)
+            .and_then(|object| {
+                serde_json::from_value::<light_output::OutputRoute>(object.body).ok()
+            });
+        let next = serde_json::from_value::<light_output::OutputRoute>(body.clone()).ok();
+        previous.filter(|old| {
+            old.enabled
+                && next.as_ref().is_none_or(|new| {
+                    !new.enabled
+                        || old.protocol != new.protocol
+                        || old.destination_universe != new.destination_universe
+                        || old.destination != new.destination
+                })
+        })
+    } else {
+        None
+    };
+    if active {
         let candidate =
             load_engine_snapshot_with_override(&entry, Some((&kind, &object_id, &body)))
                 .map_err(ApiError::internal)?;
@@ -2920,12 +2964,12 @@ async fn put_object(
     let revision = store
         .put_object(&kind, &object_id, &body, expected)
         .map_err(ApiError::store)?;
-    if state
-        .active_show
-        .read()
-        .as_ref()
-        .is_some_and(|active| active.id == show_id)
-    {
+    if active {
+        if let (Some(output), Some(route)) = (&state.network_output, route_to_terminate) {
+            let _ = output
+                .terminate_routes(&[route], &mut *state.output_sequences.lock().await)
+                .await;
+        }
         state
             .engine
             .replace_snapshot(load_engine_snapshot(&entry).map_err(ApiError::internal)?)
