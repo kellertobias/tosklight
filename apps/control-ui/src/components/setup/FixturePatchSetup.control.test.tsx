@@ -98,9 +98,14 @@ describe("selected split SET editing", () => {
     state.patchSetArmed = true;
     rerender(<FixturePatchSetup/>);
 
-    expect(await screen.findByRole("heading", { name: "Set fixture split 3 address" })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Split 3 address"), { target: { value: "4.401" } });
-    fireEvent.click(screen.getByRole("button", { name: /^Set$/ }));
+    const addressScreen = await screen.findByRole("dialog", { name: "Fixture Address" });
+    expect(within(addressScreen).getByText("Complete footprint").parentElement).toHaveTextContent("16 slots");
+    expect(within(addressScreen).getByRole("button", { name: /Split 3/ })).toHaveClass("active");
+    expect(within(addressScreen).getAllByRole("gridcell")).toHaveLength(512);
+    fireEvent.click(within(addressScreen).getByRole("button", { name: "Clear address · Unpatch" }));
+    for (const key of ["4", "Universe separator", "4", "0", "1"]) fireEvent.click(within(addressScreen).getByRole("button", { name: key === "Universe separator" ? key : `Address ${key}` }));
+    expect(within(addressScreen).getAllByText("4.401")).not.toHaveLength(0);
+    fireEvent.click(within(addressScreen).getByRole("button", { name: "Set Address" }));
 
     await waitFor(() => expect(server.updatePatchedFixture).toHaveBeenCalledWith("fixture-split", {
       split_patches: [
@@ -111,6 +116,39 @@ describe("selected split SET editing", () => {
       address: 101,
     }));
     expect(dispatch).toHaveBeenCalledWith({ type: "SET_PATCH_ARMED", value: false });
+  });
+
+  it("excludes the fixture's own slots, rejects another fixture's full range, and cancels on Escape", async () => {
+    const occupied = splitFixture();
+    occupied.fixture_id = "fixture-other";
+    occupied.fixture_number = 18;
+    occupied.name = "Split Wash 18";
+    occupied.universe = 4;
+    occupied.address = 401;
+    occupied.split_patches = [
+      { split: 1, universe: 4, address: 401 },
+      { split: 3, universe: 5, address: 201 },
+    ];
+    server.patch.fixtures = [splitFixture(), occupied];
+
+    const { rerender } = render(<FixturePatchSetup/>);
+    fireEvent.click(screen.getByRole("button", { name: "Split 3 patch 2.201" }));
+    state.patchSetArmed = true;
+    rerender(<FixturePatchSetup/>);
+
+    const addressScreen = await screen.findByRole("dialog", { name: "Fixture Address" });
+    const current = within(addressScreen).getByRole("gridcell", { name: /DMX address 201/ });
+    expect(current).toHaveClass("proposed");
+    expect(current).not.toHaveClass("used");
+
+    fireEvent.click(within(addressScreen).getByRole("button", { name: "Clear address · Unpatch" }));
+    for (const key of ["4", "Universe separator", "4", "0", "1"]) fireEvent.click(within(addressScreen).getByRole("button", { name: key === "Universe separator" ? key : `Address ${key}` }));
+    expect(within(addressScreen).getByRole("alert")).toHaveTextContent("complete Split 3 footprint is unavailable");
+    expect(within(addressScreen).getByRole("button", { name: "Set Address" })).toBeDisabled();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Fixture Address" })).not.toBeInTheDocument();
+    expect(server.updatePatchedFixture).not.toHaveBeenCalled();
   });
 });
 

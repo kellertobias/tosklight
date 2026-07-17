@@ -15,6 +15,7 @@ The [canonical test catalog](../help/99-Development/02-test-bench-coverage.md) i
 - [Hardware-connected encoder display](../plans/Done/31-hardware-connected-encoders.DONE.md) retains the `ENCODER-DISPLAY-001` six-slot numbering, value formatting, remapping, physical turn/press-turn, Direct clearing, and measured hardware-layout contract.
 - [Record and Update workflow colors](../plans/Done/33-record-and-update-menu-colors.DONE.md) retains the `WORKFLOW-COLOR-001` semantic red/amber tokens, text identity, distinct destructive/error/disabled actions, and software/hardware visual contract.
 - [Active playback colors](../plans/Done/34-active-playback-colors.DONE.md) retains the `PLAYBACK-COLOR-001` configured-color runtime strength, separate selection outline, combined-state, empty-cell, hardware, and Virtual Playback contract.
+- [Fixture Address screen](../plans/Done/35-fixture-address-screen.DONE.md) retains the `FIXTURE-ADDRESS-001` complete-footprint availability, own-slot exclusion, integrated number block, split-wide atomic validation, cancellation, and supported-layout contract.
 
 This file remains because OSC-002, OSC-004, OSC-006, API-002, and CROSS-001 still contain contract assertions that are not fully represented by executable tests.
 

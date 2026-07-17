@@ -1,5 +1,9 @@
 # Fixture Address Screen
 
+## Completion
+
+Implemented. Set Address now opens one desk-sized Fixture Address screen with the selected fixture, complete mode footprint, current and pending address, every split assignment, an integrated number block, and the authoritative 512-slot universe map. The fixture's own ranges are excluded while moving it, all split drafts are validated together, and confirmation remains one atomic patch update. Clear explicitly unpatches the active split; Cancel, Close, and Escape make no change.
+
 ## Status and scope
 
 Redesign the **Set Address / Fixture Address** screen so the operator can choose from authoritative available DMX addresses and enter an address with an on-screen number block in one place. Similar design than in the New Fixture screen.
@@ -20,3 +24,9 @@ Changing universe, mode, split, or fixture selection refreshes availability and 
 4. Invalid, overlapping, overflowing, stale, and unsupported split addresses cannot partially patch.
 5. Confirmation updates the patch once; Cancel, close, and Escape leave it unchanged.
 6. The full availability list and number block remain reachable at supported desk sizes.
+
+## Verification
+
+- Component coverage exercises full split editing through the integrated number block, the 512-slot map, own-slot exclusion, occupied-footprint rejection, one atomic update, and Escape cancellation.
+- `FIXTURE-ADDRESS-001` opens the production Show Patch workflow, checks the integrated map and number block, verifies supported viewport bounds, and proves Escape preserves the address.
+- Focused component tests, the production frontend build, full unit coverage, focused Playwright coverage, and the generated manual pass.

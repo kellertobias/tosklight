@@ -1,0 +1,132 @@
+.fixture-address-layer {
+	z-index: 2700 !important;
+}
+.show-patch-layout:has(> .fixture-address-layer)
+	> .stacked-modal-layer:not(.fixture-address-layer) {
+	display: none;
+}
+.fixture-address-screen {
+	width: calc(100vw - 24px) !important;
+	height: calc(100vh - 24px);
+	max-width: none !important;
+	display: grid;
+	grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+	gap: 8px;
+	overflow: hidden;
+}
+.fixture-address-screen > header {
+	display: flex;
+	align-items: center;
+	padding-right: 58px;
+}
+.fixture-address-screen h2 {
+	margin: 0;
+}
+.fixture-address-screen header small {
+	display: block;
+	color: var(--muted);
+}
+.fixture-address-summary {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 6px;
+}
+.fixture-address-summary span {
+	display: grid;
+	gap: 3px;
+	padding: 8px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: var(--panel2);
+	color: var(--muted);
+}
+.fixture-address-summary b {
+	color: var(--text);
+}
+.fixture-address-summary b.invalid {
+	color: var(--red);
+}
+.fixture-address-screen > nav {
+	display: flex;
+	gap: 5px;
+	overflow: auto;
+}
+.fixture-address-screen > nav button {
+	min-width: 150px;
+	min-height: 48px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: var(--panel2);
+}
+.fixture-address-screen > nav button.active {
+	border-color: var(--cyan);
+	color: var(--cyan);
+}
+.fixture-address-screen > nav small {
+	display: block;
+}
+.fixture-address-content {
+	min-height: 0;
+	display: grid;
+	grid-template-columns: 260px minmax(0, 1fr);
+	gap: 10px;
+}
+.fixture-address-entry {
+	display: grid;
+	align-content: start;
+	gap: 8px;
+}
+.fixture-address-entry label {
+	display: grid;
+	gap: 5px;
+	color: var(--muted);
+}
+.fixture-address-entry label strong {
+	padding: 12px;
+	border: 1px solid var(--cyan);
+	border-radius: 6px;
+	background: #09171b;
+	color: var(--cyan);
+	font-size: 24px;
+	text-align: center;
+}
+.fixture-address-number-block {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 5px;
+}
+.fixture-address-number-block button {
+	min-height: 54px;
+	border: 1px solid var(--line2);
+	border-radius: 6px;
+	background: var(--panel2);
+	font-size: 20px;
+}
+.fixture-address-entry .unpatch {
+	min-height: 44px;
+	border-color: var(--red);
+	color: var(--red);
+}
+.fixture-address-entry [role="alert"] {
+	color: var(--red);
+}
+.fixture-address-screen > .fixture-address-content > .universe-visual {
+	min-height: 0;
+}
+.fixture-address-screen > footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 7px;
+}
+.fixture-address-screen > footer button {
+	min-width: 140px;
+	min-height: 48px;
+}
+@media (max-width: 900px) {
+	.fixture-address-summary {
+		grid-template-columns: 1fr 1fr;
+	}
+	.fixture-address-content {
+		grid-template-columns: 220px minmax(0, 1fr);
+	}
+}
