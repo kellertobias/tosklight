@@ -455,6 +455,10 @@ struct ProgrammerSet {
     value: f32,
 }
 #[derive(Deserialize)]
+struct ProgrammerSetMany {
+    assignments: Vec<ProgrammerSet>,
+}
+#[derive(Deserialize)]
 struct MasterInput {
     grand_master: Option<f32>,
     blackout: Option<bool>,
@@ -8291,6 +8295,7 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
             | "selection.macro"
             | "group.select"
             | "programmer.set"
+            | "programmer.set_many"
             | "programmer.set_value"
             | "programmer.control_action"
             | "programmer.priority"
@@ -8663,6 +8668,46 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
                 input.fixture_id,
                 light_core::AttributeKey(input.attribute),
                 light_core::AttributeValue::Normalized(input.value),
+                Some(programmer_fade_millis),
+                None,
+            );
+            persist_programmer(state, session).map_err(|e| e.message)?;
+            Ok(serde_json::json!({"programmer":state.programmers.get(session.id)}))
+        }
+        "programmer.set_many" => {
+            let input: ProgrammerSetMany =
+                serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
+            let snapshot = state.engine.snapshot();
+            let fixture_exists = |fixture_id: light_core::FixtureId| {
+                snapshot.fixtures.iter().any(|fixture| {
+                    fixture.fixture_id == fixture_id
+                        || fixture
+                            .logical_heads
+                            .iter()
+                            .any(|head| head.fixture_id == fixture_id)
+                })
+            };
+            let mut assignments = Vec::with_capacity(input.assignments.len());
+            for assignment in input.assignments {
+                if assignment.attribute.trim().is_empty() {
+                    return Err("attribute is required".into());
+                }
+                if !assignment.value.is_finite() || !(0.0..=1.0).contains(&assignment.value) {
+                    return Err("value must be within 0-1".into());
+                }
+                if !fixture_exists(assignment.fixture_id) {
+                    return Err("fixture does not exist".into());
+                }
+                assignments.push((
+                    assignment.fixture_id,
+                    light_core::AttributeKey(assignment.attribute),
+                    light_core::AttributeValue::Normalized(assignment.value),
+                ));
+            }
+            let programmer_fade_millis = state.configuration.read().programmer_fade_millis;
+            state.programmers.set_many_faded_with_timing(
+                session.id,
+                assignments,
                 Some(programmer_fade_millis),
                 None,
             );
@@ -9245,6 +9290,7 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
             if matches!(
                 command.command.as_str(),
                 "programmer.set"
+                    | "programmer.set_many"
                     | "programmer.set_value"
                     | "programmer.control_action"
                     | "programmer.release"
@@ -20132,6 +20178,69 @@ mod tests {
         assert_eq!(status["fixtures"][0]["status"]["online"], true);
         assert_eq!(status["fixtures"][0]["layers"].as_array().unwrap().len(), 1);
         mock.await.unwrap();
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+
+    #[tokio::test]
+    async fn programmer_set_many_validates_then_applies_one_faded_undo_step() {
+        let (state, data_dir) = test_state();
+        let fixture = schema_v2_direct_fixture().0;
+        let fixture_id = fixture.fixture_id;
+        state
+            .engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![fixture],
+                revision: 1,
+                ..EngineSnapshot::default()
+            })
+            .unwrap();
+        let app = router(state.clone());
+        let (token, _) = login(&app, "Operator").await;
+        let session = authenticate_token(&state, &token).unwrap();
+
+        let response = dispatch_ws_command(
+            &state,
+            &session,
+            WsCommand {
+                protocol_version: 1,
+                request_id: "home".into(),
+                session_id: session.id,
+                expected_revision: None,
+                command: "programmer.set_many".into(),
+                payload: serde_json::json!({"assignments":[
+                    {"fixture_id":fixture_id,"attribute":"pan","value":0.25},
+                    {"fixture_id":fixture_id,"attribute":"tilt","value":0.75}
+                ]}),
+            },
+        );
+        assert!(response.ok, "{:?}", response.error);
+        let values = state.programmers.get(session.id).unwrap().values;
+        assert_eq!(values.len(), 2);
+        assert!(values.iter().all(|value| value.fade));
+        assert_eq!(values[0].changed_at, values[1].changed_at);
+
+        let rejected = dispatch_ws_command(
+            &state,
+            &session,
+            WsCommand {
+                protocol_version: 1,
+                request_id: "invalid-home".into(),
+                session_id: session.id,
+                expected_revision: None,
+                command: "programmer.set_many".into(),
+                payload: serde_json::json!({"assignments":[
+                    {"fixture_id":fixture_id,"attribute":"pan","value":0.5},
+                    {"fixture_id":light_core::FixtureId::new(),"attribute":"tilt","value":0.5}
+                ]}),
+            },
+        );
+        assert!(!rejected.ok);
+        assert_eq!(
+            serde_json::to_value(state.programmers.get(session.id).unwrap().values).unwrap(),
+            serde_json::to_value(values).unwrap()
+        );
+        assert!(state.programmers.undo(session.id));
+        assert!(state.programmers.get(session.id).unwrap().values.is_empty());
         let _ = std::fs::remove_dir_all(data_dir);
     }
 

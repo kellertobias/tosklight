@@ -780,6 +780,17 @@ export class LightApiClient {
       value,
     });
   }
+  setProgrammerMany(
+    assignments: Array<{ fixtureId: string; attribute: string; value: number }>,
+  ) {
+    return this.command("programmer.set_many", {
+      assignments: assignments.map(({ fixtureId, attribute, value }) => ({
+        fixture_id: fixtureId,
+        attribute,
+        value,
+      })),
+    });
+  }
   setProgrammerValue(
     fixtureId: string,
     attribute: string,

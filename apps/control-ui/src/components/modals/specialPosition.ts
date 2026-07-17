@@ -1,6 +1,52 @@
 import type { PatchedFixture, VisualizationSnapshot } from "../../api/types";
 
 export type LampPosition = { pan: number; tilt: number };
+export type ProgrammerHomeAssignment = {
+  fixtureId: string;
+  attribute: "pan" | "tilt";
+  value: number;
+};
+
+/** Builds the ordered, per-head Position home gesture for the current selection. */
+export function returnHomeAssignments(
+  selectedFixtures: string[],
+  patch: PatchedFixture[],
+): ProgrammerHomeAssignment[] {
+  const assignments: ProgrammerHomeAssignment[] = [];
+  const seen = new Set<string>();
+  for (const fixtureId of selectedFixtures) {
+    const fixture = patch.find(
+      (candidate) =>
+        candidate.fixture_id === fixtureId ||
+        candidate.logical_heads.some((head) => head.fixture_id === fixtureId),
+    );
+    if (!fixture) continue;
+    const logicalHead = fixture.logical_heads.find(
+      (head) => head.fixture_id === fixtureId,
+    );
+    const heads = logicalHead
+      ? fixture.definition.heads.filter(
+          (head) => head.index === logicalHead.head_index,
+        )
+      : fixture.definition.heads.filter((head) => head.shared);
+    for (const attribute of ["pan", "tilt"] as const) {
+      const parameter = heads
+        .flatMap((head) => head.parameters)
+        .find((candidate) => candidate.attribute === attribute);
+      if (!parameter) continue;
+      const key = `${fixtureId}\u0000${attribute}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const configuredDefault = (parameter as { default?: number }).default;
+      assignments.push({
+        fixtureId,
+        attribute,
+        value: Number.isFinite(configuredDefault) ? configuredDefault! : 0.5,
+      });
+    }
+  }
+  return assignments;
+}
 
 function parameterDefault(
   patch: PatchedFixture[],

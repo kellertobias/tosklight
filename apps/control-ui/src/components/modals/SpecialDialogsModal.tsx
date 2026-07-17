@@ -2,7 +2,11 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent, type RefObject
 import { useApp } from "../../state/AppContext";
 import { useServer } from "../../api/ServerContext";
 import { VerticalTouchFader } from "../control/VerticalTouchFader";
-import { moveLampPositions, resolveLampPositions } from "./specialPosition";
+import {
+  moveLampPositions,
+  resolveLampPositions,
+  returnHomeAssignments,
+} from "./specialPosition";
 import { Button } from "../common";
 import type { PatchedFixture } from "../../api/types";
 
@@ -55,6 +59,14 @@ export function SpecialDialogsModal() {
   const joystick = useRef({ x: 0, y: 0 });
   const fixturePositions = useRef(new Map<string, { pan: number; tilt: number }>());
   const selectedFixtureKey = server.selectedFixtures.join("\u0000");
+  const homeAssignments = useMemo(
+    () =>
+      returnHomeAssignments(
+        server.selectedFixtures,
+        server.patch?.fixtures ?? [],
+      ),
+    [server.patch, server.selectedFixtures],
+  );
   const available = useMemo(() => {
     const result = new Set<string>();
     for (const fixture of server.patch?.fixtures ?? [])
@@ -196,7 +208,27 @@ export function SpecialDialogsModal() {
               >
                 <i className="joystick-handle" style={{ left: `${50 + joystick.current.x * 38}%`, top: `${50 + joystick.current.y * 38}%` }} />
               </div>
-              <span className="position-trackball-readout">Relative move<br/><b>Avg Pan {Math.round(pan * 100)}%</b><b>Avg Tilt {Math.round(tilt * 100)}%</b></span>
+              <span className="position-trackball-readout">Relative move<br/><b>Avg Pan {Math.round(pan * 100)}%</b><b>Avg Tilt {Math.round(tilt * 100)}%</b>
+                <Button
+                  disabled={homeAssignments.length === 0}
+                  onClick={async () => {
+                    if (!(await server.setProgrammerMany(homeAssignments))) return;
+                    const positions = new Map(fixturePositions.current);
+                    for (const assignment of homeAssignments) {
+                      const position = positions.get(assignment.fixtureId);
+                      if (position) position[assignment.attribute] = assignment.value;
+                    }
+                    fixturePositions.current = positions;
+                    const values = [...positions.values()];
+                    if (values.length) {
+                      setPan(values.reduce((sum, value) => sum + value.pan, 0) / values.length);
+                      setTilt(values.reduce((sum, value) => sum + value.tilt, 0) / values.length);
+                    }
+                  }}
+                >
+                  Return Home
+                </Button>
+              </span>
             </div>
           )}
           {family === "Color" && (
@@ -296,6 +328,7 @@ export function SpecialDialogsModal() {
             />
           )}
         </div>
+        {server.error && <p className="modal-error" role="alert">{server.error}</p>}
       </section>
     </div>
   );

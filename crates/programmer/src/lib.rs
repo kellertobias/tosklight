@@ -78,7 +78,7 @@ impl<'de> Deserialize<'de> for GroupProgrammerValue {
 }
 type GroupProgrammerValues = HashMap<String, HashMap<AttributeKey, GroupProgrammerValue>>;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 struct ProgrammerValueTiming {
     fade: bool,
     fade_millis: Option<u64>,
@@ -1017,7 +1017,27 @@ impl ProgrammerRegistry {
         session: SessionId,
         assignments: impl IntoIterator<Item = (FixtureId, AttributeKey, AttributeValue)>,
     ) {
-        self.set_many_with_checkpoint(session, assignments, true);
+        self.set_many_with_checkpoint(session, assignments, true, ProgrammerValueTiming::default());
+    }
+
+    /// Apply several normalized values as one normal faded Programmer gesture.
+    pub fn set_many_faded_with_timing(
+        &self,
+        session: SessionId,
+        assignments: impl IntoIterator<Item = (FixtureId, AttributeKey, AttributeValue)>,
+        fade_millis: Option<u64>,
+        delay_millis: Option<u64>,
+    ) {
+        self.set_many_with_checkpoint(
+            session,
+            assignments,
+            true,
+            ProgrammerValueTiming {
+                fade: true,
+                fade_millis,
+                delay_millis,
+            },
+        );
     }
 
     /// Complete a momentary/timed action without creating a second Undo point. The active edge
@@ -1028,7 +1048,12 @@ impl ProgrammerRegistry {
         session: SessionId,
         assignments: impl IntoIterator<Item = (FixtureId, AttributeKey, AttributeValue)>,
     ) {
-        self.set_many_with_checkpoint(session, assignments, false);
+        self.set_many_with_checkpoint(
+            session,
+            assignments,
+            false,
+            ProgrammerValueTiming::default(),
+        );
     }
 
     fn set_many_with_checkpoint(
@@ -1036,6 +1061,7 @@ impl ProgrammerRegistry {
         session: SessionId,
         assignments: impl IntoIterator<Item = (FixtureId, AttributeKey, AttributeValue)>,
         checkpoint: bool,
+        timing: ProgrammerValueTiming,
     ) {
         let assignments = assignments.into_iter().collect::<Vec<_>>();
         if assignments.is_empty() {
@@ -1064,9 +1090,9 @@ impl ProgrammerRegistry {
                     changed_at,
                     programmer_order: self.next_programmer_order(),
                     merge_mode: light_core::MergeMode::Ltp,
-                    fade: false,
-                    fade_millis: None,
-                    delay_millis: None,
+                    fade: timing.fade,
+                    fade_millis: timing.fade_millis,
+                    delay_millis: timing.delay_millis,
                 });
             }
             state.last_activity = changed_at;
@@ -2270,6 +2296,64 @@ mod tests {
 
         assert!(registry.undo(session));
         assert!(registry.get(session).unwrap().values.is_empty());
+    }
+
+    #[test]
+    fn faded_batch_is_one_undo_step_and_respects_preload_capture() {
+        let registry = ProgrammerRegistry::default();
+        let session = SessionId::new();
+        let fixture = FixtureId::new();
+        registry.start(session, UserId::new());
+        registry.set(
+            session,
+            fixture,
+            AttributeKey("pan".into()),
+            AttributeValue::Normalized(0.9),
+        );
+        registry.set_many_faded_with_timing(
+            session,
+            [
+                (
+                    fixture,
+                    AttributeKey("pan".into()),
+                    AttributeValue::Normalized(0.25),
+                ),
+                (
+                    fixture,
+                    AttributeKey("tilt".into()),
+                    AttributeValue::Normalized(0.75),
+                ),
+            ],
+            Some(400),
+            None,
+        );
+        let values = registry.get(session).unwrap().values;
+        assert_eq!(values.len(), 2);
+        assert!(values.iter().all(|value| value.fade));
+        assert!(values.iter().all(|value| value.fade_millis == Some(400)));
+        assert_eq!(values[0].changed_at, values[1].changed_at);
+
+        assert!(registry.undo(session));
+        let values = registry.get(session).unwrap().values;
+        assert_eq!(values.len(), 1);
+        assert_eq!(values[0].attribute, AttributeKey("pan".into()));
+        assert_eq!(values[0].value, AttributeValue::Normalized(0.9));
+
+        assert!(registry.arm_preload(session, true));
+        registry.set_many_faded_with_timing(
+            session,
+            [(
+                fixture,
+                AttributeKey("pan".into()),
+                AttributeValue::Normalized(0.5),
+            )],
+            Some(400),
+            None,
+        );
+        let programmer = registry.get(session).unwrap();
+        assert_eq!(programmer.values[0].value, AttributeValue::Normalized(0.9));
+        assert_eq!(programmer.preload_pending.len(), 1);
+        assert!(programmer.preload_pending[0].fade);
     }
 
     #[test]

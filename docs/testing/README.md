@@ -8,6 +8,7 @@ The [canonical test catalog](../help/99-Development/02-test-bench-coverage.md) i
 - [Feature 21 completion coverage](../plans/Done/21-completion-coverage-and-release-verification.DONE.md) retains the extended `SHOW-005`, `UPDATE-002`, `HIGHLIGHT-004` through `HIGHLIGHT-006`, `FIXTURE-002`, and `MATTER-002` release-verification contracts.
 - [Client history and removal](../plans/Done/22-client-history-and-removal.DONE.md) retains the `CLIENT-001` desk-persistent presence, history, removal, and clean re-registration contract.
 - [Planned demo run](../plans/Done/23-planned-demo-run.DONE.md) retains the single `DEMO-001` narrated show-build, programming, busking, and Preload contract.
+- [Return Home in the Position special dialog](../plans/Done/25-return-home-position-special-dialog.DONE.md) retains the paired `POSITION-HOME-001` per-head defaults, atomic programmer gesture, Undo, and software/hardware layout contract.
 
 This file remains because OSC-002, OSC-004, OSC-006, API-002, and CROSS-001 still contain contract assertions that are not fully represented by executable tests.
 

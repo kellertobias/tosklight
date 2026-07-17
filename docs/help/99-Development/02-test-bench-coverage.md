@@ -79,6 +79,15 @@ Configure two enabled routes for logical universe 1: Art-Net universe 1 to the b
 - **Oracle:** Current programmer selection state, ordered source references, normalized deduplicated fixture targets, visible selection indicators, leading-plus continuation, and preserved programmer values.
 - **Pass:** Selections accumulate across all surfaces as implicit `+` operations, value/encoder/preset edits leave the selection current, the next non-plus selection replaces the old targets, leading `+` continues them, and first-stage `CLR` clears only the selection.
 
+### POSITION-HOME-001 — Return selected Position heads to profile homes
+
+- **Starting show:** Load canonical `default-stage.show`, immediately Save As separate `position-home-001-api.show` and `position-home-001-ui.show` working copies, and use the active copy.
+- **Surface:** Paired authenticated programmer command and the Position special dialog in both software-only and OSC hardware-connected desk layouts.
+- **Actions:** Build a mixed ordered selection, establish prior Pan/Tilt programmer values, press **Return Home**, undo once, attach the simulated hardware surface, and press **Return Home** again.
+- **Oracle:** Ordered per-head Pan/Tilt defaults with independent 50% fallback, skipped non-Position fixtures, one faded batch mutation and audit event, exact prior values after one Undo, and the same visible enabled action in both layouts.
+- **Pass:** Return Home affects only compatible heads in the current selection, participates in ordinary programmer timing and Undo, and does not modify profile or recorded show data.
+- **Executable scenario:** [POSITION-HOME-001](../../../tests/25-return-home-position-special-dialog.spec.ts)
+
 ## Default Stage Show
 
 Canonical `default-stage.show` contains the complete 49-record built-in patch:
@@ -141,6 +150,7 @@ The executable workflows that use this patch are cataloged under the concrete Gr
 | DIM-001–002 | Foundational dimmers | ordered live Group editing and a visible Group command reaching logical, Art-Net, and sACN output | Group/programmer state and exact DMX |
 | GROUP-003–005 | Group semantics | derived membership, frozen membership, stored empty Groups, skipped missing range IDs, unpatched members, and safe invalid references | Group objects, selection, visible panes, rendered output |
 | PROG-001–004 | Programmer | selection gesture lifetime, ordered spreading, fixture/Group LTP, and two-stage Clear | programmer state, audit, panes, exact output |
+| POSITION-HOME-001 | Position Return Home | ordered per-head profile defaults, independent 50% fallback, skipped incompatible fixtures, one faded Undo gesture, empty-selection safety, and software/hardware layout parity | paired programmer state, atomic batch audit, prior values after Undo, and production dialog controls |
 | UPDATE-001–002 | Update | four Cue modes and authoritative tracked sources, exact eligibility, Preset/Group existing-versus-new semantics, touch/default/menu flows, current/explicit page context, pre-Update desk-settings migration with a schema-3 show, actual simulator pointer gesture exclusivity, and atomic revisions | paired and process-backed stored-object results, previews, revision history/undo, programmer retention, unrelated-object isolation, restart, simulator transport writes, and same-desk feedback |
 | HIGHLIGHT-001 | Transient Highlight output | independent HIGH state, complete/singleton application, programmer/store isolation, fixture-look overrides, first-frame Off reveal, ownership, and safety/master behavior | paired Highlight/programmer state, stored objects, and resolved raw output |
 | HIGHLIGHT-002 | Live selection source and lifecycle | Fixtures/Stage/Group/command selection reset, live Group ALL restoration, additive/subtractive stepped selection, multi-head/multipatch/unpatched/invalid items, empty selection, reconnect, and show-load clearing | paired actual selection, live source resolution, Highlight output, reconnect, and reload |

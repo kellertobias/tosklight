@@ -213,6 +213,9 @@ interface ServerContextValue {
     remove?: boolean,
   ) => Promise<void>;
   setProgrammer: (fixtureId: string, attribute: string, value: number) => Promise<void>;
+  setProgrammerMany: (
+    assignments: Array<{ fixtureId: string; attribute: string; value: number }>,
+  ) => Promise<boolean>;
   setProgrammerValue: (
     fixtureId: string,
     attribute: string,
@@ -1091,6 +1094,16 @@ export function ServerProvider({ children }: PropsWithChildren) {
           setError(null);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      },
+      setProgrammerMany: async (assignments) => {
+        try {
+          await client.setProgrammerMany(assignments);
+          setError(null);
+          return true;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return false;
         }
       },
       setProgrammerValue: async (fixtureId, attribute, value) => {
