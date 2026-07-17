@@ -18,7 +18,9 @@
 *.show
 *.log
 *.pid
+*.pyc
 
+__pycache__
 # Generated release packages
 /artifacts/
 /output/
