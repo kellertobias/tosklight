@@ -1,3 +1,18 @@
+# Completed: Planned demo run
+
+This plan is implemented by the single narrated `DEMO-001` scenario in `tests/product-demo.spec.ts`. The retained coverage contract and the literal normalizations required by the shipped fixture library and current desk model are documented in the development test catalog.
+
+Implementation normalizations:
+
+- House Mood uses `2.17` with multi-patches `2.18`–`2.24`, avoiding the plan's overlap with House Light `2.13`–`2.16`.
+- The shipped `Curtain 2 m` profile in its `5 m` mode represents each five-metre-high curtain; the desk does not persist per-instance scale or parent/mount relationships.
+- Art-Net destination universe 1 is used because destination universe 0 is not valid in the current route contract.
+- Groups 11 and 12 are Profiles Odd and Profiles Even; the plan's later references to Groups 11/21 are treated as the stated typo.
+- Playback slots 1 and 2 are assigned directly to the two Group masters because `SET GROUP … AT SET …` is not a valid command grammar.
+- The current Cuelist label for the requested non-tracking wrap is `Reset`.
+- The shipped ROBE Mode 3, JB-Lighting S16, Showtec 30 Channel, Generic DRGBW dimmer-first, Generic Two channel/four blind, and Generic Fan/Fog modes are used. ACL primary fixtures are patched at `1.1` and `1.2`; their seven multi-patches remain unpatched.
+- Color-playback handoffs use explicit playback Off actions after the replacement color starts, matching the requested visible outcome without claiming cross-Cuelist auto-off semantics the playback engine does not provide.
+
 Okay, now let's use this demo setup to build the following SINGLE test case And it needs to be one single test.
 Ideally we also have titles on the video that explains what we are currently doing:
 

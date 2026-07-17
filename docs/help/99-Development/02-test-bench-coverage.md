@@ -124,6 +124,15 @@ The executable workflows that use this patch are cataloged under the concrete Gr
 - **Pass:** Playback selection is deliberate and remains the shared default for Cue details and address-omitting Cue recording; running another playback does not steal selection, and explicit addresses still take precedence.
 - **Status:** Implemented with visible Shift-Z playback selection, desk-and-show scoped persistence, implicit Cuelist resolution, explicit-address override, and Playwright coverage. Sessions attached to the same desk share the selection; another desk used by the same user remains independent.
 
+## DEMO-001 — Narrated planned product demo
+
+- **Starting show:** Load a disposable copy of `default-stage.show`, then create a new empty show through the product-demo application and name it `Demo Show`.
+- **Surface:** The real `?demo=product` application, its simulated hardware keypad and playbacks, authenticated show-object setup, the manual clock, and logical DMX observation.
+- **Actions:** Add five patch layers; import the exact shipped fixture packages; build and patch the 80-fixture venue, truss, lamp, multipatch, and utility rig; add three output routes; enable Fixture Sheet group shortcuts; record Group 9 through the keypad; apply empty-selection **Lamps On**; create the color, position, and gobo presets; create the main sequence, color looks, group masters, and Speed A ACL chaser; busk the looks; then prepare playback and position changes in Preload with a four-second programmer fade and commit them before learning the chaser speed.
+- **Oracle:** Exact active show name; five named layers; 80 persisted patched fixtures; three enabled output routes; named and ordered Group objects; empty-selection programmer lamp/intensity values; preset, Cuelist, playback, page, wrap, chaser, and Speed Group data; enabled playback runtime; pending then committed Preload state; and non-zero authoritative DMX output.
+- **Pass:** One Playwright test completes the full operator story without splitting state across scenarios. `./test demo` records the narrated Full HD product surface and writes the maintained screenshot and video artifacts under `artifacts/product-demo/`.
+- **Executable scenario:** [DEMO-001](../../../tests/product-demo.spec.ts)
+
 ## Required coverage matrix
 
 | IDs | Area | Required cases | Primary oracle |
@@ -160,6 +169,7 @@ The executable workflows that use this patch are cataloged under the concrete Gr
 | TEXT-001, TEXT-015 | Text Editor | file association and dirty state, multi-pane synchronization/conflicts, external updates, rename/delete recovery, read-only and Markdown modes | persisted text/layout and visible editor state |
 | LOCK-001 | Desk Lock | synchronized multi-screen PIN/button locking, desk-scoped API and OSC suppression, stable output, and other-desk independence | lock API, visible dialogs, command line, DMX, OSC behavior |
 | CLIENT-001 | Client history and removal | stable client identity, connected-first presence, last-connected restart persistence, legacy unknown timestamps, duplicate-free reconnect, active/self removal conflicts, scoped confirmed cleanup, and removed-client default re-registration | schema-v9 desk store, live session registry, production Choose default screen UI, process restart, unchanged users/show objects, and new default desk identity |
+| DEMO-001 | Planned product demo | empty-show setup, five-layer 80-fixture rig, network routes, Groups, empty-selection Lamps On, Presets, Cues, playback busking, Preload, and Speed A chaser in one narrated run | persisted show objects, visible product-demo controls, programmer/preload/playback state, authoritative DMX, Full HD video, and final screenshot |
 | MANUAL-019 | Operator UI review | Desktop/desk terminology, shared modal/window search chrome and stacked options, fixture browser alignment, confined file fields, pane headers, Cue editor composition, Help/Outputs/DMX/Stage responsibilities, diagnostic Development access, and safe recovery load | visible accessible UI, persisted/API state, OSC desk identity, safe-blackout request |
 
 Every catalog entry added later must state setup, action surface, virtual timestamps where relevant, oracle, and pass condition. Protocol scenarios must discard packets captured before their action and assert a newer sequence, preventing stale output from satisfying the test.

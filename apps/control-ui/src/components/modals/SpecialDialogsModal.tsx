@@ -4,6 +4,23 @@ import { useServer } from "../../api/ServerContext";
 import { VerticalTouchFader } from "../control/VerticalTouchFader";
 import { moveLampPositions, resolveLampPositions } from "./specialPosition";
 import { Button } from "../common";
+import type { PatchedFixture } from "../../api/types";
+
+export function compatibleSpecialDialogActions(fixtures: PatchedFixture[], attribute: string): Array<{ fixtureId: string; attribute: string }> {
+  const actions = fixtures.flatMap((fixture) => fixture.definition.heads.flatMap((head) => {
+    const headAttributes = new Set(head.parameters.map((parameter) => parameter.attribute));
+    const targetAttribute = headAttributes.has(attribute)
+      ? attribute
+      : attribute === "control.lamp" && headAttributes.has("intensity")
+        ? "intensity"
+        : null;
+    if (!targetAttribute) return [];
+    if (head.shared) return [{ fixtureId: fixture.fixture_id, attribute: targetAttribute }];
+    const logicalHead = fixture.logical_heads.find((candidate) => candidate.head_index === head.index);
+    return [{ fixtureId: logicalHead?.fixture_id ?? fixture.fixture_id, attribute: targetAttribute }];
+  }));
+  return [...new Map(actions.map((action) => [`${action.fixtureId}\u0000${action.attribute}`, action])).values()];
+}
 
 function hsvToRgb(h: number, s: number, v: number) {
   const i = Math.floor(h * 6),
@@ -55,12 +72,14 @@ export function SpecialDialogsModal() {
   const family = state.specialDialogFamily;
   const close = () =>
     dispatch({ type: "SET_MODAL", modal: "specialDialogsOpen", value: false });
-  const apply = async (attribute: string, value: number) =>
-    Promise.all(
-      server.selectedFixtures.map((fixture) =>
-        server.setProgrammer(fixture, attribute, value),
-      ),
-    );
+  const apply = async (attribute: string, value: number, allWhenEmpty = false) => {
+    const actions = server.selectedFixtures.length || !allWhenEmpty
+      ? server.selectedFixtures.map((fixtureId) => ({ fixtureId, attribute }))
+      : compatibleSpecialDialogActions(server.patch?.fixtures ?? [], attribute);
+    await Promise.all(actions.map((action) =>
+      server.setProgrammer(action.fixtureId, action.attribute, value),
+    ));
+  };
   const applyColor = async (h = hue, s = saturation, v = brightness) => {
     const [red, green, blue] = hsvToRgb(h, s, v);
     await Promise.all(
@@ -247,8 +266,8 @@ export function SpecialDialogsModal() {
           )}
           {family === "Control" && (
             <div className="special-action-grid">
-              <Button onClick={() => void apply("control.lamp", 1)}>
-                Lamp On
+              <Button onClick={() => void apply("control.lamp", 1, true)}>
+                Lamps On
               </Button>
               <Button onClick={() => void apply("control.lamp", 0)}>
                 Lamp Off

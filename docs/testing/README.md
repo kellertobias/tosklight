@@ -7,6 +7,7 @@ The [canonical test catalog](../help/99-Development/02-test-bench-coverage.md) i
 - [OSC, API, and cross-surface agreement](04-osc-api-and-cross-surface.md) covers OSC hardware behavior, REST revisions, WebSocket/audit events, equivalent commands, authoritative PREV/NEXT/ALL and independent HIGH boundaries, and the focused Matter bridge transport/UI boundaries.
 - [Feature 21 completion coverage](../plans/Done/21-completion-coverage-and-release-verification.DONE.md) retains the extended `SHOW-005`, `UPDATE-002`, `HIGHLIGHT-004` through `HIGHLIGHT-006`, `FIXTURE-002`, and `MATTER-002` release-verification contracts.
 - [Client history and removal](../plans/Done/22-client-history-and-removal.DONE.md) retains the `CLIENT-001` desk-persistent presence, history, removal, and clean re-registration contract.
+- [Planned demo run](../plans/Done/23-planned-demo-run.DONE.md) retains the single `DEMO-001` narrated show-build, programming, busking, and Preload contract.
 
 This file remains because OSC-002, OSC-004, OSC-006, API-002, and CROSS-001 still contain contract assertions that are not fully represented by executable tests.
 
@@ -83,6 +84,8 @@ Every automated scenario should follow the same visible structure:
 ## Visual inspection recording
 
 Run `./test record` to execute the complete Playwright catalog in serial recording mode. Every browser test receives its own 1920×1080 video under `test-results/`, with deliberately slowed browser actions and a non-interactive narration bar showing the scenario ID, current phase, purpose, recent desk events, explicit external OSC transmissions and feedback, and current logical DMX output. After the run, ffmpeg joins those clips into `artifacts/visual-inspection/light-ui-test-catalog.webm`, so the entire browser-tested catalog can be watched as one reel rather than inspecting only one test.
+
+Run `./test demo` for the single maintained `DEMO-001` product walkthrough. It opens `?demo=product`, keeps the complete application, Stage, live DMX grid, simulated keypad, and playback surface visible, and overlays compact phase titles without resizing the desk. The run writes `artifacts/product-demo/tosklight-product-demo.webm` and `artifacts/product-demo/tosklight-product-demo-1920x1080.png`.
 
 The catalog also includes the more detailed narrated walkthrough at `artifacts/visual-inspection/light-visual-inspection.webm`. That chapter keeps the complete desk application visible and adds expanded external observer panels for:
 
