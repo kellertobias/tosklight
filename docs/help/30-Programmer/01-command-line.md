@@ -4,6 +4,14 @@ You can program the entire desk from the command line.
 
 With no active command, the command line contains the full editable default `FIXTURE` or `GROUP`. As soon as a selection is entered, those targets shorten to `F` and `G`: Fixture mode displays `F7 + F8`, while Group mode displays `G7 + G8`. Press `[GRP] [ENT]` by itself to change the persistent default; `[CLR]` and `[ESC]` restore its full word. After Plus, `[GRP]` selects the opposite target for that term, so Fixture mode can display `F7 + G8` and Group mode can display `G7 + F8`. Record operations are the exception: `[REC] [+] [GRP] 3` remains `RECORD + GROUP 3` because `[+]` selects the Merge operation and `GROUP` is the storage target.
 
+## Inspect recent commands
+
+Click or tap the Command Line to open **Command Line History** near the top of the desk. It lists this desk's 50 most recent completed commands newest-first, including whether each command was accepted or rejected, its result or error, execution time, and whether it came from the desk UI or attached OSC hardware. Software, keyboard, and attached-hardware input that shares the authoritative command line creates one entry when Enter is pressed.
+
+Opening, closing, or inspecting history does not change the unfinished command in the normal command-line field. Choose **Reuse** to copy an earlier command into that field; it is not executed until you press `[ENT]`. Escape, the close button, and a pointer press outside the panel close it while preserving the current input.
+
+History is transient desk state. Reconnecting to the same running desk restores its recent entries, while restarting the server starts a fresh history. Authentication-like command text containing password, passcode, token, secret, authorization, or API-key terms is retained only as a redacted entry.
+
 ## Syntax in this document
 
 The examples below use the following notation:

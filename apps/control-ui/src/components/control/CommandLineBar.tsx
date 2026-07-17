@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useApp } from "../../state/AppContext";
 import { useServer } from "../../api/ServerContext";
 import { programmerValueCount } from "./programmerActivity";
@@ -6,6 +7,7 @@ import { Button, Input } from "../common";
 import { editTargetedCommandWithSoftwareKey, softwareKeyFromKeyboard } from "./softwareKeypad";
 import { openUpdateSettings, openUpdateTargetMenu } from "./updateWorkflow";
 import { canAdvancePlaybackPage } from "./PlaybackPageDialogs";
+import "./CommandLineHistory.css";
 
 export function CommandLineBar() {
   const { state, dispatch } = useApp();
@@ -15,6 +17,8 @@ export function CommandLineBar() {
   const [commandError, setCommandError] = useState<string | null>(null);
   const [persistentError, setPersistentError] = useState<string | null>(null);
   const [errorOpen, setErrorOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const historyPanel = useRef<HTMLElement | null>(null);
   const storeHold = useRef<number | null>(null);
   const storeHeld = useRef(false);
   const storeSuppressUntil = useRef(0);
@@ -38,6 +42,25 @@ export function CommandLineBar() {
     window.addEventListener("light:command-error", showCommandError);
     return () => window.removeEventListener("light:command-error", showCommandError);
   }, []);
+  useEffect(() => {
+    if (!historyOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setHistoryOpen(false);
+    };
+    const closeOutside = (event: PointerEvent) => {
+      if (historyPanel.current?.contains(event.target as Node)) return;
+      if ((event.target as Element | null)?.closest(".command-input")) return;
+      setHistoryOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape, true);
+    window.addEventListener("pointerdown", closeOutside, true);
+    return () => {
+      window.removeEventListener("keydown", closeOnEscape, true);
+      window.removeEventListener("pointerdown", closeOutside, true);
+    };
+  }, [historyOpen]);
   const playback = state.controlMode === "playbacks";
   const ownProgrammer = server.bootstrap?.active_programmers.find((programmer) => programmer.session_id === server.session?.session_id);
   const hasRecordableContent = server.selectedFixtures.length > 0 || programmerValueCount(ownProgrammer) > 0 || state.preload !== "idle" || state.preloadActive;
@@ -264,6 +287,7 @@ export function CommandLineBar() {
         aria-label="Command line"
         value={server.commandLine}
         placeholder=""
+        onClick={() => setHistoryOpen(true)}
         onChange={(event) =>
           replaceCommand(
             completed ? `${server.commandTargetMode} ${event.target.value.slice(-1)}` : event.target.value,
@@ -282,6 +306,28 @@ export function CommandLineBar() {
         <span className="command-complete" aria-label="Command applied">
           ✓
         </span>
+      )}
+      {historyOpen && createPortal(
+        <section className="command-history-panel" role="dialog" aria-modal="false" aria-label="Command line history" ref={historyPanel}>
+          <header>
+            <div><h2>Command Line History</h2><small>Newest first · this desk · last 50 results</small></div>
+            <Button aria-label="Close command line history" onClick={() => setHistoryOpen(false)}>×</Button>
+          </header>
+          <div className="command-history-list">
+            {server.commandHistory.length === 0
+              ? <p className="command-history-empty">No accepted or rejected commands yet.</p>
+              : server.commandHistory.map((entry) => <article className={`command-history-entry ${entry.status}`} key={entry.id}>
+                <div className="command-history-entry-main">
+                  <span className="command-history-status">{entry.status === "accepted" ? "Accepted" : "Rejected"}</span>
+                  <code>{entry.command}</code>
+                  <small>{new Date(entry.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })} · {entry.source === "osc" ? "attached hardware" : "desk"}</small>
+                </div>
+                <p>{entry.feedback}</p>
+                <Button onClick={() => { replaceCommand(entry.command); setHistoryOpen(false); }}>Reuse</Button>
+              </article>)}
+          </div>
+        </section>,
+        document.body,
       )}
       {errorOpen && persistentError && <div className="persistent-error-popover" role="alertdialog"><header><b><span>▲</span> Desk error</b><Button onClick={() => setErrorOpen(false)}>×</Button></header><pre>{persistentError}</pre><Button onClick={() => { setPersistentError(null); server.dismissError(); setErrorOpen(false); }}>Acknowledge</Button></div>}
       <div className="command-record-preload">

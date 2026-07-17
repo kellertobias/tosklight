@@ -35,6 +35,10 @@ const server = {
   commandLine: "FIXTURE",
   commandTargetMode: "FIXTURE",
   commandLinePristine: true,
+  commandHistory: [
+    { id: "entry-2", desk_id: "desk-a", session_id: "session-a", command: "FIXTURE 2 AT FULL", status: "rejected", feedback: "Fixture 2 is not patched", source: "software", at: "2026-07-17T20:00:02Z" },
+    { id: "entry-1", desk_id: "desk-a", session_id: "session-a", command: "FIXTURE 1 AT FULL", status: "accepted", feedback: "Applied to 1 target(s)", source: "osc", at: "2026-07-17T20:00:01Z" },
+  ] as const,
   error: null,
   status: "connected",
   poolPlaybackAction: vi.fn(),
@@ -69,6 +73,41 @@ afterEach(() => {
 });
 
 describe("Shift+Record Update gestures", () => {
+  it("opens bounded desk history without changing or executing the unfinished command", () => {
+    server.commandLine = "FIXTURE 7 AT";
+    render(<CommandLineBar/>);
+
+    fireEvent.click(screen.getByRole("textbox", { name: "Command line" }));
+    const panel = screen.getByRole("dialog", { name: "Command line history" });
+    expect(panel).toHaveTextContent("FIXTURE 2 AT FULL");
+    expect(panel).toHaveTextContent("Rejected");
+    expect(panel).toHaveTextContent("FIXTURE 1 AT FULL");
+    expect(panel).toHaveTextContent("Accepted");
+    expect(server.commandLine).toBe("FIXTURE 7 AT");
+    expect(server.executeCommandLine).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Reuse" })[1]);
+    expect(server.setCommandLine).toHaveBeenCalledWith("FIXTURE 1 AT FULL", false);
+    expect(server.executeCommandLine).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog", { name: "Command line history" })).not.toBeInTheDocument();
+  });
+
+  it("closes history with Escape or outside pointer input without clearing the command", () => {
+    server.commandLine = "GROUP 3 AT";
+    render(<CommandLineBar/>);
+    const input = screen.getByRole("textbox", { name: "Command line" });
+
+    fireEvent.click(input);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Command line history" })).not.toBeInTheDocument();
+    expect(server.commandLine).toBe("GROUP 3 AT");
+
+    fireEvent.click(input);
+    fireEvent.pointerDown(screen.getByRole("button", { name: /Open running and output controls/ }));
+    expect(screen.queryByRole("dialog", { name: "Command line history" })).not.toBeInTheDocument();
+    expect(server.commandLine).toBe("GROUP 3 AT");
+  });
+
   it("uses gray for no timecode and blue only for a present timecode", () => {
     const { rerender } = render(<CommandLineBar/>);
     expect(screen.getByText("No Timecode").closest(".timecode-status")).toHaveClass("timecode-idle");

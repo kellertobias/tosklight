@@ -1,4 +1,4 @@
-import type { BootstrapSnapshot, DmxSnapshot, DeskConfiguration, PatchSnapshot, PlaybackSnapshot, ServerEvent, SessionResponse, ScreenConfiguration, ScreenSnapshot, ShowEntry, VersionedObject, HelpCatalog, HelpTopic } from "./types";
+import type { BootstrapSnapshot, CommandHistoryEntry, DmxSnapshot, DeskConfiguration, PatchSnapshot, PlaybackSnapshot, ServerEvent, SessionResponse, ScreenConfiguration, ScreenSnapshot, ShowEntry, VersionedObject, HelpCatalog, HelpTopic } from "./types";
 
 type EventListener = (event: ServerEvent) => void;
 
@@ -63,6 +63,9 @@ export class LightApiClient {
   }
   helpTopic(id: string): Promise<HelpTopic> {
     return this.request(`/api/v1/help/topics/${encodeURIComponent(id)}`, {}, false);
+  }
+  commandHistory(): Promise<CommandHistoryEntry[]> {
+    return this.request("/api/v1/command-history");
   }
   fileRoots(): Promise<import("./types").FileRoot[]> {
     return this.request("/api/v1/files/roots");

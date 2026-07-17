@@ -11,6 +11,7 @@ The [canonical test catalog](../help/99-Development/02-test-bench-coverage.md) i
 - [Return Home in the Position special dialog](../plans/Done/25-return-home-position-special-dialog.DONE.md) retains the paired `POSITION-HOME-001` per-head defaults, atomic programmer gesture, Undo, and software/hardware layout contract.
 - [Color special-dialog alignment](../plans/Done/26-color-special-dialog-alignment.DONE.md) retains the paired `COLOR-RANGE-001` uniform click, ordered range, cancellation, Undo, and software/hardware Shift contract.
 - [Hardware-connected playback selection](../plans/Done/28-hardware-connected-playback-selection.DONE.md) retains the paired `PLAYBACK-SELECT-001` card ownership, concrete Record target, Group distinction, explicit-page identity, real-control isolation, and OSC convergence contract.
+- [Command Line history](../plans/Done/30-command-line-history-panel.DONE.md) retains the paired `COMMAND-HISTORY-001` accepted/rejected ordering, non-executing reuse, input preservation, transient bounded retention, redaction, reconnect, hardware layout, and OSC attribution contract.
 
 This file remains because OSC-002, OSC-004, OSC-006, API-002, and CROSS-001 still contain contract assertions that are not fully represented by executable tests.
 

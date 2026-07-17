@@ -97,6 +97,7 @@ struct AppState {
     active_show_error: Arc<RwLock<Option<String>>>,
     events: broadcast::Sender<Event>,
     audit_events: Arc<Mutex<VecDeque<Event>>>,
+    command_history: Arc<Mutex<HashMap<Uuid, VecDeque<CommandHistoryEntry>>>>,
     event_revision: Arc<AtomicU64>,
     desk_token: Option<Arc<str>>,
     shutdown: CancellationToken,
@@ -293,6 +294,17 @@ struct Event {
     revision: u64,
     kind: String,
     payload: serde_json::Value,
+}
+#[derive(Clone, Serialize)]
+struct CommandHistoryEntry {
+    id: String,
+    desk_id: Uuid,
+    session_id: SessionId,
+    command: String,
+    status: String,
+    feedback: String,
+    source: String,
+    at: String,
 }
 #[derive(Deserialize)]
 struct AuditQuery {
@@ -1075,6 +1087,7 @@ async fn main() -> anyhow::Result<()> {
         active_show_error: Arc::new(RwLock::new(active_show_error)),
         events,
         audit_events: Arc::new(Mutex::new(VecDeque::with_capacity(2048))),
+        command_history: Arc::new(Mutex::new(HashMap::new())),
         event_revision: Arc::new(AtomicU64::new(0)),
         desk_token: env::var("LIGHT_DESK_TOKEN")
             .ok()
@@ -1308,6 +1321,7 @@ fn router(state: AppState) -> Router {
         .route("/api/v1/master", put(update_master))
         .route("/api/v1/midi/inputs", get(midi_inputs))
         .route("/api/v1/events", get(ws_events))
+        .route("/api/v1/command-history", get(command_history))
         .route("/api/v1/audit", get(audit_events));
     router = router.merge(file_manager::router());
     if test_bench {
@@ -7720,6 +7734,22 @@ async fn audit_events(
             .collect(),
     ))
 }
+
+const COMMAND_HISTORY_LIMIT: usize = 50;
+
+async fn command_history(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<CommandHistoryEntry>>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    let entries = state
+        .command_history
+        .lock()
+        .get(&session.desk.id)
+        .map(|history| history.iter().cloned().collect())
+        .unwrap_or_default();
+    Ok(Json(entries))
+}
 async fn clear_programmer(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -9280,6 +9310,27 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
         && let Err(error) = persist_programmer(state, session)
     {
         return fail(error.message);
+    }
+    if command.command == "programmer.execute"
+        && let Some(value) = command
+            .payload
+            .get("value")
+            .and_then(serde_json::Value::as_str)
+    {
+        match &result {
+            Ok(payload) if payload.get("pending_choice").is_none() => {
+                let feedback = payload
+                    .get("applied")
+                    .and_then(serde_json::Value::as_u64)
+                    .map(|applied| format!("Applied to {applied} target(s)"))
+                    .unwrap_or_else(|| "Accepted".into());
+                record_command_history(state, session, value, "accepted", &feedback, "software");
+            }
+            Err(error) => {
+                record_command_history(state, session, value, "rejected", error, "software");
+            }
+            Ok(_) => {}
+        }
     }
     match result {
         Ok(payload) => {
@@ -12751,7 +12802,15 @@ fn handle_programmer_osc(
                     );
                 } else {
                     match execute_programmer_command(state, &session, &programmer.command_line) {
-                        Ok(_) => {
+                        Ok(applied) => {
+                            record_command_history(
+                                state,
+                                &session,
+                                &programmer.command_line,
+                                "accepted",
+                                &format!("Applied to {applied} target(s)"),
+                                "osc",
+                            );
                             emit(
                                 state,
                                 "command_applied",
@@ -12766,17 +12825,27 @@ fn handle_programmer_osc(
                                 .programmers
                                 .set_command_line(session.id, String::new());
                         }
-                        Err(error) => emit(
-                            state,
-                            "programmer_command_rejected",
-                            serde_json::json!({
-                                "session_id":session.id,
-                                "desk_id":session.desk.id,
-                                "command":programmer.command_line,
-                                "error":error,
-                                "source":"osc"
-                            }),
-                        ),
+                        Err(error) => {
+                            record_command_history(
+                                state,
+                                &session,
+                                &programmer.command_line,
+                                "rejected",
+                                &error,
+                                "osc",
+                            );
+                            emit(
+                                state,
+                                "programmer_command_rejected",
+                                serde_json::json!({
+                                    "session_id":session.id,
+                                    "desk_id":session.desk.id,
+                                    "command":programmer.command_line,
+                                    "error":error,
+                                    "source":"osc"
+                                }),
+                            );
+                        }
                     }
                 }
             }
@@ -14165,6 +14234,62 @@ fn emit(state: &AppState, kind: &str, payload: serde_json::Value) {
         audit.push_back(event.clone());
     }
     let _ = state.events.send(event);
+}
+
+fn record_command_history(
+    state: &AppState,
+    session: &Session,
+    command: &str,
+    status: &str,
+    feedback: &str,
+    source: &str,
+) {
+    let normalized = command.split_whitespace().collect::<Vec<_>>().join(" ");
+    if normalized.is_empty() {
+        return;
+    }
+    let upper = normalized.to_ascii_uppercase();
+    let sensitive = [
+        "PASSWORD",
+        "PASSCODE",
+        "TOKEN",
+        "SECRET",
+        "AUTHORIZATION",
+        "API_KEY",
+    ]
+    .iter()
+    .any(|term| upper.split_whitespace().any(|token| token.contains(term)));
+    let retained_command = if sensitive {
+        "[REDACTED SENSITIVE COMMAND]".into()
+    } else {
+        normalized.chars().take(512).collect::<String>()
+    };
+    let retained_feedback = if sensitive {
+        "Sensitive input omitted".into()
+    } else {
+        feedback.chars().take(1_000).collect::<String>()
+    };
+    let entry = CommandHistoryEntry {
+        id: Uuid::new_v4().to_string(),
+        desk_id: session.desk.id,
+        session_id: session.id,
+        command: retained_command,
+        status: status.into(),
+        feedback: retained_feedback,
+        source: source.into(),
+        at: chrono::Utc::now().to_rfc3339(),
+    };
+    {
+        let mut histories = state.command_history.lock();
+        let history = histories.entry(session.desk.id).or_default();
+        history.push_front(entry.clone());
+        history.truncate(COMMAND_HISTORY_LIMIT);
+    }
+    emit(
+        state,
+        "command_history",
+        serde_json::to_value(entry).expect("command history entries serialize"),
+    );
 }
 fn validate_show_name(name: &str) -> Result<(), ApiError> {
     if name.is_empty() || name.len() > 100 || name.contains(['/', '\\']) {
@@ -15766,6 +15891,7 @@ mod tests {
                 active_show_error: Arc::default(),
                 events,
                 audit_events: Arc::new(Mutex::new(VecDeque::with_capacity(2048))),
+                command_history: Arc::new(Mutex::new(HashMap::new())),
                 event_revision: Arc::new(AtomicU64::new(0)),
                 desk_token: None,
                 shutdown: CancellationToken::new(),
@@ -15791,6 +15917,72 @@ mod tests {
             },
             data_dir,
         )
+    }
+
+    #[tokio::test]
+    async fn command_history_is_desk_scoped_bounded_newest_first_and_redacted() {
+        let (state, data_dir) = test_state();
+        let user = state.desk.lock().users().unwrap().remove(0);
+        let session = Session {
+            id: SessionId::new(),
+            user: user.clone(),
+            token: "history-token".into(),
+            connected: true,
+            desk: test_control_desk(),
+        };
+        let other = Session {
+            id: SessionId::new(),
+            user,
+            token: "other-history-token".into(),
+            connected: true,
+            desk: ControlDesk {
+                id: Uuid::new_v4(),
+                name: "Other desk".into(),
+                osc_alias: "other-desk".into(),
+                ..test_control_desk()
+            },
+        };
+        state.sessions.write().insert(session.id, session.clone());
+        state.sessions.write().insert(other.id, other.clone());
+        for number in 0..54 {
+            record_command_history(
+                &state,
+                &session,
+                &format!("GROUP 1 AT {number}"),
+                "accepted",
+                "Accepted",
+                "software",
+            );
+        }
+        record_command_history(
+            &state,
+            &session,
+            "LOGIN TOKEN super-secret-value",
+            "rejected",
+            "parser included super-secret-value",
+            "software",
+        );
+        record_command_history(
+            &state,
+            &other,
+            "GROUP 2 AT 50",
+            "accepted",
+            "Accepted",
+            "osc",
+        );
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::AUTHORIZATION,
+            "Bearer history-token".parse().unwrap(),
+        );
+        let Json(entries) = command_history(State(state), headers).await.unwrap();
+        assert_eq!(entries.len(), COMMAND_HISTORY_LIMIT);
+        assert_eq!(entries[0].command, "[REDACTED SENSITIVE COMMAND]");
+        assert_eq!(entries[0].feedback, "Sensitive input omitted");
+        assert_eq!(entries[49].command, "GROUP 1 AT 5");
+        assert!(entries.iter().all(|entry| entry.desk_id == session.desk.id));
+        let _ = std::fs::remove_dir_all(data_dir);
     }
 
     #[test]

@@ -1114,4 +1114,15 @@ export interface ServerEvent {
   payload: Record<string, unknown>;
 }
 
+export interface CommandHistoryEntry {
+  id: string;
+  desk_id: string;
+  session_id: string;
+  command: string;
+  status: "accepted" | "rejected";
+  feedback: string;
+  source: "software" | "osc";
+  at: string;
+}
+
 export type ConnectionStatus = "connecting" | "connected" | "offline" | "error";

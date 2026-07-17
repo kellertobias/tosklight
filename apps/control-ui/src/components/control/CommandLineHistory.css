@@ -1,0 +1,134 @@
+.command-history-panel {
+  position: fixed;
+  z-index: 1150;
+  top: 12px;
+  left: 50%;
+  width: min(880px, calc(100vw - 24px));
+  max-height: min(62vh, 640px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  transform: translateX(-50%);
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  background: #10151b;
+  box-shadow: 0 18px 70px #000d;
+}
+
+.command-history-panel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.command-history-panel h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.command-history-panel header small,
+.command-history-entry small {
+  color: var(--muted);
+}
+
+.command-history-panel header button {
+  width: 38px;
+  min-height: 38px;
+  border: 1px solid var(--line2);
+  border-radius: 6px;
+  background: var(--panel2);
+}
+
+.command-history-list {
+  min-height: 120px;
+  overflow: auto;
+  padding: 8px;
+}
+
+.command-history-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.7fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.command-history-entry:last-child {
+  border-bottom: 0;
+}
+
+.command-history-entry-main {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 8px;
+  align-items: center;
+}
+
+.command-history-entry code {
+  overflow: hidden;
+  color: #e8edf2;
+  font: 14px ui-monospace, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-history-entry-main small {
+  grid-column: 2;
+}
+
+.command-history-status {
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: #153c22;
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.command-history-entry.rejected .command-history-status {
+  background: #381417;
+  color: #ff8e94;
+}
+
+.command-history-entry p {
+  margin: 0;
+  overflow: hidden;
+  color: #aeb8c0;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-history-entry > button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--blue);
+  border-radius: 6px;
+  background: #0d2036;
+  color: #8dbaff;
+}
+
+.command-history-empty {
+  margin: 0;
+  padding: 32px;
+  color: var(--muted);
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .command-history-entry {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .command-history-entry p {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}

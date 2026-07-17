@@ -106,6 +106,15 @@ Configure two enabled routes for logical universe 1: Art-Net universe 1 to the b
 - **Pass:** The card owns one selection action, real controls remain independent, Cuelist and Group workflows stay distinct, Record uses the concrete page/playback target, and UI, API, and OSC converge on the same desk-local selected playback.
 - **Executable scenario:** [PLAYBACK-SELECT-001](../../../tests/28-hardware-connected-playback-selection.spec.ts)
 
+### COMMAND-HISTORY-001 — Inspect and reuse recent desk commands
+
+- **Starting show:** Load canonical `default-stage.show`, immediately Save As separate paired and supplemental working copies, and use the active copy.
+- **Surface:** Paired authenticated command execution and production Command Line history panel, with supplemental software, reconnect, hardware-connected, and OSC paths.
+- **Actions:** Execute one accepted and one rejected command, open history without changing the unfinished input, inspect and explicitly reuse an entry, prove Enter remains required, close by button/Escape/outside press, reload, then execute through attached OSC hardware.
+- **Oracle:** Desk-scoped newest-first entries with status, feedback, time, and source; exact current input; unchanged command-control geometry; panel bounds above the controls; retained same-process reconnect state; and one later entry only after reused Enter.
+- **Pass:** Completed commands appear once with actionable context, inspection and dismissal are mutation-free, reuse is non-executing, the last 50 entries survive reconnect but not server restart, sensitive command terms are redacted, and all named input surfaces converge.
+- **Executable scenario:** [COMMAND-HISTORY-001](../../../tests/30-command-line-history-panel.spec.ts)
+
 ## Default Stage Show
 
 Canonical `default-stage.show` contains the complete 49-record built-in patch:
@@ -171,6 +180,7 @@ The executable workflows that use this patch are cataloged under the concrete Gr
 | POSITION-HOME-001 | Position Return Home | ordered per-head profile defaults, independent 50% fallback, skipped incompatible fixtures, one faded Undo gesture, empty-selection safety, and software/hardware layout parity | paired programmer state, atomic batch audit, prior values after Undo, and production dialog controls |
 | COLOR-RANGE-001 | Color range alignment | uniform click, ordered straight-line hue/saturation interpolation, current Brightness, RGB/CMY and logical-head resolution, reversed order, one-fixture endpoint, cancel safety, single release mutation, and software/hardware Shift | paired programmer state, batch audit counts, visible range overlay, exact prior values after Undo, and attached OSC Shift state |
 | PLAYBACK-SELECT-001 | Hardware playback selection | single card-owned selection, display-only labels, independent real controls, concrete Cuelist Record/open behavior, Group selection, explicit page identity, and OSC convergence | paired selected playback, Cuelist revisions, Group programmer selection, rendered semantics, page picker, and attached OSC action |
+| COMMAND-HISTORY-001 | Command Line history | accepted/rejected status, newest-first ordering, result/error/source/time context, 50-entry desk scope, sensitive-text redaction, non-executing reuse, deterministic dismissal, reconnect, and software/hardware geometry | paired history endpoint and panel, current input, entry count, server retention/redaction unit, production bounds, and attached OSC source |
 | UPDATE-001–002 | Update | four Cue modes and authoritative tracked sources, exact eligibility, Preset/Group existing-versus-new semantics, touch/default/menu flows, current/explicit page context, pre-Update desk-settings migration with a schema-3 show, actual simulator pointer gesture exclusivity, and atomic revisions | paired and process-backed stored-object results, previews, revision history/undo, programmer retention, unrelated-object isolation, restart, simulator transport writes, and same-desk feedback |
 | HIGHLIGHT-001 | Transient Highlight output | independent HIGH state, complete/singleton application, programmer/store isolation, fixture-look overrides, first-frame Off reveal, ownership, and safety/master behavior | paired Highlight/programmer state, stored objects, and resolved raw output |
 | HIGHLIGHT-002 | Live selection source and lifecycle | Fixtures/Stage/Group/command selection reset, live Group ALL restoration, additive/subtractive stepped selection, multi-head/multipatch/unpatched/invalid items, empty selection, reconnect, and show-load clearing | paired actual selection, live source resolution, Highlight output, reconnect, and reload |

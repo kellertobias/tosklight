@@ -3,6 +3,7 @@ import { LightApiClient, saveServerUrl } from "./LightApiClient";
 import type { DeskModel } from "../types";
 import type {
   BootstrapSnapshot,
+  CommandHistoryEntry,
   ConnectionStatus,
   Cue,
   DeskConfiguration,
@@ -186,6 +187,7 @@ interface ServerContextValue {
   commandLine: string;
   commandTargetMode: CommandTargetMode;
   commandLinePristine: boolean;
+  commandHistory: CommandHistoryEntry[];
   pendingCommandChoice: PendingCommandChoice | null;
   selectedFixtures: string[];
   selectedGroupId: string | null;
@@ -374,6 +376,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
   const commandTargetModeRef = useRef<CommandTargetMode>("FIXTURE");
   const [commandLine, setCommandLineState] = useState("FIXTURE");
   const [commandLinePristine, setCommandLinePristine] = useState(true);
+  const [commandHistory, setCommandHistory] = useState<CommandHistoryEntry[]>([]);
   const commandLineWrite = useRef<Promise<unknown>>(Promise.resolve());
   const commandLineEpoch = useRef(0);
   const [pendingCommandChoice, setPendingCommandChoice] = useState<PendingCommandChoice | null>(null);
@@ -562,6 +565,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
         const [nextPatch, nextPlaybacks, programmers, nextShows, nextConfiguration, nextMedia, nextFixtureLibrary, nextFixtureProfiles, nextFixtureProfileWarnings, nextScreens] = await Promise.all([client.patch(), client.playbacks(), client.programmers(), client.shows(), client.configuration(), client.mediaServers(), client.fixtureLibrary(), client.fixtureProfiles().catch(() => []), client.fixtureProfileWarnings().catch(() => []), client.screens()]);
         if (cancelled) return;
         setSession(nextSession);
+        setCommandHistory(await client.commandHistory());
         setDeskLock(nextDeskLock);
         setPatch(nextPatch);
         setPlaybacks(nextPlaybacks);
@@ -600,6 +604,9 @@ export function ServerProvider({ children }: PropsWithChildren) {
           }
           if (event.kind === "file_operation_completed")
             window.dispatchEvent(new CustomEvent("light:file-operation", { detail: event.payload }));
+          if (event.kind === "command_history"
+            && (event.payload as { desk_id?: string }).desk_id === nextSession.desk.id)
+            void client.commandHistory().then(setCommandHistory).catch(() => undefined);
           if (event.kind === "group_configuration_requested") {
             const request = event.payload as { group_id?: string; desk_id?: string };
             if (request.group_id && request.desk_id === nextSession.desk.id)
@@ -887,6 +894,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
       commandLine,
       commandTargetMode,
       commandLinePristine,
+      commandHistory,
       pendingCommandChoice,
       selectedFixtures,
       selectedGroupId,
@@ -2334,6 +2342,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
       commandLine,
       commandTargetMode,
       commandLinePristine,
+      commandHistory,
       pendingCommandChoice,
       selectedFixtures,
       selectedGroupId,
