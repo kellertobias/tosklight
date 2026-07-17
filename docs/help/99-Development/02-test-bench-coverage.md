@@ -133,6 +133,15 @@ Configure two enabled routes for logical universe 1: Art-Net universe 1 to the b
 - **Pass:** Operators can distinguish Record from Update without relying on color alone, while workflow color remains consistent and never masks destructive, disabled, Cancel, or error meaning.
 - **Executable scenario:** [WORKFLOW-COLOR-001](../../../tests/33-record-and-update-menu-colors.spec.ts)
 
+### PLAYBACK-COLOR-001 — Show authoritative configured playback color
+
+- **Starting show:** Load canonical `default-stage.show`, immediately Save As `playback-color-001.show`, and configure a light-colored Cuelist playback on page 1.
+- **Surface:** Software Playback controls, hardware-connected Playback controls, and Virtual Playbacks.
+- **Actions:** Inspect the assigned inactive card, GO the playback through the authoritative runtime, select it independently, attach hardware, and inspect equivalent Virtual runtime projection.
+- **Oracle:** Subdued versus strong configured-color computed treatment, runtime `running` state, separate cyan selected marker, readable light-color text, retained loaded/pickup/Swap/target markers, and no configured-color class on empty cells.
+- **Pass:** Runtime state—not pointer history—controls configured-color strength consistently while selected and all combined states remain independently legible.
+- **Executable scenario:** [PLAYBACK-COLOR-001](../../../tests/34-active-playback-colors.spec.ts)
+
 ## Default Stage Show
 
 Canonical `default-stage.show` contains the complete 49-record built-in patch:

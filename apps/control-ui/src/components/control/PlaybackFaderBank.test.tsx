@@ -170,6 +170,17 @@ describe("PlaybackFaderBank authoritative playback surfaces", () => {
     expect(mocks.dispatch).toHaveBeenCalledWith({ type: "OPEN_BUILTIN_CUELIST", number: 7 });
   });
 
+  it("separates configured-color running, explicit selection, and empty states", () => {
+    assignPlayback({ color: "#f6e58d" });
+    mocks.playbacks.active = [{ playback_number: 7, enabled: true, cue_index: 0, paused: false, master: 1, flash: false }];
+    mocks.playbacks.selected_playback = 7;
+    const { container } = render(<PlaybackFaderBank count={2}/>);
+    expect(container.querySelector('[data-playback-slot="1"]')).toHaveClass("playback-colored", "running", "selected");
+    expect(container.querySelector('[data-playback-slot="1"]')).toHaveStyle({ "--playback-color": "#f6e58d" });
+    expect(container.querySelector('[data-playback-slot="2"]')).toHaveClass("empty");
+    expect(container.querySelector('[data-playback-slot="2"]')).not.toHaveClass("playback-colored", "running", "selected");
+  });
+
   it("does not select the hardware card when a real button or fader operates", () => {
     assignPlayback(); mocks.hardwareConnected = true;
     render(<PlaybackFaderBank count={1}/>);

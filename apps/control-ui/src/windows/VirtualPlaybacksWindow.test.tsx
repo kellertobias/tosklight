@@ -35,6 +35,13 @@ describe("VirtualPlaybacksWindow", () => {
     expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "button", { button: 1, pressed: true, surface: "virtual" });
   });
 
+  it("uses authoritative runtime for configured-color state and leaves empty cells uncolored", () => {
+    mocks.playbacks.active = [{ playback_number: 7, enabled: true, cue_index: 0 }];
+    render(<VirtualPlaybacksWindow paneId="virtual-1"/>);
+    expect(screen.getByRole("button", { name: "Virtual playback page 1 cell 1 Front Wash" })).toHaveClass("playback-colored", "running");
+    expect(screen.getByRole("button", { name: "Virtual playback page 1 cell 2 empty" })).not.toHaveClass("playback-colored", "running");
+  });
+
   it("SET plus an empty cell opens the same one-button faderless modal without assigning", () => {
     mocks.state.playbackSetArmed = true;
     render(<VirtualPlaybacksWindow paneId="virtual-1"/>);

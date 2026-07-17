@@ -1,5 +1,9 @@
 # Active Playback Colors
 
+## Completion
+
+Implemented. Assigned playbacks use a subdued configured-color identity while authoritative running runtime entries strengthen the same color across card, button, fader, hardware, and Virtual Playback surfaces. Explicit selection uses a separate cyan outline, combined state markers remain independent, and empty cells no longer receive a fabricated default color.
+
 ## Status and scope
 
 Make the configured playback color the authoritative visual identity of a running playback while keeping “running” distinct from the explicitly selected playback context.
@@ -19,3 +23,9 @@ Apply the same state vocabulary to software Playback controls, Hardware-Connecte
 3. Explicit selection remains distinguishable from running state, including when selected but Off or running but not selected.
 4. Light and dark palette colors preserve readable text and all combined state indicators.
 5. Software, hardware-connected, and Virtual Playback surfaces agree for the same playback.
+
+## Verification
+
+- Playback and Virtual Playback component tests cover running, selected, configured light colors, and uncolored empty cells from runtime snapshots.
+- `PLAYBACK-COLOR-001` configures a light playback color, starts it through the authoritative page-playback API, selects it separately, and compares software and attached-hardware classes and computed treatment.
+- Focused component tests, production build, and focused Playwright coverage pass.
