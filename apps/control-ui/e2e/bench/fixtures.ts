@@ -3,18 +3,17 @@ import { ApiDriver } from "./api";
 import { DeskDriver } from "./desk";
 import { LightBench, type TestShow } from "./lightBench";
 
-export interface TestFixtures { api: ApiDriver; desk: DeskDriver; show: TestShow }
-export interface WorkerFixtures { bench: LightBench }
-export type BenchContractContext = Pick<TestFixtures, "api" | "show"> & WorkerFixtures & Pick<PlaywrightTestArgs, "request">;
+export interface TestFixtures { api: ApiDriver; bench: LightBench; desk: DeskDriver; show: TestShow }
+export type BenchContractContext = Pick<TestFixtures, "api" | "bench" | "show"> & Pick<PlaywrightTestArgs, "request">;
 export type BenchUiContext = BenchContractContext & Pick<TestFixtures, "desk"> & Pick<PlaywrightTestArgs, "page">;
 
-export const test = base.extend<TestFixtures, WorkerFixtures>({
-  bench: [async ({}, use, workerInfo) => {
+export const test = base.extend<TestFixtures>({
+  bench: async ({}, use, testInfo) => {
     const bench = new LightBench();
-    await bench.start(workerInfo.workerIndex);
+    await bench.start(testInfo.workerIndex);
     try { await use(bench); }
     finally { await bench.stop(); }
-  }, { scope: "worker" }],
+  },
   baseURL: async ({ bench }, use) => use(bench.baseUrl),
   show: [async ({ bench }, use, testInfo) => {
     const show = await bench.createTwelveDimmerShow();
@@ -30,7 +29,11 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     api.session = show.session;
     await use(api);
   },
-  desk: async ({ page }, use, testInfo) => { await use(new DeskDriver(page, testInfo.title)); },
+  desk: async ({ page, api, bench }, use, testInfo) => {
+    const driver = new DeskDriver(page, testInfo.title, api.session?.desk.id ?? null, () => bench.visualOscSummary());
+    try { await use(driver); }
+    finally { await driver.dispose(); }
+  },
 });
 
 export { expect } from "@playwright/test";

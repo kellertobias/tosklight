@@ -3,7 +3,7 @@ import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-test.describe("docs/planned features/16-file-manager.md", () => {
+test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
   test("FILE-016 @api › confined file services authenticate, stream ranges, expose native capabilities, and resolve conflicts", async ({ api, bench, request }) => {
     const unauthenticated = await request.get(`${bench.baseUrl}/api/v1/files/roots`);
     expect(unauthenticated.status()).toBe(401);
@@ -63,8 +63,19 @@ test.describe("docs/planned features/16-file-manager.md", () => {
       expect(programmers.find((programmer) => programmer.session_id === api.session!.session_id)?.command_line).toBe("");
       const competingClaim = await request.post(`${bench.baseUrl}/api/v1/files/input-context`, { headers: { ...authorization, "content-type": "application/json" }, data: { instance_id: "another-pane", action: "copy", origin: "toolbar" } });
       expect(competingClaim.status()).toBe(409);
-      await api.request("DELETE", "/api/v1/files/input-context?instance_id=acceptance-file-manager");
-      expect(await api.request("GET", "/api/v1/files/input-context")).toBeNull();
+      const hardware = await bench.osc();
+      try {
+        const alias = api.session!.desk.osc_alias;
+        await hardware.subscribe(`file-manager-${crypto.randomUUID()}`, alias);
+        await hardware.send(`/light/${alias}/programmer/enter`, [true]);
+        await expect.poll(() => api.request<any>("GET", "/api/v1/files/input-context"))
+          .toEqual(expect.objectContaining({ instance_id: "acceptance-file-manager", action: "copy" }));
+        expect((await api.request<any[]>("GET", "/api/v1/programmers")).find((programmer) => programmer.session_id === api.session!.session_id)?.command_line).toBe("");
+        await hardware.send(`/light/${alias}/programmer/escape`, [true]);
+        await expect.poll(() => api.request("GET", "/api/v1/files/input-context")).toBeNull();
+      } finally {
+        await hardware.close();
+      }
     } finally {
       await api.request("POST", "/api/v1/files/shows/operations", { operation: "delete", sources: [workspace] }).catch(() => undefined);
     }
@@ -86,9 +97,15 @@ test.describe("docs/planned features/16-file-manager.md", () => {
     await expect(manager.locator(".file-columns")).toBeVisible();
     await expect(manager.getByRole("heading", { name: "Locations" })).toBeVisible();
     await expect(manager.getByRole("heading", { name: "Properties" })).toBeVisible();
+    const header = manager.locator(".file-manager-header-actions");
+    await expect(header.getByRole("button", { name: "Edit", exact: true })).toBeVisible();
+    await expect(header.getByRole("button", { name: "Create", exact: true })).toBeVisible();
+    await expect(header.getByRole("button", { name: "View", exact: true })).toBeVisible();
+    await expect(manager.getByRole("button", { name: "Show hidden files" })).toHaveCount(0);
 
     await manager.getByRole("button", { name: `${workspace}, folder` }).dblclick();
     await expect(manager.getByRole("navigation", { name: "Breadcrumb" })).toContainText(workspace);
+    await expect(manager.locator(".file-manager-header-path")).toHaveText(`Shows: /${workspace}`);
     const visibleRows = manager.locator("main[aria-label='Directory contents'] > button");
     await expect(visibleRows).toHaveCount(3);
     await expect(visibleRows.nth(0)).toHaveAttribute("aria-label", "Destination, folder");
@@ -109,7 +126,13 @@ test.describe("docs/planned features/16-file-manager.md", () => {
     });
     expect(streamed).toEqual({ status: 206, range: `bytes 0-3/${minimalWave().length}`, bytes: [82, 73, 70, 70] });
 
-    await manager.getByRole("button", { name: "Show hidden files" }).click();
+    await manager.getByRole("button", { name: "Settings", exact: true }).click();
+    const paneSettings = page.getByRole("dialog", { name: "Pane Settings" });
+    await paneSettings.getByRole("tab", { name: "File Manager", exact: true }).click();
+    const hiddenSwitch = paneSettings.getByRole("switch", { name: "Show Hidden" });
+    await hiddenSwitch.locator("xpath=..").click();
+    await expect(hiddenSwitch).toBeChecked();
+    await paneSettings.getByRole("button", { name: "Close settings" }).click();
     await expect(manager.getByRole("button", { name: ".operator-note, file" })).toBeVisible();
     await manager.getByRole("button", { name: "alpha.txt, file" }).click();
     const properties = manager.getByRole("complementary", { name: "Selection properties" });
@@ -123,15 +146,17 @@ test.describe("docs/planned features/16-file-manager.md", () => {
       await expect(properties.getByLabel("Notes")).toBeDisabled();
     }
 
-    await manager.getByRole("button", { name: "Copy" }).click();
+    await beginFileEdit(page, manager, "Copy");
     await expect(manager.getByRole("button", { name: "Copy Here" })).toBeVisible();
     await expect(manager.getByRole("button", { name: "Rename" })).toHaveCount(0);
     await manager.getByRole("button", { name: "Destination, folder" }).dblclick();
     await manager.getByRole("button", { name: "Copy Here" }).click();
     await expect.poll(async () => (await api.request<any>("GET", `/api/v1/files/shows/entries?path=${encodeURIComponent(destination)}`)).entries.map((entry: any) => entry.name)).toContain("alpha.txt");
 
+    await manager.getByRole("navigation", { name: "Breadcrumb" }).getByRole("button", { name: `/ ${workspace}` }).click();
     await manager.getByRole("button", { name: "alpha.txt, file" }).click();
-    await manager.getByRole("button", { name: "Copy" }).click();
+    await beginFileEdit(page, manager, "Copy");
+    await manager.getByRole("button", { name: "Destination, folder" }).dblclick();
     await manager.getByRole("button", { name: "Copy Here" }).click();
     const conflict = manager.getByRole("dialog", { name: "Resolve name conflict" });
     await expect(conflict.getByRole("button", { name: "Replace" })).toBeVisible();
@@ -141,22 +166,23 @@ test.describe("docs/planned features/16-file-manager.md", () => {
 
     const copied = manager.getByRole("button", { name: "alpha.txt, file" });
     await copied.click();
-    await manager.getByRole("button", { name: "Rename" }).click();
+    await beginFileEdit(page, manager, "Rename");
     await manager.getByLabel("New name").fill("renamed.txt");
     await manager.getByRole("button", { name: "Rename" }).click();
     await expect(manager.getByRole("button", { name: "renamed.txt, file" })).toBeVisible();
 
     await manager.getByRole("button", { name: "renamed.txt, file" }).click();
-    await manager.getByRole("button", { name: "Delete" }).click();
+    await beginFileEdit(page, manager, "Delete");
     const confirmation = manager.getByRole("dialog", { name: /Confirm (?:move to trash|permanent deletion)/ });
     await expect(confirmation).toContainText(/platform Trash|deletion is permanent/);
     await confirmation.getByRole("button", { name: "Cancel" }).click();
     await expect(manager.getByRole("button", { name: "renamed.txt, file" })).toBeVisible();
-    await manager.getByRole("button", { name: "Delete" }).click();
+    await beginFileEdit(page, manager, "Delete");
     await manager.getByRole("button", { name: /Move to Trash|Delete Permanently/ }).click();
     await expect(manager.getByRole("button", { name: "renamed.txt, file" })).toHaveCount(0);
 
-    await manager.getByRole("button", { name: "Grid view" }).click();
+    await header.getByRole("button", { name: "View", exact: true }).click();
+    await page.getByRole("menu", { name: "View menu" }).getByRole("menuitem", { name: "Grid", exact: true }).click();
     await expect(manager.locator("main.file-grid")).toBeVisible();
     await manager.getByRole("button", { name: "Back", exact: true }).click();
     await manager.getByRole("button", { name: "Forward", exact: true }).click();
@@ -187,7 +213,7 @@ test.describe("docs/planned features/16-file-manager.md", () => {
     await expect.poll(async () => (await api.request<any>("GET", "/api/v1/configuration")).configuration.file_manager_roots[0].label)
       .toBe("Tour Files");
     await page.getByRole("button", { name: "Open File Manager Workspace" }).click();
-    await expect(page.locator(".file-manager").getByRole("button", { name: /Tour Files/ })).toBeVisible();
+    await expect(page.locator(".file-manager").getByRole("button", { name: "Tour Files", exact: true }).first()).toBeVisible();
     await expect(page.locator(".file-manager")).not.toContainText(configuredPath);
     await expect(page.locator(".left-dock")).not.toContainText("File Manager");
 
@@ -238,6 +264,38 @@ test.describe("docs/planned features/16-file-manager.md", () => {
     await expect.poll(async () => (await pickerResult(page) as any[]).map((selection) => selection.entry.path).sort())
       .toEqual([`${workspace}/Folder`, `${workspace}/allowed.txt`].sort());
   });
+
+  test("FILE-016 @ui › form fields use the confined picker first and expose a constrained system fallback only when enabled", async ({ api, bench, desk, page }) => {
+    await desk.open(bench.baseUrl);
+    expect((await api.request<any>("GET", "/api/v1/configuration")).configuration.file_manager_system_picker_fallback).toBe(false);
+
+    await page.getByRole("button", { name: /Open show menu/ }).click();
+    await page.getByRole("button", { name: "Enter Setup", exact: true }).click();
+    const setupNav = page.locator(".setup-window nav");
+    await setupNav.getByRole("button", { name: "Desk Lock", exact: true }).click();
+    await page.getByRole("button", { name: "Choose lock wallpaper" }).click();
+    let dialog = page.getByRole("dialog", { name: "Choose files or folders" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Open system file picker" })).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+
+    await setupNav.getByRole("button", { name: "File Manager", exact: true }).click();
+    const fallbackSwitch = page.getByRole("switch", { name: "Allow Open system file picker fallback" });
+    await fallbackSwitch.locator("xpath=..").click();
+    await expect(fallbackSwitch).toBeChecked();
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/configuration")).configuration.file_manager_system_picker_fallback).toBe(true);
+
+    await setupNav.getByRole("button", { name: "Desk Lock", exact: true }).click();
+    await page.getByRole("button", { name: "Choose lock wallpaper" }).click();
+    dialog = page.getByRole("dialog", { name: "Choose files or folders" });
+    await expect(dialog.getByRole("button", { name: "Open system file picker" })).toBeVisible();
+    const systemInput = dialog.locator('input[type="file"]');
+    await expect(systemInput).toHaveAttribute("accept", ".png,.jpg,.jpeg,.gif,.webp");
+    await expect(systemInput).not.toHaveAttribute("multiple");
+    await expect(systemInput).not.toHaveAttribute("webkitdirectory");
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  });
 });
 
 function propertiesFor(manager: Locator) {
@@ -278,8 +336,8 @@ function minimalWave() {
 }
 
 async function addFileManagerPane(page: Page) {
-  await page.getByRole("button", { name: "DESKS" }).click();
-  await page.getByRole("button", { name: /New desk/ }).click();
+  await page.getByRole("button", { name: "DESKTOPS" }).click();
+  await page.getByRole("button", { name: /New desktop/ }).click();
   const grid = page.locator(".desk-grid");
   const box = await grid.boundingBox();
   expect(box).not.toBeNull();
@@ -297,4 +355,12 @@ async function addFileManagerPane(page: Page) {
   await page.mouse.move(gridBox!.x + gridBox!.width * 0.95, gridBox!.y + gridBox!.height * 0.9, { steps: 5 });
   await page.mouse.up();
   await expect.poll(async () => (await pane.boundingBox())?.width ?? 0).toBeGreaterThan(900);
+}
+
+async function beginFileEdit(page: Page, manager: Locator, action: "Rename" | "Copy" | "Move" | "Delete") {
+  await manager
+    .locator(".file-manager-header-actions")
+    .getByRole("button", { name: "Edit", exact: true })
+    .click();
+  await page.getByRole("menu", { name: "Edit menu" }).getByRole("menuitem", { name: action, exact: true }).click();
 }

@@ -1,6 +1,6 @@
 # Playback Configuration
 
-These scenarios specify the future Playback Configuration modal described in [`docs/planned features/10-playback-configuration.md`](../planned%20features/10-playback-configuration.md). They are specifications only: do not add or enable matching Playwright tests until the modal and authoritative playback-configuration model exist.
+These scenarios verify the implemented Playback Configuration modal and authoritative playback-configuration model described in [`docs/planned features/10-playback-configuration.DONE.md`](../planned%20features/10-playback-configuration.DONE.md). The executable API, UI, and OSC coverage lives in [`tests/07-playback-configuration.spec.ts`](../../tests/07-playback-configuration.spec.ts).
 
 Every scenario loads the named canonical show, immediately uses Save As with the stated unique filename, and operates only on that working copy. The API and UI variants use independent copies and the shared normalized playback/output oracle. For UI cases, `[SET]` means the Lightning Desk Set key, not a browser modifier.
 
@@ -14,15 +14,17 @@ Every scenario loads the named canonical show, immediately uses Save As with the
 **Detailed procedure:**
 
 1. Put playback 1 on Cue 1 at a nonzero master level. Record its current Cue, output, fader value, button states, object revision, and audit tail.
-2. Press `[SET]`, then independently touch the top, middle, and bottom buttons, the fader handle/track, and the software playback representation.
+2. Press `[SET]`, then independently touch the top, middle, and bottom buttons, the fader handle/track, the software playback representation, and a Virtual Playback cell.
 3. For every surface, confirm exactly one **Playback Configuration** modal opens for page 1 playback 1 with **Playback Function** and **Playback Layout** tabs.
 4. Confirm the touched button did not execute, the Cuelist did not advance or release, and touching/dragging the fader while Set was armed did not change its value or output.
-5. Repeat against an empty playback and confirm its modal opens without creating or assigning anything.
+5. Repeat against an empty physical playback and an empty Virtual Playback cell and confirm the same modal opens without creating or assigning anything. Confirm the virtual target exposes one button, no fader, and its icon/image-background presentation fields.
 6. Cancel every modal and compare the complete playback state, show revision, event stream, and output with the pre-touch snapshot.
 
 **Assertions:** Every constituent control resolves to the same playback identity while Set is armed. Set intercepts normal control behavior, and Cancel is mutation-free.
 
 **Pass condition:** An operator can reliably configure a playback from any of its controls without accidentally operating it.
+
+The Virtual Playback Pane Settings used in this scenario contains only Rows and Columns. No direct per-cell Cuelist/action assignment list may appear there.
 
 ## PBK-002 — Assign, color, persist, and clear every playback function
 

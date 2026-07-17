@@ -24,7 +24,7 @@ desktop_smoke(){
   build_e2e
   (cd "$UI" && npm run tauri:build -- --debug --bundles app)
   cp "$ROOT/target/debug/light-server" "$ROOT/target/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-server"
-  node "$UI/e2e/desktop-smoke.mjs"
+  (cd "$UI" && LIGHT_DESKTOP_SMOKE=1 npm run test:e2e -- 05-desktop-process-integration.spec.ts --workers=1)
 }
 
 command="${1:-}"; shift || true

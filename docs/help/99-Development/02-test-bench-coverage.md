@@ -1,10 +1,10 @@
 # Test Bench Coverage Catalog
 
-This is the canonical catalog for automated and manual acceptance coverage. Stable IDs must be retained when scenarios move between Rust integration tests, the Playwright browser bench, or packaged-desktop smoke tests. Every executable scenario records its action surface and oracle so a passing API-only test is never mistaken for UI or wire-protocol coverage.
+This is the canonical catalog for executable acceptance coverage. Every stable ID listed here is present in `docs/testing` and in at least one repository-root Playwright test. Stable IDs must be retained when scenarios move between Rust integration tests, the Playwright browser bench, or packaged-desktop smoke tests. Every executable scenario records its actual action surface and oracle so a passing API-only, UI-only, integrated, or wire-protocol case is not mistaken for a different kind of coverage.
 
 Detailed scenario specifications are grouped in [docs/testing](../../testing/README.md). The catalog remains the authoritative ID and coverage index; the scenario documents provide the executable setup, literal button/click order, actions, timing checkpoints, oracles, and pass conditions. The short **Actions** entries in this catalog are summaries, not manual procedures; do not infer missing operator gestures from them.
 
-The Playwright bench runs an isolated server per worker with a fixed application clock. Advancing virtual time renders and transmits one real output frame, allowing fades, chasers, and effects to be tested without wall-clock waits. Production mode continues to stream at its configured frame rate.
+The Playwright bench runs an isolated server and data directory per test with a fixed application clock. Advancing virtual time renders and transmits one real output frame, allowing fades, chasers, and effects to be tested without wall-clock waits. Production mode continues to stream at its configured frame rate.
 
 ## SHOW-000: copy a reusable show with Save As
 
@@ -55,17 +55,17 @@ Configure two enabled routes for logical universe 1: Art-Net universe 1 to the b
 - **Oracle:** Ordered normalized programmer values before quantization, address shape (group-relative spread versus fixture-scoped values), Fixture Sheet values, logical output, and matching Art-Net/sACN slots.
 - **Pass:** Intensity spreads preserve target order, endpoints, direction, symmetry, and equal intervals. Live Group spreads recalculate when group membership changes and remain group-relative in Cue/Preset storage; dereferenced spreads stay attached to the captured fixtures. Unresolved center and complex-value rules remain explicitly documented rather than guessed.
 
-### DIM-003 — Frozen and derived membership
+### GROUP-003 and GROUP-004 — Derived and frozen membership
 
-- **Starting show:** Load canonical `compact-rig.show`, immediately Save As `dim-003.show`, and use the active copy.
+- **Starting show:** Load separate canonical `compact-rig.show` copies for the derived and frozen cases and use only their active working copies.
 - **Surface:** Lightning Desk command line and Group UI.
 - **Actions:** Create an every-second derived group from group 1 and a frozen snapshot of group 1; insert and remove members in group 1.
 - **Oracle:** Derived membership recalculates from source order while the frozen group remains unchanged; only genuinely deleted fixture references are reported missing.
 - **Pass:** Live/derived and frozen semantics remain distinguishable after source edits.
 
-### DIM-004 — Direct values and group arbitration
+### PROG-003 — Direct values and group arbitration
 
-- **Starting show:** Load canonical `compact-rig.show`, immediately Save As `dim-004.show`, and use the active copy.
+- **Starting show:** Load canonical `compact-rig.show`, immediately Save As the `prog-003` working copy, and use the active copy.
 - **Surface:** REST programmer API plus UI group programming.
 - **Actions:** Put Group 1 at 50%, fixture 1 at 75%, fixture 1 at 25%, repeat Group 1 at 50%, release each source, and then cover second-programmer/playback arbitration in MERGE scenarios.
 - **Oracle:** Inside one programmer, the newer fixture or Group programmer value wins by LTP even when the newer value is lower; release falls back to the remaining active source; cue/playback HTP remains covered separately.
@@ -95,148 +95,16 @@ Canonical `default-stage.show` contains the complete 49-record built-in patch:
 | 301–304 | Back Trackspots (universe 2 from `2.79`) | Movement and intensity |
 | 999 | Overhead RGB multipatch (`4.1`) | Intensity and RGB color |
 
-At the start of each theater workflow, create only the groups it uses from this fresh show copy. The common groups are:
-
-| Group | Name | Members |
-| --- | --- | --- |
-| 1 | Front Fresnels | 1–6 |
-| 2 | Back Profiles | 101–108 |
-| 3 | Back LED Washes | 201–205 |
-| 4 | All Stage | 1–6, 101–108, 201–205, 401–412, 501–506, 601–604 |
-
-Before each workflow, clear the command line, selection, programmer, preload, and active playbacks unless the workflow says otherwise. Create or load any named presets and cues that a workflow lists as prerequisites; do not rely on accidental state left by an earlier workflow.
-
-## THE-001 — Retain a live group reference
-
-**Starting show:** Load canonical `default-stage.show`, immediately Save As `the-001.show`, use the active copy, and then create common group 2 as listed above.
-
-**Purpose:** Prove that programming stored against a group remains connected to that group's current membership.
-
-1. Select group 2 by reference with `[GRP] 2 [ENTER]`.
-   - **Expect:** Back Profiles 101–108 are selected in their group order, and the selection is identified as a live group reference.
-2. Set intensity to 60% and choose a visible blue color.
-   - **Expect:** All eight profiles show the programmed intensity and color; unrelated fixtures are unchanged.
-3. Record the look as cue 1 on an empty playback.
-   - **Expect:** The cue stores group-relative changes, not eight copied fixture changes.
-4. Clear the programmer and run cue 1.
-   - **Expect:** Back Profiles 101–108 reproduce the look from playback.
-5. Patch a compatible `ToskLight Built-in / Profile Moving Light / DPTRGB` as fixture 109 on universe 1 at address 361 and add it to group 2 after fixture 108.
-   - **Expect:** The group reports nine ordered members without requiring the cue to be rerecorded.
-6. Observe the still-running cue, or release and run it again if required by the chosen playback state.
-   - **Expect:** Fixture 109 receives the same group-relative intensity and color. Fixtures removed from group 2 stop receiving that group-relative playback data, while unrelated fixture-scoped values remain intact.
-
-**Pass condition:** Membership can change after programming, and the cue follows the live group reference without duplicating or losing fixture-scoped data.
-
-## THE-002 — Compare a derived group with a frozen selection
-
-**Starting show:** Load canonical `default-stage.show`, immediately Save As `the-002.show`, use the active copy, and then create common group 4 as listed above.
-
-**Purpose:** Prove the difference between a live subdivided reference and a static snapshot of group membership.
-
-1. Select every second member of group 4 with `[GRP] 4 [DIV] 2 [ENTER]`.
-   - **Expect:** Alternating fixtures are selected using the ordered membership of group 4.
-2. Record the selection as group 5, named `All Stage Odd`.
-   - **Expect:** Group 5 retains group 4 as its source and retains the every-second derivation rule.
-3. Select the current members of group 4 as individual fixtures with `[GRP][GRP] 4 [ENTER]` and record them as group 6, named `All Stage Snapshot`.
-   - **Expect:** Group 6 contains a frozen or static ordered membership and does not retain a live membership link to group 4.
-4. Add fixture 999 to group 4 in a position where it changes the alternating pattern.
-   - **Expect:** Group 5 recalculates from the new group 4 order. Group 6 remains unchanged.
-5. Remove one original member of group 4.
-   - **Expect:** Group 5 recalculates again. Group 6 still identifies its original member, including a warning only if that member no longer exists in the show.
-
-**Pass condition:** Derived groups track their source and ordering rule, while frozen selections preserve the captured membership until explicitly refreshed.
-
-## THE-003 — Program a short theater scene
-
-**Starting show:** Load canonical `default-stage.show`, immediately Save As `the-003.show`, use the active copy, and then create common groups 1–4 as listed above.
-
-**Purpose:** Exercise a typical theater-programming sequence using reusable presets, tracked cues, and playback.
-
-The scene is a short evening interior: preset, lights up, an actor crosses to center, the room cools, and blackout.
-
-1. Build and record reusable presets:
-   - Record a warm color preset for groups 2 and 3; group 1 has intensity only.
-   - Record a cool blue color preset for groups 2 and 3.
-   - Record a center-stage position preset for group 2.
-   - **Expect:** Each preset contains only its intended attribute family and can be recalled on compatible fixtures.
-2. Program cue 1, `Preset`:
-   - Set all stage intensity to 0 while preparing the warm color and center-stage position values.
-   - Record cue 1 on a new playback with a zero-second or deliberately short fade.
-   - **Expect:** Running cue 1 establishes the tracked color and position without visible light output.
-3. Program cue 2, `Lights Up`:
-   - Bring group 1 to 70%, group 2 to 45%, and group 3 to 20% using the warm look.
-   - Record cue 2 with a 3-second fade.
-   - **Expect:** GO fades from the preset state into the warm stage look over the configured time.
-4. Program cue 3, `Cross to Center`:
-   - Apply the center-stage position preset to group 2 and raise it to 65%.
-   - Record cue 3 with a 2-second fade.
-   - **Expect:** Unchanged values from cue 2 track forward; only the intended profile position and intensity change.
-5. Program cue 4, `Night`:
-   - Apply the cool preset to groups 2 and 3, lower group 1 to 25%, and set group 3 to 50%.
-   - Record cue 4 with a 4-second fade.
-   - **Expect:** The stage moves smoothly into the cool look while tracked position remains intact.
-6. Program cue 5, `Blackout`:
-   - Set group 4 intensity to 0 and record cue 5 with a 2-second fade.
-   - **Expect:** All stage fixtures fade to zero without deleting their tracked non-intensity values.
-7. Clear the programmer, release the playback, and run cues 1–5 using GO.
-   - **Expect:** Cue order, current/next indication, fade timing, tracking, Stage view, Fixture Sheet, and rendered output agree throughout the sequence.
-8. Use GO minus to return one cue, then GO again.
-   - **Expect:** The previous and next looks are reconstructed consistently rather than depending on values left in the programmer.
-
-**Pass condition:** A programmer can build, store, clear, and replay a complete tracked theater sequence with correct preset recall, timing, navigation, and output.
-
-## THE-004 — Prepare a change in Preload without disturbing the live scene
-
-**Starting show:** Load canonical `default-stage.show`, immediately Save As `the-004.show`, use the active copy, create common groups 1–4, and recreate cues 1–5 exactly as described in THE-003 before beginning this scenario.
-
-**Purpose:** Prove that an operator can prepare and store the next change while the audience-facing output remains stable.
-
-1. Run cue 2 from the theater scene workflow and note its live values.
-   - **Expect:** The warm `Lights Up` look is active.
-2. Enter Preload and select group 3.
-   - **Expect:** The UI distinguishes current output, the active preload scene, and pending preload values.
-3. Set group 3 to blue at 60% as a pending preload change.
-   - **Expect:** The pending values are visible in preload-aware views, but live Stage, Fixture Sheet current values, and rendered DMX do not change.
-4. Store the pending preload values into a new cue.
-   - **Expect:** The new cue contains the intended group-relative color and intensity while the live cue remains unchanged.
-5. Clear pending preload values.
-   - **Expect:** Only the pending values clear. The live scene, active preload scene, and stored cue are unchanged.
-6. Recreate the pending change and press Preload GO.
-   - **Expect:** The change moves into the active preload scene and becomes visible immediately according to Preload GO behavior.
-7. Release the preload scene.
-   - **Expect:** Preload output is removed cleanly and normal playback output remains authoritative.
-
-**Pass condition:** Pending preload work is isolated from live output, can be stored independently, and can be applied or cleared without corrupting playback state.
-
-The complete capture-domain contract is specified by [PRELOAD-001–006](../../testing/06-preload-modes-and-virtual-playbacks.md): independent programmer, physical-playback, and virtual-playback switches; all eight combinations; ordered action capture; Programmer Fade execution; Virtual Playbacks as a future pane; and programmer-only Preload Release.
-
-## THE-005 — Save, restart, and resume a show
-
-**Starting show:** Load canonical `default-stage.show`, immediately Save As `the-005.show`, use the active copy, create common groups 1–4, and recreate the presets and cues from THE-003 before beginning this scenario.
-
-**Purpose:** Verify the normal end-of-session and recovery path using persisted show data and durable operator state.
-
-1. Save the common test show after creating groups, presets, and the theater Cuelist.
-   - **Expect:** The dirty indicator clears only after the persisted show changes are saved.
-2. Leave cue 3 active and place a distinct fixture value in the programmer without recording it.
-   - **Expect:** Playback and programmer values are visibly distinguishable.
-3. Stop and restart the real server and control application, then reconnect as the same user.
-   - **Expect:** Startup succeeds without replacing the show, and the same active show opens.
-4. Inspect patch, groups, presets, Cuelist, playback position, and programmer.
-   - **Expect:** Persisted show objects reload with their ordering and references intact; the durable user's programmer returns; the running cue index and playback state follow the product's documented restart policy.
-5. Clear the programmer and run the theater sequence again.
-   - **Expect:** Playback output matches the pre-restart show data and no temporary programmer value has been written into a cue.
-
-**Pass condition:** Restart preserves the portable show and durable user data without silently merging transient programmer values into stored programming.
+The executable workflows that use this patch are cataloged under the concrete Group, Programmer, Cue, Preload, Move in Black, persistence, and Sound-to-Light IDs below. Earlier draft theater walkthroughs were never implemented as stable-ID scenarios and are not listed as coverage.
 
 ## CMD-002 — Set and synchronize speed groups
 
 - **Starting show:** Load canonical `default-stage.show`, immediately Save As `cmd-002-speed-groups.show`, and use the active copy.
 - **Surface:** Lightning Desk keypad/command line and Speed Group controls.
-- **Actions:** Enter `SHIFT TIME` to display `SPD GRP`; address groups 1–5 as A–E; set integer and decimal-comma BPM values with `+`; synchronize two groups with `<source> AT <target>`; then break synchronization once by direct BPM entry and once by tap tempo.
+- **Actions:** Enter `SHIFT TIME` to display `SPD GRP`; address groups 1–5 as A–E; set integer and decimal-comma BPM values with `AT`; make relative changes with `AT +` and `AT -`; synchronize two groups with `SPD GRP <source> AT SPD GRP <target>`; then break synchronization once by direct BPM entry and once by tap tempo.
 - **Oracle:** Exact visible command text, A–E BPM values and precision, active synchronization relationship, and aligned beat phase until the documented break action.
 - **Pass:** The shortcut addresses every Speed Group correctly, synchronization copies source speed and phase to the target, and direct entry or tapping either linked group returns the pair to independent operation.
-- **Status:** Specification only; executable coverage must not be claimed before the command and synchronization model are implemented.
+- **Status:** Implemented in the production command surface with server integration and Playwright coverage, including direct-entry and tap-tempo unlinking.
 
 ## SOUND-001 — Drive a Speed Group from a desk-local audio input
 
@@ -254,33 +122,40 @@ The complete capture-domain contract is specified by [PRELOAD-001–006](../../t
 - **Actions:** Press Shift-Z to enter `SELECT`, touch page 1 playback 2, run a different playback, open Shift-4 Cue details, and enter `RECORD CUE 7` without an explicit playback or Cuelist Pool address.
 - **Oracle:** Exact `SELECT` command text before the playback touch, one explicit active-playback identity, Shift-4 opening that playback's Cuelist, and Cue 7 stored only in the active playback's assigned Cuelist.
 - **Pass:** Playback selection is deliberate and remains the shared default for Cue details and address-omitting Cue recording; running another playback does not steal selection, and explicit addresses still take precedence.
-- **Status:** Specification only; Shift-Z command entry exists, but playback selection and all active-playback resolution remain intentionally unimplemented until this scenario receives executable coverage.
+- **Status:** Implemented with visible Shift-Z playback selection, desk-and-show scoped persistence, implicit Cuelist resolution, explicit-address override, and Playwright coverage. Sessions attached to the same desk share the selection; another desk used by the same user remains independent.
 
 ## Required coverage matrix
 
 | IDs | Area | Required cases | Primary oracle |
 | --- | --- | --- | --- |
-| SHOW-000–006 | Show and patch | Save As copy isolation, create/open/save, addressing, overlap rejection, restart, invalid-show recovery, legacy migration | independent files, API, restarted server, preserved files |
-| GROUP-001–008 | Groups | ordered CRUD, add/remove, empty, live, derived, frozen, missing source, nested-cycle rejection | group objects, selection, rendered output |
-| PROG-001–008 | Programmer | select, values, fixture override, two-stage clear, undo/redo, preload, masters, two users | programmer state, audit, rendered output |
+| SHOW-000–004 | Show files and recovery | Save As copy isolation, save/restart/reopen, atomic replacement recovery, invalid-active-show recovery, and stable legacy migration | independent files, hashes/revisions, restarted server, preserved corrupt files |
+| DIM-001–002 | Foundational dimmers | ordered live Group editing and a visible Group command reaching logical, Art-Net, and sACN output | Group/programmer state and exact DMX |
+| GROUP-003–005 | Group semantics | derived membership, frozen membership, stored empty Groups, skipped missing range IDs, unpatched members, and safe invalid references | Group objects, selection, visible panes, rendered output |
+| PROG-001–004 | Programmer | selection gesture lifetime, ordered spreading, fixture/Group LTP, and two-stage Clear | programmer state, audit, panes, exact output |
 | PRELOAD-001–006 | Preload | programmer-only blind values, physical action queue, virtual-playback pane/actions, all eight capture masks, atomic combined GO, programmer-only release | pending entries, one commit timestamp, playback runtime, rendered output |
+| VPB-007 | Virtual Playbacks | inert Shift selection and named zone editing; overlap union; concurrent UI/REST/OSC/keyboard activation; hidden membership; restart and desk isolation | persisted zone store, serialized playback runtime, UI Settings, audit, rendered output |
 | PBK-001–006 | Playback configuration | Set interception on every playback control, assignment/color/clear persistence, type-safe button and fader layouts, Cuelist actions, Master/X-fade/Temp, Flash/Temp LTP restoration, Swap protection, specialized masters | persisted playback definition, action verb, playback runtime, temporary ownership, master state, exact output |
-| CMD-001–010 | Command line | fixture/group ranges, subsets, `AT`, presets, `REC/DEL/MOV/CPY`, cues, `SPD GRP`, page addressing, invalid grammar | UI result, audit event, show object mutation |
-| CUE-001–013 | Cue/playback | record, tracking, cue-only restore, active-Cue deletion with held output/navigation, GO/back, pause, release, per-value/Cue timing, GO/FOLLOW/TIME triggers, Cuelist View editing and transactional renumbering, Chaser/Speed Group settings, Intensity HTP/LTP, wrapping, First/Continue restart, timing bypass | playback state, persisted Cuelist data, exact virtual timestamps, UI selection without execution |
+| CMD-001–002 | Command line | fixture/Group default modes, ranges and dereferencing, plus Speed Group value/synchronization commands | visible command text, programmer state, audit, Speed Group state |
+| CUE-001–014 | Cue/playback | record, tracking, cue-only restore, active-Cue deletion with held output/navigation, GO/back, Go To/Load, pause, release, per-value/Cue timing, GO/FOLLOW/TIME triggers, Cuelist View editing and transactional renumbering, Chaser/Speed Group settings, Intensity HTP/LTP, wrapping, First/Continue restart, timing bypass | playback state, persisted Cuelist data, exact virtual timestamps, UI selection without execution |
 | SOUND-001 | Sound to Light | desk/browser-local input, permission and source state, frequency/gain/confidence/smoothing/range/hold/ratio configuration, recorded 120 BPM analysis, authoritative mapping, manual fallback and ownership boundaries | persisted Speed Group config, local device mapping, live analysis, authoritative Speed snapshot |
 | MIB-001 | Move in Black | per-fixture enable/default, safety delay after resolved zero, future lit-position lookup, disabled comparison, cancellation, Cue-edit invalidation | patch persistence, normalized MIB runtime state, exact Position DMX boundaries |
-| MERGE-001–006 | HTP/LTP | intensity maximum, equal-priority LTP recency, priority override, programmer/playback conflict, release restoration, group/fixture scope | resolved values and exact DMX |
-| DMX-001–010 | Encoding/routes | 0/50/75/100%, multi-byte order, disabled/remapped/multiple routes, ArtDMX headers/sequence, E1.31 headers/priority/sequence, termination | decoded real UDP datagrams |
-| OSC-001–008 | Hardware OSC | subscribe/unsubscribe, connected state, command keys, faders/buttons, full feedback, invalid alias, multiple desks, subscriber isolation | received OSC messages, audit, UDP output |
-| API-001–008 | REST/events | authentication, revision conflict, CRUD, validation failures, WebSocket commands/events, audit ordering, UI/API agreement, shutdown | HTTP status/body, events, audit |
-| TIME-001–008 | Virtual time | zero tick, fade boundaries, pause/resume, follow, chaser speed, effect phase, speed change, seven-day jump | exact virtual timestamp and output frame |
-| DESKTOP-001 | Packaged app | WebView load, session/bootstrap, app-owned server readiness, clean child shutdown | ready marker, HTTP readiness, process exit |
+| MERGE-001–003 | HTP/LTP | programmer priority/recency, programmer/playback arbitration, automatic full-overwrite release, and reversible Flash/Temp ownership | resolved source state and exact DMX |
+| DMX-001–007 | Encoding/routes | single-byte values, ArtDMX/E1.31 fields and sequence, remapped/multiple routes, patch boundaries, 16-bit order/defaults, and isolated output failure/recovery | decoded real UDP datagrams and route diagnostics |
+| OSC-001–006 | Hardware OSC | feedback subscription, commands, subscriber isolation, invalid input, same-desk UI/OSC interaction state, desk isolation, and current/explicit page addressing | received OSC messages, command/audit state, UDP output |
+| API-001–002 | REST/events | authentication, revision conflicts, CRUD, matching events, and audit ordering | HTTP status/body, events, audit |
+| CROSS-001–002 | Cross-surface agreement | equivalent Group value through UI/API/OSC and visible UI synchronization after external mutation | normalized programmer/output state and visible UI |
+| TIME-001–003 | Virtual time | zero tick, exact fade boundaries, chaser/phaser speed, pause/resume, and maximum one-week jump | exact virtual timestamp, runtime phase, and output frame |
+| DESKTOP-001–002 | Packaged app | WebView load, session/bootstrap, app-owned server readiness and clean child shutdown; independent-server non-adoption and survival | ready marker, HTTP readiness, exact process ownership and exit, authenticated post-exit write |
+| FILE-001–002, FILE-016 | File Manager | confined revision-safe text, visible browse/edit, authenticated roots/capabilities/range streaming, file operations, configured roots, pane input ownership, and hosted picker contracts | HTTP status/body, persisted files, visible pane/picker state, OSC-owned input context |
+| TEXT-001, TEXT-015 | Text Editor | file association and dirty state, multi-pane synchronization/conflicts, external updates, rename/delete recovery, read-only and Markdown modes | persisted text/layout and visible editor state |
+| LOCK-001 | Desk Lock | synchronized multi-screen PIN/button locking, desk-scoped API and OSC suppression, stable output, and other-desk independence | lock API, visible dialogs, command line, DMX, OSC behavior |
+| MANUAL-019 | Operator UI review | Desktop/desk terminology, fixture browser alignment, confined file fields, pane headers, Cue editor composition, Help/Outputs/DMX/Stage responsibilities, diagnostic Development access, and safe recovery load | visible accessible UI, persisted/API state, OSC desk identity, safe-blackout request |
 
 Every catalog entry added later must state setup, action surface, virtual timestamps where relevant, oracle, and pass condition. Protocol scenarios must discard packets captured before their action and assert a newer sequence, preventing stale output from satisfying the test.
 
 ## Test implementation rules
 
-When these definitions become executable tests, keep the layers separate:
+Executable tests keep the layers separate:
 
 - Use UI automation for operator actions, visible state, dialogs, and timing controls. Wait for both HTTP bootstrap and the live command WebSocket before interacting.
 - Use server or engine tests for exact reference semantics, tracking, persistence, and restart behavior.

@@ -2,6 +2,8 @@
 
 These scenarios focus on behavior that is slow or flaky under wall time and on failures that must not damage operator data.
 
+**Automated coverage:** Implemented by [`tests/05-virtual-time-persistence-and-recovery.spec.ts`](../../tests/05-virtual-time-persistence-and-recovery.spec.ts) and the Playwright process-integration cases in [`tests/05-desktop-process-integration.spec.ts`](../../tests/05-desktop-process-integration.spec.ts). Run the packaged cases through `./test desktop-smoke`; that command builds and launches the actual macOS application bundle rather than substituting a browser page.
+
 ## How to run this file
 
 Timing cases run in `--test-bench`; persistence cases use a dedicated serial fixture and real temporary files. Every case loads a canonical show, immediately uses Save As to create its named working copy, and applies mutations only to that copy. Before restart, record file hashes, active show ID, revision, programmer/playback state, and expected output. After restart, wait independently for readiness and bootstrap. Desktop cases launch the packaged app as a child process with unique data and port environment variables and assert process ownership explicitly.
@@ -26,6 +28,8 @@ Timing cases run in `--test-bench`; persistence cases use a dedicated serial fix
 
 **Pass condition:** Tests can observe current state repeatedly without introducing application-time movement.
 
+**Implementation status:** Implemented as independent `TIME-001 @api` and `TIME-001 @ui` cases. Both use the same normalized logical-DMX, Art-Net, sACN, OSC-cycle, sequence, and behavior-timestamp oracle; the UI variant sets Prog Fade and enters the fixture value through production controls.
+
 ## TIME-002 — Fade boundaries are exact
 
 **Priority:** P0  
@@ -37,13 +41,17 @@ Timing cases run in `--test-bench`; persistence cases use a dedicated serial fix
 
 1. Set **Prog Fade** to `3.0 s` through the hardware timing summary.
 2. Click fixture 1, set Intensity to 0%, and advance 3,000 ms so the starting value is settled.
-3. With fixture 1 as a new/open selection, set Intensity to 100% and record that programmer mutation as virtual time 0 for the fade.
-4. Call the clock endpoint with increments that land cumulatively at `0`, `1`, `1499`, `1500`, `1501`, `2999`, `3000`, and `3001` ms. The increments are `0, 1, 1498, 1, 1, 1498, 1, 1`; do not pass each checkpoint as though it were an absolute timestamp.
-5. At every call, inspect the returned unrounded engine value, logical slot, and newest Art-Net/sACN bytes before advancing again.
+3. With fixture 1 as a new/open selection, set Intensity to 100% and record that programmer mutation as virtual time 0 for the fade. The encoder target must read 100% immediately, while Fixture Sheet resolved light and DMX remain at the 0% starting value.
+4. Record the touch-set value into Cue 1 and verify the stored fixture change has `fade_millis: 3000`. Clear/release the programmer, replay Cue 1, and use the Cue activation as a fresh virtual time 0.
+5. Call the clock endpoint with increments that land cumulatively at `0`, `1`, `1499`, `1500`, `1501`, `2999`, and `3000` ms, followed by `3001` to prove the completed value remains stable. The increments are `0, 1, 1498, 1, 1, 1498, 1, 1`; do not pass each checkpoint as though it were an absolute timestamp.
+6. At every call, inspect Fixture Sheet, the returned unrounded resolved engine value, the logical slot, and the newest Art-Net/sACN bytes before advancing again.
+7. Repeat the touch-set, record, clear, and replay sequence through live Group 3. The Group encoder target must jump immediately, the stored Group Cue change must have `fade_millis: 3000`, and every Group member must follow the same resolved/output boundaries.
 
-**Assertions:** Values are monotonic, midpoint rounding is documented, the endpoint is exactly 255, and no wall-time delay changes a checkpoint.
+**Assertions:** Encoder target values jump immediately. Fixture Sheet, resolved values, logical output, Art-Net, and sACN remain monotonic through the fade; midpoint rounding is documented; the endpoint is exactly 255; the recorded fixture and Group Cue changes retain the 3,000 ms timing; and no wall-time delay changes a checkpoint.
 
 **Pass condition:** Interpolation is reproducible at boundaries and finishes exactly once.
+
+**Implementation status:** Implemented as independent `TIME-002 @api` and `TIME-002 @ui` live-programmer cases plus focused `TIME-002 @ui` fixture-Cue and Group-Cue recording/replay cases. The live cases share one exact boundary oracle. The replay cases additionally assert the immediate encoder target, stored per-change timing, Fixture Sheet resolved display, logical output, and Art-Net/sACN bytes at all eight cumulative checkpoints.
 
 ## TIME-003 — Chaser and effect phases survive large jumps
 
@@ -61,11 +69,13 @@ Timing cases run in `--test-bench`; persistence cases use a dedicated serial fix
 5. Pause through the playback API, advance several step durations, verify no phase movement, resume, and advance the remaining virtual duration.
 6. From an identical start, jump 604,800,000 ms and verify bounded phase calculation rather than scheduler catch-up iterations.
 7. Repeat steps 2–6 for a periodic color effect on fixture 501's emitters.
-8. **UI capability required:** current Cuelist/Dynamics surfaces do not expose all chaser construction, precise phase, and pause/resume controls required by this deterministic case. Keep this Rust/API-driven until those controls exist.
+8. **Harness boundary:** the exact phase inspection and one-week jump are deterministic runtime operations rather than operator gestures. The executable `@wire` case drives those seams directly; it does not claim a cosmetic browser equivalent.
 
 **Assertions:** The result is defined by virtual timestamp and configured phase rules, not by the number or duration of scheduler iterations. Large jumps do not create an unbounded catch-up loop.
 
 **Pass condition:** A direct jump and an equivalent series of smaller advances end in the same defined state.
+
+**Implementation status:** Implemented as a supplemental `TIME-003 @wire` harness case for Chaser and Phaser runtime, including speed changes, pause/resume, and the maximum one-week jump. It is intentionally not represented by a cosmetic UI pair: construction and precise phase inspection remain runtime-driven under the explicit harness boundary above.
 
 ## SHOW-001 — Save, restart, and reopen
 
@@ -78,7 +88,7 @@ Timing cases run in `--test-bench`; persistence cases use a dedicated serial fix
 
 1. Click fixtures 5 and 6, press `[REC]`, click Group 3, and choose **Merge**. Confirm Group 3 is `1, 2, 3, 4, 5, 6`.
 2. Click Group 3, set Intensity to 40%, press `[REC]`, and click empty Cuelist 1 to record Cue 1. Assign Cuelist 1 to page 1 playback 1 with `[SET]`, the Cuelist 1 pool cell, and the **Assign Cuelist 1** fader target.
-3. Press `[CLR]` twice, open Cuelist 1, and click **GO** so playback remains active.
+3. Press `[CLR]` twice, open Cuelist 1 and inspect the recorded Cue 1, then return to the desk and click **GO +** on assigned page 1 playback 1 so playback remains active. Cuelist View is an editor and does not duplicate playback transport controls.
 4. Click fixture 12 and set Intensity to 65% without recording it. Record the durable user's programmer ID and complete state.
 5. Open the show menu, click **Save Named Revision**, name it `SHOW-001 before restart`, and confirm. Record the working-copy file hash, active show ID/revision, playback state, and expected output.
 6. Call authenticated `POST /api/v1/shutdown` and wait for the exact server PID and port to exit.
@@ -89,6 +99,8 @@ Timing cases run in `--test-bench`; persistence cases use a dedicated serial fix
 **Assertions:** Patch, routes, ordered groups, presets, cues, active show identity, and documented durable programmer/playback state reload correctly. No files appear in repository `light-data`.
 
 **Pass condition:** A normal restart preserves durable state without converting transient values into show data.
+
+**Implementation status:** Implemented first as independent `SHOW-001 @api` and `SHOW-001 @ui` operator workflows with one shared normalized Group/Cue/playback/programmer/revision/output oracle. A supplemental `SHOW-001 @restart` process case adds authenticated graceful shutdown, exact old/new PIDs, named revision and show hash, restored active playback runtime, and the first emitted frame.
 
 ## SHOW-002 — Crash during save recovers atomically
 
@@ -104,11 +116,13 @@ Timing cases run in `--test-bench`; persistence cases use a dedicated serial fix
 3. Repeat from a fresh baseline with the fault **during temporary-file write**.
 4. Repeat again with the fault **after replacement but before backup cleanup**.
 5. For every restart, preserve directory listing, hashes, recovery log, bootstrap diagnostics, and normalized show JSON before cleanup.
-6. **Harness capability required:** if these three named storage fault points are not injectable, this scenario is blocked. Killing the process at an uncontrolled wall-time instant does not satisfy the three cases.
+6. **Harness boundary:** use the implemented deterministic fixtures for all three named storage replacement points. Killing the process at an uncontrolled wall-time instant does not satisfy any case.
 
 **Assertions:** On restart the server opens either the complete old revision or complete new revision, never truncated or mixed JSON. Recovery and backup choice are logged and exposed to the operator.
 
 **Pass condition:** Interrupted persistence cannot destroy the last known-good show.
+
+**Implementation status:** Implemented as three supplemental `SHOW-002 @restart` harness cases with deterministic SQLite boundary fixtures. Each case first produces complete old and new revisions through the production save path while the server owns the file, stops the server, then stages only the named replacement boundary before restart. The test retains the truncated temporary file or pre-cleanup backup as recovery evidence and accepts only the exact old or new hash. Fault injection has no operator gesture, so a browser pair would not exercise an independent UI adapter.
 
 ## SHOW-003 — Invalid active show enters recovery
 
@@ -124,7 +138,7 @@ Timing cases run in `--test-bench`; persistence cases use a dedicated serial fix
 3. Keep an untouched backup outside the active path. Record the active-show metadata that will cause startup to select the invalid copy.
 4. Stop the server, place the corrupted fixture at the active path, and start a new process against that data directory.
 5. Poll `/api/v1/readiness`, then `/api/v1/bootstrap`; retain logs and diagnostics before opening any replacement show.
-6. In the app, open the show menu, click **Load**, and choose **Load Latest Autosave** for the untouched valid show. Confirm safe output and successful activation.
+6. In the app recovery screen, choose **Load Latest Autosave** for the untouched valid show. The recovery choice uses safe blackout directly and does not require initializing another show or dismissing the recovery state first. Confirm safe output and successful activation.
 7. Re-hash the invalid file and prove startup did not overwrite it.
 
 **Operator boundary:** corruption is deliberately performed by the serial file-fixture harness, not through a UI control.
@@ -132,6 +146,8 @@ Timing cases run in `--test-bench`; persistence cases use a dedicated serial fix
 **Assertions:** Server readiness succeeds, output remains safe, bootstrap reports the active-show error, and the operator can select a valid show. The invalid file is not overwritten merely by startup.
 
 **Pass condition:** One bad show cannot prevent the desk from starting or silently erase recovery evidence.
+
+**Implementation status:** Implemented first as independent `SHOW-003 @api` and `SHOW-003 @ui` malformed-show recovery cases using the same valid-show activation, safe-output, and unchanged corrupt-file oracle. Supplemental `SHOW-003 @restart` cases independently cover malformed storage, a wrong-shaped required field, and a syntactically valid missing playback reference, including readiness and bootstrap diagnostics.
 
 ## SHOW-004 — Backward-compatible migration is stable
 
@@ -142,7 +158,13 @@ Timing cases run in `--test-bench`; persistence cases use a dedicated serial fix
 
 **Detailed fixture procedure:**
 
-1. Maintain one checked-in/generated historical fixture for each supported schema shape. Derive it from the working copy by removing only the named fields: fixture numbers, Group defaults, playback defaults, route defaults, or virtual-dimmer metadata.
+1. Maintain one generated historical fixture for each supported schema shape. Derive it from a fresh working copy by removing only one matrix row at a time:
+   - every `fixture_number` field, whose supported maintained-fixture names restore their documented numbers before deterministic patch-order fallback is considered;
+   - Group `color`, `icon`, derivation/freeze metadata, `programming`, `master`, and `playback_fader`, which default to no presentation/derivation/programming, master `1`, and no playback fader;
+   - playback layout, activation, x-fade, color, flash-release, swap-protection, and presentation defaults, which are restored according to the playback target;
+   - route `destination`, which defaults to `null` so the protocol chooses its standard destination; or
+   - a virtual dimmer parameter's physical metadata and capabilities, which default to the linear `0–1` metadata and an empty capability list without changing `virtual_dimmer: true`.
+   The persisted legacy Cue row separately removes Cue identities and Cuelist defaults.
 2. Record the normalized semantic object graph and hash before loading; do not use an arbitrary old file whose intended values are unknown.
 3. Load the fixture through the same Show Store open path used by production and capture migration diagnostics plus the normalized in-memory result.
 4. Save the migrated show once, close it, and reopen it. Capture normalized state and bytes.
@@ -152,6 +174,8 @@ Timing cases run in `--test-bench`; persistence cases use a dedicated serial fix
 **Assertions:** Defaults are documented, identities and addressing remain stable, migration is idempotent, and the second open performs no additional semantic rewrite.
 
 **Pass condition:** Supported historical shows migrate once without losing operator intent.
+
+**Implementation status:** Implemented as supplemental `SHOW-004 @restart` Playwright matrix cases for fixture-number, Group, playback, route, virtual-dimmer-metadata, and Cue-identity/default migration. Every case opens through the production Show Store, asserts the documented normalized object, and proves object revision and whole-file byte stability on the second reopen. Rust fixture tests additionally retain exhaustive logical-head repair and built-in default-patch coverage. Raw historical-field removal remains a harness operation rather than a simulated operator gesture.
 
 ## DESKTOP-001 — Packaged app owns its child server
 
@@ -173,6 +197,8 @@ Timing cases run in `--test-bench`; persistence cases use a dedicated serial fix
 
 **Pass condition:** Packaging, frontend bootstrap, server ownership, and shutdown work without touching normal operator data or an already-running production server.
 
+**Implementation status:** Implemented as Playwright case `DESKTOP-001` by `./test desktop-smoke` against the built `.app`. It seeds the temporary active show through the production server, records app and exact child PIDs, verifies readiness/bootstrap and the frontend marker independently, and proves both the child PID and listener disappear after app exit.
+
 ## DESKTOP-002 — Existing server is not adopted as a child
 
 **Priority:** P2  
@@ -192,6 +218,8 @@ Timing cases run in `--test-bench`; persistence cases use a dedicated serial fix
 **Assertions:** Record app and server PIDs before quit. The app PID exits, the independent PID remains unchanged, readiness still succeeds, and its data directory and log remain writable by that server.
 
 **Pass condition:** The desktop app terminates only a server process it spawned and never kills an independently owned server.
+
+**Implementation status:** Implemented as Playwright case `DESKTOP-002` by `./test desktop-smoke`. It proves the app creates no child server, exits, leaves the original PID and readiness endpoint intact, and then performs an authenticated show-file write through that same independent process before cleanup.
 
 ## Follow-ups
 

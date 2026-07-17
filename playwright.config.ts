@@ -5,13 +5,14 @@ const helpScreenshots = process.env.LIGHT_HELP_SCREENSHOTS === "1";
 
 export default defineConfig({
   testDir: "./tests",
+  timeout: visualRecording ? 300_000 : 30_000,
   testIgnore: visualRecording
     ? /02-help-screenshots\.spec\.ts/
     : helpScreenshots
       ? /visual-recording\.spec\.ts/
       : [/visual-recording\.spec\.ts/, /02-help-screenshots\.spec\.ts/],
   fullyParallel: true,
-  workers: process.env.CI ? 4 : undefined,
+  workers: 4,
   retries: process.env.CI ? 2 : 0,
   outputDir: "./test-results",
   reporter: process.env.CI
@@ -20,8 +21,9 @@ export default defineConfig({
   use: {
     browserName: "chromium",
     channel: "chrome",
+    actionTimeout: visualRecording ? 20_000 : 0,
     launchOptions: visualRecording
-      ? { slowMo: Number(process.env.LIGHT_VISUAL_SLOW_MO ?? 180) }
+      ? { slowMo: Number(process.env.LIGHT_VISUAL_SLOW_MO ?? 250) }
       : undefined,
     viewport: visualRecording ? { width: 1920, height: 1080 } : { width: 1280, height: 720 },
     video: visualRecording ? { mode: "on", size: { width: 1920, height: 1080 } } : "off",

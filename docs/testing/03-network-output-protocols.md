@@ -35,10 +35,11 @@ Bind receivers before opening the show so route targets can use their actual por
 **Detailed procedure:**
 
 1. Bind the Art-Net receiver and update the working copy's enabled Art-Net route destination to that receiver through a revision-checked route-object PUT.
-2. Record the receiver mark and current route sequence state.
-3. Call `POST /api/v1/test/clock/advance` with `{"millis":0}` three separate times. Do not combine them into one 0 ms call and do not wait for the scheduler.
-4. Collect exactly the ArtDMX packets received after the mark, preserve their raw bytes, and decode each header and payload independently.
-5. **Harness only:** seed the route sequence at 254, emit three more frames, and verify `255, 1, 2`. Disable the route with a revision-checked PUT, mark the receiver, emit once, and verify no packet inside the bounded receive window while the enabled sACN route still receives one.
+2. Set fixture 1 to 25% with an explicit `TIME 0` override so its resolved output is a known 64-byte payload without changing the configured Programmer Fade.
+3. Record the receiver mark and current route sequence state.
+4. Call `POST /api/v1/test/clock/advance` with `{"millis":0}` three separate times. Do not combine them into one 0 ms call and do not wait for the scheduler.
+5. Collect exactly the ArtDMX packets received after the mark, preserve their raw bytes, and decode each header and payload independently.
+6. **Harness only:** seed the route sequence at 254, emit three more frames, and verify `255, 1, 2`. Disable the route with a revision-checked PUT, mark the receiver, emit once, and verify no packet inside the bounded receive window while the enabled sACN route still receives one.
 
 **Assertions:**
 
@@ -59,10 +60,11 @@ Bind receivers before opening the show so route targets can use their actual por
 **Detailed procedure:**
 
 1. Bind the sACN receiver and point the working copy's enabled sACN route at it with a revision-checked route-object PUT.
-2. Mark the receiver and call the 0 ms virtual-clock advance three times. Save and decode all E1.31 datagrams received after the mark.
-3. Check the stable CID/source name, universe 101, priority 100, DMP property count, start code, sequence, and slot payload on each packet.
-4. **Harness only:** seed the route sequence at 254 and emit three frames to prove the production sequence helper emits `255, 1, 2`; it deliberately skips zero after wrapping.
-5. Mark the receiver, then disable or delete the active sACN route through its current revision. Collect the complete termination burst and assert the stream-terminated option on every required packet.
+2. Set fixture 1 to 50% with an explicit `TIME 0` override so its resolved output is a known 128-byte payload without changing the configured Programmer Fade.
+3. Mark the receiver and call the 0 ms virtual-clock advance three times. Save and decode all E1.31 datagrams received after the mark.
+4. Check the stable CID/source name, universe 101, priority 100, DMP property count, start code, sequence, and slot payload on each packet.
+5. **Harness only:** seed the route sequence at 254 and emit three frames to prove the production sequence helper emits `255, 1, 2`; it deliberately skips zero after wrapping.
+6. Mark the receiver, then disable or delete the active sACN route through its current revision. Collect the complete termination burst and assert the stream-terminated option on every required packet.
 
 **Assertions:** Root, framing, and DMP vectors are valid; CID and source name are stable; universe and property count are correct; start code is zero; default priority is 100; sequence increments and wraps correctly.
 
@@ -135,6 +137,8 @@ Bind receivers before opening the show so route targets can use their actual por
 **Priority:** P2  
 **Primary layer:** Server integration
 
+**Implementation status:** Implemented by the paired Playwright API/UI scenario and the route-scoped output-layer integration test. The test bench exposes failure injection only through the test-only server route; production builds do not register that endpoint.
+
 **Starting show:** Load canonical `compact-rig.show`, immediately Save As `dmx-007.show`, and use the active copy for this scenario.
 
 **Detailed harness procedure:**
@@ -144,7 +148,7 @@ Bind receivers before opening the show so route targets can use their actual por
 3. Emit one 0 ms frame. Verify the healthy receiver got the frame, then reread diagnostics/audit and prove only the failing route's error counter changed.
 4. Disable the injection without recreating the route. Mark both receivers and emit another 0 ms frame.
 5. Verify both destinations receive current state with valid next sequences rather than a replay of the failed frame.
-6. **Harness capability required:** if the output layer has no route-scoped send-failure injection seam, this scenario is blocked there; closing a UDP receiver is not a valid substitute because UDP send normally still succeeds.
+6. Use the test-only route-scoped send-failure injection seam. Closing a UDP receiver is not a valid substitute because UDP send normally still succeeds.
 
 **Assertions:** Send errors increment without stopping other routes. Recovery resumes packets with valid sequences and current state rather than replaying stale frames.
 
@@ -160,4 +164,4 @@ Bind receivers before opening the show so route targets can use their actual por
 | DMX-004 | Add routes dynamically while output is active and restart with saved routes. | Compare logical universe, route mapping, destination address, and per-route sequence key. |
 | DMX-005 | Test multi-head footprints, multipatch, and remapping an active fixture. | Verify patch validation and compiled slot ownership before engine output. |
 | DMX-006 | Add physical curves, inversion, virtual dimmers, and head-shared parameters. | Compare fixture metadata, normalized component value, and coarse/fine byte order. |
-| DMX-007 | Fail only one of several routes and repeat during shutdown. | Inspect health counters and healthy-route packets at the same virtual frame. |
+| DMX-007 | Repeat the isolated route failure during shutdown. | Inspect health counters and healthy-route packets at the same virtual frame. |

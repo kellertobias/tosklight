@@ -56,7 +56,7 @@ test("OSC-002 @osc › hardware command matches the paired API and UI contract",
     expect(Array.from(packet.slots.slice(0, 12))).toEqual(Array(12).fill(64));
     await hardware.expectAfter(nextFeedback, `/light/${alias}/feedback/page`);
   } finally {
-    hardware.close();
+    await hardware.close();
   }
 });
 

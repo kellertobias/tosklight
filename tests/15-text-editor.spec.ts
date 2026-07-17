@@ -1,7 +1,7 @@
 import type { Locator, Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
 import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
 
-test.describe("planned feature 15 · dedicated Text Editor", () => {
+test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
   test("TEXT-015 @ui › two editors reflect clean saves, surface dirty conflicts, persist association, and recover a deleted file", async ({
     api,
     bench,
@@ -25,8 +25,8 @@ test.describe("planned feature 15 · dedicated Text Editor", () => {
     });
 
     await desk.open(bench.baseUrl);
-    await page.getByRole("button", { name: "DESKS" }).click();
-    await page.getByRole("button", { name: /New desk/ }).click();
+    await page.getByRole("button", { name: "DESKTOPS" }).click();
+    await page.getByRole("button", { name: /New desktop/ }).click();
     await addTextEditor(page, 0.12);
     await addTextEditor(page, 0.62);
 
@@ -116,6 +116,94 @@ test.describe("planned feature 15 · dedicated Text Editor", () => {
     await expect(editors.nth(1).locator(".text-save-state")).toHaveText("Saved");
 
     await api.request("POST", "/api/v1/files/shows/operations", { operation: "delete", sources: [renamedName] });
+  });
+
+  test("TEXT-015 @ui › Open File is root-confined and Pane Settings control read-only and Markdown views", async ({
+    api,
+    bench,
+    desk,
+    page,
+    show,
+  }) => {
+    const name = `text-editor-settings-${crypto.randomUUID()}.md`;
+    await api.request("POST", "/api/v1/files/shows/operations", {
+      operation: "create_file",
+      sources: [],
+      destination: "",
+      name,
+    });
+    const empty = await api.request<any>("GET", `/api/v1/files/shows/text?path=${encodeURIComponent(name)}`);
+    await api.request("PUT", "/api/v1/files/shows/text", {
+      path: name,
+      text: "# Cue Sheet\n\n- House open\n- Beginners\n",
+      revision: empty.revision,
+    });
+
+    await desk.open(bench.baseUrl);
+    await page.getByRole("button", { name: "DESKTOPS" }).click();
+    await page.getByRole("button", { name: /New desktop/ }).click();
+    await addTextEditor(page, 0.3);
+
+    const editor = page.locator(".desk-pane:has(.text-editor)");
+    await editor.getByRole("button", { name: "Open File", exact: true }).click();
+    const picker = page.getByRole("dialog", { name: "Choose files or folders" });
+    await expect(picker).toBeVisible();
+    await expect(picker.getByRole("button", { name: "Open system file picker" })).toHaveCount(0);
+    await picker.getByRole("button", { name: `${name}, file` }).click();
+    await picker.getByRole("button", { name: "Select", exact: true }).click();
+    await expect(editor.getByLabel("File text")).toHaveValue("# Cue Sheet\n\n- House open\n- Beginners\n");
+
+    await editor.getByRole("button", { name: "Settings", exact: true }).click();
+    let settings = page.getByRole("dialog", { name: "Pane Settings" });
+    await settings.getByRole("tab", { name: "Text Editor", exact: true }).click();
+    let readOnlySwitch = settings.getByRole("switch", { name: "Read-only pane" });
+    await readOnlySwitch.locator("xpath=..").click();
+    await expect(readOnlySwitch).toBeChecked();
+    await settings.getByRole("radio", { name: "Rendered Markdown" }).click();
+    await settings.getByRole("button", { name: "Close settings" }).click();
+
+    await expect(editor.getByLabel("File text")).toHaveCount(0);
+    const rendered = editor.getByRole("article", { name: "Rendered Markdown" });
+    await expect(rendered.getByRole("heading", { name: "Cue Sheet" })).toBeVisible();
+    await expect(rendered).toContainText("House open");
+    await expect(editor.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+    await expect(editor.getByRole("button", { name: "Save As" })).toBeDisabled();
+    await expect(editor.getByText("This pane is configured read-only.", { exact: false })).toBeVisible();
+
+    await expect.poll(async () => {
+      const layouts = await api.request<any[]>("GET", `/api/v1/shows/${show.id}/objects/user_layout`);
+      return layouts.flatMap((layout) => layout.body.desks)
+        .flatMap((configuredDesk: any) => configuredDesk.panes)
+        .find((pane: any) => pane.kind === "text_editor" && pane.textFilePath === name);
+    }).toEqual(expect.objectContaining({ textEditorReadOnly: true, textEditorMode: "markdown" }));
+
+    await editor.getByRole("button", { name: "Settings", exact: true }).click();
+    settings = page.getByRole("dialog", { name: "Pane Settings" });
+    await settings.getByRole("tab", { name: "Text Editor", exact: true }).click();
+    readOnlySwitch = settings.getByRole("switch", { name: "Read-only pane" });
+    await readOnlySwitch.locator("xpath=..").click();
+    await expect(readOnlySwitch).not.toBeChecked();
+    await settings.getByRole("radio", { name: "Edit + Markdown" }).click();
+    await settings.getByRole("button", { name: "Close settings" }).click();
+
+    await expect(editor.getByLabel("File text")).toBeEditable();
+    await expect(editor.getByRole("article", { name: "Rendered Markdown" })).toBeVisible();
+    await expect(editor.locator(".text-editor-content.mode-split")).toBeVisible();
+    await editor.getByLabel("File text").fill("# Updated Cue Sheet\n\nStand by.\n");
+    await expect(editor.getByRole("article", { name: "Rendered Markdown" }).getByRole("heading", { name: "Updated Cue Sheet" })).toBeVisible();
+    await editor.getByRole("button", { name: "Save", exact: true }).click();
+    await expect.poll(async () => (await api.request<any>("GET", `/api/v1/files/shows/text?path=${encodeURIComponent(name)}`)).text)
+      .toBe("# Updated Cue Sheet\n\nStand by.\n");
+
+    await editor.getByRole("button", { name: "Settings", exact: true }).click();
+    settings = page.getByRole("dialog", { name: "Pane Settings" });
+    await settings.getByRole("tab", { name: "Text Editor", exact: true }).click();
+    await settings.getByRole("radio", { name: "Plain Text" }).click();
+    await settings.getByRole("button", { name: "Close settings" }).click();
+    await expect(editor.getByLabel("File text")).toBeVisible();
+    await expect(editor.getByRole("article", { name: "Rendered Markdown" })).toHaveCount(0);
+
+    await api.request("POST", "/api/v1/files/shows/operations", { operation: "delete", sources: [name] });
   });
 });
 

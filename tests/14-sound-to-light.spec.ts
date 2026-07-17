@@ -88,7 +88,8 @@ async function configureFromRecordedAudio({ api, bench, desk, page }: BenchUiCon
   expect((await api.request<any>("GET", "/api/v1/speed-groups/A")).configuration.enabled).toBe(false);
 
   await desk.recordStep("SET RESPONSE", "Enable tempo analysis, isolate 45–140 Hz, and set gain, confidence, smoothing, hold, accepted BPM, and 2× mapping.");
-  await modal.getByRole("switch", { name: "Enable Sound-to-Light" }).click();
+  await modal.getByText("Enable Sound-to-Light", { exact: true }).click();
+  await expect(modal.getByRole("switch", { name: "Enable Sound-to-Light" })).toBeChecked();
   await modal.getByRole("button", { name: "Low · 60–180 Hz" }).click();
   await page.getByRole("option", { name: "Custom range" }).click();
   await modal.getByLabel("Custom low frequency").fill(String(configuration.frequency.low_hz));
@@ -116,12 +117,18 @@ async function configureFromRecordedAudio({ api, bench, desk, page }: BenchUiCon
 }
 
 async function setRange(locator: import("../apps/control-ui/node_modules/@playwright/test/index.js").Locator, value: number) {
-  await locator.evaluate((element, next) => {
-    const input = element as HTMLInputElement;
-    input.value = String(next);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-  }, value);
+  const minimum = Number(await locator.getAttribute("min"));
+  const maximum = Number(await locator.getAttribute("max"));
+  const step = Number(await locator.getAttribute("step"));
+  const bounds = await locator.boundingBox();
+  if (!bounds) throw new Error("Sound response range is not visible");
+  const ratio = (value - minimum) / (maximum - minimum);
+  await locator.click({ position: { x: Math.max(1, Math.min(bounds.width - 1, bounds.width * ratio)), y: bounds.height / 2 } });
+  const current = Number(await locator.inputValue());
+  const remaining = Math.round((value - current) / step);
+  const key = remaining < 0 ? "ArrowLeft" : "ArrowRight";
+  for (let index = 0; index < Math.abs(remaining); index += 1) await locator.press(key);
+  if (Number(await locator.inputValue()) !== value) throw new Error(`Unable to set range to ${value}`);
 }
 
 async function installRecordedKickInput(page: import("../apps/control-ui/node_modules/@playwright/test/index.js").Page) {

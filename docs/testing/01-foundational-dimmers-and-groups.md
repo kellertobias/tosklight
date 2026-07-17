@@ -193,7 +193,7 @@ The fully entered command `[REC] [GRP] [3] [ENTER]` overwrites; `[REC] [+] [GRP]
 **Detailed cases:**
 
 1. From a fresh working copy, confirm Group 4 is not present as a stored Group object after deletion or before deliberate creation. Enter a Group range that spans the missing slot, such as `[GRP] [1] [THRU] [5] [ENTER]`, and confirm the missing Group 4 is skipped like a nonexistent fixture number; the range selects only stored groups in order and does not create Group 4.
-2. With an empty selection, press `[REC]`, then click Group 4's empty pool cell. Because no Group object exists there yet, no Merge/Overwrite dialog should open; the click stores Group 4 directly as an empty Group object. If the `@ui` surface cannot record an empty selection this way, mark that UI case blocked on empty-cell Group storage; the `@api` variant must create the same revision-checked empty Group object directly.
+2. With an empty selection, press `[REC]`, then click Group 4's empty pool cell. Because no Group object exists there yet, no Merge/Overwrite dialog opens; the click stores Group 4 directly as an empty Group object. The independent `@api` variant creates the same revision-checked empty Group object directly.
 3. Click stored empty Group 4, set intensity to 50%, and confirm the programmer contains a live Group 4 value even though no fixture output changes.
 4. From independent copies with stored empty Group 4 and fixture 1 selected, verify both record modes produce the same result: `RECORD + GROUP 4` and `RECORD GROUP 4` each store fixture 1 as Group 4's only member, and after advancing virtual time by 3,000 ms only fixture 1 receives the live Group 4 value.
 5. In the UI variant, click fixture 1, press `[REC]`, and click stored empty Group 4. Because Group 4 exists but has no members, no Merge/Overwrite dialog should open; the click stores fixture 1 directly, equivalent to either Merge or Overwrite.
@@ -304,7 +304,7 @@ For every case, assert the programmer's normalized values and address shape befo
 - Output quantization occurs only after interpolation; intermediate normalized values are not repeatedly rounded while the spread is built.
 - Multiple `[THRU]` tokens are parsed as one value spread with multiple control points, not as a selection range or invalid trailing tokens.
 
-**Pass condition:** Uniform, ascending, descending, and multi-control-point intensity commands distribute deterministic values over ordered targets. Live Group spreads remain group-relative through programmer, Cue, and Preset storage; dereferenced Group spreads become concrete fixture values. Unresolved complex-value syntax remains explicitly unimplemented.
+**Pass condition:** Uniform, ascending, descending, and multi-control-point intensity commands distribute deterministic values over ordered targets. Live Group spreads remain group-relative through programmer, Cue, and Preset storage; dereferenced Group spreads become concrete fixture values. Complex Color and Position spread syntax is outside this implemented intensity-spread scenario and is not inferred from these assertions.
 
 ## PROG-003 — Programmer intensity override uses LTP within one programmer
 
@@ -319,11 +319,13 @@ For every case, assert the programmer's normalized values and address shape befo
 2. Click fixture 1 once. Because this new selection does not begin with `+`, it replaces the current Group selection.
 3. Touch Intensity, enter `75`, and confirm it. Confirm the programmer now contains one Group 1 value and one fixture 1 value. Advance virtual time by exactly 3,000 ms and emit one frame: fixture 1 outputs 191 while fixtures 2–12 output 128.
 4. Release only fixture 1's fixture-scoped intensity value through the parameter/value release control.
-5. **UI capability required:** if no per-attribute release control is present, stop the `@ui` case at step 4; the API variant removes only fixture 1's intensity contribution.
+5. In the API variant, issue `programmer.release` with `{"fixture_id":"<fixture-1-id>","attribute":"intensity"}`. The visible UI control and API command must remove the same one contribution and no other fixture, Group, or attribute value.
 6. Emit a 0 ms frame and confirm fixture 1 falls back to the still-active Group 1 value of 128.
 7. From a fresh copy, repeat steps 1 and 2, but set fixture 1 to `25`. Advance to the fade boundary and confirm fixture 1 outputs 64 while fixtures 2–12 remain at 128. This proves the fixture-scoped programmer value wins by recency/specificity even when it is lower than the live Group value.
 8. Without releasing fixture 1, enter `[GRP] [1] [AT] [5] [0] [ENTER]` again. Advance to the fade boundary and confirm fixture 1 returns to 128 with the rest of Group 1, because the newer Group 1 programmer value supersedes the older fixture-scoped value inside the same programmer.
 9. Release the Group 1 intensity value while leaving the fixture 1 value present. Emit a 0 ms frame and confirm fixture 1 returns to 64 while fixtures 2–12 fall to 0. Then release fixture 1 and confirm all fixtures return to 0.
+
+The API mirror for the first release is `programmer.release` with a fixture ID and attribute. The Group-scoped mirror is `programmer.group.release` with `{"group_id":"1","attribute":"intensity"}`. Both are idempotent: releasing an absent scoped value reports no mutation and must not rewrite fallback values or timestamps.
 
 **Assertions:** Within one programmer, live Group intensity and fixture-scoped intensity resolve by LTP semantics, not HTP. A later lower fixture value can pull a member below its Group value; a later Group value can pull that fixture back up; releasing one source falls back to the next still-active source without rewriting the other value.
 

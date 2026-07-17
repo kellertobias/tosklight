@@ -58,7 +58,7 @@ test("records the complete desk with OSC and DMX observers", async ({ api, bench
     await stage(page, "COMPLETE", "Visual walkthrough complete. Assertions are still checked by the normal test catalog.", sent, hardware.messages, await dmxState(api, bench));
     await pause(page, 1_500);
   } finally {
-    hardware.close();
+    await hardware.close();
     await fs.mkdir(path.dirname(VIDEO), { recursive: true });
     await page.context().close();
     if (video) {

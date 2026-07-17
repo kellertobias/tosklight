@@ -3,13 +3,35 @@ import { expect, type Page } from "@playwright/test";
 export class DeskDriver {
   private recordingStep = { title: "STARTING", description: "Preparing the test application." };
   private recordingInstalled = false;
+  private recordingNavigationHandler?: () => void;
 
-  constructor(readonly page: Page, private readonly testTitle = "Light UI test") {}
+  constructor(
+    readonly page: Page,
+    private readonly testTitle = "Light UI test",
+    private readonly controlDeskId: string | null = null,
+    private readonly externalOscSummary: () => string = () => "",
+  ) {}
+
+  async dispose(): Promise<void> {
+    if (this.recordingNavigationHandler) this.page.off("domcontentloaded", this.recordingNavigationHandler);
+    this.recordingNavigationHandler = undefined;
+  }
 
   async open(baseUrl: string): Promise<void> {
+    if (this.controlDeskId) {
+      await this.page.addInitScript((deskId) => {
+        localStorage.setItem("light.control-desk", deskId);
+      }, this.controlDeskId);
+    }
     await this.page.goto(baseUrl);
     await expect(this.page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
     await expect(this.page.locator(".connection-banner")).toBeHidden({ timeout: 10_000 });
+    if (this.controlDeskId) {
+      await expect.poll(() => this.page.evaluate(() => {
+        const session = JSON.parse(localStorage.getItem("light.primary-session") ?? "null");
+        return session?.desk?.id ?? null;
+      })).toBe(this.controlDeskId);
+    }
     if (
       process.env.LIGHT_VISUAL_RECORDING === "1"
       && !this.testTitle.includes("records the complete desk")
@@ -28,32 +50,87 @@ export class DeskDriver {
   async recordStep(title: string, description: string): Promise<void> {
     this.recordingStep = { title, description };
     if (process.env.LIGHT_VISUAL_RECORDING !== "1" || !this.recordingInstalled || this.page.isClosed()) return;
+    if (await this.page.locator("#light-catalog-recording").count() === 0) {
+      await this.renderRecordingOverlay();
+    }
     await this.page.evaluate(({ title, description }) => {
       document.querySelector("#light-catalog-step")!.textContent = title;
       document.querySelector("#light-catalog-description")!.textContent = description;
     }, { title, description });
-    const pause = Number(process.env.LIGHT_VISUAL_STEP_PAUSE ?? 900);
+    const pause = Number(process.env.LIGHT_VISUAL_STEP_PAUSE ?? 1_200);
     if (Number.isFinite(pause) && pause > 0) await this.page.waitForTimeout(pause);
   }
 
   private async installRecordingOverlay(): Promise<void> {
     if (this.recordingInstalled) return;
+    await this.page.exposeFunction("__lightVisualOscSummary", () => this.externalOscSummary());
+    this.recordingNavigationHandler = () => {
+      void this.renderRecordingOverlay().catch(() => {
+        // A second navigation or teardown can supersede this document.
+      });
+    };
+    this.page.on("domcontentloaded", this.recordingNavigationHandler);
+    await this.renderRecordingOverlay();
+    this.recordingInstalled = true;
+  }
+
+  private async renderRecordingOverlay(): Promise<void> {
     await this.page.addStyleTag({ content: `
-      #light-catalog-recording{position:fixed;z-index:999998;left:14px;right:14px;top:12px;min-height:74px;display:grid;grid-template-columns:minmax(0,1fr) 510px;gap:12px;padding:10px 13px;border:2px solid #1bd6ec;border-radius:10px;background:#071017ed;color:#edf7ff;box-shadow:0 10px 35px #000b;font:14px/1.25 ui-monospace,SFMono-Regular,Menlo,monospace;pointer-events:none}
-      #light-catalog-recording .catalog-copy{min-width:0}#light-catalog-recording small{display:block;color:#74ddea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#light-catalog-recording strong{display:block;margin:3px 0;color:#fff;font:800 19px/1.05 system-ui}#light-catalog-recording p{margin:0;color:#c5d0d8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      #light-catalog-recording .catalog-state{display:grid;grid-template-columns:1fr 1fr;gap:9px}#light-catalog-recording section{min-width:0;padding:5px 8px;border:1px solid #344552;border-radius:6px;background:#101922}#light-catalog-recording b{display:block;color:#ffc44d;font-size:11px}#light-catalog-recording output{display:block;overflow:hidden;color:#d9eef9;white-space:nowrap;text-overflow:ellipsis;font-size:12px}
+      body{position:fixed!important;inset:0 640px 0 0!important;width:auto!important;height:100%!important;transform:translateZ(0)}
+      #light-catalog-recording{position:fixed;z-index:999998;inset:0 0 0 auto;width:640px;display:grid;grid-template-rows:auto minmax(0,1fr);gap:14px;padding:18px;border-left:3px solid #1bd6ec;background:#071017;color:#edf7ff;box-shadow:-10px 0 35px #000b;font:16px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;pointer-events:none}
+      #light-catalog-recording .catalog-copy{min-width:0;padding:14px;border:1px solid #344552;border-radius:10px;background:#101922}#light-catalog-recording small{display:block;color:#74ddea;overflow-wrap:anywhere}#light-catalog-recording strong{display:block;margin:8px 0;color:#fff;font:800 25px/1.08 system-ui}#light-catalog-recording p{margin:0;color:#c5d0d8;overflow-wrap:anywhere}
+      #light-catalog-recording .catalog-state{min-height:0;display:grid;grid-template-rows:repeat(3,minmax(0,1fr));gap:12px}#light-catalog-recording section{min-width:0;min-height:0;padding:14px;border:1px solid #344552;border-radius:10px;background:#101922;overflow:hidden}#light-catalog-recording b{display:block;margin-bottom:8px;color:#ffc44d;font-size:13px}#light-catalog-recording output{display:block;max-height:100%;overflow:auto;color:#d9eef9;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px}
     ` });
-    await this.page.evaluate(({ testTitle }) => {
+    await this.page.evaluate(({ testTitle, recordingStep }) => {
       const previous = document.querySelector("#light-catalog-recording");
-      previous?.remove();
+      if (previous) {
+        previous.querySelector("#light-catalog-step")!.textContent = recordingStep.title;
+        previous.querySelector("#light-catalog-description")!.textContent = recordingStep.description;
+        return;
+      }
       const overlay = document.createElement("aside");
       overlay.id = "light-catalog-recording";
-      overlay.innerHTML = `<div class="catalog-copy"><small id="light-catalog-test"></small><strong id="light-catalog-step">APPLICATION READY</strong><p id="light-catalog-description"></p></div><div class="catalog-state"><section><b>DESK / OSC EVENTS</b><output id="light-catalog-events">Waiting for events…</output></section><section><b>ACTUAL DMX U1</b><output id="light-catalog-dmx">Waiting for output…</output></section></div>`;
+      overlay.innerHTML = `<div class="catalog-copy"><small id="light-catalog-test"></small><strong id="light-catalog-step"></strong><p id="light-catalog-description"></p></div><div class="catalog-state"><section><b>DESK EVENTS</b><output id="light-catalog-events">Waiting for events…</output></section><section><b>EXTERNAL OSC (TX / RX)</b><output id="light-catalog-osc">No external OSC yet</output></section><section><b>ACTUAL DMX U1</b><output id="light-catalog-dmx">Waiting for output…</output></section></div>`;
       overlay.querySelector("#light-catalog-test")!.textContent = testTitle;
-      document.body.append(overlay);
+      overlay.querySelector("#light-catalog-step")!.textContent = recordingStep.title;
+      overlay.querySelector("#light-catalog-description")!.textContent = recordingStep.description;
+      document.documentElement.append(overlay);
+      const purpose = (testTitle.split("›").at(-1) ?? testTitle).trim().slice(0, 150);
+      const describeControl = (target: EventTarget | null) => {
+        const element = target instanceof Element
+          ? target.closest<HTMLElement>('button,[role="button"],input,textarea,select,[role="slider"],[role="option"],[role="tab"]')
+          : null;
+        if (!element || element.closest("#light-catalog-recording")) return;
+        const label = element.getAttribute("aria-label")
+          || element.getAttribute("title")
+          || (element instanceof HTMLInputElement ? element.labels?.[0]?.textContent : null)
+          || element.textContent
+          || element.getAttribute("name")
+          || element.tagName.toLowerCase();
+        const concise = label.replace(/\s+/g, " ").trim().slice(0, 140);
+        document.querySelector("#light-catalog-step")!.textContent = "UI ACTION";
+        document.querySelector("#light-catalog-description")!.textContent = concise
+          ? `Using “${concise}” to verify: ${purpose}.`
+          : `Operating the production UI to verify: ${purpose}.`;
+      };
+      document.addEventListener("pointerdown", (event) => describeControl(event.target), true);
+      document.addEventListener("input", (event) => describeControl(event.target), true);
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Shift" || event.key === "Control" || event.key === "Alt" || event.key === "Meta") return;
+        describeControl(event.target);
+        const description = document.querySelector("#light-catalog-description")!;
+        description.textContent = `${description.textContent} Keyboard: ${event.key}.`;
+      }, true);
+      const visualWindow = window as Window & { __lightVisualOscSummary?: () => Promise<string> };
       let revision = 0;
+      let updating = false;
       const update = async () => {
+        if (updating) return;
+        updating = true;
         try {
+          const oscSummary = await visualWindow.__lightVisualOscSummary?.();
+          const oscOutput = document.querySelector("#light-catalog-osc");
+          if (oscOutput) oscOutput.textContent = oscSummary || "No external OSC yet";
           const session = JSON.parse(localStorage.getItem("light.primary-session") ?? "null");
           if (!session?.token) return;
           const headers = { Authorization: `Bearer ${session.token}` };
@@ -78,12 +155,13 @@ export class DeskDriver {
           }
         } catch {
           // The overlay is evidence only; a transient refresh error must not alter the test.
+        } finally {
+          updating = false;
         }
       };
       void update();
-      window.setInterval(() => void update(), 250);
-    }, { testTitle: this.testTitle });
-    this.recordingInstalled = true;
+      window.setInterval(() => void update(), 500);
+    }, { testTitle: this.testTitle, recordingStep: this.recordingStep });
   }
 
   async command(value: string, visibleValue = formatVisibleCommand(value)): Promise<void> {

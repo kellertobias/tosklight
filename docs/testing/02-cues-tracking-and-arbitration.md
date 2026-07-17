@@ -59,11 +59,12 @@ Before every scenario, load its named canonical show, immediately use Save As wi
 
 1. Create Group 1, set it to 30%, press `[REC]`, and click empty Cuelist 1 to record Cue 1.
 2. Clear selection and normal programmer values with two `[CLR]` presses. Set Group 1 to 80%.
-3. **UI capability required:** arm **Cue only**, then press `[REC]` and click Cuelist 1 to record Cue 2. There is currently no Cue-only control in the Cuelist or Record Settings UI, so the `@ui` procedure stops here until that control exists.
+3. Hold `[REC]` to open **Record Settings**, enable **Cue only**, close the settings, then press `[REC]` and click Cuelist 1 to record Cue 2.
+   - **Expect:** Cue 2 is persisted as Cue-only. When Cue 3 is appended, the desk generates automatic restore or release changes for Cue 2's addresses from the tracked Cue 1 state. The Cue-only marker and generated changes survive refresh and show reopen.
 4. For the API/Rust variant, generate Cue 2's automatic restoration delta from the tracked Cue 1 state, append Cue 2, and append Cue 3 with a change on unrelated fixture 101.
 5. Assign Cuelist 1 to page 1 playback 1. From **OFF**, click **GO** three times with assertions after each Cue.
 6. Return to **OFF** before each direct-jump case. Invoke Cue 1, Cue 2, and Cue 3 by their explicit Cuelist/Cue address through the API and compare each reconstructed state with the sequential result.
-7. **UI capability required:** the Cuelist table currently selects a row for inspection but has no **Go to selected Cue** action. Do not treat clicking a row as a direct jump.
+7. For the visible direct-jump variant, explicitly select playback 1, enter `[CUE] <Cue-number> [ENTER]` for Cues 1, 2, and 3, and compare those results with step 5. A Cuelist-table row remains an inspection/edit selection and must not execute the Cue when clicked.
 
 **Assertions:** Cue 2 outputs 80%. Cue 3 restores group 1 to 30%. Direct jumps reconstruct the same state as sequential GO operations.
 
@@ -82,7 +83,7 @@ Before every scenario, load its named canonical show, immediately use Save As wi
 2. Assign Cuelist 1 to page 1 playback 1. Use that assigned playback's configured **GO** control for Cue 1 and then Cue 2. Do not use the Cuelist View as a playback surface.
 3. Call the virtual-clock endpoint with 0 ms and assert byte 0; advance 2,000 ms and assert approximately 128; advance another 2,000 ms and assert 255.
 4. Click **OFF**, click **GO** for Cue 1, and click **GO** again for Cue 2. Advance 1,000 ms.
-5. **UI capability required:** use explicit **PAUSE** and **RESUME** actions on the assigned playback, advance 10,000 ms while paused, verify no progress, resume, and advance the remaining 3,000 ms. The Cuelist View intentionally contains no playback execution controls. API/Rust coverage uses playback pause/resume actions until assigned playback controls can be configured for these actions.
+5. Configure one of the assigned playback's buttons as **PAUSE**. Press it, advance 10,000 ms while paused, verify no progress, then press the same button now labelled **RESUME** and advance the remaining 3,000 ms. The Cuelist View intentionally contains no playback execution controls.
 6. Click **GO −** once and verify Cue 1's tracked state.
 7. Click **OFF** and verify restoration to the next authoritative source.
 
@@ -151,7 +152,7 @@ Before every scenario, load its named canonical show, immediately use Save As wi
 4. **FOLLOW case:** Start Cue 1 at virtual 0. At 1,999 ms Cue 1 is still fading and Cue 2 has not started. At exactly 2,000 ms Cue 1 completes and Cue 2 triggers with no extra wait.
 5. **TIME case:** Start Cue 1 at virtual 0. Cue 1 completes at 2,000 ms. Cue 2 remains pending through 5,999 ms and triggers exactly at 6,000 ms: 2 seconds for the preceding Cue to finish plus the stored 4-second trigger time.
 6. Repeat FOLLOW and TIME with a preceding Cue containing several values whose completion times differ. Define preceding-Cue completion as the latest `value delay + value fade` endpoint after applying **Force Cue Timing** if enabled. Neither automatic trigger may fire when only the first or master-fade value has completed.
-7. **UI capability required:** edit each Cue's Trigger through the Cue editor using exactly **GO**, **FOLLOW**, or **TIME**. Choosing **TIME** exposes its numeric wait field. The UI edit and command-line storage paths must serialize identical trigger data.
+7. Edit each Cue's Trigger through the Cue editor using exactly **GO**, **FOLLOW**, or **TIME**. Choosing **TIME** exposes its numeric wait field. The UI edit and command-line storage paths must serialize identical trigger data.
 
 **Trigger ownership rule:** The trigger setting belongs to the Cue that will start. In the example “Cue 1 fades for 2 seconds, then wait 4 seconds, then the next Cue starts,” Cue 1 is **GO** and Cue 2 is **TIME 4 s**. FOLLOW and TIME measure from the completion of the preceding Cue, not from its initial GO press.
 
@@ -174,11 +175,11 @@ Before every scenario, load its named canonical show, immediately use Save As wi
 2. Hold the physical Shift key and press `Z`.
    - **Expect now:** The command line contains exactly `SELECT`; no playback has been selected merely by entering the shortcut.
 3. Touch page 1 playback 2.
-   - **UI capability required:** Playback 2 becomes the active playback and has one unambiguous active-playback indication. Cuelist 2 is the active Cuelist because it is assigned to that playback.
+   - **Expect:** Playback 2 becomes the active playback and has one unambiguous active-playback indication. Cuelist 2 is the active Cuelist because it is assigned to that playback.
 4. Run playback 1 after selecting playback 2, then press `[SHIFT] [4]`.
    - **Expect:** The Cue details for playback 2/Cuelist 2 open. Running another playback does not silently replace the explicit active-playback selection.
 5. Close the details, put a distinct value into the programmer, and press `[REC] [CUE] [7] [ENTER]` without entering a playback address or a Cuelist Pool number.
-   - **UI/server capability required:** Cue 7 is recorded in Cuelist 2, the Cuelist assigned to active playback 2. Cuelist 1 is unchanged.
+   - **Expect:** Cue 7 is recorded in Cuelist 2, the Cuelist assigned to active playback 2. Cuelist 1 is unchanged.
 6. Enter a complete explicit address targeting Cuelist 1 and record another distinct Cue.
    - **Expect:** The explicit Cuelist address overrides the active-playback default without changing which playback is active.
 
@@ -253,7 +254,7 @@ Before every scenario, load its named canonical show, immediately use Save As wi
 **Priority:** P1
 **Primary layer:** Rust/API integration plus selected UI E2E
 
-**Implementation status:** Specification only until Cue Move/Copy execution and the post-Enter choice modal exist on the production command surface.
+**Implementation status:** Implemented with server integration and production UI Playwright coverage for Cancel and all four Plain/Status Move/Copy combinations.
 
 **Starting show:** Load canonical `compact-rig.show`, immediately Save As a separate `cue-009-<operation>.show` copy for each operation below, and use only that active copy.
 
@@ -308,7 +309,7 @@ Before every scenario, load its named canonical show, immediately use Save As wi
 **Priority:** P0
 **Primary layer:** Paired API/UI E2E plus layout assertions
 
-**Implementation dependency:** Implement the [Cuelist View and Cuelist Settings contract](../planned%20features/06-cuelist-view-and-settings.md) before enabling this UI scenario.
+**Implementation status:** Implemented through the [completed Cuelist View and Cuelist Settings contract](../planned%20features/06-cuelist-view-and-settings.DONE.md), with paired API/UI coverage and focused supplemental UI coverage for transactional renumbering.
 
 **Starting show:** Load canonical `compact-rig.show`, immediately Save As `cue-011-cuelist-view.show`, create Cuelist 1 with Cues 1, 2, and 3, assign it to playback 1, and use the active copy.
 
@@ -348,7 +349,7 @@ Before every scenario, load its named canonical show, immediately use Save As wi
 **Priority:** P1
 **Primary layer:** Rust/API integration plus paired UI E2E
 
-**Implementation dependency:** Implement the [Cuelist View and Cuelist Settings contract](../planned%20features/06-cuelist-view-and-settings.md) before enabling this scenario. Reuse the exact virtual-time phase oracle from TIME-003 for Chaser timing.
+**Implementation status:** Implemented through the [completed Cuelist View and Cuelist Settings contract](../planned%20features/06-cuelist-view-and-settings.DONE.md), with paired API/UI coverage. Chaser timing reuses the deterministic virtual-time phase oracle from TIME-003.
 
 **Starting show:** Use a separate fresh `cue-012-<case>.show` copy for every case below.
 
@@ -418,14 +419,14 @@ Save and reload every configuration. Confirm Mode, X-fade, Speed Group, multipli
 **Priority:** P0
 **Primary layer:** Rust/API timing checks plus paired UI E2E
 
-**Implementation dependency:** Implement the [Move in Black contract](../planned%20features/07-move-in-black.md) before enabling this scenario. The test must inspect normalized MIB runtime state as well as output DMX.
+**Implementation status:** Implemented through the [completed Move in Black contract](../planned%20features/07-move-in-black.DONE.md), with paired API/UI coverage plus focused wire cases that inspect normalized MIB runtime state and output DMX.
 
 **Starting show:** Load canonical `default-stage.show`, immediately Save As `mib-001-basic.show`, and use moving fixtures 101 and 102 as enabled and disabled comparison fixtures.
 
 **Patch setup:**
 
 1. Open **Setup → Patch** and confirm every migrated/new fixture defaults to **Move in Black: On** and **MIB Delay: 0 s**.
-2. Set fixture 101 to Move in Black On with a 1-second delay. Set fixture 102 to Move in Black Off with the same stored delay. Save, reload, and confirm both fixture-level settings persist.
+2. Click fixture 101's **MIB** and **MIB Delay** cells normally and prove that this only selects the fixture and does not mutate either stored value. Then use `[SET]` followed by each cell to open the standard selected-cell editor. Set fixture 101 to Move in Black On with a 1-second delay and fixture 102 to Move in Black Off with the same stored delay. Save, reload, and confirm both fixture-level settings persist.
 
 **Cue setup:**
 
@@ -467,7 +468,7 @@ Save and reload every configuration. Confirm Mode, X-fade, Speed Group, multipli
 **Priority:** P0
 **Primary layer:** Paired API/UI E2E plus playback runtime integration
 
-**Implementation dependency:** Implement the [active-Cue deletion contract](../planned%20features/06-cuelist-view-and-settings.md#deleting-a-cue-including-the-active-cue) before enabling this scenario.
+**Implementation status:** Implemented through the [completed active-Cue deletion contract](../planned%20features/06-cuelist-view-and-settings.DONE.md#deleting-a-cue-including-the-active-cue), with paired API/UI coverage and supplemental runtime safeguards.
 
 **Starting show:** Load canonical `compact-rig.show`, immediately Save As a separate `cue-013-<case>.show` copy for each case, and create Groups 1–3 as fixtures 1–4, 5–8, and 9–12.
 
@@ -526,6 +527,8 @@ Save and reload every configuration. Confirm Mode, X-fade, Speed Group, multipli
 5. Release B's winning contribution through the API and emit another frame; prove A's contribution is revealed without a transient default frame.
 6. **Harness only:** the UI has no control for programmer priority or for choosing between two simultaneous browser programmers, so this is not a manual single-desk gesture sequence.
 
+**Paired-test exception:** MERGE-001 is intentionally registered only as `@api`. Creating two authenticated programmer identities and assigning their priorities are harness-only capabilities; there is no honest independent `@ui` copy of this scenario. Single-programmer UI arbitration and visible playback interactions remain covered by CUE-010, MERGE-002, and MERGE-003.
+
 **Assertions:** For every case, compare the complete ordered contribution set, chosen source per attribute, normalized resolved value, and application edit timestamp. Re-rendering without mutation must produce an identical result.
 
 **Pass condition:** Priority, HTP, and LTP decisions use operator edit time and never render-loop timing.
@@ -545,7 +548,7 @@ Save and reload every configuration. Confirm Mode, X-fade, Speed Group, multipli
 4. Move playback 1's master to 50%, emit a frame, then move it back to 100% and emit another.
 5. Click **OFF** for playback 2, emit a frame; clear the programmer in its documented stages, emit a frame; then click **OFF** for playback 1 and emit a frame.
 6. Reset all sources and repeat activation in the order programmer, playback 2, playback 1.
-7. **UI capability required:** repeat with direct Cue jumps only after the Cuelist surface provides an explicit **Go to selected Cue** action. API/Rust coverage may address the Cues directly now.
+7. Repeat the retrigger checks through the visible direct-jump path: explicitly select the intended playback, then enter `[CUE] <Cue-number> [ENTER]`. A Cuelist-table row remains non-executing and is not a substitute for that Go To command.
 
 **Independent sequences, programmer override, and retrigger subcase:**
 
@@ -593,7 +596,7 @@ Repeat the matrix for Intensity. Within the winning priority, Intensity uses HTP
 5. Configure playback 2's fader as **Temp**. Raise it from zero and then return it to zero.
    - **Expect:** While the Temp fader contributes, red wins according to its temporary level and LTP rules; playback 1 remains enabled. Returning the fader to zero removes the temporary contribution and restores blue.
 6. Configure a playback 2 button as a toggled **TEMP** action. Toggle it on and then off.
-   - **UI/schema capability required:** The current playback button action list includes Flash but not Temp. Once Temp-button assignment exists, it must have the same non-destructive arbitration and restoration semantics as the Temp fader, differing only in its toggled on/off interaction.
+   - **Expect:** TEMP uses the implemented toggled button action. While active it has the same non-destructive arbitration and restoration semantics as the Temp fader; toggling it off removes only the temporary contribution.
 
 **Assertions:** Automatic switch-off occurs only when a non-temporary, fully raised, newer playback contribution covers every active attribute address of a playback whose automatic-off option is enabled. Partial overwrites, disabled automatic-off, Flash, Temp fader, and Temp button do not release the underlying playback. Removing a transient source reveals the exact underlying value immediately.
 
@@ -605,7 +608,7 @@ Repeat the matrix for Intensity. Within the winning priority, Intensity uses HTP
 
 **Primary layer:** Playwright E2E plus server integration
 
-**Implementation status:** Specification only. Do not mark this scenario implemented until the `SPD GRP` command and synchronization behavior exist.
+**Implementation status:** Implemented with server integration and production UI Playwright coverage for exact command text, A–E addressing, decimal-comma and relative values, phase synchronization, direct-entry unlinking, and tap-tempo unlinking.
 
 **Starting show:** Load canonical `default-stage.show`, immediately Save As `cmd-002-speed-groups.show`, and use only the active working copy. Start with no hardware connected, an empty command line, and Speed Groups A through E visible.
 
@@ -613,19 +616,21 @@ Repeat the matrix for Intensity. Within the winning priority, Intensity uses HTP
 
 1. Press `[SHIFT]`, then `[TIME]`.
    - **Expect:** The command line contains exactly `SPD GRP`.
-2. Press `[1] [+] [1] [2] [0] [ENTER]`.
+2. Press `[1] [AT] [1] [2] [0] [ENTER]`.
    - **Expect:** Speed Group A changes to exactly 120 BPM. Speed Groups B through E do not change.
-3. Press `[SHIFT] [TIME] [2] [+] [1] [2] [7] [ . ] [5]` and inspect the command before pressing `[ENTER]`.
-   - **Expect:** The command line reads `SPD GRP 2 + 127,5`; the decimal separator is displayed as a comma. Press `[ENTER]` and confirm Speed Group B reports exactly 127.5 BPM while A and C–E do not change.
+3. Press `[SHIFT] [TIME] [2] [AT] [1] [2] [7] [ . ] [5]` and inspect the command before pressing `[ENTER]`.
+   - **Expect:** The command line reads `SPD GRP 2 AT 127,5`; the decimal separator is displayed as a comma. Press `[ENTER]` and confirm Speed Group B reports exactly 127.5 BPM while A and C–E do not change.
 4. Repeat the whole-number command for group numbers `3`, `4`, and `5`, using distinct BPM values. Confirm that the changed controls are Speed Groups C, D, and E respectively. No command may update a neighboring group.
-5. Set Speed Group A to 120 BPM and Speed Group C to a different BPM. Press `[SHIFT] [TIME] [1] [AT] [3]` and inspect the command before pressing `[ENTER]`.
-   - **Expect:** The command line reads `SPD GRP 1 AT 3`. Press `[ENTER]`; Speed Group A's 120 BPM is copied to Speed Group C, and their beat phases become synchronized. Observe multiple beats or advance application time through multiple beat boundaries and confirm their beat indicators remain aligned.
-6. Set Speed Group C directly to 90 BPM with `[SHIFT] [TIME] [3] [+] [9] [0] [ENTER]`.
+5. Enter `[SHIFT] [TIME] [1] [AT] [+] [5] [ENTER]`, then `[SHIFT] [TIME] [1] [AT] [-] [5] [ENTER]`.
+   - **Expect:** The first command raises Speed Group A by exactly 5 BPM and the second returns it to its previous BPM. No other Speed Group changes.
+6. Set Speed Group A to 120 BPM and Speed Group C to a different BPM. Press `[SHIFT] [TIME] [1] [AT] [SHIFT] [TIME] [3]` and inspect the command before pressing `[ENTER]`.
+   - **Expect:** The command line reads `SPD GRP 1 AT SPD GRP 3`. Press `[ENTER]`; Speed Group A's 120 BPM is copied to Speed Group C, and their beat phases become synchronized. Observe multiple beats or advance application time through multiple beat boundaries and confirm their beat indicators remain aligned.
+7. Set Speed Group C directly to 90 BPM with `[SHIFT] [TIME] [3] [AT] [9] [0] [ENTER]`.
    - **Expect:** C changes to 90 BPM, A remains at 120 BPM, and the A–C synchronization is removed. A subsequent tempo change to either group does not change or re-synchronize the other.
-7. Enter `[SHIFT] [TIME] [1] [AT] [3] [ENTER]` again and confirm A and C are synchronized at A's current BPM. Tap Speed Group A at a deliberately different tempo, using enough taps for the normal tap-tempo calculation.
+8. Enter `[SHIFT] [TIME] [1] [AT] [SHIFT] [TIME] [3] [ENTER]` again and confirm A and C are synchronized at A's current BPM. Tap Speed Group A at a deliberately different tempo, using enough taps for the normal tap-tempo calculation.
    - **Expect:** A adopts the tapped BPM, C retains the BPM it had while linked, and the A–C synchronization is removed. Subsequent beats and speed changes are independent.
 
-**Assertions:** The visible command text is exact; group numbers `1–5` map only to A–E; integer and decimal-comma BPM values retain their entered precision; `[AT]` copies the first group's BPM to the second and synchronizes their beat phase; direct BPM entry or tap tempo on either synchronized group removes that synchronization without changing the other group.
+**Assertions:** The visible command text is exact; group numbers `1–5` map only to A–E; integer and decimal-comma BPM values retain their entered precision; `[AT][+]` and `[AT][-]` make relative changes; `SPD GRP <source> AT SPD GRP <target>` copies the source group's BPM to the target and synchronizes their beat phase; direct BPM entry or tap tempo on either synchronized group removes that synchronization without changing the other group.
 
 **Pass condition:** An operator can address, set, copy, and synchronize every speed group through `SPD GRP`, and either documented manual speed action reliably returns the affected groups to independent operation.
 

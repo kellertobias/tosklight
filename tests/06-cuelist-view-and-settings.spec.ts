@@ -1,91 +1,173 @@
 import type { Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
 import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
+import { expect, test, type BenchUiContext } from "../apps/control-ui/e2e/bench/fixtures";
+import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
 import { activeShowId, fixtureIdsByNumber, loadCanonicalCopy, object, putObject } from "./support/catalog";
 
-test.describe("planned feature 06 — Cuelist View and Cuelist Settings", () => {
+test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
   test.beforeEach(({}, testInfo) => testInfo.setTimeout(90_000));
 
-  test("CUE-011 @ui › Cue rows edit exact fields without executing playback and survive reopen", async ({ api, bench, desk, page }) => {
-    const show = await loadCanonicalCopy(api, bench, "cue-011-cuelist-view", "compact-rig");
-    const installed = await installCuelist(api, { name: "CUE-011 Sequence", numbers: [1, 2, 3] });
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
-    await openCuelistView(page, desk, bench.baseUrl, installed.name);
+  pairedScenario<{ completed: boolean }>({
+    id: "CUE-011",
+    title: "Cue edits and atomic renumber preserve runtime identity, output, and persisted bytes",
+    arrange: () => ({ completed: false }),
+    api: async ({ api, bench }, state) => {
+      const show = await loadCanonicalCopy(api, bench, "cue-011-api", "compact-rig");
+      const installed = await installCuelist(api, { name: "CUE-011 API Sequence", numbers: [1, 1.5, 2, 7] });
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
 
-    await expect(page.locator(".ui-window-header")).toContainText("Cuelist View · Cuelist 1");
-    await expect(page.locator(".ui-window-header")).toContainText(installed.name);
-    await expect(page.locator(".cue-table thead th")).toHaveText(["Preview", "No.", "Name", "Trigger", "Fade"]);
-    await expect(page.locator(".cue-table thead")).not.toContainText("Status");
-    for (const action of ["GO", "GO −", "Toggle", "Off"]) {
-      await expect(page.locator(".cue-properties > button").filter({ hasText: new RegExp(`^${action}$`, "i") })).toHaveCount(0);
-    }
+      const original = await object<any>(api, "cue_list", installed.id);
+      const selectedId = original.body.cues[1].id;
+      const editRuntime = await runtime(api, 1);
+      const beforeOutput = slot(await bench.tick(0), 1);
+      expect(editRuntime).toMatchObject({ current_cue_id: original.body.cues[0].id, current_cue_number: 1 });
 
-    const beforeSelection = await playbackState(api);
-    const beforeObject = await object<any>(api, "cue_list", installed.id);
-    const beforeOutput = slot(await bench.tick(0), 1);
-    const rows = page.locator(".cue-table tbody tr");
-    await rows.nth(1).click();
-    await expect(rows.nth(1)).toHaveClass(/selected/);
-    await expect(page.getByText("Selected Cue · 2", { exact: true })).toBeVisible();
-    await rows.nth(2).focus();
-    await page.keyboard.press("Enter");
-    await rows.nth(1).focus();
-    await page.keyboard.press("Space");
-    expect((await object<any>(api, "cue_list", installed.id)).revision).toBe(beforeObject.revision);
-    expect((await playbackState(api)).active).toEqual(beforeSelection.active);
-    expect(slot(await bench.tick(0), 1)).toBe(beforeOutput);
+      const editedCues = original.body.cues.map((item: any) =>
+        item.id === selectedId
+          ? {
+              ...item,
+              name: "Center transition",
+              fade_millis: 2_500,
+              delay_millis: 1_250,
+              trigger: { type: "wait", delay_millis: 4_000 },
+            }
+          : item,
+      );
+      await putObject(api, "cue_list", installed.id, { ...original.body, cues: editedCues }, original.revision);
+      const edited = await object<any>(api, "cue_list", installed.id);
+      expect(edited.body.cues[1]).toMatchObject({
+        id: selectedId,
+        number: 1.5,
+        name: "Center transition",
+        fade_millis: 2_500,
+        delay_millis: 1_250,
+        trigger: { type: "wait", delay_millis: 4_000 },
+      });
+      expect(await runtime(api, 1)).toMatchObject({
+        current_cue_id: original.body.cues[0].id,
+        current_cue_number: 1,
+        activated_at: editRuntime.activated_at,
+      });
+      expect(slot(await bench.tick(0), 1)).toBe(beforeOutput);
 
-    await commitField(page, api, installed.id, "Title", "Center transition", (body) => body.cues[1].name);
-    await expect(rows.nth(1)).toContainText("Center transition");
-    await commitField(page, api, installed.id, "Fade", "2.5", (body) => body.cues[1].fade_millis);
-    await expect.poll(async () => (await object<any>(api, "cue_list", installed.id)).body.cues[1].fade_millis).toBe(2_500);
-    await commitField(page, api, installed.id, "Delay", "1.25", (body) => body.cues[1].delay_millis);
-    await expect.poll(async () => (await object<any>(api, "cue_list", installed.id)).body.cues[1].delay_millis).toBe(1_250);
+      await api.request("POST", "/api/v1/cuelists/1/go-to", { cue_number: 1.5 });
+      const beforeRenumberRuntime = await runtime(api, 1);
+      const beforeRenumberOutput = slot(await bench.tick(4_000), 1);
+      expect(beforeRenumberRuntime).toMatchObject({ current_cue_id: selectedId, current_cue_number: 1.5 });
 
-    await chooseCueTrigger(page, api, installed.id, "GO", "FOLLOW");
-    await expect.poll(async () => (await object<any>(api, "cue_list", installed.id)).body.cues[1].trigger).toEqual({ type: "follow", delay_millis: 0 });
-    await chooseCueTrigger(page, api, installed.id, "FOLLOW", "GO");
-    await expect.poll(async () => (await object<any>(api, "cue_list", installed.id)).body.cues[1].trigger).toEqual({ type: "manual" });
-    await chooseCueTrigger(page, api, installed.id, "GO", "TIME");
-    await commitField(page, api, installed.id, "Trigger time", "4", (body) => body.cues[1].trigger.delay_millis);
-    await expect.poll(async () => (await object<any>(api, "cue_list", installed.id)).body.cues[1].trigger).toEqual({ type: "wait", delay_millis: 4_000 });
-    await expect(rows.nth(1).locator("td").nth(3)).toHaveText("TIME");
+      const renumberedCues = edited.body.cues.map((item: any, index: number) => ({ ...item, number: 10 + index }));
+      await putObject(api, "cue_list", installed.id, { ...edited.body, cues: renumberedCues }, edited.revision);
+      const renumbered = await object<any>(api, "cue_list", installed.id);
+      expect(renumbered.body.cues.map((item: any) => item.number)).toEqual([10, 11, 12, 13]);
+      expect(renumbered.body.cues.map((item: any) => item.id)).toEqual(original.body.cues.map((item: any) => item.id));
+      expect(renumbered.body.cues.map(stripNumber)).toEqual(edited.body.cues.map(stripNumber));
+      expect(await runtime(api, 1)).toMatchObject({
+        current_cue_id: selectedId,
+        current_cue_number: 11,
+        activated_at: beforeRenumberRuntime.activated_at,
+      });
+      expect(slot(await bench.tick(0), 1)).toBe(beforeRenumberOutput);
 
-    await rows.nth(2).click();
-    await expect(page.getByLabel("Title")).toHaveValue("Cue 3");
-    await rows.nth(1).click();
-    await expect(page.getByLabel("Title")).toHaveValue("Center transition");
-    await expect(page.getByLabel("Fade")).toHaveValue("2.5");
-    await expect(page.getByLabel("Delay")).toHaveValue("1.25");
-    await expect(page.getByLabel("Trigger time")).toHaveValue("4");
+      const committedBytes = JSON.stringify(renumbered.body);
+      await expect(putObject(api, "cue_list", installed.id, { ...renumbered.body, name: "Stale write" }, edited.revision)).rejects.toThrow(/revision/i);
+      expect(JSON.stringify((await object<any>(api, "cue_list", installed.id)).body)).toBe(committedBytes);
 
-    await page.getByRole("button", { name: "Cuelist Settings", exact: true }).click();
-    const settings = page.getByRole("dialog", { name: "Cuelist Settings" });
-    await expect(settings).toContainText(installed.name);
-    await settings.getByRole("button", { name: "Cancel", exact: true }).click();
-    await expect(rows.nth(1)).toHaveClass(/selected/);
+      await api.request("POST", `/api/v1/shows/${show.id}/open`, { transition: "hold_current" });
+      const reopened = await object<any>(api, "cue_list", installed.id);
+      expect(JSON.stringify(reopened.body)).toBe(committedBytes);
+      expect(reopened.body.cues[1]).toMatchObject({
+        id: selectedId,
+        number: 11,
+        name: "Center transition",
+        fade_millis: 2_500,
+        delay_millis: 1_250,
+        trigger: { type: "wait", delay_millis: 4_000 },
+      });
+      state.completed = true;
+    },
+    ui: async ({ api, bench, desk, page }, state) => {
+      const show = await loadCanonicalCopy(api, bench, "cue-011-cuelist-view", "compact-rig");
+      const installed = await installCuelist(api, { name: "CUE-011 Sequence", numbers: [1, 2, 3] });
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
+      await openCuelistView(page, desk, bench.baseUrl, installed.name);
 
-    const lastValid = await object<any>(api, "cue_list", installed.id);
-    await page.getByLabel("Fade").fill("-1");
-    await page.getByLabel("Fade").press("Enter");
-    await expect(page.getByRole("alert").filter({ hasText: "Cue edit was not saved" })).toBeVisible();
-    const afterInvalid = await object<any>(api, "cue_list", installed.id);
-    expect(afterInvalid.revision).toBe(lastValid.revision);
-    expect(afterInvalid.body.cues[1]).toEqual(lastValid.body.cues[1]);
-    expect((await playbackState(api)).active).toEqual(beforeSelection.active);
+      await expect(page.locator(".ui-window-header")).toContainText("Cuelist View · Cuelist 1");
+      await expect(page.locator(".ui-window-header")).toContainText(installed.name);
+      await expect(page.locator(".cue-table thead th")).toHaveText(["Preview", "No.", "Name", "Trigger", "Fade"]);
+      await expect(page.locator(".cue-table thead")).not.toContainText("Status");
+      for (const action of ["GO", "GO −", "Toggle", "Off"]) {
+        await expect(page.locator(".cue-properties > button").filter({ hasText: new RegExp(`^${action}$`, "i") })).toHaveCount(0);
+      }
 
-    await api.request("POST", `/api/v1/shows/${show.id}/open`, { transition: "hold_current" });
-    await page.reload();
-    await expect(page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
-    await openCuelistFromCurrentDesk(page, installed.name);
-    await page.locator(".cue-table tbody tr").nth(1).click();
-    await expect(page.getByLabel("Title")).toHaveValue("Center transition");
-    await expect(page.getByLabel("Fade")).toHaveValue("2.5");
-    await expect(page.getByLabel("Delay")).toHaveValue("1.25");
-    await expect(page.getByLabel("Trigger time")).toHaveValue("4");
+      const beforeSelection = await playbackState(api);
+      const beforeObject = await object<any>(api, "cue_list", installed.id);
+      const beforeOutput = slot(await bench.tick(0), 1);
+      const rows = page.locator(".cue-table tbody tr");
+      await rows.nth(1).click();
+      await expect(rows.nth(1)).toHaveClass(/selected/);
+      await expect(page.getByText("Selected Cue · 2", { exact: true })).toBeVisible();
+      await rows.nth(2).focus();
+      await page.keyboard.press("Enter");
+      await rows.nth(1).focus();
+      await page.keyboard.press("Space");
+      expect((await object<any>(api, "cue_list", installed.id)).revision).toBe(beforeObject.revision);
+      expect((await playbackState(api)).active).toEqual(beforeSelection.active);
+      expect(slot(await bench.tick(0), 1)).toBe(beforeOutput);
+
+      await commitField(page, api, installed.id, "Title", "Center transition", (body) => body.cues[1].name);
+      await expect(rows.nth(1)).toContainText("Center transition");
+      await commitField(page, api, installed.id, "Fade", "2.5", (body) => body.cues[1].fade_millis);
+      await expect.poll(async () => (await object<any>(api, "cue_list", installed.id)).body.cues[1].fade_millis).toBe(2_500);
+      await commitField(page, api, installed.id, "Delay", "1.25", (body) => body.cues[1].delay_millis);
+      await expect.poll(async () => (await object<any>(api, "cue_list", installed.id)).body.cues[1].delay_millis).toBe(1_250);
+
+      await chooseCueTrigger(page, api, installed.id, "GO", "FOLLOW");
+      await expect.poll(async () => (await object<any>(api, "cue_list", installed.id)).body.cues[1].trigger).toEqual({ type: "follow", delay_millis: 0 });
+      await chooseCueTrigger(page, api, installed.id, "FOLLOW", "GO");
+      await expect.poll(async () => (await object<any>(api, "cue_list", installed.id)).body.cues[1].trigger).toEqual({ type: "manual" });
+      await chooseCueTrigger(page, api, installed.id, "GO", "TIME");
+      await commitField(page, api, installed.id, "Trigger time", "4", (body) => body.cues[1].trigger.delay_millis);
+      await expect.poll(async () => (await object<any>(api, "cue_list", installed.id)).body.cues[1].trigger).toEqual({ type: "wait", delay_millis: 4_000 });
+      await expect(rows.nth(1).locator("td").nth(3)).toHaveText("TIME");
+
+      await rows.nth(2).click();
+      await expect(page.getByLabel("Title")).toHaveValue("Cue 3");
+      await rows.nth(1).click();
+      await expect(page.getByLabel("Title")).toHaveValue("Center transition");
+      await expect(page.getByLabel("Fade")).toHaveValue("2.5");
+      await expect(page.getByLabel("Delay")).toHaveValue("1.25");
+      await expect(page.getByLabel("Trigger time")).toHaveValue("4");
+
+      await page.getByRole("button", { name: "Cuelist Settings", exact: true }).click();
+      const settings = page.getByRole("dialog", { name: "Cuelist Settings" });
+      await expect(settings).toContainText(installed.name);
+      await settings.getByRole("button", { name: "Cancel", exact: true }).click();
+      await expect(rows.nth(1)).toHaveClass(/selected/);
+
+      const lastValid = await object<any>(api, "cue_list", installed.id);
+      await page.getByLabel("Fade").fill("-1");
+      await page.getByLabel("Fade").press("Enter");
+      await expect(page.getByRole("alert").filter({ hasText: "Cue edit was not saved" })).toBeVisible({ timeout: 10_000 });
+      const afterInvalid = await object<any>(api, "cue_list", installed.id);
+      expect(afterInvalid.revision).toBe(lastValid.revision);
+      expect(afterInvalid.body.cues[1]).toEqual(lastValid.body.cues[1]);
+      expect((await playbackState(api)).active).toEqual(beforeSelection.active);
+
+      await api.request("POST", `/api/v1/shows/${show.id}/open`, { transition: "hold_current" });
+      await page.reload();
+      await expect(page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
+      await openCuelistFromCurrentDesk(page, installed.name);
+      await page.locator(".cue-table tbody tr").nth(1).click();
+      await expect(page.getByLabel("Title")).toHaveValue("Center transition");
+      await expect(page.getByLabel("Fade")).toHaveValue("2.5");
+      await expect(page.getByLabel("Delay")).toHaveValue("1.25");
+      await expect(page.getByLabel("Trigger time")).toHaveValue("4");
+      state.completed = true;
+    },
+    assert: async (_context, state) => expect(state.completed).toBe(true),
   });
 
-  test("CUE-011 @ui › Renumber is one revision, preserves stable Cue/runtime identity, and rejects every invalid path", async ({ api, bench, desk, page }) => {
+  test("CUE-011 @supplemental-ui › Renumber is one revision, preserves stable Cue/runtime identity, and rejects every invalid path", async ({ api, bench, desk, page }) => {
     await loadCanonicalCopy(api, bench, "cue-011-renumber", "compact-rig");
     const installed = await installCuelist(api, { name: "Renumber Sequence", numbers: [1, 1.5, 2, 7] });
     const oneCue = await installCuelist(api, { name: "One Cue Sequence", numbers: [1], playback: 2 });
@@ -171,53 +253,100 @@ test.describe("planned feature 06 — Cuelist View and Cuelist Settings", () => 
     await page.getByRole("dialog", { name: "Renumber Cues" }).getByLabel("Start Cue").fill("10");
     await page.getByRole("dialog", { name: "Renumber Cues" }).getByRole("button", { name: "Renumber", exact: true }).click();
     await expect.poll(async () => (await object<any>(api, "cue_list", oneCue.id)).body.cues[0].number).toBe(10);
-    await expect(page.getByRole("button", { name: "Delete Cue", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Delete Cue", exact: true })).toHaveCount(0);
   });
 
-  test("CUE-011 @wire › deleting the active Cue holds output and anchors GO/GO minus without a hidden persisted Cue", async ({ api, bench, desk, page }) => {
-    await loadCanonicalCopy(api, bench, "cue-011-delete-active", "compact-rig");
-    const fixtures = await fixtureIdsByNumber(api);
-    const installed = await installCuelist(api, {
-      name: "Delete Active Sequence",
-      numbers: [1, 2, 3],
-      cueFactory: (number, index) => cue(number, crypto.randomUUID(), fixtures[1], (index + 1) * 0.25, { fade: index === 2 ? 1_000 : 0 }),
-    });
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
-    await bench.tick(3_000);
-    const heldLevel = slot(await bench.tick(0), 1);
-    await openCuelistView(page, desk, bench.baseUrl, installed.name);
-    await page.locator(".cue-table tbody tr").nth(1).click();
-    const before = await object<any>(api, "cue_list", installed.id);
-    const mark = (await audit(api)).length;
-    await page.getByRole("button", { name: "Delete Cue", exact: true }).click();
-    await expect.poll(async () => (await object<any>(api, "cue_list", installed.id)).body.cues.map((cue: any) => cue.number)).toEqual([1, 3]);
-    const deleted = await object<any>(api, "cue_list", installed.id);
-    expect(deleted.revision).toBeGreaterThan(before.revision);
-    expect(deleted.body.cues.some((cue: any) => cue.number === 2)).toBe(false);
-    await expect(page.locator(".cue-table tbody tr")).toHaveCount(2);
-    await expect.poll(async () => runtime(api, 1)).toMatchObject({
-      current_cue_number: 2,
-      deleted_cue_hold: { deleted_number: 2, previous_number: 1, next_number: 3 },
-      normal_next_cue_number: 3,
-    });
-    expect(slot(await bench.tick(0), 1)).toBe(heldLevel);
-    expect((await audit(api)).slice(mark).filter((event: any) => event.kind === "show_object_changed" && event.payload?.id === installed.id)).toHaveLength(1);
+  pairedScenario<{ completed: boolean }>({
+    id: "CUE-013",
+    title: "deleting the active Cue holds output and anchors GO/GO minus without hidden Cue data",
+    arrange: () => ({ completed: false }),
+    api: async ({ api, bench }, state) => {
+      await loadCanonicalCopy(api, bench, "cue-013-active-delete-api", "compact-rig");
+      await setControlTiming(api, [120, 90, 60, 30, 15], 0);
+      const fixtures = await fixtureIdsByNumber(api);
+      const installed = await installCuelist(api, {
+        name: "Delete Active API Sequence",
+        numbers: [1, 2, 3],
+        cueFactory: (number, index) => cue(number, crypto.randomUUID(), fixtures[1], (index + 1) * 0.25),
+      });
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
+      const heldLevel = slot(await bench.tick(0), 1);
+      await api.command("programmer.execute", { value: "DELETE SET 1 CUE 2" });
+      expect((await object<any>(api, "cue_list", installed.id)).body.cues.map((item: any) => item.number)).toEqual([1, 3]);
+      expect(await runtime(api, 1)).toMatchObject({
+        current_cue_number: 2,
+        deleted_cue_hold: { deleted_number: 2, previous_number: 1, next_number: 3 },
+      });
+      expect(slot(await bench.tick(0), 1)).toBe(heldLevel);
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
+      expect(await runtime(api, 1)).toMatchObject({ current_cue_number: 3 });
+      await api.request("POST", "/api/v1/cuelists/1/go-minus", {});
+      expect(await runtime(api, 1)).toMatchObject({ current_cue_number: 1 });
 
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
-    await expect.poll(async () => (await runtime(api, 1)).current_cue_number).toBe(3);
-    expect((await runtime(api, 1)).deleted_cue_hold).toBeUndefined();
-    expect(slot(await bench.tick(0), 1)).toBe(heldLevel);
-    expect(slot(await bench.tick(500), 1)).toBeGreaterThanOrEqual(159);
-    expect(slot(await bench.tick(0), 1)).toBeLessThanOrEqual(160);
-    expect(slot(await bench.tick(500), 1)).toBe(191);
-    await api.request("POST", "/api/v1/cuelists/1/go-minus", {});
-    await expect.poll(async () => runtime(api, 1)).toMatchObject({ current_cue_number: 1 });
-    expect(slot(await bench.tick(0), 1)).toBe(191);
-    expect(slot(await bench.tick(3_000), 1)).toBe(64);
+      const sole = await installCuelist(api, { name: "Sole Cue Safeguard", numbers: [1], playback: 2 });
+      const soleBefore = await object<any>(api, "cue_list", sole.id);
+      await expect(api.command("programmer.execute", { value: "DELETE SET 2 CUE 1" })).rejects.toThrow();
+      expect((await object<any>(api, "cue_list", sole.id)).body).toEqual(soleBefore.body);
+      state.completed = true;
+    },
+    ui: async ({ api, bench, desk, page }, state) => {
+      await loadCanonicalCopy(api, bench, "cue-011-delete-active", "compact-rig");
+      await setControlTiming(api, [120, 90, 60, 30, 15], 0);
+      const fixtures = await fixtureIdsByNumber(api);
+      const installed = await installCuelist(api, {
+        name: "Delete Active Sequence",
+        numbers: [1, 2, 3],
+        cueFactory: (number, index) => cue(number, crypto.randomUUID(), fixtures[1], (index + 1) * 0.25, { fade: index === 2 ? 1_000 : 0 }),
+      });
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
+      await bench.tick(3_000);
+      const heldLevel = slot(await bench.tick(0), 1);
+      await openCuelistView(page, desk, bench.baseUrl, installed.name);
+      await page.locator(".cue-table tbody tr").nth(1).click();
+      const before = await object<any>(api, "cue_list", installed.id);
+      const mark = (await audit(api)).length;
+      await expect(page.getByRole("button", { name: "Delete Cue", exact: true })).toHaveCount(0);
+      await page.getByRole("button", { name: "ESC", exact: true }).click();
+      for (const key of ["DEL", "SET", "1", "CUE", "2"]) {
+        await page.getByRole("button", { name: key, exact: true }).click();
+      }
+      await expect(page.getByLabel("Command line")).toHaveValue("DELETE SET 1 CUE 2");
+      await page.getByRole("button", { name: "ENT", exact: true }).click();
+      await expect.poll(async () => (await object<any>(api, "cue_list", installed.id)).body.cues.map((cue: any) => cue.number)).toEqual([1, 3]);
+      const deleted = await object<any>(api, "cue_list", installed.id);
+      expect(deleted.revision).toBeGreaterThan(before.revision);
+      expect(deleted.body.cues.some((cue: any) => cue.number === 2)).toBe(false);
+      await expect(page.locator(".cue-table tbody tr")).toHaveCount(2);
+      await expect
+        .poll(async () => runtime(api, 1))
+        .toMatchObject({
+          current_cue_number: 2,
+          deleted_cue_hold: { deleted_number: 2, previous_number: 1, next_number: 3 },
+          normal_next_cue_number: 3,
+        });
+      expect(slot(await bench.tick(0), 1)).toBe(heldLevel);
+      await expect
+        .poll(async () => (await audit(api)).slice(mark).filter((event: any) => event.kind === "show_object_changed" && event.payload?.id === installed.id))
+        .toHaveLength(1);
+
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
+      await expect.poll(async () => (await runtime(api, 1)).current_cue_number).toBe(3);
+      expect((await runtime(api, 1)).deleted_cue_hold).toBeUndefined();
+      expect(slot(await bench.tick(0), 1)).toBe(heldLevel);
+      expect(slot(await bench.tick(500), 1)).toBeGreaterThanOrEqual(159);
+      expect(slot(await bench.tick(0), 1)).toBeLessThanOrEqual(160);
+      expect(slot(await bench.tick(500), 1)).toBe(191);
+      await api.request("POST", "/api/v1/cuelists/1/go-minus", {});
+      await expect.poll(async () => runtime(api, 1)).toMatchObject({ current_cue_number: 1 });
+      expect(slot(await bench.tick(0), 1)).toBe(64);
+      state.completed = true;
+    },
+    assert: async (_context, state) => expect(state.completed).toBe(true),
   });
 
-  test("CUE-012 @ui › every settings control persists, validates Chaser overlap, and upgrades legacy defaults", async ({ api, bench, desk, page }) => {
+  const cue012Ui = async ({ api, bench, desk, page }: BenchUiContext, state: { completed: boolean }) => {
     const show = await loadCanonicalCopy(api, bench, "cue-012-settings", "compact-rig");
     const installed = await installCuelist(api, { name: "CUE-012 Settings", numbers: [1, 2, 3, 4], legacy: true, looped: true });
     const legacyOff = await installCuelist(api, { name: "Legacy Off", numbers: [1, 2], playback: 2, legacy: true, looped: false });
@@ -261,18 +390,20 @@ test.describe("planned feature 06 — Cuelist View and Cuelist Settings", () => 
     await settings.getByLabel("Chaser X-fade").fill("0.1");
     await settings.getByRole("button", { name: "Save", exact: true }).click();
     await expect(settings).toBeHidden();
-    await expect.poll(async () => (await object<any>(api, "cue_list", installed.id)).body).toMatchObject({
-      mode: "chaser",
-      priority: 42,
-      intensity_priority_mode: "ltp",
-      wrap_mode: "reset",
-      restart_mode: "continue_current_cue",
-      force_cue_timing: true,
-      disable_cue_timing: true,
-      speed_group: "A",
-      speed_multiplier: 2,
-      chaser_xfade_millis: 100,
-    });
+    await expect
+      .poll(async () => (await object<any>(api, "cue_list", installed.id)).body)
+      .toMatchObject({
+        mode: "chaser",
+        priority: 42,
+        intensity_priority_mode: "ltp",
+        wrap_mode: "reset",
+        restart_mode: "continue_current_cue",
+        force_cue_timing: true,
+        disable_cue_timing: true,
+        speed_group: "A",
+        speed_multiplier: 2,
+        chaser_xfade_millis: 100,
+      });
 
     await page.getByRole("button", { name: "← Cuelist Pool", exact: true }).click();
     const legacyCard = page.locator(".cuelist-card").filter({ hasText: legacyOff.name });
@@ -326,216 +457,219 @@ test.describe("planned feature 06 — Cuelist View and Cuelist Settings", () => 
     expect((await object<any>(api, "playback", "1")).body.target.cue_list_id).toBe(installed.id);
     expect((await object<any>(api, "playback", "2")).body.target.cue_list_id).toBe(legacyOff.id);
     expect((await object<any>(api, "playback", "3")).body.target.cue_list_id).toBe(legacyTracking.id);
-  });
+    state.completed = true;
+  };
 
-  test("CUE-012 @wire › arbitration, wrap, restart, timing precedence, and Chaser phase are engine behavior", async ({ api, bench }) => {
-    await loadCanonicalCopy(api, bench, "cue-012-engine", "compact-rig");
-    const fixtures = await fixtureIdsByNumber(api);
-    await setControlTiming(api, [120, 90, 60, 30, 15], 0);
+  pairedScenario<{ completed: boolean }>({
+    id: "CUE-012",
+    title: "Cuelist Settings drive arbitration, wrapping, restart, timing, and Chaser phase",
+    arrange: () => ({ completed: false }),
+    api: async ({ api, bench }, state) => {
+      await loadCanonicalCopy(api, bench, "cue-012-engine", "compact-rig");
+      const fixtures = await fixtureIdsByNumber(api);
+      await setControlTiming(api, [120, 90, 60, 30, 15], 0);
 
-    const high = await installCuelist(api, { name: "Priority High", numbers: [1], playback: 1, fixture: fixtures[1], levels: [0.8] });
-    const low = await installCuelist(api, { name: "Priority Low", numbers: [1], playback: 2, fixture: fixtures[1], levels: [0.3] });
-    expect(fixtures[21]).toBeTruthy();
-    for (const [installed, level] of [
-      [high, 0.8],
-      [low, 0.3],
-    ] as const) {
-      const stored = await object<any>(api, "cue_list", installed.id);
-      stored.body.cues[0].changes.push({
-        fixture_id: fixtures[21],
-        attribute: "red",
-        value: { kind: "normalized", value: level },
-        automatic_restore: false,
+      const high = await installCuelist(api, { name: "Priority High", numbers: [1], playback: 1, fixture: fixtures[1], levels: [0.8] });
+      const low = await installCuelist(api, { name: "Priority Low", numbers: [1], playback: 2, fixture: fixtures[1], levels: [0.3] });
+      expect(fixtures[21]).toBeTruthy();
+      for (const [installed, level] of [
+        [high, 0.8],
+        [low, 0.3],
+      ] as const) {
+        const stored = await object<any>(api, "cue_list", installed.id);
+        stored.body.cues[0].changes.push({
+          fixture_id: fixtures[21],
+          attribute: "red",
+          value: { kind: "normalized", value: level },
+          automatic_restore: false,
+        });
+        await putObject(api, "cue_list", installed.id, stored.body, stored.revision);
+      }
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
+      await bench.tick(1);
+      await api.request("POST", "/api/v1/cuelists/2/go", {});
+      expect(slot(await bench.tick(0), 1)).toBe(204);
+      expect(await visualizationLevel(api, fixtures[21], "red")).toBeCloseTo(0.3, 4);
+      for (const installed of [high, low]) {
+        const stored = await object<any>(api, "cue_list", installed.id);
+        await putObject(api, "cue_list", installed.id, { ...stored.body, intensity_priority_mode: "ltp" }, stored.revision);
+      }
+      expect(slot(await bench.tick(0), 1)).toBe(77);
+      expect(await visualizationLevel(api, fixtures[21], "red")).toBeCloseTo(0.3, 4);
+      const highPriority = await object<any>(api, "cue_list", high.id);
+      await putObject(api, "cue_list", high.id, { ...highPriority.body, priority: 10 }, highPriority.revision);
+      expect(slot(await bench.tick(0), 1)).toBe(204);
+      expect(await visualizationLevel(api, fixtures[21], "red")).toBeCloseTo(0.8, 4);
+
+      await loadCanonicalCopy(api, bench, "cue-012-wrap", "compact-rig");
+      await setControlTiming(api, [120, 90, 60, 30, 15], 0);
+      const base = await installCuelist(api, { name: "Underlying", numbers: [1], playback: 2, fixture: fixtures[2], levels: [0.2], priority: -1 });
+      const wrapped = await installCuelist(api, {
+        name: "Wrapped",
+        numbers: [1, 2],
+        playback: 1,
+        cueFactory: (number, index) =>
+          index === 0 ? cue(number, crypto.randomUUID(), fixtures[1], 1, { fade: 2_000, delay: 1_000 }) : cue(number, crypto.randomUUID(), fixtures[2], 1),
       });
-      await putObject(api, "cue_list", installed.id, stored.body, stored.revision);
-    }
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
-    await bench.tick(1);
-    await api.request("POST", "/api/v1/cuelists/2/go", {});
-    expect(slot(await bench.tick(0), 1)).toBe(204);
-    expect(await visualizationLevel(api, fixtures[21], "red")).toBeCloseTo(0.3, 4);
-    for (const installed of [high, low]) {
-      const stored = await object<any>(api, "cue_list", installed.id);
-      await putObject(api, "cue_list", installed.id, { ...stored.body, intensity_priority_mode: "ltp" }, stored.revision);
-    }
-    expect(slot(await bench.tick(0), 1)).toBe(77);
-    expect(await visualizationLevel(api, fixtures[21], "red")).toBeCloseTo(0.3, 4);
-    const highPriority = await object<any>(api, "cue_list", high.id);
-    await putObject(api, "cue_list", high.id, { ...highPriority.body, priority: 10 }, highPriority.revision);
-    expect(slot(await bench.tick(0), 1)).toBe(204);
-    expect(await visualizationLevel(api, fixtures[21], "red")).toBeCloseTo(0.8, 4);
-
-    await loadCanonicalCopy(api, bench, "cue-012-wrap", "compact-rig");
-    await setControlTiming(api, [120, 90, 60, 30, 15], 0);
-    const base = await installCuelist(api, { name: "Underlying", numbers: [1], playback: 2, fixture: fixtures[2], levels: [0.2], priority: -1 });
-    const wrapped = await installCuelist(api, {
-      name: "Wrapped",
-      numbers: [1, 2],
-      playback: 1,
-      cueFactory: (number, index) =>
-        index === 0
-          ? cue(number, crypto.randomUUID(), fixtures[1], 1, { fade: 2_000, delay: 1_000 })
-          : cue(number, crypto.randomUUID(), fixtures[2], 1),
-    });
-    await api.request("POST", "/api/v1/cuelists/2/go", {});
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
-    await bench.tick(3_000);
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
-    await bench.tick(0);
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
-    expect((await runtime(api, 1)).current_cue_number).toBe(2);
-    expect(slot(await bench.tick(0), 2)).toBe(255);
-    const offBody = await object<any>(api, "cue_list", wrapped.id);
-    await putObject(api, "cue_list", wrapped.id, { ...offBody.body, wrap_mode: "tracking" }, offBody.revision);
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
-    expect((await runtime(api, 1)).current_cue_number).toBe(1);
-    expect(slot(await bench.tick(0), 2)).toBe(255);
-    await api.request("POST", "/api/v1/cuelists/1/go-minus", {});
-    expect((await runtime(api, 1)).current_cue_number).toBe(1);
-    const trackingBody = await object<any>(api, "cue_list", wrapped.id);
-    await putObject(api, "cue_list", wrapped.id, { ...trackingBody.body, wrap_mode: "reset" }, trackingBody.revision);
-    await api.request("POST", "/api/v1/cuelists/1/go-to", { cue_number: 2 });
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
-    expect(slot(await bench.tick(999), 2)).toBe(255);
-    expect(slot(await bench.tick(1_001), 2)).toBeGreaterThan(51);
-    expect(slot(await bench.tick(1_000), 2)).toBe(51);
-    expect((await object<any>(api, "cue_list", base.id)).body.cues[0].changes[0].value.value).toBeCloseTo(0.2, 6);
-
-    await loadCanonicalCopy(api, bench, "cue-012-restart", "compact-rig");
-    const restarted = await installCuelist(api, { name: "Restart", numbers: [1, 2, 3], levels: [0.2, 0.5, 0.8] });
-    for (const action of ["on", "toggle", "go"]) {
-      await api.request("POST", "/api/v1/cuelists/1/go-to", { cue_number: 2 });
-      await api.request("POST", "/api/v1/cuelists/1/off", {});
-      await api.request("POST", `/api/v1/cuelists/1/${action}`, {});
+      await api.request("POST", "/api/v1/cuelists/2/go", {});
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
+      await bench.tick(3_000);
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
+      await bench.tick(0);
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
+      expect((await runtime(api, 1)).current_cue_number).toBe(2);
+      expect(slot(await bench.tick(0), 2)).toBe(255);
+      const offBody = await object<any>(api, "cue_list", wrapped.id);
+      await putObject(api, "cue_list", wrapped.id, { ...offBody.body, wrap_mode: "tracking" }, offBody.revision);
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
       expect((await runtime(api, 1)).current_cue_number).toBe(1);
-    }
-    let restartBody = await object<any>(api, "cue_list", restarted.id);
-    await putObject(api, "cue_list", restarted.id, { ...restartBody.body, restart_mode: "continue_current_cue" }, restartBody.revision);
-    for (const action of ["on", "toggle", "go"]) {
+      expect(slot(await bench.tick(0), 2)).toBe(255);
+      await api.request("POST", "/api/v1/cuelists/1/go-minus", {});
+      expect((await runtime(api, 1)).current_cue_number).toBe(1);
+      const trackingBody = await object<any>(api, "cue_list", wrapped.id);
+      await putObject(api, "cue_list", wrapped.id, { ...trackingBody.body, wrap_mode: "reset" }, trackingBody.revision);
       await api.request("POST", "/api/v1/cuelists/1/go-to", { cue_number: 2 });
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
+      expect(slot(await bench.tick(999), 2)).toBe(255);
+      expect(slot(await bench.tick(1_001), 2)).toBeGreaterThan(51);
+      expect(slot(await bench.tick(1_000), 2)).toBe(51);
+      expect((await object<any>(api, "cue_list", base.id)).body.cues[0].changes[0].value.value).toBeCloseTo(0.2, 6);
+
+      await loadCanonicalCopy(api, bench, "cue-012-restart", "compact-rig");
+      const restarted = await installCuelist(api, { name: "Restart", numbers: [1, 2, 3], levels: [0.2, 0.5, 0.8] });
+      for (const action of ["on", "toggle", "go"]) {
+        await api.request("POST", "/api/v1/cuelists/1/go-to", { cue_number: 2 });
+        await api.request("POST", "/api/v1/cuelists/1/off", {});
+        await api.request("POST", `/api/v1/cuelists/1/${action}`, {});
+        expect((await runtime(api, 1)).current_cue_number).toBe(1);
+      }
+      let restartBody = await object<any>(api, "cue_list", restarted.id);
+      await putObject(api, "cue_list", restarted.id, { ...restartBody.body, restart_mode: "continue_current_cue" }, restartBody.revision);
+      for (const action of ["on", "toggle", "go"]) {
+        await api.request("POST", "/api/v1/cuelists/1/go-to", { cue_number: 2 });
+        await api.request("POST", "/api/v1/cuelists/1/off", {});
+        await api.request("POST", `/api/v1/cuelists/1/${action}`, {});
+        expect((await runtime(api, 1)).current_cue_number).toBe(2);
+        expect(slot(await bench.tick(0), 1)).toBe(128);
+      }
+      const neverRun = await installCuelist(api, { name: "Never Run Continue", numbers: [1, 2], playback: 2 });
+      let neverRunBody = await object<any>(api, "cue_list", neverRun.id);
+      await putObject(api, "cue_list", neverRun.id, { ...neverRunBody.body, restart_mode: "continue_current_cue" }, neverRunBody.revision);
+      await api.request("POST", "/api/v1/cuelists/2/on", {});
+      expect((await runtime(api, 2)).current_cue_number).toBe(1);
+      await api.request("POST", "/api/v1/cuelists/2/off", {});
       await api.request("POST", "/api/v1/cuelists/1/off", {});
-      await api.request("POST", `/api/v1/cuelists/1/${action}`, {});
+      restartBody = await object<any>(api, "cue_list", restarted.id);
+      await putObject(api, "cue_list", restarted.id, { ...restartBody.body, cues: restartBody.body.cues.filter((item: any) => item.number !== 2) }, restartBody.revision);
+      await api.request("POST", "/api/v1/cuelists/1/on", {});
+      expect((await runtime(api, 1)).current_cue_number).toBe(1);
+
+      await loadCanonicalCopy(api, bench, "cue-012-timing", "compact-rig");
+      await setControlTiming(api, [120, 90, 60, 30, 15], 0);
+      const timed = await installCuelist(api, {
+        name: "Timing",
+        numbers: [1, 2],
+        cueFactory: (number, index) =>
+          index === 0
+            ? cue(number, crypto.randomUUID(), fixtures[1], 1, { fade: 1_000, delay: 500, valueFade: 2_000, valueDelay: 100 })
+            : cue(number, crypto.randomUUID(), fixtures[1], 0.2, { trigger: { type: "wait", delay_millis: 4_000 } }),
+      });
+      const serializedTiming = timingBytes((await object<any>(api, "cue_list", timed.id)).body);
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
+      expect(slot(await bench.tick(1_100), 1)).toBe(128);
+      await api.request("POST", "/api/v1/cuelists/1/off", {});
+      let timedBody = await object<any>(api, "cue_list", timed.id);
+      await putObject(api, "cue_list", timed.id, { ...timedBody.body, force_cue_timing: true }, timedBody.revision);
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
+      expect(slot(await bench.tick(1_000), 1)).toBe(128);
+      await api.request("POST", "/api/v1/cuelists/1/off", {});
+      timedBody = await object<any>(api, "cue_list", timed.id);
+      await putObject(api, "cue_list", timed.id, { ...timedBody.body, disable_cue_timing: true }, timedBody.revision);
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
+      expect(slot(await bench.tick(0), 1)).toBe(51);
+      expect((await runtime(api, 1)).current_cue_number).toBe(2);
+      timedBody = await object<any>(api, "cue_list", timed.id);
+      await putObject(api, "cue_list", timed.id, { ...timedBody.body, disable_cue_timing: false, force_cue_timing: false }, timedBody.revision);
+      expect(timingBytes((await object<any>(api, "cue_list", timed.id)).body)).toBe(serializedTiming);
+
+      await loadCanonicalCopy(api, bench, "cue-012-chaser", "compact-rig");
+      await setControlTiming(api, [120, 90, 60, 30, 15], 0);
+      const chaser = await installCuelist(api, { name: "Chaser", numbers: [1, 2, 3, 4], mode: "chaser", speedGroup: "A", speedMultiplier: 1, chaserXfade: 100 });
+      const chaserShowId = await activeShowId(api);
+      const valid = await object<any>(api, "cue_list", chaser.id);
+      await expect(putObject(api, "cue_list", chaser.id, { ...valid.body, chaser_xfade_millis: 501 }, valid.revision)).rejects.toThrow(/effective step duration/i);
+      const afterRejectedXfade = await object<any>(api, "cue_list", chaser.id);
+      expect(afterRejectedXfade.revision).toBe(valid.revision);
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
+      expect((await runtime(api, 1)).current_cue_number).toBe(1);
+      await bench.tick(499);
+      expect((await runtime(api, 1)).current_cue_number).toBe(1);
+      await bench.tick(1);
+      expect((await runtime(api, 1)).current_cue_number).toBe(2);
+      expect(slot(await bench.tick(50), 1)).toBe(96);
+      expect(slot(await bench.tick(50), 1)).toBe(128);
+
+      await reopenAndReset(api, chaserShowId);
+      let chaserBody = await object<any>(api, "cue_list", chaser.id);
+      await putObject(api, "cue_list", chaser.id, { ...chaserBody.body, speed_multiplier: 0.5 }, chaserBody.revision);
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
+      await bench.tick(999);
+      expect((await runtime(api, 1)).current_cue_number).toBe(1);
+      await bench.tick(1);
+      expect((await runtime(api, 1)).current_cue_number).toBe(2);
+
+      await reopenAndReset(api, chaserShowId);
+      chaserBody = await object<any>(api, "cue_list", chaser.id);
+      await putObject(api, "cue_list", chaser.id, { ...chaserBody.body, speed_multiplier: 2 }, chaserBody.revision);
+      chaserBody = await object<any>(api, "cue_list", chaser.id);
+      await expect(putObject(api, "cue_list", chaser.id, { ...chaserBody.body, chaser_xfade_millis: 251 }, chaserBody.revision)).rejects.toThrow(/effective step duration/i);
+      const afterRejectedFastXfade = await object<any>(api, "cue_list", chaser.id);
+      expect(afterRejectedFastXfade.revision).toBe(chaserBody.revision);
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
+      await bench.tick(249);
+      expect((await runtime(api, 1)).current_cue_number).toBe(1);
+      await bench.tick(1);
+      expect((await runtime(api, 1)).current_cue_number).toBe(2);
+
+      await reopenAndReset(api, chaserShowId);
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
+      await bench.tick(1_000);
+      const direct = await runtime(api, 1);
+      await reopenAndReset(api, chaserShowId);
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
+      for (let index = 0; index < 4; index += 1) await bench.tick(250);
+      const incremental = await runtime(api, 1);
+      expect(direct.current_cue_number).toBe(incremental.current_cue_number);
+      expect(direct.activated_at).toBe(incremental.activated_at);
+
+      await reopenAndReset(api, chaserShowId);
+      chaserBody = await object<any>(api, "cue_list", chaser.id);
+      await putObject(api, "cue_list", chaser.id, { ...chaserBody.body, speed_multiplier: 1 }, chaserBody.revision);
+      await setControlTiming(api, [120, 90, 60, 30, 15], 0);
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
+      await bench.tick(250);
+      await setControlTiming(api, [60, 90, 60, 30, 15], 0);
+      await bench.tick(499);
+      expect((await runtime(api, 1)).current_cue_number).toBe(1);
+      await bench.tick(1);
+      expect((await runtime(api, 1)).current_cue_number).toBe(2);
+
+      await reopenAndReset(api, chaserShowId);
+      await setControlTiming(api, [120, 90, 60, 30, 15], 0);
+      chaserBody = await object<any>(api, "cue_list", chaser.id);
+      await putObject(api, "cue_list", chaser.id, { ...chaserBody.body, speed_multiplier: 2, disable_cue_timing: true }, chaserBody.revision);
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
+      await bench.tick(250);
       expect((await runtime(api, 1)).current_cue_number).toBe(2);
       expect(slot(await bench.tick(0), 1)).toBe(128);
-    }
-    const neverRun = await installCuelist(api, { name: "Never Run Continue", numbers: [1, 2], playback: 2 });
-    let neverRunBody = await object<any>(api, "cue_list", neverRun.id);
-    await putObject(api, "cue_list", neverRun.id, { ...neverRunBody.body, restart_mode: "continue_current_cue" }, neverRunBody.revision);
-    await api.request("POST", "/api/v1/cuelists/2/on", {});
-    expect((await runtime(api, 2)).current_cue_number).toBe(1);
-    await api.request("POST", "/api/v1/cuelists/2/off", {});
-    await api.request("POST", "/api/v1/cuelists/1/off", {});
-    restartBody = await object<any>(api, "cue_list", restarted.id);
-    await putObject(api, "cue_list", restarted.id, { ...restartBody.body, cues: restartBody.body.cues.filter((item: any) => item.number !== 2) }, restartBody.revision);
-    await api.request("POST", "/api/v1/cuelists/1/on", {});
-    expect((await runtime(api, 1)).current_cue_number).toBe(1);
-
-    await loadCanonicalCopy(api, bench, "cue-012-timing", "compact-rig");
-    await setControlTiming(api, [120, 90, 60, 30, 15], 0);
-    const timed = await installCuelist(api, {
-      name: "Timing",
-      numbers: [1, 2],
-      cueFactory: (number, index) =>
-        index === 0
-          ? cue(number, crypto.randomUUID(), fixtures[1], 1, { fade: 1_000, delay: 500, valueFade: 2_000, valueDelay: 100 })
-          : cue(number, crypto.randomUUID(), fixtures[1], 0.2, { trigger: { type: "wait", delay_millis: 4_000 } }),
-    });
-    const serializedTiming = timingBytes((await object<any>(api, "cue_list", timed.id)).body);
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
-    expect(slot(await bench.tick(1_100), 1)).toBe(128);
-    await api.request("POST", "/api/v1/cuelists/1/off", {});
-    let timedBody = await object<any>(api, "cue_list", timed.id);
-    await putObject(api, "cue_list", timed.id, { ...timedBody.body, force_cue_timing: true }, timedBody.revision);
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
-    expect(slot(await bench.tick(1_000), 1)).toBe(128);
-    await api.request("POST", "/api/v1/cuelists/1/off", {});
-    timedBody = await object<any>(api, "cue_list", timed.id);
-    await putObject(api, "cue_list", timed.id, { ...timedBody.body, disable_cue_timing: true }, timedBody.revision);
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
-    expect(slot(await bench.tick(0), 1)).toBe(51);
-    expect((await runtime(api, 1)).current_cue_number).toBe(2);
-    timedBody = await object<any>(api, "cue_list", timed.id);
-    await putObject(api, "cue_list", timed.id, { ...timedBody.body, disable_cue_timing: false, force_cue_timing: false }, timedBody.revision);
-    expect(timingBytes((await object<any>(api, "cue_list", timed.id)).body)).toBe(serializedTiming);
-
-    await loadCanonicalCopy(api, bench, "cue-012-chaser", "compact-rig");
-    await setControlTiming(api, [120, 90, 60, 30, 15], 0);
-    const chaser = await installCuelist(api, { name: "Chaser", numbers: [1, 2, 3, 4], mode: "chaser", speedGroup: "A", speedMultiplier: 1, chaserXfade: 100 });
-    const chaserShowId = await activeShowId(api);
-    const valid = await object<any>(api, "cue_list", chaser.id);
-    await expect(putObject(api, "cue_list", chaser.id, { ...valid.body, chaser_xfade_millis: 501 }, valid.revision)).rejects.toThrow(/effective step duration/i);
-    const afterRejectedXfade = await object<any>(api, "cue_list", chaser.id);
-    if (afterRejectedXfade.revision !== valid.revision) {
-      await putObject(api, "cue_list", chaser.id, valid.body, afterRejectedXfade.revision);
-    }
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
-    expect((await runtime(api, 1)).current_cue_number).toBe(1);
-    await bench.tick(499);
-    expect((await runtime(api, 1)).current_cue_number).toBe(1);
-    await bench.tick(1);
-    expect((await runtime(api, 1)).current_cue_number).toBe(2);
-    expect(slot(await bench.tick(50), 1)).toBe(96);
-    expect(slot(await bench.tick(50), 1)).toBe(128);
-
-    await reopenAndReset(api, chaserShowId);
-    let chaserBody = await object<any>(api, "cue_list", chaser.id);
-    await putObject(api, "cue_list", chaser.id, { ...chaserBody.body, speed_multiplier: 0.5 }, chaserBody.revision);
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
-    await bench.tick(999);
-    expect((await runtime(api, 1)).current_cue_number).toBe(1);
-    await bench.tick(1);
-    expect((await runtime(api, 1)).current_cue_number).toBe(2);
-
-    await reopenAndReset(api, chaserShowId);
-    chaserBody = await object<any>(api, "cue_list", chaser.id);
-    await putObject(api, "cue_list", chaser.id, { ...chaserBody.body, speed_multiplier: 2 }, chaserBody.revision);
-    chaserBody = await object<any>(api, "cue_list", chaser.id);
-    await expect(putObject(api, "cue_list", chaser.id, { ...chaserBody.body, chaser_xfade_millis: 251 }, chaserBody.revision)).rejects.toThrow(/effective step duration/i);
-    const afterRejectedFastXfade = await object<any>(api, "cue_list", chaser.id);
-    if (afterRejectedFastXfade.revision !== chaserBody.revision) {
-      await putObject(api, "cue_list", chaser.id, chaserBody.body, afterRejectedFastXfade.revision);
-    }
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
-    await bench.tick(249);
-    expect((await runtime(api, 1)).current_cue_number).toBe(1);
-    await bench.tick(1);
-    expect((await runtime(api, 1)).current_cue_number).toBe(2);
-
-    await reopenAndReset(api, chaserShowId);
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
-    await bench.tick(1_000);
-    const direct = await runtime(api, 1);
-    await reopenAndReset(api, chaserShowId);
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
-    for (let index = 0; index < 4; index += 1) await bench.tick(250);
-    const incremental = await runtime(api, 1);
-    expect(direct.current_cue_number).toBe(incremental.current_cue_number);
-    expect(direct.activated_at).toBe(incremental.activated_at);
-
-    await reopenAndReset(api, chaserShowId);
-    chaserBody = await object<any>(api, "cue_list", chaser.id);
-    await putObject(api, "cue_list", chaser.id, { ...chaserBody.body, speed_multiplier: 1 }, chaserBody.revision);
-    await setControlTiming(api, [120, 90, 60, 30, 15], 0);
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
-    await bench.tick(250);
-    await setControlTiming(api, [60, 90, 60, 30, 15], 0);
-    await bench.tick(499);
-    expect((await runtime(api, 1)).current_cue_number).toBe(1);
-    await bench.tick(1);
-    expect((await runtime(api, 1)).current_cue_number).toBe(2);
-
-    await reopenAndReset(api, chaserShowId);
-    await setControlTiming(api, [120, 90, 60, 30, 15], 0);
-    chaserBody = await object<any>(api, "cue_list", chaser.id);
-    await putObject(api, "cue_list", chaser.id, { ...chaserBody.body, speed_multiplier: 2, disable_cue_timing: true }, chaserBody.revision);
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
-    await bench.tick(250);
-    expect((await runtime(api, 1)).current_cue_number).toBe(2);
-    expect(slot(await bench.tick(0), 1)).toBe(128);
-    await bench.tick(249);
-    expect((await runtime(api, 1)).current_cue_number).toBe(2);
-    await bench.tick(1);
-    expect((await runtime(api, 1)).current_cue_number).toBe(3);
+      await bench.tick(249);
+      expect((await runtime(api, 1)).current_cue_number).toBe(2);
+      await bench.tick(1);
+      expect((await runtime(api, 1)).current_cue_number).toBe(3);
+      state.completed = true;
+    },
+    ui: cue012Ui,
+    assert: async (_context, state) => expect(state.completed).toBe(true),
   });
 });
 
@@ -559,8 +693,8 @@ async function installCuelist(api: ApiDriver, options: InstallOptions): Promise<
   const playback = options.playback ?? 1;
   const fixture = options.fixture ?? (await fixtureIdsByNumber(api))[1];
   const id = crypto.randomUUID();
-  const cues = options.numbers.map((number, index) =>
-    options.cueFactory?.(number, index) ?? cue(number, crypto.randomUUID(), fixture, options.levels?.[index] ?? (index + 1) * 0.25),
+  const cues = options.numbers.map(
+    (number, index) => options.cueFactory?.(number, index) ?? cue(number, crypto.randomUUID(), fixture, options.levels?.[index] ?? (index + 1) * 0.25),
   );
   const body: Record<string, unknown> = {
     id,
@@ -603,23 +737,11 @@ async function installCuelist(api: ApiDriver, options: InstallOptions): Promise<
   } catch {
     page = null;
   }
-  await putObject(
-    api,
-    "playback_page",
-    "1",
-    { number: 1, name: "Main", slots: { ...(page?.body.slots ?? {}), [String(playback)]: playback } },
-    page?.revision ?? 0,
-  );
+  await putObject(api, "playback_page", "1", { number: 1, name: "Main", slots: { ...(page?.body.slots ?? {}), [String(playback)]: playback } }, page?.revision ?? 0);
   return { id, name: options.name };
 }
 
-function cue(
-  number: number,
-  id: string,
-  fixture: string,
-  level: number,
-  options: { fade?: number; delay?: number; valueFade?: number; valueDelay?: number; trigger?: any } = {},
-) {
+function cue(number: number, id: string, fixture: string, level: number, options: { fade?: number; delay?: number; valueFade?: number; valueDelay?: number; trigger?: any } = {}) {
   return {
     id,
     number,

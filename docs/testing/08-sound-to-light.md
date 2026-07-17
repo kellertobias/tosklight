@@ -42,6 +42,7 @@ The initial implementation supports one analysis mode: **Tempo / BPM**. The brow
 ## Manual controls, loss, and reconnect rules
 
 - **Learn** is manual tap tempo. Its first tap immediately disables Sound-to-Light; later valid taps update the manual fallback from the rolling tap intervals.
+- The attached OSC Speed Group button invokes that same authoritative Learn action. OSC feedback reports the effective Sound-mapped BPM, not the stored manual fallback, and turns its beat state off while the group is paused.
 - **Double** and **Half** change the Sound multiplier while Sound-to-Light is enabled. Outside Sound mode, they change the manual learned rate.
 - **Pause** freezes phase advancement without discarding the current Sound rate. Resume continues from the retained rate.
 - When a previously valid source becomes unusable, the group holds the last accepted Sound rate for the configured hold interval and then returns to its stored manual BPM. Low confidence and out-of-range tempos cannot take ownership.

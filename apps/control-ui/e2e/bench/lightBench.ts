@@ -35,13 +35,43 @@ export class LightBench {
   }
 
   async restart(): Promise<void> {
-    if (this.process && this.process.exitCode === null) {
-      const exited = new Promise<void>((resolve) => this.process?.once("exit", () => resolve()));
-      this.process.kill("SIGKILL");
-      await Promise.race([exited, new Promise<void>((resolve) => setTimeout(resolve, 1_000))]);
+    await this.stopServerAbruptly();
+    await this.spawnServer();
+  }
+
+  serverPid(): number | undefined { return this.process?.pid; }
+
+  async stopServerGracefully(token: string): Promise<number> {
+    const process = this.process;
+    if (!process?.pid || process.exitCode !== null) throw new Error("light-server is not running");
+    const pid = process.pid;
+    const response = await fetch(`${this.baseUrl}/api/v1/shutdown`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!response.ok) throw new Error(`Server shutdown failed: ${response.status} ${await response.text()}`);
+    await this.waitForServerExit(process, 5_000);
+    this.process = undefined;
+    return pid;
+  }
+
+  async stopServerAbruptly(): Promise<number | undefined> {
+    const process = this.process;
+    const pid = process?.pid;
+    if (process && process.exitCode === null) {
+      process.kill("SIGKILL");
+      await this.waitForServerExit(process, 2_000);
     }
     this.process = undefined;
+    return pid;
+  }
+
+  async startServer(): Promise<number> {
+    if (this.process && this.process.exitCode === null) throw new Error("light-server is already running");
     await this.spawnServer();
+    if (!this.process?.pid) throw new Error("light-server started without a PID");
+    return this.process.pid;
   }
 
   private async spawnServer(): Promise<void> {
@@ -69,6 +99,7 @@ export class LightBench {
     this.lastVirtualNow = "2020-01-01T00:00:00Z";
     this.artnet.reset();
     this.sacn.reset();
+    for (const hardware of this.oscHardware) hardware.resetTrace();
     const show = await api.request<{ id: string }>("POST", "/api/v1/shows", { name, data_base64: null, overwrite: false });
     const fixtureIds = Array.from({ length: 12 }, () => crypto.randomUUID());
     await Promise.all(fixtureIds.map((fixtureId, index) => api.request("PUT", `/api/v1/shows/${show.id}/objects/patched_fixture/${fixtureId}`, dimmer(fixtureId, index + 1), true, 0)));
@@ -141,12 +172,26 @@ export class LightBench {
     this.oscHardware.push(hardware);
     return hardware;
   }
+  visualOscSummary(): string {
+    return this.oscHardware
+      .flatMap((hardware) => hardware.trace)
+      .sort((left, right) => left.recordedAt - right.recordedAt)
+      .slice(-2)
+      .map((message) => {
+        const values = message.arguments.map((value) => typeof value === "number" ? Number(value.toFixed(3)) : value).join(", ");
+        return `${message.direction === "sent" ? "TX" : "RX"} ${message.address}${values ? ` ${values}` : ""}`;
+      })
+      .join(" · ");
+  }
   recentLog(): string { return this.log.slice(-100).join(""); }
 
   async failureArtifacts(token: string): Promise<Record<string, string>> {
     let audit: unknown = [];
     try {
-      const response = await fetch(`${this.baseUrl}/api/v1/audit?after=0`, { headers: { authorization: `Bearer ${token}` } });
+      const response = await fetch(`${this.baseUrl}/api/v1/audit?after=0`, {
+        headers: { authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(2_000),
+      });
       if (response.ok) audit = (await response.json() as unknown[]).slice(-100);
     } catch { /* server failure is represented by its log */ }
     const packets = [...this.artnet.packets, ...this.sacn.packets].slice(-40).map((packet) => ({
@@ -158,22 +203,38 @@ export class LightBench {
       "virtual-time.json": JSON.stringify({ now: this.lastVirtualNow }, null, 2),
       "audit-tail.json": JSON.stringify(audit, null, 2),
       "osc-tail.json": JSON.stringify(this.oscHardware.flatMap((hardware) => hardware.messages).slice(-200), null, 2),
+      "osc-trace.json": JSON.stringify(this.oscHardware.flatMap((hardware) => hardware.trace).sort((left, right) => left.recordedAt - right.recordedAt).slice(-200), null, 2),
       "dmx-packets.json": JSON.stringify(packets, null, 2),
     };
   }
 
   async stop(): Promise<void> {
-    this.artnet?.close();
-    this.sacn?.close();
-    if (this.process && this.process.exitCode === null) {
-      const exited = new Promise<void>((resolve) => this.process?.once("exit", () => resolve()));
-      this.process.kill("SIGKILL");
-      await Promise.race([
-        exited,
-        new Promise<void>((resolve) => setTimeout(resolve, 1_000)),
-      ]);
-    }
+    const udpClosures: Promise<void>[] = this.oscHardware.map((hardware) => hardware.close());
+    this.oscHardware.length = 0;
+    if (this.artnet) udpClosures.push(this.artnet.close());
+    if (this.sacn) udpClosures.push(this.sacn.close());
+    await Promise.all(udpClosures);
+    await this.stopServerAbruptly();
     if (this.dataDir) await fs.rm(this.dataDir, { recursive: true, force: true });
+  }
+
+  private async waitForServerExit(process: ChildProcess, timeout: number): Promise<void> {
+    if (process.exitCode !== null) return;
+    await new Promise<void>((resolve, reject) => {
+      const onExit = () => {
+        clearTimeout(timer);
+        process.off("exit", onExit);
+        resolve();
+      };
+      const timer = setTimeout(() => {
+        process.off("exit", onExit);
+        reject(new Error(`Timed out waiting for light-server PID ${process.pid} to exit`));
+      }, timeout);
+      timer.unref();
+      process.once("exit", onExit);
+      // Avoid missing an exit that lands between the initial check and listener setup.
+      if (process.exitCode !== null) onExit();
+    });
   }
 
   private async waitUntilReady(): Promise<void> {
