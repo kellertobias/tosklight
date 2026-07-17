@@ -2,7 +2,21 @@
 
 ## Status and scope
 
-This is a planned verification feature that closes the remaining executable-coverage and release-evidence gaps found while re-auditing completed Features 01, 04, 08, 11, 18, and 20. The underlying operator behavior is already implemented. This work adds missing proof, strengthens existing acceptance cases, and corrects completion bookkeeping where the current evidence is incomplete or stale.
+**Completed 2026-07-17.** This verification feature closes the remaining executable-coverage and release-evidence gaps found while re-auditing completed Features 01, 04, 08, 11, 18, and 20. The underlying operator behavior was already implemented except for the complete fixture physical-metadata and GLB-preview fields required by `FIXTURE-002`; those production paths were added with the acceptance coverage. The work adds missing proof, strengthens existing acceptance cases, and corrects completion bookkeeping where prior evidence was incomplete or stale.
+
+The final checkout passed the hermetic unit and focused browser gates, the real desktop smoke path,
+the hardware-controls production build and browser harness, strict formatting and Clippy, the manual
+build, and the opt-in host-network Matter transport smoke. The authoritative `./build open` runtime
+also passed readiness, health, and bootstrap checks. Independent-controller interoperability was not
+performed, and CSA production credentials/certification are not available or claimed; those remain
+external production release gates under `RELEASE-023`.
+
+Completion bookkeeping found 90 tracked Markdown files before this plan move, 17 completed plan
+files, and 11 completed-plan references targeting eight unique files, all resolving. Moving this
+file raises the completed-plan count to 18 without changing the total tracked Markdown count. The
+Feature 20 completion file was added in commit `5d5bb9a`; its parent contains no tracked old-path
+counterpart, so the repository history does not contain the deletion half requested by the original
+checklist and no synthetic deletion was created.
 
 This feature must not redesign or reposition the software Programmer keypad. The current software layout is an observed contract for these tests. In particular, do not move the HIGH/PREV/NEXT/ALL or GRP/CUE/TIME/DIV rows, do not change key dimensions or gaps, and do not alter the current two-column-by-two-row Programmer Fade while adding coverage. Hardware-simulator tests must verify the restored RECORD/PRELOAD GO and Programmer Fade/Cue Fade geometry without changing that geometry.
 
@@ -254,7 +268,7 @@ When every automated case above passes:
 
 ## Final verification gate
 
-This follow-up may be marked complete only when all of the following pass from the same final checkout:
+This follow-up was marked complete after all of the following passed from the same final checkout:
 
 ```sh
 ./test unit

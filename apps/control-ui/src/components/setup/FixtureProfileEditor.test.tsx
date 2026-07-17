@@ -50,6 +50,50 @@ function touchDrag(source: HTMLElement, target: HTMLElement, pointerId: number) 
 }
 
 describe("FixtureProfileEditor", () => {
+  it("authors the complete Generic physical metadata snapshot while older profiles keep empty defaults", async () => {
+    const profile = validProfile();
+    delete profile.physical.connectors;
+    delete profile.physical.light_source;
+    delete profile.physical.color_temperature_kelvin;
+    delete profile.physical.color_rendering_index;
+    delete profile.physical.luminous_output_lumens;
+    delete profile.physical.lens;
+    delete profile.physical.beam_angle_degrees;
+    const save = vi.fn(async (draft: FixtureProfile) => draft);
+    render(<FixtureProfileEditor initialProfile={profile} manufacturers={[]} onSave={save} onClose={vi.fn()}/>);
+
+    expect(screen.getByLabelText("Connectors")).toHaveValue("");
+    fireEvent.change(screen.getByLabelText("Width (mm)"), { target: { value: "420" } });
+    fireEvent.change(screen.getByLabelText("Height (mm)"), { target: { value: "680" } });
+    fireEvent.change(screen.getByLabelText("Depth (mm)"), { target: { value: "310" } });
+    fireEvent.change(screen.getByLabelText("Weight (kg)"), { target: { value: "24.5" } });
+    fireEvent.change(screen.getByLabelText("Power consumption (W)"), { target: { value: "720" } });
+    fireEvent.change(screen.getByLabelText("Connectors"), { target: { value: "powerCON TRUE1 TOP; 5-pin XLR in/out" } });
+    fireEvent.change(screen.getByLabelText("Light source"), { target: { value: "600 W LED engine" } });
+    fireEvent.change(screen.getByLabelText("Color temperature (K)"), { target: { value: "6500" } });
+    fireEvent.change(screen.getByLabelText("Color rendering index (CRI)"), { target: { value: "92" } });
+    fireEvent.change(screen.getByLabelText("Luminous output (lm)"), { target: { value: "18500" } });
+    fireEvent.change(screen.getByLabelText("Lens"), { target: { value: "Fresnel zoom" } });
+    fireEvent.change(screen.getByLabelText("Beam angle (degrees)"), { target: { value: "36" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save fixture" }));
+
+    await waitFor(() => expect(save).toHaveBeenCalledOnce());
+    expect(save.mock.calls[0][0].physical).toEqual({
+      width_millimetres: 420,
+      height_millimetres: 680,
+      depth_millimetres: 310,
+      weight_kilograms: 24.5,
+      power_watts: 720,
+      connectors: "powerCON TRUE1 TOP; 5-pin XLR in/out",
+      light_source: "600 W LED engine",
+      color_temperature_kelvin: 6500,
+      color_rendering_index: 92,
+      luminous_output_lumens: 18500,
+      lens: "Fresnel zoom",
+      beam_angle_degrees: 36,
+    });
+  });
+
   it("uses the server canonical attribute registry including IDs, families, value types, and default units", () => {
     const registry: AttributeDescriptor[] = [
       { id: "color", label: "Color", family: "color", value_type: "color", default_unit: null },

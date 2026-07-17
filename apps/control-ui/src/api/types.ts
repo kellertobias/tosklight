@@ -492,6 +492,13 @@ export interface FixtureProfilePhysical {
   depth_millimetres: number | null;
   weight_kilograms: number | null;
   power_watts: number | null;
+  connectors?: string;
+  light_source?: string;
+  color_temperature_kelvin?: number | null;
+  color_rendering_index?: number | null;
+  luminous_output_lumens?: number | null;
+  lens?: string;
+  beam_angle_degrees?: number | null;
 }
 
 export interface FixtureMode {

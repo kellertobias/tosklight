@@ -153,6 +153,13 @@ export function blankFixtureProfile(): FixtureProfile {
       depth_millimetres: null,
       weight_kilograms: null,
       power_watts: null,
+      connectors: "",
+      light_source: "",
+      color_temperature_kelvin: null,
+      color_rendering_index: null,
+      luminous_output_lumens: null,
+      lens: "",
+      beam_angle_degrees: null,
     },
     modes: [blankMode()],
     hazardous: false,
@@ -402,8 +409,9 @@ export function validateProfile(profile: FixtureProfile) {
   if (!profile.name.trim()) errors.push("Fixture name is required");
   if (!profile.modes.length) errors.push("At least one mode is required");
   for (const [key, value] of Object.entries(profile.physical)) {
-    if (value != null && (!Number.isFinite(value) || value <= 0)) errors.push(`${key.replaceAll("_", " ")} must be positive`);
+    if (typeof value === "number" && (!Number.isFinite(value) || (key === "color_rendering_index" ? value < 0 : value <= 0))) errors.push(`${key.replaceAll("_", " ")} must be positive`);
   }
+  if (profile.physical.color_rendering_index != null && profile.physical.color_rendering_index > 100) errors.push("color rendering index must be from 0 to 100");
   const modeIds = new Set<string>();
   for (const mode of profile.modes) {
     if (!mode.name.trim()) errors.push("Every mode needs a name");
@@ -541,6 +549,7 @@ export function fixtureProfileFromDefinition(definition: FixtureDefinition): Fix
     stage_icon_asset: definition.icon_asset ?? null,
     model_asset: definition.model_asset ?? null,
     physical: {
+      ...blankFixtureProfile().physical,
       width_millimetres: definition.physical.width_millimetres ?? null,
       height_millimetres: definition.physical.height_millimetres ?? null,
       depth_millimetres: definition.physical.depth_millimetres ?? null,

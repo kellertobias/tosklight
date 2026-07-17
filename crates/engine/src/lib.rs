@@ -1594,16 +1594,11 @@ fn render_profile_split(
     group_master_flashes: &HashMap<String, f32>,
     highlighted_fixtures: &HashSet<FixtureId>,
 ) -> Result<(), EngineError> {
-    for (head_index, _) in mode
-        .heads
-        .iter()
-        .enumerate()
-        .filter(|(_, head)| {
-            mode.channels
-                .iter()
-                .any(|channel| channel.head_id == head.id && channel.split == split)
-        })
-    {
+    for (head_index, _) in mode.heads.iter().enumerate().filter(|(_, head)| {
+        mode.channels
+            .iter()
+            .any(|channel| channel.head_id == head.id && channel.split == split)
+    }) {
         let output = resolve_profile_head(
             fixture,
             mode,

@@ -331,10 +331,7 @@ fn extract_asset_field(
     Ok(())
 }
 
-fn decode_data_url<'a>(
-    value: &'a str,
-    kind: AssetKind,
-) -> Result<(&'a str, Vec<u8>), FixturePackageError> {
+fn decode_data_url(value: &str, kind: AssetKind) -> Result<(&str, Vec<u8>), FixturePackageError> {
     let payload = value.strip_prefix("data:").ok_or_else(|| {
         invalid(format!(
             "{} must be a self-contained data URL",

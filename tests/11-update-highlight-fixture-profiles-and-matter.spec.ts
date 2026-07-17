@@ -1,7 +1,12 @@
-import { expect } from "../apps/control-ui/e2e/bench/fixtures";
-import type { Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
+import { execFile } from "node:child_process";
+import fs from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+import { ApiDriver } from "../apps/control-ui/e2e/bench/api";
+import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
+import type { Locator, Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
 import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
-import { blankFixtureProfile } from "../apps/control-ui/src/components/setup/fixtureProfileModel";
+import { blankFixtureProfile, fixtureDefinitionFromProfileMode } from "../apps/control-ui/src/components/setup/fixtureProfileModel";
 import {
   loadCanonicalCopy,
   object,
@@ -79,6 +84,296 @@ interface MatterScenarioState {
   playbackNumber: number;
 }
 
+const sqlite = promisify(execFile);
+
+test("HIGHLIGHT-004 @api › ownership conflicts retain same-user sessions, release on the last session, and stay desk-local", async ({ api, bench }) => {
+  await loadCanonicalCopy(api, bench, "highlight-004", "default-stage");
+  const fixtures = await fixturesByNumber(api, [101, 102, 103]);
+  await api.request("POST", "/api/v1/users", { name: "Highlight A", enabled: true });
+  await api.request("POST", "/api/v1/users", { name: "Highlight B", enabled: true });
+
+  const userAFirst = new ApiDriver(api.baseUrl);
+  userAFirst.session = await userAFirst.request(
+    "POST",
+    "/api/v1/sessions",
+    { username: "Highlight A", desk_id: api.session!.desk.id },
+    false,
+  );
+  const userASecond = new ApiDriver(api.baseUrl);
+  userASecond.session = await userASecond.request(
+    "POST",
+    "/api/v1/sessions",
+    { username: "Highlight A", desk_id: api.session!.desk.id },
+    false,
+  );
+  const userB = new ApiDriver(api.baseUrl);
+  userB.session = await userB.request(
+    "POST",
+    "/api/v1/sessions",
+    { username: "Highlight B", desk_id: api.session!.desk.id },
+    false,
+  );
+
+  await userAFirst.command("selection.set", { fixtures: [fixtures[0].id] });
+  await userB.command("selection.set", { fixtures: [fixtures[1].id] });
+  await highlightAction(userAFirst, "on");
+  const ownerBeforeConflict = await highlightState(userAFirst);
+  expect(ownerBeforeConflict).toMatchObject({
+    active: true,
+    output_enabled: true,
+    owner_user_name: "Highlight A",
+  });
+  expect(ownerBeforeConflict.remembered).toHaveLength(1);
+  await expect(highlightAction(userB, "toggle")).rejects.toThrow(/another user on this desk/i);
+  expect(await highlightState(userAFirst)).toMatchObject(ownerBeforeConflict);
+  expect(await highlightState(userB)).toMatchObject({
+    active: false,
+    output_enabled: false,
+  });
+
+  await highlightAction(userB, "next");
+  expect((await programmer(userB)).selected).toEqual([fixtures[1].id]);
+  expect(await highlightState(userAFirst)).toMatchObject({ active: true, output_enabled: true, owner_user_name: "Highlight A" });
+  await userASecond.request("DELETE", `/api/v1/sessions/${userASecond.session!.session_id}`);
+  expect((await highlightState(userAFirst)).active).toBe(true);
+  await expect(highlightAction(userB, "on")).rejects.toThrow(/another user on this desk/i);
+
+  await userAFirst.request("DELETE", `/api/v1/sessions/${userAFirst.session!.session_id}`);
+  await highlightAction(userB, "on");
+  expect(await highlightState(userB)).toMatchObject({ active: true, output_enabled: true, owner_user_name: "Highlight B" });
+
+  const otherDesk = new ApiDriver(api.baseUrl);
+  await otherDesk.login("Highlight A");
+  await otherDesk.command("selection.set", { fixtures: [fixtures[2].id] });
+  await highlightAction(otherDesk, "on");
+  expect(await highlightState(otherDesk)).toMatchObject({
+    active: true,
+    output_enabled: true,
+    owner_user_name: "Highlight A",
+    remembered: [{ fixture_id: fixtures[2].id }],
+  });
+  expect((await highlightState(userB)).owner_user_name).toBe("Highlight B");
+});
+
+test("HIGHLIGHT-005 @ui › Highlight errors remain reachable above production content without moving accepted controls", async ({ api, bench, desk, page }) => {
+  await loadCanonicalCopy(api, bench, "highlight-005", "default-stage");
+  const errors = [
+    { status: 409, message: "Highlight output is active for another user on this desk" },
+    { status: 500, message: "The Highlight action was rejected by the desk" },
+  ];
+
+  for (const viewport of [{ width: 1280, height: 720 }, { width: 1600, height: 1100 }]) {
+    await page.setViewportSize(viewport);
+    await desk.open(bench.baseUrl);
+    await openBuiltIn(page, "Fixtures");
+    await expect(page.locator(".programmer-number-block")).toBeVisible();
+
+    for (const error of errors) {
+      const before = await softwareHighlightGeometry(page);
+      await page.route("**/api/v1/highlight/action", async (route) => {
+        await route.fulfill({
+          status: error.status,
+          contentType: "application/json",
+          body: JSON.stringify({ error: error.message }),
+        });
+      }, { times: 1 });
+      await highlightKey(page, "HIGH").click();
+      const alert = page.locator("[data-highlight-error-alert]");
+      await expect(alert).toHaveCount(1);
+      await expect(alert).toContainText(error.message);
+      await page.getByRole("button", { name: /Open show menu/ }).click();
+      const modal = page.getByRole("dialog", { name: "Show", exact: true });
+      await expect(modal).toBeVisible();
+      await assertReachableAlert(page, alert, modal, viewport);
+      expect(await softwareHighlightGeometry(page)).toEqual(before);
+      await expect(highlightKey(page, "HIGH")).toHaveText("HIGH");
+      await expect(page.locator(".command-line-bar [aria-label='Highlight status']")).toHaveCount(0);
+      const dismiss = page.getByRole("button", { name: "Dismiss Highlight error" });
+      await dismiss.focus();
+      await expect(dismiss).toBeFocused();
+      await dismiss.press("Enter");
+      await expect(alert).toBeHidden();
+      await page.getByRole("button", { name: "Close Show" }).click();
+      await expect(modal).toBeHidden();
+    }
+
+    const hardware = await bench.osc();
+    const clientId = `highlight-005-${viewport.width}-${crypto.randomUUID()}`;
+    try {
+      await page.route("**/api/v1/highlight/action", async (route) => {
+        await route.fulfill({
+          status: 409,
+          contentType: "application/json",
+          body: JSON.stringify({ error: errors[0].message }),
+        });
+      }, { times: 1 });
+      await highlightKey(page, "HIGH").click();
+      const alert = page.locator("[data-highlight-error-alert]");
+      await expect(alert).toBeVisible();
+      await hardware.subscribe(clientId, api.session!.desk.osc_alias);
+      await expect.poll(async () => (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).hardware_connected).toBe(true);
+      await expect(page.locator(".hardware-right-pane .hardware-control-summary")).toBeVisible();
+      const hardwareBefore = await hardwareHighlightGeometry(page);
+      await page.getByRole("button", { name: /Open show menu/ }).click();
+      const modal = page.getByRole("dialog", { name: "Show", exact: true });
+      await assertReachableAlert(page, alert, modal, viewport);
+      expect(await hardwareHighlightGeometry(page)).toEqual(hardwareBefore);
+      await page.getByRole("button", { name: "Dismiss Highlight error" }).click();
+      await page.getByRole("button", { name: "Close Show" }).click();
+    } finally {
+      await hardware.send("/light/unsubscribe", [clientId]).catch(() => undefined);
+      await hardware.close();
+      await expect.poll(async () => (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).hardware_connected).toBe(false);
+    }
+  }
+});
+
+test("FIXTURE-002 @restart › complete assets and physical metadata remain immutable across edit, patch, and restart", async ({ api, bench, desk, page }) => {
+  test.setTimeout(90_000);
+  await loadCanonicalCopy(api, bench, "fixture-002", "default-stage");
+  const manufacturer = `Feature 21 ${crypto.randomUUID()}`;
+  const name = "Complete Asset Fixture";
+  const physical = {
+    width_millimetres: 420,
+    height_millimetres: 680,
+    depth_millimetres: 310,
+    weight_kilograms: 24.5,
+    power_watts: 720,
+    connectors: "powerCON TRUE1 TOP; 5-pin XLR in/out",
+    light_source: "600 W LED engine",
+    color_temperature_kelvin: 6500,
+    color_rendering_index: 92,
+    luminous_output_lumens: 18500,
+    lens: "Fresnel zoom",
+    beam_angle_degrees: 36,
+  };
+  const files = {
+    photoA: "fixture-002-photo-a.png",
+    photoB: "fixture-002-photo-b.png",
+    icon: "fixture-002-icon.png",
+    modelA: "fixture-002-model-a.glb",
+    modelB: "fixture-002-model-b.glb",
+  };
+  await extractFixtureAsset("generic--dimmer-profile.toskfixture", "assets/icon.png", `${bench.dataDir}/shows/${files.photoA}`);
+  await extractFixtureAsset("generic--dimmer-par-can.toskfixture", "assets/icon.png", `${bench.dataDir}/shows/${files.photoB}`);
+  await fs.copyFile(`${bench.dataDir}/shows/${files.photoB}`, `${bench.dataDir}/shows/${files.icon}`);
+  await extractFixtureAsset("generic--dimmer-profile.toskfixture", "assets/model.glb", `${bench.dataDir}/shows/${files.modelA}`);
+  await extractFixtureAsset("generic--dimmer-par-can.toskfixture", "assets/model.glb", `${bench.dataDir}/shows/${files.modelB}`);
+  const expectedAssets = {
+    photoA: `data:image/png;base64,${(await fs.readFile(`${bench.dataDir}/shows/${files.photoA}`)).toString("base64")}`,
+    photoB: `data:image/png;base64,${(await fs.readFile(`${bench.dataDir}/shows/${files.photoB}`)).toString("base64")}`,
+    icon: `data:image/png;base64,${(await fs.readFile(`${bench.dataDir}/shows/${files.icon}`)).toString("base64")}`,
+    modelA: `data:application/octet-stream;base64,${(await fs.readFile(`${bench.dataDir}/shows/${files.modelA}`)).toString("base64")}`,
+    modelB: `data:application/octet-stream;base64,${(await fs.readFile(`${bench.dataDir}/shows/${files.modelB}`)).toString("base64")}`,
+  };
+
+  await desk.open(bench.baseUrl);
+  await page.getByRole("button", { name: /Open show menu/ }).click();
+  await page.getByRole("button", { name: "Enter Setup", exact: true }).click();
+  await page.getByRole("button", { name: "Open Fixture Library", exact: true }).click();
+  await page.getByRole("button", { name: "Create fixture", exact: true }).click();
+  let editor = page.getByRole("dialog", { name: "Create fixture profile" });
+  await editor.getByLabel(/^Manufacturer/).fill(manufacturer);
+  await editor.getByLabel(/^Fixture name/).fill(name);
+  await editor.getByLabel("Fixture short name").fill("Asset Fixture");
+  await chooseCustomSelect(editor, "Fixture type", "wash mover");
+  await editor.getByLabel("Fixture notes").fill("Complete Generic asset and physical metadata acceptance fixture.");
+  for (const [label, value] of [
+    ["Width (mm)", physical.width_millimetres], ["Height (mm)", physical.height_millimetres],
+    ["Depth (mm)", physical.depth_millimetres], ["Weight (kg)", physical.weight_kilograms],
+    ["Power consumption (W)", physical.power_watts], ["Color temperature (K)", physical.color_temperature_kelvin],
+    ["Color rendering index (CRI)", physical.color_rendering_index], ["Luminous output (lm)", physical.luminous_output_lumens],
+    ["Beam angle (degrees)", physical.beam_angle_degrees],
+  ] as const) await editor.getByLabel(label).fill(String(value));
+  await editor.getByLabel("Connectors").fill(physical.connectors);
+  await editor.getByLabel("Light source").fill(physical.light_source);
+  await editor.getByLabel("Lens").fill(physical.lens);
+
+  await editor.getByRole("button", { name: "Choose photograph", exact: true }).click();
+  await selectConfinedFile(page, files.photoA);
+  await expect(editor.getByAltText("Fixture photograph preview")).toHaveAttribute("src", expectedAssets.photoA);
+  await editor.getByRole("button", { name: "Replace photograph", exact: true }).click();
+  await selectConfinedFile(page, files.photoB);
+  await expect(editor.getByAltText("Fixture photograph preview")).toHaveAttribute("src", expectedAssets.photoB);
+  expect(await editor.getByAltText("Fixture photograph preview").getAttribute("src")).not.toBe(expectedAssets.photoA);
+  await editor.getByRole("button", { name: "Remove photograph", exact: true }).click();
+  await expect(editor.getByAltText("Fixture photograph preview")).toHaveCount(0);
+  await editor.getByRole("button", { name: "Choose fixture icon", exact: true }).click();
+  await selectConfinedFile(page, files.icon);
+  await editor.getByRole("button", { name: "Choose visualizer glb model", exact: true }).click();
+  await selectConfinedFile(page, files.modelA);
+  await expect(editor.getByRole("status")).toContainText("GLB 2.0 · 1268 bytes");
+  await expect(editor.getByLabel("Visualizer GLB model preview").locator("canvas")).toBeVisible();
+  await editor.getByRole("button", { name: "Replace visualizer glb model", exact: true }).click();
+  await selectConfinedFile(page, files.modelB);
+  await expect(editor.getByRole("status")).toContainText("GLB 2.0 · 1448 bytes");
+  await editor.getByRole("button", { name: "Save fixture", exact: true }).click();
+  await expect(editor).toBeHidden();
+
+  const profile = (await api.request<any[]>("GET", "/api/v1/fixture-profiles", undefined, false)).find((candidate) => candidate.manufacturer === manufacturer && candidate.name === name);
+  expect(profile).toBeDefined();
+  expect(profile).toMatchObject({ revision: 1, photograph_asset: null, stage_icon_asset: expectedAssets.icon, model_asset: expectedAssets.modelB, physical });
+
+  await page.getByPlaceholder("Search manufacturer, fixture, mode, or type").fill(manufacturer);
+  await page.getByRole("button", { name: new RegExp(name) }).click();
+  await page.getByRole("button", { name: "Edit fixture", exact: true }).click();
+  editor = page.getByRole("dialog", { name: "Edit fixture profile" });
+  await expect(editor.getByLabel("Width (mm)")).toHaveValue("420");
+  await expect(editor.getByLabel("Connectors")).toHaveValue(physical.connectors);
+  await expect(editor.getByLabel("Light source")).toHaveValue(physical.light_source);
+  await expect(editor.getByLabel("Color temperature (K)")).toHaveValue("6500");
+  await expect(editor.getByLabel("Color rendering index (CRI)")).toHaveValue("92");
+  await expect(editor.getByLabel("Luminous output (lm)")).toHaveValue("18500");
+  await expect(editor.getByLabel("Lens")).toHaveValue(physical.lens);
+  await expect(editor.getByLabel("Beam angle (degrees)")).toHaveValue("36");
+  await expect(editor.getByAltText("Fixture photograph preview")).toHaveCount(0);
+  await expect(editor.getByText("Fixture icon assigned")).toBeVisible();
+  await expect(editor.getByText("Visualizer GLB model assigned")).toBeVisible();
+  await expect(editor.getByRole("status")).toContainText("GLB 2.0 · 1448 bytes");
+
+  await editor.getByLabel("Beam angle (degrees)").fill("42");
+  await editor.getByRole("button", { name: "Choose photograph", exact: true }).click();
+  await selectConfinedFile(page, files.photoA);
+  await editor.getByRole("button", { name: "Replace visualizer glb model", exact: true }).click();
+  await selectConfinedFile(page, files.modelA);
+  await expect(editor.getByRole("status")).toContainText("GLB 2.0 · 1268 bytes");
+  await editor.getByRole("button", { name: "Save fixture", exact: true }).click();
+  await page.getByRole("alertdialog", { name: "Create a new fixture revision?" }).getByRole("button", { name: "Save and create revision" }).click();
+  await expect(editor).toBeHidden();
+
+  const revisions = await api.request<any[]>("GET", `/api/v1/fixture-profiles/${profile.id}/revisions`, undefined, false);
+  expect(revisions.map((candidate) => candidate.revision)).toEqual([1, 2]);
+  expect(revisions[0]).toMatchObject({
+    photograph_asset: null,
+    stage_icon_asset: expectedAssets.icon,
+    model_asset: expectedAssets.modelB,
+    physical: { beam_angle_degrees: 36 },
+  });
+  expect(revisions[1]).toMatchObject({
+    photograph_asset: expectedAssets.photoA,
+    stage_icon_asset: expectedAssets.icon,
+    model_asset: expectedAssets.modelA,
+    physical: { ...physical, beam_angle_degrees: 42 },
+  });
+
+  const definition = fixtureDefinitionFromProfileMode(revisions[1], revisions[1].modes[0]);
+  const fixture = (await objects<any>(api, "patched_fixture"))[0];
+  await putObject(api, "patched_fixture", fixture.id, {
+    ...fixture.body,
+    definition,
+    split_patches: [{ split: 1, universe: fixture.body.universe, address: fixture.body.address }],
+  }, fixture.revision);
+  const patched = await object<any>(api, "patched_fixture", fixture.id);
+  expect(patched.body.definition.profile_snapshot).toMatchObject(revisions[1]);
+
+  await bench.stopServerGracefully(api.session!.token);
+  await bench.startServer();
+  await api.login();
+  const reopened = await object<any>(api, "patched_fixture", fixture.id);
+  expect(reopened.body.definition.profile_snapshot).toMatchObject(revisions[1]);
+  expect(reopened.body.definition.profile_snapshot.physical.beam_angle_degrees).toBe(42);
+});
+
 pairedScenario<UpdateGroupState>({
   id: "UPDATE-001",
   title: "Update Add New appends ordered Group membership through the authoritative workflow",
@@ -128,6 +423,167 @@ pairedScenario<UpdateGroupState>({
     expect(stored.body.fixtures).toEqual([...state.original, state.added]);
     expect((await programmer(api)).selected).toEqual([state.added]);
   },
+});
+
+test("UPDATE-002 @restart › pre-Update desk settings migrate once and Cue, Preset, and ordered Group updates remain undoable", async ({ api, bench, desk, page }) => {
+  test.setTimeout(90_000);
+  const show = await loadCanonicalCopy(api, bench, "update-002-legacy");
+  const showEntry = (await api.request<any[]>("GET", "/api/v1/shows", undefined, false)).find((entry) => entry.id === show.id);
+  expect(showEntry).toBeDefined();
+  const fixtures = (await objects<any>(api, "patched_fixture")).slice(0, 4);
+  expect(fixtures).toHaveLength(4);
+  const [first, second, third, fourth] = fixtures.map((fixture) => fixture.body.fixture_id as string);
+
+  const cueListId = crypto.randomUUID();
+  const cueId = crypto.randomUUID();
+  const cueBaseline = {
+    id: cueListId,
+    name: "Legacy Update Cue",
+    priority: 0,
+    mode: "sequence",
+    looped: false,
+    chaser_step_millis: 1_000,
+    speed_group: null,
+    intensity_priority_mode: "htp",
+    wrap_mode: "off",
+    restart_mode: "first_cue",
+    force_cue_timing: false,
+    disable_cue_timing: false,
+    chaser_xfade_millis: 0,
+    speed_multiplier: 1,
+    cues: [{
+      id: cueId,
+      number: 1,
+      name: "Legacy cue",
+      changes: [{ fixture_id: first, attribute: "intensity", value: { kind: "normalized", value: 0.2 }, automatic_restore: false }],
+      group_changes: [],
+      fade_millis: 0,
+      delay_millis: 0,
+      trigger: { type: "manual" },
+      phasers: [],
+    }],
+  };
+  const presetId = "0.1";
+  const presetBaseline = {
+    name: "Legacy Update Preset",
+    family: "All",
+    values: { [first]: { intensity: { kind: "normalized", value: 0.1 } } },
+    group_values: {},
+  };
+  const groupId = "39";
+  const groupBaseline = groupBody("Legacy ordered Group", [first, second]);
+  await putObject(api, "cue_list", cueListId, cueBaseline);
+  await putObject(api, "preset", presetId, presetBaseline);
+  await putObject(api, "group", groupId, groupBaseline);
+
+  const configuration = await api.request<any>("GET", "/api/v1/configuration", undefined, false);
+  await api.request("PUT", "/api/v1/configuration", configuration.configuration);
+  await bench.stopServerGracefully(api.session!.token);
+  await runSql(`${bench.dataDir}/desk.sqlite`, "UPDATE settings SET value=json_remove(value,'$.update_settings_by_desk') WHERE key='server_configuration'; UPDATE schema_info SET version=6;");
+  expect(await readSql(showEntry.path, "SELECT version FROM schema_info")).toBe("3");
+  expect(await readSql(showEntry.path, "SELECT count(*) FROM metadata WHERE key LIKE 'update_%'")).toBe("0");
+
+  await bench.startServer();
+  await api.login();
+  const migratedDefaults = {
+    cue_mode: "add_to_current_cue",
+    preset_mode: "update_existing",
+    group_mode: "update_existing",
+    other_target_modes: {},
+    show_update_modal_on_touch: true,
+  };
+  expect(await api.request<any>("GET", "/api/v1/update/settings")).toEqual(migratedDefaults);
+  expect(await readSql(`${bench.dataDir}/desk.sqlite`, "SELECT version FROM schema_info")).toBe("8");
+  const authoritativeCueBaseline = (await object<any>(api, "cue_list", cueListId)).body;
+  const authoritativePresetBaseline = (await object<any>(api, "preset", presetId)).body;
+  const authoritativeGroupBaseline = (await object<any>(api, "group", groupId)).body;
+
+  await api.command("selection.set", { fixtures: [first, second] });
+  await api.command("programmer.set", { fixture_id: first, attribute: "intensity", value: 0.8 });
+  await api.command("programmer.set", { fixture_id: second, attribute: "intensity", value: 0.7 });
+  const unrelatedBeforeCue = await objectRows(showEntry.path, "cue_list", cueListId);
+  const cueResult = await api.request<any>("POST", "/api/v1/update/apply", {
+    target: { family: { type: "cue" }, object_id: cueListId, cue_id: cueId, cue_number: 1 },
+    mode: { target_type: "cue", mode: migratedDefaults.cue_mode },
+    expected_revision: 1,
+  });
+  expect(cueResult.revision_after).toBe(2);
+  const updatedCue = await object<any>(api, "cue_list", cueListId);
+  expect(updatedCue.body.cues[0].changes).toHaveLength(1);
+  expect(updatedCue.body.cues[0].changes[0]).toMatchObject({
+    fixture_id: first,
+    attribute: "intensity",
+    value: { kind: "normalized" },
+    automatic_restore: false,
+  });
+  expect(updatedCue.body.cues[0].changes[0].value.value).toBeCloseTo(0.8, 5);
+  expect((await programmer(api)).values).toEqual(expect.arrayContaining([
+    expect.objectContaining({ fixture_id: first, attribute: "intensity" }),
+    expect.objectContaining({ fixture_id: second, attribute: "intensity" }),
+  ]));
+  expect(await objectRows(showEntry.path, "cue_list", cueListId)).toEqual(unrelatedBeforeCue);
+  await api.request("POST", `/api/v1/shows/${show.id}/objects/cue_list/${cueListId}/undo`, undefined, true, updatedCue.revision);
+  expect((await object<any>(api, "cue_list", cueListId)).body).toEqual(authoritativeCueBaseline);
+
+  const unrelatedBeforePreset = await objectRows(showEntry.path, "preset", presetId);
+  const preset = await object<any>(api, "preset", presetId);
+  const presetResult = await api.request<any>("POST", "/api/v1/update/apply", {
+    target: { family: { type: "preset" }, object_id: presetId },
+    mode: { target_type: "existing_content", mode: migratedDefaults.preset_mode },
+    expected_revision: preset.revision,
+  });
+  expect(presetResult.revision_after).toBe(preset.revision + 1);
+  const updatedPreset = await object<any>(api, "preset", presetId);
+  expect(Object.keys(updatedPreset.body.values)).toEqual([first]);
+  expect(updatedPreset.body.values[first].intensity).toMatchObject({ kind: "normalized" });
+  expect(updatedPreset.body.values[first].intensity.value).toBeCloseTo(0.8, 5);
+  expect(await objectRows(showEntry.path, "preset", presetId)).toEqual(unrelatedBeforePreset);
+  await api.request("POST", `/api/v1/shows/${show.id}/objects/preset/${presetId}/undo`, undefined, true, updatedPreset.revision);
+  expect((await object<any>(api, "preset", presetId)).body).toEqual(authoritativePresetBaseline);
+
+  await api.command("selection.set", { fixtures: [second, third, first, fourth] });
+  const group = await object<any>(api, "group", groupId);
+  const defaultPreview = await api.request<any>("POST", "/api/v1/update/preview", {
+    target: { family: { type: "group" }, object_id: groupId },
+    mode: { target_type: "existing_content", mode: migratedDefaults.group_mode },
+    expected_revision: group.revision,
+  });
+  expect(defaultPreview.mode).toEqual({ target_type: "existing_content", mode: "update_existing" });
+  expect(defaultPreview.items.filter((item: any) => item.outcome.outcome === "unchanged")).toHaveLength(2);
+  expect(defaultPreview.items.filter((item: any) => item.outcome.outcome === "ignored")).toHaveLength(2);
+
+  await desk.open(bench.baseUrl);
+  await page.keyboard.press("Shift+End");
+  await expect(page.getByText(/UPDATE armed · touch a recordable target/i)).toBeVisible();
+  await openGroups(page);
+  await page.locator(".group-pool-window .group-card").filter({ hasText: "Legacy ordered Group" }).click();
+  const updateDialog = page.getByRole("dialog", { name: /Update Legacy ordered Group/i });
+  await expect(updateDialog).toBeVisible();
+  await expect(updateDialog.getByRole("button", { name: "Update Existing", exact: true })).toHaveClass(/active/);
+  await updateDialog.getByRole("button", { name: "Add New", exact: true }).click();
+  await updateDialog.getByRole("button", { name: "Update Group", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Update complete" })).toBeVisible();
+  const updatedGroup = await object<any>(api, "group", groupId);
+  expect(updatedGroup.body.fixtures).toEqual([first, second, third, fourth]);
+  expect((await programmer(api)).selected).toEqual([second, third, first, fourth]);
+  await api.request("POST", `/api/v1/shows/${show.id}/objects/group/${groupId}/undo`, undefined, true, updatedGroup.revision);
+  expect((await object<any>(api, "group", groupId)).body).toEqual(authoritativeGroupBaseline);
+
+  await bench.stopServerGracefully(api.session!.token);
+  await bench.startServer();
+  await api.login();
+  expect(await api.request<any>("GET", "/api/v1/update/settings")).toEqual(migratedDefaults);
+  expect(await readSql(showEntry.path, "SELECT version FROM schema_info")).toBe("3");
+  const reopenedPreset = await object<any>(api, "preset", presetId);
+  const repeated = await api.request<any>("POST", "/api/v1/update/apply", {
+    target: { family: { type: "preset" }, object_id: presetId },
+    mode: { target_type: "existing_content", mode: migratedDefaults.preset_mode },
+    expected_revision: reopenedPreset.revision,
+  });
+  expect(repeated.revision_after).toBe(reopenedPreset.revision + 1);
+  const repeatedPreset = await object<any>(api, "preset", presetId);
+  expect(Object.keys(repeatedPreset.body.values)).toEqual([first]);
+  expect(repeatedPreset.body.values[first].intensity.value).toBeCloseTo(0.8, 5);
 });
 
 pairedScenario<HighlightScenarioState>({
@@ -686,6 +1142,45 @@ function groupBody(name: string, fixtures: string[]) {
   };
 }
 
+async function runSql(file: string, sql: string): Promise<void> {
+  await sqlite("sqlite3", [file, sql]);
+}
+
+async function readSql(file: string, sql: string): Promise<string> {
+  return (await sqlite("sqlite3", ["-noheader", file, sql])).stdout.trim();
+}
+
+async function objectRows(file: string, excludedKind: string, excludedId: string): Promise<string> {
+  const kind = excludedKind.replaceAll("'", "''");
+  const id = excludedId.replaceAll("'", "''");
+  return readSql(file, `SELECT group_concat(kind||'|'||id||'|'||revision||'|'||length(body_json), char(10)) FROM (SELECT kind,id,revision,body_json FROM objects WHERE NOT (kind='${kind}' AND id='${id}') ORDER BY kind,id)`);
+}
+
+async function extractFixtureAsset(archive: string, asset: string, destination: string): Promise<void> {
+  const archivePath = fileURLToPath(new URL(`../fixture-library/${archive}`, import.meta.url));
+  const bytes = await new Promise<Buffer>((resolve, reject) => {
+    execFile("unzip", ["-p", archivePath, asset], { encoding: "buffer", maxBuffer: 2 * 1024 * 1024 }, (error, stdout) => {
+      if (error) reject(error);
+      else resolve(Buffer.from(stdout));
+    });
+  });
+  await fs.writeFile(destination, bytes);
+}
+
+async function selectConfinedFile(page: Page, filename: string): Promise<void> {
+  const picker = page.getByRole("dialog", { name: "Choose files or folders" });
+  await expect(picker).toBeVisible();
+  await picker.getByRole("button", { name: `${filename}, file` }).click();
+  await picker.getByRole("button", { name: "Select", exact: true }).click();
+  await expect(picker).toBeHidden();
+}
+
+async function chooseCustomSelect(container: Locator, label: string, option: string): Promise<void> {
+  const field = container.getByText(label, { selector: "label", exact: true }).locator("..");
+  await field.locator(".ui-select-trigger").click();
+  await container.page().getByRole("option", { name: option, exact: true }).click();
+}
+
 async function highlightState(api: Parameters<typeof objects>[0]): Promise<any> {
   return api.request<any>("GET", "/api/v1/highlight", undefined, true);
 }
@@ -823,6 +1318,64 @@ async function verifyProgrammerKeypadGeometry(
   const followingGap = delBox!.y - (fadeBox!.y + fadeBox!.height);
   const normalGap = clrBox!.x - (delBox!.x + delBox!.width);
   expect(Math.abs(followingGap - normalGap)).toBeLessThanOrEqual(tolerance);
+}
+
+async function softwareHighlightGeometry(page: Page) {
+  return Promise.all([
+    page.locator(".programmer-number-block"),
+    highlightKey(page, "HIGH"),
+    page.locator('[data-keypad-key="GRP"]'),
+    page.locator(".global-store-button"),
+    page.locator(".preload-button"),
+  ].map(async (locator) => {
+    const box = await locator.boundingBox();
+    expect(box).toBeTruthy();
+    return roundedBox(box!);
+  }));
+}
+
+async function hardwareHighlightGeometry(page: Page) {
+  return Promise.all([
+    page.locator(".hardware-right-pane"),
+    page.locator(".hardware-control-summary"),
+    page.locator(".global-store-button"),
+    page.locator(".preload-button"),
+  ].map(async (locator) => {
+    const box = await locator.boundingBox();
+    expect(box).toBeTruthy();
+    return roundedBox(box!);
+  }));
+}
+
+async function assertReachableAlert(
+  page: Page,
+  alert: Locator,
+  modal: Locator,
+  viewport: { width: number; height: number },
+) {
+  const box = await alert.boundingBox();
+  expect(box).toBeTruthy();
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height);
+  const topElementIsAlert = await page.evaluate(({ x, y }) => {
+    const top = document.elementFromPoint(x, y);
+    return Boolean(top?.closest("[data-highlight-error-alert]"));
+  }, { x: centerX(box!), y: centerY(box!) });
+  expect(topElementIsAlert).toBe(true);
+  const [alertZ, modalZ] = await Promise.all([
+    alert.evaluate((element) => Number(getComputedStyle(element).zIndex) || 0),
+    modal.evaluate((element) => {
+      const layer = element.closest<HTMLElement>(".stacked-modal-layer") ?? element;
+      return Number(getComputedStyle(layer).zIndex) || 0;
+    }),
+  ]);
+  expect(alertZ).toBeGreaterThan(modalZ);
+}
+
+function roundedBox(box: { x: number; y: number; width: number; height: number }) {
+  return Object.fromEntries(Object.entries(box).map(([key, value]) => [key, Math.round(value * 10) / 10]));
 }
 
 function centerX(box: { x: number; width: number }): number {

@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type {
   AttributeDescriptor,
   ChannelFunctionBehavior,
@@ -181,8 +182,8 @@ export function FixtureProfileEditor({
             <TextField required label="Fixture name" clearable value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })}/>
             <TextField label="Fixture short name" clearable value={draft.short_name} onChange={(event) => setDraft({ ...draft, short_name: event.target.value })}/>
             <SelectField label="Fixture type" value={draft.fixture_type} options={FIXTURE_TYPES.map((value) => ({ value, label: value }))} onChange={(fixture_type) => setDraft({ ...draft, fixture_type })}/>
-            <AssetField label="Fixture icon" value={draft.stage_icon_asset} extensions={["png", "jpg", "jpeg", "gif", "webp", "svg"]} onChange={(stage_icon_asset) => setDraft({ ...draft, stage_icon_asset })}/>
-            <AssetField label="Visualizer GLB model" value={draft.model_asset} extensions={["glb"]} onChange={(model_asset) => setDraft({ ...draft, model_asset })}/>
+            <AssetField label="Fixture icon" value={draft.stage_icon_asset} extensions={["png", "jpg", "jpeg", "webp"]} onChange={(stage_icon_asset) => setDraft({ ...draft, stage_icon_asset })}/>
+            <AssetField label="Visualizer GLB model" preview="glb" value={draft.model_asset} extensions={["glb"]} onChange={(model_asset) => setDraft({ ...draft, model_asset })}/>
           </FormLayout></section>
           <section><h3>Physical</h3><FormLayout columns={5} minColumnWidth={145}>
             {([
@@ -192,8 +193,15 @@ export function FixtureProfileEditor({
               ["weight_kilograms", "Weight", "kg"],
               ["power_watts", "Power consumption", "W"],
             ] as const).map(([key, label, unit]) => <NumberField key={key} label={`${label} (${unit})`} allowDecimal min={0} value={draft.physical[key] ?? ""} onChange={(event) => setDraft({ ...draft, physical: { ...draft.physical, [key]: optionalNumber(event.target.value) } })}/>) }
+            <TextField label="Connectors" clearable value={draft.physical.connectors ?? ""} onChange={(event) => setDraft({ ...draft, physical: { ...draft.physical, connectors: event.target.value } })}/>
+            <TextField label="Light source" clearable value={draft.physical.light_source ?? ""} onChange={(event) => setDraft({ ...draft, physical: { ...draft.physical, light_source: event.target.value } })}/>
+            <NumberField label="Color temperature (K)" allowDecimal min={0} value={draft.physical.color_temperature_kelvin ?? ""} onChange={(event) => setDraft({ ...draft, physical: { ...draft.physical, color_temperature_kelvin: optionalNumber(event.target.value) } })}/>
+            <NumberField label="Color rendering index (CRI)" allowDecimal min={0} max={100} value={draft.physical.color_rendering_index ?? ""} onChange={(event) => setDraft({ ...draft, physical: { ...draft.physical, color_rendering_index: optionalNumber(event.target.value) } })}/>
+            <NumberField label="Luminous output (lm)" allowDecimal min={0} value={draft.physical.luminous_output_lumens ?? ""} onChange={(event) => setDraft({ ...draft, physical: { ...draft.physical, luminous_output_lumens: optionalNumber(event.target.value) } })}/>
+            <TextField label="Lens" clearable value={draft.physical.lens ?? ""} onChange={(event) => setDraft({ ...draft, physical: { ...draft.physical, lens: event.target.value } })}/>
+            <NumberField label="Beam angle (degrees)" allowDecimal min={0} value={draft.physical.beam_angle_degrees ?? ""} onChange={(event) => setDraft({ ...draft, physical: { ...draft.physical, beam_angle_degrees: optionalNumber(event.target.value) } })}/>
           </FormLayout></section>
-          <section className="fixture-notes-picture"><div><h3>Notes</h3><TextAreaField label="Fixture notes" rows={9} value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })}/></div><div><h3>Fixture photograph</h3><AssetField label="Photograph" preview value={draft.photograph_asset} extensions={["png", "jpg", "jpeg", "gif", "webp"]} onChange={(photograph_asset) => setDraft({ ...draft, photograph_asset })}/></div></section>
+          <section className="fixture-notes-picture"><div><h3>Notes</h3><TextAreaField label="Fixture notes" rows={9} value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })}/></div><div><h3>Fixture photograph</h3><AssetField label="Photograph" preview="image" value={draft.photograph_asset} extensions={["png", "jpg", "jpeg", "gif", "webp"]} onChange={(photograph_asset) => setDraft({ ...draft, photograph_asset })}/></div></section>
         </div>}
 
         {tab === "modes" && <div className="fixture-modes-tab">
@@ -231,8 +239,62 @@ export function FixtureProfileEditor({
   </div>;
 }
 
-function AssetField({ label, value, extensions, preview = false, onChange }: { label: string; value: string | null; extensions: string[]; preview?: boolean; onChange: (value: string | null) => void }) {
-  return <div className="fixture-asset-field"><label>{label}</label>{preview && value && <img src={value} alt="Fixture photograph preview"/>}<div><RootConfinedFilePickerButton label={value ? `Replace ${label.toLowerCase()}` : `Choose ${label.toLowerCase()}`} allowedExtensions={extensions} onFiles={(files) => { const file = files[0]; if (file) return fileAsDataUrl(file).then(onChange); }}/>{value && <Button onClick={() => onChange(null)}>Remove</Button>}</div><small>{value ? `${label} assigned` : `No ${label.toLowerCase()} assigned`}</small></div>;
+function AssetField({ label, value, extensions, preview, onChange }: { label: string; value: string | null; extensions: string[]; preview?: "image" | "glb"; onChange: (value: string | null) => void }) {
+  return <div className="fixture-asset-field"><label>{label}</label>{preview === "image" && value && <img src={value} alt="Fixture photograph preview"/>}{preview === "glb" && value && <GlbAssetPreview value={value}/>}<div><RootConfinedFilePickerButton label={value ? `Replace ${label.toLowerCase()}` : `Choose ${label.toLowerCase()}`} allowedExtensions={extensions} onFiles={(files) => { const file = files[0]; if (file) return fileAsDataUrl(file).then(onChange); }}/>{value && <Button aria-label={`Remove ${label.toLowerCase()}`} onClick={() => onChange(null)}>Remove</Button>}</div><small>{value ? `${label} assigned` : `No ${label.toLowerCase()} assigned`}</small></div>;
+}
+
+function GlbAssetPreview({ value }: { value: string }) {
+  const host = useRef<HTMLDivElement>(null);
+  const [metadata, setMetadata] = useState("Inspecting GLB model…");
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    let renderer: THREE.WebGLRenderer | null = null;
+    let loadedScene: THREE.Object3D | null = null;
+    void fetch(value).then((response) => response.arrayBuffer()).then((buffer) => new Promise<void>((resolve, reject) => {
+      new GLTFLoader().parse(buffer, "", (gltf) => {
+        if (cancelled) return resolve();
+        loadedScene = gltf.scene;
+        let nodes = 0;
+        let meshes = 0;
+        gltf.scene.traverse((node) => {
+          nodes += 1;
+          if ((node as THREE.Mesh).isMesh) meshes += 1;
+        });
+        setMetadata(`GLB 2.0 · ${buffer.byteLength} bytes · ${nodes} nodes · ${meshes} meshes`);
+        setError(null);
+        if (host.current && typeof WebGLRenderingContext !== "undefined") {
+          const scene = new THREE.Scene();
+          scene.background = new THREE.Color(0x090d10);
+          scene.add(gltf.scene);
+          scene.add(new THREE.HemisphereLight(0xffffff, 0x27313a, 2.2));
+          const bounds = new THREE.Box3().setFromObject(gltf.scene);
+          const center = bounds.getCenter(new THREE.Vector3());
+          const size = Math.max(bounds.getSize(new THREE.Vector3()).length(), 0.1);
+          gltf.scene.position.sub(center);
+          const camera = new THREE.PerspectiveCamera(38, 3 / 2, 0.01, size * 20);
+          camera.position.set(size * 0.8, size * 0.55, size * 1.4);
+          camera.lookAt(0, 0, 0);
+          renderer = new THREE.WebGLRenderer({ antialias: true });
+          renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+          renderer.setSize(300, 200, false);
+          host.current.replaceChildren(renderer.domElement);
+          renderer.render(scene, camera);
+        }
+        resolve();
+      }, reject);
+    })).catch((reason) => {
+      if (cancelled) return;
+      setMetadata("");
+      setError(`GLB preview failed: ${reason instanceof Error ? reason.message : String(reason)}`);
+    });
+    return () => {
+      cancelled = true;
+      if (loadedScene) disposeScene(loadedScene as THREE.Scene);
+      renderer?.dispose();
+    };
+  }, [value]);
+  return <div className="fixture-glb-preview"><div ref={host} aria-label="Visualizer GLB model preview"/><small role={error ? "alert" : "status"}>{error ?? metadata}</small></div>;
 }
 
 function ManufacturerLookup({ manufacturers, query, onQuery, onSelect, onClose }: { manufacturers: string[]; query: string; onQuery: (value: string) => void; onSelect: (value: string) => void; onClose: () => void }) {

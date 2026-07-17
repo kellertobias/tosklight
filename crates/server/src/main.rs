@@ -15412,6 +15412,16 @@ mod tests {
         seed_schema_v1_fixture_database(&data_dir, &rows);
 
         let package_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixture-library");
+        let package_count = std::fs::read_dir(&package_dir)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .path()
+                    .extension()
+                    .is_some_and(|extension| extension == "toskfixture")
+            })
+            .count();
         let library = open_fixture_library_for_startup(&data_dir, Some(&package_dir)).unwrap();
         let profiles = library.profiles().unwrap();
         let migrated = profiles
@@ -15439,7 +15449,7 @@ mod tests {
             .iter()
             .filter(|profile| profile.manufacturer == "ROBE")
             .collect::<Vec<_>>();
-        assert_eq!(profiles.len(), 33);
+        assert_eq!(profiles.len(), package_count + 1);
         assert_eq!(vendor_profiles.len(), 5);
         assert!(vendor_profiles.iter().any(|profile| {
             profile.name == "Robin 600X LEDWash"

@@ -37,7 +37,14 @@ export function HighlightErrorAlert({ message, onDismiss }: { message: string | 
   if (!message) return null;
   return createPortal(<div className="highlight-error" data-highlight-error-alert role="alert">
     <span>{message}</span>
-    <Button iconOnly aria-label="Dismiss Highlight error" onClick={onDismiss}>×</Button>
+    <Button
+      iconOnly
+      aria-label="Dismiss Highlight error"
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") event.stopPropagation();
+      }}
+      onClick={onDismiss}
+    >×</Button>
   </div>, document.body);
 }
 

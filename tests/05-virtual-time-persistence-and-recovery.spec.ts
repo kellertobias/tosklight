@@ -14,6 +14,7 @@ import {
   fixtureIdsByNumber,
   normalized,
   object,
+  objects,
   programmer,
   putObject,
   loadCanonicalCopy,
@@ -26,6 +27,58 @@ type Show004Case = typeof SHOW_004_CASES[number];
 type HardwareState = { hardware?: OscHardware; hardwareClientId?: string };
 
 test.describe("docs/testing/05-virtual-time-persistence-and-recovery.md", () => {
+  test.beforeEach(({}, testInfo) => testInfo.setTimeout(90_000));
+
+  test("MATTER-002 @restart › desk enablement survives show changes and restart while advertised playbacks follow the active show", async ({ api, bench }) => {
+    const showA = await loadCanonicalCopy(api, bench, "matter-002-a");
+    const configuration = await api.request<any>("GET", "/api/v1/configuration", undefined, false);
+    await api.request("PUT", "/api/v1/configuration", {
+      ...configuration.configuration,
+      matter_enabled: true,
+    });
+    const assignment = await assignMatterRestartPlayback(api);
+    const endpointId = 1 + (assignment.page - 1) * 127 + (assignment.slot - 1);
+    await expect.poll(async () => {
+      const status = await api.request<any>("GET", "/api/v1/matter/status");
+      return status.lights.find((light: any) => light.endpoint_id === endpointId)?.playback_number;
+    }).toBe(assignment.playbackNumber);
+
+    const showB = await loadCanonicalCopy(api, bench, "matter-002-b");
+    expect(showB.id).not.toBe(showA.id);
+    await expect.poll(async () => {
+      const status = await api.request<any>("GET", "/api/v1/matter/status");
+      return status.lights.some((light: any) => light.endpoint_id === endpointId);
+    }).toBe(false);
+    expect((await api.request<any>("GET", "/api/v1/configuration", undefined, false)).configuration.matter_enabled).toBe(true);
+
+    await api.request("POST", `/api/v1/shows/${showA.id}/open`, { transition: "hold_current" });
+    await expect.poll(async () => {
+      const status = await api.request<any>("GET", "/api/v1/matter/status");
+      return status.lights.find((light: any) => light.endpoint_id === endpointId)?.playback_number;
+    }).toBe(assignment.playbackNumber);
+
+    await bench.stopServerGracefully(api.session!.token);
+    await bench.startServer();
+    await api.login();
+    expect((await api.request<any>("GET", "/api/v1/configuration", undefined, false)).configuration.matter_enabled).toBe(true);
+    expect((await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).active_show.id).toBe(showA.id);
+    await expect.poll(async () => {
+      const status = await api.request<any>("GET", "/api/v1/matter/status");
+      return status.lights.find((light: any) => light.endpoint_id === endpointId)?.playback_number;
+    }).toBe(assignment.playbackNumber);
+
+    const enabled = await api.request<any>("GET", "/api/v1/configuration", undefined, false);
+    await api.request("PUT", "/api/v1/configuration", {
+      ...enabled.configuration,
+      matter_enabled: false,
+    });
+    await bench.stopServerGracefully(api.session!.token);
+    await bench.startServer();
+    await api.login();
+    expect((await api.request<any>("GET", "/api/v1/configuration", undefined, false)).configuration.matter_enabled).toBe(false);
+    expect((await api.request<any>("GET", "/api/v1/matter/status")).lights).toEqual([]);
+  });
+
   pairedScenario<HardwareState>({
     id: "TIME-001",
     title: "zero ticks emit current state without advancing behavior time",
@@ -524,28 +577,24 @@ test.describe("docs/testing/05-virtual-time-persistence-and-recovery.md", () => 
     });
   }
 
-  test("FIXTURE-001 @restart › supplemental fresh startup seeds reserved Generic profiles once with stable IDs", async ({ api, bench }) => {
-    const initial = reservedGenericProfileSnapshot(await fixtureProfiles(api));
+  test("FIXTURE-001 @restart › supplemental fresh startup installs transferable profiles once with stable IDs", async ({ api, bench }) => {
+    const initial = transferableProfileSnapshot(await fixtureProfiles(api));
     expect(initial.length).toBeGreaterThan(0);
     expect(new Set(initial.map((profile) => profile.id)).size).toBe(initial.length);
-    expect(initial.every((profile) => profile.manufacturer === "Generic" && profile.revision === 1)).toBe(true);
+    expect(initial.every((profile) => profile.revision === 1 && profile.reservedSource === null)).toBe(true);
 
     await bench.stopServerGracefully(api.session!.token);
     await bench.startServer();
     await api.login();
 
-    expect(reservedGenericProfileSnapshot(await fixtureProfiles(api))).toEqual(initial);
+    expect(transferableProfileSnapshot(await fixtureProfiles(api))).toEqual(initial);
     const database = `${bench.dataDir}/fixtures.sqlite`;
-    expect(Number(await readSql(database, "SELECT COUNT(DISTINCT id) FROM fixture_profiles WHERE reserved_source='builtin:generic-catalog'"))).toBe(initial.length);
-    expect(Number(await readSql(database, "SELECT COUNT(*) FROM fixture_profile_migration_failures WHERE legacy_id IN (SELECT legacy_id FROM fixture_profile_legacy_map WHERE profile_id IN (SELECT id FROM fixture_profiles WHERE reserved_source='builtin:generic-catalog'))"))).toBe(0);
+    expect(Number(await readSql(database, "SELECT COUNT(DISTINCT id) FROM fixture_profiles"))).toBe(initial.length);
+    expect(Number(await readSql(database, "SELECT COUNT(*) FROM fixture_profile_migration_failures"))).toBe(0);
   });
 
   test("FIXTURE-001 @restart › supplemental compatible schema-v1 modes migrate on real startup and retain exact sources idempotently", async ({ api, bench }) => {
-    const definitions = await fixtureDefinitions(api);
-    const dimmerModes = definitions
-      .filter((definition) => definition.manufacturer === "Generic" && definition.model === "Dimmer")
-      .slice(0, 2);
-    expect(dimmerModes).toHaveLength(2);
+    const dimmerModes = [await legacyDimmerDefinition(api, 1), await legacyDimmerDefinition(api, 2)];
     const family = `Legacy startup ${crypto.randomUUID()}`;
     const rows: LegacyFixtureRow[] = dimmerModes.map((definition, index) => ({
       definition: {
@@ -597,8 +646,7 @@ test.describe("docs/testing/05-virtual-time-persistence-and-recovery.md", () => 
   });
 
   test("FIXTURE-001 @restart › supplemental malformed and conflicting schema-v1 rows keep startup ready with retained evidence and stable warnings", async ({ api, bench }) => {
-    const [base] = (await fixtureDefinitions(api)).filter((definition) => definition.manufacturer === "Generic" && definition.model === "Dimmer");
-    expect(base).toBeDefined();
+    const base = await legacyDimmerDefinition(api, 1);
     const family = `Conflicting startup ${crypto.randomUUID()}`;
     const conflictingRows: LegacyFixtureRow[] = [0, 1].map((index) => ({
       definition: {
@@ -672,6 +720,9 @@ test.describe("docs/testing/05-virtual-time-persistence-and-recovery.md", () => 
     expectedSourceName?: string;
     expectedCopyName?: string;
     expectedCopyRevisions?: string[];
+    destinationId: string;
+    destinationName: string;
+    destinationRevision: number;
   }>({
     id: "SHOW-005",
     title: "named revisions load as durable, visibly independent copies",
@@ -689,7 +740,23 @@ test.describe("docs/testing/05-virtual-time-persistence-and-recovery.md", () => 
         ...latest.body,
         name: "Newer autosave state",
       }, true, latest.revision);
-      return { sourceId: source.id, sourceName: sourceEntry.name, savedRevision: saved.revision };
+      const destination = await loadCanonicalCopy(api, bench, `show-005-destination-${surface}`);
+      const destinationEntry = await showEntry(api, destination.id);
+      const destinationGroup = await showObject(api, destination.id, "group", "4");
+      await api.request("PUT", `/api/v1/shows/${destination.id}/objects/group/4`, {
+        ...destinationGroup.body,
+        name: "destination-before-overwrite",
+      }, true, destinationGroup.revision);
+      const destinationRevision = await api.request<{ revision: number }>("POST", `/api/v1/shows/${destination.id}/revisions`, { name: "Destination checkpoint" });
+      await api.request("POST", `/api/v1/shows/${source.id}/open`, { transition: "hold_current" });
+      return {
+        sourceId: source.id,
+        sourceName: sourceEntry.name,
+        savedRevision: saved.revision,
+        destinationId: destination.id,
+        destinationName: destinationEntry.name,
+        destinationRevision: destinationRevision.revision,
+      };
     },
     api: async ({ api, bench }, state) => {
       const copy = await api.request<any>("POST", `/api/v1/shows/${state.sourceId}/revisions/${state.savedRevision}/open`, { transition: "hold_current" });
@@ -722,7 +789,12 @@ test.describe("docs/testing/05-virtual-time-persistence-and-recovery.md", () => 
       await desk.open(bench.baseUrl);
       await page.getByRole("button", { name: /Open show menu/ }).click();
       await page.getByRole("button", { name: "Load", exact: true }).click();
-      const sourceCard = page.locator(".revision-show-library article").filter({ has: page.getByText(state.sourceName, { exact: true }) });
+      let sourceCard = page.locator(".revision-show-library article").filter({ has: page.getByText(state.sourceName, { exact: true }) });
+      await sourceCard.getByRole("button", { name: "Load Latest Autosave" }).click();
+      await expect.poll(async () => (await showObject(api, state.sourceId, "group", "4")).body.name).toBe("Newer autosave state");
+
+      await page.getByRole("button", { name: "Load", exact: true }).click();
+      sourceCard = page.locator(".revision-show-library article").filter({ has: page.getByText(state.sourceName, { exact: true }) });
       const revisionAction = sourceCard.locator(".named-revision-list button").filter({ hasText: "Approved focus" });
       await expect(revisionAction).toContainText("Load Revision as Copy");
       await revisionAction.click();
@@ -731,29 +803,99 @@ test.describe("docs/testing/05-virtual-time-persistence-and-recovery.md", () => 
       await expect(page.getByRole("dialog", { name: "Load show", exact: true })).toBeHidden();
       const copy = (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).active_show;
       expect(copy.id).not.toBe(state.sourceId);
+      const displayedCopiedAt = await page.evaluate((copiedAt) => new Date(copiedAt).toLocaleString(), copy.revision_copy.copied_at);
+      await expect(page.locator(".dock-identity")).toHaveAttribute("title", new RegExp(`Source: ${escapeRegex(state.sourceName)}, Revision ${state.savedRevision} · Approved focus\\. Created ${escapeRegex(displayedCopiedAt)}`));
       const showMenu = page.getByRole("dialog", { name: "Show", exact: true });
       await expect(showMenu).toContainText(`Revision ${state.savedRevision} · Approved focus`);
+      await expect(showMenu).toContainText(`Created ${displayedCopiedAt}`);
       await expect(showMenu).toContainText(`autosaved to this copy, not to ${state.sourceName}`);
 
-      await showMenu.getByRole("button", { name: "Save", exact: true }).click();
+      const copyGroup = await showObject(api, copy.id, "group", "4");
+      await api.request("PUT", `/api/v1/shows/${copy.id}/objects/group/4`, {
+        ...copyGroup.body,
+        name: "Copy-only edit",
+      }, true, copyGroup.revision);
+      await api.request("POST", `/api/v1/shows/${copy.id}/revisions`, { name: "Copy checkpoint" });
+
+      await showMenu.getByRole("button", { name: "Load", exact: true }).click();
+      const destinationCard = page.locator(".revision-show-library article").filter({ has: page.getByText(state.destinationName, { exact: true }) });
+      await destinationCard.getByRole("button", { name: "Load Latest Autosave" }).click();
+      await page.getByRole("button", { name: "Load", exact: true }).click();
+      const copyCard = page.locator(".revision-show-library article").filter({ has: page.getByText(copy.name, { exact: true }) });
+      await copyCard.getByRole("button", { name: "Load Latest Autosave" }).click();
+      await expect.poll(async () => (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).active_show.id).toBe(copy.id);
+      expect((await showObject(api, copy.id, "group", "4")).body.name).toBe("Copy-only edit");
+
+      await bench.stopServerGracefully(api.session!.token);
+      await bench.startServer();
+      await api.login();
+      await desk.open(bench.baseUrl);
+      await page.getByRole("button", { name: /Open show menu/ }).click();
+      await page.getByRole("button", { name: "Load", exact: true }).click();
+      const restartedCopyCard = page.locator(".revision-show-library article").filter({ has: page.getByText(copy.name, { exact: true }) });
+      await restartedCopyCard.getByRole("button", { name: "Load Latest Autosave" }).click();
+      await expect.poll(async () => (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).active_show.id).toBe(copy.id);
+      expect((await api.request<any[]>("GET", `/api/v1/shows/${copy.id}/revisions`)).map((entry) => entry.name)).toEqual(["Copy checkpoint"]);
+
+      const restartedShowMenu = page.getByRole("dialog", { name: "Show", exact: true });
+      await restartedShowMenu.getByRole("button", { name: "Save As" }).click();
+      const newName = `show-005-independent-${crypto.randomUUID()}`;
+      const saveAs = page.getByRole("dialog", { name: "Save show" });
+      await saveAs.getByRole("textbox", { name: "Show name" }).fill(newName);
+      await saveAs.getByRole("button", { name: "Save as New Show" }).click();
+      await expect.poll(async () => (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).active_show.name).toBe(newName);
+      const renamedCopy = (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).active_show;
+      expect(renamedCopy.id).not.toBe(copy.id);
+      expect(renamedCopy.revision_copy).toEqual(copy.revision_copy);
+      expect((await showObject(api, renamedCopy.id, "group", "4")).body.name).toBe("Copy-only edit");
+
+      await page.getByRole("button", { name: "Save As", exact: true }).click();
+      let overwriteDestination = page.locator(".overwrite-destination-list article").filter({ has: page.getByText(state.destinationName, { exact: true }) });
+      await overwriteDestination.getByRole("button", { name: "Choose Destination" }).click();
+      let confirmation = page.getByRole("alertdialog", { name: new RegExp(`Confirm overwrite ${escapeRegex(state.destinationName)}`) });
+      await expect(confirmation).toContainText(`Replace ${state.destinationName} Latest Autosave?`);
+      await confirmation.getByRole("button", { name: "Cancel" }).click();
+      expect((await showObject(api, state.destinationId, "group", "4")).body.name).toBe("destination-before-overwrite");
+
+      await page.getByRole("button", { name: "Save As", exact: true }).click();
+      overwriteDestination = page.locator(".overwrite-destination-list article").filter({ has: page.getByText(state.destinationName, { exact: true }) });
+      await overwriteDestination.getByRole("button", { name: "Choose Destination" }).click();
+      confirmation = page.getByRole("alertdialog", { name: new RegExp(`Confirm overwrite ${escapeRegex(state.destinationName)}`) });
+      await confirmation.getByRole("button", { name: new RegExp(`Replace ${escapeRegex(state.destinationName)} Latest Autosave`) }).click();
+      await expect.poll(async () => (await showObject(api, state.destinationId, "group", "4")).body.name).toBe("Copy-only edit");
+      const destinationAfter = await showEntry(api, state.destinationId);
+      expect(destinationAfter.name).toBe(state.destinationName);
+      expect((await api.request<any[]>("GET", `/api/v1/shows/${state.destinationId}/revisions`)).map((entry) => [entry.revision, entry.name])).toEqual([[state.destinationRevision, "Destination checkpoint"]]);
+
+      const backupDirectory = `${bench.dataDir}/backups`;
+      const backupNames = (await fs.readdir(backupDirectory)).filter((name) => name.startsWith(`${state.destinationName}-`) && name.endsWith(".show")).sort();
+      expect(backupNames.length).toBeGreaterThan(0);
+      const backup = `${backupDirectory}/${backupNames.at(-1)}`;
+      expect(await readSql(backup, "SELECT value FROM metadata WHERE key='show_id'")).toBe(state.destinationId);
+      expect(await readSql(backup, "SELECT value FROM metadata WHERE key='name'")).toBe(state.destinationName);
+      expect(await readSql(backup, "SELECT json_extract(body_json,'$.name')||'|'||revision FROM objects WHERE kind='group' AND id='4'")).toMatch(/^destination-before-overwrite\|\d+$/);
+      expect((await showObject(api, state.sourceId, "group", "4")).body.name).toBe("Newer autosave state");
+      expect((await showObject(api, copy.id, "group", "4")).body.name).toBe("Copy-only edit");
+
+      await page.getByRole("dialog", { name: "Show", exact: true }).getByRole("button", { name: "Save", exact: true }).click();
       const manualSave = page.getByRole("dialog", { name: "Save revision copy" });
       await expect(manualSave.getByRole("button", { name: "Keep as Separate Show" })).toBeVisible();
       await expect(manualSave.getByRole("button", { name: "Overwrite Original Show" })).toBeVisible();
       await manualSave.getByRole("button", { name: "Overwrite Original Show" }).click();
-      const confirmation = page.getByRole("alertdialog", { name: new RegExp(`Confirm overwrite ${escapeRegex(state.sourceName)}`) });
+      confirmation = page.getByRole("alertdialog", { name: new RegExp(`Confirm overwrite ${escapeRegex(state.sourceName)}`) });
       await expect(confirmation).toContainText("identity and named revisions are preserved");
       await confirmation.getByRole("button", { name: "Cancel" }).click();
       expect((await showObject(api, state.sourceId, "group", "4")).body.name).toBe("Newer autosave state");
 
-      await showMenu.getByRole("button", { name: "Save", exact: true }).click();
+      await page.getByRole("dialog", { name: "Show", exact: true }).getByRole("button", { name: "Save", exact: true }).click();
       await page.getByRole("dialog", { name: "Save revision copy" }).getByRole("button", { name: "Overwrite Original Show" }).click();
       await page.getByRole("alertdialog").getByRole("button", { name: new RegExp(`Replace ${escapeRegex(state.sourceName)} Latest Autosave`) }).click();
-      await expect.poll(async () => (await showObject(api, state.sourceId, "group", "4")).body.name).toBe("Named revision state");
+      await expect.poll(async () => (await showObject(api, state.sourceId, "group", "4")).body.name).toBe("Copy-only edit");
 
-      state.copyId = copy.id;
-      state.copyProvenance = copy.revision_copy;
-      state.expectedSourceName = "Named revision state";
-      state.expectedCopyName = "Named revision state";
+      state.copyId = renamedCopy.id;
+      state.copyProvenance = renamedCopy.revision_copy;
+      state.expectedSourceName = "Copy-only edit";
+      state.expectedCopyName = "Copy-only edit";
       state.expectedCopyRevisions = [];
     },
     assert: async ({ api }, state) => {
@@ -820,6 +962,88 @@ async function disconnectHardware(api: ApiDriver, state: HardwareState): Promise
   await state.hardware.send("/light/unsubscribe", [state.hardwareClientId]);
   await expect.poll(async () => (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).hardware_connected).toBe(false);
   await state.hardware.close();
+}
+
+async function assignMatterRestartPlayback(api: ApiDriver): Promise<{
+  page: number;
+  slot: number;
+  playbackNumber: number;
+}> {
+  const pages = await objects<any>(api, "playback_page");
+  const pagesByNumber = new Map<number, (typeof pages)[number]>(
+    pages.map((page) => [Number(page.body.number), page]),
+  );
+  const pageNumber = Array.from({ length: 127 }, (_, index) => index + 1).find((candidate) => {
+    const assigned = new Set(Object.keys(pagesByNumber.get(candidate)?.body.slots ?? {}).map(Number));
+    return Array.from({ length: 127 }, (_, index) => index + 1).some((slot) => !assigned.has(slot));
+  });
+  expect(pageNumber).toBeDefined();
+  const page = pagesByNumber.get(pageNumber!);
+  const assigned = new Set(Object.keys(page?.body.slots ?? {}).map(Number));
+  const slot = Array.from({ length: 127 }, (_, index) => index + 1).find((candidate) => !assigned.has(candidate));
+  expect(slot).toBeDefined();
+  const existingCueList = (await objects<any>(api, "cue_list"))[0];
+  const cueListId = existingCueList?.id ?? await createMatterRestartCueList(api);
+  const result = await api.request<any>(
+    "PUT",
+    `/api/v1/playback-pages/${pageNumber}/slots/${slot}`,
+    {
+      playback: {
+        number: 0,
+        name: "Matter restart persistence",
+        target: { type: "cue_list", cue_list_id: cueListId },
+        buttons: ["toggle", "none", "none"],
+        button_count: 1,
+        fader: "master",
+        has_fader: false,
+        go_activates: true,
+        auto_off: false,
+        xfade_millis: 0,
+        color: "#20c997",
+        flash_release: "release_all",
+        protect_from_swap: false,
+      },
+      expected_playback_revision: 0,
+      expected_page_revision: page?.revision ?? 0,
+    },
+  );
+  return {
+    page: pageNumber!,
+    slot: slot!,
+    playbackNumber: result.playback.number,
+  };
+}
+
+async function createMatterRestartCueList(api: ApiDriver): Promise<string> {
+  const fixture = (await objects<any>(api, "patched_fixture"))[0];
+  expect(fixture).toBeDefined();
+  const id = crypto.randomUUID();
+  await putObject(api, "cue_list", id, {
+    id,
+    name: "Matter restart persistence",
+    priority: 0,
+    mode: "sequence",
+    looped: false,
+    chaser_step_millis: 1_000,
+    speed_group: null,
+    cues: [{
+      id: crypto.randomUUID(),
+      number: 1,
+      name: "Matter on",
+      changes: [{
+        fixture_id: fixture.body.fixture_id,
+        attribute: "intensity",
+        value: { kind: "normalized", value: 1 },
+        automatic_restore: false,
+      }],
+      group_changes: [],
+      fade_millis: 0,
+      delay_millis: 0,
+      trigger: { type: "manual" },
+      phasers: [],
+    }],
+  });
+  return id;
 }
 
 async function assertFadeBoundaries(api: ApiDriver, bench: LightBench, fixtureId: string): Promise<void> {
@@ -1298,10 +1522,6 @@ function escapeRegex(value: string): string {
 
 type LegacyFixtureRow = { definition: Record<string, any>; source: Buffer };
 
-async function fixtureDefinitions(api: ApiDriver): Promise<any[]> {
-  return api.request<any[]>("GET", "/api/v1/fixture-library", undefined, false);
-}
-
 async function fixtureProfiles(api: ApiDriver): Promise<any[]> {
   return api.request<any[]>("GET", "/api/v1/fixture-profiles", undefined, false);
 }
@@ -1310,17 +1530,44 @@ async function fixtureProfileWarnings(api: ApiDriver): Promise<string[]> {
   return api.request<string[]>("GET", "/api/v1/fixture-profiles/warnings", undefined, false);
 }
 
-function reservedGenericProfileSnapshot(profiles: any[]): any[] {
+function transferableProfileSnapshot(profiles: any[]): any[] {
   return profiles
-    .filter((profile) => profile.reserved_source === "builtin:generic-catalog")
     .map((profile) => ({
       id: profile.id,
       revision: profile.revision,
       manufacturer: profile.manufacturer,
       name: profile.name,
+      reservedSource: profile.reserved_source,
       modes: profile.modes.map((mode: any) => ({ id: mode.id, name: mode.name })),
     }))
     .sort((left, right) => left.id.localeCompare(right.id));
+}
+
+async function legacyDimmerDefinition(api: ApiDriver, footprint: number): Promise<Record<string, any>> {
+  const bootstrap = await api.request<any>("GET", "/api/v1/bootstrap", undefined, false);
+  const fixtures = await api.request<any[]>("GET", `/api/v1/shows/${bootstrap.active_show.id}/objects/patched_fixture`, undefined, false);
+  const source = fixtures.find((entry) => entry.body?.definition?.heads?.[0]?.parameters?.[0]);
+  expect(source).toBeDefined();
+  const definition = structuredClone(source.body.definition);
+  const parameter = definition.heads[0].parameters[0];
+  return {
+    ...definition,
+    schema_version: 1,
+    footprint,
+    heads: [{
+      ...definition.heads[0],
+      parameters: [{
+        ...parameter,
+        components: Array.from({ length: footprint }, (_, offset) => ({
+          ...parameter.components[0],
+          offset,
+        })),
+      }],
+    }],
+    profile_id: null,
+    mode_id: null,
+    profile_snapshot: null,
+  };
 }
 
 async function insertLegacyFixtureRows(database: string, rows: LegacyFixtureRow[]): Promise<void> {

@@ -270,6 +270,7 @@ impl DeskStore {
         self.conn.execute("INSERT INTO control_desks(id,name,osc_alias,columns_count,rows_count,buttons_count) VALUES (?1,?2,?3,?4,?5,?6)",params![desk.id.to_string(),desk.name,desk.osc_alias,desk.columns,desk.rows,desk.buttons])?;
         Ok(desk)
     }
+    #[allow(clippy::too_many_arguments)]
     pub fn update_desk(
         &self,
         id: Uuid,

@@ -63,11 +63,30 @@ pub struct FixtureProfile {
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ProfilePhysicalProperties {
+    #[serde(default)]
     pub width_millimetres: Option<f32>,
+    #[serde(default)]
     pub height_millimetres: Option<f32>,
+    #[serde(default)]
     pub depth_millimetres: Option<f32>,
+    #[serde(default)]
     pub weight_kilograms: Option<f32>,
+    #[serde(default)]
     pub power_watts: Option<f32>,
+    #[serde(default)]
+    pub connectors: String,
+    #[serde(default)]
+    pub light_source: String,
+    #[serde(default)]
+    pub color_temperature_kelvin: Option<f32>,
+    #[serde(default)]
+    pub color_rendering_index: Option<f32>,
+    #[serde(default)]
+    pub luminous_output_lumens: Option<f32>,
+    #[serde(default)]
+    pub lens: String,
+    #[serde(default)]
+    pub beam_angle_degrees: Option<f32>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -239,8 +258,8 @@ impl<'de> Deserialize<'de> for FixtureMode {
                 channel.insert("split".into(), serde_json::Value::from(split));
             }
         }
-        let canonical: FixtureModeCanonical = serde_json::from_value(value)
-            .map_err(<D::Error as serde::de::Error>::custom)?;
+        let canonical: FixtureModeCanonical =
+            serde_json::from_value(value).map_err(<D::Error as serde::de::Error>::custom)?;
         Ok(Self {
             id: canonical.id,
             name: canonical.name,
@@ -672,6 +691,16 @@ impl FixtureProfile {
         validate_positive("depth", self.physical.depth_millimetres)?;
         validate_positive("weight", self.physical.weight_kilograms)?;
         validate_positive("power", self.physical.power_watts)?;
+        validate_positive("color temperature", self.physical.color_temperature_kelvin)?;
+        validate_positive("luminous output", self.physical.luminous_output_lumens)?;
+        validate_positive("beam angle", self.physical.beam_angle_degrees)?;
+        if let Some(cri) = self.physical.color_rendering_index
+            && (!cri.is_finite() || !(0.0..=100.0).contains(&cri))
+        {
+            return Err(ProfileError::Invalid(
+                "color rendering index must be from 0 to 100".into(),
+            ));
+        }
         let mut mode_ids = HashSet::new();
         for mode in &self.modes {
             if !mode_ids.insert(mode.id) {
@@ -839,6 +868,7 @@ impl FixtureProfile {
                 depth_millimetres: first.physical.depth_millimetres,
                 weight_kilograms: first.physical.weight_kilograms,
                 power_watts: first.physical.power_watts,
+                ..Default::default()
             },
             modes,
             hazardous: first.hazardous,
@@ -1005,9 +1035,9 @@ impl FixtureMode {
                     channel.resolution.bytes() - 1
                 )));
             }
-            let limit = *footprint
-                .get(&split)
-                .ok_or_else(|| ProfileError::Invalid("channel references a missing split".into()))?;
+            let limit = *footprint.get(&split).ok_or_else(|| {
+                ProfileError::Invalid("channel references a missing split".into())
+            })?;
             for slot in &channel.secondary_slots {
                 if *slot == 0 || *slot > limit || !reserved.entry(split).or_default().insert(*slot)
                 {
@@ -2201,13 +2231,14 @@ mod tests {
     #[test]
     fn mode_rejects_a_channel_that_references_a_missing_split() {
         let mut mode = FixtureProfile::blank().modes.remove(0);
-        mode.channels.push(channel(mode.heads[0].id, ChannelResolution::U8, vec![]));
+        mode.channels
+            .push(channel(mode.heads[0].id, ChannelResolution::U8, vec![]));
         mode.channels[0].split = 2;
 
         assert!(matches!(
             mode.validate(),
             Err(ProfileError::Invalid(message))
-                if message == "head references a missing split"
+                if message == "channel references a missing split"
         ));
     }
 
@@ -2365,6 +2396,42 @@ mod tests {
             definition.profile_snapshot.unwrap().modes[0].channels[0].highlight_raw,
             73
         );
+    }
+
+    #[test]
+    fn complete_physical_metadata_round_trips_and_older_profiles_receive_safe_defaults() {
+        let mut profile = FixtureProfile::blank();
+        profile.manufacturer = "Test".into();
+        profile.name = "Complete physical metadata".into();
+        profile.physical.connectors = "powerCON TRUE1 TOP; 5-pin XLR in/out".into();
+        profile.physical.light_source = "600 W LED engine".into();
+        profile.physical.color_temperature_kelvin = Some(6_500.0);
+        profile.physical.color_rendering_index = Some(92.0);
+        profile.physical.luminous_output_lumens = Some(18_500.0);
+        profile.physical.lens = "Fresnel zoom".into();
+        profile.physical.beam_angle_degrees = Some(36.0);
+
+        let encoded = serde_json::to_value(&profile).unwrap();
+        let decoded: FixtureProfile = serde_json::from_value(encoded.clone()).unwrap();
+        assert_eq!(decoded.physical, profile.physical);
+        decoded.validate().unwrap();
+
+        let mut legacy = encoded;
+        let physical = legacy["physical"].as_object_mut().unwrap();
+        for field in [
+            "connectors",
+            "light_source",
+            "color_temperature_kelvin",
+            "color_rendering_index",
+            "luminous_output_lumens",
+            "lens",
+            "beam_angle_degrees",
+        ] {
+            physical.remove(field);
+        }
+        let migrated: FixtureProfile = serde_json::from_value(legacy).unwrap();
+        assert_eq!(migrated.physical, ProfilePhysicalProperties::default());
+        migrated.validate().unwrap();
     }
 
     #[test]
