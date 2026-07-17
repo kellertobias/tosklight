@@ -8,7 +8,7 @@ Bind receivers before opening the show so route targets can use their actual por
 
 ## DMX-001 — Exact single-byte conversion
 
-**Priority:** P0  
+**Priority:** P0
 **Primary layer:** Rust parameterized test plus one E2E path
 
 **Starting show:** Load canonical `compact-rig.show`, immediately Save As `dmx-001.show`, and use dimmer fixture 1 at universe 1, address 1 in the active copy.
@@ -82,7 +82,7 @@ Bind receivers before opening the show so route targets can use their actual por
 **Detailed procedure:**
 
 1. Bind four UDP receiver destinations. Through authenticated revision-checked route-object PUTs, create enabled logical-1 routes to Art-Net universe 10, Art-Net universe 11, and sACN universe 101, plus a disabled sACN route to universe 102.
-2. **Harness only:** the current DMX **Universe routes** view is read-only; there is no route editor to perform this setup by touch.
+2. In the UI variant, create and edit the routes through **Desk Setup > Outputs > Routes**. The DMX Universe view remains a monitor rather than a configuration surface.
 3. Click fixture 1, set Intensity to 25%, click fixture 2, set it to 50%, click fixture 3, and set it to 75%.
 4. Advance to the programmer fade endpoint. Mark all four receivers, then advance 0 ms to emit one comparison frame.
 5. Decode the newest packet at each enabled destination and run a bounded receive check against disabled universe 102.
@@ -154,6 +154,24 @@ Bind receivers before opening the show so route targets can use their actual por
 
 **Pass condition:** One failing destination is observable and isolated from healthy output routes.
 
+## DMX-008 — Minimum universe size and idle configured routes
+
+**Priority:** P0
+**Primary layer:** Playwright UI/API plus Rust packet tests
+
+**Starting show:** Load canonical `compact-rig.show`, immediately Save As `dmx-008.show`, and use an otherwise unpatched logical universe 32.
+
+1. In **Desk Setup > Outputs > Routes**, create enabled Art-Net and sACN mappings from logical universe 32 with **Minimum universe size** set to `128`.
+2. Emit one frame while universe 32 has no patched fixtures. Both receivers must get exactly 128 zero slots.
+3. Patch a two-slot fixture at address 200. Give its first channel a 40% default and omit the second channel's default.
+4. Emit again. sACN contains 201 slots; Art-Net contains 202 because its payload length must be even. Slots 1–199 are zero, slot 200 is 102, and the remaining patched/default-padding slots are zero.
+5. Disable the Art-Net route through the same route editor without removing it. Emit again and use a bounded receive window to prove Art-Net is silent while the enabled sACN sibling receives current output.
+6. Reread the route objects and confirm the disabled mapping and its 128-slot minimum remain configured.
+
+**Assertions:** Enabled configured universes emit even without a patch; payload size follows the configured minimum and full patched footprint rather than the last non-zero value; omitted fixture defaults resolve to zero; disabled routes stay editable and emit nothing.
+
+**Pass condition:** An operator can reserve a stable minimum payload, receive deterministic idle/default frames, and hand one mapped universe to another desk without deleting its configuration.
+
 ## Follow-ups
 
 | Scenario | Next tests after the primary case | First failure checks |
@@ -165,3 +183,4 @@ Bind receivers before opening the show so route targets can use their actual por
 | DMX-005 | Test multi-head footprints, multipatch, and remapping an active fixture. | Verify patch validation and compiled slot ownership before engine output. |
 | DMX-006 | Add physical curves, inversion, virtual dimmers, and head-shared parameters. | Compare fixture metadata, normalized component value, and coarse/fine byte order. |
 | DMX-007 | Repeat the isolated route failure during shutdown. | Inspect health counters and healthy-route packets at the same virtual frame. |
+| DMX-008 | Restart with enabled and disabled minimum-size routes and test odd Art-Net footprints. | Compare configured minimum, patched footprint end, protocol payload count, and route enablement separately. |

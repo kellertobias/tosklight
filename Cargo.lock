@@ -2123,6 +2123,7 @@ dependencies = [
  "async-trait",
  "light-core",
  "serde",
+ "serde_json",
  "tokio",
  "tokio-util",
 ]

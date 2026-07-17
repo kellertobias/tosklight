@@ -281,6 +281,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
       destination_universe: 101,
       destination: "127.0.0.1:6454",
       enabled: true,
+      minimum_slots: 128,
     }, true, 0);
     await page.addInitScript(() => Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} }));
     await desk.open(api.baseUrl);

@@ -90,13 +90,13 @@ Timing cases run in `--test-bench`; persistence cases use a dedicated serial fix
 2. Click Group 3, set Intensity to 40%, press `[REC]`, and click empty Cuelist 1 to record Cue 1. Assign Cuelist 1 to page 1 playback 1 with `[SET]`, the Cuelist 1 pool cell, and the **Assign Cuelist 1** fader target.
 3. Press `[CLR]` twice, open Cuelist 1 and inspect the recorded Cue 1, then return to the desk and click **GO +** on assigned page 1 playback 1 so playback remains active. Cuelist View is an editor and does not duplicate playback transport controls.
 4. Click fixture 12 and set Intensity to 65% without recording it. Record the durable user's programmer ID and complete state.
-5. Open the show menu, click **Save Named Revision**, name it `SHOW-001 before restart`, and confirm. Record the working-copy file hash, active show ID/revision, playback state, and expected output.
+5. Set Grand Master to 50%. Open the show menu, click **Save Named Revision**, name it `SHOW-001 before restart`, and confirm. Wait until the playback and programmer values are visibly present together, then record the working-copy file hash, active show ID/revision, playback state, Grand Master/Blackout state, and exact expected output.
 6. Call authenticated `POST /api/v1/shutdown` and wait for the exact server PID and port to exit.
 7. Start a new `light-server` process with the same temporary data directory and port configuration. Wait separately for `/api/v1/readiness` and `/api/v1/bootstrap`.
 8. Reconnect as the same durable user. If the working show is not already active, open `show-001.show` through **Load Latest Autosave**.
-9. Inspect Group 3, Cuelist 1, playback 1, the durable programmer, first emitted frame, and repository `light-data` before declaring recovery complete.
+9. Inspect Group 3, Cuelist 1, playback 1, the durable programmer, restored Grand Master/Blackout state, the very first emitted frame, and repository `light-data` before declaring recovery complete.
 
-**Assertions:** Patch, routes, ordered groups, presets, cues, active show identity, and documented durable programmer/playback state reload correctly. No files appear in repository `light-data`.
+**Assertions:** Patch, routes, ordered groups, presets, cues, active show identity, documented durable programmer/playback state, and latched output controls reload correctly. The first frame after restart is byte-for-byte equal to the settled frame immediately before shutdown; no transient zero or unmastered frame is accepted. No files appear in repository `light-data`.
 
 **Pass condition:** A normal restart preserves durable state without converting transient values into show data.
 

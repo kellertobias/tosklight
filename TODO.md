@@ -11,9 +11,22 @@ evidence in [docs/todo-completion-audit.md](docs/todo-completion-audit.md).
 - remove the "Development" built ins window. Instead add it via the settings of the help window
 - Clicking the Command Line opens the command line towards the top and shows the command line history
 - Fix Hardware-Connected Display of Encoders
-
+- DEREF groups command line display
+- Record and update menu colors
+- Color of active playbacks
+- Set Address/ Fixture Address screen needs the available dmx addresses + numblock directly
+- Cuelist settings use full width of sidebar. Cue Settings must be inline
+- Chaser X-Fade must be in percent, not ms
+- Virtual Playbacks Checken (Exclusion Zone Visuals)
+- Preload Go Extra Text?
+- Playback Configuration Layout
+- Preload settings is not input!
+- Check file manager + editor
+- ArtNET Multicast/ Broadcast
+- 
 
 ## Larger Blocks
 - Dynamics + Chasers
 - Check Cuelists + Fade times
 - [Cue Go To and Load command grammar](docs/planned%20features/09-cue-go-to-and-load.md)
+- [Fixture channel-configuration redesign](docs/planned%20features/18-fixture-channel-configuration.md)

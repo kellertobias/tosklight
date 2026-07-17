@@ -288,7 +288,7 @@ test.describe("docs/testing/05-virtual-time-persistence-and-recovery.md", () => 
 
   test("SHOW-001 @restart › supplemental process check preserves named show state, durable programmer, active playback, PID, and first frame", async ({ api, bench }) => {
     const copy = await loadCanonicalCopy(api, bench, "show-001");
-    await setProgrammerFade(api, 0, 3_000);
+    await setProgrammerFade(api, 0, 0);
     const fixtures = await fixtureIdsByNumber(api);
     const group = await object<any>(api, "group", "3");
     await putObject(api, "group", "3", { ...group.body, fixtures: [...group.body.fixtures, fixtures[5], fixtures[6]] }, group.revision);
@@ -298,12 +298,14 @@ test.describe("docs/testing/05-virtual-time-persistence-and-recovery.md", () => 
     expect((await object<any>(api, "group", "3")).body.fixtures).toEqual(expectedGroup);
     await api.request("POST", "/api/v1/cuelists/1/go", {});
     await api.command("programmer.execute", { value: "FIXTURE 12 AT 65" });
+    await bench.tick(0);
+    await api.command("master.set", { grand_master: 0.5, blackout: false });
     const durableBefore = (await programmer(api));
     const revision = await api.request<any>("POST", `/api/v1/shows/${copy.id}/revisions`, { name: "SHOW-001 before restart" });
     expect(revision.name).toBe("SHOW-001 before restart");
     const expectedFirstFrame = await bench.tick(0);
-    expect(expectedFirstFrame.universes.find((universe) => universe.universe === 1)?.slots.slice(0, 6)).toEqual(Array(6).fill(0));
-    expect(slot(expectedFirstFrame, 12)).toBe(166);
+    expect(expectedFirstFrame.universes.find((universe) => universe.universe === 1)?.slots.slice(0, 6)).toEqual(Array(6).fill(51));
+    expect(slot(expectedFirstFrame, 12)).toBe(83);
     const entry = await showEntry(api, copy.id);
     expect(entry.path.startsWith(bench.dataDir)).toBe(true);
     const oldPid = bench.serverPid();
@@ -326,12 +328,11 @@ test.describe("docs/testing/05-virtual-time-persistence-and-recovery.md", () => 
     expect(restored.user_id).toBe(durableBefore.user_id);
     expect(restored.values.find((value: any) => value.fixture_id === fixtures[12] && value.attribute === "intensity")?.value).toMatchObject({ value: 0.65 });
     expect(await fileHash(entry.path)).toBe(showHash);
+    expect(await api.request<any>("GET", "/api/v1/visualization")).toMatchObject({ grand_master: 0.5, blackout: false });
     const firstFrame = await bench.tick(0);
     expect(firstFrame.universes).toEqual(expectedFirstFrame.universes);
-    expect(slot(firstFrame, 12)).toBe(166);
-    const settledFrame = await bench.tick(3_000);
-    expect(settledFrame.universes.find((universe) => universe.universe === 1)?.slots.slice(0, 6)).toEqual(Array(6).fill(102));
-    expect(slot(settledFrame, 12)).toBe(166);
+    expect(firstFrame.universes.find((universe) => universe.universe === 1)?.slots.slice(0, 6)).toEqual(Array(6).fill(51));
+    expect(slot(firstFrame, 12)).toBe(83);
   });
 
   for (const fault of ["before-atomic-replacement", "during-temporary-write", "after-replacement-before-cleanup"] as const) {

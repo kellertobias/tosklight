@@ -37,6 +37,8 @@ pub struct Capability {
 pub struct Parameter {
     pub attribute: AttributeKey,
     pub components: Vec<ChannelComponent>,
+    /// Unspecified channel defaults are DMX zero for compatibility with minimal fixture profiles.
+    #[serde(default)]
     pub default: f32,
     pub virtual_dimmer: bool,
     #[serde(default)]

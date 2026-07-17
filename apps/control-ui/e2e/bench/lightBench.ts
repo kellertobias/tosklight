@@ -117,11 +117,11 @@ export class LightBench {
     }, true, 0);
     await api.request("PUT", `/api/v1/shows/${show.id}/objects/route/artnet`, {
       protocol: "art_net", logical_universe: 1, destination_universe: 1,
-      destination: `127.0.0.1:${this.artnet.port}`, enabled: true,
+      destination: `127.0.0.1:${this.artnet.port}`, enabled: true, minimum_slots: 512,
     }, true, 0);
     await api.request("PUT", `/api/v1/shows/${show.id}/objects/route/sacn`, {
       protocol: "sacn", logical_universe: 1, destination_universe: 101,
-      destination: `127.0.0.1:${this.sacn.port}`, enabled: true,
+      destination: `127.0.0.1:${this.sacn.port}`, enabled: true, minimum_slots: 512,
     }, true, 0);
     await api.request("POST", `/api/v1/shows/${show.id}/open`, { transition: "hold_current" });
     return { id: show.id, fixtureIds, session };

@@ -34,6 +34,14 @@ pub struct OutputRoute {
     pub destination_universe: Universe,
     pub destination: Option<SocketAddr>,
     pub enabled: bool,
+    /// Smallest DMX payload emitted for this route. Historical routes omitted this field and
+    /// continue to emit full universes for wire compatibility.
+    #[serde(default = "legacy_route_minimum_slots")]
+    pub minimum_slots: u16,
+}
+
+const fn legacy_route_minimum_slots() -> u16 {
+    DMX_SLOTS as u16
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -181,11 +189,13 @@ impl NetworkOutput {
         &self,
         routes: &[OutputRoute],
         frames: &HashMap<Universe, DmxFrame>,
+        patched_slots: &HashMap<Universe, u16>,
         sequences: &mut HashMap<(Protocol, Universe), u8>,
     ) -> io::Result<u64> {
         let packets = encode_routes(
             routes,
             frames,
+            patched_slots,
             sequences,
             self.cid,
             &self.source_name,
@@ -242,20 +252,13 @@ impl NetworkOutput {
         sequences: &mut HashMap<(Protocol, Universe), u8>,
     ) -> io::Result<()> {
         for route in routes.iter().filter(|route| route.enabled) {
-            let sequence = next_sequence(sequences, (route.protocol, route.destination_universe));
             match route.protocol {
-                Protocol::ArtNet => {
-                    let destination = route
-                        .destination
-                        .unwrap_or_else(artnet_broadcast_destination);
-                    self.artnet
-                        .send_to(
-                            &artdmx_packet(route.destination_universe, sequence, &[0; DMX_SLOTS]),
-                            destination,
-                        )
-                        .await?;
-                }
+                // Art-Net has no stream-termination packet. Disabling must relinquish the
+                // universe immediately so another desk can take over without a final black frame.
+                Protocol::ArtNet => {}
                 Protocol::Sacn => {
+                    let sequence =
+                        next_sequence(sequences, (route.protocol, route.destination_universe));
                     let destination = route
                         .destination
                         .unwrap_or_else(|| sacn_multicast_destination(route.destination_universe));
@@ -281,6 +284,7 @@ impl NetworkOutput {
 pub fn encode_routes(
     routes: &[OutputRoute],
     frames: &HashMap<Universe, DmxFrame>,
+    patched_slots: &HashMap<Universe, u16>,
     sequences: &mut HashMap<(Protocol, Universe), u8>,
     cid: [u8; 16],
     source_name: &str,
@@ -289,19 +293,28 @@ pub fn encode_routes(
     routes
         .iter()
         .filter(|route| route.enabled)
-        .filter_map(|route| {
-            frames
-                .get(&route.logical_universe)
-                .map(|frame| (route, frame))
-        })
-        .map(|(route, frame)| {
+        .map(|route| {
+            let empty = [0; DMX_SLOTS];
+            let frame = frames.get(&route.logical_universe).unwrap_or(&empty);
+            let minimum_slots = usize::from(route.minimum_slots.clamp(1, DMX_SLOTS as u16));
+            let patched_slots = usize::from(
+                patched_slots
+                    .get(&route.logical_universe)
+                    .copied()
+                    .unwrap_or_default(),
+            );
+            let mut slot_count = minimum_slots.max(patched_slots).min(DMX_SLOTS);
+            if route.protocol == Protocol::ArtNet && slot_count % 2 != 0 {
+                slot_count = (slot_count + 1).min(DMX_SLOTS);
+            }
+            let payload = &frame[..slot_count];
             let sequence = next_sequence(sequences, (route.protocol, route.destination_universe));
             let (destination, bytes) = match route.protocol {
                 Protocol::ArtNet => (
                     route
                         .destination
                         .unwrap_or_else(artnet_broadcast_destination),
-                    artdmx_packet(route.destination_universe, sequence, frame),
+                    artdmx_packet(route.destination_universe, sequence, payload),
                 ),
                 Protocol::Sacn => (
                     route
@@ -310,7 +323,7 @@ pub fn encode_routes(
                     sacn_data_packet(
                         route.destination_universe,
                         sequence,
-                        frame,
+                        payload,
                         cid,
                         source_name,
                         sacn_priority,
@@ -481,15 +494,15 @@ pub fn next_sequence(
     *sequence
 }
 
-pub fn artdmx_packet(universe: Universe, sequence: u8, frame: &DmxFrame) -> Vec<u8> {
-    let mut packet = Vec::with_capacity(18 + DMX_SLOTS);
+pub fn artdmx_packet(universe: Universe, sequence: u8, frame: &[u8]) -> Vec<u8> {
+    let mut packet = Vec::with_capacity(18 + frame.len());
     packet.extend_from_slice(b"Art-Net\0");
     packet.extend_from_slice(&0x5000_u16.to_le_bytes());
     packet.extend_from_slice(&14_u16.to_be_bytes());
     packet.push(sequence);
     packet.push(0);
     packet.extend_from_slice(&universe.to_le_bytes());
-    packet.extend_from_slice(&(DMX_SLOTS as u16).to_be_bytes());
+    packet.extend_from_slice(&(frame.len() as u16).to_be_bytes());
     packet.extend_from_slice(frame);
     packet
 }
@@ -497,20 +510,20 @@ pub fn artdmx_packet(universe: Universe, sequence: u8, frame: &DmxFrame) -> Vec<
 pub fn sacn_data_packet(
     universe: Universe,
     sequence: u8,
-    frame: &DmxFrame,
+    frame: &[u8],
     cid: [u8; 16],
     source_name: &str,
     priority: u8,
     stream_terminated: bool,
 ) -> Vec<u8> {
-    const SIZE: usize = 126 + DMX_SLOTS;
-    let mut packet = vec![0_u8; SIZE];
+    let size = 126 + frame.len();
+    let mut packet = vec![0_u8; size];
     packet[0..2].copy_from_slice(&0x0010_u16.to_be_bytes());
     packet[4..16].copy_from_slice(b"ASC-E1.17\0\0\0");
-    set_flags_and_length(&mut packet[16..18], SIZE - 16);
+    set_flags_and_length(&mut packet[16..18], size - 16);
     packet[18..22].copy_from_slice(&0x0000_0004_u32.to_be_bytes());
     packet[22..38].copy_from_slice(&cid);
-    set_flags_and_length(&mut packet[38..40], SIZE - 38);
+    set_flags_and_length(&mut packet[38..40], size - 38);
     packet[40..44].copy_from_slice(&0x0000_0002_u32.to_be_bytes());
     let source = source_name.as_bytes();
     packet[44..44 + source.len().min(63)].copy_from_slice(&source[..source.len().min(63)]);
@@ -518,11 +531,11 @@ pub fn sacn_data_packet(
     packet[111] = sequence;
     packet[112] = if stream_terminated { 0x40 } else { 0 };
     packet[113..115].copy_from_slice(&universe.to_be_bytes());
-    set_flags_and_length(&mut packet[115..117], SIZE - 115);
+    set_flags_and_length(&mut packet[115..117], size - 115);
     packet[117] = 0x02;
     packet[118] = 0xa1;
     packet[121..123].copy_from_slice(&1_u16.to_be_bytes());
-    packet[123..125].copy_from_slice(&((DMX_SLOTS + 1) as u16).to_be_bytes());
+    packet[123..125].copy_from_slice(&((frame.len() + 1) as u16).to_be_bytes());
     packet[125] = 0; // DMX start code
     packet[126..].copy_from_slice(frame);
     packet
@@ -589,6 +602,7 @@ mod tests {
                 destination_universe: 10,
                 destination: Some("127.0.0.1:6454".parse().unwrap()),
                 enabled: true,
+                minimum_slots: 512,
             },
             OutputRoute {
                 protocol: Protocol::Sacn,
@@ -596,6 +610,7 @@ mod tests {
                 destination_universe: 20,
                 destination: None,
                 enabled: true,
+                minimum_slots: 512,
             },
             OutputRoute {
                 protocol: Protocol::Sacn,
@@ -603,12 +618,21 @@ mod tests {
                 destination_universe: 21,
                 destination: None,
                 enabled: false,
+                minimum_slots: 512,
             },
         ];
         let frames = HashMap::from([(1, [0x33; DMX_SLOTS])]);
         let mut sequences = HashMap::new();
-        let packets =
-            encode_routes(&routes, &frames, &mut sequences, [1; 16], "Light", 100).unwrap();
+        let packets = encode_routes(
+            &routes,
+            &frames,
+            &HashMap::from([(1, 512)]),
+            &mut sequences,
+            [1; 16],
+            "Light",
+            100,
+        )
+        .unwrap();
         assert_eq!(packets.len(), 2);
         assert_eq!(packets[0].universe, 10);
         assert_eq!(packets[0].bytes[18], 0x33);
@@ -624,11 +648,71 @@ mod tests {
             destination_universe: 1,
             destination: None,
             enabled: true,
+            minimum_slots: 512,
         }];
         let frames = HashMap::from([(1, [0; DMX_SLOTS])]);
-        let packets =
-            encode_routes(&routes, &frames, &mut HashMap::new(), [0; 16], "Light", 100).unwrap();
+        let packets = encode_routes(
+            &routes,
+            &frames,
+            &HashMap::new(),
+            &mut HashMap::new(),
+            [0; 16],
+            "Light",
+            100,
+        )
+        .unwrap();
         assert_eq!(packets[0].destination, artnet_broadcast_destination());
+    }
+
+    #[test]
+    fn enabled_empty_routes_emit_their_minimum_and_patched_zero_slots_extend_payloads() {
+        let routes = [
+            OutputRoute {
+                protocol: Protocol::ArtNet,
+                logical_universe: 32,
+                destination_universe: 10,
+                destination: Some("127.0.0.1:6454".parse().unwrap()),
+                enabled: true,
+                minimum_slots: 128,
+            },
+            OutputRoute {
+                protocol: Protocol::Sacn,
+                logical_universe: 33,
+                destination_universe: 101,
+                destination: Some("127.0.0.1:5568".parse().unwrap()),
+                enabled: true,
+                minimum_slots: 128,
+            },
+        ];
+        let packets = encode_routes(
+            &routes,
+            &HashMap::from([(33, [0; DMX_SLOTS])]),
+            &HashMap::from([(33, 201)]),
+            &mut HashMap::new(),
+            [0; 16],
+            "Light",
+            100,
+        )
+        .unwrap();
+
+        assert_eq!(packets[0].bytes.len(), 18 + 128);
+        assert!(packets[0].bytes[18..].iter().all(|slot| *slot == 0));
+        assert_eq!(packets[1].bytes.len(), 126 + 201);
+        assert_eq!(&packets[1].bytes[123..125], &202_u16.to_be_bytes());
+        assert!(packets[1].bytes[126..].iter().all(|slot| *slot == 0));
+    }
+
+    #[test]
+    fn legacy_route_without_minimum_slots_keeps_full_universe_payloads() {
+        let route: OutputRoute = serde_json::from_value(serde_json::json!({
+            "protocol": "art_net",
+            "logical_universe": 1,
+            "destination_universe": 1,
+            "destination": null,
+            "enabled": true
+        }))
+        .unwrap();
+        assert_eq!(route.minimum_slots, 512);
     }
 
     #[tokio::test]
@@ -647,6 +731,7 @@ mod tests {
                 destination_universe: 10,
                 destination: Some(healthy_destination),
                 enabled: true,
+                minimum_slots: 512,
             },
             OutputRoute {
                 protocol: Protocol::ArtNet,
@@ -654,6 +739,7 @@ mod tests {
                 destination_universe: 11,
                 destination: Some(failing_destination),
                 enabled: true,
+                minimum_slots: 512,
             },
         ];
         let frames = HashMap::from([(1, [0x44; DMX_SLOTS])]);
@@ -662,7 +748,7 @@ mod tests {
         output.inject_failure(failing_destination, true);
         assert_eq!(
             output
-                .send_routes(&routes, &frames, &mut sequences)
+                .send_routes(&routes, &frames, &HashMap::from([(1, 512)]), &mut sequences)
                 .await
                 .unwrap(),
             1
@@ -687,7 +773,7 @@ mod tests {
         output.inject_failure(failing_destination, false);
         assert_eq!(
             output
-                .send_routes(&routes, &frames, &mut sequences)
+                .send_routes(&routes, &frames, &HashMap::from([(1, 512)]), &mut sequences)
                 .await
                 .unwrap(),
             2

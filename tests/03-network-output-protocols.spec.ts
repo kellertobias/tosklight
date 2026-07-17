@@ -48,6 +48,15 @@ interface SixteenBitState {
   sunstripDestinationUniverse: number;
 }
 
+interface MinimumRouteState {
+  receiver: DmxReceiver;
+  emptyArtSlots?: number[];
+  emptySacnSlots?: number[];
+  patchedArtSlots?: number[];
+  patchedSacnSlots?: number[];
+  artDisabled?: boolean;
+}
+
 test.describe("docs/testing/03-network-output-protocols.md", () => {
   pairedScenario<{ values: number[]; observations: ConversionObservation[] }>({
     id: "DMX-001",
@@ -374,6 +383,57 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
       await state.failing.close();
     },
   });
+
+  pairedScenario<MinimumRouteState>({
+    id: "DMX-008",
+    title: "minimum universe size sends idle zeros, includes patched defaults, and disables without deletion",
+    arrange: async ({ api, bench }, surface) => {
+      await loadCanonicalCopy(api, bench, `dmx-008-${surface}`);
+      return { receiver: await DmxReceiver.bind() };
+    },
+    api: async ({ api, bench }, state) => {
+      await putObject(api, "route", "dmx-008-artnet", route("art_net", 32, 32, state.receiver.port, true, 128));
+      await putObject(api, "route", "dmx-008-sacn", route("sacn", 32, 132, state.receiver.port, true, 128));
+      await exerciseMinimumRoute(api, bench, state, async () => {
+        const artnet = await object<any>(api, "route", "dmx-008-artnet");
+        await putObject(api, "route", artnet.id, { ...artnet.body, enabled: false }, artnet.revision);
+      });
+    },
+    ui: async ({ api, bench, desk, page }, state) => {
+      await desk.open(bench.baseUrl);
+      await page.locator(".dock-identity").click();
+      await page.locator(".show-modal").getByRole("button", { name: "Enter Setup", exact: true }).click();
+      await page.locator(".setup-window nav").getByRole("button", { name: "Outputs", exact: true }).click();
+      const routes = page.getByRole("region", { name: "Output routes" });
+      await createRouteThroughUi(routes, page, "Art-Net", 32, 32, state.receiver.port, 128);
+      await createRouteThroughUi(routes, page, "sACN", 32, 132, state.receiver.port, 128);
+      await exerciseMinimumRoute(api, bench, state, async () => {
+        const artnet = routes.locator("article").filter({ hasText: "Logical 32 → Art-Net 32" });
+        await artnet.getByRole("button", { name: "Edit route", exact: true }).click();
+        const editor = page.getByRole("dialog", { name: "Output route editor" });
+        await editor.locator(".ui-switch-control").click();
+        await editor.getByRole("button", { name: "Save route", exact: true }).click();
+        await expect(artnet).toContainText("Disabled");
+      });
+    },
+    assert: async ({ api }, state) => {
+      expect(state.emptyArtSlots).toEqual(Array(128).fill(0));
+      expect(state.emptySacnSlots).toEqual(Array(128).fill(0));
+      expect(state.patchedArtSlots).toHaveLength(202);
+      expect(state.patchedSacnSlots).toHaveLength(201);
+      expect(state.patchedArtSlots?.slice(0, 199)).toEqual(Array(199).fill(0));
+      expect(state.patchedSacnSlots?.slice(0, 199)).toEqual(Array(199).fill(0));
+      expect(state.patchedArtSlots?.slice(199)).toEqual([102, 0, 0]);
+      expect(state.patchedSacnSlots?.slice(199)).toEqual([102, 0]);
+      expect(state.artDisabled).toBe(true);
+      const routes = await objects<any>(api, "route");
+      expect(routes.find((entry) => entry.body.logical_universe === 32 && entry.body.protocol === "art_net")?.body)
+        .toMatchObject({ enabled: false, minimum_slots: 128 });
+      expect(routes.find((entry) => entry.body.logical_universe === 32 && entry.body.protocol === "sacn")?.body)
+        .toMatchObject({ enabled: true, minimum_slots: 128 });
+      await state.receiver.close();
+    },
+  });
 });
 
 function routeSendErrors(diagnostics: any, destination: string): number {
@@ -397,8 +457,65 @@ async function captureConversion(api: ApiDriver, bench: any, fixtureId: string, 
   };
 }
 
-function route(protocol: "art_net" | "sacn", logical: number, destination: number, port: number, enabled: boolean) {
-  return { protocol, logical_universe: logical, destination_universe: destination, destination: `127.0.0.1:${port}`, enabled };
+function route(protocol: "art_net" | "sacn", logical: number, destination: number, port: number, enabled: boolean, minimumSlots = 512) {
+  return { protocol, logical_universe: logical, destination_universe: destination, destination: `127.0.0.1:${port}`, enabled, minimum_slots: minimumSlots };
+}
+
+async function createRouteThroughUi(routes: any, page: any, protocol: "Art-Net" | "sACN", logical: number, destination: number, port: number, minimumSlots: number) {
+  await routes.getByRole("button", { name: "Add route", exact: true }).click();
+  const editor = page.getByRole("dialog", { name: "Output route editor" });
+  if (protocol === "sACN") {
+    await editor.getByRole("button", { name: "Art-Net", exact: true }).click();
+    await page.getByRole("option", { name: "sACN", exact: true }).click();
+  }
+  await editor.getByLabel("Logical universe").fill(String(logical));
+  await editor.getByLabel("Destination universe").fill(String(destination));
+  await editor.getByLabel("Destination", { exact: true }).fill(`127.0.0.1:${port}`);
+  await editor.getByLabel("Minimum universe size").fill(String(minimumSlots));
+  await editor.getByRole("button", { name: "Save route", exact: true }).click();
+  await expect(routes.locator("article").filter({ hasText: `Logical ${logical} → ${protocol} ${destination}` })).toBeVisible();
+}
+
+async function exerciseMinimumRoute(api: ApiDriver, bench: any, state: MinimumRouteState, disableArtNet: () => Promise<void>) {
+  let mark = state.receiver.mark();
+  await bench.tick(0);
+  state.emptyArtSlots = Array.from((await state.receiver.nextAfter(mark, "artnet", 32)).slots);
+  state.emptySacnSlots = Array.from((await state.receiver.nextAfter(mark, "sacn", 132)).slots);
+
+  const source = (await objects<any>(api, "patched_fixture")).find((entry) => entry.body.fixture_number === 1)!;
+  const firstParameter = source.body.definition.heads[0].parameters[0];
+  await putObject(api, "patched_fixture", "dmx-008-defaults", {
+    ...source.body,
+    fixture_id: crypto.randomUUID(),
+    fixture_number: 932,
+    name: "Minimum Size Defaults",
+    universe: 32,
+    address: 200,
+    definition: {
+      ...source.body.definition,
+      id: crypto.randomUUID(),
+      revision: 1,
+      footprint: 2,
+      heads: [{
+        ...source.body.definition.heads[0],
+        parameters: [
+          { ...firstParameter, default: 0.4, components: [{ ...firstParameter.components[0], offset: 0 }] },
+          { ...firstParameter, attribute: "minimum_size_zero", components: [{ ...firstParameter.components[0], offset: 1 }], default: undefined },
+        ],
+      }],
+    },
+  });
+  mark = state.receiver.mark();
+  await bench.tick(0);
+  state.patchedArtSlots = Array.from((await state.receiver.nextAfter(mark, "artnet", 32)).slots);
+  state.patchedSacnSlots = Array.from((await state.receiver.nextAfter(mark, "sacn", 132)).slots);
+
+  await disableArtNet();
+  mark = state.receiver.mark();
+  await bench.tick(0);
+  await state.receiver.nextAfter(mark, "sacn", 132);
+  await new Promise((resolve) => setTimeout(resolve, 75));
+  state.artDisabled = !state.receiver.packets.slice(mark).some((packet) => packet.protocol === "artnet" && packet.universe === 32);
 }
 
 async function installPatchConflict(api: any): Promise<PatchConflictState> {

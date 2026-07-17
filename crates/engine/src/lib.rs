@@ -128,6 +128,11 @@ impl EngineSnapshot {
                     "universe zero is not valid for show routes".into(),
                 ));
             }
+            if !(1..=light_output::DMX_SLOTS as u16).contains(&route.minimum_slots) {
+                return Err(EngineError::Invalid(
+                    "route minimum slots must be within 1-512".into(),
+                ));
+            }
         }
         Ok(())
     }
@@ -152,6 +157,9 @@ impl Default for RenderOptions {
 #[derive(Clone, Debug)]
 pub struct RenderResult {
     pub universes: HashMap<Universe, DmxFrame>,
+    /// Highest patched slot for each logical universe. This is kept separately from values so a
+    /// patched channel whose default is zero still extends the network payload.
+    pub patched_slots: HashMap<Universe, u16>,
     pub revision: u64,
 }
 
@@ -849,6 +857,7 @@ impl Engine {
             .collect::<HashMap<_, _>>();
         let group_master_flashes = self.group_master_flashes.read();
         let mut universes = HashMap::new();
+        let mut patched_slots: HashMap<Universe, u16> = HashMap::new();
         for fixture in &snapshot.fixtures {
             let mut patches = vec![(fixture.universe, fixture.address)];
             patches.extend(
@@ -862,6 +871,14 @@ impl Engine {
                     continue;
                 };
                 let frame = universes.entry(universe).or_insert([0; 512]);
+                let last_slot = address
+                    .saturating_sub(1)
+                    .saturating_add(fixture.definition.footprint)
+                    .min(light_output::DMX_SLOTS as u16);
+                patched_slots
+                    .entry(universe)
+                    .and_modify(|current| *current = (*current).max(last_slot))
+                    .or_insert(last_slot);
                 let mut instance = fixture.clone();
                 instance.universe = Some(universe);
                 instance.address = Some(address);
@@ -877,6 +894,7 @@ impl Engine {
         }
         Ok(RenderResult {
             universes,
+            patched_slots,
             revision: snapshot.revision,
         })
     }

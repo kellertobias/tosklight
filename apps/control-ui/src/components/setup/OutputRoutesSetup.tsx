@@ -24,6 +24,7 @@ function newRoute(): RouteDraft {
       destination_universe: 1,
       destination: "",
       enabled: true,
+      minimum_slots: 128,
     },
   };
 }
@@ -33,6 +34,8 @@ function validate(route: OutputRoute): string {
     return "Logical universe must be a whole number from 1 to 65535.";
   if (!Number.isInteger(route.destination_universe) || route.destination_universe < 1 || route.destination_universe > 65_535)
     return "Destination universe must be a whole number from 1 to 65535.";
+  if (!Number.isInteger(route.minimum_slots) || route.minimum_slots < 1 || route.minimum_slots > 512)
+    return "Minimum universe size must be a whole number from 1 to 512.";
   if (route.protocol === "art_net" && !route.destination?.trim())
     return "Art-Net routes require a destination address and port.";
   return "";
@@ -93,7 +96,7 @@ export function OutputRoutesSetup({ routes, onSave, onDelete }: OutputRoutesSetu
       {ordered.map((route) => <article key={route.id}>
         <span>
           <b>Logical {route.body.logical_universe} → {route.body.protocol === "art_net" ? "Art-Net" : "sACN"} {route.body.destination_universe}</b>
-          <small>{route.body.destination || "Protocol default destination"}</small>
+          <small>{route.body.destination || "Protocol default destination"} · Minimum {route.body.minimum_slots ?? 512} slots</small>
         </span>
         <span className={route.body.enabled ? "route-enabled" : "route-disabled"}>{route.body.enabled ? "Enabled" : "Disabled"}</span>
         <Button onClick={() => edit(route)}>Edit route</Button>
@@ -113,6 +116,7 @@ export function OutputRoutesSetup({ routes, onSave, onDelete }: OutputRoutesSetu
           />
           <NumberField label="Logical universe" min="1" max="65535" value={draft.body.logical_universe} onChange={(event) => setDraft({ ...draft, body: { ...draft.body, logical_universe: Number(event.target.value) } })}/>
           <NumberField label="Destination universe" min="1" max="65535" value={draft.body.destination_universe} onChange={(event) => setDraft({ ...draft, body: { ...draft.body, destination_universe: Number(event.target.value) } })}/>
+          <NumberField label="Minimum universe size" min="1" max="512" value={draft.body.minimum_slots ?? 512} description="Enabled routes send at least this many slots. Patched fixtures extend the frame when needed." onChange={(event) => setDraft({ ...draft, body: { ...draft.body, minimum_slots: Number(event.target.value) } })}/>
           <TextField label="Destination" value={draft.body.destination ?? ""} description={draft.body.protocol === "art_net" ? "Required IP address and port, for example 10.0.0.20:6454." : "Optional IP address and port. Leave empty for sACN multicast."} onChange={(event) => setDraft({ ...draft, body: { ...draft.body, destination: event.target.value } })}/>
           <SwitchField label="Enabled" checked={draft.body.enabled} onChange={(event) => setDraft({ ...draft, body: { ...draft.body, enabled: event.target.checked } })}/>
         </FormLayout>

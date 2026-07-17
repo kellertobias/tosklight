@@ -16,6 +16,7 @@ const route: VersionedObject<OutputRoute> = {
     destination_universe: 11,
     destination: "10.0.0.20:6454",
     enabled: true,
+    minimum_slots: 128,
   },
 };
 
@@ -27,12 +28,14 @@ describe("OutputRoutesSetup", () => {
     expect(screen.getByText("Logical 1 → Art-Net 11")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Edit route" }));
     fireEvent.change(screen.getByLabelText("Logical universe"), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText("Minimum universe size"), { target: { value: "256" } });
     expect(save).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Save route" }));
 
     await waitFor(() => expect(save).toHaveBeenCalledWith("front-artnet", {
       ...route.body,
       logical_universe: 2,
+      minimum_slots: 256,
     }, 4));
     expect(screen.queryByRole("dialog", { name: "Output route editor" })).not.toBeInTheDocument();
   });
@@ -50,7 +53,7 @@ describe("OutputRoutesSetup", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save route" }));
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0][0]).toMatch(/^route-/);
-    expect(save.mock.calls[0][1]).toMatchObject({ destination: "127.0.0.1:6454", enabled: true });
+    expect(save.mock.calls[0][1]).toMatchObject({ destination: "127.0.0.1:6454", enabled: true, minimum_slots: 128 });
     expect(save.mock.calls[0][2]).toBe(0);
   });
 

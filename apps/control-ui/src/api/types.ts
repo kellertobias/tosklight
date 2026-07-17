@@ -363,6 +363,7 @@ export interface OutputRoute {
   destination_universe: number;
   destination: string | null;
   enabled: boolean;
+  minimum_slots: number;
 }
 
 export interface PatchSnapshot {

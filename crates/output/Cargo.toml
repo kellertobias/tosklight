@@ -10,3 +10,6 @@ light-core = { path = "../core" }
 serde.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

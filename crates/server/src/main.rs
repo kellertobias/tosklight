@@ -215,6 +215,37 @@ struct OutputControl {
     last_frames: HashMap<light_core::Universe, light_output::DmxFrame>,
     raw_overrides: HashMap<(light_core::Universe, light_core::DmxAddress), u8>,
 }
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+struct PersistedOutputRuntime {
+    grand_master: f32,
+    blackout: bool,
+    dynamics_paused_at: Option<chrono::DateTime<chrono::Utc>>,
+    group_masters: HashMap<String, f32>,
+}
+
+impl Default for PersistedOutputRuntime {
+    fn default() -> Self {
+        Self {
+            grand_master: 1.0,
+            blackout: false,
+            dynamics_paused_at: None,
+            group_masters: HashMap::new(),
+        }
+    }
+}
+
+impl PersistedOutputRuntime {
+    fn is_valid(&self) -> bool {
+        self.grand_master.is_finite()
+            && (0.0..=1.0).contains(&self.grand_master)
+            && self
+                .group_masters
+                .values()
+                .all(|value| value.is_finite() && (0.0..=1.0).contains(value))
+    }
+}
 impl OutputControl {
     fn render_options(&self) -> RenderOptions {
         RenderOptions {
@@ -735,6 +766,34 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     }
+    let mut output_runtime = PersistedOutputRuntime::default();
+    if active_show_error.is_none()
+        && let Some(show) = active_show.as_ref()
+        && let Some(serialized) = desk.setting(&output_runtime_setting(show.id))?
+    {
+        match serde_json::from_str::<PersistedOutputRuntime>(&serialized) {
+            Ok(runtime) if runtime.is_valid() => output_runtime = runtime,
+            Ok(_) => tracing::warn!(show_id=?show.id, "ignoring invalid persisted output runtime"),
+            Err(error) => {
+                tracing::warn!(show_id=?show.id, %error, "ignoring invalid persisted output runtime")
+            }
+        }
+    }
+    if !output_runtime.group_masters.is_empty() {
+        let mut snapshot = (*engine.snapshot()).clone();
+        for group in &mut snapshot.groups {
+            if let Some(master) = output_runtime.group_masters.get(&group.id) {
+                group.master = *master;
+            }
+        }
+        if let Err(error) = engine.replace_snapshot(snapshot) {
+            tracing::warn!(%error, "ignoring persisted group output masters");
+        }
+    }
+    engine
+        .playback()
+        .write()
+        .restore_dynamics_paused_since(output_runtime.dynamics_paused_at);
     let output_health = Arc::new(std::sync::Mutex::new(OutputHealth::default()));
     let timecode_router = Arc::new(Mutex::new(TimecodeRouter::default()));
     timecode_router
@@ -757,7 +816,14 @@ async fn main() -> anyhow::Result<()> {
     let scheduler_rate = Arc::clone(&output_rate);
     let sequences = Arc::new(tokio::sync::Mutex::new(HashMap::new()));
     let scheduler_sequences = Arc::clone(&sequences);
-    let output_control = Arc::new(Mutex::new(OutputControl::default()));
+    let output_control = Arc::new(Mutex::new(OutputControl {
+        options: RenderOptions {
+            grand_master: output_runtime.grand_master,
+            blackout: output_runtime.blackout,
+            control_loss_progress: None,
+        },
+        ..OutputControl::default()
+    }));
     let scheduler_control = Arc::clone(&output_control);
     let scheduler_timecode = Arc::clone(&timecode_router);
     let scheduler = tokio::spawn(async move {
@@ -803,7 +869,12 @@ async fn main() -> anyhow::Result<()> {
                             }
                         };
                         output
-                            .send_routes(&snapshot.routes, &frames, &mut *sequences.lock().await)
+                            .send_routes(
+                                &snapshot.routes,
+                                &frames,
+                                &rendered.patched_slots,
+                                &mut *sequences.lock().await,
+                            )
                             .await
                     }
                 },
@@ -818,6 +889,7 @@ async fn main() -> anyhow::Result<()> {
                 .send_routes(
                     &snapshot.routes,
                     &safe.universes,
+                    &safe.patched_slots,
                     &mut *scheduler_sequences.lock().await,
                 )
                 .await;
@@ -1151,6 +1223,7 @@ async fn advance_test_clock(
         .send_routes(
             &snapshot.routes,
             &frames,
+            &rendered.patched_slots,
             &mut *state.output_sequences.lock().await,
         )
         .await
@@ -5375,7 +5448,10 @@ fn dispatch_playback_action(
                 );
             }
         }
+    }
+    if changed {
         persist_active_playbacks(state)?;
+        persist_output_runtime(state)?;
     }
     Ok(changed)
 }
@@ -5891,6 +5967,7 @@ async fn update_master(
     }
     let result = serde_json::json!({"grand_master":control.options.grand_master,"blackout":control.options.blackout});
     drop(control);
+    persist_output_runtime(&state)?;
     emit(
         &state,
         "master_changed",
@@ -6749,9 +6826,10 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
             if let Some(blackout) = input.blackout {
                 control.options.blackout = blackout;
             }
-            Ok(
-                serde_json::json!({"grand_master":control.options.grand_master,"blackout":control.options.blackout}),
-            )
+            let result = serde_json::json!({"grand_master":control.options.grand_master,"blackout":control.options.blackout});
+            drop(control);
+            persist_output_runtime(state).map_err(|error| error.message)?;
+            Ok(result)
         }
         "group.master.set" => {
             #[derive(Deserialize)]
@@ -6776,6 +6854,7 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
                 .engine
                 .replace_snapshot(snapshot)
                 .map_err(|error| error.to_string())?;
+            persist_output_runtime(state).map_err(|error| error.message)?;
             Ok(serde_json::json!({"group_id":input.group_id,"master":input.value}))
         }
         "group.master.flash" => {
@@ -9551,7 +9630,9 @@ fn handle_control_event(state: &AppState, event: ControlEvent) {
         return;
     }
     let mappings = state.engine.snapshot().control_mappings.clone();
+    let mut mapping_applied = false;
     for mapping in mappings.iter().filter(|mapping| mapping.matches(&event)) {
+        mapping_applied = true;
         match mapping.action {
             ControlAction::CueGo { cue_list_id } => {
                 let _ = state.engine.playback().write().go(cue_list_id);
@@ -9575,6 +9656,10 @@ fn handle_control_event(state: &AppState, event: ControlEvent) {
                 emit(state, "desk_action", serde_json::json!({"action":"set"}))
             }
         }
+    }
+    if mapping_applied {
+        let _ = persist_active_playbacks(state);
+        let _ = persist_output_runtime(state);
     }
     emit(
         state,
@@ -10987,6 +11072,39 @@ fn persist_programmer(state: &AppState, session: &Session) -> Result<(), ApiErro
 
 fn active_playbacks_setting(show_id: light_core::ShowId) -> String {
     format!("active_playbacks:{}", show_id.0)
+}
+
+fn output_runtime_setting(show_id: light_core::ShowId) -> String {
+    format!("output_runtime:{}", show_id.0)
+}
+
+fn persist_output_runtime(state: &AppState) -> Result<(), ApiError> {
+    let Some(show) = state.active_show.read().clone() else {
+        return Ok(());
+    };
+    let (grand_master, blackout) = {
+        let control = state.output_control.lock();
+        (control.options.grand_master, control.options.blackout)
+    };
+    let runtime = PersistedOutputRuntime {
+        grand_master,
+        blackout,
+        dynamics_paused_at: state.engine.playback().read().dynamics_paused_since(),
+        group_masters: state
+            .engine
+            .snapshot()
+            .groups
+            .iter()
+            .map(|group| (group.id.clone(), group.master))
+            .collect(),
+    };
+    let serialized =
+        serde_json::to_string(&runtime).map_err(|error| ApiError::internal(error.to_string()))?;
+    state
+        .desk
+        .lock()
+        .set_setting(&output_runtime_setting(show.id), &serialized)
+        .map_err(ApiError::store)
 }
 
 fn persist_active_playbacks(state: &AppState) -> Result<(), ApiError> {
@@ -14382,6 +14500,7 @@ mod tests {
             destination_universe: 1,
             destination: None,
             enabled: true,
+            minimum_slots: 512,
         };
         assert_eq!(
             put_show_object(
