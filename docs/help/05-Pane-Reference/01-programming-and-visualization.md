@@ -11,7 +11,6 @@ Each tile shows its number, title, family, icon or artwork, and how many fixture
 - **Preset family** selects All, Intensity, Color, Position, or Beam for this pane only. Two Preset panes can therefore show different families.
 - **Enable pool colors** enables the family and custom-button color treatment.
 - **Show group shortcuts** adds the Group strip below the pool so fixtures can be selected before a preset is recalled or recorded.
-- The common **Grid width**, **Grid height**, and **Remove pane** controls change only this pane instance.
 
 The full Presets window additionally exposes family buttons in its header. With Set armed, tapping a preset opens its local button presentation settings: title, icon, and button color. Those presentation choices belong to the operator interface and do not change the stored preset values.
 
@@ -30,8 +29,6 @@ The Group master limits the intensity of members when that Group is assigned to 
 **Pane configuration:** the Group pool has only the common size and removal settings. Its membership and Group-master controls are content operations, not pane-layout settings.
 
 ![Group pool pane](../assets/screenshots/panes/groups.png)
-
-![Group pool settings](../assets/screenshots/panes/groups-settings.png)
 
 ## Fixture sheet
 
@@ -78,9 +75,9 @@ The Stage is the spatial selection and visualization surface. In 2D it shows fix
 
 Only the full Stage window exposes **Select fixtures**, **Setup positions**, and **Navigate**. A Stage pane reflects the global mode and can therefore visibly enter setup mode, but it does not contain the controls that enter that mode.
 
-In 2D **Setup positions**, drag fixtures to their show positions. In 3D setup, selected fixtures expose X, Y, Z and three rotation controls. Physical patch and multi-patch positions provide the starting point when no separate Stage transform exists. **Import scene** accepts supported scene assets; **Add element** inserts a built-in truss, platform, curtain, or other scenery element. Selected elements can be translated, rotated, scaled, and removed.
+In 2D **Setup positions**, drag fixtures to their show positions. In 3D setup, selected fixtures expose X, Y, Z and three rotation controls. Physical patch and multi-patch positions provide the starting point when no separate Stage transform exists. **Import scene** accepts supported scene assets; **Add element** opens the element chooser and then inserts a built-in truss, platform, curtain, or other scenery element. Selected elements can be translated, rotated, scaled, and removed.
 
-The full Stage settings also control the 2D/3D view, Group shortcuts, selection visibility, environment brightness, and which built-in scenery element will be added. These are full-window controls, not extra pane-settings tabs.
+The full Stage settings also control the 2D/3D view, Group shortcuts, selection visibility, and environment brightness. Element choice belongs to the **Add element** action, not Stage Settings. These are full-window controls, not extra pane-settings tabs.
 
 ![Stage pane](../assets/screenshots/panes/stage.png)
 
@@ -97,8 +94,6 @@ The full Channels window has previous/next controls and a page picker with at le
 **Pane configuration:** only the common size and removal controls.
 
 ![Channels pane](../assets/screenshots/panes/channels.png)
-
-![Channels settings](../assets/screenshots/panes/channels-settings.png)
 
 ## Dynamics
 

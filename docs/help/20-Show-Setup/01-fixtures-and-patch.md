@@ -10,7 +10,9 @@ After you have selected the fixture type you want, you can patch your fixtures w
 
 The patch refuses addresses outside 1-512 and detects overlaps across primary and multi-patch instances. Unpatched fixtures remain valid show fixtures and can still be selected and programmed; they simply produce no routed DMX until addressed.
 
-Use **+ Add fixture** to search by type, manufacturer, fixture family, and mode, then check the footprint and physical details before placement.
+Use **+ Add fixture** to search by type, manufacturer, fixture family, and mode, then check the footprint and physical details before placement. Search sits in the Add Fixture title bar. Manufacturer and fixture names align left, while type/mode counts and detail values align right for quick scanning.
+
+The **MIB** and **MIB Delay** columns configure fixture-level Move in Black behavior. Like the other editable patch cells, an ordinary click selects the fixture without changing show data. Press `[SET]` and then the cell to open its editor; confirm with **Set** or leave the stored value untouched with **Cancel**. MIB is On by default, and MIB Delay is a non-negative duration in seconds.
 
 ![Fixture-library browser used while patching](../assets/screenshots/workflows/patch-add-fixture.png)
 

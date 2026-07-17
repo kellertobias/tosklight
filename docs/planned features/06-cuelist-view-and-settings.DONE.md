@@ -44,7 +44,7 @@ Remove GO, GO minus, Toggle, and Off from the Cuelist View's right side. Those a
 
 Add a **Cuelist Settings** action to the Cuelist View title bar. It opens the settings for the currently viewed Cuelist. Pool long-press may remain as an additional shortcut, but it must open the same settings model and must not be the only discoverable path.
 
-Playback-definition settings such as button assignments, fader mode, automatic-off, and GO activation belong to an assigned playback's configuration, not to Cuelist Settings. Their separate implementation contract is [`docs/planned features/10-playback-configuration.md`](10-playback-configuration.md). Do not mix those fields into this panel merely because the current UI uses one playback-definition modal from the Cuelist Pool.
+Playback-definition settings such as button assignments, fader mode, automatic-off, and GO activation belong to an assigned playback's configuration, not to Cuelist Settings. Their separate implementation contract is [`docs/planned features/10-playback-configuration.DONE.md`](10-playback-configuration.DONE.md). Do not mix those fields into this panel merely because the current UI uses one playback-definition modal from the Cuelist Pool.
 
 ## Renumber Cues
 

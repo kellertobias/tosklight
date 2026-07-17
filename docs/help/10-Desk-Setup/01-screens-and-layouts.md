@@ -1,4 +1,4 @@
-# Screens and Desk Layouts
+# Screens and Desktop Layouts
 
 Open **Show > Desk Setup > Screens & playback** to configure the primary desk surface and, in the desktop application, optional operator screens.
 
@@ -10,8 +10,8 @@ The Tauri desktop application can add optional screens. Each optional screen can
 
 ![Default screen and playback configuration](../assets/screenshots/workflows/desk-setup-screens.png)
 
-## Build task desks
+## Build task Desktops
 
-Create separate desks for common jobs such as Programming, Playback, Patch, and diagnostics. Add only the panes needed for that job. Use full built-ins for temporary work that should not change a desk. Layout changes are autosaved to desk data.
+Create separate Desktops for common jobs such as Programming, Playback, Patch, and diagnostics. Add only the panes needed for that job. Use full built-ins for temporary work that should not change a Desktop. Layout changes are autosaved to desk data.
 
 For pane geometry and available windows, see [Application Layout and Window Manager](../01-application-layout.md).

@@ -4,12 +4,12 @@ This matrix is the completeness contract for operator Help and the generated man
 
 | Application area | Help coverage | Screenshot |
 | --- | --- | --- |
-| Shell, Show menu, desks, panes, window settings | [Application Layout and Window Manager](../01-application-layout.md) | `default-desk-overview.png` |
-| Every Open Window pane and its pane settings | [Pane Reference](../05-Pane-Reference/index.md) | `panes/*.png` generated for all 15 panes and settings dialogs |
+| Shell, Show menu, Desktops, panes, window settings | [Application Layout and Window Manager](../01-application-layout.md) | `default-desk-overview.png` |
+| Every operator Open Window pane and its pane-specific settings | [Pane Reference](../05-Pane-Reference/index.md) | `panes/*.png`; common-only settings dialogs are not embedded |
 | Installation, desktop/server start, LAN token | [Installation and First Start](../02-installation.md) | Not required |
-| Screens and playback page modes | [Screens and Desk Layouts](../10-Desk-Setup/01-screens-and-layouts.md) | `desk-setup-screens.png`; native additional-screen card requires desktop QA |
-| OSC, MIDI, RTP-MIDI, REST, WebSocket | [OSC, MIDI, and Network Control](../10-Desk-Setup/02-osc-midi-and-network.md) | `desk-setup-inputs.png`, `desk-setup-network-api.png` |
-| Output engine, DMX, Art-Net, sACN, overrides | [DMX Output and Universe Routes](../10-Desk-Setup/03-dmx-output.md) | `desk-setup-output-engine.png`, `dmx-routes.png` |
+| Screens and playback page modes | [Screens and Desktop Layouts](../10-Desk-Setup/01-screens-and-layouts.md) | `desk-setup-screens.png`; native additional-screen card requires desktop QA |
+| OSC, MIDI, RTP-MIDI, REST, WebSocket | [OSC, MIDI, and Network Control](../10-Desk-Setup/02-osc-midi-and-network.md) and [Protocol Reference](../50-Protocols/01-osc-rest-and-websocket.md) | `desk-setup-inputs.png`, `desk-setup-network-api.png` |
+| Output engine, DMX, Art-Net, sACN, overrides | [DMX Output and Universe Routes](../10-Desk-Setup/03-dmx-output.md) | `desk-setup-output-engine.png` with the Outputs route editor, plus selected-channel DMX pane |
 | Users, sessions, recovery | [Users, Sessions, and Recovery](../10-Desk-Setup/04-users-sessions-and-recovery.md) | Users, Change User, recovery, and load/revision workflow images |
 | Native shows, autosave, revisions, MVR | [Shows, Revisions, and MVR](../20-Show-Setup/02-shows-revisions-and-mvr.md) | Show menu, revisions, new-MVR, and export-MVR images |
 | GDTF, Fixture Share files, local fixture creation/revisions | [Fixture Library](../20-Show-Setup/03-fixture-library.md) | Library, Import GDTF, and Create fixture images |

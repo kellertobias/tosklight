@@ -8,8 +8,10 @@ The supplied mockups establish a useful console-like model: a large workspace, a
 
 | UI concept | Server domain | Notes |
 | --- | --- | --- |
-| Selected fixtures and groups | Session programmer | Never shared implicitly between sessions. |
-| Command line and undo/redo | Session programmer | Persisted across disconnect and daemon restart. |
+| Landed fixture and Group values | User programmer | Shared by every session for that user, including sessions on different desks. |
+| Open selection/source gesture and command line | Control desk interaction state | Shared by sessions and OSC hardware attached to one desk; isolated from another desk even when both use the same user. |
+| Playback page and pressed-button state | Control desk interaction state | A hardware/OSC button acts like the corresponding UI button on its subscribed desk. |
+| Undo/redo | Session editing context | Persisted across disconnect and daemon restart without changing desk-scoped partial input. |
 | Blind, preview, highlight | Session programmer modes | Always visible near the command line. |
 | Attribute encoders | Typed fixture attributes | Generated from selected fixtures and capability intersection. |
 | Raw channels | DMX diagnostic inspector | Explicit override mode with warning treatment. |

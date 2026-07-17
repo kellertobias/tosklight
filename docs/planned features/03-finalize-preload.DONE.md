@@ -14,10 +14,12 @@ For physical playbacks, the Preload payload identifies the real target playback 
 - Temp on
 - Temp off
 
+The configured **TEMP** button remains a press-to-toggle control, matching its normal UI behavior; it is not converted into a held button. While Preload capture is armed, the first applicable TEMP press is retained as **Temp on** and the next as **Temp off**, in order, without changing the live temporary state.
+
 Flash actions, ordinary fader changes, and an On state caused only by moving a fader are never captured. Pending entries store action verbs rather than predicted end states. Multiple actions for one playback preserve operator order and execute against the playback's actual state at Preload GO.
 
-Virtual Playbacks are a future pane kind in the normal configurable window system, never a built-in fixed surface. A Virtual Playbacks pane contains a configurable grid of single-button cells. Each cell can be assigned a Cuelist, defaults to GO, and can instead be configured as TOGGLE. Pane placement, grid dimensions, assignments, and actions persist. When virtual capture is enabled, virtual GO and TOGGLE actions remain pending until Preload GO and then execute against their real underlying playbacks.
+Virtual Playbacks are a pane kind in the normal configurable window system, never a built-in fixed surface. A Virtual Playbacks pane contains a configurable grid of single-button cells. Each cell can be assigned a Cuelist, defaults to GO, and can instead be configured as TOGGLE. Pane placement, grid dimensions, assignments, and actions persist. When virtual capture is enabled, virtual GO and TOGGLE actions remain pending until Preload GO and then execute against their real underlying playbacks.
 
 Preload Release removes only the active temporary programmer contribution created by Preload GO. Physical and virtual actions have already changed their actual playbacks and are never undone by Preload Release.
 
-The executable contract, configuration matrix, and intentional Virtual Playbacks expected-failure point are defined in [`docs/testing/06-preload-modes-and-virtual-playbacks.md`](../testing/06-preload-modes-and-virtual-playbacks.md).
+The executable contract and complete configuration matrix are defined in [`docs/testing/06-preload-modes-and-virtual-playbacks.md`](../testing/06-preload-modes-and-virtual-playbacks.md) and implemented by the paired Playwright scenarios in `tests/06-preload-modes-and-virtual-playbacks.spec.ts`.

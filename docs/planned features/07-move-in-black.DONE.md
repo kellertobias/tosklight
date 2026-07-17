@@ -23,7 +23,7 @@ Every patched fixture has:
 - **Move in Black**: enabled by default.
 - **Move in Black Delay**: a non-negative duration in seconds in the UI and milliseconds in persisted data. Default `0`.
 
-Add **MIB** and **MIB Delay** controls to each fixture row in **Setup → Patch**. They remain fixture-level settings even when the fixture has logical heads or multipatches; all heads and physical instances inherit the parent fixture's behavior. Fixtures without Position attributes still expose the setting for consistency, but it has no runtime effect.
+Add **MIB** and **MIB Delay** cells to each fixture row in **Setup → Patch**. They use the same selected-cell editing model as the rest of the patch: an ordinary click only selects the fixture, while `[SET]` followed by the cell opens the editor. They remain fixture-level settings even when the fixture has logical heads or multipatches; all heads and physical instances inherit the parent fixture's behavior. Fixtures without Position attributes still expose the setting for consistency, but it has no runtime effect.
 
 Edits use the existing revision-checked patch update path, survive Save/Reload, and update the live engine without repatching or restarting the show.
 

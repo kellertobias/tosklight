@@ -6,13 +6,13 @@ ToskLight renders logical universes and sends them through configured Art-Net or
 
 In **Desk Setup > Outputs**, choose a 40-44 Hz frame rate, the output bind address, and backup retention. Bind to the interface used by the isolated lighting network. Save and restart when requested.
 
-![Output engine configuration](../assets/screenshots/workflows/desk-setup-output-engine.png)
+![Output engine and universe-route configuration](../assets/screenshots/workflows/desk-setup-output-engine.png)
 
 ## Create routes
 
-Open **DMX** and select **Routes**. A route maps one logical show universe to an Art-Net or sACN destination universe and optional destination address; multicast is shown when there is no explicit destination. The current Routes page is an inspection view and does not create, edit, enable, or disable routes. Configure routes in the server/installation configuration, restart if required, and verify the loaded mapping here.
+Open **Desk Setup > Outputs > Routes**. A route maps one logical show universe to an Art-Net or sACN destination universe and optional destination address; multicast is used when there is no explicit destination. Create, edit, enable, disable, and verify routes beside the output-engine configuration rather than inside the DMX monitor.
 
-![Read-only DMX universe route inspection](../assets/screenshots/workflows/dmx-routes.png)
+Choose **Add route** to create one, or **Edit route** beside a versioned route to change its protocol, logical universe, destination universe, address, or enabled state. New Art-Net routes require an address and port. For backward compatibility, a migrated historical Art-Net route whose destination was absent uses the standard `255.255.255.255:6454` broadcast; sACN with no destination uses multicast. Removing a route requires explicit confirmation and immediately terminates that route before the output snapshot is refreshed.
 
 ## Verify output
 

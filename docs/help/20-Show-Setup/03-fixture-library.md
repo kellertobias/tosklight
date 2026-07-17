@@ -1,6 +1,6 @@
 # Fixture Library
 
-The fixture library is desk-wide and persists independently of show files. Open **Desk Setup > Fixture library** to search, import, create, and revise fixture modes.
+The fixture library is desk-wide and persists independently of show files. Open **Desk Setup > Fixture library** to search, import, create, and revise fixture modes. Search, **Import GDTF**, and **Create fixture** live together in the window title. Manufacturer and fixture names align left while secondary mode and detail information aligns right.
 
 ![Fixture-library manufacturers, modes, footprint, heads, and revision](../assets/screenshots/workflows/fixture-library.png)
 

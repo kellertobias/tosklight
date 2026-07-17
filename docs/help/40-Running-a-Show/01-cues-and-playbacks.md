@@ -10,7 +10,7 @@ Arm **SET**, then choose a playback button or fader. Select the target, fader be
 
 ## Run Cues
 
-GO advances to the next Cue and applies its tracking state with configured timing. GO minus reconstructs the previous Cue rather than relying on programmer residue. Pause freezes a transition; GO continues. Release removes the playback's ownership and permits lower-priority sources to become visible.
+GO advances to the next Cue and applies its tracking state with configured timing. GO minus reconstructs the previous Cue rather than relying on programmer residue. A playback button configured as **Pause** freezes a transition and changes to **Resume** while paused; pressing it again continues the same Cue without advancing. GO also continues a paused transition. Release removes the playback's ownership and permits lower-priority sources to become visible.
 
 The active playback is an explicit operator selection. Running another playback must not silently steal that selection. Cuelist View shows current/next state, Cue detail, and playback configuration.
 

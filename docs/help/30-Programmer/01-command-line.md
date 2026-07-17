@@ -31,10 +31,10 @@ The **Desk key** is the button shown on the touchscreen keypad or console. The *
 | `[TRU]` | Thru | `[KBD:ß]` | Define a range. |
 | `[+]` | Plus | `[KBD:NUMPAD +]` or `[KBD:+]` | Add to a range or offset a subset. |
 | `[-]` | Minus | `[KBD:NUMPAD -]` | Remove fixtures from a selection; after `[AT]`, subtract a value. |
-| `[AT]` | At | `[KBD:#]` | Separate the selection from the value. |
+| `[AT]` | At | `[KBD:#]` | Separate the selection from the value. Press `[AT][AT]` for `[AT][FULL][ENT]`. |
 | `[TIME]` | Time | - | Give a value or recorded Cue an explicit fade time; press twice for `DELAY`. |
 | `[SHIFT]` | Shift | - | Latch the shifted keypad layer for the next desk key. |
-| `[.]` | Dot | `[KBD:.]` | Separate address/value parts or enter a decimal point. |
+| `[.]` | Dot | `[KBD:.]` | Separate address/value parts or enter a decimal point. Press `[.][.]` for `[AT] 0 [ENT]`. |
 | `[DIV]` | Division | `[KBD:´]` | Edit a selection or separate multiple values. Hold for selection options. |
 | `[GRP]` | Group | `[KBD:SHIFT]` + `[KBD:^]` | Select a group; press twice to reference its fixtures instead. |
 | `[CUE]` | Cue | `[KBD:SHIFT]` + `[KBD:?]` | Separate a playback address from its cue number. |
@@ -61,9 +61,11 @@ The remaining `[PRE]` and `[ESC]` buttons are in or next to the command-line dis
 
 Except for `[KBD:SHIFT]` + `[KBD:Z]`, letter keys remain free for typing and future custom shortcuts.
 
-The software shortcuts are disabled while hardware is connected. `[AT] [AT]` expands to `[AT] [FULL] [ENT]`, and `[ . ] [ . ]` expands to `[AT] 0 [ENT]`.
+The software shortcuts are disabled while hardware is connected.
 
-`[ ^ ]` is latched for one following key on software/ touch desks. `[ ^ ] 1` through `[ ^ ] 9`, and `[ ^ ] 0`, open Stage, Fixtures, Groups, Presets, Cuelists, Channels, DMX, Dynamics, Help, and Development respectively. Press `[ ^ ]` again to cancel it. On Hardware, `[ ^ ]` needs to be kept pressed while pressing the modified button.
+`[ ^ ]` is latched for one following key on software/touch desks. Its software assignments are `[ ^ ][.]` Help, `[ ^ ] 0` Fixtures, `[ ^ ] 1` Groups, `[ ^ ] 2` Presets, `[ ^ ] 3` Cuelists, `[ ^ ] 4` the selected playback's Cue details, `[ ^ ] 5` Dynamics, `[ ^ ] 6` Channels, and `[ ^ ] 7` through `[ ^ ] 9` the first three saved Desktops.
+
+On attached hardware, keep `[ ^ ]` pressed while pressing the modified button. Hardware shortcuts `[ ^ ] 1` through `[ ^ ] 9` open Stage, Fixtures, Groups, Presets, Cuelists, Channels, DMX, Dynamics, and Help respectively. Hardware `[ ^ ] 0` has no operator-window assignment; Development diagnostics are available only through the **Desk Status** developer menu.
 
 `[ ^ ] 4` opens the Cue details for the active playback. The active playback is an operator selection, not merely the most recently running playback.
 
@@ -73,11 +75,23 @@ Press `[SHIFT] [TIME]` to enter `SPD GRP`. The speed-group numbers `1` through `
 
 | Action | Command | Result |
 | --- | --- | --- |
-| Set a whole-number BPM | `[SHIFT] [TIME] 1 [+] 120 [ENT]` | Set Speed Group A to 120 BPM. |
-| Set a fractional BPM | `[SHIFT] [TIME] 2 [+] 127,5 [ENT]` | Set Speed Group B to 127.5 BPM. A comma may be used as the decimal separator. |
-| Synchronize two groups | `[SHIFT] [TIME] 1 [AT] 2 [ENT]` | Copy Speed Group A's BPM to Speed Group B and keep A and B synchronized. |
+| Set a whole-number BPM | `[SHIFT] [TIME] 1 [AT] 120 [ENT]` | Set Speed Group A to 120 BPM. |
+| Set a fractional BPM | `[SHIFT] [TIME] 2 [AT] 127,5 [ENT]` | Set Speed Group B to 127.5 BPM. A comma may be used as the decimal separator. |
+| Increase relatively | `[SHIFT] [TIME] 1 [AT] [+] 5 [ENT]` | Add 5 BPM to Speed Group A. |
+| Decrease relatively | `[SHIFT] [TIME] 1 [AT] [-] 5 [ENT]` | Subtract 5 BPM from Speed Group A. |
+| Synchronize two groups | `[SHIFT] [TIME] 1 [AT] [SHIFT] [TIME] 2 [ENT]` | Copy Speed Group A's BPM and phase to Speed Group B and keep A and B synchronized. |
 
 The two speed groups remain synchronized until you set a BPM directly for either group or tap either group to set its tempo.
+
+## Moving and copying Cues
+
+Address a Cue through its pool playback number: `[CPY] [SET] 1 [CUE] 2 [AT] [SET] 2 [CUE] 2 [ENT]`, or begin with `[MOV]` to move it. Entering the complete command opens a required choice instead of guessing the transfer meaning:
+
+- **Plain Copy** or **Plain Move** transfers only the selected Cue's stored commands and deltas.
+- **Status Copy** or **Status Move** materializes the complete tracked source status for attributes touched at or before that Cue.
+- **Cancel** closes the choice without changing either Cuelist.
+
+Copy retains the source Cue. Move removes it and recalculates tracking from the remaining stored Cues. The Plain/Status choice independently controls the destination contents.
 
 
 ## Selecting fixtures
@@ -89,6 +103,8 @@ A number without `[GRP]` always identifies a fixture. `[ENTER]` completes the se
 Selection is additive until you replace or clear it. You can select one fixture, then another fixture, then a group, and all of them remain selected. This works the same way with Stage clicks, a Stage marquee, Fixture Sheet rows, the Groups pool, and command-line selections. You do not need to hold a modifier key when moving between those surfaces.
 
 Each additional selection behaves like adding another range with `[+]`. Fixtures and groups can be combined, and overlapping fixtures appear only once in the resolved selection. Group selections remain identifiable as group references.
+
+This open selection gesture belongs to the desk, not to the logged-in user globally. Two sessions attached to the same desk share the same consecutive clicks, ordered source references, and partial command exactly as if every button had been pressed on one physical console. A different desk used by the same operator may build a different selection. Once a value is confirmed, that fixture- or Group-scoped value lands in the operator's shared programmer and is visible from all of that user's sessions; it does not copy the originating desk's partial button or selection gesture to another desk.
 
 The selection stays current after you add or change a programmer value, move an encoder, or recall a preset. That lets you continue directly: `1 [+] 2 [AT] 75 [ENTER]`, then `[AT] 50 [ENTER]`, changes the same two fixtures from 75% to 50%.
 
@@ -156,6 +172,8 @@ Double-pressing a group in the Groups pool also dereferences it. A group recorde
 
 Relative values are calculated independently for every selected fixture and clamped to the attribute's valid range. A live Group reference must be dereferenced with `[GRP][GRP]` before using a relative value so the per-fixture results can be retained.
 
+An attribute touch encoder shows its new target immediately: moving it or entering `100` through **Set value** makes the encoder read 100% at once. The resolved value in the Fixture Sheet and the actual output still interpolate to that target over Programmer Fade. That fade belongs to the programmer value, so recording it into a scene/Cue retains the timing for later playback; an explicit `[TIME]` overrides it for that value.
+
 ### Value fade and delay times
 
 Append `[TIME] <seconds>` to override Programmer Fade for only the values in this command. Pressing `[TIME]` twice changes the second press to `DELAY` in the command line; append the delay in seconds after it. Fade and delay may appear in either order because fading always begins after the delay.
@@ -166,7 +184,7 @@ Append `[TIME] <seconds>` to override Programmer Fade for only the values in thi
 | Delay then fade | `<selection> [AT] 100 [TIME][TIME] 1 [TIME] 2 [ENTER]` | Display `DELAY 1 TIME 2`, wait one second, then fade for two seconds. |
 | Fade then delay | `<selection> [AT] 100 [TIME] 2 [TIME][TIME] 1 [ENTER]` | Produce the same timing with the clauses entered in the opposite order. |
 
-The programmer remembers fade and start delay on each changed value. Recording several values with different command times into one Cue preserves those individual timings. A value without an explicit fade uses the Cue's master Fade, then the configured Cue Fade fallback. A value without an explicit start delay uses the Cue's master Delay. Cue Delay is edited in the Cuelist View. `DELAY` has a different scope in a Cue-record command: there it stores the Cue's GO/FOLLOW/TIME trigger as described below, not Cue Delay or an attribute start delay.
+The programmer remembers fade and start delay on each changed value. When no `[TIME]` is entered, it resolves the current Programmer Fade when the value is written; recording therefore preserves that duration rather than looking up a possibly different setting during playback. Recording several values with different command times into one Cue preserves those individual timings. A legacy or imported value with no retained per-value fade uses the Cue's master Fade, then the configured Cue Fade fallback. A value without an explicit start delay uses the Cue's master Delay. Cue Delay is edited in the Cuelist View. `DELAY` has a different scope in a Cue-record command: there it stores the Cue's GO/FOLLOW/TIME trigger as described below, not Cue Delay or an attribute start delay.
 
 ## Recording
 

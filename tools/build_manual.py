@@ -214,6 +214,7 @@ KEYCAP_ASSET_DIR = ROOT / "output" / "pdf" / ".manual-keycaps"
 def keycap_asset(label: str, category: str) -> tuple[Path, float, float]:
     """Render an indivisible high-resolution inline keycap for Paragraph layout."""
     scale = 4
+    horizontal_gap = round(1.4 * scale)
     font_size = 7.4
     font_path = (
         "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
@@ -227,20 +228,23 @@ def keycap_asset(label: str, category: str) -> tuple[Path, float, float]:
     box = probe.textbbox((0, 0), label, font=font)
     text_width = box[2] - box[0]
     text_height = box[3] - box[1]
-    width = max(round(15 * scale), text_width + round(7 * scale))
+    key_width = max(round(15 * scale), text_width + round(7 * scale))
+    width = key_width + horizontal_gap * 2
     height = round(11.2 * scale)
     shadow = round(1.2 * scale)
     fill, border, shadow_color, text_color = KEYCAP_PALETTES[category]
-    digest = hashlib.sha1(f"{category}\0{label}".encode()).hexdigest()[:12]
+    digest = hashlib.sha1(f"spaced-v2\0{category}\0{label}".encode()).hexdigest()[:12]
     path = KEYCAP_ASSET_DIR / f"{category}-{digest}.png"
     if not path.is_file():
         KEYCAP_ASSET_DIR.mkdir(parents=True, exist_ok=True)
         image = PILImage.new("RGBA", (width, height + shadow), (255, 255, 255, 0))
         draw = ImageDraw.Draw(image)
         radius = round(2.8 * scale)
-        draw.rounded_rectangle((0, shadow, width - 1, height + shadow - 1), radius=radius, fill=shadow_color)
-        draw.rounded_rectangle((0, 0, width - 1, height - 1), radius=radius, fill=fill, outline=border, width=max(1, scale))
-        x = (width - text_width) / 2 - box[0]
+        left = horizontal_gap
+        right = left + key_width - 1
+        draw.rounded_rectangle((left, shadow, right, height + shadow - 1), radius=radius, fill=shadow_color)
+        draw.rounded_rectangle((left, 0, right, height - 1), radius=radius, fill=fill, outline=border, width=max(1, scale))
+        x = left + (key_width - text_width) / 2 - box[0]
         y = (height - text_height) / 2 - box[1]
         draw.text((x, y), label, font=font, fill=text_color)
         image.save(path)

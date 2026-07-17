@@ -1,16 +1,18 @@
 # Playback Configuration Implementation Contract
 
-This document defines the planned playback-assignment and control-layout feature. Its behavioral acceptance scenarios are specified in [`docs/testing/07-playback-configuration.md`](../testing/07-playback-configuration.md). The feature does not exist yet; implement this contract before enabling those scenarios as Playwright coverage.
+This document defines the implemented playback-assignment and control-layout feature. Its behavioral acceptance scenarios are specified in [`docs/testing/07-playback-configuration.md`](../testing/07-playback-configuration.md) and run as executable Playwright coverage in [`tests/07-playback-configuration.spec.ts`](../../tests/07-playback-configuration.spec.ts).
 
 ## Opening Playback Configuration
 
-`[SET]` followed by touching any part of a playback opens one **Playback Configuration** modal for that playback. Valid targets include every physical or simulated button, the fader track or handle, and the playback representation in the software. While Set is armed, the touched control identifies the playback only:
+`[SET]` followed by touching any part of a playback opens one **Playback Configuration** modal for that playback. Valid targets include every physical or simulated button, the fader track or handle, the playback representation in the software, and a Virtual Playback cell. While Set is armed, the touched control identifies the playback only:
 
 - a button must not execute its assigned action;
 - a fader touch or drag must not change output or the stored fader level; and
 - touching an empty playback must still open its configuration.
 
 All entry surfaces address the same page/playback identity and open the same persisted configuration. Cancel changes nothing.
+
+Virtual Playback Pane Settings contains Rows and Columns, not a separate per-cell assignment list. Assign a virtual target through **Set Source**, **Add Target**, or the normal `[SET]`, source, target sequence. A direct `[SET]` followed by a Virtual Playback cell opens this same modal. The virtual target reports one button and no fader, and additionally exposes an icon or image-background choice in its presentation settings.
 
 ## Modal structure
 

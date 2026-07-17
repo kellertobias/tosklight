@@ -130,3 +130,21 @@ Evidence: `docs/todo-completion-audit.md`; `StageWindow`; `NumericPad`; `Command
 - Group Flash is transient: output uses `max(flash, fader)` while held and the fader value is never changed.
 
 Evidence and release verification: [docs/todo-completion-audit.md](docs/todo-completion-audit.md), 80 Rust tests, 28 frontend tests, 7 Playwright scenarios, strict Clippy, formatting/type checks, production build, desktop check, and the 64-universe benchmark (`PASS`).
+
+## Virtual Playback exclusion zones — 2026-07-16
+
+- Shift-selection and named zone creation are inert configuration gestures in the real Virtual Playbacks pane.
+- Zone names, ordered lists, memberships, and retained hidden grid cells are editable in Pane Settings and persist by show, control desk, and surface.
+- One serialized server action path enforces overlapping-zone union semantics across UI, F-key shortcuts, REST, OSC, and restart normalization.
+- Multiple sessions on one desk share the desk's zone behavior; another desk for the same user remains independent while programmer values remain user-shared.
+- Automatic full-override release remains independent of mutual exclusion.
+
+Evidence: [VPB-007](docs/testing/06-preload-modes-and-virtual-playbacks.md), `tests/06-preload-modes-and-virtual-playbacks.spec.ts`, focused UI unit coverage, and the completed [Feature 17 contract](docs/planned%20features/17-virtual-playback-exclusion-zones.DONE.md).
+
+## Manual-review software corrections — 2026-07-17
+
+- Saved workspace arrangements use Desktop terminology while physical desk identity, aliases, sessions, and OSC routing remain unchanged.
+- Cues, File Manager, Text Editor, Help, DMX, Stage, fixture browsers, Desk Setup, diagnostics, output routes, standard file fields, MIB editing, and safe show recovery implement the reviewed operator contracts.
+- Persisted legacy pane layouts receive deterministic defaults; deterministic help screenshots and manual keycap spacing were refreshed.
+
+Evidence: [MANUAL-019](docs/testing/10-desk-lock-and-operator-ui.md), [File Manager and Text Editor](docs/testing/09-file-manager-and-text-editor.md), `tests/19-manual-review-software-corrections.spec.ts`, focused UI unit coverage, refreshed help screenshots, the rebuilt PDF manual, and the completed [Feature 19 contract](docs/planned%20features/19-manual-review-software-corrections.DONE.md).

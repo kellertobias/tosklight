@@ -40,6 +40,8 @@ Picker mode is configurable by its caller with:
 
 Picker mode shows Select and Cancel controls. ENTER chooses the current valid selection; ESC cancels. Merely highlighting an item must not close the picker.
 
+This picker is the standard file and folder field for ToskLight UI forms. A form must open the root-confined ToskLight File Manager picker first, rather than opening the operating system picker directly. Desk settings may enable an explicit **Open system file picker** fallback; only when that setting is enabled may the ToskLight picker offer a secondary action that opens the native operating-system picker. The fallback is never the default action and must preserve the same allowed file types and selection constraints where the operating system supports them.
+
 ## Desk-key targeting
 
 SET, CPY, MOV, and DEL use the desk's normal button-selection model. Pressing one of these keys creates a pending, unowned action. A File Manager must not capture the action merely because it is visible, was used most recently, or currently has keyboard focus.
@@ -73,7 +75,7 @@ Delete always requires confirmation. Use the platform trash where the target fil
 
 Store notes only in native filesystem metadata: a namespaced extended attribute on macOS and Linux, or an equivalent native metadata stream on Windows when supported. If a filesystem does not support the required metadata, show Notes as unavailable and do not create hidden sidecar files or desk-database records.
 
-The first version previews common raster images such as JPEG, PNG, GIF, and WebP. It streams MP3 and WAV files with range support to the audio player. Video, PDF, document, and source-code previews are outside this feature. Plain-text editing is planned separately in [File Manager and Text Editor](15-text-editor.md) and should reuse the same confined file API when implemented.
+The first version previews common raster images such as JPEG, PNG, GIF, and WebP. It streams MP3 and WAV files with range support to the audio player. Video, PDF, document, and source-code previews are outside this feature. Plain-text editing is implemented separately in [File Manager and Text Editor](15-text-editor.DONE.md) and reuses the same confined file API.
 
 ## Server interface
 
@@ -94,6 +96,8 @@ The input context is created only after a pointer interaction inside the File Ma
 Automated coverage must include configured/default roots, removable-drive discovery adapters, root confinement, traversal and symlink escapes, hidden files, optional timestamps, range streaming, thumbnails, note capability, copy and move across roots, conflict choices, rename validation, trash capability, and drive disconnection.
 
 UI coverage must verify the three-column layout, folders-first ordering, lazy tree navigation, breadcrumbs, history, view and hidden toggles, properties, previews, multi-selection, toolbar replacement, conflicts, and every picker configuration.
+
+Picker coverage must also prove that form file fields open the ToskLight picker by default, that the operating-system picker action is absent while disabled in Desk settings, and that enabling the fallback exposes it without bypassing the calling form's target and extension constraints.
 
 Input-routing coverage must prove that focus or visibility alone never captures SET, CPY, MOV, or DEL; clicking inside claims the pending action only for the clicked File Manager; clicking elsewhere preserves lighting behavior; and touch, physical shortcuts, and OSC have matching ENTER and ESC behavior. The lighting command line must not execute or change while a claimed file operation is active.
 

@@ -10,7 +10,7 @@ Install the pinned packages in `docs/manual/requirements.txt`, then run `./build
 
 Run `./test help-screenshots` only when intentionally updating documentation images. The serial Playwright test loads a deterministic show, drives the real browser desk, and writes the software keypad, every available pane and pane-settings dialog, and the setup-workflow gallery to `docs/help/assets/screenshots`. The test checks the exact expected filenames, so adding a pane or a documented setup surface requires an intentional coverage update. Reference the files with ordinary relative Markdown image syntax so Help, PDF, and HTML use the identical image.
 
-The Dynamics pane remains in screenshot generation so future UI changes are detected, but its screenshot is intentionally not embedded in the manual while Dynamics is a future feature.
+The Dynamics pane remains in screenshot generation so future UI changes are detected, but its screenshot is intentionally not embedded in the manual while Dynamics is a future feature. Development remains available through developer tooling, but it is not an operator **Open Window** choice and is therefore excluded from the Pane Reference screenshot set.
 
 ## Release publication
 

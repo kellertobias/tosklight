@@ -12,7 +12,9 @@ Planning must define which file types and encodings are supported, whether new t
 
 Add **Text Editor** as a pane/window type in the normal configurable window system. Each Text Editor instance can select one stored text file and keep that file associated with the window, making it suitable for show notes, cue notes, contact details, run sheets, or other free-form operator information.
 
-The window should provide a clear file selector or **Choose File** action, the file name/path, editable text, save state, and explicit handling for a missing, moved, deleted, or read-only file. Its selected file and useful view state should persist with the window configuration, but unsaved text must not be mistaken for safely stored show data.
+The window title/header provides **Open File**, **Refresh**, **Save**, and **Save As**. Open File uses the root-confined ToskLight File Manager picker. The header also shows the file name/path and save state, with explicit handling for a missing, moved, deleted, or read-only file. Its selected file, cursor, and scroll position persist with the window configuration, but unsaved text must not be mistaken for safely stored show data.
+
+Pane Settings selects read-only or read-write operation and one of three views: Plain Text, Rendered Markdown, or a two-column Edit + Markdown view with editable source on the left and rendered output on the right. A pane-level read-only choice prevents writing even when the underlying file is writable.
 
 Multiple Text Editor windows may point to different files. If two windows open the same file, they must share updates or surface revision conflicts; they must not independently overwrite one another. Planning must also decide whether note files are normal files managed by the File Manager, assets embedded in the show, or both, and how those choices affect show portability, autosave, backup, Save As, and multi-user editing.
 
