@@ -1,5 +1,9 @@
 # Hardware-Connected Encoder Display
 
+## Completion
+
+Implemented. Hardware-connected Programmer and Stage surfaces now retain six numbered feedback slots, use explicit display cards rather than draggable faders, distinguish fine turn from coarse press-turn input, format normalized and discrete targets, expose pointer value entry as a separate action, and clear all mappings in Direct mode. OSC encoder events are scoped to the attached desk alias and update the target shown in the corresponding slot.
+
 ## Status and scope
 
 Review and correct the encoder presentation used when attached hardware is connected. The current compressed touch-fader representation must become an unambiguous display of the six physical encoder targets and their authoritative values.
@@ -22,3 +26,9 @@ The precise geometry needs visual review against the supported hardware-connecte
 4. Unassigned slots remain visibly numbered and non-interactive.
 5. Color, Dynamics, release/default, and Stage dual-encoder states remain distinguishable.
 6. Measured layout checks cover representative hardware-connected sizes and long localized labels.
+
+## Verification
+
+- `ParameterControls.test.tsx` covers stable numbering, unassigned slots, Direct remapping, physical fine/coarse changes, discrete values, and absence of slider semantics.
+- `ENCODER-DISPLAY-001` measures all six production cards at the supported hardware-connected bench viewport, checks ordering and readable bounds, drives Enc 1 through attached OSC, and verifies deterministic Direct-mode clearing.
+- The production TypeScript/Vite build and focused Playwright scenario pass.

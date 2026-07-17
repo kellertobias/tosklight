@@ -115,6 +115,15 @@ Configure two enabled routes for logical universe 1: Art-Net universe 1 to the b
 - **Pass:** Completed commands appear once with actionable context, inspection and dismissal are mutation-free, reuse is non-executing, the last 50 entries survive reconnect but not server restart, sensitive command terms are redacted, and all named input surfaces converge.
 - **Executable scenario:** [COMMAND-HISTORY-001](../../../tests/30-command-line-history-panel.spec.ts)
 
+### ENCODER-DISPLAY-001 — Mirror six attached hardware encoders
+
+- **Starting show:** Load canonical `default-stage.show`, immediately Save As `encoder-display-001.show`, and use the active copy.
+- **Surface:** Production hardware-connected Programmer and Stage feedback cards with attached OSC encoder input.
+- **Actions:** Select a moving fixture, change families, turn and press-turn assigned encoders, inspect missing and discrete targets, enter Direct mode, and inspect Stage navigation/setup mappings.
+- **Oracle:** Exactly six ordered cards, stable Enc 1–6 numbering, formatted authoritative targets, explicit turn/press-turn vocabulary, no slider semantics, desk-scoped OSC convergence, deterministic clearing, and non-overlapping measured bounds.
+- **Pass:** The software surface truthfully mirrors the six physical targets without implying draggable faders, stale mappings, shifted gaps, clipped values, or cross-desk input.
+- **Executable scenario:** [ENCODER-DISPLAY-001](../../../tests/31-hardware-connected-encoders.spec.ts)
+
 ## Default Stage Show
 
 Canonical `default-stage.show` contains the complete 49-record built-in patch:

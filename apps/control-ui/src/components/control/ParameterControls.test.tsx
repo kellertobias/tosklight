@@ -18,7 +18,7 @@ const server = {
   selectedGroupId: null as string | null,
   groups: [] as any[],
   patch: { fixtures: [] as any[] },
-  bootstrap: { active_programmers: [] as any[] },
+  bootstrap: { active_programmers: [] as any[], hardware_connected: false },
   session: { session_id: "session-1", user: { id: "operator" } },
   readVisualization: vi.fn().mockResolvedValue({ values: [] }),
   alignSelection: vi.fn(),
@@ -42,6 +42,7 @@ afterEach(() => {
   server.groups = [];
   server.patch.fixtures = [];
   server.bootstrap.active_programmers = [];
+  server.bootstrap.hardware_connected = false;
   vi.clearAllMocks();
 });
 
@@ -86,6 +87,55 @@ function schemaV2Fixture(): any {
 }
 
 describe("ParameterControls alignment", () => {
+  it("keeps six numbered hardware feedback slots and routes fine and press-turn changes", () => {
+    server.bootstrap.hardware_connected = true;
+    server.selectedFixtures = ["fixture-1"];
+    server.patch.fixtures = [{
+      fixture_id: "fixture-1",
+      logical_heads: [],
+      definition: { heads: [{ shared: true, parameters: [{ attribute: "intensity", capabilities: [] }] }] },
+    }];
+    render(<ParameterControls />);
+
+    expect(screen.getByLabelText("Encoder 1: Dimmer, 0%")).toBeInTheDocument();
+    for (let slot = 2; slot <= 6; slot += 1) expect(screen.getByLabelText(`Encoder ${slot} unassigned`)).toBeInTheDocument();
+    expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+
+    window.dispatchEvent(new CustomEvent("light:encoder-action", { detail: { control: "encode/1", value: "up" } }));
+    expect(server.setProgrammer).toHaveBeenLastCalledWith("fixture-1", "intensity", .01);
+    window.dispatchEvent(new CustomEvent("light:encoder-action", { detail: { control: "encode/1", value: "right" } }));
+    expect(server.setProgrammer).toHaveBeenLastCalledWith("fixture-1", "intensity", .1);
+  });
+
+  it("clears all physical encoder mappings in Direct mode", () => {
+    server.bootstrap.hardware_connected = true;
+    server.selectedFixtures = ["fixture-1"];
+    server.patch.fixtures = [schemaV2Fixture()];
+    render(<ParameterControls />);
+    fireEvent.click(screen.getByRole("button", { name: "Direct values and actions" }));
+    for (let slot = 1; slot <= 6; slot += 1) expect(screen.getByLabelText(`Encoder ${slot} unassigned`)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Encoder 1:/)).not.toBeInTheDocument();
+  });
+
+  it("formats a discrete hardware target as a semantic value instead of a percentage", () => {
+    server.bootstrap.hardware_connected = true;
+    server.selectedFixtures = ["fixture-1"];
+    server.patch.fixtures = [{
+      fixture_id: "fixture-1",
+      logical_heads: [],
+      definition: { heads: [{ shared: true, parameters: [{ attribute: "control.reset", capabilities: [] }] }] },
+    }];
+    server.bootstrap.active_programmers = [{
+      session_id: "session-1",
+      values: [{ fixture_id: "fixture-1", attribute: "control.reset", value: { kind: "discrete", value: "fixture.reset.safe" } }],
+      group_values: {},
+    }];
+    render(<ParameterControls />);
+    fireEvent.click(screen.getByRole("button", { name: "Control" }));
+    expect(screen.getByLabelText("Encoder 1: control reset, fixture.reset.safe")).toHaveTextContent("Discrete");
+    expect(screen.queryByRole("button", { name: "Set value for control reset" })).not.toBeInTheDocument();
+  });
+
   it("releases only the visible fixture-scoped attribute", () => {
     server.selectedFixtures = ["fixture-1"];
     server.patch.fixtures = [{

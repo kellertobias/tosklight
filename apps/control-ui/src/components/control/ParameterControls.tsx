@@ -10,6 +10,7 @@ import type {
 import { VerticalTouchFader } from "./VerticalTouchFader";
 import { StageCommandControls } from "./StageCommandControls";
 import { Button } from "../common";
+import { HardwareEncoderDisplay } from "./HardwareEncoderDisplay";
 
 const families = {
   Intensity: ["intensity", "shutter", "strobe", "master"],
@@ -278,6 +279,13 @@ export function ParameterControls() {
         result.set(entry.attribute, entry.value.value);
     return result;
   }, [visualization, server.selectedFixtures]);
+  const discreteValues = useMemo(() => {
+    const result = new Map<string, string>();
+    for (const entry of visualization?.values ?? [])
+      if (server.selectedFixtures.includes(entry.fixture_id) && entry.value.kind === "discrete" && !result.has(entry.attribute))
+        result.set(entry.attribute, entry.value.value);
+    return result;
+  }, [visualization, server.selectedFixtures]);
   const programmerTarget = (attribute: string): number | undefined => {
     if (server.selectedGroupId) {
       return normalizedProgrammerTarget(
@@ -290,6 +298,15 @@ export function ParameterControls() {
           candidate.fixture_id === fixtureId && candidate.attribute === attribute,
       );
       const target = normalizedProgrammerTarget(entry?.value);
+      if (target != null) return target;
+    }
+    return undefined;
+  };
+  const programmerDiscreteTarget = (attribute: string): string | undefined => {
+    if (server.selectedGroupId) return discreteProgrammerTarget(groupProgrammerValues[server.selectedGroupId]?.[attribute]);
+    for (const fixtureId of server.selectedFixtures) {
+      const entry = programmerValues.find((candidate) => candidate.fixture_id === fixtureId && candidate.attribute === attribute);
+      const target = discreteProgrammerTarget(entry?.value);
       if (target != null) return target;
     }
     return undefined;
@@ -358,6 +375,22 @@ export function ParameterControls() {
     supported.has(attribute),
   );
   const encoderSlots = Array.from({ length: 6 }, (_, index) => attributes[index] ?? null);
+  const hardwareConnected = Boolean(server.bootstrap?.hardware_connected || state.midiProfile);
+  useEffect(() => {
+    if (!hardwareConnected || directMode) return;
+    const handleEncoder = (event: Event) => {
+      const { control, value } = (event as CustomEvent<{ control: string; value?: string }>).detail;
+      const slot = Number(control.split("/")[1]) - 1;
+      const attribute = encoderSlots[slot];
+      if (!attribute || !["up", "down", "left", "right"].includes(value ?? "")) return;
+      if (programmerDiscreteTarget(attribute) ?? discreteValues.get(attribute)) return;
+      const current = programmerTarget(attribute) ?? values.get(attribute) ?? 0;
+      const delta = value === "up" ? .01 : value === "down" ? -.01 : value === "right" ? .1 : -.1;
+      void applyParameter(attribute, Math.max(0, Math.min(1, current + delta)));
+    };
+    window.addEventListener("light:encoder-action", handleEncoder);
+    return () => window.removeEventListener("light:encoder-action", handleEncoder);
+  }, [hardwareConnected, directMode, encoderSlots.join("|"), programmerValues, groupProgrammerValues, values, discreteValues, server.selectedFixtures, server.selectedGroupId]);
   if (state.stageMode !== "select" && (state.builtIn === "stage" || state.desks.find((desk) => desk.id === state.activeDeskId)?.panes.some((pane) => pane.kind === "stage"))) return <StageCommandControls />;
   return (
     <div className="parameter-controls">
@@ -406,7 +439,9 @@ export function ParameterControls() {
         <Button aria-label="Dynamics" onClick={() => { setDirectMode(false); setDynamicsMode(!dynamicsMode); }} className={`dynamics-family ${dynamicsMode ? "active" : ""}`}><FamilyLabel full="Dynamics" compact="Dyn" /></Button>
       </div>
       <div className="parameter-surfaces">
-        {directMode ? (
+        {directMode && hardwareConnected ? (
+          <>{Array.from({ length: 6 }, (_, index) => <HardwareEncoderDisplay key={index} slot={index + 1} />)}</>
+        ) : directMode ? (
           <section className="direct-programmer-picker" aria-label="Direct programmer values and actions">
             <header>
               <div>
@@ -511,16 +546,27 @@ export function ParameterControls() {
           </div>
         ) : (
           <>{encoderSlots.map((attribute, index) => {
-            if (!attribute) return <div className="parameter-placeholder" aria-label={`Encoder ${index + 1} unassigned`} key={`empty-${index}`}><span>Enc {index + 1}</span><small>Unassigned</small></div>;
+            if (!attribute) return hardwareConnected
+              ? <HardwareEncoderDisplay key={`empty-${index}`} slot={index + 1} />
+              : <div className="parameter-placeholder" aria-label={`Encoder ${index + 1} unassigned`} key={`empty-${index}`}><span>Enc {index + 1}</span><small>Unassigned</small></div>;
             // Encoders show the operator's target immediately. Fixture/Stage views continue to
             // read the resolved visualization so a configured Programmer Fade stays visible.
             const value = programmerTarget(attribute) ?? values.get(attribute) ?? 0;
+            const discreteValue = programmerDiscreteTarget(attribute) ?? discreteValues.get(attribute);
             const hasScopedValue = server.selectedGroupId
               ? Boolean(ownProgrammer?.group_values?.[server.selectedGroupId]?.[attribute])
               : programmerValues.some(
                   (entry) => entry.attribute === attribute && server.selectedFixtures.includes(entry.fixture_id),
                 );
-            return (
+            return hardwareConnected ? <HardwareEncoderDisplay
+              key={attribute}
+              slot={index + 1}
+              target={{ label: labels[attribute] ?? attribute.replaceAll(".", " "), value: discreteValue ?? `${Math.round(value * 100)}%`, role: discreteValue ? "Discrete" : "Turn · %" }}
+              state={`${family}${dynamicsMode ? " · Dynamics" : ""}${hasScopedValue ? " · Programmer" : " · Default"}`}
+              editValue={discreteValue ? undefined : value * 100}
+              onEdit={discreteValue ? undefined : (next) => void applyParameter(attribute, Math.max(0, Math.min(100, next)) / 100)}
+              onRelease={hasScopedValue ? () => void releaseParameter(attribute) : undefined}
+            /> : (
               <VerticalTouchFader
                 key={attribute}
                 label={`Enc ${index + 1} · ${labels[attribute] ?? attribute.replaceAll(".", " ")}`}

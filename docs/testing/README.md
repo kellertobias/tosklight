@@ -12,6 +12,7 @@ The [canonical test catalog](../help/99-Development/02-test-bench-coverage.md) i
 - [Color special-dialog alignment](../plans/Done/26-color-special-dialog-alignment.DONE.md) retains the paired `COLOR-RANGE-001` uniform click, ordered range, cancellation, Undo, and software/hardware Shift contract.
 - [Hardware-connected playback selection](../plans/Done/28-hardware-connected-playback-selection.DONE.md) retains the paired `PLAYBACK-SELECT-001` card ownership, concrete Record target, Group distinction, explicit-page identity, real-control isolation, and OSC convergence contract.
 - [Command Line history](../plans/Done/30-command-line-history-panel.DONE.md) retains the paired `COMMAND-HISTORY-001` accepted/rejected ordering, non-executing reuse, input preservation, transient bounded retention, redaction, reconnect, hardware layout, and OSC attribution contract.
+- [Hardware-connected encoder display](../plans/Done/31-hardware-connected-encoders.DONE.md) retains the `ENCODER-DISPLAY-001` six-slot numbering, value formatting, remapping, physical turn/press-turn, Direct clearing, and measured hardware-layout contract.
 
 This file remains because OSC-002, OSC-004, OSC-006, API-002, and CROSS-001 still contain contract assertions that are not fully represented by executable tests.
 

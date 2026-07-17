@@ -597,6 +597,11 @@ export function ServerProvider({ children }: PropsWithChildren) {
             if ((!action.session_id && !action.desk_id) || action.session_id === nextSession.session_id || action.desk_id === nextSession.desk.id)
               window.dispatchEvent(new CustomEvent("light:desk-action", { detail: action.action }));
           }
+          if (event.kind === "desk_action" && (event.payload as { control?: string; value?: string; desk_alias?: string })?.control) {
+            const encoder = event.payload as { control: string; value?: string; desk_alias?: string };
+            if (encoder.desk_alias === nextSession.desk.osc_alias && encoder.control.startsWith("encode/"))
+              window.dispatchEvent(new CustomEvent("light:encoder-action", { detail: encoder }));
+          }
           if (event.kind === "file_input_action") {
             const action = event.payload as { action?: string; instance_id?: string; session_id?: string };
             if (action.action && action.instance_id && action.session_id === nextSession.session_id)
