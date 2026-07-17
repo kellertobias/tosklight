@@ -14,7 +14,9 @@ The full window can search the 1,000-position pool by number or name using the s
 
 This pane shows the Cues of one Cuelist. Rows show the optional Stage preview, Cue number, Cue name, trigger type, and fade time. Running and next Cues receive status highlighting. Selecting a row changes the current row selection but does not execute it.
 
-The right-hand Cue editor changes the selected Cue's title, Fade, Delay, GO/FOLLOW/TIME trigger, and trigger time. Cue deletion is deliberately not a button in this editor; use the explicit Delete Cue command with a complete Cue address. The full window also provides navigation back to the Cuelist Pool and access to Cuelist configuration.
+The right-hand **Cue Settings** editor stays inline with the selected Cue and changes its title, Fade, Delay, GO/FOLLOW/TIME trigger, and trigger time. Selecting another row updates this same editor without executing either Cue, and the Cue table remains visible. Cue deletion is deliberately not a button in this editor; use the explicit Delete Cue command with a complete Cue address.
+
+The full window also provides navigation back to the Cuelist Pool and **Cuelist Settings**. Opening Cuelist Settings replaces the complete right-hand sidebar instead of opening a second, narrower Cue form or covering the table. Mode, priority, intensity arbitration, wrap/restart behavior, timing overrides, renumbering, and Chaser controls belong to the Cuelist. Save applies them as one revision. Cancel or Close leaves clean settings immediately; if settings are dirty, choose **Save changes**, **Discard changes**, or **Stay** explicitly. The pool's hold shortcut still presents the same Cuelist-owned settings as an overlay because the pool has no Cue sidebar.
 
 The compact pane starts with Cuelist 1 or the first available list and has no independent list selector. It is best used as a running overview for a desk whose Cuelist choice is already known.
 

@@ -109,6 +109,53 @@ describe("CuelistWindow pool recording", () => {
     expect(screen.queryByRole("button", { name: "TOGGLE" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "OFF" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Title")).toHaveValue("Opening");
+    expect(screen.getByRole("heading", { name: "Cue Settings" })).toBeInTheDocument();
+  });
+
+  it("replaces the Cue sidebar with full-width Cuelist Settings and confirms dirty cancellation", () => {
+    mocks.state.storeArmed = false;
+    const cueList: CueList = {
+      id: "main",
+      name: "Main",
+      priority: 10,
+      mode: "sequence",
+      looped: false,
+      cues: [{ number: 1, name: "Opening", fade_millis: 1000, delay_millis: 0, trigger: { type: "manual" }, changes: [] }],
+    };
+    mocks.playbacks.pool = [{
+      number: 1,
+      name: "Main",
+      target: { type: "cue_list", cue_list_id: "main" },
+      buttons: ["go", "go_minus", "flash"],
+      fader: "master",
+      go_activates: true,
+      auto_off: true,
+      xfade_millis: 0,
+    }];
+    mocks.cueObjects = [{ id: "main", revision: 3, body: cueList }];
+
+    const { container } = render(<CuelistWindow />);
+    const ui = within(container);
+    fireEvent.click(ui.getByText("Main").closest("button")!);
+    fireEvent.click(ui.getByRole("button", { name: "Cuelist Settings" }));
+
+    const settings = ui.getByRole("dialog", { name: "Cuelist Settings" });
+    const sidebar = container.querySelector(".cue-properties")!;
+    expect(sidebar).toHaveClass("cuelist-settings-active");
+    expect(sidebar).toContainElement(settings);
+    expect(ui.getByRole("table")).toBeInTheDocument();
+    expect(ui.queryByRole("heading", { name: "Cue Settings" })).not.toBeInTheDocument();
+
+    fireEvent.change(within(settings).getByLabelText("Numeric priority"), { target: { value: "11" } });
+    fireEvent.click(within(settings).getByRole("button", { name: "Cancel" }));
+    const confirmation = ui.getByRole("dialog", { name: "Unsaved Cuelist Settings" });
+    fireEvent.click(within(confirmation).getByRole("button", { name: "Stay" }));
+    expect(settings).toBeInTheDocument();
+    fireEvent.click(within(settings).getByRole("button", { name: "Cancel" }));
+    fireEvent.click(within(ui.getByRole("dialog", { name: "Unsaved Cuelist Settings" })).getByRole("button", { name: "Discard changes" }));
+    expect(ui.queryByRole("dialog", { name: "Cuelist Settings" })).not.toBeInTheDocument();
+    expect(ui.getByRole("heading", { name: "Cue Settings" })).toBeInTheDocument();
+    expect(mocks.saveCueList).not.toHaveBeenCalled();
   });
 
   it("does not let a late server refresh clobber an invalid Cue draft before validation", async () => {

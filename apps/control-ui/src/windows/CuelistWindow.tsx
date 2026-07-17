@@ -24,11 +24,13 @@ function CuelistSettings({
   speedGroupsBpm,
   close,
   save,
+  inline = false,
 }: {
   object: VersionedObject<CueList>;
   speedGroupsBpm: number[];
   close: () => void;
   save: (cueList: CueList, revision: number) => Promise<boolean>;
+  inline?: boolean;
 }) {
   const [draft, setDraft] = useState<CueList>({
     ...object.body,
@@ -46,12 +48,17 @@ function CuelistSettings({
   const [startCue, setStartCue] = useState("");
   const [settingsError, setSettingsError] = useState("");
   const [renumberError, setRenumberError] = useState("");
+  const [closeConfirm, setCloseConfirm] = useState(false);
+  const initialDraft = useRef(JSON.stringify(draft));
   const replaceDraft = (next: CueList) => {
     draftRef.current = next;
     setDraft(next);
   };
   const update = <K extends keyof CueList>(key: K, value: CueList[K]) =>
     replaceDraft({ ...draftRef.current, [key]: value });
+  const dirty = () => JSON.stringify(draftRef.current) !== initialDraft.current
+    || String(priorityInputRef.current?.value ?? object.body.priority) !== String(object.body.priority);
+  const requestClose = () => dirty() ? setCloseConfirm(true) : close();
   const submit = async () => {
     setSettingsError("");
     const priority = Number(priorityInputRef.current?.value ?? object.body.priority);
@@ -101,14 +108,13 @@ function CuelistSettings({
     window.addEventListener("keydown", closeOnEscape, true);
     return () => window.removeEventListener("keydown", closeOnEscape, true);
   }, [renumberOpen]);
-  return (
-    <div className="modal-backdrop cuelist-settings-backdrop" onPointerDown={(event) => event.target === event.currentTarget && close()}>
-      <section className="modal-card cuelist-settings-modal" role="dialog" aria-label="Cuelist Settings">
-        <Button className="modal-close" onClick={close}>
+  const panel = (
+      <section className={`${inline ? "cuelist-settings-inline" : "modal-card"} cuelist-settings-modal`} role="dialog" aria-label="Cuelist Settings">
+        <Button className="modal-close" aria-label="Close Cuelist Settings" onClick={requestClose}>
           ×
         </Button>
         <h2>Cuelist Settings · {draft.name}</h2>
-        <FormLayout labelPlacement="side">
+        <FormLayout labelPlacement={inline ? "top" : "side"}>
           <SelectField
             label="Mode"
             value={draft.mode}
@@ -200,7 +206,7 @@ function CuelistSettings({
         </FormLayout>
         {settingsError && <p className="ui-field-error" role="alert">{settingsError}</p>}
         <div className="modal-actions three">
-          <Button onClick={close}>Cancel</Button>
+          <Button onClick={requestClose}>Cancel</Button>
           <Button disabled={!draft.cues.length} onClick={() => setRenumberOpen(true)}>
             Renumber Cues
           </Button>
@@ -253,9 +259,22 @@ function CuelistSettings({
             </form>
           </div>
         )}
+        {closeConfirm && (
+          <div className="modal-backdrop">
+            <section className="modal-card cuelist-settings-close-confirm" role="dialog" aria-label="Unsaved Cuelist Settings">
+              <h2>Unsaved Cuelist Settings</h2>
+              <p>Save the Cuelist changes, discard them, or stay in Cuelist Settings.</p>
+              <div className="modal-actions three">
+                <Button onClick={() => void submit()}>Save changes</Button>
+                <Button className="danger" onClick={close}>Discard changes</Button>
+                <Button onClick={() => setCloseConfirm(false)}>Stay</Button>
+              </div>
+            </section>
+          </div>
+        )}
       </section>
-    </div>
   );
+  return inline ? panel : <div className="modal-backdrop cuelist-settings-backdrop" onPointerDown={(event) => event.target === event.currentTarget && requestClose()}>{panel}</div>;
 }
 
 export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowProps) {
@@ -427,6 +446,7 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
       speedGroupsBpm={server.configuration?.speed_groups_bpm ?? [120, 90, 60, 30, 15]}
       close={() => setSettingsOpen(false)}
       save={server.saveCueList}
+      inline={tab === "cues"}
     />
   );
   if (tab === "pool")
@@ -592,8 +612,10 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
                   {cues.map((cue, index) => (
                     <tr
                       tabIndex={0}
-                      onClick={() => setSelectedCue(index)}
+                      aria-disabled={settingsOpen}
+                      onClick={() => { if (!settingsOpen) setSelectedCue(index); }}
                       onKeyDown={(event) => {
+                        if (settingsOpen) return;
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault();
                           setSelectedCue(index);
@@ -617,9 +639,10 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
           </WindowScrollArea>
         </div>
         {showCueProperties && (
-          <aside className="sequence-actions cue-properties">
-            {cueDraft && (
+          <aside className={`sequence-actions cue-properties ${settingsOpen ? "cuelist-settings-active" : ""}`}>
+            {settingsOpen ? settings : cueDraft && (
               <>
+                <h2 className="cue-settings-title">Cue Settings</h2>
                 <section>
                   {thumbnails[selectedCue] && <img className="cue-selected-thumbnail" src={thumbnails[selectedCue]} alt={`3D preview for Cue ${cueDraft.number}`} />}
                   <b>Selected Cue · {cueDraft.number}</b>
@@ -745,7 +768,6 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
           </aside>
         )}
       </div>
-      {settings}
     </div>
   );
 }

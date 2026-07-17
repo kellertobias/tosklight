@@ -11,6 +11,7 @@ import "./hardware-dense.css";
 import "./workflow-themes.css";
 import "./playback-colors.css";
 import "./fixture-address.css";
+import "./cuelist-settings-layout.css";
 import { UiKitCatalog } from "./components/window-kit/UiKitCatalog";
 import { enableSetOnContextMenu } from "./disableContextMenu";
 import { ProductDemoApp } from "./ProductDemoApp";
