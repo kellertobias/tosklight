@@ -6,7 +6,7 @@ The [canonical test catalog](../help/99-Development/02-test-bench-coverage.md) i
 
 - [OSC, API, and cross-surface agreement](04-osc-api-and-cross-surface.md) covers OSC hardware behavior, REST revisions, WebSocket/audit events, equivalent commands, authoritative PREV/NEXT/ALL and independent HIGH boundaries, and the focused Matter bridge transport/UI boundaries.
 
-This file remains because OSC-002, OSC-004, OSC-006, API-002, and CROSS-001 still contain contract assertions that are not fully represented by executable tests or [Plan 23](../plans/Future/23-completion-coverage-and-release-verification.md).
+This file remains because OSC-002, OSC-004, OSC-006, API-002, and CROSS-001 still contain contract assertions that are not fully represented by executable tests or [Plan 21](../plans/Next/21-completion-coverage-and-release-verification.md).
 
 ## Common conventions
 

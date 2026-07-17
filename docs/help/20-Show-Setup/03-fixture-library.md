@@ -79,7 +79,7 @@ An import or migration error leaves the original data untouched and appears as a
 
 ## Create or edit a fixture profile
 
-**Create fixture** opens a blank profile with one mode named **Default** and one editable main head. **Edit as new revision** opens the same editor with the chosen revision. The title bar contains **Generic**, **Modes**, **Save fixture**, and Close; there is no footer Cancel action.
+**Create fixture** opens a blank profile with one mode named **Default** and one editable main head. **Edit as new revision** opens the same editor with the chosen revision. The title bar contains **Generic**, **Modes**, **Save fixture**, and Close; the Modes tab also adds **Add mode** at the top right. There is no footer Cancel action.
 
 Closing an unchanged editor is immediate. Closing a changed editor through Close, Escape, or the backdrop asks whether to **Stay** or **Discard changes**. Saving an existing profile first asks to **Save and create revision**. A failed or stale save keeps the editor open and explains the problem.
 
@@ -89,7 +89,7 @@ Generic information includes manufacturer, full and short names, fixture type, n
 
 ### Modes and heads
 
-Modes have stable identities, names, notes, and complete channel configuration. Add, remove, and reorder modes with drag-and-drop or the explicit move buttons; the final mode cannot be removed. **Edit channels** opens the nested tabs in this order: **Heads**, **Channels**, **Color**, and **Geometry**.
+Modes have stable identities, names, notes, and complete channel configuration. Each row in the full-width Modes list edits that mode's name and notes directly and summarizes its heads, logical channels, and splits. Add modes from the title bar; remove and reorder them with drag-and-drop or the explicit move buttons. The final mode cannot be removed. **Edit channels** opens the nested tabs in this order: **Heads**, **Channels**, **Color**, and **Geometry**.
 
 Every head has a stable identity, one split, and an optional master/shared designation. At most one head is master/shared. Several heads may share a split. A head that still owns channels cannot be removed until those channels are reassigned or removed.
 

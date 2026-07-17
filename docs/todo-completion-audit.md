@@ -1,7 +1,8 @@
-# TODO completion audit
+# Backlog completion audit
 
-This audit maps every `TODO.md` area to authoritative implementation and executable evidence. It is
-updated together with the final production gates; prose alone is not considered completion proof.
+This audit maps the former lightweight backlog's completed areas to authoritative implementation and
+executable evidence. It is updated together with the final production gates; prose alone is not
+considered completion proof. Remaining work now lives in the numbered files under `docs/plans/`.
 
 | Area | Implemented evidence | Automated evidence |
 | --- | --- | --- |

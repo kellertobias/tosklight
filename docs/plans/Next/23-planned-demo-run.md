@@ -33,4 +33,61 @@ Ideally we also have titles on the video that explains what we are currently doi
   - Universe 1: ArtNET Universe 0 (IP Address and so doesn't really matter, output active)
   - Universe 2: sACN Universe 1 (IP Address and so doesn't really matter, output active)
   - Universe 3: ArtNET Universe 1 (IP Address and so doesn't really matter, output active)
-  -
+
+# Group Preparation
+- Open Fixture view. Go into settings, enable the group overlay.
+- `1 THRU 8 REC GROUP 9 ENTER` to store the front lights in Group 9
+- `SET GROUP 9 ENTER` to open the group settings modal. Give the Group the name "Front"
+- `SET GROUP 1 ENTER` to open the group settings modal and make it an empty group (from a null group). Give the Group the name "Profiles"
+- `SET GROUP 2 ENTER` to open the group settings modal and make it an empty group (from a null group). Give the Group the name "Wash"
+- `SET GROUP 3 ENTER` to open the group settings modal and make it an empty group (from a null group). Give the Group the name "LED"
+- `SET GROUP 4 ENTER` to open the group settings modal and make it an empty group (from a null group). Give the Group the name "Strips"
+- `GROUP 1 DIV 2 REC GROUP 11 ENTER`, then `SET GROUP 11 ENTER` and name it "Profiles Odd`
+- `GROUP 1 DIV 2 + 1 REC GROUP 11 ENTER`, then `SET GROUP 21 ENTER` and name it "Profiles Even`
+- `101 THRU 199 REC GROUP 1` to actually assign lamps to the group 1
+- `201 THRU 299 REC GROUP 2` to actually assign lamps to the group 2
+- `301 THRU 399 REC GROUP 3` to actually assign lamps to the group 3
+- `401 THRU 499 REC GROUP 4` to actually assign lamps to the group 4
+- `SET GROUP 11 AT SET 1.1 ENTER` to assign group 11 at playback 1 on page 1
+- `SET GROUP 12 AT SET 1.2 ENTER` to assign group 11 at playback 2 on page 1
+
+# Turn lights on
+- Clear the selection
+- Go into Programmer -> Control
+- Open the Special Dialog
+- Click "Lamps On" to turn ALL lamps on (since we have an empty selection)
+
+# Preset Programming
+- Program Red, Yellow, Green, Cyan, Blue, Magentha, White Color presets for all lamps (one preset per color, merged for all lamps)
+- Program Fan Out, Mirrored Fan Out, Audience, Center, Crossed position presets for all moving lights.
+- Program Presets for some GOBOs
+
+# Cue Programming
+- Set all front lights to 100%, record to playback 1.3
+- Set all Profiles (via the group) to 100%, record to playback 1.3
+- Set all wash via group to 100%, record to playback 1.3, choose "add second step"
+- now set both groups via preset to a color, one red, the other blue. record as next step in 1.3
+- now store all wash in red, store on playback 1.21
+- now store all wash in blue, store on playback 1.22
+- now store all profile in red, store on playback 1.23
+- now store all profile in blue, store on playback 1.24
+- Store ACL In @ 100% to playback 1.4, second cue: ACL I @ 0%, ACL Out @ 100%.
+- Go in cuelist settings for 1.4 and configure the wrap around to non-tracking and to chaser with speed group A
+
+# Busking
+- Trigger 1.21 & 1.23. Turn on Playback 1.1, 1.2 and 1.3
+- Wait a few seconds
+- click go on 1.3
+- Trigger 1.22 (see 1.21 turn off and wash immediately turn blue)
+- Trigger 1.3 GO. This is the cue, where profile and wash both get a color. See 1.22 and 1.23 turn off.
+- Turn off 1.3 and start it again with GOTO CUE 2
+
+# Preloading
+- Press Preload
+- turn on 1.21 and 1.24
+- select new positions (presets) for both, profile and wash
+- set a programmer fade time of 4s
+- press preload go
+- wait 6s
+- turn on 1.4
+- tap speed in Speed group A

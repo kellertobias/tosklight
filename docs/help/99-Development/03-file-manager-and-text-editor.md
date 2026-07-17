@@ -4,6 +4,10 @@ The File Manager and Text Editor expose only registered roots. These include the
 
 Use File Manager to inspect roots, create files and folders, and edit supported text files. ToskLight forms open its root-confined picker first. Desk configuration can expose **Open system file picker** as a secondary fallback, but the fallback is disabled by default and retains the calling form's extension, target, and cardinality constraints wherever the operating system supports them.
 
+File Manager opens temporarily over the surface that launched it. Closing the built-in File Manager returns to the same Desktop or built-in window, including the same Setup section. Closing a File Manager picker dismisses only the picker and reveals its calling dialog or form. A File Manager pane remains part of its Desktop and therefore has no close button in its pane header.
+
+The header's **Edit**, **New**, and **View** controls are dropdown menus. Edit operations use distinct icons and colors; New distinguishes files from folders. In View, List and Grid are a single-choice group, while **Show Hidden Files** and **Show Properties Sidebar** are fixed-label checkboxes. The compact location control shows the current `/path` without repeating the root name and opens a menu of its parent locations.
+
 Add a Text Editor pane to keep one file associated with a Desktop pane, monitor its Saved/Unsaved state, and save deliberate edits. The supported text formats are `.txt`, `.md`, `.csv`, and `.log`; their contents must be UTF-8 and no larger than 4 MiB. Ordinary line breaks are preserved. Pane Settings can make a pane read-only independently of the underlying file and selects Plain Text, Rendered Markdown, or a two-column Edit + Markdown view. Read-only files can be viewed and copied with **Save As**, but cannot be overwritten; a pane configured read-only disables both Save and Save As.
 
 The server validates paths inside each root. Relative traversal and files outside the configured boundary are rejected.

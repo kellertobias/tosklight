@@ -8,9 +8,11 @@ The left dock switches between **DESKTOPS** and **BUILT-INS**. Desktops are save
 
 The Show menu contains show creation/loading, MVR exchange, Desk Setup, Help, development tools, system controls, and desk shutdown. Help itself is a split workspace: topics on the left and the selected Markdown page on the right.
 
+Title-bar buttons within one action group use a single gray divider. The boundary between action groups uses a gray, light-blue, gray divider, making related controls visible without inserting a black gap.
+
 ## Search bars
 
-Search uses the same title-bar control in modals and regular windows. The search group is right-aligned immediately before every defined window or modal action. Its fixed order is magnifying glass, text, **X** while text is present, and the keyboard button. A search that offers additional options adds an Options button after a small gap; searches without options do not show that button. Options open in a stacked dialog above the owning window or modal, so they are never clipped by its title bar.
+Search uses the same title-bar control in modals and regular windows. The search group is right-aligned immediately before every defined window or modal action. Its fixed order is magnifying glass, text, **X** while text is present, and the keyboard button. When a search offers additional options, the leading magnifying-glass area widens to include a chevron; press that leading area to open Options in a stacked dialog above the owning window or modal. Searches without options show the magnifying glass without a chevron or button behavior.
 
 Typing filters immediately unless the feature page explicitly documents a different search operation. **X** clears the query, and the keyboard button opens the shared full-text keyboard.
 
