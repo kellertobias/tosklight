@@ -29,7 +29,7 @@ describe("3D stage state", () => {
     profile.name = "Twin Beam";
     profile.revision = 1;
     const mode = profile.modes[0];
-    const second = { ...blankHead(1, 1), master_shared: false };
+    const second = { ...blankHead(1), master_shared: false };
     mode.heads.push(second);
     mode.channels = [
       { ...blankChannel(mode), head_id: mode.heads[0].id, attribute: "intensity" },

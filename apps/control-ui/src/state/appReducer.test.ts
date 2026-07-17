@@ -80,6 +80,23 @@ describe("appReducer", () => {
     expect(builtIns.builtIn).toBe("groups");
   });
 
+  it("closes File Manager back to the built-in that launched it", () => {
+    const setup = appReducer(initialState, { type: "OPEN_BUILTIN", kind: "setup" });
+    const manager = appReducer(setup, { type: "OPEN_BUILTIN", kind: "file_manager" });
+    expect(manager.fileManagerReturn).toMatchObject({ dockMode: "builtins", builtIn: "setup" });
+    expect(manager.lastBuiltIn).toBe("setup");
+
+    const closed = appReducer(manager, { type: "CLOSE_FILE_MANAGER" });
+    expect(closed).toMatchObject({ dockMode: "builtins", builtIn: "setup", fileManagerReturn: null });
+  });
+
+  it("closes File Manager back to the active Desktop that launched it", () => {
+    const playback = appReducer(initialState, { type: "OPEN_DESK", id: "playback" });
+    const manager = appReducer(playback, { type: "OPEN_BUILTIN", kind: "file_manager" });
+    const closed = appReducer(manager, { type: "CLOSE_FILE_MANAGER" });
+    expect(closed).toMatchObject({ dockMode: "desks", activeDeskId: "playback", builtIn: null, fileManagerReturn: null });
+  });
+
   it("configures playback rows and columns within desk limits", () => {
     const configured = appReducer(initialState, { type: "SET_PLAYBACK_LAYOUT", columns: 20, rows: 3 });
     expect(configured.playbackColumns).toBe(20);

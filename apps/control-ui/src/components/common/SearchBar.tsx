@@ -102,13 +102,26 @@ export function SearchBar({
 	return (
 		<div className={`console-search ${hasOptions ? "has-options" : ""}`.trim()}>
 			<div className="console-search-input">
-				<span className="console-search-icon" aria-hidden="true">
-					<svg viewBox="0 0 24 24">
-						<title>Search</title>
-						<circle cx="10.5" cy="10.5" r="6.5" />
-						<path d="m15.5 15.5 5 5" />
-					</svg>
-				</span>
+				{hasOptions ? (
+					<Button
+						ref={optionsButton}
+						iconOnly
+						active={open}
+						className="console-search-icon console-search-options"
+						aria-label="Search options"
+						aria-expanded={open}
+						onClick={() => setOpen(true)}
+					>
+						<SearchIcon />
+						<span className="console-search-chevron" aria-hidden="true">
+							⌄
+						</span>
+					</Button>
+				) : (
+					<span className="console-search-icon" aria-hidden="true">
+						<SearchIcon />
+					</span>
+				)}
 				<TextInput
 					clearable
 					clearLabel="Clear search"
@@ -120,17 +133,16 @@ export function SearchBar({
 					onChange={(event) => onChange(event.target.value)}
 				/>
 			</div>
-			{hasOptions && (
-				<Button
-					ref={optionsButton}
-					className="search-options"
-					aria-label="Search options"
-					onClick={() => setOpen(true)}
-				>
-					☷
-				</Button>
-			)}
 			{open && createPortal(filterDialog, document.body)}
 		</div>
+	);
+}
+
+function SearchIcon() {
+	return (
+		<svg viewBox="0 0 24 24" aria-hidden="true">
+			<circle cx="10.5" cy="10.5" r="6.5" />
+			<path d="m15.5 15.5 5 5" />
+		</svg>
 	);
 }

@@ -15718,6 +15718,7 @@ mod tests {
             light_fixture::FixtureChannel {
                 id: indexed_channel,
                 head_id,
+                split: 1,
                 attribute: light_core::AttributeKey("gobo.1".into()),
                 resolution: light_fixture::ChannelResolution::U8,
                 secondary_slots: vec![],
@@ -15750,6 +15751,7 @@ mod tests {
             light_fixture::FixtureChannel {
                 id: reset_channel,
                 head_id,
+                split: 1,
                 attribute: light_core::AttributeKey("control.reset".into()),
                 resolution: light_fixture::ChannelResolution::U8,
                 secondary_slots: vec![],
@@ -15832,19 +15834,16 @@ mod tests {
         fixture.name = "Two-cell Highlight fixture".into();
         let mut profile = *fixture.definition.profile_snapshot.take().unwrap();
         let mode_id = profile.modes[0].id;
-        let split = profile.modes[0].heads[0].split;
         profile.modes[0].heads.extend([
             light_fixture::FixtureHead {
                 id: Uuid::new_v4(),
                 name: "Cell 1".into(),
                 master_shared: false,
-                split,
             },
             light_fixture::FixtureHead {
                 id: Uuid::new_v4(),
                 name: "Cell 2".into(),
                 master_shared: false,
-                split,
             },
         ]);
         fixture.definition = profile.resolved_definition(mode_id).unwrap();
@@ -19146,7 +19145,6 @@ mod tests {
             id: Uuid::new_v4(),
             name: "Second".into(),
             master_shared: false,
-            split: 2,
         });
         multi_split.definition = profile.resolved_definition(mode_id).unwrap();
         multi_split.split_patches = vec![

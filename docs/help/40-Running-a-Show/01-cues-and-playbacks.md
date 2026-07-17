@@ -10,7 +10,7 @@ Arm **SET**, then choose a playback button or fader. Select the target, fader be
 
 ## Manage playback pages
 
-Touch the current **Page** control to open **Playback pages** and select an existing page. **Add new page** creates and selects the next numbered page. When the last page already contains an assigned playback, the Next Page control also creates and selects a new empty page automatically; it remains disabled while the last page is empty so the desk does not accumulate unused pages.
+Touch the current **Page** control to open **Playback pages** and select an existing page. The keyboard button at the right of each page opens the full-text keyboard to rename that page without selecting it. **Add new page** creates and selects the next numbered page. When the last page already contains an assigned playback, the Next Page control also creates and selects a new empty page automatically; it remains disabled while the last page is empty so the desk does not accumulate unused pages.
 
 To rename the current page, press **SET** and then touch the **Page** control. Enter the new name and choose **Rename Page**. Page names and assignments are stored with the show, while each desk or independently paged screen retains its own current-page position.
 

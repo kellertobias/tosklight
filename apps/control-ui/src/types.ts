@@ -121,6 +121,11 @@ export interface AppState {
   desks: DeskModel[];
   builtIn: BuiltInWindow | null;
   lastBuiltIn: BuiltInWindow;
+  fileManagerReturn: {
+    dockMode: DockMode;
+    activeDeskId: string;
+    builtIn: BuiltInWindow | null;
+  } | null;
   controlMode: ControlMode;
   paneSettingsId: string | null;
   maximizedPaneId: string | null;

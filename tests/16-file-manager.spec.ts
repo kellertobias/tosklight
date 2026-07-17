@@ -107,7 +107,7 @@ test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
 
     await manager.getByRole("button", { name: `${workspace}, folder` }).dblclick();
     await expect(manager.getByRole("navigation", { name: "Breadcrumb" })).toContainText(workspace);
-    await expect(manager.locator(".file-manager-header-path")).toHaveText(`Shows: /${workspace}`);
+    await expect(manager.getByRole("button", { name: `Current path /${workspace}` })).toHaveText(`/${workspace}`);
     const visibleRows = manager.locator("main[aria-label='Directory contents'] > button");
     await expect(visibleRows).toHaveCount(3);
     await expect(visibleRows.nth(0)).toHaveAttribute("aria-label", "Destination, folder");
@@ -129,7 +129,7 @@ test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
     expect(streamed).toEqual({ status: 206, range: `bytes 0-3/${minimalWave().length}`, bytes: [82, 73, 70, 70] });
 
     await header.getByRole("button", { name: "View", exact: true }).click();
-    await page.getByRole("menu", { name: "View menu" }).getByRole("menuitem", { name: "Show Hidden Files", exact: true }).click();
+    await page.getByRole("menu", { name: "View menu" }).getByRole("menuitemcheckbox", { name: "Show Hidden Files", exact: true }).click();
     await expect(manager.getByRole("button", { name: ".operator-note, file" })).toBeVisible();
     await manager.getByRole("button", { name: "alpha.txt, file" }).click();
     const properties = manager.getByRole("complementary", { name: "Selection properties" });
@@ -179,7 +179,7 @@ test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
     await expect(manager.getByRole("button", { name: "renamed.txt, file" })).toHaveCount(0);
 
     await header.getByRole("button", { name: "View", exact: true }).click();
-    await page.getByRole("menu", { name: "View menu" }).getByRole("menuitem", { name: "Grid", exact: true }).click();
+    await page.getByRole("menu", { name: "View menu" }).getByRole("menuitemradio", { name: "Grid", exact: true }).click();
     await expect(manager.locator("main.file-grid")).toBeVisible();
     await manager.getByRole("button", { name: "Back", exact: true }).click();
     await manager.getByRole("button", { name: "Forward", exact: true }).click();
@@ -201,11 +201,27 @@ test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
     await expect(page.getByRole("button", { name: "Close File Manager" })).toBeVisible();
     await page.getByRole("button", { name: "Close File Manager" }).click();
     await expect(page.locator(".file-manager")).toHaveCount(0);
+    await expect(page.locator(".setup-window")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Shows & recovery" })).toBeVisible();
 
-    await page.getByRole("button", { name: /Open show menu/ }).click();
-    await page.getByRole("button", { name: "Enter Setup", exact: true }).click();
     await page.getByRole("button", { name: "Open Fixture Library", exact: true }).click();
-    await expect(page.getByRole("dialog", { name: "Fixture Library" })).toBeVisible();
+    const fixtureLibrary = page.getByRole("dialog", { name: "Fixture Library" });
+    await expect(fixtureLibrary).toBeVisible();
+
+    const viewport = page.viewportSize();
+    const libraryBox = await fixtureLibrary.boundingBox();
+    expect(viewport).not.toBeNull();
+    expect(libraryBox).not.toBeNull();
+    expect(libraryBox!.x).toBeCloseTo(12, 0);
+    expect(viewport!.width - (libraryBox!.x + libraryBox!.width)).toBeCloseTo(12, 0);
+
+    const titleBar = fixtureLibrary.locator(":scope > .ui-modal-titlebar");
+    const closeHeight = await titleBar.getByRole("button", { name: "Close Fixture Library" }).evaluate((button) => button.getBoundingClientRect().height);
+    for (const name of ["Import fixture", "Import GDTF", "Create fixture"]) {
+      const action = titleBar.getByRole("button", { name, exact: true });
+      await expect(action).toBeVisible();
+      await expect.poll(() => action.evaluate((button) => button.getBoundingClientRect().height)).toBe(closeHeight);
+    }
   });
 
   test("FILE-016 @ui › hosted picker supports every target, cardinality, filter, initial location, Select, ENTER, and ESC", async ({ bench, desk, page }) => {

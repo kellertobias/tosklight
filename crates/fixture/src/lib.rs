@@ -1876,7 +1876,6 @@ mod tests {
             id: Uuid::new_v4(),
             name: "Second".into(),
             master_shared: false,
-            split: 2,
         });
         let definition = profile.resolved_definition(mode_id).unwrap();
         PatchedFixture {

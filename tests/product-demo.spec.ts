@@ -18,8 +18,9 @@ test("@ui records the Full HD product demo surface", async ({ api, bench, desk, 
     await expect(demo).toBeVisible();
     await expect(demo.locator(".product-demo-application .control-section.hardware-connected")).toBeVisible();
     await expect(demo.locator(".stage-3d-canvas canvas")).toBeVisible();
-    await expect(demo.getByLabel("Live DMX universe 1").locator(".product-demo-dmx-cell")).toHaveCount(512);
-    await expect(demo.getByLabel("Live DMX universe 2").locator(".product-demo-dmx-cell")).toHaveCount(512);
+    for (const universe of [1, 2, 3, 4])
+      await expect(demo.getByLabel(`Live DMX universe ${universe}`).locator(".product-demo-dmx-cell")).toHaveCount(512);
+    await expect(demo.locator(".product-demo-dmx-universe-label")).toHaveText(["UNIVERSE 1", "UNIVERSE 2", "UNIVERSE 3", "UNIVERSE 4"]);
     await expect(demo.locator(".product-demo-visual-divider")).toHaveCount(2);
     await expect(demo.getByLabel("Live DMX output above, simulated hardware controls below")).toContainText("SIMULATED HARDWARE CONTROLS");
     await expect(demo.locator(".product-demo-playback-strip")).toHaveCount(4);

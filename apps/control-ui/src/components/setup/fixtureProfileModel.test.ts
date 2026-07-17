@@ -53,7 +53,7 @@ describe("fixture profile model", () => {
   });
   it("starts with one Default mode, one editable main head, and revision zero", () => {
     const profile = blankFixtureProfile();
-    expect(profile).toMatchObject({ schema_version: 2, revision: 0, modes: [{ name: "Default", heads: [{ name: "Main", split: 1 }] }] });
+    expect(profile).toMatchObject({ schema_version: 2, revision: 0, modes: [{ name: "Default", heads: [{ name: "Main" }] }] });
     expect(profile.modes[0].heads[0].id).toBeTruthy();
   });
 

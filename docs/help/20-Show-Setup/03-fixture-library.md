@@ -91,15 +91,15 @@ Generic information includes manufacturer, full and short names, fixture type, n
 
 Modes have stable identities, names, notes, and complete channel configuration. Each row in the full-width Modes list edits that mode's name and notes directly and summarizes its heads, logical channels, and splits. Add modes from the title bar; remove and reorder them with drag-and-drop or the explicit move buttons. The final mode cannot be removed. **Edit channels** opens the nested tabs in this order: **Heads**, **Channels**, **Color**, and **Geometry**.
 
-Every head has a stable identity, one split, and an optional master/shared designation. At most one head is master/shared. Several heads may share a split. A head that still owns channels cannot be removed until those channels are reassigned or removed.
+Every head has a stable identity and an optional master/shared designation. Heads describe logical emitters, not patch blocks: one head may own channels in several independently patched splits. At most one head is master/shared. A head that still owns channels cannot be removed until those channels are reassigned or removed.
 
-A split is an independently patchable address block. Give each split its footprint here; each gets its own optional universe and address in Show Patch. An unpatched split remains selectable, programmable, and visible but emits no DMX.
+A split is an independently patchable address block configured in Channels. Give each split its footprint there and assign every physical channel to a split; each split gets its own optional universe and address in Show Patch. An unpatched split remains selectable, programmable, and visible but emits no DMX.
 
 ![Nested fixture mode editor with Heads, Channels, Color, and Geometry tabs](../assets/screenshots/workflows/fixture-library-mode-editor.png)
 
 ### Channels
 
-For multi-split modes, Channels shows one accordion per split and keeps exactly one open. A single-split mode shows its table directly. Rows support touch drag-and-drop and explicit keyboard/accessibility move controls.
+For multi-split modes, Channels shows one accordion per split and keeps exactly one open. A single-split mode shows its table directly. The table uses large touch-sized summary cells; selecting a cell opens the labeled channel editor. Channel role is selected from the desk's supported attribute registry, with Static output as an explicit role, rather than entered as free text. Channel functions open in their own nested modal. Rows support touch drag-and-drop and explicit keyboard/accessibility move controls.
 
 The primary DMX slot is derived from row order. Fine, Third byte, and Fourth byte contain explicit component slots for 16-, 24-, and 32-bit channels; reserved component slots are skipped when later primary slots are calculated. Default, Highlight, function ranges, and fixed values are exact raw integers at the selected resolution. Saving is blocked when slots overlap, exceed 512, do not fit the resolution, or lie outside the split footprint.
 

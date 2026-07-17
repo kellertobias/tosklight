@@ -26,7 +26,7 @@ Build desk-transferable fixture packages from authoritative documentation and pr
 - For a scenic object that must never be DMX patched, set `patch_policy` to `visual_only`, give each mode a stable split with footprint `0`, and keep channels, color systems, and control actions empty. Keep a head for geometry ownership. Verify that parent and multi-patch instances remain addressless.
 - Preserve all requested personalities. Never silently collapse modes because channel counts match.
 - Assign every published DMX slot exactly once. Represent fine and higher bytes as secondary slots on the owning channel in documented byte order.
-- Model independently addressable cells or zones as logical heads. Keep fixture-wide controls on the master/shared head.
+- Model independently programmable cells or zones as logical heads. Assign each physical channel to its independently patchable split; one head may own channels in several splits. Keep fixture-wide controls on the master/shared head.
 - Use exact raw defaults and Highlight values. A useful Highlight look normally needs full intensity, physical white, and documented shutter-open. Leave movement, reset, lamp control, macros, and hazardous functions safe.
 - Preserve physical units and manufacturer ranges. Mark unknown data as unknown rather than estimating it.
 - Package raster photographs/icons as PNG, JPEG, or WebP. Package recognizable or manufacturer-specific geometry as a self-contained GLB 2.0. Asset fields must use relative `assets/` paths.

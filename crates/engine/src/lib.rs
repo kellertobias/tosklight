@@ -1598,7 +1598,11 @@ fn render_profile_split(
         .heads
         .iter()
         .enumerate()
-        .filter(|(_, head)| head.split == split)
+        .filter(|(_, head)| {
+            mode.channels
+                .iter()
+                .any(|channel| channel.head_id == head.id && channel.split == split)
+        })
     {
         let output = resolve_profile_head(
             fixture,
@@ -1618,6 +1622,9 @@ fn render_profile_split(
                 .ok_or_else(|| {
                     EngineError::Invalid("resolved profile channel is missing".into())
                 })?;
+            if channel.split != split {
+                continue;
+            }
             mode.encode_channel(frame, address, channel, raw)
                 .map_err(|error| EngineError::Invalid(error.to_string()))?;
         }
@@ -2063,6 +2070,7 @@ mod tests {
                 |(attribute, snap, virtual_intensity, sequence, group, grand)| FixtureChannel {
                     id: uuid::Uuid::new_v4(),
                     head_id,
+                    split: 1,
                     attribute: AttributeKey((*attribute).into()),
                     resolution: ChannelResolution::U8,
                     secondary_slots: vec![],
@@ -2139,6 +2147,7 @@ mod tests {
         .map(|(id, attribute, group, grand)| FixtureChannel {
             id,
             head_id,
+            split: 1,
             attribute: AttributeKey(attribute.into()),
             resolution: ChannelResolution::U8,
             secondary_slots: vec![],
@@ -3749,14 +3758,13 @@ mod tests {
     }
 
     #[test]
-    fn schema_v2_renders_exact_32_bit_values_to_independent_splits() {
+    fn schema_v2_renders_one_head_channels_to_independent_splits() {
         let mut profile = FixtureProfile::blank();
         profile.manufacturer = "Test".into();
         profile.name = "Split fixture".into();
         profile.short_name = "Split".into();
         profile.revision = 1;
         let first_head = profile.modes[0].heads[0].id;
-        let second_head = uuid::Uuid::new_v4();
         profile.modes[0].splits = vec![
             FixtureSplit {
                 number: 1,
@@ -3767,17 +3775,12 @@ mod tests {
                 footprint: 1,
             },
         ];
-        profile.modes[0].heads.push(FixtureHead {
-            id: second_head,
-            name: "Remote cell".into(),
-            master_shared: false,
-            split: 2,
-        });
         let exact_attribute = AttributeKey("control.exact".into());
         profile.modes[0].channels = vec![
             FixtureChannel {
                 id: uuid::Uuid::new_v4(),
                 head_id: first_head,
+                split: 1,
                 attribute: exact_attribute.clone(),
                 resolution: ChannelResolution::U32,
                 secondary_slots: vec![2, 3, 4],
@@ -3801,7 +3804,8 @@ mod tests {
             },
             FixtureChannel {
                 id: uuid::Uuid::new_v4(),
-                head_id: second_head,
+                head_id: first_head,
+                split: 2,
                 attribute: AttributeKey("remote.static".into()),
                 resolution: ChannelResolution::U8,
                 secondary_slots: vec![],
@@ -4136,6 +4140,7 @@ mod tests {
         profile.modes[0].channels = vec![FixtureChannel {
             id: uuid::Uuid::new_v4(),
             head_id: head,
+            split: 1,
             attribute: AttributeKey::intensity(),
             resolution: ChannelResolution::U8,
             secondary_slots: vec![],
@@ -4336,6 +4341,7 @@ mod tests {
             .map(|attribute| FixtureChannel {
                 id: uuid::Uuid::new_v4(),
                 head_id,
+                split: 1,
                 attribute: AttributeKey(attribute.into()),
                 resolution: ChannelResolution::U8,
                 secondary_slots: Vec::new(),
@@ -4496,7 +4502,6 @@ mod tests {
             id: second_head,
             name: "Second".into(),
             master_shared: false,
-            split: 1,
         });
         mode.splits[0].footprint = 2;
         mode.channels = [(first_head, 10, 101), (second_head, 20, 202)]
@@ -4504,6 +4509,7 @@ mod tests {
             .map(|(head_id, default_raw, highlight_raw)| FixtureChannel {
                 id: uuid::Uuid::new_v4(),
                 head_id,
+                split: 1,
                 attribute: AttributeKey::intensity(),
                 resolution: ChannelResolution::U8,
                 secondary_slots: vec![],

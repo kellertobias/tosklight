@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { configuredServerUrl } from "../api/LightApiClient";
 import { useServer } from "../api/ServerContext";
 import type { DeskConfiguration, UpdateSettings } from "../api/types";
@@ -57,8 +57,6 @@ export function SetupWindow(_: WindowProps) {
 	const [serverUrl, setServerUrl] = useState(configuredServerUrl());
 	const [fixtureLibraryOpen, setFixtureLibraryOpen] = useState(false);
 	const [deskLockSettingsOpen, setDeskLockSettingsOpen] = useState(false);
-	const [screenCanUndo, setScreenCanUndo] = useState(false);
-	const screenUndo = useRef<(() => void) | null>(null);
 	const draftRevision = useRef(0);
 	const draftDirty = useRef(false);
 	const pendingConfigurationSave = useRef<{
@@ -124,8 +122,6 @@ export function SetupWindow(_: WindowProps) {
 			updateSaved ? null : "Update defaults were not saved.",
 		);
 	};
-	const updateScreenUndoAvailability = useCallback((available: boolean) => setScreenCanUndo(available), []);
-
 	return (
 		<div className="setup-window">
 			<WindowHeader
@@ -135,12 +131,6 @@ export function SetupWindow(_: WindowProps) {
 					secondary: restartRequired ? "Restart required" : undefined,
 				}}
 				actions={section === 6 ? [[
-						{
-							id: "undo",
-							label: "Undo",
-							disabled: !screenCanUndo,
-							onClick: () => screenUndo.current?.(),
-						},
 						{ id: "desk-lock", label: "Desk Lock", onClick: () => setDeskLockSettingsOpen(true) },
 					]] : [[
 						{
@@ -151,7 +141,7 @@ export function SetupWindow(_: WindowProps) {
 						},
 					]]}
 			/>
-			<div>
+			<div className="setup-window-body">
 				<nav>
 					{sections.map((name, index) => (
 						<Button
@@ -252,38 +242,40 @@ export function SetupWindow(_: WindowProps) {
 												<header>
 													<b>Preload capture</b>
 												</header>
-												<SwitchField
-													label="Preload programmer changes"
-													checked={draft.preload_programmer_changes}
-													onChange={(event) =>
-														editDraft({
-															...draft,
-															preload_programmer_changes: event.target.checked,
-														})
-													}
-												/>
-												<SwitchField
-													label="Preload physical playback actions"
-													checked={draft.preload_physical_playback_actions}
-													onChange={(event) =>
-														editDraft({
-															...draft,
-															preload_physical_playback_actions:
-																event.target.checked,
-														})
-													}
-												/>
-												<SwitchField
-													label="Preload virtual playback actions"
-													checked={draft.preload_virtual_playback_actions}
-													onChange={(event) =>
-														editDraft({
-															...draft,
-															preload_virtual_playback_actions:
-																event.target.checked,
-														})
-													}
-												/>
+												<FormLayout labelPlacement="side">
+													<SwitchField
+														label="Preload programmer changes"
+														checked={draft.preload_programmer_changes}
+														onChange={(event) =>
+															editDraft({
+																...draft,
+																preload_programmer_changes: event.target.checked,
+															})
+														}
+													/>
+													<SwitchField
+														label="Preload physical playback actions"
+														checked={draft.preload_physical_playback_actions}
+														onChange={(event) =>
+															editDraft({
+																...draft,
+																preload_physical_playback_actions:
+																	event.target.checked,
+															})
+														}
+													/>
+													<SwitchField
+														label="Preload virtual playback actions"
+														checked={draft.preload_virtual_playback_actions}
+														onChange={(event) =>
+															editDraft({
+																...draft,
+																preload_virtual_playback_actions:
+																	event.target.checked,
+															})
+														}
+													/>
+												</FormLayout>
 											</article>
 										)}
 										{programmerSettingsError && (
@@ -405,10 +397,7 @@ export function SetupWindow(_: WindowProps) {
 								</>
 							)}
 							<div hidden={section !== 6}>
-								<ScreensSetup
-									undoRef={screenUndo}
-									onUndoAvailabilityChange={updateScreenUndoAvailability}
-								/>
+								<ScreensSetup />
 							</div>
 							{server.error && <p className="modal-error">{server.error}</p>}
 						</div>

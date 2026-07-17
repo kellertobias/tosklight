@@ -70,7 +70,7 @@ pub struct ProfilePhysicalProperties {
     pub power_watts: Option<f32>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct FixtureMode {
     pub id: Uuid,
     pub name: String,
@@ -100,7 +100,6 @@ pub struct FixtureHead {
     pub name: String,
     #[serde(default)]
     pub master_shared: bool,
-    pub split: u16,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -144,6 +143,8 @@ pub enum ChannelBehavior {
 pub struct FixtureChannel {
     pub id: Uuid,
     pub head_id: Uuid,
+    /// Independently patchable address block containing this physical channel.
+    pub split: u16,
     pub attribute: AttributeKey,
     pub resolution: ChannelResolution,
     /// Explicit 1-based component slots after the derived primary slot.
@@ -173,6 +174,85 @@ pub struct FixtureChannel {
     pub behavior: ChannelBehavior,
     #[serde(default)]
     pub functions: Vec<ChannelFunction>,
+}
+
+#[derive(Deserialize)]
+struct FixtureModeCanonical {
+    id: Uuid,
+    name: String,
+    #[serde(default)]
+    notes: String,
+    splits: Vec<FixtureSplit>,
+    heads: Vec<FixtureHead>,
+    #[serde(default)]
+    channels: Vec<FixtureChannel>,
+    #[serde(default)]
+    color_systems: Vec<HeadColorSystem>,
+    #[serde(default)]
+    control_actions: Vec<ControlAction>,
+    #[serde(default)]
+    geometry: GeometryGraph,
+}
+
+impl<'de> Deserialize<'de> for FixtureMode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let mut value = serde_json::Value::deserialize(deserializer)?;
+        let object = value.as_object_mut().ok_or_else(|| {
+            <D::Error as serde::de::Error>::custom("fixture mode must be an object")
+        })?;
+        let legacy_head_splits = object
+            .get("heads")
+            .and_then(serde_json::Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|head| {
+                Some((
+                    head.get("id")?.as_str()?.to_owned(),
+                    head.get("split")?.as_u64()?,
+                ))
+            })
+            .collect::<HashMap<_, _>>();
+        if let Some(channels) = object
+            .get_mut("channels")
+            .and_then(serde_json::Value::as_array_mut)
+        {
+            for channel in channels {
+                let Some(channel) = channel.as_object_mut() else {
+                    continue;
+                };
+                if channel.contains_key("split") {
+                    continue;
+                }
+                let split = channel
+                    .get("head_id")
+                    .and_then(serde_json::Value::as_str)
+                    .and_then(|head_id| legacy_head_splits.get(head_id))
+                    .copied()
+                    .ok_or_else(|| {
+                        <D::Error as serde::de::Error>::custom(
+                            "channel without split does not reference a legacy head split",
+                        )
+                    })?;
+                channel.insert("split".into(), serde_json::Value::from(split));
+            }
+        }
+        let canonical: FixtureModeCanonical = serde_json::from_value(value)
+            .map_err(<D::Error as serde::de::Error>::custom)?;
+        Ok(Self {
+            id: canonical.id,
+            name: canonical.name,
+            notes: canonical.notes,
+            splits: canonical.splits,
+            heads: canonical.heads,
+            channels: canonical.channels,
+            color_systems: canonical.color_systems,
+            control_actions: canonical.control_actions,
+            geometry: canonical.geometry,
+        })
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -560,7 +640,6 @@ impl FixtureProfile {
                     id: head_id,
                     name: "Main".into(),
                     master_shared: true,
-                    split: 1,
                 }],
                 channels: Vec::new(),
                 color_systems: Vec::new(),
@@ -827,11 +906,6 @@ impl FixtureMode {
                     "head names and IDs must be unique".into(),
                 ));
             }
-            if !split_map.contains_key(&head.split) {
-                return Err(ProfileError::Invalid(
-                    "head references a missing split".into(),
-                ));
-            }
             masters += usize::from(head.master_shared);
         }
         if masters > 1 {
@@ -844,6 +918,11 @@ impl FixtureMode {
             if !channel_ids.insert(channel.id) || !head_ids.contains(&channel.head_id) {
                 return Err(ProfileError::Invalid(
                     "channel IDs must be unique and reference an existing head".into(),
+                ));
+            }
+            if !split_map.contains_key(&channel.split) {
+                return Err(ProfileError::Invalid(
+                    "channel references a missing split".into(),
                 ));
             }
             channel.validate()?;
@@ -911,11 +990,6 @@ impl FixtureMode {
     }
 
     pub fn primary_slots(&self) -> Result<HashMap<Uuid, u16>, ProfileError> {
-        let split_by_head = self
-            .heads
-            .iter()
-            .map(|head| (head.id, head.split))
-            .collect::<HashMap<_, _>>();
         let footprint = self
             .splits
             .iter()
@@ -923,9 +997,7 @@ impl FixtureMode {
             .collect::<HashMap<_, _>>();
         let mut reserved = HashMap::<u16, BTreeSet<u16>>::new();
         for channel in &self.channels {
-            let split = *split_by_head
-                .get(&channel.head_id)
-                .ok_or_else(|| ProfileError::Invalid("channel references a missing head".into()))?;
+            let split = channel.split;
             if channel.secondary_slots.len() + 1 != channel.resolution.bytes() {
                 return Err(ProfileError::Invalid(format!(
                     "{}-bit channels require {} secondary slots",
@@ -935,7 +1007,7 @@ impl FixtureMode {
             }
             let limit = *footprint
                 .get(&split)
-                .ok_or_else(|| ProfileError::Invalid("head references a missing split".into()))?;
+                .ok_or_else(|| ProfileError::Invalid("channel references a missing split".into()))?;
             for slot in &channel.secondary_slots {
                 if *slot == 0 || *slot > limit || !reserved.entry(split).or_default().insert(*slot)
                 {
@@ -949,7 +1021,7 @@ impl FixtureMode {
         let mut used = reserved.clone();
         let mut result = HashMap::new();
         for channel in &self.channels {
-            let split = split_by_head[&channel.head_id];
+            let split = channel.split;
             let limit = footprint[&split];
             let cursor = next.entry(split).or_insert(1);
             while used.get(&split).is_some_and(|slots| slots.contains(cursor)) {
@@ -965,13 +1037,6 @@ impl FixtureMode {
             *cursor += 1;
         }
         Ok(result)
-    }
-
-    pub fn head_split(&self, head_id: Uuid) -> Option<u16> {
-        self.heads
-            .iter()
-            .find(|head| head.id == head_id)
-            .map(|head| head.split)
     }
 
     /// Internal semantic address used by the Programmer for an atomic control-action assignment.
@@ -1353,7 +1418,6 @@ impl FixtureMode {
                 id: stable_uuid(&format!("{mode_id}\0head\0{}", head.index)),
                 name: head.name.clone(),
                 master_shared: head.shared,
-                split: 1,
             })
             .collect::<Vec<_>>();
         let mut channels = Vec::new();
@@ -1394,6 +1458,7 @@ impl FixtureMode {
                         attribute.0
                     )),
                     head_id: heads[head_index].id,
+                    split: 1,
                     attribute: attribute.clone(),
                     resolution,
                     secondary_slots: parameter
@@ -1925,6 +1990,7 @@ mod tests {
         FixtureChannel {
             id: Uuid::new_v4(),
             head_id,
+            split: 1,
             attribute: AttributeKey("intensity".into()),
             resolution,
             secondary_slots,
@@ -2051,7 +2117,6 @@ mod tests {
                 id: head_id,
                 name: "Main".into(),
                 master_shared: true,
-                split: 1,
             }],
             channels: vec![first.clone(), second.clone(), third.clone()],
             color_systems: vec![],
@@ -2098,7 +2163,6 @@ mod tests {
                 id: head_id,
                 name: "Main".into(),
                 master_shared: true,
-                split: 1,
             }],
             channels: vec![first, second],
             color_systems: vec![],
@@ -2125,7 +2189,6 @@ mod tests {
             id: Uuid::new_v4(),
             name: "Shared 2".into(),
             master_shared: true,
-            split: 1,
         });
 
         assert!(matches!(
@@ -2136,9 +2199,10 @@ mod tests {
     }
 
     #[test]
-    fn mode_rejects_a_head_that_references_a_missing_split() {
+    fn mode_rejects_a_channel_that_references_a_missing_split() {
         let mut mode = FixtureProfile::blank().modes.remove(0);
-        mode.heads[0].split = 2;
+        mode.channels.push(channel(mode.heads[0].id, ChannelResolution::U8, vec![]));
+        mode.channels[0].split = 2;
 
         assert!(matches!(
             mode.validate(),
@@ -2304,6 +2368,25 @@ mod tests {
     }
 
     #[test]
+    fn legacy_head_split_migrates_to_channels_and_serializes_canonically() {
+        let mut profile = FixtureProfile::blank();
+        profile.manufacturer = "Test".into();
+        profile.name = "Legacy split".into();
+        let mode = &mut profile.modes[0];
+        mode.channels = vec![channel(mode.heads[0].id, ChannelResolution::U8, vec![])];
+        let mut value = serde_json::to_value(&profile).unwrap();
+        let mode = &mut value["modes"][0];
+        mode["heads"][0]["split"] = serde_json::json!(1);
+        mode["channels"][0].as_object_mut().unwrap().remove("split");
+
+        let migrated: FixtureProfile = serde_json::from_value(value).unwrap();
+        assert_eq!(migrated.modes[0].channels[0].split, 1);
+        let canonical = serde_json::to_value(migrated).unwrap();
+        assert!(canonical["modes"][0]["heads"][0].get("split").is_none());
+        assert_eq!(canonical["modes"][0]["channels"][0]["split"], 1);
+    }
+
+    #[test]
     fn exact_raw_values_encode_msb_first_at_every_supported_resolution() {
         let cases = [
             (ChannelResolution::U8, 0x0000_00ab, vec![], vec![0xab]),
@@ -2341,7 +2424,6 @@ mod tests {
                     id: head_id,
                     name: "Main".into(),
                     master_shared: true,
-                    split: 1,
                 }],
                 channels: vec![fixture_channel.clone()],
                 color_systems: vec![],
@@ -2417,7 +2499,6 @@ mod tests {
                 id: head_id,
                 name: "Main".into(),
                 master_shared: true,
-                split: 1,
             }],
             channels: vec![fixture_channel.clone()],
             color_systems: vec![],
@@ -2544,7 +2625,6 @@ mod tests {
                 id: head_id,
                 name: "Main".into(),
                 master_shared: true,
-                split: 1,
             }],
             channels: vec![fixture_channel.clone()],
             color_systems: vec![],
@@ -2688,7 +2768,6 @@ mod tests {
                 id: head_id,
                 name: "Main".into(),
                 master_shared: true,
-                split: 1,
             }],
             channels: vec![fixture_channel.clone()],
             color_systems: vec![],
@@ -3023,6 +3102,7 @@ mod tests {
         profile.modes[0].channels.push(FixtureChannel {
             id: Uuid::new_v4(),
             head_id: head,
+            split: 1,
             attribute: AttributeKey::intensity(),
             resolution: ChannelResolution::U8,
             secondary_slots: vec![],

@@ -25,8 +25,8 @@ Startup reads the same archives through `FixtureLibrary::load_fixture_package_di
 
 - `FixtureProfile` owns fixture-wide identity, physical facts, assets, modes, and safety policy.
 - `FixtureMode` owns independent splits, logical heads, ordered physical channels, color systems, control actions, and geometry.
-- `FixtureSplit.number` is an independently patchable address block. Every head belongs to exactly one split.
-- `FixtureChannel.head_id` selects its logical head. Row order derives primary slots per split; `secondary_slots` reserves fine and higher bytes.
+- `FixtureSplit.number` is an independently patchable address block.
+- `FixtureChannel.head_id` selects its logical head and `FixtureChannel.split` selects its patch block. One head may own channels in several splits. Row order derives primary slots per split; `secondary_slots` reserves fine and higher bytes.
 - U8 has zero secondary slots, U16 one, U24 two, and U32 three.
 - A physical channel has one default semantic attribute and non-overlapping channel functions. Function arbitration uses configured priority.
 - Multi-cell emitters need separate logical heads when independently programmable. Fixture-wide dimmer, shutter, macro, and movement controls stay on the master/shared head.

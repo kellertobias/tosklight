@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { PlaybackSurfaceLayout } from "../../api/types";
 import {
   Button,
@@ -9,6 +9,18 @@ import {
   SwitchField,
 } from "../common";
 import { WindowScrollArea } from "../window-kit";
+
+export function reorderPlaybackRows(
+  rows: PlaybackSurfaceLayout["rows"],
+  from: number,
+  to: number,
+) {
+  if (from === to || from < 0 || to < 0 || from >= rows.length || to >= rows.length) return rows;
+  const next = [...rows];
+  const [row] = next.splice(from, 1);
+  next.splice(to, 0, row);
+  return next;
+}
 
 export function PlaybackLayoutModal({
   initialLayout,
@@ -25,6 +37,7 @@ export function PlaybackLayoutModal({
 }) {
   const [layout, setLayout] = useState(() => structuredClone(initialLayout));
   const [draftPageMode, setDraftPageMode] = useState(pageMode);
+  const dragRow = useRef<{ pointerId: number; from: number } | null>(null);
   const maxRows = 127;
   const maxFirst = 128 - layout.playbacks_per_row;
   const invalid =
@@ -63,11 +76,26 @@ export function PlaybackLayoutModal({
         ],
       };
     });
+  const moveRow = (from: number, to: number) => {
+    if (from === to) return;
+    setLayout((current) => ({
+      ...current,
+      rows: reorderPlaybackRows(current.rows, from, to),
+    }));
+  };
 
   return (
     <div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
       <section className="nested-modal playback-layout-modal" role="dialog" aria-modal="true" aria-label="Configure Playbacks">
-        <ModalTitleBar title="Configure Playbacks" closeLabel="Close playback configuration" onClose={onClose} />
+        <ModalTitleBar
+          title="Configure Playbacks"
+          actions={<>
+            <Button disabled={layout.rows.length >= maxRows} onClick={addRow}>Add Row</Button>
+            <Button className="playback-layout-save" variant="primary" disabled={invalid} onClick={() => onSave(layout, draftPageMode)}>Save</Button>
+          </>}
+          closeLabel="Close playback configuration"
+          onClose={onClose}
+        />
         <FormLayout columns={2} minColumnWidth={190}>
           <NumberField
             label="Playbacks per row"
@@ -92,8 +120,46 @@ export function PlaybackLayoutModal({
         {pageModeLocked && <small className="playback-page-mode-note">The default screen owns the main playback page.</small>}
         <WindowScrollArea className="playback-row-list">
           {layout.rows.map((row, index) => (
-            <article className="playback-row-configuration" key={index}>
-              <b>Row {index + 1}</b>
+            <article
+              className="playback-row-configuration"
+              data-playback-row-index={index}
+              key={index}
+            >
+              <Button
+                className="playback-row-drag"
+                aria-label={`Reorder playback row ${index + 1}`}
+                title="Drag to reorder"
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  dragRow.current = { pointerId: event.pointerId, from: index };
+                  event.currentTarget.setPointerCapture?.(event.pointerId);
+                }}
+                onPointerMove={(event) => {
+                  const active = dragRow.current;
+                  if (!active || active.pointerId !== event.pointerId) return;
+                  const target = document
+                    .elementFromPoint(event.clientX, event.clientY)
+                    ?.closest<HTMLElement>("[data-playback-row-index]");
+                  const to = Number(target?.dataset.playbackRowIndex);
+                  if (!Number.isInteger(to) || to === active.from) return;
+                  moveRow(active.from, to);
+                  dragRow.current = { ...active, from: to };
+                }}
+                onPointerUp={(event) => {
+                  dragRow.current = null;
+                  if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+                    event.currentTarget.releasePointerCapture(event.pointerId);
+                  }
+                }}
+                onPointerCancel={(event) => {
+                  dragRow.current = null;
+                  if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+                    event.currentTarget.releasePointerCapture(event.pointerId);
+                  }
+                }}
+              >
+                <span aria-hidden="true">⠿</span>
+              </Button>
               <NumberField
                 label="First Playback Number"
                 min="0"
@@ -114,21 +180,21 @@ export function PlaybackLayoutModal({
                 onChange={(event) => updateRow(index, { button_count: Number(event.target.value) })}
               />
               <Button
+                className="playback-row-remove"
                 variant="danger"
+                iconOnly
+                aria-label={`Remove row ${index + 1}`}
+                title={`Remove row ${index + 1}`}
                 disabled={layout.rows.length === 1}
                 onClick={() => setLayout((current) => ({ ...current, rows: current.rows.filter((_, rowIndex) => rowIndex !== index) }))}
               >
-                Remove row
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M4 7h16M9 7V4h6v3m-9 0 1 13h10l1-13M10 11v5m4-5v5" />
+                </svg>
               </Button>
             </article>
           ))}
         </WindowScrollArea>
-        <footer className="playback-layout-actions">
-          <Button disabled={layout.rows.length >= maxRows} onClick={addRow}>+ Add playback row</Button>
-          <span />
-          <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={invalid} onClick={() => onSave(layout, draftPageMode)}>Save playback configuration</Button>
-        </footer>
       </section>
     </div>
   );

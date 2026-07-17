@@ -5,6 +5,7 @@ export type Action =
   | { type: "SET_DOCK_MODE"; mode: AppState["dockMode"] }
   | { type: "OPEN_DESK"; id: string }
   | { type: "OPEN_BUILTIN"; kind: BuiltInWindow }
+  | { type: "CLOSE_FILE_MANAGER" }
   | { type: "TOGGLE_CONTROL_MODE" }
   | { type: "SET_PANE_SETTINGS"; id: string | null }
   | { type: "SET_PANE_RECT"; id: string; rect: Partial<GridRect> }
@@ -71,6 +72,7 @@ export const initialState: AppState = {
   desks: initialDesks,
   builtIn: null,
   lastBuiltIn: "stage",
+  fileManagerReturn: null,
   controlMode: "programmer",
   paneSettingsId: null,
   maximizedPaneId: null,
@@ -139,13 +141,28 @@ const cueListWindowTitle = (title: string, kind: BuiltInWindow) => {
 export function appReducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case "SET_DOCK_MODE": return action.mode === "desks"
-      ? { ...state, dockMode: "desks", builtIn: null }
-      : { ...state, dockMode: "builtins", builtIn: state.lastBuiltIn };
-    case "OPEN_DESK": return { ...state, activeDeskId: action.id, builtIn: null, dockMode: "desks", savingDesk: false };
+      ? { ...state, dockMode: "desks", builtIn: null, fileManagerReturn: null }
+      : { ...state, dockMode: "builtins", builtIn: state.lastBuiltIn, fileManagerReturn: null };
+    case "OPEN_DESK": return { ...state, activeDeskId: action.id, builtIn: null, dockMode: "desks", savingDesk: false, fileManagerReturn: null };
     case "OPEN_BUILTIN": {
       const kind = cueListWindowKind(action.kind);
       if (kind === "cuelists" && state.builtIn === "cuelists" && state.cuelistBuiltInView === "cues") return { ...state, cuelistBuiltInView: "pool", dockMode: "builtins" };
-      return { ...state, builtIn: kind, lastBuiltIn: kind, dockMode: "builtins" };
+      if (kind === "file_manager") return {
+        ...state,
+        builtIn: kind,
+        dockMode: "builtins",
+        fileManagerReturn: state.builtIn === "file_manager" && state.fileManagerReturn
+          ? state.fileManagerReturn
+          : { dockMode: state.dockMode, activeDeskId: state.activeDeskId, builtIn: state.builtIn },
+      };
+      return { ...state, builtIn: kind, lastBuiltIn: kind, dockMode: "builtins", fileManagerReturn: null };
+    }
+    case "CLOSE_FILE_MANAGER": {
+      if (state.builtIn !== "file_manager") return state;
+      const destination = state.fileManagerReturn;
+      return destination
+        ? { ...state, ...destination, fileManagerReturn: null }
+        : { ...state, builtIn: null, dockMode: "desks", fileManagerReturn: null };
     }
     case "OPEN_GROUPS_FROM_STAGE": return { ...state, builtIn: "groups", lastBuiltIn: "groups", dockMode: "builtins", groupsReturnToStage: action.origin ?? "builtin" };
     case "RETURN_TO_STAGE": return state.groupsReturnToStage === "desk" ? { ...state, builtIn: null, dockMode: "desks", groupsReturnToStage: null } : { ...state, builtIn: "stage", lastBuiltIn: "stage", dockMode: "builtins", groupsReturnToStage: null };

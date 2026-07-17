@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import type { PlaybackPage } from "../../api/types";
 import { useServer } from "../../api/ServerContext";
 import { useApp } from "../../state/AppContext";
-import { Button, TextInput } from "../common";
+import { Button, ModalTitleBar, TextInput } from "../common";
 
 export const MAX_PLAYBACK_PAGES = 127;
 
@@ -21,6 +21,8 @@ export function canAdvancePlaybackPage(pages: PlaybackPage[], currentPage: numbe
 export function PlaybackPageMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
   const server = useServer();
   const { dispatch } = useApp();
+  const [renamePage, setRenamePage] = useState<PlaybackPage | null>(null);
+  useEffect(() => { if (!open) setRenamePage(null); }, [open]);
   if (!open) return null;
   const pages = [...(server.playbacks?.pages ?? [])].sort((left, right) => left.number - right.number);
   const nextNumber = nextPlaybackPageNumber(pages);
@@ -36,15 +38,17 @@ export function PlaybackPageMenu({ open, onClose }: { open: boolean; onClose: ()
   };
   return createPortal(<div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
     <section className="nested-modal playback-page-modal" role="dialog" aria-modal="true" aria-label="Playback pages">
-      <Button className="modal-close" onClick={onClose}>×</Button>
-      <h3>Playback pages</h3>
-      <div>{pages.map((item) => <Button className={item.number === (server.playbacks?.active_page ?? 1) ? "active" : ""} key={item.number} onClick={() => select(item.number)}><strong>{item.number}</strong><span>{item.name}</span></Button>)}</div>
-      <footer><Button variant="primary" disabled={nextNumber == null} onClick={() => void add()}>Add new page</Button></footer>
+      <ModalTitleBar title="Playback pages" actions={<Button variant="primary" disabled={nextNumber == null} onClick={() => void add()}>Add new page</Button>} closeLabel="Close Playback pages" onClose={onClose}/>
+      <div>{pages.map((item) => <div className={`playback-page-row ${item.number === (server.playbacks?.active_page ?? 1) ? "active" : ""}`} key={item.number}>
+        <Button className="playback-page-select" onClick={() => select(item.number)}><strong>{item.number}</strong><span>{item.name}</span></Button>
+        <Button className="playback-page-rename" iconOnly aria-label={`Rename playback page ${item.number}`} title={`Rename ${item.name}`} onClick={() => setRenamePage(item)}><span className="ui-keyboard-icon" aria-hidden="true">⌨</span></Button>
+      </div>)}</div>
     </section>
+    <PlaybackPageRenameDialog page={renamePage} openKeyboardInitially onClose={() => setRenamePage(null)}/>
   </div>, document.body);
 }
 
-export function PlaybackPageRenameDialog({ page, onClose }: { page: PlaybackPage | null; onClose: () => void }) {
+export function PlaybackPageRenameDialog({ page, onClose, openKeyboardInitially = false }: { page: PlaybackPage | null; onClose: () => void; openKeyboardInitially?: boolean }) {
   const server = useServer();
   const [name, setName] = useState(page?.name ?? "");
   useEffect(() => setName(page?.name ?? ""), [page]);
@@ -58,7 +62,7 @@ export function PlaybackPageRenameDialog({ page, onClose }: { page: PlaybackPage
     <section className="nested-modal playback-page-name-modal" role="dialog" aria-modal="true" aria-label={`Rename playback page ${page.number}`}>
       <Button className="modal-close" onClick={onClose}>×</Button>
       <h3>Rename Playback Page {page.number}</h3>
-      <TextInput autoFocus clearable aria-label="Playback page name" value={name} onChange={(event) => setName(event.target.value)} onKeyboardCommit={(value) => void save(value)}/>
+      <TextInput autoFocus clearable aria-label="Playback page name" value={name} openKeyboardInitially={openKeyboardInitially} onChange={(event) => setName(event.target.value)} onKeyboardCommit={(value) => void save(value)}/>
       <footer><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!name.trim()} onClick={() => void save()}>Rename Page</Button></footer>
     </section>
   </div>, document.body);

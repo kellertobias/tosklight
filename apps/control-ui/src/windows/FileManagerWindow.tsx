@@ -79,10 +79,29 @@ interface ConflictState {
   applyToAll: boolean;
 }
 
-type FileHeaderMenuKind = "edit" | "create" | "view";
+type FileHeaderMenuKind = "location" | "edit" | "create" | "view";
 interface FileHeaderMenu {
   kind: FileHeaderMenuKind;
   anchor: DOMRect;
+}
+
+type FileMenuIconName = "chevron" | "rename" | "copy" | "move" | "delete" | "file-new" | "folder-new" | "list" | "grid" | "folder";
+
+function FileMenuIcon({ name }: { name: FileMenuIconName }) {
+  const paths: Record<Exclude<FileMenuIconName, "grid">, ReactNode> = {
+    chevron: <path d="m6 9 6 6 6-6"/>,
+    rename: <><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></>,
+    copy: <><rect width="13" height="13" x="9" y="9" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>,
+    move: <><path d="M5 9h11"/><path d="m13 6 3 3-3 3"/><path d="M19 15H8"/><path d="m11 12-3 3 3 3"/></>,
+    delete: <><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></>,
+    "file-new": <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M12 18v-6M9 15h6"/></>,
+    "folder-new": <><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M12 11v6M9 14h6"/></>,
+    list: <><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></>,
+    folder: <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>,
+  };
+  return <svg className="file-menu-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    {name === "grid" ? <><rect width="7" height="7" x="3" y="3"/><rect width="7" height="7" x="14" y="3"/><rect width="7" height="7" x="3" y="14"/><rect width="7" height="7" x="14" y="14"/></> : paths[name]}
+  </svg>;
 }
 
 let pendingDeskAction: FileManagerOperationKind | null = null;
@@ -974,7 +993,7 @@ export function FileManager({ picker, instanceId: suppliedInstanceId, paneId, cl
   const trashForOperation = Boolean(operation?.kind === "delete" && operation.sources.length && operation.sources.every((source) => source.entry.trash_supported));
   const sourceKeys = new Set(operation?.sources.map(selectionKey) ?? []);
   const selectedKeys = new Set(selected.map(selectionKey));
-  const headerPath = `${currentRoot?.label ?? "Location"}: /${currentPath}`;
+  const headerPath = `/${currentPath}`;
   const openHeaderMenu = (kind: FileHeaderMenuKind, event: ReactMouseEvent<HTMLButtonElement>) => {
     const anchor = event.currentTarget.getBoundingClientRect();
     setHeaderMenu((current) => current?.kind === kind ? null : { kind, anchor });
@@ -984,10 +1003,20 @@ export function FileManager({ picker, instanceId: suppliedInstanceId, paneId, cl
     closeHeaderMenu();
     void action();
   };
+  const locationChoices = [{ label: currentRoot?.label ?? "Location", path: "" }, ...breadcrumbs.map((_, index) => ({ label: `/${breadcrumbs.slice(0, index + 1).join("/")}`, path: breadcrumbs.slice(0, index + 1).join("/") }))];
+  const headerPathControl = <Button
+    variant="ghost"
+    className="file-manager-header-path"
+    aria-label={`Current path ${headerPath}`}
+    aria-haspopup="menu"
+    aria-expanded={headerMenu?.kind === "location"}
+    title={headerPath}
+    onClick={(event) => openHeaderMenu("location", event)}
+  ><span>{headerPath}</span><FileMenuIcon name="chevron" /></Button>;
   const headerActions = <div className="file-manager-header-actions">
-    <Button aria-haspopup="menu" aria-expanded={headerMenu?.kind === "edit"} onClick={(event) => openHeaderMenu("edit", event)}>Edit</Button>
-    <Button aria-haspopup="menu" aria-expanded={headerMenu?.kind === "create"} onClick={(event) => openHeaderMenu("create", event)}>New</Button>
-    <Button aria-haspopup="menu" aria-expanded={headerMenu?.kind === "view"} onClick={(event) => openHeaderMenu("view", event)}>View</Button>
+    <Button aria-label="Edit" aria-haspopup="menu" aria-expanded={headerMenu?.kind === "edit"} onClick={(event) => openHeaderMenu("edit", event)}><span>Edit</span><FileMenuIcon name="chevron" /></Button>
+    <Button aria-label="New" aria-haspopup="menu" aria-expanded={headerMenu?.kind === "create"} onClick={(event) => openHeaderMenu("create", event)}><span>New</span><FileMenuIcon name="chevron" /></Button>
+    <Button aria-label="View" aria-haspopup="menu" aria-expanded={headerMenu?.kind === "view"} onClick={(event) => openHeaderMenu("view", event)}><span>View</span><FileMenuIcon name="chevron" /></Button>
     <Button aria-label="Back" disabled={historyIndex <= 0} onClick={() => { setHistoryIndex((value) => value - 1); setSelected([]); }}>←</Button>
     <Button aria-label="Forward" disabled={historyIndex < 0 || historyIndex >= history.length - 1} onClick={() => { setHistoryIndex((value) => value + 1); setSelected([]); }}>→</Button>
   </div>;
@@ -1000,29 +1029,31 @@ export function FileManager({ picker, instanceId: suppliedInstanceId, paneId, cl
   >
     {!paneChrome && !picker && <WindowHeader
       title="File Manager"
-      info={{ primary: purpose, secondary: headerPath }}
+      info={{ primary: purpose, secondary: headerPathControl }}
       toolbar={headerActions}
-      actions={closeable && app ? [[{ id: "close", label: "×", ariaLabel: "Close File Manager", onClick: () => app.dispatch({ type: "SET_DOCK_MODE", mode: "desks" }) }]] : []}
+      actions={closeable && app ? [[{ id: "close", label: "×", ariaLabel: "Close File Manager", onClick: () => app.dispatch({ type: "CLOSE_FILE_MANAGER" }) }]] : []}
     />}
-    {paneChrome?.info && createPortal(<span className="file-manager-header-path" title={headerPath}>{headerPath}</span>, paneChrome.info)}
+    {paneChrome?.info && createPortal(headerPathControl, paneChrome.info)}
     {paneChrome?.toolbar && createPortal(headerActions, paneChrome.toolbar)}
     {headerMenu && createPortal(<div className="file-header-menu-layer" onPointerDown={(event) => event.target === event.currentTarget && closeHeaderMenu()}>
-      <div className="file-header-menu" role="menu" aria-label={`${headerMenu.kind === "create" ? "New" : `${headerMenu.kind[0].toUpperCase()}${headerMenu.kind.slice(1)}`} menu`} style={{ top: headerMenu.anchor.bottom + 3, left: Math.max(3, Math.min(headerMenu.anchor.left, window.innerWidth - 210)) }}>
+      <div className="file-header-menu" role="menu" aria-label={`${headerMenu.kind === "create" ? "New" : `${headerMenu.kind[0].toUpperCase()}${headerMenu.kind.slice(1)}`} menu`} style={{ top: headerMenu.anchor.bottom + 3, left: Math.max(3, Math.min(headerMenu.anchor.left, window.innerWidth - 230)) }}>
+        {headerMenu.kind === "location" && locationChoices.map((choice) => <Button key={choice.path} role="menuitem" className="file-menu-location" active={choice.path === currentPath} onClick={() => menuAction(() => navigate({ rootId, path: choice.path }))}><FileMenuIcon name="folder"/><span>{choice.label}</span></Button>)}
         {headerMenu.kind === "edit" && <>
-          <Button role="menuitem" disabled={selected.length !== 1} onClick={() => menuAction(() => beginOperation("rename"))}>Rename</Button>
-          <Button role="menuitem" disabled={!selected.length} onClick={() => menuAction(() => beginOperation("copy"))}>Copy</Button>
-          <Button role="menuitem" disabled={!selected.length} onClick={() => menuAction(() => beginOperation("move"))}>Move</Button>
-          <Button role="menuitem" disabled={!selected.length} onClick={() => menuAction(() => beginOperation("delete"))}>Delete</Button>
+          <Button className="file-menu-rename" role="menuitem" disabled={selected.length !== 1} onClick={() => menuAction(() => beginOperation("rename"))}><FileMenuIcon name="rename"/><span>Rename</span></Button>
+          <Button className="file-menu-copy" role="menuitem" disabled={!selected.length} onClick={() => menuAction(() => beginOperation("copy"))}><FileMenuIcon name="copy"/><span>Copy</span></Button>
+          <Button className="file-menu-move" role="menuitem" disabled={!selected.length} onClick={() => menuAction(() => beginOperation("move"))}><FileMenuIcon name="move"/><span>Move</span></Button>
+          <Button className="file-menu-delete" role="menuitem" disabled={!selected.length} onClick={() => menuAction(() => beginOperation("delete"))}><FileMenuIcon name="delete"/><span>Delete</span></Button>
         </>}
         {headerMenu.kind === "create" && <>
-          <Button role="menuitem" onClick={() => menuAction(() => create(false))}>New File</Button>
-          <Button role="menuitem" onClick={() => menuAction(() => create(true))}>New Folder</Button>
+          <Button className="file-menu-new-file" role="menuitem" onClick={() => menuAction(() => create(false))}><FileMenuIcon name="file-new"/><span>New File</span></Button>
+          <Button className="file-menu-new-folder" role="menuitem" onClick={() => menuAction(() => create(true))}><FileMenuIcon name="folder-new"/><span>New Folder</span></Button>
         </>}
         {headerMenu.kind === "view" && <>
-          <Button role="menuitem" active={view === "list"} onClick={() => menuAction(() => setView("list"))}>List</Button>
-          <Button role="menuitem" active={view === "grid"} onClick={() => menuAction(() => setView("grid"))}>Grid</Button>
-          <Button role="menuitem" active={hidden} onClick={() => menuAction(() => setHidden(!hidden))}>{hidden ? "Hide Hidden Files" : "Show Hidden Files"}</Button>
-          <Button role="menuitem" active={propertiesVisible} onClick={() => menuAction(() => { setPropertiesVisible((value) => !value); setSidePanel("none"); })}>{propertiesVisible ? "Hide Properties" : "Show Properties"}</Button>
+          <Button role="menuitemradio" aria-checked={view === "list"} onClick={() => menuAction(() => setView("list"))}><span className="file-menu-check" aria-hidden="true">{view === "list" ? "✓" : ""}</span><FileMenuIcon name="list"/><span>List</span></Button>
+          <Button role="menuitemradio" aria-checked={view === "grid"} onClick={() => menuAction(() => setView("grid"))}><span className="file-menu-check" aria-hidden="true">{view === "grid" ? "✓" : ""}</span><FileMenuIcon name="grid"/><span>Grid</span></Button>
+          <div className="file-menu-divider" role="separator" />
+          <Button role="menuitemcheckbox" aria-checked={hidden} onClick={() => menuAction(() => setHidden(!hidden))}><span className="file-menu-checkbox" aria-hidden="true">{hidden ? "✓" : ""}</span><span>Show Hidden Files</span></Button>
+          <Button role="menuitemcheckbox" aria-checked={propertiesVisible} onClick={() => menuAction(() => { setPropertiesVisible((value) => !value); setSidePanel("none"); })}><span className="file-menu-checkbox" aria-hidden="true">{propertiesVisible ? "✓" : ""}</span><span>Show Properties Sidebar</span></Button>
         </>}
       </div>
     </div>, document.body)}

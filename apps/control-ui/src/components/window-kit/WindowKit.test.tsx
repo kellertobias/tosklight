@@ -42,13 +42,20 @@ describe("window kit", () => {
     expect(screen.getByRole("button", { name: /Disabled/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Store/ })).toHaveClass("store-target");
   });
-  it("uses the resolved column width for every button-grid row", () => {
+  it("uses the untransformed column width for every button-grid row", () => {
+    const realGetComputedStyle = window.getComputedStyle.bind(window);
+    const computedStyle = vi.spyOn(window, "getComputedStyle").mockImplementation((element) => {
+      const style = realGetComputedStyle(element);
+      if (element.tagName === "BUTTON") Object.defineProperty(style, "width", { value: "117.25px" });
+      return style;
+    });
     const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-      const width = this.tagName === "BUTTON" ? 117.25 : 400;
+      const width = this.tagName === "BUTTON" ? 114.319 : 400;
       return { x: 0, y: 0, top: 0, right: width, bottom: width, left: 0, width, height: width, toJSON: () => ({}) };
     });
     render(<ButtonGrid><GridButton number="1" primary="One"/><GridButton number="2" primary="Two"/></ButtonGrid>);
     expect(screen.getByRole("button", { name: /One/ }).parentElement).toHaveStyle({ "--grid-row-size": "117.25px" });
+    computedStyle.mockRestore();
     rect.mockRestore();
   });
   it("shows the unified empty state instead of window content", () => {

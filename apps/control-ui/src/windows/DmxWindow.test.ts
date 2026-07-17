@@ -49,9 +49,9 @@ describe("DMX fixture channel details", () => {
     profile.revision = 4;
     const mode = profile.modes[0];
     const main = mode.heads[0];
-    const remote = blankHead(1, 3);
+    const remote = blankHead(1);
     mode.splits = [{ number: 1, footprint: 4 }, { number: 3, footprint: 6 }];
-    mode.heads = [{ ...main, split: 1 }, remote];
+    mode.heads = [main, remote];
     mode.channels = [
       { ...blankChannel(mode, 1), id: "intensity", head_id: main.id, attribute: "intensity" },
       { ...blankChannel(mode, 3), id: "pan", head_id: remote.id, attribute: "pan", resolution: "u16", secondary_slots: [4] },

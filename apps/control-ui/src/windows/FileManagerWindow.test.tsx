@@ -74,7 +74,11 @@ describe("FileManager helpers", () => {
 describe("FileManager", () => {
   const chooseHeaderAction = (menu: "Edit" | "New" | "View", action: string) => {
     fireEvent.click(screen.getByRole("button", { name: menu }));
-    fireEvent.click(screen.getByRole("menuitem", { name: action }));
+    const popup = screen.getByRole("menu", { name: `${menu} menu` });
+    const item = within(popup).queryByRole("menuitem", { name: action })
+      ?? within(popup).queryByRole("menuitemradio", { name: action })
+      ?? within(popup).getByRole("menuitemcheckbox", { name: action });
+    fireEvent.click(item);
   };
 
   beforeEach(() => {
@@ -116,10 +120,15 @@ describe("FileManager", () => {
     const { container } = render(<FileManager instanceId="layout" />);
     expect(screen.getByText("File Manager")).toBeVisible();
     expect(screen.getByText("Browse and manage files")).toBeVisible();
-    expect(await screen.findByText("Shows: /")).toBeVisible();
+    expect(await screen.findByRole("button", { name: "Current path /" })).toHaveTextContent("/");
+    expect(screen.queryByText("Shows: /")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Edit" })).toBeVisible();
     expect(screen.getByRole("button", { name: "New" })).toBeVisible();
     expect(screen.getByRole("button", { name: "View" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Edit" }).querySelector("svg")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Current path /" }));
+    expect(within(screen.getByRole("menu", { name: "Location menu" })).getByRole("menuitem", { name: "Shows" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Current path /" }));
     expect(screen.queryByRole("button", { name: "Close File Manager" })).not.toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Locations" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Properties" })).toBeVisible();
@@ -128,6 +137,18 @@ describe("FileManager", () => {
     expect(rows.map((row) => row.getAttribute("aria-label"))).toEqual(["Folder, folder", "alpha.txt, file", "image.png, file"]);
 
     fireEvent.click(screen.getByRole("button", { name: "alpha.txt, file" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const editMenu = screen.getByRole("menu", { name: "Edit menu" });
+    for (const [name, className] of [["Rename", "file-menu-rename"], ["Copy", "file-menu-copy"], ["Move", "file-menu-move"], ["Delete", "file-menu-delete"]]) {
+      const item = within(editMenu).getByRole("menuitem", { name });
+      expect(item).toHaveClass(className);
+      expect(item.querySelector("svg")).toBeTruthy();
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
+    expect(within(screen.getByRole("menu", { name: "New menu" })).getByRole("menuitem", { name: "New File" }).querySelector("svg")).toBeTruthy();
+    expect(within(screen.getByRole("menu", { name: "New menu" })).getByRole("menuitem", { name: "New Folder" }).querySelector("svg")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
     const properties = screen.getByRole("complementary", { name: "Selection properties" });
     expect(within(properties).getByText("Read only")).toBeVisible();
     expect(within(properties).getAllByText("Unavailable")).toHaveLength(2);
@@ -138,8 +159,14 @@ describe("FileManager", () => {
     expect(mocks.server.fileEntries).toHaveBeenCalledWith("shows", "", true);
     chooseHeaderAction("View", "Grid");
     expect(container.querySelector(".file-grid")).toBeTruthy();
-    chooseHeaderAction("View", "Hide Properties");
+    chooseHeaderAction("View", "Show Properties Sidebar");
     expect(container.querySelector(".file-manager")).toHaveClass("fm-properties-hidden");
+
+    fireEvent.click(screen.getByRole("button", { name: "View" }));
+    expect(screen.getByRole("menuitemradio", { name: "Grid" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("menuitemcheckbox", { name: "Show Hidden Files" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("menuitemcheckbox", { name: "Show Properties Sidebar" })).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByRole("separator")).toBeVisible();
   });
 
   it("clears a transient directory error after the next successful refresh", async () => {

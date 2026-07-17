@@ -151,7 +151,8 @@ describe("FixtureProfileEditor", () => {
     render(<FixtureProfileEditor initialProfile={profile} manufacturers={[]} onSave={vi.fn()} onClose={vi.fn()}/>);
     fireEvent.click(screen.getByRole("tab", { name: "Modes" }));
     openModeEditor();
-    fireEvent.click(screen.getByText("Channel functions (0)"));
+    fireEvent.click(screen.getByRole("button", { name: "Edit intensity channel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Channel functions (0)" }));
     fireEvent.click(screen.getByRole("button", { name: "Add function" }));
     expect(screen.getByLabelText("Priority")).toHaveValue("0");
 
@@ -167,10 +168,16 @@ describe("FixtureProfileEditor", () => {
     expect(screen.getByLabelText("Priority")).toHaveValue("0");
   });
 
-  it("uses Generic and Modes title tabs with Save fixture in the title bar and no footer Cancel", () => {
-    render(<FixtureProfileEditor initialProfile={validProfile()} manufacturers={[]} onSave={vi.fn()} onClose={vi.fn()}/>);
+  it("uses Generic and Modes title tabs with contextual title actions and no footer Cancel", () => {
+    const { container } = render(<FixtureProfileEditor initialProfile={validProfile()} manufacturers={[]} onSave={vi.fn()} onClose={vi.fn()}/>);
     expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Generic", "Modes"]);
     expect(screen.getByRole("button", { name: "Save fixture" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add mode" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Modes" }));
+    expect(container.querySelector(".ui-modal-title-actions")).toContainElement(screen.getByRole("button", { name: "Add mode" }));
+    const modeRow = container.querySelector<HTMLElement>(".fixture-mode-list > article")!;
+    expect(within(modeRow).getByLabelText(/^Mode name/)).toHaveValue("Default");
+    expect(within(modeRow).getByLabelText("Mode notes")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
   });
 
@@ -244,7 +251,7 @@ describe("FixtureProfileEditor", () => {
     const profile = validProfile();
     const mode = profile.modes[0];
     mode.splits = [{ number: 1, footprint: 4 }, { number: 2, footprint: 8 }];
-    mode.heads.push({ ...blankHead(1, 2), master_shared: false });
+    mode.heads.push({ ...blankHead(1), master_shared: false });
     render(<FixtureProfileEditor initialProfile={profile} manufacturers={[]} onSave={vi.fn()} onClose={vi.fn()}/>);
     fireEvent.click(screen.getByRole("tab", { name: "Modes" }));
     expect(screen.getByRole("button", { name: "Remove Default" })).toBeDisabled();
@@ -285,14 +292,15 @@ describe("FixtureProfileEditor", () => {
     fireEvent.pointerDown(source, { pointerId: 4, pointerType: "touch" });
     fireEvent.pointerMove(source, { pointerId: 4, pointerType: "touch", clientX: 40, clientY: 80 });
 
-    const names = [...document.querySelectorAll<HTMLElement>(".fixture-mode-list .mode-select")].map((element) => element.textContent);
+    const names = [...document.querySelectorAll<HTMLElement>(".fixture-mode-list > article")].map((row) => row.querySelector<HTMLInputElement>("input")?.value);
     expect(names[0]).toMatch(/^Mode 2/);
     expect(names[1]).toMatch(/^Default/);
     expect(screen.getByRole("button", { name: "Move Mode 2 down" })).toBeInTheDocument();
   });
 
   it("adds, reorders, and removes heads and channels through the editor controls", () => {
-    const { container } = render(<FixtureProfileEditor initialProfile={validProfile()} manufacturers={[]} onSave={vi.fn()} onClose={vi.fn()}/>);
+    const registry: AttributeDescriptor[] = [{ id: "intensity", label: "Intensity", family: "intensity", value_type: "continuous", default_unit: "percent" }, { id: "pan", label: "Pan", family: "position", value_type: "continuous", default_unit: "degrees" }];
+    const { container } = render(<FixtureProfileEditor initialProfile={validProfile()} manufacturers={[]} attributeRegistry={registry} onSave={vi.fn()} onClose={vi.fn()}/>);
     fireEvent.click(screen.getByRole("tab", { name: "Modes" }));
     openModeEditor("Heads");
 
@@ -313,17 +321,19 @@ describe("FixtureProfileEditor", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Channels" }));
     fireEvent.click(screen.getByRole("button", { name: "Add channel" }));
     fireEvent.click(screen.getByRole("button", { name: "Add channel" }));
-    const attributes = screen.getAllByLabelText("Channel attribute");
-    fireEvent.change(attributes[1], { target: { value: "pan" } });
     let channelRows = document.querySelectorAll<HTMLElement>(".fixture-channel-row");
+    fireEvent.click(within(channelRows[1]).getByRole("button", { name: "Edit intensity channel" }));
+    choose("Channel role", "position · Pan");
+    fireEvent.click(screen.getByRole("button", { name: "Close channel editor" }));
+    channelRows = document.querySelectorAll<HTMLElement>(".fixture-channel-row");
     touchDrag(channelRows[0].querySelector<HTMLElement>(".touch-drag-handle")!, channelRows[1], 6);
-    expect([...container.querySelectorAll<HTMLInputElement>(".fixture-channel-row input[aria-label='Channel attribute']")].map((input) => input.value)).toEqual(["pan", "intensity"]);
+    expect([...container.querySelectorAll<HTMLElement>(".fixture-channel-row")].map((row) => row.textContent)).toEqual([expect.stringContaining("Pan"), expect.stringContaining("Intensity")]);
     fireEvent.click(screen.getByRole("button", { name: "Move pan down" }));
     fireEvent.click(screen.getByRole("button", { name: "Move pan up" }));
-    expect([...container.querySelectorAll<HTMLInputElement>(".fixture-channel-row input[aria-label='Channel attribute']")].map((input) => input.value)).toEqual(["pan", "intensity"]);
+    expect([...container.querySelectorAll<HTMLElement>(".fixture-channel-row")].map((row) => row.textContent)).toEqual([expect.stringContaining("Pan"), expect.stringContaining("Intensity")]);
     fireEvent.click(screen.getByRole("button", { name: "Remove intensity" }));
-    expect(screen.getAllByLabelText("Channel attribute")).toHaveLength(1);
-    expect(screen.getByLabelText("Channel attribute")).toHaveValue("pan");
+    expect(container.querySelectorAll(".fixture-channel-row")).toHaveLength(1);
+    expect(container.querySelector(".fixture-channel-row")).toHaveTextContent("Pan");
   });
 
   it("shows a single split's channel table directly without an accordion", () => {

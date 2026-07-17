@@ -70,17 +70,41 @@ describe("additional screen settings", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: "Configure Playbacks" }));
 		expect(screen.getByRole("dialog", { name: "Configure Playbacks" })).toBeInTheDocument();
-		fireEvent.click(screen.getByRole("button", { name: "+ Add playback row" }));
+		const addRow = screen.getByRole("button", { name: "Add Row" });
+		const saveAction = screen.getByRole("button", { name: "Save" });
+		expect(addRow.parentElement).toHaveClass("ui-modal-title-actions");
+		expect(saveAction.parentElement).toHaveClass("ui-modal-title-actions");
+		expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+		fireEvent.click(addRow);
+		expect(screen.getByRole("button", { name: "Remove row 2" })).toBeInTheDocument();
+		const secondRowHandle = screen.getByRole("button", { name: "Reorder playback row 2" });
+		const firstRowHandle = screen.getByRole("button", { name: "Reorder playback row 1" });
+		const firstRow = firstRowHandle.closest(".playback-row-configuration");
+		expect(firstRow).not.toBeNull();
+		expect(secondRowHandle).toHaveTextContent("⠿");
+		expect(secondRowHandle).not.toHaveTextContent("Row 2");
+		const elementFromPoint = document.elementFromPoint;
+		Object.defineProperty(secondRowHandle, "setPointerCapture", { configurable: true, value: vi.fn() });
+		Object.defineProperty(document, "elementFromPoint", { configurable: true, value: vi.fn(() => firstRow) });
+		fireEvent.pointerDown(secondRowHandle, { pointerId: 1, pointerType: "mouse", clientX: 20, clientY: 120 });
+		fireEvent.pointerMove(secondRowHandle, { pointerId: 1, pointerType: "mouse", clientX: 20, clientY: 60 });
+		Object.defineProperty(document, "elementFromPoint", { configurable: true, value: elementFromPoint });
 		fireEvent.click(screen.getByRole("button", { name: "Follow Main" }));
 		fireEvent.click(screen.getByRole("option", { name: "Dedicated Page" }));
-		fireEvent.click(screen.getByRole("button", { name: "Save playback configuration" }));
+		fireEvent.click(saveAction);
 
 		await waitFor(() => expect(save).toHaveBeenCalledOnce());
 		expect(saved[0]).toMatchObject({
 			page_mode: "independent",
 			playback_count: 16,
 			playback_rows: 2,
-			playback_layout: { playbacks_per_row: 8 },
+			playback_layout: {
+				playbacks_per_row: 8,
+				rows: [
+					{ first_playback_slot: 9 },
+					{ first_playback_slot: 1 },
+				],
+			},
 		});
 	});
 });

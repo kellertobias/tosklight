@@ -36,6 +36,7 @@ export function PlaybackTools() {
     if (!pagePickerOpen) return;
     const close = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      if (document.querySelector(".ui-input-modal-layer")) return;
       event.preventDefault(); event.stopImmediatePropagation(); setPagePickerOpen(false);
     };
     window.addEventListener("keydown", close, true);

@@ -109,7 +109,9 @@ describe("PlaybackTools", () => {
     expect(screen.getByRole("button", { name: "Next playback page" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Select playback page. Page 1 Main" }));
     const dialog = screen.getByRole("dialog", { name: "Playback pages" });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Add new page" }));
+    const addPage = within(dialog).getByRole("button", { name: "Add new page" });
+    expect(addPage.parentElement).toHaveClass("ui-modal-title-actions");
+    fireEvent.click(addPage);
     await waitFor(() => expect(server.savePlaybackPage).toHaveBeenCalledWith({ number: 2, name: "Page 2", slots: {} }));
     expect(server.setPlaybackPage).toHaveBeenCalledWith(2);
   });
@@ -123,6 +125,16 @@ describe("PlaybackTools", () => {
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Playback page name" }), { target: { value: "  Act One  " } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Rename Page" }));
     await waitFor(() => expect(server.savePlaybackPage).toHaveBeenCalledWith({ number: 1, name: "Act One", slots: {} }));
+  });
+
+  it("opens the full-text keyboard from the rename button in the page menu", () => {
+    render(<PlaybackTools/>);
+    fireEvent.click(screen.getByRole("button", { name: "Select playback page. Page 1 Main" }));
+    const pages = screen.getByRole("dialog", { name: "Playback pages" });
+    fireEvent.click(within(pages).getByRole("button", { name: "Rename playback page 1" }));
+    expect(screen.getByRole("dialog", { name: "Playback page name" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Full text keyboard")).toBeInTheDocument();
+    expect(server.setPlaybackPage).not.toHaveBeenCalled();
   });
 
   it("opens the selected Speed Group Sound-to-Light configuration instead of treating the UI button as a Learn tap", async () => {

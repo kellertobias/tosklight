@@ -160,8 +160,9 @@ export function ButtonGrid({ children, minimum = 88, className = "", style, ref 
     const node = host.current;
     if (!node) return;
     const measure = () => {
-      const width = node.firstElementChild?.getBoundingClientRect().width ?? 0;
-      if (width <= 0) return;
+      const firstButton = node.firstElementChild;
+      const width = firstButton instanceof HTMLElement ? Number.parseFloat(getComputedStyle(firstButton).width) : 0;
+      if (!Number.isFinite(width) || width <= 0) return;
       const rowSize = `${Math.round(width * 1000) / 1000}px`;
       if (node.style.getPropertyValue("--grid-row-size") !== rowSize) node.style.setProperty("--grid-row-size", rowSize);
     };

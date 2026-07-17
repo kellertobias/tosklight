@@ -46,11 +46,13 @@ describe("FileManagerPickerHost", () => {
 
   it("resolves cancellation as null", async () => {
     mocks.configuration.file_manager_system_picker_fallback = false;
-    render(<FileManagerPickerHost />);
+    render(<><section aria-label="Calling setup">Caller remains open</section><FileManagerPickerHost /></>);
     let result!: Promise<unknown>;
     act(() => { result = openFileManagerPicker({ target: "folders" }); });
     fireEvent.click(screen.getByRole("button", { name: "Close File Manager" }));
     await expect(result).resolves.toBeNull();
+    expect(screen.getByRole("region", { name: "Calling setup" })).toBeVisible();
+    expect(screen.queryByRole("dialog", { name: "Choose files or folders" })).not.toBeInTheDocument();
   });
 
   it("keeps the system picker constrained when the disabled-by-default fallback is enabled", async () => {

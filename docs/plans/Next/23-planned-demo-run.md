@@ -91,3 +91,24 @@ Ideally we also have titles on the video that explains what we are currently doi
 - wait 6s
 - turn on 1.4
 - tap speed in Speed group A
+
+
+---
+
+Here is how to use the demo recording
+
+Use [product-demo.spec.ts](/Users/keller/repos/light/tests/product-demo.spec.ts) as the template:
+Load a known show state with loadCanonicalCopy(...).
+Open ?demo=product.
+Perform the demo using normal Playwright interactions or API commands.
+Add short waits where viewers need time to understand the result.
+Assert the expected state—so it remains a real regression test.
+Run:
+./test demo
+Recording mode automatically uses Chrome at 1920×1080 with 250 ms slow motion. Outputs are written to:
+artifacts/product-demo/tosklight-product-demo.webm
+artifacts/product-demo/tosklight-product-demo-1920x1080.png
+For additional demo scenarios, create another Playwright spec following the same pattern and give its video.saveAs(...) call a unique filename. Simulated hardware interactions should use actual button locators, for example:
+await keypad.getByRole("button", { name: "GRP", exact: true }).click();
+That exercises the real interaction path and records the visible pressed-button state. For recording arbitrary UI tests, use:
+./test record tests/my-demo.spec.ts

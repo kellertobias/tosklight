@@ -113,8 +113,8 @@ export function geometryTemplate(template: GeometryTemplateName, headIds: string
   return graph;
 }
 
-export function blankHead(index = 0, split = 1): FixtureHead {
-  return { id: uuid(), name: index === 0 ? "Main" : `Head ${index + 1}`, master_shared: index === 0, split };
+export function blankHead(index = 0): FixtureHead {
+  return { id: uuid(), name: index === 0 ? "Main" : `Head ${index + 1}`, master_shared: index === 0 };
 }
 
 export function blankMode(name = "Default"): FixtureMode {
@@ -303,7 +303,7 @@ export function reconcileColorSystemHighlightDefaults(mode: FixtureMode, colorSy
 }
 
 export function channelSplit(mode: FixtureMode, channel: FixtureChannel) {
-  return mode.heads.find((head) => head.id === channel.head_id)?.split ?? 0;
+  return channel.split;
 }
 
 export function derivePrimarySlots(mode: FixtureMode): { slots: Map<string, number>; errors: string[] } {
@@ -344,12 +344,13 @@ export function derivePrimarySlots(mode: FixtureMode): { slots: Map<string, numb
 }
 
 export function blankChannel(mode: FixtureMode, split = mode.splits[0]?.number ?? 1): FixtureChannel {
-  const head = mode.heads.find((candidate) => candidate.split === split) ?? mode.heads[0];
+  const head = mode.heads[0];
   const resolution: ChannelResolution = "u8";
   const defaultRaw = 0;
   return {
     id: uuid(),
     head_id: head?.id ?? "",
+    split,
     attribute: "intensity",
     resolution,
     secondary_slots: [],
@@ -421,13 +422,11 @@ export function validateProfile(profile: FixtureProfile) {
     if (!mode.heads.length) errors.push(`${mode.name}: at least one head is required`);
     if (mode.heads.filter((head) => head.master_shared).length > 1) errors.push(`${mode.name}: only one head can be master/shared`);
     const headIds = new Set(mode.heads.map((head) => head.id));
-    for (const head of mode.heads) {
-      if (!head.name.trim()) errors.push(`${mode.name}: every head needs a name`);
-      if (!splitNumbers.has(head.split)) errors.push(`${mode.name}: ${head.name || "head"} references missing split ${head.split}`);
-    }
+    for (const head of mode.heads) if (!head.name.trim()) errors.push(`${mode.name}: every head needs a name`);
     const channelIds = new Set<string>();
     for (const channel of mode.channels) {
       if (!headIds.has(channel.head_id)) errors.push(`${mode.name}: ${channel.attribute || "channel"} references a missing head`);
+      if (!splitNumbers.has(channel.split)) errors.push(`${mode.name}: ${channel.attribute || "channel"} references missing split ${channel.split}`);
       if (channelIds.has(channel.id)) errors.push(`${mode.name}: channel identities must be unique`);
       channelIds.add(channel.id);
       const maximum = maxRaw(channel.resolution);
@@ -448,7 +447,7 @@ export function validateProfile(profile: FixtureProfile) {
 
 export function fixtureProfileFromDefinition(definition: FixtureDefinition): FixtureProfile {
   if (definition.profile_snapshot) return cloneProfile(definition.profile_snapshot);
-  const heads: FixtureHead[] = definition.heads.map((head) => ({ id: uuid(), name: head.name, master_shared: head.shared, split: 1 }));
+  const heads: FixtureHead[] = definition.heads.map((head) => ({ id: uuid(), name: head.name, master_shared: head.shared }));
   const indexed = definition.heads.flatMap((head, headIndex) => head.parameters.map((parameter) => ({ headIndex, parameter })))
     .sort((left, right) => (left.parameter.components[0]?.offset ?? 0) - (right.parameter.components[0]?.offset ?? 0));
   const channels: FixtureChannel[] = indexed.map(({ headIndex, parameter }) => {
@@ -477,6 +476,7 @@ export function fixtureProfileFromDefinition(definition: FixtureDefinition): Fix
     return {
       id: uuid(),
       head_id: heads[headIndex].id,
+      split: 1,
       attribute: parameter.attribute,
       resolution,
       secondary_slots: parameter.components.slice(1).map((component) => component.offset + 1),

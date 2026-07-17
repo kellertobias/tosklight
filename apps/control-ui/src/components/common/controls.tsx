@@ -124,14 +124,15 @@ export interface TextInputProps extends Omit<InputHTMLAttributes<HTMLInputElemen
   liveKeyboard?: boolean;
   onValueChange?: (value: string) => void;
   onKeyboardCommit?: (value: string) => void;
+  openKeyboardInitially?: boolean;
   secure?: boolean;
 }
 
 export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function TextInput(
-  { className = "", value, defaultValue, onChange, onValueChange, onKeyboardCommit, clearable = false, clearLabel = "Clear input", keyboardLabel, liveKeyboard = false, secure = false, disabled, readOnly, ...props },
+  { className = "", value, defaultValue, onChange, onValueChange, onKeyboardCommit, clearable = false, clearLabel = "Clear input", keyboardLabel, liveKeyboard = false, openKeyboardInitially = false, secure = false, disabled, readOnly, ...props },
   ref,
 ) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(openKeyboardInitially);
   const native = useRef<HTMLInputElement>(null);
   useImperativeHandle(ref, () => native.current!);
   const current = String(value ?? native.current?.value ?? defaultValue ?? "");

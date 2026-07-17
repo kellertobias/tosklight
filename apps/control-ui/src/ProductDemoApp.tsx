@@ -9,7 +9,7 @@ import { AppProvider, useApp } from "./state/AppContext";
 import { StageWindow } from "./windows/StageWindow";
 
 const DEMO_DMX_CHANNELS = 512;
-const DEMO_DMX_UNIVERSES = [1, 2] as const;
+const DEMO_DMX_UNIVERSES = [1, 2, 3, 4] as const;
 
 function DemoDmxGrid({ universeNumber }: { universeNumber: number }) {
   const server = useServer();
@@ -32,15 +32,18 @@ function DemoDmxGrid({ universeNumber }: { universeNumber: number }) {
     () => Array.from({ length: DEMO_DMX_CHANNELS }, (_, index) => universe?.slots[index] ?? 0),
     [universe],
   );
-  return <div className="product-demo-dmx-grid" aria-label={`Live DMX universe ${universeNumber}`}>
-    {slots.map((value, index) => <span
-      aria-label={`DMX ${universeNumber}.${index + 1}: ${value}`}
-      className="product-demo-dmx-cell"
-      data-address={index + 1}
-      data-value={value}
-      key={index}
-      style={{ "--demo-dmx-level": Math.max(.07, value / 255) } as CSSProperties}
-    />)}
+  return <div className="product-demo-dmx-universe">
+    <div className="product-demo-dmx-universe-label">UNIVERSE {universeNumber}</div>
+    <div className="product-demo-dmx-grid" aria-label={`Live DMX universe ${universeNumber}`}>
+      {slots.map((value, index) => <span
+        aria-label={`DMX ${universeNumber}.${index + 1}: ${value}`}
+        className="product-demo-dmx-cell"
+        data-address={index + 1}
+        data-value={value}
+        key={index}
+        style={{ "--demo-dmx-level": Math.max(.07, value / 255) } as CSSProperties}
+      />)}
+    </div>
   </div>;
 }
 
@@ -110,7 +113,7 @@ function ProductDemoSurface() {
         <StageWindow compact stageView="3d" showGroupShortcuts={false} followPreload={false} showSelection={false} environmentBrightness={.5}/>
       </DemoCard>
       <div className="product-demo-visual-divider" aria-label="Stage render above, live DMX output below"><span>⌃&nbsp; STAGE RENDER</span><span>LIVE DMX OUTPUT &nbsp;⌄</span></div>
-      <DemoCard className="product-demo-dmx" title="DMX OUTPUT" meta="UNIVERSES 1–2 · LIVE">
+      <DemoCard className="product-demo-dmx" title="DMX OUTPUT" meta="UNIVERSES 1–4 · LIVE">
         {DEMO_DMX_UNIVERSES.map((universeNumber) => <DemoDmxGrid universeNumber={universeNumber} key={universeNumber} />)}
       </DemoCard>
       <div className="product-demo-visual-divider" aria-label="Live DMX output above, simulated hardware controls below"><span>⌃&nbsp; LIVE DMX OUTPUT</span><span>SIMULATED HARDWARE CONTROLS &nbsp;⌄</span></div>

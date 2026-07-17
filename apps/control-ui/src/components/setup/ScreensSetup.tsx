@@ -219,13 +219,7 @@ export function ScreenSettingsCard({
 	);
 }
 
-export function ScreensSetup({
-	undoRef,
-	onUndoAvailabilityChange,
-}: {
-	undoRef?: { current: (() => void) | null };
-	onUndoAvailabilityChange?: (available: boolean) => void;
-} = {}) {
+export function ScreensSetup() {
 	const server = useServer();
 	const { state, dispatch } = useApp();
 	const [displays, setDisplays] = useState<Array<{ id: string; name: string }>>(
@@ -234,13 +228,11 @@ export function ScreensSetup({
 	const [deskPlaybackLayout, setDeskPlaybackLayout] = useState<PlaybackSurfaceLayout | null>(null);
 	const [deskName, setDeskName] = useState("");
 	const [deskAlias, setDeskAlias] = useState("");
-	const [undoHistory, setUndoHistory] = useState<Array<{ desk: ControlDesk; regularNumberShortcuts: boolean }>>([]);
 	const [defaultScreenPickerOpen, setDefaultScreenPickerOpen] = useState(false);
 	const [defaultPlaybackModalOpen, setDefaultPlaybackModalOpen] = useState(false);
 	const deskDraft = useRef<ControlDesk | null>(null);
 	const deskSaveQueue = useRef(Promise.resolve());
 	const pendingDeskSaves = useRef(0);
-	const textEditRecorded = useRef({ name: false, osc_alias: false });
 	useEffect(() => {
 		if (tauri)
 			void invoke<Array<{ id: string; name: string }>>(
@@ -260,18 +252,9 @@ export function ScreensSetup({
 			rows: desk.rows,
 		});
 	}, [server.session?.desk, dispatch]);
-	const snapshot = () => {
-		const desk = deskDraft.current ?? server.session?.desk;
-		return desk ? { desk: structuredClone(desk), regularNumberShortcuts: state.regularNumberShortcuts } : null;
-	};
-	const rememberCurrent = () => {
-		const current = snapshot();
-		if (current) setUndoHistory((history) => [...history, current]);
-	};
-	const applyDesk = (next: ControlDesk, remember: boolean) => {
+	const applyDesk = (next: ControlDesk) => {
 		const current = deskDraft.current ?? server.session?.desk;
 		if (!current || JSON.stringify(current) === JSON.stringify(next)) return false;
-		if (remember) rememberCurrent();
 		deskDraft.current = next;
 		setDeskName(next.name);
 		setDeskAlias(next.osc_alias);
@@ -284,36 +267,17 @@ export function ScreensSetup({
 			.finally(() => { pendingDeskSaves.current -= 1; });
 		return true;
 	};
-	const updateDesk = (changes: Partial<ControlDesk>, remember = true) => {
+	const updateDesk = (changes: Partial<ControlDesk>) => {
 		const current = deskDraft.current ?? server.session?.desk;
-		return current ? applyDesk({ ...current, ...changes }, remember) : false;
+		return current ? applyDesk({ ...current, ...changes }) : false;
 	};
 	const updateText = (field: "name" | "osc_alias", value: string) => {
-		const changed = updateDesk({ [field]: value }, !textEditRecorded.current[field]);
-		if (changed) textEditRecorded.current[field] = true;
+		updateDesk({ [field]: value });
 	};
 	const updateKeyboardShortcuts = (value: boolean) => {
 		if (value === state.regularNumberShortcuts) return;
-		rememberCurrent();
 		dispatch({ type: "SET_REGULAR_NUMBER_SHORTCUTS", value });
 	};
-	const undo = () => {
-		const previous = undoHistory.at(-1);
-		if (!previous) return;
-		setUndoHistory((history) => history.slice(0, -1));
-		applyDesk(previous.desk, false);
-		if (previous.regularNumberShortcuts !== state.regularNumberShortcuts) {
-			dispatch({ type: "SET_REGULAR_NUMBER_SHORTCUTS", value: previous.regularNumberShortcuts });
-		}
-	};
-	if (undoRef) undoRef.current = undo;
-	useEffect(() => {
-		onUndoAvailabilityChange?.(undoHistory.length > 0);
-	}, [undoHistory.length, onUndoAvailabilityChange]);
-	useEffect(
-		() => () => onUndoAvailabilityChange?.(false),
-		[onUndoAvailabilityChange],
-	);
 	const create = () =>
 		void server.saveScreen(
 			createScreenConfiguration(server.screens?.screens ?? [], {
@@ -348,10 +312,6 @@ export function ScreensSetup({
 							<b>Default screen</b>
 							<small>Primary desk window</small>
 						</div>
-						<div className="screen-settings-actions">
-							<Button onClick={() => setDefaultPlaybackModalOpen(true)}>Configure Playbacks</Button>
-							<Button onClick={() => setDefaultScreenPickerOpen(true)}>Choose default screen</Button>
-						</div>
 					</header>
 					<FormLayout
 						className="screen-settings-grid"
@@ -361,15 +321,11 @@ export function ScreensSetup({
 						<TextField
 							label="Name"
 							value={deskName}
-							onFocus={() => { textEditRecorded.current.name = false; }}
-							onBlur={() => { textEditRecorded.current.name = false; }}
 							onChange={(event) => updateText("name", event.target.value)}
 						/>
 						<TextField
 							label="OSC alias"
 							value={deskAlias}
-							onFocus={() => { textEditRecorded.current.osc_alias = false; }}
-							onBlur={() => { textEditRecorded.current.osc_alias = false; }}
 							onChange={(event) => updateText("osc_alias", event.target.value)}
 						/>
 						<div className="playback-layout-summary">
@@ -388,6 +344,10 @@ export function ScreensSetup({
 							{state.playbackColumns * state.playbackRows} playback slots · OSC
 							/light/{deskAlias || "desk"}/
 						</small>
+						<div className="screen-settings-actions default-screen-bottom-actions">
+							<Button onClick={() => setDefaultPlaybackModalOpen(true)}>Configure Playbacks</Button>
+							<Button onClick={() => setDefaultScreenPickerOpen(true)}>Choose default screen</Button>
+						</div>
 					</footer>
 				</article>
 				{!tauri && (

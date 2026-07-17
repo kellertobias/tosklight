@@ -4,7 +4,7 @@ import { Button } from "./controls";
 import { SearchBar } from "./SearchBar";
 
 describe("SearchBar", () => {
-	it("keeps magnifier, text, conditional clear, keyboard, and options in order", () => {
+	it("uses a wider leading magnifier as the optional options trigger", () => {
 		const change = vi.fn();
 		const { container, rerender, unmount } = render(
 			<SearchBar value="" onChange={change} />,
@@ -20,11 +20,12 @@ describe("SearchBar", () => {
 		rerender(<SearchBar value="orbit" onChange={change} options={<p>Option content</p>} />);
 		const controls = [...bar.querySelectorAll("input, button")];
 		expect(controls.map((control) => control.getAttribute("aria-label"))).toEqual([
+			"Search options",
 			"Search",
 			"Clear search",
 			"Open keyboard",
-			"Search options",
 		]);
+		expect(bar.querySelector(".console-search-chevron")).toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
 		expect(change).toHaveBeenCalledWith("");
 		unmount();

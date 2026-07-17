@@ -515,7 +515,6 @@ export interface FixtureHead {
   id: string;
   name: string;
   master_shared: boolean;
-  split: number;
 }
 
 export type ChannelResolution = "u8" | "u16" | "u24" | "u32";
@@ -524,6 +523,7 @@ export type ChannelBehavior = "controlled" | "static";
 export interface FixtureChannel {
   id: string;
   head_id: string;
+  split: number;
   attribute: string;
   resolution: ChannelResolution;
   secondary_slots: number[];

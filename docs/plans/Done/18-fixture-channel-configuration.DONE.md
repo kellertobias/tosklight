@@ -58,11 +58,11 @@ Deleting a mode affects only the unsaved editor draft. Saving that deletion as a
 
 ### Heads
 
-Heads have stable identities, a name, an optional master/shared designation, and exactly one split number. At most one head in a mode can be the master/shared head. Multiple heads may use the same split number.
+Heads have stable identities, a name, and an optional master/shared designation. At most one head in a mode can be the master/shared head. Heads describe logical emitters independently of patch topology.
 
 Heads can be added, removed, and reordered. A head that still owns channels cannot be removed until those channels are removed or reassigned.
 
-A split is an independently patchable address block within one logical fixture. Every distinct split number in a mode receives its own optional universe and address when the fixture is patched. An unpatched split remains part of the fixture: its heads remain selectable, programmable, and visible, but that split emits no DMX.
+A split is an independently patchable address block within one logical fixture and is assigned per physical channel. One head may own channels across several splits, such as a conventional lamp dimmer and its scroller on dedicated addresses. Every distinct split number in a mode receives its own optional universe and address when the fixture is patched.
 
 ### Channels
 

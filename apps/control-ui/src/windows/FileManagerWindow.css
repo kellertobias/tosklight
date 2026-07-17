@@ -42,6 +42,16 @@
   white-space: nowrap;
 }
 
+.file-manager-header-actions > .ui-button {
+  gap: 5px;
+}
+
+.file-manager-header-actions > .ui-button .file-menu-icon {
+  width: 12px;
+  height: 12px;
+  color: var(--muted);
+}
+
 .ui-modal-title-actions .file-manager-header-actions > .ui-button {
   height: 53px;
   min-height: 53px;
@@ -124,6 +134,30 @@
   white-space: nowrap;
 }
 
+.file-manager-header-path.ui-button {
+  display: inline-flex;
+  width: fit-content;
+  max-width: min(28vw, 24rem);
+  min-height: 18px;
+  justify-content: flex-start;
+  gap: 4px;
+  padding: 0 4px;
+  border: 0;
+  color: var(--muted);
+  font: inherit;
+}
+
+.file-manager-header-path.ui-button > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-manager-header-path .file-menu-icon {
+  width: 10px;
+  height: 10px;
+  flex: none;
+}
+
 .file-header-menu-layer {
   position: fixed;
   z-index: 980;
@@ -133,7 +167,7 @@
 .file-header-menu {
   position: fixed;
   display: grid;
-  width: 204px;
+  width: 224px;
   padding: 5px;
   border: 1px solid var(--line2);
   border-radius: 0 0 7px 7px;
@@ -143,11 +177,64 @@
 
 .file-header-menu > .ui-button {
   justify-content: flex-start;
+  gap: 10px;
   min-height: 40px;
   border: 0;
   border-radius: 4px;
   background: transparent;
   text-align: left;
+}
+
+.file-header-menu .file-menu-icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.file-header-menu .file-menu-check {
+  width: 15px;
+  flex: none;
+  color: var(--cyan);
+  text-align: center;
+  font-weight: 800;
+}
+
+.file-header-menu .file-menu-checkbox {
+  display: grid;
+  width: 17px;
+  height: 17px;
+  flex: none;
+  place-items: center;
+  border: 1px solid #60717e;
+  border-radius: 3px;
+  color: #071016;
+  background: #0e151a;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.file-header-menu [role="menuitemcheckbox"][aria-checked="true"] .file-menu-checkbox {
+  border-color: var(--cyan);
+  background: var(--cyan);
+}
+
+.file-menu-divider {
+  height: 1px;
+  margin: 5px 3px;
+  background: var(--line2);
+}
+
+.file-header-menu .file-menu-rename { color: var(--cyan); }
+.file-header-menu .file-menu-copy { color: #70b7ff; }
+.file-header-menu .file-menu-move { color: var(--amber); }
+.file-header-menu .file-menu-delete { color: #ff6f76; }
+.file-header-menu .file-menu-new-file { color: #70b7ff; }
+.file-header-menu .file-menu-new-folder { color: var(--amber); }
+.file-header-menu .file-menu-location { color: var(--text); }
+
+.file-header-menu > .ui-button:disabled {
+  color: var(--muted);
+  opacity: .45;
 }
 
 .file-header-menu > .ui-button:hover,
