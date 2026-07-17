@@ -133,6 +133,7 @@ describe("TextEditorWindow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open File" }));
 
     await waitFor(() => expect(mocks.openPicker).toHaveBeenCalledWith({
+      purpose: "Open a text file",
       target: "files",
       multiple: false,
       allowedExtensions: ["txt", "md", "csv", "log"],

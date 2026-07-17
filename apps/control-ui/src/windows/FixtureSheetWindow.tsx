@@ -8,7 +8,7 @@ import { GroupStrip } from "../components/shared/GroupStrip";
 import { SourceLegend } from "../components/shared/SourceLegend";
 import { useApp } from "../state/AppContext";
 import { DataTable, WindowHeader, WindowScrollArea, WindowSettings, type DataTableColumn } from "../components/window-kit";
-import { Select, SwitchField } from "../components/common";
+import { Button, Select, SwitchField } from "../components/common";
 import { activeProgrammerFixtureIds, compareFixtureIds, cueListFixtureIds } from "./fixtureSheetFilters";
 import { fixtureSheetTargets, targetHasAttribute, targetValue } from "./fixtureSheetTargets";
 
@@ -23,6 +23,7 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
   const [fixtureOrder, setFixtureOrder] = useState<FixtureOrder>("fixture-id");
   const [activeOnly, setActiveOnly] = useState(false);
   const [cueListId, setCueListId] = useState("");
+  const [collapsedFixtureIds, setCollapsedFixtureIds] = useState<Set<string>>(() => new Set());
   const groupsVisible = compact ? Boolean(showGroupShortcuts) : state.fixtureGroupsVisible;
   useEffect(() => {
     let cancelled = false;
@@ -40,11 +41,12 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
   const orderedPatch = [...(server.patch?.fixtures ?? [])].sort(compareFixtureIds);
   const orderedTargets = orderedPatch
     .flatMap(fixtureSheetTargets)
-    .filter((target) => !activeOnly || activeFixtureIds.has(target.fixtureId))
-    .filter((target) => cueFixtureIds == null || cueFixtureIds.has(target.fixtureId))
+    .filter((target) => !activeOnly || activeFixtureIds.has(target.fixtureId) || (target.order === 0 && target.fixture.logical_heads.some((head) => activeFixtureIds.has(head.fixture_id))))
+    .filter((target) => cueFixtureIds == null || cueFixtureIds.has(target.fixtureId) || (target.order === 0 && target.fixture.logical_heads.some((head) => cueFixtureIds.has(head.fixture_id))))
     .sort((a, b) => {
       if (fixtureOrder === "active") {
-        const activeDifference = Number(activeFixtureIds.has(b.fixtureId)) - Number(activeFixtureIds.has(a.fixtureId));
+        const familyActive = (target: typeof a) => activeFixtureIds.has(target.fixtureId) || target.fixture.logical_heads.some((head) => activeFixtureIds.has(head.fixture_id));
+        const activeDifference = Number(familyActive(b)) - Number(familyActive(a));
         if (activeDifference) return activeDifference;
       }
       return compareFixtureIds(a.fixture, b.fixture) || a.order - b.order;
@@ -76,6 +78,9 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
       name: target.name,
       type: `${patched.definition.manufacturer} · ${patched.definition.mode} · U${patched.universe}.${patched.address}`,
       fixtureId: target.fixtureId,
+      targetKind: (patched.logical_heads.length ? target.order === 0 ? "master" : "head" : "fixture") as "fixture" | "master" | "head",
+      parentFixtureId: patched.fixture_id,
+      childFixtureIds: patched.logical_heads.map((head) => head.fixture_id),
       dimmer: Math.round(intensity * 100),
       color,
       colorLabel: hasColor ? color : "White",
@@ -104,14 +109,56 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
     : fixtures.map((fixture) => ({
         ...fixture,
         fixtureId: "",
+        targetKind: "fixture" as const,
+        parentFixtureId: "",
+        childFixtureIds: [] as string[],
         limitingGroups: [],
         preloadDimmer: null, preloadColor: null, preloadPan: null, preloadTilt: null,
       }));
-  const visible = compact ? rows.slice(0, 12) : rows;
+  const expandedRows = rows.filter((fixture) => fixture.targetKind !== "head" || !collapsedFixtureIds.has(fixture.parentFixtureId));
+  const visible = compact ? expandedRows.slice(0, 12) : expandedRows;
   const [activeRow, setActiveRow] = useState(0);
   type Row = (typeof visible)[number];
+  const stepMode = server.highlight?.mode === "step";
+  const rememberedStepIds = new Set(stepMode ? server.highlight?.remembered.map((fixture) => fixture.fixture_id) : []);
+  const currentStepId = stepMode
+    ? server.highlight?.active_fixture?.fixture_id
+      ?? (server.highlight?.active_index == null ? null : server.highlight.remembered[server.highlight.active_index]?.fixture_id ?? null)
+    : null;
+  const stepPresentation = (fixture: Row) => {
+    const current = Boolean(stepMode && currentStepId === fixture.fixtureId);
+    const base = Boolean(stepMode && rememberedStepIds.has(fixture.fixtureId));
+    const containedCurrent = Boolean(stepMode && fixture.targetKind === "master" && currentStepId && fixture.childFixtureIds.includes(currentStepId));
+    const containedBase = Boolean(stepMode && fixture.targetKind === "master" && fixture.childFixtureIds.some((fixtureId) => rememberedStepIds.has(fixtureId)));
+    return { current, base, containedCurrent, containedBase };
+  };
+  const toggleCollapsed = (fixtureId: string) => setCollapsedFixtureIds((current) => {
+    const next = new Set(current);
+    if (next.has(fixtureId)) next.delete(fixtureId);
+    else next.add(fixtureId);
+    return next;
+  });
   const columns: DataTableColumn<Row>[] = [
-    { id: "id", header: "ID", width: "50px", render: (fixture) => fixture.id },
+    { id: "id", header: "ID", width: "88px", render: (fixture) => {
+      const presentation = stepPresentation(fixture);
+      const collapsible = fixture.targetKind === "master" && fixture.childFixtureIds.length > 0;
+      const collapsed = collapsible && collapsedFixtureIds.has(fixture.parentFixtureId);
+      const marker = presentation.current
+        ? "STEP"
+        : presentation.containedCurrent
+          ? "STEP INSIDE"
+          : presentation.base
+            ? "BASE"
+            : presentation.containedBase
+              ? "BASE INSIDE"
+              : null;
+      return <span className="fixture-sheet-id"><span>{fixture.id}</span>{collapsible && <Button
+        className="fixture-head-toggle"
+        aria-label={`${collapsed ? "Expand" : "Collapse"} fixture ${fixture.id} heads`}
+        aria-expanded={!collapsed}
+        onClick={(event) => { event.stopPropagation(); toggleCollapsed(fixture.parentFixtureId); }}
+      >{collapsed ? "▶" : "▼"}</Button>}{marker && <small className="fixture-step-marker">{marker}</small>}</span>;
+    } },
     { id: "name", header: "Name / type", width: "minmax(190px,1.4fr)", render: (fixture) => <span className="fixture-name"><b>{fixture.name}</b><small>{fixture.type}</small>{fixture.limitingGroups.length > 0 && <em title={fixture.limitingGroups.map((group) => `${group.body.name}: ${Math.round((group.body.master ?? 1) * 100)}%`).join(", ")}>◒ Group master {Math.round(Math.max(...fixture.limitingGroups.map((group) => group.body.master ?? 1)) * 100)}%</em>}</span> },
     { id: "dimmer", header: "Dimmer", width: "minmax(95px,.7fr)", render: (fixture) => <SourceValue source={fixture.sources.dimmer}><i className="vertical-meter"><i style={{ height: `${fixture.dimmer}%` }} /></i>{fixture.dimmer}%{fixture.preloadDimmer != null && <small className="preload-value">→ {fixture.preloadDimmer}%</small>}</SourceValue> },
     { id: "color", header: "Color", width: "minmax(105px,1fr)", render: (fixture) => <SourceValue source={fixture.sources.color}><i className="color-dot" style={{ background: fixture.color }} />{fixture.colorLabel}{fixture.preloadColor && <small className="preload-value"><i className="color-dot" style={{ background: fixture.preloadColor }} /> Preload</small>}</SourceValue> },
@@ -122,7 +169,36 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
   return (
     <div className="fixture-window">
       {!compact && <WindowHeader title="Fixture Sheet" info={{ primary: `${server.selectedFixtures.length} selected`, secondary: <SourceLegend /> }} settings onSettings={(anchor) => setSettingsAnchor(anchor.getBoundingClientRect())} />}
-      <WindowScrollArea className="fixture-table"><DataTable columns={columns} rows={visible} rowKey={(fixture) => fixture.fixtureId || String(fixture.id)} selected={(fixture) => Boolean(fixture.fixtureId && server.selectedFixtures.includes(fixture.fixtureId))} activeIndex={activeRow} onActiveIndexChange={setActiveRow} onActivate={(fixture) => fixture.fixtureId && void server.selectionGesture({ type: "fixture", fixture_id: fixture.fixtureId })} /></WindowScrollArea>
+      <WindowScrollArea className="fixture-table"><DataTable
+        columns={columns}
+        rows={visible}
+        rowKey={(fixture) => fixture.fixtureId || String(fixture.id)}
+        selected={(fixture) => Boolean(fixture.fixtureId && server.selectedFixtures.includes(fixture.fixtureId))}
+        rowClassName={(fixture) => {
+          const presentation = stepPresentation(fixture);
+          return [
+            `fixture-${fixture.targetKind}-row`,
+            presentation.base ? "fixture-step-base" : "",
+            presentation.current ? "fixture-step-current" : "",
+            presentation.containedBase ? "fixture-step-contained-base" : "",
+            presentation.containedCurrent ? "fixture-step-contained-current" : "",
+          ].filter(Boolean).join(" ");
+        }}
+        rowDataAttributes={(fixture) => {
+          const presentation = stepPresentation(fixture);
+          return {
+            "data-fixture-id": fixture.fixtureId || undefined,
+            "data-fixture-kind": fixture.targetKind,
+            "data-parent-fixture-id": fixture.parentFixtureId || undefined,
+            "data-step-selection": presentation.current ? "active" : presentation.base ? "base" : undefined,
+            "data-step-contained": presentation.containedCurrent ? "active" : presentation.containedBase ? "base" : undefined,
+            "data-collapsed": fixture.targetKind === "master" ? String(collapsedFixtureIds.has(fixture.parentFixtureId)) : undefined,
+          };
+        }}
+        activeIndex={activeRow}
+        onActiveIndexChange={setActiveRow}
+        onActivate={(fixture) => fixture.fixtureId && void server.selectionGesture({ type: "fixture", fixture_id: fixture.fixtureId })}
+      /></WindowScrollArea>
       {groupsVisible && <GroupStrip />}
       {settingsAnchor && <WindowSettings modal={false} anchor={settingsAnchor} title="Fixture Sheet Settings" onClose={() => setSettingsAnchor(null)} tabs={[
         { id: "ordering", label: "Ordering", content: <label className="pane-option-toggle">Order fixtures <Select aria-label="Fixture sheet ordering" value={fixtureOrder} onChange={(event) => setFixtureOrder(event.target.value as FixtureOrder)}><option value="fixture-id">Fixture ID</option><option value="active">Active fixtures first</option></Select></label> },

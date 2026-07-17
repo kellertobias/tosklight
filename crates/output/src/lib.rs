@@ -641,6 +641,32 @@ mod tests {
     }
 
     #[test]
+    fn disabled_route_suppresses_a_nonzero_highlight_frame() {
+        let routes = [OutputRoute {
+            protocol: Protocol::ArtNet,
+            logical_universe: 1,
+            destination_universe: 1,
+            destination: Some("127.0.0.1:6454".parse().unwrap()),
+            enabled: false,
+            minimum_slots: 1,
+        }];
+        // The output scheduler deliberately has no knowledge of contribution sources. A disabled
+        // route must suppress even a fully resolved nonzero frame produced by transient HIGH.
+        let frames = HashMap::from([(1, [200; DMX_SLOTS])]);
+        let packets = encode_routes(
+            &routes,
+            &frames,
+            &HashMap::from([(1, 1)]),
+            &mut HashMap::new(),
+            [1; 16],
+            "Highlight safety test",
+            100,
+        )
+        .unwrap();
+        assert!(packets.is_empty());
+    }
+
+    #[test]
     fn artnet_route_without_an_explicit_destination_uses_standard_broadcast() {
         let routes = [OutputRoute {
             protocol: Protocol::ArtNet,

@@ -22,8 +22,6 @@ jobs:
         uses: https://code.forgejo.org/actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Install pinned manual dependencies
-        run: python3 -m pip install --requirement docs/manual/requirements.txt
       - name: Build and verify PDF and HTML manuals
         run: |
           if [[ "${{ forgejo.ref_name }}" == v* ]]; then

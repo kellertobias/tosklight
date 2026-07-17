@@ -5,6 +5,7 @@ import { programmerValueCount } from "./programmerActivity";
 import { Button, Input } from "../common";
 import { editTargetedCommandWithSoftwareKey, softwareKeyFromKeyboard } from "./softwareKeypad";
 import { openUpdateSettings, openUpdateTargetMenu } from "./updateWorkflow";
+import { canAdvancePlaybackPage } from "./PlaybackPageDialogs";
 
 export function CommandLineBar() {
   const { state, dispatch } = useApp();
@@ -108,6 +109,7 @@ export function CommandLineBar() {
     else toggleRecord();
   };
   useEffect(() => {
+	if (hardware || !state.regularNumberShortcuts) return;
     const openRunningMenu = (event: KeyboardEvent) => {
       if (event.code !== "Delete" || !event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
@@ -117,9 +119,9 @@ export function CommandLineBar() {
     };
     window.addEventListener("keydown", openRunningMenu);
     return () => window.removeEventListener("keydown", openRunningMenu);
-  }, [dispatch]);
+  }, [dispatch, hardware, state.regularNumberShortcuts]);
   useEffect(() => {
-    if (hardware) return;
+    if (hardware || !state.regularNumberShortcuts) return;
     const triggerPlaybackButton = (event: KeyboardEvent, slot: number) => {
       const page = server.playbacks?.pages.find((candidate) => candidate.number === server.playbacks?.active_page);
       const playbackNumber = page?.slots[String(slot)];
@@ -154,12 +156,22 @@ export function CommandLineBar() {
       if (event.code === "PageUp" || event.code === "PageDown") {
         event.preventDefault();
         const current = server.playbacks?.active_page ?? state.playbackPage + 1;
-        const page = Math.max(1, Math.min(state.playbackPageNames.length, current + (event.code === "PageUp" ? 1 : -1)));
-        dispatch({ type: "SET_PLAYBACK_PAGE", page: page - 1 });
-        void server.setPlaybackPage(page);
+        const pages = server.playbacks?.pages ?? [];
+        const page = current + (event.code === "PageUp" ? 1 : -1);
+        if (page < 1) return;
+        if (pages.some((item) => item.number === page)) {
+          dispatch({ type: "SET_PLAYBACK_PAGE", page: page - 1 });
+          void server.setPlaybackPage(page);
+        } else if (event.code === "PageUp" && canAdvancePlaybackPage(pages, current)) {
+          void server.savePlaybackPage({ number: page, name: `Page ${page}`, slots: {} }).then((saved) => {
+            if (!saved) return;
+            dispatch({ type: "SET_PLAYBACK_PAGE", page: page - 1 });
+            void server.setPlaybackPage(page);
+          });
+        }
         return;
       }
-      const key = softwareKeyFromKeyboard(event, state.regularNumberShortcuts);
+      const key = softwareKeyFromKeyboard(event, true);
       if (!key) return;
       if (key === "ESC") {
         event.preventDefault();
@@ -231,7 +243,7 @@ export function CommandLineBar() {
       for (const playbackNumber of keyboardFlash.current.values()) void server.poolPlaybackAction(playbackNumber, "flash", { pressed: false });
       keyboardFlash.current.clear();
     };
-  }, [hardware, completed, persistentError, state.storeArmed, state.updateArmed, state.cueListSetArmed, state.playbackSetArmed, state.presetSetArmed, state.regularNumberShortcuts, state.playbackPage, state.playbackPageNames.length, server.playbacks, server.commandLine, server.commandTargetMode, server.commandLinePristine, server.poolPlaybackAction, server.setPlaybackPage]);
+  }, [hardware, completed, persistentError, state.storeArmed, state.updateArmed, state.cueListSetArmed, state.playbackSetArmed, state.presetSetArmed, state.regularNumberShortcuts, state.playbackPage, server.playbacks, server.commandLine, server.commandTargetMode, server.commandLinePristine, server.poolPlaybackAction, server.savePlaybackPage, server.setPlaybackPage]);
   return (
     <header
       className={`command-line-bar command-line-left ${playback ? "playback-mode" : ""} ${commandError ? "has-command-error" : ""}`}
@@ -263,7 +275,7 @@ export function CommandLineBar() {
       />{!hardware && <Button className="command-escape" onClick={() => replaceCommand("", true)}>ESC</Button>}
         <Button aria-label={`DMX ${server.bootstrap?.frame_rate_hz ?? "—"}Hz; ${server.bootstrap?.active_timecode ?? "No Timecode"}. Open running and output controls`} className={`command-status ${server.status}`} title="Open running and output controls" onClick={() => dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: true })}>
           <span className={state.blackout ? "blackout-status" : ""}>{state.blackout ? <><i><span className="status-label-full">DMX </span>{server.bootstrap?.frame_rate_hz ?? "—"}Hz</i><b>BLACKOUT</b></> : <><span className="status-label-full">DMX {server.bootstrap?.frame_rate_hz ?? "—"}Hz</span><span className="status-label-compact">{server.bootstrap?.frame_rate_hz ?? "—"}Hz</span></>}</span>
-          <span>{server.bootstrap?.active_timecode ?? <><span className="status-label-full">No Timecode</span><span className="status-label-compact">No TC</span></>}</span>
+          <span className={`timecode-status ${server.bootstrap?.active_timecode ? "timecode-active" : "timecode-idle"}`}>{server.bootstrap?.active_timecode ?? <><span className="status-label-full">No Timecode</span><span className="status-label-compact">No TC</span></>}</span>
         </Button>
       </div>
       {completed && (

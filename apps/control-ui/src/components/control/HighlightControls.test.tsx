@@ -5,7 +5,7 @@ import { HighlightControls, highlightStatusLabel } from "./HighlightControls";
 
 const offState: HighlightState = {
   active: false,
-  mode: "off",
+  mode: "selection",
   output_enabled: false,
   capture_only: false,
   remembered: [],
@@ -44,115 +44,108 @@ afterEach(() => {
 });
 
 describe("HighlightControls", () => {
-  it("renders the four keypad labels and routes the existing actions to the server", async () => {
-    server.selectedFixtures = ["fixture-a", "fixture-b"];
+  it("renders only the four corrected keypad labels and routes ALL to restoration", async () => {
     render(<HighlightControls/>);
 
-    expect(screen.getByRole("region", { name: "Highlight and step through" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Turn Highlight on" })).toHaveTextContent("HIGH");
-    expect(screen.getByRole("button", { name: "Previous highlighted fixture" })).toHaveTextContent("PREV");
-    expect(screen.getByRole("button", { name: "Next highlighted fixture" })).toHaveTextContent("NEXT");
-    expect(screen.getByRole("button", { name: "Capture current selection for Highlight" })).toHaveTextContent("ALL");
+    const controls = screen.getByRole("region", { name: "Highlight and selection stepping" });
+    expect([...controls.querySelectorAll("button")].map((button) => button.textContent)).toEqual([
+      "HIGH",
+      "PREV",
+      "NEXT",
+      "ALL",
+    ]);
+    expect([...controls.querySelectorAll("[data-keypad-key]")].map((button) => button.getAttribute("data-keypad-key"))).toEqual(["HIGH", "PREV", "NEXT", "ALL"]);
+    expect(screen.getByRole("button", { name: "Turn Highlight on" })).toHaveTextContent(/^HIGH$/);
+    expect(screen.queryByText(/capture/i)).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Capture current selection for Highlight" }));
-    await waitFor(() => expect(server.highlightAction).toHaveBeenCalledWith("capture"));
+    fireEvent.click(screen.getByRole("button", { name: "Restore complete selection" }));
+    await waitFor(() => expect(server.highlightAction).toHaveBeenCalledWith("all"));
   });
 
-  it("sends explicit On and Off actions so a deliberate rapid toggle is not repeat-guarded", async () => {
+  it("sends explicit On and Off actions and lights HIGH from active state alone", async () => {
     const { rerender } = render(<HighlightControls/>);
+    const high = () => screen.getByRole("button", { name: /Turn Highlight/ });
+    expect(high()).toHaveClass("highlight-off");
+    expect(high()).not.toHaveClass("highlight-armed");
 
-    fireEvent.click(screen.getByRole("button", { name: "Turn Highlight on" }));
+    fireEvent.click(high());
     await waitFor(() => expect(server.highlightAction).toHaveBeenCalledWith("on"));
 
     server.highlightAction.mockClear();
     server.highlight = {
       ...offState,
       active: true,
-      mode: "selection",
-      output_enabled: true,
-      remembered: fixtures,
-      can_next: true,
-      owner_user_id: "operator-a",
+      output_enabled: false,
+      capture_only: true,
     };
     rerender(<HighlightControls/>);
-    fireEvent.click(screen.getByRole("button", { name: "Turn Highlight off" }));
+    expect(high()).toHaveClass("highlight-armed");
+    expect(high()).toHaveTextContent(/^HIGH$/);
+    expect(high()).not.toHaveTextContent(/suppressed|empty|selection/i);
+    fireEvent.click(high());
 
     await waitFor(() => expect(server.highlightAction).toHaveBeenCalledWith("off"));
   });
 
-  it("shows all remembered fixtures before stepping and the current fixture while stepping", () => {
+  it("keeps PREV and NEXT available at the ends so authoritative stepping can wrap", async () => {
     server.highlight = {
       ...offState,
-      active: true,
-      mode: "selection",
-      output_enabled: true,
-      remembered: fixtures,
-      can_next: true,
-      owner_user_id: "operator-a",
-    };
-    const { rerender } = render(<HighlightControls/>);
-    expect(screen.getByRole("region", { name: "Highlight and step through" })).toHaveAttribute("title", expect.stringContaining("Fixture 102 · Centre Spot"));
-    expect(screen.getByRole("button", { name: "Turn Highlight off" })).toHaveTextContent("All 3");
-
-    server.highlight = {
-      ...server.highlight,
+      active: false,
       mode: "step",
-      active_index: 1,
-      active_fixture: fixtures[1],
-      can_previous: true,
-      can_next: true,
-    };
-    rerender(<HighlightControls/>);
-    expect(screen.getByRole("region", { name: "Highlight and step through" })).toHaveAttribute("title", expect.stringContaining("2/3 · Fixture 102 · Centre Spot"));
-    expect(screen.getByRole("button", { name: "Turn Highlight off" })).toHaveTextContent("2/3 · Fixture 102 · Centre Spot");
-  });
-
-  it("stops at the ends and never advances its displayed index locally", async () => {
-    server.highlight = {
-      ...offState,
-      active: true,
-      mode: "step",
-      output_enabled: true,
       remembered: fixtures,
       active_index: 2,
       active_fixture: fixtures[2],
       can_previous: true,
-      can_next: false,
+      can_next: true,
       owner_user_id: "operator-a",
     };
-    render(<HighlightControls/>);
+    const { rerender } = render(<HighlightControls/>);
 
-    expect(screen.getByRole("button", { name: "Next highlighted fixture" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Previous highlighted fixture" })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: "Previous highlighted fixture" }));
+    expect(screen.getByRole("button", { name: "Next selection item" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Next selection item" }));
+    await waitFor(() => expect(server.highlightAction).toHaveBeenCalledWith("next"));
+
+    server.highlightAction.mockClear();
+    server.highlight = { ...server.highlight, active_index: 0, active_fixture: fixtures[0] };
+    rerender(<HighlightControls/>);
+    expect(screen.getByRole("button", { name: "Previous selection item" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Previous selection item" }));
     await waitFor(() => expect(server.highlightAction).toHaveBeenCalledWith("previous"));
-    expect(screen.getByRole("region", { name: "Highlight and step through" })).toHaveAttribute("title", expect.stringContaining("3/3 · Fixture 103 · Stage Right"));
   });
 
-  it("provides keyboard actions without sending repeated or unavailable steps", async () => {
+  it("binds Alt+H, Alt+A, and Alt+Left/Right while removing Alt+C", async () => {
     server.highlight = {
       ...offState,
-      active: true,
-      mode: "step",
-      output_enabled: true,
       remembered: fixtures,
-      active_index: 0,
-      active_fixture: fixtures[0],
-      can_previous: false,
+      can_previous: true,
       can_next: true,
       owner_user_id: "operator-a",
     };
     render(<HighlightControls/>);
 
-    fireEvent.keyDown(window, { key: "ArrowRight", altKey: true });
-    await waitFor(() => expect(server.highlightAction).toHaveBeenCalledWith("next"));
+    fireEvent.keyDown(window, { key: "a", altKey: true });
+    await waitFor(() => expect(server.highlightAction).toHaveBeenLastCalledWith("all"));
     server.highlightAction.mockClear();
+
+    fireEvent.keyDown(window, { key: "c", altKey: true });
+    expect(server.highlightAction).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(window, { key: "ArrowRight", altKey: true });
+    await waitFor(() => expect(server.highlightAction).toHaveBeenLastCalledWith("next"));
+    server.highlightAction.mockClear();
+
     fireEvent.keyDown(window, { key: "ArrowLeft", altKey: true });
+    await waitFor(() => expect(server.highlightAction).toHaveBeenLastCalledWith("previous"));
+    server.highlightAction.mockClear();
+
+    fireEvent.keyDown(window, { key: "h", altKey: true });
+    await waitFor(() => expect(server.highlightAction).toHaveBeenLastCalledWith("toggle"));
+    server.highlightAction.mockClear();
     fireEvent.keyDown(window, { key: "ArrowRight", altKey: true, repeat: true });
     expect(server.highlightAction).not.toHaveBeenCalled();
   });
 
-  it("makes capture-only safety and ownership conflicts explicit", () => {
+  it("keeps ownership errors outside the lit HIGH key", () => {
     server.highlight = {
       ...offState,
       active: true,
@@ -162,37 +155,43 @@ describe("HighlightControls", () => {
       remembered: fixtures,
       active_index: 0,
       active_fixture: fixtures[0],
+      can_previous: true,
       can_next: true,
       owner_user_id: "operator-b",
       owner_user_name: "Focus operator",
       message: "Blind mode",
     };
     server.highlightError = "Highlight is controlled by Focus operator.";
-    render(<HighlightControls/>);
+    const { container } = render(<HighlightControls/>);
 
-    expect(screen.getByRole("region", { name: "Highlight and step through" })).toHaveClass("capture-only");
-    expect(screen.getByRole("region", { name: "Highlight and step through" })).toHaveAttribute("title", expect.stringContaining("Capture only; no live highlight output"));
-    expect(screen.getByText("CAPTURE ONLY")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Turn Highlight off" })).toBeEnabled();
-    expect(screen.getByRole("alert")).toHaveTextContent("Highlight is controlled by Focus operator");
+    const high = screen.getByRole("button", { name: "Turn Highlight off" });
+    expect(high).toHaveClass("highlight-armed");
+    expect(high).toHaveTextContent(/^HIGH$/);
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveAttribute("data-highlight-error-alert");
+    expect(alert).toHaveTextContent("Highlight is controlled by Focus operator");
+    expect(alert.parentElement).toBe(document.body);
+    expect(container.contains(alert)).toBe(false);
+    expect(screen.queryByLabelText("Highlight status")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Dismiss Highlight error" }));
     expect(server.dismissHighlightError).toHaveBeenCalledOnce();
   });
 
-  it("allows capture but blocks live-output actions while another operator owns Highlight", () => {
-    server.selectedFixtures = ["fixture-a"];
+  it("blocks every live desk action while another operator owns Highlight", () => {
     server.highlight = {
       ...offState,
       remembered: fixtures,
+      can_previous: true,
       can_next: true,
       owner_user_id: "operator-b",
       owner_user_name: "Focus operator",
     };
     render(<HighlightControls/>);
 
-    expect(screen.getByRole("button", { name: "Capture current selection for Highlight" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Highlight is controlled by Focus operator" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Next highlighted fixture" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Previous selection item" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Next selection item" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Restore complete selection" })).toBeDisabled();
   });
 });
 
@@ -200,13 +199,15 @@ describe("highlightStatusLabel", () => {
   it("uses a zero-based server index only for display conversion", () => {
     expect(highlightStatusLabel({
       ...offState,
-      active: true,
       mode: "step",
-      output_enabled: true,
       remembered: fixtures,
       active_index: 0,
       active_fixture: fixtures[0],
       can_next: true,
-    })).toBe("1/3 · Fixture 101 · Stage Left");
+    })).toBe("STEP 1/3 · Fixture 101 · Stage Left");
+  });
+
+  it("reports complete selection independently of HIGH state", () => {
+    expect(highlightStatusLabel({ ...offState, remembered: fixtures })).toBe("ALL · 3 selected");
   });
 });

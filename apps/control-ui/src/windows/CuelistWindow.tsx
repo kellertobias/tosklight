@@ -3,7 +3,7 @@ import type { WindowProps } from "./windowTypes";
 import { useServer } from "../api/ServerContext";
 import type { AttributeValue, Cue, CueList, VersionedObject, VisualizationSnapshot } from "../api/types";
 import { cueVisualization, migrateStagePosition, renderStageThumbnail } from "./stage3dScene";
-import { Button, FormLayout, NumberField, SelectField, SwitchField, TextField, TextInput } from "../components/common";
+import { Button, FormLayout, NumberField, SearchBar, SelectField, SwitchField, TextField } from "../components/common";
 import { ButtonGrid, WindowHeader, WindowScrollArea } from "../components/window-kit";
 import { useApp } from "../state/AppContext";
 import { cueUpdateTarget, requestUpdateTarget } from "../components/control/updateWorkflow";
@@ -439,14 +439,9 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
               primary: `${pool.length} / 1000 Cuelists`,
               secondary: workflowMessage ? <span className="cuelist-workflow-status">{workflowMessage}</span> : undefined,
             }}
+            search={<SearchBar value={search} onChange={setSearch} ariaLabel="Search Cuelists" placeholder="Number or name"/>}
             actions={[]}
           />
-        )}
-        {!compact && (
-          <label className="cuelist-search">
-            <span>⌕ Search Cuelists</span>
-            <TextInput clearable aria-label="Search Cuelists" placeholder="Number or name" value={search} onChange={(event) => setSearch(event.target.value)} />
-          </label>
         )}
         {compact && workflowMessage && <div className="pool-message">{workflowMessage}</div>}
         <WindowScrollArea

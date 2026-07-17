@@ -28,7 +28,7 @@ const dispatch = vi.fn((action: { type: string; value?: boolean }) => {
   if (action.type === "SET_SHIFT_ARMED") state.shiftArmed = Boolean(action.value);
 });
 const server = {
-  bootstrap: { hardware_connected: false, active_programmers: [], frame_rate_hz: 60, active_timecode: null },
+  bootstrap: { hardware_connected: false, active_programmers: [], frame_rate_hz: 60, active_timecode: null as string | null },
   session: { session_id: "session-a" },
   selectedFixtures: [],
   playbacks: null,
@@ -48,7 +48,6 @@ const server = {
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
 vi.mock("../../state/AppContext", () => ({ useApp: () => ({ state, dispatch }) }));
-vi.mock("./HighlightControls", () => ({ HighlightControls: () => null }));
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -57,7 +56,10 @@ beforeEach(() => {
   state.shiftArmed = false;
   state.builtIn = null;
   state.patchSetArmed = false;
+  state.midiProfile = false;
+  state.regularNumberShortcuts = true;
   server.commandLine = "FIXTURE";
+  server.bootstrap.active_timecode = null;
   vi.clearAllMocks();
 });
 
@@ -67,6 +69,31 @@ afterEach(() => {
 });
 
 describe("Shift+Record Update gestures", () => {
+  it("uses gray for no timecode and blue only for a present timecode", () => {
+    const { rerender } = render(<CommandLineBar/>);
+    expect(screen.getByText("No Timecode").closest(".timecode-status")).toHaveClass("timecode-idle");
+
+    server.bootstrap.active_timecode = "01:02:03:04";
+    rerender(<CommandLineBar/>);
+    expect(screen.getByText("01:02:03:04")).toHaveClass("timecode-active");
+  });
+
+  it("keeps the command-to-REC/Preload space free of Highlight status panels in both layouts", () => {
+    const { container, rerender } = render(<CommandLineBar/>);
+    const assertNoHighlightPanel = () => {
+      const commandField = container.querySelector(".command-field");
+      const recordPreload = container.querySelector(".command-record-preload");
+      expect(commandField?.nextElementSibling).toBe(recordPreload);
+      expect(container.querySelector('[aria-label="Highlight status"]')).not.toBeInTheDocument();
+      expect(container.querySelector(".highlight-feedback,.command-highlight-feedback")).not.toBeInTheDocument();
+    };
+    assertNoHighlightPanel();
+
+    state.midiProfile = true;
+    rerender(<CommandLineBar/>);
+    assertNoHighlightPanel();
+  });
+
   it("routes the physical Home-key SET shortcut through the selected Patch control surface", () => {
     state.builtIn = "patch";
     const set = vi.fn();
@@ -75,6 +102,20 @@ describe("Shift+Record Update gestures", () => {
     fireEvent.keyDown(window, { code: "Home", key: "Home" });
 
     expect(set).toHaveBeenCalledOnce();
+    expect(server.setCommandLine).not.toHaveBeenCalled();
+  });
+
+  it("disables the complete software keyboard shortcut layer", () => {
+    state.builtIn = "patch";
+    state.regularNumberShortcuts = false;
+    const set = vi.fn();
+    render(<><Button data-keypad-key="SET" onClick={set}>SET target</Button><CommandLineBar/></>);
+
+    fireEvent.keyDown(window, { code: "Home", key: "Home" });
+    fireEvent.keyDown(window, { code: "Delete", key: "Delete", shiftKey: true });
+
+    expect(set).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalledWith({ type: "SET_MODAL", modal: "systemControlsOpen", value: true });
     expect(server.setCommandLine).not.toHaveBeenCalled();
   });
 

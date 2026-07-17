@@ -625,7 +625,7 @@ test.describe("docs/testing/06-preload-modes-and-virtual-playbacks.md", () => {
         await setPreloadMaskThroughUi(api, page, mask);
         state.savedMasks.push(captureMask(await configuration(api)));
         await page.getByRole("button", { name: "Outputs", exact: true }).click();
-        await page.getByRole("button", { name: "Inputs", exact: true }).click();
+        await page.getByRole("button", { name: "Programmer", exact: true }).click();
         await expectPreloadMaskControls(page, mask);
       }
     },
@@ -677,7 +677,7 @@ test.describe("docs/testing/06-preload-modes-and-virtual-playbacks.md", () => {
     await desk.open(bench.baseUrl);
     await page.getByRole("button", { name: /Open show menu/ }).click();
     await page.getByRole("button", { name: "Enter Setup", exact: true }).click();
-    await page.getByRole("button", { name: "Inputs", exact: true }).click();
+    await page.getByRole("button", { name: "Programmer", exact: true }).click();
     const labels = ["Preload programmer changes", "Preload physical playback actions", "Preload virtual playback actions"] as const;
     for (let mask = 0; mask < 8; mask++) {
       await desk.recordStep(`SAVE MASK ${mask + 1} / 8`, labels.map((label, index) => `${label.replace("Preload ", "")}: ${mask & (1 << index) ? "On" : "Off"}`).join(" · "));
@@ -693,7 +693,7 @@ test.describe("docs/testing/06-preload-modes-and-virtual-playbacks.md", () => {
         return [current.preload_programmer_changes, current.preload_physical_playback_actions, current.preload_virtual_playback_actions];
       }).toEqual([Boolean(mask & 1), Boolean(mask & 2), Boolean(mask & 4)]);
       await page.getByRole("button", { name: "Outputs", exact: true }).click();
-      await page.getByRole("button", { name: "Inputs", exact: true }).click();
+      await page.getByRole("button", { name: "Programmer", exact: true }).click();
       for (let index = 0; index < labels.length; index++)
         await expect(page.getByLabel(labels[index])).toBeChecked({ checked: Boolean(mask & (1 << index)) });
     }
@@ -1083,7 +1083,7 @@ const preloadMaskLabels = [
 async function openPreloadInputSettings(page: Page) {
   await page.getByRole("button", { name: /Open show menu/ }).click();
   await page.getByRole("button", { name: "Enter Setup", exact: true }).click();
-  await page.getByRole("button", { name: "Inputs", exact: true }).click();
+  await page.getByRole("button", { name: "Programmer", exact: true }).click();
 }
 
 async function setPreloadMaskThroughUi(api: ApiDriver, page: Page, mask: number) {

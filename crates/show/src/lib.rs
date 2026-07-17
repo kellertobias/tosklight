@@ -9,7 +9,7 @@ use std::path::Path;
 use thiserror::Error;
 use uuid::Uuid;
 
-const DESK_SCHEMA_VERSION: i64 = 7;
+const DESK_SCHEMA_VERSION: i64 = 8;
 const SHOW_SCHEMA_VERSION: i64 = 3;
 
 #[derive(Debug, Error)]
@@ -37,6 +37,19 @@ pub struct DeskUser {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct PlaybackSurfaceRow {
+    pub first_playback_slot: u8,
+    pub has_fader: bool,
+    pub button_count: u8,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct PlaybackSurfaceLayout {
+    pub playbacks_per_row: u8,
+    pub rows: Vec<PlaybackSurfaceRow>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ControlDesk {
     pub id: Uuid,
     pub name: String,
@@ -44,6 +57,8 @@ pub struct ControlDesk {
     pub columns: u8,
     pub rows: u8,
     pub buttons: u8,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub playback_layout: Option<PlaybackSurfaceLayout>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -62,6 +77,29 @@ pub struct ScreenConfiguration {
     pub display_id: Option<String>,
     pub bounds: Option<serde_json::Value>,
     pub fullscreen: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub playback_layout: Option<PlaybackSurfaceLayout>,
+}
+
+fn validate_playback_surface(layout: &PlaybackSurfaceLayout) -> Result<(), StoreError> {
+    if !(1..=32).contains(&layout.playbacks_per_row)
+        || layout.rows.is_empty()
+        || layout.rows.len() > 127
+        || usize::from(layout.playbacks_per_row) * layout.rows.len() > 127
+    {
+        return Err(StoreError::Invalid(
+            "invalid playback surface layout".into(),
+        ));
+    }
+    for row in &layout.rows {
+        if row.first_playback_slot == 0
+            || row.button_count > 3
+            || u16::from(row.first_playback_slot) + u16::from(layout.playbacks_per_row) - 1 > 127
+        {
+            return Err(StoreError::Invalid("invalid playback surface row".into()));
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -171,7 +209,7 @@ impl DeskStore {
     }
 
     pub fn desks(&self) -> Result<Vec<ControlDesk>, StoreError> {
-        let mut statement = self.conn.prepare("SELECT id,name,osc_alias,columns_count,rows_count,buttons_count FROM control_desks ORDER BY name COLLATE NOCASE")?;
+        let mut statement = self.conn.prepare("SELECT id,name,osc_alias,columns_count,rows_count,buttons_count,playback_layout_json FROM control_desks ORDER BY name COLLATE NOCASE")?;
         let rows = statement.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
@@ -180,10 +218,11 @@ impl DeskStore {
                 row.get::<_, u8>(3)?,
                 row.get::<_, u8>(4)?,
                 row.get::<_, u8>(5)?,
+                row.get::<_, Option<String>>(6)?,
             ))
         })?;
         rows.map(|row| {
-            let (id, name, osc_alias, columns, rows, buttons) = row?;
+            let (id, name, osc_alias, columns, rows, buttons, playback_layout) = row?;
             Ok(ControlDesk {
                 id: Uuid::parse_str(&id)?,
                 name,
@@ -191,6 +230,9 @@ impl DeskStore {
                 columns,
                 rows,
                 buttons,
+                playback_layout: playback_layout
+                    .map(|value| serde_json::from_str(&value))
+                    .transpose()?,
             })
         })
         .collect()
@@ -223,6 +265,7 @@ impl DeskStore {
             columns: 8,
             rows: 1,
             buttons: 3,
+            playback_layout: None,
         };
         self.conn.execute("INSERT INTO control_desks(id,name,osc_alias,columns_count,rows_count,buttons_count) VALUES (?1,?2,?3,?4,?5,?6)",params![desk.id.to_string(),desk.name,desk.osc_alias,desk.columns,desk.rows,desk.buttons])?;
         Ok(desk)
@@ -235,6 +278,7 @@ impl DeskStore {
         columns: u8,
         rows: u8,
         buttons: u8,
+        playback_layout: Option<PlaybackSurfaceLayout>,
     ) -> Result<ControlDesk, StoreError> {
         let alias = alias.trim().to_ascii_lowercase();
         if name.trim().is_empty()
@@ -243,14 +287,23 @@ impl DeskStore {
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
             || !(1..=32).contains(&columns)
-            || !(1..=3).contains(&rows)
+            || !(1..=127).contains(&rows)
             || buttons > 3
         {
             return Err(StoreError::Invalid(
                 "invalid control desk configuration".into(),
             ));
         }
-        if self.conn.execute("UPDATE control_desks SET name=?1,osc_alias=?2,columns_count=?3,rows_count=?4,buttons_count=?5 WHERE id=?6",params![name.trim(),alias,columns,rows,buttons,id.to_string()])?!=1{return Err(StoreError::Invalid("control desk does not exist".into()));}
+        let playback_layout = playback_layout.or_else(|| {
+            self.control_desk(id)
+                .ok()
+                .flatten()
+                .and_then(|desk| desk.playback_layout)
+        });
+        if let Some(layout) = &playback_layout {
+            validate_playback_surface(layout)?;
+        }
+        if self.conn.execute("UPDATE control_desks SET name=?1,osc_alias=?2,columns_count=?3,rows_count=?4,buttons_count=?5,playback_layout_json=?6 WHERE id=?7",params![name.trim(),alias,columns,rows,buttons,playback_layout.as_ref().map(serde_json::to_string).transpose()?,id.to_string()])?!=1{return Err(StoreError::Invalid("control desk does not exist".into()));}
         self.control_desk(id)?
             .ok_or_else(|| StoreError::Invalid("control desk update failed".into()))
     }
@@ -306,7 +359,7 @@ impl DeskStore {
     }
 
     pub fn screens(&self) -> Result<Vec<ScreenConfiguration>, StoreError> {
-        let mut statement = self.conn.prepare("SELECT id,name,layout_json,show_dock,show_playbacks,playback_count,playback_rows,first_playback_slot,page_mode,show_page_controls,desired_open,display_id,bounds_json,fullscreen FROM screens ORDER BY name COLLATE NOCASE")?;
+        let mut statement = self.conn.prepare("SELECT id,name,layout_json,show_dock,show_playbacks,playback_count,playback_rows,first_playback_slot,page_mode,show_page_controls,desired_open,display_id,bounds_json,fullscreen,playback_layout_json FROM screens ORDER BY name COLLATE NOCASE")?;
         let rows = statement.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
@@ -323,6 +376,7 @@ impl DeskStore {
                 row.get::<_, Option<String>>(11)?,
                 row.get::<_, Option<String>>(12)?,
                 row.get::<_, bool>(13)?,
+                row.get::<_, Option<String>>(14)?,
             ))
         })?;
         rows.map(|row| {
@@ -341,6 +395,7 @@ impl DeskStore {
                 display_id,
                 bounds,
                 fullscreen,
+                playback_layout,
             ) = row?;
             Ok(ScreenConfiguration {
                 id: Uuid::parse_str(&id)?,
@@ -359,6 +414,9 @@ impl DeskStore {
                     .map(|value| serde_json::from_str(&value))
                     .transpose()?,
                 fullscreen,
+                playback_layout: playback_layout
+                    .map(|value| serde_json::from_str(&value))
+                    .transpose()?,
             })
         })
         .collect()
@@ -370,6 +428,11 @@ impl DeskStore {
         &self,
         mut screen: ScreenConfiguration,
     ) -> Result<ScreenConfiguration, StoreError> {
+        if screen.playback_layout.is_none() {
+            screen.playback_layout = self
+                .screen(screen.id)?
+                .and_then(|existing| existing.playback_layout);
+        }
         screen.name = screen.name.trim().to_owned();
         if screen.name.is_empty()
             || screen.name.len() > 80
@@ -382,7 +445,10 @@ impl DeskStore {
         {
             return Err(StoreError::Invalid("invalid screen configuration".into()));
         }
-        self.conn.execute("INSERT INTO screens(id,name,layout_json,show_dock,show_playbacks,playback_count,playback_rows,first_playback_slot,page_mode,show_page_controls,desired_open,display_id,bounds_json,fullscreen) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14) ON CONFLICT(id) DO UPDATE SET name=excluded.name,layout_json=excluded.layout_json,show_dock=excluded.show_dock,show_playbacks=excluded.show_playbacks,playback_count=excluded.playback_count,playback_rows=excluded.playback_rows,first_playback_slot=excluded.first_playback_slot,page_mode=excluded.page_mode,show_page_controls=excluded.show_page_controls,desired_open=excluded.desired_open,display_id=excluded.display_id,bounds_json=excluded.bounds_json,fullscreen=excluded.fullscreen",params![screen.id.to_string(),screen.name,serde_json::to_string(&screen.layout)?,screen.show_dock,screen.show_playbacks,screen.playback_count,screen.playback_rows,screen.first_playback_slot,screen.page_mode,screen.show_page_controls,screen.desired_open,screen.display_id,screen.bounds.as_ref().map(serde_json::to_string).transpose()?,screen.fullscreen])?;
+        if let Some(layout) = &screen.playback_layout {
+            validate_playback_surface(layout)?;
+        }
+        self.conn.execute("INSERT INTO screens(id,name,layout_json,show_dock,show_playbacks,playback_count,playback_rows,first_playback_slot,page_mode,show_page_controls,desired_open,display_id,bounds_json,fullscreen,playback_layout_json) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15) ON CONFLICT(id) DO UPDATE SET name=excluded.name,layout_json=excluded.layout_json,show_dock=excluded.show_dock,show_playbacks=excluded.show_playbacks,playback_count=excluded.playback_count,playback_rows=excluded.playback_rows,first_playback_slot=excluded.first_playback_slot,page_mode=excluded.page_mode,show_page_controls=excluded.show_page_controls,desired_open=excluded.desired_open,display_id=excluded.display_id,bounds_json=excluded.bounds_json,fullscreen=excluded.fullscreen,playback_layout_json=excluded.playback_layout_json",params![screen.id.to_string(),screen.name,serde_json::to_string(&screen.layout)?,screen.show_dock,screen.show_playbacks,screen.playback_count,screen.playback_rows,screen.first_playback_slot,screen.page_mode,screen.show_page_controls,screen.desired_open,screen.display_id,screen.bounds.as_ref().map(serde_json::to_string).transpose()?,screen.fullscreen,screen.playback_layout.as_ref().map(serde_json::to_string).transpose()?])?;
         self.screen(screen.id)?
             .ok_or_else(|| StoreError::Invalid("screen update failed".into()))
     }
@@ -646,6 +712,18 @@ impl DeskStore {
         if self.conn.execute(
             "UPDATE show_library SET revision=revision+1,updated_at=?1 WHERE id=?2",
             params![Utc::now().to_rfc3339(), id.0.to_string()],
+        )? != 1
+        {
+            return Err(StoreError::Invalid("show does not exist".into()));
+        }
+        self.show(id)?
+            .ok_or_else(|| StoreError::Invalid("show index update failed".into()))
+    }
+
+    pub fn rename_show(&self, id: ShowId, name: &str, path: &str) -> Result<ShowEntry, StoreError> {
+        if self.conn.execute(
+            "UPDATE show_library SET name=?1,path=?2,revision=revision+1,updated_at=?3 WHERE id=?4",
+            params![name, path, Utc::now().to_rfc3339(), id.0.to_string()],
         )? != 1
         {
             return Err(StoreError::Invalid("show does not exist".into()));
@@ -1141,10 +1219,10 @@ fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
       CREATE TABLE IF NOT EXISTS show_library(id TEXT PRIMARY KEY,name TEXT NOT NULL UNIQUE COLLATE NOCASE,path TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL,revision_source_show_id TEXT,revision_source_show_name TEXT,revision_source_revision INTEGER,revision_source_name TEXT,revision_copy_created_at TEXT);
       CREATE TABLE IF NOT EXISTS show_revisions(show_id TEXT NOT NULL,revision INTEGER NOT NULL,name TEXT NOT NULL,path TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(show_id,revision),FOREIGN KEY(show_id) REFERENCES show_library(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS control_desks(id TEXT PRIMARY KEY,name TEXT NOT NULL,osc_alias TEXT NOT NULL UNIQUE COLLATE NOCASE,columns_count INTEGER NOT NULL DEFAULT 8,rows_count INTEGER NOT NULL DEFAULT 1,buttons_count INTEGER NOT NULL DEFAULT 3);
+      CREATE TABLE IF NOT EXISTS control_desks(id TEXT PRIMARY KEY,name TEXT NOT NULL,osc_alias TEXT NOT NULL UNIQUE COLLATE NOCASE,columns_count INTEGER NOT NULL DEFAULT 8,rows_count INTEGER NOT NULL DEFAULT 1,buttons_count INTEGER NOT NULL DEFAULT 3,playback_layout_json TEXT);
       CREATE TABLE IF NOT EXISTS control_desk_pages(desk_id TEXT NOT NULL,show_id TEXT NOT NULL,page INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(desk_id,show_id),FOREIGN KEY(desk_id) REFERENCES control_desks(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS control_desk_selections(desk_id TEXT NOT NULL,show_id TEXT NOT NULL,playback INTEGER NOT NULL,PRIMARY KEY(desk_id,show_id),FOREIGN KEY(desk_id) REFERENCES control_desks(id) ON DELETE CASCADE);
-      CREATE TABLE IF NOT EXISTS screens(id TEXT PRIMARY KEY,name TEXT NOT NULL,layout_json TEXT NOT NULL DEFAULT '{"desks":[],"activeDeskId":""}',show_dock INTEGER NOT NULL DEFAULT 1,show_playbacks INTEGER NOT NULL DEFAULT 1,playback_count INTEGER NOT NULL DEFAULT 8,playback_rows INTEGER NOT NULL DEFAULT 1,first_playback_slot INTEGER NOT NULL DEFAULT 1,page_mode TEXT NOT NULL DEFAULT 'follow_main',show_page_controls INTEGER NOT NULL DEFAULT 1,desired_open INTEGER NOT NULL DEFAULT 0,display_id TEXT,bounds_json TEXT,fullscreen INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE IF NOT EXISTS screens(id TEXT PRIMARY KEY,name TEXT NOT NULL,layout_json TEXT NOT NULL DEFAULT '{"desks":[],"activeDeskId":""}',show_dock INTEGER NOT NULL DEFAULT 1,show_playbacks INTEGER NOT NULL DEFAULT 1,playback_count INTEGER NOT NULL DEFAULT 8,playback_rows INTEGER NOT NULL DEFAULT 1,first_playback_slot INTEGER NOT NULL DEFAULT 1,page_mode TEXT NOT NULL DEFAULT 'follow_main',show_page_controls INTEGER NOT NULL DEFAULT 1,desired_open INTEGER NOT NULL DEFAULT 0,display_id TEXT,bounds_json TEXT,fullscreen INTEGER NOT NULL DEFAULT 0,playback_layout_json TEXT);
       CREATE TABLE IF NOT EXISTS screen_pages(screen_id TEXT NOT NULL,show_id TEXT NOT NULL,page INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(screen_id,show_id),FOREIGN KEY(screen_id) REFERENCES screens(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,token TEXT NOT NULL,programmer_json TEXT NOT NULL,connected INTEGER NOT NULL CHECK(connected IN(0,1)),updated_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id));"#)?;
     add_column_if_missing(
@@ -1152,6 +1230,18 @@ fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
         "show_library",
         "revision_source_show_id",
         "revision_source_show_id TEXT",
+    )?;
+    add_column_if_missing(
+        &tx,
+        "control_desks",
+        "playback_layout_json",
+        "playback_layout_json TEXT",
+    )?;
+    add_column_if_missing(
+        &tx,
+        "screens",
+        "playback_layout_json",
+        "playback_layout_json TEXT",
     )?;
     add_column_if_missing(
         &tx,
@@ -1280,12 +1370,31 @@ mod tests {
             display_id: Some("display".into()),
             bounds: Some(serde_json::json!({"x":1,"y":2,"width":800,"height":600})),
             fullscreen: true,
+            playback_layout: Some(PlaybackSurfaceLayout {
+                playbacks_per_row: 6,
+                rows: vec![
+                    PlaybackSurfaceRow {
+                        first_playback_slot: 20,
+                        has_fader: false,
+                        button_count: 1,
+                    },
+                    PlaybackSurfaceRow {
+                        first_playback_slot: 40,
+                        has_fader: true,
+                        button_count: 3,
+                    },
+                ],
+            }),
         };
         store.put_screen(screen).unwrap();
         store.set_screen_page(id, show, 7).unwrap();
         let restored = store.screen(id).unwrap().unwrap();
         assert_eq!(restored.first_playback_slot, 20);
         assert_eq!(restored.playback_count, 12);
+        assert_eq!(
+            restored.playback_layout.unwrap().rows[1].first_playback_slot,
+            40
+        );
         assert_eq!(store.screen_page(id, show).unwrap(), 7);
         drop(store);
         let _ = fs::remove_file(path);
@@ -1310,6 +1419,7 @@ mod tests {
             display_id: None,
             bounds: None,
             fullscreen: false,
+            playback_layout: None,
         };
         assert!(store.put_screen(invalid).is_err());
         drop(store);

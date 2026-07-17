@@ -550,9 +550,22 @@ impl Preset {
 struct SelectionContext {
     selected: Vec<FixtureId>,
     expression: Option<SelectionExpression>,
+    /// Monotonic identity of the last authoritative selection operation. This changes even when
+    /// an operator deliberately re-selects the same members, allowing transient desk controls
+    /// such as PREV/NEXT/ALL to distinguish their own writes from an external selection reset.
+    revision: u64,
     /// True only while consecutive ordinary surface selections are being accumulated. A value
     /// entry or an explicit selection/clear operation closes the gesture.
     gesture_open: bool,
+}
+
+/// Desk-local authoritative programmer selection plus the operation identity that produced it.
+/// Attribute/value mutations deliberately do not change `revision`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ProgrammerSelection {
+    pub selected: Vec<FixtureId>,
+    pub expression: Option<SelectionExpression>,
+    pub revision: u64,
 }
 
 #[derive(Clone)]
@@ -563,6 +576,7 @@ pub struct ProgrammerRegistry {
     command_lines: Arc<RwLock<HashMap<SessionId, String>>>,
     command_targets: Arc<RwLock<HashMap<SessionId, String>>>,
     selection_contexts: Arc<RwLock<HashMap<SessionId, SelectionContext>>>,
+    selection_revision: Arc<AtomicU64>,
     programmer_order: Arc<AtomicU64>,
     clock: SharedClock,
 }
@@ -580,6 +594,7 @@ impl ProgrammerRegistry {
             command_lines: Arc::default(),
             command_targets: Arc::default(),
             selection_contexts: Arc::default(),
+            selection_revision: Arc::default(),
             programmer_order: Arc::default(),
             clock,
         }
@@ -614,11 +629,16 @@ impl ProgrammerRegistry {
         self.command_lines.write().clear();
         self.command_targets.write().clear();
         self.selection_contexts.write().clear();
+        self.selection_revision.store(0, Ordering::Relaxed);
         self.programmer_order.store(0, Ordering::Relaxed);
     }
 
     fn next_programmer_order(&self) -> u64 {
         self.programmer_order.fetch_add(1, Ordering::Relaxed) + 1
+    }
+
+    fn next_selection_revision(&self) -> u64 {
+        self.selection_revision.fetch_add(1, Ordering::Relaxed) + 1
     }
 
     pub fn start(&self, session_id: SessionId, user_id: UserId) -> ProgrammerState {
@@ -732,6 +752,7 @@ impl ProgrammerRegistry {
             SelectionContext {
                 selected: state.selected.clone(),
                 expression: state.selection_expression.clone(),
+                revision: self.next_selection_revision(),
                 gesture_open: false,
             },
         );
@@ -885,7 +906,7 @@ impl ProgrammerRegistry {
         }
         true
     }
-    pub fn select(&self, session: SessionId, fixtures: impl IntoIterator<Item = FixtureId>) {
+    pub fn select(&self, session: SessionId, fixtures: impl IntoIterator<Item = FixtureId>) -> u64 {
         let mut seen = HashSet::new();
         let selected = fixtures
             .into_iter()
@@ -900,35 +921,41 @@ impl ProgrammerRegistry {
             state.selection_expression = expression.clone();
             state.last_activity = self.clock.now();
         }
+        let revision = self.next_selection_revision();
         self.selection_contexts.write().insert(
             self.command_context(session),
             SelectionContext {
                 selected,
                 expression,
+                revision,
                 gesture_open: false,
             },
         );
+        revision
     }
     pub fn select_expression(
         &self,
         session: SessionId,
         fixtures: Vec<FixtureId>,
         expression: SelectionExpression,
-    ) {
+    ) -> u64 {
         if let Some(state) = self.states.write().get_mut(&self.key(session)) {
             state.checkpoint();
             state.selected = fixtures.clone();
             state.selection_expression = Some(expression.clone());
             state.last_activity = self.clock.now();
         }
+        let revision = self.next_selection_revision();
         self.selection_contexts.write().insert(
             self.command_context(session),
             SelectionContext {
                 selected: fixtures,
                 expression: Some(expression),
+                revision,
                 gesture_open: false,
             },
         );
+        revision
     }
 
     /// Apply one ordinary UI selection gesture. Consecutive calls on the same desk accumulate;
@@ -943,6 +970,7 @@ impl ProgrammerRegistry {
             return false;
         }
         let context = self.command_context(session);
+        let revision = self.next_selection_revision();
         let (selected, expression) = {
             let mut selections = self.selection_contexts.write();
             let selection = selections.entry(context).or_default();
@@ -959,6 +987,7 @@ impl ProgrammerRegistry {
             let expression = SelectionExpression::Sources { items };
             selection.selected = selected.clone();
             selection.expression = Some(expression.clone());
+            selection.revision = revision;
             selection.gesture_open = true;
             (selected, expression)
         };
@@ -1527,6 +1556,7 @@ impl ProgrammerRegistry {
             SelectionContext {
                 selected,
                 expression,
+                revision: self.next_selection_revision(),
                 gesture_open: false,
             },
         );
@@ -1550,6 +1580,7 @@ impl ProgrammerRegistry {
             SelectionContext {
                 selected,
                 expression,
+                revision: self.next_selection_revision(),
                 gesture_open: false,
             },
         );
@@ -1617,21 +1648,38 @@ impl ProgrammerRegistry {
         self.project_selection(&mut state, command_context);
         Some(state)
     }
+
+    pub fn selection(&self, session: SessionId) -> Option<ProgrammerSelection> {
+        let context = self.command_context(session);
+        self.selection_contexts
+            .read()
+            .get(&context)
+            .map(|selection| ProgrammerSelection {
+                selected: selection.selected.clone(),
+                expression: selection.expression.clone(),
+                revision: selection.revision,
+            })
+    }
+
     pub fn refresh_live_selections(&self, groups: &HashMap<String, GroupDefinition>) {
         for selection in self.selection_contexts.write().values_mut() {
-            match selection.expression.clone() {
+            let resolved = match selection.expression.clone() {
                 Some(SelectionExpression::LiveGroup { group_id, rule }) => {
-                    if let Ok(fixtures) = resolve_group(&group_id, groups) {
-                        selection.selected = apply_selection_rule(&fixtures, &rule);
-                    }
+                    resolve_group(&group_id, groups)
+                        .ok()
+                        .map(|fixtures| apply_selection_rule(&fixtures, &rule))
                 }
                 Some(
                     SelectionExpression::PlaybackContents { items }
                     | SelectionExpression::Sources { items },
-                ) => {
-                    selection.selected = resolve_selection_references(&items, groups);
-                }
-                _ => {}
+                ) => Some(resolve_selection_references(&items, groups)),
+                _ => None,
+            };
+            if let Some(resolved) = resolved
+                && selection.selected != resolved
+            {
+                selection.selected = resolved;
+                selection.revision = self.next_selection_revision();
             }
         }
     }
@@ -1641,6 +1689,33 @@ impl ProgrammerRegistry {
 mod tests {
     use super::*;
     use light_core::ManualClock;
+
+    #[test]
+    fn selection_revision_identifies_operations_but_ignores_value_changes() {
+        let registry = ProgrammerRegistry::default();
+        let session = SessionId::new();
+        let fixture = FixtureId::new();
+        registry.start(session, UserId::new());
+
+        registry.select(session, [fixture]);
+        let first = registry.selection(session).unwrap();
+        registry.set(
+            session,
+            fixture,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.5),
+        );
+        assert_eq!(
+            registry.selection(session).unwrap().revision,
+            first.revision
+        );
+
+        registry.select(session, [fixture]);
+        let reselection = registry.selection(session).unwrap();
+        assert!(reselection.revision > first.revision);
+        assert_eq!(reselection.selected, first.selected);
+        assert_eq!(reselection.expression, first.expression);
+    }
 
     #[test]
     fn users_are_isolated() {

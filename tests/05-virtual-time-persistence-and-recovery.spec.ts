@@ -286,6 +286,57 @@ test.describe("docs/testing/05-virtual-time-persistence-and-recovery.md", () => 
     assert: async ({ api, bench }, state) => assertShow001State(api, bench, state),
   });
 
+  test("SHOW-001 @restart › an unnamed empty show survives an abrupt restart and Save As renames its identity", async ({ api, bench }) => {
+    const provisional = await api.request<any>("POST", "/api/v1/shows", {
+      name: "New Empty Show",
+      data_base64: null,
+      overwrite: false,
+    });
+    await api.request("POST", `/api/v1/shows/${provisional.id}/open`, { transition: "hold_current" });
+    await api.request(
+      "PUT",
+      `/api/v1/shows/${provisional.id}/objects/user_layout/empty-show-durability`,
+      { marker: "programmed before naming" },
+      true,
+      0,
+    );
+    const provisionalPath = provisional.path as string;
+    expect((await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).active_show).toMatchObject({
+      id: provisional.id,
+      name: "New Empty Show",
+    });
+
+    await bench.restart();
+    await api.login("Operator");
+    expect((await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).active_show).toMatchObject({
+      id: provisional.id,
+      name: "New Empty Show",
+    });
+    expect((await object<any>(api, "user_layout", "empty-show-durability")).body).toEqual({
+      marker: "programmed before naming",
+    });
+
+    const renamed = await api.request<any>("PUT", `/api/v1/shows/${provisional.id}/rename`, {
+      name: "Opening Night",
+    });
+    expect(renamed).toMatchObject({ id: provisional.id, name: "Opening Night" });
+    expect(renamed.path).toContain("Opening Night.show");
+    await expect(fs.access(provisionalPath)).rejects.toThrow();
+    expect((await api.request<any[]>("GET", "/api/v1/shows")).filter((show) => show.id === provisional.id)).toEqual([
+      expect.objectContaining({ id: provisional.id, name: "Opening Night" }),
+    ]);
+
+    await bench.restart();
+    await api.login("Operator");
+    expect((await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).active_show).toMatchObject({
+      id: provisional.id,
+      name: "Opening Night",
+    });
+    expect((await object<any>(api, "user_layout", "empty-show-durability")).body).toEqual({
+      marker: "programmed before naming",
+    });
+  });
+
   test("SHOW-001 @restart › supplemental process check preserves named show state, durable programmer, active playback, PID, and first frame", async ({ api, bench }) => {
     const copy = await loadCanonicalCopy(api, bench, "show-001");
     await setProgrammerFade(api, 0, 0);

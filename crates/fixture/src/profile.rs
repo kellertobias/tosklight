@@ -11,6 +11,22 @@ use uuid::Uuid;
 
 pub const FIXTURE_PROFILE_SCHEMA_VERSION: u16 = 2;
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PatchPolicy {
+    #[default]
+    Dmx,
+    VisualOnly,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelUnits {
+    #[default]
+    Auto,
+    Metres,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FixtureProfile {
     pub schema_version: u16,
@@ -21,6 +37,8 @@ pub struct FixtureProfile {
     pub short_name: String,
     pub fixture_type: String,
     #[serde(default)]
+    pub patch_policy: PatchPolicy,
+    #[serde(default)]
     pub notes: String,
     #[serde(default)]
     pub photograph_asset: Option<String>,
@@ -28,6 +46,8 @@ pub struct FixtureProfile {
     pub stage_icon_asset: Option<String>,
     #[serde(default)]
     pub model_asset: Option<String>,
+    #[serde(default)]
+    pub model_units: ModelUnits,
     #[serde(default)]
     pub physical: ProfilePhysicalProperties,
     pub modes: Vec<FixtureMode>,
@@ -521,10 +541,12 @@ impl FixtureProfile {
             name: String::new(),
             short_name: String::new(),
             fixture_type: "other".into(),
+            patch_policy: PatchPolicy::Dmx,
             notes: String::new(),
             photograph_asset: None,
             stage_icon_asset: None,
             model_asset: None,
+            model_units: ModelUnits::Auto,
             physical: ProfilePhysicalProperties::default(),
             modes: vec![FixtureMode {
                 id: mode_id,
@@ -576,7 +598,7 @@ impl FixtureProfile {
             if !mode_ids.insert(mode.id) {
                 return Err(ProfileError::Invalid("mode IDs must be unique".into()));
             }
-            mode.validate()?;
+            mode.validate_for_patch_policy(self.patch_policy)?;
         }
         Ok(())
     }
@@ -726,10 +748,12 @@ impl FixtureProfile {
             name: first.display_name().to_owned(),
             short_name: first.model.clone(),
             fixture_type: first.device_type.clone(),
+            patch_policy: PatchPolicy::Dmx,
             notes: String::new(),
             photograph_asset: None,
             stage_icon_asset: first.icon_asset.clone(),
             model_asset: first.model_asset.clone(),
+            model_units: ModelUnits::Auto,
             physical: ProfilePhysicalProperties {
                 width_millimetres: first.physical.width_millimetres,
                 height_millimetres: first.physical.height_millimetres,
@@ -750,6 +774,10 @@ impl FixtureProfile {
 
 impl FixtureMode {
     pub fn validate(&self) -> Result<(), ProfileError> {
+        self.validate_for_patch_policy(PatchPolicy::Dmx)
+    }
+
+    fn validate_for_patch_policy(&self, patch_policy: PatchPolicy) -> Result<(), ProfileError> {
         if self.name.trim().is_empty() {
             return Err(ProfileError::Invalid("mode name is required".into()));
         }
@@ -763,14 +791,32 @@ impl FixtureMode {
             .iter()
             .map(|split| (split.number, split.footprint))
             .collect::<BTreeMap<_, _>>();
-        if split_map.len() != self.splits.len()
-            || self
-                .splits
-                .iter()
-                .any(|split| split.number == 0 || !(1..=512).contains(&split.footprint))
+        let invalid_split = self.splits.iter().any(|split| {
+            split.number == 0
+                || match patch_policy {
+                    PatchPolicy::Dmx => !(1..=512).contains(&split.footprint),
+                    PatchPolicy::VisualOnly => split.footprint != 0,
+                }
+        });
+        if split_map.len() != self.splits.len() || invalid_split {
+            return Err(ProfileError::Invalid(
+                match patch_policy {
+                    PatchPolicy::Dmx => "split numbers must be unique and footprints must be 1-512",
+                    PatchPolicy::VisualOnly => {
+                        "visual-only split numbers must be unique and footprints must be zero"
+                    }
+                }
+                .into(),
+            ));
+        }
+        if patch_policy == PatchPolicy::VisualOnly
+            && (!self.channels.is_empty()
+                || !self.color_systems.is_empty()
+                || !self.control_actions.is_empty())
         {
             return Err(ProfileError::Invalid(
-                "split numbers must be unique and footprints must be 1-512".into(),
+                "visual-only modes cannot define DMX channels, color systems, or control actions"
+                    .into(),
             ));
         }
         let mut head_ids = HashSet::new();
@@ -974,15 +1020,19 @@ impl FixtureMode {
                 .unwrap_or(ResolvedChannelRaw::Exact(channel.default_raw))
         };
         let mut scale = 1.0_f64;
-        if channel.reacts_to_virtual_intensity {
-            scale *= f64::from(scales.virtual_intensity.clamp(0.0, 1.0));
+        if !highlighted {
+            if channel.reacts_to_virtual_intensity {
+                scale *= f64::from(scales.virtual_intensity.clamp(0.0, 1.0));
+            }
+            if channel.reacts_to_sequence_master {
+                scale *= f64::from(scales.sequence_master.clamp(0.0, 1.0));
+            }
+            if channel.reacts_to_group_master {
+                scale *= f64::from(scales.group_master.clamp(0.0, 1.0));
+            }
         }
-        if channel.reacts_to_sequence_master {
-            scale *= f64::from(scales.sequence_master.clamp(0.0, 1.0));
-        }
-        if channel.reacts_to_group_master {
-            scale *= f64::from(scales.group_master.clamp(0.0, 1.0));
-        }
+        // Grand Master is the only ordinary master above transient Highlight. Blackout and
+        // hazardous safe values are enforced by the engine after this channel resolution.
         if channel.reacts_to_grand_master {
             scale *= f64::from(scales.grand_master.clamp(0.0, 1.0));
         }
@@ -2410,12 +2460,14 @@ mod tests {
                 true,
                 Some(220),
                 ChannelScales {
+                    virtual_intensity: 0.0,
+                    sequence_master: 0.0,
                     group_master: 0.5,
                     grand_master: 0.5,
-                    ..Default::default()
                 },
             ),
-            55
+            110,
+            "Highlight bypasses virtual intensity, sequence masters, and Group Masters; Grand Master remains above it"
         );
 
         fixture_channel.behavior = ChannelBehavior::Static;
@@ -2946,5 +2998,61 @@ mod tests {
                 .y = invalid;
             assert!(invalid_measurement.validate().is_err());
         }
+    }
+
+    #[test]
+    fn visual_only_profiles_require_zero_footprint_and_no_dmx_behavior() {
+        let mut profile = FixtureProfile::blank();
+        profile.manufacturer = "Venue".into();
+        profile.name = "Stage Element".into();
+        profile.patch_policy = PatchPolicy::VisualOnly;
+        profile.modes[0].splits[0].footprint = 0;
+        profile.validate().unwrap();
+        assert_eq!(
+            profile
+                .resolved_definition(profile.modes[0].id)
+                .unwrap()
+                .footprint,
+            0
+        );
+
+        profile.modes[0].splits[0].footprint = 1;
+        assert!(profile.validate().is_err());
+        profile.modes[0].splits[0].footprint = 0;
+        let head = profile.modes[0].heads[0].id;
+        profile.modes[0].channels.push(FixtureChannel {
+            id: Uuid::new_v4(),
+            head_id: head,
+            attribute: AttributeKey::intensity(),
+            resolution: ChannelResolution::U8,
+            secondary_slots: vec![],
+            default_raw: 0,
+            highlight_raw: 255,
+            physical_min: None,
+            physical_max: None,
+            unit: None,
+            invert: false,
+            snap: false,
+            reacts_to_virtual_intensity: false,
+            reacts_to_sequence_master: true,
+            reacts_to_group_master: true,
+            reacts_to_grand_master: true,
+            behavior: ChannelBehavior::Controlled,
+            functions: vec![],
+        });
+        assert!(profile.validate().is_err());
+    }
+
+    #[test]
+    fn missing_patch_and_model_policy_fields_decode_to_legacy_defaults() {
+        let mut profile = FixtureProfile::blank();
+        profile.manufacturer = "Generic".into();
+        profile.name = "Dimmer".into();
+        let mut value = serde_json::to_value(profile).unwrap();
+        value.as_object_mut().unwrap().remove("patch_policy");
+        value.as_object_mut().unwrap().remove("model_units");
+        let decoded: FixtureProfile = serde_json::from_value(value).unwrap();
+        assert_eq!(decoded.patch_policy, PatchPolicy::Dmx);
+        assert_eq!(decoded.model_units, ModelUnits::Auto);
     }
 }

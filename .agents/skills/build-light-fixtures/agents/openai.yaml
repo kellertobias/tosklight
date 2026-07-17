@@ -1,0 +1,4 @@
+interface:
+  display_name: "Build ToskLight Fixtures"
+  short_description: "Build and verify transferable ToskLight fixtures"
+  default_prompt: "Use $build-light-fixtures to build and verify a transferable ToskLight fixture package without clicking through the desk UI."

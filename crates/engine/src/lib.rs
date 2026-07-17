@@ -1733,7 +1733,13 @@ fn resolve_profile_head(
     // arbitrary non-intensity highlight_raw could defeat a configured raw safe value during
     // Blackout merely because blackout_raw only knows typed intensity/color systems.
     let output_highlighted = highlighted && !(fixture.definition.hazardous && options.blackout);
-    let group_scale = group_scale_for_fixture(owner, groups, group_master_flashes);
+    // Highlight sits above Group Masters and ordinary programmer/playback contributions. Grand
+    // Master remains above it and is still applied once by the per-channel scale below.
+    let group_scale = if output_highlighted {
+        1.0
+    } else {
+        group_scale_for_fixture(owner, groups, group_master_flashes)
+    };
     let mut values = resolved
         .values
         .iter()
@@ -4120,7 +4126,7 @@ mod tests {
     }
 
     #[test]
-    fn transient_highlight_uses_raw_value_but_group_master_grand_master_and_blackout_win() {
+    fn transient_highlight_wins_over_group_master_while_grand_master_and_blackout_win() {
         let mut profile = FixtureProfile::blank();
         profile.manufacturer = "Test".into();
         profile.name = "Highlight fixture".into();
@@ -4181,6 +4187,16 @@ mod tests {
             location: Default::default(),
             rotation: Default::default(),
         });
+        let movement_fixture = fixture.clone();
+        let cue_list = test_cue_list(
+            "Highlight playback source",
+            vec![CueChange::set(
+                physical,
+                AttributeKey::intensity(),
+                AttributeValue::Normalized(1.0),
+            )],
+        );
+        let playback = test_playback(1, cue_list.id);
         let programmers = ProgrammerRegistry::default();
         let session = SessionId::new();
         programmers.start(session, UserId::new());
@@ -4202,10 +4218,13 @@ mod tests {
                     playback_fader: Some(1),
                     ..Default::default()
                 }],
+                cue_lists: vec![cue_list.clone()],
+                playbacks: vec![playback],
                 revision: 1,
                 ..Default::default()
             })
             .unwrap();
+        engine.playback().write().go(cue_list.id).unwrap();
 
         engine.set_highlighted_fixtures([physical]);
         assert_eq!(
@@ -4216,7 +4235,8 @@ mod tests {
                 })
                 .unwrap()
                 .universes[&1][0],
-            50
+            100,
+            "Highlight raw 200 bypasses the 50% Group Master, then Grand Master applies once"
         );
         assert_eq!(
             engine
@@ -4226,7 +4246,7 @@ mod tests {
                 })
                 .unwrap()
                 .universes[&1][9],
-            50,
+            100,
             "one parent Highlight identity applies the same look to every multipatch copy"
         );
         assert_eq!(
@@ -4257,6 +4277,48 @@ mod tests {
         assert_eq!(programmer.values[0].fixture_id, physical);
         assert_eq!(programmer.values[0].attribute, AttributeKey::intensity());
         assert_eq!(programmer.values[0].value, AttributeValue::Normalized(0.5));
+
+        programmers.clear_values(session);
+        assert_eq!(
+            engine.render(RenderOptions::default()).unwrap().universes[&1][0],
+            128,
+            "the 100% playback contribution is ordinarily limited by the 50% Group Master"
+        );
+        engine.set_highlighted_fixtures([physical]);
+        assert_eq!(
+            engine.render(RenderOptions::default()).unwrap().universes[&1][0],
+            200,
+            "Highlight must replace the playback winner and bypass its Group Master"
+        );
+
+        let mut second = movement_fixture.clone();
+        let second_id = FixtureId::new();
+        second.fixture_id = second_id;
+        second.fixture_number = Some(2);
+        second.name = "Second Highlight fixture".into();
+        second.address = Some(20);
+        second.multipatch.clear();
+        engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![movement_fixture, second],
+                revision: 2,
+                ..Default::default()
+            })
+            .unwrap();
+        engine.set_highlighted_fixtures([physical]);
+        let first_step = engine.render(RenderOptions::default()).unwrap();
+        assert_eq!(first_step.universes[&1][0], 200);
+        assert_eq!(first_step.universes[&1][19], 0);
+        engine.set_highlighted_fixtures([second_id]);
+        let next_step_first_frame = engine.render(RenderOptions::default()).unwrap();
+        assert_eq!(
+            next_step_first_frame.universes[&1][0], 0,
+            "the old step must lose Highlight on the first frame after NEXT"
+        );
+        assert_eq!(
+            next_step_first_frame.universes[&1][19], 200,
+            "the new step must receive Highlight on that same first frame"
+        );
     }
 
     #[test]

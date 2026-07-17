@@ -4,7 +4,7 @@ A `.show` file is the portable source for patch, stage layout, groups, presets, 
 
 ## Create, load, and revise
 
-Use the Show menu to create a show, upload/open a show from the library, or save a copy under a new name. **Save Named Revision** creates an immutable numbered restore point. **Load Latest Autosave** always resumes that show's newest work. **Load Revision as Copy** creates and activates a separate show from the selected restore point; it never rewinds or replaces the original show's Latest Autosave.
+Use the Show menu to create a show, upload/open a show from the library, or save a copy under a new name. Creating an empty show immediately creates, activates, and autosaves a real show named **New Empty Show** (with a number when needed); programming is protected before you choose a final name. The first **Save As** on that provisional show renames the same show, preserving its identity and current programming. **Save Named Revision** creates an immutable numbered restore point. **Load Latest Autosave** always resumes that show's newest work. **Load Revision as Copy** creates and activates a separate show from the selected restore point; it never rewinds or replaces the original show's Latest Autosave.
 
 The generated copy name includes the source show, revision number, and copy date. The Show menu identifies it as a separate revision copy and keeps the source show name, revision number and name, and creation time visible. The left dock also labels the active show as a revision copy. All subsequent changes autosave to the copy, not the original. The copy remains in the show library after switching shows or restarting the desk, and it can have its own named revisions.
 
@@ -12,7 +12,7 @@ The generated copy name includes the source show, revision number, and copy date
 
 Because autosave already protects the active copy, **Save** asks where the copy should remain. Choose **Keep as Separate Show** to leave it independent, or **Overwrite Original Show** to replace the original show's mutable Latest Autosave. If the original was deleted, the overwrite-original choice is unavailable and the copy remains fully usable.
 
-**Save As** can create another named show or select the original or another existing show as a destination. Choosing an existing destination opens a separate destructive confirmation; cancel is the safe default. A confirmed overwrite first creates an internal recovery backup, replaces only the destination's Latest Autosave, and preserves the destination identity and all of its named revisions. The revision copy and immutable source revision are retained until explicitly deleted.
+For an established, named show, **Save As** can create another named show or select the original or another existing show as a destination. Choosing an existing destination opens a separate destructive confirmation; cancel is the safe default. A confirmed overwrite first creates an internal recovery backup, replaces only the destination's Latest Autosave, and preserves the destination identity and all of its named revisions. The revision copy and immutable source revision are retained until explicitly deleted.
 
 ![Show menu and its primary show-management actions](../assets/screenshots/workflows/show-menu.png)
 

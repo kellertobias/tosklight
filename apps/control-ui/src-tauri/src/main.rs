@@ -261,6 +261,7 @@ fn launch_server(app: &tauri::AppHandle) -> Result<Option<Child>, Box<dyn std::e
         } else {
             app.path().app_data_dir()?
         });
+    let fixture_package_dir = app.path().resource_dir()?.join("fixture-library");
     std::fs::create_dir_all(&data_dir)?;
     let log_path = data_dir.join("light-server.log");
     let stdout = OpenOptions::new()
@@ -272,6 +273,8 @@ fn launch_server(app: &tauri::AppHandle) -> Result<Option<Child>, Box<dyn std::e
     let mut child = Command::new(server)
         .arg("--data-dir")
         .arg(&data_dir)
+        .arg("--fixture-package-dir")
+        .arg(&fixture_package_dir)
         .arg("--bind")
         .arg(address.to_string())
         .stdout(Stdio::from(stdout))

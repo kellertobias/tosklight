@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useServer } from "../api/ServerContext";
-import { Button, Input } from "../components/common";
+import { Button, Input, ModalTitleBar } from "../components/common";
+import { PaneChromeProvider } from "../components/shell/PaneChromeContext";
 import { extension, FileManager, type FileManagerPickerOptions, type FileManagerSelection, type FileManagerTarget } from "./FileManagerWindow";
 
 export const OPEN_FILE_MANAGER_PICKER_EVENT = "light:open-file-manager-picker";
@@ -39,6 +40,8 @@ export function FileManagerPickerHost() {
   const server = useServer();
   const [request, setRequest] = useState<HostedPickerRequest | null>(null);
   const [systemError, setSystemError] = useState("");
+  const [chromeInfo, setChromeInfo] = useState<HTMLSpanElement | null>(null);
+  const [chromeToolbar, setChromeToolbar] = useState<HTMLSpanElement | null>(null);
   const requestRef = useRef<HostedPickerRequest | null>(null);
   const systemInput = useRef<HTMLInputElement | null>(null);
   requestRef.current = request;
@@ -66,6 +69,11 @@ export function FileManagerPickerHost() {
     setRequest(null);
   };
   const target = request.target ?? "files";
+  const purpose = request.purpose ?? (target === "folders"
+    ? request.multiple ? "Select folders" : "Select a folder"
+    : target === "either"
+      ? request.multiple ? "Select files or folders" : "Select a file or folder"
+      : request.multiple ? "Select files" : "Select a file");
   const allowedExtensions = (request.allowedExtensions ?? []).map((value) => value.replace(/^\./, "").toLowerCase()).filter(Boolean);
   const accept = allowedExtensions.map((value) => `.${value}`).join(",");
   const setSystemInput = (input: HTMLInputElement | null) => {
@@ -92,20 +100,32 @@ export function FileManagerPickerHost() {
   };
   return <div className="file-picker-backdrop" role="dialog" aria-modal="true" aria-label="Choose files or folders">
     <div className="file-picker-surface">
-      <FileManager
-        instanceId="hosted-file-picker"
-        picker={{
-          ...request,
-          onSelect: (selection) => {
-            request.onSelect(selection);
-            close();
-          },
-          onCancel: () => {
-            request.onCancel();
-            close();
-          },
+      <ModalTitleBar
+        title="File Manager"
+        details={<><b>{purpose}</b><small><span className="pane-chrome-info-target" ref={setChromeInfo} /></small></>}
+        actions={<span className="pane-chrome-toolbar-target" ref={setChromeToolbar} />}
+        closeLabel="Close File Manager"
+        onClose={() => {
+          request.onCancel();
+          close();
         }}
       />
+      <PaneChromeProvider value={{ info: chromeInfo, toolbar: chromeToolbar }}>
+        <FileManager
+          instanceId="hosted-file-picker"
+          picker={{
+            ...request,
+            onSelect: (selection) => {
+              request.onSelect(selection);
+              close();
+            },
+            onCancel: () => {
+              request.onCancel();
+              close();
+            },
+          }}
+        />
+      </PaneChromeProvider>
       {server.configuration?.file_manager_system_picker_fallback && <footer className="file-picker-system-fallback">
         <Button onClick={() => systemInput.current?.click()}>Open system file picker</Button>
         <small>This secondary picker keeps the calling form's target, selection-count, and extension constraints.</small>

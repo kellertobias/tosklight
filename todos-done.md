@@ -139,7 +139,7 @@ Evidence and release verification: [docs/todo-completion-audit.md](docs/todo-com
 - Multiple sessions on one desk share the desk's zone behavior; another desk for the same user remains independent while programmer values remain user-shared.
 - Automatic full-override release remains independent of mutual exclusion.
 
-Evidence: [VPB-007](docs/testing/06-preload-modes-and-virtual-playbacks.md), `tests/06-preload-modes-and-virtual-playbacks.spec.ts`, focused UI unit coverage, and the completed [Feature 17 contract](docs/planned%20features/17-virtual-playback-exclusion-zones.DONE.md).
+Evidence: [VPB-007](tests/06-preload-modes-and-virtual-playbacks.spec.ts), focused UI unit coverage, and the completed [Feature 17 contract](docs/plans/Done/17-virtual-playback-exclusion-zones.DONE.md).
 
 ## Manual-review software corrections — 2026-07-17
 
@@ -147,7 +147,7 @@ Evidence: [VPB-007](docs/testing/06-preload-modes-and-virtual-playbacks.md), `te
 - Cues, File Manager, Text Editor, Help, DMX, Stage, fixture browsers, Desk Setup, diagnostics, output routes, standard file fields, MIB editing, and safe show recovery implement the reviewed operator contracts.
 - Persisted legacy pane layouts receive deterministic defaults; deterministic help screenshots and manual keycap spacing were refreshed.
 
-Evidence: [MANUAL-019](docs/testing/10-desk-lock-and-operator-ui.md), [File Manager and Text Editor](docs/testing/09-file-manager-and-text-editor.md), `tests/19-manual-review-software-corrections.spec.ts`, focused UI unit coverage, refreshed help screenshots, the rebuilt PDF manual, and the completed [Feature 19 contract](docs/planned%20features/19-manual-review-software-corrections.DONE.md).
+Evidence: [MANUAL-019](tests/19-manual-review-software-corrections.spec.ts), [File Manager and Text Editor](tests/08-file-manager-and-text-editor.spec.ts), focused UI unit coverage, refreshed help screenshots, the rebuilt PDF manual, and the completed [Feature 19 contract](docs/plans/Done/19-manual-review-software-corrections.DONE.md).
 
 ## Fixture channel configuration — 2026-07-17
 
@@ -156,4 +156,13 @@ Evidence: [MANUAL-019](docs/testing/10-desk-lock-and-operator-ui.md), [File Mana
 - Ordered heads, independently patchable splits, exact u8/u16/u24/u32 channels, prioritized functions, typed actions, color systems, and geometry feed programming, rendering, DMX output, and visualization.
 - Explicit schema-v1-to-v2 migration preserves legacy library rows, embedded show definitions, retained source data, and actionable recovery behavior.
 
-Evidence: [FIXTURE-001](docs/testing/11-update-highlight-fixture-profiles-and-matter.md), `tests/11-update-highlight-fixture-profiles-and-matter.spec.ts`, focused fixture/editor/patch/engine/server migration coverage, refreshed Fixture Library screenshots, the rebuilt manual, desktop smoke, and the completed [Feature 18 contract](docs/planned%20features/18-fixture-channel-configuration.DONE.md).
+Evidence: [FIXTURE-001](tests/11-update-highlight-fixture-profiles-and-matter.spec.ts), focused fixture/editor/patch/engine/server migration coverage, refreshed Fixture Library screenshots, the rebuilt manual, desktop smoke, and the completed [Feature 18 contract](docs/plans/Done/18-fixture-channel-configuration.DONE.md).
+
+## Highlight corrective interaction — 2026-07-17
+
+- PREV, NEXT, and ALL now change the real programmer selection, wrap deterministically, retain programmed values, and restore live ordered sources such as edited Groups.
+- HIGH is an independent transient output toggle across software, keyboard, REST, WebSocket, OSC, and attached hardware; removed Capture paths remain rejected and no Highlight status panel consumes control-surface geometry.
+- The Fixture Sheet keeps the remembered step base subdued while making the current fixture or head prominent, including collapsed-parent state and behavior independent of HIGH.
+- Software keypad and two-row Programmer Fade geometry match the corrective contract. The hardware simulator restores one-column-by-two-row RECORD/PRELOAD GO controls and equal adjacent full-height Programmer Fade/Cue Fade faders.
+
+Evidence: [HIGHLIGHT-001 through HIGHLIGHT-003](tests/11-update-highlight-fixture-profiles-and-matter.spec.ts), focused backend/control/Fixture Sheet/hardware-layout suites, refreshed help screenshots, the rebuilt manual, desktop smoke, and the completed [Feature 20 contract](docs/plans/Done/20-highlight-changes.DONE.md).

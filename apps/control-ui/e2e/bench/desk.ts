@@ -35,6 +35,7 @@ export class DeskDriver {
     if (
       process.env.LIGHT_VISUAL_RECORDING === "1"
       && !this.testTitle.includes("records the complete desk")
+      && !this.testTitle.includes("Full HD product demo surface")
     ) {
       await this.installRecordingOverlay();
       await this.recordStep(

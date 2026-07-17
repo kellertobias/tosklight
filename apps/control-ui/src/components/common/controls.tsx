@@ -92,7 +92,7 @@ function emitInputValue(
   onChange?.({ target: input, currentTarget: input } as ChangeEvent<HTMLInputElement>);
 }
 
-function InputModal({ kind, value, allowDecimal = false, secure = false, label, unit, onCommit, onCancel }: {
+function InputModal({ kind, value, allowDecimal = false, secure = false, label, unit, onCommit, onDraftChange, onCancel }: {
   kind: "text" | "number";
   value: string;
   allowDecimal?: boolean;
@@ -100,16 +100,18 @@ function InputModal({ kind, value, allowDecimal = false, secure = false, label, 
   label?: string;
   unit?: ReactNode;
   onCommit: (value: string) => void;
+  onDraftChange?: (value: string) => void;
   onCancel: () => void;
 }) {
   const [draft, setDraft] = useState(value);
+  const updateDraft = (next: string) => { setDraft(next); onDraftChange?.(next); };
   return createPortal(<div className="stacked-modal-layer ui-input-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && onCancel()}>
     <section className={`nested-modal ${kind === "text" ? "keyboard-modal" : "number-field-modal"}`} role="dialog" aria-modal="true" aria-label={label ?? (kind === "text" ? "Text input" : "Number input")}>
       <ModalTitleBar title={label ?? (kind === "text" ? "Text input" : "Number input")} closeLabel="Close input" onClose={onCancel}/>
       {kind === "number" && unit ? <div className="modal-number-value"><input className="ui-input" type="text" aria-label={`${label ?? kind} value`} value={draft} readOnly/><span aria-label="Unit">{unit}</span></div> : <input className="ui-input" type={secure ? "password" : "text"} aria-label={`${label ?? kind} value`} value={draft} readOnly/>}
       {kind === "text"
-        ? <ModalTextKeyboard value={draft} onChange={setDraft} onEnter={() => onCommit(draft)} onEscape={onCancel}/>
-        : <ModalNumberInput value={draft} allowDecimal={allowDecimal} onChange={setDraft} onEnter={() => onCommit(draft)} onEscape={onCancel}/>
+        ? <ModalTextKeyboard value={draft} onChange={updateDraft} onEnter={() => onCommit(draft)} onEscape={onCancel}/>
+        : <ModalNumberInput value={draft} allowDecimal={allowDecimal} onChange={updateDraft} onEnter={() => onCommit(draft)} onEscape={onCancel}/>
       }
     </section>
   </div>, document.body);
@@ -117,14 +119,16 @@ function InputModal({ kind, value, allowDecimal = false, secure = false, label, 
 
 export interface TextInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "type"> {
   clearable?: boolean;
+  clearLabel?: string;
   keyboardLabel?: string;
+  liveKeyboard?: boolean;
   onValueChange?: (value: string) => void;
   onKeyboardCommit?: (value: string) => void;
   secure?: boolean;
 }
 
 export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function TextInput(
-  { className = "", value, defaultValue, onChange, onValueChange, onKeyboardCommit, clearable = false, keyboardLabel, secure = false, disabled, readOnly, ...props },
+  { className = "", value, defaultValue, onChange, onValueChange, onKeyboardCommit, clearable = false, clearLabel = "Clear input", keyboardLabel, liveKeyboard = false, secure = false, disabled, readOnly, ...props },
   ref,
 ) {
   const [open, setOpen] = useState(false);
@@ -134,10 +138,10 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function T
   const update = (next: string) => emitInputValue(native.current, next, onChange, onValueChange);
   return <span className="ui-text-control">
     <input {...props} ref={native} type={secure ? "password" : "text"} value={value} defaultValue={defaultValue} onChange={(event) => { onValueChange?.(event.target.value); onChange?.(event); }} disabled={disabled} readOnly={readOnly} className={`ui-input ${className}`.trim()}/>
+    {clearable && current && <Button size="compact" iconOnly className="ui-input-clear" aria-label={clearLabel} disabled={disabled || readOnly} onClick={() => { update(""); native.current?.focus(); }}>×</Button>}
     <Button size="compact" iconOnly className="ui-input-keyboard" aria-label="Open keyboard" disabled={disabled || readOnly} onClick={() => setOpen(true)}><span className="ui-keyboard-icon" aria-hidden="true">⌨</span></Button>
-    {clearable && current && <Button size="compact" iconOnly className="ui-input-clear" aria-label="Clear input" disabled={disabled || readOnly} onClick={() => { update(""); native.current?.focus(); }}>×</Button>}
     {open && (
-      <InputModal kind="text" value={current} secure={secure} label={keyboardLabel ?? props["aria-label"]} onCommit={(next) => { update(next); setOpen(false); onKeyboardCommit?.(next); requestAnimationFrame(() => native.current?.focus()); }} onCancel={() => { setOpen(false); requestAnimationFrame(() => native.current?.focus()); }}/>
+      <InputModal kind="text" value={current} secure={secure} label={keyboardLabel ?? props["aria-label"]} onDraftChange={liveKeyboard ? update : undefined} onCommit={(next) => { update(next); setOpen(false); onKeyboardCommit?.(next); requestAnimationFrame(() => native.current?.focus()); }} onCancel={() => { setOpen(false); requestAnimationFrame(() => native.current?.focus()); }}/>
     )}
   </span>;
 });

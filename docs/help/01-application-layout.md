@@ -8,6 +8,12 @@ The left dock switches between **DESKTOPS** and **BUILT-INS**. Desktops are save
 
 The Show menu contains show creation/loading, MVR exchange, Desk Setup, Help, development tools, system controls, and desk shutdown. Help itself is a split workspace: topics on the left and the selected Markdown page on the right.
 
+## Search bars
+
+Search uses the same title-bar control in modals and regular windows. The search group is right-aligned immediately before every defined window or modal action. Its fixed order is magnifying glass, text, **X** while text is present, and the keyboard button. A search that offers additional options adds an Options button after a small gap; searches without options do not show that button. Options open in a stacked dialog above the owning window or modal, so they are never clipped by its title bar.
+
+Typing filters immediately unless the feature page explicitly documents a different search operation. **X** clears the query, and the keyboard button opens the shared full-text keyboard.
+
 ## Desktops and panes
 
 A Desktop uses a 24-column by 18-row grid. Create one with **New desktop** in the DESKTOPS dock. Open its settings to rename it, change its icon, clone the current layout, or delete it. At least one Desktop always remains.

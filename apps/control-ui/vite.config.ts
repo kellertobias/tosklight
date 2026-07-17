@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  resolve: { dedupe: ["react", "react-dom", "@tauri-apps/api"] },
   server: {
     port: 4175,
     strictPort: true,
@@ -11,5 +12,5 @@ export default defineConfig({
     },
   },
   preview: { port: 4175, strictPort: true },
-  test: { environment: "jsdom", setupFiles: "./src/test/setup.ts", exclude: ["e2e/**", "node_modules/**"] },
+  test: { environment: "jsdom", setupFiles: "./src/test/setup.ts", exclude: ["e2e/**", "node_modules/**"], css: true },
 });

@@ -20,34 +20,37 @@ Changing a page in the application changes where the same `page-playback` packet
 
 ### Highlight and Step Through
 
-Highlight actions use the OSC subscriber's authenticated user/session and the desk named in the address. Send a pressed Boolean value to one of these addresses; releases and messages from an unsubscribed command socket are ignored.
+Highlight and selection-step actions use the OSC subscriber's authenticated user/session and the desk named in the address. Send a pressed Boolean value to one of these addresses; releases and messages from an unsubscribed command socket are ignored. Highlight state is independent of the actual programmer selection and its step state.
 
 | Input address | Authoritative action |
 | --- | --- |
-| `/light/{desk}/highlight/on` | Turn Highlight on, capturing the current selection only when there is no remembered selection. |
-| `/light/{desk}/highlight/off` | Remove Highlight output and leave the remembered selection available. |
-| `/light/{desk}/highlight/toggle` | Toggle the same authoritative state used by software controls. |
-| `/light/{desk}/highlight/capture` | Replace the remembered ordered selection with the current selection. `/reset` is a compatibility alias. |
-| `/light/{desk}/highlight/next` | Enter Step mode at the first fixture or advance once without wrapping. |
-| `/light/{desk}/highlight/previous` | Move back once without wrapping. `/prev` is a compatibility alias. |
+| `/light/{desk}/highlight/on` | Turn HIGH on for exactly the actual current selection without changing selection or step state. |
+| `/light/{desk}/highlight/off` | Turn HIGH off without restoring ALL, clearing selection, or changing the remembered step source. |
+| `/light/{desk}/highlight/toggle` | Toggle the same independent HIGH state used by software controls. |
+| `/light/{desk}/highlight/next` | From the complete selection, remember its live source and select the first item; while stepped, advance and wrap from last to first. |
+| `/light/{desk}/highlight/previous` | From the complete selection, remember its live source and select the last item; while stepped, move backward and wrap from first to last. `/prev` remains an alias. |
+| `/light/{desk}/highlight/all` | Re-resolve the remembered live source, restore its complete current ordered membership as the actual selection, and leave the single-step position. |
 
-Physical button bounce or a repeated identical action is accepted only once inside a 150 ms guard window. Aliases are normalized before this check, so `/previous` followed by `/prev`, or `/capture` followed by `/reset`, cannot advance or capture twice. A different action is accepted immediately. Software, REST, and OSC all call the same server state; an OSC client must not maintain its own step index.
+There is no Capture action: `/highlight/capture` and `/highlight/reset` are not inputs. Any selection operation outside PREV, NEXT, and ALL replaces the remembered source with the resulting actual selection and returns the selection state to complete. Programmer-value changes do not reset it.
+
+Physical button bounce or a repeated identical action is accepted only once inside a 150 ms guard window. Aliases are normalized before this check, so `/previous` followed by `/prev` cannot advance twice. A different action is accepted immediately. Software, keyboard, REST, WebSocket, and OSC all use the same server state; an OSC client must not maintain its own selection, step index, or Highlight state.
 
 Every normal feedback cycle includes:
 
 | Feedback address | Value |
 | --- | --- |
-| `/light/{desk}/feedback/highlight/active` | Boolean Highlight on/off state. |
-| `/light/{desk}/feedback/highlight/output` | Boolean indicating whether live Highlight output is currently allowed. It is false for Blind/Preview capture-only state. |
-| `/light/{desk}/feedback/highlight/index` | One-based active step index, or `0` while all captured fixtures are highlighted or Highlight is off. |
-| `/light/{desk}/feedback/highlight/total` | Count of valid fixtures in the remembered selection. |
-| `/light/{desk}/feedback/highlight/can-next` | Boolean availability of a non-wrapping Next action. |
-| `/light/{desk}/feedback/highlight/can-previous` | Boolean availability of a non-wrapping Previous action. |
-| `/light/{desk}/feedback/highlight/fixture/id` | Active step fixture UUID, or an empty string. |
-| `/light/{desk}/feedback/highlight/fixture/number` | Active fixture number, or `0` when absent. |
-| `/light/{desk}/feedback/highlight/fixture/name` | Active fixture/head name, or an empty string. |
+| `/light/{desk}/feedback/highlight/active` | Boolean HIGH on/off state, independent of selection mode, an empty selection, or output suppression. |
+| `/light/{desk}/feedback/highlight/output` | Boolean indicating whether live Highlight output is currently allowed. It is false while Blind, Preview, Preload, or another safety boundary suppresses the transient output. |
+| `/light/{desk}/feedback/highlight/mode` | `selection` for the complete actual selection or `step` for one stepped item. |
+| `/light/{desk}/feedback/highlight/index` | One-based active step index, or `0` in complete-selection state. |
+| `/light/{desk}/feedback/highlight/total` | Count of valid items in the currently resolved remembered live source. |
+| `/light/{desk}/feedback/highlight/can-next` | True whenever the remembered live source resolves to at least one valid item because NEXT wraps. |
+| `/light/{desk}/feedback/highlight/can-previous` | True whenever the remembered live source resolves to at least one valid item because PREV wraps. |
+| `/light/{desk}/feedback/highlight/fixture/id` | Active stepped fixture/head UUID, or an empty string in complete-selection state. |
+| `/light/{desk}/feedback/highlight/fixture/number` | Active stepped fixture/head number, or `0` in complete-selection state. |
+| `/light/{desk}/feedback/highlight/fixture/name` | Active stepped fixture/head name, or an empty string in complete-selection state. |
 
-Refresh all of these fields after reconnect instead of applying an old local index. An action rejected because another user owns live Highlight output leaves the authoritative state unchanged.
+Refresh all of these fields after reconnect instead of applying an old local index. An external authoritative selection event immediately replaces the old step basis and feedback with the resulting complete selection. An action rejected because another user owns live Highlight output leaves the authoritative state unchanged.
 
 ## REST
 
@@ -67,7 +70,7 @@ The main resource families are:
 
 Treat response revisions as concurrency guards. A stale or invalid mutation must be rejected rather than partially applied. Use the current server response and audit/event stream as the authoritative result instead of assuming a successful local UI update.
 
-For Highlight, `GET /api/v1/highlight` returns the current desk/user state. `POST /api/v1/highlight/action` accepts a body such as `{"action":"next"}`; the action is one of `capture`, `on`, `off`, `toggle`, `next`, or `previous`, and the response is the updated state. Step indices in REST are zero-based (or `null` while all captured fixtures are identified); the OSC feedback index is deliberately one-based with `0` for no active step.
+For Highlight and selection stepping, `GET /api/v1/highlight` returns the current desk/user state. `POST /api/v1/highlight/action` accepts a body such as `{"action":"next"}`; the action is one of `on`, `off`, `toggle`, `next`, `previous`, or `all`, and the response is the updated state. `active` reports HIGH only. `mode` is `selection` for the complete actual selection or `step` for one stepped item. `active_index` is zero-based in REST and `null` in complete-selection state; the OSC feedback index is deliberately one-based with `0` for complete selection. `total` follows the current live resolution of the remembered source. Because stepping wraps, both availability fields remain true whenever that source contains at least one valid item. `capture` and `reset` are not accepted actions.
 
 ## WebSocket events
 

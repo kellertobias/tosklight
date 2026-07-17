@@ -33,6 +33,7 @@ describe("VerticalTouchFader", () => {
       { id: "extra", label: "EXTRA" },
     ]}/>);
     expect(container.querySelectorAll(".vertical-touch-fader-actions .ui-button")).toHaveLength(3);
+    expect(container.querySelector(".vertical-touch-fader-stack")).toHaveClass("action-count-3");
     expect(screen.queryByRole("button", { name: "EXTRA" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "GO" }));
     expect(action).toHaveBeenCalledOnce();

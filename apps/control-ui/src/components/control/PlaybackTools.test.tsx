@@ -7,6 +7,8 @@ const dispatch = vi.fn();
 const state = {
   playbackPage: 0,
   playbackPageNames: ["Main", "Effects"],
+  playbackSetArmed: false,
+  shiftArmed: false,
 };
 const server = {
   session: null as { session_id: string; desk: { id: string } } | null,
@@ -15,19 +17,29 @@ const server = {
     sequence_master_fade_millis: 4_000,
     speed_groups_bpm: [120, 90, 60, 30, 15],
   },
-  playbacks: { active_page: 1, pages: [{ number: 1, name: "Main" }] },
+  playbacks: { active_page: 1, pages: [{ number: 1, name: "Main", slots: {} as Record<string, number> }] },
   setControlTiming: vi.fn(),
   setPlaybackPage: vi.fn(),
+  savePlaybackPage: vi.fn(async () => true),
   speedGroup: vi.fn(),
   updateSpeedGroup: vi.fn(),
   observeSpeedGroup: vi.fn(),
   speedGroupAction: vi.fn(),
+  commandLine: "FIXTURE",
+  commandLinePristine: true,
+  commandTargetMode: "FIXTURE" as const,
+  setCommandLine: vi.fn(),
+  executeCommandLine: vi.fn(),
 };
 
-vi.mock("../../state/AppContext", () => ({ useApp: () => ({ state, dispatch }) }));
+vi.mock("../../state/AppContext", () => ({ useApp: () => ({ state, dispatch: (action: { type: string; value?: boolean }) => {
+  if (action.type === "SET_PLAYBACK_SET_ARMED") state.playbackSetArmed = Boolean(action.value);
+  if (action.type === "SET_SHIFT_ARMED") state.shiftArmed = Boolean(action.value);
+  dispatch(action);
+} }) }));
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
 
-afterEach(() => { cleanup(); server.session = null; if (typeof localStorage.clear === "function") localStorage.clear(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); server.session = null; server.playbacks = { active_page: 1, pages: [{ number: 1, name: "Main", slots: {} }] }; state.playbackPage = 0; state.playbackSetArmed = false; state.shiftArmed = false; server.commandLine = "FIXTURE"; server.commandLinePristine = true; if (typeof localStorage.clear === "function") localStorage.clear(); vi.clearAllMocks(); });
 
 function soundState(group: SpeedGroupId): SpeedGroupSoundState {
   const bpm = server.configuration.speed_groups_bpm[group.charCodeAt(0) - 65];
@@ -43,12 +55,13 @@ describe("PlaybackTools", () => {
     const { container } = render(<PlaybackTools/>);
     const tools = container.querySelector(".playback-tools")!;
     expect([...tools.children].map((child) => child.className)).toEqual([
-      "ui-button ui-secondary ui-default",
+      "playback-command-keys",
       "playback-page-controls",
       "programmer-fade-fader full",
       "cue-fade-master",
       "speed-group-stack",
     ]);
+    expect(within(container.querySelector(".playback-command-keys")!).getAllByRole("button").map((button) => button.textContent)).toEqual(["SET", "CPY", "MOV", "DEL", "SHIFT"]);
     const previous = screen.getByRole("button", { name: "Previous playback page" });
     const next = screen.getByRole("button", { name: "Next playback page" });
     expect(previous.textContent).toBe("");
@@ -65,6 +78,51 @@ describe("PlaybackTools", () => {
       "speed-group-value",
       "speed-group-unit",
     ]);
+  });
+
+  it("routes playback command keys through the shared command line behavior", () => {
+    const { rerender } = render(<PlaybackTools/>);
+    fireEvent.click(screen.getByRole("button", { name: "CPY" }));
+    expect(server.setCommandLine).toHaveBeenCalledWith("COPY", false);
+
+    fireEvent.click(screen.getByRole("button", { name: "SHIFT" }));
+    expect(dispatch).toHaveBeenCalledWith({ type: "SET_SHIFT_ARMED", value: true });
+    rerender(<PlaybackTools/>);
+    expect(screen.getByRole("button", { name: "SHIFT" })).toHaveClass("active");
+
+    fireEvent.click(screen.getByRole("button", { name: "DEL" }));
+    expect(dispatch).toHaveBeenCalledWith({ type: "SET_MODAL", modal: "systemControlsOpen", value: true });
+    expect(server.setCommandLine).toHaveBeenCalledTimes(1);
+  });
+
+  it("creates and selects the next page when the last page has an assignment", async () => {
+    server.playbacks.pages[0].slots = { "1": 12 };
+    render(<PlaybackTools/>);
+    fireEvent.click(screen.getByRole("button", { name: "Next playback page" }));
+    await waitFor(() => expect(server.savePlaybackPage).toHaveBeenCalledWith({ number: 2, name: "Page 2", slots: {} }));
+    expect(server.setPlaybackPage).toHaveBeenCalledWith(2);
+    expect(dispatch).toHaveBeenCalledWith({ type: "SET_PLAYBACK_PAGE", page: 1 });
+  });
+
+  it("keeps Next disabled on an empty last page but lets the page menu add one", async () => {
+    render(<PlaybackTools/>);
+    expect(screen.getByRole("button", { name: "Next playback page" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Select playback page. Page 1 Main" }));
+    const dialog = screen.getByRole("dialog", { name: "Playback pages" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add new page" }));
+    await waitFor(() => expect(server.savePlaybackPage).toHaveBeenCalledWith({ number: 2, name: "Page 2", slots: {} }));
+    expect(server.setPlaybackPage).toHaveBeenCalledWith(2);
+  });
+
+  it("opens page rename with SET then Page and persists the trimmed name", async () => {
+    render(<PlaybackTools/>);
+    fireEvent.click(screen.getByRole("button", { name: "SET" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select playback page. Page 1 Main" }));
+    const dialog = screen.getByRole("dialog", { name: "Rename playback page 1" });
+    expect(dispatch).toHaveBeenCalledWith({ type: "SET_PLAYBACK_SET_ARMED", value: false });
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Playback page name" }), { target: { value: "  Act One  " } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Rename Page" }));
+    await waitFor(() => expect(server.savePlaybackPage).toHaveBeenCalledWith({ number: 1, name: "Act One", slots: {} }));
   });
 
   it("opens the selected Speed Group Sound-to-Light configuration instead of treating the UI button as a Learn tap", async () => {

@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import "../../styles.css";
 import { NumericPad, numericPadLayout } from "./NumericPad";
 
 const dispatch = vi.fn((action: { type: string; value?: boolean }) => {
@@ -127,30 +128,46 @@ describe("NumericPad layout", () => {
     expect(server.setCommandLine).toHaveBeenCalledWith("COPY SET ", false);
   });
 
-  it("uses separate six-row command and number grids with Highlight above Group and a single-row Enter key", () => {
+  it("uses six-row grids with aligned Highlight actions, a 2x2 Fade control, and a single-row Enter key", () => {
     const { container } = render(<NumericPad/>);
     expect(container.querySelector(".numeric-pad-command-section")).toBeInTheDocument();
     expect(container.querySelector(".numeric-pad-number-section")).toBeInTheDocument();
-    expect(container.querySelector(".numeric-pad-fade")).toHaveStyle({ gridColumn: "1 / span 2", gridRow: "1" });
+    expect(container.querySelector(".numeric-pad-fade")).toHaveStyle({ gridColumn: "1 / span 2", gridRow: "1 / span 2" });
+    expect(container.querySelector(".numeric-pad-fade")).toHaveAttribute("data-grid-column-span", "2");
+    expect(container.querySelector(".numeric-pad-fade")).toHaveAttribute("data-grid-row-span", "2");
     for (const { key, section, column, row, rowSpan = 1 } of numericPadLayout) {
       const expectedColumn = section === "commands" ? column : column - 3;
-      const expectedRow = row + (section === "numbers" ? 1 : 0);
+      const expectedRow = row + 1;
       expect(container.querySelector(`[data-keypad-key="${key}"]`)).toHaveStyle({
         gridColumn: `${expectedColumn}`,
         gridRow: `${expectedRow} / span ${rowSpan}`,
       });
     }
-    const highlight = screen.getByRole("region", { name: "Highlight and step through" });
+    const highlight = screen.getByRole("region", { name: "Highlight and selection stepping" });
     expect(highlight.parentElement).toHaveClass("numeric-pad-number-section");
-    expect(highlight.querySelector(".highlight-toggle")).toHaveTextContent("HIGH");
-    expect(highlight.querySelector(".highlight-previous")).toHaveTextContent("PREV");
-    expect(highlight.querySelector(".highlight-next")).toHaveTextContent("NEXT");
-    expect(highlight.querySelector(".highlight-capture")).toHaveTextContent("ALL");
+    expect([...highlight.querySelectorAll("button")].map((button) => button.textContent)).toEqual(["HIGH", "PREV", "NEXT", "ALL"]);
+    expect(highlight.querySelector(".highlight-toggle")).toHaveTextContent(/^HIGH$/);
+    expect(highlight.querySelector(".highlight-previous")).toHaveTextContent(/^PREV$/);
+    expect(highlight.querySelector(".highlight-next")).toHaveTextContent(/^NEXT$/);
+    expect(highlight.querySelector(".highlight-all")).toHaveTextContent(/^ALL$/);
     expect(screen.getByRole("button", { name: "SET" })).toHaveAttribute("data-keypad-key", "SET");
     expect(screen.getByRole("button", { name: "CUE" })).toHaveAttribute("data-keypad-key", "CUE");
     expect(screen.getByRole("button", { name: "UND" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "TRU" })).toHaveStyle({ gridColumn: "4", gridRow: "5 / span 1" });
     expect(screen.getByRole("button", { name: "ENT" })).toHaveStyle({ gridColumn: "4", gridRow: "6 / span 1" });
+  });
+
+  it("renders inactive HIGH with the same neutral off treatment as idle CLR", () => {
+    render(<NumericPad/>);
+
+    const highStyle = getComputedStyle(screen.getByRole("button", { name: "Turn Highlight on" }));
+    const clearStyle = getComputedStyle(screen.getByRole("button", { name: "CLR" }));
+
+    expect(highStyle.backgroundColor).toBe(clearStyle.backgroundColor);
+    expect(highStyle.backgroundColor).toBe("rgb(23, 28, 34)");
+    expect(highStyle.borderTopColor).toBe(clearStyle.borderTopColor);
+    expect(highStyle.borderTopWidth).toBe(clearStyle.borderTopWidth);
+    expect(highStyle.borderTopStyle).toBe(clearStyle.borderTopStyle);
   });
 
   it("routes Shift shortcuts to built-ins, the explicitly selected playback, and stored desks", () => {

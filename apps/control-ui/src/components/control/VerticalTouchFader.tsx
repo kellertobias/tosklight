@@ -63,7 +63,7 @@ export function VerticalTouchFader({ label, value, maximum = 100, display, disab
     <Input aria-label={label} disabled={disabled || (hardware && directInput)} type="range" min="0" max={maximum} step="0.1" value={localValue} onPointerDown={() => { interacting.current = true; }} onPointerUp={finish} onPointerCancel={finish} onBlur={() => { if (interacting.current) finish(); }} onInput={(event) => emit(Number(event.currentTarget.value))}/>
   </label>;
   const visibleActions = [...(directInput ? [{ id: "set-value", label: "Set value", onClick: openInput, className: "set-value-button" } satisfies VerticalTouchFaderAction] : []), ...actions].slice(0, 3);
-  return <div className={`vertical-touch-fader-stack ${visibleActions.length ? "has-actions" : ""}`}>
+  return <div className={`vertical-touch-fader-stack ${visibleActions.length ? `has-actions action-count-${visibleActions.length}` : ""}`}>
     {fader}
     {visibleActions.length > 0 && <div className="vertical-touch-fader-actions" style={{ "--fader-action-count": visibleActions.length } as CSSProperties}>{visibleActions.map(({ id, label: actionLabel, ...props }) => <Button type="button" {...props} key={id}>{actionLabel}</Button>)}</div>}
     {inputOpen && <SetValueDialog label={label} value={inputValue} maximum={maximum} offset={directInputOffset} onChange={setInputValue} onFaderChange={(next) => { const entered = next - directInputOffset; setInputValue(String(Number(entered.toFixed(1)))); setLocalValue(next); onChange?.(next); }} onSubmit={submitInput} onClose={()=>setInputOpen(false)}/>}

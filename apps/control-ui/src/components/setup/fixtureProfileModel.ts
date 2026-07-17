@@ -141,10 +141,12 @@ export function blankFixtureProfile(): FixtureProfile {
     name: "",
     short_name: "",
     fixture_type: "other",
+    patch_policy: "dmx",
     notes: "",
     photograph_asset: null,
     stage_icon_asset: null,
     model_asset: null,
+    model_units: "auto",
     physical: {
       width_millimetres: null,
       height_millimetres: null,
@@ -409,7 +411,10 @@ export function validateProfile(profile: FixtureProfile) {
     const splitNumbers = new Set<number>();
     for (const split of mode.splits) {
       if (!Number.isInteger(split.number) || split.number < 1 || splitNumbers.has(split.number)) errors.push(`${mode.name}: split numbers must be unique positive integers`);
-      if (!Number.isInteger(split.footprint) || split.footprint < 1 || split.footprint > 512) errors.push(`${mode.name}: split ${split.number} footprint must be 1–512`);
+      const validFootprint = profile.patch_policy === "visual_only"
+        ? split.footprint === 0
+        : Number.isInteger(split.footprint) && split.footprint >= 1 && split.footprint <= 512;
+      if (!validFootprint) errors.push(`${mode.name}: split ${split.number} footprint must be ${profile.patch_policy === "visual_only" ? "zero" : "1–512"}`);
       splitNumbers.add(split.number);
     }
     if (!mode.splits.length) errors.push(`${mode.name}: at least one split is required`);
@@ -435,6 +440,7 @@ export function validateProfile(profile: FixtureProfile) {
         if (index && sorted[index - 1].dmx_to >= fn.dmx_from) errors.push(`${mode.name}: ${channel.attribute} function ranges overlap`);
       });
     }
+    if (profile.patch_policy === "visual_only" && (mode.channels.length || mode.color_systems.length || mode.control_actions.length)) errors.push(`${mode.name}: visual-only modes cannot contain DMX behavior`);
     errors.push(...derivePrimarySlots(mode).errors.map((error) => `${mode.name}: ${error}`));
   }
   return [...new Set(errors)];

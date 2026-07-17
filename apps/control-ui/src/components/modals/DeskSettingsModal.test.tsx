@@ -48,8 +48,8 @@ describe("physical desk Matter playback bridge settings", () => {
   it("shows disabled state and persists the toggle without discarding other desk settings", () => {
     render(<MatterBridgeSettings />);
 
-    const toggle = screen.getByRole("checkbox", {
-      name: "Enable this desk as a Matter bridge",
+    const toggle = screen.getByRole("switch", {
+      name: "Matter server disabled",
     });
     expect(toggle).not.toBeChecked();
     expect(screen.getByText("Disabled. No Matter lights are advertised.")).toBeInTheDocument();
@@ -67,6 +67,7 @@ describe("physical desk Matter playback bridge settings", () => {
 
     render(<MatterBridgeSettings />);
 
+    expect(screen.getByRole("switch", { name: "Matter server enabled" })).toBeChecked();
     expect(screen.getByText("0 assigned playbacks exposed as dimmable lights.")).toBeInTheDocument();
     expect(screen.getByText(/including button-only controls; empty slots are not advertised/i)).toBeInTheDocument();
     expect(screen.queryByText("Ready to commission")).not.toBeInTheDocument();

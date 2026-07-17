@@ -7,6 +7,10 @@ UI_DIR="$ROOT/apps/control-ui"
 HARDWARE_DIR="$ROOT/apps/hardware-controls"
 TARGET_DIR="$ROOT/target"
 DATA_DIR="${LIGHT_DATA_DIR:-$ROOT/light-data}"
+FIXTURE_LIBRARY_DIR="$ROOT/fixture-library"
+MANUAL_REQUIREMENTS="$ROOT/docs/help/.tooling/requirements.txt"
+MANUAL_VENV_DIR="$TARGET_DIR/manual-venv"
+MANUAL_PYTHON="$MANUAL_VENV_DIR/bin/python"
 
 usage() {
   cat <<'EOF'
@@ -19,13 +23,49 @@ EOF
 }
 
 build_manual() {
-  require python3
-  PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" python3 "$ROOT/tools/build_manual.py"
-  PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" python3 "$ROOT/tools/verify_manual.py" "$ROOT/output/pdf/tosklight-manual.pdf"
-  PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" python3 "$ROOT/tools/build_html_manual.py"
-  PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" python3 "$ROOT/tools/verify_html_manual.py" \
+  ensure_manual_dependencies
+  PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" "$MANUAL_PYTHON" "$ROOT/tools/build_manual.py"
+  PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" "$MANUAL_PYTHON" "$ROOT/tools/verify_manual.py" "$ROOT/output/pdf/tosklight-manual.pdf"
+  PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" "$MANUAL_PYTHON" "$ROOT/tools/build_html_manual.py"
+  PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" "$MANUAL_PYTHON" "$ROOT/tools/verify_html_manual.py" \
     "$ROOT/output/html/tosklight-manual" \
     "$ROOT/output/html/tosklight-manual-html.zip"
+}
+
+ensure_manual_dependencies() {
+  require python3
+  [[ -f "$MANUAL_REQUIREMENTS" ]] || {
+    echo "error: manual requirements not found: $MANUAL_REQUIREMENTS" >&2
+    exit 1
+  }
+
+  if [[ ! -x "$MANUAL_PYTHON" ]]; then
+    echo "Creating isolated manual build environment..."
+    mkdir -p "$TARGET_DIR"
+    python3 -m venv "$MANUAL_VENV_DIR"
+  fi
+
+  if ! manual_requirements_satisfied; then
+    echo "Installing pinned manual build dependencies..."
+    "$MANUAL_PYTHON" -m pip install --disable-pip-version-check --requirement "$MANUAL_REQUIREMENTS"
+  fi
+}
+
+manual_requirements_satisfied() {
+  local installed package requirement version
+
+  while IFS= read -r requirement; do
+    [[ -z "$requirement" || "$requirement" == \#* ]] && continue
+    package="${requirement%%==*}"
+    version="${requirement#*==}"
+    [[ "$package" != "$requirement" && -n "$package" && -n "$version" ]] || return 1
+    installed="$("$MANUAL_PYTHON" -c \
+      'from importlib.metadata import version; import sys; print(version(sys.argv[1]))' \
+      "$package" 2>/dev/null)" || return 1
+    [[ "$installed" == "$version" ]] || return 1
+  done < "$MANUAL_REQUIREMENTS"
+
+  "$MANUAL_PYTHON" -m pip check >/dev/null 2>&1
 }
 
 require() {
@@ -80,7 +120,7 @@ wait_for_server() {
 start_server() {
   local binary="$1"
   mkdir -p "$DATA_DIR" "$TARGET_DIR"
-  nohup "$binary" --data-dir "$DATA_DIR" >"$TARGET_DIR/light-server.log" 2>&1 &
+  nohup "$binary" --data-dir "$DATA_DIR" --fixture-package-dir "$FIXTURE_LIBRARY_DIR" >"$TARGET_DIR/light-server.log" 2>&1 &
   local pid=$!
   echo "$pid" >"$TARGET_DIR/light-server.pid"
   wait_for_server "$pid"
@@ -105,7 +145,7 @@ build_debug_and_open() {
   (cd "$UI_DIR" && npm run tauri:build -- --debug --bundles app)
   cp "$TARGET_DIR/debug/light-server" "$TARGET_DIR/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-server"
   echo "Starting development server service..."
-  launchctl submit -l de.tokenet.tosklight.dev-server -o "$DATA_DIR/light-server.log" -e "$DATA_DIR/light-server.log" -- "$TARGET_DIR/debug/light-server" --data-dir "$DATA_DIR"
+  launchctl submit -l de.tokenet.tosklight.dev-server -o "$DATA_DIR/light-server.log" -e "$DATA_DIR/light-server.log" -- "$TARGET_DIR/debug/light-server" --data-dir "$DATA_DIR" --fixture-package-dir "$FIXTURE_LIBRARY_DIR"
   wait_for_endpoint
   open "$TARGET_DIR/debug/bundle/macos/ToskLight.app"
   echo "ToskLight is open. Server log: $DATA_DIR/light-server.log"
@@ -205,11 +245,13 @@ archive_binary() {
   local staging
 
   [[ -f "$binary" ]] || { echo "error: expected build output not found: $binary" >&2; exit 1; }
+  [[ -d "$FIXTURE_LIBRARY_DIR" ]] || { echo "error: fixture library not found: $FIXTURE_LIBRARY_DIR" >&2; exit 1; }
   archive_name="${archive##*/}"
   archive_name="${archive_name%.zip}"
   staging="$(mktemp -d "$TARGET_DIR/archive.XXXXXX")"
   mkdir -p "$staging/$archive_name"
   cp "$binary" "$staging/$archive_name/$binary_name"
+  cp -R "$FIXTURE_LIBRARY_DIR" "$staging/$archive_name/fixture-library"
   rm -f "$archive"
   (cd "$staging" && zip -q -r "$archive" "$archive_name")
   rm -rf "$staging"

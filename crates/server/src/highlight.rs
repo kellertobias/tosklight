@@ -1,6 +1,11 @@
-//! Authoritative transient Highlight/Step Through state shared by every control surface.
+//! Authoritative transient Highlight and programmer-selection stepping shared by every control
+//! surface.
 
 use light_core::{FixtureId, UserId};
+use light_programmer::{
+    GroupDefinition, ProgrammerSelection, SelectionExpression, apply_selection_rule, resolve_group,
+    resolve_selection_references,
+};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -19,10 +24,11 @@ pub struct HighlightFixture {
     pub number: Option<u32>,
 }
 
+/// Selection stepping is independent of whether HIGH is active. `Selection` means the complete
+/// remembered source is the actual programmer selection; `Step` means one item is selected.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HighlightMode {
-    Off,
     Selection,
     Step,
 }
@@ -30,23 +36,23 @@ pub enum HighlightMode {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HighlightAction {
-    Capture,
     On,
     Off,
     Toggle,
     Next,
     Previous,
+    All,
 }
 
 impl HighlightAction {
     pub const fn osc_dedupe_key(self) -> &'static str {
         match self {
-            Self::Capture => "capture",
             Self::On => "on",
             Self::Off => "off",
             Self::Toggle => "toggle",
             Self::Next => "next",
             Self::Previous => "previous",
+            Self::All => "all",
         }
     }
 }
@@ -64,10 +70,13 @@ pub fn is_duplicate_osc_action(
 
 #[derive(Clone, Debug, Serialize)]
 pub struct HighlightState {
+    /// HIGH state only. This is deliberately independent of `mode` and selection emptiness.
     pub active: bool,
     pub mode: HighlightMode,
     pub output_enabled: bool,
+    /// Compatibility name for the Blind/Preview output-suppression state.
     pub capture_only: bool,
+    /// Current valid resolution of the remembered live selection source.
     pub remembered: Vec<HighlightFixture>,
     pub active_index: Option<usize>,
     pub active_fixture: Option<HighlightFixture>,
@@ -79,25 +88,29 @@ pub struct HighlightState {
 }
 
 #[derive(Clone, Debug)]
+pub struct HighlightSelectionWrite {
+    pub selected: Vec<FixtureId>,
+    pub expression: Option<SelectionExpression>,
+}
+
+#[derive(Clone, Debug)]
 pub struct HighlightTransition {
     pub state: HighlightState,
     /// Fixture identities whose raw Highlight Look should be overlaid by the engine.
     pub output_fixtures: Vec<FixtureId>,
-    /// When stepping, replace the desk-local working selection with this one fixture.
-    pub working_selection: Option<FixtureId>,
+    /// Authoritative actual programmer selection requested by PREV, NEXT, ALL, or reconciliation
+    /// after an item disappeared. Attribute values are never touched by this write.
+    pub working_selection: Option<HighlightSelectionWrite>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum HighlightError {
-    EmptySelection,
     OwnedByAnotherUser(UserId),
 }
 
 impl std::fmt::Display for HighlightError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::EmptySelection => formatter
-                .write_str("Highlight needs a non-empty current or remembered fixture selection"),
             Self::OwnedByAnotherUser(_) => {
                 formatter.write_str("Highlight output is active for another user on this desk")
             }
@@ -110,7 +123,12 @@ struct OperatorState {
     active: bool,
     output_enabled: bool,
     remembered: Vec<FixtureId>,
+    remembered_expression: Option<SelectionExpression>,
+    stepping: bool,
     active_fixture: Option<FixtureId>,
+    /// Revision of the actual programmer selection last observed or explicitly acknowledged as
+    /// our own PREV/NEXT/ALL write.
+    observed_selection_revision: Option<u64>,
     message: Option<String>,
 }
 
@@ -131,7 +149,7 @@ pub struct HighlightRegistry {
 
 impl HighlightRegistry {
     /// Apply an operator-facing action with one repeat guard shared by REST, software, OSC, and
-    /// attached hardware. The guard belongs here so two adapters cannot advance one remembered
+    /// attached hardware. The guard belongs here so two adapters cannot advance the actual
     /// selection independently during a single physical press.
     #[allow(clippy::too_many_arguments)]
     pub fn action_guarded(
@@ -140,8 +158,9 @@ impl HighlightRegistry {
         user_id: UserId,
         user_name: Option<&str>,
         action: HighlightAction,
-        current_selection: &[FixtureId],
+        current_selection: &ProgrammerSelection,
         valid_fixtures: &[HighlightFixture],
+        groups: &HashMap<String, GroupDefinition>,
         capture_only: bool,
     ) -> Result<HighlightTransition, HighlightError> {
         let received_at = Instant::now();
@@ -155,7 +174,15 @@ impl HighlightRegistry {
             received_at,
         ) {
             drop(recent_actions);
-            return Ok(self.status(desk_id, user_id, user_name, valid_fixtures, capture_only));
+            return Ok(self.status(
+                desk_id,
+                user_id,
+                user_name,
+                current_selection,
+                valid_fixtures,
+                groups,
+                capture_only,
+            ));
         }
         let transition = self.action(
             desk_id,
@@ -164,6 +191,7 @@ impl HighlightRegistry {
             action,
             current_selection,
             valid_fixtures,
+            groups,
             capture_only,
         )?;
         recent_actions.insert(key, (action.osc_dedupe_key(), received_at));
@@ -177,138 +205,94 @@ impl HighlightRegistry {
         user_id: UserId,
         user_name: Option<&str>,
         action: HighlightAction,
-        current_selection: &[FixtureId],
+        current_selection: &ProgrammerSelection,
         valid_fixtures: &[HighlightFixture],
+        groups: &HashMap<String, GroupDefinition>,
         capture_only: bool,
     ) -> Result<HighlightTransition, HighlightError> {
-        // Stage the entire transition and publish it only after every ownership and selection
-        // precondition succeeds. In particular, a Blind/Preview operator may already have a
-        // prepared capture when another user owns live output; rejecting On/Next must not drop or
-        // partially advance that prepared state.
+        // Stage the whole transition so an ownership failure cannot partially toggle HIGH or move
+        // the programmer selection.
         let mut live_runtime = self.runtime.lock();
         let mut runtime = live_runtime.clone();
-        reconcile_runtime(&mut runtime, valid_fixtures);
         let key = (desk_id, user_id);
         let mut operator = runtime.operators.remove(&key).unwrap_or_default();
-        if capture_only && operator.output_enabled {
-            operator.output_enabled = false;
-            if runtime.output_owners.get(&desk_id) == Some(&user_id) {
-                runtime.output_owners.remove(&desk_id);
-            }
-        }
+        let mut working_selection =
+            synchronize_actual_selection(&mut operator, current_selection, valid_fixtures, groups);
+        reconcile_capture_mode(&mut runtime, desk_id, user_id, &mut operator, capture_only);
         operator.message = None;
-        let mut working_selection = None;
 
         match action {
-            HighlightAction::Capture => {
-                let captured = valid_selection(current_selection, valid_fixtures);
-                if captured.is_empty() {
-                    return Err(HighlightError::EmptySelection);
-                }
-                operator.remembered = captured;
-                operator.active_fixture = None;
-                if operator.active && !capture_only {
-                    acquire_output_owner(&mut runtime, desk_id, user_id)?;
-                    operator.output_enabled = true;
-                }
-            }
             HighlightAction::On => {
-                if operator.remembered.is_empty() {
-                    operator.remembered = valid_selection(current_selection, valid_fixtures);
-                }
-                if operator.remembered.is_empty() {
-                    return Err(HighlightError::EmptySelection);
-                }
-                operator.active = true;
-                if capture_only {
-                    operator.output_enabled = false;
-                    operator.message = Some(
-                        "Highlight prepared in Blind/Preview; live output is suppressed".into(),
-                    );
-                } else {
-                    acquire_output_owner(&mut runtime, desk_id, user_id)?;
-                    operator.output_enabled = true;
-                }
+                enable_highlight(&mut runtime, desk_id, user_id, &mut operator, capture_only)?;
             }
             HighlightAction::Off => {
-                operator.active = false;
-                operator.output_enabled = false;
-                operator.active_fixture = None;
-                if runtime.output_owners.get(&desk_id) == Some(&user_id) {
-                    runtime.output_owners.remove(&desk_id);
-                }
+                disable_highlight(&mut runtime, desk_id, user_id, &mut operator);
             }
             HighlightAction::Toggle => {
                 if operator.active {
-                    operator.active = false;
-                    operator.output_enabled = false;
+                    disable_highlight(&mut runtime, desk_id, user_id, &mut operator);
+                } else {
+                    enable_highlight(&mut runtime, desk_id, user_id, &mut operator, capture_only)?;
+                }
+            }
+            HighlightAction::Next | HighlightAction::Previous => {
+                operator.remembered = resolve_remembered(&operator, valid_fixtures, groups);
+                if operator.remembered.is_empty() {
+                    operator.stepping = true;
                     operator.active_fixture = None;
-                    if runtime.output_owners.get(&desk_id) == Some(&user_id) {
-                        runtime.output_owners.remove(&desk_id);
-                    }
+                    working_selection = Some(HighlightSelectionWrite {
+                        selected: Vec::new(),
+                        expression: Some(SelectionExpression::Static),
+                    });
+                    operator.message = Some("The remembered selection has no valid items".into());
                 } else {
-                    if operator.remembered.is_empty() {
-                        operator.remembered = valid_selection(current_selection, valid_fixtures);
-                    }
-                    if operator.remembered.is_empty() {
-                        return Err(HighlightError::EmptySelection);
-                    }
-                    operator.active = true;
-                    if capture_only {
-                        operator.output_enabled = false;
-                        operator.message = Some(
-                            "Highlight prepared in Blind/Preview; live output is suppressed".into(),
-                        );
+                    let index = if operator.stepping {
+                        operator
+                            .active_fixture
+                            .and_then(|active| {
+                                operator
+                                    .remembered
+                                    .iter()
+                                    .position(|fixture| *fixture == active)
+                            })
+                            .map(|index| match action {
+                                HighlightAction::Next => (index + 1) % operator.remembered.len(),
+                                HighlightAction::Previous => {
+                                    (index + operator.remembered.len() - 1)
+                                        % operator.remembered.len()
+                                }
+                                _ => unreachable!(),
+                            })
+                            .unwrap_or_else(|| {
+                                if action == HighlightAction::Next {
+                                    0
+                                } else {
+                                    operator.remembered.len() - 1
+                                }
+                            })
+                    } else if action == HighlightAction::Next {
+                        0
                     } else {
-                        acquire_output_owner(&mut runtime, desk_id, user_id)?;
-                        operator.output_enabled = true;
-                    }
+                        operator.remembered.len() - 1
+                    };
+                    let fixture = operator.remembered[index];
+                    operator.stepping = true;
+                    operator.active_fixture = Some(fixture);
+                    working_selection = Some(HighlightSelectionWrite {
+                        selected: vec![fixture],
+                        expression: Some(SelectionExpression::Static),
+                    });
                 }
             }
-            HighlightAction::Next => {
-                prepare_step(
-                    &mut runtime,
-                    desk_id,
-                    user_id,
-                    &mut operator,
-                    current_selection,
-                    valid_fixtures,
-                    capture_only,
-                )?;
-                let next = match operator
-                    .active_fixture
-                    .and_then(|active| operator.remembered.iter().position(|id| *id == active))
-                {
-                    None => Some(0),
-                    Some(index) if index + 1 < operator.remembered.len() => Some(index + 1),
-                    Some(_) => None,
-                };
-                if let Some(index) = next {
-                    operator.active_fixture = Some(operator.remembered[index]);
-                    working_selection = operator.active_fixture;
-                } else {
-                    operator.message = Some("End of remembered Highlight selection".into());
-                }
-            }
-            HighlightAction::Previous => {
-                prepare_step(
-                    &mut runtime,
-                    desk_id,
-                    user_id,
-                    &mut operator,
-                    current_selection,
-                    valid_fixtures,
-                    capture_only,
-                )?;
-                let previous = operator
-                    .active_fixture
-                    .and_then(|active| operator.remembered.iter().position(|id| *id == active))
-                    .and_then(|index| index.checked_sub(1));
-                if let Some(index) = previous {
-                    operator.active_fixture = Some(operator.remembered[index]);
-                    working_selection = operator.active_fixture;
-                } else {
-                    operator.message = Some("Start of remembered Highlight selection".into());
+            HighlightAction::All => {
+                operator.remembered = resolve_remembered(&operator, valid_fixtures, groups);
+                if operator.stepping {
+                    operator.stepping = false;
+                    operator.active_fixture = None;
+                    working_selection = Some(HighlightSelectionWrite {
+                        selected: operator.remembered.clone(),
+                        expression: operator.remembered_expression.clone(),
+                    });
                 }
             }
         }
@@ -333,25 +317,36 @@ impl HighlightRegistry {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn status(
         &self,
         desk_id: Uuid,
         user_id: UserId,
         user_name: Option<&str>,
+        current_selection: &ProgrammerSelection,
         valid_fixtures: &[HighlightFixture],
+        groups: &HashMap<String, GroupDefinition>,
         capture_only: bool,
     ) -> HighlightTransition {
         let mut runtime = self.runtime.lock();
-        reconcile_runtime(&mut runtime, valid_fixtures);
         let key = (desk_id, user_id);
         let mut operator = runtime.operators.remove(&key).unwrap_or_default();
-        if capture_only && operator.output_enabled {
-            operator.output_enabled = false;
-            if runtime.output_owners.get(&desk_id) == Some(&user_id) {
-                runtime.output_owners.remove(&desk_id);
+        let working_selection =
+            synchronize_actual_selection(&mut operator, current_selection, valid_fixtures, groups);
+        reconcile_capture_mode(&mut runtime, desk_id, user_id, &mut operator, capture_only);
+        if operator.active && !capture_only && !operator.output_enabled {
+            if runtime
+                .output_owners
+                .get(&desk_id)
+                .is_none_or(|owner| *owner == user_id)
+            {
+                runtime.output_owners.insert(desk_id, user_id);
+                operator.output_enabled = true;
+                operator.message = None;
+            } else {
+                operator.message =
+                    Some("Highlight output is active for another user on this desk".into());
             }
-            operator.message =
-                Some("Highlight prepared in Blind/Preview; live output is suppressed".into());
         }
         let owner = runtime.output_owners.get(&desk_id).copied();
         let output_fixtures = output_fixture_ids(&operator);
@@ -368,7 +363,22 @@ impl HighlightRegistry {
         HighlightTransition {
             state,
             output_fixtures,
-            working_selection: None,
+            working_selection,
+        }
+    }
+
+    /// Acknowledge the programmer selection revision written by one of this registry's own
+    /// PREV/NEXT/ALL transitions. The next status call therefore does not mistake it for an
+    /// external operator selection, while any later external write (even identical membership)
+    /// has a new revision and resets the step basis.
+    pub fn acknowledge_internal_selection(
+        &self,
+        desk_id: Uuid,
+        user_id: UserId,
+        selection: &ProgrammerSelection,
+    ) {
+        if let Some(operator) = self.runtime.lock().operators.get_mut(&(desk_id, user_id)) {
+            operator.observed_selection_revision = Some(selection.revision);
         }
     }
 
@@ -439,22 +449,13 @@ fn acquire_output_owner(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
-fn prepare_step(
+fn enable_highlight(
     runtime: &mut HighlightRuntime,
     desk_id: Uuid,
     user_id: UserId,
     operator: &mut OperatorState,
-    current_selection: &[FixtureId],
-    valid_fixtures: &[HighlightFixture],
     capture_only: bool,
 ) -> Result<(), HighlightError> {
-    if operator.remembered.is_empty() {
-        operator.remembered = valid_selection(current_selection, valid_fixtures);
-    }
-    if operator.remembered.is_empty() {
-        return Err(HighlightError::EmptySelection);
-    }
     operator.active = true;
     if capture_only {
         operator.output_enabled = false;
@@ -465,6 +466,36 @@ fn prepare_step(
         operator.output_enabled = true;
     }
     Ok(())
+}
+
+fn disable_highlight(
+    runtime: &mut HighlightRuntime,
+    desk_id: Uuid,
+    user_id: UserId,
+    operator: &mut OperatorState,
+) {
+    operator.active = false;
+    operator.output_enabled = false;
+    if runtime.output_owners.get(&desk_id) == Some(&user_id) {
+        runtime.output_owners.remove(&desk_id);
+    }
+}
+
+fn reconcile_capture_mode(
+    runtime: &mut HighlightRuntime,
+    desk_id: Uuid,
+    user_id: UserId,
+    operator: &mut OperatorState,
+    capture_only: bool,
+) {
+    if capture_only && operator.output_enabled {
+        operator.output_enabled = false;
+        if runtime.output_owners.get(&desk_id) == Some(&user_id) {
+            runtime.output_owners.remove(&desk_id);
+        }
+        operator.message =
+            Some("Highlight prepared in Blind/Preview; live output is suppressed".into());
+    }
 }
 
 fn valid_selection(selection: &[FixtureId], valid_fixtures: &[HighlightFixture]) -> Vec<FixtureId> {
@@ -480,66 +511,101 @@ fn valid_selection(selection: &[FixtureId], valid_fixtures: &[HighlightFixture])
         .collect()
 }
 
-fn reconcile(operator: &mut OperatorState, valid_fixtures: &[HighlightFixture]) {
-    let valid = valid_fixtures
-        .iter()
-        .map(|fixture| fixture.fixture_id)
-        .collect::<HashSet<_>>();
-    let previous_index = operator.active_fixture.and_then(|active| {
-        operator
-            .remembered
-            .iter()
-            .position(|fixture| *fixture == active)
-    });
-    operator
-        .remembered
-        .retain(|fixture| valid.contains(fixture));
-    if operator
-        .active_fixture
-        .is_some_and(|fixture| !valid.contains(&fixture))
-    {
-        operator.active_fixture = previous_index.and_then(|index| {
-            (!operator.remembered.is_empty())
-                .then(|| operator.remembered[index.min(operator.remembered.len() - 1)])
-        });
-        operator.message = Some("Removed fixture skipped in remembered Highlight selection".into());
-    }
-    if operator.remembered.is_empty() {
-        operator.active = false;
-        operator.output_enabled = false;
-        operator.active_fixture = None;
+fn resolve_expression(
+    expression: &SelectionExpression,
+    snapshot: &[FixtureId],
+    groups: &HashMap<String, GroupDefinition>,
+) -> Vec<FixtureId> {
+    match expression {
+        SelectionExpression::LiveGroup { group_id, rule } => resolve_group(group_id, groups)
+            .map(|fixtures| apply_selection_rule(&fixtures, rule))
+            .unwrap_or_default(),
+        SelectionExpression::PlaybackContents { items }
+        | SelectionExpression::Sources { items } => resolve_selection_references(items, groups),
+        // A frozen selection and an explicitly static selection retain the exact resolved order
+        // present when stepping began.
+        SelectionExpression::Static | SelectionExpression::FrozenGroup { .. } => snapshot.to_vec(),
     }
 }
 
-fn reconcile_runtime(runtime: &mut HighlightRuntime, valid_fixtures: &[HighlightFixture]) {
-    for operator in runtime.operators.values_mut() {
-        reconcile(operator, valid_fixtures);
+fn resolve_remembered(
+    operator: &OperatorState,
+    valid_fixtures: &[HighlightFixture],
+    groups: &HashMap<String, GroupDefinition>,
+) -> Vec<FixtureId> {
+    let resolved = operator
+        .remembered_expression
+        .as_ref()
+        .map(|expression| resolve_expression(expression, &operator.remembered, groups))
+        .unwrap_or_else(|| operator.remembered.clone());
+    valid_selection(&resolved, valid_fixtures)
+}
+
+fn reset_basis(
+    operator: &mut OperatorState,
+    current_selection: &ProgrammerSelection,
+    valid_fixtures: &[HighlightFixture],
+    groups: &HashMap<String, GroupDefinition>,
+) {
+    let snapshot = valid_selection(&current_selection.selected, valid_fixtures);
+    let remembered = current_selection
+        .expression
+        .as_ref()
+        .map(|expression| resolve_expression(expression, &snapshot, groups))
+        .unwrap_or(snapshot);
+    operator.remembered = valid_selection(&remembered, valid_fixtures);
+    operator.remembered_expression = current_selection.expression.clone();
+    operator.stepping = false;
+    operator.active_fixture = None;
+    operator.message = None;
+    operator.observed_selection_revision = Some(current_selection.revision);
+}
+
+fn synchronize_actual_selection(
+    operator: &mut OperatorState,
+    current_selection: &ProgrammerSelection,
+    valid_fixtures: &[HighlightFixture],
+    groups: &HashMap<String, GroupDefinition>,
+) -> Option<HighlightSelectionWrite> {
+    if operator.observed_selection_revision != Some(current_selection.revision) {
+        reset_basis(operator, current_selection, valid_fixtures, groups);
+        return None;
     }
 
-    let stale_desks = runtime
-        .output_owners
-        .iter()
-        .filter_map(|(desk_id, user_id)| {
-            (!runtime
-                .operators
-                .get(&(*desk_id, *user_id))
-                .is_some_and(|operator| operator.output_enabled))
-            .then_some(*desk_id)
-        })
-        .collect::<Vec<_>>();
-    for desk_id in stale_desks {
-        runtime.output_owners.remove(&desk_id);
+    let previous = operator.remembered.clone();
+    let previous_index = operator
+        .active_fixture
+        .and_then(|active| previous.iter().position(|candidate| *candidate == active));
+    operator.remembered = resolve_remembered(operator, valid_fixtures, groups);
+    if !operator.stepping {
+        return None;
     }
+    if operator
+        .active_fixture
+        .is_some_and(|active| operator.remembered.contains(&active))
+    {
+        return None;
+    }
+    operator.active_fixture = previous_index.and_then(|index| {
+        (!operator.remembered.is_empty())
+            .then(|| operator.remembered[index.min(operator.remembered.len() - 1)])
+    });
+    operator.message = Some("Removed selection item skipped while stepping".into());
+    Some(HighlightSelectionWrite {
+        selected: operator.active_fixture.into_iter().collect(),
+        expression: Some(SelectionExpression::Static),
+    })
 }
 
 fn output_fixture_ids(operator: &OperatorState) -> Vec<FixtureId> {
     if !operator.active || !operator.output_enabled {
         return Vec::new();
     }
-    operator
-        .active_fixture
-        .map(|fixture| vec![fixture])
-        .unwrap_or_else(|| operator.remembered.clone())
+    if operator.stepping {
+        operator.active_fixture.into_iter().collect()
+    } else {
+        operator.remembered.clone()
+    }
 }
 
 fn response(
@@ -558,20 +624,25 @@ fn response(
         .iter()
         .filter_map(|fixture| by_id.get(fixture).cloned())
         .collect::<Vec<_>>();
-    let active_index = operator.active_fixture.and_then(|active| {
-        operator
-            .remembered
-            .iter()
-            .position(|fixture| *fixture == active)
-    });
+    let active_index = if operator.stepping {
+        operator.active_fixture.and_then(|active| {
+            operator
+                .remembered
+                .iter()
+                .position(|fixture| *fixture == active)
+        })
+    } else {
+        None
+    };
     let active_fixture = operator
-        .active_fixture
+        .stepping
+        .then_some(operator.active_fixture)
+        .flatten()
         .and_then(|fixture| by_id.get(&fixture).cloned());
+    let can_step = !operator.remembered.is_empty();
     HighlightState {
         active: operator.active,
-        mode: if !operator.active {
-            HighlightMode::Off
-        } else if operator.active_fixture.is_some() {
+        mode: if operator.stepping {
             HighlightMode::Step
         } else {
             HighlightMode::Selection
@@ -581,11 +652,8 @@ fn response(
         remembered,
         active_index,
         active_fixture,
-        can_previous: active_index.is_some_and(|index| index > 0),
-        can_next: match active_index {
-            Some(index) => index + 1 < operator.remembered.len(),
-            None => operator.active && !operator.remembered.is_empty(),
-        },
+        can_previous: can_step,
+        can_next: can_step,
         owner_user_id,
         owner_user_name,
         message: operator.message.clone(),
@@ -604,249 +672,336 @@ mod tests {
         }
     }
 
+    fn selection(
+        selected: Vec<FixtureId>,
+        expression: Option<SelectionExpression>,
+        revision: u64,
+    ) -> ProgrammerSelection {
+        ProgrammerSelection {
+            selected,
+            expression,
+            revision,
+        }
+    }
+
+    fn no_groups() -> HashMap<String, GroupDefinition> {
+        HashMap::new()
+    }
+
+    fn apply_write(
+        registry: &HighlightRegistry,
+        desk: Uuid,
+        user: UserId,
+        transition: &HighlightTransition,
+        revision: u64,
+    ) -> Option<ProgrammerSelection> {
+        let write = transition.working_selection.as_ref()?;
+        let selection = selection(write.selected.clone(), write.expression.clone(), revision);
+        registry.acknowledge_internal_selection(desk, user, &selection);
+        Some(selection)
+    }
+
     #[test]
-    fn captures_authoritative_order_steps_without_wrap_and_retains_on_off() {
+    fn prev_next_all_write_real_selection_wrap_and_never_activate_high() {
         let registry = HighlightRegistry::default();
         let desk = Uuid::new_v4();
         let user = UserId::new();
-        let fixtures = vec![fixture(1), fixture(2), fixture(3)];
-        let selection = fixtures
+        let fixtures = vec![fixture(1), fixture(2), fixture(3), fixture(4)];
+        let ids = fixtures
             .iter()
-            .rev()
             .map(|fixture| fixture.fixture_id)
             .collect::<Vec<_>>();
-        let captured = registry
+        let groups = no_groups();
+        let complete = selection(ids.clone(), Some(SelectionExpression::Static), 1);
+
+        let next = registry
             .action(
                 desk,
                 user,
-                Some("Operator"),
-                HighlightAction::Capture,
-                &[selection[0], selection[1], selection[0], selection[2]],
+                None,
+                HighlightAction::Next,
+                &complete,
                 &fixtures,
+                &groups,
                 false,
             )
             .unwrap();
+        assert!(!next.state.active);
         assert_eq!(
-            captured
-                .state
-                .remembered
-                .iter()
-                .map(|fixture| fixture.fixture_id)
-                .collect::<Vec<_>>(),
-            selection
+            next.working_selection.as_ref().unwrap().selected,
+            vec![ids[0]]
         );
-        assert!(!captured.state.active);
-        assert!(captured.output_fixtures.is_empty());
-        let on = registry
-            .action(
-                desk,
-                user,
-                Some("Operator"),
-                HighlightAction::On,
-                &[],
-                &fixtures,
-                false,
-            )
-            .unwrap();
-        assert_eq!(on.output_fixtures, selection);
-        let first = registry
-            .action(
-                desk,
-                user,
-                None,
-                HighlightAction::Next,
-                &[],
-                &fixtures,
-                false,
-            )
-            .unwrap();
-        assert_eq!(first.working_selection, Some(selection[0]));
-        registry
+        let mut actual = apply_write(&registry, desk, user, &next, 2).unwrap();
+        for expected in [ids[1], ids[2], ids[3], ids[0]] {
+            let next = registry
+                .action(
+                    desk,
+                    user,
+                    None,
+                    HighlightAction::Next,
+                    &actual,
+                    &fixtures,
+                    &groups,
+                    false,
+                )
+                .unwrap();
+            assert_eq!(
+                next.working_selection.as_ref().unwrap().selected,
+                vec![expected]
+            );
+            actual = apply_write(&registry, desk, user, &next, actual.revision + 1).unwrap();
+        }
+
+        let all = registry
             .action(
                 desk,
                 user,
                 None,
-                HighlightAction::Next,
-                &[],
+                HighlightAction::All,
+                &actual,
                 &fixtures,
+                &groups,
                 false,
             )
             .unwrap();
-        registry
-            .action(
-                desk,
-                user,
-                None,
-                HighlightAction::Next,
-                &[],
-                &fixtures,
-                false,
-            )
-            .unwrap();
-        let end = registry
-            .action(
-                desk,
-                user,
-                None,
-                HighlightAction::Next,
-                &[],
-                &fixtures,
-                false,
-            )
-            .unwrap();
-        assert_eq!(end.state.active_index, Some(2));
-        assert!(!end.state.can_next);
-        assert!(end.state.message.as_deref().unwrap().contains("End"));
-        assert_eq!(end.output_fixtures, vec![selection[2]]);
+        assert_eq!(all.state.mode, HighlightMode::Selection);
+        assert_eq!(all.working_selection.as_ref().unwrap().selected, ids);
+        actual = apply_write(&registry, desk, user, &all, actual.revision + 1).unwrap();
         let previous = registry
             .action(
                 desk,
                 user,
                 None,
                 HighlightAction::Previous,
-                &[selection[2]],
+                &actual,
                 &fixtures,
+                &groups,
                 false,
             )
             .unwrap();
-        assert_eq!(previous.state.active_index, Some(1));
-        let start = registry
-            .action(
-                desk,
-                user,
-                None,
-                HighlightAction::Previous,
-                &[selection[1]],
-                &fixtures,
-                false,
-            )
-            .unwrap();
-        assert_eq!(start.state.active_index, Some(0));
-        let start_again = registry
-            .action(
-                desk,
-                user,
-                None,
-                HighlightAction::Previous,
-                &[selection[0]],
-                &fixtures,
-                false,
-            )
-            .unwrap();
-        assert_eq!(start_again.state.active_index, Some(0));
-        assert!(!start_again.state.can_previous);
-        assert!(
-            start_again
-                .state
-                .message
-                .as_deref()
-                .unwrap()
-                .contains("Start")
+        assert_eq!(
+            previous.working_selection.as_ref().unwrap().selected,
+            vec![ids[3]]
         );
-        registry
-            .action(
-                desk,
-                user,
-                None,
-                HighlightAction::Off,
-                &[],
-                &fixtures,
-                false,
-            )
-            .unwrap();
-        let resumed = registry
-            .action(desk, user, None, HighlightAction::On, &[], &fixtures, false)
-            .unwrap();
-        assert_eq!(resumed.state.remembered.len(), 3);
-        assert_eq!(resumed.output_fixtures, selection);
+        assert!(previous.state.can_next && previous.state.can_previous);
     }
 
     #[test]
-    fn removed_active_fixture_is_skipped_and_programming_selection_is_not_recaptured() {
+    fn high_is_independent_accepts_empty_selection_and_follows_later_external_selection() {
+        let registry = HighlightRegistry::default();
+        let desk = Uuid::new_v4();
+        let user = UserId::new();
+        let fixtures = vec![fixture(1), fixture(2)];
+        let groups = no_groups();
+        let empty = selection(Vec::new(), Some(SelectionExpression::Static), 1);
+        let on = registry
+            .action(
+                desk,
+                user,
+                None,
+                HighlightAction::On,
+                &empty,
+                &fixtures,
+                &groups,
+                false,
+            )
+            .unwrap();
+        assert!(on.state.active);
+        assert!(on.state.output_enabled);
+        assert!(on.output_fixtures.is_empty());
+
+        let selected = selection(
+            vec![fixtures[1].fixture_id],
+            Some(SelectionExpression::Static),
+            2,
+        );
+        let followed = registry.status(desk, user, None, &selected, &fixtures, &groups, false);
+        assert!(followed.state.active);
+        assert_eq!(followed.state.mode, HighlightMode::Selection);
+        assert_eq!(followed.output_fixtures, vec![fixtures[1].fixture_id]);
+    }
+
+    #[test]
+    fn external_same_membership_revision_resets_step_but_value_changes_do_not() {
         let registry = HighlightRegistry::default();
         let desk = Uuid::new_v4();
         let user = UserId::new();
         let fixtures = vec![fixture(1), fixture(2), fixture(3)];
-        let selection = fixtures
+        let ids = fixtures
             .iter()
             .map(|fixture| fixture.fixture_id)
             .collect::<Vec<_>>();
-        registry
-            .action(
-                desk,
-                user,
-                None,
-                HighlightAction::On,
-                &selection,
-                &fixtures,
-                false,
-            )
-            .unwrap();
-        registry
+        let groups = no_groups();
+        let complete = selection(ids.clone(), Some(SelectionExpression::Static), 1);
+        let first = registry
             .action(
                 desk,
                 user,
                 None,
                 HighlightAction::Next,
-                &[],
+                &complete,
                 &fixtures,
+                &groups,
                 false,
             )
             .unwrap();
-        let second = registry
+        let stepped = apply_write(&registry, desk, user, &first, 2).unwrap();
+
+        // Programmer values may change repeatedly while the selection revision is unchanged.
+        let unchanged = registry.status(desk, user, None, &stepped, &fixtures, &groups, false);
+        assert_eq!(unchanged.state.mode, HighlightMode::Step);
+
+        // A deliberate external selection operation has a new revision even if it resolves to the
+        // same singleton ID, so it becomes a new complete basis.
+        let external_same = selection(stepped.selected.clone(), stepped.expression.clone(), 3);
+        let reset = registry.status(desk, user, None, &external_same, &fixtures, &groups, false);
+        assert_eq!(reset.state.mode, HighlightMode::Selection);
+        let next = registry
             .action(
                 desk,
                 user,
                 None,
                 HighlightAction::Next,
-                &[fixtures[0].fixture_id],
+                &external_same,
                 &fixtures,
+                &groups,
                 false,
             )
             .unwrap();
-        assert_eq!(second.state.active_index, Some(1));
-        assert_eq!(second.state.remembered.len(), 3);
-        assert_eq!(second.output_fixtures, vec![fixtures[1].fixture_id]);
-        assert_eq!(second.working_selection, Some(fixtures[1].fixture_id));
-        let remaining = vec![fixtures[0].clone(), fixtures[2].clone()];
-        let status = registry.status(desk, user, None, &remaining, false);
-        assert_eq!(status.state.remembered.len(), 2);
-        assert_eq!(status.state.active_fixture, Some(fixtures[2].clone()));
+        assert_eq!(next.working_selection.unwrap().selected, vec![ids[0]]);
     }
 
     #[test]
-    fn invalidating_the_last_fixture_releases_desk_output_ownership() {
+    fn all_reresolves_the_live_group_source_after_membership_changes() {
         let registry = HighlightRegistry::default();
         let desk = Uuid::new_v4();
-        let first_user = UserId::new();
-        let second_user = UserId::new();
-        let first = fixture(1);
+        let user = UserId::new();
+        let fixtures = vec![fixture(1), fixture(2), fixture(3), fixture(4)];
+        let ids = fixtures
+            .iter()
+            .map(|fixture| fixture.fixture_id)
+            .collect::<Vec<_>>();
+        let mut groups = HashMap::from([(
+            "1".into(),
+            GroupDefinition {
+                id: "1".into(),
+                fixtures: ids[..3].to_vec(),
+                ..Default::default()
+            },
+        )]);
+        let complete = selection(
+            ids[..3].to_vec(),
+            Some(SelectionExpression::LiveGroup {
+                group_id: "1".into(),
+                rule: light_programmer::SelectionRule::All,
+            }),
+            1,
+        );
+        let first = registry
+            .action(
+                desk,
+                user,
+                None,
+                HighlightAction::Next,
+                &complete,
+                &fixtures,
+                &groups,
+                false,
+            )
+            .unwrap();
+        let stepped = apply_write(&registry, desk, user, &first, 2).unwrap();
+        groups.get_mut("1").unwrap().fixtures = vec![ids[3], ids[1]];
+        let all = registry
+            .action(
+                desk,
+                user,
+                None,
+                HighlightAction::All,
+                &stepped,
+                &fixtures,
+                &groups,
+                false,
+            )
+            .unwrap();
+        assert_eq!(
+            all.working_selection.as_ref().unwrap().selected,
+            vec![ids[3], ids[1]]
+        );
+        assert!(matches!(
+            all.working_selection.unwrap().expression,
+            Some(SelectionExpression::LiveGroup { ref group_id, .. }) if group_id == "1"
+        ));
+    }
+
+    #[test]
+    fn removed_items_keep_live_sequence_deterministic_and_high_active_when_empty() {
+        let registry = HighlightRegistry::default();
+        let desk = Uuid::new_v4();
+        let user = UserId::new();
+        let fixtures = vec![fixture(1), fixture(2), fixture(3)];
+        let ids = fixtures
+            .iter()
+            .map(|fixture| fixture.fixture_id)
+            .collect::<Vec<_>>();
+        let groups = no_groups();
+        let complete = selection(ids.clone(), Some(SelectionExpression::Static), 1);
         registry
             .action(
                 desk,
-                first_user,
+                user,
                 None,
                 HighlightAction::On,
-                &[first.fixture_id],
-                std::slice::from_ref(&first),
+                &complete,
+                &fixtures,
+                &groups,
                 false,
             )
             .unwrap();
-
-        let replacement = fixture(2);
-        let acquired = registry
+        let first = registry
             .action(
                 desk,
-                second_user,
+                user,
                 None,
-                HighlightAction::On,
-                &[replacement.fixture_id],
-                std::slice::from_ref(&replacement),
+                HighlightAction::Next,
+                &complete,
+                &fixtures,
+                &groups,
                 false,
             )
             .unwrap();
-        assert_eq!(acquired.state.owner_user_id, Some(second_user));
-        assert_eq!(acquired.output_fixtures, vec![replacement.fixture_id]);
+        let stepped = apply_write(&registry, desk, user, &first, 2).unwrap();
+        let remaining = vec![fixtures[1].clone(), fixtures[2].clone()];
+        let reconciled = registry.status(desk, user, None, &stepped, &remaining, &groups, false);
+        assert_eq!(
+            reconciled.working_selection.as_ref().unwrap().selected,
+            vec![ids[1]]
+        );
+        assert_eq!(reconciled.output_fixtures, vec![ids[1]]);
+
+        let corrected = apply_write(&registry, desk, user, &reconciled, 3).unwrap();
+        let only_active = vec![fixtures[1].clone()];
+        let inactive_removed =
+            registry.status(desk, user, None, &corrected, &only_active, &groups, false);
+        assert_eq!(inactive_removed.state.remembered.len(), 1);
+        assert!(inactive_removed.working_selection.is_none());
+        let wrapped = registry
+            .action(
+                desk,
+                user,
+                None,
+                HighlightAction::Next,
+                &corrected,
+                &only_active,
+                &groups,
+                false,
+            )
+            .unwrap();
+        assert_eq!(wrapped.working_selection.unwrap().selected, vec![ids[1]]);
+
+        let none = registry.status(desk, user, None, &corrected, &[], &groups, false);
+        assert!(none.state.active);
+        assert!(none.state.output_enabled);
+        assert!(none.output_fixtures.is_empty());
     }
 
     #[test]
@@ -855,30 +1010,21 @@ mod tests {
         let desk = Uuid::new_v4();
         let user = UserId::new();
         let fixtures = vec![fixture(1), fixture(2), fixture(3)];
-        let selection = fixtures
+        let ids = fixtures
             .iter()
             .map(|fixture| fixture.fixture_id)
             .collect::<Vec<_>>();
-        registry
-            .action(
-                desk,
-                user,
-                None,
-                HighlightAction::On,
-                &selection,
-                &fixtures,
-                false,
-            )
-            .unwrap();
-
+        let groups = no_groups();
+        let complete = selection(ids, Some(SelectionExpression::Static), 1);
         let software = registry
             .action_guarded(
                 desk,
                 user,
                 None,
                 HighlightAction::Next,
-                &selection,
+                &complete,
                 &fixtures,
+                &groups,
                 false,
             )
             .unwrap();
@@ -888,143 +1034,14 @@ mod tests {
                 user,
                 None,
                 HighlightAction::Next,
-                &[selection[0]],
+                &complete,
                 &fixtures,
+                &groups,
                 false,
             )
             .unwrap();
         assert_eq!(software.state.active_index, Some(0));
         assert_eq!(simultaneous_hardware.state.active_index, Some(0));
-        assert_eq!(simultaneous_hardware.state.remembered.len(), 3);
-    }
-
-    #[test]
-    fn different_user_cannot_take_over_live_output_but_blind_can_prepare() {
-        let registry = HighlightRegistry::default();
-        let desk = Uuid::new_v4();
-        let first = UserId::new();
-        let second = UserId::new();
-        let fixtures = vec![fixture(1)];
-        let selection = [fixtures[0].fixture_id];
-        registry
-            .action(
-                desk,
-                first,
-                None,
-                HighlightAction::On,
-                &selection,
-                &fixtures,
-                false,
-            )
-            .unwrap();
-        assert_eq!(
-            registry
-                .action(
-                    desk,
-                    second,
-                    None,
-                    HighlightAction::On,
-                    &selection,
-                    &fixtures,
-                    false,
-                )
-                .unwrap_err(),
-            HighlightError::OwnedByAnotherUser(first)
-        );
-        let prepared = registry
-            .action(
-                desk,
-                second,
-                None,
-                HighlightAction::On,
-                &selection,
-                &fixtures,
-                true,
-            )
-            .unwrap();
-        assert!(prepared.state.active);
-        assert!(prepared.state.capture_only);
-        assert!(!prepared.state.output_enabled);
-        assert!(prepared.output_fixtures.is_empty());
-    }
-
-    #[test]
-    fn rejected_live_actions_preserve_a_blind_prepared_capture_transactionally() {
-        let registry = HighlightRegistry::default();
-        let desk = Uuid::new_v4();
-        let owner = UserId::new();
-        let prepared_user = UserId::new();
-        let fixtures = vec![fixture(1), fixture(2), fixture(3)];
-        let owner_selection = [fixtures[0].fixture_id];
-        let prepared_selection = [fixtures[1].fixture_id, fixtures[2].fixture_id];
-
-        registry
-            .action(
-                desk,
-                owner,
-                Some("Owner"),
-                HighlightAction::On,
-                &owner_selection,
-                &fixtures,
-                false,
-            )
-            .unwrap();
-        let prepared = registry
-            .action(
-                desk,
-                prepared_user,
-                Some("Prepared"),
-                HighlightAction::On,
-                &prepared_selection,
-                &fixtures,
-                true,
-            )
-            .unwrap();
-        assert!(prepared.state.active);
-        assert_eq!(
-            prepared
-                .state
-                .remembered
-                .iter()
-                .map(|fixture| fixture.fixture_id)
-                .collect::<Vec<_>>(),
-            prepared_selection
-        );
-        assert_eq!(prepared.state.active_fixture, None);
-
-        for action in [HighlightAction::On, HighlightAction::Next] {
-            assert_eq!(
-                registry
-                    .action(
-                        desk,
-                        prepared_user,
-                        Some("Prepared"),
-                        action,
-                        &[],
-                        &fixtures,
-                        false,
-                    )
-                    .unwrap_err(),
-                HighlightError::OwnedByAnotherUser(owner)
-            );
-            let retained = registry.status(desk, prepared_user, Some("Prepared"), &fixtures, true);
-            assert!(retained.state.active);
-            assert!(!retained.state.output_enabled);
-            assert_eq!(retained.state.active_fixture, None);
-            assert_eq!(
-                retained
-                    .state
-                    .remembered
-                    .iter()
-                    .map(|fixture| fixture.fixture_id)
-                    .collect::<Vec<_>>(),
-                prepared_selection
-            );
-            assert_eq!(registry.output_fixtures(), owner_selection);
-        }
-        let owner_status = registry.status(desk, owner, Some("Owner"), &fixtures, false);
-        assert_eq!(owner_status.state.owner_user_id, Some(owner));
-        assert_eq!(owner_status.output_fixtures, owner_selection);
     }
 
     #[test]
@@ -1043,11 +1060,6 @@ mod tests {
         ));
         assert!(!is_duplicate_osc_action(
             Some(("previous", received_at - Duration::from_millis(150))),
-            HighlightAction::Previous,
-            received_at,
-        ));
-        assert!(!is_duplicate_osc_action(
-            None,
             HighlightAction::Previous,
             received_at,
         ));

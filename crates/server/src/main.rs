@@ -39,8 +39,8 @@ use light_media::{CitpClient, LibraryId, MediaCache, PreviewKey, ThumbnailKey};
 use light_output::{NetworkOutput, OutputHealth, run_scheduler_dynamic};
 use light_programmer::ProgrammerRegistry;
 use light_server::highlight::{
-    HighlightAction, HighlightError, HighlightFixture, HighlightRegistry, HighlightState,
-    is_duplicate_osc_action,
+    HighlightAction, HighlightError, HighlightFixture, HighlightMode, HighlightRegistry,
+    HighlightSelectionWrite, HighlightState, HighlightTransition, is_duplicate_osc_action,
 };
 use light_server::update;
 use light_show::{
@@ -435,6 +435,10 @@ struct OpenShow {
 struct SaveShowRevision {
     name: String,
 }
+#[derive(Deserialize)]
+struct RenameShow {
+    name: String,
+}
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 enum Transition {
@@ -552,6 +556,14 @@ struct WsResponse {
     error: Option<String>,
 }
 #[derive(Serialize)]
+struct BootstrapHighlightState {
+    session_id: SessionId,
+    desk_id: Uuid,
+    user_id: light_core::UserId,
+    state: HighlightState,
+}
+
+#[derive(Serialize)]
 struct Bootstrap {
     api_version: &'static str,
     attribute_registry: &'static [light_core::AttributeDescriptor],
@@ -559,6 +571,7 @@ struct Bootstrap {
     desks: Vec<ControlDesk>,
     active_show: Option<ShowEntry>,
     active_programmers: Vec<light_programmer::ProgrammerState>,
+    highlight_states: Vec<BootstrapHighlightState>,
     frame_rate_hz: u16,
     output_health: OutputHealth,
     active_timecode_source: Option<String>,
@@ -721,14 +734,19 @@ impl DeskConfiguration {
 
 fn open_fixture_library_for_startup(
     data_dir: &FsPath,
+    fixture_package_dir: Option<&FsPath>,
 ) -> Result<light_fixture::FixtureLibrary, light_fixture::FixtureError> {
     tracing::info!(path=%data_dir.join("fixtures.sqlite").display(), "opening fixture library");
-    let mut library = light_fixture::FixtureLibrary::open(data_dir.join("fixtures.sqlite"))?;
-    let seeded = library.ensure_builtin_generics()?;
-    if seeded > 0 {
+    let library = light_fixture::FixtureLibrary::open(data_dir.join("fixtures.sqlite"))?;
+    if let Some(path) = fixture_package_dir {
+        let report = library.load_fixture_package_directory(path)?;
         tracing::info!(
-            profiles = seeded,
-            "installed built-in Generic fixture profiles"
+            path = %path.display(),
+            installed = report.installed,
+            updated = report.updated,
+            unchanged = report.unchanged,
+            preserved_operator_revisions = report.preserved_operator_revisions,
+            "loaded transferable fixture packages"
         );
     }
     for warning in library.migration_warnings()? {
@@ -738,12 +756,18 @@ fn open_fixture_library_for_startup(
     Ok(library)
 }
 
+fn sibling_fixture_package_dir(executable: &FsPath) -> Option<PathBuf> {
+    let directory = executable.parent()?.join("fixture-library");
+    directory.is_dir().then_some(directory)
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter("light_server=info,tower_http=info")
         .init();
     let mut data_dir = PathBuf::from("light-data");
+    let mut fixture_package_dir: Option<PathBuf> = None;
     let mut bind = "127.0.0.1:5000".parse::<SocketAddr>()?;
     let mut test_bench = false;
     let mut osc_bind_override = None;
@@ -752,6 +776,13 @@ async fn main() -> anyhow::Result<()> {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--data-dir" => data_dir = args.next().context("--data-dir requires a path")?.into(),
+            "--fixture-package-dir" => {
+                fixture_package_dir = Some(
+                    args.next()
+                        .context("--fixture-package-dir requires a path")?
+                        .into(),
+                )
+            }
             "--bind" => bind = args.next().context("--bind requires an address")?.parse()?,
             "--test-bench" => test_bench = true,
             "--osc-bind" => {
@@ -770,7 +801,7 @@ async fn main() -> anyhow::Result<()> {
             }
             "--help" => {
                 println!(
-                    "light-server [--data-dir PATH] [--bind ADDRESS] [--test-bench] [--osc-bind ADDRESS] [--output-bind-ip ADDRESS]"
+                    "light-server [--data-dir PATH] [--fixture-package-dir PATH] [--bind ADDRESS] [--test-bench] [--osc-bind ADDRESS] [--output-bind-ip ADDRESS]"
                 );
                 return Ok(());
             }
@@ -780,10 +811,17 @@ async fn main() -> anyhow::Result<()> {
     if test_bench && !bind.ip().is_loopback() {
         anyhow::bail!("--test-bench requires a loopback HTTP bind");
     }
+    if fixture_package_dir.is_none() {
+        fixture_package_dir = env::current_exe()
+            .ok()
+            .as_deref()
+            .and_then(sibling_fixture_package_dir);
+    }
     std::fs::create_dir_all(data_dir.join("shows"))?;
     tracing::info!(path=%data_dir.display(), "opening desk data");
     let desk = DeskStore::open(data_dir.join("desk.sqlite"))?;
-    let fixture_library = open_fixture_library_for_startup(&data_dir)?;
+    let fixture_library =
+        open_fixture_library_for_startup(&data_dir, fixture_package_dir.as_deref())?;
     let mut configuration: DeskConfiguration = desk
         .setting("server_configuration")?
         .map(|json| serde_json::from_str(&json))
@@ -1099,6 +1137,14 @@ fn router(state: AppState) -> Router {
             delete(delete_fixture_profile),
         )
         .route(
+            "/api/v1/fixture-profiles/{id}/{revision}/package",
+            get(export_fixture_package),
+        )
+        .route(
+            "/api/v1/fixture-packages/import",
+            post(import_fixture_package),
+        )
+        .route(
             "/api/v1/fixture-profiles/{id}/{revision}/source-gdtf",
             put(put_fixture_profile_source_gdtf),
         )
@@ -1149,6 +1195,7 @@ fn router(state: AppState) -> Router {
         .route("/api/v1/shows/rollback", post(rollback_show))
         .route("/api/v1/shows/{id}", delete(delete_show))
         .route("/api/v1/shows/{id}/open", post(open_show))
+        .route("/api/v1/shows/{id}/rename", put(rename_show))
         .route("/api/v1/shows/{id}/download", get(download_show))
         .route(
             "/api/v1/shows/{source_id}/overwrite/{destination_id}",
@@ -1521,6 +1568,75 @@ async fn put_fixture_profile(
         serde_json::json!({"id":stored.id,"revision":stored.revision}),
     );
     Ok(Json(stored))
+}
+
+async fn import_fixture_package(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<Json<light_fixture::FixtureProfile>, ApiError> {
+    let _session = authenticate(&state, &headers)?;
+    if body.is_empty() {
+        return Err(ApiError::bad_request("fixture package is empty"));
+    }
+    let stored = state
+        .fixture_library
+        .lock()
+        .import_fixture_package(&body)
+        .map_err(ApiError::fixture)?;
+    emit(
+        &state,
+        "fixture_profile_changed",
+        serde_json::json!({"id":stored.id,"revision":stored.revision,"imported_package":true}),
+    );
+    Ok(Json(stored))
+}
+
+async fn export_fixture_package(
+    State(state): State<AppState>,
+    Path((id, revision)): Path<(light_core::FixtureId, u32)>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    let _session = authenticate(&state, &headers)?;
+    let library = state.fixture_library.lock();
+    let profile = library
+        .profile(id, revision)
+        .map_err(ApiError::fixture)?
+        .ok_or_else(|| ApiError::not_found("fixture profile revision"))?;
+    let bytes = library
+        .export_fixture_package(id, revision)
+        .map_err(ApiError::fixture)?
+        .ok_or_else(|| ApiError::not_found("fixture profile revision"))?;
+    let filename = format!(
+        "{}-{}.toskfixture",
+        profile
+            .manufacturer
+            .chars()
+            .chain(std::iter::once('-'))
+            .chain(profile.name.chars())
+            .map(|character| if character.is_ascii_alphanumeric() {
+                character
+            } else {
+                '-'
+            })
+            .collect::<String>()
+            .trim_matches('-'),
+        revision
+    );
+    Ok((
+        [
+            (
+                header::CONTENT_TYPE,
+                light_fixture::FIXTURE_PACKAGE_MIME_TYPE,
+            ),
+            (
+                header::CONTENT_DISPOSITION,
+                &format!("attachment; filename=\"{filename}\""),
+            ),
+        ],
+        bytes,
+    )
+        .into_response())
 }
 
 async fn delete_fixture_profile(
@@ -1912,6 +2028,33 @@ async fn bootstrap(State(state): State<AppState>) -> Json<Bootstrap> {
             }),
         )
     };
+    let snapshot = state.engine.snapshot();
+    let highlight_fixtures = highlight_fixture_summaries(&snapshot.fixtures);
+    let highlight_groups = highlight_groups(&snapshot);
+    let highlight_states = state
+        .sessions
+        .read()
+        .values()
+        .filter_map(|session| {
+            let programmer = state.programmers.get(session.id)?;
+            let selection = state.programmers.selection(session.id)?;
+            let transition = state.highlight.status(
+                session.desk.id,
+                session.user.id,
+                Some(&session.user.name),
+                &selection,
+                &highlight_fixtures,
+                &highlight_groups,
+                programmer.blind || programmer.preview,
+            );
+            Some(BootstrapHighlightState {
+                session_id: session.id,
+                desk_id: session.desk.id,
+                user_id: session.user.id,
+                state: transition.state,
+            })
+        })
+        .collect();
     Json(Bootstrap {
         api_version: "v1",
         attribute_registry: ATTRIBUTE_REGISTRY,
@@ -1919,6 +2062,7 @@ async fn bootstrap(State(state): State<AppState>) -> Json<Bootstrap> {
         desks,
         active_show: state.active_show.read().clone(),
         active_programmers: state.programmers.active_for_sessions(),
+        highlight_states,
         frame_rate_hz: state.output_rate.load(Ordering::Relaxed),
         output_health: state
             .output_health
@@ -3325,6 +3469,84 @@ async fn upload_show(
         .map_err(ApiError::store)?;
     emit(&state, "show_uploaded", serde_json::json!({"show":entry}));
     Ok((StatusCode::CREATED, Json(entry)))
+}
+async fn rename_show(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+    Json(input): Json<RenameShow>,
+) -> Result<Json<ShowEntry>, ApiError> {
+    let _session = authenticate(&state, &headers)?;
+    let name = input.name.trim();
+    validate_show_name(name)?;
+    let id = light_core::ShowId(id);
+    let current = state
+        .active_show
+        .read()
+        .clone()
+        .filter(|show| show.id == id)
+        .ok_or_else(|| ApiError::conflict("only the active show can be renamed"))?;
+    if current.name == name {
+        return Ok(Json(current));
+    }
+    if state
+        .desk
+        .lock()
+        .library()
+        .map_err(ApiError::store)?
+        .into_iter()
+        .any(|show| show.id != id && show.name.eq_ignore_ascii_case(name))
+    {
+        return Err(ApiError::conflict("a show with that name already exists"));
+    }
+
+    let destination = state.data_dir.join("shows").join(format!("{name}.show"));
+    if destination.exists() {
+        return Err(ApiError::conflict(
+            "a show file with that name already exists",
+        ));
+    }
+    let staged = state
+        .data_dir
+        .join("shows")
+        .join(format!(".rename-{}.tmp", Uuid::new_v4()));
+    let stage_result = ShowStore::open(&current.path)
+        .and_then(|store| store.backup_to(&staged))
+        .and_then(|_| ShowStore::open(&staged))
+        .and_then(|store| store.set_identity(current.id, name, current.revision_copy.as_ref()))
+        .and_then(|_| validate_show_file(&staged).map(|_| ()));
+    if let Err(error) = stage_result {
+        let _ = std::fs::remove_file(&staged);
+        return Err(ApiError::store(error));
+    }
+    if let Err(error) = std::fs::rename(&staged, &destination) {
+        let _ = std::fs::remove_file(&staged);
+        return Err(ApiError::io(error));
+    }
+    let renamed =
+        match state
+            .desk
+            .lock()
+            .rename_show(current.id, name, &destination.display().to_string())
+        {
+            Ok(entry) => entry,
+            Err(error) => {
+                let _ = std::fs::remove_file(&destination);
+                return Err(ApiError::store(error));
+            }
+        };
+    *state.active_show.write() = Some(renamed.clone());
+    if let Err(error) = std::fs::remove_file(&current.path)
+        && error.kind() != std::io::ErrorKind::NotFound
+    {
+        tracing::warn!(path=%current.path, %error, "renamed show retained its superseded file");
+    }
+    emit(
+        &state,
+        "show_renamed",
+        serde_json::json!({"previous_name":current.name,"show":renamed}),
+    );
+    Ok(Json(renamed))
 }
 async fn overwrite_show(
     State(state): State<AppState>,
@@ -5549,6 +5771,8 @@ struct ControlDeskInput {
     columns: u8,
     rows: u8,
     buttons: u8,
+    #[serde(default)]
+    playback_layout: Option<light_show::PlaybackSurfaceLayout>,
 }
 async fn update_control_desk(
     State(state): State<AppState>,
@@ -5572,6 +5796,7 @@ async fn update_control_desk(
             input.columns,
             input.rows,
             input.buttons,
+            input.playback_layout,
         )
         .map_err(ApiError::store)?;
     for session in state
@@ -5607,13 +5832,7 @@ async fn update_desk_page(
         .read()
         .clone()
         .ok_or_else(|| ApiError::bad_request("no show is open"))?;
-    if !state
-        .engine
-        .snapshot()
-        .playback_pages
-        .iter()
-        .any(|page| page.number == input.page)
-    {
+    if !ensure_playback_page_for_advance(&state, &show, input.page)? {
         return Err(ApiError::bad_request("playback page does not exist"));
     }
     state
@@ -5628,6 +5847,53 @@ async fn update_desk_page(
     );
     send_osc_feedback(&state, false);
     Ok(Json(serde_json::json!({"desk_id":id,"page":input.page})))
+}
+
+fn ensure_playback_page_for_advance(
+    state: &AppState,
+    show: &ShowEntry,
+    requested: u8,
+) -> Result<bool, ApiError> {
+    let snapshot = state.engine.snapshot();
+    if snapshot
+        .playback_pages
+        .iter()
+        .any(|page| page.number == requested)
+    {
+        return Ok(true);
+    }
+    let Some(last) = snapshot
+        .playback_pages
+        .iter()
+        .max_by_key(|page| page.number)
+    else {
+        return Ok(false);
+    };
+    if last.slots.is_empty() || last.number.checked_add(1) != Some(requested) {
+        return Ok(false);
+    }
+    let page = light_playback::PlaybackPage {
+        number: requested,
+        name: format!("Page {requested}"),
+        slots: HashMap::new(),
+    };
+    let body =
+        serde_json::to_value(&page).map_err(|error| ApiError::internal(error.to_string()))?;
+    let store = ShowStore::open(&show.path).map_err(ApiError::store)?;
+    backup_show(state, show)?;
+    let revision = store
+        .put_object("playback_page", &requested.to_string(), &body, 0)
+        .map_err(ApiError::store)?;
+    state
+        .engine
+        .replace_snapshot(load_engine_snapshot(show).map_err(ApiError::internal)?)
+        .map_err(|error| ApiError::internal(error.to_string()))?;
+    emit(
+        state,
+        "show_object_changed",
+        serde_json::json!({"show_id":show.id,"kind":"playback_page","id":requested.to_string(),"revision":revision}),
+    );
+    Ok(true)
 }
 
 async fn list_screens(
@@ -5992,6 +6258,7 @@ fn select_cuelist_contents(
         light_programmer::SelectionExpression::PlaybackContents { items },
     );
     persist_programmer(state, session)?;
+    reconcile_highlight_selection(state, session, "playback_contents_selection");
     Ok(())
 }
 
@@ -6023,6 +6290,7 @@ fn select_group_playback(
         state.programmers.select(session.id, fixtures);
     }
     persist_programmer(state, session)?;
+    reconcile_highlight_selection(state, session, "group_playback_selection");
     Ok(())
 }
 
@@ -7088,18 +7356,15 @@ async fn highlight_status(
     headers: HeaderMap,
 ) -> Result<Json<HighlightState>, ApiError> {
     let session = authenticate(&state, &headers)?;
-    let fixtures = highlight_fixture_summaries(&state.engine.snapshot().fixtures);
-    let programmer = state
-        .programmers
-        .get(session.id)
+    let transition = current_highlight_transition(&state, &session)
         .ok_or_else(|| ApiError::not_found("programmer"))?;
-    let transition = state.highlight.status(
-        session.desk.id,
-        session.user.id,
-        Some(&session.user.name),
-        &fixtures,
-        programmer.blind || programmer.preview,
-    );
+    if apply_highlight_selection_write(&state, &session, transition.working_selection.as_ref())? {
+        emit(
+            &state,
+            "programmer_changed",
+            serde_json::json!({"session_id":session.id,"source":"highlight_status_reconcile"}),
+        );
+    }
     sync_highlight_output(&state);
     Ok(Json(transition.state))
 }
@@ -7110,11 +7375,17 @@ async fn highlight_action(
     Json(input): Json<HighlightActionInput>,
 ) -> Result<Json<HighlightState>, ApiError> {
     let session = authenticate(&state, &headers)?;
-    let fixtures = highlight_fixture_summaries(&state.engine.snapshot().fixtures);
     let programmer = state
         .programmers
         .get(session.id)
         .ok_or_else(|| ApiError::not_found("programmer"))?;
+    let selection = state
+        .programmers
+        .selection(session.id)
+        .ok_or_else(|| ApiError::not_found("programmer selection"))?;
+    let snapshot = state.engine.snapshot();
+    let fixtures = highlight_fixture_summaries(&snapshot.fixtures);
+    let groups = highlight_groups(&snapshot);
     let transition = state
         .highlight
         .action_guarded(
@@ -7122,17 +7393,20 @@ async fn highlight_action(
             session.user.id,
             Some(&session.user.name),
             input.action,
-            &programmer.selected,
+            &selection,
             &fixtures,
+            &groups,
             programmer.blind || programmer.preview,
         )
         .map_err(|error| match error {
             HighlightError::OwnedByAnotherUser(_) => ApiError::conflict(error.to_string()),
-            HighlightError::EmptySelection => ApiError::bad_request(error.to_string()),
         })?;
-    if let Some(fixture) = transition.working_selection {
-        state.programmers.select(session.id, [fixture]);
-        persist_programmer(&state, &session)?;
+    if apply_highlight_selection_write(&state, &session, transition.working_selection.as_ref())? {
+        emit(
+            &state,
+            "programmer_changed",
+            serde_json::json!({"session_id":session.id,"source":"highlight","action":input.action}),
+        );
     }
     sync_highlight_output(&state);
     emit(
@@ -7188,26 +7462,98 @@ fn highlight_fixture_summaries(
     summaries
 }
 
-fn sync_highlight_output(state: &AppState) {
-    state
-        .engine
-        .set_highlighted_fixtures(state.highlight.output_fixtures());
+fn highlight_groups(
+    snapshot: &EngineSnapshot,
+) -> HashMap<String, light_programmer::GroupDefinition> {
+    snapshot
+        .groups
+        .iter()
+        .map(|group| (group.id.clone(), group.clone()))
+        .collect()
 }
 
-fn reconcile_highlight_capture_mode(
+fn apply_highlight_selection_write(
+    state: &AppState,
+    session: &Session,
+    write: Option<&HighlightSelectionWrite>,
+) -> Result<bool, ApiError> {
+    let Some(write) = write else {
+        return Ok(false);
+    };
+    match write.expression.clone() {
+        Some(expression) => {
+            state
+                .programmers
+                .select_expression(session.id, write.selected.clone(), expression);
+        }
+        None => {
+            state.programmers.select(session.id, write.selected.clone());
+        }
+    }
+    let selection = state
+        .programmers
+        .selection(session.id)
+        .ok_or_else(|| ApiError::not_found("programmer selection"))?;
+    state
+        .highlight
+        .acknowledge_internal_selection(session.desk.id, session.user.id, &selection);
+    persist_programmer(state, session)?;
+    Ok(true)
+}
+
+fn current_highlight_transition(
+    state: &AppState,
+    session: &Session,
+) -> Option<HighlightTransition> {
+    let programmer = state.programmers.get(session.id)?;
+    let selection = state.programmers.selection(session.id)?;
+    let snapshot = state.engine.snapshot();
+    let fixtures = highlight_fixture_summaries(&snapshot.fixtures);
+    let groups = highlight_groups(&snapshot);
+    Some(state.highlight.status(
+        session.desk.id,
+        session.user.id,
+        Some(&session.user.name),
+        &selection,
+        &fixtures,
+        &groups,
+        programmer.blind || programmer.preview,
+    ))
+}
+
+fn reconcile_highlight_selection(
     state: &AppState,
     session: &Session,
     source: &str,
 ) -> Option<HighlightState> {
-    let programmer = state.programmers.get(session.id)?;
-    let fixtures = highlight_fixture_summaries(&state.engine.snapshot().fixtures);
-    let transition = state.highlight.status(
-        session.desk.id,
-        session.user.id,
-        Some(&session.user.name),
-        &fixtures,
-        programmer.blind || programmer.preview,
-    );
+    let transition = current_highlight_transition(state, session)?;
+    let selection_changed = match apply_highlight_selection_write(
+        state,
+        session,
+        transition.working_selection.as_ref(),
+    ) {
+        Ok(changed) => changed,
+        Err(error) => {
+            emit(
+                state,
+                "highlight_rejected",
+                serde_json::json!({
+                    "desk_id":session.desk.id,
+                    "user_id":session.user.id,
+                    "source":source,
+                    "error":error.message,
+                }),
+            );
+            return None;
+        }
+    };
+    if selection_changed {
+        emit(
+            state,
+            "programmer_changed",
+            serde_json::json!({"session_id":session.id,"source":source,"action":"highlight_selection_reconcile"}),
+        );
+    }
     sync_highlight_output(state);
     emit(
         state,
@@ -7221,6 +7567,20 @@ fn reconcile_highlight_capture_mode(
     );
     send_osc_feedback(state, false);
     Some(transition.state)
+}
+
+fn sync_highlight_output(state: &AppState) {
+    state
+        .engine
+        .set_highlighted_fixtures(state.highlight.output_fixtures());
+}
+
+fn reconcile_highlight_capture_mode(
+    state: &AppState,
+    session: &Session,
+    source: &str,
+) -> Option<HighlightState> {
+    reconcile_highlight_selection(state, session, source)
 }
 async fn audit_events(
     State(state): State<AppState>,
@@ -7790,6 +8150,10 @@ fn generate_profile_presets(
 
 fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) -> WsResponse {
     let revision = state.engine.snapshot().revision;
+    let selection_revision_before = state
+        .programmers
+        .selection(session.id)
+        .map(|selection| selection.revision);
     let fail = |message: String| WsResponse {
         protocol_version: 1,
         request_id: command.request_id.clone(),
@@ -7857,7 +8221,11 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
             }
             let input: Input =
                 serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
-            state.programmers.select(session.id, input.fixtures);
+            let snapshot = state.engine.snapshot();
+            state.programmers.select(
+                session.id,
+                expand_selectable_fixture_ids(&snapshot.fixtures, input.fixtures),
+            );
             persist_programmer(state, session).map_err(|e| e.message)?;
             Ok(serde_json::json!({"programmer":state.programmers.get(session.id)}))
         }
@@ -7885,20 +8253,30 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
                 .collect::<HashMap<_, _>>();
             let references = match input.source {
                 Source::Fixture { fixture_id } => {
-                    if !snapshot.fixtures.iter().any(|fixture| {
+                    let Some(fixture) = snapshot.fixtures.iter().find(|fixture| {
                         fixture.fixture_id == fixture_id
                             || fixture
                                 .logical_heads
                                 .iter()
                                 .any(|head| head.fixture_id == fixture_id)
-                    }) {
+                    }) else {
                         return Err("fixture does not exist".into());
-                    }
-                    vec![if input.remove {
-                        light_programmer::SelectionReference::RemoveFixture { fixture_id }
+                    };
+                    let selectable = if fixture.fixture_id == fixture_id {
+                        selectable_fixture_ids(fixture)
                     } else {
-                        light_programmer::SelectionReference::Fixture { fixture_id }
-                    }]
+                        vec![fixture_id]
+                    };
+                    selectable
+                        .into_iter()
+                        .map(|fixture_id| {
+                            if input.remove {
+                                light_programmer::SelectionReference::RemoveFixture { fixture_id }
+                            } else {
+                                light_programmer::SelectionReference::Fixture { fixture_id }
+                            }
+                        })
+                        .collect()
                 }
                 Source::LiveGroup { group_id } => {
                     light_programmer::resolve_group(&group_id, &groups)?;
@@ -8577,7 +8955,13 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
                     .programmers
                     .get(session.id)
                     .ok_or("programmer does not exist")?;
-                let fixtures = highlight_fixture_summaries(&state.engine.snapshot().fixtures);
+                let selection = state
+                    .programmers
+                    .selection(session.id)
+                    .ok_or("programmer selection does not exist")?;
+                let snapshot = state.engine.snapshot();
+                let fixtures = highlight_fixture_summaries(&snapshot.fixtures);
+                let groups = highlight_groups(&snapshot);
                 let transition = state
                     .highlight
                     .action_guarded(
@@ -8589,11 +8973,18 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
                         } else {
                             HighlightAction::Off
                         },
-                        &programmer.selected,
+                        &selection,
                         &fixtures,
+                        &groups,
                         programmer.blind || programmer.preview,
                     )
                     .map_err(|error| error.to_string())?;
+                apply_highlight_selection_write(
+                    state,
+                    session,
+                    transition.working_selection.as_ref(),
+                )
+                .map_err(|error| error.message)?;
                 sync_highlight_output(state);
                 emit(
                     state,
@@ -8710,6 +9101,15 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
         _ => Err("unknown command".into()),
     })();
     if result.is_ok()
+        && state
+            .programmers
+            .selection(session.id)
+            .map(|selection| selection.revision)
+            != selection_revision_before
+    {
+        reconcile_highlight_selection(state, session, "programmer_selection");
+    }
+    if result.is_ok()
         && matches!(
             command.command.as_str(),
             "programmer.undo" | "programmer.redo"
@@ -8737,8 +9137,13 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
                     | "programmer.release"
                     | "programmer.group.set"
                     | "programmer.group.release"
+                    | "selection.set"
                     | "selection.gesture"
+                    | "selection.macro"
+                    | "group.select"
                     | "programmer.execute"
+                    | "programmer.undo"
+                    | "programmer.redo"
                     | "preload.group.set"
                     | "preload.clear"
             ) {
@@ -8860,6 +9265,38 @@ fn ordered_child_ids(fixture: &light_fixture::PatchedFixture) -> Vec<light_core:
                 .map(|patched| patched.fixture_id)
         })
         .collect()
+}
+
+fn selectable_fixture_ids(fixture: &light_fixture::PatchedFixture) -> Vec<light_core::FixtureId> {
+    let children = ordered_child_ids(fixture);
+    if children.is_empty() {
+        vec![fixture.fixture_id]
+    } else {
+        children
+    }
+}
+
+fn expand_selectable_fixture_ids(
+    fixtures: &[light_fixture::PatchedFixture],
+    fixture_ids: impl IntoIterator<Item = light_core::FixtureId>,
+) -> Vec<light_core::FixtureId> {
+    let mut expanded = Vec::new();
+    for fixture_id in fixture_ids {
+        if let Some(fixture) = fixtures
+            .iter()
+            .find(|fixture| fixture.fixture_id == fixture_id)
+        {
+            for selectable in selectable_fixture_ids(fixture) {
+                push_unique(&mut expanded, selectable);
+            }
+        } else {
+            // A logical head is already an ordinary selectable identity. Preserve it (and retain
+            // the existing validation behavior for unknown IDs) rather than looking for another
+            // master expansion.
+            push_unique(&mut expanded, fixture_id);
+        }
+    }
+    expanded
 }
 
 fn push_unique(selected: &mut Vec<light_core::FixtureId>, fixture_id: light_core::FixtureId) {
@@ -9049,9 +9486,8 @@ fn parse_fixture_selection(
                 ),
                 None => {
                     if let Some(fixture) = fixture_by_number(fixtures, first.number) {
-                        push_unique(&mut selected, fixture.fixture_id);
-                        for child in ordered_child_ids(fixture) {
-                            push_unique(&mut selected, child);
+                        for selectable in selectable_fixture_ids(fixture) {
+                            push_unique(&mut selected, selectable);
                         }
                     }
                 }
@@ -9150,10 +9586,24 @@ fn active_show_store(state: &AppState) -> Result<(ShowEntry, ShowStore), String>
 }
 
 fn refresh_command_show(state: &AppState, entry: &ShowEntry) -> Result<(), String> {
+    let snapshot = load_engine_snapshot(entry)?;
+    let groups = snapshot
+        .groups
+        .iter()
+        .map(|group| (group.id.clone(), group.clone()))
+        .collect::<HashMap<_, _>>();
     state
         .engine
-        .replace_snapshot(load_engine_snapshot(entry)?)
-        .map_err(|error| error.to_string())
+        .replace_snapshot(snapshot)
+        .map_err(|error| error.to_string())?;
+    state.programmers.refresh_live_selections(&groups);
+    let mut reconciled = HashSet::new();
+    for session in state.sessions.read().values().cloned().collect::<Vec<_>>() {
+        if reconciled.insert((session.desk.id, session.user.id)) {
+            reconcile_highlight_selection(state, &session, "show_selection_refresh");
+        }
+    }
+    Ok(())
 }
 
 fn emit_command_object_changed(
@@ -10361,7 +10811,7 @@ fn parse_group_mixed_selection(
     fn fixture_by_number(
         snapshot: &EngineSnapshot,
         token: &str,
-    ) -> Result<light_core::FixtureId, String> {
+    ) -> Result<Vec<light_core::FixtureId>, String> {
         let number = token
             .parse::<u32>()
             .map_err(|_| "fixture number is invalid")?;
@@ -10369,7 +10819,7 @@ fn parse_group_mixed_selection(
             .fixtures
             .iter()
             .find(|fixture| fixture.fixture_number == Some(number))
-            .map(|fixture| fixture.fixture_id)
+            .map(selectable_fixture_ids)
             .ok_or_else(|| format!("fixture {number} does not exist"))
     }
     fn group_members(
@@ -10396,8 +10846,11 @@ fn parse_group_mixed_selection(
                     let valid = snapshot
                         .fixtures
                         .iter()
-                        .map(|fixture| fixture.fixture_id)
-                        .collect::<Vec<_>>();
+                        .flat_map(|fixture| {
+                            std::iter::once(fixture.fixture_id)
+                                .chain(fixture.logical_heads.iter().map(|head| head.fixture_id))
+                        })
+                        .collect::<HashSet<_>>();
                     members
                         .into_iter()
                         .filter(|fixture| valid.contains(fixture))
@@ -10507,10 +10960,9 @@ fn parse_group_mixed_selection(
                                 }
                             }
                             TermKind::Fixture => {
-                                sources.push(reference_for_fixture(
-                                    fixture_by_number(snapshot, &id)?,
-                                    operation == "-",
-                                ));
+                                for fixture in fixture_by_number(snapshot, &id)? {
+                                    sources.push(reference_for_fixture(fixture, operation == "-"));
+                                }
                             }
                         }
                         if current == end {
@@ -10532,10 +10984,9 @@ fn parse_group_mixed_selection(
                             }
                         }
                         TermKind::Fixture => {
-                            sources.push(reference_for_fixture(
-                                fixture_by_number(snapshot, token)?,
-                                operation == "-",
-                            ));
+                            for fixture in fixture_by_number(snapshot, token)? {
+                                sources.push(reference_for_fixture(fixture, operation == "-"));
+                            }
                         }
                     }
                     index += 1;
@@ -11832,9 +12283,9 @@ fn handle_highlight_osc(
         "on" => HighlightAction::On,
         "off" => HighlightAction::Off,
         "toggle" => HighlightAction::Toggle,
-        "capture" | "reset" => HighlightAction::Capture,
         "next" => HighlightAction::Next,
         "previous" | "prev" => HighlightAction::Previous,
+        "all" => HighlightAction::All,
         _ => return,
     };
     let Some(source) = source.and_then(|value| value.parse::<SocketAddr>().ok()) else {
@@ -11868,20 +12319,35 @@ fn handle_highlight_osc(
     let Some(programmer) = state.programmers.get(session.id) else {
         return;
     };
-    let fixtures = highlight_fixture_summaries(&state.engine.snapshot().fixtures);
+    let Some(selection) = state.programmers.selection(session.id) else {
+        return;
+    };
+    let snapshot = state.engine.snapshot();
+    let fixtures = highlight_fixture_summaries(&snapshot.fixtures);
+    let groups = highlight_groups(&snapshot);
     match state.highlight.action_guarded(
         session.desk.id,
         session.user.id,
         Some(&session.user.name),
         action,
-        &programmer.selected,
+        &selection,
         &fixtures,
+        &groups,
         programmer.blind || programmer.preview,
     ) {
         Ok(transition) => {
-            if let Some(fixture) = transition.working_selection {
-                state.programmers.select(session.id, [fixture]);
-                let _ = persist_programmer(state, &session);
+            let selection_changed = apply_highlight_selection_write(
+                state,
+                &session,
+                transition.working_selection.as_ref(),
+            )
+            .unwrap_or(false);
+            if selection_changed {
+                emit(
+                    state,
+                    "programmer_changed",
+                    serde_json::json!({"session_id":session.id,"source":"osc_highlight","action":action}),
+                );
             }
             sync_highlight_output(state);
             emit(
@@ -11934,6 +12400,10 @@ fn handle_programmer_osc(
     let Some(session) = state.sessions.read().get(&subscriber.session_id).cloned() else {
         return;
     };
+    let selection_revision_before = state
+        .programmers
+        .selection(session.id)
+        .map(|selection| selection.revision);
     let action = parts[3];
     if action == "shift" {
         if let Some(source) = source
@@ -12199,6 +12669,14 @@ fn handle_programmer_osc(
         }
     }
     let _ = persist_programmer(state, &session);
+    if state
+        .programmers
+        .selection(session.id)
+        .map(|selection| selection.revision)
+        != selection_revision_before
+    {
+        reconcile_highlight_selection(state, &session, "osc_programmer_selection");
+    }
     emit(
         state,
         "programmer_changed",
@@ -12401,6 +12879,7 @@ fn send_osc_feedback(state: &AppState, _full: bool) {
         std::array::from_fn(|index| controllers[index].snapshot(now))
     };
     let highlight_fixtures = highlight_fixture_summaries(&snapshot.fixtures);
+    let highlight_groups = highlight_groups(&snapshot);
     for subscriber in subscribers {
         let Ok(Some(desk)) = state
             .desk
@@ -12470,11 +12949,16 @@ fn send_osc_feedback(state: &AppState, _full: bool) {
             let capture_only = programmer
                 .as_ref()
                 .is_some_and(|programmer| programmer.blind || programmer.preview);
+            let Some(selection) = state.programmers.selection(subscriber.session_id) else {
+                continue;
+            };
             let highlight = state.highlight.status(
                 desk.id,
                 session.user.id,
                 Some(&session.user.name),
+                &selection,
                 &highlight_fixtures,
+                &highlight_groups,
                 capture_only,
             );
             let prefix = format!("/light/{}/feedback/highlight", subscriber.desk_alias);
@@ -12489,6 +12973,18 @@ fn send_osc_feedback(state: &AppState, _full: bool) {
                 subscriber.target,
                 format!("{prefix}/output"),
                 vec![OscArgument::Bool(highlight.state.output_enabled)],
+            );
+            send_osc(
+                state,
+                subscriber.target,
+                format!("{prefix}/mode"),
+                vec![OscArgument::String(
+                    match highlight.state.mode {
+                        HighlightMode::Selection => "selection",
+                        HighlightMode::Step => "step",
+                    }
+                    .into(),
+                )],
             );
             send_osc(
                 state,
@@ -12900,6 +13396,9 @@ fn handle_playback_osc(
         };
         let desk = osc_control_desk(state, parts[1]);
         if let Some(desk) = desk {
+            if !ensure_playback_page_for_advance(state, &show, page).unwrap_or(false) {
+                return;
+            }
             let _ = state.desk.lock().set_desk_page(desk.id, show.id, page);
             emit(
                 state,
@@ -13633,6 +14132,7 @@ mod tests {
             columns: 8,
             rows: 1,
             buttons: 3,
+            playback_layout: None,
         }
     }
 
@@ -14824,24 +15324,50 @@ mod tests {
         manufacturer: &str,
         family: &str,
     ) -> Vec<(light_fixture::FixtureDefinition, Vec<u8>)> {
-        light_fixture::generic_fixture_definitions()
+        [1_u16, 2_u16]
             .into_iter()
-            .filter(|definition| {
-                definition.manufacturer == "Generic" && definition.model == "Dimmer"
-            })
-            .take(2)
             .enumerate()
-            .map(|(index, mut definition)| {
-                definition.id = light_core::FixtureId::new();
-                definition.revision = 1;
-                definition.schema_version = 1;
-                definition.manufacturer = manufacturer.into();
-                definition.name = family.into();
-                definition.model = family.into();
-                definition.mode = if index == 0 { "Coarse" } else { "Fine" }.into();
-                definition.profile_id = None;
-                definition.mode_id = None;
-                definition.profile_snapshot = None;
+            .map(|(index, footprint)| {
+                let definition = light_fixture::FixtureDefinition {
+                    schema_version: 1,
+                    id: light_core::FixtureId::new(),
+                    revision: 1,
+                    manufacturer: manufacturer.into(),
+                    device_type: "dimmer".into(),
+                    name: family.into(),
+                    model: family.into(),
+                    mode: if index == 0 { "Coarse" } else { "Fine" }.into(),
+                    footprint,
+                    heads: vec![light_fixture::LogicalHead {
+                        index: 0,
+                        name: "Main".into(),
+                        shared: true,
+                        parameters: vec![light_fixture::Parameter {
+                            attribute: light_core::AttributeKey("intensity".into()),
+                            components: (0..footprint)
+                                .map(|offset| light_fixture::ChannelComponent {
+                                    offset,
+                                    byte_order: light_fixture::ByteOrder::MsbFirst,
+                                })
+                                .collect(),
+                            default: 0.0,
+                            virtual_dimmer: false,
+                            metadata: light_fixture::ParameterMetadata::default(),
+                            capabilities: Vec::new(),
+                        }],
+                    }],
+                    color_calibration: None,
+                    physical: light_fixture::FixturePhysicalProperties::default(),
+                    model_asset: None,
+                    icon_asset: None,
+                    hazardous: false,
+                    direct_control_protocols: Vec::new(),
+                    signal_loss_policy: light_fixture::SignalLossPolicy::HoldLast,
+                    safe_values: BTreeMap::new(),
+                    profile_id: None,
+                    mode_id: None,
+                    profile_snapshot: None,
+                };
                 (
                     definition,
                     format!("retained-startup-gdtf-{index}").into_bytes(),
@@ -14874,7 +15400,7 @@ mod tests {
     }
 
     #[test]
-    fn startup_fixture_library_migrates_compatible_schema_v1_modes_and_seeds_generics_once() {
+    fn startup_fixture_library_migrates_schema_v1_and_loads_transferable_packages_once() {
         let data_dir = std::env::temp_dir().join(format!(
             "light-startup-fixture-migration-{}",
             Uuid::new_v4()
@@ -14885,7 +15411,8 @@ mod tests {
         let expected_profile_id = rows[0].0.id;
         seed_schema_v1_fixture_database(&data_dir, &rows);
 
-        let library = open_fixture_library_for_startup(&data_dir).unwrap();
+        let package_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixture-library");
+        let library = open_fixture_library_for_startup(&data_dir, Some(&package_dir)).unwrap();
         let profiles = library.profiles().unwrap();
         let migrated = profiles
             .iter()
@@ -14903,9 +15430,25 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["Coarse", "Fine"]
         );
-        assert!(profiles.iter().any(|profile| {
-            profile.reserved_source.as_deref()
-                == Some(light_fixture::BUILTIN_GENERIC_RESERVED_SOURCE)
+        assert!(
+            profiles
+                .iter()
+                .all(|profile| profile.reserved_source.is_none())
+        );
+        let vendor_profiles = profiles
+            .iter()
+            .filter(|profile| profile.manufacturer == "ROBE")
+            .collect::<Vec<_>>();
+        assert_eq!(profiles.len(), 33);
+        assert_eq!(vendor_profiles.len(), 5);
+        assert!(vendor_profiles.iter().any(|profile| {
+            profile.name == "Robin 600X LEDWash"
+                && profile
+                    .modes
+                    .iter()
+                    .map(|mode| mode.splits[0].footprint)
+                    .collect::<Vec<_>>()
+                    == vec![37, 21, 15, 10, 37, 25]
         }));
         let legacy_sources = library
             .profile_legacy_sources(expected_profile_id, 1)
@@ -14925,7 +15468,7 @@ mod tests {
         let initial = serde_json::to_value(&profiles).unwrap();
         drop(library);
 
-        let reopened = open_fixture_library_for_startup(&data_dir).unwrap();
+        let reopened = open_fixture_library_for_startup(&data_dir, Some(&package_dir)).unwrap();
         assert_eq!(
             serde_json::to_value(reopened.profiles().unwrap()).unwrap(),
             initial
@@ -14952,7 +15495,7 @@ mod tests {
         ).unwrap();
         drop(connection);
 
-        let library = open_fixture_library_for_startup(&data_dir).unwrap();
+        let library = open_fixture_library_for_startup(&data_dir, None).unwrap();
         let warnings = library.migration_warnings().unwrap();
         assert!(warnings.iter().any(|warning| {
             warning.contains(&malformed_id.0.to_string())
@@ -14987,7 +15530,7 @@ mod tests {
         let profiles = serde_json::to_value(library.profiles().unwrap()).unwrap();
         drop(library);
 
-        let reopened = open_fixture_library_for_startup(&data_dir).unwrap();
+        let reopened = open_fixture_library_for_startup(&data_dir, None).unwrap();
         assert_eq!(reopened.migration_warnings().unwrap(), warnings);
         assert_eq!(
             serde_json::to_value(reopened.profiles().unwrap()).unwrap(),
@@ -15062,6 +15605,77 @@ mod tests {
             },
             data_dir,
         )
+    }
+
+    #[test]
+    fn advancing_from_an_occupied_last_playback_page_creates_one_empty_page() {
+        let (state, data_dir) = test_state();
+        let show_path = data_dir.join("shows/page-advance.show");
+        let show_id = initialise_show(&show_path, "Page advance").unwrap();
+        let entry = ShowEntry {
+            id: show_id,
+            name: "Page advance".into(),
+            path: show_path.display().to_string(),
+            revision: 0,
+            updated_at: String::new(),
+            revision_copy: None,
+        };
+        let page = light_playback::PlaybackPage {
+            number: 1,
+            name: "Main".into(),
+            slots: HashMap::from([(1, 1)]),
+        };
+        let playback = light_playback::PlaybackDefinition {
+            number: 1,
+            name: "Grand Master".into(),
+            target: light_playback::PlaybackTarget::GrandMaster,
+            buttons: light_playback::PlaybackDefinition::default_buttons(
+                &light_playback::PlaybackTarget::GrandMaster,
+            ),
+            button_count: 3,
+            fader: light_playback::PlaybackFaderMode::Master,
+            has_fader: true,
+            go_activates: true,
+            auto_off: false,
+            xfade_millis: 0,
+            color: "#20c997".into(),
+            flash_release: light_playback::FlashReleaseMode::ReleaseAll,
+            protect_from_swap: false,
+            presentation_icon: None,
+            presentation_image: None,
+        };
+        let store = ShowStore::open(&entry.path).unwrap();
+        store
+            .put_object("playback", "1", &serde_json::to_value(playback).unwrap(), 0)
+            .unwrap();
+        store
+            .put_object(
+                "playback_page",
+                "1",
+                &serde_json::to_value(page).unwrap(),
+                0,
+            )
+            .unwrap();
+        state
+            .engine
+            .replace_snapshot(load_engine_snapshot(&entry).unwrap())
+            .unwrap();
+
+        assert!(ensure_playback_page_for_advance(&state, &entry, 2).unwrap());
+        assert!(!ensure_playback_page_for_advance(&state, &entry, 3).unwrap());
+        let pages = ShowStore::open(&entry.path)
+            .unwrap()
+            .objects("playback_page")
+            .unwrap();
+        let created = pages.iter().find(|object| object.id == "2").unwrap();
+        assert_eq!(
+            serde_json::from_value::<light_playback::PlaybackPage>(created.body.clone())
+                .unwrap()
+                .name,
+            "Page 2"
+        );
+        assert_eq!(pages.len(), 2);
+        let _ = std::fs::remove_dir_all(data_dir);
     }
 
     #[tokio::test]
@@ -15211,6 +15825,35 @@ mod tests {
             .collect()
     }
 
+    fn highlight_multi_head_fixture() -> (light_fixture::PatchedFixture, [light_core::FixtureId; 2])
+    {
+        let (mut fixture, _, _) = schema_v2_direct_fixture();
+        fixture.fixture_number = Some(1);
+        fixture.name = "Two-cell Highlight fixture".into();
+        let mut profile = *fixture.definition.profile_snapshot.take().unwrap();
+        let mode_id = profile.modes[0].id;
+        let split = profile.modes[0].heads[0].split;
+        profile.modes[0].heads.extend([
+            light_fixture::FixtureHead {
+                id: Uuid::new_v4(),
+                name: "Cell 1".into(),
+                master_shared: false,
+                split,
+            },
+            light_fixture::FixtureHead {
+                id: Uuid::new_v4(),
+                name: "Cell 2".into(),
+                master_shared: false,
+                split,
+            },
+        ]);
+        fixture.definition = profile.resolved_definition(mode_id).unwrap();
+        fixture.logical_heads.clear();
+        assert!(light_fixture::reconcile_logical_heads(&mut fixture));
+        let children = ordered_child_ids(&fixture);
+        (fixture, [children[0], children[1]])
+    }
+
     #[test]
     fn highlight_participation_uses_logical_fixture_identities_independent_of_patch() {
         let mut fixture = schema_v2_direct_fixture().0;
@@ -15254,19 +15897,25 @@ mod tests {
         );
 
         let registry = HighlightRegistry::default();
-        let captured = registry
+        let selection = light_programmer::ProgrammerSelection {
+            selected: vec![head, parent, head, parent],
+            expression: Some(light_programmer::SelectionExpression::Static),
+            revision: 1,
+        };
+        let stepped = registry
             .action(
                 Uuid::new_v4(),
                 light_core::UserId::new(),
                 None,
-                HighlightAction::Capture,
-                &[head, parent, head, parent],
+                HighlightAction::Next,
+                &selection,
                 &summaries,
+                &HashMap::new(),
                 false,
             )
             .unwrap();
         assert_eq!(
-            captured
+            stepped
                 .state
                 .remembered
                 .iter()
@@ -15551,6 +16200,8 @@ mod tests {
             .unwrap();
         state.programmers.select(session.id, [fixture_id]);
         let fixtures = highlight_fixture_summaries(&state.engine.snapshot().fixtures);
+        let groups = HashMap::new();
+        let selection = state.programmers.selection(session.id).unwrap();
         state
             .highlight
             .action(
@@ -15558,8 +16209,9 @@ mod tests {
                 user.id,
                 Some(&user.name),
                 HighlightAction::On,
-                &[fixture_id],
+                &selection,
                 &fixtures,
+                &groups,
                 false,
             )
             .unwrap();
@@ -15591,12 +16243,47 @@ mod tests {
                 user.id,
                 Some(&user.name),
                 HighlightAction::On,
-                &[fixture_id],
+                &selection,
                 &fixtures,
+                &groups,
                 false,
             )
             .unwrap();
         sync_highlight_output(&state);
+        assert_eq!(state.engine.highlighted_fixtures(), vec![fixture_id]);
+
+        let preview = dispatch_ws_command(
+            &state,
+            &session,
+            WsCommand {
+                protocol_version: 1,
+                request_id: "preview".into(),
+                session_id: session.id,
+                expected_revision: None,
+                command: "programmer.mode".into(),
+                payload: serde_json::json!({"preview":true}),
+            },
+        );
+        assert!(preview.ok, "{:?}", preview.error);
+        assert!(state.engine.highlighted_fixtures().is_empty());
+        let preview_state = current_highlight_transition(&state, &session).unwrap();
+        assert!(preview_state.state.active);
+        assert!(preview_state.state.capture_only);
+        assert!(!preview_state.state.output_enabled);
+
+        let leave_preview = dispatch_ws_command(
+            &state,
+            &session,
+            WsCommand {
+                protocol_version: 1,
+                request_id: "leave-preview".into(),
+                session_id: session.id,
+                expected_revision: None,
+                command: "programmer.mode".into(),
+                payload: serde_json::json!({"preview":false}),
+            },
+        );
+        assert!(leave_preview.ok, "{:?}", leave_preview.error);
         assert_eq!(state.engine.highlighted_fixtures(), vec![fixture_id]);
 
         let preload = dispatch_ws_command(
@@ -15613,10 +16300,15 @@ mod tests {
         );
         assert!(preload.ok, "{:?}", preload.error);
         assert!(state.engine.highlighted_fixtures().is_empty());
-        let state_after_preload =
-            state
-                .highlight
-                .status(session.desk.id, user.id, Some(&user.name), &fixtures, true);
+        let state_after_preload = state.highlight.status(
+            session.desk.id,
+            user.id,
+            Some(&user.name),
+            &selection,
+            &fixtures,
+            &groups,
+            true,
+        );
         assert!(state_after_preload.state.active);
         assert!(state_after_preload.state.capture_only);
         assert!(!state_after_preload.state.output_enabled);
@@ -15685,7 +16377,10 @@ mod tests {
 
         // Model a simultaneous software press followed immediately by its attached-hardware echo.
         // The registry-level guard is the shared cross-surface authority, so only one step occurs.
-        let fixture_summaries = highlight_fixture_summaries(&state.engine.snapshot().fixtures);
+        let highlight_snapshot = state.engine.snapshot();
+        let fixture_summaries = highlight_fixture_summaries(&highlight_snapshot.fixtures);
+        let groups = highlight_groups(&highlight_snapshot);
+        let selection = state.programmers.selection(session.id).unwrap();
         let software = state
             .highlight
             .action_guarded(
@@ -15693,55 +16388,72 @@ mod tests {
                 session.user.id,
                 Some(&session.user.name),
                 HighlightAction::Next,
-                &fixture_ids,
+                &selection,
                 &fixture_summaries,
+                &groups,
                 false,
             )
             .unwrap();
+        apply_highlight_selection_write(&state, &session, software.working_selection.as_ref())
+            .unwrap();
         assert_eq!(software.state.active_index, Some(0));
         send("next");
+        let selection = state.programmers.selection(session.id).unwrap();
         let after_hardware_echo = state.highlight.status(
             session.desk.id,
             session.user.id,
             Some(&session.user.name),
+            &selection,
             &fixture_summaries,
+            &groups,
             false,
         );
         assert_eq!(after_hardware_echo.state.active_index, Some(0));
 
         // Seed item three without touching either adapter's repeat clock, then prove OSC aliases
         // share the subscriber guard: previous + prev is one physical step, not two.
-        state
+        let selection = state.programmers.selection(session.id).unwrap();
+        let second = state
             .highlight
             .action(
                 session.desk.id,
                 session.user.id,
                 Some(&session.user.name),
                 HighlightAction::Next,
-                &[],
+                &selection,
                 &fixture_summaries,
+                &groups,
                 false,
             )
             .unwrap();
-        state
+        apply_highlight_selection_write(&state, &session, second.working_selection.as_ref())
+            .unwrap();
+        let selection = state.programmers.selection(session.id).unwrap();
+        let third = state
             .highlight
             .action(
                 session.desk.id,
                 session.user.id,
                 Some(&session.user.name),
                 HighlightAction::Next,
-                &[],
+                &selection,
                 &fixture_summaries,
+                &groups,
                 false,
             )
+            .unwrap();
+        apply_highlight_selection_write(&state, &session, third.working_selection.as_ref())
             .unwrap();
         send("previous");
         send("prev");
+        let selection = state.programmers.selection(session.id).unwrap();
         let after_aliases = state.highlight.status(
             session.desk.id,
             session.user.id,
             Some(&session.user.name),
+            &selection,
             &fixture_summaries,
+            &groups,
             false,
         );
         assert_eq!(after_aliases.state.active_index, Some(1));
@@ -15757,6 +16469,7 @@ mod tests {
         for (suffix, arguments) in [
             ("active", vec![OscArgument::Bool(true)]),
             ("output", vec![OscArgument::Bool(true)]),
+            ("mode", vec![OscArgument::String("step".into())]),
             ("index", vec![OscArgument::Int(2)]),
             ("total", vec![OscArgument::Int(3)]),
             ("can-previous", vec![OscArgument::Bool(true)]),
@@ -15785,16 +16498,225 @@ mod tests {
             state.osc_subscribers.lock()[client_id].session_id,
             session.id
         );
+        let selection = state.programmers.selection(session.id).unwrap();
         let reconnected = state.highlight.status(
             session.desk.id,
             session.user.id,
             Some(&session.user.name),
+            &selection,
             &fixture_summaries,
+            &groups,
             false,
         );
         assert_eq!(reconnected.state.active_index, Some(1));
         assert_eq!(reconnected.state.remembered.len(), 3);
         assert!(reconnected.state.output_enabled);
+
+        send("capture");
+        send("reset");
+        let selection = state.programmers.selection(session.id).unwrap();
+        let removed_actions_ignored = state.highlight.status(
+            session.desk.id,
+            session.user.id,
+            Some(&session.user.name),
+            &selection,
+            &fixture_summaries,
+            &groups,
+            false,
+        );
+        assert_eq!(removed_actions_ignored.state.active_index, Some(1));
+        send("all");
+        assert_eq!(
+            state.programmers.get(session.id).unwrap().selected,
+            fixture_ids
+        );
+        let selection = state.programmers.selection(session.id).unwrap();
+        let restored = state.highlight.status(
+            session.desk.id,
+            session.user.id,
+            Some(&session.user.name),
+            &selection,
+            &fixture_summaries,
+            &groups,
+            false,
+        );
+        assert_eq!(restored.state.mode, HighlightMode::Selection);
+        assert!(restored.state.active);
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+
+    #[tokio::test]
+    async fn rest_prev_next_all_change_the_real_selection_while_high_remains_independent() {
+        async fn post_highlight(app: &Router, token: &str, action: &str) -> serde_json::Value {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::post("/api/v1/highlight/action")
+                        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                        .header(header::CONTENT_TYPE, "application/json")
+                        .body(Body::from(format!(r#"{{"action":"{action}"}}"#)))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            json(response).await
+        }
+
+        let (state, data_dir) = test_state();
+        let app = router(state.clone());
+        let (token, session_id) = login(&app, "Operator").await;
+        let session_id = SessionId(Uuid::parse_str(&session_id).unwrap());
+        let session = state.sessions.read()[&session_id].clone();
+        let fixtures = highlight_test_fixtures();
+        let fixture_ids = fixtures
+            .iter()
+            .map(|fixture| fixture.fixture_id)
+            .collect::<Vec<_>>();
+        state
+            .engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures,
+                groups: vec![light_programmer::GroupDefinition {
+                    id: "1".into(),
+                    name: "Live step source".into(),
+                    fixtures: fixture_ids.clone(),
+                    ..Default::default()
+                }],
+                ..EngineSnapshot::default()
+            })
+            .unwrap();
+        state.programmers.select(session.id, fixture_ids.clone());
+
+        let next = post_highlight(&app, &token, "next").await;
+        assert_eq!(next["active"], false);
+        assert_eq!(next["mode"], "step");
+        assert_eq!(
+            state.programmers.get(session.id).unwrap().selected,
+            fixture_ids[..1]
+        );
+        let bootstrap = app
+            .clone()
+            .oneshot(
+                Request::get("/api/v1/bootstrap")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(bootstrap.status(), StatusCode::OK);
+        let bootstrap = json(bootstrap).await;
+        let bootstrapped_highlight = bootstrap["highlight_states"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["session_id"] == session.id.0.to_string())
+            .unwrap();
+        assert_eq!(bootstrapped_highlight["state"]["active"], false);
+        assert_eq!(bootstrapped_highlight["state"]["mode"], "step");
+        assert_eq!(
+            bootstrapped_highlight["state"]["remembered"]
+                .as_array()
+                .unwrap()
+                .len(),
+            3
+        );
+        assert_eq!(
+            bootstrapped_highlight["state"]["active_fixture"]["fixture_id"],
+            fixture_ids[0].0.to_string()
+        );
+        let next_event = state
+            .audit_events
+            .lock()
+            .iter()
+            .find(|event| event.kind == "highlight_changed" && event.payload["action"] == "next")
+            .cloned()
+            .unwrap();
+        assert_eq!(next_event.payload["state"]["active"], false);
+        assert_eq!(next_event.payload["state"]["mode"], "step");
+        assert_eq!(
+            next_event.payload["state"]["remembered"]
+                .as_array()
+                .unwrap()
+                .len(),
+            3
+        );
+
+        let all = post_highlight(&app, &token, "all").await;
+        assert_eq!(all["active"], false);
+        assert_eq!(all["mode"], "selection");
+        assert_eq!(
+            state.programmers.get(session.id).unwrap().selected,
+            fixture_ids
+        );
+
+        let previous = post_highlight(&app, &token, "previous").await;
+        assert_eq!(previous["active"], false);
+        assert_eq!(
+            state.programmers.get(session.id).unwrap().selected,
+            fixture_ids[2..]
+        );
+        let high = post_highlight(&app, &token, "on").await;
+        assert_eq!(high["active"], true);
+        assert_eq!(high["mode"], "step");
+        assert_eq!(state.engine.highlighted_fixtures(), fixture_ids[2..]);
+
+        // An external selection write resets the step basis without toggling HIGH, including when
+        // the new source is live. Editing that Group before ALL is then re-resolved at action time.
+        state.programmers.select_expression(
+            session.id,
+            fixture_ids.clone(),
+            light_programmer::SelectionExpression::LiveGroup {
+                group_id: "1".into(),
+                rule: light_programmer::SelectionRule::All,
+            },
+        );
+        reconcile_highlight_selection(&state, &session, "test_external_group_selection");
+        assert_eq!(
+            state
+                .engine
+                .highlighted_fixtures()
+                .into_iter()
+                .collect::<HashSet<_>>(),
+            fixture_ids.iter().copied().collect::<HashSet<_>>()
+        );
+        let stepped = post_highlight(&app, &token, "next").await;
+        assert_eq!(stepped["active"], true);
+        assert_eq!(
+            state.programmers.get(session.id).unwrap().selected,
+            fixture_ids[..1]
+        );
+
+        let mut snapshot = (*state.engine.snapshot()).clone();
+        snapshot.groups[0].fixtures = vec![fixture_ids[2], fixture_ids[1]];
+        state.engine.replace_snapshot(snapshot).unwrap();
+        let restored = post_highlight(&app, &token, "all").await;
+        assert_eq!(restored["active"], true);
+        assert_eq!(
+            state.programmers.get(session.id).unwrap().selected,
+            vec![fixture_ids[2], fixture_ids[1]]
+        );
+        assert!(matches!(
+            state
+                .programmers
+                .get(session.id)
+                .unwrap()
+                .selection_expression,
+            Some(light_programmer::SelectionExpression::LiveGroup { ref group_id, .. })
+                if group_id == "1"
+        ));
+
+        // HIGH remains on with an empty actual selection, produces no output, and automatically
+        // follows the next external selection without another toggle.
+        state.programmers.select(session.id, []);
+        reconcile_highlight_selection(&state, &session, "test_clear_selection");
+        assert!(state.engine.highlighted_fixtures().is_empty());
+        let status = current_highlight_transition(&state, &session).unwrap();
+        assert!(status.state.active);
+        state.programmers.select(session.id, [fixture_ids[1]]);
+        reconcile_highlight_selection(&state, &session, "test_new_selection");
+        assert_eq!(state.engine.highlighted_fixtures(), vec![fixture_ids[1]]);
+
         let _ = std::fs::remove_dir_all(data_dir);
     }
 
@@ -15925,11 +16847,14 @@ mod tests {
             .unwrap();
         assert_eq!(final_closed.status(), StatusCode::NO_CONTENT);
         let summaries = highlight_fixture_summaries(&state.engine.snapshot().fixtures);
+        let selection = light_programmer::ProgrammerSelection::default();
         let cleared = state.highlight.status(
             first_session.desk.id,
             first_session.user.id,
             Some(&first_session.user.name),
+            &selection,
             &summaries,
+            &HashMap::new(),
             false,
         );
         assert!(!cleared.state.active);
@@ -17408,6 +18333,174 @@ mod tests {
     }
 
     #[test]
+    fn bare_multi_head_selection_expands_to_children_and_steps_without_parent_identity() {
+        let mut fixture = schema_v2_direct_fixture().0;
+        fixture.fixture_number = Some(1);
+        let parent = fixture.fixture_id;
+        let first_head = light_core::FixtureId::new();
+        let second_head = light_core::FixtureId::new();
+        fixture.definition.heads = vec![
+            light_fixture::LogicalHead {
+                index: 0,
+                name: "Master".into(),
+                shared: true,
+                parameters: Vec::new(),
+            },
+            light_fixture::LogicalHead {
+                index: 1,
+                name: "Cell 1".into(),
+                shared: false,
+                parameters: Vec::new(),
+            },
+            light_fixture::LogicalHead {
+                index: 2,
+                name: "Cell 2".into(),
+                shared: false,
+                parameters: Vec::new(),
+            },
+        ];
+        fixture.logical_heads = vec![
+            light_fixture::PatchedHead {
+                head_index: 1,
+                fixture_id: first_head,
+            },
+            light_fixture::PatchedHead {
+                head_index: 2,
+                fixture_id: second_head,
+            },
+        ];
+
+        let expanded = parse_fixture_selection(&[fixture.clone()], &["1".into()]).unwrap();
+        assert_eq!(expanded, vec![first_head, second_head]);
+        assert_eq!(
+            parse_fixture_selection(&[fixture.clone()], &["1".into(), ".".into(), "0".into()])
+                .unwrap(),
+            vec![parent],
+            "only an explicit .0 address selects the master identity"
+        );
+
+        let registry = HighlightRegistry::default();
+        let desk = Uuid::new_v4();
+        let user = light_core::UserId::new();
+        let fixtures = highlight_fixture_summaries(&[fixture]);
+        let complete = light_programmer::ProgrammerSelection {
+            selected: expanded,
+            expression: Some(light_programmer::SelectionExpression::Static),
+            revision: 1,
+        };
+        let first = registry
+            .action(
+                desk,
+                user,
+                None,
+                HighlightAction::Next,
+                &complete,
+                &fixtures,
+                &HashMap::new(),
+                false,
+            )
+            .unwrap();
+        assert_eq!(
+            first.working_selection.as_ref().unwrap().selected,
+            vec![first_head]
+        );
+        let stepped = light_programmer::ProgrammerSelection {
+            selected: vec![first_head],
+            expression: Some(light_programmer::SelectionExpression::Static),
+            revision: 2,
+        };
+        registry.acknowledge_internal_selection(desk, user, &stepped);
+        let second = registry
+            .action(
+                desk,
+                user,
+                None,
+                HighlightAction::Next,
+                &stepped,
+                &fixtures,
+                &HashMap::new(),
+                false,
+            )
+            .unwrap();
+        assert_eq!(
+            second.working_selection.as_ref().unwrap().selected,
+            vec![second_head]
+        );
+        assert!(
+            !second
+                .state
+                .remembered
+                .iter()
+                .any(|item| item.fixture_id == parent)
+        );
+    }
+
+    #[test]
+    fn authoritative_selection_surfaces_expand_a_multi_head_parent_to_child_rows() {
+        let (state, data_dir) = test_state();
+        let user = state.desk.lock().users().unwrap().remove(0);
+        let session = Session {
+            id: SessionId::new(),
+            user: user.clone(),
+            token: "multi-head-selection".into(),
+            connected: true,
+            desk: test_control_desk(),
+        };
+        state.programmers.start(session.id, user.id);
+        attach_session_command_context(&state, &session);
+        state.sessions.write().insert(session.id, session.clone());
+        let (fixture, children) = highlight_multi_head_fixture();
+        let parent = fixture.fixture_id;
+        state
+            .engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![fixture],
+                ..EngineSnapshot::default()
+            })
+            .unwrap();
+
+        let set = dispatch_ws_command(
+            &state,
+            &session,
+            WsCommand {
+                protocol_version: 1,
+                request_id: "multi-head-set".into(),
+                session_id: session.id,
+                expected_revision: None,
+                command: "selection.set".into(),
+                payload: serde_json::json!({"fixtures":[parent]}),
+            },
+        );
+        assert!(set.ok, "{:?}", set.error);
+        assert_eq!(
+            state.programmers.get(session.id).unwrap().selected,
+            children
+        );
+
+        state.programmers.select(session.id, []);
+        let gesture = dispatch_ws_command(
+            &state,
+            &session,
+            WsCommand {
+                protocol_version: 1,
+                request_id: "multi-head-gesture".into(),
+                session_id: session.id,
+                expected_revision: None,
+                command: "selection.gesture".into(),
+                payload: serde_json::json!({
+                    "source":{"type":"fixture","fixture_id":parent}
+                }),
+            },
+        );
+        assert!(gesture.ok, "{:?}", gesture.error);
+        assert_eq!(
+            state.programmers.get(session.id).unwrap().selected,
+            children
+        );
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+
+    #[test]
     fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
         let (state, data_dir) = test_state();
         let user = state.desk.lock().users().unwrap().remove(0);
@@ -18142,6 +19235,46 @@ mod tests {
         assert_eq!(created.status(), StatusCode::OK);
         let created = json(created).await;
         assert_eq!(created["revision"], 1);
+
+        let exported = app
+            .clone()
+            .oneshot(
+                Request::get(format!(
+                    "/api/v1/fixture-profiles/{}/1/package",
+                    profile_id.0
+                ))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(exported.status(), StatusCode::OK);
+        assert_eq!(
+            exported.headers()[header::CONTENT_TYPE],
+            light_fixture::FIXTURE_PACKAGE_MIME_TYPE
+        );
+        let package = exported.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(
+            light_fixture::read_fixture_package(&package).unwrap().id,
+            profile_id
+        );
+        let imported = app
+            .clone()
+            .oneshot(
+                Request::post("/api/v1/fixture-packages/import")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(
+                        header::CONTENT_TYPE,
+                        light_fixture::FIXTURE_PACKAGE_MIME_TYPE,
+                    )
+                    .body(Body::from(package))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(imported.status(), StatusCode::OK);
+        assert_eq!(json(imported).await["revision"], 1);
 
         let stale = app
             .clone()
@@ -19292,6 +20425,126 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::CREATED);
         json(response).await
+    }
+
+    #[tokio::test]
+    async fn active_empty_show_rename_preserves_identity_content_and_revisions() {
+        let (state, data_dir) = test_state();
+        let app = router(state.clone());
+        let (token, _) = login(&app, "Operator").await;
+        let created = create_show(&app, &token, "New Empty Show").await;
+        let show_id = created["id"].as_str().unwrap();
+        let original_path = created["path"].as_str().unwrap().to_owned();
+        let opened = app
+            .clone()
+            .oneshot(
+                Request::post(format!("/api/v1/shows/{show_id}/open"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::from(r#"{"transition":"hold_current"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(opened.status(), StatusCode::OK);
+        let reopened_desk = DeskStore::open(data_dir.join("desk.sqlite")).unwrap();
+        let reopened_empty = reopened_desk.active_show().unwrap().unwrap();
+        assert_eq!(reopened_empty.id.0.to_string(), show_id);
+        assert_eq!(reopened_empty.name, "New Empty Show");
+        assert!(FsPath::new(&reopened_empty.path).exists());
+        drop(reopened_desk);
+        let stored = app
+            .clone()
+            .oneshot(
+                Request::put(format!(
+                    "/api/v1/shows/{show_id}/objects/user_layout/operator"
+                ))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::IF_MATCH, "0")
+                .body(Body::from(r#"{"marker":"before naming"}"#))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(stored.status(), StatusCode::OK);
+        let revision = app
+            .clone()
+            .oneshot(
+                Request::post(format!("/api/v1/shows/{show_id}/revisions"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::from(r#"{"name":"Before naming"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(revision.status(), StatusCode::CREATED);
+
+        let renamed = app
+            .clone()
+            .oneshot(
+                Request::put(format!("/api/v1/shows/{show_id}/rename"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::from(r#"{"name":"Opening Night"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(renamed.status(), StatusCode::OK);
+        let renamed = json(renamed).await;
+        assert_eq!(renamed["id"], show_id);
+        assert_eq!(renamed["name"], "Opening Night");
+        let renamed_path = renamed["path"].as_str().unwrap();
+        assert!(renamed_path.ends_with("Opening Night.show"));
+        assert!(!FsPath::new(&original_path).exists());
+        let portable = ShowStore::open(renamed_path).unwrap();
+        assert_eq!(portable.id().unwrap().0.to_string(), show_id);
+        assert_eq!(portable.name().unwrap(), "Opening Night");
+
+        let objects = app
+            .clone()
+            .oneshot(
+                Request::get(format!("/api/v1/shows/{show_id}/objects/user_layout"))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(objects.status(), StatusCode::OK);
+        assert_eq!(json(objects).await[0]["body"]["marker"], "before naming");
+        let revisions = state
+            .desk
+            .lock()
+            .show_revisions(light_core::ShowId(Uuid::parse_str(show_id).unwrap()))
+            .unwrap();
+        assert_eq!(revisions.len(), 1);
+        assert_eq!(revisions[0].name, "Before naming");
+        let active = state.desk.lock().active_show().unwrap().unwrap();
+        assert_eq!(active.id.0.to_string(), show_id);
+        assert_eq!(active.name, "Opening Night");
+
+        let _occupied = create_show(&app, &token, "Occupied").await;
+        let collision = app
+            .clone()
+            .oneshot(
+                Request::put(format!("/api/v1/shows/{show_id}/rename"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::from(r#"{"name":"occupied"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(collision.status(), StatusCode::CONFLICT);
+        let still_active = state.desk.lock().active_show().unwrap().unwrap();
+        assert_eq!(still_active.id.0.to_string(), show_id);
+        assert_eq!(still_active.name, "Opening Night");
+        assert!(FsPath::new(&still_active.path).exists());
+
+        let _ = std::fs::remove_dir_all(data_dir);
     }
 
     #[tokio::test]

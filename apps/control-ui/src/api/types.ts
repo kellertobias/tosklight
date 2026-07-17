@@ -318,7 +318,7 @@ export interface ProgrammerState {
   };
 }
 
-export type HighlightAction = "capture" | "on" | "off" | "toggle" | "next" | "previous";
+export type HighlightAction = "on" | "off" | "toggle" | "next" | "previous" | "all";
 
 export interface HighlightFixtureSummary {
   fixture_id: string;
@@ -330,11 +330,12 @@ export interface HighlightFixtureSummary {
 
 /**
  * Authoritative, transient Highlight state for the current desk and user.
- * `active_index` is zero-based and null while the complete captured selection is highlighted.
+ * `mode` describes the actual programmer selection independently of whether Highlight is active.
+ * `active_index` is zero-based and null while the complete live selection is selected.
  */
 export interface HighlightState {
   active: boolean;
-  mode: "off" | "selection" | "step";
+  mode: "selection" | "step";
   output_enabled: boolean;
   capture_only: boolean;
   remembered: HighlightFixtureSummary[];
@@ -389,6 +390,16 @@ export interface ControlDesk {
   columns: number;
   rows: number;
   buttons: number;
+  playback_layout?: PlaybackSurfaceLayout | null;
+}
+export interface PlaybackSurfaceRow {
+  first_playback_slot: number;
+  has_fader: boolean;
+  button_count: number;
+}
+export interface PlaybackSurfaceLayout {
+  playbacks_per_row: number;
+  rows: PlaybackSurfaceRow[];
 }
 export interface ScreenConfiguration {
   id: string;
@@ -405,6 +416,7 @@ export interface ScreenConfiguration {
   display_id: string | null;
   bounds: { x: number; y: number; width: number; height: number } | null;
   fullscreen: boolean;
+  playback_layout?: PlaybackSurfaceLayout | null;
 }
 export interface ScreenSnapshot {
   screens: ScreenConfiguration[];
@@ -460,10 +472,12 @@ export interface FixtureProfile {
   name: string;
   short_name: string;
   fixture_type: string;
+  patch_policy?: "dmx" | "visual_only";
   notes: string;
   photograph_asset: string | null;
   stage_icon_asset: string | null;
   model_asset: string | null;
+  model_units?: "auto" | "metres";
   physical: FixtureProfilePhysical;
   modes: FixtureMode[];
   hazardous: boolean;

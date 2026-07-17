@@ -8,6 +8,7 @@ Honor the narrowest requested scope. If the request says to edit planning or tes
 
 ## Sources of truth
 
+- For fixture-profile and fixture-package work, use the repository-owned skill at `.agents/skills/build-light-fixtures/SKILL.md` and its referenced contract.
 - Read the relevant numbered files under `docs/help/` for operator-facing behavior.
 - Treat `docs/help/30-Programmer/01-command-line.md` and the current command-line help file at that location as the command and keypad contract.
 - Treat `docs/testing/` scenario Markdown as the acceptance contract. When implementing one named scenario, keep executable Playwright coverage under root `tests/` and do not silently expand to every scenario.
@@ -97,4 +98,3 @@ If the app looks stale, verify the bundle opened by the current `build` script b
 ## Delegation
 
 For a large task, use available subagents for independent bounded work such as codebase discovery, test-contract review, compatibility audit, or visual regression review. In Codex, request general-purpose subagents. In Claude Code, use the Agent/subagent mechanism. Do not hardcode a provider-specific model name. Give each worker the applicable raw files and a concrete question; keep integration, mutations to shared live state, and final acceptance review with the primary agent.
-

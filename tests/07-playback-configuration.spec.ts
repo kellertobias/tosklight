@@ -1069,6 +1069,13 @@ test.describe("docs/testing/07-playback-configuration.md", () => {
     await expect.poll(async () => (await controls(api)).speed_groups[0].effective_bpm).toBeCloseTo(120, 3);
     await expect(playbackCard(page, 1)).toContainText("120 BPM");
     await expect(playbackCard(page, 1)).toHaveCSS("--playback-color", "#8b5cf6");
+    const threeButtonLayout = playbackCard(page, 1).locator(".vertical-touch-fader-actions > .ui-button");
+    await expect(threeButtonLayout).toHaveCount(3);
+    const [firstButtonBox, secondButtonBox, bottomButtonBox] = await Promise.all([0, 1, 2].map((index) => threeButtonLayout.nth(index).boundingBox()));
+    expect(firstButtonBox).not.toBeNull(); expect(secondButtonBox).not.toBeNull(); expect(bottomButtonBox).not.toBeNull();
+    expect(Math.abs(firstButtonBox!.y - secondButtonBox!.y)).toBeLessThan(2);
+    expect(bottomButtonBox!.y).toBeGreaterThan(firstButtonBox!.y + firstButtonBox!.height);
+    expect(bottomButtonBox!.width).toBeGreaterThan(firstButtonBox!.width * 1.9);
     await playbackCard(page, 1).getByRole("button", { name: "DOUBLE", exact: true }).click();
     await expect.poll(async () => (await controls(api)).speed_groups[0].manual_bpm).toBe(240);
     await expect(playbackCard(page, 1)).toContainText("240 BPM");
@@ -1083,8 +1090,8 @@ test.describe("docs/testing/07-playback-configuration.md", () => {
     await expect(playbackCard(page, 4)).toContainText("5.0 s");
     await expect(playbackCard(page, 5)).toContainText("15.0 s");
     for (const slot of [4, 5]) {
-      await expect(playbackCard(page, slot).getByRole("button", { name: "DISABLED" })).toHaveCount(3);
-      await expect(playbackCard(page, slot).getByRole("button", { name: "DISABLED" }).first()).toBeDisabled();
+      await expect(playbackCard(page, slot).getByRole("button", { name: "DISABLED" })).toHaveCount(0);
+      await expect(playbackCard(page, slot).locator(".vertical-touch-fader-actions")).toHaveCount(0);
     }
 
     await armSet(page);

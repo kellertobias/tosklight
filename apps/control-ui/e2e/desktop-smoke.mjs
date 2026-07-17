@@ -54,8 +54,8 @@ async function ownedServerScenario() {
     if (!fixtureProfiles.length || fixtureProfiles.some((profile) => profile.schema_version !== 2 || profile.revision < 1)) {
       throw new Error("DESKTOP-001 packaged desk did not start with revisioned schema-v2 fixture profiles");
     }
-    if (!fixtureProfiles.some((profile) => profile.reserved_source === "builtin:generic-catalog")) {
-      throw new Error("DESKTOP-001 packaged desk did not seed reserved built-in Generic profiles");
+    if (!fixtureProfiles.some((profile) => profile.manufacturer === "Generic") || fixtureProfiles.some((profile) => profile.reserved_source != null)) {
+      throw new Error("DESKTOP-001 packaged desk did not load transferable Generic fixture packages");
     }
     const ready = await waitForValue(async () => JSON.parse(await fs.readFile(marker, "utf8")), 15_000, "DESKTOP-001 frontend-ready marker");
     if (ready.ready !== true || ready.server !== `127.0.0.1:${port}`) throw new Error(`DESKTOP-001 invalid frontend marker: ${JSON.stringify(ready)}`);

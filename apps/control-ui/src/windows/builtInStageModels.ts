@@ -19,7 +19,7 @@ export const BUILT_IN_STAGE_ASSETS: Array<{ id: BuiltInStageAssetId; name: strin
   { id: "emissive-tube", name: "Emissive tube" },
 ];
 
-export type BuiltInFixtureKind = "wash-led" | "profile" | "wash-classic" | "mirror-scanner" | "par" | "fresnel" | "strobe" | "sunstrip";
+export type BuiltInFixtureKind = "wash-led" | "profile" | "profile-static" | "wash-classic" | "mirror-scanner" | "par" | "fresnel" | "strobe" | "sunstrip";
 
 const dark = () => new THREE.MeshStandardMaterial({ color: 0x20262b, roughness: .48, metalness: .55 });
 const black = () => new THREE.MeshStandardMaterial({ color: 0x0d1012, roughness: .6, metalness: .35 });
@@ -39,6 +39,22 @@ function boxFrame(width: number, height: number, depth: number, thickness = .035
   const top = mesh(new THREE.BoxGeometry(width, thickness, depth));
   top.position.y = -height / 2;
   group.add(top);
+  return group;
+}
+
+/** A complete square accessory frame in the Y/Z plane at the front of a static lantern. */
+function frontFrame(size: number, thickness = .035, depth = .035) {
+  const group = new THREE.Group();
+  for (const y of [-size / 2, size / 2]) {
+    const rail = mesh(new THREE.BoxGeometry(depth, thickness, size + thickness));
+    rail.position.y = y;
+    group.add(rail);
+  }
+  for (const z of [-size / 2, size / 2]) {
+    const rail = mesh(new THREE.BoxGeometry(depth, size + thickness, thickness));
+    rail.position.z = z;
+    group.add(rail);
+  }
   return group;
 }
 
@@ -79,7 +95,8 @@ export function inferBuiltInFixtureKind(fixture: PatchedFixture): BuiltInFixture
   if (/strobe|blinder|panel/.test(text)) return "strobe";
   if (/fresnel|\bpc\b|theatre|theater/.test(text)) return "fresnel";
   if (/\bpar\b|parcan|par can/.test(text)) return "par";
-  if (/profile|spot|beam/.test(text)) return "profile";
+  if (/moving/.test(text) && /profile|spot|beam/.test(text)) return "profile";
+  if (/profile|ellipsoidal|source four/.test(text)) return "profile-static";
   if (/a7|led.*wash|wash.*led/.test(text)) return "wash-led";
   if (/wash/.test(text)) return "wash-classic";
   if (/moving/.test(text)) return "profile";
@@ -194,7 +211,7 @@ function mirrorScanner(color: THREE.Color, intensity: number, pan: number, tilt:
   return { object, beamMount };
 }
 
-function staticFixture(kind: "par" | "fresnel" | "strobe" | "sunstrip", color: THREE.Color, intensity: number): BuiltInFixtureModel {
+function staticFixture(kind: "par" | "profile-static" | "fresnel" | "strobe" | "sunstrip", color: THREE.Color, intensity: number): BuiltInFixtureModel {
   const object = new THREE.Group();
   const hanger = boxFrame(kind === "sunstrip" ? 1.25 : .55, .45, .055, .035);
   hanger.position.y = -.2;
@@ -205,13 +222,46 @@ function staticFixture(kind: "par" | "fresnel" | "strobe" | "sunstrip", color: T
   let aperture: THREE.Mesh | null = null;
   if (kind === "par") {
     const can = mesh(new THREE.CylinderGeometry(.19, .28, .62, 24));
+    can.name = "par-can-body";
     can.rotation.z = Math.PI / 2;
     body.add(can);
     aperture = lightSource(new THREE.CircleGeometry(.185, 32), color, intensity);
     aperture.rotation.y = Math.PI / 2;
     aperture.position.x = .325;
+    const gelFrame = frontFrame(.47, .035, .03);
+    gelFrame.name = "par-gel-frame";
+    gelFrame.position.x = .345;
+    body.add(gelFrame);
+  } else if (kind === "profile-static") {
+    const rear = mesh(new THREE.CylinderGeometry(.17, .23, .42, 24));
+    rear.name = "profile-rear-housing";
+    rear.rotation.z = Math.PI / 2;
+    rear.position.x = -.18;
+    body.add(rear);
+    const gate = mesh(new THREE.BoxGeometry(.16, .34, .38));
+    gate.name = "profile-shutter-gate";
+    gate.position.x = .1;
+    body.add(gate);
+    const barrel = mesh(new THREE.CylinderGeometry(.105, .15, .52, 24));
+    barrel.name = "profile-lens-barrel";
+    barrel.rotation.z = Math.PI / 2;
+    barrel.position.x = .44;
+    body.add(barrel);
+    const lensRing = mesh(new THREE.CylinderGeometry(.155, .155, .045, 24), black());
+    lensRing.rotation.z = Math.PI / 2;
+    lensRing.position.x = .72;
+    body.add(lensRing);
+    const handle = mesh(new THREE.BoxGeometry(.32, .035, .04), metal());
+    handle.name = "profile-top-handle";
+    handle.position.set(-.03, -.23, 0);
+    body.add(handle);
+    aperture = lightSource(new THREE.CircleGeometry(.13, 32), color, intensity);
+    aperture.rotation.y = Math.PI / 2;
+    aperture.position.x = .745;
   } else if (kind === "fresnel") {
-    body.add(mesh(new THREE.BoxGeometry(.48, .42, .54)));
+    const housing = mesh(new THREE.BoxGeometry(.48, .42, .54));
+    housing.name = "fresnel-housing";
+    body.add(housing);
     const barrel = mesh(new THREE.CylinderGeometry(.23, .23, .18, 24));
     barrel.rotation.z = Math.PI / 2;
     barrel.position.x = .34;
@@ -219,11 +269,18 @@ function staticFixture(kind: "par" | "fresnel" | "strobe" | "sunstrip", color: T
     aperture = lightSource(new THREE.CircleGeometry(.21, 32), color, intensity);
     aperture.rotation.y = Math.PI / 2;
     aperture.position.x = .445;
-    for (const [y, z, ry, rz] of [[.25, 0, 0, .2], [-.25, 0, 0, -.2], [0, .25, .2, 0], [0, -.25, -.2, 0]] as number[][]) {
-      const shutter = mesh(new THREE.BoxGeometry(.04, .32, .42), black());
-      shutter.position.set(.46, y, z);
-      shutter.rotation.set(0, ry, rz);
-      body.add(shutter);
+    const barnDoors = [
+      { name: "top", size: [.025, .28, .48], position: [.48, .34, 0], rotation: [0, 0, -.34] },
+      { name: "bottom", size: [.025, .28, .48], position: [.48, -.34, 0], rotation: [0, 0, .34] },
+      { name: "left", size: [.025, .42, .28], position: [.48, 0, .35], rotation: [0, .34, 0] },
+      { name: "right", size: [.025, .42, .28], position: [.48, 0, -.35], rotation: [0, -.34, 0] },
+    ] as const;
+    for (const door of barnDoors) {
+      const flap = mesh(new THREE.BoxGeometry(door.size[0], door.size[1], door.size[2]), black());
+      flap.name = `fresnel-barn-door-${door.name}`;
+      flap.position.set(door.position[0], door.position[1], door.position[2]);
+      flap.rotation.set(door.rotation[0], door.rotation[1], door.rotation[2]);
+      body.add(flap);
     }
   } else if (kind === "strobe") {
     body.add(mesh(new THREE.BoxGeometry(.95, .48, .16)));
@@ -243,7 +300,7 @@ function staticFixture(kind: "par" | "fresnel" | "strobe" | "sunstrip", color: T
   if (aperture) body.add(aperture);
   const beamMount = new THREE.Group();
   beamMount.rotation.z = -Math.PI / 2;
-  beamMount.position.set(kind === "fresnel" ? .45 : kind === "strobe" ? .49 : kind === "sunstrip" ? .1 : .33, 0, 0);
+  beamMount.position.set(kind === "profile-static" ? .75 : kind === "fresnel" ? .45 : kind === "strobe" ? .49 : kind === "sunstrip" ? .1 : .33, 0, 0);
   body.add(beamMount);
   return { object, beamMount };
 }

@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UI="$ROOT/apps/control-ui"
 
-usage(){ echo "Usage: ./test {unit|e2e|e2e-api|e2e-ui|e2e-supplemental|help-screenshots|record|desktop-smoke|all}"; }
+usage(){ echo "Usage: ./test {unit|e2e|e2e-api|e2e-ui|e2e-supplemental|help-screenshots|record|demo|desktop-smoke|all}"; }
 build_e2e(){ (cd "$UI" && npm run build); cargo build --manifest-path "$ROOT/Cargo.toml" -p light-server --no-default-features; }
 unit(){ cargo test --manifest-path "$ROOT/Cargo.toml" --workspace --exclude light-control-ui --exclude light-hardware-controls --no-default-features; (cd "$UI" && npm test); }
 e2e(){ build_e2e; (cd "$UI" && npm run test:e2e -- "$@"); }
@@ -17,6 +17,10 @@ record(){
   (cd "$UI" && LIGHT_VISUAL_RECORDING=1 npm run test:e2e -- --workers=1 "$@") || status=$?
   node "$ROOT/tools/assemble-visual-recording.mjs" || { [[ "$status" -ne 0 ]] || return 1; }
   return "$status"
+}
+demo(){
+  build_e2e
+  (cd "$UI" && LIGHT_VISUAL_RECORDING=1 npm run test:e2e -- --workers=1 product-demo.spec.ts "$@")
 }
 help_screenshots(){ build_e2e; (cd "$UI" && LIGHT_HELP_SCREENSHOTS=1 npm run test:e2e -- 02-help-screenshots.spec.ts --workers=1 "$@"); }
 desktop_smoke(){
@@ -36,6 +40,7 @@ case "$command" in
   e2e-supplemental) e2e_supplemental "$@" ;;
   help-screenshots) help_screenshots "$@" ;;
   record) record "$@" ;;
+  demo) demo "$@" ;;
   desktop-smoke) desktop_smoke ;;
   all) unit; e2e "$@" ;;
   *) usage >&2; exit 2 ;;

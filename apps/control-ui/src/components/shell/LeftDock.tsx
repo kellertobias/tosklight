@@ -11,7 +11,7 @@ import { getShowIndicator } from "./showIndicator";
 export const builtIns: Array<[BuiltInWindow, string, string]> = [
   ["stage", "⌖", "Stage"], ["fixtures", "♙", "Fixtures"],
   ["presets", "▣", "Presets"], ["cuelists", "▶", "Cuelists"], ["dynamics", "∿", "Dynamics"],
-  ["channels", "▥", "Channels"], ["dmx", "⠿", "DMX"],
+  ["channels", "▥", "Channels"],
 ];
 
 export function LeftDock() {

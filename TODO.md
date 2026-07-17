@@ -28,4 +28,4 @@ evidence in [docs/todo-completion-audit.md](docs/todo-completion-audit.md).
 ## Larger Blocks
 - Dynamics + Chasers
 - Check Cuelists + Fade times
-- [Cue Go To and Load command grammar](docs/planned%20features/09-cue-go-to-and-load.md)
+- [Cue Go To and Load command grammar](docs/plans/Done/09-cue-go-to-and-load.DONE.md)

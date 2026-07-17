@@ -1,11 +1,26 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PlaybackFaderBank } from "./PlaybackFaderBank";
+import { PlaybackFaderBank, playbackRowUnits } from "./PlaybackFaderBank";
 import { UPDATE_TARGET_EVENT } from "./updateWorkflow";
+
+describe("playback row height units", () => {
+  const oneButton = { first_playback_slot: 1, has_fader: false, button_count: 1 };
+  const multipleButtons = { first_playback_slot: 11, has_fader: false, button_count: 3 };
+  const fader = { first_playback_slot: 21, has_fader: true, button_count: 1 };
+
+  it("uses 1/1/2 units with attached hardware", () => {
+    expect([oneButton, multipleButtons, fader].map((row) => playbackRowUnits(row, true))).toEqual([1, 1, 2]);
+  });
+
+  it("uses 1/2/4 units for touch controls", () => {
+    expect([oneButton, multipleButtons, fader].map((row) => playbackRowUnits(row, false))).toEqual([1, 2, 4]);
+  });
+});
 
 const mocks = vi.hoisted(() => ({
   dispatch: vi.fn(), executeCommandLine: vi.fn(), refresh: vi.fn(), poolPlaybackAction: vi.fn(), resetCommandLine: vi.fn(), savePlaybackSlot: vi.fn(), clearPlaybackSlot: vi.fn(),
   commandLine: "FIXTURE", error: null as string | null,
+  hardwareConnected: false,
   state: { midiProfile: null, playbackColumns: 1, playbackRows: 1, playbackPage: 0, cueListSetTarget: 12 as number | null, cueListSetArmed: true, playbackSetArmed: false, shiftArmed: false, updateArmed: false, blackout: false },
   playbacks: {
     active_page: 1,
@@ -18,7 +33,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => ({
-  bootstrap: { hardware_connected: false }, playbacks: mocks.playbacks, groups: [], configuration: { speed_groups_bpm: [120, 90, 60, 30, 15], programmer_fade_millis: 3_000, sequence_master_fade_millis: 4_000 },
+  bootstrap: { hardware_connected: mocks.hardwareConnected }, playbacks: mocks.playbacks, groups: [], configuration: { speed_groups_bpm: [120, 90, 60, 30, 15], programmer_fade_millis: 3_000, sequence_master_fade_millis: 4_000 },
   commandLine: mocks.commandLine, error: mocks.error, resetCommandLine: mocks.resetCommandLine, executeCommandLine: mocks.executeCommandLine, refresh: mocks.refresh,
   poolPlaybackAction: mocks.poolPlaybackAction, savePlaybackSlot: mocks.savePlaybackSlot, clearPlaybackSlot: mocks.clearPlaybackSlot,
 }) }));
@@ -30,6 +45,7 @@ describe("PlaybackFaderBank authoritative playback surfaces", () => {
   beforeEach(() => {
     mocks.dispatch.mockReset(); mocks.executeCommandLine.mockReset().mockResolvedValue(true); mocks.refresh.mockReset().mockResolvedValue(undefined); mocks.poolPlaybackAction.mockReset().mockResolvedValue(undefined); mocks.resetCommandLine.mockReset(); mocks.savePlaybackSlot.mockReset().mockResolvedValue(true); mocks.clearPlaybackSlot.mockReset().mockResolvedValue(true);
     mocks.commandLine = "FIXTURE"; mocks.error = null;
+    mocks.hardwareConnected = false;
     Object.assign(mocks.state, { cueListSetTarget: 12, cueListSetArmed: true, playbackSetArmed: false, shiftArmed: false, updateArmed: false, blackout: false });
     mocks.playbacks.pages[0].slots = {}; mocks.playbacks.pool = []; mocks.playbacks.active = []; mocks.playbacks.selected_playback = null;
   });
@@ -39,6 +55,39 @@ describe("PlaybackFaderBank authoritative playback surfaces", () => {
     mocks.playbacks.pool = [{ number: 7, name: "Front Wash", target: { type: "cue_list", cue_list_id: "front" }, buttons: ["go", "go_minus", "flash"], button_count: 3, fader: "master", has_fader: true, go_activates: true, auto_off: true, xfade_millis: 0, color: "#20c997", flash_release: "release_all", protect_from_swap: false, ...overrides }];
     Object.assign(mocks.state, { cueListSetTarget: null, cueListSetArmed: false });
   };
+
+  it("projects arbitrary row starts and fills touch height with weighted tracks", () => {
+    Object.assign(mocks.state, { cueListSetTarget: null, cueListSetArmed: false });
+    const { container } = render(<PlaybackFaderBank playbackLayout={{
+      playbacks_per_row: 1,
+      rows: [
+        { first_playback_slot: 1, has_fader: false, button_count: 1 },
+        { first_playback_slot: 11, has_fader: false, button_count: 3 },
+        { first_playback_slot: 21, has_fader: true, button_count: 1 },
+      ],
+    }} />);
+
+    expect(container.querySelector(".playback-fader-bank")).toHaveStyle({
+      gridTemplateRows: "minmax(0, 1fr) minmax(0, 2fr) minmax(0, 4fr)",
+    });
+    expect([...container.querySelectorAll("[data-playback-slot]")].map((element) => element.getAttribute("data-playback-slot"))).toEqual(["1", "11", "21"]);
+  });
+
+  it("fills hardware height with faderless and fader row weights", () => {
+    mocks.hardwareConnected = true;
+    Object.assign(mocks.state, { cueListSetTarget: null, cueListSetArmed: false });
+    const { container } = render(<PlaybackFaderBank playbackLayout={{
+      playbacks_per_row: 1,
+      rows: [
+        { first_playback_slot: 1, has_fader: false, button_count: 1 },
+        { first_playback_slot: 11, has_fader: false, button_count: 3 },
+        { first_playback_slot: 21, has_fader: true, button_count: 1 },
+      ],
+    }} />);
+    expect(container.querySelector(".playback-fader-bank")).toHaveStyle({
+      gridTemplateRows: "minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr)",
+    });
+  });
 
   it("assigns the selected Cuelist source to the touched physical page slot", async () => {
     render(<PlaybackFaderBank count={1} />);
@@ -109,13 +158,33 @@ describe("PlaybackFaderBank authoritative playback surfaces", () => {
   });
 
   it("dispatches the authoritative button index, including held Flash lifetime", () => {
-    assignPlayback(); render(<PlaybackFaderBank count={1}/>);
+    assignPlayback(); const { container } = render(<PlaybackFaderBank count={1}/>);
+    expect(container.querySelector(".vertical-touch-fader-stack")).toHaveClass("action-count-3");
     fireEvent.click(screen.getByRole("button", { name: "GO +" }));
     expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "button", { button: 1, pressed: true, surface: "physical" });
     const flash = screen.getByRole("button", { name: "FLASH" });
     fireEvent.pointerDown(flash, { pointerId: 4 }); fireEvent.pointerUp(flash, { pointerId: 4 });
     expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "button", { button: 3, pressed: true, surface: "physical" });
     expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "button", { button: 3, pressed: false, surface: "physical" });
+  });
+
+  it("omits disabled touch buttons while preserving configured button indices", () => {
+    assignPlayback({ buttons: ["go", "none", "flash"], button_count: 3 });
+    const { container } = render(<PlaybackFaderBank count={1}/>);
+    expect(screen.queryByRole("button", { name: "DISABLED" })).not.toBeInTheDocument();
+    expect(container.querySelector(".vertical-touch-fader-stack")).toHaveClass("action-count-2");
+    expect(container.querySelectorAll(".vertical-touch-fader-actions .ui-button")).toHaveLength(2);
+    fireEvent.pointerDown(screen.getByRole("button", { name: "FLASH" }), { pointerId: 4 });
+    expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "button", { button: 3, pressed: true, surface: "physical" });
+  });
+
+  it("renders one configured faderless touch button as the only action", () => {
+    assignPlayback({ buttons: ["flash", "none", "none"], button_count: 1, has_fader: false });
+    const { container } = render(<PlaybackFaderBank count={1}/>);
+    expect(container.querySelector(".faderless-playback-actions")).toHaveClass("action-count-1");
+    expect(container.querySelectorAll(".faderless-playback-actions .ui-button")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "FLASH" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "DISABLED" })).not.toBeInTheDocument();
   });
 
   it("dispatches TEMP as a press-to-toggle action on successive clicks", () => {

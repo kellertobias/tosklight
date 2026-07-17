@@ -208,7 +208,7 @@ function geometryBeam(emitter: GeometryEmitter, attributes: Map<string, Attribut
 
 function schemaV2Geometry(fixture: PatchedFixture, mode: FixtureMode, byFixture: Map<string, Map<string, AttributeValue>>, selected: boolean, snapshot: VisualizationSnapshot | null, projectedOwners: Set<string>) {
   const graph = mode.geometry;
-  if (!graph.nodes.length || !graph.emitters.length) return null;
+  if (!graph.nodes.length) return null;
   const result = new THREE.Group();
   result.name = "fixture-profile-geometry";
   const rootAttributes = byFixture.get(fixture.fixture_id) ?? new Map<string, AttributeValue>();
@@ -317,7 +317,11 @@ export function mountFixtureModel(
 ) {
   const instanceId = root.userData.instanceId ?? fixture.fixture_id;
   model.updateMatrixWorld(true);
-  const scale = normalizedModelScale(model, fixture);
+  // Visual-only Venue packages author GLB geometry in metres so transferred scenic elements
+  // retain exact real-world dimensions instead of being normalized like lamp body models.
+  const scale = fixture.definition.profile_snapshot?.model_units === "metres"
+    ? 1
+    : normalizedModelScale(model, fixture);
   const mode = profileMode(fixture);
   const bindings = mode?.geometry.nodes.filter((node) => node.glb_node) ?? [];
   const boundNames = new Set(bindings.flatMap((node) => node.glb_node ? [node.glb_node] : []));

@@ -262,6 +262,26 @@ export class LightApiClient {
     });
   }
 
+  importFixturePackage(source: Uint8Array) {
+    const bytes = source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength) as ArrayBuffer;
+    return this.request<import("./types").FixtureProfile>("/api/v1/fixture-packages/import", {
+      method: "POST",
+      headers: { "content-type": "application/vnd.tosklight.fixture+zip" },
+      body: bytes,
+    });
+  }
+
+  async exportFixturePackage(id: string, revision: number): Promise<Blob> {
+    if (!this.session) throw new Error("A server session is required");
+    const headers = this.boundaryHeaders(new Headers({ authorization: `Bearer ${this.session.token}` }));
+    const response = await fetch(
+      `${this.baseUrl}/api/v1/fixture-profiles/${encodeURIComponent(id)}/${revision}/package`,
+      { headers },
+    );
+    if (!response.ok) throw new Error(await response.text());
+    return response.blob();
+  }
+
   putFixtureDefinition(definition: import("./types").FixtureDefinition) {
     return this.request<import("./types").FixtureDefinition>("/api/v1/fixture-library", {
       method: "PUT",
@@ -362,6 +382,14 @@ export class LightApiClient {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ transition, transition_millis: transitionMillis }),
+    });
+  }
+
+  renameShow(id: string, name: string): Promise<ShowEntry> {
+    return this.request(`/api/v1/shows/${id}/rename`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name }),
     });
   }
 

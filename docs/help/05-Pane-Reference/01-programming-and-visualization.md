@@ -36,6 +36,8 @@ The Fixture sheet is the detailed live inspection and selection table. It refres
 
 Simple fixtures use one row. Multi-head fixtures can expose a `.0` master row for shared parameters and `.1`, `.2`, and following logical-head rows for the individual heads.
 
+During PREV/NEXT stepping, every row in the remembered base selection remains visibly selected with a subdued patterned treatment, while the actual current fixture or head uses the prominent selected treatment and a stronger left marker. This distinction does not rely on color alone and remains visible whether HIGH is off or on. PREV and NEXT move the prominent marker without hiding the base; ALL restores ordinary complete-selection styling, and an external selection replaces both indications. Multi-head state appears on the actual head rows. Collapse the heads when more space is needed; the parent row then retains a contained-base or contained-step indication so the active state is not hidden.
+
 ### Fixture sheet columns
 
 | Column | What it shows |

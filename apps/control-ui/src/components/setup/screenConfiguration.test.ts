@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ScreenConfiguration } from "../../api/types";
-import { createScreenConfiguration, screenForAddAction } from "./screenConfiguration";
+import { createScreenConfiguration, playbackLayoutLegacyFields, screenForAddAction } from "./screenConfiguration";
 
 const layout = { desks: [], activeDeskId: "main" };
 const configuredScreen: ScreenConfiguration = {
@@ -54,6 +54,25 @@ describe("Add Screen action", () => {
       playback_count: 40,
       playback_rows: 4,
       desired_open: false,
+      playback_layout: {
+        playbacks_per_row: 10,
+        rows: [
+          { first_playback_slot: 41, has_fader: true, button_count: 3 },
+          { first_playback_slot: 51, has_fader: true, button_count: 3 },
+          { first_playback_slot: 61, has_fader: true, button_count: 3 },
+          { first_playback_slot: 71, has_fader: true, button_count: 3 },
+        ],
+      },
     });
+  });
+
+  it("projects a row layout into legacy desk and screen fields", () => {
+    expect(playbackLayoutLegacyFields({
+      playbacks_per_row: 6,
+      rows: [
+        { first_playback_slot: 1, has_fader: false, button_count: 1 },
+        { first_playback_slot: 21, has_fader: true, button_count: 3 },
+      ],
+    })).toEqual({ columns: 6, rows: 2, buttons: 3, playback_count: 12, playback_rows: 2, first_playback_slot: 1 });
   });
 });

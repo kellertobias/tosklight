@@ -93,8 +93,8 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
     await page.getByRole("button", { name: /Open show menu/ }).click();
     await page.getByRole("button", { name: "Enter Setup", exact: true }).click();
     const setupNav = page.locator(".setup-window nav");
-    await setupNav.getByRole("button", { name: "Fixture library", exact: true }).click();
-    await expect(page.locator(".ui-window-title")).toHaveText("Fixture library");
+    await page.getByRole("button", { name: "Open Fixture Library", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Fixture Library" })).toBeVisible();
     const titleActions = page.locator("#setup-section-actions");
     await expect(titleActions.locator(".console-search")).toBeVisible();
     await expect(titleActions.getByRole("button", { name: "Import GDTF" })).toBeVisible();
@@ -141,7 +141,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
     await desk.recordStep("GDTF FILE PICKER", "Fixture Library imports use the confined picker with a .gdtf-only selection contract.");
     await page.locator(".show-modal").getByRole("button", { name: "Enter Setup", exact: true }).click();
     const setupNav = page.locator(".setup-window nav");
-    await setupNav.getByRole("button", { name: "Fixture library", exact: true }).click();
+    await page.getByRole("button", { name: "Open Fixture Library", exact: true }).click();
     await page.getByRole("button", { name: "Import GDTF", exact: true }).click();
     const gdtf = page.locator(".gdtf-import-modal");
     await gdtf.getByRole("button", { name: "Choose GDTF file", exact: true }).click();
@@ -156,9 +156,11 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
     await fixtureEditor.getByRole("button", { name: "Choose visualizer glb model", exact: true }).click();
     await expectPickerConstraint(page, files.invalid, files.scene);
     await fixtureEditor.getByRole("button", { name: "Close fixture editor" }).click();
+	await page.getByRole("button", { name: "Close Fixture Library", exact: true }).click();
 
     await desk.recordStep("WALLPAPER FILE PICKER", "Desk Lock wallpaper selection stays inside configured roots and accepts browser image formats only.");
-    await setupNav.getByRole("button", { name: "Desk Lock", exact: true }).click();
+	await setupNav.getByRole("button", { name: "Screens & playback", exact: true }).click();
+	await page.getByRole("button", { name: "Desk Lock", exact: true }).click();
     await page.getByRole("button", { name: "Choose lock wallpaper", exact: true }).click();
     await expectPickerConstraint(page, files.invalid, files.wallpaper);
 

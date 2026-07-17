@@ -14,7 +14,8 @@ import type {
 } from "../../api/types";
 import { useServer } from "../../api/ServerContext";
 import { useApp } from "../../state/AppContext";
-import { Button, FormLayout, SelectField, SwitchField } from "../common";
+import { Button, SelectField } from "../common";
+import { UpdateDefaultsFields } from "../setup/ProgrammerDefaults";
 import {
   UPDATE_SETTINGS_EVENT,
   UPDATE_ARMED_EVENT,
@@ -143,13 +144,7 @@ export function UpdateSettingsDialog({ settings, busy, error, onChange, onSave, 
       <Button className="modal-close" aria-label="Close Update Settings" onClick={onCancel}>×</Button>
       <h2>Update Settings</h2>
       <p>Desk workflow preferences for Update. These settings do not change show programming.</p>
-      <FormLayout labelPlacement="side">
-        <SelectField label="Cue/Cuelist default" value={settings.cue_mode} onChange={(value) => onChange({ ...settings, cue_mode: value as CueUpdateMode })} options={cueUpdateModes}/>
-        <SelectField label="Preset default" value={settings.preset_mode} onChange={(value) => onChange({ ...settings, preset_mode: value as ExistingContentMode })} options={existingContentModes}/>
-        <SelectField label="Group default" value={settings.group_mode} onChange={(value) => onChange({ ...settings, group_mode: value as ExistingContentMode })} options={existingContentModes}/>
-        <SwitchField label="Show Update modal on touch" checked={settings.show_update_modal_on_touch} onChange={(event) => onChange({ ...settings, show_update_modal_on_touch: event.target.checked })}/>
-      </FormLayout>
-      <p className="playback-topology-note">Command-line confirmation with Enter always applies the configured default directly.</p>
+      <UpdateDefaultsFields settings={settings} onChange={onChange}/>
       {error && <p className="modal-error" role="alert">{error}</p>}
       <div className="modal-actions"><Button disabled={busy} onClick={onCancel}>Cancel</Button><Button className="primary" disabled={busy} onClick={onSave}>{busy ? "Saving…" : "Save Update Settings"}</Button></div>
     </section>

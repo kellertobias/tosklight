@@ -229,9 +229,12 @@ describe("FixtureProfileEditor", () => {
   it("provides case-insensitive manufacturer lookup with the shared full-text keyboard", () => {
     render(<FixtureProfileEditor initialProfile={validProfile()} manufacturers={["Robe", "robe", "ETC", "Clay Paky"]} onSave={vi.fn()} onClose={vi.fn()}/>);
     fireEvent.click(screen.getByRole("button", { name: "Look up manufacturer" }));
+		const lookup = screen.getByRole("dialog", { name: "Manufacturer lookup" });
+		fireEvent.click(within(lookup).getByRole("button", { name: "Open keyboard" }));
     expect(screen.getByLabelText("Full text keyboard")).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Close input" }));
     expect(screen.getAllByRole("option", { name: /Robe/i })).toHaveLength(1);
-    fireEvent.change(screen.getByLabelText("Search manufacturers"), { target: { value: "clay" } });
+    fireEvent.change(within(lookup).getByRole("textbox", { name: "Search manufacturers" }), { target: { value: "clay" } });
     fireEvent.click(screen.getByRole("option", { name: "Clay Paky" }));
     expect(screen.getByLabelText(/^Manufacturer/)).toHaveValue("Clay Paky");
     expect(screen.getByRole("dialog", { name: "Create fixture profile" })).toBeInTheDocument();

@@ -18,3 +18,10 @@ describe("Development window registration", () => {
     expect(builtIns.some(([kind]) => kind === "development")).toBe(false);
   });
 });
+
+describe("DMX window registration", () => {
+  it("remains routable but is omitted from the Built-ins dock", () => {
+    expect(windowRegistry.dmx).toBeDefined();
+    expect(builtIns.some(([kind]) => kind === "dmx")).toBe(false);
+  });
+});

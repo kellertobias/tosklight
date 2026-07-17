@@ -34,6 +34,9 @@ describe("FileManagerPickerHost", () => {
     });
 
     expect(screen.getByRole("dialog", { name: "Choose files or folders" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "File Manager" })).toBeVisible();
+    expect(screen.getByText("Select files")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Close File Manager" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "Open system file picker" })).not.toBeInTheDocument();
     expect(screen.getByText(/"target":"files"/)).toHaveTextContent('"multiple":true');
     fireEvent.click(screen.getByRole("button", { name: "Select mock" }));
@@ -46,7 +49,7 @@ describe("FileManagerPickerHost", () => {
     render(<FileManagerPickerHost />);
     let result!: Promise<unknown>;
     act(() => { result = openFileManagerPicker({ target: "folders" }); });
-    fireEvent.click(screen.getByRole("button", { name: "Cancel mock" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close File Manager" }));
     await expect(result).resolves.toBeNull();
   });
 

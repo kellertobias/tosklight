@@ -1,21 +1,12 @@
-# End-to-End Scenario Specifications
+# End-to-End Testing Conventions
 
-These documents expand the stable IDs in the [canonical test catalog](../help/99-Development/02-test-bench-coverage.md) into executable scenarios. Every stable ID listed by the current catalog has matching Playwright coverage in the repository-root `tests/` folder. Harness-only, packaged-process, and inherently surface-specific cases state their actual execution shape instead of claiming an artificial API/UI pair.
+The [canonical test catalog](../help/99-Development/02-test-bench-coverage.md) indexes stable scenario IDs. Implemented scenarios live with their executable Playwright coverage in the repository-root `tests/` folder. Harness-only, packaged-process, and inherently surface-specific cases state their actual execution shape instead of claiming an artificial API/UI pair.
 
-## Scenario documents
+## Retained scenario contract
 
-- [Reusable show files and Save As](00-generate-show-files.md) defines the two maintained canonical fixtures and first proves that Save As creates independent working copies.
-- [Foundational dimmers and groups](01-foundational-dimmers-and-groups.md) covers patching, ordered groups, live references, direct values, clear stages, and exact DMX.
-- [Cues, tracking, and arbitration](02-cues-tracking-and-arbitration.md) covers recording, tracking, cue-only, fades, navigation, Cuelist settings, Move in Black, HTP, and LTP.
-- [Network output protocols](03-network-output-protocols.md) covers real Art-Net and sACN packets, routing, sequence numbers, priorities, and termination.
-- [OSC, API, and cross-surface agreement](04-osc-api-and-cross-surface.md) covers OSC hardware behavior, REST revisions, WebSocket/audit events, equivalent commands, authoritative Highlight/Step Through boundaries, and the focused Matter bridge transport/UI boundaries.
-- [Virtual time, persistence, and recovery](05-virtual-time-persistence-and-recovery.md) covers exact timing boundaries, restart behavior, corrupt data, and packaged desktop ownership.
-- [Preload modes and virtual playbacks](06-preload-modes-and-virtual-playbacks.md) covers the three independent Preload capture domains, all eight Settings combinations, physical and virtual playback action queues, Programmer Fade execution, programmer-only release, and authoritative named Virtual Playback exclusion zones.
-- [Playback Configuration](07-playback-configuration.md) covers Set-plus-playback modal entry, assignments, colors, clearing, type-specific layouts, Cuelist controls, Master/X-fade/Temp faders, and temporary LTP/Swap behavior.
-- [Sound to Light](08-sound-to-light.md) covers browser/desk-local audio assignment, deterministic recorded input, portable response configuration, authoritative Speed Group mapping, manual controls, and signal-loss fallback.
-- [File Manager and Text Editor](09-file-manager-and-text-editor.md) covers root confinement, revision-safe text, the three-column file workflow, configured roots and pickers, persisted editor association, conflict handling, recovery, and Markdown/read-only modes.
-- [Desk Lock and operator UI review](10-desk-lock-and-operator-ui.md) covers desk-scoped lock behavior across screens/API/OSC and the operator-visible terminology, layout, picker, Cues, Help, DMX, Stage, Development, and recovery corrections verified by the manual-review suite.
-- [Update, Highlight, Fixture Profiles, and Matter](11-update-highlight-fixture-profiles-and-matter.md) covers representative paired Update, transient Highlight/Step Through, desk-wide fixture-profile, and desk-persistent Matter workflows, with the focused exhaustive layers named beside each scenario.
+- [OSC, API, and cross-surface agreement](04-osc-api-and-cross-surface.md) covers OSC hardware behavior, REST revisions, WebSocket/audit events, equivalent commands, authoritative PREV/NEXT/ALL and independent HIGH boundaries, and the focused Matter bridge transport/UI boundaries.
+
+This file remains because OSC-002, OSC-004, OSC-006, API-002, and CROSS-001 still contain contract assertions that are not fully represented by executable tests or [Plan 23](../plans/Future/23-completion-coverage-and-release-verification.md).
 
 ## Common conventions
 
@@ -31,7 +22,7 @@ These documents expand the stable IDs in the [canonical test catalog](../help/99
 
 ### Literal operator-action notation
 
-The procedures in these files are intentionally literal. A tester must not fill in an omitted selection, recording, or confirmation step from experience with another console.
+The procedures in the retained scenario contract and executable tests are intentionally literal. A tester must not fill in an omitted selection, recording, or confirmation step from experience with another console.
 
 - **Click** means one ordinary primary-button click or one finger tap. Do not hold Command, Control, Shift, or another modifier unless the procedure explicitly says so.
 - Consecutive fixture and group clicks are additive while the selection is still current. For example, click fixture 5 and then fixture 6 to obtain the ordered selection `5, 6`. A value change, encoder move, or preset recall applies to the current selection without immediately deselecting it. The next fixture or group click starts a new selection while previously programmed values remain active; a leading `[+]` continues the current selection instead.
@@ -54,7 +45,7 @@ Every catalog behavior that can be performed independently through both the auth
 
 Both variants use the same canonical starting show, arrangement function, virtual timestamps, normalized expected state, and output oracle. They must not run sequentially against the same show: independent fixtures are what make the comparison trustworthy.
 
-An ID whose complete primary action is a harness boundary or packaged-process ownership remains a supplemental `@wire`, `@restart`, `@desktop`, or Rust integration case until a genuine operator adapter exists. An inherently UI-only contract such as pane geometry, rendered Markdown, or visible terminology uses a real `@ui` case; an integrated boundary such as Desk Lock may deliberately prove UI, API rejection, and OSC suppression in one cross-surface case. These exceptions are stated in their scenario documents and are not substitutes for pairing when equivalent independent API and UI actions do exist. Do not manufacture a browser test that performs the same hidden API or file mutation behind an open page: that is not an independent UI variant. Any operator-visible setup or recovery action surrounding a harness boundary still receives an API/UI pair, as `SHOW-003` does for choosing the valid recovery show.
+An ID whose complete primary action is a harness boundary or packaged-process ownership remains a supplemental `@wire`, `@restart`, `@desktop`, or Rust integration case until a genuine operator adapter exists. An inherently UI-only contract such as pane geometry, rendered Markdown, or visible terminology uses a real `@ui` case; an integrated boundary such as Desk Lock may deliberately prove UI, API rejection, and OSC suppression in one cross-surface case. These exceptions are stated in the catalog, retained contract, or executable test and are not substitutes for pairing when equivalent independent API and UI actions do exist. Do not manufacture a browser test that performs the same hidden API or file mutation behind an open page: that is not an independent UI variant. Any operator-visible setup or recovery action surrounding a harness boundary still receives an API/UI pair, as `SHOW-003` does for choosing the valid recovery show.
 
 | API result | UI result | Meaning |
 | --- | --- | --- |
@@ -78,7 +69,7 @@ CI shards the API and UI catalogs independently. This keeps both sides of every 
 
 Every automated scenario should follow the same visible structure:
 
-1. **Create the isolated fixture.** For a show-mutating scenario, follow its **Starting show** line: load the named canonical show, immediately use Save As with the scenario-specific filename, confirm the copy is active, and mutate only that copy. Otherwise create the scenario's named temporary files, roots, sessions, or process fixture.
+1. **Create the isolated fixture.** For a show-mutating scenario, follow its executable setup: load the named canonical show, immediately use Save As with the scenario-specific filename, confirm the copy is active, and mutate only that copy. Otherwise create the scenario's named temporary files, roots, sessions, or process fixture.
 2. **Establish observers.** Authenticate the API driver, connect the event socket, bind Art-Net/sACN receivers, and subscribe OSC hardware if the scenario needs it. Record event and packet marks before the action.
 3. **Perform the named actions.** For a paired case, the `@api` variant uses authenticated REST or the command WebSocket and the `@ui` variant clicks real controls or operates the Lightning Desk keys. Surface-specific, OSC, or desktop cases use only the real surface named by the scenario.
 4. **Synchronize on evidence.** Wait for a revision, audit/WebSocket event, programmer state, OSC return, or packet newer than the mark. Do not use a sleep as proof that an action finished.
@@ -100,7 +91,7 @@ The catalog also includes the more detailed narrated walkthrough at `artifacts/v
 
 The recording run is intentionally slower than the normal suite: browser actions default to a 250 ms delay and narrated checkpoints remain visible for 1,200 ms. Override those defaults with `LIGHT_VISUAL_SLOW_MO=<milliseconds>` and `LIGHT_VISUAL_STEP_PAUSE=<milliseconds>` when a still slower inspection copy is useful. API-only cases have no browser surface and therefore add assertions but no video clip; their paired UI cases show the corresponding application workflow. Recordings are supplementary evidence. The normal Playwright assertions remain authoritative because video timing and encoding are not used as synchronization or pass criteria.
 
-In these documents, **Assertions** are the exact checks made by the test. **Pass condition** is the product-level conclusion supported by those checks. **Follow-ups** are deliberately separate tests or failure investigations, not extra unbounded work inside the primary scenario.
+In the retained contract, **Assertions** are the exact checks made by the test. **Pass condition** is the product-level conclusion supported by those checks. **Follow-ups** are deliberately separate tests or failure investigations, not extra unbounded work inside the primary scenario.
 
 ## Priority
 

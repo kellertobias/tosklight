@@ -39,6 +39,28 @@ afterEach(() => {
 });
 
 describe("fixture profile revision editing", () => {
+  it("filters the fixture library immediately while typing and restores it with Clear search", async () => {
+    const dimmer = blankFixtureProfile();
+    dimmer.manufacturer = "Generic";
+    dimmer.name = "Dimmer";
+    dimmer.short_name = "Dimmer";
+    const orbit = blankFixtureProfile();
+    orbit.id = "orbit-profile";
+    orbit.manufacturer = "Acme";
+    orbit.name = "Orbit Wash";
+    orbit.short_name = "Orbit";
+    server.fixtureProfiles = [dimmer, orbit];
+
+    render(<FixtureLibrarySetup/>);
+    const search = await screen.findByRole("textbox", { name: "Search" });
+    fireEvent.change(search, { target: { value: "orbit" } });
+
+    expect(screen.getByRole("button", { name: /Orbit Wash/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Dimmer/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    expect(screen.getByRole("button", { name: /^Dimmer/ })).toBeInTheDocument();
+  });
+
   it("uses a retained revision as the draft but the latest revision as the optimistic save check", async () => {
     const latest = blankFixtureProfile();
     latest.manufacturer = "Acme";

@@ -241,6 +241,7 @@ interface ServerContextValue {
   readVirtualPlaybackExclusionZones: () => Promise<import("./types").VirtualPlaybackExclusionSnapshot>;
   saveVirtualPlaybackExclusionZones: (surfaceId: string, zones: import("./types").VirtualPlaybackExclusionZone[]) => Promise<boolean>;
   setPlaybackPage: (page: number) => Promise<void>;
+  savePlaybackPage: (page: import("./types").PlaybackPage) => Promise<boolean>;
   updateControlDesk: (desk: import("./types").ControlDesk) => Promise<void>;
   selectControlDesk: (id: string) => void;
   savePlaybackDefinition: (playback: import("./types").PlaybackDefinition) => Promise<void>;
@@ -327,7 +328,9 @@ interface ServerContextValue {
   deleteFixtureProfile: (id: string, revision: number) => Promise<void>;
   fixtureProfileRevisions: (id: string) => Promise<FixtureProfile[]>;
   saveFixtureProfileSourceGdtf: (id: string, revision: number, source: Uint8Array) => Promise<boolean>;
-  patchFixture: (input: { name: string; definition: FixtureDefinition; universe: number | null; address: number | null; split_patches?: import("./types").SplitPatch[]; layer_id?: string }) => Promise<string | null>;
+  importFixturePackage: (source: Uint8Array) => Promise<FixtureProfile>;
+  exportFixturePackage: (id: string, revision: number) => Promise<Blob>;
+  patchFixture: (input: { name: string; fixture_number: number; definition: FixtureDefinition; universe: number | null; address: number | null; split_patches?: import("./types").SplitPatch[]; layer_id?: string }) => Promise<string | null>;
   updatePatchedFixture: (fixtureId: string, changes: Partial<PatchedFixture>) => Promise<boolean>;
   savePatchLayer: (layer: PatchLayer) => Promise<boolean>;
 }
@@ -641,7 +644,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
               .screens()
               .then(setScreens)
               .catch(() => undefined);
-          if (["show_opened", "show_rolled_back", "server_configuration_changed", "session_started", "session_disconnected", "programmer_changed", "programmer_cleared", "hardware_connection_changed"].includes(event.kind)) {
+          if (["show_opened", "show_renamed", "show_rolled_back", "server_configuration_changed", "session_started", "session_disconnected", "programmer_changed", "programmer_cleared", "hardware_connection_changed"].includes(event.kind)) {
             const requestedCommandLineEpoch = commandLineEpoch.current;
             // Read the shared desk command line only after every local key/reset write that was
             // already queued when this event arrived. In particular, programmer.execute can
@@ -690,7 +693,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
               .then(setFixtureProfileWarnings)
               .catch(() => undefined);
           }
-          if (["show_uploaded", "show_deleted", "show_opened", "show_rolled_back"].includes(event.kind))
+          if (["show_uploaded", "show_deleted", "show_opened", "show_renamed", "show_rolled_back"].includes(event.kind))
             void client
               .shows()
               .then(setShows)
@@ -1193,6 +1196,26 @@ export function ServerProvider({ children }: PropsWithChildren) {
           setError(reason instanceof Error ? reason.message : String(reason));
         }
       },
+      savePlaybackPage: async (page) => {
+        if (!bootstrap?.active_show) return false;
+        try {
+          const pages = await client.objects<import("./types").PlaybackPage>(bootstrap.active_show.id, "playback_page");
+          const existing = pages.find((item) => item.body.number === page.number);
+          if (!existing) {
+            for (const loadedPage of playbacks?.pages ?? []) {
+              if (loadedPage.number === page.number || pages.some((item) => item.body.number === loadedPage.number)) continue;
+              await client.putObject(bootstrap.active_show.id, "playback_page", String(loadedPage.number), loadedPage, 0);
+            }
+          }
+          await client.putObject(bootstrap.active_show.id, "playback_page", String(page.number), page, existing?.revision ?? 0);
+          setPlaybacks(await client.playbacks());
+          setError(null);
+          return true;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return false;
+        }
+      },
       updateControlDesk: async (desk) => {
         try {
           const updated = await client.updateControlDesk(desk);
@@ -1340,14 +1363,18 @@ export function ServerProvider({ children }: PropsWithChildren) {
       saveShowAs: async (name) => {
         try {
           let created: ShowEntry;
-          if (bootstrap?.active_show) {
+          let shouldOpen = true;
+          if (bootstrap?.active_show && /^New Empty Show(?: [1-9]\d*)?$/.test(bootstrap.active_show.name)) {
+            created = await client.renameShow(bootstrap.active_show.id, name);
+            shouldOpen = false;
+          } else if (bootstrap?.active_show) {
             const blob = await client.downloadShow(bootstrap.active_show.id);
             const bytes = new Uint8Array(await blob.arrayBuffer());
             let binary = "";
             for (const byte of bytes) binary += String.fromCharCode(byte);
             created = await client.createShow(name, btoa(binary), false);
           } else created = await client.createShow(name);
-          await client.openShow(created.id, "hold_current");
+          if (shouldOpen) await client.openShow(created.id, "hold_current");
           await refresh();
           setError(null);
           return true;
@@ -2181,6 +2208,20 @@ export function ServerProvider({ children }: PropsWithChildren) {
           return false;
         }
       },
+      importFixturePackage: async (source) => {
+        try {
+          const imported = await client.importFixturePackage(source);
+          setFixtureProfiles(await client.fixtureProfiles());
+          setFixtureProfileWarnings(await client.fixtureProfileWarnings());
+          setFixtureLibrary(await client.fixtureLibrary());
+          setError(null);
+          return imported;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          throw reason;
+        }
+      },
+      exportFixturePackage: (id, revision) => client.exportFixturePackage(id, revision),
       patchFixture: async (input) => {
         try {
           if (!bootstrap?.active_show) throw new Error("No active show is available");
@@ -2189,6 +2230,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
           const fixture_id = crypto.randomUUID();
           const body = {
             fixture_id,
+            fixture_number: input.fixture_number,
             name: input.name,
             definition: input.definition,
             universe: input.universe,

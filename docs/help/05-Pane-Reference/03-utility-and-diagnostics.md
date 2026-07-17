@@ -2,19 +2,17 @@
 
 ## File Manager
 
-The File Manager browses only roots explicitly exposed by the server; it cannot escape into arbitrary server paths. The Shows location is always available, operators can add configured locations under **Setup > File Manager**, and connected removable drives appear automatically as temporary locations without changing Desk configuration. If a drive disconnects, its location disappears and any affected operation reports a visible error instead of continuing against a stale path.
+The File Manager browses only roots explicitly exposed by the server; it cannot escape into arbitrary server paths. The Shows location is always available, installation-configured locations are supplied by the server, and connected removable drives appear automatically as temporary locations without changing Desk configuration. Open it from **Desk Setup > Shows & recovery > Open File Manager** or add it to a Desktop. If a drive disconnects, its location disappears and any affected operation reports a visible error instead of continuing against a stale path.
 
-The normal workspace has a folder tree, a folders-first file list or thumbnail grid, and selection properties. Its title shows the current root-relative path. Back and Forward sit beside **View**; View switches between List and Grid and toggles file properties. **Create** contains New File and New Folder, while **Edit** contains Rename, Copy, Move, and Delete. Control/Command enables multi-selection.
+The normal workspace has a folder tree, a folders-first file list or thumbnail grid, and selection properties. Its standard window header shows **File Manager** at the left, the current task above the current root-relative path, and the action controls at the right. A picker uses the same controls in the standard modal title bar and adds the regular Close button; a File Manager pane uses window chrome without a Close button. **Edit** contains Rename, Copy, Move, and Delete. **New** contains New File and New Folder. **View** switches between List and Grid and toggles hidden files and the Properties sidebar. Back and Forward sit directly beside View. Control/Command enables multi-selection.
 
 List view shows Name, Type, Size, and Modified time. The properties area previews common images and streams MP3 and WAV audio, including seeking, without loading the whole recording first. Supported text files can be opened in an embedded editor with Saved/Unsaved and read-only status. Delete uses the platform Trash where the selected filesystem supports it; otherwise the confirmation explicitly warns that deletion is permanent.
 
-The same root-confined browser is used whenever a ToskLight form asks for a file or folder. **Setup > File Manager** can enable **Open system file picker** as a secondary fallback. It is disabled by default; enabling it does not remove the ToskLight picker or the calling form's file-type and selection constraints.
+The same root-confined browser is used whenever a ToskLight form asks for a file or folder. An installation can enable **Open system file picker** as a secondary server-configured fallback. It is disabled by default; enabling it does not remove the ToskLight picker or the calling form's file-type and selection constraints.
 
-**Pane configuration:** **Show Hidden** controls hidden-file visibility for this pane. Root, path, view, navigation history, and the embedded editor remain content controls.
+Hidden-file visibility, Properties-sidebar visibility, List or Grid view, root, path, navigation history, and the embedded editor are File Manager content controls.
 
 ![File Manager pane](../assets/screenshots/panes/file-manager.png)
-
-![File Manager pane settings](../assets/screenshots/panes/file-manager-settings.png)
 
 ## Text Editor
 

@@ -120,6 +120,18 @@ describe("LightApiClient", () => {
     expect(fetchMock.mock.calls[3][0]).toBe("http://desk.local/api/v1/shows/copy-a/overwrite/show-a");
     expect(fetchMock.mock.calls[3][1].method).toBe("POST");
   });
+  it("renames a show through its stable identity", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ session_id: "session-a", token: "token-a", user: { id: "user-a", name: "Operator", enabled: true } }), { status: 200, headers: { "content-type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "show-a", name: "Opening Night" }), { status: 200, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new LightApiClient("http://desk.local");
+    await client.login("Operator");
+    await client.renameShow("show-a", "Opening Night");
+    expect(fetchMock.mock.calls[1][0]).toBe("http://desk.local/api/v1/shows/show-a/rename");
+    expect(fetchMock.mock.calls[1][1].method).toBe("PUT");
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ name: "Opening Night" });
+  });
   it("uses the desk-scoped Update settings, preview, apply, and eligible-target contracts", async () => {
     const settings = { cue_mode: "add_to_current_cue" as const, preset_mode: "update_existing" as const, group_mode: "update_existing" as const, other_target_modes: {}, show_update_modal_on_touch: true };
     const target = { family: { type: "cue" as const }, object_id: "cue-list-a", playback_number: 7, cue_id: "cue-a", cue_number: 2 };
@@ -238,11 +250,11 @@ describe("LightApiClient", () => {
     await client.login("Operator");
 
     expect(await client.highlight()).toEqual(state);
-    expect(await client.highlightAction("next")).toEqual(state);
+    expect(await client.highlightAction("all")).toEqual(state);
     expect(fetchMock.mock.calls[1][0]).toBe("http://desk.local/api/v1/highlight");
     expect(fetchMock.mock.calls[2][0]).toBe("http://desk.local/api/v1/highlight/action");
     expect(fetchMock.mock.calls[2][1].method).toBe("POST");
-    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({ action: "next" });
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({ action: "all" });
     expect((fetchMock.mock.calls[2][1].headers as Headers).get("authorization")).toBe("Bearer token-a");
   });
 
@@ -274,6 +286,8 @@ describe("LightApiClient", () => {
       .mockResolvedValueOnce(response([profile]))
       .mockResolvedValueOnce(response({ ...profile, revision: 4 }))
       .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(response(profile))
+      .mockResolvedValueOnce(new Response(new Uint8Array([0x50, 0x4b]), { status: 200, headers: { "content-type": "application/vnd.tosklight.fixture+zip" } }))
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetchMock);
     const client = new LightApiClient("http://desk.local");
@@ -284,6 +298,8 @@ describe("LightApiClient", () => {
     await client.fixtureProfileRevisions(profile.id);
     await client.putFixtureProfile(profile, profile.revision);
     await client.putFixtureProfileSourceGdtf(profile.id, profile.revision, new Uint8Array([0x50, 0x4b]));
+    await client.importFixturePackage(new Uint8Array([0x50, 0x4b]));
+    await client.exportFixturePackage(profile.id, profile.revision);
     await client.deleteFixtureProfile(profile.id, profile.revision);
 
     expect(fetchMock.mock.calls.slice(1).map((call) => call[0])).toEqual([
@@ -292,12 +308,17 @@ describe("LightApiClient", () => {
       "http://desk.local/api/v1/fixture-profiles/profile-a/revisions",
       "http://desk.local/api/v1/fixture-profiles",
       "http://desk.local/api/v1/fixture-profiles/profile-a/3/source-gdtf",
+      "http://desk.local/api/v1/fixture-packages/import",
+      "http://desk.local/api/v1/fixture-profiles/profile-a/3/package",
       "http://desk.local/api/v1/fixture-profiles/profile-a/3",
     ]);
     expect(fetchMock.mock.calls[4][1].method).toBe("PUT");
     expect((fetchMock.mock.calls[4][1].headers as Headers).get("if-match")).toBe("3");
     expect(fetchMock.mock.calls[5][1].method).toBe("PUT");
     expect((fetchMock.mock.calls[5][1].headers as Headers).get("content-type")).toBe("application/octet-stream");
-    expect(fetchMock.mock.calls[6][1].method).toBe("DELETE");
+    expect(fetchMock.mock.calls[6][1].method).toBe("POST");
+    expect((fetchMock.mock.calls[6][1].headers as Headers).get("content-type")).toBe("application/vnd.tosklight.fixture+zip");
+    expect((fetchMock.mock.calls[7][1].headers as Headers).get("authorization")).toBe("Bearer token-a");
+    expect(fetchMock.mock.calls[8][1].method).toBe("DELETE");
   });
 });

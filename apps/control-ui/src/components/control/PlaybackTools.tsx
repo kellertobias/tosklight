@@ -8,13 +8,16 @@ import { ProgrammerFadeFader } from "./ProgrammerFadeFader";
 import { SoundToLightModal } from "./SoundToLightModal";
 import { inactiveCaptureStatus, monotonicEpochMillis } from "./soundToLightAnalyzer";
 import { useSoundToLight, type SoundToLightController } from "./useSoundToLight";
+import { editTargetedCommandWithSoftwareKey, type SoftwareKey } from "./softwareKeypad";
 import type { SpeedGroupId } from "../../api/types";
+import { canAdvancePlaybackPage, PlaybackPageMenu, PlaybackPageRenameDialog } from "./PlaybackPageDialogs";
 
 export function PlaybackTools() {
   const { state, dispatch } = useApp();
   const server = useServer();
   const speedBpms = server.configuration?.speed_groups_bpm ?? [120, 90, 60, 30, 15];
   const [pagePickerOpen, setPagePickerOpen] = useState(false);
+  const [pageRenameOpen, setPageRenameOpen] = useState(false);
   const [soundGroup, setSoundGroup] = useState<SpeedGroupId | null>(null);
   const sound = useSoundToLight();
   useEffect(() => {
@@ -38,13 +41,60 @@ export function PlaybackTools() {
     window.addEventListener("keydown", close, true);
     return () => window.removeEventListener("keydown", close, true);
   }, [pagePickerOpen]);
+  const pressCommandKey = (key: SoftwareKey) => {
+    if (key === "SHIFT") {
+      dispatch({ type: "SET_SHIFT_ARMED", value: !state.shiftArmed });
+      return;
+    }
+    if (key === "SET") {
+      dispatch({ type: "SET_PLAYBACK_SET_ARMED", value: !state.playbackSetArmed });
+      return;
+    }
+    if (state.shiftArmed) {
+      dispatch({ type: "SET_SHIFT_ARMED", value: false });
+      if (key === "DEL") {
+        dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: true });
+        return;
+      }
+    }
+    const edited = editTargetedCommandWithSoftwareKey(server.commandLine, key, server.commandTargetMode, server.commandLinePristine);
+    server.setCommandLine(edited.command, edited.pristine);
+    if (edited.execute) void server.executeCommandLine(edited.command);
+  };
+  const pages = server.playbacks?.pages ?? [];
+  const activePageNumber = server.playbacks?.active_page ?? state.playbackPage + 1;
+  const activePage = pages.find((page) => page.number === activePageNumber) ?? null;
+  const selectCurrentPage = () => {
+    if (state.playbackSetArmed && activePage) {
+      dispatch({ type: "SET_PLAYBACK_SET_ARMED", value: false });
+      setPageRenameOpen(true);
+      return;
+    }
+    setPagePickerOpen(true);
+  };
+  const nextPage = async () => {
+    const target = activePageNumber + 1;
+    if (!pages.some((page) => page.number === target)) {
+      const saved = await server.savePlaybackPage({ number: target, name: `Page ${target}`, slots: {} });
+      if (!saved) return;
+    }
+    dispatch({ type: "SET_PLAYBACK_PAGE", page: target - 1 });
+    await server.setPlaybackPage(target);
+  };
   return (
     <div className="playback-tools">
-      <Button className={state.playbackSetArmed ? "active" : ""} onClick={() => dispatch({ type: "SET_PLAYBACK_SET_ARMED", value: !state.playbackSetArmed })}>SET</Button>
+      <div className="playback-command-keys">
+        {(["SET", "CPY", "MOV", "DEL", "SHIFT"] as const).map((key) => <Button
+          className={(key === "SET" && state.playbackSetArmed) || (key === "SHIFT" && state.shiftArmed) ? "active" : ""}
+          data-keypad-key={key}
+          key={key}
+          onClick={() => pressCommandKey(key)}
+        >{key}</Button>)}
+      </div>
       <div className="playback-page-controls">
         <Button className="playback-page-chevron" aria-label="Previous playback page" disabled={state.playbackPage === 0} onClick={() => { dispatch({ type: "SET_PLAYBACK_PAGE", page: state.playbackPage - 1 }); void server.setPlaybackPage(state.playbackPage); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 15 7-7 7 7"/></svg></Button>
-        <Button className="playback-page-current" aria-label={`Select playback page. Page ${state.playbackPage + 1} ${state.playbackPageNames[state.playbackPage]}`} onClick={() => setPagePickerOpen(true)}><span>Page</span><strong>{state.playbackPage + 1}</strong><small>{state.playbackPageNames[state.playbackPage]}</small></Button>
-        <Button className="playback-page-chevron" aria-label="Next playback page" disabled={state.playbackPage === state.playbackPageNames.length - 1} onClick={() => { dispatch({ type: "SET_PLAYBACK_PAGE", page: state.playbackPage + 1 }); void server.setPlaybackPage(state.playbackPage + 2); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 9 7 7 7-7"/></svg></Button>
+        <Button className="playback-page-current" aria-label={`Select playback page. Page ${activePageNumber} ${activePage?.name ?? `Page ${activePageNumber}`}`} onClick={selectCurrentPage}><span>Page</span><strong>{activePageNumber}</strong><small>{activePage?.name ?? `Page ${activePageNumber}`}</small></Button>
+        <Button className="playback-page-chevron" aria-label="Next playback page" disabled={!canAdvancePlaybackPage(pages, activePageNumber)} onClick={() => void nextPage()}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 9 7 7 7-7"/></svg></Button>
       </div>
       <ProgrammerFadeFader/>
       <div className="cue-fade-master"><TouchTimeSurface
@@ -70,7 +120,8 @@ export function PlaybackTools() {
           </Button>
         ); })}
       </div>
-      {pagePickerOpen && createPortal(<div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && setPagePickerOpen(false)}><div className="nested-modal playback-page-modal" role="dialog" aria-modal="true" aria-label="Playback pages"><Button className="modal-close" onClick={() => setPagePickerOpen(false)}>×</Button><h3>Playback pages</h3><div>{(server.playbacks?.pages ?? []).map((item) => <Button className={item.number === (server.playbacks?.active_page ?? 1) ? "active" : ""} key={item.number} onClick={() => { dispatch({ type: "SET_PLAYBACK_PAGE", page: item.number - 1 }); void server.setPlaybackPage(item.number); setPagePickerOpen(false); }}><strong>{item.number}</strong><span>{item.name}</span></Button>)}</div></div></div>, document.body)}
+      <PlaybackPageMenu open={pagePickerOpen} onClose={() => setPagePickerOpen(false)}/>
+      <PlaybackPageRenameDialog page={pageRenameOpen ? activePage : null} onClose={() => setPageRenameOpen(false)}/>
       {soundGroup && sound.states[soundGroup] && <SoundToLightModal
         group={soundGroup}
         state={sound.states[soundGroup]!}

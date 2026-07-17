@@ -42,6 +42,24 @@
   white-space: nowrap;
 }
 
+.ui-modal-title-actions .file-manager-header-actions > .ui-button {
+  height: 53px;
+  min-height: 53px;
+  background: #151d24;
+}
+
+.file-manager > .ui-window-header .ui-button[aria-label="Close File Manager"] {
+  width: 48px;
+  min-width: 48px;
+  padding: 0;
+  font-size: 24px;
+}
+
+.file-manager > .ui-window-header .ui-button[aria-label="Close File Manager"]:hover {
+  background: #7d2328;
+  color: #fff;
+}
+
 @container (max-width: 620px) {
   .ui-window-header:has(.pane-chrome-toolbar-target) .ui-window-title {
     max-width: 72px;

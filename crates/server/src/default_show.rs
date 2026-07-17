@@ -715,9 +715,7 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(
             crate::parse_fixture_selection(&fixtures, &["501".into()]).unwrap(),
-            std::iter::once(sunstrip.fixture_id)
-                .chain(children_501.iter().copied())
-                .collect::<Vec<_>>()
+            children_501.clone()
         );
         assert_eq!(
             crate::parse_fixture_selection(
@@ -775,9 +773,7 @@ mod tests {
                 ],
             )
             .unwrap(),
-            std::iter::once(sunstrip.fixture_id)
-                .chain(children_501.iter().copied())
-                .collect::<Vec<_>>()
+            children_501.clone()
         );
         assert!(
             crate::parse_fixture_selection(

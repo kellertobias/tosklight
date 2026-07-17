@@ -58,7 +58,11 @@ test("captures help and README screenshots from the default show desk", async ({
   await page.getByRole("button", { name: "BUILT-INS" }).click();
   await page.locator(".dock-entry").filter({ hasText: "Fixtures" }).click();
   await expect(page.locator(".fixture-window")).toBeVisible();
+  await api.request("POST", "/api/v1/highlight/action", { action: "next" });
+  await expect(page.locator('.fixture-window [data-step-selection="active"]')).toHaveCount(1);
+  await expect(page.locator('.fixture-window [data-step-selection="base"]').first()).toBeVisible();
   await page.screenshot({ path: shot("fixture-sheet-programmer.png"), fullPage: true });
+  await api.request("POST", "/api/v1/highlight/action", { action: "all" });
 
   await captureWorkflowReference(page);
   const patch = await api.request<any>("GET", "/api/v1/patch", undefined, false);
@@ -185,20 +189,23 @@ async function captureWorkflowReference(page: Page) {
   const setupSections = [
     ["Shows & recovery", "desk-setup-shows-recovery.png"],
     ["Users & sessions", "desk-setup-users.png"],
-    ["Inputs", "desk-setup-inputs.png"],
+    ["Programmer", "desk-setup-inputs.png"],
     ["Outputs", "desk-setup-output-engine.png"],
     ["Timecode", "desk-setup-timecode.png"],
-    ["Network & API", "desk-setup-network-api.png"],
+    ["Network & Inputs", "desk-setup-network-api.png"],
     ["Screens & playback", "desk-setup-screens.png"],
-    ["Desk Lock", "desk-setup-lock.png"],
   ] as const;
   for (const [section, file] of setupSections) {
     await page.locator(".setup-window nav").getByRole("button", { name: section, exact: true }).click();
     await page.locator(".setup-window").screenshot({ path: workflowShot(file) });
   }
-  await page.locator(".setup-window nav").getByRole("button", { name: "Fixture library", exact: true }).click();
+  await page.getByRole("button", { name: "Desk Lock", exact: true }).click();
+  await page.getByRole("dialog", { name: "Desk Lock" }).screenshot({ path: workflowShot("desk-setup-lock.png") });
+  await page.getByRole("button", { name: "Close Desk Lock settings", exact: true }).click();
+  await page.locator(".setup-window nav").getByRole("button", { name: "Shows & recovery", exact: true }).click();
+  await page.getByRole("button", { name: "Open Fixture Library", exact: true }).click();
   await expect(page.locator(".fixture-library-setup")).toBeVisible();
-  await page.locator(".setup-window").screenshot({ path: workflowShot("fixture-library.png") });
+  await page.getByRole("dialog", { name: "Fixture Library" }).screenshot({ path: workflowShot("fixture-library.png") });
   await page.getByRole("button", { name: "Create fixture", exact: true }).click();
   await page.locator(".fixture-profile-editor-modal").screenshot({ path: workflowShot("fixture-library-create.png") });
   await page.getByRole("tab", { name: "Modes", exact: true }).click();
@@ -211,6 +218,7 @@ async function captureWorkflowReference(page: Page) {
   await page.getByRole("button", { name: "Import GDTF", exact: true }).click();
   await page.locator(".gdtf-import-modal").screenshot({ path: workflowShot("fixture-library-import.png") });
   await page.getByRole("button", { name: "Close Import GDTF", exact: true }).click();
+  await page.getByRole("button", { name: "Close Fixture Library", exact: true }).click();
 
   await page.getByRole("button", { name: "BUILT-INS" }).click();
   await page.locator(".dock-entry").filter({ hasText: "Stage" }).click();

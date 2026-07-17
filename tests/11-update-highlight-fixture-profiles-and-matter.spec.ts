@@ -6,6 +6,7 @@ import {
   loadCanonicalCopy,
   object,
   objects,
+  pressCommand,
   programmer,
   putObject,
 } from "./support/catalog";
@@ -18,19 +19,51 @@ interface UpdateGroupState {
   added: string;
 }
 
+interface HighlightFixture {
+  id: string;
+  number: number;
+}
+
 interface HighlightScenarioState {
-  fixtures: string[];
+  showId: string;
+  fixtures: HighlightFixture[];
+  storedPresetId: string;
+  selectionStayedComplete?: boolean;
 }
 
 interface HighlightSurfaceState {
   showId: string;
-  fixtures: Array<{ id: string; number: number }>;
-  group: { id: string; name: string; fixtures: string[] };
-  storedPresetId?: string;
+  fixtures: HighlightFixture[];
+  liveGroup: {
+    id: string;
+    name: string;
+    initial: string[];
+    updated: string[];
+  };
+  steppedSelection?: string[];
+  restoredSelection?: string[];
+  highSurvivedEmpty?: boolean;
+  highFollowedSelection?: boolean;
   reconnectRetained?: boolean;
-  fixtureCaptureObserved?: boolean;
-  stageCaptureObserved?: boolean;
-  groupCaptureObserved?: boolean;
+}
+
+interface HighlightSequenceState {
+  showId: string;
+  fixtures: HighlightFixture[];
+  expectedSequence: string[][];
+  observedSequence: string[][];
+  singletonGroupId: string;
+  completeGroupId: string;
+  highStayedOff?: boolean;
+  wrappedForward?: boolean;
+  wrappedBackward?: boolean;
+  highSurvivedEmpty?: boolean;
+  highFollowedSelection?: boolean;
+  removedCaptureRejected?: boolean;
+  altCaptureWasNoOp?: boolean;
+  geometryVerified?: boolean;
+  fixtureSheetVerified?: boolean;
+  noCommandBarPanel?: boolean;
 }
 
 interface FixtureProfileState {
@@ -99,151 +132,285 @@ pairedScenario<UpdateGroupState>({
 
 pairedScenario<HighlightScenarioState>({
   id: "HIGHLIGHT-001",
-  title: "Highlight captures an ordered selection and steps without becoming programmer data",
+  title: "HIGH follows the actual selection while stepped values remain normal programmer data",
   arrange: async ({ api, bench }, surface) => {
-    await loadCanonicalCopy(api, bench, `highlight-001-${surface}`);
-    const fixtures = (await objects<any>(api, "patched_fixture")).slice(0, 3).map((entry) => entry.body.fixture_id as string);
-    expect(fixtures).toHaveLength(3);
-    await api.command("selection.set", { fixtures });
-    await api.command("programmer.set", { fixture_id: fixtures[0], attribute: "position.pan", value: 0.63 });
-    return { fixtures };
+    const show = await loadCanonicalCopy(api, bench, `highlight-001-${surface}`, "default-stage");
+    const fixtures = await fixturesByNumber(api, [101, 102, 103]);
+    await api.command("selection.set", { fixtures: [fixtures[0].id] });
+    await api.command("programmer.set", { fixture_id: fixtures[0].id, attribute: "pan", value: 0.63 });
+    await api.command("selection.set", { fixtures: fixtureIds(fixtures) });
+    return { showId: show.id, fixtures, storedPresetId: "197" };
   },
-  api: async ({ api }) => {
-    await api.request("POST", "/api/v1/highlight/action", { action: "on" });
-    await api.request("POST", "/api/v1/highlight/action", { action: "next" });
+  api: async ({ api }, state) => {
+    await highlightAction(api, "on");
+    state.selectionStayedComplete = selectionsEqual((await programmer(api)).selected, fixtureIds(state.fixtures));
+    await highlightAction(api, "next");
     const first = (await programmer(api)).selected[0];
-    await api.command("programmer.set", { fixture_id: first, attribute: "position.pan", value: 0.41 });
-    await new Promise((resolve) => setTimeout(resolve, 160));
-    await api.request("POST", "/api/v1/highlight/action", { action: "next" });
+    await api.command("programmer.set", { fixture_id: first, attribute: "pan", value: 0.41 });
+    await highlightAction(api, "next");
     const second = (await programmer(api)).selected[0];
-    await api.command("programmer.set", { fixture_id: second, attribute: "position.pan", value: 0.52 });
-    await api.request("POST", "/api/v1/highlight/action", { action: "previous" });
+    await api.command("programmer.set", { fixture_id: second, attribute: "pan", value: 0.52 });
+    await highlightAction(api, "off");
+    await storeCurrentProgrammerPreset(api, state.showId, state.storedPresetId);
   },
   ui: async ({ api, bench, desk, page }, state) => {
     await desk.open(bench.baseUrl);
-    await expect.poll(async () => (await programmer(api)).selected.length).toBe(3);
-    await page.getByRole("button", { name: "Turn Highlight on" }).click();
-    const next = page.getByRole("button", { name: "Next highlighted fixture" });
-    const previous = page.getByRole("button", { name: "Previous highlighted fixture" });
-    await expect(next).toBeEnabled();
-    await next.click();
-    await expect(page.locator(".highlight-toggle small")).toContainText("1/3");
-    await api.command("programmer.set", { fixture_id: state.fixtures[0], attribute: "position.pan", value: 0.41 });
-    await page.waitForTimeout(160);
-    await next.click();
-    await expect(page.locator(".highlight-toggle small")).toContainText("2/3");
-    await api.command("programmer.set", { fixture_id: state.fixtures[1], attribute: "position.pan", value: 0.52 });
-    await previous.click();
-    await expect(page.locator(".highlight-toggle small")).toContainText("1/3");
+    await expectSelection(api, fixtureIds(state.fixtures));
+    await clickHighlightKey(page, api, "HIGH");
+    await expect.poll(async () => (await highlightState(api)).active).toBe(true);
+    state.selectionStayedComplete = selectionsEqual((await programmer(api)).selected, fixtureIds(state.fixtures));
+    await clickHighlightKey(page, api, "NEXT", [state.fixtures[0].id]);
+    await api.command("programmer.set", { fixture_id: state.fixtures[0].id, attribute: "pan", value: 0.41 });
+    await clickHighlightKey(page, api, "NEXT", [state.fixtures[1].id]);
+    await api.command("programmer.set", { fixture_id: state.fixtures[1].id, attribute: "pan", value: 0.52 });
+    await clickHighlightKey(page, api, "HIGH");
+    await expect.poll(async () => (await highlightState(api)).active).toBe(false);
+    await storeCurrentProgrammerPreset(api, state.showId, state.storedPresetId);
   },
   assert: async ({ api }, state) => {
-    const highlight = await api.request<any>("GET", "/api/v1/highlight", undefined, true);
-    expect(highlight).toMatchObject({ active: true, mode: "step", active_index: 0, can_previous: false, can_next: true });
-    expect(highlight.remembered.map((fixture: any) => fixture.fixture_id)).toEqual(state.fixtures);
-    expect(highlight.active_fixture.fixture_id).toBe(state.fixtures[0]);
-    const programmers = await api.request<any[]>("GET", "/api/v1/programmers", undefined, false);
-    expect(programmers.some((entry) => entry.selected.length === 1 && entry.selected[0] === state.fixtures[0])).toBe(true);
-    const values = programmers.flatMap((entry) => entry.values ?? []);
-    expect(values.some((entry) => entry.fixture_id === state.fixtures[0] && entry.attribute === "position.pan")).toBe(true);
-    expect(values.some((entry) => entry.fixture_id === state.fixtures[1] && entry.attribute === "position.pan")).toBe(true);
+    expect(state.selectionStayedComplete).toBe(true);
+    const highlight = await highlightState(api);
+    expect(highlight).toMatchObject({ active: false, output_enabled: false, mode: "step", active_index: 1, can_previous: true, can_next: true });
+    expect(highlight.remembered.map((fixture: any) => fixture.fixture_id)).toEqual(fixtureIds(state.fixtures));
+    expect(highlight.active_fixture.fixture_id).toBe(state.fixtures[1].id);
+    const current = await programmer(api);
+    expect(current.selected).toEqual([state.fixtures[1].id]);
+    const values = current.values ?? [];
+    expect(values.some((entry) => entry.fixture_id === state.fixtures[0].id && entry.attribute === "pan")).toBe(true);
+    expect(values.some((entry) => entry.fixture_id === state.fixtures[1].id && entry.attribute === "pan")).toBe(true);
     expect(values.every((entry) => !String(entry.attribute).toLowerCase().includes("highlight"))).toBe(true);
+    const preset = await object<any>(api, "preset", state.storedPresetId);
+    const storedAttributes = Object.values(preset.body.values ?? {}).flatMap((attributes: any) => Object.keys(attributes));
+    expect(storedAttributes).toContain("pan");
+    expect(storedAttributes.every((attribute) => !attribute.toLowerCase().includes("highlight"))).toBe(true);
   },
 });
 
 pairedScenario<HighlightSurfaceState>({
   id: "HIGHLIGHT-002",
-  title: "fixture, stage, and Group captures remain transient across store, reconnect, and show reload",
+  title: "live Group ALL restoration, external selection, empty HIGH, and lifecycle stay authoritative",
   arrange: async ({ api, bench }, surface) => {
-    const show = await loadCanonicalCopy(api, bench, `highlight-002-${surface}`);
-    const patched = (await objects<any>(api, "patched_fixture"))
-      .map((entry) => ({ id: entry.body.fixture_id as string, number: Number(entry.body.fixture_number) }))
-      .filter((entry) => Number.isFinite(entry.number))
-      .sort((left, right) => left.number - right.number);
-    const group = (await objects<any>(api, "group")).find((entry) => entry.body.fixtures.length >= 2);
-    expect(patched.length).toBeGreaterThanOrEqual(3);
-    expect(group).toBeDefined();
+    const show = await loadCanonicalCopy(api, bench, `highlight-002-${surface}`, "default-stage");
+    const fixtures = await fixturesByNumber(api, [101, 102, 103, 104, 105, 106]);
+    const initial = fixtureIds(fixtures.slice(0, 4));
+    const updated = [fixtures[3].id, fixtures[1].id, fixtures[4].id, fixtures[0].id];
+    const liveGroup = { id: "30", name: "Feature 20 Live Group", initial, updated };
+    await putObject(api, "group", liveGroup.id, groupBody(liveGroup.name, initial));
     return {
       showId: show.id,
-      fixtures: patched.slice(0, 3),
-      group: {
-        id: group!.id,
-        name: group!.body.name || `Group ${group!.id}`,
-        fixtures: [...group!.body.fixtures],
-      },
+      fixtures,
+      liveGroup,
     };
   },
   api: async ({ api }, state) => {
-    await api.command("selection.set", { fixtures: state.fixtures.slice(0, 2).map((fixture) => fixture.id) });
-    await api.request("POST", "/api/v1/highlight/action", { action: "on" });
-    state.fixtureCaptureObserved = (await api.request<any>("GET", "/api/v1/highlight", undefined, true)).remembered.length === 2;
-    await api.request("POST", "/api/v1/highlight/action", { action: "off" });
-
-    await api.command("selection.set", { fixtures: [state.fixtures[2].id] });
-    await api.request("POST", "/api/v1/highlight/action", { action: "capture" });
-    await api.request("POST", "/api/v1/highlight/action", { action: "on" });
-    state.stageCaptureObserved = (await api.request<any>("GET", "/api/v1/highlight", undefined, true)).remembered[0]?.fixture_id === state.fixtures[2].id;
-
-    await api.command("selection.set", { fixtures: state.group.fixtures });
-    await api.request("POST", "/api/v1/highlight/action", { action: "capture" });
-    state.groupCaptureObserved = JSON.stringify((await api.request<any>("GET", "/api/v1/highlight", undefined, true)).remembered.map((fixture: any) => fixture.fixture_id)) === JSON.stringify(state.group.fixtures);
-    await api.command("programmer.set", { fixture_id: state.group.fixtures[0], attribute: "position.pan", value: 0.61 });
-    state.storedPresetId = "199";
-    await storeCurrentProgrammerPreset(api, state.showId, state.storedPresetId);
-
+    await api.command("group.select", { group_id: state.liveGroup.id });
+    await highlightAction(api, "next");
+    await highlightAction(api, "next");
+    state.steppedSelection = [...(await programmer(api)).selected];
+    const stored = await object<any>(api, "group", state.liveGroup.id);
+    await putObject(api, "group", state.liveGroup.id, { ...stored.body, fixtures: state.liveGroup.updated }, stored.revision);
+    await highlightAction(api, "all");
+    state.restoredSelection = [...(await programmer(api)).selected];
+    await highlightAction(api, "on");
+    await api.command("selection.set", { fixtures: [] });
+    state.highSurvivedEmpty = (await highlightState(api)).active && (await programmer(api)).selected.length === 0;
+    await api.command("selection.set", { fixtures: [state.fixtures[2].id, state.fixtures[3].id] });
+    state.highFollowedSelection = (await highlightState(api)).active
+      && selectionsEqual((await programmer(api)).selected, [state.fixtures[2].id, state.fixtures[3].id]);
     const deskId = api.session!.desk.id;
     await api.login("Operator", deskId);
-    state.reconnectRetained = (await api.request<any>("GET", "/api/v1/highlight", undefined, true)).active;
+    state.reconnectRetained = (await highlightState(api)).active;
     await api.request("POST", `/api/v1/shows/${state.showId}/open`, { transition: "hold_current" });
   },
   ui: async ({ api, bench, desk, page }, state) => {
     await desk.open(bench.baseUrl);
-    await openBuiltIn(page, "Fixtures");
-    for (const fixture of state.fixtures.slice(0, 2)) await fixtureSheetRow(page, fixture.number).click();
-    await page.getByRole("button", { name: "Turn Highlight on" }).click();
-    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/highlight", undefined, true)).remembered.map((fixture: any) => fixture.fixture_id)).toEqual(state.fixtures.slice(0, 2).map((fixture) => fixture.id));
-    state.fixtureCaptureObserved = true;
-    await page.getByRole("button", { name: "Turn Highlight off" }).click();
-    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/highlight", undefined, true)).active).toBe(false);
-
-    await page.getByRole("button", { name: "CLR", exact: true }).click();
-    await openBuiltIn(page, "Stage");
-    await page.locator(`.stage-fixture[data-fixture-id="${state.fixtures[2].id}"]`).click();
-    await page.getByRole("button", { name: "Capture current selection for Highlight" }).click();
-    await page.getByRole("button", { name: "Turn Highlight on" }).click();
-    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/highlight", undefined, true)).remembered.map((fixture: any) => fixture.fixture_id)).toEqual([state.fixtures[2].id]);
-    state.stageCaptureObserved = true;
-
-    await page.getByRole("button", { name: "CLR", exact: true }).click();
     await openGroups(page);
-    await page.locator(".group-pool-window .group-card").filter({ hasText: state.group.name }).first().click();
-    await page.getByRole("button", { name: "Capture current selection for Highlight" }).click();
-    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/highlight", undefined, true)).remembered.map((fixture: any) => fixture.fixture_id)).toEqual(state.group.fixtures);
-    state.groupCaptureObserved = true;
-    await api.command("programmer.set", { fixture_id: state.group.fixtures[0], attribute: "position.pan", value: 0.61 });
-
-    await openBuiltIn(page, "Presets");
-    await page.locator(".global-store-button").click();
-    const emptyPreset = page.locator(".preset-pool-window .preset-card.empty").first();
-    state.storedPresetId = (await emptyPreset.locator(".number").textContent())!.trim();
-    await emptyPreset.click();
-    await expect.poll(async () => (await objects<any>(api, "preset")).some((preset) => preset.id === state.storedPresetId)).toBe(true);
-
+    await page.locator(".group-pool-window .group-card").filter({ hasText: state.liveGroup.name }).first().click();
+    await expectSelection(api, state.liveGroup.initial);
+    await clickHighlightKey(page, api, "NEXT", [state.liveGroup.initial[0]]);
+    await clickHighlightKey(page, api, "NEXT", [state.liveGroup.initial[1]]);
+    state.steppedSelection = [...(await programmer(api)).selected];
+    const stored = await object<any>(api, "group", state.liveGroup.id);
+    await putObject(api, "group", state.liveGroup.id, { ...stored.body, fixtures: state.liveGroup.updated }, stored.revision);
+    await clickHighlightKey(page, api, "ALL", state.liveGroup.updated);
+    state.restoredSelection = [...(await programmer(api)).selected];
+    await clickHighlightKey(page, api, "HIGH");
+    await page.locator('[data-keypad-key="CLR"]').click();
+    await expectSelection(api, []);
+    state.highSurvivedEmpty = (await highlightState(api)).active;
+    await openBuiltIn(page, "Fixtures");
+    await fixtureSheetRowById(page, state.fixtures[2].id).click();
+    await fixtureSheetRowById(page, state.fixtures[3].id).click();
+    await expectSelection(api, [state.fixtures[2].id, state.fixtures[3].id]);
+    state.highFollowedSelection = (await highlightState(api)).active;
     await page.reload();
     await expect(page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
-    state.reconnectRetained = (await api.request<any>("GET", "/api/v1/highlight", undefined, true)).active;
+    state.reconnectRetained = (await highlightState(api)).active;
     await api.request("POST", `/api/v1/shows/${state.showId}/open`, { transition: "hold_current" });
   },
   assert: async ({ api }, state) => {
-    expect(state.fixtureCaptureObserved).toBe(true);
-    expect(state.stageCaptureObserved).toBe(true);
-    expect(state.groupCaptureObserved).toBe(true);
+    expect(state.steppedSelection).toEqual([state.liveGroup.initial[1]]);
+    expect(state.restoredSelection).toEqual(state.liveGroup.updated);
+    expect(state.highSurvivedEmpty).toBe(true);
+    expect(state.highFollowedSelection).toBe(true);
     expect(state.reconnectRetained).toBe(true);
-    const preset = await object<any>(api, "preset", state.storedPresetId!);
-    const storedAttributes = Object.values(preset.body.values ?? {}).flatMap((attributes: any) => Object.keys(attributes));
-    expect(storedAttributes).toContain("position.pan");
-    expect(storedAttributes.every((attribute) => !attribute.toLowerCase().includes("highlight"))).toBe(true);
-    const highlight = await api.request<any>("GET", "/api/v1/highlight", undefined, true);
-    expect(highlight).toMatchObject({ active: false, output_enabled: false, remembered: [] });
+    const highlight = await highlightState(api);
+    expect(highlight).toMatchObject({
+      active: false,
+      output_enabled: false,
+      mode: "selection",
+      active_index: null,
+      active_fixture: null,
+    });
+    expect(highlight.remembered.map((fixture: any) => fixture.fixture_id)).toEqual([
+      state.fixtures[2].id,
+      state.fixtures[3].id,
+    ]);
+  },
+});
+
+pairedScenario<HighlightSequenceState>({
+  id: "HIGHLIGHT-003",
+  title: "PREV NEXT ALL mutate the real selection and preserve exact Programmer keypad geometry",
+  arrange: async ({ api, bench }, surface) => {
+    const show = await loadCanonicalCopy(api, bench, `highlight-003-${surface}`, "default-stage");
+    const fixtures = await fixturesByNumber(api, [101, 102, 103, 104]);
+    await api.command("selection.set", { fixtures: fixtureIds(fixtures) });
+    return {
+      showId: show.id,
+      fixtures,
+      expectedSequence: [
+        [fixtures[0].id],
+        [fixtures[1].id],
+        fixtureIds(fixtures),
+        [fixtures[3].id],
+        [fixtures[2].id],
+        [fixtures[1].id],
+      ],
+      observedSequence: [],
+      singletonGroupId: "92",
+      completeGroupId: "93",
+    };
+  },
+  api: async ({ api }, state) => {
+    for (const action of ["next", "next", "all", "previous", "previous", "previous"] as const) {
+      await highlightAction(api, action);
+      state.observedSequence.push([...(await programmer(api)).selected]);
+    }
+    state.highStayedOff = !(await highlightState(api)).active;
+
+    await highlightAction(api, "next");
+    await highlightAction(api, "next");
+    await highlightAction(api, "next");
+    state.wrappedForward = selectionsEqual((await programmer(api)).selected, [state.fixtures[0].id]);
+    await highlightAction(api, "previous");
+    state.wrappedBackward = selectionsEqual((await programmer(api)).selected, [state.fixtures[3].id]);
+
+    await restoreSecondStep(api);
+    await api.command("programmer.set", { fixture_id: state.fixtures[1].id, attribute: "pan", value: 0.72 });
+    await api.command("programmer.execute", { value: `RECORD GROUP ${state.singletonGroupId}` });
+    await highlightAction(api, "all");
+    await api.command("programmer.execute", { value: `RECORD GROUP ${state.completeGroupId}` });
+
+    await highlightAction(api, "on");
+    await api.command("selection.set", { fixtures: [] });
+    state.highSurvivedEmpty = (await highlightState(api)).active;
+    await api.command("selection.set", { fixtures: [state.fixtures[2].id, state.fixtures[3].id] });
+    state.highFollowedSelection = (await highlightState(api)).active;
+    await highlightAction(api, "off");
+    const removedActions = await Promise.all(["capture", "reset"].map(async (action) => {
+      try {
+        await api.request("POST", "/api/v1/highlight/action", { action });
+        return false;
+      } catch {
+        return true;
+      }
+    }));
+    state.removedCaptureRejected = removedActions.every(Boolean);
+  },
+  ui: async ({ api, bench, desk, page }, state) => {
+    await desk.open(bench.baseUrl);
+    await expectSelection(api, fixtureIds(state.fixtures));
+    for (const [index, key] of (["NEXT", "NEXT", "ALL", "PREV", "PREV", "PREV"] as const).entries()) {
+      await clickHighlightKey(page, api, key, state.expectedSequence[index]);
+      state.observedSequence.push([...(await programmer(api)).selected]);
+    }
+    state.highStayedOff = !(await highlightState(api)).active;
+
+    await clickHighlightKey(page, api, "NEXT", [state.fixtures[2].id]);
+    await clickHighlightKey(page, api, "NEXT", [state.fixtures[3].id]);
+    await clickHighlightKey(page, api, "NEXT", [state.fixtures[0].id]);
+    state.wrappedForward = true;
+    await clickHighlightKey(page, api, "PREV", [state.fixtures[3].id]);
+    state.wrappedBackward = true;
+
+    await clickHighlightKey(page, api, "ALL", fixtureIds(state.fixtures));
+    await clickHighlightKey(page, api, "NEXT", [state.fixtures[0].id]);
+    await clickHighlightKey(page, api, "NEXT", [state.fixtures[1].id]);
+    await setPanThroughUi(page, 72);
+    await pressCommand(page, `RECORD GROUP ${state.singletonGroupId}`, `RECORD GROUP ${state.singletonGroupId}`);
+    await clickHighlightKey(page, api, "ALL", fixtureIds(state.fixtures));
+    await pressCommand(page, `RECORD GROUP ${state.completeGroupId}`, `RECORD GROUP ${state.completeGroupId}`);
+
+    await clickHighlightKey(page, api, "NEXT", [state.fixtures[0].id]);
+    await openBuiltIn(page, "Fixtures");
+    await assertFixtureSheetStep(page, state.fixtures, state.fixtures[0].number);
+    await clickHighlightKey(page, api, "HIGH");
+    await assertFixtureSheetStep(page, state.fixtures, state.fixtures[0].number);
+    state.fixtureSheetVerified = true;
+
+    await page.locator('[data-keypad-key="CLR"]').click();
+    await expectSelection(api, []);
+    state.highSurvivedEmpty = (await highlightState(api)).active;
+    await fixtureSheetRowById(page, state.fixtures[2].id).click();
+    await fixtureSheetRowById(page, state.fixtures[3].id).click();
+    await expectSelection(api, [state.fixtures[2].id, state.fixtures[3].id]);
+    state.highFollowedSelection = (await highlightState(api)).active;
+    await clickHighlightKey(page, api, "HIGH");
+    await expectSelection(api, [state.fixtures[2].id, state.fixtures[3].id]);
+
+    await page.keyboard.press("Alt+H");
+    await expect.poll(async () => (await highlightState(api)).active).toBe(true);
+    await page.waitForTimeout(175);
+    await page.keyboard.press("Alt+ArrowRight");
+    await expectSelection(api, [state.fixtures[2].id]);
+    await page.waitForTimeout(175);
+    await page.keyboard.press("Alt+ArrowLeft");
+    await expectSelection(api, [state.fixtures[3].id]);
+    await page.waitForTimeout(175);
+    await page.keyboard.press("Alt+a");
+    await expectSelection(api, [state.fixtures[2].id, state.fixtures[3].id]);
+    const beforeAltCapture = await highlightState(api);
+    await page.keyboard.press("Alt+c");
+    await page.waitForTimeout(175);
+    const afterAltCapture = await highlightState(api);
+    state.altCaptureWasNoOp = JSON.stringify(afterAltCapture) === JSON.stringify(beforeAltCapture);
+
+    await verifyProgrammerKeypadGeometry(page, api);
+    await operateProgrammerFade(page, api);
+    state.geometryVerified = true;
+    await expect(page.locator(".command-line-bar .highlight-feedback, .command-line-bar [aria-label='Highlight status']")).toHaveCount(0);
+    state.noCommandBarPanel = true;
+  },
+  assert: async ({ api }, state, surface) => {
+    expect(state.observedSequence).toEqual(state.expectedSequence);
+    expect(state.highStayedOff).toBe(true);
+    expect(state.wrappedForward).toBe(true);
+    expect(state.wrappedBackward).toBe(true);
+    expect(state.highSurvivedEmpty).toBe(true);
+    expect(state.highFollowedSelection).toBe(true);
+    expect((await object<any>(api, "group", state.singletonGroupId)).body.fixtures).toEqual([state.fixtures[1].id]);
+    expect((await object<any>(api, "group", state.completeGroupId)).body.fixtures).toEqual(fixtureIds(state.fixtures));
+    const current = await programmer(api);
+    expect(current.values.some((entry) => entry.fixture_id === state.fixtures[1].id && entry.attribute === "pan")).toBe(true);
+    if (surface === "api") {
+      expect(state.removedCaptureRejected).toBe(true);
+    } else {
+      expect(state.altCaptureWasNoOp).toBe(true);
+      expect(state.geometryVerified).toBe(true);
+      expect(state.fixtureSheetVerified).toBe(true);
+      expect(state.noCommandBarPanel).toBe(true);
+    }
   },
 });
 
@@ -267,7 +434,8 @@ pairedScenario<FixtureProfileState>({
     await desk.open(bench.baseUrl);
     await page.getByRole("button", { name: /Open show menu/ }).click();
     await page.getByRole("button", { name: "Enter Setup", exact: true }).click();
-    await page.locator(".setup-window nav").getByRole("button", { name: "Fixture library", exact: true }).click();
+    await page.getByRole("button", { name: "Open Fixture Library", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Fixture Library" })).toBeVisible();
     await page.getByRole("button", { name: "Create fixture", exact: true }).click();
     const editor = page.getByRole("dialog", { name: "Create fixture profile" });
     await editor.getByLabel(/^Manufacturer/).fill(state.manufacturer);
@@ -310,15 +478,16 @@ pairedScenario<MatterScenarioState>({
     await desk.open(bench.baseUrl);
     await page.getByRole("button", { name: /Open show menu/ }).click();
     await page.getByRole("button", { name: "Enter Setup", exact: true }).click();
-    await page.locator(".setup-window nav").getByRole("button", { name: "Screens & playback", exact: true }).click();
+    await page.locator(".setup-window nav").getByRole("button", { name: "Network & Inputs", exact: true }).click();
     const settings = page.locator('article[aria-label="Matter playback bridge"]');
-    const toggle = settings.getByRole("checkbox", { name: "Enable this desk as a Matter bridge" });
+    const toggle = settings.getByRole("switch", { name: "Matter server disabled" });
     await expect(settings.getByText("Desk installation · shared across shows and Desktops")).toBeVisible();
     await expect(toggle).not.toBeChecked();
     await toggle.click();
+    await expect(settings.getByRole("switch", { name: "Matter server enabled" })).toBeChecked();
     await expect.poll(async () => (await api.request<any>("GET", "/api/v1/configuration", undefined, false)).configuration.matter_enabled).toBe(true);
     state.observed = await api.request<any>("GET", "/api/v1/matter/status");
-    await toggle.click();
+    await settings.getByRole("switch", { name: "Matter server enabled" }).click();
     await expect.poll(async () => (await api.request<any>("GET", "/api/v1/configuration", undefined, false)).configuration.matter_enabled).toBe(false);
   },
   assert: async ({ api }, state) => {
@@ -463,6 +632,10 @@ function fixtureSheetRow(page: Page, number: number) {
     .first();
 }
 
+function fixtureSheetRowById(page: Page, fixtureId: string) {
+  return page.locator(`.fixture-window .ui-data-table-row[data-fixture-id="${fixtureId}"]`).first();
+}
+
 async function storeCurrentProgrammerPreset(api: Parameters<typeof objects>[0], showId: string, presetId: string) {
   const programmers = await api.request<any[]>("GET", "/api/v1/programmers", undefined, false);
   const current = programmers.find((entry) => entry.session_id === api.session!.session_id);
@@ -475,4 +648,207 @@ async function storeCurrentProgrammerPreset(api: Parameters<typeof objects>[0], 
     mode: "overwrite",
     preset: { name: "Highlight isolation", family: "All", values, group_values: {} },
   }, true, 0);
+}
+
+async function fixturesByNumber(
+  api: Parameters<typeof objects>[0],
+  numbers: number[],
+): Promise<HighlightFixture[]> {
+  const patched = await objects<any>(api, "patched_fixture");
+  const byNumber = new Map<number, HighlightFixture>(patched.map((entry) => [
+    Number(entry.body.fixture_number),
+    { id: entry.body.fixture_id as string, number: Number(entry.body.fixture_number) },
+  ]));
+  return numbers.map((number) => {
+    const fixture = byNumber.get(number);
+    expect(fixture, `Fixture ${number} must exist in default-stage.show`).toBeDefined();
+    return fixture!;
+  });
+}
+
+function fixtureIds(fixtures: HighlightFixture[]): string[] {
+  return fixtures.map((fixture) => fixture.id);
+}
+
+function selectionsEqual(actual: string[], expected: string[]): boolean {
+  return JSON.stringify(actual) === JSON.stringify(expected);
+}
+
+function groupBody(name: string, fixtures: string[]) {
+  return {
+    derived_from: null,
+    fixtures,
+    frozen_from: null,
+    master: 1,
+    name,
+    playback_fader: null,
+    programming: {},
+  };
+}
+
+async function highlightState(api: Parameters<typeof objects>[0]): Promise<any> {
+  return api.request<any>("GET", "/api/v1/highlight", undefined, true);
+}
+
+async function highlightAction(
+  api: Parameters<typeof objects>[0],
+  action: "on" | "off" | "toggle" | "previous" | "next" | "all",
+): Promise<void> {
+  await api.request("POST", "/api/v1/highlight/action", { action });
+  // The shared hardware/software repeat guard intentionally rejects duplicate
+  // physical presses inside 150 ms. Acceptance actions model distinct presses.
+  await new Promise((resolve) => setTimeout(resolve, 175));
+}
+
+async function expectSelection(api: Parameters<typeof objects>[0], expected: string[]): Promise<void> {
+  await expect.poll(async () => (await programmer(api)).selected).toEqual(expected);
+}
+
+function highlightKey(page: Page, key: "HIGH" | "PREV" | "NEXT" | "ALL") {
+  const fallback = {
+    HIGH: ".highlight-toggle",
+    PREV: ".highlight-previous",
+    NEXT: ".highlight-next",
+    ALL: ".highlight-all",
+  }[key];
+  return page.locator(`[data-keypad-key="${key}"], ${fallback}`).first();
+}
+
+async function clickHighlightKey(
+  page: Page,
+  api: Parameters<typeof objects>[0],
+  key: "HIGH" | "PREV" | "NEXT" | "ALL",
+  expectedSelection?: string[],
+): Promise<void> {
+  const button = highlightKey(page, key);
+  await expect(button).toBeVisible();
+  await expect(button).toBeEnabled();
+  await button.click();
+  if (expectedSelection) await expectSelection(api, expectedSelection);
+  await page.waitForTimeout(175);
+}
+
+async function restoreSecondStep(api: Parameters<typeof objects>[0]): Promise<void> {
+  await highlightAction(api, "all");
+  await highlightAction(api, "next");
+  await highlightAction(api, "next");
+}
+
+async function setPanThroughUi(page: Page, percent: number): Promise<void> {
+  await page.getByRole("button", { name: "Position", exact: true }).click();
+  const encoder = page.locator(".vertical-touch-fader-stack").filter({ hasText: "Enc 1 · Pan" });
+  await expect(encoder).toBeVisible();
+  await encoder.getByRole("button", { name: "Set value" }).click();
+  const dialog = page.getByRole("dialog", { name: "Enc 1 · Pan value" });
+  await expect(dialog).toBeVisible();
+  await page.keyboard.type(String(percent));
+  await page.keyboard.press("Enter");
+  await expect(dialog).toBeHidden();
+}
+
+async function assertFixtureSheetStep(
+  page: Page,
+  fixtures: HighlightFixture[],
+  activeNumber: number,
+): Promise<void> {
+  for (const fixture of fixtures) {
+    const row = fixtureSheetRowById(page, fixture.id);
+    await expect(row).toBeVisible();
+    await expect(row).toHaveAttribute(
+      "data-step-selection",
+      fixture.number === activeNumber ? "active" : "base",
+    );
+  }
+}
+
+async function verifyProgrammerKeypadGeometry(
+  page: Page,
+  api: Parameters<typeof objects>[0],
+): Promise<void> {
+  const upperNames = ["HIGH", "PREV", "NEXT", "ALL"] as const;
+  const lowerNames = ["GRP", "CUE", "TIME", "DIV"] as const;
+  const upper = await Promise.all(upperNames.map(async (name) => {
+    const locator = highlightKey(page, name);
+    await expect(locator).toHaveText(name);
+    const box = await locator.boundingBox();
+    expect(box).toBeTruthy();
+    return { locator, box: box! };
+  }));
+  const lower = await Promise.all(lowerNames.map(async (name) => {
+    const locator = page.locator(`[data-keypad-key="${name}"]`);
+    const box = await locator.boundingBox();
+    expect(box).toBeTruthy();
+    return { locator, box: box! };
+  }));
+
+  const tolerance = 1.5;
+  for (let index = 0; index < upper.length; index += 1) {
+    expect(Math.abs(centerX(upper[index].box) - centerX(lower[index].box))).toBeLessThanOrEqual(tolerance);
+    expect(Math.abs(upper[index].box.width - lower[index].box.width)).toBeLessThanOrEqual(tolerance);
+    expect(Math.abs(upper[index].box.height - lower[index].box.height)).toBeLessThanOrEqual(tolerance);
+    expect(upper[index].box.y + upper[index].box.height).toBeLessThanOrEqual(lower[index].box.y);
+  }
+  const upperY = centerY(upper[0].box);
+  const lowerY = centerY(lower[0].box);
+  for (const item of upper) expect(Math.abs(centerY(item.box) - upperY)).toBeLessThanOrEqual(tolerance);
+  for (const item of lower) expect(Math.abs(centerY(item.box) - lowerY)).toBeLessThanOrEqual(tolerance);
+
+  const keyStyles = await Promise.all(upper.map(({ locator }) => locator.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      alignItems: style.alignItems,
+      borderRadius: style.borderRadius,
+      fontFamily: style.fontFamily,
+      fontSize: style.fontSize,
+      justifyContent: style.justifyContent,
+      textAlign: style.textAlign,
+    };
+  })));
+  expect(keyStyles.every((style) => JSON.stringify(style) === JSON.stringify(keyStyles[0]))).toBe(true);
+  await expect(upper[0].locator).toHaveClass(/highlight-armed/);
+  await clickHighlightKey(page, api, "HIGH");
+  await expect.poll(async () => (await highlightState(api)).active).toBe(false);
+  await expect(upper[0].locator).toHaveClass(/highlight-off/);
+
+  const fade = page.locator(".numeric-pad-fade");
+  await expect(fade).toHaveAttribute("data-grid-column-span", "2");
+  await expect(fade).toHaveAttribute("data-grid-row-span", "2");
+  const fadeBox = await fade.boundingBox();
+  const delBox = await page.locator('[data-keypad-key="DEL"]').boundingBox();
+  const clrBox = await page.locator('[data-keypad-key="CLR"]').boundingBox();
+  const movBox = await page.locator('[data-keypad-key="MOV"]').boundingBox();
+  expect(fadeBox && delBox && clrBox && movBox).toBeTruthy();
+  expect(Math.abs(fadeBox!.width - (clrBox!.x + clrBox!.width - delBox!.x))).toBeLessThanOrEqual(tolerance);
+  expect(Math.abs(fadeBox!.height - (movBox!.y + movBox!.height - delBox!.y))).toBeLessThanOrEqual(tolerance);
+  const followingGap = delBox!.y - (fadeBox!.y + fadeBox!.height);
+  const normalGap = clrBox!.x - (delBox!.x + delBox!.width);
+  expect(Math.abs(followingGap - normalGap)).toBeLessThanOrEqual(tolerance);
+}
+
+function centerX(box: { x: number; width: number }): number {
+  return box.x + box.width / 2;
+}
+
+function centerY(box: { y: number; height: number }): number {
+  return box.y + box.height / 2;
+}
+
+async function operateProgrammerFade(
+  page: Page,
+  api: Parameters<typeof objects>[0],
+): Promise<void> {
+  const fade = page.locator(".numeric-pad-fade");
+  const button = fade.getByRole("button", { name: /Prog\. Fade/ });
+  await expect(button).toContainText("Prog. Fade");
+  await expect(button).toContainText("s");
+  await button.click();
+  const dialog = page.getByRole("dialog", { name: "Prog. Fade value" });
+  await expect(dialog).toBeVisible();
+  await page.keyboard.type("4.2");
+  await page.keyboard.press("Enter");
+  await expect(dialog).toBeHidden();
+  await expect.poll(async () => {
+    const response = await api.request<any>("GET", "/api/v1/configuration", undefined, false);
+    return response.configuration.programmer_fade_millis;
+  }).toBe(4_200);
 }

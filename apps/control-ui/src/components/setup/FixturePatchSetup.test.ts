@@ -1,11 +1,31 @@
 import { describe, expect, it } from "vitest";
 import type { PatchedFixture } from "../../api/types";
-import { compareFixtureIds, definitionModeChannels, definitionSplits, effectiveSplitPatches, formatFixturePatch, reconcileModePatchChanges, replaceSelectedSplitPatch, splitPatchSetError, unpatchFixtureChanges } from "./FixturePatchSetup";
+import { compareFixtureIds, definitionModeChannels, definitionSplits, dmxGridSegments, draggedDmxStart, effectiveSplitPatches, formatFixturePatch, nextAvailableFixtureNumber, parseFixtureNumber, reconcileModePatchChanges, replaceSelectedSplitPatch, splitPatchSetError, unpatchFixtureChanges } from "./FixturePatchSetup";
 import { blankFixtureProfile } from "./fixtureProfileModel";
 
 const fixture = (fixture_number: number | null, fixture_id: string) => ({ fixture_number, fixture_id }) as PatchedFixture;
 
 describe("Show Patch fixture ordering", () => {
+  it("allocates positive fixture IDs from the requested start while skipping occupied IDs", () => {
+    const used = new Set([1, 2, 101, 104]);
+    expect(parseFixtureNumber("100")).toBe(100);
+    expect(parseFixtureNumber("1.5")).toBeNull();
+    expect(parseFixtureNumber("0")).toBeNull();
+    expect(nextAvailableFixtureNumber(100, used)).toBe(100);
+    expect(nextAvailableFixtureNumber(101, used)).toBe(102);
+    expect(nextAvailableFixtureNumber(104, used)).toBe(105);
+  });
+
+  it("wraps DMX footprint outlines across grid rows and clamps dragged patches inside the universe", () => {
+    expect(dmxGridSegments(15, 18)).toEqual([
+      { row: 1, column: 15, length: 2 },
+      { row: 2, column: 1, length: 2 },
+    ]);
+    expect(draggedDmxStart(50, 2, 4)).toBe(48);
+    expect(draggedDmxStart(512, 0, 4)).toBe(509);
+    expect(draggedDmxStart(1, 3, 4)).toBe(1);
+  });
+
   it("sorts numbered fixtures by fixture ID and leaves unnumbered fixtures last", () => {
     const fixtures = [fixture(999, "rgb"), fixture(null, "z"), fixture(2, "two"), fixture(101, "one-oh-one"), fixture(null, "a")];
     expect(fixtures.sort(compareFixtureIds).map((item) => item.fixture_id)).toEqual(["two", "one-oh-one", "rgb", "a", "z"]);

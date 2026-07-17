@@ -72,6 +72,11 @@ describe("FileManager helpers", () => {
 });
 
 describe("FileManager", () => {
+  const chooseHeaderAction = (menu: "Edit" | "New" | "View", action: string) => {
+    fireEvent.click(screen.getByRole("button", { name: menu }));
+    fireEvent.click(screen.getByRole("menuitem", { name: action }));
+  };
+
   beforeEach(() => {
     mocks.server.status = "connected";
     mocks.server.commandLine = "FIXTURE";
@@ -109,6 +114,13 @@ describe("FileManager", () => {
 
   it("renders the normal three-column layout, folders-first list, properties, and toggles", async () => {
     const { container } = render(<FileManager instanceId="layout" />);
+    expect(screen.getByText("File Manager")).toBeVisible();
+    expect(screen.getByText("Browse and manage files")).toBeVisible();
+    expect(await screen.findByText("Shows: /")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "New" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "View" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Close File Manager" })).not.toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Locations" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Properties" })).toBeVisible();
     expect(container.querySelector(".file-columns")?.children).toHaveLength(3);
@@ -121,11 +133,13 @@ describe("FileManager", () => {
     expect(within(properties).getAllByText("Unavailable")).toHaveLength(2);
     expect(within(properties).getByLabelText("Notes")).toBeDisabled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Show hidden files" }));
+    chooseHeaderAction("View", "Show Hidden Files");
     expect(await screen.findByRole("button", { name: ".secret, file" })).toBeVisible();
     expect(mocks.server.fileEntries).toHaveBeenCalledWith("shows", "", true);
-    fireEvent.click(screen.getByRole("button", { name: "Grid view" }));
+    chooseHeaderAction("View", "Grid");
     expect(container.querySelector(".file-grid")).toBeTruthy();
+    chooseHeaderAction("View", "Hide Properties");
+    expect(container.querySelector(".file-manager")).toHaveClass("fm-properties-hidden");
   });
 
   it("clears a transient directory error after the next successful refresh", async () => {
@@ -139,7 +153,7 @@ describe("FileManager", () => {
     render(<FileManager instanceId="transient-directory-error" />);
 
     expect(await screen.findByRole("status")).toHaveTextContent("Could not open this location");
-    fireEvent.click(screen.getByRole("button", { name: "Show hidden files" }));
+    chooseHeaderAction("View", "Show Hidden Files");
 
     expect(await screen.findByRole("button", { name: "alpha.txt, file" })).toBeVisible();
     await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
@@ -149,7 +163,7 @@ describe("FileManager", () => {
     render(<FileManager instanceId="tree" />);
     const tree = await screen.findByRole("complementary", { name: "Folder navigation" });
     const shows = within(tree).getByRole("button", { name: /Shows/ });
-    expect(screen.queryByRole("button", { name: /Folder/ })).not.toBeNull();
+    expect(await screen.findByRole("button", { name: /Folder/ })).toBeVisible();
     fireEvent.click(shows);
     await waitFor(() => expect(mocks.server.fileEntries).toHaveBeenCalledWith("shows", "", false));
     const folderTreeButton = await within(tree).findByRole("button", { name: /Folder/ });
@@ -248,13 +262,13 @@ describe("FileManager", () => {
     render(<FileManager instanceId="operations" />);
     const alpha = await screen.findByRole("button", { name: "alpha.txt, file" });
     fireEvent.click(alpha);
-    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    chooseHeaderAction("Edit", "Copy");
     expect(screen.getByRole("button", { name: "Copy Here" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "Rename" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
     fireEvent.click(alpha);
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    chooseHeaderAction("Edit", "Delete");
     expect(screen.getByRole("dialog", { name: "Confirm permanent deletion" })).toHaveTextContent("This deletion is permanent");
     expect(mocks.server.fileOperation).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Delete Permanently" }));
@@ -266,7 +280,7 @@ describe("FileManager", () => {
     render(<FileManager instanceId="conflict" />);
     fireEvent.click(await screen.findByRole("button", { name: "alpha.txt, file" }));
     fireEvent.click(screen.getByRole("button", { name: "image.png, file" }), { ctrlKey: true });
-    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    chooseHeaderAction("Edit", "Copy");
     fireEvent.click(screen.getByRole("button", { name: "Copy Here" }));
     const dialog = await screen.findByRole("dialog", { name: "Resolve name conflict" });
     expect(within(dialog).getByRole("button", { name: "Replace" })).toBeVisible();
@@ -281,7 +295,7 @@ describe("FileManager", () => {
   it("copies across configured roots through the server cross-root contract", async () => {
     render(<FileManager instanceId="cross-root" />);
     fireEvent.click(await screen.findByRole("button", { name: "alpha.txt, file" }));
-    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    chooseHeaderAction("Edit", "Copy");
     fireEvent.click(screen.getByRole("button", { name: /Tour USB/ }));
     await waitFor(() => expect(mocks.server.fileEntries).toHaveBeenCalledWith("usb", "", false));
     fireEvent.click(screen.getByRole("button", { name: "Copy Here" }));
@@ -307,7 +321,7 @@ describe("FileManager", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save Note" }));
     await waitFor(() => expect(mocks.server.saveFileNote).toHaveBeenCalledWith("shows", "alpha.txt", "Updated note"));
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    chooseHeaderAction("Edit", "Delete");
     const confirmation = screen.getByRole("dialog", { name: "Confirm move to trash" });
     expect(confirmation).toHaveTextContent("platform Trash");
     fireEvent.click(within(confirmation).getByRole("button", { name: "Move to Trash" }));
@@ -323,7 +337,7 @@ describe("FileManager", () => {
     mocks.server.fileOperation.mockRejectedValue(new Error("platform Trash refused the item"));
     render(<FileManager instanceId="failed-trash" />);
     fireEvent.click(await screen.findByRole("button", { name: "alpha.txt, file" }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    chooseHeaderAction("Edit", "Delete");
     fireEvent.click(screen.getByRole("button", { name: "Move to Trash" }));
 
     await waitFor(() => expect(screen.getByText(/File operation failed.*Trash refused/i)).toBeVisible());
@@ -351,7 +365,7 @@ describe("FileManager", () => {
   it("releases a claimed operation with a visible reason when the connection is lost", async () => {
     const view = render(<FileManager instanceId="connection-loss" />);
     fireEvent.click(await screen.findByRole("button", { name: "alpha.txt, file" }));
-    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    chooseHeaderAction("Edit", "Copy");
     await waitFor(() => expect(mocks.server.claimFileInput).toHaveBeenCalled());
 
     mocks.server.status = "disconnected";
@@ -413,13 +427,13 @@ describe("FileManager", () => {
     };
 
     fireEvent.click(alpha);
-    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    chooseHeaderAction("Edit", "Copy");
     route("escape");
     expect(screen.queryByRole("button", { name: "Copy Here" })).not.toBeInTheDocument();
     expect(mocks.server.releaseFileInput).toHaveBeenCalledWith(instanceId);
 
     fireEvent.click(alpha);
-    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    chooseHeaderAction("Edit", "Copy");
     route("enter");
     await waitFor(() => expect(mocks.server.fileOperation).toHaveBeenCalledWith("shows", expect.objectContaining({ operation: "copy", sources: ["alpha.txt"] })));
   });

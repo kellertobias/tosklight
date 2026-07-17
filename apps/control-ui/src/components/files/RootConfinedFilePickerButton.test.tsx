@@ -23,7 +23,7 @@ describe("RootConfinedFilePickerButton", () => {
     render(<RootConfinedFilePickerButton label="Choose GDTF file" allowedExtensions={["gdtf"]} onFiles={onFiles} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Choose GDTF file" }));
-    await waitFor(() => expect(mocks.open).toHaveBeenCalledWith({ target: "files", multiple: false, allowedExtensions: ["gdtf"] }));
+    await waitFor(() => expect(mocks.open).toHaveBeenCalledWith({ purpose: "Choose GDTF file", target: "files", multiple: false, allowedExtensions: ["gdtf"] }));
     expect(mocks.fileContent).toHaveBeenCalledWith("shows", "imports/tour.gdtf");
     await waitFor(() => expect(onFiles).toHaveBeenCalledOnce());
     const file = onFiles.mock.calls[0][0][0] as File;

@@ -1,8 +1,73 @@
 # Fixture Library
 
-The fixture library is desk-wide and persists independently of show files. Open **Desk Setup > Fixture library** to search, import, create, revise, and inspect complete fixture profiles. A profile is one revisioned fixture containing Generic information and an ordered set of modes; a patched show embeds the selected profile revision and mode so later library edits or deletion cannot change that show.
+The fixture library is desk-wide and persists independently of show files. Open **Desk Setup > Shows & recovery > Open Fixture Library** to launch its modal and search, import, create, revise, and inspect complete fixture profiles. Library search follows the shared [search-bar layout](../01-application-layout.md#search-bars) and filters automatically with every typed character. Its optional Options dialog selects the fixture type. A profile is one revisioned fixture containing Generic information and an ordered set of modes; a patched show embeds the selected profile revision and mode so later library edits or deletion cannot change that show.
 
 ![Fixture-library manufacturers, modes, footprint, heads, and revision](../assets/screenshots/workflows/fixture-library.png)
+
+The shipped library includes separate conventional **Dimmer PAR Can**, **Dimmer Profile**, and **Dimmer Fresnel** fixture profiles, each with 8-bit and 16-bit dimmer modes. Their transferred GLB models use a PAR housing with a square gel frame, an elongated ellipsoidal-profile housing, and a Fresnel housing with four external barn doors respectively. Choose the fixture profile for the physical lantern rather than treating these appearances as modes of one Dimmer profile.
+
+## Transferable fixture packages
+
+ToskLight has no fixture definitions compiled into the application. Every fixture supplied with the desk is an ordinary `.toskfixture` package, loaded through the same package reader used by **Import fixture**. You can export it, move it to another desk, keep it with a test, unpack and edit it, or replace it with a corrected package without rebuilding ToskLight.
+
+Select a fixture and choose **Export fixture** to download its complete immutable revision. On another desk, choose **Import fixture** and select that file. A package keeps the stable fixture, mode, head, channel, function, split, and geometry IDs. Importing identical content is a no-op; importing changed content with the same fixture ID and manufacturer/name creates the next local revision. Reusing an existing ID for a different fixture family is rejected.
+
+The shipped package directory currently provides the exhaustive Generic family and these manufacturer profiles with complete ordered mode lists:
+
+- **Generic Blinder** — the seven requested two-, four-, and eight-lamp one-, two-, and four-channel groupings. Each dimmer channel owns a non-master logical head and the corresponding physical emitters. **Fogger** provides Fog, Fan/Fog, and Fog/Fan modes; **Hazer** provides both two-channel orderings.
+- **Venue** visual-only profiles — 1 × 1 m, 2 × 1 m, and 1 × 0.5 m stage elements; correctly rising stage stairs; one-, two-, three-, and four-point truss; and 1 m, 2 m, 3 m, 5 m, and 6 m curtains. Their modes select leg height, target stage height, truss/pipe length, or curtain height. Every archive includes portable icon, photograph, and metre-authored GLB geometry.
+
+- **JB-Lighting JBLED A7** — Standard and Compressed RGB personalities in 8-bit and 16-bit color.
+- **Martin MAC 250 Entour** — 16 Bit and 16 Bit Extended.
+- **High End Systems Trackspot** — the classic seven-channel mirror scanner in low- and high-resolution DMX personalities.
+- **Showtec Sunstrip Active DMX** — ten independently controlled tungsten lamps.
+- **Showtec Sunstrip LED RGB 42206** — ten independently controlled RGB pixels.
+- **ROBE Robin DLS Profile**, **Robin 600X LEDWash**, **Robin LEDBeam 150**, **Robin 300 LEDWash**, and **Robin DLF Wash** — every documented manufacturer personality. The 600X and 300 zone modes expose their three concentric RGBW zones as logical heads.
+- **Claypaky Sharpy**, **ETC Source Four LED Series 2 Lustr**, **CHAUVET Professional COLORado 1 Solo**, and **GLP JDC1**. JDC1 SPix modes expose all twelve RGB plate pixels and twelve white beam segments as logical heads.
+
+The Source Four LED Series 2 configuration can independently enable Strobe, Fan Control, and Plus Seven. Its package contains the canonical console personalities, including the common fully enabled and Plus Seven variants, instead of multiplying every fixture-menu option permutation into a separate mode.
+
+Channel order, footprints, fine-byte slots, safe defaults, and physical ranges come from the corresponding manufacturer DMX charts. Shipped packages are not privileged or reserved: after loading, they are normal desk-library profiles. When a newer shipped package is installed, ToskLight updates it only if its last package-installed revision is still current. An operator-created later revision is preserved and reported instead of being overwritten.
+
+### Package layout
+
+A `.toskfixture` file is a ZIP archive with this portable layout:
+
+```text
+fixture.json
+assets/photograph.png    optional PNG, JPEG, or WebP
+assets/icon.png          optional PNG, JPEG, or WebP stage icon
+assets/model.glb         optional self-contained glTF Binary 2.0 model
+```
+
+`fixture.json` is UTF-8 JSON. The outer document is deliberately small and can be produced with a normal text editor or an AI fixture-building workflow:
+
+```json
+{
+  "$schema": "https://tosklight.app/schemas/fixture-package-v1.json",
+  "format": "tosklight.fixture",
+  "format_version": 1,
+  "profile": {
+    "schema_version": 2,
+    "id": "a-stable-uuid",
+    "revision": 1,
+    "manufacturer": "Example",
+    "name": "Example Profile",
+    "patch_policy": "dmx",
+    "photograph_asset": "assets/photograph.png",
+    "stage_icon_asset": "assets/icon.png",
+    "model_asset": "assets/model.glb",
+    "model_units": "metres",
+    "modes": []
+  }
+}
+```
+
+The `profile` is the same schema-v2 fixture profile edited by the Fixture Library and embedded in patched shows. A DMX profile uses `"patch_policy": "dmx"`, a 1–512 slot split footprint, and its channels. A scenic object uses `"patch_policy": "visual_only"`, a zero-footprint split, no channels/color/control actions, and geometry; the desk then guarantees that it cannot receive a universe, address, or direct-control endpoint. `"model_units": "metres"` preserves authored GLB dimensions exactly, while the backward-compatible `"auto"` value normalizes a conventional lamp model to its profile dimensions. Use an exported package as the safest complete template. Asset fields are either `null` or relative paths under `assets/`. Do not use absolute paths, parent paths, data URLs, external GLB textures, or network URLs inside a package. The package must contain exactly the referenced files and no unreferenced extras.
+
+To author one manually, export a similar fixture, rename `.toskfixture` to `.zip`, unpack it, edit `fixture.json`, add or replace assets, ZIP `fixture.json` and `assets/` at the archive root, then restore the `.toskfixture` extension. Keep existing UUIDs when correcting the same fixture; generate new UUIDs for a genuinely different fixture, mode, head, channel, or function. Never derive identity from display text or DMX row position.
+
+For safety, import rejects unsafe or duplicate paths, symbolic links, unsupported compression, undeclared files, invalid raster data, non-self-contained GLBs, archives over 64 MiB compressed or 128 MiB expanded, more than 32 entries, and manifests over 64 MiB. The supported MIME type is `application/vnd.tosklight.fixture+zip`.
 
 ## Import GDTF
 
@@ -62,7 +127,7 @@ The editor preview and Stage visualizer use the configured graph, multiple emitt
 
 The server assigns revision numbers atomically and rejects concurrent edits. Open **Revision history** to inspect immutable revisions, edit an older revision as a new one, or delete an unused revision. Deletion warns when a patched show embeds that revision; the show's snapshot remains intact even if deletion is confirmed.
 
-Legacy library entries migrate through an explicit schema-v1 reader. Compatible modes are combined only when their fixture-family metadata agrees; conflicts remain separate and produce a visible warning. Built-in Generic profiles are regenerated as reserved-source entries without deleting user-authored fixtures that also use `Generic` as manufacturer.
+Legacy library entries migrate through an explicit schema-v1 reader. Compatible modes are combined only when their fixture-family metadata agrees; conflicts remain separate and produce a visible warning. Installations that predate transferable packages remove only the historical code-owned catalog rows, then load the equivalent `.toskfixture` files as ordinary profiles. User-authored profiles are never claimed by manufacturer or model name.
 
 During legacy or GDTF migration, intensity, RGB/RGBW/additive, CMY/subtractive, and identifiable Open/White wheel channels receive the same deterministic physical Highlight defaults; unmatched wheel, Position, and unrelated channels retain their source defaults. Existing authored schema-v2 Highlight raw values are preserved exactly. A patched fixture without a per-instance Highlight override map inherits those values from its embedded profile revision. Later desk-library edits therefore do not silently change the Highlight Look already stored with a show.
 

@@ -1,14 +1,18 @@
 #![forbid(unsafe_code)]
 //! Fixture definitions, portable fixture library, color calibration, patching, and DMX encoding.
 
+mod package;
 mod profile;
+pub use package::*;
 pub use profile::*;
 
 use light_core::{AttributeKey, AttributeValue, DmxAddress, FixtureId, Universe, Xyz};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
+    fs, io,
     net::IpAddr,
     path::Path,
 };
@@ -382,11 +386,19 @@ pub enum FixtureError {
     Sql(#[from] rusqlite::Error),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
+    #[error(transparent)]
+    Io(#[from] io::Error),
     #[error("fixture revision conflict: expected {expected}, current {current}")]
     RevisionConflict { expected: u32, current: u32 },
 }
 
 impl FixtureDefinition {
+    pub fn is_dmx_patchable(&self) -> bool {
+        self.profile_snapshot
+            .as_deref()
+            .is_none_or(|profile| profile.patch_policy == profile::PatchPolicy::Dmx)
+    }
+
     pub fn split_footprints(&self) -> BTreeMap<u16, u16> {
         if self.schema_version == FIXTURE_PROFILE_SCHEMA_VERSION
             && let (Some(profile), Some(mode_id)) = (&self.profile_snapshot, self.mode_id)
@@ -651,6 +663,30 @@ pub fn validate_patch(fixtures: &[PatchedFixture]) -> Result<(), FixtureError> {
             }
         }
         fixture.definition.validate()?;
+        if !fixture.definition.is_dmx_patchable() {
+            if fixture.direct_control.is_some()
+                || fixture.universe.is_some()
+                || fixture.address.is_some()
+                || fixture
+                    .split_patches
+                    .iter()
+                    .any(|patch| patch.universe.is_some() || patch.address.is_some())
+                || fixture.multipatch.iter().any(|instance| {
+                    instance.universe.is_some()
+                        || instance.address.is_some()
+                        || instance
+                            .split_patches
+                            .iter()
+                            .any(|patch| patch.universe.is_some() || patch.address.is_some())
+                })
+            {
+                return Err(FixtureError::Invalid(format!(
+                    "visual-only fixture {} cannot have a DMX or direct-control patch",
+                    fixture.fixture_id.0
+                )));
+            }
+            continue;
+        }
         if let Some(endpoint) = &fixture.direct_control {
             if endpoint.port == 0 {
                 return Err(FixtureError::Invalid(format!(
@@ -898,13 +934,20 @@ pub struct FixtureLibrary {
     conn: Connection,
 }
 
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct FixturePackageLoadReport {
+    pub installed: usize,
+    pub updated: usize,
+    pub unchanged: usize,
+    pub preserved_operator_revisions: usize,
+}
+
 pub type LegacyFixtureProfileSource = (String, String, Option<Vec<u8>>);
 
-/// Ownership marker for profiles generated from the desk's built-in Generic catalog. Catalog
-/// upgrades use this marker and deterministic legacy IDs; manufacturer text is never an ownership
-/// signal because operators may create their own fixtures whose manufacturer is also `Generic`.
-pub const BUILTIN_GENERIC_RESERVED_SOURCE: &str = "builtin:generic-catalog";
-const BUILTIN_GENERIC_CATALOG_VERSION: &str = "5";
+// Removed code-owned catalogs used these markers. They remain only for a one-time data migration
+// that releases old catalog rows before loading the same fixtures from transferable packages.
+const LEGACY_GENERIC_CATALOG_SOURCE: &str = "builtin:generic-catalog";
+const LEGACY_VENDOR_CATALOG_SOURCE: &str = "builtin:vendor-catalog";
 
 impl FixtureLibrary {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, FixtureError> {
@@ -919,7 +962,8 @@ impl FixtureLibrary {
              CREATE TABLE IF NOT EXISTS fixture_profile_legacy_map(legacy_id TEXT NOT NULL,legacy_revision INTEGER NOT NULL,profile_id TEXT NOT NULL,profile_revision INTEGER NOT NULL,PRIMARY KEY(legacy_id,legacy_revision));
              CREATE TABLE IF NOT EXISTS fixture_profile_migration_failures(legacy_id TEXT NOT NULL,legacy_revision INTEGER NOT NULL,error TEXT NOT NULL,PRIMARY KEY(legacy_id,legacy_revision));
              CREATE TABLE IF NOT EXISTS fixture_library_warnings(id INTEGER PRIMARY KEY AUTOINCREMENT,message TEXT NOT NULL UNIQUE);
-             CREATE TABLE IF NOT EXISTS library_metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);",
+             CREATE TABLE IF NOT EXISTS library_metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+             CREATE TABLE IF NOT EXISTS fixture_package_installations(package_path TEXT PRIMARY KEY,package_digest TEXT NOT NULL,profile_id TEXT NOT NULL,installed_revision INTEGER NOT NULL);",
         )?;
         if conn
             .prepare("SELECT source_gdtf FROM fixture_definitions LIMIT 0")
@@ -931,8 +975,239 @@ impl FixtureLibrary {
             )?;
         }
         let library = Self { conn };
+        library.remove_legacy_code_owned_catalogs()?;
         library.migrate_legacy_profiles()?;
         Ok(library)
+    }
+
+    fn remove_legacy_code_owned_catalogs(&self) -> Result<(), FixtureError> {
+        let transaction = self.conn.unchecked_transaction()?;
+        let owned_profile_ids = {
+            let mut statement = transaction.prepare(
+                "SELECT DISTINCT id FROM fixture_profiles WHERE reserved_source IN (?1,?2)",
+            )?;
+            statement
+                .query_map(
+                    params![LEGACY_GENERIC_CATALOG_SOURCE, LEGACY_VENDOR_CATALOG_SOURCE],
+                    |row| row.get::<_, String>(0),
+                )?
+                .collect::<Result<Vec<_>, _>>()?
+        };
+        let legacy_definition_ids = {
+            let mut statement = transaction.prepare(
+                "SELECT DISTINCT m.legacy_id FROM fixture_profile_legacy_map m JOIN fixture_profiles p ON p.id=m.profile_id AND p.revision=m.profile_revision WHERE p.reserved_source IN (?1,?2)",
+            )?;
+            statement
+                .query_map(
+                    params![LEGACY_GENERIC_CATALOG_SOURCE, LEGACY_VENDOR_CATALOG_SOURCE],
+                    |row| row.get::<_, String>(0),
+                )?
+                .collect::<Result<Vec<_>, _>>()?
+        };
+        for profile_id in owned_profile_ids {
+            transaction.execute(
+                "DELETE FROM fixture_profile_sources WHERE profile_id=?1",
+                [&profile_id],
+            )?;
+            transaction.execute(
+                "DELETE FROM fixture_profile_legacy_sources WHERE profile_id=?1",
+                [&profile_id],
+            )?;
+            transaction.execute(
+                "DELETE FROM fixture_profile_legacy_map WHERE profile_id=?1",
+                [&profile_id],
+            )?;
+            transaction.execute("DELETE FROM fixture_profiles WHERE id=?1", [&profile_id])?;
+        }
+        for legacy_id in legacy_definition_ids {
+            transaction.execute(
+                "DELETE FROM fixture_profile_migration_failures WHERE legacy_id=?1",
+                [&legacy_id],
+            )?;
+            transaction.execute("DELETE FROM fixture_definitions WHERE id=?1", [&legacy_id])?;
+        }
+        transaction.execute(
+            "DELETE FROM library_metadata WHERE key IN ('generic_catalog_version','generic_catalog_profile_count','vendor_catalog_version','vendor_catalog_profile_count')",
+            [],
+        )?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    /// Imports the exact same portable archive used for desk-to-desk transfer. Stable profile IDs
+    /// are retained; changed content becomes a new local revision of the same fixture family.
+    pub fn import_fixture_package(&self, bytes: &[u8]) -> Result<FixtureProfile, FixtureError> {
+        let mut profile = read_fixture_package(bytes)
+            .map_err(|error| FixtureError::Invalid(error.to_string()))?;
+        profile.reserved_source = None;
+        let current = self.latest_profile_for_id(profile.id)?;
+        if let Some(existing) = &current {
+            ensure_same_fixture_family(existing, &profile)?;
+            if normalized_profile_json(existing)? == normalized_profile_json(&profile)? {
+                return Ok(existing.clone());
+            }
+        }
+        self.save_profile(profile, current.map_or(0, |profile| profile.revision))
+    }
+
+    pub fn export_fixture_package(
+        &self,
+        id: FixtureId,
+        revision: u32,
+    ) -> Result<Option<Vec<u8>>, FixtureError> {
+        self.profile(id, revision)?
+            .map(|profile| {
+                write_fixture_package(&profile)
+                    .map_err(|error| FixtureError::Invalid(error.to_string()))
+            })
+            .transpose()
+    }
+
+    /// Loads a shipped directory of normal transferable packages. Package upgrades are applied
+    /// only while the installed revision is still current; a later operator revision always wins.
+    pub fn load_fixture_package_directory(
+        &self,
+        directory: impl AsRef<Path>,
+    ) -> Result<FixturePackageLoadReport, FixtureError> {
+        let directory = directory.as_ref();
+        let mut paths = fs::read_dir(directory)?
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.is_file()
+                    && path.extension().is_some_and(|extension| {
+                        extension.eq_ignore_ascii_case(FIXTURE_PACKAGE_EXTENSION)
+                    })
+            })
+            .collect::<Vec<_>>();
+        paths.sort();
+        let mut report = FixturePackageLoadReport::default();
+        for path in paths {
+            let bytes = fs::read(&path)?;
+            let digest = format!("{:x}", Sha256::digest(&bytes));
+            let package_key = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .ok_or_else(|| {
+                    FixtureError::Invalid("fixture package filename is not UTF-8".into())
+                })?
+                .to_owned();
+            let mut incoming = read_fixture_package(&bytes)
+                .map_err(|error| FixtureError::Invalid(format!("{}: {error}", path.display())))?;
+            incoming.reserved_source = None;
+            let installation = self
+                .conn
+                .query_row(
+                    "SELECT package_digest,profile_id,installed_revision FROM fixture_package_installations WHERE package_path=?1",
+                    [&package_key],
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, u32>(2)?)),
+                )
+                .optional()?;
+            if installation.as_ref().is_some_and(
+                |(installed_digest, installed_id, installed_revision)| {
+                    installed_digest == &digest
+                        && installed_id == &incoming.id.0.to_string()
+                        && self
+                            .profile(incoming.id, *installed_revision)
+                            .ok()
+                            .flatten()
+                            .is_some()
+                },
+            ) {
+                report.unchanged += 1;
+                continue;
+            }
+            let current = self.latest_profile_for_id(incoming.id)?;
+            let legacy_packaged_profile = installation.is_none()
+                && incoming.manufacturer.eq_ignore_ascii_case("Generic")
+                && self.conn.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM fixture_profile_legacy_sources WHERE profile_id=?1)",
+                    [incoming.id.0.to_string()],
+                    |row| row.get::<_, bool>(0),
+                )?;
+            let stored = match current {
+                None => {
+                    report.installed += 1;
+                    self.save_profile(incoming, 0)?
+                }
+                Some(existing) => {
+                    ensure_same_fixture_family(&existing, &incoming)?;
+                    if normalized_profile_json(&existing)? == normalized_profile_json(&incoming)? {
+                        report.unchanged += 1;
+                        existing
+                    } else if legacy_packaged_profile
+                        || installation
+                            .as_ref()
+                            .is_some_and(|(_, installed_id, revision)| {
+                                installed_id == &incoming.id.0.to_string()
+                                    && *revision == existing.revision
+                            })
+                    {
+                        report.updated += 1;
+                        self.save_profile(incoming, existing.revision)?
+                    } else {
+                        report.preserved_operator_revisions += 1;
+                        self.conn.execute(
+                            "INSERT OR IGNORE INTO fixture_library_warnings(message) VALUES(?1)",
+                            [format!(
+                                "Shipped fixture package {package_key} was not applied because {} {} has an operator revision.",
+                                existing.manufacturer, existing.name
+                            )],
+                        )?;
+                        continue;
+                    }
+                }
+            };
+            if legacy_packaged_profile {
+                self.retire_packaged_legacy_sources(stored.id)?;
+            }
+            self.conn.execute(
+                "INSERT INTO fixture_package_installations(package_path,package_digest,profile_id,installed_revision) VALUES(?1,?2,?3,?4) ON CONFLICT(package_path) DO UPDATE SET package_digest=excluded.package_digest,profile_id=excluded.profile_id,installed_revision=excluded.installed_revision",
+                params![package_key, digest, stored.id.0.to_string(), stored.revision],
+            )?;
+        }
+        Ok(report)
+    }
+
+    fn retire_packaged_legacy_sources(&self, profile_id: FixtureId) -> Result<(), FixtureError> {
+        let transaction = self.conn.unchecked_transaction()?;
+        let legacy_ids = {
+            let mut statement = transaction.prepare(
+                "SELECT DISTINCT legacy_id FROM fixture_profile_legacy_sources WHERE profile_id=?1",
+            )?;
+            statement
+                .query_map([profile_id.0.to_string()], |row| row.get::<_, String>(0))?
+                .collect::<Result<Vec<_>, _>>()?
+        };
+        transaction.execute(
+            "DELETE FROM fixture_profile_legacy_sources WHERE profile_id=?1",
+            [profile_id.0.to_string()],
+        )?;
+        transaction.execute(
+            "DELETE FROM fixture_profile_legacy_map WHERE profile_id=?1",
+            [profile_id.0.to_string()],
+        )?;
+        for legacy_id in legacy_ids {
+            transaction.execute(
+                "DELETE FROM fixture_profile_migration_failures WHERE legacy_id=?1",
+                [&legacy_id],
+            )?;
+            transaction.execute("DELETE FROM fixture_definitions WHERE id=?1", [&legacy_id])?;
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
+    fn latest_profile_for_id(&self, id: FixtureId) -> Result<Option<FixtureProfile>, FixtureError> {
+        self.conn
+            .query_row(
+                "SELECT profile_json FROM fixture_profiles WHERE id=?1 ORDER BY revision DESC LIMIT 1",
+                [id.0.to_string()],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?
+            .map(|json| serde_json::from_str(&json).map_err(FixtureError::from))
+            .transpose()
     }
     pub fn import_json(&self, json: &str) -> Result<FixtureDefinition, FixtureError> {
         self.import_json_with_source(json, None)
@@ -1052,6 +1327,7 @@ impl FixtureLibrary {
         }
         profile.revision = current + 1;
         profile.schema_version = FIXTURE_PROFILE_SCHEMA_VERSION;
+        profile.reserved_source = None;
         profile
             .validate()
             .map_err(|error| FixtureError::Invalid(error.to_string()))?;
@@ -1344,487 +1620,39 @@ impl FixtureLibrary {
             params![id.0.to_string(), revision],
         )? == 1)
     }
-    pub fn ensure_builtin_generics(&mut self) -> Result<usize, FixtureError> {
-        self.conn.execute_batch("CREATE TABLE IF NOT EXISTS library_metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);")?;
-        let installed_version = self
-            .conn
-            .query_row(
-                "SELECT value FROM library_metadata WHERE key='generic_catalog_version'",
-                [],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()?;
-        let installed_profile_count = self
-            .conn
-            .query_row(
-                "SELECT value FROM library_metadata WHERE key='generic_catalog_profile_count'",
-                [],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()?
-            .and_then(|value| value.parse::<usize>().ok());
-        let reserved_profiles = self.conn.query_row(
-            "SELECT COUNT(DISTINCT id) FROM fixture_profiles WHERE reserved_source=?1",
-            [BUILTIN_GENERIC_RESERVED_SOURCE],
-            |row| row.get::<_, usize>(0),
-        )?;
-        if installed_version.as_deref() == Some(BUILTIN_GENERIC_CATALOG_VERSION)
-            && installed_profile_count == Some(reserved_profiles)
-            && reserved_profiles > 0
-        {
-            return Ok(0);
-        }
-        let definitions = generic_fixture_definitions();
-        let mut families = BTreeMap::<String, Vec<FixtureDefinition>>::new();
-        for definition in &definitions {
-            families
-                .entry(format!(
-                    "{}\0{}\0{}",
-                    definition.model, definition.device_type, definition.name
-                ))
-                .or_default()
-                .push(definition.clone());
-        }
-        let mut profiles = Vec::with_capacity(families.len());
-        for definitions in families.values_mut() {
-            definitions.sort_by_key(|definition| definition.mode.to_lowercase());
-            let mut profile = FixtureProfile::from_legacy_modes(definitions)
-                .map_err(|error| FixtureError::Invalid(error.to_string()))?;
-            profile.reserved_source = Some(BUILTIN_GENERIC_RESERVED_SOURCE.into());
-            profiles.push((profile, definitions.clone()));
-        }
-        let transaction = self.conn.transaction()?;
-        // Never delete by manufacturer/name: user-authored Generic fixtures are normal protected
-        // library content. Built-ins have deterministic legacy IDs and a reserved-source marker,
-        // so catalog upgrades replace only entries they own.
-        let builtin_ids = definitions
-            .iter()
-            .map(|fixture| fixture.id.0.to_string())
-            .collect::<HashSet<_>>();
-        let mut previous_profile_ids = {
-            let mut statement = transaction
-                .prepare("SELECT DISTINCT id FROM fixture_profiles WHERE reserved_source=?1")?;
-            statement
-                .query_map([BUILTIN_GENERIC_RESERVED_SOURCE], |row| {
-                    row.get::<_, String>(0)
-                })?
-                .collect::<Result<HashSet<_>, _>>()?
-        };
-        {
-            let mut find_profile = transaction.prepare(
-                "SELECT profile_id FROM fixture_profile_legacy_map WHERE legacy_id=?1 AND legacy_revision=1",
-            )?;
-            for id in &builtin_ids {
-                if let Some(profile_id) = find_profile
-                    .query_row([id], |row| row.get::<_, String>(0))
-                    .optional()?
-                {
-                    previous_profile_ids.insert(profile_id);
-                }
-            }
-        }
-        for profile_id in previous_profile_ids {
-            transaction.execute(
-                "DELETE FROM fixture_profile_sources WHERE profile_id=?1",
-                [&profile_id],
-            )?;
-            transaction.execute(
-                "DELETE FROM fixture_profile_legacy_sources WHERE profile_id=?1",
-                [&profile_id],
-            )?;
-            transaction.execute(
-                "DELETE FROM fixture_profile_legacy_map WHERE profile_id=?1",
-                [&profile_id],
-            )?;
-            transaction.execute("DELETE FROM fixture_profiles WHERE id=?1", [&profile_id])?;
-        }
-        for fixture in &definitions {
-            let json = serde_json::to_string(fixture)?;
-            transaction.execute("INSERT INTO fixture_definitions(id,revision,manufacturer,model,mode,definition_json) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(id,revision) DO UPDATE SET manufacturer=excluded.manufacturer,model=excluded.model,mode=excluded.mode,definition_json=excluded.definition_json", params![fixture.id.0.to_string(),fixture.revision,fixture.manufacturer,fixture.model,fixture.mode,json])?;
-        }
-        for (profile, legacy_definitions) in &profiles {
-            let profile_json = serde_json::to_string(profile)?;
-            transaction.execute(
-                "INSERT INTO fixture_profiles(id,revision,manufacturer,name,profile_json,reserved_source) VALUES(?1,1,?2,?3,?4,?5)",
-                params![profile.id.0.to_string(), profile.manufacturer, profile.name, profile_json, BUILTIN_GENERIC_RESERVED_SOURCE],
-            )?;
-            for definition in legacy_definitions {
-                let definition_json = serde_json::to_string(definition)?;
-                transaction.execute(
-                    "INSERT OR REPLACE INTO fixture_profile_legacy_sources(profile_id,profile_revision,legacy_id,legacy_revision,definition_json,source_gdtf) VALUES(?1,1,?2,1,?3,NULL)",
-                    params![profile.id.0.to_string(), definition.id.0.to_string(), definition_json],
-                )?;
-                transaction.execute(
-                    "INSERT OR REPLACE INTO fixture_profile_legacy_map(legacy_id,legacy_revision,profile_id,profile_revision) VALUES(?1,1,?2,1)",
-                    params![definition.id.0.to_string(), profile.id.0.to_string()],
-                )?;
-                transaction.execute(
-                    "DELETE FROM fixture_profile_migration_failures WHERE legacy_id=?1 AND legacy_revision=1",
-                    [definition.id.0.to_string()],
-                )?;
-            }
-        }
-        transaction.execute("INSERT INTO library_metadata(key,value) VALUES('generic_catalog_version',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [BUILTIN_GENERIC_CATALOG_VERSION])?;
-        transaction.execute("INSERT INTO library_metadata(key,value) VALUES('generic_catalog_profile_count',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [profiles.len().to_string()])?;
-        transaction.commit()?;
-        Ok(profiles.len())
-    }
 }
 
-fn permutations(values: &[(&str, &str)]) -> Vec<Vec<(String, String)>> {
-    fn visit(
-        remaining: Vec<(&str, &str)>,
-        current: &mut Vec<(String, String)>,
-        output: &mut Vec<Vec<(String, String)>>,
-    ) {
-        if remaining.is_empty() {
-            output.push(current.clone());
-            return;
-        }
-        for index in 0..remaining.len() {
-            let mut next = remaining.clone();
-            let value = next.remove(index);
-            current.push((value.0.into(), value.1.into()));
-            visit(next, current, output);
-            current.pop();
-        }
-    }
-    let mut output = Vec::new();
-    visit(values.to_vec(), &mut Vec::new(), &mut output);
-    output
+fn normalized_profile_json(profile: &FixtureProfile) -> Result<String, FixtureError> {
+    let mut profile = profile.clone();
+    profile.revision = 0;
+    profile.reserved_source = None;
+    Ok(serde_json::to_string(&profile)?)
 }
 
-fn generic_definition(
-    name: &str,
-    device_type: &str,
-    mode: String,
-    channels: &[(String, String)],
-    virtual_dimmer: bool,
-    resolution: usize,
-) -> FixtureDefinition {
-    let mut offset = 0_u16;
-    let mut parameters = channels
-        .iter()
-        .map(|(_label, attribute)| {
-            let bytes = resolution;
-            let start = offset;
-            offset += bytes as u16;
-            Parameter {
-                attribute: AttributeKey(attribute.clone()),
-                components: (0..bytes)
-                    .map(|component| ChannelComponent {
-                        offset: start + component as u16,
-                        byte_order: ByteOrder::MsbFirst,
-                    })
-                    .collect(),
-                default: 0.0,
-                virtual_dimmer: virtual_dimmer && attribute.starts_with("color."),
-                metadata: ParameterMetadata::default(),
-                capabilities: if attribute == "fog" {
-                    vec![Capability {
-                        name: "Off to full output".into(),
-                        dmx_from: 0,
-                        dmx_to: 255,
-                        preset_family: Some("beam".into()),
-                    }]
-                } else if attribute == "switch" {
-                    vec![
-                        Capability {
-                            name: "Off".into(),
-                            dmx_from: 0,
-                            dmx_to: 127,
-                            preset_family: Some("control".into()),
-                        },
-                        Capability {
-                            name: "On".into(),
-                            dmx_from: 128,
-                            dmx_to: 255,
-                            preset_family: Some("control".into()),
-                        },
-                    ]
-                } else {
-                    Vec::new()
-                },
-            }
-        })
-        .collect::<Vec<_>>();
-    if virtual_dimmer {
-        parameters.insert(
-            0,
-            Parameter {
-                attribute: AttributeKey::intensity(),
-                components: Vec::new(),
-                default: 1.0,
-                virtual_dimmer: true,
-                metadata: ParameterMetadata::default(),
-                capabilities: Vec::new(),
-            },
-        );
-    }
-    let id = FixtureId(profile::stable_uuid(&format!(
-        "builtin-generic\0{name}\0{mode}\0{resolution}\0{}",
-        channels
-            .iter()
-            .map(|(_, attribute)| attribute.as_str())
-            .collect::<Vec<_>>()
-            .join(",")
-    )));
-    FixtureDefinition {
-        schema_version: 1,
-        id,
-        revision: 1,
-        manufacturer: "Generic".into(),
-        device_type: device_type.into(),
-        name: name.into(),
-        model: name.into(),
-        mode,
-        footprint: offset,
-        heads: vec![LogicalHead {
-            index: 0,
-            name: "Main".into(),
-            shared: true,
-            parameters,
-        }],
-        color_calibration: None,
-        physical: FixturePhysicalProperties::default(),
-        model_asset: None,
-        icon_asset: None,
-        hazardous: false,
-        direct_control_protocols: Vec::new(),
-        signal_loss_policy: SignalLossPolicy::HoldLast,
-        safe_values: BTreeMap::new(),
-        profile_id: None,
-        mode_id: None,
-        profile_snapshot: None,
-    }
-}
-
-fn led_modes(name: &str, emitters: &[(&str, &str)]) -> Vec<FixtureDefinition> {
-    let mut result = Vec::new();
-    for order in permutations(emitters) {
-        let label = order
-            .iter()
-            .map(|(label, _)| label.as_str())
-            .collect::<String>();
-        let mut dimmer_first = vec![("D".into(), "intensity".into())];
-        dimmer_first.extend(order.clone());
-        result.push(generic_definition(
-            name,
-            "wash",
-            format!("D{label} 8-bit dimmer first"),
-            &dimmer_first,
-            false,
-            1,
-        ));
-        let mut dimmer_last = order.clone();
-        dimmer_last.push(("D".into(), "intensity".into()));
-        result.push(generic_definition(
-            name,
-            "wash",
-            format!("{label}D 8-bit dimmer last"),
-            &dimmer_last,
-            false,
-            1,
-        ));
-        result.push(generic_definition(
-            name,
-            "wash",
-            format!("{label} virtual dimmer"),
-            &order,
-            true,
-            1,
-        ));
-    }
-    result
-}
-
-fn scanner_definition() -> FixtureDefinition {
-    let mut fixture = generic_definition(
-        "Mirror Mover Scanner",
-        "scanner",
-        "Dimmer, Pan, Tilt".into(),
-        &[
-            ("D".into(), "intensity".into()),
-            ("P".into(), "pan".into()),
-            ("T".into(), "tilt".into()),
-        ],
-        false,
-        1,
-    );
-    for parameter in fixture
-        .heads
-        .iter_mut()
-        .flat_map(|head| &mut head.parameters)
+fn ensure_same_fixture_family(
+    existing: &FixtureProfile,
+    incoming: &FixtureProfile,
+) -> Result<(), FixtureError> {
+    if existing
+        .manufacturer
+        .trim()
+        .eq_ignore_ascii_case(incoming.manufacturer.trim())
+        && existing
+            .name
+            .trim()
+            .eq_ignore_ascii_case(incoming.name.trim())
     {
-        if parameter.attribute.0 == "pan" || parameter.attribute.0 == "tilt" {
-            parameter.default = 0.5;
-        }
+        Ok(())
+    } else {
+        Err(FixtureError::Invalid(format!(
+            "fixture package ID {} belongs to {} {}, not {} {}",
+            incoming.id.0,
+            existing.manufacturer,
+            existing.name,
+            incoming.manufacturer,
+            incoming.name
+        )))
     }
-    fixture.physical.pan_range_degrees = Some(180.0);
-    fixture.physical.tilt_range_degrees = Some(120.0);
-    fixture
-}
-
-/// Built-in profiles are normal library entries, grouped as named modes by manufacturer/model.
-pub fn generic_fixture_definitions() -> Vec<FixtureDefinition> {
-    let mut result = vec![
-        generic_definition(
-            "Dimmer",
-            "dimmer",
-            "8-bit".into(),
-            &[("D".into(), "intensity".into())],
-            false,
-            1,
-        ),
-        generic_definition(
-            "Dimmer",
-            "dimmer",
-            "16-bit".into(),
-            &[("D".into(), "intensity".into())],
-            false,
-            2,
-        ),
-        generic_definition(
-            "Fogger",
-            "fogger",
-            "Fog 8-bit".into(),
-            &[("F".into(), "fog".into())],
-            false,
-            1,
-        ),
-        generic_definition(
-            "Hazer",
-            "fogger",
-            "Fan, Fog".into(),
-            &[("Fan".into(), "fan".into()), ("Fog".into(), "fog".into())],
-            false,
-            1,
-        ),
-        generic_definition(
-            "Fan",
-            "other",
-            "Fan 8-bit".into(),
-            &[("F".into(), "fan".into())],
-            false,
-            1,
-        ),
-        generic_definition(
-            "Relay",
-            "other",
-            "Off / On".into(),
-            &[("S".into(), "switch".into())],
-            false,
-            1,
-        ),
-        generic_definition(
-            "Hazer",
-            "fogger",
-            "Fog, Fan".into(),
-            &[("Fog".into(), "fog".into()), ("Fan".into(), "fan".into())],
-            false,
-            1,
-        ),
-        generic_definition(
-            "Strobe",
-            "strobe",
-            "Dimmer, Strobe".into(),
-            &[
-                ("D".into(), "intensity".into()),
-                ("S".into(), "strobe".into()),
-            ],
-            false,
-            1,
-        ),
-        scanner_definition(),
-        generic_definition(
-            "Strobe",
-            "strobe",
-            "Strobe, Dimmer".into(),
-            &[
-                ("S".into(), "strobe".into()),
-                ("D".into(), "intensity".into()),
-            ],
-            false,
-            1,
-        ),
-        generic_definition(
-            "Pan Tilt",
-            "other",
-            "Pan Tilt 8-bit".into(),
-            &[("P".into(), "pan".into()), ("T".into(), "tilt".into())],
-            false,
-            1,
-        ),
-        generic_definition(
-            "Pan Tilt",
-            "other",
-            "Pan Tilt 16-bit".into(),
-            &[("P".into(), "pan".into()), ("T".into(), "tilt".into())],
-            false,
-            2,
-        ),
-    ];
-    result.extend(led_modes(
-        "RGB LED",
-        &[
-            ("R", "color.red"),
-            ("G", "color.green"),
-            ("B", "color.blue"),
-        ],
-    ));
-    result.extend(led_modes(
-        "RGBW LED",
-        &[
-            ("R", "color.red"),
-            ("G", "color.green"),
-            ("B", "color.blue"),
-            ("W", "color.white"),
-        ],
-    ));
-    result.extend(led_modes(
-        "RGBCCT LED",
-        &[
-            ("R", "color.red"),
-            ("G", "color.green"),
-            ("B", "color.blue"),
-            ("C", "color.cold_white"),
-            ("W", "color.warm_white"),
-        ],
-    ));
-    result.extend(led_modes(
-        "RGBWA LED",
-        &[
-            ("R", "color.red"),
-            ("G", "color.green"),
-            ("B", "color.blue"),
-            ("W", "color.white"),
-            ("A", "color.amber"),
-        ],
-    ));
-    result.extend(led_modes(
-        "RGBWAUV LED",
-        &[
-            ("R", "color.red"),
-            ("G", "color.green"),
-            ("B", "color.blue"),
-            ("W", "color.white"),
-            ("A", "color.amber"),
-            ("U", "color.uv"),
-        ],
-    ));
-    result.extend(led_modes(
-        "CCT LED",
-        &[("C", "color.cold_white"), ("W", "color.warm_white")],
-    ));
-    result.extend(led_modes(
-        "CMY LED",
-        &[
-            ("C", "color.cyan"),
-            ("M", "color.magenta"),
-            ("Y", "color.yellow"),
-        ],
-    ));
-    result
 }
 
 #[cfg(test)]
@@ -2589,166 +2417,117 @@ mod tests {
     }
 
     #[test]
-    fn generic_catalog_groups_named_modes_and_covers_led_permutations() {
-        let catalog = generic_fixture_definitions();
-        assert_eq!(catalog.len(), 3_006);
-        assert!(
-            catalog
-                .iter()
-                .any(|fixture| fixture.name == "Mirror Mover Scanner"
-                    && fixture.device_type == "scanner")
-        );
-        assert!(catalog.iter().all(|fixture| fixture.validate().is_ok()));
-        let dimmers = catalog
-            .iter()
-            .filter(|fixture| fixture.name == "Dimmer")
-            .collect::<Vec<_>>();
-        assert_eq!(dimmers.len(), 2);
-        assert!(
-            dimmers
-                .iter()
-                .any(|fixture| fixture.mode == "8-bit" && fixture.footprint == 1)
-        );
-        assert!(dimmers.iter().any(|fixture| fixture.mode == "16-bit"
-            && fixture.footprint == 2
-            && fixture.heads[0].parameters[0].components.len() == 2));
-        let rgb = catalog
-            .iter()
-            .filter(|fixture| fixture.name == "RGB LED")
-            .collect::<Vec<_>>();
-        assert_eq!(rgb.len(), 18);
-        assert!(
-            rgb.iter()
-                .any(|fixture| fixture.mode == "DRGB 8-bit dimmer first")
-        );
-        assert!(
-            rgb.iter()
-                .any(|fixture| fixture.mode == "RBGD 8-bit dimmer last")
-        );
-        assert!(rgb.iter().any(|fixture| {
-            fixture.mode == "BGR virtual dimmer"
-                && fixture.footprint == 3
-                && fixture.heads[0].parameters.iter().any(|parameter| {
-                    parameter.attribute.is_intensity()
-                        && parameter.components.is_empty()
-                        && parameter.virtual_dimmer
-                })
-                && fixture.heads[0]
-                    .parameters
-                    .iter()
-                    .filter(|parameter| parameter.attribute.0.starts_with("color."))
-                    .all(|parameter| parameter.virtual_dimmer)
-        }));
+    fn transferable_package_startup_is_idempotent_updates_clean_installs_and_preserves_edits() {
+        let root = std::env::temp_dir().join(format!("fixture-package-startup-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let package_path = root.join("test-lamp.toskfixture");
+        let database_path = root.join("fixtures.sqlite");
+        let mut profile = FixtureProfile::blank();
+        profile.manufacturer = "Test".into();
+        profile.name = "Transfer Lamp".into();
+        profile.short_name = "Transfer".into();
+        fs::write(&package_path, write_fixture_package(&profile).unwrap()).unwrap();
+
+        let library = FixtureLibrary::open(&database_path).unwrap();
         assert_eq!(
-            catalog
-                .iter()
-                .filter(|fixture| fixture.name == "Hazer")
-                .count(),
-            2
-        );
-        assert!(catalog.iter().any(|fixture| fixture.name == "Relay"
-            && fixture.heads[0].parameters[0].capabilities.len() == 2));
-        assert_eq!(
-            catalog
-                .iter()
-                .filter(|fixture| fixture.name == "CCT LED")
-                .count(),
-            6
+            library.load_fixture_package_directory(&root).unwrap(),
+            FixturePackageLoadReport {
+                installed: 1,
+                ..FixturePackageLoadReport::default()
+            }
         );
         assert_eq!(
-            catalog
-                .iter()
-                .filter(|fixture| fixture.name == "CMY LED")
-                .count(),
-            18
+            library.load_fixture_package_directory(&root).unwrap(),
+            FixturePackageLoadReport {
+                unchanged: 1,
+                ..FixturePackageLoadReport::default()
+            }
         );
-        assert!(catalog.iter().any(
-            |fixture| fixture.name == "RGBWAUV LED" && fixture.mode == "UAWGBR virtual dimmer"
-        ));
+        let installed = library.profiles().unwrap().remove(0);
+        assert_eq!(installed.revision, 1);
+        assert!(installed.reserved_source.is_none());
+
+        profile.notes = "package update".into();
+        fs::write(&package_path, write_fixture_package(&profile).unwrap()).unwrap();
+        assert_eq!(
+            library
+                .load_fixture_package_directory(&root)
+                .unwrap()
+                .updated,
+            1
+        );
+        let mut operator = library.profiles().unwrap().remove(0);
+        assert_eq!(operator.revision, 2);
+        operator.notes = "operator edit".into();
+        let operator = library.save_profile(operator, 2).unwrap();
+        profile.notes = "later package update".into();
+        fs::write(&package_path, write_fixture_package(&profile).unwrap()).unwrap();
+        assert_eq!(
+            library
+                .load_fixture_package_directory(&root)
+                .unwrap()
+                .preserved_operator_revisions,
+            1
+        );
+        assert_eq!(library.profiles().unwrap().remove(0).notes, operator.notes);
+
+        let exported = library
+            .export_fixture_package(operator.id, operator.revision)
+            .unwrap()
+            .unwrap();
+        let second = FixtureLibrary::open(root.join("second.sqlite")).unwrap();
+        let imported = second.import_fixture_package(&exported).unwrap();
+        assert_eq!(imported.id, operator.id);
+        assert_eq!(imported.notes, "operator edit");
+        assert!(imported.reserved_source.is_none());
+        drop(second);
+        drop(library);
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
-    fn generic_catalog_upgrade_owns_only_reserved_profiles() {
-        let path = std::env::temp_dir().join(format!(
-            "fixture-profile-generic-upgrade-{}.sqlite",
-            Uuid::new_v4()
-        ));
-        let mut library = FixtureLibrary::open(&path).unwrap();
-
-        // Reproduce an older installation where deterministic built-in definitions had already
-        // been migrated into ordinary, unmarked profiles.
-        let old_dimmers = generic_fixture_definitions()
-            .into_iter()
-            .filter(|definition| definition.name == "Dimmer")
-            .collect::<Vec<_>>();
-        for definition in &old_dimmers {
-            let json = serde_json::to_string(definition).unwrap();
-            library.conn.execute(
-                "INSERT INTO fixture_definitions(id,revision,manufacturer,model,mode,definition_json) VALUES(?1,1,?2,?3,?4,?5)",
-                params![definition.id.0.to_string(), definition.manufacturer, definition.model, definition.mode, json],
-            ).unwrap();
-        }
-        library.migrate_legacy_profiles().unwrap();
-        let old_profile = library
-            .profiles()
-            .unwrap()
-            .into_iter()
-            .find(|profile| profile.name == "Dimmer")
-            .unwrap();
-        assert_eq!(old_profile.reserved_source, None);
-        library.conn.execute(
-            "INSERT INTO library_metadata(key,value) VALUES('generic_catalog_version','4') ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-            [],
+    fn transferable_package_retires_matching_unmarked_legacy_generic_rows() {
+        let root =
+            std::env::temp_dir().join(format!("fixture-package-legacy-catalog-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let database_path = root.join("fixtures.sqlite");
+        let connection = Connection::open(&database_path).unwrap();
+        connection.execute_batch("CREATE TABLE fixture_definitions(id TEXT NOT NULL,revision INTEGER NOT NULL,manufacturer TEXT NOT NULL,model TEXT NOT NULL,mode TEXT NOT NULL,definition_json TEXT NOT NULL,source_gdtf BLOB,PRIMARY KEY(id,revision));").unwrap();
+        let mut legacy = definition(1);
+        legacy.manufacturer = "Generic".into();
+        legacy.name = "Legacy Package Lamp".into();
+        legacy.model = legacy.name.clone();
+        connection.execute(
+            "INSERT INTO fixture_definitions(id,revision,manufacturer,model,mode,definition_json) VALUES(?1,1,?2,?3,?4,?5)",
+            params![legacy.id.0.to_string(), legacy.manufacturer, legacy.model, legacy.mode, serde_json::to_string(&legacy).unwrap()],
         ).unwrap();
+        drop(connection);
 
-        // Manufacturer text is deliberately not enough to make a profile catalog-owned.
-        let mut user_profile = FixtureProfile::blank();
-        user_profile.manufacturer = "Generic".into();
-        user_profile.name = "Operator relay".into();
-        user_profile.short_name = "Relay".into();
-        let user_profile = library.save_profile(user_profile, 0).unwrap();
-
-        let expected_profile_count = generic_fixture_definitions()
-            .into_iter()
-            .map(|definition| (definition.model, definition.device_type, definition.name))
-            .collect::<HashSet<_>>()
-            .len();
-        assert_eq!(
-            library.ensure_builtin_generics().unwrap(),
-            expected_profile_count
-        );
-        let profiles = library.profiles().unwrap();
-        assert_eq!(
-            profiles
-                .iter()
-                .filter(|profile| profile.reserved_source.as_deref()
-                    == Some(BUILTIN_GENERIC_RESERVED_SOURCE))
-                .count(),
-            expected_profile_count
-        );
+        let library = FixtureLibrary::open(&database_path).unwrap();
+        let mut packaged = library.profiles().unwrap().remove(0);
+        assert!(packaged.reserved_source.is_none());
+        packaged.notes = "now supplied as a package".into();
+        fs::write(
+            root.join("generic--legacy-package-lamp.toskfixture"),
+            write_fixture_package(&packaged).unwrap(),
+        )
+        .unwrap();
         assert_eq!(
             library
-                .profile(user_profile.id, user_profile.revision)
+                .load_fixture_package_directory(&root)
                 .unwrap()
-                .unwrap()
-                .reserved_source,
-            None
+                .updated,
+            1
         );
-        assert_eq!(library.ensure_builtin_generics().unwrap(), 0);
-
-        drop(library);
-        let mut reopened = FixtureLibrary::open(&path).unwrap();
-        assert_eq!(reopened.ensure_builtin_generics().unwrap(), 0);
+        assert!(library.definitions().unwrap().is_empty());
         assert!(
-            reopened
-                .profiles()
+            library
+                .profile_legacy_sources(packaged.id, 1)
                 .unwrap()
-                .iter()
-                .any(|profile| profile.id == user_profile.id
-                    && profile.manufacturer == "Generic"
-                    && profile.reserved_source.is_none())
+                .is_empty()
         );
-        let _ = std::fs::remove_file(path);
+        drop(library);
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
@@ -2783,5 +2562,34 @@ mod tests {
         let restored: PatchedFixture =
             serde_json::from_value(serde_json::to_value(fixture).unwrap()).unwrap();
         assert_eq!(restored.highlight_overrides.get(&channel_id), Some(&173));
+    }
+
+    #[test]
+    fn visual_only_fixtures_allow_addressless_multipatches_and_reject_dmx_addresses() {
+        let mut profile = FixtureProfile::blank();
+        profile.manufacturer = "Venue".into();
+        profile.name = "Truss".into();
+        profile.patch_policy = PatchPolicy::VisualOnly;
+        profile.modes[0].splits[0].footprint = 0;
+        let definition = profile.resolved_definition(profile.modes[0].id).unwrap();
+        let mut fixture: PatchedFixture = serde_json::from_value(serde_json::json!({
+            "fixture_id": FixtureId::new(),
+            "definition": definition,
+            "split_patches": [{"split": 1, "universe": null, "address": null}],
+            "multipatch": [{
+                "id": Uuid::new_v4(),
+                "name": "Second span",
+                "universe": null,
+                "address": null,
+                "split_patches": [{"split": 1, "universe": null, "address": null}],
+                "location": {"x": 1000, "y": 0, "z": 0},
+                "rotation": {"x": 0, "y": 0, "z": 0}
+            }]
+        }))
+        .unwrap();
+        validate_patch(std::slice::from_ref(&fixture)).unwrap();
+        fixture.universe = Some(1);
+        fixture.address = Some(1);
+        assert!(validate_patch(&[fixture]).is_err());
     }
 }

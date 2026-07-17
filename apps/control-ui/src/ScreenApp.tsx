@@ -8,11 +8,24 @@ import { PlaybackFaderBank } from "./components/control/PlaybackFaderBank";
 import type { ScreenConfiguration } from "./api/types";
 import { Button } from "./components/common";
 import { NativeDragStrip } from "./components/shell/NativeDragStrip";
+import { canAdvancePlaybackPage, nextPlaybackPageNumber } from "./components/control/PlaybackPageDialogs";
 
 function ScreenPageControls({ screen, page }: { screen: ScreenConfiguration; page: number }) {
   const server = useServer();
   const [picker, setPicker] = useState(false);
+  const pages = server.playbacks?.pages ?? [];
   const setPage = (next: number) => screen.page_mode === "independent" && void server.setScreenPage(screen.id, next);
+  const advance = async () => {
+    const next = page + 1;
+    if (!pages.some((item) => item.number === next) && !await server.savePlaybackPage({ number: next, name: `Page ${next}`, slots: {} })) return;
+    setPage(next);
+  };
+  const addPage = async () => {
+    const next = nextPlaybackPageNumber(pages);
+    if (next == null || !await server.savePlaybackPage({ number: next, name: `Page ${next}`, slots: {} })) return;
+    setPage(next);
+    setPicker(false);
+  };
   return (
     <div className="screen-page-controls">
       <Button disabled={screen.page_mode !== "independent" || page <= 1} onClick={() => setPage(page - 1)}>
@@ -22,7 +35,7 @@ function ScreenPageControls({ screen, page }: { screen: ScreenConfiguration; pag
         <strong>{page}</strong>
         <span>{server.playbacks?.pages.find((item) => item.number === page)?.name ?? `Page ${page}`}</span>
       </Button>
-      <Button disabled={screen.page_mode !== "independent" || page >= 127} onClick={() => setPage(page + 1)}>
+      <Button disabled={screen.page_mode !== "independent" || !canAdvancePlaybackPage(pages, page)} onClick={() => void advance()}>
         PAGE DOWN ▼
       </Button>
       {picker && (
@@ -40,6 +53,7 @@ function ScreenPageControls({ screen, page }: { screen: ScreenConfiguration; pag
               {item.number} · {item.name}
             </Button>
           ))}
+          <Button disabled={nextPlaybackPageNumber(pages) == null} onClick={() => void addPage()}>Add new page</Button>
         </div>
       )}
     </div>
@@ -142,7 +156,7 @@ function ScreenSurface({ id }: { id: string }) {
       <WorkspaceView />
       {screen.show_playbacks && (
         <section className="screen-playbacks">
-          <PlaybackFaderBank pageNumber={page} firstSlot={screen.first_playback_slot} count={screen.playback_count} rows={screen.playback_rows} />
+          <PlaybackFaderBank pageNumber={page} firstSlot={screen.first_playback_slot} count={screen.playback_count} rows={screen.playback_rows} playbackLayout={screen.playback_layout} />
           {screen.show_page_controls && <ScreenPageControls screen={screen} page={page} />}
         </section>
       )}

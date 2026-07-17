@@ -32,7 +32,7 @@ export function RootConfinedFilePickerButton({
 
   const choose = useCallback(async () => {
     setError("");
-    const result = await openFileManagerPicker({ target: "files", multiple, allowedExtensions });
+    const result = await openFileManagerPicker({ purpose: label, target: "files", multiple, allowedExtensions });
     if (!result) return;
     setBusy(true);
     try {
@@ -48,7 +48,7 @@ export function RootConfinedFilePickerButton({
     } finally {
       setBusy(false);
     }
-  }, [allowedExtensions, multiple, onFiles, server]);
+  }, [allowedExtensions, label, multiple, onFiles, server]);
 
   useEffect(() => {
     if (!triggerRef) return;

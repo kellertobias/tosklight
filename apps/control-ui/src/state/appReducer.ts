@@ -55,6 +55,7 @@ export type Action =
   | { type: "SET_MODAL"; modal: "setupOpen" | "specialDialogsOpen" | "systemControlsOpen" | "preloadStoreOpen" | "debugOpen" | "deskSettingsOpen" | "storeSettingsOpen"; value: boolean }
   | { type: "OPEN_SPECIAL_DIALOG"; family: AppState["specialDialogFamily"] }
   | { type: "TOGGLE_MIDI_PROFILE" }
+  | { type: "SET_MIDI_PROFILE"; value: boolean }
   | { type: "TOGGLE_TOUCH_SCROLLBARS" }
   | { type: "TOGGLE_SECTION_NAMES" }
   | { type: "SET_REGULAR_NUMBER_SHORTCUTS"; value: boolean }
@@ -253,6 +254,7 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "SET_MODAL": return { ...state, [action.modal]: action.value };
     case "OPEN_SPECIAL_DIALOG": return { ...state, specialDialogFamily: action.family, specialDialogsOpen: true };
     case "TOGGLE_MIDI_PROFILE": return { ...state, midiProfile: !state.midiProfile };
+    case "SET_MIDI_PROFILE": return { ...state, midiProfile: action.value };
     case "TOGGLE_TOUCH_SCROLLBARS": return { ...state, touchScrollbars: !state.touchScrollbars };
     case "TOGGLE_SECTION_NAMES": return { ...state, showSectionNames: !state.showSectionNames };
     case "SET_REGULAR_NUMBER_SHORTCUTS": return { ...state, regularNumberShortcuts: action.value };

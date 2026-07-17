@@ -437,6 +437,7 @@ export function TextEditorWindow({ paneId }: WindowProps) {
 
   const openFile = async () => {
     const result = await openFileManagerPicker({
+      purpose: "Open a text file",
       target: "files",
       multiple: false,
       allowedExtensions: [...TEXT_FILE_EXTENSIONS],

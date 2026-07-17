@@ -14,6 +14,7 @@ import type { FileConflictChoice, FileDirectory, FileEntry, FileNativeNote, File
 import { Button, CheckboxField, TextArea, TextInput } from "../components/common";
 import { registerPaneRemovalGuard } from "../components/shell/paneRemovalGuard";
 import { usePaneChromeTargets } from "../components/shell/PaneChromeContext";
+import { WindowHeader } from "../components/window-kit";
 import { useOptionalApp } from "../state/AppContext";
 import "./FileManagerWindow.css";
 import {
@@ -40,6 +41,7 @@ export interface FileManagerSelection {
 }
 
 export interface FileManagerPickerOptions {
+  purpose?: string;
   target?: FileManagerTarget;
   multiple?: boolean;
   allowedExtensions?: string[];
@@ -56,6 +58,8 @@ export interface FileManagerProps {
   picker?: FileManagerPickerOptions;
   instanceId?: string;
   paneId?: string;
+  closeable?: boolean;
+  purpose?: string;
 }
 
 interface Location {
@@ -223,11 +227,11 @@ function RasterThumbnail({ rootId, entry, load }: { rootId: string; entry: FileE
   return url ? <img className="file-thumbnail" src={url} alt="" /> : <span className="file-item-icon" aria-hidden="true">▧</span>;
 }
 
-export function FileManagerWindow({ paneId }: WindowProps) {
-  return <FileManager instanceId={paneId} paneId={paneId} />;
+export function FileManagerWindow({ builtIn, paneId }: WindowProps) {
+  return <FileManager instanceId={paneId} paneId={paneId} closeable={builtIn} />;
 }
 
-export function FileManager({ picker, instanceId: suppliedInstanceId, paneId }: FileManagerProps) {
+export function FileManager({ picker, instanceId: suppliedInstanceId, paneId, closeable = false, purpose = "Browse and manage files" }: FileManagerProps) {
   const server = useServer();
   const serverRef = useRef(server);
   serverRef.current = server;
@@ -980,6 +984,13 @@ export function FileManager({ picker, instanceId: suppliedInstanceId, paneId }: 
     closeHeaderMenu();
     void action();
   };
+  const headerActions = <div className="file-manager-header-actions">
+    <Button aria-haspopup="menu" aria-expanded={headerMenu?.kind === "edit"} onClick={(event) => openHeaderMenu("edit", event)}>Edit</Button>
+    <Button aria-haspopup="menu" aria-expanded={headerMenu?.kind === "create"} onClick={(event) => openHeaderMenu("create", event)}>New</Button>
+    <Button aria-haspopup="menu" aria-expanded={headerMenu?.kind === "view"} onClick={(event) => openHeaderMenu("view", event)}>View</Button>
+    <Button aria-label="Back" disabled={historyIndex <= 0} onClick={() => { setHistoryIndex((value) => value - 1); setSelected([]); }}>←</Button>
+    <Button aria-label="Forward" disabled={historyIndex < 0 || historyIndex >= history.length - 1} onClick={() => { setHistoryIndex((value) => value + 1); setSelected([]); }}>→</Button>
+  </div>;
 
   return <section
     className={`file-manager fm-${view} fm-${sidePanel}-open ${propertiesVisible ? "fm-properties-visible" : "fm-properties-hidden"}`}
@@ -987,18 +998,16 @@ export function FileManager({ picker, instanceId: suppliedInstanceId, paneId }: 
     data-file-manager-instance={instanceId}
     onPointerDownCapture={claimPendingAction}
   >
+    {!paneChrome && !picker && <WindowHeader
+      title="File Manager"
+      info={{ primary: purpose, secondary: headerPath }}
+      toolbar={headerActions}
+      actions={closeable && app ? [[{ id: "close", label: "×", ariaLabel: "Close File Manager", onClick: () => app.dispatch({ type: "SET_DOCK_MODE", mode: "desks" }) }]] : []}
+    />}
     {paneChrome?.info && createPortal(<span className="file-manager-header-path" title={headerPath}>{headerPath}</span>, paneChrome.info)}
-    {paneChrome?.toolbar && createPortal(<div className="file-manager-header-actions">
-      {!picker && <>
-        <Button aria-haspopup="menu" aria-expanded={headerMenu?.kind === "edit"} onClick={(event) => openHeaderMenu("edit", event)}>Edit</Button>
-        <Button aria-haspopup="menu" aria-expanded={headerMenu?.kind === "create"} onClick={(event) => openHeaderMenu("create", event)}>Create</Button>
-      </>}
-      <Button aria-haspopup="menu" aria-expanded={headerMenu?.kind === "view"} onClick={(event) => openHeaderMenu("view", event)}>View</Button>
-      <Button aria-label="Back" disabled={historyIndex <= 0} onClick={() => { setHistoryIndex((value) => value - 1); setSelected([]); }}>←</Button>
-      <Button aria-label="Forward" disabled={historyIndex < 0 || historyIndex >= history.length - 1} onClick={() => { setHistoryIndex((value) => value + 1); setSelected([]); }}>→</Button>
-    </div>, paneChrome.toolbar)}
+    {paneChrome?.toolbar && createPortal(headerActions, paneChrome.toolbar)}
     {headerMenu && createPortal(<div className="file-header-menu-layer" onPointerDown={(event) => event.target === event.currentTarget && closeHeaderMenu()}>
-      <div className="file-header-menu" role="menu" aria-label={`${headerMenu.kind[0].toUpperCase()}${headerMenu.kind.slice(1)} menu`} style={{ top: headerMenu.anchor.bottom + 3, left: Math.max(3, Math.min(headerMenu.anchor.left, window.innerWidth - 210)) }}>
+      <div className="file-header-menu" role="menu" aria-label={`${headerMenu.kind === "create" ? "New" : `${headerMenu.kind[0].toUpperCase()}${headerMenu.kind.slice(1)}`} menu`} style={{ top: headerMenu.anchor.bottom + 3, left: Math.max(3, Math.min(headerMenu.anchor.left, window.innerWidth - 210)) }}>
         {headerMenu.kind === "edit" && <>
           <Button role="menuitem" disabled={selected.length !== 1} onClick={() => menuAction(() => beginOperation("rename"))}>Rename</Button>
           <Button role="menuitem" disabled={!selected.length} onClick={() => menuAction(() => beginOperation("copy"))}>Copy</Button>
@@ -1012,41 +1021,25 @@ export function FileManager({ picker, instanceId: suppliedInstanceId, paneId }: 
         {headerMenu.kind === "view" && <>
           <Button role="menuitem" active={view === "list"} onClick={() => menuAction(() => setView("list"))}>List</Button>
           <Button role="menuitem" active={view === "grid"} onClick={() => menuAction(() => setView("grid"))}>Grid</Button>
+          <Button role="menuitem" active={hidden} onClick={() => menuAction(() => setHidden(!hidden))}>{hidden ? "Hide Hidden Files" : "Show Hidden Files"}</Button>
           <Button role="menuitem" active={propertiesVisible} onClick={() => menuAction(() => { setPropertiesVisible((value) => !value); setSidePanel("none"); })}>{propertiesVisible ? "Hide Properties" : "Show Properties"}</Button>
         </>}
       </div>
     </div>, document.body)}
     <div className="file-toolbar">
-      {!paneChrome && <>
-        <Button aria-label="Back" disabled={historyIndex <= 0} onClick={() => { setHistoryIndex((value) => value - 1); setSelected([]); }}>←</Button>
-        <Button aria-label="Forward" disabled={historyIndex < 0 || historyIndex >= history.length - 1} onClick={() => { setHistoryIndex((value) => value + 1); setSelected([]); }}>→</Button>
-      </>}
       <Button className="file-navigation-toggle" active={sidePanel === "navigation"} onClick={() => setSidePanel((value) => value === "navigation" ? "none" : "navigation")}>Navigation</Button>
       <nav aria-label="Breadcrumb">
         <Button variant="ghost" onClick={() => rootId && navigate({ rootId, path: "" })}>{currentRoot?.label ?? "Location"}</Button>
         {breadcrumbs.map((part, index) => <Button variant="ghost" key={`${part}-${index}`} onClick={() => navigate({ rootId, path: breadcrumbs.slice(0, index + 1).join("/") })}>/ {part}</Button>)}
       </nav>
-      {!paneChrome && <>
-        <Button aria-label="List view" active={view === "list"} onClick={() => setView("list")}>List</Button>
-        <Button aria-label="Grid view" active={view === "grid"} onClick={() => setView("grid")}>Grid</Button>
-      </>}
-      {!paneId && <Button aria-label="Show hidden files" active={hidden} onClick={() => setHidden(!hidden)}>Hidden</Button>}
       <Button className="file-info-toggle" active={sidePanel === "info"} onClick={() => { setPropertiesVisible(true); setSidePanel((value) => value === "info" ? "none" : "info"); }}>Info</Button>
-      {!paneChrome && !picker && !operation && <>
-        <Button onClick={() => void create(false)}>New File</Button>
-        <Button onClick={() => void create(true)}>New Folder</Button>
-        <Button disabled={selected.length !== 1} onClick={() => beginOperation("rename")}>Rename</Button>
-        <Button disabled={!selected.length} onClick={() => beginOperation("copy")}>Copy</Button>
-        <Button disabled={!selected.length} onClick={() => beginOperation("move")}>Move</Button>
-        <Button disabled={!selected.length} onClick={() => beginOperation("delete")}>Delete</Button>
-      </>}
-      {!picker && operation && <div className="file-operation-actions" aria-label={`${operationLabel} operation`}>
+      {operation && <div className="file-operation-actions" aria-label={`${operationLabel} operation`}>
         {(operation.kind === "copy" || operation.kind === "move") && <Button variant="primary" disabled={!operation.sources.length || busy} onClick={() => void completeOperation()}>{operationLabel} Here</Button>}
         {operation.kind === "rename" && <Button variant="primary" disabled={!operation.sources.length || !validItemName(operation.renameDraft) || busy} onClick={() => void completeOperation()}>Rename</Button>}
         {operation.kind === "delete" && <Button variant="primary" disabled={!operation.sources.length || busy} onClick={() => void completeOperation()}>Delete</Button>}
         <Button disabled={busy} onClick={() => cancelOperation()}>Cancel</Button>
       </div>}
-      {picker && <div className="file-picker-actions">
+      {picker && !operation && <div className="file-picker-actions">
         <Button variant="primary" disabled={!pickerValid} onClick={() => pickerValid && picker.onSelect(selected)}>{picker.selectLabel ?? "Select"}</Button>
         {!picker.hideCancel && <Button onClick={picker.onCancel}>{picker.cancelLabel ?? "Cancel"}</Button>}
       </div>}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { HighlightAction, HighlightFixtureSummary, HighlightState, PatchedFixture } from "../../api/types";
 import { useServer } from "../../api/ServerContext";
 import { Button } from "../common";
@@ -15,20 +16,29 @@ function fixtureDetails(fixture: HighlightFixtureSummary | null, patch: PatchedF
 export function highlightStatusLabel(state: HighlightState | null, patch: PatchedFixture[] = []) {
   if (!state) return "Unavailable";
   const total = state.remembered.length;
-  if (!state.active) return total ? `${total} captured` : "No capture";
-  if (state.mode === "selection") return total ? `All ${total}` : "No fixtures";
+  if (state.mode !== "step") return total ? `ALL · ${total} selected` : "ALL · Empty selection";
   const index = state.active_index;
   const active = state.active_fixture ?? (index == null ? null : state.remembered[index] ?? null);
   const fixture = fixtureDetails(active, patch);
-  const position = index == null ? "Step" : `${index + 1}/${total}`;
+  const position = index == null ? `STEP · ${total}` : `STEP ${index + 1}/${total}`;
   return fixture ? `${position} · ${fixture}` : position;
 }
 
 function highlightAnnouncement(state: HighlightState | null, patch: PatchedFixture[]) {
   if (!state) return "Highlight state unavailable.";
-  const status = state.active ? `Highlight active, ${highlightStatusLabel(state, patch)}.` : `Highlight off, ${highlightStatusLabel(state, patch)}.`;
-  const safety = state.capture_only || (state.active && !state.output_enabled) ? " Capture only; no live highlight output." : "";
+  const status = `Highlight ${state.active ? "on" : "off"}. ${highlightStatusLabel(state, patch)}.`;
+  const safety = state.capture_only || (state.active && !state.output_enabled)
+    ? " Live Highlight output suppressed."
+    : "";
   return `${status}${safety}${state.message ? ` ${state.message}` : ""}`;
+}
+
+export function HighlightErrorAlert({ message, onDismiss }: { message: string | null; onDismiss: () => void }) {
+  if (!message) return null;
+  return createPortal(<div className="highlight-error" data-highlight-error-alert role="alert">
+    <span>{message}</span>
+    <Button iconOnly aria-label="Dismiss Highlight error" onClick={onDismiss}>×</Button>
+  </div>, document.body);
 }
 
 export function HighlightControls() {
@@ -43,16 +53,15 @@ export function HighlightControls() {
     && state.owner_user_id !== server.session.user.id,
   );
   const ownerLabel = state?.owner_user_name?.trim() || "another operator";
-  const captureOnly = Boolean(state?.capture_only || (state?.active && !state.output_enabled));
+  const outputSuppressed = Boolean(state?.capture_only || (state?.active && !state.output_enabled));
 
   const allowed = useCallback((action: HighlightAction) => {
     if (pendingRef.current || !state) return false;
-    if (action === "capture") return server.selectedFixtures.length > 0;
     if (ownedByOther && !state.capture_only) return false;
     if (action === "next") return state.can_next;
     if (action === "previous") return state.can_previous;
     return true;
-  }, [ownedByOther, server.selectedFixtures.length, state]);
+  }, [ownedByOther, state]);
 
   const invoke = useCallback(async (action: HighlightAction) => {
     if (!allowed(action)) return;
@@ -70,10 +79,10 @@ export function HighlightControls() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
       const key = event.key.toLowerCase();
-      const action = key === "h"
+      const action: HighlightAction | null = key === "h"
         ? "toggle"
-        : key === "c"
-          ? "capture"
+        : key === "a"
+          ? "all"
           : event.key === "ArrowLeft"
             ? "previous"
             : event.key === "ArrowRight"
@@ -94,56 +103,54 @@ export function HighlightControls() {
       ? "Turn Highlight off"
       : "Turn Highlight on";
   const details = state?.remembered.map((fixture) => fixtureDetails(fixture, patch)).filter(Boolean).join(", ");
-  const title = [highlightAnnouncement(state, patch), details ? `Remembered: ${details}.` : "", "Shortcuts: Alt+H toggle, Alt+C capture, Alt+Left/Right step."].filter(Boolean).join(" ");
+  const title = [
+    highlightAnnouncement(state, patch),
+    details ? `Live step source: ${details}.` : "",
+    "Shortcuts: Alt+H HIGH, Alt+A ALL, Alt+Left/Right PREV/NEXT.",
+  ].filter(Boolean).join(" ");
 
   return (
-    <section className={`highlight-controls ${state?.active ? "active" : ""} ${captureOnly ? "capture-only" : ""}`} aria-label="Highlight and step through" aria-busy={pending !== null} title={title}>
+    <section
+      className={`highlight-controls ${state?.active ? "active" : ""} ${outputSuppressed ? "output-suppressed" : ""}`}
+      aria-label="Highlight and selection stepping"
+      aria-busy={pending !== null}
+      title={title}
+    >
       <Button
-        className="highlight-toggle"
+        className={`highlight-toggle ${state?.active ? "highlight-armed" : "highlight-off"}`}
+        data-keypad-key="HIGH"
         active={Boolean(state?.active)}
         aria-label={toggleLabel}
         aria-pressed={Boolean(state?.active)}
         aria-keyshortcuts="Alt+H"
         disabled={!allowed("toggle")}
         onClick={() => void invoke(state?.active ? "off" : "on")}
-      >
-        <b>HIGH</b>
-        <small>{highlightStatusLabel(state, patch)}</small>
-      </Button>
+      >HIGH</Button>
       <Button
         className="highlight-previous"
-        aria-label="Previous highlighted fixture"
+        data-keypad-key="PREV"
+        aria-label="Previous selection item"
         aria-keyshortcuts="Alt+ArrowLeft"
         disabled={!allowed("previous")}
         onClick={() => void invoke("previous")}
-      >
-        PREV
-      </Button>
+      >PREV</Button>
       <Button
         className="highlight-next"
-        aria-label="Next highlighted fixture"
+        data-keypad-key="NEXT"
+        aria-label="Next selection item"
         aria-keyshortcuts="Alt+ArrowRight"
         disabled={!allowed("next")}
         onClick={() => void invoke("next")}
-      >
-        NEXT
-      </Button>
+      >NEXT</Button>
       <Button
-        className="highlight-capture"
-        aria-label="Capture current selection for Highlight"
-        aria-keyshortcuts="Alt+C"
-        disabled={!allowed("capture")}
-        onClick={() => void invoke("capture")}
-      >
-        ALL
-      </Button>
-      {captureOnly && <span className="highlight-capture-only">CAPTURE ONLY</span>}
-      {server.highlightError && (
-        <div className="highlight-error" role="alert">
-          <span>{server.highlightError}</span>
-          <Button iconOnly aria-label="Dismiss Highlight error" onClick={server.dismissHighlightError}>×</Button>
-        </div>
-      )}
+        className="highlight-all"
+        data-keypad-key="ALL"
+        aria-label="Restore complete selection"
+        aria-keyshortcuts="Alt+A"
+        disabled={!allowed("all")}
+        onClick={() => void invoke("all")}
+      >ALL</Button>
+      <HighlightErrorAlert message={server.highlightError} onDismiss={server.dismissHighlightError}/>
     </section>
   );
 }

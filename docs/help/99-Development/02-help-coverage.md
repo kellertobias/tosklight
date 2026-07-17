@@ -16,8 +16,8 @@ This matrix is the completeness contract for operator Help and the generated man
 | Patch, unpatched fixtures, multi-patch, multi-head | [Fixtures and Patch](../20-Show-Setup/01-fixtures-and-patch.md) | `show-patch.png`, `patch-add-fixture.png` |
 | 2D/3D Stage, position setup, scenery/models | [Stage Positions and Scenery](../20-Show-Setup/04-stage-positions-and-scenery.md) | `stage-setup-2d.png`, `stage-settings.png`; 3D scenery requires desktop QA |
 | Groups and Presets | [Groups and Presets](../20-Show-Setup/05-groups-and-presets.md) | `default-desk-overview.png` |
-| Programmer selection, values, clear, undo, multiple users | [Selecting and Setting Values](../30-Programmer/02-selecting-and-setting-values.md) | `fixture-sheet-programmer.png` |
-| Command line, keypad, keyboard shortcuts | [Command Line Reference](../30-Programmer/01-command-line.md) | `software-keypad.png` and `help-command-line.png` |
+| Programmer selection, PREV/NEXT/ALL stepping, Fixture Sheet remembered-base/current-step treatment, independent HIGH, top-layer errors, clear, undo, multiple users | [Selecting and Setting Values](../30-Programmer/02-selecting-and-setting-values.md) | `fixture-sheet-programmer.png` plus exact HIGH state in `software-keypad.png` |
+| Command line, fixed Highlight-key columns, no Highlight status panel, software 2×2 Programmer Fade, simulator RECORD/Preload and adjacent faders, keyboard shortcuts | [Command Line Reference](../30-Programmer/01-command-line.md) | `software-keypad.png` and `help-command-line.png`; simulator geometry requires desktop QA |
 | Cue record/edit/timing/triggers | [Programming Cues](../30-Programmer/03-programming-cues.md) | `cuelist-playback.png` |
 | Stage, Fixtures, Groups, Presets, and planned Dynamics | [Programming Windows](../30-Programmer/04-programming-windows.md) | Programming and fixture images |
 | Channels intensity bank and paging | [Channel Faders](../30-Programmer/05-channel-faders.md) | `panes/channels.png` |

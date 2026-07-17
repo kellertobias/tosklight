@@ -172,6 +172,37 @@ describe("3D stage state", () => {
     expect(scene.getObjectByName(`geometry-node:${pan.id}`)?.rotation.y).toBeCloseTo(THREE.MathUtils.degToRad(135));
   });
 
+  it("mounts metre-authored visual-only geometry without emitters or normalization", () => {
+    const profile = blankFixtureProfile();
+    profile.manufacturer = "Venue";
+    profile.name = "Two-Point Truss";
+    profile.revision = 1;
+    profile.patch_policy = "visual_only";
+    profile.model_units = "metres";
+    const mode = profile.modes[0];
+    mode.splits[0].footprint = 0;
+    mode.geometry.emitters = [];
+    mode.geometry.nodes[0].glb_node = "Truss2m";
+    const fixture = {
+      fixture_id: profile.id,
+      universe: null,
+      address: null,
+      definition: fixtureDefinitionFromProfileMode(profile, mode),
+      logical_heads: [],
+    } as PatchedFixture;
+    const { scene, fixtureObjects } = buildStageScene([{ fixture, index: 0, position: { x: 0, y: 0, z: 0, rotationX: 0, rotationY: 0, rotationZ: 0 } }], null);
+    expect(scene.getObjectByName(`geometry-node:${mode.geometry.nodes[0].id}`)).toBeTruthy();
+    const model = new THREE.Group();
+    const truss = new THREE.Mesh(new THREE.BoxGeometry(2, .3, .3));
+    truss.name = "Truss2m";
+    model.add(truss);
+    const root = fixtureObjects.get(profile.id)!;
+    expect(mountFixtureModel(root, model, fixture)).toBe(1);
+    const mounted = scene.getObjectByName(`fixture-model-part:${mode.geometry.nodes[0].id}`)!;
+    expect(mounted.scale.toArray()).toEqual([1, 1, 1]);
+    expect(new THREE.Box3().setFromObject(mounted).getSize(new THREE.Vector3()).x).toBeCloseTo(2);
+  });
+
   it("uses post-profile calibrated color and mastered intensity without applying desk masters twice", () => {
     const profile = blankFixtureProfile();
     profile.manufacturer = "Acme";
@@ -219,6 +250,7 @@ describe("built-in 3D model library", () => {
   it("recognizes the requested fixture families", () => {
     expect(inferBuiltInFixtureKind(fixture("moving wash", "A7 LED Wash"))).toBe("wash-led");
     expect(inferBuiltInFixtureKind(fixture("moving profile", "Profile"))).toBe("profile");
+    expect(inferBuiltInFixtureKind(fixture("dimmer profile", "Dimmer Profile"))).toBe("profile-static");
     expect(inferBuiltInFixtureKind(fixture("wash", "Classic Wash"))).toBe("wash-classic");
     expect(inferBuiltInFixtureKind(fixture("conventional", "PAR Can"))).toBe("par");
     expect(inferBuiltInFixtureKind(fixture("conventional", "PC Fresnel"))).toBe("fresnel");
@@ -249,7 +281,7 @@ describe("built-in 3D model library", () => {
 
   it("gives every fixture family a bright unlit emitting surface", () => {
     for (const [type, name] of [
-      ["moving wash", "A7 LED Wash"], ["moving profile", "Profile"], ["wash", "Classic Wash"],
+      ["moving wash", "A7 LED Wash"], ["moving profile", "Profile"], ["dimmer profile", "Dimmer Profile"], ["wash", "Classic Wash"],
       ["scanner", "Mirror Mover"], ["conventional", "PAR Can"], ["conventional", "PC Fresnel"], ["strobe", "Strobe"], ["strip light", "Sunstrip"],
     ]) {
       const model = createBuiltInFixtureModel(fixture(type, name), new THREE.Color(0x55aaff), 1, 0, 0);
@@ -280,6 +312,30 @@ describe("built-in 3D model library", () => {
     expect(sourceColor.r).toBeGreaterThanOrEqual(sourceColor.g);
     expect(sourceColor.g).toBeGreaterThan(.7);
     expect(sourceColor.b).toBeGreaterThan(.7);
+  });
+
+  it("gives the conventional dimmers their recognizable practical housings", () => {
+    const par = createBuiltInFixtureModel(fixture("dimmer par can", "Dimmer PAR Can"), new THREE.Color("white"), 1, 0, 0);
+    const gelFrame = par.object.getObjectByName("par-gel-frame")!;
+    expect(gelFrame.children).toHaveLength(4);
+    const frameSize = new THREE.Box3().setFromObject(gelFrame).getSize(new THREE.Vector3());
+    expect(frameSize.y).toBeCloseTo(frameSize.z);
+
+    const profile = createBuiltInFixtureModel(fixture("dimmer profile", "Dimmer Profile"), new THREE.Color("white"), 1, 0, 0);
+    expect(profile.object.getObjectByName("profile-shutter-gate")).toBeTruthy();
+    expect(profile.object.getObjectByName("profile-lens-barrel")).toBeTruthy();
+    const profileSize = new THREE.Box3().setFromObject(profile.object).getSize(new THREE.Vector3());
+    expect(profileSize.x / profileSize.z).toBeGreaterThan(1.5);
+
+    const fresnel = createBuiltInFixtureModel(fixture("dimmer fresnel", "Dimmer Fresnel"), new THREE.Color("white"), 1, 0, 0);
+    const doors: THREE.Object3D[] = [];
+    fresnel.object.traverse((object) => { if (object.name.startsWith("fresnel-barn-door-")) doors.push(object); });
+    expect(doors.map((door) => door.name).sort()).toEqual([
+      "fresnel-barn-door-bottom",
+      "fresnel-barn-door-left",
+      "fresnel-barn-door-right",
+      "fresnel-barn-door-top",
+    ]);
   });
 
   it("renders an off lens as nearly black neutral glass", () => {

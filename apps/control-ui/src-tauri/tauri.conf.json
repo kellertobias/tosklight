@@ -28,6 +28,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all"
+    "targets": "all",
+    "resources": {
+      "../../../fixture-library/": "fixture-library/"
+    }
   }
 }

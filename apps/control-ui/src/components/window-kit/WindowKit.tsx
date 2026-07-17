@@ -23,9 +23,10 @@ export interface WindowEmptyState { title: ReactNode; description?: ReactNode; i
 const WindowSettingsContext = createContext<(() => void) | null>(null);
 export const useWindowSettings = () => useContext(WindowSettingsContext);
 
-export function WindowHeader({ title, info, toolbar, actions = [], settings, onSettings, dragHandleProps }: {
+export function WindowHeader({ title, info, search, toolbar, actions = [], settings, onSettings, dragHandleProps }: {
   title: ReactNode;
   info?: WindowInfo;
+  search?: ReactNode;
   toolbar?: ReactNode;
   actions?: WindowAction[][];
   settings?: boolean;
@@ -36,6 +37,7 @@ export function WindowHeader({ title, info, toolbar, actions = [], settings, onS
     <strong className="ui-window-title">{title}</strong>
     {info && <span className="ui-window-info"><b>{info.primary}</b>{info.secondary != null && <small>{info.secondary}</small>}</span>}
     <span className="ui-window-header-spacer" />
+    {search && <div className="ui-window-header-search">{search}</div>}
     {toolbar}
     <div className="ui-window-action-groups">
       {actions.filter((group) => group.length).map((group, groupIndex) => <div className="ui-window-action-group" key={groupIndex}>
@@ -56,9 +58,10 @@ export function WindowSettings({ title = "Settings", tabs, initialTab, onClose, 
   return createPortal(modal ? <div className="ui-window-settings-backdrop" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>{panel}</div> : panel, document.body);
 }
 
-export function WindowFrame({ title, info, actions, settingsTabs = [], settingsTitle = "Settings", navigation, infoSection, bottom, className = "", children }: {
+export function WindowFrame({ title, info, search, actions, settingsTabs = [], settingsTitle = "Settings", navigation, infoSection, bottom, className = "", children }: {
   title: ReactNode;
   info?: WindowInfo;
+  search?: ReactNode;
   actions?: WindowAction[][];
   settingsTabs?: WindowSettingsTab[];
   settingsTitle?: string;
@@ -73,7 +76,7 @@ export function WindowFrame({ title, info, actions, settingsTabs = [], settingsT
   const [rightOpen, setRightOpen] = useState(false);
   return <WindowSettingsContext.Provider value={settingsTabs.length ? () => setSettingsAnchor(new DOMRect(window.innerWidth - 90, 39, 88, 38)) : null}>
     <section className={`ui-window ${className}`}>
-      <WindowHeader title={title} info={info} actions={actions} settings={settingsTabs.length > 0} onSettings={(anchor) => setSettingsAnchor(anchor.getBoundingClientRect())} />
+      <WindowHeader title={title} info={info} search={search} actions={actions} settings={settingsTabs.length > 0} onSettings={(anchor) => setSettingsAnchor(anchor.getBoundingClientRect())} />
       <div className={`ui-window-layout ${navigation ? "has-navigation" : ""} ${infoSection ? "has-info-section" : ""}`}>
         {navigation && <><Button className="ui-window-side-toggle navigation-toggle" onClick={() => setLeftOpen(true)}>☰ Navigation</Button><aside className={`ui-window-navigation ${leftOpen ? "open" : ""}`}><Button className="ui-window-side-close" onClick={() => setLeftOpen(false)}>×</Button>{navigation}</aside></>}
         <main className="ui-window-center">{children}</main>
@@ -128,8 +131,8 @@ export function WindowScrollArea({ children, className = "", emptyState }: { chi
 }
 
 export interface DataTableColumn<T> { id: string; header: ReactNode; width?: string; align?: "left" | "center" | "right"; render: (row: T, index: number) => ReactNode }
-export function DataTable<T>({ columns, rows, rowKey, selected, activeIndex, onActiveIndexChange, onActivate, emptyRows = 0, className = "" }: {
-  columns: DataTableColumn<T>[]; rows: T[]; rowKey: (row: T, index: number) => string; selected?: (row: T) => boolean; activeIndex?: number; onActiveIndexChange?: (index: number) => void; onActivate?: (row: T, index: number) => void; emptyRows?: number; className?: string;
+export function DataTable<T>({ columns, rows, rowKey, selected, rowClassName, rowDataAttributes, activeIndex, onActiveIndexChange, onActivate, emptyRows = 0, className = "" }: {
+  columns: DataTableColumn<T>[]; rows: T[]; rowKey: (row: T, index: number) => string; selected?: (row: T) => boolean; rowClassName?: (row: T, index: number) => string; rowDataAttributes?: (row: T, index: number) => Record<string, string | undefined>; activeIndex?: number; onActiveIndexChange?: (index: number) => void; onActivate?: (row: T, index: number) => void; emptyRows?: number; className?: string;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const [fillRows, setFillRows] = useState(emptyRows);
@@ -142,7 +145,7 @@ export function DataTable<T>({ columns, rows, rowKey, selected, activeIndex, onA
   const template = columns.map((column) => column.width ?? "minmax(0,1fr)").join(" ");
   return <div ref={host} className={`ui-data-table ${className}`} role="table" style={{ "--table-columns": template } as CSSProperties}>
     <div className="ui-data-table-row header" role="row">{columns.map((column) => <span role="columnheader" className={column.align ?? "left"} key={column.id}>{column.header}</span>)}</div>
-    {Array.from({ length: total }, (_, index) => { const row = rows[index]; const isEmpty = row == null; return <div key={row ? rowKey(row, index) : `empty-${index}`} role="row" tabIndex={index === (activeIndex ?? 0) ? 0 : -1} className={`ui-data-table-row ${isEmpty ? "empty" : ""} ${row && selected?.(row) ? "selected" : ""} ${index === activeIndex ? "active" : ""}`} onFocus={() => onActiveIndexChange?.(index)} onClick={() => { onActiveIndexChange?.(index); if (row) onActivate?.(row, index); }} onKeyDown={(event) => keyDown(event, index)}>{columns.map((column) => <span role="cell" className={column.align ?? "left"} key={column.id}>{row ? column.render(row, index) : null}</span>)}</div>; })}
+    {Array.from({ length: total }, (_, index) => { const row = rows[index]; const isEmpty = row == null; const dataAttributes = row ? rowDataAttributes?.(row, index) : undefined; return <div {...dataAttributes} key={row ? rowKey(row, index) : `empty-${index}`} role="row" tabIndex={index === (activeIndex ?? 0) ? 0 : -1} className={`ui-data-table-row ${isEmpty ? "empty" : ""} ${row && selected?.(row) ? "selected" : ""} ${row ? rowClassName?.(row, index) ?? "" : ""} ${index === activeIndex ? "active" : ""}`} onFocus={() => onActiveIndexChange?.(index)} onClick={() => { onActiveIndexChange?.(index); if (row) onActivate?.(row, index); }} onKeyDown={(event) => keyDown(event, index)}>{columns.map((column) => <span role="cell" className={column.align ?? "left"} key={column.id}>{row ? column.render(row, index) : null}</span>)}</div>; })}
   </div>;
 }
 

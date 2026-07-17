@@ -2649,12 +2649,16 @@ dependencies = [
 name = "light-fixture"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
+ "image",
  "light-core",
  "rusqlite",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "thiserror 2.0.18",
  "uuid",
+ "zip",
 ]
 
 [[package]]

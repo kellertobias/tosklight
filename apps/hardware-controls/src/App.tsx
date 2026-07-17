@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
 import { numericPadLayout, oscProgrammerActionForKey, softwareKeyLabel, type NumericPadSection, type SoftwareKey } from "../../shared/programmerKeypad";
 import { feedbackPagePlaybackOffset, oscPaths } from "./oscPaths";
+import { attachedHighlightKeys, attachedKeypadContentRowOffset, attachedProgrammerActionLayout } from "./programmerLayout";
 
 type Blink = "off" | "on" | "slow" | "medium" | "fast";
 type Lamp = { color: string; state: Blink; bpm?: number };
@@ -14,7 +15,7 @@ function arg(value: unknown) {
   return value;
 }
 
-function ControlButton({ label, lamp = dark, onDown, onUp, className = "", style, keypadKey }: { label: string; lamp?: Lamp; onDown: () => void; onUp: () => void; className?: string; style?: React.CSSProperties; keypadKey?: SoftwareKey }) {
+function ControlButton({ label, lamp = dark, onDown, onUp, className = "", style, keypadKey, showHoldFeedback = true }: { label: string; lamp?: Lamp; onDown: () => void; onUp: () => void; className?: string; style?: React.CSSProperties; keypadKey?: SoftwareKey | "HIGH" | "PREV" | "NEXT" | "ALL" | "RECORD" | "PRELOAD GO"; showHoldFeedback?: boolean }) {
   const timer = useRef<number | undefined>(undefined);
   const [long, setLong] = useState(false);
   const [pressed, setPressed] = useState(false);
@@ -22,7 +23,7 @@ function ControlButton({ label, lamp = dark, onDown, onUp, className = "", style
   return <button className={`control-button ${lamp.state} ${lamp.state === "on" && lamp.bpm ? "beat" : ""} ${pressed ? "local-pressed" : ""} ${className}`} data-keypad-key={keypadKey} style={{ ...style, "--lamp": lamp.color, "--bpm": lamp.bpm ?? 60 } as React.CSSProperties}
     onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); setPressed(true); setLong(false); timer.current = window.setTimeout(() => setLong(true), 650); onDown(); }}
     onPointerUp={release} onPointerCancel={release}>
-    <span>{label}</span>{long && <i>LONG</i>}
+    <span>{label}</span>{showHoldFeedback && long && <i>LONG</i>}
   </button>;
 }
 
@@ -75,7 +76,7 @@ export function App() {
   const [host, setHost] = useState(saved.host ?? "127.0.0.1"), [port, setPort] = useState(saved.port ?? 9000), [desk, setDesk] = useState(saved.desk ?? "main");
   const [connected, setConnected] = useState(false), [tab, setTab] = useState<"console" | "grid" | "settings">("console"), [top, setTop] = useState(saved.top ?? true), [page, setPage] = useState(1);
   const [levels, setLevels] = useState<Record<number, number>>({}), [lamps, setLamps] = useState<Record<string, Lamp>>({}), [speedBpms, setSpeedBpms] = useState<Record<number, number>>({});
-  const [highlight, setHighlight] = useState({ active: false, index: 0, total: 0, fixture: "No fixture", canNext: false, canPrevious: false });
+  const [highlight, setHighlight] = useState({ active: false, canNext: false, canPrevious: false });
   const [updateArmed, setUpdateArmed] = useState(false);
   useEffect(() => { const off = listen<Feedback>("osc-feedback", ({ payload }) => {
     setConnected(true); const parts = payload.address.split("/"), args = payload.arguments.map(arg);
@@ -84,12 +85,9 @@ export function App() {
     const highlightOffset = parts.indexOf("highlight");
     if (highlightOffset >= 0 && parts[highlightOffset - 1] === "feedback") {
       const field = parts[highlightOffset + 1];
-      if (field === "active") { const active = Boolean(args[0]); setHighlight((current) => ({ ...current, active })); setLamps((current) => ({ ...current, highlight: { color: active ? "#ffef76" : "#576069", state: active ? "on" : "off" } })); }
-      if (field === "index") setHighlight((current) => ({ ...current, index: Number(args[0]) }));
-      if (field === "total") setHighlight((current) => ({ ...current, total: Number(args[0]) }));
+      if (field === "active") { const active = Boolean(args[0]); setHighlight((current) => ({ ...current, active })); setLamps((current) => ({ ...current, highlight: { color: active ? "#27c4d8" : "#25303a", state: active ? "on" : "off" } })); }
       if (field === "can-next") setHighlight((current) => ({ ...current, canNext: Boolean(args[0]) }));
       if (field === "can-previous") setHighlight((current) => ({ ...current, canPrevious: Boolean(args[0]) }));
-      if (field === "fixture" && parts[highlightOffset + 2] === "name") setHighlight((current) => ({ ...current, fixture: String(args[0] || "No fixture") }));
     }
     const speedOffset = parts.indexOf("speed-group");
     if (speedOffset >= 0) { const number = Number(parts[speedOffset + 1]), bpm = Number(args[0]), state: Blink = args[4] === "off" ? "off" : "on"; const color = `rgb(${Math.round(Number(args[1]) * 255)} ${Math.round(Number(args[2]) * 255)} ${Math.round(Number(args[3]) * 255)})`; setSpeedBpms((current) => ({ ...current, [number]: bpm })); setLamps((current) => ({ ...current, [`speed/${number}`]: { color, state, bpm } })); }
@@ -107,7 +105,7 @@ export function App() {
     .filter((item) => item.section === section)
     .map(({ key: keypadKey, column, row, rowSpan = 1 }) => {
       const sectionColumn = section === "commands" ? column : column - 3;
-      const displayRow = row + 1;
+      const displayRow = row + attachedKeypadContentRowOffset;
       const actionName = oscProgrammerActionForKey(keypadKey);
       return <ControlButton
         key={keypadKey}
@@ -123,6 +121,26 @@ export function App() {
     const bpm = speedBpms[number] ?? 120;
     return <div className="encoder" key={number}><ControlButton label={`SPEED ${number}`} lamp={lamps[`speed/${number}`]} onDown={() => send(oscPaths.speedGroupButton(number), [true])} onUp={() => send(oscPaths.speedGroupButton(number), [false])}/><TouchFader className="speed-touch-fader" label="RATE" value={(bpm - 1) / 998} display={`${bpm} BPM`} onChange={(value) => send(oscPaths.speedGroupEncoder(number), [Math.round(1 + value * 998)])}/></div>;
   })}</section>;
+  const attachedHighlightButtons = attachedHighlightKeys.map((item) => {
+    const lamp = item.action === "toggle"
+      ? lamps.highlight
+      : item.action === "previous"
+        ? (highlight.canPrevious ? { color: "#68b9c7", state: "on" as const } : dark)
+        : item.action === "next"
+          ? (highlight.canNext ? { color: "#68b9c7", state: "on" as const } : dark)
+          : dark;
+    return <ControlButton
+      key={item.action}
+      className={`highlight-key ${item.action === "toggle" ? "highlight-high" : `highlight-${item.action}`}`}
+      label={item.label}
+      lamp={lamp}
+      keypadKey={item.label}
+      showHoldFeedback={item.action !== "toggle"}
+      style={{ gridColumn: item.column, gridRow: item.row }}
+      onDown={() => highlightAction(item.action, true)}
+      onUp={() => highlightAction(item.action, false)}
+    />;
+  });
 
   return <main className={updateArmed ? "update-armed" : ""}><header><h1>ToskLight <span>Hardware Controls</span></h1>{updateArmed && <strong className="hardware-update-state" role="status">UPDATE ARMED · touch an assigned playback</strong>}<i className={connected ? "connected" : ""}>{connected ? `● Connected · page ${page}` : "○ Connecting…"}</i></header>
     <nav><button className={tab === "console" ? "active" : ""} onClick={() => setTab("console")}>Playback Console</button><button className={tab === "grid" ? "active" : ""} onClick={() => setTab("grid")}>Button Grid 41–90</button><button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}>Settings</button>{tab === "console" && <label><input type="checkbox" checked={top} onChange={(event) => { setTop(event.target.checked); localStorage.setItem("tosklight.hardware", JSON.stringify({ host, port: Number(port), desk, top: event.target.checked })); }}/> Show 21–40</label>}</nav>
@@ -133,15 +151,12 @@ export function App() {
       </section>
       <aside className="programmer-panel"><div className="hardware-number-block">
         <div className="hardware-keypad-section hardware-keypad-command-section">
-          <ControlButton className="key-record" label={updateArmed ? "UPDATE" : "RECORD"} lamp={updateArmed ? { color: "#f4b942", state: "on" } : dark} style={{ gridColumn: 1, gridRow: 1 }} onDown={() => action("record", true)} onUp={() => action("record", false)}/>
-          <ControlButton className="key-preload-go" label="PRELOAD GO" style={{ gridColumn: 2, gridRow: 1 }} onDown={() => action("preload", true)} onUp={() => action("preload", false)}/>
+          <ControlButton keypadKey="RECORD" className="key-record" label={updateArmed ? "UPDATE" : "RECORD"} lamp={updateArmed ? { color: "#f4b942", state: "on" } : dark} style={{ gridColumn: attachedProgrammerActionLayout.record.column, gridRow: `${attachedProgrammerActionLayout.record.row} / span ${attachedProgrammerActionLayout.record.rowSpan}` }} onDown={() => action("record", true)} onUp={() => action("record", false)}/>
+          <ControlButton keypadKey="PRELOAD GO" className="key-preload-go" label="PRELOAD GO" style={{ gridColumn: attachedProgrammerActionLayout.preload.column, gridRow: `${attachedProgrammerActionLayout.preload.row} / span ${attachedProgrammerActionLayout.preload.rowSpan}` }} onDown={() => action("preload", true)} onUp={() => action("preload", false)}/>
           {renderKeypadSection("commands")}
         </div>
         <div className="hardware-keypad-section hardware-keypad-number-section">
-          <ControlButton className="highlight-key highlight-high" label="HIGH" lamp={lamps.highlight} style={{ gridColumn: 1, gridRow: 1 }} onDown={() => highlightAction("toggle", true)} onUp={() => highlightAction("toggle", false)}/>
-          <ControlButton className="highlight-key" label="PREV" lamp={highlight.canPrevious ? { color: "#68b9c7", state: "on" } : dark} style={{ gridColumn: 2, gridRow: 1 }} onDown={() => highlightAction("previous", true)} onUp={() => highlightAction("previous", false)}/>
-          <ControlButton className="highlight-key" label="NEXT" lamp={highlight.canNext ? { color: "#68b9c7", state: "on" } : dark} style={{ gridColumn: 3, gridRow: 1 }} onDown={() => highlightAction("next", true)} onUp={() => highlightAction("next", false)}/>
-          <ControlButton className="highlight-key" label="ALL" style={{ gridColumn: 4, gridRow: 1 }} onDown={() => highlightAction("capture", true)} onUp={() => highlightAction("capture", false)}/>
+          {attachedHighlightButtons}
           {renderKeypadSection("numbers")}
         </div>
       </div><div className="fade-times"><TimeFader label="Prog Fade" path="programmer/prog-fade" maximum={20} send={send}/><TimeFader label="Cue Fade" path="programmer/cue-fade" maximum={60} send={send}/></div></aside>

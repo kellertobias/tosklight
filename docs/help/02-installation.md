@@ -8,7 +8,7 @@ ToskLight ships as a desktop application with its own Light server, and as stand
 2. Expand the ZIP and move **ToskLight.app** to Applications.
 3. Open the application. The bundled server uses `127.0.0.1:5000` and stores desk data in the application data location.
 4. If macOS blocks an unsigned development build, verify that the archive came from the expected Forgejo release before using the Finder **Open** confirmation.
-5. Open **Desk Setup > Network & API** and confirm the active server URL.
+5. Open **Desk Setup > Network & Inputs** and confirm the active server URL.
 
 The separate **ToskLight Hardware Controls** application is used for the attached hardware-control surface when that artifact is included in the release.
 

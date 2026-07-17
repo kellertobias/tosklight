@@ -35,6 +35,10 @@ The **Desk key** is the button shown on the touchscreen keypad or console. The *
 | `[TIME]` | Time | - | Give a value or recorded Cue an explicit fade time; press twice for `DELAY`. |
 | `[SHIFT]` | Shift | - | Latch the shifted keypad layer for the next desk key. With Record it enters Update. |
 | `[.]` | Dot | `[KBD:.]` | Separate address/value parts or enter a decimal point. Press `[.][.]` for `[AT] 0 [ENT]`. |
+| `[HIGH]` | Highlight | `[KBD:ALT]` + `[KBD:H]` | Toggle the transient Highlight Look for the actual current selection without changing that selection. |
+| `[PREV]` | Previous selection item | `[KBD:ALT]` + `[KBD:LEFT]` | From ALL, select the last item; while stepped, select the previous item and wrap at the start. |
+| `[NEXT]` | Next selection item | `[KBD:ALT]` + `[KBD:RIGHT]` | From ALL, select the first item; while stepped, select the next item and wrap at the end. |
+| `[ALL]` | Restore complete selection | `[KBD:ALT]` + `[KBD:A]` | Re-resolve the remembered live selection source and restore its complete current ordered membership. |
 | `[DIV]` | Division | `[KBD:´]` | Edit a selection or separate multiple values. Hold for selection options. |
 | `[GRP]` | Group | `[KBD:SHIFT]` + `[KBD:^]` | Select a group; press twice to reference its fixtures instead. |
 | `[CUE]` | Cue | `[KBD:SHIFT]` + `[KBD:?]` | Separate a playback address from its cue number. |
@@ -58,6 +62,14 @@ Playback shortcuts are `[KBD:PAGEUP]` and `[KBD:PAGEDOWN]` for playback pages, `
 ![The real software keypad, command controls, and key arrangement](../assets/screenshots/software-keypad.png)
 
 The remaining `[PRE]` and `[ESC]` buttons are in or next to the command-line display. Shortcuts are disabled while console hardware is connected. They also pause while an ordinary text input is focused; command inputs still receive command shortcuts, `[ENT]` confirms them, and `[ESC]` closes the active input or dialog.
+
+The num block places `[HIGH]`, `[PREV]`, `[NEXT]`, and `[ALL]` in one horizontal row directly above `[GRP]`, `[CUE]`, `[TIME]`, and `[DIV]` respectively. HIGH contains only the centered text `HIGH`: it uses the ordinary neutral key treatment while inactive and the same visibly lit armed/active treatment as SHIFT or SET while Highlight is active, including with an empty selection or safety-suppressed output. There is no Capture key and `Alt+C` has no Highlight action.
+
+The command-bar space between the command line and the REC/Preload controls contains no Highlight status menu, selection summary, or suppression panel. Normal state is visible through the HIGH key's lit/unlit state and the Fixture Sheet's complete-versus-stepped selection treatment. An actionable Highlight error opens a dedicated dismissible alert above panes and modal surfaces without changing the num-block grid or the HIGH key's size.
+
+On the software desk, **Programmer Fade** occupies exactly two button columns by two complete button rows. Its label, current value, unit, and touch/value interaction remain visible, and the next command row follows after the ordinary num-block grid gap.
+
+The hardware simulator keeps the same HIGH/PREV/NEXT/ALL column alignment but uses the two-column-by-two-row command area for **RECORD** and **PRELOAD GO**: each button occupies one column and both rows. Its fader area shows equal full-height **Programmer Fade** and **Cue Fade** faders directly beside each other. The simulator has no separate Highlight display or status panel; authoritative selection and step details remain on the main desk's Fixture Sheet and in protocol feedback.
 
 Except for `[KBD:SHIFT]` + `[KBD:Z]`, letter keys remain free for typing and future custom shortcuts.
 

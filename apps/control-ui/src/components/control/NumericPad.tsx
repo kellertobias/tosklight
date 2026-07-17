@@ -18,13 +18,24 @@ const shiftedWindows: Partial<Record<SoftwareKey, BuiltInWindow>> = {
   "6": "channels",
 };
 
-export function NumericPad() {
+export function NumericPad({ demo = false }: { demo?: boolean } = {}) {
   const server = useServer();
   const { state, dispatch } = useApp();
   const ownProgrammer = server.bootstrap?.active_programmers.find((programmer) => programmer.session_id === server.session?.session_id);
   const hasSelection = server.selectedFixtures.length > 0;
   const hasProgrammerValues = programmerValueCount(ownProgrammer) > 0;
   const clearClass = hasSelection ? "clear-active" : hasProgrammerValues ? "clear-warning" : "clear-idle";
+  const toggleRecord = () => {
+    const armed = !state.storeArmed;
+    if (armed && state.cueListSetArmed) dispatch({ type: "SET_CUELIST_SET_ARMED", value: false });
+    dispatch({ type: "SET_STORE_ARMED", value: armed });
+    if (armed) server.setCommandLine("RECORD ", false);
+    else if (/^RECORD\b/i.test(server.commandLine)) server.setCommandLine(server.commandLine.replace(/^RECORD\s*/i, ""), false);
+  };
+  const advancePreload = async () => {
+    await server.preloadAction(state.preload === "blind" ? "go" : "enter");
+    dispatch({ type: "ADVANCE_PRELOAD" });
+  };
   const press = (key: SoftwareKey) => {
     if (key === "SHIFT") { dispatch({ type: "SET_SHIFT_ARMED", value: !state.shiftArmed }); return; }
     if (state.shiftArmed) {
@@ -91,7 +102,9 @@ export function NumericPad() {
   };
   const renderKeys = (section: "commands" | "numbers") => numericPadLayout.filter((item) => item.section === section).map(({ key, column, row, rowSpan = 1 }) => {
     const sectionColumn = section === "commands" ? column : column - 3;
-    const displayRow = row + (section === "numbers" ? 1 : 0);
+    // Both halves reserve their first surface row: the number side for
+    // HIGH/PREV/NEXT/ALL and the command side to complete the 2x2 Fade area.
+    const displayRow = row + 1;
     return <Button
     onClick={() => press(key)}
     data-keypad-key={key}
@@ -102,9 +115,13 @@ export function NumericPad() {
     key={key}
   >{softwareKeyLabel(key)}</Button>;
   });
-  return <div className="numeric-pad programmer-number-block">
+  return <div className={`numeric-pad programmer-number-block ${demo ? "demo-number-block" : ""}`}>
     <div className="numeric-pad-section numeric-pad-command-section">
-      <div className="numeric-pad-fade" style={{ gridColumn: "1 / span 2", gridRow: 1 }}><ProgrammerFadeFader compact/></div>
+      {demo ? <>
+        <Button className={`demo-record ${state.storeArmed ? "armed" : ""}`} aria-pressed={state.storeArmed} style={{ gridColumn: 1, gridRow: 1 }} onClick={toggleRecord}>{state.updateArmed ? "UPDATE" : "RECORD"}</Button>
+        <Button className={`demo-preload ${state.preload === "blind" ? "preload-go" : ""}`} style={{ gridColumn: 2, gridRow: 1 }} onClick={() => void advancePreload()}>PRELOAD GO</Button>
+        <Button className="demo-escape" style={{ gridColumn: 2, gridRow: 2 }} onClick={server.resetCommandLine}>ESCAPE</Button>
+      </> : <div className="numeric-pad-fade" data-grid-column-span="2" data-grid-row-span="2" style={{ gridColumn: "1 / span 2", gridRow: "1 / span 2" }}><ProgrammerFadeFader compact/></div>}
       {renderKeys("commands")}
     </div>
     <div className="numeric-pad-section numeric-pad-number-section"><HighlightControls/>{renderKeys("numbers")}</div>

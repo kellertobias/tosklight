@@ -38,7 +38,7 @@ The generated manuals are written to `output/pdf/tosklight-manual.pdf` and
 root to deploy the single-page manual and its images.
 Use `./test help-screenshots` to intentionally refresh the application images
 consumed by the Help window, PDF, and HTML manual. See the
-[manual authoring guide](docs/manual/README.md) for the Markdown and screenshot
+[manual authoring guide](docs/help/99-Development/04-manual-and-help-screenshots.md) for the Markdown and screenshot
 contract.
 
 `./build archive` ships the web UI inside each `light-server` binary. It creates a

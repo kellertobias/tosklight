@@ -26,7 +26,7 @@ import { WindowHeader, WindowSettings } from "../components/window-kit";
 const symbols = ["◉", "◈", "◎", "◐", "◇", "◍"];
 type Point = { x: number; y: number };
 
-export function StageWindow({ compact, paneId, showGroupShortcuts, stageView, followPreload: paneFollowPreload }: WindowProps) {
+export function StageWindow({ compact, paneId, showGroupShortcuts, stageView, followPreload: paneFollowPreload, showSelection: forcedShowSelection, environmentBrightness: forcedEnvironmentBrightness }: WindowProps & { showSelection?: boolean; environmentBrightness?: number }) {
   const server = useServer();
   const { state, dispatch } = useApp();
   const mode = state.stageMode;
@@ -39,6 +39,8 @@ export function StageWindow({ compact, paneId, showGroupShortcuts, stageView, fo
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
   const groupsVisible = compact ? Boolean(showGroupShortcuts) : state.stageGroupsVisible;
+  const showSelection = forcedShowSelection ?? state.stageShowSelection;
+  const environmentBrightness = forcedEnvironmentBrightness ?? state.stageEnvironmentBrightness;
   const tauri =
     typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
   const zoom = state.stageZoom;
@@ -386,8 +388,8 @@ export function StageWindow({ compact, paneId, showGroupShortcuts, stageView, fo
             visualization={visualization}
             selected={server.selectedFixtures}
             setup={mode === "setup"}
-            showSelection={state.stageShowSelection}
-            environmentBrightness={state.stageEnvironmentBrightness}
+            showSelection={showSelection}
+            environmentBrightness={environmentBrightness}
             onSelect={(fixtureId, additive) =>
               void server.selectionGesture(
                 { type: "fixture", fixture_id: fixtureId },
