@@ -7,12 +7,12 @@ import {
   type PointerEvent as ReactPointerEvent,
   type CSSProperties,
 } from "react";
-import { Button, FormLayout, HorizontalFaderField, Input, MultiValueToggleField, NumberField, Select, SelectField, SwitchField } from "../components/common";
+import { Button, FormLayout, HorizontalFaderField, MultiValueToggleField, NumberField, Select, SwitchField } from "../components/common";
+import { RootConfinedFilePickerButton } from "../components/files/RootConfinedFilePickerButton";
 import { GroupStrip } from "../components/shared/GroupStrip";
 import { fixtures as visualFixtures } from "../data/mockData";
 import { useServer } from "../api/ServerContext";
 import type { WindowProps } from "./windowTypes";
-import { applyMarqueeSelection, applyStageSelection } from "./stageSelection";
 import { Stage3dCanvas } from "./Stage3dCanvas";
 import { fixtureValue } from "./fixtureVisualization";
 import { migrateStagePosition } from "./stage3dScene";
@@ -50,9 +50,9 @@ export function StageWindow({ compact, paneId, showGroupShortcuts, stageView, fo
   >({});
   const [assets, setAssets] = useState<StageAsset[]>([]);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
-  const [builtInAssetId, setBuiltInAssetId] = useState<BuiltInStageAssetId>("truss-1m");
+  const [elementChooserOpen, setElementChooserOpen] = useState(false);
   const assetsRef = useRef(assets);
-  const assetInput = useRef<HTMLInputElement>(null);
+  const assetPicker = useRef<(() => void) | null>(null);
   const positions3dRef = useRef(positions3d);
   const [visualization, setVisualization] =
     useState<VisualizationSnapshot | null>(null);
@@ -72,9 +72,14 @@ export function StageWindow({ compact, paneId, showGroupShortcuts, stageView, fo
   } | null>(null);
 
   useEffect(() => {
-    const openImport = (event: Event) => { if (!(event instanceof CustomEvent) || !event.detail || event.detail === paneId) assetInput.current?.click(); };
+    const openImport = (event: Event) => { if (!(event instanceof CustomEvent) || !event.detail || event.detail === paneId) assetPicker.current?.(); };
+    const openElementChooser = (event: Event) => { if (!(event instanceof CustomEvent) || !event.detail || event.detail === paneId) setElementChooserOpen(true); };
     window.addEventListener("light:import-stage-scene", openImport);
-    return () => window.removeEventListener("light:import-stage-scene", openImport);
+    window.addEventListener("light:add-stage-element", openElementChooser);
+    return () => {
+      window.removeEventListener("light:import-stage-scene", openImport);
+      window.removeEventListener("light:add-stage-element", openElementChooser);
+    };
   }, [paneId]);
 
   useEffect(() => {
@@ -112,8 +117,14 @@ export function StageWindow({ compact, paneId, showGroupShortcuts, stageView, fo
       window.clearInterval(timer);
     };
   }, [followPreload, server.readVisualization]);
+  const stageFixtures = useMemo(
+    () => [...(server.patch?.fixtures ?? [])].sort((left, right) =>
+      (left.fixture_number ?? Number.MAX_SAFE_INTEGER) - (right.fixture_number ?? Number.MAX_SAFE_INTEGER)
+      || left.fixture_id.localeCompare(right.fixture_id)),
+    [server.patch],
+  );
   const patched =
-    server.patch?.fixtures.map((fixture) => {
+    server.patch ? stageFixtures.map((fixture, index) => {
       const intensity = (visualization?.blackout ? 0 : fixtureValue(visualization, fixture, "intensity")) * (visualization?.grand_master ?? 1);
       const red = fixtureValue(visualization, fixture, "color.red", 1);
       const green = fixtureValue(visualization, fixture, "color.green", 1);
@@ -122,17 +133,19 @@ export function StageWindow({ compact, paneId, showGroupShortcuts, stageView, fo
       const tiltValue = fixtureValue(visualization, fixture, "tilt");
       return ({
       fixtureId: fixture.fixture_id,
+      fixtureNumber: fixture.fixture_number ?? index + 1,
       name: fixture.definition.name ?? fixture.definition.model,
       icon: fixture.definition.icon_asset,
       color: `rgb(${Math.round(red * 255)},${Math.round(green * 255)},${Math.round(blue * 255)})`,
       dimmer: Math.round(intensity * 100),
       pan: panValue,
       tilt: tiltValue,
-    });}) ?? [];
+    });}) : [];
   const fixtures = server.bootstrap
     ? patched
-    : visualFixtures.map((fixture) => ({
+    : visualFixtures.map((fixture, index) => ({
         fixtureId: "",
+        fixtureNumber: index + 1,
         name: fixture.name,
         icon: null,
         color: fixture.color,
@@ -146,7 +159,7 @@ export function StageWindow({ compact, paneId, showGroupShortcuts, stageView, fo
   const columns = compact ? 6 : 8;
   const fixtures3d = useMemo(
     () =>
-      (server.patch?.fixtures ?? []).flatMap((fixture, fixtureIndex) => {
+      stageFixtures.flatMap((fixture, fixtureIndex) => {
         const physical = [{ id: fixture.fixture_id, location: fixture.location, rotation: fixture.rotation }, ...(fixture.multipatch ?? [])];
         return physical.map((instance, instanceIndex) => {
           const index = fixtureIndex * 16 + instanceIndex;
@@ -157,7 +170,7 @@ export function StageWindow({ compact, paneId, showGroupShortcuts, stageView, fo
           return { fixture, instanceId: instance.id, index, position: stored ?? located ?? migrateStagePosition(instanceIndex ? undefined : positions[fixture.fixture_id], index) };
         });
       }),
-    [server.patch, positions3d, positions],
+    [stageFixtures, positions3d, positions],
   );
   const save3d = () =>
     server.saveStageLayout({
@@ -178,7 +191,7 @@ export function StageWindow({ compact, paneId, showGroupShortcuts, stageView, fo
       assets: next,
     });
   };
-  const addBuiltInAsset = async () => {
+  const addBuiltInAsset = async (builtInAssetId: BuiltInStageAssetId) => {
     const definition = BUILT_IN_STAGE_ASSETS.find((item) => item.id === builtInAssetId)!;
     const nextAsset: StageAsset = {
       id: crypto.randomUUID(), name: definition.name, format: "builtin", builtinId: builtInAssetId,
@@ -189,6 +202,7 @@ export function StageWindow({ compact, paneId, showGroupShortcuts, stageView, fo
     assetsRef.current = next;
     setAssets(next);
     setSelectedAssetId(nextAsset.id);
+    setElementChooserOpen(false);
     await server.saveStageLayout({ version: 2, positions: positionsRef.current, positions3d: positions3dRef.current, assets: next });
   };
   const updateStageAsset = (assetId: string, update: Partial<StageAsset>) => {
@@ -210,16 +224,23 @@ export function StageWindow({ compact, paneId, showGroupShortcuts, stageView, fo
     event: ReactMouseEvent<HTMLButtonElement>,
   ) => {
     if (!fixtureId || mode !== "select") return;
-    const next = applyStageSelection({
-      fixtureId,
-      orderedFixtureIds,
-      selectedFixtureIds: server.selectedFixtures,
-      anchorFixtureId: selectionAnchor.current,
-      additive: event.ctrlKey || event.metaKey,
-      range: event.shiftKey,
-    });
+    const anchor = selectionAnchor.current;
+    if (event.shiftKey && anchor) {
+      const from = orderedFixtureIds.indexOf(anchor);
+      const to = orderedFixtureIds.indexOf(fixtureId);
+      if (from >= 0 && to >= 0) {
+        const members = orderedFixtureIds.slice(Math.min(from, to), Math.max(from, to) + 1);
+        for (const member of members)
+          void server.selectionGesture({ type: "fixture", fixture_id: member });
+      }
+    } else {
+      const toggled = event.ctrlKey || event.metaKey;
+      void server.selectionGesture(
+        { type: "fixture", fixture_id: fixtureId },
+        toggled && server.selectedFixtures.includes(fixtureId),
+      );
+    }
     selectionAnchor.current = fixtureId;
-    void server.setSelection(next);
   };
   const moveFixture = (
     fixtureId: string,
@@ -322,29 +343,40 @@ export function StageWindow({ compact, paneId, showGroupShortcuts, stageView, fo
         })
         .map((node) => node.dataset.fixtureId!)
         .filter(Boolean);
-      void server.setSelection(
-        applyMarqueeSelection(server.selectedFixtures, hits, start.additive),
-      );
+      for (const fixtureId of hits)
+        void server.selectionGesture(
+          { type: "fixture", fixture_id: fixtureId },
+          start.additive && server.selectedFixtures.includes(fixtureId),
+        );
     } else if (!start.additive) void server.setSelection([]);
     setMarquee(null);
   };
 
   return (
     <div className={`stage-window ${compact ? "compact" : ""}`}>
-      <Input ref={assetInput} hidden type="file" accept=".glb,.stl,.3mf,.gdtf" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importAssets(file); event.currentTarget.value = ""; }} />
+      <RootConfinedFilePickerButton hideButton triggerRef={assetPicker} label="Import scene" allowedExtensions={["glb", "stl", "3mf", "gdtf"]} onFiles={(files) => { const file = files[0]; if (file) return importAssets(file); }} />
       {!compact && (
-        <WindowHeader title="Stage" info={{ primary: `${server.selectedFixtures.length} selected`, secondary: "Tap to select · Shift for range · Control/Command tracks macro" }} actions={[[mode === "setup" ? { id: "import", label: "Import scene", onClick: () => assetInput.current?.click() } : { id: "follow", label: "Follow Preload", active: followPreload, onClick: () => { const now = performance.now(); if (now - lastFollowToggle.current < 400) return; lastFollowToggle.current = now; setDedicatedFollowPreload((current) => !current); } }],[{ id: "select", label: "Select fixtures", active: mode === "select", onClick: () => setMode("select") },{ id: "setup", label: "Setup positions", active: mode === "setup", onClick: () => setMode("setup") },{ id: "navigate", label: "Navigate", active: mode === "navigate", onClick: () => setMode("navigate") }], ...(view === "3d" && mode === "setup" ? [[{ id: "add", label: "Add element", onClick: () => void addBuiltInAsset() }]] : [])]} settings onSettings={(anchor) => { setSettingsAnchor(anchor.getBoundingClientRect()); setOptionsOpen(true); }} />
+        <WindowHeader title="Stage" info={{ primary: `${server.selectedFixtures.length} selected`, secondary: "Tap to select · Shift for range · Control/Command tracks macro" }} actions={[[mode === "setup" ? { id: "import", label: "Import scene", onClick: () => assetPicker.current?.() } : { id: "follow", label: "Follow Preload", active: followPreload, onClick: () => { const now = performance.now(); if (now - lastFollowToggle.current < 400) return; lastFollowToggle.current = now; setDedicatedFollowPreload((current) => !current); } }],[{ id: "select", label: "Select fixtures", active: mode === "select", onClick: () => setMode("select") },{ id: "setup", label: "Setup positions", active: mode === "setup", onClick: () => setMode("setup") },{ id: "navigate", label: "Navigate", active: mode === "navigate", onClick: () => setMode("navigate") }], ...(view === "3d" && mode === "setup" ? [[{ id: "add", label: "Add element", onClick: () => setElementChooserOpen(true) }]] : [])]} settings onSettings={(anchor) => { setSettingsAnchor(anchor.getBoundingClientRect()); setOptionsOpen(true); }} />
       )}
       {optionsOpen && !compact && (
         <WindowSettings modal={false} anchor={settingsAnchor} title="Stage Settings" onClose={() => setOptionsOpen(false)} tabs={[{ id: "stage", label: "Stage", content: <FormLayout labelPlacement="side">
             <MultiValueToggleField label="View" value={view} onChange={setView} options={[{ value: "2d", label: "2D" }, { value: "3d", label: "3D", disabled: !tauri }]}/>
-            {view === "3d" && mode === "setup" && (
-              <SelectField label="Built-in element" value={builtInAssetId} onChange={(value) => setBuiltInAssetId(value)} options={BUILT_IN_STAGE_ASSETS.map((asset) => ({ value: asset.id, label: asset.name }))}/>
-            )}
             <SwitchField label="Groups shortcuts" checked={groupsVisible} onChange={(event) => dispatch({ type: "SET_STAGE_OPTIONS", groupsVisible: event.target.checked })}/>
             <SwitchField label="Show Selection" checked={state.stageShowSelection} onChange={(event) => dispatch({ type: "SET_STAGE_OPTIONS", showSelection: event.target.checked })}/>
             <HorizontalFaderField label="Environment brightness" value={state.stageEnvironmentBrightness} minimum={0} maximum={2} step={0.05} display={`${Math.round(state.stageEnvironmentBrightness * 100)}%`} onChange={(environmentBrightness) => dispatch({ type: "SET_STAGE_OPTIONS", environmentBrightness })}/>
           </FormLayout> }]} />
+      )}
+      {elementChooserOpen && (
+        <div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && setElementChooserOpen(false)}>
+          <section className="nested-modal stage-element-chooser" role="dialog" aria-modal="true" aria-label="Add Stage Element">
+            <Button className="modal-close" aria-label="Close Add Stage Element" onClick={() => setElementChooserOpen(false)}>×</Button>
+            <h3>Add Stage Element</h3>
+            <p>Choose the element to add at the default Stage insertion point. Its position and scale can be adjusted after it is added.</p>
+            <div className="stage-element-options">
+              {BUILT_IN_STAGE_ASSETS.map((asset) => <Button key={asset.id} onClick={() => void addBuiltInAsset(asset.id)}>{asset.name}</Button>)}
+            </div>
+          </section>
+        </div>
       )}
       {view === "3d" ? (
         <div className="stage-canvas stage-canvas-3d">
@@ -357,14 +389,9 @@ export function StageWindow({ compact, paneId, showGroupShortcuts, stageView, fo
             showSelection={state.stageShowSelection}
             environmentBrightness={state.stageEnvironmentBrightness}
             onSelect={(fixtureId, additive) =>
-              void server.setSelection(
-                additive
-                  ? applyMarqueeSelection(
-                      server.selectedFixtures,
-                      [fixtureId],
-                      true,
-                    )
-                  : [fixtureId],
+              void server.selectionGesture(
+                { type: "fixture", fixture_id: fixtureId },
+                additive && server.selectedFixtures.includes(fixtureId),
               )
             }
             onMove={(fixtureId, position) =>
@@ -508,7 +535,7 @@ export function StageWindow({ compact, paneId, showGroupShortcuts, stageView, fo
                 >
                   <span>{fixture.icon ? <img src={fixture.icon} alt="" /> : symbols[index % symbols.length]}<i className="lamp-color-dot" style={{ background: fixture.color }} /></span>
                   <i className={`lamp-position-line ${fixture.dimmer > 0 ? "active" : "inactive"}`} style={{ transform: `rotate(${fixture.pan * 360 - 180}deg)`, color: fixture.dimmer > 0 ? fixture.color : undefined }}><i style={{ left: `${fixture.tilt * 100}%` }} /></i>
-                  <small>{index + 1}</small>
+                  <small>{fixture.fixtureNumber}</small>
                 </Button>
               );
             })}

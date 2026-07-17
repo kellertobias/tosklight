@@ -1,5 +1,5 @@
 import type { DeskConfiguration } from "../../api/types";
-import { Button, FormLayout, SelectField, TextField } from "../common";
+import { Button, FormLayout, SelectField, SwitchField, TextField } from "../common";
 
 export type FileManagerRootConfiguration = DeskConfiguration["file_manager_roots"][number];
 
@@ -41,11 +41,15 @@ function nextRootId(roots: FileManagerRootConfiguration[]) {
 
 export function FileManagerRootsSetup({
   roots,
+  systemPickerFallback,
   onChange,
+  onSystemPickerFallbackChange,
   onOpen,
 }: {
   roots: FileManagerRootConfiguration[];
+  systemPickerFallback: boolean;
   onChange: (roots: FileManagerRootConfiguration[]) => void;
+  onSystemPickerFallbackChange: (enabled: boolean) => void;
   onOpen: () => void;
 }) {
   const update = (index: number, patch: Partial<FileManagerRootConfiguration>) => {
@@ -88,6 +92,12 @@ export function FileManagerRootsSetup({
       </article>)}
     </div>
     {validation && <p className="modal-error" role="alert">{validation}</p>}
+    <SwitchField
+      label="Allow Open system file picker fallback"
+      checked={systemPickerFallback}
+      description="Disabled by default. When enabled, forms still open the root-confined ToskLight picker first and offer the operating-system picker only as a secondary action."
+      onChange={(event) => onSystemPickerFallbackChange(event.target.checked)}
+    />
     <div className="modal-actions">
       <Button onClick={() => onChange([...roots, { id: nextRootId(roots), label: "New location", path: "", icon: "folder" }])}>Add configured root</Button>
       <Button variant="primary" onClick={onOpen}>Open File Manager Workspace</Button>

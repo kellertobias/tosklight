@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CueList, PlaybackDefinition } from "../api/types";
 import { CuelistWindow } from "./CuelistWindow";
@@ -109,6 +109,50 @@ describe("CuelistWindow pool recording", () => {
     expect(screen.queryByRole("button", { name: "TOGGLE" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "OFF" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Title")).toHaveValue("Opening");
+  });
+
+  it("does not let a late server refresh clobber an invalid Cue draft before validation", async () => {
+    mocks.state.storeArmed = false;
+    const cueList: CueList = {
+      id: "main",
+      name: "Main",
+      priority: 10,
+      mode: "sequence",
+      looped: false,
+      cues: [{
+        id: "cue-1",
+        number: 1,
+        name: "Opening",
+        fade_millis: 2_500,
+        delay_millis: 0,
+        trigger: { type: "manual" },
+        changes: [],
+      }],
+    };
+    mocks.playbacks.pool = [{
+      number: 1,
+      name: "Main",
+      target: { type: "cue_list", cue_list_id: "main" },
+      buttons: ["go", "go_minus", "flash"],
+      fader: "master",
+      go_activates: true,
+      auto_off: true,
+      xfade_millis: 0,
+    }];
+    mocks.cueObjects = [{ id: "main", revision: 1, body: cueList }];
+    const view = render(<CuelistWindow />);
+    const ui = within(view.container);
+    fireEvent.click(ui.getByText("Main").closest("button")!);
+    const fade = ui.getByLabelText("Fade");
+    fireEvent.change(fade, { target: { value: "-1" } });
+
+    mocks.cueObjects = [{ id: "main", revision: 1, body: { ...cueList, cues: cueList.cues.map((cue) => ({ ...cue })) } }];
+    view.rerender(<CuelistWindow />);
+    expect(ui.getByLabelText("Fade")).toHaveValue("-1");
+
+    fireEvent.keyDown(ui.getByLabelText("Fade"), { key: "Enter" });
+    expect(await ui.findByRole("alert")).toHaveTextContent("Cue edit was not saved");
+    expect(mocks.saveCueList).not.toHaveBeenCalled();
   });
 
   it("renders empty numbered slots and records into the touched slot", async () => {

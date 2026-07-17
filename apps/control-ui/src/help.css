@@ -45,7 +45,7 @@
 .help-content img { display: block; max-width: 100%; height: auto; margin: 16px auto; border: 1px solid var(--line); border-radius: 8px; }
 .help-image-error { color: var(--red); }
 .help-window.compact .window-toolbar { display: none; }
-.help-window.compact .help-layout { grid-template-columns: 1fr; grid-template-rows: minmax(110px, 35%) minmax(0, 1fr); }
-.help-window.compact .help-layout > nav { border-right: 0; border-bottom: 1px solid var(--line); overflow: auto; }
+.help-window.compact .help-layout { grid-template-columns: minmax(130px, 30%) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+.help-window.compact .help-layout > nav { border-right: 1px solid var(--line); border-bottom: 0; overflow: auto; }
 .help-window.compact .help-content { padding: 10px 12px 24px; }
 .help-window.compact .help-content h1 { font-size: 21px; }

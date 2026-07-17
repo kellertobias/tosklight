@@ -1,4 +1,4 @@
-import { GRID_COLUMNS, GRID_ROWS, type AppState, type BuiltInWindow, type DevelopmentView, type GridRect, type WindowSettings } from "../types";
+import { GRID_COLUMNS, GRID_ROWS, type AppState, type BuiltInWindow, type DevelopmentView, type GridRect, type TextEditorMode, type VirtualPlaybackExclusionZone, type WindowSettings } from "../types";
 import { initialDesks } from "../data/mockData";
 
 export type Action =
@@ -15,7 +15,10 @@ export type Action =
   | { type: "SET_PANE_DEVELOPMENT_VIEW"; id: string; value: DevelopmentView }
   | { type: "SET_VIRTUAL_PLAYBACK_GRID"; id: string; rows: number; columns: number }
   | { type: "SET_VIRTUAL_PLAYBACK_CELL"; id: string; index: number; playbackNumber?: number | null; action?: "go" | "toggle" }
+  | { type: "SET_VIRTUAL_PLAYBACK_EXCLUSION_ZONES"; id: string; zones: VirtualPlaybackExclusionZone[] }
+  | { type: "SET_FILE_MANAGER_SHOW_HIDDEN"; id: string; value: boolean }
   | { type: "SET_TEXT_EDITOR_FILE"; id: string; root: string; path: string }
+  | { type: "SET_TEXT_EDITOR_SETTINGS"; id: string; readOnly?: boolean; mode?: TextEditorMode }
   | { type: "SET_TEXT_EDITOR_VIEW"; id: string; root: string; path: string; selectionStart: number; selectionEnd: number; scrollTop: number }
   | { type: "SET_STAGE_MODE"; value: AppState["stageMode"] }
   | { type: "SET_STAGE_VIEW"; value: AppState["stageView"] }
@@ -186,7 +189,7 @@ export function appReducer(state: AppState, action: Action): AppState {
       const panes = state.savingDesk && source
         ? source.panes.map((pane, index) => ({ ...pane, id: `${id}-${pane.kind}-${index + 1}` }))
         : [];
-      return { ...state, desks: [...state.desks, { id, name: `Desk ${state.desks.length + 1}`, panes }], activeDeskId: id, builtIn: null, savingDesk: false };
+      return { ...state, desks: [...state.desks, { id, name: `Desktop ${state.desks.length + 1}`, panes }], activeDeskId: id, builtIn: null, savingDesk: false };
     }
     case "SET_PANE_RECT": return {
       ...state,
@@ -208,6 +211,8 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "SET_PANE_DEVELOPMENT_VIEW": return { ...state, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, developmentView: action.value } : pane) }) };
     case "SET_VIRTUAL_PLAYBACK_GRID": return { ...state, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, virtualPlaybackRows: clamp(action.rows, 1, 12), virtualPlaybackColumns: clamp(action.columns, 1, 12) } : pane) }) };
     case "SET_VIRTUAL_PLAYBACK_CELL": return { ...state, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: desk.panes.map((pane) => { if (pane.id !== action.id) return pane; const cells = [...(pane.virtualPlaybackCells ?? [])]; const current = cells[action.index] ?? { playbackNumber: null, action: "go" as const }; cells[action.index] = { playbackNumber: action.playbackNumber === undefined ? current.playbackNumber : action.playbackNumber, action: action.action ?? current.action }; return { ...pane, virtualPlaybackCells: cells }; }) }) };
+    case "SET_VIRTUAL_PLAYBACK_EXCLUSION_ZONES": return { ...state, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, virtualPlaybackExclusionZones: action.zones.map((zone) => ({ ...zone, slots: [...zone.slots] })) } : pane) }) };
+    case "SET_FILE_MANAGER_SHOW_HIDDEN": return { ...state, desks: state.desks.map((desk) => ({ ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, fileManagerShowHidden: action.value } : pane) })) };
     case "SET_STAGE_MODE": return { ...state, stageMode: action.value };
     case "SET_STAGE_VIEW": return { ...state, stageView: action.value };
     case "SET_STAGE_NAVIGATION": return { ...state, stageZoom: action.zoom ?? state.stageZoom, stagePanX: action.panX ?? state.stagePanX, stagePanY: action.panY ?? state.stagePanY, stageOrbitX: action.orbitX ?? state.stageOrbitX, stageOrbitY: action.orbitY ?? state.stageOrbitY };
@@ -225,7 +230,7 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "ADD_WINDOW": {
       if (!state.windowPicker) return state;
       const kind = cueListWindowKind(action.kind);
-      const pane = { id: `${kind}-${Date.now()}`, kind, title: kind === "help" ? "Help" : kind === "development" ? "Development" : kind === "virtual_playbacks" ? "Virtual Playbacks" : kind === "file_manager" ? "File Manager" : kind === "text_editor" ? "Text Editor" : cueListWindowTitle(kind[0].toUpperCase() + kind.slice(1), kind), ...(kind === "virtual_playbacks" ? { virtualPlaybackRows: 2, virtualPlaybackColumns: 2, virtualPlaybackCells: [] } : {}), ...state.windowPicker };
+      const pane = { id: `${kind}-${Date.now()}`, kind, title: kind === "help" ? "Help" : kind === "development" ? "Development" : kind === "virtual_playbacks" ? "Virtual Playbacks" : kind === "file_manager" ? "File Manager" : kind === "text_editor" ? "Text Editor" : cueListWindowTitle(kind[0].toUpperCase() + kind.slice(1), kind), ...(kind === "virtual_playbacks" ? { virtualPlaybackRows: 2, virtualPlaybackColumns: 2, virtualPlaybackCells: [], virtualPlaybackExclusionZones: [] } : {}), ...(kind === "file_manager" ? { fileManagerShowHidden: false } : {}), ...(kind === "text_editor" ? { textEditorReadOnly: false, textEditorMode: "plain" as const } : {}), ...state.windowPicker };
       const activeDesk = state.desks.find((desk) => desk.id === state.activeDeskId);
       if (activeDesk?.panes.some((item) => overlaps(pane, item))) return { ...state, windowPicker: null };
       return { ...state, windowPicker: null, desks: state.desks.map((desk) => desk.id !== state.activeDeskId ? desk : { ...desk, panes: [...desk.panes, pane] }) };
@@ -250,6 +255,7 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "TOGGLE_SECTION_NAMES": return { ...state, showSectionNames: !state.showSectionNames };
     case "SET_REGULAR_NUMBER_SHORTCUTS": return { ...state, regularNumberShortcuts: action.value };
     case "SET_TEXT_EDITOR_FILE": return { ...state, desks: state.desks.map((desk) => ({ ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, textFileRoot: action.root, textFilePath: action.path } : pane) })) };
+    case "SET_TEXT_EDITOR_SETTINGS": return { ...state, desks: state.desks.map((desk) => ({ ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, textEditorReadOnly: action.readOnly ?? pane.textEditorReadOnly ?? false, textEditorMode: action.mode ?? pane.textEditorMode ?? "plain" } : pane) })) };
     case "SET_TEXT_EDITOR_VIEW": return { ...state, desks: state.desks.map((desk) => ({ ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, textEditorView: { root: action.root, path: action.path, selectionStart: action.selectionStart, selectionEnd: action.selectionEnd, scrollTop: action.scrollTop } } : pane) })) };
     case "SET_STORE_ARMED": return { ...state, storeArmed: action.value };
     case "SET_SHIFT_ARMED": return { ...state, shiftArmed: action.value };

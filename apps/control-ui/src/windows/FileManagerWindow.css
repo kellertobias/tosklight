@@ -3,6 +3,141 @@
   position: relative;
 }
 
+.pane-chrome-info-target,
+.pane-chrome-toolbar-target {
+  min-width: 0;
+}
+
+.pane-chrome-toolbar-target,
+.file-manager-header-actions,
+.text-editor-header-actions {
+  display: flex;
+  height: 100%;
+  align-items: stretch;
+}
+
+.ui-window-header:has(.pane-chrome-toolbar-target) .ui-window-info {
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.pane-chrome-toolbar-target {
+  flex: none;
+}
+
+.file-manager-header-actions,
+.text-editor-header-actions {
+  border-left: 1px solid var(--line2);
+}
+
+.file-manager-header-actions > .ui-button,
+.text-editor-header-actions > .ui-button {
+  height: 38px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  background: #171d23;
+  white-space: nowrap;
+}
+
+@container (max-width: 620px) {
+  .ui-window-header:has(.pane-chrome-toolbar-target) .ui-window-title {
+    max-width: 72px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 13px;
+  }
+
+  .ui-window-header:has(.pane-chrome-toolbar-target) .ui-window-info {
+    flex: 0 1 64px;
+    margin-left: 4px;
+  }
+
+  .pane-chrome-toolbar-target {
+    flex: 1 1 auto;
+    overflow: hidden;
+  }
+
+  .file-manager-header-actions,
+  .text-editor-header-actions {
+    width: 100%;
+  }
+
+  .file-manager-header-actions > .ui-button,
+  .text-editor-header-actions > .ui-button {
+    flex: 1 1 auto;
+    min-width: 32px;
+    padding-inline: 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 10px;
+  }
+
+  .ui-window-header:has(.pane-chrome-toolbar-target) .ui-window-settings-action > .ui-button {
+    min-width: 36px;
+    padding-inline: 6px;
+  }
+
+  .ui-window-header:has(.pane-chrome-toolbar-target) .ui-window-settings-action > .ui-button > span:last-child {
+    display: none;
+  }
+}
+
+@container (max-width: 380px) {
+  .ui-window-header:has(.pane-chrome-toolbar-target) .ui-window-title {
+    max-width: 54px;
+    font-size: 11px;
+  }
+
+  .ui-window-header:has(.pane-chrome-toolbar-target) .ui-window-info {
+    flex-basis: 40px;
+    margin-left: 2px;
+  }
+}
+
+.file-manager-header-path,
+.text-editor-header-state {
+  display: block;
+  max-width: min(28vw, 24rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-header-menu-layer {
+  position: fixed;
+  z-index: 980;
+  inset: 0;
+}
+
+.file-header-menu {
+  position: fixed;
+  display: grid;
+  width: 204px;
+  padding: 5px;
+  border: 1px solid var(--line2);
+  border-radius: 0 0 7px 7px;
+  background: #151b21;
+  box-shadow: 0 18px 45px #000c;
+}
+
+.file-header-menu > .ui-button {
+  justify-content: flex-start;
+  min-height: 40px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+}
+
+.file-header-menu > .ui-button:hover,
+.file-header-menu > .ui-button.active {
+  background: #223843;
+  color: var(--cyan);
+}
+
 .file-manager .file-toolbar {
   flex-wrap: nowrap;
   overflow: hidden;
@@ -57,8 +192,21 @@
   position: sticky;
   z-index: 1;
   top: -0.4rem;
-  background: var(--surface, #181b20);
+  background: #101318;
   border-bottom: 1px solid #39404a;
+}
+
+.file-manager .file-list,
+.file-manager .file-grid {
+  background: #101318;
+}
+
+.file-manager.fm-properties-hidden .file-columns {
+  grid-template-columns: minmax(9rem, 22%) minmax(0, 1fr);
+}
+
+.file-manager.fm-properties-hidden .file-properties {
+  display: none;
 }
 
 .file-manager .file-list > button,
@@ -189,7 +337,7 @@
   }
 
   .file-manager.fm-navigation-open .file-roots,
-  .file-manager.fm-info-open .file-properties {
+  .file-manager.fm-info-open.fm-properties-visible .file-properties {
     display: block;
     grid-row: 1;
   }

@@ -59,10 +59,10 @@ export function VerticalTouchFader({ label, value, maximum = 100, display, disab
   const openInput = () => { if (!disabled && directInput) { setInputValue(String(Number((localValue - directInputOffset).toFixed(1)))); setInputOpen(true); } };
   const submitInput = () => { const entered = Number(inputValue); const next = Math.max(0, Math.min(maximum, entered + directInputOffset)); if (Number.isFinite(entered)) { setLocalValue(next); onChange?.(next); } setInputOpen(false); };
   const fader = <label onClick={() => hardware && openInput()} className={`vertical-touch-fader ${disabled ? "disabled" : ""} ${directInput ? "direct-input-fader" : ""}`} style={{ "--fader-level": fraction, "--fader-color": accentColor ?? "#176777", "--fader-color-dark": accentColor ? `color-mix(in srgb, ${accentColor} 42%, #081014)` : "#103039" } as CSSProperties}>
-    <span>{label}{mode && <small>{mode}</small>}</span><strong>{display === undefined ? `${Math.round(localValue)}%` : display.replace(/^[\d.]+/, String(Math.round(localValue)))}</strong>
+    <span>{label}{mode && <small>{mode}</small>}</span><strong>{display ?? `${Math.round(localValue)}%`}</strong>
     <Input aria-label={label} disabled={disabled || (hardware && directInput)} type="range" min="0" max={maximum} step="0.1" value={localValue} onPointerDown={() => { interacting.current = true; }} onPointerUp={finish} onPointerCancel={finish} onBlur={() => { if (interacting.current) finish(); }} onInput={(event) => emit(Number(event.currentTarget.value))}/>
   </label>;
-  const visibleActions = [...(directInput && !hardware ? [{ id: "set-value", label: "Set value", onClick: openInput, className: "set-value-button" } satisfies VerticalTouchFaderAction] : []), ...actions].slice(0, 3);
+  const visibleActions = [...(directInput ? [{ id: "set-value", label: "Set value", onClick: openInput, className: "set-value-button" } satisfies VerticalTouchFaderAction] : []), ...actions].slice(0, 3);
   return <div className={`vertical-touch-fader-stack ${visibleActions.length ? "has-actions" : ""}`}>
     {fader}
     {visibleActions.length > 0 && <div className="vertical-touch-fader-actions" style={{ "--fader-action-count": visibleActions.length } as CSSProperties}>{visibleActions.map(({ id, label: actionLabel, ...props }) => <Button type="button" {...props} key={id}>{actionLabel}</Button>)}</div>}

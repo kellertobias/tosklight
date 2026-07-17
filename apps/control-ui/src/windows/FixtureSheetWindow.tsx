@@ -32,7 +32,7 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [server.readVisualization, state.preload]);
   const ownProgrammer = server.bootstrap?.active_programmers.find(
-    (programmer) => programmer.user_id === server.session?.user.id,
+    (programmer) => programmer.session_id === server.session?.session_id,
   );
   const activeFixtureIds = activeProgrammerFixtureIds(ownProgrammer, server.groups);
   const selectedCueList = server.playbacks?.cue_lists.find((cueList) => cueList.id === cueListId);
@@ -122,7 +122,7 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
   return (
     <div className="fixture-window">
       {!compact && <WindowHeader title="Fixture Sheet" info={{ primary: `${server.selectedFixtures.length} selected`, secondary: <SourceLegend /> }} settings onSettings={(anchor) => setSettingsAnchor(anchor.getBoundingClientRect())} />}
-      <WindowScrollArea className="fixture-table"><DataTable columns={columns} rows={visible} rowKey={(fixture) => fixture.fixtureId || String(fixture.id)} selected={(fixture) => Boolean(fixture.fixtureId && server.selectedFixtures.includes(fixture.fixtureId))} activeIndex={activeRow} onActiveIndexChange={setActiveRow} onActivate={(fixture) => fixture.fixtureId && void server.setSelection([fixture.fixtureId])} /></WindowScrollArea>
+      <WindowScrollArea className="fixture-table"><DataTable columns={columns} rows={visible} rowKey={(fixture) => fixture.fixtureId || String(fixture.id)} selected={(fixture) => Boolean(fixture.fixtureId && server.selectedFixtures.includes(fixture.fixtureId))} activeIndex={activeRow} onActiveIndexChange={setActiveRow} onActivate={(fixture) => fixture.fixtureId && void server.selectionGesture({ type: "fixture", fixture_id: fixture.fixtureId })} /></WindowScrollArea>
       {groupsVisible && <GroupStrip />}
       {settingsAnchor && <WindowSettings modal={false} anchor={settingsAnchor} title="Fixture Sheet Settings" onClose={() => setSettingsAnchor(null)} tabs={[
         { id: "ordering", label: "Ordering", content: <label className="pane-option-toggle">Order fixtures <Select aria-label="Fixture sheet ordering" value={fixtureOrder} onChange={(event) => setFixtureOrder(event.target.value as FixtureOrder)}><option value="fixture-id">Fixture ID</option><option value="active">Active fixtures first</option></Select></label> },

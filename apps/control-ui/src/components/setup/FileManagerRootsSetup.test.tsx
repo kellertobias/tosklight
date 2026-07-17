@@ -19,7 +19,7 @@ const root: FileManagerRootConfiguration = {
 describe("FileManagerRootsSetup", () => {
   it("shows the backward-compatible Shows root until a custom root is added", () => {
     const onChange = vi.fn();
-    render(<FileManagerRootsSetup roots={[]} onChange={onChange} onOpen={vi.fn()} />);
+    render(<FileManagerRootsSetup roots={[]} systemPickerFallback={false} onChange={onChange} onSystemPickerFallbackChange={vi.fn()} onOpen={vi.fn()} />);
 
     expect(screen.getByText("Built-in default · Desk Shows directory · ID: shows")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Add configured root" }));
@@ -33,15 +33,16 @@ describe("FileManagerRootsSetup", () => {
 
   it("edits labels, absolute paths, icons, and removes roots without changing their stable IDs", () => {
     const onChange = vi.fn();
+    const onSystemPickerFallbackChange = vi.fn();
     const onOpen = vi.fn();
-    render(<FileManagerRootsSetup roots={[root]} onChange={onChange} onOpen={onOpen} />);
+    render(<FileManagerRootsSetup roots={[root]} systemPickerFallback={false} onChange={onChange} onSystemPickerFallbackChange={onSystemPickerFallbackChange} onOpen={onOpen} />);
     const card = screen.getByRole("article", { name: "Configured root 1" });
 
     fireEvent.change(within(card).getByLabelText(/^Label/), { target: { value: "Updated Notes" } });
     expect(onChange).toHaveBeenLastCalledWith([{ ...root, label: "Updated Notes" }]);
     fireEvent.change(within(card).getByLabelText(/^Absolute server path/), { target: { value: "D:\\Show Files" } });
     expect(onChange).toHaveBeenLastCalledWith([{ ...root, path: "D:\\Show Files" }]);
-    fireEvent.click(within(card).getByRole("button", { name: "Network" }));
+    fireEvent.click(within(card).getByRole("button", { name: /Network$/ }));
     fireEvent.click(screen.getByRole("option", { name: "Archive" }));
     expect(onChange).toHaveBeenLastCalledWith([{ ...root, icon: "archive" }]);
 
@@ -49,6 +50,8 @@ describe("FileManagerRootsSetup", () => {
     expect(onChange).toHaveBeenLastCalledWith([]);
     fireEvent.click(screen.getByRole("button", { name: "Open File Manager Workspace" }));
     expect(onOpen).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("switch", { name: "Allow Open system file picker fallback" }));
+    expect(onSystemPickerFallbackChange).toHaveBeenCalledWith(true);
   });
 
   it("validates server paths and unique stable IDs before Setup can save", () => {

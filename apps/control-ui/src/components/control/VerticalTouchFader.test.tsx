@@ -2,10 +2,14 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TouchValueButton, VerticalTouchFader } from "./VerticalTouchFader";
 
-vi.mock("../../api/ServerContext", () => ({ useServer: () => ({ bootstrap: null }) }));
+let hardwareConnected = false;
+vi.mock("../../api/ServerContext", () => ({ useServer: () => ({ bootstrap: { hardware_connected: hardwareConnected } }) }));
 vi.mock("../../state/AppContext", () => ({ useApp: () => ({ state: { midiProfile: null } }) }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  hardwareConnected = false;
+});
 
 describe("VerticalTouchFader", () => {
   it("never lets the mouse wheel control the fader", () => {
@@ -32,6 +36,19 @@ describe("VerticalTouchFader", () => {
     expect(screen.queryByRole("button", { name: "EXTRA" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "GO" }));
     expect(action).toHaveBeenCalledOnce();
+  });
+
+  it("preserves displays whose leading number is not the raw fader position", () => {
+    render(<VerticalTouchFader label="Speed Group A" value={100} display="120 BPM · MANUAL"/>);
+    expect(screen.getByText("120 BPM · MANUAL")).toBeInTheDocument();
+  });
+
+  it("keeps direct value entry reachable while hardware disables the range gesture", () => {
+    hardwareConnected = true;
+    render(<VerticalTouchFader label="Enc 1 · Dimmer" value={50} directInput/>);
+    expect(screen.getByRole("slider", { name: "Enc 1 · Dimmer" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Set value" }));
+    expect(screen.getByRole("dialog", { name: "Enc 1 · Dimmer value" })).toBeInTheDocument();
   });
 
   it("opens the compact set-value control with both a touch fader and number pad", () => {

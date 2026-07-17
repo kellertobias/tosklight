@@ -1,21 +1,34 @@
 import { useEffect, useRef, useState } from "react";
-import { FileManager, type FileManagerPickerOptions, type FileManagerSelection } from "./FileManagerWindow";
+import { useServer } from "../api/ServerContext";
+import { Button, Input } from "../components/common";
+import { extension, FileManager, type FileManagerPickerOptions, type FileManagerSelection, type FileManagerTarget } from "./FileManagerWindow";
 
 export const OPEN_FILE_MANAGER_PICKER_EVENT = "light:open-file-manager-picker";
 
 export type FileManagerPickerRequest = Omit<FileManagerPickerOptions, "onSelect" | "onCancel">;
 
+export interface SystemFilePickerSelection {
+  source: "system";
+  target: FileManagerTarget;
+  files: File[];
+  directoryName?: string;
+}
+
+export type HostedFileManagerPickerResult = FileManagerSelection[] | SystemFilePickerSelection | null;
+
 interface HostedPickerRequest extends FileManagerPickerRequest {
   onSelect: (selection: FileManagerSelection[]) => void;
+  onSystemSelect: (selection: SystemFilePickerSelection) => void;
   onCancel: () => void;
 }
 
 export function openFileManagerPicker(options: FileManagerPickerRequest) {
-  return new Promise<FileManagerSelection[] | null>((resolve) => {
+  return new Promise<HostedFileManagerPickerResult>((resolve) => {
     window.dispatchEvent(new CustomEvent<HostedPickerRequest>(OPEN_FILE_MANAGER_PICKER_EVENT, {
       detail: {
         ...options,
         onSelect: (selection) => resolve(selection),
+        onSystemSelect: (selection) => resolve(selection),
         onCancel: () => resolve(null),
       },
     }));
@@ -23,16 +36,24 @@ export function openFileManagerPicker(options: FileManagerPickerRequest) {
 }
 
 export function FileManagerPickerHost() {
+  const server = useServer();
   const [request, setRequest] = useState<HostedPickerRequest | null>(null);
+  const [systemError, setSystemError] = useState("");
   const requestRef = useRef<HostedPickerRequest | null>(null);
+  const systemInput = useRef<HTMLInputElement | null>(null);
   requestRef.current = request;
 
   useEffect(() => {
     const open = (event: Event) => {
-      const next = (event as CustomEvent<HostedPickerRequest>).detail;
+      const incoming = (event as CustomEvent<HostedPickerRequest>).detail;
+      const next = incoming && {
+        ...incoming,
+        onSystemSelect: typeof incoming.onSystemSelect === "function" ? incoming.onSystemSelect : () => incoming.onCancel(),
+      };
       if (!next || typeof next.onSelect !== "function" || typeof next.onCancel !== "function") return;
       requestRef.current?.onCancel();
       requestRef.current = next;
+      setSystemError("");
       setRequest(next);
     };
     window.addEventListener(OPEN_FILE_MANAGER_PICKER_EVENT, open);
@@ -43,6 +64,31 @@ export function FileManagerPickerHost() {
   const close = () => {
     requestRef.current = null;
     setRequest(null);
+  };
+  const target = request.target ?? "files";
+  const allowedExtensions = (request.allowedExtensions ?? []).map((value) => value.replace(/^\./, "").toLowerCase()).filter(Boolean);
+  const accept = allowedExtensions.map((value) => `.${value}`).join(",");
+  const setSystemInput = (input: HTMLInputElement | null) => {
+    systemInput.current = input;
+    if (input) {
+      if (target === "folders") input.setAttribute("webkitdirectory", "");
+      else input.removeAttribute("webkitdirectory");
+    }
+  };
+  const systemSelected = (files: File[]) => {
+    if (!files.length) return;
+    const selected = request.multiple || target === "folders" ? files : files.slice(0, 1);
+    if (target !== "folders" && allowedExtensions.length && selected.some((file) => !allowedExtensions.includes(extension(file.name)))) {
+      setSystemError(`Choose only ${allowedExtensions.map((value) => `.${value}`).join(", ")} files.`);
+      return;
+    }
+    request.onSystemSelect({
+      source: "system",
+      target,
+      files: selected,
+      ...(target === "folders" ? { directoryName: selected[0]?.webkitRelativePath.split("/")[0] || undefined } : {}),
+    });
+    close();
   };
   return <div className="file-picker-backdrop" role="dialog" aria-modal="true" aria-label="Choose files or folders">
     <div className="file-picker-surface">
@@ -60,6 +106,22 @@ export function FileManagerPickerHost() {
           },
         }}
       />
+      {server.configuration?.file_manager_system_picker_fallback && <footer className="file-picker-system-fallback">
+        <Button onClick={() => systemInput.current?.click()}>Open system file picker</Button>
+        <small>This secondary picker keeps the calling form's target, selection-count, and extension constraints.</small>
+        {systemError && <span role="alert">{systemError}</span>}
+        <Input
+          ref={setSystemInput}
+          hidden
+          type="file"
+          accept={target === "folders" ? undefined : accept || undefined}
+          multiple={Boolean(request.multiple) || target === "folders"}
+          onChange={(event) => {
+            systemSelected(Array.from(event.target.files ?? []));
+            event.target.value = "";
+          }}
+        />
+      </footer>}
     </div>
   </div>;
 }

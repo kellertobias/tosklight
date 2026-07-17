@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FileEntry, TextDocument } from "../api/types";
 import { requestPaneRemoval } from "../components/shell/paneRemovalGuard";
@@ -7,6 +7,7 @@ import { textFileLocationChange } from "./textFileSync";
 
 const mocks = vi.hoisted(() => ({
   dispatch: vi.fn(),
+  openPicker: vi.fn(),
   state: {
     desks: [
       {
@@ -16,6 +17,8 @@ const mocks = vi.hoisted(() => ({
             id: "editor",
             textFileRoot: "shows",
             textFilePath: "notes.txt",
+            textEditorReadOnly: false,
+            textEditorMode: "plain" as "plain" | "markdown" | "split",
           },
         ],
       },
@@ -36,6 +39,8 @@ vi.mock("../api/ServerContext", () => ({
 vi.mock("../state/AppContext", () => ({
   useApp: () => ({ state: mocks.state, dispatch: mocks.dispatch }),
 }));
+
+vi.mock("./FileManagerPickerHost", () => ({ openFileManagerPicker: mocks.openPicker }));
 
 const entry = (path: string, kind: "file" | "folder" = "file", writable = true): FileEntry => ({
   name: path.split("/").pop()!,
@@ -61,6 +66,9 @@ describe("TextEditorWindow", () => {
     mocks.dispatch.mockReset();
     mocks.state.desks[0].panes[0].textFileRoot = "shows";
     mocks.state.desks[0].panes[0].textFilePath = "notes.txt";
+    mocks.state.desks[0].panes[0].textEditorReadOnly = false;
+    mocks.state.desks[0].panes[0].textEditorMode = "plain";
+    mocks.openPicker.mockReset().mockResolvedValue(null);
     mocks.server.fileRoots.mockReset().mockResolvedValue([
       { id: "shows", label: "Shows", icon: "shows", removable: false, writable: true },
     ]);
@@ -115,6 +123,56 @@ describe("TextEditorWindow", () => {
     expect(screen.getByText("Read-only", { selector: ".text-save-state" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Save$/ })).toBeDisabled();
     expect(screen.getByText(/contents can be copied with Save As/i)).toBeInTheDocument();
+  });
+
+  it("opens files through the root-confined ToskLight picker", async () => {
+    mocks.openPicker.mockResolvedValue([{ rootId: "shows", entry: entry("run/cues.md") }]);
+    render(<TextEditorWindow paneId="editor" />);
+    await waitFor(() => expect(screen.getByLabelText("File text")).toHaveValue("House open"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Open File" }));
+
+    await waitFor(() => expect(mocks.openPicker).toHaveBeenCalledWith({
+      target: "files",
+      multiple: false,
+      allowedExtensions: ["txt", "md", "csv", "log"],
+      initialRootId: "shows",
+      initialDirectory: "",
+    }));
+    expect(mocks.dispatch).toHaveBeenCalledWith({
+      type: "SET_TEXT_EDITOR_FILE",
+      id: "editor",
+      root: "shows",
+      path: "run/cues.md",
+    });
+  });
+
+  it("enforces pane-level read-only operation even for a writable file", async () => {
+    mocks.state.desks[0].panes[0].textEditorReadOnly = true;
+    render(<TextEditorWindow paneId="editor" />);
+
+    const editor = await screen.findByLabelText("File text");
+    await waitFor(() => expect(editor).toHaveValue("House open"));
+    expect(editor).toHaveAttribute("readonly");
+    expect(screen.getByText("Read-only", { selector: ".text-save-state" })).toBeVisible();
+    expect(screen.getByText(/pane is configured read-only/i)).toBeVisible();
+    expect(screen.getByRole("button", { name: /^Save$/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save As" })).toBeDisabled();
+  });
+
+  it("renders Markdown-only and two-column Edit + Markdown views from the same authoritative text", async () => {
+    mocks.state.desks[0].panes[0].textEditorMode = "markdown";
+    mocks.server.readTextFile.mockResolvedValue(document("# Running Order\n\n- House open"));
+    const view = render(<TextEditorWindow paneId="editor" />);
+
+    const rendered = await screen.findByRole("article", { name: "Rendered Markdown" });
+    expect(within(rendered).getByRole("heading", { name: "Running Order" })).toBeVisible();
+    expect(screen.queryByLabelText("File text")).not.toBeInTheDocument();
+
+    mocks.state.desks[0].panes[0].textEditorMode = "split";
+    view.rerender(<TextEditorWindow paneId="editor" />);
+    expect(screen.getByLabelText("File text")).toHaveValue("# Running Order\n\n- House open");
+    expect(screen.getByRole("article", { name: "Rendered Markdown" })).toBeVisible();
   });
 
   it("reflects a clean save from another Text Editor window", async () => {
@@ -182,7 +240,7 @@ describe("TextEditorWindow", () => {
     await waitFor(() => expect(editor).toHaveValue("House open"));
     fireEvent.change(editor, { target: { value: "House open\nBeginners" } });
 
-    fireEvent.click(screen.getByRole("button", { name: "Create file copy" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save As" }));
 
     await waitFor(() => expect(mocks.server.saveTextFile).toHaveBeenCalledWith(
       "shows",

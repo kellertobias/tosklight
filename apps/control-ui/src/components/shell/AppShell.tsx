@@ -14,6 +14,7 @@ import { ScreenWindowManager } from "./ScreenWindowManager";
 import { NativeDragStrip } from "./NativeDragStrip";
 import { SectionNameMap } from "./SectionNameMap";
 import { DebugModal } from "../modals/DebugModal";
+import { CommandChoiceModal } from "../modals/CommandChoiceModal";
 
 export function AppShell() {
   return <div className="app-shell">
@@ -31,6 +32,7 @@ export function AppShell() {
     <SystemControlsModal />
     <PreloadStoreModal />
     <StoreSettingsModal />
+    <CommandChoiceModal />
     <ConnectionState />
     <ShowRecoveryModal />
   </div>;

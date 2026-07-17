@@ -1,10 +1,10 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { groups as fallbackGroups } from "../data/mockData";
 import type { WindowProps } from "./windowTypes";
 import { useServer } from "../api/ServerContext";
 import type { StoredGroup, VersionedObject } from "../api/types";
 import { useApp } from "../state/AppContext";
-import { Button, Input } from "../components/common";
+import { Button, ColorPickerField, FormLayout, IconPickerField, Input, TextField } from "../components/common";
 import { ButtonGrid, WindowHeader, WindowScrollArea } from "../components/window-kit";
 import { RecordModeDialog, type RecordMode } from "../components/shared/RecordModeDialog";
 
@@ -13,6 +13,7 @@ export function GroupsWindow({ compact }: WindowProps) {
   const { state, dispatch } = useApp();
   const [contextGroup, setContextGroup] = useState<string | null>(null);
   const [recordGroup, setRecordGroup] = useState<string | null>(null);
+  const [propertiesGroup, setPropertiesGroup] = useState<string | null>(null);
   const hold = useRef<number | null>(null);
   const fallback = (
     server.bootstrap
@@ -50,9 +51,12 @@ export function GroupsWindow({ compact }: WindowProps) {
   const fixtureNames = new Map<string, string>();
   const capabilities = new Map<string, Set<string>>();
   for (const fixture of server.patch?.fixtures ?? []) {
+    const fixtureLabel = fixture.fixture_number != null
+      ? `Fixture ${fixture.fixture_number}`
+      : (fixture.name || fixture.definition.name || fixture.fixture_id);
     fixtureNames.set(
       fixture.fixture_id,
-      `${fixture.definition.manufacturer} ${fixture.definition.model}`,
+      `${fixtureLabel} · ${fixture.definition.manufacturer} ${fixture.definition.model}`,
     );
     for (const head of fixture.definition.heads ?? []) {
       const owner = head.shared
@@ -76,23 +80,32 @@ export function GroupsWindow({ compact }: WindowProps) {
   }
   const contextual = stored.find((group) => group.id === contextGroup);
   const recordTarget = stored.find((group) => group.id === recordGroup);
+  const propertiesTarget = stored.find((group) => group.id === propertiesGroup);
+  useEffect(() => {
+    const openRequestedGroup = (event: Event) => {
+      const id = (event as CustomEvent<string>).detail;
+      if (stored.some((group) => group.id === id)) setPropertiesGroup(id);
+    };
+    window.addEventListener("light:group-configuration", openRequestedGroup);
+    return () => window.removeEventListener("light:group-configuration", openRequestedGroup);
+  }, [stored]);
   const cancelRecording = () => {
     setRecordGroup(null);
     dispatch({ type: "SET_STORE_ARMED", value: false });
   };
-  const recordExistingGroup = (mode: RecordMode) => {
+  const recordExistingGroup = async (mode: RecordMode) => {
     if (!recordTarget) return cancelRecording();
-    void recordGroupCommand(recordTarget.id, mode);
+    await recordGroupCommand(recordTarget.id, mode);
     setRecordGroup(null);
     dispatch({ type: "SET_STORE_ARMED", value: false });
   };
-  const runCommand = (command: string, refresh = false) => {
-    void server.executeCommandLine(command).then((ok) => {
-      if (ok && refresh) void server.refresh();
-    });
+  const runCommand = async (command: string, refresh = false) => {
+    const ok = await server.executeCommandLine(command);
+    if (ok && refresh) await server.refresh();
+    return ok;
   };
   const recordGroupCommand = (id: string, mode: RecordMode = "overwrite") => {
-    runCommand(mode === "merge" ? `RECORD + GROUP ${id}` : `RECORD GROUP ${id}`, true);
+    return runCommand(mode === "merge" ? `RECORD + GROUP ${id}` : `RECORD GROUP ${id}`, true);
   };
   const cancelHold = () => {
     if (hold.current) window.clearTimeout(hold.current);
@@ -121,20 +134,28 @@ export function GroupsWindow({ compact }: WindowProps) {
             }}
             cancelHold={cancelHold}
             openContext={() => group && setContextGroup(group.id)}
+            dereference={() => group && runCommand(`DEGRP ${group.id}`)}
             select={() => {
-              if (group && !state.storeArmed) return runCommand(`GROUP ${group.id}`);
+              if (group && /^SET\b/i.test(server.commandLine.trim())) {
+                setPropertiesGroup(group.id);
+                server.resetCommandLine();
+                return;
+              }
+              if (group && !state.storeArmed) return void server.selectionGesture({ type: "live_group", group_id: group.id });
               if (group && state.storeArmed) {
                 if (!group.body.fixtures.length) {
-                  recordGroupCommand(group.id);
-                  dispatch({ type: "SET_STORE_ARMED", value: false });
+                  void recordGroupCommand(group.id).finally(() =>
+                    dispatch({ type: "SET_STORE_ARMED", value: false }),
+                  );
                 } else {
                   setRecordGroup(group.id);
                 }
                 return;
               }
               if (!state.storeArmed) return;
-              recordGroupCommand(String(index + 1));
-              dispatch({ type: "SET_STORE_ARMED", value: false });
+              void recordGroupCommand(String(index + 1)).finally(() =>
+                dispatch({ type: "SET_STORE_ARMED", value: false }),
+              );
             }}
           />
         ))}
@@ -226,6 +247,16 @@ export function GroupsWindow({ compact }: WindowProps) {
           onCancel={cancelRecording}
         />
       )}
+      {propertiesTarget && (
+        <GroupPropertiesDialog
+          key={`${propertiesTarget.id}:${propertiesTarget.revision}`}
+          group={propertiesTarget}
+          onClose={() => setPropertiesGroup(null)}
+          onSave={async (update) => {
+            if (await server.updateGroup(propertiesTarget.id, update)) setPropertiesGroup(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -240,6 +271,7 @@ function GroupCard({
   beginHold,
   cancelHold,
   openContext,
+  dereference,
   select,
 }: {
   group: VersionedObject<StoredGroup> | null;
@@ -251,6 +283,7 @@ function GroupCard({
   beginHold: () => void;
   cancelHold: () => void;
   openContext: () => void;
+  dereference: () => void;
   select: () => void;
 }) {
   const missing =
@@ -269,6 +302,7 @@ function GroupCard({
     ) ?? 0;
   return <Button
         className={`group-card pool-cell ${group?.body.derived_from ? "derived" : ""} ${group?.body.frozen_from ? "frozen" : ""} ${selected ? "selected" : !group || !group.body.fixtures.length ? "empty" : ""} ${storeArmed && !group ? "store-target" : ""}`}
+        style={group?.body.color ? { borderColor: group.body.color } : undefined}
         onPointerDown={beginHold}
         onPointerUp={cancelHold}
         onPointerCancel={cancelHold}
@@ -276,6 +310,7 @@ function GroupCard({
           event.preventDefault();
           openContext();
         }}
+        onDoubleClick={dereference}
         onClick={select}
       >
         <span className="number">{index + 1}</span>
@@ -298,6 +333,14 @@ function GroupCard({
             {group.body.frozen_from && (
               <em>Frozen · rev {group.body.frozen_from.source_revision}</em>
             )}
+            {group.body.color && (
+              <span
+                className="group-color"
+                aria-label={`Color ${group.body.color}`}
+                style={{ background: group.body.color }}
+              />
+            )}
+            {group.body.icon && <span className="group-icon" aria-label={`Icon ${group.body.icon}`}>{group.body.icon}</span>}
           </>
         ) : (
           <>
@@ -306,4 +349,36 @@ function GroupCard({
           </>
         )}
       </Button>;
+}
+
+function GroupPropertiesDialog({ group, onClose, onSave }: {
+  group: VersionedObject<StoredGroup>;
+  onClose: () => void;
+  onSave: (update: Pick<StoredGroup, "name" | "color" | "icon">) => Promise<void>;
+}) {
+  const [name, setName] = useState(group.body.name ?? `Group ${group.id}`);
+  const [color, setColor] = useState(group.body.color ?? "#718596");
+  const [icon, setIcon] = useState(group.body.icon ?? "◇");
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    if (!name.trim() || saving) return;
+    setSaving(true);
+    await onSave({ name: name.trim(), color, icon });
+    setSaving(false);
+  };
+  return <div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
+    <section className="nested-modal group-properties-modal" role="dialog" aria-modal="true" aria-label="Group properties">
+      <Button className="modal-close" onClick={onClose}>×</Button>
+      <h3>Group {group.id} properties</h3>
+      <FormLayout labelPlacement="side">
+        <TextField label="Group name" clearable autoFocus value={name} onChange={(event) => setName(event.target.value)}/>
+        <ColorPickerField label="Color" value={color} onChange={setColor}/>
+        <IconPickerField label="Icon" value={icon} onChange={setIcon}/>
+      </FormLayout>
+      <footer>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="primary" disabled={!name.trim() || saving} onClick={() => void save()}>{saving ? "Saving…" : "Save group"}</Button>
+      </footer>
+    </section>
+  </div>;
 }

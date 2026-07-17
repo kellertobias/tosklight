@@ -8,10 +8,13 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { useServer } from "../api/ServerContext";
 import type { FileConflictChoice, FileDirectory, FileEntry, FileNativeNote, FileOperationResult, FileRoot, TextDocument } from "../api/types";
 import { Button, CheckboxField, TextArea, TextInput } from "../components/common";
 import { registerPaneRemovalGuard } from "../components/shell/paneRemovalGuard";
+import { usePaneChromeTargets } from "../components/shell/PaneChromeContext";
+import { useOptionalApp } from "../state/AppContext";
 import "./FileManagerWindow.css";
 import {
   publishTextFileOperation,
@@ -29,7 +32,7 @@ const imageExtensions = new Set(["png", "jpg", "jpeg", "gif", "webp"]);
 const audioExtensions = new Set(["mp3", "wav"]);
 
 type FileManagerOperationKind = "rename" | "copy" | "move" | "delete";
-type FileManagerTarget = "files" | "folders" | "either";
+export type FileManagerTarget = "files" | "folders" | "either";
 
 export interface FileManagerSelection {
   rootId: string;
@@ -42,6 +45,9 @@ export interface FileManagerPickerOptions {
   allowedExtensions?: string[];
   initialRootId?: string;
   initialDirectory?: string;
+  selectLabel?: string;
+  cancelLabel?: string;
+  hideCancel?: boolean;
   onSelect: (selection: FileManagerSelection[]) => void;
   onCancel: () => void;
 }
@@ -67,6 +73,12 @@ interface FileOperationState {
 interface ConflictState {
   operation: FileOperationState;
   applyToAll: boolean;
+}
+
+type FileHeaderMenuKind = "edit" | "create" | "view";
+interface FileHeaderMenu {
+  kind: FileHeaderMenuKind;
+  anchor: DOMRect;
 }
 
 let pendingDeskAction: FileManagerOperationKind | null = null;
@@ -217,6 +229,13 @@ export function FileManagerWindow({ paneId }: WindowProps) {
 
 export function FileManager({ picker, instanceId: suppliedInstanceId, paneId }: FileManagerProps) {
   const server = useServer();
+  const serverRef = useRef(server);
+  serverRef.current = server;
+  const fileRoots = server.fileRoots;
+  const fileEntries = server.fileEntries;
+  const app = useOptionalApp();
+  const paneChrome = usePaneChromeTargets();
+  const pane = app?.state.desks.flatMap((desk) => desk.panes).find((candidate) => candidate.id === paneId);
   const generatedId = useId();
   const instanceId = useRef(suppliedInstanceId ?? `file-manager-${generatedId.replaceAll(":", "")}`).current;
   const [roots, setRoots] = useState<FileRoot[]>([]);
@@ -225,9 +244,11 @@ export function FileManager({ picker, instanceId: suppliedInstanceId, paneId }: 
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [selected, setSelected] = useState<FileManagerSelection[]>([]);
   const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
-  const [hidden, setHidden] = useState(false);
+  const [localHidden, setLocalHidden] = useState(false);
   const [view, setView] = useState<"list" | "grid">("list");
   const [sidePanel, setSidePanel] = useState<"none" | "navigation" | "info">("none");
+  const [propertiesVisible, setPropertiesVisible] = useState(true);
+  const [headerMenu, setHeaderMenu] = useState<FileHeaderMenu | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [previewUrl, setPreviewUrl] = useState("");
@@ -251,6 +272,11 @@ export function FileManager({ picker, instanceId: suppliedInstanceId, paneId }: 
   const rootId = current?.rootId ?? "";
   const currentPath = current?.path ?? "";
   const currentRoot = roots.find((root) => root.id === rootId) ?? null;
+  const hidden = paneId ? Boolean(pane?.fileManagerShowHidden) : localHidden;
+  const setHidden = (value: boolean) => {
+    if (paneId && app) app.dispatch({ type: "SET_FILE_MANAGER_SHOW_HIDDEN", id: paneId, value });
+    else setLocalHidden(value);
+  };
 
   function hasUnsavedEditorText() {
     return Boolean(editorRef.current && editorTextRef.current !== editorRef.current.text);
@@ -283,7 +309,7 @@ export function FileManager({ picker, instanceId: suppliedInstanceId, paneId }: 
 
   const loadRoots = useCallback(async () => {
     try {
-      const items = await server.fileRoots();
+      const items = await fileRoots();
       setRoots(items);
       if (!initialized.current && items.length) {
         initialized.current = true;
@@ -295,7 +321,7 @@ export function FileManager({ picker, instanceId: suppliedInstanceId, paneId }: 
     } catch (error) {
       setMessage(`Locations unavailable: ${String(error)}`);
     }
-  }, [picker?.initialDirectory, picker?.initialRootId, server]);
+  }, [fileRoots, picker?.initialDirectory, picker?.initialRootId]);
 
   useEffect(() => {
     void loadRoots();
@@ -316,13 +342,14 @@ export function FileManager({ picker, instanceId: suppliedInstanceId, paneId }: 
   const refresh = useCallback(async () => {
     if (!rootId) return;
     try {
-      const next = await server.fileEntries(rootId, currentPath, hidden);
+      const next = await fileEntries(rootId, currentPath, hidden);
       setListing({ ...next, entries: sortFileEntries(next.entries) });
+      setMessage((value) => value.startsWith("Could not open this location:") ? "" : value);
     } catch (error) {
       setListing(null);
       setMessage(`Could not open this location: ${String(error)}`);
     }
-  }, [currentPath, hidden, rootId, server]);
+  }, [currentPath, fileEntries, hidden, rootId]);
 
   useEffect(() => {
     void refresh();
@@ -333,6 +360,10 @@ export function FileManager({ picker, instanceId: suppliedInstanceId, paneId }: 
     setTreeExpanded(new Set());
   }, [hidden]);
 
+  const previewSelection = selected.length === 1 && selected[0].entry.kind === "file"
+    ? { rootId: selected[0].rootId, path: selected[0].entry.path, name: selected[0].entry.name }
+    : null;
+
   useEffect(() => {
     let cancelled = false;
     let allocated = "";
@@ -340,17 +371,16 @@ export function FileManager({ picker, instanceId: suppliedInstanceId, paneId }: 
       releaseObjectUrl(value);
       return "";
     });
-    const file = selected.length === 1 ? selected[0] : null;
-    if (!file || file.entry.kind !== "file") return;
-    if (!imageExtensions.has(extension(file.entry.name)) && !audioExtensions.has(extension(file.entry.name))) return;
-    if (audioExtensions.has(extension(file.entry.name))) {
-      void server.fileStreamUrl(file.rootId, file.entry.path)
+    if (!previewSelection) return;
+    if (!imageExtensions.has(extension(previewSelection.name)) && !audioExtensions.has(extension(previewSelection.name))) return;
+    if (audioExtensions.has(extension(previewSelection.name))) {
+      void serverRef.current.fileStreamUrl(previewSelection.rootId, previewSelection.path)
         .then((url) => {
           if (!cancelled) setPreviewUrl(url);
         })
         .catch((error) => setMessage(`Preview unavailable: ${String(error)}`));
     } else {
-      void server.fileThumbnail(file.rootId, file.entry.path)
+      void serverRef.current.fileThumbnail(previewSelection.rootId, previewSelection.path)
         .then((blob) => {
           allocated = safeObjectUrl(blob);
           if (cancelled) releaseObjectUrl(allocated);
@@ -362,15 +392,18 @@ export function FileManager({ picker, instanceId: suppliedInstanceId, paneId }: 
       cancelled = true;
       releaseObjectUrl(allocated);
     };
-  }, [selected, server]);
+  }, [previewSelection?.name, previewSelection?.path, previewSelection?.rootId]);
+
+  const noteSelection = selected.length === 1 && selected[0].entry.note_supported
+    ? { rootId: selected[0].rootId, path: selected[0].entry.path }
+    : null;
 
   useEffect(() => {
     let cancelled = false;
     setNativeNote(null);
     setNoteDraft("");
-    const item = selected.length === 1 ? selected[0] : null;
-    if (!item?.entry.note_supported) return;
-    void server.readFileNote(item.rootId, item.entry.path).then((note) => {
+    if (!noteSelection) return;
+    void serverRef.current.readFileNote(noteSelection.rootId, noteSelection.path).then((note) => {
       if (cancelled) return;
       setNativeNote(note);
       setNoteDraft(note.note ?? "");
@@ -378,7 +411,7 @@ export function FileManager({ picker, instanceId: suppliedInstanceId, paneId }: 
       if (!cancelled) setMessage(`Notes unavailable: ${String(error)}`);
     });
     return () => { cancelled = true; };
-  }, [selected, server]);
+  }, [noteSelection?.path, noteSelection?.rootId]);
 
   useEffect(() => {
     if (!paneId) return;
@@ -444,7 +477,7 @@ export function FileManager({ picker, instanceId: suppliedInstanceId, paneId }: 
       if (checking) return;
       checking = true;
       try {
-        const next = await server.readTextFile(editor.root_id, editor.path);
+        const next = await serverRef.current.readTextFile(editor.root_id, editor.path);
         if (!cancelled) surfaceTextRevision(next, "Another editor or external program");
       } catch (error) {
         if (!cancelled && isMissingFileError(error)) {
@@ -460,14 +493,14 @@ export function FileManager({ picker, instanceId: suppliedInstanceId, paneId }: 
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [editor?.path, editor?.root_id, server, surfaceTextRevision]);
+  }, [editor?.path, editor?.root_id, surfaceTextRevision]);
 
   useEffect(() => () => {
     if (claimedInputOwner === instanceId) {
       claimedInputOwner = null;
-      void server.releaseFileInput(instanceId).catch(() => undefined);
+      void serverRef.current.releaseFileInput(instanceId).catch(() => undefined);
     }
-  }, [instanceId, server]);
+  }, [instanceId]);
 
   useEffect(() => {
     const routeDeskAction = (event: Event) => {
@@ -511,12 +544,12 @@ export function FileManager({ picker, instanceId: suppliedInstanceId, paneId }: 
   useEffect(() => {
     if (!operation || claimedInputOwner !== instanceId) return;
     const timer = window.setInterval(() => {
-      void server.claimFileInput(instanceId, operation.kind, "toolbar").catch(() => {
+      void serverRef.current.claimFileInput(instanceId, operation.kind, "toolbar").catch(() => {
         cancelOperation("The server released this File Manager input context.");
       });
     }, 30_000);
     return () => window.clearInterval(timer);
-  }, [instanceId, operation?.kind, server]);
+  }, [instanceId, operation?.kind]);
 
   useEffect(() => {
     if (server.status === "connected" || !operationRef.current) return;
@@ -835,7 +868,7 @@ export function FileManager({ picker, instanceId: suppliedInstanceId, paneId }: 
       await finishSuccessfulOperation(activeOperation);
     } catch (error) {
       const reason = String(error);
-      if (/409|already exists|conflict/i.test(reason) && activeOperation.kind !== "delete") setConflict({ operation: activeOperation, applyToAll: false });
+      if (/409|already exist|conflict/i.test(reason) && activeOperation.kind !== "delete") setConflict({ operation: activeOperation, applyToAll: false });
       else setMessage(`File operation failed: ${reason}`);
     } finally {
       setBusy(false);
@@ -937,26 +970,69 @@ export function FileManager({ picker, instanceId: suppliedInstanceId, paneId }: 
   const trashForOperation = Boolean(operation?.kind === "delete" && operation.sources.length && operation.sources.every((source) => source.entry.trash_supported));
   const sourceKeys = new Set(operation?.sources.map(selectionKey) ?? []);
   const selectedKeys = new Set(selected.map(selectionKey));
+  const headerPath = `${currentRoot?.label ?? "Location"}: /${currentPath}`;
+  const openHeaderMenu = (kind: FileHeaderMenuKind, event: ReactMouseEvent<HTMLButtonElement>) => {
+    const anchor = event.currentTarget.getBoundingClientRect();
+    setHeaderMenu((current) => current?.kind === kind ? null : { kind, anchor });
+  };
+  const closeHeaderMenu = () => setHeaderMenu(null);
+  const menuAction = (action: () => void | Promise<void>) => {
+    closeHeaderMenu();
+    void action();
+  };
 
   return <section
-    className={`file-manager fm-${view} fm-${sidePanel}-open`}
+    className={`file-manager fm-${view} fm-${sidePanel}-open ${propertiesVisible ? "fm-properties-visible" : "fm-properties-hidden"}`}
     aria-label={picker ? "File picker" : "File Manager"}
     data-file-manager-instance={instanceId}
     onPointerDownCapture={claimPendingAction}
   >
-    <div className="file-toolbar">
+    {paneChrome?.info && createPortal(<span className="file-manager-header-path" title={headerPath}>{headerPath}</span>, paneChrome.info)}
+    {paneChrome?.toolbar && createPortal(<div className="file-manager-header-actions">
+      {!picker && <>
+        <Button aria-haspopup="menu" aria-expanded={headerMenu?.kind === "edit"} onClick={(event) => openHeaderMenu("edit", event)}>Edit</Button>
+        <Button aria-haspopup="menu" aria-expanded={headerMenu?.kind === "create"} onClick={(event) => openHeaderMenu("create", event)}>Create</Button>
+      </>}
+      <Button aria-haspopup="menu" aria-expanded={headerMenu?.kind === "view"} onClick={(event) => openHeaderMenu("view", event)}>View</Button>
       <Button aria-label="Back" disabled={historyIndex <= 0} onClick={() => { setHistoryIndex((value) => value - 1); setSelected([]); }}>←</Button>
       <Button aria-label="Forward" disabled={historyIndex < 0 || historyIndex >= history.length - 1} onClick={() => { setHistoryIndex((value) => value + 1); setSelected([]); }}>→</Button>
+    </div>, paneChrome.toolbar)}
+    {headerMenu && createPortal(<div className="file-header-menu-layer" onPointerDown={(event) => event.target === event.currentTarget && closeHeaderMenu()}>
+      <div className="file-header-menu" role="menu" aria-label={`${headerMenu.kind[0].toUpperCase()}${headerMenu.kind.slice(1)} menu`} style={{ top: headerMenu.anchor.bottom + 3, left: Math.max(3, Math.min(headerMenu.anchor.left, window.innerWidth - 210)) }}>
+        {headerMenu.kind === "edit" && <>
+          <Button role="menuitem" disabled={selected.length !== 1} onClick={() => menuAction(() => beginOperation("rename"))}>Rename</Button>
+          <Button role="menuitem" disabled={!selected.length} onClick={() => menuAction(() => beginOperation("copy"))}>Copy</Button>
+          <Button role="menuitem" disabled={!selected.length} onClick={() => menuAction(() => beginOperation("move"))}>Move</Button>
+          <Button role="menuitem" disabled={!selected.length} onClick={() => menuAction(() => beginOperation("delete"))}>Delete</Button>
+        </>}
+        {headerMenu.kind === "create" && <>
+          <Button role="menuitem" onClick={() => menuAction(() => create(false))}>New File</Button>
+          <Button role="menuitem" onClick={() => menuAction(() => create(true))}>New Folder</Button>
+        </>}
+        {headerMenu.kind === "view" && <>
+          <Button role="menuitem" active={view === "list"} onClick={() => menuAction(() => setView("list"))}>List</Button>
+          <Button role="menuitem" active={view === "grid"} onClick={() => menuAction(() => setView("grid"))}>Grid</Button>
+          <Button role="menuitem" active={propertiesVisible} onClick={() => menuAction(() => { setPropertiesVisible((value) => !value); setSidePanel("none"); })}>{propertiesVisible ? "Hide Properties" : "Show Properties"}</Button>
+        </>}
+      </div>
+    </div>, document.body)}
+    <div className="file-toolbar">
+      {!paneChrome && <>
+        <Button aria-label="Back" disabled={historyIndex <= 0} onClick={() => { setHistoryIndex((value) => value - 1); setSelected([]); }}>←</Button>
+        <Button aria-label="Forward" disabled={historyIndex < 0 || historyIndex >= history.length - 1} onClick={() => { setHistoryIndex((value) => value + 1); setSelected([]); }}>→</Button>
+      </>}
       <Button className="file-navigation-toggle" active={sidePanel === "navigation"} onClick={() => setSidePanel((value) => value === "navigation" ? "none" : "navigation")}>Navigation</Button>
       <nav aria-label="Breadcrumb">
         <Button variant="ghost" onClick={() => rootId && navigate({ rootId, path: "" })}>{currentRoot?.label ?? "Location"}</Button>
         {breadcrumbs.map((part, index) => <Button variant="ghost" key={`${part}-${index}`} onClick={() => navigate({ rootId, path: breadcrumbs.slice(0, index + 1).join("/") })}>/ {part}</Button>)}
       </nav>
-      <Button aria-label="List view" active={view === "list"} onClick={() => setView("list")}>List</Button>
-      <Button aria-label="Grid view" active={view === "grid"} onClick={() => setView("grid")}>Grid</Button>
-      <Button aria-label="Show hidden files" active={hidden} onClick={() => setHidden((value) => !value)}>Hidden</Button>
-      <Button className="file-info-toggle" active={sidePanel === "info"} onClick={() => setSidePanel((value) => value === "info" ? "none" : "info")}>Info</Button>
-      {!picker && !operation && <>
+      {!paneChrome && <>
+        <Button aria-label="List view" active={view === "list"} onClick={() => setView("list")}>List</Button>
+        <Button aria-label="Grid view" active={view === "grid"} onClick={() => setView("grid")}>Grid</Button>
+      </>}
+      {!paneId && <Button aria-label="Show hidden files" active={hidden} onClick={() => setHidden(!hidden)}>Hidden</Button>}
+      <Button className="file-info-toggle" active={sidePanel === "info"} onClick={() => { setPropertiesVisible(true); setSidePanel((value) => value === "info" ? "none" : "info"); }}>Info</Button>
+      {!paneChrome && !picker && !operation && <>
         <Button onClick={() => void create(false)}>New File</Button>
         <Button onClick={() => void create(true)}>New Folder</Button>
         <Button disabled={selected.length !== 1} onClick={() => beginOperation("rename")}>Rename</Button>
@@ -971,8 +1047,8 @@ export function FileManager({ picker, instanceId: suppliedInstanceId, paneId }: 
         <Button disabled={busy} onClick={() => cancelOperation()}>Cancel</Button>
       </div>}
       {picker && <div className="file-picker-actions">
-        <Button variant="primary" disabled={!pickerValid} onClick={() => pickerValid && picker.onSelect(selected)}>Select</Button>
-        <Button onClick={picker.onCancel}>Cancel</Button>
+        <Button variant="primary" disabled={!pickerValid} onClick={() => pickerValid && picker.onSelect(selected)}>{picker.selectLabel ?? "Select"}</Button>
+        {!picker.hideCancel && <Button onClick={picker.onCancel}>{picker.cancelLabel ?? "Cancel"}</Button>}
       </div>}
     </div>
     {(message || busy || operation) && <div className={`file-message ${busy ? "is-busy" : ""}`} role="status">

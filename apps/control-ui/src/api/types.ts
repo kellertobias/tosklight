@@ -161,9 +161,29 @@ export interface ProgrammerState {
   command_line: string;
   connected: boolean;
   blind: boolean;
+  preload_capture_programmer?: boolean;
   preview: boolean;
   highlight: boolean;
   values: unknown[];
+  preload_pending?: Array<{
+    fixture_id: string;
+    attribute: string;
+    value: unknown;
+    changed_at: string;
+    fade_millis?: number;
+    delay_millis?: number;
+  }>;
+  preload_active?: unknown[];
+  preload_group_pending?: Record<
+    string,
+    Record<string, { value: unknown; changed_at: string; fade_millis?: number; delay_millis?: number }>
+  >;
+  preload_group_active?: Record<string, Record<string, unknown>>;
+  preload_playback_pending?: Array<{
+    playback_number: number;
+    action: "toggle" | "go" | "go-minus" | "off" | "on" | "temp-on" | "temp-off";
+    surface: "physical" | "virtual" | string;
+  }>;
   group_values?: Record<
     string,
     Record<
@@ -337,16 +357,18 @@ export interface MediaServerFixture {
   };
 }
 
+export interface OutputRoute {
+  protocol: "art_net" | "sacn";
+  logical_universe: number;
+  destination_universe: number;
+  destination: string | null;
+  enabled: boolean;
+}
+
 export interface PatchSnapshot {
   revision: number;
   fixtures: PatchedFixture[];
-  routes: Array<{
-    protocol: "art_net" | "sacn";
-    logical_universe: number;
-    destination_universe: number;
-    destination: string | null;
-    enabled: boolean;
-  }>;
+  routes: OutputRoute[];
 }
 
 export interface PatchLayer {
@@ -357,6 +379,7 @@ export interface PatchLayer {
 
 export interface Cue {
   id?: string;
+  cue_only?: boolean;
   number: number;
   name: string;
   fade_millis: number;
@@ -366,6 +389,7 @@ export interface Cue {
     fixture_id: string;
     attribute: string;
     value: AttributeValue | null;
+    automatic_restore?: boolean;
     fade_millis?: number;
     delay_millis?: number;
   }>;
@@ -373,6 +397,7 @@ export interface Cue {
     group_id: string;
     attribute: string;
     value: AttributeValue | null;
+    automatic_restore?: boolean;
     fade_millis?: number;
     delay_millis?: number;
   }>;
@@ -424,7 +449,16 @@ export interface PlaybackSnapshot {
     paused: boolean;
     activated_at?: string;
     master: number;
+    fader_position?: number;
+    fader_pickup_required?: boolean;
     flash: boolean;
+    transition_timing_bypassed?: boolean;
+    manual_xfade_position?: number;
+    manual_xfade_direction?: "towards_high" | "towards_low";
+    manual_xfade_progress?: number;
+    temporary_active?: boolean;
+    temporary_master?: number;
+    swap_active?: boolean;
     enabled?: boolean;
     current_cue_number?: number | null;
     loaded_cue_number?: number | null;
@@ -435,26 +469,51 @@ export interface PlaybackSnapshot {
   desk: ControlDesk;
   active_page: number;
   selected_playback?: number | null;
+  authoritative_controls?: {
+    speed_groups: SpeedSnapshot[];
+    groups: Array<{ id: string; master: number; flash_level: number }>;
+    grand_master: { level: number; blackout: boolean; flash_active: boolean; dynamics_paused: boolean };
+    programmer_fade_millis: number;
+    cue_fade_millis: number;
+  };
 }
 
-export type PlaybackButtonAction = "on" | "off" | "toggle" | "go" | "go_minus" | "fast_forward" | "fast_rewind" | "flash" | "temp" | "swap" | "select" | "select_contents" | "learn" | "double" | "half" | "pause" | "blackout" | "pause_dynamics" | "none";
+export type PlaybackButtonAction = "on" | "off" | "toggle" | "go" | "go_minus" | "fast_forward" | "fast_rewind" | "flash" | "temp" | "swap" | "select" | "select_contents" | "select_dereferenced" | "learn" | "double" | "half" | "pause" | "blackout" | "pause_dynamics" | "none";
 export interface PlaybackDefinition {
   number: number;
   name: string;
   target: { type: "cue_list"; cue_list_id: string } | { type: "group"; group_id: string } | { type: "speed_group"; group: string } | { type: "programmer_fade" } | { type: "cue_fade" } | { type: "grand_master" };
   buttons: [PlaybackButtonAction, PlaybackButtonAction, PlaybackButtonAction];
+  /** Missing only on legacy show files; every save writes an explicit topology. */
+  button_count?: 0 | 1 | 2 | 3;
   fader: "master" | "temp" | "speed" | "x_fade" | "direct_bpm" | "centered_relative" | "learned_percentage";
+  /** Missing only on legacy show files; every save writes an explicit topology. */
+  has_fader?: boolean;
   go_activates: boolean;
   auto_off: boolean;
   xfade_millis: number;
   color?: string;
   flash_release?: "release_all" | "release_intensity_only";
   protect_from_swap?: boolean;
+  presentation_icon?: string;
+  presentation_image?: string;
 }
 export interface PlaybackPage {
   number: number;
   name: string;
   slots: Record<string, number>;
+}
+
+export interface VirtualPlaybackExclusionZone {
+  id: string;
+  name: string;
+  slots: number[];
+}
+
+export interface VirtualPlaybackExclusionSnapshot {
+  show_id: string;
+  desk_id: string;
+  surfaces: Record<string, VirtualPlaybackExclusionZone[]>;
 }
 
 export interface DmxSnapshot {
@@ -492,6 +551,7 @@ export interface DeskConfiguration {
   preload_programmer_changes: boolean;
   preload_physical_playback_actions: boolean;
   preload_virtual_playback_actions: boolean;
+  file_manager_system_picker_fallback: boolean;
   file_manager_roots: Array<{
     id: string;
     label: string;
@@ -575,6 +635,8 @@ export interface SpeedGroupActionInput {
 
 export interface StoredGroup {
   name?: string;
+  color?: string;
+  icon?: string;
   fixtures: string[];
   master?: number;
   playback_fader?: number | null;

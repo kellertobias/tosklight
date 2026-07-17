@@ -13,6 +13,11 @@ function cueTriggerKind(cue: Cue | null | undefined): "go" | "follow" | "time" {
   return "time";
 }
 
+function cueDraftIdentity(cue: Cue | null | undefined): string | null {
+  if (!cue) return null;
+  return cue.id ?? `number:${cue.number}`;
+}
+
 function CuelistSettings({
   object,
   speedGroupsBpm,
@@ -275,6 +280,7 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
   const cues = cueList?.cues ?? [];
   const [selectedCue, setSelectedCue] = useState(0);
   const [cueDraft, setCueDraft] = useState<Cue | null>(null);
+  const cueServerSnapshot = useRef<{ identity: string | null; serialized: string } | null>(null);
   const [cueEditError, setCueEditError] = useState("");
   const cueSavePending = useRef("");
   const tauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -358,13 +364,46 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
     };
   }, [tauri, cues, stageFixtures, server.groups, server.readVisualization]);
   useEffect(() => {
-    setCueDraft(cues[selectedCue] ? { ...cues[selectedCue] } : null);
+    const next = cues[selectedCue] ? { ...cues[selectedCue] } : null;
+    const nextSnapshot = {
+      identity: cueDraftIdentity(next),
+      serialized: JSON.stringify(next),
+    };
+    const previousSnapshot = cueServerSnapshot.current;
+    cueServerSnapshot.current = nextSnapshot;
+    setCueDraft((current) => {
+      const currentSerialized = JSON.stringify(current);
+      const sameCue = nextSnapshot.identity != null
+        && cueDraftIdentity(current) === nextSnapshot.identity
+        && previousSnapshot?.identity === nextSnapshot.identity;
+      const locallyEdited = sameCue && currentSerialized !== previousSnapshot.serialized;
+      const serverCaughtUp = currentSerialized === nextSnapshot.serialized;
+      // Event refreshes can return the last saved Cue while an operator is still typing. Keep
+      // that local draft until the server catches up or the operator selects a different Cue.
+      if (locallyEdited && !serverCaughtUp) return current;
+      return next;
+    });
   }, [selectedCue, cues]);
   useEffect(() => {
     setSelectedCue((current) => Math.min(current, Math.max(0, cues.length - 1)));
   }, [cueList?.id, cues.length]);
   const saveCue = async (nextCue = cueDraft) => {
     if (!nextCue || !selectedCueObject) return;
+    const triggerDelay = nextCue.trigger.type === "manual"
+      ? 0
+      : typeof nextCue.trigger.delay_millis === "number"
+        ? nextCue.trigger.delay_millis
+        : Number.NaN;
+    const timings: number[] = [
+      nextCue.fade_millis,
+      nextCue.delay_millis,
+      triggerDelay,
+    ];
+    if (timings.some((value) => !Number.isSafeInteger(value) || value < 0)) {
+      cueSavePending.current = "";
+      setCueEditError("Cue edit was not saved. Fade, Delay, and Trigger time must be zero or greater.");
+      return;
+    }
     const saveKey = `${selectedCueObject.id}:${selectedCue}:${JSON.stringify(nextCue)}`;
     if (cueSavePending.current === saveKey) return;
     cueSavePending.current = saveKey;
@@ -379,13 +418,6 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
     if (!saved) {
       cueSavePending.current = "";
       setCueEditError("Cue edit was not saved. Check the value or refresh after a revision conflict.");
-    }
-  };
-  const deleteCue = async () => {
-    if (!selectedCueObject || selectedCueObject.body.cues.length <= 1) return;
-    const cues = selectedCueObject.body.cues.filter((_, index) => index !== selectedCue);
-    if (await server.saveCueList({ ...selectedCueObject.body, cues }, selectedCueObject.revision)) {
-      setSelectedCue(Math.min(selectedCue, cues.length - 1));
     }
   };
   const settings = settingsOpen && settingsCueObject && (
@@ -505,6 +537,7 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
     );
   const triggerKind = cueTriggerKind(cueDraft);
   const triggerMillis = Number(cueDraft?.trigger.delay_millis ?? 0);
+  const showCueProperties = !compact || cueListTab === "cues";
   return (
     <div className="cuelist-window">
       {!compact && (
@@ -529,7 +562,7 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
           ]}
         />
       )}
-      <div className="sequence-layout">
+      <div className={`sequence-layout ${showCueProperties ? "with-cue-properties" : ""}`}>
         <div className="cue-editor">
           <WindowScrollArea
             className="cue-table-wrap"
@@ -582,7 +615,7 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
             )}
           </WindowScrollArea>
         </div>
-        {!compact && (
+        {showCueProperties && (
           <aside className="sequence-actions cue-properties">
             {cueDraft && (
               <>
@@ -706,9 +739,6 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
                   )}
                 </FormLayout>
                 {cueEditError && <p className="ui-field-error" role="alert">{cueEditError}</p>}
-                <Button className="large-danger danger" disabled={cues.length <= 1} onClick={() => void deleteCue()}>
-                  Delete Cue
-                </Button>
               </>
             )}
           </aside>

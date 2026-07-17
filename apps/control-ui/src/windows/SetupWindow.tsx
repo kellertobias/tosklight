@@ -1,12 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { WindowProps } from "./windowTypes";
 import { useServer } from "../api/ServerContext";
 import type { DeskConfiguration } from "../api/types";
 import { configuredServerUrl } from "../api/LightApiClient";
 import { FixtureLibrarySetup } from "../components/setup/FixtureLibrarySetup";
 import { FileManagerRootsSetup, fileManagerRootsValidationError } from "../components/setup/FileManagerRootsSetup";
+import { OutputRoutesSetup } from "../components/setup/OutputRoutesSetup";
+import { ShowRecoveryFileManager } from "../components/setup/ShowRecoveryFileManager";
+import { RootConfinedFilePickerButton } from "../components/files/RootConfinedFilePickerButton";
 import { ScreensSetup } from "../components/setup/ScreensSetup";
-import { Button, FormLayout, FormField, Input, NumberField, SelectField, SwitchField, TextAreaField, TextField } from "../components/common";
+import { Button, FormLayout, FormField, NumberField, SelectField, SwitchField, TextAreaField, TextField } from "../components/common";
 import { WindowHeader } from "../components/window-kit";
 import { useApp } from "../state/AppContext";
 
@@ -23,8 +26,22 @@ export function SetupWindow(_: WindowProps) {
   const [lockWallpaper, setLockWallpaper] = useState<string | null>(server.deskLock?.wallpaper ?? null);
   const [unlockMode, setUnlockMode] = useState<"button" | "pin">(server.deskLock?.unlock_mode ?? "button");
   const [lockPin, setLockPin] = useState("");
+  const draftRevision = useRef(0);
+  const draftDirty = useRef(false);
+  const pendingConfigurationSave = useRef<{ revision: number; configuration: DeskConfiguration } | null>(null);
   const fileManagerRootError = draft ? fileManagerRootsValidationError(draft.file_manager_roots) : null;
-  useEffect(() => setDraft(server.configuration), [server.configuration]);
+  useEffect(() => {
+    const pending = pendingConfigurationSave.current;
+    if (pending && JSON.stringify(pending.configuration) === JSON.stringify(server.configuration)) {
+      pendingConfigurationSave.current = null;
+      if (draftRevision.current === pending.revision) {
+        draftDirty.current = false;
+        setDraft(server.configuration);
+      }
+      return;
+    }
+    if (!draftDirty.current) setDraft(server.configuration);
+  }, [server.configuration]);
   useEffect(() => {
     if (server.deskLock) {
       setLockMessage(server.deskLock.message);
@@ -33,8 +50,15 @@ export function SetupWindow(_: WindowProps) {
     }
   }, [server.deskLock]);
 
+  const editDraft = (next: DeskConfiguration) => {
+    draftRevision.current += 1;
+    draftDirty.current = true;
+    setDraft(next);
+  };
+
   const save = async () => {
     if (!draft) return;
+    pendingConfigurationSave.current = { revision: draftRevision.current, configuration: draft };
     setRestartRequired(await server.saveConfiguration(draft));
   };
 
@@ -84,6 +108,7 @@ export function SetupWindow(_: WindowProps) {
                   <small>{server.bootstrap?.active_show ? "Autosave active" : "No active show"}</small>
                 </section>
               </div>
+              <ShowRecoveryFileManager />
             </>
           )}
           {section === 1 && (
@@ -112,7 +137,7 @@ export function SetupWindow(_: WindowProps) {
                       label="Preload programmer changes"
                       checked={draft.preload_programmer_changes}
                       onChange={(event) =>
-                        setDraft({
+                        editDraft({
                           ...draft,
                           preload_programmer_changes: event.target.checked,
                         })
@@ -122,7 +147,7 @@ export function SetupWindow(_: WindowProps) {
                       label="Preload physical playback actions"
                       checked={draft.preload_physical_playback_actions}
                       onChange={(event) =>
-                        setDraft({
+                        editDraft({
                           ...draft,
                           preload_physical_playback_actions: event.target.checked,
                         })
@@ -132,7 +157,7 @@ export function SetupWindow(_: WindowProps) {
                       label="Preload virtual playback actions"
                       checked={draft.preload_virtual_playback_actions}
                       onChange={(event) =>
-                        setDraft({
+                        editDraft({
                           ...draft,
                           preload_virtual_playback_actions: event.target.checked,
                         })
@@ -179,27 +204,28 @@ export function SetupWindow(_: WindowProps) {
                   max="44"
                   value={draft.frame_rate_hz}
                   onChange={(event) =>
-                    setDraft({
+                    editDraft({
                       ...draft,
                       frame_rate_hz: Number(event.target.value),
                     })
                   }
                   description="40–44 Hz"
                 />
-                <TextField label="Output bind address" value={draft.output_bind_ip} onChange={(event) => setDraft({ ...draft, output_bind_ip: event.target.value })} />
+                <TextField label="Output bind address" value={draft.output_bind_ip} onChange={(event) => editDraft({ ...draft, output_bind_ip: event.target.value })} />
                 <NumberField
                   label="Backup retention"
                   min="1"
                   max="1000"
                   value={draft.backup_retention}
                   onChange={(event) =>
-                    setDraft({
+                    editDraft({
                       ...draft,
                       backup_retention: Number(event.target.value),
                     })
                   }
                 />
               </FormLayout>
+              <OutputRoutesSetup routes={server.outputRoutes} onSave={server.saveOutputRoute} onDelete={server.deleteOutputRoute}/>
             </>
           )}
           {section === 4 && (
@@ -248,7 +274,9 @@ export function SetupWindow(_: WindowProps) {
               <h2>File Manager</h2>
               {draft && <FileManagerRootsSetup
                 roots={draft.file_manager_roots}
-                onChange={(file_manager_roots) => setDraft({ ...draft, file_manager_roots })}
+                systemPickerFallback={draft.file_manager_system_picker_fallback}
+                onChange={(file_manager_roots) => editDraft({ ...draft, file_manager_roots })}
+                onSystemPickerFallbackChange={(file_manager_system_picker_fallback) => editDraft({ ...draft, file_manager_system_picker_fallback })}
                 onOpen={() => dispatch({ type: "OPEN_BUILTIN", kind: "file_manager" })}
               />}
             </>
@@ -270,12 +298,11 @@ export function SetupWindow(_: WindowProps) {
                 />
                 {unlockMode === "pin" && <TextField label="New PIN" secure inputMode="numeric" value={lockPin} description="4–12 digits. Leave empty to retain the configured PIN." onChange={(event) => setLockPin(event.target.value.replace(/\D/g, ""))} />}
                 <FormField label="Wallpaper">
-                  <Input
-                    aria-label="Lock wallpaper"
-                    type="file"
-                    accept="image/*"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
+                  <RootConfinedFilePickerButton
+                    label="Choose lock wallpaper"
+                    allowedExtensions={["png", "jpg", "jpeg", "gif", "webp"]}
+                    onFiles={(files) => {
+                      const file = files[0];
                       if (!file) return;
                       const reader = new FileReader();
                       reader.onload = () => setLockWallpaper(String(reader.result));

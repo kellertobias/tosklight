@@ -35,6 +35,10 @@ export function CommandLineBar() {
   const playback = state.controlMode === "playbacks";
   const ownProgrammer = server.bootstrap?.active_programmers.find((programmer) => programmer.session_id === server.session?.session_id);
   const hasRecordableContent = server.selectedFixtures.length > 0 || programmerValueCount(ownProgrammer) > 0 || state.preload !== "idle" || state.preloadActive;
+  const pendingProgrammerCount = (ownProgrammer?.preload_pending?.length ?? 0)
+    + Object.values(ownProgrammer?.preload_group_pending ?? {}).reduce((count, attributes) => count + Object.keys(attributes).length, 0);
+  const pendingPlaybackLabels = (ownProgrammer?.preload_playback_pending ?? []).map((pending) => `${pending.action.replaceAll("-", " ").toUpperCase()} ${pending.playback_number}`);
+  const pendingSummary = [pendingProgrammerCount ? `PROG ${pendingProgrammerCount}` : "", ...pendingPlaybackLabels].filter(Boolean).join(" · ");
   const preloadLabel = state.preload === "blind" ? "PRELOAD GO" : "PRELOAD";
   const advancePreload = async () => {
     await server.preloadAction(state.preload === "blind" ? "go" : "enter");
@@ -203,7 +207,7 @@ export function CommandLineBar() {
         <Button className={`global-store-button ${state.storeArmed ? "armed" : hasRecordableContent ? "record-ready" : "record-empty"}`} onPointerDown={() => { storeHeld.current = false; storeHold.current = window.setTimeout(() => { storeHeld.current = true; storeSuppressUntil.current = performance.now() + 1000; dispatch({ type: "SET_MODAL", modal: "storeSettingsOpen", value: true }); }, 650); }} onPointerUp={() => { if (storeHold.current) window.clearTimeout(storeHold.current); storeHold.current = null; }} onPointerCancel={() => { if (storeHold.current) window.clearTimeout(storeHold.current); storeHold.current = null; }} onClick={() => { if (!storeHeld.current && performance.now() >= storeSuppressUntil.current) toggleRecord(); storeHeld.current = false; }}>{state.storeArmed ? "REC ARMED" : "REC"}</Button>
         <Button
           className={`preload-button ${state.preload === "blind" ? "preload-go" : "preload-enter"}`}
-          title={state.preloadActive ? "Hold to release the active preload scene" : undefined}
+          title={state.preload === "blind" && pendingSummary ? `Pending Preload: ${pendingSummary}` : state.preloadActive ? "Hold to release the active preload scene" : undefined}
           onPointerDown={() => {
             preloadHeld.current = false;
             if (!state.preloadActive) return;
@@ -218,7 +222,9 @@ export function CommandLineBar() {
           onClick={() => { if (!preloadHeld.current) void advancePreload(); preloadHeld.current = false; }}
         >
           <b>{preloadLabel}</b>
-          {state.preloadActive && <small>(Hold: release)</small>}
+          {state.preload === "blind" && pendingSummary
+            ? <small aria-label={`Pending Preload: ${pendingSummary}`}>{pendingSummary}</small>
+            : state.preloadActive && <small>(Hold: release)</small>}
         </Button>
       </div>
     </header>

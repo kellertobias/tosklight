@@ -4,7 +4,7 @@ import { AppProvider, useApp } from "./AppContext";
 
 function ModalState() {
   const { state } = useApp();
-  return <span>{state.systemControlsOpen ? "running-open" : "running-closed"}</span>;
+  return <><span>{state.systemControlsOpen ? "running-open" : "running-closed"}</span><span>built-in-{state.builtIn ?? "none"}</span></>;
 }
 
 const values = new Map<string, string>();
@@ -27,5 +27,15 @@ describe("desk shortcuts", () => {
     act(() => window.dispatchEvent(new CustomEvent("light:desk-action", { detail: "shift-clear" })));
 
     expect(screen.getByText("running-open")).toBeInTheDocument();
+  });
+
+  it("keeps hardware Shift 0 unassigned while retaining the operator Help shortcut", () => {
+    render(<AppProvider><ModalState/></AppProvider>);
+
+    act(() => window.dispatchEvent(new CustomEvent("light:desk-action", { detail: "shift-0" })));
+    expect(screen.getByText("built-in-none")).toBeInTheDocument();
+
+    act(() => window.dispatchEvent(new CustomEvent("light:desk-action", { detail: "shift-9" })));
+    expect(screen.getByText("built-in-help")).toBeInTheDocument();
   });
 });

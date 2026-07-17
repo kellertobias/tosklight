@@ -34,7 +34,7 @@ fn open_hardware_controls() -> Result<(), String> {
             .arg(app)
             .spawn()
             .map_err(|e| e.to_string())?;
-        return Ok(());
+        Ok(())
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -112,9 +112,10 @@ fn frontend_ready(app: tauri::AppHandle) {
             marker,
             format!("{{\"ready\":true,\"server\":\"{}\"}}", server_address()),
         );
-        if std::env::var_os("LIGHT_DESKTOP_TEST_AUTO_EXIT").is_some() {
+        if let Some(delay) = std::env::var_os("LIGHT_DESKTOP_TEST_AUTO_EXIT") {
+            let delay = delay.to_string_lossy().parse::<u64>().unwrap_or(150);
             thread::spawn(move || {
-                thread::sleep(Duration::from_millis(150));
+                thread::sleep(Duration::from_millis(delay));
                 app.exit(0);
             });
         }
@@ -292,11 +293,11 @@ fn launch_server(app: &tauri::AppHandle) -> Result<Option<Child>, Box<dyn std::e
     }
     let _ = child.kill();
     let _ = child.wait();
-    return Err(format!(
+    Err(format!(
         "timed out waiting for bundled Light server; see {}",
         log_path.display()
     )
-    .into());
+    .into())
 }
 
 fn main() {
@@ -323,9 +324,9 @@ fn main() {
                 let url=format!("http://{}",server_address());
                 let encoded=serde_json::to_string(&url)?;
                 if std::env::var_os("LIGHT_DESKTOP_TEST_BIND").is_some(){
-                    window.eval(&format!("sessionStorage.setItem('light.test-server-url',{encoded});location.reload()"))?;
+                    window.eval(format!("sessionStorage.setItem('light.test-server-url',{encoded});location.reload()"))?;
                 }else if cfg!(debug_assertions){
-                    window.eval(&format!("if(localStorage.getItem('light.server-url')!=={encoded}){{localStorage.setItem('light.server-url',{encoded});location.reload()}}"))?;
+                    window.eval(format!("if(localStorage.getItem('light.server-url')!=={encoded}){{localStorage.setItem('light.server-url',{encoded});location.reload()}}"))?;
                 }
             }
             let process = ServerProcess { child: Arc::new(Mutex::new(child)), stop: Arc::new(AtomicBool::new(false)) };

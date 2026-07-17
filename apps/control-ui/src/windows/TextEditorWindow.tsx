@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useServer } from "../api/ServerContext";
 import type { FileEntry, FileRoot, TextDocument } from "../api/types";
 import { Button, Select, TextArea } from "../components/common";
 import { registerPaneRemovalGuard } from "../components/shell/paneRemovalGuard";
+import { usePaneChromeTargets } from "../components/shell/PaneChromeContext";
 import { useApp } from "../state/AppContext";
+import { openFileManagerPicker } from "./FileManagerPickerHost";
 import {
   publishTextFileSaved,
   TEXT_FILE_OPERATION_EVENT,
@@ -18,6 +23,7 @@ const TEXT_FILE_EXTENSIONS = new Set(["txt", "md", "csv", "log"]);
 const EXTERNAL_CHECK_INTERVAL_MILLIS = 1_500;
 const FILE_CHOOSER_DIRECTORY_LIMIT = 256;
 const FILE_CHOOSER_FILE_LIMIT = 2_000;
+const MAX_TEXT_FILE_BYTES = 4 * 1024 * 1024;
 
 type Availability = "none" | "loading" | "ready" | "missing";
 type Notice = { kind: "info" | "error" | "conflict"; text: string } | null;
@@ -29,6 +35,10 @@ interface LegacyTextEditorViewState {
 
 function extension(path: string) {
   return path.split(".").pop()?.toLowerCase() ?? "";
+}
+
+function parentDirectory(path: string) {
+  return path.split("/").slice(0, -1).join("/");
 }
 
 function isSupportedTextFile(path: string) {
@@ -98,8 +108,11 @@ export function TextEditorWindow({ paneId }: WindowProps) {
   const serverRef = useRef(server);
   serverRef.current = server;
   const { state, dispatch } = useApp();
+  const paneChrome = usePaneChromeTargets();
   const pane = state.desks.flatMap((desk) => desk.panes).find((candidate) => candidate.id === paneId);
   const selectedPath = pane?.textFilePath ?? "";
+  const paneReadOnly = Boolean(pane?.textEditorReadOnly);
+  const editorMode = pane?.textEditorMode ?? "plain";
 
   const [roots, setRoots] = useState<FileRoot[]>([]);
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -395,7 +408,7 @@ export function TextEditorWindow({ paneId }: WindowProps) {
     } catch {
       // Corrupt view metadata is non-authoritative and safe to ignore.
     }
-  }, [availability, document?.revision, paneId, selectedPath, selectedRoot]);
+  }, [availability, document?.revision, editorMode, paneId, selectedPath, selectedRoot]);
 
   const persistViewState = () => {
     const control = textarea.current;
@@ -420,6 +433,43 @@ export function TextEditorWindow({ paneId }: WindowProps) {
   const associateFile = (root: string, path: string) => {
     if (!confirmDiscard()) return;
     if (paneId) dispatch({ type: "SET_TEXT_EDITOR_FILE", id: paneId, root, path });
+  };
+
+  const openFile = async () => {
+    const result = await openFileManagerPicker({
+      target: "files",
+      multiple: false,
+      allowedExtensions: [...TEXT_FILE_EXTENSIONS],
+      initialRootId: selectedRoot || undefined,
+      initialDirectory: parentDirectory(selectedPath),
+    });
+    if (!result || !confirmDiscard()) return;
+    if (Array.isArray(result)) {
+      const selected = result[0];
+      if (selected && paneId) dispatch({ type: "SET_TEXT_EDITOR_FILE", id: paneId, root: selected.rootId, path: selected.entry.path });
+      return;
+    }
+    if (paneReadOnly) {
+      setNotice({ kind: "error", text: "This Text Editor pane is read-only and cannot import a system-picked file." });
+      return;
+    }
+    const file = result.files[0];
+    const targetRoot = selectedRoot || roots[0]?.id;
+    if (!file || !targetRoot) return;
+    if (file.size > MAX_TEXT_FILE_BYTES) {
+      setNotice({ kind: "error", text: "Text Editor files may not exceed 4 MiB." });
+      return;
+    }
+    try {
+      const importedText = new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
+      const next = await serverRef.current.saveTextFile(targetRoot, file.name, importedText, null);
+      acceptDocument(next, `Imported ${file.name} from the system picker.`);
+      if (paneId) dispatch({ type: "SET_TEXT_EDITOR_FILE", id: paneId, root: targetRoot, path: next.path });
+      publishTextFileSaved(next, paneId);
+      void reloadFiles(targetRoot);
+    } catch (error) {
+      setNotice({ kind: "error", text: `Could not import ${file.name}: ${friendlyError(error)}` });
+    }
   };
 
   const publishSaved = (next: TextDocument) => {
@@ -464,12 +514,12 @@ export function TextEditorWindow({ paneId }: WindowProps) {
 
   const save = () => {
     const current = documentRef.current;
-    if (!current || current.read_only || externalDocumentRef.current || availability === "missing") return;
+    if (!current || paneReadOnly || current.read_only || externalDocumentRef.current || availability === "missing") return;
     void saveTo(current.path, current.revision, false, "Saved");
   };
 
   const saveAs = () => {
-    if (!selectedRoot) return;
+    if (!selectedRoot || paneReadOnly) return;
     const suggested = selectedPath || "operator-notes.txt";
     const path = window.prompt("Save as path (relative to this file location)", suggested)?.trim();
     if (!path) return;
@@ -481,7 +531,7 @@ export function TextEditorWindow({ paneId }: WindowProps) {
   };
 
   const recreate = () => {
-    if (!selectedPath || !window.confirm(`Recreate ${selectedPath} from the text retained in this window?`)) return;
+    if (paneReadOnly || !selectedPath || !window.confirm(`Recreate ${selectedPath} from the text retained in this window?`)) return;
     void saveTo(selectedPath, null, false, "File recreated");
   };
 
@@ -503,7 +553,7 @@ export function TextEditorWindow({ paneId }: WindowProps) {
           ? "Missing"
           : dirty
             ? "Unsaved"
-            : document?.read_only
+            : document?.read_only || paneReadOnly
               ? "Read-only"
               : document
                 ? "Saved"
@@ -514,7 +564,15 @@ export function TextEditorWindow({ paneId }: WindowProps) {
   const chooserFiles = currentFileInList ? [currentFileInList, ...files] : files;
 
   return <section className="text-editor" aria-label="Text Editor" data-dirty={dirty || undefined}>
+    {paneChrome?.info && createPortal(<span className="text-editor-header-state" title={`${status} · ${label}`}><strong className={`text-save-state ${dirty || externalDocument ? "dirty" : ""}`} role="status" aria-live="polite">{status}</strong> · {label}</span>, paneChrome.info)}
+    {paneChrome?.toolbar && createPortal(<div className="text-editor-header-actions">
+      <Button onClick={() => void openFile()}>Open File</Button>
+      <Button disabled={!selectedRoot || filesLoading} onClick={() => void reloadFiles(selectedRoot)}>Refresh</Button>
+      <Button disabled={!document || !dirty || paneReadOnly || document.read_only || saving || Boolean(externalDocument) || availability === "missing"} onClick={save}>Save</Button>
+      <Button aria-label="Save As" disabled={!selectedRoot || paneReadOnly || saving} onClick={saveAs}>Save As…</Button>
+    </div>, paneChrome.toolbar)}
     <div className="text-editor-toolbar">
+      {!paneChrome && <Button onClick={() => void openFile()}>Open File</Button>}
       <Select
         aria-label="File root"
         value={selectedRoot}
@@ -531,35 +589,33 @@ export function TextEditorWindow({ paneId }: WindowProps) {
         <option value="">{filesLoading ? "Loading text files…" : "Choose File…"}</option>
         {chooserFiles.map((file) => <option key={file.path} value={file.path}>{file.path}{file.writable ? "" : " (read-only or missing)"}</option>)}
       </Select>
-      <strong className={`text-save-state ${dirty || externalDocument ? "dirty" : ""}`} role="status" aria-live="polite">{status}</strong>
-      <span title={label}>{label}</span>
-      <Button disabled={!document || !dirty || document.read_only || saving || Boolean(externalDocument) || availability === "missing"} onClick={save}>Save</Button>
-      <Button aria-label="Create file copy" disabled={!selectedRoot || saving} onClick={saveAs}>Save As…</Button>
-      <Button disabled={!selectedRoot || filesLoading} onClick={() => void reloadFiles(selectedRoot)}>Refresh Files</Button>
+      {!paneChrome && <><strong className={`text-save-state ${dirty || externalDocument ? "dirty" : ""}`} role="status" aria-live="polite">{status}</strong><span title={label}>{label}</span><Button disabled={!document || !dirty || paneReadOnly || document.read_only || saving || Boolean(externalDocument) || availability === "missing"} onClick={save}>Save</Button><Button aria-label="Save As" disabled={!selectedRoot || paneReadOnly || saving} onClick={saveAs}>Save As…</Button><Button disabled={!selectedRoot || filesLoading} onClick={() => void reloadFiles(selectedRoot)}>Refresh</Button></>}
       <Button disabled={!selectedPath} onClick={() => associateFile(selectedRoot, "")}>Close File</Button>
     </div>
+    {paneReadOnly && <div className="file-message text-editor-read-only" role="status">This pane is configured read-only. Editing, Save, Save As, import, and recreate actions are disabled.</div>}
     {notice && <div id={messageId} className={`file-message text-editor-${notice.kind}`} role={notice.kind === "info" ? "status" : "alert"}>{notice.text}</div>}
     {availability === "missing" && selectedPath && <div className="file-message text-editor-missing-actions" aria-label="Missing file actions">
-      <Button disabled={saving} onClick={recreate}>Recreate File</Button>
-      <Button disabled={saving} onClick={saveAs}>Save Retained Text As…</Button>
+      <Button disabled={saving || paneReadOnly} onClick={recreate}>Recreate File</Button>
+      <Button disabled={saving || paneReadOnly} onClick={saveAs}>Save Retained Text As…</Button>
       <Button disabled={filesLoading} onClick={() => void reloadFiles(selectedRoot)}>Look for Moved File</Button>
     </div>}
     {externalDocument && <section className="file-message text-editor-conflict" aria-label="File revision conflict">
       <b>A newer file revision is available.</b>
       <Button onClick={reloadExternal}>Reload Newer Version</Button>
-      <Button disabled={saving} onClick={saveAs}>Save My Version As…</Button>
+      <Button disabled={saving || paneReadOnly} onClick={saveAs}>Save My Version As…</Button>
       <details>
         <summary>Compare versions</summary>
         <label>Your unsaved version<TextArea aria-label="Your unsaved version" value={text} readOnly /></label>
         <label>Newer file version<TextArea aria-label="Newer file version" value={externalDocument.text} readOnly /></label>
       </details>
     </section>}
-    <TextArea
+    <div className={`text-editor-content mode-${editorMode}`}>
+    {editorMode !== "markdown" && <TextArea
       ref={textarea}
       aria-label="File text"
       aria-describedby={notice ? messageId : undefined}
       value={text}
-      readOnly={!document || document.read_only || availability === "missing"}
+      readOnly={!document || paneReadOnly || document.read_only || availability === "missing"}
       onBlur={persistViewState}
       onChange={(event) => {
         textRef.current = event.target.value;
@@ -576,6 +632,10 @@ export function TextEditorWindow({ paneId }: WindowProps) {
         }
       }}
       placeholder={availability === "missing" ? "The associated file is missing." : "Choose a UTF-8 text file to begin."}
-    />
+    />}
+    {editorMode !== "plain" && <article className="text-editor-markdown" aria-label="Rendered Markdown">
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+    </article>}
+    </div>
   </section>;
 }

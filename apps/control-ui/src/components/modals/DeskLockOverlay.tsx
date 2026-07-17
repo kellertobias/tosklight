@@ -21,7 +21,7 @@ export function DeskLockOverlay() {
       style={
         server.deskLock.wallpaper
           ? {
-              backgroundImage: `linear-gradient(#0008,#0008),url(${server.deskLock.wallpaper})`,
+              backgroundImage: `linear-gradient(#0008,#0008),url(${JSON.stringify(server.deskLock.wallpaper)})`,
             }
           : undefined
       }

@@ -34,12 +34,20 @@ export type StageMode = "select" | "setup" | "navigate";
 export type StageView = "2d" | "3d";
 export type DmxDotSize = "small" | "large";
 export type DevelopmentView = "forms" | "faders" | "buttons";
+export type TextEditorMode = "plain" | "markdown" | "split";
 
 export interface GridRect {
   x: number;
   y: number;
   width: number;
   height: number;
+}
+
+export interface VirtualPlaybackExclusionZone {
+  id: string;
+  name: string;
+  /** One-based cells on the surface's current playback page. */
+  slots: number[];
 }
 
 export interface PaneModel extends GridRect {
@@ -55,8 +63,12 @@ export interface PaneModel extends GridRect {
   virtualPlaybackRows?: number;
   virtualPlaybackColumns?: number;
   virtualPlaybackCells?: Array<{ playbackNumber: number | null; action: "go" | "toggle" }>;
+  virtualPlaybackExclusionZones?: VirtualPlaybackExclusionZone[];
+  fileManagerShowHidden?: boolean;
   textFileRoot?: string;
   textFilePath?: string;
+  textEditorReadOnly?: boolean;
+  textEditorMode?: TextEditorMode;
   textEditorView?: {
     root: string;
     path: string;

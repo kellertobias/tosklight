@@ -4,10 +4,12 @@ import type { DeskModel } from "../types";
 import type {
   BootstrapSnapshot,
   ConnectionStatus,
+  Cue,
   DeskConfiguration,
   FixtureDefinition,
   DmxSnapshot,
   MediaServerFixture,
+  OutputRoute,
   PatchSnapshot,
   PatchLayer,
   PatchedFixture,
@@ -29,8 +31,56 @@ export interface StoredDeskLayout {
   windowSettings?: Partial<import("../types").WindowSettings>;
 }
 
+export interface CommandChoiceOption {
+  id: string;
+  label: string;
+  command: string;
+}
+
+export interface PendingCommandChoice {
+  type: "cue_move_copy";
+  operation: "copy" | "move";
+  command: string;
+  options: CommandChoiceOption[];
+  cancel_label: string;
+}
+
 export function deskLayoutScopeKey(showId: string | null | undefined, userId: string | null | undefined) {
   return showId && userId ? `${showId}:${userId}` : null;
+}
+
+export function cueOnlyRestoration(cues: Cue[]): { changes: Cue["changes"]; group_changes: NonNullable<Cue["group_changes"]> } {
+  const cueOnly = cues.at(-1);
+  if (!cueOnly?.cue_only) return { changes: [], group_changes: [] };
+  const fixtureState = new Map<string, Cue["changes"][number]["value"]>();
+  const groupState = new Map<string, NonNullable<Cue["group_changes"]>[number]["value"]>();
+  for (const cue of cues.slice(0, -1)) {
+    for (const change of cue.changes) {
+      const key = `${change.fixture_id}\u0000${change.attribute}`;
+      if (change.value == null) fixtureState.delete(key); else fixtureState.set(key, change.value);
+    }
+    for (const change of cue.group_changes ?? []) {
+      const key = `${change.group_id}\u0000${change.attribute}`;
+      if (change.value == null) groupState.delete(key); else groupState.set(key, change.value);
+    }
+  }
+  const changes = cueOnly.changes
+    .filter((change) => !change.automatic_restore)
+    .map((change) => ({
+      fixture_id: change.fixture_id,
+      attribute: change.attribute,
+      value: fixtureState.get(`${change.fixture_id}\u0000${change.attribute}`) ?? null,
+      automatic_restore: true,
+    }));
+  const group_changes = (cueOnly.group_changes ?? [])
+    .filter((change) => !change.automatic_restore)
+    .map((change) => ({
+      group_id: change.group_id,
+      attribute: change.attribute,
+      value: groupState.get(`${change.group_id}\u0000${change.attribute}`) ?? null,
+      automatic_restore: true,
+    }));
+  return { changes, group_changes };
 }
 export interface StagePosition3d {
   x: number;
@@ -100,6 +150,7 @@ interface ServerContextValue {
   createUser: (name: string) => Promise<void>;
   changeUser: (user: import("./types").DeskUser) => Promise<void>;
   patch: PatchSnapshot | null;
+  outputRoutes: VersionedObject<OutputRoute>[];
   patchLayers: VersionedObject<PatchLayer>[];
   playbacks: PlaybackSnapshot | null;
   screens: ScreenSnapshot | null;
@@ -121,42 +172,61 @@ interface ServerContextValue {
   commandLine: string;
   commandTargetMode: CommandTargetMode;
   commandLinePristine: boolean;
+  pendingCommandChoice: PendingCommandChoice | null;
   selectedFixtures: string[];
   selectedGroupId: string | null;
   refresh: () => Promise<void>;
   setCommandLine: (value: string, pristine?: boolean) => void;
   resetCommandLine: () => void;
+  cancelCommandChoice: () => void;
   executeCommandLine: (value?: string) => Promise<boolean>;
   undoProgrammer: () => Promise<void>;
   setSelection: (fixtures: string[]) => Promise<void>;
+  selectionGesture: (
+    source:
+      | { type: "fixture"; fixture_id: string }
+      | { type: "live_group"; group_id: string }
+      | { type: "dereferenced_group"; group_id: string },
+    remove?: boolean,
+  ) => Promise<void>;
   setProgrammer: (fixtureId: string, attribute: string, value: number) => Promise<void>;
+  releaseProgrammer: (fixtureId: string, attribute: string) => Promise<void>;
   setGroupValue: (attribute: string, value: number) => Promise<void>;
+  releaseGroupValue: (attribute: string) => Promise<void>;
   setPreloadGroupValue: (attribute: string, value: number) => Promise<void>;
   playbackAction: (cueListId: string, action: "go" | "back" | "pause" | "release") => Promise<void>;
   poolPlaybackAction: (
     number: number,
-    action: "on" | "off" | "toggle" | "go" | "go-minus" | "go-to" | "load" | "fast-forward" | "fast-rewind" | "temp" | "swap" | "select" | "select-contents" | "learn" | "double" | "half" | "pause" | "blackout" | "pause-dynamics" | "flash" | "master" | "xfade-on" | "xfade-off",
+    action: "button" | "on" | "off" | "toggle" | "go" | "go-minus" | "go-to" | "load" | "fast-forward" | "fast-rewind" | "temp" | "temp-on" | "temp-off" | "swap" | "select" | "select-contents" | "select-dereferenced" | "learn" | "double" | "half" | "pause" | "blackout" | "pause-dynamics" | "flash" | "master" | "xfade-on" | "xfade-off",
     input?: {
       value?: number;
       pressed?: boolean;
+      button?: number;
       cue_number?: number;
       surface?: "physical" | "virtual";
     },
   ) => Promise<void>;
+  readVirtualPlaybackExclusionZones: () => Promise<import("./types").VirtualPlaybackExclusionSnapshot>;
+  saveVirtualPlaybackExclusionZones: (surfaceId: string, zones: import("./types").VirtualPlaybackExclusionZone[]) => Promise<boolean>;
   setPlaybackPage: (page: number) => Promise<void>;
   updateControlDesk: (desk: import("./types").ControlDesk) => Promise<void>;
   selectControlDesk: (id: string) => void;
   savePlaybackDefinition: (playback: import("./types").PlaybackDefinition) => Promise<void>;
+  savePlaybackSlot: (page: number, slot: number, playback: import("./types").PlaybackDefinition) => Promise<boolean>;
+  clearPlaybackSlot: (page: number, slot: number) => Promise<boolean>;
   saveCueList: (cueList: import("./types").CueList, revision: number) => Promise<boolean>;
   unassignPagePlayback: (page: number, slot: number) => Promise<boolean>;
   readDmx: () => Promise<DmxSnapshot>;
   readVisualization: (preload?: boolean) => Promise<VisualizationSnapshot>;
   setDmxOverride: (universe: number, address: number, value: number | null) => Promise<void>;
+  saveOutputRoute: (id: string, route: OutputRoute, revision: number) => Promise<boolean>;
+  deleteOutputRoute: (id: string, revision: number) => Promise<boolean>;
   createShow: (name: string) => Promise<void>;
   saveShowAs: (name: string) => Promise<boolean>;
   initializeEmptyShow: () => Promise<boolean>;
   uploadShow: (file: File, overwrite?: boolean) => Promise<void>;
   openShow: (id: string, transition?: "hold_current" | "timed_fade" | "safe_blackout") => Promise<void>;
+  openShowFile: (rootId: string, path: string, name: string) => Promise<boolean>;
   listShowRevisions: (id: string) => Promise<import("./types").ShowRevision[]>;
   saveShowRevision: (name: string) => Promise<import("./types").ShowRevision | null>;
   openShowRevision: (id: string, revision: number) => Promise<boolean>;
@@ -199,6 +269,7 @@ interface ServerContextValue {
   storeDynamic: (speed: number, width: number, direction: string) => Promise<void>;
   storePlayback: (slot: number, cueListId?: string) => Promise<void>;
   storeGroup: (id: string, name: string, mode?: "merge" | "overwrite") => Promise<void>;
+  updateGroup: (id: string, update: Pick<StoredGroup, "name" | "color" | "icon">) => Promise<boolean>;
   setGroupMaster: (id: string, master: number) => Promise<void>;
   setGroupMasterFlash: (id: string, value: number) => Promise<void>;
   undoGroup: (id: string) => Promise<void>;
@@ -234,6 +305,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [deskLock, setDeskLock] = useState<import("./types").DeskLockState | null>(null);
   const [patch, setPatch] = useState<PatchSnapshot | null>(null);
+  const [outputRoutes, setOutputRoutes] = useState<VersionedObject<OutputRoute>[]>([]);
   const [patchLayers, setPatchLayers] = useState<VersionedObject<PatchLayer>[]>([]);
   const [playbacks, setPlaybacks] = useState<PlaybackSnapshot | null>(null);
   const [screens, setScreens] = useState<ScreenSnapshot | null>(null);
@@ -255,6 +327,9 @@ export function ServerProvider({ children }: PropsWithChildren) {
   const commandTargetModeRef = useRef<CommandTargetMode>("FIXTURE");
   const [commandLine, setCommandLineState] = useState("FIXTURE");
   const [commandLinePristine, setCommandLinePristine] = useState(true);
+  const commandLineWrite = useRef<Promise<unknown>>(Promise.resolve());
+  const commandLineEpoch = useRef(0);
+  const [pendingCommandChoice, setPendingCommandChoice] = useState<PendingCommandChoice | null>(null);
   const [selectedFixtures, setSelectedFixtures] = useState<string[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   useEffect(
@@ -296,16 +371,18 @@ export function ServerProvider({ children }: PropsWithChildren) {
         setGroups([]);
         setPresets([]);
         setCueObjects([]);
+        setOutputRoutes([]);
         setDeskLayout(null);
         setStageLayout(null);
         setUnresolvedMvrFixtures([]);
         setDeskLayoutScope(null);
         return;
       }
-      const [nextGroups, nextPresets, nextCueObjects, layouts, stageLayouts, nextPatchLayers, unresolvedMvr] = await Promise.all([
+      const [nextGroups, nextPresets, nextCueObjects, nextOutputRoutes, layouts, stageLayouts, nextPatchLayers, unresolvedMvr] = await Promise.all([
         client.objects<StoredGroup>(showId, "group"),
         client.objects<StoredPreset>(showId, "preset"),
         client.objects<import("./types").CueList>(showId, "cue_list"),
+        client.objects<OutputRoute>(showId, "route"),
         userId ? client.objects<StoredDeskLayout>(showId, "user_layout") : Promise.resolve([]),
         client.objects<StoredStageLayout>(showId, "stage_layout"),
         client.objects<PatchLayer>(showId, "patch_layer"),
@@ -315,6 +392,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
       setGroups(nextGroups);
       setPresets(nextPresets);
       setCueObjects(nextCueObjects);
+      setOutputRoutes(nextOutputRoutes);
       setDeskLayout(layouts.find((item) => item.id === userId) ?? null);
       setDeskLayoutScope(scope);
       setStageLayout(stageLayouts.find((item) => item.id === "main") ?? null);
@@ -421,7 +499,22 @@ export function ServerProvider({ children }: PropsWithChildren) {
           }
           if (event.kind === "file_operation_completed")
             window.dispatchEvent(new CustomEvent("light:file-operation", { detail: event.payload }));
+          if (event.kind === "group_configuration_requested") {
+            const request = event.payload as { group_id?: string; desk_id?: string };
+            if (request.group_id && request.desk_id === nextSession.desk.id)
+              window.dispatchEvent(new CustomEvent("light:group-configuration", { detail: request.group_id }));
+          }
           if (["playback_changed", "playback_page_changed", "show_opened", "show_object_changed", "preload_stored"].includes(event.kind)) {
+            void client
+              .playbacks()
+              .then(setPlaybacks)
+              .catch(() => undefined);
+          }
+          if (["server_configuration_changed", "speed_group_command", "speed_group_action"].includes(event.kind)) {
+            void client
+              .configuration()
+              .then((next) => setConfiguration(next.configuration))
+              .catch(() => undefined);
             void client
               .playbacks()
               .then(setPlaybacks)
@@ -433,15 +526,28 @@ export function ServerProvider({ children }: PropsWithChildren) {
               .then(setScreens)
               .catch(() => undefined);
           if (["show_opened", "show_rolled_back", "server_configuration_changed", "session_started", "session_disconnected", "programmer_changed", "programmer_cleared", "hardware_connection_changed"].includes(event.kind)) {
-            void client
-              .bootstrap()
+            const requestedCommandLineEpoch = commandLineEpoch.current;
+            // Read the shared desk command line only after every local key/reset write that was
+            // already queued when this event arrived. In particular, programmer.execute can
+            // emit programmer_changed before its response lets Enter enqueue the reset target;
+            // the epoch check below rejects that earlier read. An event arriving after the
+            // reset waits for its write here, so it cannot restore the just-executed command.
+            void commandLineWrite.current
+              .catch(() => undefined)
+              .then(() => client.bootstrap())
               .then((next) => {
                 setBootstrap(next);
                 const own = next.active_programmers.find((programmer) => programmer.session_id === nextSession.session_id);
                 if (own) {
-                  const restoredCommand = own.command_line?.trim() || commandTargetModeRef.current;
-                  setCommandLineState(restoredCommand);
-                  setCommandLinePristine(restoredCommand === commandTargetModeRef.current);
+                  // A programmer event can be delivered before the command execution response.
+                  // Do not let that event's older bootstrap snapshot restore a command after Enter
+                  // has already reset it locally. Events without an intervening local edit still
+                  // apply, preserving the shared command line for another session on this desk.
+                  if (requestedCommandLineEpoch === commandLineEpoch.current) {
+                    const restoredCommand = own.command_line?.trim() || commandTargetModeRef.current;
+                    setCommandLineState(restoredCommand);
+                    setCommandLinePristine(restoredCommand === commandTargetModeRef.current);
+                  }
                   setSelectedFixtures(own.selected ?? []);
                 }
                 void loadShowObjects(next.active_show?.id ?? null, nextSession.user.id);
@@ -479,7 +585,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
             void client
               .programmers()
               .then((states) => {
-                const own = states.find((programmer) => programmer.user_id === nextSession.user.id);
+                const own = states.find((programmer) => programmer.session_id === nextSession.session_id);
                 if (own) setSelectedFixtures(own.selected);
               })
               .catch(() => undefined);
@@ -503,16 +609,34 @@ export function ServerProvider({ children }: PropsWithChildren) {
     };
   }, [client, loadShowObjects]);
 
-  const setCommandLine = useCallback(
-    (value: string, pristine = false) => {
-      const next = value.trim() ? value : commandTargetModeRef.current;
-      setCommandLineState(next);
-      setCommandLinePristine(pristine || !value.trim());
-      void client.setCommandLine(next).catch((reason) => setError(String(reason)));
+  const persistCommandLine = useCallback(
+    (value: string) => {
+      const write = commandLineWrite.current.catch(() => undefined).then(() => client.setCommandLine(value));
+      commandLineWrite.current = write;
+      return write;
     },
     [client],
   );
+  const setCommandLine = useCallback(
+    (value: string, pristine = false) => {
+      const next = value.trim() ? value : commandTargetModeRef.current;
+      commandLineEpoch.current += 1;
+      setCommandLineState(next);
+      setCommandLinePristine(pristine || !value.trim());
+      void persistCommandLine(next).catch((reason) => setError(String(reason)));
+    },
+    [persistCommandLine],
+  );
   const resetCommandLine = useCallback(() => setCommandLine("", true), [setCommandLine]);
+  const cancelCommandChoice = useCallback(() => {
+    setPendingCommandChoice(null);
+    resetCommandLine();
+  }, [resetCommandLine]);
+  const fileRoots = useCallback(() => client.fileRoots(), [client]);
+  const fileEntries = useCallback(
+    (root: string, path?: string, hidden?: boolean) => client.fileEntries(root, path, hidden),
+    [client],
+  );
 
   const value = useMemo<ServerContextValue>(
     () => ({
@@ -521,8 +645,8 @@ export function ServerProvider({ children }: PropsWithChildren) {
       dismissError: () => setError(null),
       simulateError: (message) => setError(message),
       readServerLogs: () => client.auditEvents(),
-      fileRoots: () => client.fileRoots(),
-      fileEntries: (root, path, hidden) => client.fileEntries(root, path, hidden),
+      fileRoots,
+      fileEntries,
       fileMetadata: (root, path) => client.fileMetadata(root, path),
       readFileNote: (root, path) => client.readFileNote(root, path),
       saveFileNote: (root, path, note) => client.saveFileNote(root, path, note),
@@ -583,6 +707,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
         window.location.reload();
       },
       patch,
+      outputRoutes,
       patchLayers,
       playbacks,
       screens,
@@ -628,22 +753,31 @@ export function ServerProvider({ children }: PropsWithChildren) {
       commandLine,
       commandTargetMode,
       commandLinePristine,
+      pendingCommandChoice,
       selectedFixtures,
       selectedGroupId,
       refresh,
       setCommandLine,
       resetCommandLine,
+      cancelCommandChoice,
       executeCommandLine: async (value = commandLine) => {
         try {
+          // Invalidate event refreshes that began while the command was being assembled. A
+          // successful execution increments this again when it installs the reset target.
+          commandLineEpoch.current += 1;
+          // Key presses update the authoritative desk command line. Preserve their order so an
+          // older in-flight key cannot arrive after Enter and restore a command that already ran.
+          await commandLineWrite.current;
           const toggledTarget = commandTargetAfterEnter(value, commandTargetModeRef.current, commandLinePristine);
           if (toggledTarget) {
             const nextTarget = toggledTarget;
             commandTargetModeRef.current = nextTarget;
             setCommandTargetMode(nextTarget);
+            commandLineEpoch.current += 1;
             setCommandLineState(nextTarget);
             setCommandLinePristine(true);
             await client.setCommandTarget(nextTarget);
-            await client.setCommandLine(nextTarget);
+            await persistCommandLine(nextTarget);
             setError(null);
             return true;
           }
@@ -656,16 +790,24 @@ export function ServerProvider({ children }: PropsWithChildren) {
                     group_id?: string;
                   } | null;
                 };
+                pending_choice?: PendingCommandChoice;
               }
             | undefined;
+          if (result?.pending_choice) {
+            setPendingCommandChoice(result.pending_choice);
+            setError(null);
+            return true;
+          }
           if (result?.programmer?.selected) {
             setSelectedFixtures(result.programmer.selected);
             setSelectedGroupId(result.programmer.selection_expression?.type === "live_group" ? (result.programmer.selection_expression.group_id ?? null) : null);
           }
+          setPendingCommandChoice(null);
           const target = defaultCommandLine(commandTargetModeRef.current);
+          commandLineEpoch.current += 1;
           setCommandLineState(target);
           setCommandLinePristine(true);
-          await client.setCommandLine(target);
+          await persistCommandLine(target);
           setError(null);
           return true;
         } catch (reason) {
@@ -696,9 +838,45 @@ export function ServerProvider({ children }: PropsWithChildren) {
           setError(reason instanceof Error ? reason.message : String(reason));
         }
       },
+      selectionGesture: async (source, remove = false) => {
+        const previousFixtures = selectedFixtures;
+        const previousGroup = selectedGroupId;
+        try {
+          const result = (await client.selectionGesture(source, remove)) as {
+            programmer?: {
+              selected?: string[];
+              selection_expression?: {
+                type?: string;
+                items?: Array<{ type?: string; group_id?: string }>;
+              } | null;
+            };
+          };
+          const programmer = result.programmer;
+          setSelectedFixtures(programmer?.selected ?? []);
+          const items = programmer?.selection_expression?.type === "sources"
+            ? (programmer.selection_expression.items ?? [])
+            : [];
+          const only = items.length === 1 ? items[0] : null;
+          setSelectedGroupId(only?.type === "live_group" ? (only.group_id ?? null) : null);
+          setError(null);
+        } catch (reason) {
+          setSelectedFixtures(previousFixtures);
+          setSelectedGroupId(previousGroup);
+          setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      },
       setProgrammer: async (fixtureId, attribute, level) => {
         try {
           await client.setProgrammer(fixtureId, attribute, level);
+          setError(null);
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      },
+      releaseProgrammer: async (fixtureId, attribute) => {
+        try {
+          await client.releaseProgrammer(fixtureId, attribute);
+          setBootstrap(await client.bootstrap());
           setError(null);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
@@ -708,6 +886,16 @@ export function ServerProvider({ children }: PropsWithChildren) {
         try {
           if (!selectedGroupId) throw new Error("Select a live group before setting group-relative values");
           await client.setGroupProgrammer(selectedGroupId, attribute, level);
+          setError(null);
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      },
+      releaseGroupValue: async (attribute) => {
+        try {
+          if (!selectedGroupId) throw new Error("Select a live group before releasing group-relative values");
+          await client.releaseGroupProgrammer(selectedGroupId, attribute);
+          setBootstrap(await client.bootstrap());
           setError(null);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
@@ -738,6 +926,17 @@ export function ServerProvider({ children }: PropsWithChildren) {
           setError(null);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      },
+      readVirtualPlaybackExclusionZones: () => client.virtualPlaybackExclusionZones(),
+      saveVirtualPlaybackExclusionZones: async (surfaceId, zones) => {
+        try {
+          await client.saveVirtualPlaybackExclusionZones(surfaceId, zones);
+          setError(null);
+          return true;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return false;
         }
       },
       setPlaybackPage: async (page) => {
@@ -775,6 +974,46 @@ export function ServerProvider({ children }: PropsWithChildren) {
           setError(null);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      },
+      savePlaybackSlot: async (page, slot, playback) => {
+        if (!bootstrap?.active_show) return false;
+        try {
+          const [pages, definitions] = await Promise.all([
+            client.objects<import("./types").PlaybackPage>(bootstrap.active_show.id, "playback_page"),
+            client.objects<import("./types").PlaybackDefinition>(bootstrap.active_show.id, "playback"),
+          ]);
+          const pageObject = pages.find((item) => item.body.number === page);
+          const mappedNumber = pageObject?.body.slots[String(slot)];
+          const playbackObject = mappedNumber == null ? undefined : definitions.find((item) => item.body.number === mappedNumber);
+          await client.savePlaybackSlot(page, slot, playback, playbackObject?.revision ?? 0, pageObject?.revision ?? 0);
+          setPlaybacks(await client.playbacks());
+          setError(null);
+          return true;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return false;
+        }
+      },
+      clearPlaybackSlot: async (page, slot) => {
+        if (!bootstrap?.active_show) return false;
+        try {
+          const [pages, definitions] = await Promise.all([
+            client.objects<import("./types").PlaybackPage>(bootstrap.active_show.id, "playback_page"),
+            client.objects<import("./types").PlaybackDefinition>(bootstrap.active_show.id, "playback"),
+          ]);
+          const pageObject = pages.find((item) => item.body.number === page);
+          const mappedNumber = pageObject?.body.slots[String(slot)];
+          if (!pageObject || mappedNumber == null) return true;
+          const playbackObject = definitions.find((item) => item.body.number === mappedNumber);
+          if (!playbackObject) return false;
+          await client.clearPlaybackSlot(page, slot, playbackObject.revision, pageObject.revision);
+          setPlaybacks(await client.playbacks());
+          setError(null);
+          return true;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return false;
         }
       },
       saveCueList: async (cueList, revision) => {
@@ -817,6 +1056,32 @@ export function ServerProvider({ children }: PropsWithChildren) {
           setError(null);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      },
+      saveOutputRoute: async (id, route, revision) => {
+        if (!bootstrap?.active_show) return false;
+        try {
+          await client.putObject(bootstrap.active_show.id, "route", id, route, revision);
+          setPatch(await client.patch());
+          setOutputRoutes(await client.objects<OutputRoute>(bootstrap.active_show.id, "route"));
+          setError(null);
+          return true;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return false;
+        }
+      },
+      deleteOutputRoute: async (id, revision) => {
+        if (!bootstrap?.active_show) return false;
+        try {
+          await client.deleteObject(bootstrap.active_show.id, "route", id, revision);
+          setPatch(await client.patch());
+          setOutputRoutes(await client.objects<OutputRoute>(bootstrap.active_show.id, "route"));
+          setError(null);
+          return true;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return false;
         }
       },
       createShow: async (name) => {
@@ -881,6 +1146,28 @@ export function ServerProvider({ children }: PropsWithChildren) {
           setError(null);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      },
+      openShowFile: async (rootId, path, name) => {
+        try {
+          const showName = name.replace(/\.show$/i, "");
+          let entry = rootId === "shows"
+            ? shows.find((show) => show.name.localeCompare(showName, undefined, { sensitivity: "accent" }) === 0)
+            : undefined;
+          if (!entry) {
+            const blob = await client.fileContent(rootId, path);
+            const bytes = new Uint8Array(await blob.arrayBuffer());
+            let binary = "";
+            for (const byte of bytes) binary += String.fromCharCode(byte);
+            entry = await client.createShow(showName, btoa(binary), false);
+          }
+          await client.openShow(entry.id, "safe_blackout");
+          await refresh();
+          setError(null);
+          return true;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return false;
         }
       },
       listShowRevisions: async (id) => {
@@ -1014,7 +1301,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
       },
       saveDeskLayout: async (layout) => {
         try {
-          if (!bootstrap?.active_show || !session) throw new Error("Open a show before saving a desk layout");
+          if (!bootstrap?.active_show || !session) throw new Error("Open a show before saving a Desktop layout");
           const revision = deskLayout?.revision ?? 0;
           await client.putObject(bootstrap.active_show.id, "user_layout", session.user.id, layout, revision);
           const layouts = await client.objects<StoredDeskLayout>(bootstrap.active_show.id, "user_layout");
@@ -1137,8 +1424,11 @@ export function ServerProvider({ children }: PropsWithChildren) {
         try {
           if (!bootstrap?.active_show || !session) throw new Error("Open a show before storing a Cue");
           const programmers = await client.programmers();
-          const programmer = programmers.find((item) => item.user_id === session.user.id);
+          const programmer = programmers.find((item) => item.session_id === session.session_id);
           if (!programmer) throw new Error("The current programmer is unavailable");
+          const recordingBlind = programmer.blind && programmer.preload_capture_programmer !== false;
+          const recordValues = recordingBlind ? programmer.preload_pending : programmer.values;
+          const recordGroupValues = recordingBlind ? programmer.preload_group_pending : programmer.group_values;
           const objects = await client.objects<import("./types").CueList>(bootstrap.active_show.id, "cue_list");
           const existing = cueListId ? objects.find((item) => item.id === cueListId) : undefined;
           const id = existing?.id ?? crypto.randomUUID();
@@ -1163,7 +1453,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
           const mergeActive = localStorage.getItem("light.store-merge-active-cue") === "true" && active && current.cues[active.cue_index];
           const cueNumber = mergeActive ? current.cues[active.cue_index].number : current.cues.length ? Math.max(...current.cues.map((cue) => cue.number)) + 1 : 1;
           const changes = (
-            programmer.values as Array<{
+            recordValues as Array<{
               fixture_id: string;
               attribute: string;
               value: import("./types").AttributeValue;
@@ -1177,7 +1467,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
             ...(value.fade_millis == null ? {} : { fade_millis: value.fade_millis }),
             ...(value.delay_millis == null ? {} : { delay_millis: value.delay_millis }),
           }));
-          const group_changes = Object.entries(programmer.group_values ?? {}).flatMap(([group_id, attributes]) =>
+          const group_changes = Object.entries(recordGroupValues ?? {}).flatMap(([group_id, attributes]) =>
             Object.entries(attributes).map(([attribute, value]) => ({
               group_id,
               attribute,
@@ -1187,6 +1477,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
             })),
           );
           const previousCue = mergeActive ? current.cues[active.cue_index] : null;
+          const cueOnly = localStorage.getItem("light.store-cue-only") === "true";
           const mergeChanges = <
             T extends {
               fixture_id?: string;
@@ -1197,14 +1488,16 @@ export function ServerProvider({ children }: PropsWithChildren) {
             previous: T[],
             incoming: T[],
           ) => [...previous.filter((old) => !incoming.some((next) => next.attribute === old.attribute && next.fixture_id === old.fixture_id && next.group_id === old.group_id)), ...incoming];
+          const restoration = mergeActive ? { changes: [], group_changes: [] } : cueOnlyRestoration(current.cues);
           const cue = {
             number: cueNumber,
             name: previousCue?.name ?? `Cue ${cueNumber}`,
+            cue_only: mergeActive ? previousCue?.cue_only ?? cueOnly : cueOnly,
             fade_millis: previousCue?.fade_millis ?? 0,
             delay_millis: previousCue?.delay_millis ?? 0,
             trigger: previousCue?.trigger ?? { type: "manual" },
-            changes: mergeChanges(previousCue?.changes ?? [], changes),
-            group_changes: mergeChanges(previousCue?.group_changes ?? [], group_changes),
+            changes: mergeActive ? mergeChanges(previousCue?.changes ?? [], changes) : mergeChanges(restoration.changes, changes),
+            group_changes: mergeActive ? mergeChanges(previousCue?.group_changes ?? [], group_changes) : mergeChanges(restoration.group_changes, group_changes),
             phasers: previousCue?.phasers ?? [],
           };
           const cues = mergeActive ? current.cues.map((existingCue, index) => (index === active.cue_index ? cue : existingCue)) : [...current.cues, cue];
@@ -1253,6 +1546,10 @@ export function ServerProvider({ children }: PropsWithChildren) {
             pageObject?.revision ?? 0,
           );
           await refresh();
+          if (!recordingBlind) {
+            await client.poolPlaybackAction(playbackObject.body.number, "go-to", { cue_number: cueNumber });
+            await refresh();
+          }
           setError(null);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
@@ -1263,7 +1560,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
           if (!bootstrap?.active_show || !session) throw new Error("Open a show before storing groups");
           const existing = groups.find((item) => item.id === id);
           const programmers = await client.programmers();
-          const programmer = programmers.find((item) => item.user_id === session.user.id);
+          const programmer = programmers.find((item) => item.session_id === session.session_id);
           const expression = programmer?.selection_expression;
           const derived_from =
             expression?.type === "live_group" && expression.group_id
@@ -1301,6 +1598,28 @@ export function ServerProvider({ children }: PropsWithChildren) {
           setError(null);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      },
+      updateGroup: async (id, update) => {
+        try {
+          if (!bootstrap?.active_show) throw new Error("Open a show before editing a group");
+          const existing = groups.find((item) => item.id === id);
+          if (!existing) throw new Error(`Group ${id} does not exist`);
+          const name = update.name?.trim();
+          if (!name) throw new Error("Group name is required");
+          const body: StoredGroup = {
+            ...existing.body,
+            name,
+            color: update.color || undefined,
+            icon: update.icon || undefined,
+          };
+          await client.putObject(bootstrap.active_show.id, "group", id, body, existing.revision);
+          setGroups(await client.objects<StoredGroup>(bootstrap.active_show.id, "group"));
+          setError(null);
+          return true;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return false;
         }
       },
       setGroupMaster: async (id, master) => {
@@ -1389,7 +1708,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
         try {
           if (!bootstrap?.active_show || !session) throw new Error("Open a show before storing presets");
           const programmers = await client.programmers();
-          const programmer = programmers.find((item) => item.user_id === session.user.id);
+          const programmer = programmers.find((item) => item.session_id === session.session_id);
           if (!programmer) throw new Error("The current programmer is unavailable");
           const values: Record<string, Record<string, unknown>> = {};
           const group_values: Record<string, Record<string, unknown>> = Object.fromEntries(Object.entries(programmer.group_values ?? {}).map(([group, attributes]) => [group, Object.fromEntries(Object.entries(attributes).map(([attribute, value]) => [attribute, value.value]))]));
@@ -1474,6 +1793,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
       clearProgrammerValues: async () => {
         try {
           await client.clearProgrammerValues();
+          setBootstrap(await client.bootstrap());
           setError(null);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
@@ -1629,6 +1949,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
       session,
       deskLock,
       patch,
+      outputRoutes,
       playbacks,
       shows,
       configuration,
@@ -1644,11 +1965,15 @@ export function ServerProvider({ children }: PropsWithChildren) {
       commandLine,
       commandTargetMode,
       commandLinePristine,
+      pendingCommandChoice,
       selectedFixtures,
       selectedGroupId,
       refresh,
       setCommandLine,
       resetCommandLine,
+      cancelCommandChoice,
+      fileRoots,
+      fileEntries,
       client,
     ],
   );

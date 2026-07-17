@@ -43,6 +43,14 @@ describe("software keypad", () => {
     expect(editCommandWithSoftwareKey("1 AT 100 ", "-")).toEqual({ command: "1 AT 100 - ", execute: false });
   });
 
+  it("displays Speed Group decimal BPM values with the documented comma", () => {
+    const decimal = editTargetedCommandWithSoftwareKey("SPD GRP 2 AT 127", ".", "FIXTURE", false);
+    expect(decimal).toEqual({ command: "SPD GRP 2 AT 127,", execute: false, pristine: false });
+    expect(editTargetedCommandWithSoftwareKey(decimal.command, "5", "FIXTURE", decimal.pristine)).toEqual({
+      command: "SPD GRP 2 AT 127,5", execute: false, pristine: false,
+    });
+  });
+
   it("builds selected-playback Go To and Load Cue commands", () => {
     let goTo = editTargetedCommandWithSoftwareKey("FIXTURE", "CUE", "FIXTURE", true);
     goTo = editTargetedCommandWithSoftwareKey(goTo.command, "8", "FIXTURE", goTo.pristine);
@@ -98,18 +106,25 @@ describe("software keypad", () => {
     expect(editTargetedCommandWithSoftwareKey("RECORD + ", "GRP", "GROUP", false)).toEqual({ command: "RECORD + GROUP ", execute: false, pristine: false });
   });
 
-  it("marks the visible Group prefix as entered and preserves double-GRP dereference", () => {
-    const entered = editTargetedCommandWithSoftwareKey("GROUP", "GRP", "GROUP", true);
+  it("uses GRP as the opposite one-term prefix in Group mode and preserves Fixture-mode dereference", () => {
+    const fixture = editTargetedCommandWithSoftwareKey("GROUP", "GRP", "GROUP", true);
+    expect(fixture).toEqual({ command: "FIXTURE", execute: false, pristine: false });
+    expect(editTargetedCommandWithSoftwareKey(fixture.command, "1", "GROUP", fixture.pristine)).toEqual({
+      command: "F1", execute: false, pristine: false,
+    });
+    const entered = editTargetedCommandWithSoftwareKey("FIXTURE", "GRP", "FIXTURE", true);
     expect(entered).toEqual({ command: "GROUP", execute: false, pristine: false });
-    expect(editTargetedCommandWithSoftwareKey(entered.command, "GRP", "GROUP", entered.pristine)).toEqual({
+    expect(editTargetedCommandWithSoftwareKey(entered.command, "GRP", "FIXTURE", entered.pristine)).toEqual({
       command: "DEGRP", execute: false, pristine: false,
     });
   });
 
-  it("switches to persistent Group mode on bare Group Enter and restores it after Clear or Escape", () => {
-    const target = commandTargetAfterEnter("GROUP ", "FIXTURE", false);
-    expect(target).toBe("GROUP");
-    expect(defaultCommandLine(target!)).toBe("GROUP");
-    expect(defaultCommandLine(target!)).toBe("GROUP");
+  it("toggles the persistent target in both directions on bare opposite-prefix Enter", () => {
+    const group = commandTargetAfterEnter("GROUP ", "FIXTURE", false);
+    expect(group).toBe("GROUP");
+    expect(defaultCommandLine(group!)).toBe("GROUP");
+    const fixture = commandTargetAfterEnter("FIXTURE", "GROUP", false);
+    expect(fixture).toBe("FIXTURE");
+    expect(defaultCommandLine(fixture!)).toBe("FIXTURE");
   });
 });

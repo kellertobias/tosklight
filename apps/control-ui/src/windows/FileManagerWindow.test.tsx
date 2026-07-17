@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FileEntry } from "../api/types";
+import { Button } from "../components/common/controls";
 import { requestPaneRemoval } from "../components/shell/paneRemovalGuard";
 import {
   FileManager,
@@ -127,6 +128,23 @@ describe("FileManager", () => {
     expect(container.querySelector(".file-grid")).toBeTruthy();
   });
 
+  it("clears a transient directory error after the next successful refresh", async () => {
+    mocks.server.fileEntries
+      .mockRejectedValueOnce(new Error("temporary root race"))
+      .mockImplementation(async (root: string, path: string) => ({
+        root_id: root,
+        path,
+        entries,
+      }));
+    render(<FileManager instanceId="transient-directory-error" />);
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Could not open this location");
+    fireEvent.click(screen.getByRole("button", { name: "Show hidden files" }));
+
+    expect(await screen.findByRole("button", { name: "alpha.txt, file" })).toBeVisible();
+    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+  });
+
   it("loads tree folders lazily and preserves breadcrumb/history navigation", async () => {
     render(<FileManager instanceId="tree" />);
     const tree = await screen.findByRole("complementary", { name: "Folder navigation" });
@@ -244,7 +262,7 @@ describe("FileManager", () => {
   });
 
   it("offers Replace, Keep Both, Skip, and applies one decision to all conflicts", async () => {
-    mocks.server.fileOperation.mockRejectedValueOnce(new Error("409 an item with that name already exists"));
+    mocks.server.fileOperation.mockRejectedValueOnce(new Error('{"error":"one or more destination names already exist"}'));
     render(<FileManager instanceId="conflict" />);
     fireEvent.click(await screen.findByRole("button", { name: "alpha.txt, file" }));
     fireEvent.click(screen.getByRole("button", { name: "image.png, file" }), { ctrlKey: true });
@@ -355,6 +373,54 @@ describe("FileManager", () => {
     expect(await within(manager).findByRole("button", { name: "Copy Here" })).toBeVisible();
     fireEvent.click(await within(manager).findByRole("button", { name: "alpha.txt, file" }));
     fireEvent.keyDown(window, { key: "Enter" });
+    await waitFor(() => expect(mocks.server.fileOperation).toHaveBeenCalledWith("shows", expect.objectContaining({ operation: "copy", sources: ["alpha.txt"] })));
+  });
+
+  it("lets only the clicked File Manager claim a pending action and leaves outside controls untouched", async () => {
+    mocks.server.commandLine = "FIXTURE";
+    const outside = vi.fn();
+    render(<>
+      <FileManager instanceId="first-manager" />
+      <FileManager instanceId="second-manager" />
+      <Button onClick={outside}>Lighting control</Button>
+    </>);
+    const managers = await screen.findAllByRole("region", { name: "File Manager" });
+
+    act(() => { window.dispatchEvent(new CustomEvent("light:desk-action", { detail: "copy" })); });
+    fireEvent.click(screen.getByRole("button", { name: "Lighting control" }));
+    expect(outside).toHaveBeenCalledOnce();
+    expect(mocks.server.claimFileInput).not.toHaveBeenCalled();
+
+    act(() => { window.dispatchEvent(new CustomEvent("light:desk-action", { detail: "copy" })); });
+    fireEvent.pointerDown(within(managers[1]).getByRole("heading", { name: "Locations" }));
+    await waitFor(() => expect(mocks.server.claimFileInput).toHaveBeenCalledWith("second-manager", "copy", "pending"));
+    expect(within(managers[0]).queryByRole("button", { name: "Copy Here" })).not.toBeInTheDocument();
+    expect(within(managers[1]).getByRole("button", { name: "Copy Here" })).toBeVisible();
+  });
+
+  it.each(["keyboard", "touch", "osc"] as const)("routes matching ENTER and ESC behavior from %s while a File Manager owns input", async (source) => {
+    const instanceId = `routing-${source}`;
+    render(<>
+      <FileManager instanceId={instanceId} />
+      <Button data-keypad-key="ENT">Touch ENTER</Button>
+      <Button data-keypad-key="ESC">Touch ESC</Button>
+    </>);
+    const alpha = await screen.findByRole("button", { name: "alpha.txt, file" });
+    const route = (action: "enter" | "escape") => {
+      if (source === "keyboard") fireEvent.keyDown(window, { key: action === "enter" ? "Enter" : "Escape" });
+      else if (source === "touch") fireEvent.click(screen.getByRole("button", { name: action === "enter" ? "Touch ENTER" : "Touch ESC" }));
+      else act(() => { window.dispatchEvent(new CustomEvent("light:file-manager-input", { detail: { instance_id: instanceId, action } })); });
+    };
+
+    fireEvent.click(alpha);
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    route("escape");
+    expect(screen.queryByRole("button", { name: "Copy Here" })).not.toBeInTheDocument();
+    expect(mocks.server.releaseFileInput).toHaveBeenCalledWith(instanceId);
+
+    fireEvent.click(alpha);
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    route("enter");
     await waitFor(() => expect(mocks.server.fileOperation).toHaveBeenCalledWith("shows", expect.objectContaining({ operation: "copy", sources: ["alpha.txt"] })));
   });
 

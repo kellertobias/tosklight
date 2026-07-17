@@ -76,9 +76,31 @@ function FamilyLabel({ full, compact }: { full: string; compact: string }) {
   </>;
 }
 
+function normalizedProgrammerTarget(value: unknown): number | undefined {
+  if (typeof value === "number") return value;
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  if (record.kind === "normalized" && typeof record.value === "number") {
+    return record.value;
+  }
+  return record.value === value ? undefined : normalizedProgrammerTarget(record.value);
+}
+
 export function ParameterControls() {
   const { state, dispatch } = useApp();
   const server = useServer();
+  const ownProgrammer = server.bootstrap?.active_programmers.find(
+    (programmer) => programmer.session_id === server.session?.session_id,
+  );
+  const programmerValues = (ownProgrammer?.values ?? []) as Array<{
+    fixture_id: string;
+    attribute: string;
+    value: unknown;
+  }>;
+  const groupProgrammerValues = (ownProgrammer?.group_values ?? {}) as Record<
+    string,
+    Record<string, unknown>
+  >;
   const [family, setFamily] = useState<Family>("Intensity");
   const [alignMode, setAlignMode] = useState<AlignMode | null>(null);
   const [dynamicsMode, setDynamicsMode] = useState(false);
@@ -116,8 +138,16 @@ export function ParameterControls() {
         for (const head of fixture.definition.heads ?? [])
           for (const parameter of head.parameters)
             result.add(parameter.attribute);
+    if (server.selectedGroupId) {
+      // An empty stored Group is still a valid live programming target. Keep the portable
+      // intensity control available before it has members, and retain any attributes already
+      // carried by the Group so they can be inspected or released.
+      result.add("intensity");
+      const group = server.groups.find((candidate) => candidate.id === server.selectedGroupId);
+      for (const attribute of Object.keys(group?.body.programming ?? {})) result.add(attribute);
+    }
     return result;
-  }, [server.patch, server.selectedFixtures]);
+  }, [server.patch, server.selectedFixtures, server.selectedGroupId, server.groups]);
   const values = useMemo(() => {
     const result = new Map<string, number>();
     for (const entry of visualization?.values ?? [])
@@ -129,17 +159,49 @@ export function ParameterControls() {
         result.set(entry.attribute, entry.value.value);
     return result;
   }, [visualization, server.selectedFixtures]);
+  const programmerTarget = (attribute: string): number | undefined => {
+    if (server.selectedGroupId) {
+      return normalizedProgrammerTarget(
+        groupProgrammerValues[server.selectedGroupId]?.[attribute],
+      );
+    }
+    for (const fixtureId of server.selectedFixtures) {
+      const entry = programmerValues.find(
+        (candidate) =>
+          candidate.fixture_id === fixtureId && candidate.attribute === attribute,
+      );
+      const target = normalizedProgrammerTarget(entry?.value);
+      if (target != null) return target;
+    }
+    return undefined;
+  };
   const applyParameter = async (attribute: string, level: number) => {
     if (server.selectedGroupId) {
-      await (state.preload === "blind"
-        ? server.setPreloadGroupValue(attribute, level)
-        : server.setGroupValue(attribute, level));
+      // The server owns the capture-domain decision. Sending the normal programmer action keeps
+      // this control live when programmer capture is disabled and blind when it is enabled.
+      await server.setGroupValue(attribute, level);
       return;
     }
     await Promise.all(
       server.selectedFixtures.map((fixtureId) =>
         server.setProgrammer(fixtureId, attribute, level),
       ),
+    );
+  };
+  const releaseParameter = async (attribute: string) => {
+    if (server.selectedGroupId) {
+      await server.releaseGroupValue(attribute);
+      return;
+    }
+    const fixtureValues = new Set(
+      programmerValues
+        .filter((entry) => entry.attribute === attribute)
+        .map((entry) => entry.fixture_id),
+    );
+    await Promise.all(
+      server.selectedFixtures
+        .filter((fixtureId) => fixtureValues.has(fixtureId))
+        .map((fixtureId) => server.releaseProgrammer(fixtureId, attribute)),
     );
   };
   const attributes = families[family].filter((attribute) =>
@@ -208,7 +270,14 @@ export function ParameterControls() {
         ) : (
           <>{encoderSlots.map((attribute, index) => {
             if (!attribute) return <div className="parameter-placeholder" aria-label={`Encoder ${index + 1} unassigned`} key={`empty-${index}`}><span>Enc {index + 1}</span><small>Unassigned</small></div>;
-            const value = values.get(attribute) ?? 0;
+            // Encoders show the operator's target immediately. Fixture/Stage views continue to
+            // read the resolved visualization so a configured Programmer Fade stays visible.
+            const value = programmerTarget(attribute) ?? values.get(attribute) ?? 0;
+            const hasScopedValue = server.selectedGroupId
+              ? Boolean(ownProgrammer?.group_values?.[server.selectedGroupId]?.[attribute])
+              : programmerValues.some(
+                  (entry) => entry.attribute === attribute && server.selectedFixtures.includes(entry.fixture_id),
+                );
             return (
               <VerticalTouchFader
                 key={attribute}
@@ -218,6 +287,7 @@ export function ParameterControls() {
                 accentColor={attribute === "color.red" ? "#ff3d45" : attribute === "color.green" ? "#35d568" : attribute === "color.blue" ? "#378eff" : attribute === "color.white" ? "#ffffff" : attribute === "color.amber" ? "#ffb30f" : attribute === "color.uv" ? "#9a55ff" : undefined}
                 mode={dynamicsMode ? "Dynamics" : undefined}
                 directInput
+                actions={hasScopedValue ? [{ id: "release", label: "Release", "aria-label": `Release ${labels[attribute] ?? attribute}` , onClick: () => void releaseParameter(attribute) }] : []}
                 onChange={(next) => void applyParameter(attribute, next / 100)}
               />
             );

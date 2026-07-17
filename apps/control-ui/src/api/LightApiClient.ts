@@ -507,6 +507,13 @@ export class LightApiClient {
     });
   }
 
+  deleteObject(showId: string, kind: string, id: string, revision: number): Promise<void> {
+    return this.request(`/api/v1/shows/${showId}/objects/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: { "if-match": String(revision) },
+    });
+  }
+
   setDmxOverride(universe: number, address: number, value: number | null) {
     return this.request("/api/v1/dmx/override", {
       method: "PUT",
@@ -583,10 +590,11 @@ export class LightApiClient {
   }
   poolPlaybackAction(
     number: number,
-    action: "on" | "off" | "toggle" | "go" | "go-minus" | "go-to" | "load" | "fast-forward" | "fast-rewind" | "temp" | "swap" | "select" | "select-contents" | "learn" | "double" | "half" | "pause" | "blackout" | "pause-dynamics" | "flash" | "master" | "xfade-on" | "xfade-off",
+    action: "button" | "on" | "off" | "toggle" | "go" | "go-minus" | "go-to" | "load" | "fast-forward" | "fast-rewind" | "temp" | "temp-on" | "temp-off" | "swap" | "select" | "select-contents" | "select-dereferenced" | "learn" | "double" | "half" | "pause" | "blackout" | "pause-dynamics" | "flash" | "master" | "xfade-on" | "xfade-off",
     input: {
       value?: number;
       pressed?: boolean;
+      button?: number;
       cue_number?: number;
       surface?: "physical" | "virtual";
     } = {},
@@ -595,6 +603,30 @@ export class LightApiClient {
       method: action === "master" ? "PUT" : "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(input),
+    });
+  }
+  virtualPlaybackExclusionZones() {
+    return this.request<import("./types").VirtualPlaybackExclusionSnapshot>("/api/v1/virtual-playback-exclusion-zones");
+  }
+  saveVirtualPlaybackExclusionZones(surfaceId: string, zones: import("./types").VirtualPlaybackExclusionZone[]) {
+    return this.request<{ surface_id: string; zones: import("./types").VirtualPlaybackExclusionZone[] }>(`/api/v1/virtual-playback-exclusion-zones/${encodeURIComponent(surfaceId)}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ zones }),
+    });
+  }
+  savePlaybackSlot(page: number, slot: number, playback: import("./types").PlaybackDefinition, expectedPlaybackRevision: number, expectedPageRevision: number) {
+    return this.request<{ playback: import("./types").PlaybackDefinition; page: import("./types").PlaybackPage }>(`/api/v1/playback-pages/${page}/slots/${slot}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ playback, expected_playback_revision: expectedPlaybackRevision, expected_page_revision: expectedPageRevision }),
+    });
+  }
+  clearPlaybackSlot(page: number, slot: number, expectedPlaybackRevision: number, expectedPageRevision: number) {
+    return this.request<{ cleared: boolean; playback_number: number; page: number; slot: number; page_revisions: number[] }>(`/api/v1/playback-pages/${page}/slots/${slot}`, {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ expected_playback_revision: expectedPlaybackRevision, expected_page_revision: expectedPageRevision }),
     });
   }
   setPlaybackPage(deskId: string, page: number) {
@@ -619,11 +651,23 @@ export class LightApiClient {
       value,
     });
   }
+  releaseProgrammer(fixtureId: string, attribute: string) {
+    return this.command("programmer.release", {
+      fixture_id: fixtureId,
+      attribute,
+    });
+  }
   setGroupProgrammer(groupId: string, attribute: string, value: number) {
     return this.command("programmer.group.set", {
       group_id: groupId,
       attribute,
       value,
+    });
+  }
+  releaseGroupProgrammer(groupId: string, attribute: string) {
+    return this.command("programmer.group.release", {
+      group_id: groupId,
+      attribute,
     });
   }
   setGroupMaster(groupId: string, value: number) {
@@ -635,6 +679,16 @@ export class LightApiClient {
 
   setSelection(fixtures: string[]) {
     return this.command("selection.set", { fixtures });
+  }
+
+  selectionGesture(
+    source:
+      | { type: "fixture"; fixture_id: string }
+      | { type: "live_group"; group_id: string }
+      | { type: "dereferenced_group"; group_id: string },
+    remove = false,
+  ) {
+    return this.command("selection.gesture", { source, remove });
   }
 
   setCommandLine(value: string) {

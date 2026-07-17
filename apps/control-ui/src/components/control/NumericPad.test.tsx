@@ -6,9 +6,9 @@ const dispatch = vi.fn((action: { type: string; value?: boolean }) => {
   if (action.type === "SET_SHIFT_ARMED") state.shiftArmed = Boolean(action.value);
 });
 const server = {
-  bootstrap: { active_programmers: [] },
+  bootstrap: { active_programmers: [] as Array<Record<string, unknown>> },
   session: { user: { id: "operator" } },
-  selectedFixtures: [],
+  selectedFixtures: [] as string[],
   configuration: { programmer_fade_millis: 3_000 },
   commandLine: "FIXTURE",
   commandTargetMode: "FIXTURE",
@@ -36,15 +36,87 @@ const state = {
   ],
   patchSetArmed: false,
   presetSetArmed: false,
+  playbackSetArmed: false,
   shiftArmed: false,
 };
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
 vi.mock("../../state/AppContext", () => ({ useApp: () => ({ state, dispatch }) }));
 
-afterEach(() => { cleanup(); state.shiftArmed = false; vi.clearAllMocks(); });
+afterEach(() => {
+  cleanup();
+  server.bootstrap.active_programmers = [];
+  server.selectedFixtures = [];
+  server.commandLine = "FIXTURE";
+  server.commandLinePristine = true;
+  state.shiftArmed = false;
+  state.activeDeskId = "programming";
+  (state as { builtIn: string | null }).builtIn = null;
+  (state.desks[0] as { panes: Array<{ kind: string }> }).panes = [];
+  vi.clearAllMocks();
+});
 
 describe("NumericPad layout", () => {
+  it("shows dark, lit, and blinking Clear states and clears selection before values", () => {
+    const { rerender } = render(<NumericPad/>);
+    const clear = () => screen.getByRole("button", { name: "CLR" });
+    expect(clear()).toHaveClass("clear-idle");
+
+    server.selectedFixtures = ["fixture-1"];
+    rerender(<NumericPad/>);
+    expect(clear()).toHaveClass("clear-active");
+    fireEvent.click(clear());
+    expect(server.setSelection).toHaveBeenCalledWith([]);
+    expect(server.clearProgrammerValues).not.toHaveBeenCalled();
+
+    server.selectedFixtures = [];
+    server.bootstrap.active_programmers = [{
+      user_id: "operator",
+      values: [{ fixture_id: "fixture-1", attribute: "intensity", value: { kind: "normalized", value: 0.5 } }],
+      group_values: {},
+    }];
+    rerender(<NumericPad/>);
+    expect(clear()).toHaveClass("clear-warning");
+    fireEvent.click(clear());
+    expect(server.clearProgrammerValues).toHaveBeenCalledTimes(1);
+
+    server.bootstrap.active_programmers = [];
+    rerender(<NumericPad/>);
+    expect(clear()).toHaveClass("clear-idle");
+  });
+
+  it("arms playback configuration when a Virtual Playback grid is the available target surface", () => {
+    const grid = document.createElement("div");
+    grid.className = "virtual-playback-grid";
+    document.body.append(grid);
+    render(<NumericPad/>);
+    fireEvent.click(screen.getByRole("button", { name: "SET" }));
+    expect(dispatch).toHaveBeenCalledWith({ type: "SET_PLAYBACK_SET_ARMED", value: true });
+    grid.remove();
+  });
+
+  it("does not let a hidden Presets pane steal SET from another visible built-in", () => {
+    state.activeDeskId = "desk-one";
+    (state as { builtIn: string | null }).builtIn = "groups";
+    (state.desks[0] as { panes: Array<{ kind: string }> }).panes = [{ kind: "presets" }];
+    render(<NumericPad/>);
+    fireEvent.click(screen.getByRole("button", { name: "SET" }));
+    expect(dispatch).not.toHaveBeenCalledWith({ type: "SET_PRESET_SET_ARMED", value: true });
+    expect(server.setCommandLine).toHaveBeenCalledWith("SET", false);
+  });
+
+  it("keeps SET as a command token once Copy or Move entry has started", () => {
+    state.activeDeskId = "desk-one";
+    (state.desks[0] as { panes: Array<{ kind: string }> }).panes = [{ kind: "presets" }];
+    server.commandLine = "COPY";
+    server.commandLinePristine = false;
+    render(<NumericPad/>);
+
+    fireEvent.click(screen.getByRole("button", { name: "SET" }));
+    expect(dispatch).not.toHaveBeenCalledWith({ type: "SET_PRESET_SET_ARMED", value: true });
+    expect(server.setCommandLine).toHaveBeenCalledWith("COPY SET ", false);
+  });
+
   it("uses separate 5-by-2 and 5-by-4 grids with a spanning fade and single-row Through and Enter keys", () => {
     const { container } = render(<NumericPad/>);
     expect(container.querySelector(".numeric-pad-command-section")).toBeInTheDocument();
@@ -88,6 +160,12 @@ describe("NumericPad layout", () => {
     expect(dispatch).toHaveBeenCalledWith({ type: "OPEN_BUILTIN", kind: "dynamics" });
     shifted("6");
     expect(dispatch).toHaveBeenCalledWith({ type: "OPEN_BUILTIN", kind: "channels" });
+    shifted("TIME");
+    expect(server.setCommandLine).toHaveBeenCalledWith("SPD GRP", false);
+    server.commandLine = "SPD GRP 1 AT";
+    server.commandLinePristine = false;
+    shifted("TIME");
+    expect(server.setCommandLine).toHaveBeenCalledWith("SPD GRP 1 AT SPD GRP", false);
     shifted("7");
     shifted("8");
     shifted("9");

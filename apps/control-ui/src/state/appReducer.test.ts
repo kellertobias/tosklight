@@ -36,6 +36,7 @@ describe("appReducer", () => {
   it("creates an empty new desk normally and clones when saving as new", () => {
     const empty = appReducer(initialState, { type: "NEW_DESK" });
     expect(empty.desks.at(-1)?.panes).toHaveLength(0);
+    expect(empty.desks.at(-1)?.name).toBe("Desktop 4");
 
     const saving = appReducer(initialState, { type: "START_SAVE_DESK" });
     const cloned = appReducer(saving, { type: "NEW_DESK" });
@@ -128,6 +129,44 @@ describe("appReducer", () => {
     const updated = appReducer(hydrated, { type: "SET_TEXT_EDITOR_VIEW", id: "editor", root: "shows", path: "run.md", selectionStart: 12, selectionEnd: 16, scrollTop: 240 });
     expect(updated.desks[0].panes[0].textEditorView).toEqual({ root: "shows", path: "run.md", selectionStart: 12, selectionEnd: 16, scrollTop: 240 });
     expect(updated.desks[0].panes[0]).not.toHaveProperty("text");
+  });
+
+  it("persists Text Editor pane mode and read-only settings while older layouts retain safe defaults", () => {
+    const desks = [{ id: "notes", name: "Notes", panes: [{ id: "editor", kind: "text_editor" as const, title: "Text Editor", x: 1, y: 1, width: 8, height: 8 }] }];
+    const legacy = appReducer(initialState, { type: "HYDRATE_LAYOUT", desks, activeDeskId: "notes" });
+    expect(legacy.desks[0].panes[0].textEditorReadOnly ?? false).toBe(false);
+    expect(legacy.desks[0].panes[0].textEditorMode ?? "plain").toBe("plain");
+
+    const readOnly = appReducer(legacy, { type: "SET_TEXT_EDITOR_SETTINGS", id: "editor", readOnly: true });
+    const rendered = appReducer(readOnly, { type: "SET_TEXT_EDITOR_SETTINGS", id: "editor", mode: "split" });
+    expect(rendered.desks[0].panes[0]).toEqual(expect.objectContaining({ textEditorReadOnly: true, textEditorMode: "split" }));
+  });
+
+  it("hydrates legacy pane layouts without requiring newly added pane fields", () => {
+    const desks = [{
+      id: "legacy-workspace",
+      name: "Legacy workspace",
+      panes: [
+        { id: "virtual", kind: "virtual_playbacks" as const, title: "Virtual Playbacks", x: 1, y: 1, width: 8, height: 8 },
+        { id: "files", kind: "file_manager" as const, title: "File Manager", x: 9, y: 1, width: 8, height: 8 },
+        { id: "notes", kind: "text_editor" as const, title: "Text Editor", x: 17, y: 1, width: 8, height: 8 },
+      ],
+    }];
+
+    const legacy = appReducer(initialState, {
+      type: "HYDRATE_LAYOUT",
+      desks,
+      activeDeskId: "legacy-workspace",
+    });
+    const [virtual, files, notes] = legacy.desks[0].panes;
+
+    expect(virtual.virtualPlaybackRows ?? 2).toBe(2);
+    expect(virtual.virtualPlaybackColumns ?? 2).toBe(2);
+    expect(virtual.virtualPlaybackCells ?? []).toEqual([]);
+    expect(virtual.virtualPlaybackExclusionZones ?? []).toEqual([]);
+    expect(files.fileManagerShowHidden ?? false).toBe(false);
+    expect(notes.textEditorReadOnly ?? false).toBe(false);
+    expect(notes.textEditorMode ?? "plain").toBe("plain");
   });
 
   it("hydrates persisted built-in window settings without requiring them in older layouts", () => {

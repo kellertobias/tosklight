@@ -28,7 +28,8 @@ export function commandTargetAfterEnter(
   target: CommandTargetMode,
   pristine: boolean,
 ): CommandTargetMode | null {
-  if (pristine || command.trim().toUpperCase() !== "GROUP") return null;
+  const opposite = target === "GROUP" ? "FIXTURE" : "GROUP";
+  if (pristine || command.trim().toUpperCase() !== opposite) return null;
   return target === "GROUP" ? "FIXTURE" : "GROUP";
 }
 
@@ -97,6 +98,7 @@ export function editTargetedCommandWithSoftwareKey(
 
   if (pristine) {
     if (/^\d$/.test(key)) return { command: `${shortTarget(target)}${key}`, execute: false, pristine: false };
+    if (key === "GRP") return { command: target === "GROUP" ? "FIXTURE" : "GROUP", execute: false, pristine: false };
     const root = ({
       GRP: "GROUP", CUE: "CUE", DEL: "DELETE", MOV: "MOVE", CPY: "COPY",
       SET: "SET", AT: "AT", TIME: "TIME", SELECT: "SELECT", "+": "+", "-": "-", ".": ".",
@@ -115,6 +117,9 @@ export function editTargetedCommandWithSoftwareKey(
   if (key === "AT" && /(?:^|\s)AT\s*$/i.test(command)) {
     return { command: command.replace(/AT\s*$/i, "AT FULL"), execute: true, pristine: false };
   }
+  if (key === "." && /^\s*SPD\s+GRP\b/i.test(command)) {
+    return { command: `${command},`, execute: false, pristine: false };
+  }
   if (key === "." && /\.\s*$/.test(command)) {
     return { command: `${command.replace(/\.\s*$/, "").trimEnd()} AT 0`, execute: true, pristine: false };
   }
@@ -126,8 +131,8 @@ export function editTargetedCommandWithSoftwareKey(
     TRU: "THRU", DIV: "DIV", SET: "SET", AT: "AT", TIME: "TIME", SELECT: "SELECT", "+": "+", "-": "-",
   } as Partial<Record<SoftwareKey, string>>)[key] ?? key;
   const spaced = ["GROUP", "CUE", "DELETE", "MOVE", "COPY", "THRU", "DIV", "SET", "AT", "TIME", "SELECT", "+", "-"].includes(token);
-  if (/^\d$/.test(token) && /^\s*GROUP\s*$/i.test(command)) {
-    return { command: `G${token}`, execute: false, pristine: false };
+  if (/^\d$/.test(token) && /^\s*(?:GROUP|FIXTURE)\s*$/i.test(command)) {
+    return { command: `${/^\s*GROUP/i.test(command) ? "G" : "F"}${token}`, execute: false, pristine: false };
   }
   const selectionContinuation = (selectionCommand || /^\s*\+\s*$/.test(command))
     && /(?:\+|-)\s*$/.test(command)

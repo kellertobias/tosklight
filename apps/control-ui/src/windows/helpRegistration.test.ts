@@ -12,9 +12,9 @@ describe("Help window registration", () => {
 });
 
 describe("Development window registration", () => {
-  it("remains routable and pane-capable but is omitted from the Built-ins dock", () => {
+  it("remains routable through developer tooling but is not an operator pane or Built-in choice", () => {
     expect(windowRegistry.development).toBeDefined();
-    expect(windowChoices.some(([kind]) => kind === "development")).toBe(true);
+    expect(windowChoices.some(([kind]) => kind === "development")).toBe(false);
     expect(builtIns.some(([kind]) => kind === "development")).toBe(false);
   });
 });

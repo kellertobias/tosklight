@@ -18,7 +18,7 @@ function ControlButton({ label, lamp = dark, onDown, onUp, className = "" }: { l
   const [long, setLong] = useState(false);
   const [pressed, setPressed] = useState(false);
   const release = () => { clearTimeout(timer.current); onUp(); window.setTimeout(() => setPressed(false), 90); };
-  return <button className={`control-button ${lamp.state} ${lamp.bpm ? "beat" : ""} ${pressed ? "local-pressed" : ""} ${className}`} style={{ "--lamp": lamp.color, "--bpm": lamp.bpm ?? 60 } as React.CSSProperties}
+  return <button className={`control-button ${lamp.state} ${lamp.state === "on" && lamp.bpm ? "beat" : ""} ${pressed ? "local-pressed" : ""} ${className}`} style={{ "--lamp": lamp.color, "--bpm": lamp.bpm ?? 60 } as React.CSSProperties}
     onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); setPressed(true); setLong(false); timer.current = window.setTimeout(() => setLong(true), 650); onDown(); }}
     onPointerUp={release} onPointerCancel={release}>
     <span>{label}</span>{long && <i>LONG</i>}
@@ -73,12 +73,12 @@ export function App() {
   const saved = JSON.parse(localStorage.getItem("tosklight.hardware") ?? "{}");
   const [host, setHost] = useState(saved.host ?? "127.0.0.1"), [port, setPort] = useState(saved.port ?? 9000), [desk, setDesk] = useState(saved.desk ?? "main");
   const [connected, setConnected] = useState(false), [tab, setTab] = useState<"console" | "grid" | "settings">("console"), [top, setTop] = useState(saved.top ?? true), [page, setPage] = useState(1);
-  const [levels, setLevels] = useState<Record<number, number>>({}), [lamps, setLamps] = useState<Record<string, Lamp>>({});
+  const [levels, setLevels] = useState<Record<number, number>>({}), [lamps, setLamps] = useState<Record<string, Lamp>>({}), [speedBpms, setSpeedBpms] = useState<Record<number, number>>({});
   useEffect(() => { const off = listen<Feedback>("osc-feedback", ({ payload }) => {
     setConnected(true); const parts = payload.address.split("/"), args = payload.arguments.map(arg);
     if (payload.address.endsWith("/feedback/page")) setPage(Number(args[0]));
     const speedOffset = parts.indexOf("speed-group");
-    if (speedOffset >= 0) { const number = Number(parts[speedOffset + 1]); const color = `rgb(${Math.round(Number(args[1]) * 255)} ${Math.round(Number(args[2]) * 255)} ${Math.round(Number(args[3]) * 255)})`; setLamps((current) => ({ ...current, [`speed/${number}`]: { color, state: "on", bpm: Number(args[0]) } })); }
+    if (speedOffset >= 0) { const number = Number(parts[speedOffset + 1]), bpm = Number(args[0]), state: Blink = args[4] === "off" ? "off" : "on"; const color = `rgb(${Math.round(Number(args[1]) * 255)} ${Math.round(Number(args[2]) * 255)} ${Math.round(Number(args[3]) * 255)})`; setSpeedBpms((current) => ({ ...current, [number]: bpm })); setLamps((current) => ({ ...current, [`speed/${number}`]: { color, state, bpm } })); }
     const offset = feedbackPagePlaybackOffset(parts); if (offset < 0) return; const slot = Number(parts[offset + 1]);
     if (parts[offset + 2] === "fader") setLevels((current) => ({ ...current, [slot]: Number(args[0]) }));
     if (parts[offset + 2] === "button") { const color = `rgb(${Math.round(Number(args[0]) * 255)} ${Math.round(Number(args[1]) * 255)} ${Math.round(Number(args[2]) * 255)})`; setLamps((current) => ({ ...current, [`${slot}/${parts[offset + 3]}`]: { color, state: String(args[3]) as Blink } })); }
@@ -88,7 +88,7 @@ export function App() {
   const send = (path: string, args: unknown[]) => void invoke("send_control", { path, args });
   const action = (name: string, down: boolean) => send(oscPaths.programmer(name), [down]);
   const key = (label: string, className = "", actionName = label.toLowerCase()) => <ControlButton className={`key-${actionName === "." ? "dot" : actionName} ${className}`} label={label} onDown={() => action(actionName, true)} onUp={() => action(actionName, false)}/>;
-  const speedGroups = <section className="speed-groups"><h2>Speed groups</h2>{[1, 2, 3, 4, 5].map((number) => <div className="encoder" key={number}><ControlButton label={`SPEED ${number}`} lamp={lamps[`speed/${number}`]} onDown={() => send(oscPaths.speedGroupButton(number), [true])} onUp={() => send(oscPaths.speedGroupButton(number), [false])}/><WheelSafeRange min="1" max="999" defaultValue={120} onChange={(event) => send(oscPaths.speedGroupEncoder(number), [Number(event.target.value)])}/></div>)}</section>;
+  const speedGroups = <section className="speed-groups"><h2>Speed groups</h2>{[1, 2, 3, 4, 5].map((number) => <div className="encoder" key={number}><ControlButton label={`SPEED ${number}`} lamp={lamps[`speed/${number}`]} onDown={() => send(oscPaths.speedGroupButton(number), [true])} onUp={() => send(oscPaths.speedGroupButton(number), [false])}/><WheelSafeRange aria-label={`Speed group ${number}, ${speedBpms[number] ?? 120} BPM`} min="1" max="999" value={speedBpms[number] ?? 120} onChange={(event) => send(oscPaths.speedGroupEncoder(number), [Number(event.target.value)])}/></div>)}</section>;
 
   return <main><header><h1>ToskLight <span>Hardware Controls</span></h1><i className={connected ? "connected" : ""}>{connected ? `● Connected · page ${page}` : "○ Connecting…"}</i></header>
     <nav><button className={tab === "console" ? "active" : ""} onClick={() => setTab("console")}>Playback Console</button><button className={tab === "grid" ? "active" : ""} onClick={() => setTab("grid")}>Button Grid 41–90</button><button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}>Settings</button>{tab === "console" && <label><input type="checkbox" checked={top} onChange={(event) => { setTop(event.target.checked); localStorage.setItem("tosklight.hardware", JSON.stringify({ host, port: Number(port), desk, top: event.target.checked })); }}/> Show 21–40</label>}</nav>

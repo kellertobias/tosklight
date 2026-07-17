@@ -5,6 +5,8 @@ import { GroupStrip } from "./GroupStrip";
 const mocks = vi.hoisted(() => ({
   dispatch: vi.fn(),
   executeCommandLine: vi.fn(),
+  selectionGesture: vi.fn(),
+  selectGroup: vi.fn(),
   refresh: vi.fn(),
   state: { storeArmed: false },
   groups: [
@@ -24,6 +26,8 @@ vi.mock("../../api/ServerContext", () => ({
     groups: mocks.groups,
     selectedGroupId: null,
     executeCommandLine: mocks.executeCommandLine,
+    selectionGesture: mocks.selectionGesture,
+    selectGroup: mocks.selectGroup,
     refresh: mocks.refresh,
   }),
 }));
@@ -41,6 +45,8 @@ describe("GroupStrip command routing", () => {
   beforeEach(() => {
     mocks.dispatch.mockReset();
     mocks.executeCommandLine.mockReset().mockResolvedValue(true);
+    mocks.selectionGesture.mockReset().mockResolvedValue(undefined);
+    mocks.selectGroup.mockReset().mockResolvedValue(undefined);
     mocks.refresh.mockReset().mockResolvedValue(undefined);
     mocks.state.storeArmed = false;
     mocks.groups = [
@@ -54,10 +60,10 @@ describe("GroupStrip command routing", () => {
     ];
   });
 
-  it("selects shortcut groups through the command line", () => {
+  it("selects shortcut groups through the shared surface gesture", () => {
     render(<GroupStrip />);
     fireEvent.click(screen.getByText("Shortcut Group").closest("button")!);
-    expect(mocks.executeCommandLine).toHaveBeenCalledWith("GROUP 1");
+    expect(mocks.selectionGesture).toHaveBeenCalledWith({ type: "live_group", group_id: "1" });
   });
 
   it("records directly into stored empty shortcut groups", async () => {
