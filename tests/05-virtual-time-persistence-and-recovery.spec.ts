@@ -472,6 +472,250 @@ test.describe("docs/testing/05-virtual-time-persistence-and-recovery.md", () => 
       await api.login();
     });
   }
+
+  test("FIXTURE-001 @restart › supplemental fresh startup seeds reserved Generic profiles once with stable IDs", async ({ api, bench }) => {
+    const initial = reservedGenericProfileSnapshot(await fixtureProfiles(api));
+    expect(initial.length).toBeGreaterThan(0);
+    expect(new Set(initial.map((profile) => profile.id)).size).toBe(initial.length);
+    expect(initial.every((profile) => profile.manufacturer === "Generic" && profile.revision === 1)).toBe(true);
+
+    await bench.stopServerGracefully(api.session!.token);
+    await bench.startServer();
+    await api.login();
+
+    expect(reservedGenericProfileSnapshot(await fixtureProfiles(api))).toEqual(initial);
+    const database = `${bench.dataDir}/fixtures.sqlite`;
+    expect(Number(await readSql(database, "SELECT COUNT(DISTINCT id) FROM fixture_profiles WHERE reserved_source='builtin:generic-catalog'"))).toBe(initial.length);
+    expect(Number(await readSql(database, "SELECT COUNT(*) FROM fixture_profile_migration_failures WHERE legacy_id IN (SELECT legacy_id FROM fixture_profile_legacy_map WHERE profile_id IN (SELECT id FROM fixture_profiles WHERE reserved_source='builtin:generic-catalog'))"))).toBe(0);
+  });
+
+  test("FIXTURE-001 @restart › supplemental compatible schema-v1 modes migrate on real startup and retain exact sources idempotently", async ({ api, bench }) => {
+    const definitions = await fixtureDefinitions(api);
+    const dimmerModes = definitions
+      .filter((definition) => definition.manufacturer === "Generic" && definition.model === "Dimmer")
+      .slice(0, 2);
+    expect(dimmerModes).toHaveLength(2);
+    const family = `Legacy startup ${crypto.randomUUID()}`;
+    const rows: LegacyFixtureRow[] = dimmerModes.map((definition, index) => ({
+      definition: {
+        ...definition,
+        id: crypto.randomUUID(),
+        revision: 1,
+        schema_version: 1,
+        manufacturer: "E2E Legacy",
+        name: family,
+        model: family,
+        mode: index === 0 ? "Coarse" : "Fine",
+        profile_id: null,
+        mode_id: null,
+        profile_snapshot: null,
+      },
+      source: Buffer.from(`retained-compatible-gdtf-${index}`),
+    }));
+    const expectedProfileId = rows[0].definition.id;
+    const database = `${bench.dataDir}/fixtures.sqlite`;
+
+    await bench.stopServerGracefully(api.session!.token);
+    await insertLegacyFixtureRows(database, rows);
+    await bench.startServer();
+    await api.login();
+
+    expect(await api.request<any>("GET", "/api/v1/readiness", undefined, false)).toMatchObject({ status: "ready", recovery_mode: false });
+    const migrated = (await fixtureProfiles(api)).find((profile) => profile.manufacturer === "E2E Legacy" && profile.name === family);
+    expect(migrated).toMatchObject({ id: expectedProfileId, revision: 1, schema_version: 2, reserved_source: null });
+    expect(migrated.modes.map((mode: any) => mode.name)).toEqual(["Coarse", "Fine"]);
+
+    await bench.stopServerGracefully(api.session!.token);
+    for (const row of rows) {
+      expect(await legacyFixtureRow(database, row.definition.id)).toEqual({
+        json: JSON.stringify(row.definition),
+        sourceHex: row.source.toString("hex").toUpperCase(),
+      });
+    }
+    expect(Number(await readSql(database, `SELECT COUNT(*) FROM fixture_profile_legacy_map WHERE profile_id=${sqlString(expectedProfileId)} AND profile_revision=1`))).toBe(2);
+    const firstSnapshot = await fixtureProfileMigrationSnapshot(database, expectedProfileId);
+
+    await bench.startServer();
+    await api.login();
+    const reopened = (await fixtureProfiles(api)).find((profile) => profile.id === expectedProfileId);
+    expect(reopened).toEqual(migrated);
+    await bench.stopServerGracefully(api.session!.token);
+    expect(await fixtureProfileMigrationSnapshot(database, expectedProfileId)).toBe(firstSnapshot);
+    await bench.startServer();
+    await api.login();
+  });
+
+  test("FIXTURE-001 @restart › supplemental malformed and conflicting schema-v1 rows keep startup ready with retained evidence and stable warnings", async ({ api, bench }) => {
+    const [base] = (await fixtureDefinitions(api)).filter((definition) => definition.manufacturer === "Generic" && definition.model === "Dimmer");
+    expect(base).toBeDefined();
+    const family = `Conflicting startup ${crypto.randomUUID()}`;
+    const conflictingRows: LegacyFixtureRow[] = [0, 1].map((index) => ({
+      definition: {
+        ...base,
+        id: crypto.randomUUID(),
+        revision: 1,
+        schema_version: 1,
+        manufacturer: "E2E Recovery",
+        name: family,
+        model: family,
+        mode: index === 0 ? "Narrow" : "Wide",
+        physical: { ...base.physical, width_millimetres: index === 0 ? 250 : 500 },
+        profile_id: null,
+        mode_id: null,
+        profile_snapshot: null,
+      },
+      source: Buffer.from(`retained-conflict-gdtf-${index}`),
+    }));
+    const malformedId = crypto.randomUUID();
+    const malformedJson = "{";
+    const malformedSource = Buffer.from("retained-malformed-gdtf");
+    const database = `${bench.dataDir}/fixtures.sqlite`;
+
+    await bench.stopServerGracefully(api.session!.token);
+    await insertLegacyFixtureRows(database, conflictingRows);
+    await runSql(database, `INSERT INTO fixture_definitions(id,revision,manufacturer,model,mode,definition_json,source_gdtf) VALUES(${sqlString(malformedId)},1,'Broken','Broken','Broken',${sqlString(malformedJson)},X'${malformedSource.toString("hex")}')`);
+    await bench.startServer();
+    await api.login();
+
+    expect(await api.request<any>("GET", "/api/v1/readiness", undefined, false)).toMatchObject({ status: "ready", recovery_mode: false });
+    const warnings = await fixtureProfileWarnings(api);
+    expect(warnings.some((warning) => warning.includes(malformedId) && warning.includes("could not be migrated") && warning.includes("original definition and GDTF source were retained"))).toBe(true);
+    expect(warnings.some((warning) => warning.includes("E2E Recovery") && warning.includes(family) && warning.includes("conflicting fixture-level metadata") && warning.includes("retained as separate profiles"))).toBe(true);
+    const recoveryProfiles = (await fixtureProfiles(api)).filter((profile) => profile.manufacturer === "E2E Recovery" && profile.name === family);
+    expect(recoveryProfiles).toHaveLength(2);
+    expect(bench.recentLog()).toContain("fixture library migration requires operator attention");
+    expect(bench.recentLog()).toContain(malformedId);
+
+    await bench.stopServerGracefully(api.session!.token);
+    expect(await legacyFixtureRow(database, malformedId)).toEqual({
+      json: malformedJson,
+      sourceHex: malformedSource.toString("hex").toUpperCase(),
+    });
+    for (const row of conflictingRows) {
+      expect(await legacyFixtureRow(database, row.definition.id)).toEqual({
+        json: JSON.stringify(row.definition),
+        sourceHex: row.source.toString("hex").toUpperCase(),
+      });
+    }
+    const failure = await readSql(database, `SELECT hex(error) FROM fixture_profile_migration_failures WHERE legacy_id=${sqlString(malformedId)} AND legacy_revision=1`);
+    expect(failure).not.toBe("");
+    const warningSnapshot = await fixtureWarningSnapshot(database, family, malformedId);
+
+    await bench.startServer();
+    await api.login();
+    expect(await fixtureProfileWarnings(api)).toEqual(warnings);
+    expect((await fixtureProfiles(api)).filter((profile) => profile.manufacturer === "E2E Recovery" && profile.name === family)).toEqual(recoveryProfiles);
+    await bench.stopServerGracefully(api.session!.token);
+    expect(await fixtureWarningSnapshot(database, family, malformedId)).toBe(warningSnapshot);
+    expect(await readSql(database, `SELECT hex(error) FROM fixture_profile_migration_failures WHERE legacy_id=${sqlString(malformedId)} AND legacy_revision=1`)).toBe(failure);
+    await bench.startServer();
+    await api.login();
+  });
+
+  pairedScenario<{
+    sourceId: string;
+    sourceName: string;
+    savedRevision: number;
+    copyId?: string;
+    copyProvenance?: Record<string, unknown>;
+    expectedSourceName?: string;
+    expectedCopyName?: string;
+    expectedCopyRevisions?: string[];
+  }>({
+    id: "SHOW-005",
+    title: "named revisions load as durable, visibly independent copies",
+    arrange: async ({ api, bench }, surface) => {
+      const source = await loadCanonicalCopy(api, bench, `show-005-${surface}`);
+      const sourceEntry = await showEntry(api, source.id);
+      const named = await showObject(api, source.id, "group", "4");
+      await api.request("PUT", `/api/v1/shows/${source.id}/objects/group/4`, {
+        ...named.body,
+        name: "Named revision state",
+      }, true, named.revision);
+      const saved = await api.request<{ revision: number }>("POST", `/api/v1/shows/${source.id}/revisions`, { name: "Approved focus" });
+      const latest = await showObject(api, source.id, "group", "4");
+      await api.request("PUT", `/api/v1/shows/${source.id}/objects/group/4`, {
+        ...latest.body,
+        name: "Newer autosave state",
+      }, true, latest.revision);
+      return { sourceId: source.id, sourceName: sourceEntry.name, savedRevision: saved.revision };
+    },
+    api: async ({ api, bench }, state) => {
+      const copy = await api.request<any>("POST", `/api/v1/shows/${state.sourceId}/revisions/${state.savedRevision}/open`, { transition: "hold_current" });
+      expect(copy.id).not.toBe(state.sourceId);
+      expect(copy.name).toMatch(new RegExp(`^${escapeRegex(state.sourceName)}-rev-${state.savedRevision}-\\d{4}-\\d{2}-\\d{2}`));
+      expect(copy.revision_copy).toMatchObject({ show_id: state.sourceId, show_name: state.sourceName, revision: state.savedRevision, revision_name: "Approved focus" });
+
+      const collision = await api.request<any>("POST", `/api/v1/shows/${state.sourceId}/revisions/${state.savedRevision}/open`, { transition: "hold_current" });
+      expect(collision.id).not.toBe(copy.id);
+      expect(collision.name).not.toBe(copy.name);
+      await api.request("POST", `/api/v1/shows/${copy.id}/open`, { transition: "hold_current" });
+
+      const copyGroup = await showObject(api, copy.id, "group", "4");
+      await api.request("PUT", `/api/v1/shows/${copy.id}/objects/group/4`, {
+        ...copyGroup.body,
+        name: "Copy-only edit",
+      }, true, copyGroup.revision);
+      await api.request("POST", `/api/v1/shows/${copy.id}/revisions`, { name: "Copy checkpoint" });
+      await bench.stopServerGracefully(api.session!.token);
+      await bench.startServer();
+      await api.login();
+
+      state.copyId = copy.id;
+      state.copyProvenance = copy.revision_copy;
+      state.expectedSourceName = "Newer autosave state";
+      state.expectedCopyName = "Copy-only edit";
+      state.expectedCopyRevisions = ["Copy checkpoint"];
+    },
+    ui: async ({ api, bench, desk, page }, state) => {
+      await desk.open(bench.baseUrl);
+      await page.getByRole("button", { name: /Open show menu/ }).click();
+      await page.getByRole("button", { name: "Load", exact: true }).click();
+      const sourceCard = page.locator(".revision-show-library article").filter({ has: page.getByText(state.sourceName, { exact: true }) });
+      const revisionAction = sourceCard.locator(".named-revision-list button").filter({ hasText: "Approved focus" });
+      await expect(revisionAction).toContainText("Load Revision as Copy");
+      await revisionAction.click();
+
+      await expect(page.locator(".dock-identity b")).toContainText("Revision Copy");
+      await expect(page.getByRole("dialog", { name: "Load show", exact: true })).toBeHidden();
+      const copy = (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).active_show;
+      expect(copy.id).not.toBe(state.sourceId);
+      const showMenu = page.getByRole("dialog", { name: "Show", exact: true });
+      await expect(showMenu).toContainText(`Revision ${state.savedRevision} · Approved focus`);
+      await expect(showMenu).toContainText(`autosaved to this copy, not to ${state.sourceName}`);
+
+      await showMenu.getByRole("button", { name: "Save", exact: true }).click();
+      const manualSave = page.getByRole("dialog", { name: "Save revision copy" });
+      await expect(manualSave.getByRole("button", { name: "Keep as Separate Show" })).toBeVisible();
+      await expect(manualSave.getByRole("button", { name: "Overwrite Original Show" })).toBeVisible();
+      await manualSave.getByRole("button", { name: "Overwrite Original Show" }).click();
+      const confirmation = page.getByRole("alertdialog", { name: new RegExp(`Confirm overwrite ${escapeRegex(state.sourceName)}`) });
+      await expect(confirmation).toContainText("identity and named revisions are preserved");
+      await confirmation.getByRole("button", { name: "Cancel" }).click();
+      expect((await showObject(api, state.sourceId, "group", "4")).body.name).toBe("Newer autosave state");
+
+      await showMenu.getByRole("button", { name: "Save", exact: true }).click();
+      await page.getByRole("dialog", { name: "Save revision copy" }).getByRole("button", { name: "Overwrite Original Show" }).click();
+      await page.getByRole("alertdialog").getByRole("button", { name: new RegExp(`Replace ${escapeRegex(state.sourceName)} Latest Autosave`) }).click();
+      await expect.poll(async () => (await showObject(api, state.sourceId, "group", "4")).body.name).toBe("Named revision state");
+
+      state.copyId = copy.id;
+      state.copyProvenance = copy.revision_copy;
+      state.expectedSourceName = "Named revision state";
+      state.expectedCopyName = "Named revision state";
+      state.expectedCopyRevisions = [];
+    },
+    assert: async ({ api }, state) => {
+      expect(state.copyId).toBeTruthy();
+      expect(state.copyProvenance).toMatchObject({ show_id: state.sourceId, show_name: state.sourceName, revision: state.savedRevision, revision_name: "Approved focus" });
+      expect((await showObject(api, state.sourceId, "group", "4")).body.name).toBe(state.expectedSourceName);
+      expect((await showObject(api, state.copyId!, "group", "4")).body.name).toBe(state.expectedCopyName);
+      expect((await api.request<any[]>("GET", `/api/v1/shows/${state.sourceId}/revisions`)).map((entry) => entry.name)).toEqual(["Approved focus"]);
+      expect((await api.request<any[]>("GET", `/api/v1/shows/${state.copyId}/revisions`)).map((entry) => entry.name)).toEqual(state.expectedCopyRevisions);
+      expect((await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).active_show.id).toBe(state.copyId);
+      expect((await api.request<any[]>("GET", "/api/v1/shows", undefined, false)).some((entry) => entry.id === state.copyId)).toBe(true);
+    },
+  });
 });
 
 async function assertZeroTicks(api: ApiDriver, bench: LightBench): Promise<void> {
@@ -990,8 +1234,76 @@ async function showEntry(api: ApiDriver, id: string): Promise<any> {
   return entry;
 }
 
+async function showObject(api: ApiDriver, showId: string, kind: string, id: string): Promise<any> {
+  const entries = await api.request<any[]>("GET", `/api/v1/shows/${showId}/objects/${kind}`, undefined, false);
+  const entry = entries.find((candidate) => candidate.id === id);
+  expect(entry).toBeDefined();
+  return entry;
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+type LegacyFixtureRow = { definition: Record<string, any>; source: Buffer };
+
+async function fixtureDefinitions(api: ApiDriver): Promise<any[]> {
+  return api.request<any[]>("GET", "/api/v1/fixture-library", undefined, false);
+}
+
+async function fixtureProfiles(api: ApiDriver): Promise<any[]> {
+  return api.request<any[]>("GET", "/api/v1/fixture-profiles", undefined, false);
+}
+
+async function fixtureProfileWarnings(api: ApiDriver): Promise<string[]> {
+  return api.request<string[]>("GET", "/api/v1/fixture-profiles/warnings", undefined, false);
+}
+
+function reservedGenericProfileSnapshot(profiles: any[]): any[] {
+  return profiles
+    .filter((profile) => profile.reserved_source === "builtin:generic-catalog")
+    .map((profile) => ({
+      id: profile.id,
+      revision: profile.revision,
+      manufacturer: profile.manufacturer,
+      name: profile.name,
+      modes: profile.modes.map((mode: any) => ({ id: mode.id, name: mode.name })),
+    }))
+    .sort((left, right) => left.id.localeCompare(right.id));
+}
+
+async function insertLegacyFixtureRows(database: string, rows: LegacyFixtureRow[]): Promise<void> {
+  await runSql(database, rows.map((row) => {
+    const definition = row.definition;
+    return `INSERT INTO fixture_definitions(id,revision,manufacturer,model,mode,definition_json,source_gdtf) VALUES(${sqlString(definition.id)},${Number(definition.revision)},${sqlString(definition.manufacturer)},${sqlString(definition.model)},${sqlString(definition.mode)},${sqlString(JSON.stringify(definition))},X'${row.source.toString("hex")}')`;
+  }).join(";"));
+}
+
+async function legacyFixtureRow(database: string, id: string): Promise<{ json: string; sourceHex: string }> {
+  const encoded = await readSql(database, `SELECT hex(definition_json)||'|'||COALESCE(hex(source_gdtf),'') FROM fixture_definitions WHERE id=${sqlString(id)} AND revision=1`);
+  const [jsonHex, sourceHex] = encoded.split("|");
+  return { json: Buffer.from(jsonHex, "hex").toString("utf8"), sourceHex };
+}
+
+async function fixtureProfileMigrationSnapshot(database: string, profileId: string): Promise<string> {
+  return readSql(database, `SELECT hex(profile_json)||':'||(SELECT COUNT(*) FROM fixture_profile_legacy_map WHERE profile_id=p.id AND profile_revision=p.revision)||':'||(SELECT COUNT(*) FROM fixture_profile_legacy_sources WHERE profile_id=p.id AND profile_revision=p.revision) FROM fixture_profiles p WHERE p.id=${sqlString(profileId)} AND p.revision=1`);
+}
+
+async function fixtureWarningSnapshot(database: string, family: string, malformedId: string): Promise<string> {
+  return readSql(database, `SELECT group_concat(hex(message),'|') FROM (SELECT message FROM fixture_library_warnings WHERE message LIKE ${sqlString(`%${family}%`)} OR message LIKE ${sqlString(`%${malformedId}%`)} ORDER BY message)`);
+}
+
+function sqlString(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
 async function runSql(file: string, sql: string): Promise<void> {
   await sqlite("sqlite3", [file, sql]);
+}
+
+async function readSql(file: string, sql: string): Promise<string> {
+  const { stdout } = await sqlite("sqlite3", ["-noheader", file, sql]);
+  return stdout.trim();
 }
 
 async function fileHash(file: string): Promise<string> {

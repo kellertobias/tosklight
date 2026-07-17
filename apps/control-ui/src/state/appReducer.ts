@@ -59,6 +59,7 @@ export type Action =
   | { type: "TOGGLE_SECTION_NAMES" }
   | { type: "SET_REGULAR_NUMBER_SHORTCUTS"; value: boolean }
   | { type: "SET_STORE_ARMED"; value: boolean }
+  | { type: "SET_UPDATE_ARMED"; value: boolean }
   | { type: "SET_SHIFT_ARMED"; value: boolean }
   | { type: "SET_PATCH_ARMED"; value: boolean }
   | { type: "HYDRATE_LAYOUT"; desks: AppState["desks"]; activeDeskId: string; windowSettings?: Partial<WindowSettings> };
@@ -95,6 +96,7 @@ export const initialState: AppState = {
   systemControlsOpen: false,
   preloadStoreOpen: false,
   storeArmed: false,
+  updateArmed: false,
   shiftArmed: false,
   storeSettingsOpen: false,
   patchSetArmed: false,
@@ -257,7 +259,8 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "SET_TEXT_EDITOR_FILE": return { ...state, desks: state.desks.map((desk) => ({ ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, textFileRoot: action.root, textFilePath: action.path } : pane) })) };
     case "SET_TEXT_EDITOR_SETTINGS": return { ...state, desks: state.desks.map((desk) => ({ ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, textEditorReadOnly: action.readOnly ?? pane.textEditorReadOnly ?? false, textEditorMode: action.mode ?? pane.textEditorMode ?? "plain" } : pane) })) };
     case "SET_TEXT_EDITOR_VIEW": return { ...state, desks: state.desks.map((desk) => ({ ...desk, panes: desk.panes.map((pane) => pane.id === action.id ? { ...pane, textEditorView: { root: action.root, path: action.path, selectionStart: action.selectionStart, selectionEnd: action.selectionEnd, scrollTop: action.scrollTop } } : pane) })) };
-    case "SET_STORE_ARMED": return { ...state, storeArmed: action.value };
+    case "SET_STORE_ARMED": return { ...state, storeArmed: action.value, updateArmed: action.value ? false : state.updateArmed };
+    case "SET_UPDATE_ARMED": return { ...state, updateArmed: action.value, storeArmed: action.value ? false : state.storeArmed };
     case "SET_SHIFT_ARMED": return { ...state, shiftArmed: action.value };
     case "SET_PATCH_ARMED": return { ...state, patchSetArmed: action.value };
     default: return state;

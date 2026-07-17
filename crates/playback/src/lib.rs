@@ -823,6 +823,23 @@ pub struct MoveInBlackCandidate {
     pub values: Vec<MoveInBlackTargetValue>,
 }
 
+/// Stable identity of the playback whose sequence master applies to a contribution. Keeping this
+/// separate from `TimedValue` lets the engine retain source-specific master semantics without
+/// leaking playback concerns into programmer and show data.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct SequenceMasterSource {
+    pub playback_number: Option<u16>,
+    pub cue_list_id: CueListId,
+    pub temporary: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct PlaybackContribution {
+    pub value: TimedValue,
+    pub sequence_master: f32,
+    pub source: SequenceMasterSource,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DeletedCueHold {
     pub deleted_number: f64,
@@ -1309,6 +1326,22 @@ impl PlaybackEngine {
         }
     }
     pub fn set_master(&mut self, number: u16, value: f32) -> Result<(), String> {
+        self.set_master_inner(number, value, false)
+    }
+
+    /// Set the authoritative level through a virtual fader supplied by a remote control
+    /// protocol. Faderless/button-only layouts intentionally have no local fader, but their
+    /// playback master remains a valid runtime control and feedback source.
+    pub fn set_virtual_master(&mut self, number: u16, value: f32) -> Result<(), String> {
+        self.set_master_inner(number, value, true)
+    }
+
+    fn set_master_inner(
+        &mut self,
+        number: u16,
+        value: f32,
+        allow_faderless: bool,
+    ) -> Result<(), String> {
         if !value.is_finite() || !(0.0..=1.0).contains(&value) {
             return Err("playback master must be within 0-1".into());
         }
@@ -1316,12 +1349,14 @@ impl PlaybackEngine {
             .definitions
             .get(&number)
             .ok_or("playback does not exist")?;
-        if !definition.has_fader {
+        if !definition.has_fader && !allow_faderless {
             return Err("playback does not have a fader".into());
         }
         match definition.fader {
             PlaybackFaderMode::Temp => return self.set_temp_fader(number, value),
-            PlaybackFaderMode::XFade => return self.set_manual_xfade(number, value),
+            PlaybackFaderMode::XFade => {
+                return self.set_manual_xfade_inner(number, value, allow_faderless);
+            }
             PlaybackFaderMode::Master => {}
             _ => return Err("fader mode is not handled by the Cuelist engine".into()),
         }
@@ -1541,6 +1576,15 @@ impl PlaybackEngine {
     }
 
     pub fn set_manual_xfade(&mut self, number: u16, value: f32) -> Result<(), String> {
+        self.set_manual_xfade_inner(number, value, false)
+    }
+
+    fn set_manual_xfade_inner(
+        &mut self,
+        number: u16,
+        value: f32,
+        allow_faderless: bool,
+    ) -> Result<(), String> {
         if !value.is_finite() || !(0.0..=1.0).contains(&value) {
             return Err("manual X-fade must be within 0-1".into());
         }
@@ -1548,7 +1592,9 @@ impl PlaybackEngine {
             .definitions
             .get(&number)
             .ok_or("playback does not exist")?;
-        if !definition.has_fader || definition.fader != PlaybackFaderMode::XFade {
+        if definition.fader != PlaybackFaderMode::XFade
+            || (!definition.has_fader && !allow_faderless)
+        {
             return Err("playback is not configured for manual X-fade".into());
         }
         let cue_list_id = self.cue_list_for(number)?;
@@ -2636,6 +2682,27 @@ impl PlaybackEngine {
     }
 
     pub fn contributions_at(&self, now: DateTime<Utc>) -> Vec<TimedValue> {
+        self.contributions_at_with_snap(now, |_, _| false)
+    }
+
+    pub fn contributions_at_with_snap(
+        &self,
+        now: DateTime<Utc>,
+        is_snap: impl Fn(FixtureId, &AttributeKey) -> bool,
+    ) -> Vec<TimedValue> {
+        self.contributions_with_context_at(now, is_snap)
+            .into_iter()
+            .map(|contribution| contribution.value)
+            .collect()
+    }
+
+    /// Resolve active Cue values while retaining the exact playback master which owns each
+    /// contribution. The engine uses this metadata only after normal HTP/LTP arbitration.
+    pub fn contributions_with_context_at(
+        &self,
+        now: DateTime<Utc>,
+        is_snap: impl Fn(FixtureId, &AttributeKey) -> bool,
+    ) -> Vec<PlaybackContribution> {
         let mut values = Vec::new();
         let dynamics_now = self.dynamics_paused_at.unwrap_or(now);
         let suppressed = |playback: &ActivePlayback| {
@@ -2659,8 +2726,39 @@ impl PlaybackEngine {
             if !playback.enabled {
                 continue;
             }
+            let source = SequenceMasterSource {
+                playback_number: playback.playback_number,
+                cue_list_id: playback.cue_list_id,
+                temporary: playback.temporary,
+            };
+            let sequence_master = if playback.flash {
+                1.0
+            } else {
+                playback.master.clamp(0.0, 1.0)
+            };
+            let snap_sequence_master = if playback.flash {
+                1.0
+            } else {
+                playback
+                    .master_transition
+                    .as_ref()
+                    .map(|transition| transition.to)
+                    .unwrap_or(playback.master)
+                    .clamp(0.0, 1.0)
+            };
             if let Some(hold) = &playback.deleted_cue_hold {
-                values.extend(hold.contributions.clone());
+                values.extend(hold.contributions.iter().cloned().map(|value| {
+                    let contribution_master = if is_snap(value.fixture_id, &value.attribute) {
+                        snap_sequence_master
+                    } else {
+                        sequence_master
+                    };
+                    PlaybackContribution {
+                        value,
+                        sequence_master: contribution_master,
+                        source,
+                    }
+                }));
                 continue;
             }
             let cue_list = &self.cue_lists[&playback.cue_list_id];
@@ -2742,16 +2840,26 @@ impl PlaybackEngine {
                         delay_override.unwrap_or(cue.delay_millis),
                     )
                 };
+                let snap = is_snap(fixture_id, &attribute);
                 let progress = if playback.manual_xfade_from_index.is_some() {
-                    playback.manual_xfade_progress
+                    if snap {
+                        1.0
+                    } else {
+                        playback.manual_xfade_progress
+                    }
                 } else if playback.transition_timing_bypassed {
                     1.0
                 } else if elapsed < delay_millis {
                     0.0
-                } else if fade_millis == 0 {
+                } else if snap || fade_millis == 0 {
                     1.0
                 } else {
                     ((elapsed - delay_millis) as f32 / fade_millis as f32).clamp(0.0, 1.0)
+                };
+                let contribution_master = if snap {
+                    snap_sequence_master
+                } else {
+                    sequence_master
                 };
                 let value = interpolate(
                     previous.get(&(fixture_id, attribute.clone())),
@@ -2764,34 +2872,34 @@ impl PlaybackEngine {
                 let value = if attribute.is_intensity() {
                     value
                         .normalized()
-                        .map(|level| {
-                            AttributeValue::Normalized(
-                                level * if playback.flash { 1.0 } else { playback.master },
-                            )
-                        })
+                        .map(|level| AttributeValue::Normalized(level * contribution_master))
                         .unwrap_or(value)
                 } else {
                     value
                 };
-                values.push(TimedValue {
-                    fixture_id,
-                    merge_mode: if attribute.is_intensity() {
-                        if cue_list.intensity_priority_mode == IntensityPriorityMode::Htp {
-                            MergeMode::Htp
+                values.push(PlaybackContribution {
+                    value: TimedValue {
+                        fixture_id,
+                        merge_mode: if attribute.is_intensity() {
+                            if cue_list.intensity_priority_mode == IntensityPriorityMode::Htp {
+                                MergeMode::Htp
+                            } else {
+                                MergeMode::Ltp
+                            }
                         } else {
                             MergeMode::Ltp
-                        }
-                    } else {
-                        MergeMode::Ltp
+                        },
+                        attribute,
+                        value,
+                        priority: cue_list.priority,
+                        changed_at: playback.activated_at,
+                        programmer_order: 0,
+                        fade: false,
+                        fade_millis: None,
+                        delay_millis: None,
                     },
-                    attribute,
-                    value,
-                    priority: cue_list.priority,
-                    changed_at: playback.activated_at,
-                    programmer_order: 0,
-                    fade: false,
-                    fade_millis: None,
-                    delay_millis: None,
+                    sequence_master: contribution_master,
+                    source,
                 });
             }
             let phaser_elapsed = (effective_now
@@ -2802,6 +2910,11 @@ impl PlaybackEngine {
                 / 1000.0;
             for attribute_phaser in &cue.phasers {
                 for (index, fixture_id) in attribute_phaser.fixture_ids.iter().enumerate() {
+                    let contribution_master = if is_snap(*fixture_id, &attribute_phaser.attribute) {
+                        snap_sequence_master
+                    } else {
+                        sequence_master
+                    };
                     let sampled = attribute_phaser.phaser.sample(
                         phaser_elapsed,
                         index,
@@ -2811,30 +2924,37 @@ impl PlaybackEngine {
                         .get(&(*fixture_id, attribute_phaser.attribute.clone()))
                         .and_then(AttributeValue::normalized)
                         .unwrap_or(0.0);
-                    let level = match attribute_phaser.phaser.mode {
+                    let mut level = match attribute_phaser.phaser.mode {
                         PhaserMode::Absolute => sampled,
                         PhaserMode::Relative => base + sampled,
                     }
                     .clamp(0.0, 1.0);
-                    values.push(TimedValue {
-                        fixture_id: *fixture_id,
-                        attribute: attribute_phaser.attribute.clone(),
-                        value: AttributeValue::Normalized(level),
-                        priority: cue_list.priority,
-                        changed_at: playback.activated_at,
-                        programmer_order: 0,
-                        merge_mode: if attribute_phaser.attribute.is_intensity() {
-                            if cue_list.intensity_priority_mode == IntensityPriorityMode::Htp {
-                                MergeMode::Htp
+                    if attribute_phaser.attribute.is_intensity() {
+                        level *= contribution_master;
+                    }
+                    values.push(PlaybackContribution {
+                        value: TimedValue {
+                            fixture_id: *fixture_id,
+                            attribute: attribute_phaser.attribute.clone(),
+                            value: AttributeValue::Normalized(level),
+                            priority: cue_list.priority,
+                            changed_at: playback.activated_at,
+                            programmer_order: 0,
+                            merge_mode: if attribute_phaser.attribute.is_intensity() {
+                                if cue_list.intensity_priority_mode == IntensityPriorityMode::Htp {
+                                    MergeMode::Htp
+                                } else {
+                                    MergeMode::Ltp
+                                }
                             } else {
                                 MergeMode::Ltp
-                            }
-                        } else {
-                            MergeMode::Ltp
+                            },
+                            fade: false,
+                            fade_millis: None,
+                            delay_millis: None,
                         },
-                        fade: false,
-                        fade_millis: None,
-                        delay_millis: None,
+                        sequence_master: contribution_master,
+                        source,
                     });
                 }
             }
@@ -3168,6 +3288,76 @@ mod tests {
                 .unwrap()
                 .value,
             AttributeValue::Normalized(0.8)
+        );
+    }
+
+    #[test]
+    fn virtual_master_controls_faderless_playback_without_adding_a_local_fader() {
+        let fixture = FixtureId::new();
+        let mut cue = Cue::new(1.0);
+        cue.changes.push(value(fixture, "intensity", 1.0));
+        let cue_list = list(vec![cue]);
+        let cue_list_id = cue_list.id;
+        let mut playback = definition(1, cue_list_id);
+        playback.has_fader = false;
+        playback.button_count = 1;
+        playback.buttons = [
+            PlaybackButtonAction::Toggle,
+            PlaybackButtonAction::None,
+            PlaybackButtonAction::None,
+        ];
+        let mut engine = PlaybackEngine::default();
+        engine.register(cue_list).unwrap();
+        engine.register_definition(playback).unwrap();
+
+        assert_eq!(
+            engine.set_master(1, 0.5),
+            Err("playback does not have a fader".into())
+        );
+        engine.set_virtual_master(1, 0.5).unwrap();
+        let runtime = &engine.runtime()[0];
+        assert!(runtime.enabled);
+        assert_eq!(runtime.master, 0.5);
+        assert_eq!(runtime.fader_position, 0.5);
+        assert_eq!(
+            engine.contributions()[0].value,
+            AttributeValue::Normalized(0.5)
+        );
+    }
+
+    #[test]
+    fn virtual_master_drives_faderless_manual_xfade_without_enabling_local_input() {
+        let fixture = FixtureId::new();
+        let mut first = Cue::new(1.0);
+        first.changes.push(value(fixture, "intensity", 0.0));
+        let mut second = Cue::new(2.0);
+        second.changes.push(value(fixture, "intensity", 1.0));
+        let cue_list = list(vec![first, second]);
+        let cue_list_id = cue_list.id;
+        let mut playback = definition(1, cue_list_id);
+        playback.fader = PlaybackFaderMode::XFade;
+        playback.has_fader = false;
+        let mut engine = PlaybackEngine::default();
+        engine.register(cue_list).unwrap();
+        engine.register_definition(playback).unwrap();
+
+        assert_eq!(
+            engine.set_master(1, 0.5),
+            Err("playback does not have a fader".into())
+        );
+        assert_eq!(
+            engine.set_manual_xfade(1, 0.5),
+            Err("playback is not configured for manual X-fade".into())
+        );
+        engine.set_virtual_master(1, 0.5).unwrap();
+        let runtime = &engine.runtime()[0];
+        assert!(runtime.enabled);
+        assert_eq!(runtime.fader_position, 0.5);
+        assert_eq!(runtime.manual_xfade_position, 0.5);
+        assert_eq!(runtime.manual_xfade_progress, 0.5);
+        assert_eq!(
+            resolve(engine.contributions())[&(fixture, AttributeKey::intensity())],
+            AttributeValue::Normalized(0.5)
         );
     }
 
@@ -4556,5 +4746,77 @@ mod tests {
         engine.go_playback(1).unwrap();
         engine.go_playback(1).unwrap();
         assert!(engine.move_in_black_candidates().is_empty());
+    }
+
+    #[test]
+    fn snap_attributes_bypass_cue_crossfades() {
+        let started = Utc::now();
+        let clock = Arc::new(light_core::ManualClock::new(started));
+        let fixture = FixtureId::new();
+        let mut first = Cue::new(1.0);
+        first.changes.push(value(fixture, "pan", 0.0));
+        first.changes.push(value(fixture, "tilt", 0.0));
+        let mut second = Cue::new(2.0);
+        second.fade_millis = 1_000;
+        second.changes.push(value(fixture, "pan", 1.0));
+        second.changes.push(value(fixture, "tilt", 1.0));
+        let cue_list = list(vec![first, second]);
+        let cue_list_id = cue_list.id;
+        let mut engine = PlaybackEngine::with_clock(clock.clone());
+        engine.register(cue_list).unwrap();
+        engine
+            .register_definition(definition(1, cue_list_id))
+            .unwrap();
+        engine.go_playback(1).unwrap();
+        engine.go_playback(1).unwrap();
+
+        let halfway = started + ChronoDuration::milliseconds(500);
+        clock.set(halfway);
+        let values = resolve(
+            engine.contributions_at_with_snap(halfway, |_, attribute| attribute.0 == "pan"),
+        );
+        assert_eq!(
+            values[&(fixture, AttributeKey("pan".into()))],
+            AttributeValue::Normalized(1.0)
+        );
+        assert_eq!(
+            values[&(fixture, AttributeKey("tilt".into()))],
+            AttributeValue::Normalized(0.5)
+        );
+    }
+
+    #[test]
+    fn snap_attributes_bypass_playback_master_crossfades() {
+        let started = Utc::now();
+        let clock = Arc::new(light_core::ManualClock::new(started));
+        let snap_fixture = FixtureId::new();
+        let faded_fixture = FixtureId::new();
+        let mut cue = Cue::new(1.0);
+        for fixture in [snap_fixture, faded_fixture] {
+            cue.changes.push(value(fixture, "intensity", 1.0));
+        }
+        let cue_list = list(vec![cue]);
+        let cue_list_id = cue_list.id;
+        let mut playback = definition(1, cue_list_id);
+        playback.xfade_millis = 1_000;
+        let mut engine = PlaybackEngine::with_clock(clock.clone());
+        engine.register(cue_list).unwrap();
+        engine.register_definition(playback).unwrap();
+        engine.xfade(1, true).unwrap();
+
+        let halfway = started + ChronoDuration::milliseconds(500);
+        clock.set(halfway);
+        engine.tick(halfway, None);
+        let values = resolve(
+            engine.contributions_at_with_snap(halfway, |fixture, _| fixture == snap_fixture),
+        );
+        assert_eq!(
+            values[&(snap_fixture, AttributeKey::intensity())],
+            AttributeValue::Normalized(1.0)
+        );
+        assert_eq!(
+            values[&(faded_fixture, AttributeKey::intensity())],
+            AttributeValue::Normalized(0.5)
+        );
     }
 }

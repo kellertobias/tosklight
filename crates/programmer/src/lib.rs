@@ -108,7 +108,6 @@ pub struct ProgrammerSnapshot {
     pub blind: bool,
     pub preload_capture_programmer: bool,
     pub preview: bool,
-    pub highlight: bool,
     pub active_context: Option<String>,
 }
 
@@ -144,7 +143,9 @@ pub struct ProgrammerState {
     pub preload_capture_programmer: bool,
     #[serde(default)]
     pub preview: bool,
-    #[serde(default)]
+    /// Legacy compatibility field. Live Highlight is owned by the server's transient output
+    /// registry and is never serialized, restored, recorded, or included in undo history.
+    #[serde(skip)]
     pub highlight: bool,
     #[serde(default)]
     pub active_context: Option<String>,
@@ -155,6 +156,55 @@ pub struct ProgrammerState {
 }
 
 impl ProgrammerState {
+    /// Capture only the operator-authored content that Update and Record-style storage workflows
+    /// may consume. This deliberately excludes resolved output, Highlight, defaults, and Preload
+    /// buffers. The returned value is owned, so planning an Update never clears or otherwise
+    /// mutates the live programmer.
+    pub fn update_content(&self) -> ProgrammerUpdateContent {
+        let mut fixture_values = self
+            .values
+            .iter()
+            .map(|value| ProgrammerFixtureUpdate {
+                fixture_id: value.fixture_id,
+                attribute: value.attribute.clone(),
+                value: value.value.clone(),
+                programmer_order: value.programmer_order,
+                fade_millis: value.fade_millis,
+                delay_millis: value.delay_millis,
+            })
+            .collect::<Vec<_>>();
+        fixture_values.sort_by_key(|value| value.programmer_order);
+
+        let mut group_values = self
+            .group_values
+            .iter()
+            .flat_map(|(group_id, attributes)| {
+                attributes
+                    .iter()
+                    .map(move |(attribute, value)| ProgrammerGroupUpdate {
+                        group_id: group_id.clone(),
+                        attribute: attribute.clone(),
+                        value: value.value.clone(),
+                        programmer_order: value.programmer_order,
+                        fade_millis: value.fade_millis,
+                        delay_millis: value.delay_millis,
+                    })
+            })
+            .collect::<Vec<_>>();
+        group_values.sort_by(|left, right| {
+            left.programmer_order
+                .cmp(&right.programmer_order)
+                .then_with(|| left.group_id.cmp(&right.group_id))
+                .then_with(|| left.attribute.cmp(&right.attribute))
+        });
+
+        ProgrammerUpdateContent {
+            fixture_values,
+            group_values,
+            selected_fixtures: self.selected.clone(),
+        }
+    }
+
     fn snapshot(&self) -> ProgrammerSnapshot {
         ProgrammerSnapshot {
             selected: self.selected.clone(),
@@ -170,7 +220,6 @@ impl ProgrammerState {
             blind: self.blind,
             preload_capture_programmer: self.preload_capture_programmer,
             preview: self.preview,
-            highlight: self.highlight,
             active_context: self.active_context.clone(),
         }
     }
@@ -189,7 +238,7 @@ impl ProgrammerState {
         self.blind = snapshot.blind;
         self.preload_capture_programmer = snapshot.preload_capture_programmer;
         self.preview = snapshot.preview;
-        self.highlight = snapshot.highlight;
+        self.highlight = false;
         self.active_context = snapshot.active_context;
         self.last_activity = now;
     }
@@ -200,6 +249,52 @@ impl ProgrammerState {
             self.undo.remove(0);
         }
         self.redo.clear();
+    }
+}
+
+/// One exact fixture/attribute value authored in the normal programmer.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ProgrammerFixtureUpdate {
+    pub fixture_id: FixtureId,
+    pub attribute: AttributeKey,
+    pub value: AttributeValue,
+    pub programmer_order: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fade_millis: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delay_millis: Option<u64>,
+}
+
+/// One exact Group/attribute value authored in the normal programmer.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ProgrammerGroupUpdate {
+    pub group_id: String,
+    pub attribute: AttributeKey,
+    pub value: AttributeValue,
+    pub programmer_order: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fade_millis: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delay_millis: Option<u64>,
+}
+
+/// Stable, owned Update input. Fixture and Group values are kept separate because their exact
+/// stored addresses and tracking sources are different. Selection is included solely for Group
+/// membership updates.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct ProgrammerUpdateContent {
+    pub fixture_values: Vec<ProgrammerFixtureUpdate>,
+    pub group_values: Vec<ProgrammerGroupUpdate>,
+    pub selected_fixtures: Vec<FixtureId>,
+}
+
+impl ProgrammerUpdateContent {
+    pub fn has_values(&self) -> bool {
+        !self.fixture_values.is_empty() || !self.group_values.is_empty()
+    }
+
+    pub fn has_selection(&self) -> bool {
+        !self.selected_fixtures.is_empty()
     }
 }
 
@@ -383,6 +478,23 @@ pub fn resolve_selection_references(
         }
     }
     selected
+}
+
+/// Apply the desk's ordered Group Merge rule: retain the existing membership exactly, then append
+/// each previously absent incoming fixture in operator selection order. Duplicate incoming
+/// fixtures do not reorder or duplicate an existing member.
+pub fn merge_ordered_group_membership(
+    existing: &[FixtureId],
+    incoming: &[FixtureId],
+) -> Vec<FixtureId> {
+    let mut merged = existing.to_vec();
+    let mut seen = existing.iter().copied().collect::<HashSet<_>>();
+    for fixture_id in incoming {
+        if seen.insert(*fixture_id) {
+            merged.push(*fixture_id);
+        }
+    }
+    merged
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -867,6 +979,70 @@ impl ProgrammerRegistry {
     ) {
         self.set_with_fade(session, fixture_id, attribute, value, false);
     }
+
+    /// Apply a fixture-level macro as one Programmer mutation. All values share one undo
+    /// checkpoint and become visible to the renderer together, so a multi-channel control action
+    /// can never be observed half-applied.
+    pub fn set_many(
+        &self,
+        session: SessionId,
+        assignments: impl IntoIterator<Item = (FixtureId, AttributeKey, AttributeValue)>,
+    ) {
+        self.set_many_with_checkpoint(session, assignments, true);
+    }
+
+    /// Complete a momentary/timed action without creating a second Undo point. The active edge
+    /// already captured the pre-action state; Undo after the inactive edge therefore returns to
+    /// that state instead of unexpectedly firing the action again.
+    pub fn set_many_transient(
+        &self,
+        session: SessionId,
+        assignments: impl IntoIterator<Item = (FixtureId, AttributeKey, AttributeValue)>,
+    ) {
+        self.set_many_with_checkpoint(session, assignments, false);
+    }
+
+    fn set_many_with_checkpoint(
+        &self,
+        session: SessionId,
+        assignments: impl IntoIterator<Item = (FixtureId, AttributeKey, AttributeValue)>,
+        checkpoint: bool,
+    ) {
+        let assignments = assignments.into_iter().collect::<Vec<_>>();
+        if assignments.is_empty() {
+            return;
+        }
+        self.close_selection_gesture(session);
+        if let Some(state) = self.states.write().get_mut(&self.key(session)) {
+            if checkpoint {
+                state.checkpoint();
+            }
+            let values = if state.blind && state.preload_capture_programmer {
+                &mut state.preload_pending
+            } else {
+                &mut state.values
+            };
+            let changed_at = self.clock.now();
+            for (fixture_id, attribute, value) in assignments {
+                values.retain(|existing| {
+                    existing.fixture_id != fixture_id || existing.attribute != attribute
+                });
+                values.push(TimedValue {
+                    fixture_id,
+                    attribute,
+                    value,
+                    priority: state.priority,
+                    changed_at,
+                    programmer_order: self.next_programmer_order(),
+                    merge_mode: light_core::MergeMode::Ltp,
+                    fade: false,
+                    fade_millis: None,
+                    delay_millis: None,
+                });
+            }
+            state.last_activity = changed_at;
+        }
+    }
     pub fn set_faded(
         &self,
         session: SessionId,
@@ -1301,9 +1477,8 @@ impl ProgrammerRegistry {
         if let Some(value) = preview {
             state.preview = value;
         }
-        if let Some(value) = highlight {
-            state.highlight = value;
-        }
+        let _ = highlight;
+        state.highlight = false;
         if let Some(value) = active_context {
             state.active_context = value;
         }
@@ -1975,8 +2150,51 @@ mod tests {
         assert!(registry.undo(first));
         assert!(!registry.get(first).unwrap().highlight);
         assert!(registry.redo(first));
-        assert!(registry.get(first).unwrap().highlight);
+        assert!(!registry.get(first).unwrap().highlight);
+        assert!(registry.get(first).unwrap().blind);
         assert!(registry.get(second).unwrap().command_line.is_empty());
+    }
+
+    #[test]
+    fn multi_channel_action_is_one_atomic_undo_step() {
+        let registry = ProgrammerRegistry::default();
+        let session = SessionId::new();
+        let fixture = FixtureId::new();
+        registry.start(session, UserId::new());
+        registry.set_many(
+            session,
+            [
+                (
+                    fixture,
+                    AttributeKey("__fixture_control_channel.one".into()),
+                    AttributeValue::RawDmxExact(255),
+                ),
+                (
+                    fixture,
+                    AttributeKey("__fixture_control_channel.two".into()),
+                    AttributeValue::RawDmxExact(128),
+                ),
+            ],
+        );
+        assert_eq!(registry.get(session).unwrap().values.len(), 2);
+        registry.set_many_transient(
+            session,
+            [
+                (
+                    fixture,
+                    AttributeKey("__fixture_control_channel.one".into()),
+                    AttributeValue::RawDmxExact(0),
+                ),
+                (
+                    fixture,
+                    AttributeKey("__fixture_control_channel.two".into()),
+                    AttributeValue::RawDmxExact(0),
+                ),
+            ],
+        );
+
+        assert!(registry.undo(session));
+        assert!(registry.get(session).unwrap().values.is_empty());
     }
 
     #[test]
@@ -2023,5 +2241,68 @@ mod tests {
         );
         assert_eq!(preset.name, "B");
         assert_eq!(preset.values[&fixture].len(), 2);
+    }
+
+    #[test]
+    fn update_content_captures_only_normal_programmer_edits_without_consuming_them() {
+        let registry = ProgrammerRegistry::default();
+        let session = SessionId::new();
+        let fixture = FixtureId::new();
+        let preload_fixture = FixtureId::new();
+        registry.start(session, UserId::new());
+        registry.select(session, [fixture]);
+        registry.set_faded_with_timing(
+            session,
+            fixture,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.75),
+            Some(1_000),
+            Some(250),
+        );
+        assert!(registry.set_group(
+            session,
+            "front".into(),
+            AttributeKey("pan".into()),
+            AttributeValue::Normalized(0.25),
+        ));
+        assert!(registry.arm_preload(session, true));
+        registry.set(
+            session,
+            preload_fixture,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(1.0),
+        );
+
+        let before = registry.get(session).unwrap();
+        let update = before.update_content();
+        let after = registry.get(session).unwrap();
+
+        assert_eq!(update.selected_fixtures, vec![fixture]);
+        assert_eq!(update.fixture_values.len(), 1);
+        assert_eq!(update.fixture_values[0].fixture_id, fixture);
+        assert_eq!(update.fixture_values[0].fade_millis, Some(1_000));
+        assert_eq!(update.fixture_values[0].delay_millis, Some(250));
+        assert_eq!(update.group_values.len(), 1);
+        assert_eq!(update.group_values[0].group_id, "front");
+        assert_eq!(after.values.len(), before.values.len());
+        assert_eq!(after.group_values.len(), before.group_values.len());
+        assert_eq!(after.preload_pending.len(), 1);
+        assert_eq!(after.preload_pending[0].fixture_id, preload_fixture);
+    }
+
+    #[test]
+    fn ordered_group_merge_never_reorders_or_duplicates_existing_members() {
+        let first = FixtureId::new();
+        let second = FixtureId::new();
+        let third = FixtureId::new();
+        let fourth = FixtureId::new();
+
+        assert_eq!(
+            merge_ordered_group_membership(
+                &[first, second],
+                &[second, third, first, fourth, third]
+            ),
+            vec![first, second, third, fourth]
+        );
     }
 }

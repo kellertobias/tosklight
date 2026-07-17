@@ -7,6 +7,7 @@ import { normalizePlaybackTopology, PlaybackConfigurationModal } from "../compon
 import type { PlaybackDefinition } from "../api/types";
 import type { VirtualPlaybackExclusionZone } from "../types";
 import type { WindowProps } from "./windowTypes";
+import { cueUpdateTarget, requestUpdateTarget } from "../components/control/updateWorkflow";
 
 export function VirtualPlaybacksWindow({ paneId }: WindowProps) {
   const { state, dispatch } = useApp();
@@ -80,19 +81,26 @@ export function VirtualPlaybacksWindow({ paneId }: WindowProps) {
         const number = page?.slots[String(slot)];
         const playback = server.playbacks?.pool.find((candidate) => candidate.number === number) ?? null;
         const runtime = playback ? server.playbacks?.active.find((candidate) => candidate.playback_number === playback.number) : undefined;
+        const playbackCueListId = playback?.target.type === "cue_list" ? playback.target.cue_list_id : null;
+        const cueList = playbackCueListId ? server.playbacks?.cue_lists.find((candidate) => candidate.id === playbackCueListId) : null;
+        const currentCue = cueList && runtime && runtime.cue_index >= 0 ? cueList.cues[runtime.cue_index] : null;
+        const requestPlaybackUpdate = () => {
+          if (!playback || playback.target.type !== "cue_list") return;
+          requestUpdateTarget(cueUpdateTarget(playback.target.cue_list_id, playback.number, currentCue?.id ? { id: currentCue.id, number: currentCue.number } : null));
+        };
         const action = playback?.buttons[0] ?? "none";
         const held = action === "flash" || action === "swap";
         const background = playback?.presentation_image ? `linear-gradient(#08101488,#081014cc),url(${JSON.stringify(playback.presentation_image)})` : undefined;
         const style = playback ? { "--playback-color": playback.color ?? "#20c997", backgroundImage: background } as CSSProperties : undefined;
         const selectedForZone = selectedSlots.includes(slot);
         const containingZones = zones.filter((zone) => zone.slots.includes(slot));
-        const intercept = (event: ReactPointerEvent<HTMLButtonElement>) => { if (state.shiftArmed || event.shiftKey) { event.preventDefault(); event.stopPropagation(); return true; } if (!configurationArmed) return false; event.preventDefault(); event.stopPropagation(); openConfiguration(playback, slot); return true; };
-        return <Button key={slot} aria-label={`Virtual playback page ${pageNumber} cell ${slot}${playback ? ` ${playback.name}` : " empty"}`} aria-pressed={selectedForZone} data-exclusion-zones={containingZones.map((zone) => zone.name).join(", ")} className={`virtual-playback-cell playback-colored ${runtime?.enabled !== false && runtime ? "active" : ""} ${configurationArmed ? "configuration-armed" : ""} ${assignmentPending ? "assignment-pending" : ""} ${selectedForZone ? "exclusion-selected" : ""} ${containingZones.length > 0 ? "exclusion-member" : ""}`} style={style}
+        const intercept = (event: ReactPointerEvent<HTMLButtonElement>) => { if (state.updateArmed) { event.preventDefault(); event.stopPropagation(); return true; } if (state.shiftArmed || event.shiftKey) { event.preventDefault(); event.stopPropagation(); return true; } if (!configurationArmed) return false; event.preventDefault(); event.stopPropagation(); openConfiguration(playback, slot); return true; };
+        return <Button key={slot} aria-label={`Virtual playback page ${pageNumber} cell ${slot}${playback ? ` ${playback.name}` : " empty"}`} aria-pressed={selectedForZone} data-exclusion-zones={containingZones.map((zone) => zone.name).join(", ")} className={`virtual-playback-cell playback-colored ${runtime?.enabled !== false && runtime ? "active" : ""} ${configurationArmed ? "configuration-armed" : ""} ${assignmentPending ? "assignment-pending" : ""} ${selectedForZone ? "exclusion-selected" : ""} ${containingZones.length > 0 ? "exclusion-member" : ""} ${state.updateArmed ? "update-target" : ""}`} style={style}
           onPointerDown={(event) => { if (intercept(event)) return; if (assignmentPending) { event.preventDefault(); return; } if (playback && held) { event.currentTarget.setPointerCapture?.(event.pointerId); void server.poolPlaybackAction(playback.number, "button", { button: 1, pressed: true, surface: "virtual" }); } }}
-          onPointerUp={(event) => !(state.shiftArmed || event.shiftKey) && playback && held && void server.poolPlaybackAction(playback.number, "button", { button: 1, pressed: false, surface: "virtual" })}
-          onPointerCancel={(event) => !(state.shiftArmed || event.shiftKey) && playback && held && void server.poolPlaybackAction(playback.number, "button", { button: 1, pressed: false, surface: "virtual" })}
-          onLostPointerCapture={(event) => !(state.shiftArmed || event.shiftKey) && playback && held && void server.poolPlaybackAction(playback.number, "button", { button: 1, pressed: false, surface: "virtual" })}
-          onClick={(event) => { if (state.shiftArmed || event.shiftKey) { event.preventDefault(); toggleZoneSlot(slot); return; } if (configurationArmed) { event.preventDefault(); openConfiguration(playback, slot); return; } if (assignmentPending) { void assignSource(slot); return; } if (playback && !held && action !== "none") void server.poolPlaybackAction(playback.number, "button", { button: 1, pressed: true, surface: "virtual" }); }}>
+          onPointerUp={(event) => !state.updateArmed && !(state.shiftArmed || event.shiftKey) && playback && held && void server.poolPlaybackAction(playback.number, "button", { button: 1, pressed: false, surface: "virtual" })}
+          onPointerCancel={(event) => !state.updateArmed && !(state.shiftArmed || event.shiftKey) && playback && held && void server.poolPlaybackAction(playback.number, "button", { button: 1, pressed: false, surface: "virtual" })}
+          onLostPointerCapture={(event) => !state.updateArmed && !(state.shiftArmed || event.shiftKey) && playback && held && void server.poolPlaybackAction(playback.number, "button", { button: 1, pressed: false, surface: "virtual" })}
+          onClick={(event) => { if (state.updateArmed) { event.preventDefault(); requestPlaybackUpdate(); return; } if (state.shiftArmed || event.shiftKey) { event.preventDefault(); toggleZoneSlot(slot); return; } if (configurationArmed) { event.preventDefault(); openConfiguration(playback, slot); return; } if (assignmentPending) { void assignSource(slot); return; } if (playback && !held && action !== "none") void server.poolPlaybackAction(playback.number, "button", { button: 1, pressed: true, surface: "virtual" }); }}>
           <span>{playback?.presentation_icon ?? slot}</span><b>{playback?.name ?? "Empty"}</b><small>{selectedForZone ? "Selected for exclusion zone" : assignmentPending ? `Assign Cuelist ${state.cueListSetTarget}` : configurationArmed ? "Configure Playback" : containingZones.length > 0 ? containingZones.map((zone) => zone.name).join(" · ") : playback ? `${action.replaceAll("_", " ").toUpperCase()}${runtime ? ` · Cue ${(runtime.cue_index ?? 0) + 1}` : ""}` : "Unassigned"}</small>
         </Button>;
       })}

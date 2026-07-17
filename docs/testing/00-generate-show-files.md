@@ -44,7 +44,7 @@ The maintained `Default Stage Show` file contains the complete built-in standard
 4. Open Groups, click fixture 1 in Stage or Fixture Sheet, press `[REC]`, click stored empty Group 4, and store the selection. Confirm Group 4 now contains fixture 1 in the copy.
 5. Press `[SET] [GRP] [4] [ENTER]`. Confirm this exact shortcut opens the Group properties modal for Group 4. In the modal, replace the name with `Copy Center Spot`, choose a non-default color with the color button, choose an icon, and confirm the modal. Verify the Group 4 tile displays the new name, color, and icon.
 6. Press `[SET]`, then click the visible Group 4 tile. Confirm this alternate gesture opens the same Group properties modal with `Copy Center Spot` and the chosen color and icon already populated. Close the modal without changing them.
-7. Reopen the show menu, click **Save Named Revision**, enter a descriptive revision name such as `SHOW-000 compact mutation`, and confirm it. Reload the named revision and verify Group 4 still contains fixture 1 and retains its name, color, and icon. Then use **Load** to reopen canonical `compact-rig.show`.
+7. Reopen the show menu, click **Save Named Revision**, enter a descriptive revision name such as `SHOW-000 compact mutation`, and confirm it. Choose **Load Revision as Copy** and verify a separately named revision copy becomes active while Group 4 still contains fixture 1 and retains its name, color, and icon. Confirm the Show menu identifies the source show and revision and says new changes autosave only to the copy. Then use **Load** to reopen canonical `compact-rig.show`.
 8. Open Groups and verify canonical Group 4 is still named `Center Spot`, is still stored empty, and did not acquire the copy's color or icon.
 9. Use **Load** to open canonical `default-stage.show`. Immediately click **Save As**, enter `show-000-default-copy.show`, and confirm it.
 10. Click fixture 1, then press `[REC] [GRP] [9] [0] [0] [ENTER]` on the Lightning Desk. Confirm Group 900 exists in the copy through the Groups object API; the visible pool contains only its configured slot range and does not expose slot 900.
@@ -58,7 +58,8 @@ The maintained `Default Stage Show` file contains the complete built-in standard
 - Save As creates a distinct show file and makes that copy active.
 - Each copy initially preserves the canonical show's patch layers, patched fixtures, groups, routes, stage layout, and clean programmer/playback state exactly.
 - Before its deliberate mutation, `show-000-compact-copy.show` contains 16 fixtures, distinct `Dimmers` and `LEDs` layers, groups 1–3 with the listed ordered membership, and stored empty Group 4 named `Center Spot`.
-- Both Group-property gestures open the same modal for Group 4, and its edited name, color, and icon appear on the Group tile and survive a named-revision reload.
+- Both Group-property gestures open the same modal for Group 4, and its edited name, color, and icon appear on the Group tile and survive loading that named revision as an independent copy.
+- Loading the named revision creates a new show identity with stable source provenance; it does not replace the working copy's newer Latest Autosave or the canonical source.
 - `show-000-default-copy.show` contains the complete 49-record built-in patch and stage layout.
 - Editing and saving either copy does not alter its canonical source file.
 - Both canonical files remain reusable starting points after the test.

@@ -2,7 +2,7 @@
 
 ## Status
 
-This is a planned feature. Its runtime behavior, fixture-level highlight configuration, UI placement, OSC contract, and hardware mapping must be designed together before implementation or acceptance coverage is added.
+**Implementation status: Complete.** The authoritative transient output layer, remembered ordered stepping state, per-fixture semantic Highlight Look, software/keyboard/OSC/hardware controls and feedback, ownership and session lifecycle, Blind/Preview/Preload suppression, safety/master behavior, help, and focused/paired acceptance coverage are implemented together.
 
 ## Operator intent
 
@@ -54,7 +54,7 @@ The complete step selection must survive ordinary programming work. In particula
 - an explicit command to capture a new selection replaces the remembered step selection deliberately, rather than this happening as a side effect of programming; and
 - fixtures removed from the show or otherwise no longer addressable are skipped safely.
 
-The order should follow the desk's authoritative ordered selection, including group order where that is defined, rather than sorting again implicitly. Planning must settle how multipatch fixtures, compound/logical heads, overlapping groups, duplicate selection members, unpatched fixtures, and fixtures with no usable intensity output participate.
+The order follows the desk's authoritative ordered selection, including stored Group order, without an implicit re-sort. Overlapping or duplicate selection members are de-duplicated at their first occurrence. A multipatched physical parent is one logical step identity and its copies share the parent's Highlight contribution. A selected logical head may participate as its own step identity, while selecting the physical parent identifies the complete compound fixture. Unpatched fixtures remain valid remembered/step members but emit no DMX until patched. Fixtures without an Intensity channel also participate and use any deliberately configured safe Highlight raw look; if no profile channel differs usefully from its normal default, the step remains valid but produces no useful identification emission.
 
 Turning Highlight off should normally retain no active highlight output. Whether the remembered step selection remains available for a quick resume, and for how long, must be decided explicitly; it must never resume output unexpectedly after a show load or operator/session change.
 

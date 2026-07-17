@@ -8,13 +8,14 @@ These documents expand the stable IDs in the [canonical test catalog](../help/99
 - [Foundational dimmers and groups](01-foundational-dimmers-and-groups.md) covers patching, ordered groups, live references, direct values, clear stages, and exact DMX.
 - [Cues, tracking, and arbitration](02-cues-tracking-and-arbitration.md) covers recording, tracking, cue-only, fades, navigation, Cuelist settings, Move in Black, HTP, and LTP.
 - [Network output protocols](03-network-output-protocols.md) covers real Art-Net and sACN packets, routing, sequence numbers, priorities, and termination.
-- [OSC, API, and cross-surface agreement](04-osc-api-and-cross-surface.md) covers OSC hardware behavior, REST revisions, WebSocket/audit events, and equivalent commands.
+- [OSC, API, and cross-surface agreement](04-osc-api-and-cross-surface.md) covers OSC hardware behavior, REST revisions, WebSocket/audit events, equivalent commands, authoritative Highlight/Step Through boundaries, and the focused Matter bridge transport/UI boundaries.
 - [Virtual time, persistence, and recovery](05-virtual-time-persistence-and-recovery.md) covers exact timing boundaries, restart behavior, corrupt data, and packaged desktop ownership.
 - [Preload modes and virtual playbacks](06-preload-modes-and-virtual-playbacks.md) covers the three independent Preload capture domains, all eight Settings combinations, physical and virtual playback action queues, Programmer Fade execution, programmer-only release, and authoritative named Virtual Playback exclusion zones.
 - [Playback Configuration](07-playback-configuration.md) covers Set-plus-playback modal entry, assignments, colors, clearing, type-specific layouts, Cuelist controls, Master/X-fade/Temp faders, and temporary LTP/Swap behavior.
 - [Sound to Light](08-sound-to-light.md) covers browser/desk-local audio assignment, deterministic recorded input, portable response configuration, authoritative Speed Group mapping, manual controls, and signal-loss fallback.
 - [File Manager and Text Editor](09-file-manager-and-text-editor.md) covers root confinement, revision-safe text, the three-column file workflow, configured roots and pickers, persisted editor association, conflict handling, recovery, and Markdown/read-only modes.
 - [Desk Lock and operator UI review](10-desk-lock-and-operator-ui.md) covers desk-scoped lock behavior across screens/API/OSC and the operator-visible terminology, layout, picker, Cues, Help, DMX, Stage, Development, and recovery corrections verified by the manual-review suite.
+- [Update, Highlight, Fixture Profiles, and Matter](11-update-highlight-fixture-profiles-and-matter.md) covers representative paired Update, transient Highlight/Step Through, desk-wide fixture-profile, and desk-persistent Matter workflows, with the focused exhaustive layers named beside each scenario.
 
 ## Common conventions
 

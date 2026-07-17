@@ -1,10 +1,7 @@
 import { removeCommandToken } from "./commandLineEditing";
+import type { SoftwareKey } from "../../../../shared/programmerKeypad";
 
-export type SoftwareKey =
-  | "SET" | "GRP" | "CUE" | "UND" | "CLR"
-  | "DEL" | "MOV" | "CPY" | "TRU" | "DIV"
-  | "BACKSPACE" | "AT" | "ENT" | "PRE" | "REC" | "ESC" | "SHIFT" | "TIME" | "SELECT" | "+" | "-" | "."
-  | `${number}`;
+export type { SoftwareKey } from "../../../../shared/programmerKeypad";
 
 export const softwareKeypadRows: SoftwareKey[][] = [
   ["SET", "GRP", "CUE", "UND", "CLR"],

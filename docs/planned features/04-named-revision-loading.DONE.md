@@ -1,5 +1,9 @@
 # Named Revision Loading
 
+## Status
+
+**Implementation status: Complete.** Provenance-linked revision copies, collision-safe identities, isolated autosave, visible source communication, explicit Save/Save As overwrite choices, recovery backup, immutable source/destination revision handling, help, and paired `SHOW-005` acceptance coverage are implemented.
+
 ## History model
 
 A show has one mutable **Latest Autosave** and zero or more immutable **Named Revisions**. Autosave continuously updates Latest Autosave; intermediate autosaves are not presented to the operator as revision history. Internal recovery backups may still be retained, but they are recovery data rather than selectable show revisions.

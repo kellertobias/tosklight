@@ -229,6 +229,39 @@ export class LightApiClient {
     return this.request("/api/v1/fixture-library", {}, false);
   }
 
+  fixtureProfiles(): Promise<import("./types").FixtureProfile[]> {
+    return this.request("/api/v1/fixture-profiles", {}, false);
+  }
+
+  fixtureProfileWarnings(): Promise<string[]> {
+    return this.request("/api/v1/fixture-profiles/warnings", {}, false);
+  }
+
+  fixtureProfileRevisions(id: string): Promise<import("./types").FixtureProfile[]> {
+    return this.request(`/api/v1/fixture-profiles/${encodeURIComponent(id)}/revisions`, {}, false);
+  }
+
+  putFixtureProfile(profile: import("./types").FixtureProfile, expectedRevision: number) {
+    return this.request<import("./types").FixtureProfile>("/api/v1/fixture-profiles", {
+      method: "PUT",
+      headers: { "content-type": "application/json", "if-match": String(expectedRevision) },
+      body: JSON.stringify(profile),
+    });
+  }
+
+  deleteFixtureProfile(id: string, revision: number) {
+    return this.request<void>(`/api/v1/fixture-profiles/${encodeURIComponent(id)}/${revision}`, { method: "DELETE" });
+  }
+
+  putFixtureProfileSourceGdtf(id: string, revision: number, source: Uint8Array) {
+    const bytes = source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength) as ArrayBuffer;
+    return this.request<void>(`/api/v1/fixture-profiles/${encodeURIComponent(id)}/${revision}/source-gdtf`, {
+      method: "PUT",
+      headers: { "content-type": "application/octet-stream" },
+      body: bytes,
+    });
+  }
+
   putFixtureDefinition(definition: import("./types").FixtureDefinition) {
     return this.request<import("./types").FixtureDefinition>("/api/v1/fixture-library", {
       method: "PUT",
@@ -332,6 +365,12 @@ export class LightApiClient {
     });
   }
 
+  overwriteShow(sourceId: string, destinationId: string): Promise<ShowEntry> {
+    return this.request(`/api/v1/shows/${sourceId}/overwrite/${destinationId}`, {
+      method: "POST",
+    });
+  }
+
   showRevisions(id: string): Promise<import("./types").ShowRevision[]> {
     return this.request(`/api/v1/shows/${id}/revisions`);
   }
@@ -414,16 +453,21 @@ export class LightApiClient {
   configuration(): Promise<{
     configuration: DeskConfiguration;
     output_health: import("./types").OutputHealth;
+    matter: import("./types").MatterBridgeStatus;
   }> {
     return this.request("/api/v1/configuration", {}, false);
   }
 
-  updateConfiguration(configuration: DeskConfiguration): Promise<{ configuration: DeskConfiguration; requires_restart: boolean }> {
+  updateConfiguration(configuration: DeskConfiguration): Promise<{ configuration: DeskConfiguration; requires_restart: boolean; matter: import("./types").MatterBridgeStatus }> {
     return this.request("/api/v1/configuration", {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(configuration),
     });
+  }
+
+  matterStatus(): Promise<import("./types").MatterBridgeStatus> {
+    return this.request("/api/v1/matter/status");
   }
 
   speedGroup(group: import("./types").SpeedGroupId): Promise<import("./types").SpeedGroupSoundState> {
@@ -524,6 +568,60 @@ export class LightApiClient {
 
   programmers() {
     return this.request<import("./types").ProgrammerState[]>("/api/v1/programmers", {}, false);
+  }
+
+  highlight() {
+    return this.request<import("./types").HighlightState>("/api/v1/highlight");
+  }
+
+  highlightAction(action: import("./types").HighlightAction) {
+    return this.request<import("./types").HighlightState>("/api/v1/highlight/action", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
+  }
+
+  updateSettings() {
+    return this.request<import("./types").UpdateSettings>("/api/v1/update/settings");
+  }
+
+  saveUpdateSettings(settings: import("./types").UpdateSettings) {
+    return this.request<import("./types").UpdateSettings>("/api/v1/update/settings", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(settings),
+    });
+  }
+
+  previewUpdate(target: import("./types").UpdateTargetRequest, mode: import("./types").UpdateMode) {
+    return this.request<import("./types").UpdatePreview>("/api/v1/update/preview", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ target, mode }),
+    });
+  }
+
+  applyUpdate(
+    target: import("./types").UpdateTargetRequest,
+    mode: import("./types").UpdateMode,
+    expectedRevision?: number,
+    expectedProgrammerRevision?: string,
+  ) {
+    return this.request<import("./types").UpdateResult>("/api/v1/update/apply", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        target,
+        mode,
+        ...(expectedRevision == null ? {} : { expected_revision: expectedRevision }),
+        ...(expectedProgrammerRevision == null ? {} : { expected_programmer_revision: expectedProgrammerRevision }),
+      }),
+    });
+  }
+
+  updateTargets(filter: import("./types").UpdateTargetFilter) {
+    return this.request<import("./types").UpdateMenuEntry[]>(`/api/v1/update/targets?filter=${encodeURIComponent(filter)}`);
   }
 
   auditEvents(after = 0) {
@@ -650,6 +748,29 @@ export class LightApiClient {
       attribute,
       value,
     });
+  }
+  setProgrammerValue(
+    fixtureId: string,
+    attribute: string,
+    value: import("./types").AttributeValue,
+  ) {
+    return this.command("programmer.set_value", {
+      fixture_id: fixtureId,
+      attribute,
+      value,
+    });
+  }
+  controlFixtureAction(fixtureId: string, actionId: string, active: boolean) {
+    return this.command("programmer.control_action", {
+      fixture_id: fixtureId,
+      action_id: actionId,
+      active,
+    });
+  }
+  generateFixturePresets(fixtureIds: string[]) {
+    return this.command("preset.generate_fixture_values", {
+      fixture_ids: fixtureIds,
+    }) as Promise<import("./types").GeneratedFixturePresetResult>;
   }
   releaseProgrammer(fixtureId: string, attribute: string) {
     return this.command("programmer.release", {

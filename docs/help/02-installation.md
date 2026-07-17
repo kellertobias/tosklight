@@ -25,6 +25,6 @@ When the server is reachable over a LAN, set `LIGHT_DESK_TOKEN` before starting 
 - The correct physical screens are assigned.
 - OSC, MIDI, RTP-MIDI, Art-Net, and sACN are disabled until intentionally configured.
 - The DMX view reports the expected frame rate with no send errors.
-- A named revision can be created and restored before real programming begins.
+- A named revision can be created and loaded as a separate autosaved copy before real programming begins, without rewinding the original show's Latest Autosave.
 
 See [Desk Setup](10-Desk-Setup/index.md) next. Developers building from source should use the repository `./build open` and `./build archive` commands described in the README.

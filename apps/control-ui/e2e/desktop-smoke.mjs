@@ -47,6 +47,16 @@ async function ownedServerScenario() {
     await waitFor(async () => (await fetch(`http://127.0.0.1:${port}/api/v1/readiness`)).ok, 8_000, "DESKTOP-001 app-owned server readiness");
     const bootstrap = await fetchJson(port, "/api/v1/bootstrap");
     if (bootstrap.active_show?.name !== "desktop-001") throw new Error(`DESKTOP-001 active show mismatch: ${JSON.stringify(bootstrap.active_show)}`);
+    if (!bootstrap.attribute_registry?.some((attribute) => attribute.id === "intensity")) {
+      throw new Error("DESKTOP-001 packaged desk did not expose the canonical fixture attribute registry");
+    }
+    const fixtureProfiles = await authenticated(seeder.token, port, "GET", "/api/v1/fixture-profiles");
+    if (!fixtureProfiles.length || fixtureProfiles.some((profile) => profile.schema_version !== 2 || profile.revision < 1)) {
+      throw new Error("DESKTOP-001 packaged desk did not start with revisioned schema-v2 fixture profiles");
+    }
+    if (!fixtureProfiles.some((profile) => profile.reserved_source === "builtin:generic-catalog")) {
+      throw new Error("DESKTOP-001 packaged desk did not seed reserved built-in Generic profiles");
+    }
     const ready = await waitForValue(async () => JSON.parse(await fs.readFile(marker, "utf8")), 15_000, "DESKTOP-001 frontend-ready marker");
     if (ready.ready !== true || ready.server !== `127.0.0.1:${port}`) throw new Error(`DESKTOP-001 invalid frontend marker: ${JSON.stringify(ready)}`);
 

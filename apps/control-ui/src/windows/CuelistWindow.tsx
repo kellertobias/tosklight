@@ -6,6 +6,7 @@ import { cueVisualization, migrateStagePosition, renderStageThumbnail } from "./
 import { Button, FormLayout, NumberField, SelectField, SwitchField, TextField, TextInput } from "../components/common";
 import { ButtonGrid, WindowHeader, WindowScrollArea } from "../components/window-kit";
 import { useApp } from "../state/AppContext";
+import { cueUpdateTarget, requestUpdateTarget } from "../components/control/updateWorkflow";
 
 function cueTriggerKind(cue: Cue | null | undefined): "go" | "follow" | "time" {
   if (cue?.trigger.type === "manual") return "go";
@@ -466,9 +467,9 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
               return (
                 <Button
                   key={number}
-                  className={`pool-cell cuelist-card ${cueListDefinition ? "" : "empty"} ${runtime ? "running" : ""} ${selectedCuelist === number && cueListDefinition ? "selected" : ""} ${state.storeArmed ? "store-target" : ""} ${state.cueListSetTarget === number ? "set-target" : ""}`}
+                  className={`pool-cell cuelist-card ${cueListDefinition ? "" : "empty"} ${runtime ? "running" : ""} ${selectedCuelist === number && cueListDefinition ? "selected" : ""} ${state.storeArmed ? "store-target" : ""} ${state.updateArmed ? "update-target" : ""} ${state.cueListSetTarget === number ? "set-target" : ""}`}
                   onPointerDown={() => {
-                    if (!cueListDefinition) return;
+                    if (!cueListDefinition || state.updateArmed) return;
                     held.current = false;
                     holdTimer.current = window.setTimeout(() => {
                       held.current = true;
@@ -488,6 +489,11 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
                   onClick={() => {
                     if (held.current) {
                       held.current = false;
+                      return;
+                    }
+                    if (state.updateArmed) {
+                      const objectId = cueListDefinition?.target.type === "cue_list" ? cueListDefinition.target.cue_list_id : String(number);
+                      requestUpdateTarget(cueUpdateTarget(objectId));
                       return;
                     }
                     if (state.storeArmed) {
@@ -521,11 +527,11 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab }: WindowPr
                   <b>{cueListDefinition?.name ?? "Empty"}</b>
                   {cueListDefinition ? (
                     <>
-                      <small>Cuelist · {runtime ? `${Math.round(runtime.master * 100)}%` : "Off"}</small>
+                      <small>{state.updateArmed ? "Touch to choose Update mode" : `Cuelist · ${runtime ? `${Math.round(runtime.master * 100)}%` : "Off"}`}</small>
                       <small>{usage.length ? `Playbacks on pages ${usage.join(", ")}` : "Not assigned to a playback"}</small>
                     </>
                   ) : (
-                    <small>{state.storeArmed ? "Tap to record Cuelist" : "Press Rec first"}</small>
+                    <small>{state.updateArmed ? "Touch to check Update eligibility" : state.storeArmed ? "Tap to record Cuelist" : "Press Rec first"}</small>
                   )}
                 </Button>
               );

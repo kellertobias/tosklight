@@ -96,6 +96,7 @@ const workflowScreenshots = [
   "desk-setup-users.png",
   "fixture-library-create.png",
   "fixture-library-import.png",
+  "fixture-library-mode-editor.png",
   "fixture-library.png",
   "fixture-sheet-settings-filters.png",
   "fixture-sheet-settings-ordering.png",
@@ -165,7 +166,9 @@ async function captureWorkflowReference(page: Page) {
   await closeNested(".mvr-modal");
   await page.getByRole("button", { name: "Save As", exact: true }).click();
   await page.getByRole("button", { name: "Export as MVR", exact: true }).click();
-  await page.getByRole("dialog", { name: "MVR import and export" }).screenshot({ path: workflowShot("mvr-export.png") });
+  const exportMvr = page.getByRole("dialog", { name: "MVR import and export" });
+  await expect(exportMvr.locator(".mvr-summary")).toBeVisible();
+  await exportMvr.screenshot({ path: workflowShot("mvr-export.png") });
   await closeNested(".mvr-modal");
   await page.getByRole("button", { name: "Show Patch", exact: true }).click();
 
@@ -197,7 +200,13 @@ async function captureWorkflowReference(page: Page) {
   await expect(page.locator(".fixture-library-setup")).toBeVisible();
   await page.locator(".setup-window").screenshot({ path: workflowShot("fixture-library.png") });
   await page.getByRole("button", { name: "Create fixture", exact: true }).click();
-  await page.locator(".fixture-editor-modal").screenshot({ path: workflowShot("fixture-library-create.png") });
+  await page.locator(".fixture-profile-editor-modal").screenshot({ path: workflowShot("fixture-library-create.png") });
+  await page.getByRole("tab", { name: "Modes", exact: true }).click();
+  await page.getByRole("button", { name: "Edit channels for Default", exact: true }).click();
+  const modeEditor = page.getByRole("dialog", { name: "Edit Default mode" });
+  await expect(modeEditor).toBeVisible();
+  await modeEditor.screenshot({ path: workflowShot("fixture-library-mode-editor.png") });
+  await modeEditor.getByRole("button", { name: "Close mode editor", exact: true }).click();
   await page.getByRole("button", { name: "Close fixture editor", exact: true }).click();
   await page.getByRole("button", { name: "Import GDTF", exact: true }).click();
   await page.locator(".gdtf-import-modal").screenshot({ path: workflowShot("fixture-library-import.png") });

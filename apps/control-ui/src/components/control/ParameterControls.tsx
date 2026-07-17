@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../../state/AppContext";
 import { useServer } from "../../api/ServerContext";
-import type { VisualizationSnapshot } from "../../api/types";
+import type {
+  AttributeValue,
+  ControlActionKind,
+  PatchedFixture,
+  VisualizationSnapshot,
+} from "../../api/types";
 import { VerticalTouchFader } from "./VerticalTouchFader";
 import { StageCommandControls } from "./StageCommandControls";
 import { Button } from "../common";
@@ -86,6 +91,113 @@ function normalizedProgrammerTarget(value: unknown): number | undefined {
   return record.value === value ? undefined : normalizedProgrammerTarget(record.value);
 }
 
+function discreteProgrammerTarget(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  if (record.kind === "discrete" && typeof record.value === "string") return record.value;
+  return record.value === value ? undefined : discreteProgrammerTarget(record.value);
+}
+
+interface DirectValueAssignment {
+  fixtureId: string;
+  attribute: string;
+}
+
+export interface DirectValueChoice {
+  key: string;
+  label: string;
+  semanticId: string;
+  kind: "fixed" | "indexed";
+  assignments: DirectValueAssignment[];
+}
+
+export interface DirectControlChoice {
+  key: string;
+  actionId: string;
+  label: string;
+  kind: ControlActionKind;
+  durationMillis: number | null;
+  fixtureIds: string[];
+}
+
+function profileHeadOwner(
+  fixture: PatchedFixture,
+  headId: string,
+): string | null {
+  const profile = fixture.definition.profile_snapshot;
+  const mode = profile?.modes.find((candidate) => candidate.id === fixture.definition.mode_id);
+  const headIndex = mode?.heads.findIndex((head) => head.id === headId) ?? -1;
+  if (!mode || headIndex < 0) return null;
+  if (mode.heads[headIndex].master_shared) return fixture.fixture_id;
+  return (
+    fixture.logical_heads.find((head) => head.head_index === headIndex) ??
+    fixture.logical_heads.find((head) => head.head_index === headIndex + 1)
+  )?.fixture_id ?? null;
+}
+
+export function directProgrammerChoices(
+  fixtures: PatchedFixture[],
+  selectedFixtures: string[],
+): {
+  values: DirectValueChoice[];
+  actions: DirectControlChoice[];
+  fixtureIds: string[];
+} {
+  const selected = new Set(selectedFixtures);
+  const values = new Map<string, DirectValueChoice>();
+  const actions = new Map<string, DirectControlChoice>();
+  const fixtureIds = new Set<string>();
+  for (const fixture of fixtures) {
+    const physicalSelected = selected.has(fixture.fixture_id);
+    const logicalSelected = fixture.logical_heads.some((head) => selected.has(head.fixture_id));
+    if (!physicalSelected && !logicalSelected) continue;
+    const profile = fixture.definition.profile_snapshot;
+    const mode = profile?.modes.find((candidate) => candidate.id === fixture.definition.mode_id);
+    if (!profile || !mode) continue;
+    for (const channel of mode.channels) {
+      const owner = profileHeadOwner(fixture, channel.head_id);
+      if (!owner || (!physicalSelected && !selected.has(owner))) continue;
+      for (const fn of channel.functions) {
+        if (fn.behavior.type !== "fixed" && fn.behavior.type !== "indexed") continue;
+        const key = `${fn.behavior.type}:${fn.behavior.semantic_id}`;
+        const choice = values.get(key) ?? {
+          key,
+          label: fn.behavior.label,
+          semanticId: fn.behavior.semantic_id,
+          kind: fn.behavior.type,
+          assignments: [],
+        };
+        if (fn.behavior.label.localeCompare(choice.label) < 0) choice.label = fn.behavior.label;
+        if (!choice.assignments.some(
+          (assignment) => assignment.fixtureId === owner && assignment.attribute === fn.attribute,
+        )) {
+          choice.assignments.push({ fixtureId: owner, attribute: fn.attribute });
+        }
+        values.set(key, choice);
+        fixtureIds.add(fixture.fixture_id);
+      }
+    }
+    for (const action of mode.control_actions) {
+      const key = `${profile.id}:${mode.id}:${action.id}`;
+      const choice = actions.get(key) ?? {
+        key,
+        actionId: action.id,
+        label: action.name,
+        kind: action.kind,
+        durationMillis: action.duration_millis,
+        fixtureIds: [],
+      };
+      if (!choice.fixtureIds.includes(fixture.fixture_id)) choice.fixtureIds.push(fixture.fixture_id);
+      actions.set(key, choice);
+    }
+  }
+  return {
+    values: [...values.values()].sort((left, right) => left.label.localeCompare(right.label)),
+    actions: [...actions.values()].sort((left, right) => left.label.localeCompare(right.label)),
+    fixtureIds: [...fixtureIds],
+  };
+}
+
 export function ParameterControls() {
   const { state, dispatch } = useApp();
   const server = useServer();
@@ -102,6 +214,9 @@ export function ParameterControls() {
     Record<string, unknown>
   >;
   const [family, setFamily] = useState<Family>("Intensity");
+  const [directMode, setDirectMode] = useState(false);
+  const [latchedActions, setLatchedActions] = useState<Record<string, boolean>>({});
+  const [generationStatus, setGenerationStatus] = useState<string | null>(null);
   const [alignMode, setAlignMode] = useState<AlignMode | null>(null);
   const [dynamicsMode, setDynamicsMode] = useState(false);
   const [visualization, setVisualization] =
@@ -148,6 +263,10 @@ export function ParameterControls() {
     }
     return result;
   }, [server.patch, server.selectedFixtures, server.selectedGroupId, server.groups]);
+  const directChoices = useMemo(
+    () => directProgrammerChoices(server.patch?.fixtures ?? [], server.selectedFixtures),
+    [server.patch, server.selectedFixtures],
+  );
   const values = useMemo(() => {
     const result = new Map<string, number>();
     for (const entry of visualization?.values ?? [])
@@ -204,40 +323,67 @@ export function ParameterControls() {
         .map((fixtureId) => server.releaseProgrammer(fixtureId, attribute)),
     );
   };
+  const applyDirectValue = async (choice: DirectValueChoice) => {
+    const value: AttributeValue = { kind: "discrete", value: choice.semanticId };
+    await Promise.all(
+      choice.assignments.map((assignment) =>
+        server.setProgrammerValue(assignment.fixtureId, assignment.attribute, value),
+      ),
+    );
+  };
+  const applyControlAction = async (choice: DirectControlChoice, active: boolean) => {
+    await Promise.all(
+      choice.fixtureIds.map((fixtureId) =>
+        server.controlFixtureAction(fixtureId, choice.actionId, active),
+      ),
+    );
+  };
+  const generateDirectPresets = async () => {
+    setGenerationStatus("Generating portable presets…");
+    const result = await server.generateFixturePresets(directChoices.fixtureIds);
+    setGenerationStatus(
+      result
+        ? `Created ${result.created.length} portable preset${result.created.length === 1 ? "" : "s"}`
+        : "Preset generation failed",
+    );
+  };
+  const directChoiceActive = (choice: DirectValueChoice) => choice.assignments.some(
+    (assignment) => programmerValues.some(
+      (entry) => entry.fixture_id === assignment.fixtureId
+        && entry.attribute === assignment.attribute
+        && discreteProgrammerTarget(entry.value) === choice.semanticId,
+    ),
+  );
   const attributes = families[family].filter((attribute) =>
     supported.has(attribute),
   );
   const encoderSlots = Array.from({ length: 6 }, (_, index) => attributes[index] ?? null);
-  const lampMacros = useMemo(() => {
-    const macros: Array<{ label: string; attribute: string; value: number }> = [];
-    for (const fixture of server.patch?.fixtures ?? []) {
-      if (!server.selectedFixtures.includes(fixture.fixture_id) && !fixture.logical_heads.some((head) => server.selectedFixtures.includes(head.fixture_id))) continue;
-      for (const head of fixture.definition.heads ?? []) for (const parameter of head.parameters) {
-        for (const capability of parameter.capabilities ?? []) {
-          const name = capability.name.toLowerCase();
-          const label = name.includes("lamp on") ? "Lamp on" : name.includes("lamp off") ? "Lamp off" : null;
-          if (label && !macros.some((macro) => macro.label === label)) macros.push({ label, attribute: parameter.attribute, value: ((capability.dmx_from + capability.dmx_to) / 2) / 255 });
-        }
-      }
-    }
-    return macros;
-  }, [server.patch, server.selectedFixtures]);
   if (state.stageMode !== "select" && (state.builtIn === "stage" || state.desks.find((desk) => desk.id === state.activeDeskId)?.panes.some((pane) => pane.kind === "stage"))) return <StageCommandControls />;
   return (
     <div className="parameter-controls">
       <div className="family-tabs">
         {(Object.keys(families) as Family[]).map((name) => (
             <Button
-              onClick={() => setFamily(name)}
-              className={`attribute-family ${family === name ? "active" : ""}`}
+              onClick={() => {
+                setFamily(name);
+                setDirectMode(false);
+              }}
+              className={`attribute-family ${!directMode && family === name ? "active" : ""}`}
               key={name}
               aria-label={name}
             >
               <FamilyLabel full={name} compact={compactFamilyLabels[name]} />
             </Button>
           ))}
+        <Button
+          aria-label="Direct values and actions"
+          className={`attribute-family direct-family ${directMode ? "active" : ""}`}
+          onClick={() => setDirectMode(true)}
+        >
+          <FamilyLabel full="Direct" compact="Dir" />
+        </Button>
         <span className="family-spacer" />
-        {family === "Position" && <Button aria-label={`Align ${alignMode ? alignMode[0].toUpperCase() + alignMode.slice(1) : "Off"}`} className={`align-cycle ${alignMode ? "align-active" : "align-off"}`} onClick={(event) => {
+        {!directMode && family === "Position" && <Button aria-label={`Align ${alignMode ? alignMode[0].toUpperCase() + alignMode.slice(1) : "Off"}`} className={`align-cycle ${alignMode ? "align-active" : "align-off"}`} onClick={(event) => {
           if (event.shiftKey || state.shiftArmed) {
             setAlignMode(null);
             if (state.shiftArmed) dispatch({ type: "SET_SHIFT_ARMED", value: false });
@@ -247,7 +393,7 @@ export function ParameterControls() {
           void server.alignSelection("pan", next);
           setAlignMode(next);
         }}><span className="align-label-full"><span>Align</span><span>{alignMode ? alignMode[0].toUpperCase() + alignMode.slice(1) : "Off"}</span></span><span className="align-label-compact"><span>Align</span><span>{alignMode ? alignMode[0].toUpperCase() + alignMode.slice(1) : "Off"}</span></span></Button>}
-        {specialFamilies.has(family as SpecialFamily) && (
+        {!directMode && specialFamilies.has(family as SpecialFamily) && (
             <Button
               className="special-dialogs"
               aria-label="Special Dialog"
@@ -257,10 +403,106 @@ export function ParameterControls() {
               <span className="special-dialog-label-compact">Spcl</span>
             </Button>
         )}
-        <Button aria-label="Dynamics" onClick={() => setDynamicsMode(!dynamicsMode)} className={`dynamics-family ${dynamicsMode ? "active" : ""}`}><FamilyLabel full="Dynamics" compact="Dyn" /></Button>
+        <Button aria-label="Dynamics" onClick={() => { setDirectMode(false); setDynamicsMode(!dynamicsMode); }} className={`dynamics-family ${dynamicsMode ? "active" : ""}`}><FamilyLabel full="Dynamics" compact="Dyn" /></Button>
       </div>
       <div className="parameter-surfaces">
-        {!server.selectedFixtures.length && !server.selectedGroupId ? (
+        {directMode ? (
+          <section className="direct-programmer-picker" aria-label="Direct programmer values and actions">
+            <header>
+              <div>
+                <b>Fixed, indexed, and control values</b>
+                <small>Semantic values stay portable across fixture-profile DMX ranges.</small>
+              </div>
+              <Button
+                disabled={!directChoices.values.length || Boolean(server.selectedGroupId)}
+                onClick={() => void generateDirectPresets()}
+              >
+                Generate portable presets
+              </Button>
+            </header>
+            {server.selectedGroupId && (
+              <p role="note">Select concrete fixtures to use typed direct values or generate presets.</p>
+            )}
+            {!server.selectedGroupId && !directChoices.values.length && !directChoices.actions.length ? (
+              <div className="direct-programmer-empty">
+                <b>No direct values configured</b>
+                <small>The selected profile mode has no fixed/indexed functions or typed control actions.</small>
+              </div>
+            ) : (
+              <div className="direct-programmer-columns">
+                <section>
+                  <h3>Fixed and indexed values</h3>
+                  <div className="direct-value-grid">
+                    {directChoices.values.map((choice) => (
+                      <Button
+                        key={choice.key}
+                        disabled={Boolean(server.selectedGroupId)}
+                        className={directChoiceActive(choice) ? "active" : ""}
+                        aria-label={`${choice.label} ${choice.kind} value`}
+                        onClick={() => void applyDirectValue(choice)}
+                      >
+                        <b>{choice.label}</b>
+                        <small>{choice.kind} · {choice.assignments[0]?.attribute}</small>
+                      </Button>
+                    ))}
+                  </div>
+                </section>
+                <section>
+                  <h3>Control actions</h3>
+                  <div className="direct-value-grid">
+                    {directChoices.actions.map((choice) => {
+                      const active = Boolean(latchedActions[choice.key]);
+                      const shared = {
+                        key: choice.key,
+                        disabled: Boolean(server.selectedGroupId),
+                        className: active ? "active" : "",
+                        "aria-label": `${choice.label} ${choice.kind} control action`,
+                      };
+                      const content = <><b>{choice.label}</b><small>{choice.kind.replaceAll("_", " ")}{choice.durationMillis != null ? ` · ${choice.durationMillis} ms` : ""}</small></>;
+                      if (choice.kind === "momentary") {
+                        return <Button
+                          {...shared}
+                          onPointerDown={(event) => {
+                            event.currentTarget.setPointerCapture?.(event.pointerId);
+                            void applyControlAction(choice, true);
+                          }}
+                          onPointerUp={(event) => {
+                            if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+                            void applyControlAction(choice, false);
+                          }}
+                          onPointerCancel={() => void applyControlAction(choice, false)}
+                          onKeyDown={(event) => {
+                            if (!event.repeat && (event.key === "Enter" || event.key === " ")) {
+                              event.preventDefault();
+                              void applyControlAction(choice, true);
+                            }
+                          }}
+                          onKeyUp={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              void applyControlAction(choice, false);
+                            }
+                          }}
+                        >{content}</Button>;
+                      }
+                      return <Button
+                        {...shared}
+                        onClick={() => {
+                          const next = choice.kind === "latched" ? !active : true;
+                          if (choice.kind === "latched") {
+                            setLatchedActions((current) => ({ ...current, [choice.key]: next }));
+                          }
+                          void applyControlAction(choice, next);
+                        }}
+                      >{content}</Button>;
+                    })}
+                  </div>
+                </section>
+              </div>
+            )}
+            {generationStatus && <footer role="status">{generationStatus}</footer>}
+          </section>
+        ) : !server.selectedFixtures.length && !server.selectedGroupId ? (
           <div className="parameter-empty">
             <b>No fixtures selected</b>
             <small>

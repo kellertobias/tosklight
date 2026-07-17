@@ -4,22 +4,23 @@
 use arc_swap::ArcSwap;
 use light_core::{
     AttributeKey, AttributeValue, FixtureId, MergeMode, ProgrammerId, SharedClock, TimedValue,
-    Universe,
+    Universe, Xyz,
 };
 use light_fixture::{
-    PatchedFixture, SignalLossPolicy, encode_parameter, mix_color, validate_patch,
+    ChannelScales, ColorSystem, FixtureChannel, FixtureMode, PatchedFixture, SignalLossPolicy,
+    encode_parameter, mix_color, srgb_to_xyz, validate_patch,
 };
 use light_output::{DmxFrame, OutputRoute};
 use light_playback::{
-    ActivePlayback, CueList, MoveInBlackCandidate, PlaybackDefinition, PlaybackEngine,
-    PlaybackPage, PlaybackTarget, resolve,
+    ActivePlayback, CueList, MoveInBlackCandidate, PlaybackContribution, PlaybackDefinition,
+    PlaybackEngine, PlaybackPage, PlaybackTarget, SequenceMasterSource,
 };
 use light_programmer::ProgrammerRegistry;
 use light_programmer::{GroupDefinition, resolve_group};
 use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicU64, Ordering},
@@ -46,6 +47,79 @@ fn value_for_ordered_position(
     let right = position.ceil() as usize;
     let progress = position - left as f32;
     AttributeValue::Normalized(points[left] + (points[right] - points[left]) * progress)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct ApplicableSequenceMaster {
+    source: SequenceMasterSource,
+    scale: f32,
+}
+
+#[derive(Clone)]
+struct EngineContribution {
+    value: TimedValue,
+    sequence_master: Option<ApplicableSequenceMaster>,
+}
+
+impl EngineContribution {
+    fn unscaled(value: TimedValue) -> Self {
+        Self {
+            value,
+            sequence_master: None,
+        }
+    }
+}
+
+impl From<PlaybackContribution> for EngineContribution {
+    fn from(contribution: PlaybackContribution) -> Self {
+        Self {
+            value: contribution.value,
+            sequence_master: Some(ApplicableSequenceMaster {
+                source: contribution.source,
+                scale: contribution.sequence_master,
+            }),
+        }
+    }
+}
+
+#[derive(Default)]
+struct ResolvedAttributes {
+    values: HashMap<(FixtureId, AttributeKey), AttributeValue>,
+    sequence_masters: HashMap<(FixtureId, AttributeKey), ApplicableSequenceMaster>,
+}
+
+fn resolve_engine_contributions(
+    values: impl IntoIterator<Item = EngineContribution>,
+) -> ResolvedAttributes {
+    let mut winners: HashMap<(FixtureId, AttributeKey), EngineContribution> = HashMap::new();
+    for candidate in values {
+        let key = (
+            candidate.value.fixture_id,
+            candidate.value.attribute.clone(),
+        );
+        let replace = match winners.get(&key) {
+            None => true,
+            Some(current) if candidate.value.priority != current.value.priority => {
+                candidate.value.priority > current.value.priority
+            }
+            Some(current) if candidate.value.merge_mode == MergeMode::Htp => {
+                candidate.value.value.normalized().unwrap_or(0.0)
+                    > current.value.value.normalized().unwrap_or(0.0)
+            }
+            Some(current) => candidate.value.changed_at > current.value.changed_at,
+        };
+        if replace {
+            winners.insert(key, candidate);
+        }
+    }
+    let mut resolved = ResolvedAttributes::default();
+    for (key, winner) in winners {
+        resolved.values.insert(key.clone(), winner.value.value);
+        if let Some(sequence_master) = winner.sequence_master {
+            resolved.sequence_masters.insert(key, sequence_master);
+        }
+    }
+    resolved
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -221,6 +295,9 @@ pub struct Engine {
     programmer_transitions: Mutex<HashMap<ProgrammerTransitionKey, ProgrammerTransition>>,
     move_in_black: Mutex<HashMap<MoveInBlackKey, MoveInBlackRuntime>>,
     group_master_flashes: RwLock<HashMap<String, f32>>,
+    /// Live Highlight is an output overlay, not programmer/show data. Ownership and remembered
+    /// selection live in the server; the engine only needs the currently lit fixture identities.
+    highlighted_fixtures: RwLock<HashSet<FixtureId>>,
     clock: SharedClock,
 }
 
@@ -292,6 +369,7 @@ impl Engine {
             programmer_transitions: Mutex::new(HashMap::new()),
             move_in_black: Mutex::new(HashMap::new()),
             group_master_flashes: RwLock::new(HashMap::new()),
+            highlighted_fixtures: RwLock::new(HashSet::new()),
             clock,
         }
     }
@@ -389,7 +467,12 @@ impl Engine {
     ) -> Vec<TimedValue> {
         let mut runtimes = self.move_in_black.lock();
         let mut present = std::collections::HashSet::new();
-        for candidate in candidates {
+        for mut candidate in candidates {
+            for target in &mut candidate.values {
+                if snapshot_attribute_is_snap(snapshot, candidate.fixture_id, &target.attribute) {
+                    target.fade_millis = 0;
+                }
+            }
             let key = MoveInBlackKey {
                 playback_number: candidate.playback_number,
                 cue_list_id: candidate.cue_list_id,
@@ -656,19 +739,31 @@ impl Engine {
         underlying: Option<&AttributeValue>,
         programmer_id: ProgrammerId,
         source: ProgrammerTransitionSource,
+        snap: bool,
     ) -> TimedValue {
-        let duration = value
-            .fade_millis
-            .unwrap_or_else(|| self.programmer_fade_millis.load(Ordering::Relaxed));
-        if duration == 0 || value.value.normalized().is_none() {
-            return value;
-        }
         let key = ProgrammerTransitionKey {
             programmer_id,
             source,
             fixture_id: value.fixture_id,
             attribute: value.attribute.clone(),
         };
+        if snap {
+            self.programmer_transitions.lock().remove(&key);
+            let elapsed = (now - value.changed_at).num_milliseconds().max(0) as u64;
+            if elapsed < value.delay_millis.unwrap_or(0) {
+                value.value = underlying
+                    .cloned()
+                    .unwrap_or(AttributeValue::Normalized(0.0));
+            }
+            return value;
+        }
+        let duration = value
+            .fade_millis
+            .unwrap_or_else(|| self.programmer_fade_millis.load(Ordering::Relaxed));
+        if duration == 0 || value.value.normalized().is_none() {
+            self.programmer_transitions.lock().remove(&key);
+            return value;
+        }
         let mut transitions = self.programmer_transitions.lock();
         let transition = transitions
             .entry(key)
@@ -846,19 +941,96 @@ impl Engine {
             .unwrap_or(0.0)
     }
 
+    /// Replace the transient Highlight output set. This deliberately does not touch programmer
+    /// state, undo history, or the persisted engine snapshot.
+    pub fn set_highlighted_fixtures(&self, fixtures: impl IntoIterator<Item = FixtureId>) {
+        *self.highlighted_fixtures.write() = fixtures.into_iter().collect();
+    }
+
+    pub fn clear_highlighted_fixtures(&self) {
+        self.highlighted_fixtures.write().clear();
+    }
+
+    pub fn highlighted_fixtures(&self) -> Vec<FixtureId> {
+        let mut fixtures = self
+            .highlighted_fixtures
+            .read()
+            .iter()
+            .copied()
+            .collect::<Vec<_>>();
+        fixtures.sort_by_key(|fixture| fixture.0);
+        fixtures
+    }
+
     pub fn render(&self, options: RenderOptions) -> Result<RenderResult, EngineError> {
         let snapshot = self.snapshot.load_full();
         let now = self.clock.now();
-        let resolved = self.resolved_values_at(&snapshot, now);
+        let resolved = self.resolved_attributes_at(&snapshot, now);
         let groups = snapshot
             .groups
             .iter()
             .map(|group| (group.id.clone(), group.clone()))
             .collect::<HashMap<_, _>>();
         let group_master_flashes = self.group_master_flashes.read();
+        let highlighted_fixtures = self.highlighted_fixtures.read();
         let mut universes = HashMap::new();
         let mut patched_slots: HashMap<Universe, u16> = HashMap::new();
         for fixture in &snapshot.fixtures {
+            if fixture.definition.schema_version == light_fixture::FIXTURE_PROFILE_SCHEMA_VERSION {
+                let profile = fixture
+                    .definition
+                    .profile_snapshot
+                    .as_deref()
+                    .ok_or_else(|| {
+                        EngineError::Invalid(
+                            "schema-v2 fixture is missing its profile snapshot".into(),
+                        )
+                    })?;
+                let mode_id = fixture.definition.mode_id.ok_or_else(|| {
+                    EngineError::Invalid("schema-v2 fixture is missing its mode identity".into())
+                })?;
+                let mode = profile.mode(mode_id).ok_or_else(|| {
+                    EngineError::Invalid("schema-v2 fixture mode is missing".into())
+                })?;
+                let footprints = fixture.definition.split_footprints();
+                let mut patches = fixture.effective_split_patches();
+                for instance in &fixture.multipatch {
+                    patches.extend(instance.effective_split_patches());
+                }
+                for patch in patches {
+                    let (Some(universe), Some(address)) = (patch.universe, patch.address) else {
+                        continue;
+                    };
+                    let footprint = footprints.get(&patch.split).copied().ok_or_else(|| {
+                        EngineError::Invalid(format!(
+                            "fixture split {} has no footprint",
+                            patch.split
+                        ))
+                    })?;
+                    let frame = universes.entry(universe).or_insert([0; 512]);
+                    let last_slot = address
+                        .saturating_sub(1)
+                        .saturating_add(footprint)
+                        .min(light_output::DMX_SLOTS as u16);
+                    patched_slots
+                        .entry(universe)
+                        .and_modify(|current| *current = (*current).max(last_slot))
+                        .or_insert(last_slot);
+                    render_profile_split(
+                        frame,
+                        fixture,
+                        mode,
+                        patch.split,
+                        address,
+                        &resolved,
+                        options,
+                        &groups,
+                        &group_master_flashes,
+                        &highlighted_fixtures,
+                    )?;
+                }
+                continue;
+            }
             let mut patches = vec![(fixture.universe, fixture.address)];
             patches.extend(
                 fixture
@@ -885,7 +1057,7 @@ impl Engine {
                 render_fixture(
                     frame,
                     &instance,
-                    &resolved,
+                    &resolved.values,
                     options,
                     &groups,
                     &group_master_flashes,
@@ -903,20 +1075,90 @@ impl Engine {
     /// visualizers can use this without attempting to reverse fixture-specific DMX encoding.
     pub fn resolved_values(&self) -> HashMap<(FixtureId, AttributeKey), AttributeValue> {
         let snapshot = self.snapshot.load_full();
-        self.resolved_values_at(&snapshot, self.clock.now())
+        self.resolved_attributes_at(&snapshot, self.clock.now())
+            .values
     }
 
-    fn resolved_values_at(
+    /// Project schema-v2 profile heads through the same channel-resolution path used for DMX.
+    /// The returned intensity and XYZ color therefore include Highlight/Blackout, calibrated
+    /// gamut clipping, response curves, virtual intensity, and applicable masters exactly once.
+    /// `values` may include temporary visualization-only overrides such as Preload.
+    pub fn profile_visualization_values(
+        &self,
+        values: &HashMap<(FixtureId, AttributeKey), AttributeValue>,
+        options: RenderOptions,
+    ) -> Result<HashMap<(FixtureId, AttributeKey), AttributeValue>, EngineError> {
+        let snapshot = self.snapshot.load_full();
+        let mut resolved = self.resolved_attributes_at(&snapshot, self.clock.now());
+        for (key, value) in values {
+            if resolved.values.get(key) != Some(value) {
+                // Visualization-only overrides (notably Preload) do not inherit the sequence
+                // master of the source they temporarily replace.
+                resolved.sequence_masters.remove(key);
+            }
+        }
+        resolved.values.clone_from(values);
+        let groups = snapshot
+            .groups
+            .iter()
+            .map(|group| (group.id.clone(), group.clone()))
+            .collect::<HashMap<_, _>>();
+        let group_master_flashes = self.group_master_flashes.read();
+        let highlighted_fixtures = self.highlighted_fixtures.read();
+        let mut projected = HashMap::new();
+        for fixture in &snapshot.fixtures {
+            let Some(profile) = fixture.definition.profile_snapshot.as_deref() else {
+                continue;
+            };
+            let mode_id = fixture.definition.mode_id.ok_or_else(|| {
+                EngineError::Invalid("schema-v2 fixture is missing its mode identity".into())
+            })?;
+            let mode = profile
+                .mode(mode_id)
+                .ok_or_else(|| EngineError::Invalid("schema-v2 fixture mode is missing".into()))?;
+            for head_index in 0..mode.heads.len() {
+                let output = resolve_profile_head(
+                    fixture,
+                    mode,
+                    head_index,
+                    &resolved,
+                    options,
+                    &groups,
+                    &group_master_flashes,
+                    &highlighted_fixtures,
+                )?;
+                projected.insert(
+                    (output.owner, AttributeKey::intensity()),
+                    AttributeValue::Normalized(output.intensity),
+                );
+                if let Some(color) = output.color {
+                    projected.insert(
+                        (output.owner, AttributeKey("color".into())),
+                        AttributeValue::ColorXyz(color),
+                    );
+                }
+            }
+        }
+        Ok(projected)
+    }
+
+    fn resolved_attributes_at(
         &self,
         snapshot: &EngineSnapshot,
         now: chrono::DateTime<chrono::Utc>,
-    ) -> HashMap<(FixtureId, AttributeKey), AttributeValue> {
+    ) -> ResolvedAttributes {
         let timecode = self.timecode_frame.load(Ordering::Relaxed);
         let (mut contributions, move_in_black_candidates, active_playbacks) = {
             let mut playback = self.playback.write();
             playback.tick(now, (timecode != u64::MAX).then_some(timecode));
             (
-                playback.contributions_at(now),
+                playback
+                    .contributions_with_context_at(now, |fixture_id, attribute| {
+                        snapshot_attribute_is_snap(snapshot, fixture_id, attribute)
+                    })
+                    .into_iter()
+                    .map(EngineContribution::from)
+                    .collect::<Vec<_>>(),
                 playback.move_in_black_candidates(),
                 playback.runtime(),
             )
@@ -924,7 +1166,7 @@ impl Engine {
         // A newly faded programmer source starts at the resolved playback underneath it. This is
         // especially visible for Preload: GO must not introduce a zero/default frame before the
         // temporary programmer contribution takes ownership.
-        let programmer_underlay = resolve(contributions.clone());
+        let programmer_underlay = resolve_engine_contributions(contributions.clone()).values;
         let groups = snapshot
             .groups
             .iter()
@@ -948,7 +1190,9 @@ impl Engine {
                 scoped_contributions.push(if value.fade {
                     let underlying =
                         programmer_underlay.get(&(value.fixture_id, value.attribute.clone()));
-                    self.faded_programmer_value(value, now, underlying, programmer_id, source)
+                    let snap =
+                        snapshot_attribute_is_snap(snapshot, value.fixture_id, &value.attribute);
+                    self.faded_programmer_value(value, now, underlying, programmer_id, source, snap)
                 } else {
                     value
                 });
@@ -989,12 +1233,18 @@ impl Engine {
                         scoped_contributions.push(if value.fade {
                             let underlying = programmer_underlay
                                 .get(&(value.fixture_id, value.attribute.clone()));
+                            let snap = snapshot_attribute_is_snap(
+                                snapshot,
+                                value.fixture_id,
+                                &value.attribute,
+                            );
                             self.faded_programmer_value(
                                 value,
                                 now,
                                 underlying,
                                 programmer_id,
                                 source.clone(),
+                                snap,
                             )
                         } else {
                             value
@@ -1018,14 +1268,19 @@ impl Engine {
                     programmer_winners.insert(key, value);
                 }
             }
-            contributions.extend(programmer_winners.into_values().map(|mut value| {
-                value.merge_mode = if value.attribute.is_intensity() {
-                    MergeMode::Htp
-                } else {
-                    MergeMode::Ltp
-                };
-                value
-            }));
+            contributions.extend(
+                programmer_winners
+                    .into_values()
+                    .map(|mut value| {
+                        value.merge_mode = if value.attribute.is_intensity() {
+                            MergeMode::Htp
+                        } else {
+                            MergeMode::Ltp
+                        };
+                        value
+                    })
+                    .map(EngineContribution::unscaled),
+            );
         }
         for group in &snapshot.groups {
             let Ok(fixtures) = resolve_group(&group.id, &groups) else {
@@ -1033,7 +1288,7 @@ impl Engine {
             };
             for fixture_id in fixtures {
                 for (attribute, value) in &group.programming {
-                    contributions.push(TimedValue {
+                    contributions.push(EngineContribution::unscaled(TimedValue {
                         fixture_id,
                         attribute: attribute.clone(),
                         value: value.clone(),
@@ -1048,19 +1303,23 @@ impl Engine {
                         fade: false,
                         fade_millis: None,
                         delay_millis: None,
-                    });
+                    }));
                 }
             }
         }
-        let base_resolved = resolve(contributions.clone());
-        contributions.extend(self.move_in_black_contributions(
-            snapshot,
-            move_in_black_candidates,
-            &active_playbacks,
-            &base_resolved,
-            now,
-        ));
-        resolve(contributions)
+        let base_resolved = resolve_engine_contributions(contributions.clone());
+        contributions.extend(
+            self.move_in_black_contributions(
+                snapshot,
+                move_in_black_candidates,
+                &active_playbacks,
+                &base_resolved.values,
+                now,
+            )
+            .into_iter()
+            .map(EngineContribution::unscaled),
+        );
+        resolve_engine_contributions(contributions)
     }
 }
 
@@ -1109,6 +1368,65 @@ fn move_in_black_is_at_target(runtime: &MoveInBlackRuntime) -> bool {
             )
     })
 }
+
+fn profile_mode(fixture: &PatchedFixture) -> Option<&FixtureMode> {
+    if fixture.definition.schema_version != light_fixture::FIXTURE_PROFILE_SCHEMA_VERSION {
+        return None;
+    }
+    let profile = fixture.definition.profile_snapshot.as_deref()?;
+    profile.mode(fixture.definition.mode_id?)
+}
+
+fn profile_head_owner(
+    fixture: &PatchedFixture,
+    head_index: usize,
+    head: &light_fixture::FixtureHead,
+) -> FixtureId {
+    if head.master_shared {
+        return fixture.fixture_id;
+    }
+    let persisted_head_index = fixture
+        .definition
+        .heads
+        .get(head_index)
+        .map(|head| head.index)
+        .unwrap_or(head_index as u16);
+    fixture
+        .logical_heads
+        .iter()
+        .find(|patched| patched.head_index == persisted_head_index)
+        .or_else(|| {
+            fixture
+                .logical_heads
+                .iter()
+                .find(|patched| usize::from(patched.head_index) == head_index)
+        })
+        .or_else(|| {
+            fixture
+                .logical_heads
+                .iter()
+                .find(|patched| usize::from(patched.head_index) == head_index + 1)
+        })
+        .map(|patched| patched.fixture_id)
+        .unwrap_or(fixture.fixture_id)
+}
+
+fn snapshot_attribute_is_snap(
+    snapshot: &EngineSnapshot,
+    fixture_id: FixtureId,
+    attribute: &AttributeKey,
+) -> bool {
+    snapshot.fixtures.iter().any(|fixture| {
+        let Some(mode) = profile_mode(fixture) else {
+            return false;
+        };
+        mode.heads.iter().enumerate().any(|(head_index, head)| {
+            profile_head_owner(fixture, head_index, head) == fixture_id
+                && mode.head_attribute_is_snap(head.id, attribute)
+        })
+    })
+}
+
 fn render_fixture(
     frame: &mut DmxFrame,
     fixture: &PatchedFixture,
@@ -1240,12 +1558,389 @@ fn render_fixture(
     Ok(())
 }
 
+fn group_scale_for_fixture(
+    fixture_id: FixtureId,
+    groups: &HashMap<String, GroupDefinition>,
+    group_master_flashes: &HashMap<String, f32>,
+) -> f32 {
+    groups
+        .values()
+        .filter(|group| group.playback_fader.is_some())
+        .filter_map(|group| {
+            resolve_group(&group.id, groups)
+                .ok()
+                .filter(|members| members.contains(&fixture_id))
+                .map(|_| {
+                    group
+                        .master
+                        .max(group_master_flashes.get(&group.id).copied().unwrap_or(0.0))
+                        .clamp(0.0, 1.0)
+                })
+        })
+        .reduce(f32::max)
+        .unwrap_or(1.0)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_profile_split(
+    frame: &mut DmxFrame,
+    fixture: &PatchedFixture,
+    mode: &FixtureMode,
+    split: u16,
+    address: u16,
+    resolved: &ResolvedAttributes,
+    options: RenderOptions,
+    groups: &HashMap<String, GroupDefinition>,
+    group_master_flashes: &HashMap<String, f32>,
+    highlighted_fixtures: &HashSet<FixtureId>,
+) -> Result<(), EngineError> {
+    for (head_index, _) in mode
+        .heads
+        .iter()
+        .enumerate()
+        .filter(|(_, head)| head.split == split)
+    {
+        let output = resolve_profile_head(
+            fixture,
+            mode,
+            head_index,
+            resolved,
+            options,
+            groups,
+            group_master_flashes,
+            highlighted_fixtures,
+        )?;
+        for (channel_id, raw) in output.channels {
+            let channel = mode
+                .channels
+                .iter()
+                .find(|channel| channel.id == channel_id)
+                .ok_or_else(|| {
+                    EngineError::Invalid("resolved profile channel is missing".into())
+                })?;
+            mode.encode_channel(frame, address, channel, raw)
+                .map_err(|error| EngineError::Invalid(error.to_string()))?;
+        }
+    }
+    Ok(())
+}
+
+struct ResolvedProfileHeadOutput {
+    owner: FixtureId,
+    channels: Vec<(uuid::Uuid, u32)>,
+    intensity: f32,
+    color: Option<Xyz>,
+}
+
+fn channel_visual_level(
+    mode: &FixtureMode,
+    channels: &HashMap<uuid::Uuid, u32>,
+    channel_id: uuid::Uuid,
+) -> Option<f32> {
+    let channel = mode
+        .channels
+        .iter()
+        .find(|channel| channel.id == channel_id)?;
+    let level = channels.get(&channel_id).copied()? as f32 / channel.resolution.max_raw() as f32;
+    Some(if channel.invert { 1.0 - level } else { level }.clamp(0.0, 1.0))
+}
+
+fn profile_visual_color(
+    mode: &FixtureMode,
+    head_id: uuid::Uuid,
+    channels: &HashMap<uuid::Uuid, u32>,
+    fallback: Option<Xyz>,
+) -> Option<Xyz> {
+    let system = mode
+        .color_systems
+        .iter()
+        .find(|system| system.head_id == head_id);
+    match system.map(|system| &system.system) {
+        Some(ColorSystem::Additive { emitters }) => {
+            Some(emitters.iter().filter(|emitter| emitter.visible).fold(
+                Xyz {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                },
+                |sum, emitter| {
+                    let emitted = channel_visual_level(mode, channels, emitter.channel_id)
+                        .unwrap_or(0.0)
+                        .powf(emitter.response_curve);
+                    Xyz {
+                        x: sum.x + emitter.xyz.x * emitted,
+                        y: sum.y + emitter.xyz.y * emitted,
+                        z: sum.z + emitter.xyz.z * emitted,
+                    }
+                },
+            ))
+        }
+        Some(ColorSystem::Subtractive {
+            cyan_channel_id,
+            magenta_channel_id,
+            yellow_channel_id,
+        }) => Some(srgb_to_xyz(
+            1.0 - channel_visual_level(mode, channels, *cyan_channel_id).unwrap_or(0.0),
+            1.0 - channel_visual_level(mode, channels, *magenta_channel_id).unwrap_or(0.0),
+            1.0 - channel_visual_level(mode, channels, *yellow_channel_id).unwrap_or(0.0),
+        )),
+        Some(ColorSystem::DiscreteWheel { channel_id, slots }) => {
+            let raw = channels.get(channel_id).copied()?;
+            slots
+                .iter()
+                .find(|slot| raw >= slot.dmx_from && raw <= slot.dmx_to)
+                .and_then(|slot| slot.measured_xyz)
+                .or(fallback)
+        }
+        None => {
+            let level = |attribute: &str| {
+                mode.channels
+                    .iter()
+                    .find(|channel| channel.head_id == head_id && channel.attribute.0 == attribute)
+                    .and_then(|channel| channel_visual_level(mode, channels, channel.id))
+            };
+            match (
+                level("color.red"),
+                level("color.green"),
+                level("color.blue"),
+            ) {
+                (Some(red), Some(green), Some(blue)) => Some(srgb_to_xyz(red, green, blue)),
+                _ => fallback,
+            }
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn resolve_profile_head(
+    fixture: &PatchedFixture,
+    mode: &FixtureMode,
+    head_index: usize,
+    resolved: &ResolvedAttributes,
+    options: RenderOptions,
+    groups: &HashMap<String, GroupDefinition>,
+    group_master_flashes: &HashMap<String, f32>,
+    highlighted_fixtures: &HashSet<FixtureId>,
+) -> Result<ResolvedProfileHeadOutput, EngineError> {
+    let head = mode
+        .heads
+        .get(head_index)
+        .ok_or_else(|| EngineError::Invalid("fixture profile head is missing".into()))?;
+    let owner = profile_head_owner(fixture, head_index, head);
+    let highlighted =
+        highlighted_fixtures.contains(&fixture.fixture_id) || highlighted_fixtures.contains(&owner);
+    // Hazardous fixture safety is resolved after transient Highlight ownership. Otherwise an
+    // arbitrary non-intensity highlight_raw could defeat a configured raw safe value during
+    // Blackout merely because blackout_raw only knows typed intensity/color systems.
+    let output_highlighted = highlighted && !(fixture.definition.hazardous && options.blackout);
+    let group_scale = group_scale_for_fixture(owner, groups, group_master_flashes);
+    let mut values = resolved
+        .values
+        .iter()
+        .filter(|((fixture_id, _), _)| *fixture_id == owner)
+        .map(|((_, attribute), value)| (attribute.clone(), value.clone()))
+        .collect::<HashMap<_, _>>();
+    let mut sequence_masters = resolved
+        .sequence_masters
+        .iter()
+        .filter(|((fixture_id, _), _)| *fixture_id == owner)
+        .map(|((_, attribute), master)| (attribute.clone(), *master))
+        .collect::<HashMap<_, _>>();
+    if let Some(progress) = options.control_loss_progress {
+        match fixture.definition.effective_signal_loss_policy() {
+            SignalLossPolicy::HoldLast => {}
+            SignalLossPolicy::ImmediateSafe => {
+                apply_safe_values(&mut values, &fixture.definition.safe_values, 1.0)
+            }
+            SignalLossPolicy::FadeToSafe { .. } => apply_safe_values_with_snap(
+                &mut values,
+                &fixture.definition.safe_values,
+                progress.clamp(0.0, 1.0),
+                |attribute| mode.head_attribute_is_snap(head.id, attribute),
+            ),
+        }
+    }
+    if fixture.definition.hazardous && options.blackout {
+        for (attribute, value) in &fixture.definition.safe_values {
+            values.insert(attribute.clone(), value.clone());
+        }
+    }
+
+    let virtual_intensity = if output_highlighted {
+        1.0
+    } else {
+        values
+            .get(&AttributeKey::intensity())
+            .and_then(AttributeValue::normalized)
+            .unwrap_or(1.0)
+    };
+    let color_attribute = AttributeKey("color".into());
+    let requested_color = values.get(&color_attribute).and_then(|value| match value {
+        AttributeValue::ColorXyz(color) => Some(*color),
+        _ => None,
+    });
+    let color_sequence_master = sequence_masters.get(&color_attribute).copied();
+    if let Some(target) = requested_color {
+        for (channel_id, raw) in mode
+            .resolve_color(head.id, target)
+            .map_err(|error| EngineError::Invalid(error.to_string()))?
+        {
+            if let Some(channel) = mode
+                .channels
+                .iter()
+                .find(|channel| channel.id == channel_id)
+                && !values.contains_key(&channel.attribute)
+            {
+                values.insert(channel.attribute.clone(), AttributeValue::RawDmxExact(raw));
+                if let Some(master) = color_sequence_master {
+                    sequence_masters.insert(channel.attribute.clone(), master);
+                }
+            }
+        }
+    }
+
+    let intensity_sequence_master = sequence_masters.get(&AttributeKey::intensity()).copied();
+    let mut channels = Vec::new();
+    for channel in mode
+        .channels
+        .iter()
+        .filter(|channel| channel.head_id == head.id)
+    {
+        let active_attribute = mode.active_attribute_for_channel(channel, &values);
+        let sequence_master = active_attribute
+            .and_then(|attribute| {
+                if attribute.is_intensity() {
+                    return None;
+                }
+                sequence_masters.get(attribute).copied()
+            })
+            .filter(|master| {
+                !channel.reacts_to_virtual_intensity
+                    || intensity_sequence_master
+                        .is_none_or(|intensity| intensity.source != master.source)
+            })
+            .map(|master| master.scale)
+            .unwrap_or(1.0);
+        let channel_virtual_intensity = if active_attribute.is_some_and(AttributeKey::is_intensity)
+        {
+            1.0
+        } else {
+            virtual_intensity
+        };
+        let mut raw = mode.resolve_channel_raw(
+            channel,
+            &values,
+            output_highlighted,
+            fixture.highlight_overrides.get(&channel.id).copied(),
+            ChannelScales {
+                virtual_intensity: channel_virtual_intensity,
+                sequence_master,
+                group_master: group_scale,
+                grand_master: if options.blackout {
+                    0.0
+                } else {
+                    options.grand_master.clamp(0.0, 1.0)
+                },
+            },
+        );
+        if options.blackout {
+            raw = blackout_raw(mode, channel, raw);
+        }
+        channels.push((channel.id, raw));
+    }
+    let channel_map = channels.iter().copied().collect::<HashMap<_, _>>();
+    let physical_intensity = mode
+        .channels
+        .iter()
+        .filter(|channel| channel.head_id == head.id && channel.attribute.is_intensity())
+        .filter_map(|channel| channel_visual_level(mode, &channel_map, channel.id))
+        .reduce(f32::max);
+    let mut color = profile_visual_color(mode, head.id, &channel_map, requested_color);
+    let intensity = physical_intensity.unwrap_or_else(|| {
+        if options.blackout {
+            return 0.0;
+        }
+        // With no physical dimmer, the final emitter channels already contain virtual-intensity
+        // and applicable master scaling. Split their produced XYZ into chromaticity plus one beam
+        // level so Stage does not apply that scaling twice.
+        let brightness = color
+            .map(|value| value.x.max(value.y).max(value.z).clamp(0.0, 1.0))
+            .unwrap_or(0.0);
+        if brightness > f32::EPSILON {
+            color = color.map(|value| Xyz {
+                x: value.x / brightness,
+                y: value.y / brightness,
+                z: value.z / brightness,
+            });
+            brightness
+        } else {
+            virtual_intensity * group_scale * options.grand_master.clamp(0.0, 1.0)
+        }
+    });
+    Ok(ResolvedProfileHeadOutput {
+        owner,
+        channels,
+        intensity,
+        color,
+    })
+}
+
+fn blackout_raw(mode: &FixtureMode, channel: &FixtureChannel, raw: u32) -> u32 {
+    if channel.attribute.is_intensity() {
+        return if channel.invert {
+            channel.resolution.max_raw()
+        } else {
+            0
+        };
+    }
+    for system in &mode.color_systems {
+        match &system.system {
+            light_fixture::ColorSystem::Additive { emitters }
+                if emitters
+                    .iter()
+                    .any(|emitter| emitter.channel_id == channel.id) =>
+            {
+                return if channel.invert {
+                    channel.resolution.max_raw()
+                } else {
+                    0
+                };
+            }
+            light_fixture::ColorSystem::Subtractive {
+                cyan_channel_id,
+                magenta_channel_id,
+                yellow_channel_id,
+            } if [cyan_channel_id, magenta_channel_id, yellow_channel_id]
+                .contains(&&channel.id) =>
+            {
+                return if channel.invert {
+                    0
+                } else {
+                    channel.resolution.max_raw()
+                };
+            }
+            _ => {}
+        }
+    }
+    raw
+}
+
 fn apply_safe_values(
     values: &mut HashMap<AttributeKey, AttributeValue>,
     safe: &std::collections::BTreeMap<AttributeKey, AttributeValue>,
     progress: f32,
 ) {
+    apply_safe_values_with_snap(values, safe, progress, |_| false);
+}
+
+fn apply_safe_values_with_snap(
+    values: &mut HashMap<AttributeKey, AttributeValue>,
+    safe: &std::collections::BTreeMap<AttributeKey, AttributeValue>,
+    progress: f32,
+    is_snap: impl Fn(&AttributeKey) -> bool,
+) {
     for (attribute, target) in safe {
+        let progress = if is_snap(attribute) { 1.0 } else { progress };
         let value = match (values.get(attribute), target) {
             (Some(AttributeValue::Normalized(current)), AttributeValue::Normalized(target)) => {
                 AttributeValue::Normalized(current + (target - current) * progress)
@@ -1267,8 +1962,10 @@ mod tests {
     use chrono::{Duration as ChronoDuration, TimeZone, Utc};
     use light_core::{ApplicationClock, ManualClock, SessionId, UserId};
     use light_fixture::{
-        ByteOrder, ChannelComponent, FixtureDefinition, LogicalHead, MultiPatchInstance, Parameter,
-        PatchedHead,
+        ByteOrder, ChannelBehavior, ChannelComponent, ChannelFunction, ChannelResolution,
+        FixtureChannel, FixtureDefinition, FixtureHead, FixtureProfile, FixtureSplit,
+        GeometryGraph, GeometryTemplate, LogicalHead, MultiPatchInstance, Parameter, PatchedHead,
+        SplitPatch,
     };
     use light_playback::{
         Cue, CueChange, CueListMode, IntensityPriorityMode, PlaybackButtonAction,
@@ -1320,9 +2017,13 @@ mod tests {
                     direct_control_protocols: Vec::new(),
                     signal_loss_policy: SignalLossPolicy::HoldLast,
                     safe_values: BTreeMap::new(),
+                    profile_id: None,
+                    mode_id: None,
+                    profile_snapshot: None,
                 },
                 universe: Some(1),
                 address: Some(1),
+                split_patches: Vec::new(),
                 direct_control: None,
                 location: Default::default(),
                 rotation: Default::default(),
@@ -1333,9 +2034,311 @@ mod tests {
                 multipatch: Vec::new(),
                 move_in_black_enabled: true,
                 move_in_black_delay_millis: 0,
+                highlight_overrides: BTreeMap::new(),
             },
             logical,
         )
+    }
+
+    fn schema_v2_fixture(
+        channels: &[(&str, bool, bool, bool, bool, bool)],
+    ) -> (PatchedFixture, FixtureId) {
+        let mut profile = FixtureProfile::blank();
+        profile.manufacturer = "Test".into();
+        profile.name = "Semantic fixture".into();
+        profile.short_name = "Semantic".into();
+        profile.revision = 1;
+        let mode = &mut profile.modes[0];
+        let head_id = mode.heads[0].id;
+        mode.splits[0].footprint = channels.len() as u16;
+        mode.channels = channels
+            .iter()
+            .map(
+                |(attribute, snap, virtual_intensity, sequence, group, grand)| FixtureChannel {
+                    id: uuid::Uuid::new_v4(),
+                    head_id,
+                    attribute: AttributeKey((*attribute).into()),
+                    resolution: ChannelResolution::U8,
+                    secondary_slots: vec![],
+                    default_raw: 0,
+                    highlight_raw: u8::MAX.into(),
+                    physical_min: Some(0.0),
+                    physical_max: Some(1.0),
+                    unit: None,
+                    invert: false,
+                    snap: *snap,
+                    reacts_to_virtual_intensity: *virtual_intensity,
+                    reacts_to_sequence_master: *sequence,
+                    reacts_to_group_master: *group,
+                    reacts_to_grand_master: *grand,
+                    behavior: ChannelBehavior::Controlled,
+                    functions: vec![ChannelFunction::continuous(
+                        *attribute,
+                        AttributeKey((*attribute).into()),
+                        u8::MAX.into(),
+                    )],
+                },
+            )
+            .collect();
+        let mode_id = mode.id;
+        let definition = profile.resolved_definition(mode_id).unwrap();
+        let fixture_id = FixtureId::new();
+        (
+            PatchedFixture {
+                fixture_id,
+                fixture_number: Some(1),
+                name: "Semantic fixture".into(),
+                definition,
+                universe: Some(1),
+                address: Some(1),
+                split_patches: vec![],
+                layer_id: "default".into(),
+                direct_control: None,
+                location: Default::default(),
+                rotation: Default::default(),
+                logical_heads: vec![],
+                multipatch: vec![],
+                move_in_black_enabled: true,
+                move_in_black_delay_millis: 0,
+                highlight_overrides: BTreeMap::new(),
+            },
+            fixture_id,
+        )
+    }
+
+    #[test]
+    fn profile_visualization_uses_the_exact_calibrated_and_mastered_channel_result() {
+        let programmers = ProgrammerRegistry::default();
+        let session = light_core::SessionId::new();
+        programmers.start(session, light_core::UserId::new());
+        let mut profile = FixtureProfile::blank();
+        profile.manufacturer = "Test".into();
+        profile.name = "Calibrated visual".into();
+        profile.short_name = "Visual".into();
+        profile.revision = 1;
+        let mode = &mut profile.modes[0];
+        let head_id = mode.heads[0].id;
+        mode.splits[0].footprint = 4;
+        let intensity_id = uuid::Uuid::new_v4();
+        let red_id = uuid::Uuid::new_v4();
+        let green_id = uuid::Uuid::new_v4();
+        let blue_id = uuid::Uuid::new_v4();
+        mode.channels = [
+            (intensity_id, "intensity", true, true),
+            (red_id, "color.red", true, true),
+            (green_id, "color.green", false, false),
+            (blue_id, "color.blue", false, false),
+        ]
+        .into_iter()
+        .map(|(id, attribute, group, grand)| FixtureChannel {
+            id,
+            head_id,
+            attribute: AttributeKey(attribute.into()),
+            resolution: ChannelResolution::U8,
+            secondary_slots: vec![],
+            default_raw: 0,
+            highlight_raw: 255,
+            physical_min: Some(0.0),
+            physical_max: Some(1.0),
+            unit: None,
+            invert: id == red_id,
+            snap: false,
+            reacts_to_virtual_intensity: false,
+            reacts_to_sequence_master: false,
+            reacts_to_group_master: group,
+            reacts_to_grand_master: grand,
+            behavior: ChannelBehavior::Controlled,
+            functions: vec![ChannelFunction::continuous(
+                attribute,
+                AttributeKey(attribute.into()),
+                255,
+            )],
+        })
+        .collect();
+        mode.color_systems = vec![light_fixture::HeadColorSystem {
+            head_id,
+            correction_matrix: [[0.5, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+            system: ColorSystem::Additive {
+                emitters: vec![
+                    light_fixture::EmitterBinding {
+                        channel_id: red_id,
+                        name: "Red".into(),
+                        xyz: Xyz {
+                            x: 1.0,
+                            y: 0.0,
+                            z: 0.0,
+                        },
+                        maximum_level: 1.0,
+                        response_curve: 2.0,
+                        visible: true,
+                    },
+                    light_fixture::EmitterBinding {
+                        channel_id: green_id,
+                        name: "Green".into(),
+                        xyz: Xyz {
+                            x: 0.0,
+                            y: 1.0,
+                            z: 0.0,
+                        },
+                        maximum_level: 1.0,
+                        response_curve: 1.0,
+                        visible: true,
+                    },
+                    light_fixture::EmitterBinding {
+                        channel_id: blue_id,
+                        name: "Blue".into(),
+                        xyz: Xyz {
+                            x: 0.0,
+                            y: 0.0,
+                            z: 1.0,
+                        },
+                        maximum_level: 1.0,
+                        response_curve: 1.0,
+                        visible: true,
+                    },
+                ],
+            },
+        }];
+        let mode_id = mode.id;
+        let definition = profile.resolved_definition(mode_id).unwrap();
+        let fixture_id = FixtureId::new();
+        let fixture = PatchedFixture {
+            fixture_id,
+            fixture_number: Some(1),
+            name: "Calibrated visual".into(),
+            definition,
+            universe: Some(1),
+            address: Some(1),
+            split_patches: vec![],
+            layer_id: "default".into(),
+            direct_control: None,
+            location: Default::default(),
+            rotation: Default::default(),
+            logical_heads: vec![],
+            multipatch: vec![],
+            move_in_black_enabled: true,
+            move_in_black_delay_millis: 0,
+            highlight_overrides: BTreeMap::new(),
+        };
+        programmers.set(
+            session,
+            fixture_id,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(1.0),
+        );
+        programmers.set(
+            session,
+            fixture_id,
+            AttributeKey("color".into()),
+            AttributeValue::ColorXyz(Xyz {
+                x: 1.0,
+                y: 0.25,
+                z: 0.1,
+            }),
+        );
+        let engine = Engine::new(programmers);
+        engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![fixture],
+                groups: vec![GroupDefinition {
+                    id: "front".into(),
+                    name: "Front".into(),
+                    fixtures: vec![fixture_id],
+                    master: 0.5,
+                    playback_fader: Some(1),
+                    ..Default::default()
+                }],
+                revision: 1,
+                ..Default::default()
+            })
+            .unwrap();
+        let options = RenderOptions {
+            grand_master: 0.5,
+            ..Default::default()
+        };
+        let rendered = engine.render(options).unwrap();
+        let frame = &rendered.universes[&1];
+        let projected = engine
+            .profile_visualization_values(&engine.resolved_values(), options)
+            .unwrap();
+        let AttributeValue::Normalized(intensity) =
+            projected[&(fixture_id, AttributeKey::intensity())]
+        else {
+            panic!("profile intensity projection is missing");
+        };
+        let AttributeValue::ColorXyz(color) =
+            projected[&(fixture_id, AttributeKey("color".into()))]
+        else {
+            panic!("profile color projection is missing");
+        };
+
+        assert_eq!(frame[0], 64);
+        assert!((intensity - frame[0] as f32 / 255.0).abs() < 0.000_001);
+        assert_eq!(frame[1], 210);
+        assert!((color.x - ((255 - frame[1]) as f32 / 255.0).powi(2)).abs() < 0.000_001);
+        assert!((color.y - frame[2] as f32 / 255.0).abs() < 0.000_001);
+        assert!((color.z - frame[3] as f32 / 255.0).abs() < 0.000_001);
+        assert!(
+            color.x < 0.6,
+            "the correction matrix must affect visual color"
+        );
+        assert_eq!(
+            &engine
+                .render(RenderOptions {
+                    blackout: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .universes[&1][0..4],
+            &[0, 255, 0, 0],
+            "blackout must drive inverted additive emitters to their physical off endpoint"
+        );
+    }
+
+    fn test_cue_list(name: &str, changes: Vec<CueChange>) -> CueList {
+        let mut cue = Cue::new(1.0);
+        cue.changes = changes;
+        CueList {
+            id: light_core::CueListId::new(),
+            name: name.into(),
+            priority: 10,
+            mode: CueListMode::Sequence,
+            looped: false,
+            chaser_step_millis: 1_000,
+            speed_group: None,
+            intensity_priority_mode: IntensityPriorityMode::Htp,
+            wrap_mode: Some(WrapMode::Off),
+            restart_mode: RestartMode::FirstCue,
+            force_cue_timing: false,
+            disable_cue_timing: false,
+            chaser_xfade_millis: 0,
+            speed_multiplier: 1.0,
+            cues: vec![cue],
+        }
+    }
+
+    fn test_playback(number: u16, cue_list_id: light_core::CueListId) -> PlaybackDefinition {
+        PlaybackDefinition {
+            number,
+            name: format!("Playback {number}"),
+            target: PlaybackTarget::CueList { cue_list_id },
+            buttons: [
+                PlaybackButtonAction::GoMinus,
+                PlaybackButtonAction::Go,
+                PlaybackButtonAction::Flash,
+            ],
+            button_count: 3,
+            fader: PlaybackFaderMode::Master,
+            has_fader: true,
+            go_activates: true,
+            auto_off: true,
+            xfade_millis: 0,
+            color: "#20c997".into(),
+            flash_release: light_playback::FlashReleaseMode::ReleaseAll,
+            protect_from_swap: false,
+            presentation_icon: None,
+            presentation_image: None,
+        }
     }
 
     fn moving_fixture(
@@ -1470,6 +2473,7 @@ mod tests {
                 name: "Patched clone".into(),
                 universe: Some(1),
                 address: Some(8),
+                split_patches: Vec::new(),
                 location: Default::default(),
                 rotation: Default::default(),
             },
@@ -1478,6 +2482,7 @@ mod tests {
                 name: "Visualizer clone".into(),
                 universe: None,
                 address: None,
+                split_patches: Vec::new(),
                 location: Default::default(),
                 rotation: Default::default(),
             },
@@ -1826,9 +2831,13 @@ mod tests {
                 direct_control_protocols: vec![],
                 signal_loss_policy: SignalLossPolicy::HoldLast,
                 safe_values: BTreeMap::new(),
+                profile_id: None,
+                mode_id: None,
+                profile_snapshot: None,
             },
             universe: Some(1),
             address: Some(1),
+            split_patches: Vec::new(),
             direct_control: None,
             location: Default::default(),
             rotation: Default::default(),
@@ -1845,6 +2854,7 @@ mod tests {
             multipatch: vec![],
             move_in_black_enabled: true,
             move_in_black_delay_millis: 0,
+            highlight_overrides: BTreeMap::new(),
         };
         for fixture_id in [first, second] {
             programmers.set(
@@ -2722,12 +3732,830 @@ mod tests {
             None,
             ProgrammerId::new(),
             ProgrammerTransitionSource::Programmer,
+            false,
         );
         assert!(
             faded
                 .value
                 .normalized()
                 .is_some_and(|level| (level - 0.5).abs() < 0.02)
+        );
+    }
+
+    #[test]
+    fn schema_v2_renders_exact_32_bit_values_to_independent_splits() {
+        let mut profile = FixtureProfile::blank();
+        profile.manufacturer = "Test".into();
+        profile.name = "Split fixture".into();
+        profile.short_name = "Split".into();
+        profile.revision = 1;
+        let first_head = profile.modes[0].heads[0].id;
+        let second_head = uuid::Uuid::new_v4();
+        profile.modes[0].splits = vec![
+            FixtureSplit {
+                number: 1,
+                footprint: 4,
+            },
+            FixtureSplit {
+                number: 2,
+                footprint: 1,
+            },
+        ];
+        profile.modes[0].heads.push(FixtureHead {
+            id: second_head,
+            name: "Remote cell".into(),
+            master_shared: false,
+            split: 2,
+        });
+        let exact_attribute = AttributeKey("control.exact".into());
+        profile.modes[0].channels = vec![
+            FixtureChannel {
+                id: uuid::Uuid::new_v4(),
+                head_id: first_head,
+                attribute: exact_attribute.clone(),
+                resolution: ChannelResolution::U32,
+                secondary_slots: vec![2, 3, 4],
+                default_raw: 0,
+                highlight_raw: u32::MAX,
+                physical_min: None,
+                physical_max: None,
+                unit: None,
+                invert: false,
+                snap: true,
+                reacts_to_virtual_intensity: false,
+                reacts_to_sequence_master: false,
+                reacts_to_group_master: false,
+                reacts_to_grand_master: false,
+                behavior: ChannelBehavior::Controlled,
+                functions: vec![ChannelFunction::continuous(
+                    "Exact",
+                    exact_attribute.clone(),
+                    u32::MAX,
+                )],
+            },
+            FixtureChannel {
+                id: uuid::Uuid::new_v4(),
+                head_id: second_head,
+                attribute: AttributeKey("remote.static".into()),
+                resolution: ChannelResolution::U8,
+                secondary_slots: vec![],
+                default_raw: 0xaa,
+                highlight_raw: 0xbb,
+                physical_min: None,
+                physical_max: None,
+                unit: None,
+                invert: false,
+                snap: false,
+                reacts_to_virtual_intensity: false,
+                reacts_to_sequence_master: false,
+                reacts_to_group_master: false,
+                reacts_to_grand_master: false,
+                behavior: ChannelBehavior::Static,
+                functions: vec![],
+            },
+        ];
+        profile.modes[0].geometry = GeometryGraph::default();
+        let mode_id = profile.modes[0].id;
+        let definition = profile.resolved_definition(mode_id).unwrap();
+        let physical = FixtureId::new();
+        let logical = FixtureId::new();
+        let fixture = PatchedFixture {
+            fixture_id: physical,
+            fixture_number: Some(1),
+            name: "Split fixture".into(),
+            definition,
+            universe: None,
+            address: None,
+            split_patches: vec![
+                SplitPatch {
+                    split: 1,
+                    universe: Some(1),
+                    address: Some(10),
+                },
+                SplitPatch {
+                    split: 2,
+                    universe: Some(2),
+                    address: Some(20),
+                },
+            ],
+            layer_id: "default".into(),
+            direct_control: None,
+            location: Default::default(),
+            rotation: Default::default(),
+            logical_heads: vec![PatchedHead {
+                head_index: 1,
+                fixture_id: logical,
+            }],
+            multipatch: vec![],
+            move_in_black_enabled: true,
+            move_in_black_delay_millis: 0,
+            highlight_overrides: BTreeMap::new(),
+        };
+        let programmers = ProgrammerRegistry::default();
+        let session = SessionId::new();
+        programmers.start(session, UserId::new());
+        programmers.set(
+            session,
+            physical,
+            exact_attribute,
+            AttributeValue::RawDmxExact(0x1234_5678),
+        );
+        let engine = Engine::new(programmers);
+        engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![fixture],
+                revision: 1,
+                ..Default::default()
+            })
+            .unwrap();
+
+        let rendered = engine.render(RenderOptions::default()).unwrap();
+        assert_eq!(&rendered.universes[&1][9..13], &[0x12, 0x34, 0x56, 0x78]);
+        assert_eq!(rendered.universes[&2][19], 0xaa);
+        assert_eq!(rendered.patched_slots[&1], 13);
+        assert_eq!(rendered.patched_slots[&2], 20);
+    }
+
+    #[test]
+    fn schema_v2_snap_bypasses_programmer_fades_but_keeps_non_snap_timing() {
+        let started = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+        let clock = Arc::new(ManualClock::new(started));
+        let shared: SharedClock = clock.clone();
+        let programmers = ProgrammerRegistry::with_clock(shared);
+        let session = SessionId::new();
+        programmers.start(session, UserId::new());
+        let (fixture, fixture_id) = schema_v2_fixture(&[
+            ("pan", true, false, false, false, false),
+            ("tilt", false, false, false, false, false),
+        ]);
+        let engine = Engine::new(programmers.clone());
+        engine.set_control_timing([120.0; 5], 1_000, 0);
+        engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![fixture],
+                revision: 1,
+                ..Default::default()
+            })
+            .unwrap();
+        programmers.set_faded(
+            session,
+            fixture_id,
+            AttributeKey("pan".into()),
+            AttributeValue::Normalized(1.0),
+        );
+        programmers.set_faded(
+            session,
+            fixture_id,
+            AttributeKey("tilt".into()),
+            AttributeValue::Normalized(1.0),
+        );
+
+        let values = engine.resolved_values();
+        assert_eq!(normalized(&values, fixture_id, "pan"), 1.0);
+        assert_eq!(normalized(&values, fixture_id, "tilt"), 0.0);
+        clock.set(started + ChronoDuration::milliseconds(500));
+        let values = engine.resolved_values();
+        assert_eq!(normalized(&values, fixture_id, "pan"), 1.0);
+        assert!((normalized(&values, fixture_id, "tilt") - 0.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn schema_v2_snap_bypasses_move_in_black_and_signal_loss_fades() {
+        let started = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+        let clock = Arc::new(ManualClock::new(started));
+        let shared: SharedClock = clock.clone();
+        let programmers = ProgrammerRegistry::with_clock(shared);
+        let (fixture, fixture_id) = schema_v2_fixture(&[
+            ("intensity", false, false, false, false, false),
+            ("pan", true, false, false, false, false),
+        ]);
+        let engine = Engine::new(programmers);
+        engine
+            .replace_snapshot(mib_snapshot(vec![fixture], &[fixture_id]))
+            .unwrap();
+        engine.playback().write().go_playback(1).unwrap();
+        engine.playback().write().go_playback(1).unwrap();
+        clock.set(started + ChronoDuration::milliseconds(1_999));
+        assert_eq!(
+            normalized(&engine.resolved_values(), fixture_id, "pan"),
+            0.2
+        );
+        clock.set(started + ChronoDuration::milliseconds(2_000));
+        assert_eq!(
+            normalized(&engine.resolved_values(), fixture_id, "pan"),
+            0.8
+        );
+        assert_eq!(
+            engine.move_in_black_runtime()[0].state,
+            MoveInBlackState::Completed
+        );
+
+        let programmers = ProgrammerRegistry::default();
+        let session = SessionId::new();
+        programmers.start(session, UserId::new());
+        let (mut fixture, fixture_id) = schema_v2_fixture(&[
+            ("pan", true, false, false, false, false),
+            ("tilt", false, false, false, false, false),
+        ]);
+        fixture.definition.signal_loss_policy = SignalLossPolicy::FadeToSafe {
+            duration_millis: 1_000,
+        };
+        fixture
+            .definition
+            .safe_values
+            .insert(AttributeKey("pan".into()), AttributeValue::Normalized(0.0));
+        fixture
+            .definition
+            .safe_values
+            .insert(AttributeKey("tilt".into()), AttributeValue::Normalized(0.0));
+        programmers.set(
+            session,
+            fixture_id,
+            AttributeKey("pan".into()),
+            AttributeValue::Normalized(1.0),
+        );
+        programmers.set(
+            session,
+            fixture_id,
+            AttributeKey("tilt".into()),
+            AttributeValue::Normalized(1.0),
+        );
+        let engine = Engine::new(programmers);
+        engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![fixture],
+                revision: 1,
+                ..Default::default()
+            })
+            .unwrap();
+        let frame = engine
+            .render(RenderOptions {
+                control_loss_progress: Some(0.5),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(frame.universes[&1][0], 0);
+        assert_eq!(frame.universes[&1][1], 128);
+    }
+
+    #[test]
+    fn schema_v2_master_reactions_use_only_the_winning_sources_and_scale_once() {
+        let (fixture, fixture_id) = schema_v2_fixture(&[
+            ("intensity", false, false, true, true, true),
+            ("color.red", false, true, true, true, true),
+            ("beam.rate", false, false, true, true, true),
+            ("beam.other", false, false, true, true, true),
+        ]);
+        let main = test_cue_list(
+            "Main",
+            ["intensity", "color.red", "beam.rate"]
+                .into_iter()
+                .map(|attribute| {
+                    CueChange::set(
+                        fixture_id,
+                        AttributeKey(attribute.into()),
+                        AttributeValue::Normalized(1.0),
+                    )
+                })
+                .collect(),
+        );
+        let unrelated = test_cue_list(
+            "Unrelated",
+            vec![CueChange::set(
+                fixture_id,
+                AttributeKey("beam.other".into()),
+                AttributeValue::Normalized(1.0),
+            )],
+        );
+        let playbacks = vec![test_playback(1, main.id), test_playback(2, unrelated.id)];
+        let engine = Engine::new(ProgrammerRegistry::default());
+        engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![fixture],
+                cue_lists: vec![main, unrelated],
+                playbacks,
+                groups: vec![GroupDefinition {
+                    id: "front".into(),
+                    name: "Front".into(),
+                    fixtures: vec![fixture_id],
+                    master: 0.5,
+                    playback_fader: Some(1),
+                    ..Default::default()
+                }],
+                revision: 1,
+                ..Default::default()
+            })
+            .unwrap();
+        engine.playback().write().go_playback(1).unwrap();
+        engine.playback().write().go_playback(2).unwrap();
+        engine.playback().write().set_master(1, 0.5).unwrap();
+        engine.playback().write().set_master(2, 0.1).unwrap();
+
+        let frame = engine
+            .render(RenderOptions {
+                grand_master: 0.5,
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(
+            &frame.universes[&1][0..4],
+            &[32, 32, 32, 6],
+            "intensity and virtual intensity already contain their sequence master; a separate semantic source receives only its own master"
+        );
+    }
+
+    #[test]
+    fn inverted_intensity_masters_and_blackout_move_to_physical_off() {
+        let programmers = ProgrammerRegistry::default();
+        let session = SessionId::new();
+        programmers.start(session, UserId::new());
+        let (mut fixture, fixture_id) =
+            schema_v2_fixture(&[("intensity", false, false, false, false, true)]);
+        fixture.definition.profile_snapshot.as_mut().unwrap().modes[0].channels[0].invert = true;
+        programmers.set(
+            session,
+            fixture_id,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.5),
+        );
+        let engine = Engine::new(programmers);
+        engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![fixture],
+                revision: 1,
+                ..Default::default()
+            })
+            .unwrap();
+
+        assert_eq!(
+            engine
+                .render(RenderOptions {
+                    grand_master: 0.5,
+                    ..Default::default()
+                })
+                .unwrap()
+                .universes[&1][0],
+            191
+        );
+        assert_eq!(
+            engine
+                .render(RenderOptions {
+                    grand_master: 0.0,
+                    ..Default::default()
+                })
+                .unwrap()
+                .universes[&1][0],
+            255
+        );
+        assert_eq!(
+            engine
+                .render(RenderOptions {
+                    blackout: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .universes[&1][0],
+            255
+        );
+    }
+
+    #[test]
+    fn transient_highlight_uses_raw_value_but_group_master_grand_master_and_blackout_win() {
+        let mut profile = FixtureProfile::blank();
+        profile.manufacturer = "Test".into();
+        profile.name = "Highlight fixture".into();
+        profile.short_name = "Highlight".into();
+        profile.revision = 1;
+        let head = profile.modes[0].heads[0].id;
+        profile.modes[0].channels = vec![FixtureChannel {
+            id: uuid::Uuid::new_v4(),
+            head_id: head,
+            attribute: AttributeKey::intensity(),
+            resolution: ChannelResolution::U8,
+            secondary_slots: vec![],
+            default_raw: 0,
+            highlight_raw: 200,
+            physical_min: Some(0.0),
+            physical_max: Some(1.0),
+            unit: Some("percent".into()),
+            invert: false,
+            snap: false,
+            reacts_to_virtual_intensity: false,
+            reacts_to_sequence_master: false,
+            reacts_to_group_master: true,
+            reacts_to_grand_master: true,
+            behavior: ChannelBehavior::Controlled,
+            functions: vec![ChannelFunction::continuous(
+                "Dimmer",
+                AttributeKey::intensity(),
+                255,
+            )],
+        }];
+        profile.modes[0].geometry = GeometryGraph::default();
+        let definition = profile.resolved_definition(profile.modes[0].id).unwrap();
+        let physical = FixtureId::new();
+        let mut fixture = PatchedFixture {
+            fixture_id: physical,
+            fixture_number: Some(1),
+            name: "Highlight fixture".into(),
+            definition,
+            universe: Some(1),
+            address: Some(1),
+            split_patches: vec![],
+            layer_id: "default".into(),
+            direct_control: None,
+            location: Default::default(),
+            rotation: Default::default(),
+            logical_heads: vec![],
+            multipatch: vec![],
+            move_in_black_enabled: true,
+            move_in_black_delay_millis: 0,
+            highlight_overrides: BTreeMap::new(),
+        };
+        fixture.multipatch.push(MultiPatchInstance {
+            id: uuid::Uuid::new_v4(),
+            name: "Second physical copy".into(),
+            universe: Some(1),
+            address: Some(10),
+            split_patches: vec![],
+            location: Default::default(),
+            rotation: Default::default(),
+        });
+        let programmers = ProgrammerRegistry::default();
+        let session = SessionId::new();
+        programmers.start(session, UserId::new());
+        programmers.set(
+            session,
+            physical,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.5),
+        );
+        let engine = Engine::new(programmers.clone());
+        engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![fixture],
+                groups: vec![GroupDefinition {
+                    id: "1".into(),
+                    name: "Master".into(),
+                    fixtures: vec![physical],
+                    master: 0.5,
+                    playback_fader: Some(1),
+                    ..Default::default()
+                }],
+                revision: 1,
+                ..Default::default()
+            })
+            .unwrap();
+
+        engine.set_highlighted_fixtures([physical]);
+        assert_eq!(
+            engine
+                .render(RenderOptions {
+                    grand_master: 0.5,
+                    ..Default::default()
+                })
+                .unwrap()
+                .universes[&1][0],
+            50
+        );
+        assert_eq!(
+            engine
+                .render(RenderOptions {
+                    grand_master: 0.5,
+                    ..Default::default()
+                })
+                .unwrap()
+                .universes[&1][9],
+            50,
+            "one parent Highlight identity applies the same look to every multipatch copy"
+        );
+        assert_eq!(
+            engine
+                .render(RenderOptions {
+                    grand_master: 1.0,
+                    blackout: true,
+                    control_loss_progress: None,
+                })
+                .unwrap()
+                .universes[&1][0],
+            0
+        );
+        engine.clear_highlighted_fixtures();
+        // Clearing the transient layer is synchronous: the very first frame after Highlight Off
+        // must reveal the underlying programmer value, never the channel default. Rendering a
+        // second time cannot be required to recover the normal source.
+        assert_eq!(
+            engine.render(RenderOptions::default()).unwrap().universes[&1][0],
+            64
+        );
+        assert_eq!(
+            engine.render(RenderOptions::default()).unwrap().universes[&1][9],
+            64
+        );
+        let programmer = programmers.get(session).unwrap();
+        assert_eq!(programmer.values.len(), 1);
+        assert_eq!(programmer.values[0].fixture_id, physical);
+        assert_eq!(programmer.values[0].attribute, AttributeKey::intensity());
+        assert_eq!(programmer.values[0].value, AttributeValue::Normalized(0.5));
+    }
+
+    #[test]
+    fn fixture_highlight_override_renders_an_individual_blue_identification_look() {
+        let mut profile = FixtureProfile::blank();
+        profile.manufacturer = "Test".into();
+        profile.name = "RGB Highlight".into();
+        profile.short_name = "RGB Highlight".into();
+        profile.revision = 1;
+        let mode = &mut profile.modes[0];
+        let head_id = mode.heads[0].id;
+        mode.splits[0].footprint = 4;
+        let channels = ["intensity", "color.red", "color.green", "color.blue"]
+            .into_iter()
+            .map(|attribute| FixtureChannel {
+                id: uuid::Uuid::new_v4(),
+                head_id,
+                attribute: AttributeKey(attribute.into()),
+                resolution: ChannelResolution::U8,
+                secondary_slots: Vec::new(),
+                default_raw: 0,
+                highlight_raw: 255,
+                physical_min: Some(0.0),
+                physical_max: Some(1.0),
+                unit: None,
+                invert: false,
+                snap: false,
+                reacts_to_virtual_intensity: false,
+                reacts_to_sequence_master: false,
+                reacts_to_group_master: attribute == "intensity",
+                reacts_to_grand_master: attribute == "intensity",
+                behavior: ChannelBehavior::Controlled,
+                functions: vec![ChannelFunction::continuous(
+                    attribute,
+                    AttributeKey(attribute.into()),
+                    255,
+                )],
+            })
+            .collect::<Vec<_>>();
+        let red_id = channels[1].id;
+        let green_id = channels[2].id;
+        let blue_id = channels[3].id;
+        mode.channels = channels;
+        mode.color_systems = vec![light_fixture::HeadColorSystem {
+            head_id,
+            correction_matrix: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+            system: ColorSystem::Additive {
+                emitters: [
+                    (
+                        red_id,
+                        "Red",
+                        Xyz {
+                            x: 1.0,
+                            y: 0.0,
+                            z: 0.0,
+                        },
+                    ),
+                    (
+                        green_id,
+                        "Green",
+                        Xyz {
+                            x: 0.0,
+                            y: 1.0,
+                            z: 0.0,
+                        },
+                    ),
+                    (
+                        blue_id,
+                        "Blue",
+                        Xyz {
+                            x: 0.0,
+                            y: 0.0,
+                            z: 1.0,
+                        },
+                    ),
+                ]
+                .into_iter()
+                .map(|(channel_id, name, xyz)| light_fixture::EmitterBinding {
+                    channel_id,
+                    name: name.into(),
+                    xyz,
+                    maximum_level: 1.0,
+                    response_curve: 1.0,
+                    visible: true,
+                })
+                .collect(),
+            },
+        }];
+        let mode_id = mode.id;
+        let definition = profile.resolved_definition(mode_id).unwrap();
+        let fixture_id = FixtureId::new();
+        let fixture = PatchedFixture {
+            fixture_id,
+            fixture_number: Some(41),
+            name: "Blue identification".into(),
+            definition,
+            universe: Some(1),
+            address: Some(1),
+            split_patches: Vec::new(),
+            layer_id: "default".into(),
+            direct_control: None,
+            location: Default::default(),
+            rotation: Default::default(),
+            logical_heads: Vec::new(),
+            multipatch: Vec::new(),
+            move_in_black_enabled: true,
+            move_in_black_delay_millis: 0,
+            highlight_overrides: BTreeMap::from([(red_id, 0), (green_id, 0), (blue_id, 255)]),
+        };
+        let engine = Engine::new(ProgrammerRegistry::default());
+        engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![fixture],
+                revision: 1,
+                ..Default::default()
+            })
+            .unwrap();
+        engine.set_highlighted_fixtures([fixture_id]);
+
+        let rendered = engine.render(RenderOptions::default()).unwrap();
+        assert_eq!(&rendered.universes[&1][0..4], &[255, 0, 0, 255]);
+        let visual = engine
+            .profile_visualization_values(&engine.resolved_values(), RenderOptions::default())
+            .unwrap();
+        let AttributeValue::ColorXyz(blue) = visual
+            .get(&(fixture_id, AttributeKey("color".into())))
+            .expect("configured blue Highlight color")
+        else {
+            panic!("configured Highlight must project a color")
+        };
+        assert!(blue.z > blue.x && blue.z > blue.y);
+    }
+
+    #[test]
+    fn fixture_without_intensity_uses_its_configured_non_intensity_highlight_look() {
+        let (mut fixture, fixture_id) =
+            schema_v2_fixture(&[("shutter", false, false, false, false, false)]);
+        let mode = &mut fixture.definition.profile_snapshot.as_mut().unwrap().modes[0];
+        mode.channels[0].default_raw = 17;
+        mode.channels[0].highlight_raw = 211;
+        let engine = Engine::new(ProgrammerRegistry::default());
+        engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![fixture],
+                revision: 1,
+                ..Default::default()
+            })
+            .unwrap();
+
+        assert_eq!(
+            engine.render(RenderOptions::default()).unwrap().universes[&1][0],
+            17,
+            "without Highlight, a no-intensity fixture keeps its configured safe default"
+        );
+        engine.set_highlighted_fixtures([fixture_id]);
+        assert_eq!(
+            engine.render(RenderOptions::default()).unwrap().universes[&1][0],
+            211,
+            "a no-intensity fixture can still identify through a deliberately configured safe Highlight raw value"
+        );
+    }
+
+    #[test]
+    fn selected_logical_head_highlights_independently_while_parent_identifies_all_heads() {
+        let mut profile = FixtureProfile::blank();
+        profile.manufacturer = "Test".into();
+        profile.name = "Two-head fixture".into();
+        profile.short_name = "Two-head".into();
+        profile.revision = 1;
+        let mode = &mut profile.modes[0];
+        mode.heads[0].master_shared = false;
+        let first_head = mode.heads[0].id;
+        let second_head = uuid::Uuid::new_v4();
+        mode.heads.push(FixtureHead {
+            id: second_head,
+            name: "Second".into(),
+            master_shared: false,
+            split: 1,
+        });
+        mode.splits[0].footprint = 2;
+        mode.channels = [(first_head, 10, 101), (second_head, 20, 202)]
+            .into_iter()
+            .map(|(head_id, default_raw, highlight_raw)| FixtureChannel {
+                id: uuid::Uuid::new_v4(),
+                head_id,
+                attribute: AttributeKey::intensity(),
+                resolution: ChannelResolution::U8,
+                secondary_slots: vec![],
+                default_raw,
+                highlight_raw,
+                physical_min: Some(0.0),
+                physical_max: Some(1.0),
+                unit: Some("percent".into()),
+                invert: false,
+                snap: false,
+                reacts_to_virtual_intensity: false,
+                reacts_to_sequence_master: false,
+                reacts_to_group_master: false,
+                reacts_to_grand_master: false,
+                behavior: ChannelBehavior::Controlled,
+                functions: vec![ChannelFunction::continuous(
+                    "Dimmer",
+                    AttributeKey::intensity(),
+                    255,
+                )],
+            })
+            .collect();
+        mode.geometry = GeometryGraph::template(GeometryTemplate::Bar, &[first_head, second_head]);
+        let mode_id = mode.id;
+        let definition = profile.resolved_definition(mode_id).unwrap();
+        let parent = FixtureId::new();
+        let first = FixtureId::new();
+        let second = FixtureId::new();
+        let fixture = PatchedFixture {
+            fixture_id: parent,
+            fixture_number: Some(1),
+            name: "Two-head fixture".into(),
+            definition,
+            universe: Some(1),
+            address: Some(1),
+            split_patches: vec![],
+            layer_id: "default".into(),
+            direct_control: None,
+            location: Default::default(),
+            rotation: Default::default(),
+            logical_heads: vec![
+                PatchedHead {
+                    head_index: 0,
+                    fixture_id: first,
+                },
+                PatchedHead {
+                    head_index: 1,
+                    fixture_id: second,
+                },
+            ],
+            multipatch: vec![],
+            move_in_black_enabled: true,
+            move_in_black_delay_millis: 0,
+            highlight_overrides: BTreeMap::new(),
+        };
+        let engine = Engine::new(ProgrammerRegistry::default());
+        engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![fixture],
+                revision: 1,
+                ..Default::default()
+            })
+            .unwrap();
+
+        engine.set_highlighted_fixtures([second]);
+        assert_eq!(
+            &engine.render(RenderOptions::default()).unwrap().universes[&1][0..2],
+            &[10, 202],
+            "selecting one logical head must not highlight its sibling"
+        );
+        engine.set_highlighted_fixtures([parent]);
+        assert_eq!(
+            &engine.render(RenderOptions::default()).unwrap().universes[&1][0..2],
+            &[101, 202],
+            "selecting the physical parent identifies the complete compound fixture"
+        );
+    }
+
+    #[test]
+    fn hazardous_blackout_safe_raw_value_wins_over_non_intensity_highlight() {
+        let (mut fixture, fixture_id) =
+            schema_v2_fixture(&[("control.reset", false, false, false, false, false)]);
+        fixture.definition.hazardous = true;
+        fixture.definition.profile_snapshot.as_mut().unwrap().modes[0].channels[0].invert = true;
+        fixture.definition.safe_values.insert(
+            AttributeKey("control.reset".into()),
+            AttributeValue::RawDmxExact(37),
+        );
+        let channel_id =
+            fixture.definition.profile_snapshot.as_ref().unwrap().modes[0].channels[0].id;
+        fixture.highlight_overrides.insert(channel_id, 211);
+        let engine = Engine::new(ProgrammerRegistry::default());
+        engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![fixture],
+                revision: 1,
+                ..Default::default()
+            })
+            .unwrap();
+        engine.set_highlighted_fixtures([fixture_id]);
+
+        assert_eq!(
+            engine.render(RenderOptions::default()).unwrap().universes[&1][0],
+            211
+        );
+        assert_eq!(
+            engine
+                .render(RenderOptions {
+                    blackout: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .universes[&1][0],
+            37
         );
     }
 }

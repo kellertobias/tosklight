@@ -29,4 +29,3 @@ evidence in [docs/todo-completion-audit.md](docs/todo-completion-audit.md).
 - Dynamics + Chasers
 - Check Cuelists + Fade times
 - [Cue Go To and Load command grammar](docs/planned%20features/09-cue-go-to-and-load.md)
-- [Fixture channel-configuration redesign](docs/planned%20features/18-fixture-channel-configuration.md)

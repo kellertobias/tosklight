@@ -7,6 +7,7 @@ import { useApp } from "../state/AppContext";
 import { Button, ColorPickerField, FormLayout, IconPickerField, Input, TextField } from "../components/common";
 import { ButtonGrid, WindowHeader, WindowScrollArea } from "../components/window-kit";
 import { RecordModeDialog, type RecordMode } from "../components/shared/RecordModeDialog";
+import { requestUpdateTarget } from "../components/control/updateWorkflow";
 
 export function GroupsWindow({ compact }: WindowProps) {
   const server = useServer();
@@ -125,8 +126,9 @@ export function GroupsWindow({ compact }: WindowProps) {
             capabilities={capabilities}
             selected={server.selectedGroupId === group?.id}
             storeArmed={state.storeArmed}
+            updateArmed={state.updateArmed}
             beginHold={() => {
-              if (group)
+              if (group && !state.updateArmed)
                 hold.current = window.setTimeout(
                   () => setContextGroup(group.id),
                   600,
@@ -136,6 +138,10 @@ export function GroupsWindow({ compact }: WindowProps) {
             openContext={() => group && setContextGroup(group.id)}
             dereference={() => group && runCommand(`DEGRP ${group.id}`)}
             select={() => {
+              if (state.updateArmed) {
+                requestUpdateTarget({ family: { type: "group" }, object_id: group?.id ?? String(index + 1) });
+                return;
+              }
               if (group && /^SET\b/i.test(server.commandLine.trim())) {
                 setPropertiesGroup(group.id);
                 server.resetCommandLine();
@@ -268,6 +274,7 @@ function GroupCard({
   capabilities,
   selected,
   storeArmed,
+  updateArmed,
   beginHold,
   cancelHold,
   openContext,
@@ -280,6 +287,7 @@ function GroupCard({
   capabilities: Map<string, Set<string>>;
   selected: boolean;
   storeArmed: boolean;
+  updateArmed: boolean;
   beginHold: () => void;
   cancelHold: () => void;
   openContext: () => void;
@@ -301,7 +309,7 @@ function GroupCard({
       0,
     ) ?? 0;
   return <Button
-        className={`group-card pool-cell ${group?.body.derived_from ? "derived" : ""} ${group?.body.frozen_from ? "frozen" : ""} ${selected ? "selected" : !group || !group.body.fixtures.length ? "empty" : ""} ${storeArmed && !group ? "store-target" : ""}`}
+        className={`group-card pool-cell ${group?.body.derived_from ? "derived" : ""} ${group?.body.frozen_from ? "frozen" : ""} ${selected ? "selected" : !group || !group.body.fixtures.length ? "empty" : ""} ${storeArmed && !group ? "store-target" : ""} ${updateArmed ? "update-target" : ""}`}
         style={group?.body.color ? { borderColor: group.body.color } : undefined}
         onPointerDown={beginHold}
         onPointerUp={cancelHold}
@@ -318,7 +326,9 @@ function GroupCard({
           <>
             <b>{group.body.name ?? `Group ${index + 1}`}</b>
             <small>
-              {group.body.fixtures.length
+              {updateArmed
+                ? "Touch to choose Update mode"
+                : group.body.fixtures.length
                 ? `${group.body.fixtures.length} fixtures · ordered`
                 : "⚠ Group is empty"}
             </small>
@@ -345,7 +355,7 @@ function GroupCard({
         ) : (
           <>
             <b>Empty</b>
-            <small>{storeArmed ? "Tap to record empty group" : "Press Record to use this slot"}</small>
+            <small>{updateArmed ? "Touch to check Update eligibility" : storeArmed ? "Tap to record empty group" : "Press Record to use this slot"}</small>
           </>
         )}
       </Button>;

@@ -1,11 +1,14 @@
 #![forbid(unsafe_code)]
 //! Fixture definitions, portable fixture library, color calibration, patching, and DMX encoding.
 
+mod profile;
+pub use profile::*;
+
 use light_core::{AttributeKey, AttributeValue, DmxAddress, FixtureId, Universe, Xyz};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     net::IpAddr,
     path::Path,
 };
@@ -133,6 +136,14 @@ pub struct FixtureDefinition {
     #[serde(default)]
     pub signal_loss_policy: SignalLossPolicy,
     pub safe_values: BTreeMap<AttributeKey, AttributeValue>,
+    /// Present for schema-v2 snapshots embedded in shows. The complete profile snapshot insulates
+    /// an already-patched show from later desk-library revisions.
+    #[serde(default)]
+    pub profile_id: Option<FixtureId>,
+    #[serde(default)]
+    pub mode_id: Option<Uuid>,
+    #[serde(default)]
+    pub profile_snapshot: Option<Box<FixtureProfile>>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -143,6 +154,8 @@ pub struct FixturePhysicalProperties {
     pub height_millimetres: Option<f32>,
     pub depth_millimetres: Option<f32>,
     pub weight_kilograms: Option<f32>,
+    #[serde(default)]
+    pub power_watts: Option<f32>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -171,6 +184,10 @@ pub struct PatchedFixture {
     /// User-facing DMX address, always 1 through 512.
     #[serde(default)]
     pub address: Option<DmxAddress>,
+    /// Schema-v2 independently patchable split assignments. Legacy universe/address remain the
+    /// canonical split-1 representation and are migrated into this shape on the next save.
+    #[serde(default)]
+    pub split_patches: Vec<SplitPatch>,
     #[serde(default = "default_patch_layer")]
     pub layer_id: String,
     /// Optional direct-control endpoint attached to the physical parent fixture.
@@ -193,6 +210,9 @@ pub struct PatchedFixture {
     /// Safety delay measured from the resolved-dark boundary.
     #[serde(default)]
     pub move_in_black_delay_millis: u64,
+    /// Optional per-instance raw Highlight overrides keyed by stable channel ID.
+    #[serde(default)]
+    pub highlight_overrides: BTreeMap<Uuid, u32>,
 }
 
 fn default_true() -> bool {
@@ -209,9 +229,18 @@ pub struct MultiPatchInstance {
     #[serde(default)]
     pub address: Option<DmxAddress>,
     #[serde(default)]
+    pub split_patches: Vec<SplitPatch>,
+    #[serde(default)]
     pub location: FixtureLocation,
     #[serde(default)]
     pub rotation: FixtureVector,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct SplitPatch {
+    pub split: u16,
+    pub universe: Option<Universe>,
+    pub address: Option<DmxAddress>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -353,9 +382,25 @@ pub enum FixtureError {
     Sql(#[from] rusqlite::Error),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
+    #[error("fixture revision conflict: expected {expected}, current {current}")]
+    RevisionConflict { expected: u32, current: u32 },
 }
 
 impl FixtureDefinition {
+    pub fn split_footprints(&self) -> BTreeMap<u16, u16> {
+        if self.schema_version == FIXTURE_PROFILE_SCHEMA_VERSION
+            && let (Some(profile), Some(mode_id)) = (&self.profile_snapshot, self.mode_id)
+            && let Some(mode) = profile.mode(mode_id)
+        {
+            return mode
+                .splits
+                .iter()
+                .map(|split| (split.number, split.footprint))
+                .collect();
+        }
+        BTreeMap::from([(1, self.footprint)])
+    }
+
     pub fn effective_signal_loss_policy(&self) -> SignalLossPolicy {
         if self.hazardous && self.signal_loss_policy == SignalLossPolicy::HoldLast {
             SignalLossPolicy::ImmediateSafe
@@ -364,6 +409,26 @@ impl FixtureDefinition {
         }
     }
     pub fn validate(&self) -> Result<(), FixtureError> {
+        if self.schema_version == FIXTURE_PROFILE_SCHEMA_VERSION {
+            let profile = self.profile_snapshot.as_deref().ok_or_else(|| {
+                FixtureError::Invalid("schema-v2 fixture snapshot is missing its profile".into())
+            })?;
+            profile
+                .validate()
+                .map_err(|error| FixtureError::Invalid(error.to_string()))?;
+            if self.profile_id != Some(profile.id)
+                || self.id != profile.id
+                || self.revision != profile.revision
+                || self
+                    .mode_id
+                    .is_none_or(|mode_id| profile.mode(mode_id).is_none())
+            {
+                return Err(FixtureError::Invalid(
+                    "schema-v2 fixture snapshot identity is inconsistent".into(),
+                ));
+            }
+            return Ok(());
+        }
         if self.schema_version != 1 {
             return Err(FixtureError::Invalid(
                 "unsupported fixture schema version".into(),
@@ -471,6 +536,97 @@ impl FixtureDefinition {
     }
 }
 
+impl PatchedFixture {
+    pub fn effective_split_patches(&self) -> Vec<SplitPatch> {
+        if self.split_patches.is_empty() {
+            vec![SplitPatch {
+                split: 1,
+                universe: self.universe,
+                address: self.address,
+            }]
+        } else {
+            self.split_patches.clone()
+        }
+    }
+}
+
+impl MultiPatchInstance {
+    pub fn effective_split_patches(&self) -> Vec<SplitPatch> {
+        if self.split_patches.is_empty() {
+            vec![SplitPatch {
+                split: 1,
+                universe: self.universe,
+                address: self.address,
+            }]
+        } else {
+            self.split_patches.clone()
+        }
+    }
+}
+
+/// Normalize a persisted patched fixture into the schema-v2 portable snapshot and explicit split
+/// assignment shape. This is intentionally an explicit reader/migration rather than relying on
+/// serde defaults: once written, a show no longer needs either the desk fixture library or the
+/// legacy universe/address fallback to understand its patch.
+pub fn migrate_patched_fixture_to_v2(fixture: &mut PatchedFixture) -> Result<bool, FixtureError> {
+    let original = serde_json::to_value(&*fixture)?;
+    if fixture.definition.schema_version == 1 {
+        let legacy = fixture.definition.clone();
+        let mut profile = FixtureProfile::from_legacy_modes(std::slice::from_ref(&legacy))
+            .map_err(|error| FixtureError::Invalid(error.to_string()))?;
+        // An embedded snapshot retains the selected legacy revision as its portable identity. The
+        // desk library may independently migrate the same source into its own revision sequence.
+        profile.revision = legacy.revision.max(1);
+        let mode_id = profile
+            .modes
+            .first()
+            .map(|mode| mode.id)
+            .ok_or_else(|| FixtureError::Invalid("migrated fixture has no mode".into()))?;
+        let mut definition = profile
+            .resolved_definition(mode_id)
+            .map_err(|error| FixtureError::Invalid(error.to_string()))?;
+        // These compatibility projections are still consumed by existing programmer and stage
+        // surfaces. Keeping them verbatim avoids a behavior change while schema-v2 runtime paths
+        // use the complete embedded profile snapshot.
+        definition.heads = legacy.heads;
+        definition.color_calibration = legacy.color_calibration;
+        definition.physical.pan_range_degrees = legacy.physical.pan_range_degrees;
+        definition.physical.tilt_range_degrees = legacy.physical.tilt_range_degrees;
+        definition.safe_values = legacy.safe_values;
+        fixture.definition = definition;
+    }
+
+    let splits = fixture.definition.split_footprints();
+    if fixture.split_patches.is_empty() && splits.len() == 1 {
+        fixture.split_patches = splits
+            .keys()
+            .enumerate()
+            .map(|(index, split)| SplitPatch {
+                split: *split,
+                universe: (index == 0).then_some(fixture.universe).flatten(),
+                address: (index == 0).then_some(fixture.address).flatten(),
+            })
+            .collect();
+    }
+    for instance in &mut fixture.multipatch {
+        if instance.split_patches.is_empty() && splits.len() == 1 {
+            instance.split_patches = splits
+                .keys()
+                .enumerate()
+                .map(|(index, split)| SplitPatch {
+                    split: *split,
+                    universe: (index == 0).then_some(instance.universe).flatten(),
+                    address: (index == 0).then_some(instance.address).flatten(),
+                })
+                .collect();
+        }
+    }
+    reconcile_logical_heads(fixture);
+    fixture.definition.validate()?;
+    let normalized = serde_json::to_value(&*fixture)?;
+    Ok(normalized != original)
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GeneratedPreset {
     pub family: String,
@@ -513,47 +669,97 @@ pub fn validate_patch(fixtures: &[PatchedFixture]) -> Result<(), FixtureError> {
                 )));
             }
         }
-        let mut patches = vec![(
+        let footprints = fixture.definition.split_footprints();
+        let mut instances = vec![(
+            fixture.fixture_id.0.to_string(),
+            fixture.split_patches.as_slice(),
             fixture.universe,
             fixture.address,
-            fixture.fixture_id.0.to_string(),
         )];
-        patches.extend(
-            fixture
-                .multipatch
-                .iter()
-                .map(|instance| (instance.universe, instance.address, instance.id.to_string())),
-        );
-        for (universe, address, instance) in patches {
-            if universe.is_some() != address.is_some() {
-                return Err(FixtureError::Invalid(format!(
-                    "multipatch instance {instance} must set both universe and address or neither"
-                )));
-            }
-            let (Some(universe), Some(address)) = (universe, address) else {
-                continue;
-            };
-            if address == 0
-                || usize::from(address) + usize::from(fixture.definition.footprint) - 1 > 512
-            {
-                return Err(FixtureError::Invalid(format!(
-                    "fixture instance {instance} exceeds universe {universe}"
-                )));
-            }
-            let slots = used.entry(universe).or_insert([false; 512]);
-            let start = usize::from(address - 1);
-            for (offset, slot) in slots[start..start + usize::from(fixture.definition.footprint)]
-                .iter_mut()
-                .enumerate()
-            {
-                if *slot {
+        instances.extend(fixture.multipatch.iter().map(|instance| {
+            (
+                instance.id.to_string(),
+                instance.split_patches.as_slice(),
+                instance.universe,
+                instance.address,
+            )
+        }));
+        for (instance, explicit_patches, legacy_universe, legacy_address) in instances {
+            let patches = if explicit_patches.is_empty() {
+                if footprints.len() > 1 {
                     return Err(FixtureError::Invalid(format!(
-                        "patch overlap at universe {} address {}",
-                        universe,
-                        start + offset + 1
+                        "fixture instance {instance} must assign every split, including unpatched splits"
                     )));
                 }
-                *slot = true;
+                let split = *footprints.keys().next().ok_or_else(|| {
+                    FixtureError::Invalid(format!(
+                        "fixture instance {instance} has no defined splits"
+                    ))
+                })?;
+                vec![SplitPatch {
+                    split,
+                    universe: legacy_universe,
+                    address: legacy_address,
+                }]
+            } else {
+                explicit_patches.to_vec()
+            };
+            let mut instance_splits = HashSet::new();
+            for patch in &patches {
+                if !instance_splits.insert(patch.split) {
+                    return Err(FixtureError::Invalid(format!(
+                        "fixture instance {instance} assigns split {} more than once",
+                        patch.split
+                    )));
+                }
+                if !footprints.contains_key(&patch.split) {
+                    return Err(FixtureError::Invalid(format!(
+                        "fixture instance {instance} references unknown split {}",
+                        patch.split
+                    )));
+                }
+            }
+            if let Some(missing) = footprints
+                .keys()
+                .find(|split| !instance_splits.contains(split))
+            {
+                return Err(FixtureError::Invalid(format!(
+                    "fixture instance {instance} is missing split {missing}; every split needs an optional assignment entry"
+                )));
+            }
+            for patch in patches {
+                let footprint = footprints[&patch.split];
+                let universe = patch.universe;
+                let address = patch.address;
+                if universe.is_some() != address.is_some() {
+                    return Err(FixtureError::Invalid(format!(
+                        "fixture instance {instance} split {} must set both universe and address or neither",
+                        patch.split
+                    )));
+                }
+                let (Some(universe), Some(address)) = (universe, address) else {
+                    continue;
+                };
+                if address == 0 || usize::from(address) + usize::from(footprint) - 1 > 512 {
+                    return Err(FixtureError::Invalid(format!(
+                        "fixture instance {instance} exceeds universe {universe}"
+                    )));
+                }
+                let slots = used.entry(universe).or_insert([false; 512]);
+                let start = usize::from(address - 1);
+                for (offset, slot) in slots[start..start + usize::from(footprint)]
+                    .iter_mut()
+                    .enumerate()
+                {
+                    if *slot {
+                        return Err(FixtureError::Invalid(format!(
+                            "patch overlap at universe {} address {}",
+                            universe,
+                            start + offset + 1
+                        )));
+                    }
+                    *slot = true;
+                }
             }
         }
     }
@@ -691,10 +897,30 @@ fn multiply_matrix(matrix: [[f32; 3]; 3], value: Xyz) -> Xyz {
 pub struct FixtureLibrary {
     conn: Connection,
 }
+
+pub type LegacyFixtureProfileSource = (String, String, Option<Vec<u8>>);
+
+/// Ownership marker for profiles generated from the desk's built-in Generic catalog. Catalog
+/// upgrades use this marker and deterministic legacy IDs; manufacturer text is never an ownership
+/// signal because operators may create their own fixtures whose manufacturer is also `Generic`.
+pub const BUILTIN_GENERIC_RESERVED_SOURCE: &str = "builtin:generic-catalog";
+const BUILTIN_GENERIC_CATALOG_VERSION: &str = "5";
+
 impl FixtureLibrary {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, FixtureError> {
         let conn = Connection::open(path)?;
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; CREATE TABLE IF NOT EXISTS fixture_definitions(id TEXT NOT NULL,revision INTEGER NOT NULL,manufacturer TEXT NOT NULL,model TEXT NOT NULL,mode TEXT NOT NULL,definition_json TEXT NOT NULL,source_gdtf BLOB,PRIMARY KEY(id,revision));")?;
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL;
+             PRAGMA foreign_keys=ON;
+             CREATE TABLE IF NOT EXISTS fixture_definitions(id TEXT NOT NULL,revision INTEGER NOT NULL,manufacturer TEXT NOT NULL,model TEXT NOT NULL,mode TEXT NOT NULL,definition_json TEXT NOT NULL,source_gdtf BLOB,PRIMARY KEY(id,revision));
+             CREATE TABLE IF NOT EXISTS fixture_profiles(id TEXT NOT NULL,revision INTEGER NOT NULL,manufacturer TEXT NOT NULL,name TEXT NOT NULL,profile_json TEXT NOT NULL,reserved_source TEXT,PRIMARY KEY(id,revision));
+             CREATE TABLE IF NOT EXISTS fixture_profile_sources(profile_id TEXT NOT NULL,profile_revision INTEGER NOT NULL,source_gdtf BLOB NOT NULL,PRIMARY KEY(profile_id,profile_revision));
+             CREATE TABLE IF NOT EXISTS fixture_profile_legacy_sources(profile_id TEXT NOT NULL,profile_revision INTEGER NOT NULL,legacy_id TEXT NOT NULL,legacy_revision INTEGER NOT NULL,definition_json TEXT NOT NULL,source_gdtf BLOB,PRIMARY KEY(profile_id,profile_revision,legacy_id,legacy_revision));
+             CREATE TABLE IF NOT EXISTS fixture_profile_legacy_map(legacy_id TEXT NOT NULL,legacy_revision INTEGER NOT NULL,profile_id TEXT NOT NULL,profile_revision INTEGER NOT NULL,PRIMARY KEY(legacy_id,legacy_revision));
+             CREATE TABLE IF NOT EXISTS fixture_profile_migration_failures(legacy_id TEXT NOT NULL,legacy_revision INTEGER NOT NULL,error TEXT NOT NULL,PRIMARY KEY(legacy_id,legacy_revision));
+             CREATE TABLE IF NOT EXISTS fixture_library_warnings(id INTEGER PRIMARY KEY AUTOINCREMENT,message TEXT NOT NULL UNIQUE);
+             CREATE TABLE IF NOT EXISTS library_metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);",
+        )?;
         if conn
             .prepare("SELECT source_gdtf FROM fixture_definitions LIMIT 0")
             .is_err()
@@ -704,7 +930,9 @@ impl FixtureLibrary {
                 [],
             )?;
         }
-        Ok(Self { conn })
+        let library = Self { conn };
+        library.migrate_legacy_profiles()?;
+        Ok(library)
     }
     pub fn import_json(&self, json: &str) -> Result<FixtureDefinition, FixtureError> {
         self.import_json_with_source(json, None)
@@ -717,13 +945,360 @@ impl FixtureLibrary {
         let fixture: FixtureDefinition = serde_json::from_str(json)?;
         fixture.validate()?;
         self.conn.execute("INSERT INTO fixture_definitions(id,revision,manufacturer,model,mode,definition_json,source_gdtf) VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(id,revision) DO UPDATE SET manufacturer=excluded.manufacturer,model=excluded.model,mode=excluded.mode,definition_json=excluded.definition_json,source_gdtf=COALESCE(excluded.source_gdtf,fixture_definitions.source_gdtf)",params![fixture.id.0.to_string(),fixture.revision,fixture.manufacturer,fixture.model,fixture.mode,json,source_gdtf])?;
+        self.migrate_legacy_profiles()?;
         Ok(fixture)
+    }
+
+    /// Latest complete profile revisions, one atomic record per manufacturer fixture family.
+    pub fn profiles(&self) -> Result<Vec<FixtureProfile>, FixtureError> {
+        let mut statement = self.conn.prepare(
+            "SELECT p.profile_json FROM fixture_profiles p JOIN (SELECT id,MAX(revision) revision FROM fixture_profiles GROUP BY id) latest ON latest.id=p.id AND latest.revision=p.revision ORDER BY p.manufacturer COLLATE NOCASE,p.name COLLATE NOCASE",
+        )?;
+        let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
+        rows.map(|row| Ok(serde_json::from_str(&row?)?)).collect()
+    }
+
+    /// Resolves every ordered mode in each latest profile to the portable definition snapshot
+    /// consumed by patching. Legacy rows whose migration failed remain patchable while the
+    /// corresponding warning explains how to recover or repair them.
+    pub fn patchable_definitions(&self) -> Result<Vec<FixtureDefinition>, FixtureError> {
+        let mut definitions = Vec::new();
+        for profile in self.profiles()? {
+            for mode in &profile.modes {
+                definitions.push(
+                    profile
+                        .resolved_definition(mode.id)
+                        .map_err(|error| FixtureError::Invalid(error.to_string()))?,
+                );
+            }
+        }
+        let mut statement = self.conn.prepare(
+            "SELECT f.definition_json FROM fixture_definitions f JOIN fixture_profile_migration_failures x ON x.legacy_id=f.id AND x.legacy_revision=f.revision ORDER BY f.manufacturer COLLATE NOCASE,f.model COLLATE NOCASE,f.mode COLLATE NOCASE",
+        )?;
+        let failures = statement.query_map([], |row| row.get::<_, String>(0))?;
+        for json in failures {
+            definitions.push(serde_json::from_str(&json?)?);
+        }
+        definitions.sort_by(|left, right| {
+            (
+                left.manufacturer.to_lowercase(),
+                left.name.to_lowercase(),
+                left.mode.to_lowercase(),
+            )
+                .cmp(&(
+                    right.manufacturer.to_lowercase(),
+                    right.name.to_lowercase(),
+                    right.mode.to_lowercase(),
+                ))
+        });
+        Ok(definitions)
+    }
+
+    pub fn profile(
+        &self,
+        id: FixtureId,
+        revision: u32,
+    ) -> Result<Option<FixtureProfile>, FixtureError> {
+        self.conn
+            .query_row(
+                "SELECT profile_json FROM fixture_profiles WHERE id=?1 AND revision=?2",
+                params![id.0.to_string(), revision],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?
+            .map(|json| serde_json::from_str(&json).map_err(FixtureError::from))
+            .transpose()
+    }
+
+    pub fn profile_revisions(&self, id: FixtureId) -> Result<Vec<u32>, FixtureError> {
+        let mut statement = self
+            .conn
+            .prepare("SELECT revision FROM fixture_profiles WHERE id=?1 ORDER BY revision")?;
+        Ok(statement
+            .query_map([id.0.to_string()], |row| row.get(0))?
+            .collect::<Result<_, _>>()?)
+    }
+
+    /// Deletes one immutable fixture-profile revision. Patched shows remain unaffected because
+    /// they carry their own profile/mode snapshot rather than consulting the live library.
+    pub fn delete_profile(&self, id: FixtureId, revision: u32) -> Result<bool, FixtureError> {
+        self.conn.execute(
+            "DELETE FROM fixture_profile_sources WHERE profile_id=?1 AND profile_revision=?2",
+            params![id.0.to_string(), revision],
+        )?;
+        Ok(self.conn.execute(
+            "DELETE FROM fixture_profiles WHERE id=?1 AND revision=?2",
+            params![id.0.to_string(), revision],
+        )? == 1)
+    }
+
+    /// Stores a whole profile as one immutable revision. The server/library assigns the revision;
+    /// clients can only state which current revision they edited.
+    pub fn save_profile(
+        &self,
+        mut profile: FixtureProfile,
+        expected_revision: u32,
+    ) -> Result<FixtureProfile, FixtureError> {
+        let current = self.conn.query_row(
+            "SELECT COALESCE(MAX(revision),0) FROM fixture_profiles WHERE id=?1",
+            [profile.id.0.to_string()],
+            |row| row.get::<_, u32>(0),
+        )?;
+        if current != expected_revision {
+            return Err(FixtureError::RevisionConflict {
+                expected: expected_revision,
+                current,
+            });
+        }
+        profile.revision = current + 1;
+        profile.schema_version = FIXTURE_PROFILE_SCHEMA_VERSION;
+        profile
+            .validate()
+            .map_err(|error| FixtureError::Invalid(error.to_string()))?;
+        let json = serde_json::to_string(&profile)?;
+        self.conn.execute(
+            "INSERT INTO fixture_profiles(id,revision,manufacturer,name,profile_json,reserved_source) VALUES(?1,?2,?3,?4,?5,?6)",
+            params![
+                profile.id.0.to_string(),
+                profile.revision,
+                profile.manufacturer,
+                profile.name,
+                json,
+                profile.reserved_source,
+            ],
+        )?;
+        if current > 0 {
+            self.conn.execute(
+                "INSERT OR IGNORE INTO fixture_profile_sources(profile_id,profile_revision,source_gdtf) SELECT profile_id,?2,source_gdtf FROM fixture_profile_sources WHERE profile_id=?1 AND profile_revision=?3",
+                params![profile.id.0.to_string(), profile.revision, current],
+            )?;
+        }
+        Ok(profile)
+    }
+
+    /// Retain the original GDTF archive independently from the normalized editable profile.
+    pub fn set_profile_source_gdtf(
+        &self,
+        id: FixtureId,
+        revision: u32,
+        source: &[u8],
+    ) -> Result<bool, FixtureError> {
+        let exists = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM fixture_profiles WHERE id=?1 AND revision=?2)",
+            params![id.0.to_string(), revision],
+            |row| row.get::<_, bool>(0),
+        )?;
+        if !exists {
+            return Ok(false);
+        }
+        self.conn.execute(
+            "INSERT INTO fixture_profile_sources(profile_id,profile_revision,source_gdtf) VALUES(?1,?2,?3) ON CONFLICT(profile_id,profile_revision) DO UPDATE SET source_gdtf=excluded.source_gdtf",
+            params![id.0.to_string(), revision, source],
+        )?;
+        Ok(true)
+    }
+
+    pub fn profile_source_gdtf(
+        &self,
+        id: FixtureId,
+        revision: u32,
+    ) -> Result<Option<Vec<u8>>, FixtureError> {
+        self.conn
+            .query_row(
+                "SELECT source_gdtf FROM fixture_profile_sources WHERE profile_id=?1 AND profile_revision=?2",
+                params![id.0.to_string(), revision],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
+    pub fn migration_warnings(&self) -> Result<Vec<String>, FixtureError> {
+        let mut statement = self
+            .conn
+            .prepare("SELECT message FROM fixture_library_warnings ORDER BY id")?;
+        Ok(statement
+            .query_map([], |row| row.get(0))?
+            .collect::<Result<_, _>>()?)
+    }
+
+    pub fn profile_legacy_sources(
+        &self,
+        id: FixtureId,
+        revision: u32,
+    ) -> Result<Vec<LegacyFixtureProfileSource>, FixtureError> {
+        let mut statement = self.conn.prepare(
+            "SELECT legacy_id,definition_json,source_gdtf FROM fixture_profile_legacy_sources WHERE profile_id=?1 AND profile_revision=?2 ORDER BY legacy_id,legacy_revision",
+        )?;
+        Ok(statement
+            .query_map(params![id.0.to_string(), revision], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })?
+            .collect::<Result<_, _>>()?)
+    }
+
+    fn migrate_legacy_profiles(&self) -> Result<usize, FixtureError> {
+        #[derive(Clone)]
+        struct LegacyRow {
+            id: String,
+            revision: u32,
+            json: String,
+            source: Option<Vec<u8>>,
+            definition: FixtureDefinition,
+        }
+        let rows = {
+            let mut statement = self.conn.prepare(
+                "SELECT f.id,f.revision,f.definition_json,f.source_gdtf FROM fixture_definitions f JOIN (SELECT id,MAX(revision) revision FROM fixture_definitions GROUP BY id) latest ON latest.id=f.id AND latest.revision=f.revision LEFT JOIN fixture_profile_legacy_map m ON m.legacy_id=f.id AND m.legacy_revision=f.revision LEFT JOIN fixture_profile_migration_failures x ON x.legacy_id=f.id AND x.legacy_revision=f.revision WHERE m.legacy_id IS NULL AND x.legacy_id IS NULL ORDER BY f.manufacturer COLLATE NOCASE,f.model COLLATE NOCASE,f.mode COLLATE NOCASE",
+            )?;
+            let mapped = statement.query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, u32>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<Vec<u8>>>(3)?,
+                ))
+            })?;
+            mapped.collect::<Result<Vec<_>, _>>()?
+        };
+        let mut valid_rows = Vec::new();
+        for (id, revision, json, source) in rows {
+            match serde_json::from_str(&json) {
+                Ok(definition) => valid_rows.push(LegacyRow {
+                    id,
+                    revision,
+                    json,
+                    source,
+                    definition,
+                }),
+                Err(error) => {
+                    let message = format!(
+                        "Legacy fixture {id} revision {revision} could not be migrated: {error}. The original definition and GDTF source were retained."
+                    );
+                    self.conn.execute(
+                        "INSERT OR REPLACE INTO fixture_profile_migration_failures(legacy_id,legacy_revision,error) VALUES(?1,?2,?3)",
+                        params![id, revision, error.to_string()],
+                    )?;
+                    self.conn.execute(
+                        "INSERT OR IGNORE INTO fixture_library_warnings(message) VALUES(?1)",
+                        [message],
+                    )?;
+                }
+            }
+        }
+        if valid_rows.is_empty() {
+            return Ok(0);
+        }
+        let mut families = BTreeMap::<String, Vec<LegacyRow>>::new();
+        for row in valid_rows {
+            let definition = &row.definition;
+            let metadata = serde_json::to_string(&serde_json::json!({
+                "device_type": definition.device_type,
+                "name": definition.name,
+                "physical": definition.physical,
+                "model_asset": definition.model_asset,
+                "icon_asset": definition.icon_asset,
+                "hazardous": definition.hazardous,
+                "direct_control_protocols": definition.direct_control_protocols,
+                "signal_loss_policy": definition.signal_loss_policy,
+            }))?;
+            let family = format!(
+                "{}\0{}",
+                definition.manufacturer.to_lowercase(),
+                definition.model.to_lowercase()
+            );
+            families
+                .entry(format!("{family}\0{metadata}"))
+                .or_default()
+                .push(row);
+        }
+        let family_counts =
+            families
+                .keys()
+                .fold(HashMap::<String, usize>::new(), |mut counts, key| {
+                    let family = key.split('\0').take(2).collect::<Vec<_>>().join("\0");
+                    *counts.entry(family).or_default() += 1;
+                    counts
+                });
+        let transaction = self.conn.unchecked_transaction()?;
+        let mut migrated = 0;
+        for (_key, rows) in families {
+            let definitions = rows
+                .iter()
+                .map(|row| row.definition.clone())
+                .collect::<Vec<_>>();
+            let mut profile = match FixtureProfile::from_legacy_modes(&definitions) {
+                Ok(profile) => profile,
+                Err(error) => {
+                    let message = format!(
+                        "Legacy fixture family {} {} could not be migrated: {error}. Original rows and GDTF sources were retained.",
+                        rows[0].definition.manufacturer, rows[0].definition.model
+                    );
+                    transaction.execute(
+                        "INSERT OR IGNORE INTO fixture_library_warnings(message) VALUES(?1)",
+                        [message],
+                    )?;
+                    for row in &rows {
+                        transaction.execute(
+                            "INSERT OR REPLACE INTO fixture_profile_migration_failures(legacy_id,legacy_revision,error) VALUES(?1,?2,?3)",
+                            params![row.id, row.revision, error.to_string()],
+                        )?;
+                    }
+                    continue;
+                }
+            };
+            while transaction.query_row(
+                "SELECT EXISTS(SELECT 1 FROM fixture_profiles WHERE id=?1 AND revision=1)",
+                [profile.id.0.to_string()],
+                |row| row.get::<_, bool>(0),
+            )? {
+                profile.id = FixtureId::new();
+            }
+            let profile_json = serde_json::to_string(&profile)?;
+            transaction.execute(
+                "INSERT INTO fixture_profiles(id,revision,manufacturer,name,profile_json,reserved_source) VALUES(?1,1,?2,?3,?4,NULL)",
+                params![profile.id.0.to_string(), profile.manufacturer, profile.name, profile_json],
+            )?;
+            for row in &rows {
+                transaction.execute(
+                    "INSERT INTO fixture_profile_legacy_sources(profile_id,profile_revision,legacy_id,legacy_revision,definition_json,source_gdtf) VALUES(?1,1,?2,?3,?4,?5)",
+                    params![profile.id.0.to_string(), row.id, row.revision, row.json, row.source],
+                )?;
+                transaction.execute(
+                    "INSERT INTO fixture_profile_legacy_map(legacy_id,legacy_revision,profile_id,profile_revision) VALUES(?1,?2,?3,1)",
+                    params![row.id, row.revision, profile.id.0.to_string()],
+                )?;
+            }
+            let family = format!(
+                "{}\0{}",
+                rows[0].definition.manufacturer.to_lowercase(),
+                rows[0].definition.model.to_lowercase()
+            );
+            if family_counts.get(&family).copied().unwrap_or(1) > 1 {
+                transaction.execute(
+                    "INSERT OR IGNORE INTO fixture_library_warnings(message) VALUES(?1)",
+                    [format!(
+                        "{} {} contained conflicting fixture-level metadata; its legacy modes were retained as separate profiles",
+                        rows[0].definition.manufacturer, rows[0].definition.model
+                    )],
+                )?;
+            }
+            migrated += 1;
+        }
+        transaction.execute(
+            "INSERT INTO library_metadata(key,value) VALUES('fixture_profile_schema','2') ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            [],
+        )?;
+        transaction.commit()?;
+        Ok(migrated)
     }
     pub fn source_gdtf(
         &self,
         id: FixtureId,
         revision: u32,
     ) -> Result<Option<Vec<u8>>, FixtureError> {
+        if let Some(source) = self.profile_source_gdtf(id, revision)? {
+            return Ok(Some(source));
+        }
         self.conn
             .query_row(
                 "SELECT source_gdtf FROM fixture_definitions WHERE id=?1 AND revision=?2",
@@ -771,29 +1346,128 @@ impl FixtureLibrary {
     }
     pub fn ensure_builtin_generics(&mut self) -> Result<usize, FixtureError> {
         self.conn.execute_batch("CREATE TABLE IF NOT EXISTS library_metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);")?;
-        if self
+        let installed_version = self
             .conn
             .query_row(
                 "SELECT value FROM library_metadata WHERE key='generic_catalog_version'",
                 [],
                 |row| row.get::<_, String>(0),
             )
+            .optional()?;
+        let installed_profile_count = self
+            .conn
+            .query_row(
+                "SELECT value FROM library_metadata WHERE key='generic_catalog_profile_count'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
             .optional()?
-            .as_deref()
-            == Some("4")
+            .and_then(|value| value.parse::<usize>().ok());
+        let reserved_profiles = self.conn.query_row(
+            "SELECT COUNT(DISTINCT id) FROM fixture_profiles WHERE reserved_source=?1",
+            [BUILTIN_GENERIC_RESERVED_SOURCE],
+            |row| row.get::<_, usize>(0),
+        )?;
+        if installed_version.as_deref() == Some(BUILTIN_GENERIC_CATALOG_VERSION)
+            && installed_profile_count == Some(reserved_profiles)
+            && reserved_profiles > 0
         {
             return Ok(0);
         }
         let definitions = generic_fixture_definitions();
+        let mut families = BTreeMap::<String, Vec<FixtureDefinition>>::new();
+        for definition in &definitions {
+            families
+                .entry(format!(
+                    "{}\0{}\0{}",
+                    definition.model, definition.device_type, definition.name
+                ))
+                .or_default()
+                .push(definition.clone());
+        }
+        let mut profiles = Vec::with_capacity(families.len());
+        for definitions in families.values_mut() {
+            definitions.sort_by_key(|definition| definition.mode.to_lowercase());
+            let mut profile = FixtureProfile::from_legacy_modes(definitions)
+                .map_err(|error| FixtureError::Invalid(error.to_string()))?;
+            profile.reserved_source = Some(BUILTIN_GENERIC_RESERVED_SOURCE.into());
+            profiles.push((profile, definitions.clone()));
+        }
         let transaction = self.conn.transaction()?;
-        transaction.execute("DELETE FROM fixture_definitions WHERE manufacturer='Generic' AND model IN ('Dimmer','Fogger','Hazer','Fan','Relay','Pan Tilt','Mirror Mover Scanner','RGB LED','RGBW LED','RGBCCT LED','RGBWA LED','RGBWAUV LED','CCT LED','CMY LED','Strobe')", [])?;
+        // Never delete by manufacturer/name: user-authored Generic fixtures are normal protected
+        // library content. Built-ins have deterministic legacy IDs and a reserved-source marker,
+        // so catalog upgrades replace only entries they own.
+        let builtin_ids = definitions
+            .iter()
+            .map(|fixture| fixture.id.0.to_string())
+            .collect::<HashSet<_>>();
+        let mut previous_profile_ids = {
+            let mut statement = transaction
+                .prepare("SELECT DISTINCT id FROM fixture_profiles WHERE reserved_source=?1")?;
+            statement
+                .query_map([BUILTIN_GENERIC_RESERVED_SOURCE], |row| {
+                    row.get::<_, String>(0)
+                })?
+                .collect::<Result<HashSet<_>, _>>()?
+        };
+        {
+            let mut find_profile = transaction.prepare(
+                "SELECT profile_id FROM fixture_profile_legacy_map WHERE legacy_id=?1 AND legacy_revision=1",
+            )?;
+            for id in &builtin_ids {
+                if let Some(profile_id) = find_profile
+                    .query_row([id], |row| row.get::<_, String>(0))
+                    .optional()?
+                {
+                    previous_profile_ids.insert(profile_id);
+                }
+            }
+        }
+        for profile_id in previous_profile_ids {
+            transaction.execute(
+                "DELETE FROM fixture_profile_sources WHERE profile_id=?1",
+                [&profile_id],
+            )?;
+            transaction.execute(
+                "DELETE FROM fixture_profile_legacy_sources WHERE profile_id=?1",
+                [&profile_id],
+            )?;
+            transaction.execute(
+                "DELETE FROM fixture_profile_legacy_map WHERE profile_id=?1",
+                [&profile_id],
+            )?;
+            transaction.execute("DELETE FROM fixture_profiles WHERE id=?1", [&profile_id])?;
+        }
         for fixture in &definitions {
             let json = serde_json::to_string(fixture)?;
-            transaction.execute("INSERT INTO fixture_definitions(id,revision,manufacturer,model,mode,definition_json) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(id,revision) DO NOTHING", params![fixture.id.0.to_string(),fixture.revision,fixture.manufacturer,fixture.model,fixture.mode,json])?;
+            transaction.execute("INSERT INTO fixture_definitions(id,revision,manufacturer,model,mode,definition_json) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(id,revision) DO UPDATE SET manufacturer=excluded.manufacturer,model=excluded.model,mode=excluded.mode,definition_json=excluded.definition_json", params![fixture.id.0.to_string(),fixture.revision,fixture.manufacturer,fixture.model,fixture.mode,json])?;
         }
-        transaction.execute("INSERT INTO library_metadata(key,value) VALUES('generic_catalog_version','4') ON CONFLICT(key) DO UPDATE SET value=excluded.value", [])?;
+        for (profile, legacy_definitions) in &profiles {
+            let profile_json = serde_json::to_string(profile)?;
+            transaction.execute(
+                "INSERT INTO fixture_profiles(id,revision,manufacturer,name,profile_json,reserved_source) VALUES(?1,1,?2,?3,?4,?5)",
+                params![profile.id.0.to_string(), profile.manufacturer, profile.name, profile_json, BUILTIN_GENERIC_RESERVED_SOURCE],
+            )?;
+            for definition in legacy_definitions {
+                let definition_json = serde_json::to_string(definition)?;
+                transaction.execute(
+                    "INSERT OR REPLACE INTO fixture_profile_legacy_sources(profile_id,profile_revision,legacy_id,legacy_revision,definition_json,source_gdtf) VALUES(?1,1,?2,1,?3,NULL)",
+                    params![profile.id.0.to_string(), definition.id.0.to_string(), definition_json],
+                )?;
+                transaction.execute(
+                    "INSERT OR REPLACE INTO fixture_profile_legacy_map(legacy_id,legacy_revision,profile_id,profile_revision) VALUES(?1,1,?2,1)",
+                    params![definition.id.0.to_string(), profile.id.0.to_string()],
+                )?;
+                transaction.execute(
+                    "DELETE FROM fixture_profile_migration_failures WHERE legacy_id=?1 AND legacy_revision=1",
+                    [definition.id.0.to_string()],
+                )?;
+            }
+        }
+        transaction.execute("INSERT INTO library_metadata(key,value) VALUES('generic_catalog_version',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [BUILTIN_GENERIC_CATALOG_VERSION])?;
+        transaction.execute("INSERT INTO library_metadata(key,value) VALUES('generic_catalog_profile_count',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [profiles.len().to_string()])?;
         transaction.commit()?;
-        Ok(definitions.len())
+        Ok(profiles.len())
     }
 }
 
@@ -887,9 +1561,17 @@ fn generic_definition(
             },
         );
     }
+    let id = FixtureId(profile::stable_uuid(&format!(
+        "builtin-generic\0{name}\0{mode}\0{resolution}\0{}",
+        channels
+            .iter()
+            .map(|(_, attribute)| attribute.as_str())
+            .collect::<Vec<_>>()
+            .join(",")
+    )));
     FixtureDefinition {
         schema_version: 1,
-        id: FixtureId::new(),
+        id,
         revision: 1,
         manufacturer: "Generic".into(),
         device_type: device_type.into(),
@@ -911,6 +1593,9 @@ fn generic_definition(
         direct_control_protocols: Vec::new(),
         signal_loss_policy: SignalLossPolicy::HoldLast,
         safe_values: BTreeMap::new(),
+        profile_id: None,
+        mode_id: None,
+        profile_snapshot: None,
     }
 }
 
@@ -1192,6 +1877,9 @@ mod tests {
             direct_control_protocols: Vec::new(),
             signal_loss_policy: SignalLossPolicy::HoldLast,
             safe_values: BTreeMap::new(),
+            profile_id: None,
+            mode_id: None,
+            profile_snapshot: None,
         }
     }
 
@@ -1249,6 +1937,7 @@ mod tests {
             definition: def.clone(),
             universe: Some(1),
             address: Some(1),
+            split_patches: vec![],
             layer_id: default_patch_layer(),
             direct_control: None,
             location: Default::default(),
@@ -1257,6 +1946,7 @@ mod tests {
             multipatch: vec![],
             move_in_black_enabled: true,
             move_in_black_delay_millis: 0,
+            highlight_overrides: BTreeMap::new(),
         };
         let overlap = PatchedFixture {
             fixture_id: FixtureId::new(),
@@ -1265,6 +1955,7 @@ mod tests {
             definition: def.clone(),
             universe: Some(1),
             address: Some(10),
+            split_patches: vec![],
             layer_id: default_patch_layer(),
             direct_control: None,
             location: Default::default(),
@@ -1273,6 +1964,7 @@ mod tests {
             multipatch: vec![],
             move_in_black_enabled: true,
             move_in_black_delay_millis: 0,
+            highlight_overrides: BTreeMap::new(),
         };
         assert!(validate_patch(&[first.clone(), overlap]).is_err());
         let overflow = PatchedFixture {
@@ -1282,6 +1974,7 @@ mod tests {
             definition: def,
             universe: Some(1),
             address: Some(504),
+            split_patches: vec![],
             layer_id: default_patch_layer(),
             direct_control: None,
             location: Default::default(),
@@ -1290,6 +1983,7 @@ mod tests {
             multipatch: vec![],
             move_in_black_enabled: true,
             move_in_black_delay_millis: 0,
+            highlight_overrides: BTreeMap::new(),
         };
         assert!(validate_patch(&[overflow]).is_err());
         assert!(validate_patch(&[first]).is_ok());
@@ -1303,6 +1997,7 @@ mod tests {
             definition: definition(3),
             universe: Some(1),
             address: Some(1),
+            split_patches: vec![],
             layer_id: default_patch_layer(),
             direct_control: None,
             location: Default::default(),
@@ -1314,6 +2009,7 @@ mod tests {
                     name: "Output".into(),
                     universe: Some(1),
                     address: Some(10),
+                    split_patches: vec![],
                     location: Default::default(),
                     rotation: Default::default(),
                 },
@@ -1322,18 +2018,138 @@ mod tests {
                     name: "Visual".into(),
                     universe: None,
                     address: None,
+                    split_patches: vec![],
                     location: Default::default(),
                     rotation: Default::default(),
                 },
             ],
             move_in_black_enabled: true,
             move_in_black_delay_millis: 0,
+            highlight_overrides: BTreeMap::new(),
         };
         assert!(validate_patch(std::slice::from_ref(&fixture)).is_ok());
         fixture.multipatch[1].universe = Some(1);
         assert!(validate_patch(std::slice::from_ref(&fixture)).is_err());
         fixture.multipatch[1].address = Some(2);
         assert!(validate_patch(&[fixture]).is_err());
+    }
+
+    fn schema_v2_two_split_fixture() -> PatchedFixture {
+        let mut profile = FixtureProfile::blank();
+        profile.revision = 1;
+        profile.manufacturer = "Test".into();
+        profile.name = "Two split".into();
+        let mode_id = profile.modes[0].id;
+        profile.modes[0].splits.push(FixtureSplit {
+            number: 2,
+            footprint: 1,
+        });
+        profile.modes[0].heads.push(FixtureHead {
+            id: Uuid::new_v4(),
+            name: "Second".into(),
+            master_shared: false,
+            split: 2,
+        });
+        let definition = profile.resolved_definition(mode_id).unwrap();
+        PatchedFixture {
+            fixture_id: FixtureId::new(),
+            fixture_number: Some(1),
+            name: "Two split".into(),
+            definition,
+            universe: None,
+            address: None,
+            split_patches: vec![
+                SplitPatch {
+                    split: 1,
+                    universe: Some(1),
+                    address: Some(1),
+                },
+                SplitPatch {
+                    split: 2,
+                    universe: None,
+                    address: None,
+                },
+            ],
+            layer_id: default_patch_layer(),
+            direct_control: None,
+            location: Default::default(),
+            rotation: Default::default(),
+            logical_heads: vec![],
+            multipatch: vec![MultiPatchInstance {
+                id: Uuid::new_v4(),
+                name: "Second body".into(),
+                universe: None,
+                address: None,
+                split_patches: vec![
+                    SplitPatch {
+                        split: 1,
+                        universe: Some(1),
+                        address: Some(10),
+                    },
+                    SplitPatch {
+                        split: 2,
+                        universe: None,
+                        address: None,
+                    },
+                ],
+                location: Default::default(),
+                rotation: Default::default(),
+            }],
+            move_in_black_enabled: true,
+            move_in_black_delay_millis: 0,
+            highlight_overrides: BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn schema_v2_multi_split_requires_exact_optional_assignments_for_every_instance() {
+        let fixture = schema_v2_two_split_fixture();
+        validate_patch(std::slice::from_ref(&fixture)).unwrap();
+
+        let mut missing_parent = fixture.clone();
+        missing_parent.split_patches.pop();
+        assert!(
+            validate_patch(&[missing_parent])
+                .unwrap_err()
+                .to_string()
+                .contains("missing split 2")
+        );
+
+        let mut duplicate = fixture.clone();
+        duplicate.split_patches[1].split = 1;
+        assert!(
+            validate_patch(&[duplicate])
+                .unwrap_err()
+                .to_string()
+                .contains("more than once")
+        );
+
+        let mut unknown = fixture.clone();
+        unknown.split_patches[1].split = 99;
+        assert!(
+            validate_patch(&[unknown])
+                .unwrap_err()
+                .to_string()
+                .contains("unknown split 99")
+        );
+
+        let mut partial = fixture.clone();
+        partial.split_patches[1].universe = Some(2);
+        assert!(
+            validate_patch(&[partial])
+                .unwrap_err()
+                .to_string()
+                .contains("both universe and address or neither")
+        );
+
+        let mut missing_multipatch = fixture;
+        missing_multipatch.multipatch[0].split_patches.clear();
+        assert!(
+            validate_patch(&[missing_multipatch])
+                .unwrap_err()
+                .to_string()
+                .contains("must assign every split")
+        );
     }
     #[test]
     fn media_server_layers_inherit_parent_direct_control_endpoint() {
@@ -1351,6 +2167,7 @@ mod tests {
             definition: media_definition,
             universe: Some(1),
             address: Some(1),
+            split_patches: vec![],
             layer_id: default_patch_layer(),
             direct_control: Some(endpoint.clone()),
             location: Default::default(),
@@ -1362,6 +2179,7 @@ mod tests {
             multipatch: vec![],
             move_in_black_enabled: true,
             move_in_black_delay_millis: 0,
+            highlight_overrides: BTreeMap::new(),
         };
         validate_patch(std::slice::from_ref(&parent)).unwrap();
         assert_eq!(parent.direct_control, Some(endpoint));
@@ -1386,6 +2204,7 @@ mod tests {
             definition: definition(2),
             universe: Some(1),
             address: Some(1),
+            split_patches: vec![],
             layer_id: default_patch_layer(),
             direct_control: None,
             location: Default::default(),
@@ -1403,6 +2222,7 @@ mod tests {
             multipatch: vec![],
             move_in_black_enabled: true,
             move_in_black_delay_millis: 0,
+            highlight_overrides: BTreeMap::new(),
         };
         fixture.definition.heads = vec![
             LogicalHead {
@@ -1486,6 +2306,285 @@ mod tests {
         let json = serde_json::to_string(&fixture).unwrap();
         library.import_json(&json).unwrap();
         assert_eq!(library.export_json(fixture.id, 1).unwrap().unwrap(), json);
+        let profiles = library.profiles().unwrap();
+        assert_eq!(profiles.len(), 1);
+        assert_eq!(profiles[0].modes[0].name, "Mode");
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn profile_revisions_are_atomic_and_server_assigned() {
+        let path = std::env::temp_dir().join(format!("fixture-profiles-{}.sqlite", Uuid::new_v4()));
+        let library = FixtureLibrary::open(&path).unwrap();
+        let mut draft = FixtureProfile::blank();
+        draft.manufacturer = "Acme".into();
+        draft.name = "Orbit".into();
+        draft.short_name = "Orbit".into();
+        let first = library.save_profile(draft, 0).unwrap();
+        assert_eq!(first.revision, 1);
+        assert!(
+            library
+                .set_profile_source_gdtf(first.id, 1, b"original-gdtf-archive")
+                .unwrap()
+        );
+        assert_eq!(
+            library.profile_source_gdtf(first.id, 1).unwrap().as_deref(),
+            Some(b"original-gdtf-archive".as_slice())
+        );
+        let mut edit = first.clone();
+        edit.notes = "Second revision".into();
+        let second = library.save_profile(edit, 1).unwrap();
+        assert_eq!(second.revision, 2);
+        assert_eq!(
+            library.profile_source_gdtf(first.id, 2).unwrap().as_deref(),
+            Some(b"original-gdtf-archive".as_slice()),
+            "new immutable revisions retain the original import archive"
+        );
+        assert_eq!(library.profile(first.id, 1).unwrap().unwrap().notes, "");
+        assert_eq!(
+            library.profile(first.id, 2).unwrap().unwrap().notes,
+            "Second revision"
+        );
+        assert!(matches!(
+            library.save_profile(second, 1),
+            Err(FixtureError::RevisionConflict {
+                expected: 1,
+                current: 2
+            })
+        ));
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn embedded_legacy_patch_migrates_to_portable_profile_and_explicit_split_assignments() {
+        let mut legacy = definition(4);
+        legacy.revision = 7;
+        let intensity = Parameter {
+            attribute: AttributeKey::intensity(),
+            components: vec![ChannelComponent {
+                offset: 0,
+                byte_order: ByteOrder::MsbFirst,
+            }],
+            default: 0.0,
+            virtual_dimmer: false,
+            metadata: ParameterMetadata::default(),
+            capabilities: vec![Capability {
+                name: "Open".into(),
+                dmx_from: 1,
+                dmx_to: 255,
+                preset_family: Some("beam".into()),
+            }],
+        };
+        let emitter_parameter = |name: &str, offset| Parameter {
+            attribute: AttributeKey(format!("color.emitter.{name}")),
+            components: vec![ChannelComponent {
+                offset,
+                byte_order: ByteOrder::MsbFirst,
+            }],
+            default: 0.0,
+            virtual_dimmer: false,
+            metadata: ParameterMetadata::default(),
+            capabilities: vec![],
+        };
+        legacy.heads[0].parameters = vec![
+            intensity,
+            emitter_parameter("red", 1),
+            emitter_parameter("green", 2),
+            emitter_parameter("blue", 3),
+        ];
+        legacy.color_calibration = Some(ColorCalibration {
+            emitters: vec![
+                EmitterCalibration {
+                    name: "red".into(),
+                    xyz: Xyz {
+                        x: 1.0,
+                        y: 0.0,
+                        z: 0.0,
+                    },
+                    limit: 0.8,
+                },
+                EmitterCalibration {
+                    name: "green".into(),
+                    xyz: Xyz {
+                        x: 0.0,
+                        y: 1.0,
+                        z: 0.0,
+                    },
+                    limit: 0.9,
+                },
+                EmitterCalibration {
+                    name: "blue".into(),
+                    xyz: Xyz {
+                        x: 0.0,
+                        y: 0.0,
+                        z: 1.0,
+                    },
+                    limit: 1.0,
+                },
+            ],
+            correction_matrix: [[0.9, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.1]],
+        });
+        let instance_id = Uuid::new_v4();
+        let mut fixture = PatchedFixture {
+            fixture_id: FixtureId::new(),
+            fixture_number: Some(1),
+            name: "Legacy".into(),
+            definition: legacy,
+            universe: Some(2),
+            address: Some(101),
+            split_patches: vec![],
+            layer_id: default_patch_layer(),
+            direct_control: None,
+            location: Default::default(),
+            rotation: Default::default(),
+            logical_heads: vec![],
+            multipatch: vec![MultiPatchInstance {
+                id: instance_id,
+                name: "Balcony".into(),
+                universe: Some(3),
+                address: Some(201),
+                split_patches: vec![],
+                location: Default::default(),
+                rotation: Default::default(),
+            }],
+            move_in_black_enabled: true,
+            move_in_black_delay_millis: 0,
+            highlight_overrides: BTreeMap::new(),
+        };
+
+        assert!(migrate_patched_fixture_to_v2(&mut fixture).unwrap());
+        assert_eq!(
+            fixture.definition.schema_version,
+            FIXTURE_PROFILE_SCHEMA_VERSION
+        );
+        assert_eq!(fixture.definition.revision, 7);
+        assert!(fixture.definition.profile_snapshot.is_some());
+        let migrated_mode = &fixture.definition.profile_snapshot.as_ref().unwrap().modes[0];
+        let ColorSystem::Additive { emitters } = &migrated_mode.color_systems[0].system else {
+            panic!("legacy additive calibration was not converted")
+        };
+        assert_eq!(emitters.len(), 3);
+        assert_eq!(emitters[0].maximum_level, 0.8);
+        assert_eq!(emitters[0].response_curve, 1.0);
+        assert!(emitters.iter().all(|emitter| emitter.visible));
+        assert_eq!(migrated_mode.color_systems[0].correction_matrix[0][0], 0.9);
+        assert_eq!(
+            fixture.definition.heads[0].parameters[0].capabilities[0].name,
+            "Open"
+        );
+        assert_eq!(
+            fixture.split_patches,
+            vec![SplitPatch {
+                split: 1,
+                universe: Some(2),
+                address: Some(101),
+            }]
+        );
+        assert_eq!(
+            fixture.multipatch[0].split_patches,
+            vec![SplitPatch {
+                split: 1,
+                universe: Some(3),
+                address: Some(201),
+            }]
+        );
+        assert!(!migrate_patched_fixture_to_v2(&mut fixture).unwrap());
+    }
+
+    #[test]
+    fn legacy_library_migration_combines_compatible_modes_and_retains_sources() {
+        let path = std::env::temp_dir().join(format!(
+            "fixture-profile-migration-{}.sqlite",
+            Uuid::new_v4()
+        ));
+        let connection = Connection::open(&path).unwrap();
+        connection.execute_batch("CREATE TABLE fixture_definitions(id TEXT NOT NULL,revision INTEGER NOT NULL,manufacturer TEXT NOT NULL,model TEXT NOT NULL,mode TEXT NOT NULL,definition_json TEXT NOT NULL,source_gdtf BLOB,PRIMARY KEY(id,revision));").unwrap();
+        let mut coarse = definition(1);
+        coarse.manufacturer = "Acme".into();
+        coarse.model = "Orbit".into();
+        coarse.name = "Orbit".into();
+        coarse.mode = "Coarse".into();
+        let mut fine = coarse.clone();
+        fine.id = FixtureId::new();
+        fine.mode = "Fine".into();
+        for fixture in [&coarse, &fine] {
+            connection.execute(
+                "INSERT INTO fixture_definitions(id,revision,manufacturer,model,mode,definition_json,source_gdtf) VALUES(?1,1,?2,?3,?4,?5,?6)",
+                params![fixture.id.0.to_string(), fixture.manufacturer, fixture.model, fixture.mode, serde_json::to_string(fixture).unwrap(), b"retained-gdtf".as_slice()],
+            ).unwrap();
+        }
+        drop(connection);
+        let library = FixtureLibrary::open(&path).unwrap();
+        let profiles = library.profiles().unwrap();
+        assert_eq!(profiles.len(), 1);
+        assert_eq!(
+            profiles[0]
+                .modes
+                .iter()
+                .map(|mode| mode.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Coarse", "Fine"]
+        );
+        let sources = library.profile_legacy_sources(profiles[0].id, 1).unwrap();
+        assert_eq!(sources.len(), 2);
+        assert!(
+            sources
+                .iter()
+                .all(|(_, json, source)| json.contains("Orbit")
+                    && source.as_deref() == Some(b"retained-gdtf".as_slice()))
+        );
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn failed_or_conflicting_legacy_migration_keeps_startup_available() {
+        let path = std::env::temp_dir().join(format!(
+            "fixture-profile-recovery-{}.sqlite",
+            Uuid::new_v4()
+        ));
+        let connection = Connection::open(&path).unwrap();
+        connection.execute_batch("CREATE TABLE fixture_definitions(id TEXT NOT NULL,revision INTEGER NOT NULL,manufacturer TEXT NOT NULL,model TEXT NOT NULL,mode TEXT NOT NULL,definition_json TEXT NOT NULL,source_gdtf BLOB,PRIMARY KEY(id,revision));").unwrap();
+        let mut first = definition(1);
+        first.manufacturer = "Acme".into();
+        first.model = "Conflict".into();
+        first.name = "Conflict".into();
+        let mut second = first.clone();
+        second.id = FixtureId::new();
+        second.mode = "Different metadata".into();
+        second.physical.width_millimetres = Some(500.0);
+        for fixture in [&first, &second] {
+            connection.execute(
+                "INSERT INTO fixture_definitions(id,revision,manufacturer,model,mode,definition_json) VALUES(?1,1,?2,?3,?4,?5)",
+                params![fixture.id.0.to_string(), fixture.manufacturer, fixture.model, fixture.mode, serde_json::to_string(fixture).unwrap()],
+            ).unwrap();
+        }
+        let invalid_id = FixtureId::new();
+        connection.execute(
+            "INSERT INTO fixture_definitions(id,revision,manufacturer,model,mode,definition_json,source_gdtf) VALUES(?1,1,'Broken','Broken','Broken','{',?2)",
+            params![invalid_id.0.to_string(), b"original-source".as_slice()],
+        ).unwrap();
+        drop(connection);
+        let library = FixtureLibrary::open(&path).unwrap();
+        assert_eq!(library.profiles().unwrap().len(), 2);
+        let warnings = library.migration_warnings().unwrap();
+        assert!(
+            warnings
+                .iter()
+                .any(|warning| warning.contains("conflicting fixture-level metadata"))
+        );
+        assert!(
+            warnings
+                .iter()
+                .any(|warning| warning.contains("could not be migrated"))
+        );
+        assert_eq!(
+            library.export_json(invalid_id, 1).unwrap().as_deref(),
+            Some("{")
+        );
+        assert_eq!(
+            library.source_gdtf(invalid_id, 1).unwrap().as_deref(),
+            Some(b"original-source".as_slice())
+        );
         let _ = std::fs::remove_file(path);
     }
 
@@ -1569,6 +2668,90 @@ mod tests {
     }
 
     #[test]
+    fn generic_catalog_upgrade_owns_only_reserved_profiles() {
+        let path = std::env::temp_dir().join(format!(
+            "fixture-profile-generic-upgrade-{}.sqlite",
+            Uuid::new_v4()
+        ));
+        let mut library = FixtureLibrary::open(&path).unwrap();
+
+        // Reproduce an older installation where deterministic built-in definitions had already
+        // been migrated into ordinary, unmarked profiles.
+        let old_dimmers = generic_fixture_definitions()
+            .into_iter()
+            .filter(|definition| definition.name == "Dimmer")
+            .collect::<Vec<_>>();
+        for definition in &old_dimmers {
+            let json = serde_json::to_string(definition).unwrap();
+            library.conn.execute(
+                "INSERT INTO fixture_definitions(id,revision,manufacturer,model,mode,definition_json) VALUES(?1,1,?2,?3,?4,?5)",
+                params![definition.id.0.to_string(), definition.manufacturer, definition.model, definition.mode, json],
+            ).unwrap();
+        }
+        library.migrate_legacy_profiles().unwrap();
+        let old_profile = library
+            .profiles()
+            .unwrap()
+            .into_iter()
+            .find(|profile| profile.name == "Dimmer")
+            .unwrap();
+        assert_eq!(old_profile.reserved_source, None);
+        library.conn.execute(
+            "INSERT INTO library_metadata(key,value) VALUES('generic_catalog_version','4') ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            [],
+        ).unwrap();
+
+        // Manufacturer text is deliberately not enough to make a profile catalog-owned.
+        let mut user_profile = FixtureProfile::blank();
+        user_profile.manufacturer = "Generic".into();
+        user_profile.name = "Operator relay".into();
+        user_profile.short_name = "Relay".into();
+        let user_profile = library.save_profile(user_profile, 0).unwrap();
+
+        let expected_profile_count = generic_fixture_definitions()
+            .into_iter()
+            .map(|definition| (definition.model, definition.device_type, definition.name))
+            .collect::<HashSet<_>>()
+            .len();
+        assert_eq!(
+            library.ensure_builtin_generics().unwrap(),
+            expected_profile_count
+        );
+        let profiles = library.profiles().unwrap();
+        assert_eq!(
+            profiles
+                .iter()
+                .filter(|profile| profile.reserved_source.as_deref()
+                    == Some(BUILTIN_GENERIC_RESERVED_SOURCE))
+                .count(),
+            expected_profile_count
+        );
+        assert_eq!(
+            library
+                .profile(user_profile.id, user_profile.revision)
+                .unwrap()
+                .unwrap()
+                .reserved_source,
+            None
+        );
+        assert_eq!(library.ensure_builtin_generics().unwrap(), 0);
+
+        drop(library);
+        let mut reopened = FixtureLibrary::open(&path).unwrap();
+        assert_eq!(reopened.ensure_builtin_generics().unwrap(), 0);
+        assert!(
+            reopened
+                .profiles()
+                .unwrap()
+                .iter()
+                .any(|profile| profile.id == user_profile.id
+                    && profile.manufacturer == "Generic"
+                    && profile.reserved_source.is_none())
+        );
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
     fn legacy_patch_defaults_move_in_black_on_and_round_trips_explicit_settings() {
         let legacy = serde_json::json!({
             "fixture_id": FixtureId::new(),
@@ -1584,5 +2767,21 @@ mod tests {
             serde_json::from_value(serde_json::to_value(fixture).unwrap()).unwrap();
         assert!(!restored.move_in_black_enabled);
         assert_eq!(restored.move_in_black_delay_millis, 1_250);
+    }
+
+    #[test]
+    fn legacy_patch_inherits_highlight_look_and_round_trips_instance_overrides() {
+        let legacy = serde_json::json!({
+            "fixture_id": FixtureId::new(),
+            "definition": definition(2)
+        });
+        let mut fixture: PatchedFixture = serde_json::from_value(legacy).unwrap();
+        assert!(fixture.highlight_overrides.is_empty());
+
+        let channel_id = Uuid::new_v4();
+        fixture.highlight_overrides.insert(channel_id, 173);
+        let restored: PatchedFixture =
+            serde_json::from_value(serde_json::to_value(fixture).unwrap()).unwrap();
+        assert_eq!(restored.highlight_overrides.get(&channel_id), Some(&173));
     }
 }

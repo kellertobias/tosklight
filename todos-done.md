@@ -148,3 +148,12 @@ Evidence: [VPB-007](docs/testing/06-preload-modes-and-virtual-playbacks.md), `te
 - Persisted legacy pane layouts receive deterministic defaults; deterministic help screenshots and manual keycap spacing were refreshed.
 
 Evidence: [MANUAL-019](docs/testing/10-desk-lock-and-operator-ui.md), [File Manager and Text Editor](docs/testing/09-file-manager-and-text-editor.md), `tests/19-manual-review-software-corrections.spec.ts`, focused UI unit coverage, refreshed help screenshots, the rebuilt PDF manual, and the completed [Feature 19 contract](docs/planned%20features/19-manual-review-software-corrections.DONE.md).
+
+## Fixture channel configuration — 2026-07-17
+
+- Desk-wide fixture profiles use server-assigned atomic revisions while patched shows retain immutable portable profile and mode snapshots.
+- The shared Create/Edit fixture editor provides Generic and Modes workflows plus the nested Heads, Channels, Color, and Geometry mode editor.
+- Ordered heads, independently patchable splits, exact u8/u16/u24/u32 channels, prioritized functions, typed actions, color systems, and geometry feed programming, rendering, DMX output, and visualization.
+- Explicit schema-v1-to-v2 migration preserves legacy library rows, embedded show definitions, retained source data, and actionable recovery behavior.
+
+Evidence: [FIXTURE-001](docs/testing/11-update-highlight-fixture-profiles-and-matter.md), `tests/11-update-highlight-fixture-profiles-and-matter.spec.ts`, focused fixture/editor/patch/engine/server migration coverage, refreshed Fixture Library screenshots, the rebuilt manual, desktop smoke, and the completed [Feature 18 contract](docs/planned%20features/18-fixture-channel-configuration.DONE.md).

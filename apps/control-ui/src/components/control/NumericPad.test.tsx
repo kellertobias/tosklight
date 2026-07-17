@@ -27,7 +27,7 @@ const state = {
   storeArmed: false,
   cueListSetArmed: false,
   preload: "idle",
-  builtIn: null,
+  builtIn: null as string | null,
   activeDeskId: "programming",
   desks: [
     { id: "desk-one", name: "Desk One", panes: [] },
@@ -95,6 +95,16 @@ describe("NumericPad layout", () => {
     grid.remove();
   });
 
+  it("arms the same selected Patch target from the software SET key", () => {
+    state.builtIn = "patch";
+    render(<NumericPad/>);
+
+    fireEvent.click(screen.getByRole("button", { name: "SET" }));
+
+    expect(dispatch).toHaveBeenCalledWith({ type: "SET_PATCH_ARMED", value: true });
+    expect(server.setCommandLine).not.toHaveBeenCalled();
+  });
+
   it("does not let a hidden Presets pane steal SET from another visible built-in", () => {
     state.activeDeskId = "desk-one";
     (state as { builtIn: string | null }).builtIn = "groups";
@@ -117,23 +127,30 @@ describe("NumericPad layout", () => {
     expect(server.setCommandLine).toHaveBeenCalledWith("COPY SET ", false);
   });
 
-  it("uses separate 5-by-2 and 5-by-4 grids with a spanning fade and single-row Through and Enter keys", () => {
+  it("uses separate six-row command and number grids with Highlight above Group and a single-row Enter key", () => {
     const { container } = render(<NumericPad/>);
     expect(container.querySelector(".numeric-pad-command-section")).toBeInTheDocument();
     expect(container.querySelector(".numeric-pad-number-section")).toBeInTheDocument();
     expect(container.querySelector(".numeric-pad-fade")).toHaveStyle({ gridColumn: "1 / span 2", gridRow: "1" });
     for (const { key, section, column, row, rowSpan = 1 } of numericPadLayout) {
       const expectedColumn = section === "commands" ? column : column - 3;
+      const expectedRow = row + (section === "numbers" ? 1 : 0);
       expect(container.querySelector(`[data-keypad-key="${key}"]`)).toHaveStyle({
         gridColumn: `${expectedColumn}`,
-        gridRow: `${row} / span ${rowSpan}`,
+        gridRow: `${expectedRow} / span ${rowSpan}`,
       });
     }
+    const highlight = screen.getByRole("region", { name: "Highlight and step through" });
+    expect(highlight.parentElement).toHaveClass("numeric-pad-number-section");
+    expect(highlight.querySelector(".highlight-toggle")).toHaveTextContent("HIGH");
+    expect(highlight.querySelector(".highlight-previous")).toHaveTextContent("PREV");
+    expect(highlight.querySelector(".highlight-next")).toHaveTextContent("NEXT");
+    expect(highlight.querySelector(".highlight-capture")).toHaveTextContent("ALL");
     expect(screen.getByRole("button", { name: "SET" })).toHaveAttribute("data-keypad-key", "SET");
     expect(screen.getByRole("button", { name: "CUE" })).toHaveAttribute("data-keypad-key", "CUE");
     expect(screen.getByRole("button", { name: "UND" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "TRU" })).toHaveStyle({ gridColumn: "4", gridRow: "4 / span 1" });
-    expect(screen.getByRole("button", { name: "ENT" })).toHaveStyle({ gridColumn: "4", gridRow: "5 / span 1" });
+    expect(screen.getByRole("button", { name: "TRU" })).toHaveStyle({ gridColumn: "4", gridRow: "5 / span 1" });
+    expect(screen.getByRole("button", { name: "ENT" })).toHaveStyle({ gridColumn: "4", gridRow: "6 / span 1" });
   });
 
   it("routes Shift shortcuts to built-ins, the explicitly selected playback, and stored desks", () => {

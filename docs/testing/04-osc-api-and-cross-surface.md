@@ -222,6 +222,25 @@ Before each variant's action, mark its event/OSC/UDP observers. After the accept
 
 **Pass condition:** The browser is a live view of server state and does not rely on optimistic local state after external changes.
 
+## Highlight and Step Through boundary coverage
+
+Focused server, fixture, engine, and control-surface tests cover Highlight without inventing a client-local step model:
+
+- the server registry captures a deduplicated multi-fixture selection in authoritative order, initially highlights all captured fixtures, steps forward and backward without wrapping, retains the complete capture while the working programmer selection changes, skips a removed fixture, and retains the capture across Off/On;
+- a different user cannot take over live output on the same desk, while Blind/Preview can prepare the same capture and step state with output suppressed;
+- the OSC adapter normalizes `previous`/`prev` and `capture`/`reset`, rejects an identical repeat strictly inside 150 ms, accepts a different action immediately, and accepts the same action at the exact boundary;
+- fixture migration defaults a missing per-instance override map to empty, round-trips overrides keyed by stable channel ID, and profile resolution applies an override at the channel's exact raw resolution;
+- engine coverage proves the transient raw look remains outside programmer values, clearing it restores normal rendering, and Group Master, Grand Master, and Blackout remain safety limits; and
+- software controls cover HLT/CAP/Previous/Next, keyboard shortcuts, pending-action suppression, one-based fixture feedback, capture-only state, and another-user ownership, while the sibling hardware app uses the documented OSC actions and feedback.
+
+Run both focused server targets with `cargo test -p light-server --no-default-features --lib highlight::` for the authoritative registry and `cargo test -p light-server --no-default-features --bin light-server highlight` for REST, OSC feedback/deduplication, authenticated reconnect, Blind/Preview/Preload, and session cleanup. Then run `cargo test -p light-fixture highlight` and `cargo test -p light-engine transient_highlight`. From `apps/control-ui`, run `npm test -- HighlightControls.test.tsx patchUtils.test.ts`. Paired `HIGHLIGHT-001` covers stepping/programmer isolation and paired `HIGHLIGHT-002` covers Fixtures, Stage, Group, Preset-store, reconnect, and show-load boundaries in [Update, Highlight, Fixture Profiles, and Matter](11-update-highlight-fixture-profiles-and-matter.md).
+
+## Matter playback bridge boundary coverage
+
+Matter uses stable explicit page/playback endpoints rather than an OSC subscriber's current page. Focused Rust tests cover endpoint derivation, empty and non-fader omission, On/Off and Level writes, tracking feedback, truthful commissioning status, pairing-identity persistence, and endpoint removal without renumbering surviving lights. The physical-desk Matter settings component tests cover the persisted enable toggle, running and failed status, zero exposed lights for empty slots, pairing code and QR payload presentation, copy action, and the separate count for assigned controls without a dimmable fader.
+
+Run both deterministic server layers with `cargo test -p light-server --no-default-features matter::` for the adapter/transport module and `cargo test -p light-server --no-default-features tests::matter_` for the main server dispatcher/runtime integration tests, then run `npm test -- DeskSettingsModal.test.tsx` from `apps/control-ui`. Paired `MATTER-001` root coverage proves the persisted API/UI toggle and global endpoint identities. The socket-level smoke is deliberately opt-in because it binds UDP 5540 and shared mDNS 5353: run `cargo test -p light-server --no-default-features matter::transport::tests::commissionable_network_transport_smoke -- --ignored --test-threads=1`. That smoke proves host networking, commissioning-window advertisement, value reconciliation, endpoint removal/restart, stable identity, and shutdown. A real controller remains the final interoperability check for fabric commissioning and subscription behavior; the automated suite does not claim that a browser or mock is an independent Matter controller.
+
 ## Follow-ups
 
 | Scenario | Next tests after the primary case | First failure checks |

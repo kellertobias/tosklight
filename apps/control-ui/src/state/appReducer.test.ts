@@ -108,6 +108,15 @@ describe("appReducer", () => {
     expect(appReducer(armed, { type: "SET_STORE_ARMED", value: false }).storeArmed).toBe(false);
   });
 
+  it("keeps Update and Record mutually exclusive", () => {
+    const updating = appReducer(initialState, { type: "SET_UPDATE_ARMED", value: true });
+    expect(updating.updateArmed).toBe(true);
+    expect(updating.storeArmed).toBe(false);
+    const recording = appReducer(updating, { type: "SET_STORE_ARMED", value: true });
+    expect(recording.storeArmed).toBe(true);
+    expect(recording.updateArmed).toBe(false);
+  });
+
   it("updates stage presentation options and clamps environment brightness", () => {
     const hidden = appReducer(initialState, { type: "SET_STAGE_OPTIONS", groupsVisible: false, showSelection: false, environmentBrightness: 3 });
     expect(hidden.stageGroupsVisible).toBe(false);

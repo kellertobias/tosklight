@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import JSZip from "jszip";
 import { useServer } from "../../api/ServerContext";
-import type { FixtureDefinition } from "../../api/types";
+import type { FixtureDefinition, FixtureProfile } from "../../api/types";
 import { SearchBar } from "../common/SearchBar";
 import { groupFixtureFamilies } from "./patchUtils";
 import { createPortal } from "react-dom";
-import { Button, CheckboxField, FormLayout, NumberField, Select, SelectField, TextArea, TextAreaField, TextField } from "../common";
+import { Button, Select } from "../common";
 import { RootConfinedFilePickerButton } from "../files/RootConfinedFilePickerButton";
+import { FixtureProfileEditor } from "./FixtureProfileEditor";
+import { blankFixtureProfile, fixtureDefinitionKey, fixtureProfileFromDefinition, fixtureProfileFromDefinitions, mergeFixtureDefinitions } from "./fixtureProfileModel";
 
 export const FIXTURE_TYPES = ["dimmer", "fogger", "profile", "wash", "wash mover", "spot mover", "beam mover", "strobe", "media server", "pixel fixture", "other"];
 
@@ -18,7 +20,23 @@ export function blankDefinition(): FixtureDefinition {
   };
 }
 
-const attrName = (value: string) => value.replace(/([a-z])([A-Z])/g, "$1.$2").replace(/\s+/g, ".").toLowerCase();
+const attrName = (value: string) => {
+  const normalized = value.replace(/([a-z])([A-Z])/g, "$1.$2").replace(/\s+/g, ".").toLowerCase();
+  const aliases: Record<string, string> = {
+    dimmer: "intensity",
+    "color.add_r": "color.red",
+    "color.add_g": "color.green",
+    "color.add_b": "color.blue",
+    "color.add_w": "color.white",
+    "color.add_ww": "color.warm_white",
+    "color.add_cw": "color.cold_white",
+    "color.sub_c": "color.cyan",
+    "color.sub_m": "color.magenta",
+    "color.sub_y": "color.yellow",
+  };
+  const wheel = normalized.match(/^color(?:\.wheel)?_?(\d+)$/);
+  return aliases[normalized] ?? (wheel ? `color.wheel.${wheel[1]}` : normalized);
+};
 
 type HeadDraft = { name: string; master: boolean; channels: string };
 
@@ -66,10 +84,6 @@ export function parseHeadDrafts(heads: HeadDraft[]) {
     }),
   }));
   return { heads: parsedHeads, footprint: offset };
-}
-
-function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(reader.error); reader.readAsDataURL(file); });
 }
 
 export async function importGdtfData(data: ArrayBuffer | Uint8Array, fileName: string): Promise<FixtureDefinition[]> {
@@ -122,67 +136,50 @@ export async function importGdtf(file: File) {
 
 export function FixtureLibrarySetup() {
   const server = useServer();
-  const [draft, setDraft] = useState(blankDefinition);
-  const [heads, setHeads] = useState<HeadDraft[]>([{ name: "Main", master: true, channels: "intensity,pan:16[-270,270,deg],tilt:16[-135,135,deg]" }]);
-  const [emitters, setEmitters] = useState("");
   const [busy, setBusy] = useState(false);
   const [selectedFamilyKey, setSelectedFamilyKey] = useState("");
   const [selectedModeKey, setSelectedModeKey] = useState("");
-  const [modal, setModal] = useState<"editor" | "import" | null>(null);
+  const [modal, setModal] = useState<"import" | null>(null);
+  const [profileEditor, setProfileEditor] = useState<{ draft: FixtureProfile; expectedRevision: number } | null>(null);
+  const [revisionHistory, setRevisionHistory] = useState<FixtureProfile[] | null>(null);
+  const [revisionHistoryError, setRevisionHistoryError] = useState("");
   const [query, setQuery] = useState(""); const [submitted, setSubmitted] = useState(""); const [typeFilter, setTypeFilter] = useState(""); const [manufacturer, setManufacturer] = useState("");
-  const fixtureTypes = useMemo(() => [...new Set(server.fixtureLibrary.map((item) => item.device_type || "other"))].sort(), [server.fixtureLibrary]);
-  const manufacturers = useMemo(() => [...new Set(server.fixtureLibrary.map((item) => item.manufacturer))].sort(), [server.fixtureLibrary]);
-  const libraryFamilies = useMemo(() => groupFixtureFamilies(server.fixtureLibrary.filter((item) => { const needle = submitted.toLowerCase().trim(); return (!manufacturer || item.manufacturer === manufacturer) && (!typeFilter || item.device_type === typeFilter) && (!needle || `${item.manufacturer} ${item.name} ${item.model} ${item.mode} ${item.device_type}`.toLowerCase().includes(needle)); })), [server.fixtureLibrary, submitted, manufacturer, typeFilter]);
+  const availableDefinitions = useMemo(() => mergeFixtureDefinitions(server.fixtureProfiles, server.fixtureLibrary), [server.fixtureProfiles, server.fixtureLibrary]);
+  const fixtureTypes = useMemo(() => [...new Set(availableDefinitions.map((item) => item.device_type || "other"))].sort(), [availableDefinitions]);
+  const manufacturers = useMemo(() => [...new Set(availableDefinitions.map((item) => item.manufacturer))].filter(Boolean).sort(), [availableDefinitions]);
+  const libraryFamilies = useMemo(() => groupFixtureFamilies(availableDefinitions.filter((item) => { const needle = submitted.toLowerCase().trim(); return (!manufacturer || item.manufacturer === manufacturer) && (!typeFilter || item.device_type === typeFilter) && (!needle || `${item.manufacturer} ${item.name} ${item.model} ${item.mode} ${item.device_type}`.toLowerCase().includes(needle)); })), [availableDefinitions, submitted, manufacturer, typeFilter]);
   const selectedLibraryFamily = libraryFamilies.find((family) => family.key === selectedFamilyKey) ?? libraryFamilies[0] ?? null;
-  const selectedMode = selectedLibraryFamily?.modes.find((mode) => `${mode.id}:${mode.revision}` === selectedModeKey) ?? selectedLibraryFamily?.modes[0] ?? null;
-  const edit = (definition: FixtureDefinition) => {
-    setDraft({ ...definition, revision: definition.revision + 1 });
-    setHeads(definition.heads.map((head) => ({ name: head.name, master: head.shared, channels: head.parameters.map((parameter) => {
-      const resolution = parameter.components.length > 1 ? ":16" : "";
-      const metadata = parameter.metadata;
-      const range = metadata && (metadata.physical_min !== 0 || metadata.physical_max !== 1) ? `[${metadata.physical_min},${metadata.physical_max}${metadata.unit ? `,${metadata.unit}` : ""}]` : "";
-      const capabilities = parameter.capabilities.length ? `{${parameter.capabilities.map((capability) => `${capability.name}=${capability.dmx_from}-${capability.dmx_to}`).join("|")}}` : "";
-      return `${parameter.attribute}${resolution}${range}${capabilities}`;
-    }).join(",") })));
-    const calibration = definition.color_calibration as { emitters?: Array<{ name: string; xyz: { x: number; y: number; z: number }; limit: number }> } | null;
-    setEmitters(calibration?.emitters?.map((emitter) => `${emitter.name},${emitter.xyz.x},${emitter.xyz.y},${emitter.xyz.z},${emitter.limit}`).join("\n") ?? "");
-    setModal("editor");
-  };
-  const save = async () => {
-    const parsed = parseHeadDrafts(heads);
-    const calibrationEmitters = emitters.split("\n").map((line) => line.trim()).filter(Boolean).map((line) => { const [name, x, y, z, limit = "1"] = line.split(",").map((value) => value.trim()); return { name, xyz: { x: Number(x), y: Number(y), z: Number(z) }, limit: Number(limit) }; });
-    const definition = { ...draft, ...parsed, name: draft.name.trim(), model: draft.model.trim() || draft.name.trim(), color_calibration: calibrationEmitters.length >= 3 ? { emitters: calibrationEmitters, correction_matrix: [[1,0,0],[0,1,0],[0,0,1]] } : null };
-    if (await server.saveFixtureDefinition(definition)) { setSelectedFamilyKey(`${definition.manufacturer}\0${definition.model}`); setSelectedModeKey(`${definition.id}:${definition.revision}`); setDraft(blankDefinition()); setHeads([{ name: "Main", master: true, channels: "intensity,pan:16[-270,270,deg],tilt:16[-135,135,deg]" }]); setEmitters(""); setModal(null); }
-  };
+  const selectedMode = selectedLibraryFamily?.modes.find((mode) => fixtureDefinitionKey(mode) === selectedModeKey) ?? selectedLibraryFamily?.modes[0] ?? null;
   const importFile = async (file?: File) => {
     if (!file) return; setBusy(true);
-    try { const imported = await importGdtf(file); for (const definition of imported) await server.saveFixtureDefinition(definition); if (imported[0]) setSelectedFamilyKey(`${imported[0].manufacturer}\0${imported[0].model}`); setModal(null); }
+    try { const source = new Uint8Array(await file.arrayBuffer()); const imported = await importGdtfData(source, file.name); const profile = fixtureProfileFromDefinitions(imported); const saved = imported.length ? await server.saveFixtureProfile(profile, 0) : null; if (saved && await server.saveFixtureProfileSourceGdtf(saved.id, saved.revision, source)) { setSelectedFamilyKey(`${saved.manufacturer}\0${saved.short_name || saved.name}`); setSelectedModeKey(`${saved.id}:${saved.revision}:${saved.modes[0]?.id ?? saved.id}`); setModal(null); } }
     finally { setBusy(false); }
   };
-  const openCreate = () => { setDraft(blankDefinition()); setHeads([{ name: "Main", master: true, channels: "intensity,pan:16[-270,270,deg],tilt:16[-135,135,deg]" }]); setEmitters(""); setModal("editor"); };
+  const openCreate = () => setProfileEditor({ draft: blankFixtureProfile(), expectedRevision: 0 });
+  const openRevisionHistory = async () => {
+    if (!selectedMode) return;
+    setRevisionHistoryError("");
+    try {
+      setRevisionHistory(await server.fixtureProfileRevisions(selectedMode.profile_id ?? selectedMode.id));
+    } catch (reason) {
+      setRevisionHistory([]);
+      setRevisionHistoryError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+  const deleteRevision = async (profile: FixtureProfile) => {
+    if (!window.confirm(`Delete ${profile.manufacturer} ${profile.name} revision ${profile.revision}? Patched shows keep their embedded snapshot.`)) return;
+    await server.deleteFixtureProfile(profile.id, profile.revision);
+    const remaining = await server.fixtureProfileRevisions(profile.id).catch(() => []);
+    setRevisionHistory(remaining);
+    if (!remaining.length) setRevisionHistory(null);
+  };
   const [toolbarTarget, setToolbarTarget] = useState<HTMLElement | null>(null);
   useEffect(() => setToolbarTarget(document.getElementById("setup-section-actions")), []);
   return <div className="fixture-library-setup">{toolbarTarget && createPortal(<><SearchBar value={query} onChange={setQuery} onSearch={() => setSubmitted(query)} filters={[{id:"type",label:"Fixture type",options:fixtureTypes}]} values={{type:typeFilter}} onFilterChange={(_,value) => setTypeFilter(value)} placeholder="Search manufacturer, fixture, mode, or type"/><Button onClick={() => setModal("import")}>Import GDTF</Button><Button onClick={openCreate}>Create fixture</Button></>, toolbarTarget)}
-    <div className="fixture-library-columns"><section><h3>Manufacturer</h3><Button className={!manufacturer?"active":""} onClick={() => setManufacturer("")}><span>All manufacturers</span></Button>{manufacturers.map((name) => <Button className={manufacturer===name?"active":""} key={name} onClick={() => setManufacturer(name)}><span>{name}</span></Button>)}</section><section><h3>Fixture</h3>{libraryFamilies.map((family) => <Button className={selectedLibraryFamily?.key===family.key?"active":""} key={family.key} onClick={() => {setSelectedFamilyKey(family.key);setSelectedModeKey(`${family.modes[0].id}:${family.modes[0].revision}`);}}><span>{family.name}</span><small>{family.deviceType} · {family.modes.length} modes</small></Button>)}</section><section className="fixture-library-detail">{selectedLibraryFamily && selectedMode ? <><h3>{selectedLibraryFamily.manufacturer} {selectedLibraryFamily.name}</h3><label>Mode<Select value={`${selectedMode.id}:${selectedMode.revision}`} onChange={(event) => setSelectedModeKey(event.target.value)}>{selectedLibraryFamily.modes.map((mode) => <option value={`${mode.id}:${mode.revision}`} key={`${mode.id}:${mode.revision}`}>{mode.mode} · {mode.footprint}ch</option>)}</Select></label><dl><dt>Type</dt><dd>{selectedMode.device_type}</dd><dt>DMX footprint</dt><dd>{selectedMode.footprint} channels</dd><dt>Heads</dt><dd>{selectedMode.heads.length}</dd><dt>Revision</dt><dd>{selectedMode.revision}</dd><dt>Physical</dt><dd>{selectedMode.physical.width_millimetres ?? "?"} × {selectedMode.physical.height_millimetres ?? "?"} × {selectedMode.physical.depth_millimetres ?? "?"} mm</dd></dl><Button onClick={() => edit(selectedMode)}>Edit fixture</Button></>:<p>No fixture matches this search.</p>}</section></div>
+    {Boolean(server.fixtureProfileWarnings.length) && <section className="fixture-migration-warnings" role="alert" aria-label="Fixture library migration warnings"><h3>Fixture library needs attention</h3>{server.fixtureProfileWarnings.map((warning) => <p key={warning}>{warning}</p>)}</section>}
+    <div className="fixture-library-columns"><section><h3>Manufacturer</h3><Button className={!manufacturer?"active":""} onClick={() => setManufacturer("")}><span>All manufacturers</span></Button>{manufacturers.map((name) => <Button className={manufacturer===name?"active":""} key={name} onClick={() => setManufacturer(name)}><span>{name}</span></Button>)}</section><section><h3>Fixture</h3>{libraryFamilies.map((family) => <Button className={selectedLibraryFamily?.key===family.key?"active":""} key={family.key} onClick={() => {setSelectedFamilyKey(family.key);setSelectedModeKey(fixtureDefinitionKey(family.modes[0]));}}><span>{family.name}</span><small>{family.deviceType} · {family.modes.length} modes</small></Button>)}</section><section className="fixture-library-detail">{selectedLibraryFamily && selectedMode ? <><h3>{selectedLibraryFamily.manufacturer} {selectedLibraryFamily.name}</h3><label>Mode<Select value={fixtureDefinitionKey(selectedMode)} onChange={(event) => setSelectedModeKey(event.target.value)}>{selectedLibraryFamily.modes.map((mode) => <option value={fixtureDefinitionKey(mode)} key={fixtureDefinitionKey(mode)}>{mode.mode} · {mode.footprint}ch</option>)}</Select></label><dl><dt>Type</dt><dd>{selectedMode.device_type}</dd><dt>DMX footprint</dt><dd>{selectedMode.footprint} channels</dd><dt>Heads</dt><dd>{selectedMode.heads.length}</dd><dt>Revision</dt><dd>{selectedMode.revision}</dd><dt>Physical</dt><dd>{selectedMode.physical.width_millimetres ?? "?"} × {selectedMode.physical.height_millimetres ?? "?"} × {selectedMode.physical.depth_millimetres ?? "?"} mm</dd></dl><Button onClick={() => { const draft = fixtureProfileFromDefinition(selectedMode); setProfileEditor({ draft, expectedRevision: Math.max(draft.revision, ...server.fixtureProfiles.filter((profile) => profile.id === draft.id).map((profile) => profile.revision)) }); }}>Edit fixture</Button><Button onClick={() => void openRevisionHistory()}>Revision history</Button></>:<p>No fixture matches this search.</p>}</section></div>
     {modal === "import" && <div className="stacked-modal-layer"><section className="nested-modal gdtf-import-modal"><header><h2>Import GDTF</h2><Button aria-label="Close Import GDTF" onClick={() => setModal(null)}>×</Button></header><p>Select a GDTF archive. Every DMX mode will be imported into the desk-wide fixture library.</p><RootConfinedFilePickerButton variant="primary" disabled={busy} label={busy ? "Importing…" : "Choose GDTF file"} allowedExtensions={["gdtf"]} onFiles={(files) => importFile(files[0])}/></section></div>}
-    {modal === "editor" && <div className="stacked-modal-layer"><section className="nested-modal fixture-editor-modal"><header><h2>{draft.revision > 1 ? "Edit fixture as new revision" : "Create fixture"}</h2><Button aria-label="Close fixture editor" onClick={() => setModal(null)}>×</Button></header>
-      <FormLayout className="configuration-form fixture-editor" labelPlacement="top" columns={3} minColumnWidth={190}>
-        <TextField label="Manufacturer" clearable value={draft.manufacturer} onChange={(e) => setDraft({ ...draft, manufacturer: e.target.value })} />
-        <TextField label="Name" clearable value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-        <TextField label="Model" clearable value={draft.model} onChange={(e) => setDraft({ ...draft, model: e.target.value })} />
-        <SelectField label="Device type" value={draft.device_type} onChange={(device_type) => setDraft({ ...draft, device_type })} options={FIXTURE_TYPES.map((type) => ({ value: type, label: type }))}/>
-        <TextField label="Mode" clearable value={draft.mode} onChange={(e) => setDraft({ ...draft, mode: e.target.value })} />
-        <NumberField label="Pan range °" value={draft.physical.pan_range_degrees ?? ""} onChange={(e) => setDraft({ ...draft, physical: { ...draft.physical, pan_range_degrees: e.target.value ? Number(e.target.value) : null } })} />
-        <NumberField label="Tilt range °" value={draft.physical.tilt_range_degrees ?? ""} onChange={(e) => setDraft({ ...draft, physical: { ...draft.physical, tilt_range_degrees: e.target.value ? Number(e.target.value) : null } })} />
-        <NumberField label="Width mm" allowDecimal value={draft.physical.width_millimetres ?? ""} onChange={(e) => setDraft({ ...draft, physical: { ...draft.physical, width_millimetres: e.target.value ? Number(e.target.value) : null } })} />
-        <NumberField label="Height mm" allowDecimal value={draft.physical.height_millimetres ?? ""} onChange={(e) => setDraft({ ...draft, physical: { ...draft.physical, height_millimetres: e.target.value ? Number(e.target.value) : null } })} />
-        <NumberField label="Depth mm" allowDecimal value={draft.physical.depth_millimetres ?? ""} onChange={(e) => setDraft({ ...draft, physical: { ...draft.physical, depth_millimetres: e.target.value ? Number(e.target.value) : null } })} />
-        <NumberField label="Weight kg" allowDecimal value={draft.physical.weight_kilograms ?? ""} onChange={(e) => setDraft({ ...draft, physical: { ...draft.physical, weight_kilograms: e.target.value ? Number(e.target.value) : null } })} />
-        <label>Stage icon<RootConfinedFilePickerButton label="Choose stage icon" allowedExtensions={["png", "jpg", "jpeg", "gif", "webp", "svg"]} onFiles={(files) => { const file = files[0]; if (file) return readFileAsDataUrl(file).then((icon_asset) => setDraft((current) => ({ ...current, icon_asset }))); }}/><small>{draft.icon_asset ? "Icon assigned" : "PNG, SVG, or other browser image"}</small></label>
-        <label>3D fixture model<RootConfinedFilePickerButton label="Choose 3D fixture model" allowedExtensions={["glb"]} onFiles={(files) => { const file = files[0]; if (file) return readFileAsDataUrl(file).then((model_asset) => setDraft((current) => ({ ...current, model_asset }))); }}/><small>{draft.model_asset ? "Model assigned" : "Binary GLB"}</small></label>
-      </FormLayout>
-      <div className="fixture-head-editor"><h3>Heads and channels</h3>{heads.map((head, index) => <article key={index}><TextField label="Head name" clearable value={head.name} onChange={(e) => setHeads((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: e.target.value } : item))} /><CheckboxField label="Master/shared head" checked={head.master} onChange={(e) => setHeads((current) => current.map((item, itemIndex) => ({ ...item, master: itemIndex === index ? e.target.checked : e.target.checked ? false : item.master })))}/><TextAreaField label="Channels" value={head.channels} onChange={(e) => setHeads((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, channels: e.target.value } : item))} />{heads.length > 1 && <Button onClick={() => setHeads((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove head</Button>}</article>)}<Button onClick={() => setHeads((current) => [...current, { name: `Head ${current.length + 1}`, master: false, channels: "intensity" }])}>Add head / layer</Button><small>Syntax: attribute, pan:16[-270,270,deg], gobo&#123;Open=0-31|Dots=32-63&#125;. Channels are assigned sequentially across heads.</small></div>
-      <label className="emitter-editor">Color calibration emitters<TextArea value={emitters} onChange={(e) => setEmitters(e.target.value)} placeholder={"Red,0.64,0.33,0.03,1\nGreen,0.30,0.60,0.10,1\nBlue,0.15,0.06,0.79,1"} /><small>One emitter per line: name, X, Y, Z, limit. At least three emitters enable calibrated color optimization.</small></label>
-      <footer><Button onClick={() => setModal(null)}>Cancel</Button><Button className="primary" disabled={!draft.manufacturer.trim() || !draft.name.trim() || !heads.some((head) => head.channels.trim())} onClick={() => void save()}>Save fixture</Button></footer></section></div>}
+    {revisionHistory && <div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && setRevisionHistory(null)}><section className="nested-modal fixture-revision-history" role="dialog" aria-modal="true" aria-label="Fixture revision history"><header><h2>Fixture revision history</h2><Button aria-label="Close Fixture revision history" onClick={() => setRevisionHistory(null)}>×</Button></header>{revisionHistoryError && <p role="alert">{revisionHistoryError}</p>}{!revisionHistory.length && !revisionHistoryError && <p>No retained revisions.</p>}<div>{[...revisionHistory].sort((left, right) => right.revision - left.revision).map((profile) => <article key={`${profile.id}:${profile.revision}`}><span><b>Revision {profile.revision}</b><small>{profile.manufacturer} {profile.name} · {profile.modes.length} mode{profile.modes.length === 1 ? "" : "s"}</small></span><Button onClick={() => { setProfileEditor({ draft: structuredClone(profile), expectedRevision: Math.max(...revisionHistory.map((revision) => revision.revision)) }); setRevisionHistory(null); }}>Edit as new revision</Button><Button className="danger" onClick={() => void deleteRevision(profile)}>Delete revision</Button></article>)}</div><p>Deleting a library revision never changes fixtures already patched into a show because each patch embeds its own portable snapshot.</p></section></div>}
+    {profileEditor && <FixtureProfileEditor initialProfile={profileEditor.draft} expectedRevision={profileEditor.expectedRevision} manufacturers={manufacturers} attributeRegistry={server.bootstrap?.attribute_registry ?? []} onSave={server.saveFixtureProfile} onClose={() => setProfileEditor(null)}/>}
   </div>;
 }

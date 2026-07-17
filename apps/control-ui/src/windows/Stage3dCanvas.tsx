@@ -9,6 +9,7 @@ import type { StageAsset, StagePosition3d } from "../api/ServerContext";
 import {
   buildStageScene,
   disposeScene,
+  mountFixtureModel,
   type Stage3dFixture,
 } from "./stage3dScene";
 import { useApp } from "../state/AppContext";
@@ -75,20 +76,13 @@ export function Stage3dCanvas({
           const root = fixtureObjects.get(item.instanceId ?? item.fixture.fixture_id);
           if (!root) return;
           const placeholder = root.getObjectByName("fixture-placeholder");
-          if (placeholder) root.remove(placeholder);
-          const model = gltf.scene;
-          model.name = "fixture-model";
-          model.traverse((object) => { object.userData.fixtureId = item.fixture.fixture_id; object.userData.instanceId = item.instanceId ?? item.fixture.fixture_id; });
-          const box = new THREE.Box3().setFromObject(model);
-          const size = box.getSize(new THREE.Vector3());
-          const desiredHeight = (item.fixture.definition.physical.height_millimetres ?? 600) / 1000;
-          const scale = desiredHeight / Math.max(size.y, size.x, size.z, .001);
-          model.scale.setScalar(scale);
-          const scaledBox = new THREE.Box3().setFromObject(model);
-          const center = scaledBox.getCenter(new THREE.Vector3());
-          model.position.sub(center);
-          model.position.y -= scaledBox.min.y - center.y;
-          root.add(model);
+          placeholder?.parent?.remove(placeholder);
+          mountFixtureModel(
+            root,
+            gltf.scene,
+            item.fixture,
+            showSelection && selected.includes(item.fixture.fixture_id),
+          );
         });
       }).catch(() => undefined);
     }

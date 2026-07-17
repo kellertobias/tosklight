@@ -23,6 +23,9 @@ const server = {
   readVisualization: vi.fn().mockResolvedValue({ values: [] }),
   alignSelection: vi.fn(),
   setProgrammer: vi.fn(),
+  setProgrammerValue: vi.fn(),
+  controlFixtureAction: vi.fn(),
+  generateFixturePresets: vi.fn().mockResolvedValue({ created: [] }),
   setGroupValue: vi.fn(),
   releaseProgrammer: vi.fn(),
   releaseGroupValue: vi.fn(),
@@ -41,6 +44,46 @@ afterEach(() => {
   server.bootstrap.active_programmers = [];
   vi.clearAllMocks();
 });
+
+function schemaV2Fixture(): any {
+  return {
+    fixture_id: "fixture-1",
+    logical_heads: [],
+    definition: {
+      mode_id: "mode-1",
+      heads: [{ shared: true, parameters: [{ attribute: "gobo.1", capabilities: [] }] }],
+      profile_snapshot: {
+        id: "profile-1",
+        modes: [{
+          id: "mode-1",
+          heads: [{ id: "head-1", master_shared: true }],
+          channels: [{
+            id: "channel-1",
+            head_id: "head-1",
+            attribute: "gobo.1",
+            functions: [{
+              id: "function-1",
+              attribute: "gobo.1",
+              behavior: {
+                type: "indexed",
+                semantic_id: "gobo.dots",
+                label: "Dots",
+                raw_value: 93,
+              },
+            }],
+          }],
+          control_actions: [{
+            id: "action-1",
+            name: "Lamp reset",
+            kind: "momentary",
+            duration_millis: null,
+            assignments: [{ channel_id: "channel-1", active_raw: 255, inactive_raw: 0 }],
+          }],
+        }],
+      },
+    },
+  };
+}
 
 describe("ParameterControls alignment", () => {
   it("releases only the visible fixture-scoped attribute", () => {
@@ -137,5 +180,89 @@ describe("ParameterControls alignment", () => {
     expect(align).toHaveClass("align-off");
     expect(dispatch).toHaveBeenCalledWith({ type: "SET_SHIFT_ARMED", value: false });
     expect(server.alignSelection).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe("ParameterControls schema-v2 direct picker", () => {
+  it("programs indexed values by stable semantic ID", () => {
+    server.selectedFixtures = ["fixture-1"];
+    server.patch.fixtures = [schemaV2Fixture()];
+
+    render(<ParameterControls />);
+    fireEvent.click(screen.getByRole("button", { name: "Direct values and actions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dots indexed value" }));
+
+    expect(server.setProgrammerValue).toHaveBeenCalledWith(
+      "fixture-1",
+      "gobo.1",
+      { kind: "discrete", value: "gobo.dots" },
+    );
+  });
+
+  it("holds and releases every assignment through one typed momentary action", () => {
+    server.selectedFixtures = ["fixture-1"];
+    server.patch.fixtures = [schemaV2Fixture()];
+
+    render(<ParameterControls />);
+    fireEvent.click(screen.getByRole("button", { name: "Direct values and actions" }));
+    const action = screen.getByRole("button", { name: "Lamp reset momentary control action" });
+    fireEvent.pointerDown(action, { pointerId: 7 });
+    fireEvent.pointerUp(action, { pointerId: 7 });
+
+    expect(server.controlFixtureAction.mock.calls).toEqual([
+      ["fixture-1", "action-1", true],
+      ["fixture-1", "action-1", false],
+    ]);
+  });
+
+  it("toggles latched actions and lets the server own timed-pulse release", () => {
+    const fixture = schemaV2Fixture();
+    fixture.definition.profile_snapshot.modes[0].control_actions = [
+      {
+        id: "action-latched",
+        name: "Lamp power",
+        kind: "latched",
+        duration_millis: null,
+        assignments: [{ channel_id: "channel-1", active_raw: 255, inactive_raw: 0 }],
+      },
+      {
+        id: "action-pulse",
+        name: "Fixture reset",
+        kind: "timed_pulse",
+        duration_millis: 750,
+        assignments: [{ channel_id: "channel-1", active_raw: 255, inactive_raw: 0 }],
+      },
+    ];
+    server.selectedFixtures = ["fixture-1"];
+    server.patch.fixtures = [fixture];
+
+    render(<ParameterControls />);
+    fireEvent.click(screen.getByRole("button", { name: "Direct values and actions" }));
+    const latched = screen.getByRole("button", { name: "Lamp power latched control action" });
+    fireEvent.click(latched);
+    fireEvent.click(latched);
+    fireEvent.click(screen.getByRole("button", { name: "Fixture reset timed_pulse control action" }));
+
+    expect(server.controlFixtureAction.mock.calls).toEqual([
+      ["fixture-1", "action-latched", true],
+      ["fixture-1", "action-latched", false],
+      ["fixture-1", "action-pulse", true],
+    ]);
+  });
+
+  it("creates portable presets only after the explicit operator action", async () => {
+    server.selectedFixtures = ["fixture-1"];
+    server.patch.fixtures = [schemaV2Fixture()];
+    server.generateFixturePresets.mockResolvedValueOnce({
+      created: [{ id: "1", name: "Dots", family: "Beam" }],
+    });
+
+    render(<ParameterControls />);
+    expect(server.generateFixturePresets).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Direct values and actions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Generate portable presets" }));
+
+    expect(server.generateFixturePresets).toHaveBeenCalledWith(["fixture-1"]);
+    expect(await screen.findByRole("status")).toHaveTextContent("Created 1 portable preset");
   });
 });

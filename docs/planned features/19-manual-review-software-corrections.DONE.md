@@ -1,6 +1,6 @@
 # Manual Review Software Corrections
 
-**Implementation status: Complete.** The operator UI, confined file workflows, manual/help source, deterministic screenshots, compatibility defaults, and executable acceptance coverage described here are implemented. The separate fixture channel-editor design remains intentionally scoped to [Fixture Channel Configuration](18-fixture-channel-configuration.md).
+**Implementation status: Complete.** The operator UI, confined file workflows, manual/help source, deterministic screenshots, compatibility defaults, and executable acceptance coverage described here are implemented. The fixture channel-editor design is implemented under the completed [Fixture Channel Configuration](18-fixture-channel-configuration.DONE.md) contract.
 
 ## Implementation and verification evidence
 
@@ -87,7 +87,7 @@ Use **desk** for the physical/logical combination of ToskLight software and atta
 - Replace inline MIB and MIB Delay controls in the fixture table with the same selected-cell and `[SET]` editing model used by other editable table values. Merely clicking a checkbox or inline input must not overwrite show data.
 - Left-align manufacturer and fixture names in Add Fixture and Fixture Library browsers. Right-align secondary/detail text so names and metadata form readable columns.
 - Put search and neighboring actions in the modal/window title for Add Fixture and Fixture Library, using the shared browser component where possible.
-- The fixture channel editor requires a separate design pass documented in [Fixture Channel Configuration](18-fixture-channel-configuration.md).
+- The fixture channel editor is implemented under the completed [Fixture Channel Configuration](18-fixture-channel-configuration.DONE.md) contract.
 
 ## Standard file-picker field
 

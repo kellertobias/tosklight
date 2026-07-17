@@ -33,7 +33,7 @@ The **Desk key** is the button shown on the touchscreen keypad or console. The *
 | `[-]` | Minus | `[KBD:NUMPAD -]` | Remove fixtures from a selection; after `[AT]`, subtract a value. |
 | `[AT]` | At | `[KBD:#]` | Separate the selection from the value. Press `[AT][AT]` for `[AT][FULL][ENT]`. |
 | `[TIME]` | Time | - | Give a value or recorded Cue an explicit fade time; press twice for `DELAY`. |
-| `[SHIFT]` | Shift | - | Latch the shifted keypad layer for the next desk key. |
+| `[SHIFT]` | Shift | - | Latch the shifted keypad layer for the next desk key. With Record it enters Update. |
 | `[.]` | Dot | `[KBD:.]` | Separate address/value parts or enter a decimal point. Press `[.][.]` for `[AT] 0 [ENT]`. |
 | `[DIV]` | Division | `[KBD:´]` | Edit a selection or separate multiple values. Hold for selection options. |
 | `[GRP]` | Group | `[KBD:SHIFT]` + `[KBD:^]` | Select a group; press twice to reference its fixtures instead. |
@@ -210,6 +210,37 @@ For a Group or a specific Cue, `[-]` with an empty applicable source deletes the
 | Delete Group | `[REC] [-] [GRP] <group-number> [ENTER]` with an empty selection, or `[DEL] [GRP] <group-number> [ENTER]` | Delete the Group. Deletion is rejected while a derived Group depends on it. |
 
 To merge fixtures 5 and 6 into Group 3 entirely from the keypad, first click fixture 5 and then fixture 6, without a modifier or value change. Press `[REC]`, `[+]`, `[GRP]`, `[3]`, `[ENTER]`. To overwrite Group 3 with the resolved selection `Group 3 + fixture 5 + fixture 6`, first press `[GRP] [3] [+] [5] [+] [6] [ENTER]`, then press `[REC] [GRP] [3] [ENTER]`.
+
+### Updating existing programming
+
+`[SHIFT] [REC]` arms **UPDATE**. Update reads only actual programmer changes; Highlight, defaults, resolved playback output, and unchanged tracked values are never pulled into storage. The same armed state is shared by the software desk and attached OSC hardware for that desk. While armed, an attached playback button or fader identifies that playback as the Update target and is intercepted before its normal playback action; the main desk opens the same touch-confirmation workflow.
+
+The Record gesture has three mutually exclusive Update forms:
+
+| Gesture | Result |
+| --- | --- |
+| Short `[SHIFT] [REC]` | Arm Update and wait for a target. |
+| While Shift remains held, press `[REC]` a second time | Open **Update Update**, the eligible-target menu. |
+| Hold `[SHIFT] [REC]` for 650 ms | Open **Update Settings** without arming or applying an Update. |
+
+After arming Update, touch an existing Cuelist, assigned playback, Preset, or Group. Touch normally opens a preview that identifies the concrete target, current Cue when applicable, eligible changes, ignored changes, and the storage location. **Cancel** disarms Update and writes nothing. **Show Update modal on touch** can be disabled in Update Settings; touch then applies the configured default directly. Completing an address with `[ENT]` always applies that default directly.
+
+For a playback target, `[UPDATE] [SET] <playback-number> [ENT]` addresses the slot on this desk's current page. `[UPDATE] [SET] <page> [ . ] <playback-number> [ENT]` pins the explicit page. Append `[CUE] <Cue-number>` to address a particular Cue. Changing the desk page changes only the current-page form; an explicit-page address remains pinned.
+
+Cue targets offer exactly these modes:
+
+| Mode | Result |
+| --- | --- |
+| **Existing Only** | Update eligible fixture/attribute values at the Cue events currently supplying the tracked values. New addresses are ignored. |
+| **Existing in Current Cue** | Update only exact addresses already stored in the current Cue. |
+| **Add to Current Cue** | Write eligible addresses that exist somewhere in the Cuelist into the current Cue. This is the initial default. |
+| **Add New** | Merge all applicable programmer addresses into the current Cue, including addresses new to the Cuelist. |
+
+Preset and Group targets offer **Update Existing** and **Add New**. Preset eligibility is per exact fixture/attribute address. For a Group, existing-only retains its ordered membership and does not introduce a fixture; add-new appends selected fixtures according to normal ordered Group Merge behavior without implicit removal or reordering.
+
+**Update Update** initially shows **Eligible for Update Existing**. Switch to **Show All Active** to include active targets that would otherwise be no-ops and choose Update Existing or Add New per target. Distinct playbacks keep their concrete current-Cue context even when they share one Cuelist. No-op rows cannot report success.
+
+Update Settings stores desk workflow preferences, not show programming. It controls the Cue, Preset, and Group defaults and whether touch opens the modal. A confirmed Update performs one revision-checked show mutation, retains the programmer like Record, and reports the changed object, changed Cue/source events, ignored values, and new revision. A preview also fingerprints the exact programmer contents and live playback/current-Cue context it displayed; changing either before confirmation rejects the stale operation and writes nothing. The single resulting object revision is one Undo step. Missing, ambiguous, stale, or empty targets fail atomically.
 
 ### Cuelists, Cues, and playbacks
 

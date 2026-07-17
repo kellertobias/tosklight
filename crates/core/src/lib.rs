@@ -48,6 +48,213 @@ pub enum AttributeClass {
     Custom,
 }
 
+/// Canonical metadata shared by fixture profiles and programmer surfaces.  The stable `id` is
+/// what is persisted; labels and default units may evolve without rewriting show data.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub struct AttributeDescriptor {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub family: AttributeClass,
+    pub value_type: AttributeValueType,
+    pub default_unit: Option<&'static str>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AttributeValueType {
+    Continuous,
+    Color,
+    Indexed,
+    Control,
+}
+
+/// Built-in attribute registry. Custom attributes remain valid and use their persisted identifier
+/// as the operator label until a desk extension supplies richer metadata.
+pub const ATTRIBUTE_REGISTRY: &[AttributeDescriptor] = &[
+    AttributeDescriptor {
+        id: "intensity",
+        label: "Intensity",
+        family: AttributeClass::Intensity,
+        value_type: AttributeValueType::Continuous,
+        default_unit: Some("percent"),
+    },
+    AttributeDescriptor {
+        id: "color",
+        label: "Color",
+        family: AttributeClass::Color,
+        value_type: AttributeValueType::Color,
+        default_unit: None,
+    },
+    AttributeDescriptor {
+        id: "color.red",
+        label: "Red",
+        family: AttributeClass::Color,
+        value_type: AttributeValueType::Continuous,
+        default_unit: Some("percent"),
+    },
+    AttributeDescriptor {
+        id: "color.green",
+        label: "Green",
+        family: AttributeClass::Color,
+        value_type: AttributeValueType::Continuous,
+        default_unit: Some("percent"),
+    },
+    AttributeDescriptor {
+        id: "color.blue",
+        label: "Blue",
+        family: AttributeClass::Color,
+        value_type: AttributeValueType::Continuous,
+        default_unit: Some("percent"),
+    },
+    AttributeDescriptor {
+        id: "color.cyan",
+        label: "Cyan",
+        family: AttributeClass::Color,
+        value_type: AttributeValueType::Continuous,
+        default_unit: Some("percent"),
+    },
+    AttributeDescriptor {
+        id: "color.magenta",
+        label: "Magenta",
+        family: AttributeClass::Color,
+        value_type: AttributeValueType::Continuous,
+        default_unit: Some("percent"),
+    },
+    AttributeDescriptor {
+        id: "color.yellow",
+        label: "Yellow",
+        family: AttributeClass::Color,
+        value_type: AttributeValueType::Continuous,
+        default_unit: Some("percent"),
+    },
+    AttributeDescriptor {
+        id: "color.amber",
+        label: "Amber",
+        family: AttributeClass::Color,
+        value_type: AttributeValueType::Continuous,
+        default_unit: Some("percent"),
+    },
+    AttributeDescriptor {
+        id: "color.white",
+        label: "White",
+        family: AttributeClass::Color,
+        value_type: AttributeValueType::Continuous,
+        default_unit: Some("percent"),
+    },
+    AttributeDescriptor {
+        id: "color.uv",
+        label: "UV",
+        family: AttributeClass::Color,
+        value_type: AttributeValueType::Continuous,
+        default_unit: Some("percent"),
+    },
+    AttributeDescriptor {
+        id: "color.wheel.1",
+        label: "Color Wheel 1",
+        family: AttributeClass::Color,
+        value_type: AttributeValueType::Indexed,
+        default_unit: None,
+    },
+    AttributeDescriptor {
+        id: "color.wheel.2",
+        label: "Color Wheel 2",
+        family: AttributeClass::Color,
+        value_type: AttributeValueType::Indexed,
+        default_unit: None,
+    },
+    AttributeDescriptor {
+        id: "pan",
+        label: "Pan",
+        family: AttributeClass::Position,
+        value_type: AttributeValueType::Continuous,
+        default_unit: Some("deg"),
+    },
+    AttributeDescriptor {
+        id: "tilt",
+        label: "Tilt",
+        family: AttributeClass::Position,
+        value_type: AttributeValueType::Continuous,
+        default_unit: Some("deg"),
+    },
+    AttributeDescriptor {
+        id: "beam",
+        label: "Beam",
+        family: AttributeClass::Beam,
+        value_type: AttributeValueType::Continuous,
+        default_unit: Some("percent"),
+    },
+    AttributeDescriptor {
+        id: "focus",
+        label: "Focus",
+        family: AttributeClass::Focus,
+        value_type: AttributeValueType::Continuous,
+        default_unit: Some("percent"),
+    },
+    AttributeDescriptor {
+        id: "zoom",
+        label: "Zoom",
+        family: AttributeClass::Beam,
+        value_type: AttributeValueType::Continuous,
+        default_unit: Some("deg"),
+    },
+    AttributeDescriptor {
+        id: "iris",
+        label: "Iris",
+        family: AttributeClass::Beam,
+        value_type: AttributeValueType::Continuous,
+        default_unit: Some("percent"),
+    },
+    AttributeDescriptor {
+        id: "gobo.1",
+        label: "Gobo 1",
+        family: AttributeClass::Beam,
+        value_type: AttributeValueType::Indexed,
+        default_unit: None,
+    },
+    AttributeDescriptor {
+        id: "gobo.2",
+        label: "Gobo 2",
+        family: AttributeClass::Beam,
+        value_type: AttributeValueType::Indexed,
+        default_unit: None,
+    },
+    AttributeDescriptor {
+        id: "shutter",
+        label: "Shutter",
+        family: AttributeClass::Beam,
+        value_type: AttributeValueType::Indexed,
+        default_unit: None,
+    },
+    AttributeDescriptor {
+        id: "strobe",
+        label: "Strobe",
+        family: AttributeClass::Beam,
+        value_type: AttributeValueType::Continuous,
+        default_unit: Some("hz"),
+    },
+    AttributeDescriptor {
+        id: "control",
+        label: "Control",
+        family: AttributeClass::Control,
+        value_type: AttributeValueType::Control,
+        default_unit: None,
+    },
+];
+
+pub fn attribute_descriptor(key: &AttributeKey) -> AttributeDescriptor {
+    ATTRIBUTE_REGISTRY
+        .iter()
+        .copied()
+        .find(|descriptor| descriptor.id == key.0)
+        .unwrap_or(AttributeDescriptor {
+            id: "custom",
+            label: "Custom",
+            family: AttributeClass::Custom,
+            value_type: AttributeValueType::Continuous,
+            default_unit: None,
+        })
+}
+
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct AttributeKey(pub String);
@@ -84,6 +291,9 @@ pub enum AttributeValue {
     Discrete(String),
     ColorXyz(Xyz),
     RawDmx(u8),
+    /// Resolution-independent raw channel value used by schema-v2 fixture profiles. The fixture
+    /// channel clamps this to its configured 8/16/24/32-bit range at render time.
+    RawDmxExact(u32),
 }
 
 impl AttributeValue {

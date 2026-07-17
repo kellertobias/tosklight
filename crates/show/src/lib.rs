@@ -9,7 +9,7 @@ use std::path::Path;
 use thiserror::Error;
 use uuid::Uuid;
 
-const DESK_SCHEMA_VERSION: i64 = 6;
+const DESK_SCHEMA_VERSION: i64 = 7;
 const SHOW_SCHEMA_VERSION: i64 = 3;
 
 #[derive(Debug, Error)]
@@ -71,6 +71,17 @@ pub struct ShowEntry {
     pub path: String,
     pub revision: Revision,
     pub updated_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision_copy: Option<RevisionCopySource>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct RevisionCopySource {
+    pub show_id: ShowId,
+    pub show_name: String,
+    pub revision: Revision,
+    pub revision_name: String,
+    pub copied_at: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -507,7 +518,9 @@ impl DeskStore {
     }
 
     pub fn library(&self) -> Result<Vec<ShowEntry>, StoreError> {
-        let mut statement = self.conn.prepare("SELECT id,name,path,revision,updated_at FROM show_library ORDER BY name COLLATE NOCASE")?;
+        let mut statement = self.conn.prepare(
+            "SELECT id,name,path,revision,updated_at,revision_source_show_id,revision_source_show_name,revision_source_revision,revision_source_name,revision_copy_created_at FROM show_library ORDER BY name COLLATE NOCASE",
+        )?;
         let rows = statement.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
@@ -515,16 +528,53 @@ impl DeskStore {
                 row.get::<_, String>(2)?,
                 row.get::<_, i64>(3)?,
                 row.get::<_, String>(4)?,
+                row.get::<_, Option<String>>(5)?,
+                row.get::<_, Option<String>>(6)?,
+                row.get::<_, Option<i64>>(7)?,
+                row.get::<_, Option<String>>(8)?,
+                row.get::<_, Option<String>>(9)?,
             ))
         })?;
         rows.map(|row| {
-            let (id, name, path, revision, updated_at) = row?;
+            let (
+                id,
+                name,
+                path,
+                revision,
+                updated_at,
+                source_show_id,
+                source_show_name,
+                source_revision,
+                source_revision_name,
+                copied_at,
+            ) = row?;
+            let revision_copy = match source_show_id {
+                None => None,
+                Some(source_show_id) => Some(RevisionCopySource {
+                    show_id: ShowId(Uuid::parse_str(&source_show_id)?),
+                    show_name: source_show_name.ok_or_else(|| {
+                        StoreError::Invalid("revision copy is missing its source show name".into())
+                    })?,
+                    revision: source_revision.ok_or_else(|| {
+                        StoreError::Invalid("revision copy is missing its source revision".into())
+                    })? as u64,
+                    revision_name: source_revision_name.ok_or_else(|| {
+                        StoreError::Invalid(
+                            "revision copy is missing its source revision name".into(),
+                        )
+                    })?,
+                    copied_at: copied_at.ok_or_else(|| {
+                        StoreError::Invalid("revision copy is missing its creation time".into())
+                    })?,
+                }),
+            };
             Ok(ShowEntry {
                 id: ShowId(Uuid::parse_str(&id)?),
                 name,
                 path,
                 revision: revision as u64,
                 updated_at,
+                revision_copy,
             })
         })
         .collect()
@@ -539,6 +589,16 @@ impl DeskStore {
         name: &str,
         path: &str,
         overwrite: bool,
+    ) -> Result<ShowEntry, StoreError> {
+        self.upsert_show_with_revision_copy(name, path, overwrite, None)
+    }
+
+    pub fn upsert_show_with_revision_copy(
+        &self,
+        name: &str,
+        path: &str,
+        overwrite: bool,
+        revision_copy: Option<&RevisionCopySource>,
     ) -> Result<ShowEntry, StoreError> {
         let existing = self
             .conn
@@ -562,9 +622,34 @@ impl DeskStore {
             ShowId(Uuid::parse_str(&id)?)
         } else {
             let id = ShowId::new();
-            self.conn.execute("INSERT INTO show_library (id,name,path,revision,updated_at) VALUES (?1,?2,?3,1,?4)", params![id.0.to_string(), name, path, now])?;
+            self.conn.execute(
+                "INSERT INTO show_library (id,name,path,revision,updated_at,revision_source_show_id,revision_source_show_name,revision_source_revision,revision_source_name,revision_copy_created_at) VALUES (?1,?2,?3,1,?4,?5,?6,?7,?8,?9)",
+                params![
+                    id.0.to_string(),
+                    name,
+                    path,
+                    now,
+                    revision_copy.map(|source| source.show_id.0.to_string()),
+                    revision_copy.map(|source| source.show_name.as_str()),
+                    revision_copy.map(|source| source.revision as i64),
+                    revision_copy.map(|source| source.revision_name.as_str()),
+                    revision_copy.map(|source| source.copied_at.as_str()),
+                ],
+            )?;
             id
         };
+        self.show(id)?
+            .ok_or_else(|| StoreError::Invalid("show index update failed".into()))
+    }
+
+    pub fn mark_show_updated(&self, id: ShowId) -> Result<ShowEntry, StoreError> {
+        if self.conn.execute(
+            "UPDATE show_library SET revision=revision+1,updated_at=?1 WHERE id=?2",
+            params![Utc::now().to_rfc3339(), id.0.to_string()],
+        )? != 1
+        {
+            return Err(StoreError::Invalid("show does not exist".into()));
+        }
         self.show(id)?
             .ok_or_else(|| StoreError::Invalid("show index update failed".into()))
     }
@@ -784,6 +869,71 @@ impl ShowStore {
             .map_err(Into::into)
     }
 
+    pub fn set_identity(
+        &self,
+        id: ShowId,
+        name: &str,
+        revision_copy: Option<&RevisionCopySource>,
+    ) -> Result<(), StoreError> {
+        let transaction = self.conn.unchecked_transaction()?;
+        transaction.execute(
+            "INSERT INTO metadata(key,value) VALUES('show_id',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            [id.0.to_string()],
+        )?;
+        transaction.execute(
+            "INSERT INTO metadata(key,value) VALUES('name',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            [name],
+        )?;
+        transaction.execute(
+            "DELETE FROM metadata WHERE key IN ('revision_source_show_id','revision_source_show_name','revision_source_revision','revision_source_name','revision_copy_created_at')",
+            [],
+        )?;
+        if let Some(source) = revision_copy {
+            for (key, value) in [
+                ("revision_source_show_id", source.show_id.0.to_string()),
+                ("revision_source_show_name", source.show_name.clone()),
+                ("revision_source_revision", source.revision.to_string()),
+                ("revision_source_name", source.revision_name.clone()),
+                ("revision_copy_created_at", source.copied_at.clone()),
+            ] {
+                transaction.execute(
+                    "INSERT INTO metadata(key,value) VALUES(?1,?2)",
+                    params![key, value],
+                )?;
+            }
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
+    pub fn revision_copy_source(&self) -> Result<Option<RevisionCopySource>, StoreError> {
+        let value = |key: &str| -> Result<Option<String>, StoreError> {
+            self.conn
+                .query_row("SELECT value FROM metadata WHERE key=?1", [key], |row| {
+                    row.get(0)
+                })
+                .optional()
+                .map_err(Into::into)
+        };
+        let Some(show_id) = value("revision_source_show_id")? else {
+            return Ok(None);
+        };
+        let required = |key: &str| -> Result<String, StoreError> {
+            value(key)?.ok_or_else(|| {
+                StoreError::Invalid(format!("revision copy metadata is missing {key}"))
+            })
+        };
+        Ok(Some(RevisionCopySource {
+            show_id: ShowId(Uuid::parse_str(&show_id)?),
+            show_name: required("revision_source_show_name")?,
+            revision: required("revision_source_revision")?.parse().map_err(|_| {
+                StoreError::Invalid("revision copy source revision is invalid".into())
+            })?,
+            revision_name: required("revision_source_name")?,
+            copied_at: required("revision_copy_created_at")?,
+        }))
+    }
+
     pub fn put_object(
         &self,
         kind: &str,
@@ -988,7 +1138,7 @@ fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
     let tx = conn.transaction()?;
     tx.execute_batch(r#"CREATE TABLE IF NOT EXISTS schema_info(version INTEGER NOT NULL); INSERT INTO schema_info(version) SELECT 0 WHERE NOT EXISTS(SELECT 1 FROM schema_info);
       CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,name TEXT NOT NULL UNIQUE COLLATE NOCASE,enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN(0,1)));
-      CREATE TABLE IF NOT EXISTS show_library(id TEXT PRIMARY KEY,name TEXT NOT NULL UNIQUE COLLATE NOCASE,path TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS show_library(id TEXT PRIMARY KEY,name TEXT NOT NULL UNIQUE COLLATE NOCASE,path TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL,revision_source_show_id TEXT,revision_source_show_name TEXT,revision_source_revision INTEGER,revision_source_name TEXT,revision_copy_created_at TEXT);
       CREATE TABLE IF NOT EXISTS show_revisions(show_id TEXT NOT NULL,revision INTEGER NOT NULL,name TEXT NOT NULL,path TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(show_id,revision),FOREIGN KEY(show_id) REFERENCES show_library(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS control_desks(id TEXT PRIMARY KEY,name TEXT NOT NULL,osc_alias TEXT NOT NULL UNIQUE COLLATE NOCASE,columns_count INTEGER NOT NULL DEFAULT 8,rows_count INTEGER NOT NULL DEFAULT 1,buttons_count INTEGER NOT NULL DEFAULT 3);
@@ -997,6 +1147,36 @@ fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
       CREATE TABLE IF NOT EXISTS screens(id TEXT PRIMARY KEY,name TEXT NOT NULL,layout_json TEXT NOT NULL DEFAULT '{"desks":[],"activeDeskId":""}',show_dock INTEGER NOT NULL DEFAULT 1,show_playbacks INTEGER NOT NULL DEFAULT 1,playback_count INTEGER NOT NULL DEFAULT 8,playback_rows INTEGER NOT NULL DEFAULT 1,first_playback_slot INTEGER NOT NULL DEFAULT 1,page_mode TEXT NOT NULL DEFAULT 'follow_main',show_page_controls INTEGER NOT NULL DEFAULT 1,desired_open INTEGER NOT NULL DEFAULT 0,display_id TEXT,bounds_json TEXT,fullscreen INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS screen_pages(screen_id TEXT NOT NULL,show_id TEXT NOT NULL,page INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(screen_id,show_id),FOREIGN KEY(screen_id) REFERENCES screens(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,token TEXT NOT NULL,programmer_json TEXT NOT NULL,connected INTEGER NOT NULL CHECK(connected IN(0,1)),updated_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id));"#)?;
+    add_column_if_missing(
+        &tx,
+        "show_library",
+        "revision_source_show_id",
+        "revision_source_show_id TEXT",
+    )?;
+    add_column_if_missing(
+        &tx,
+        "show_library",
+        "revision_source_show_name",
+        "revision_source_show_name TEXT",
+    )?;
+    add_column_if_missing(
+        &tx,
+        "show_library",
+        "revision_source_revision",
+        "revision_source_revision INTEGER",
+    )?;
+    add_column_if_missing(
+        &tx,
+        "show_library",
+        "revision_source_name",
+        "revision_source_name TEXT",
+    )?;
+    add_column_if_missing(
+        &tx,
+        "show_library",
+        "revision_copy_created_at",
+        "revision_copy_created_at TEXT",
+    )?;
     set_schema_version(&tx, DESK_SCHEMA_VERSION)?;
     tx.commit()?;
     Ok(())
@@ -1018,6 +1198,25 @@ fn migrate_show(conn: &mut Connection) -> Result<(), StoreError> {
 
 fn set_schema_version(tx: &Transaction<'_>, version: i64) -> Result<(), rusqlite::Error> {
     tx.execute("UPDATE schema_info SET version=?1", [version])?;
+    Ok(())
+}
+
+fn add_column_if_missing(
+    tx: &Transaction<'_>,
+    table: &str,
+    column: &str,
+    definition: &str,
+) -> Result<(), rusqlite::Error> {
+    let mut statement = tx.prepare(&format!("PRAGMA table_info({table})"))?;
+    let mut rows = statement.query([])?;
+    while let Some(row) = rows.next()? {
+        if row.get::<_, String>(1)? == column {
+            return Ok(());
+        }
+    }
+    drop(rows);
+    drop(statement);
+    tx.execute_batch(&format!("ALTER TABLE {table} ADD COLUMN {definition}"))?;
     Ok(())
 }
 
@@ -1174,6 +1373,94 @@ mod tests {
             desk.show_revision(show_id, 1).unwrap().unwrap().name,
             "Before experiments"
         );
+        drop(desk);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn revision_copy_provenance_survives_reopen_and_source_deletion() {
+        let desk_path = temporary("revision-copy-desk");
+        let source_path = temporary("revision-copy-source");
+        let copy_path = temporary("revision-copy-file");
+        let expected = {
+            let desk = DeskStore::open(&desk_path).unwrap();
+            let source = desk
+                .upsert_show("Tour", source_path.to_str().unwrap(), false)
+                .unwrap();
+            let provenance = RevisionCopySource {
+                show_id: source.id,
+                show_name: source.name.clone(),
+                revision: 4,
+                revision_name: "Before focus rewrite".into(),
+                copied_at: "2026-07-17T10:30:00Z".into(),
+            };
+            let copy = desk
+                .upsert_show_with_revision_copy(
+                    "Tour-rev-4-2026-07-17",
+                    copy_path.to_str().unwrap(),
+                    false,
+                    Some(&provenance),
+                )
+                .unwrap();
+            assert_eq!(copy.revision_copy.as_ref(), Some(&provenance));
+            assert!(desk.remove_show(source.id).unwrap());
+            provenance
+        };
+        let desk = DeskStore::open(&desk_path).unwrap();
+        let copy = desk.library().unwrap().remove(0);
+        assert_eq!(copy.revision_copy, Some(expected));
+        drop(desk);
+        let _ = fs::remove_file(desk_path);
+    }
+
+    #[test]
+    fn revision_copy_metadata_is_portable_with_the_show_file() {
+        let path = temporary("revision-copy-metadata");
+        let (store, copy_id) = ShowStore::create(&path, "Copy").unwrap();
+        let source = RevisionCopySource {
+            show_id: ShowId::new(),
+            show_name: "Original".into(),
+            revision: 2,
+            revision_name: "Approved plot".into(),
+            copied_at: "2026-07-17T11:00:00Z".into(),
+        };
+        store.set_identity(copy_id, "Copy", Some(&source)).unwrap();
+        drop(store);
+        let reopened = ShowStore::open(&path).unwrap();
+        assert_eq!(reopened.revision_copy_source().unwrap(), Some(source));
+        drop(reopened);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn desk_schema_six_migrates_existing_shows_without_copy_provenance() {
+        let path = temporary("legacy-desk-revision-copy");
+        let show_id = ShowId::new();
+        {
+            let connection = Connection::open(&path).unwrap();
+            connection
+                .execute_batch(
+                    "CREATE TABLE schema_info(version INTEGER NOT NULL);
+                     INSERT INTO schema_info(version) VALUES(6);
+                     CREATE TABLE show_library(id TEXT PRIMARY KEY,name TEXT NOT NULL UNIQUE COLLATE NOCASE,path TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL);",
+                )
+                .unwrap();
+            connection
+                .execute(
+                    "INSERT INTO show_library(id,name,path,revision,updated_at) VALUES(?1,'Legacy','legacy.show',3,'2025-01-01T00:00:00Z')",
+                    [show_id.0.to_string()],
+                )
+                .unwrap();
+        }
+        let desk = DeskStore::open(&path).unwrap();
+        let legacy = desk.show(show_id).unwrap().unwrap();
+        assert_eq!(legacy.name, "Legacy");
+        assert!(legacy.revision_copy.is_none());
+        let version: i64 = desk
+            .conn
+            .query_row("SELECT version FROM schema_info", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, DESK_SCHEMA_VERSION);
         drop(desk);
         let _ = fs::remove_file(path);
     }

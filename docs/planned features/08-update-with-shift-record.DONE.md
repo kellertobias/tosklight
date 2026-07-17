@@ -2,11 +2,9 @@
 
 ## Status and scope
 
-This is a planned feature. **Update** is a keyword and a storage workflow for applying the current programmer contents to an existing recordable object. Its shortcut is `[SHIFT] [REC]`.
+**Implementation status: Complete.** **Update** is implemented as a keyword and storage workflow for applying the current programmer contents to an existing recordable object. Its shortcut is `[SHIFT] [REC]`. The four Cue modes, Preset and ordered Group modes, target preview and context validation, touch/Enter paths, Update Update, desk-scoped settings, software/OSC/hardware gestures and feedback, atomic undo behavior, help, and focused/paired acceptance coverage are implemented.
 
 Update is closely related to Record: anything that can be recorded can also be an Update target. It must reuse each target's normal persisted storage model and revision checks rather than create a separate kind of update data. Unlike Record, Update normally asks how the programmer contents should be applied to the existing target.
-
-Do not add executable acceptance or Playwright coverage until the supported recordable objects and their final storage and merge semantics are complete. Until Update is implemented, recording into an existing target with Merge remains the closest available workflow, but it is not a complete substitute for the tracked-source modes defined here.
 
 ## Core example
 

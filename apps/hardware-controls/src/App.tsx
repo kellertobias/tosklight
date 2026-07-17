@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
+import { numericPadLayout, oscProgrammerActionForKey, softwareKeyLabel, type NumericPadSection, type SoftwareKey } from "../../shared/programmerKeypad";
 import { feedbackPagePlaybackOffset, oscPaths } from "./oscPaths";
 
 type Blink = "off" | "on" | "slow" | "medium" | "fast";
@@ -13,12 +14,12 @@ function arg(value: unknown) {
   return value;
 }
 
-function ControlButton({ label, lamp = dark, onDown, onUp, className = "" }: { label: string; lamp?: Lamp; onDown: () => void; onUp: () => void; className?: string }) {
+function ControlButton({ label, lamp = dark, onDown, onUp, className = "", style, keypadKey }: { label: string; lamp?: Lamp; onDown: () => void; onUp: () => void; className?: string; style?: React.CSSProperties; keypadKey?: SoftwareKey }) {
   const timer = useRef<number | undefined>(undefined);
   const [long, setLong] = useState(false);
   const [pressed, setPressed] = useState(false);
   const release = () => { clearTimeout(timer.current); onUp(); window.setTimeout(() => setPressed(false), 90); };
-  return <button className={`control-button ${lamp.state} ${lamp.state === "on" && lamp.bpm ? "beat" : ""} ${pressed ? "local-pressed" : ""} ${className}`} style={{ "--lamp": lamp.color, "--bpm": lamp.bpm ?? 60 } as React.CSSProperties}
+  return <button className={`control-button ${lamp.state} ${lamp.state === "on" && lamp.bpm ? "beat" : ""} ${pressed ? "local-pressed" : ""} ${className}`} data-keypad-key={keypadKey} style={{ ...style, "--lamp": lamp.color, "--bpm": lamp.bpm ?? 60 } as React.CSSProperties}
     onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); setPressed(true); setLong(false); timer.current = window.setTimeout(() => setLong(true), 650); onDown(); }}
     onPointerUp={release} onPointerCancel={release}>
     <span>{label}</span>{long && <i>LONG</i>}
@@ -74,9 +75,22 @@ export function App() {
   const [host, setHost] = useState(saved.host ?? "127.0.0.1"), [port, setPort] = useState(saved.port ?? 9000), [desk, setDesk] = useState(saved.desk ?? "main");
   const [connected, setConnected] = useState(false), [tab, setTab] = useState<"console" | "grid" | "settings">("console"), [top, setTop] = useState(saved.top ?? true), [page, setPage] = useState(1);
   const [levels, setLevels] = useState<Record<number, number>>({}), [lamps, setLamps] = useState<Record<string, Lamp>>({}), [speedBpms, setSpeedBpms] = useState<Record<number, number>>({});
+  const [highlight, setHighlight] = useState({ active: false, index: 0, total: 0, fixture: "No fixture", canNext: false, canPrevious: false });
+  const [updateArmed, setUpdateArmed] = useState(false);
   useEffect(() => { const off = listen<Feedback>("osc-feedback", ({ payload }) => {
     setConnected(true); const parts = payload.address.split("/"), args = payload.arguments.map(arg);
     if (payload.address.endsWith("/feedback/page")) setPage(Number(args[0]));
+    if (payload.address.endsWith("/feedback/update/armed")) setUpdateArmed(Boolean(args[0]));
+    const highlightOffset = parts.indexOf("highlight");
+    if (highlightOffset >= 0 && parts[highlightOffset - 1] === "feedback") {
+      const field = parts[highlightOffset + 1];
+      if (field === "active") { const active = Boolean(args[0]); setHighlight((current) => ({ ...current, active })); setLamps((current) => ({ ...current, highlight: { color: active ? "#ffef76" : "#576069", state: active ? "on" : "off" } })); }
+      if (field === "index") setHighlight((current) => ({ ...current, index: Number(args[0]) }));
+      if (field === "total") setHighlight((current) => ({ ...current, total: Number(args[0]) }));
+      if (field === "can-next") setHighlight((current) => ({ ...current, canNext: Boolean(args[0]) }));
+      if (field === "can-previous") setHighlight((current) => ({ ...current, canPrevious: Boolean(args[0]) }));
+      if (field === "fixture" && parts[highlightOffset + 2] === "name") setHighlight((current) => ({ ...current, fixture: String(args[0] || "No fixture") }));
+    }
     const speedOffset = parts.indexOf("speed-group");
     if (speedOffset >= 0) { const number = Number(parts[speedOffset + 1]), bpm = Number(args[0]), state: Blink = args[4] === "off" ? "off" : "on"; const color = `rgb(${Math.round(Number(args[1]) * 255)} ${Math.round(Number(args[2]) * 255)} ${Math.round(Number(args[3]) * 255)})`; setSpeedBpms((current) => ({ ...current, [number]: bpm })); setLamps((current) => ({ ...current, [`speed/${number}`]: { color, state, bpm } })); }
     const offset = feedbackPagePlaybackOffset(parts); if (offset < 0) return; const slot = Number(parts[offset + 1]);
@@ -87,18 +101,49 @@ export function App() {
   useEffect(() => { void connect(); }, []);
   const send = (path: string, args: unknown[]) => void invoke("send_control", { path, args });
   const action = (name: string, down: boolean) => send(oscPaths.programmer(name), [down]);
+  const highlightAction = (name: Parameters<typeof oscPaths.highlight>[0], down: boolean) => send(oscPaths.highlight(name), [down]);
   const key = (label: string, className = "", actionName = label.toLowerCase()) => <ControlButton className={`key-${actionName === "." ? "dot" : actionName} ${className}`} label={label} onDown={() => action(actionName, true)} onUp={() => action(actionName, false)}/>;
-  const speedGroups = <section className="speed-groups"><h2>Speed groups</h2>{[1, 2, 3, 4, 5].map((number) => <div className="encoder" key={number}><ControlButton label={`SPEED ${number}`} lamp={lamps[`speed/${number}`]} onDown={() => send(oscPaths.speedGroupButton(number), [true])} onUp={() => send(oscPaths.speedGroupButton(number), [false])}/><WheelSafeRange aria-label={`Speed group ${number}, ${speedBpms[number] ?? 120} BPM`} min="1" max="999" value={speedBpms[number] ?? 120} onChange={(event) => send(oscPaths.speedGroupEncoder(number), [Number(event.target.value)])}/></div>)}</section>;
+  const renderKeypadSection = (section: NumericPadSection) => numericPadLayout
+    .filter((item) => item.section === section)
+    .map(({ key: keypadKey, column, row, rowSpan = 1 }) => {
+      const sectionColumn = section === "commands" ? column : column - 3;
+      const displayRow = row + 1;
+      const actionName = oscProgrammerActionForKey(keypadKey);
+      return <ControlButton
+        key={keypadKey}
+        keypadKey={keypadKey}
+        className={`key-${actionName} ${keypadKey === "ENT" ? "key-enter" : ""}`}
+        label={softwareKeyLabel(keypadKey)}
+        style={{ gridColumn: sectionColumn, gridRow: `${displayRow} / span ${rowSpan}` }}
+        onDown={() => action(actionName, true)}
+        onUp={() => action(actionName, false)}
+      />;
+    });
+  const speedGroups = <section className="speed-groups"><h2>Speed groups</h2>{[1, 2, 3, 4, 5].map((number) => {
+    const bpm = speedBpms[number] ?? 120;
+    return <div className="encoder" key={number}><ControlButton label={`SPEED ${number}`} lamp={lamps[`speed/${number}`]} onDown={() => send(oscPaths.speedGroupButton(number), [true])} onUp={() => send(oscPaths.speedGroupButton(number), [false])}/><TouchFader className="speed-touch-fader" label="RATE" value={(bpm - 1) / 998} display={`${bpm} BPM`} onChange={(value) => send(oscPaths.speedGroupEncoder(number), [Math.round(1 + value * 998)])}/></div>;
+  })}</section>;
 
-  return <main><header><h1>ToskLight <span>Hardware Controls</span></h1><i className={connected ? "connected" : ""}>{connected ? `● Connected · page ${page}` : "○ Connecting…"}</i></header>
+  return <main className={updateArmed ? "update-armed" : ""}><header><h1>ToskLight <span>Hardware Controls</span></h1>{updateArmed && <strong className="hardware-update-state" role="status">UPDATE ARMED · touch an assigned playback</strong>}<i className={connected ? "connected" : ""}>{connected ? `● Connected · page ${page}` : "○ Connecting…"}</i></header>
     <nav><button className={tab === "console" ? "active" : ""} onClick={() => setTab("console")}>Playback Console</button><button className={tab === "grid" ? "active" : ""} onClick={() => setTab("grid")}>Button Grid 41–90</button><button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}>Settings</button>{tab === "console" && <label><input type="checkbox" checked={top} onChange={(event) => { setTop(event.target.checked); localStorage.setItem("tosklight.hardware", JSON.stringify({ host, port: Number(port), desk, top: event.target.checked })); }}/> Show 21–40</label>}</nav>
     {tab === "console" ? <section className="console-layout">
-      <aside className="left-rail">{key("ESCAPE")}{key("MENU")}{key("PROG-PLAYBACK")}{key("PRELOAD")}<span className="button-spacer"/><button onClick={() => send(oscPaths.page, [Math.max(1, page - 1)])}>PAGE UP</button><strong>{page}</strong><button onClick={() => send(oscPaths.page, [page + 1])}>PAGE DOWN</button></aside>
+      <aside className="left-rail">{key("ESCAPE")}{key("MENU")}{key("PROG-PLAYBACK")}<span className="button-spacer"/><ControlButton className="key-align" label="ALIGN" onDown={() => undefined} onUp={() => undefined}/><span className="button-spacer"/><button onClick={() => send(oscPaths.page, [Math.max(1, page - 1)])}>PAGE UP</button><strong>{page}</strong><button onClick={() => send(oscPaths.page, [page + 1])}>PAGE DOWN</button></aside>
       <section className={`playback-surface ${top ? "with-top-row" : "without-top-row"}`}><div className="encoder-row">{Array.from({ length: 6 }, (_, index) => <EncoderEmulation key={index} number={index + 1} send={send}/>)}<EncoderEmulation number={7} nav send={send}/></div><div className="top-row">{Array.from({ length: 20 }, (_, index) => index + 21).map((slot) => <ControlButton key={slot} label={String(slot)} lamp={lamps[`${slot}/1`]} onDown={() => send(`${oscPaths.pagePlayback(slot)}/button/1`, [true])} onUp={() => send(`${oscPaths.pagePlayback(slot)}/button/1`, [false])}/>)}</div>
         <div className="playback-bank">{Array.from({ length: 20 }, (_, index) => index + 1).map((slot) => <Playback key={slot} slot={slot} levels={levels} lamps={lamps} send={send}/>)}</div>
       </section>
-      <aside className="programmer-panel"><div className="record-clear">{key("RECORD")}{key("CLEAR")}{key("UNDO")}</div><div className="edit-actions">{key("DEL")}{key("CPY")}{key("MOV")}</div><div className="keypad">
-        {key("GRP")}{key("SET")}{key("DIV")}{key("+", "", "plus")}{key("7")}{key("8")}{key("9")}{key("THRU")}{key("4")}{key("5")}{key("6")}{key("AT")}{key("1")}{key("2")}{key("3")}{key("ENTER", "enter-double")}{key(".")}{key("0")}{key("⌫", "", "backspace")}
+      <aside className="programmer-panel"><div className="hardware-number-block">
+        <div className="hardware-keypad-section hardware-keypad-command-section">
+          <ControlButton className="key-record" label={updateArmed ? "UPDATE" : "RECORD"} lamp={updateArmed ? { color: "#f4b942", state: "on" } : dark} style={{ gridColumn: 1, gridRow: 1 }} onDown={() => action("record", true)} onUp={() => action("record", false)}/>
+          <ControlButton className="key-preload-go" label="PRELOAD GO" style={{ gridColumn: 2, gridRow: 1 }} onDown={() => action("preload", true)} onUp={() => action("preload", false)}/>
+          {renderKeypadSection("commands")}
+        </div>
+        <div className="hardware-keypad-section hardware-keypad-number-section">
+          <ControlButton className="highlight-key highlight-high" label="HIGH" lamp={lamps.highlight} style={{ gridColumn: 1, gridRow: 1 }} onDown={() => highlightAction("toggle", true)} onUp={() => highlightAction("toggle", false)}/>
+          <ControlButton className="highlight-key" label="PREV" lamp={highlight.canPrevious ? { color: "#68b9c7", state: "on" } : dark} style={{ gridColumn: 2, gridRow: 1 }} onDown={() => highlightAction("previous", true)} onUp={() => highlightAction("previous", false)}/>
+          <ControlButton className="highlight-key" label="NEXT" lamp={highlight.canNext ? { color: "#68b9c7", state: "on" } : dark} style={{ gridColumn: 3, gridRow: 1 }} onDown={() => highlightAction("next", true)} onUp={() => highlightAction("next", false)}/>
+          <ControlButton className="highlight-key" label="ALL" style={{ gridColumn: 4, gridRow: 1 }} onDown={() => highlightAction("capture", true)} onUp={() => highlightAction("capture", false)}/>
+          {renderKeypadSection("numbers")}
+        </div>
       </div><div className="fade-times"><TimeFader label="Prog Fade" path="programmer/prog-fade" maximum={20} send={send}/><TimeFader label="Cue Fade" path="programmer/cue-fade" maximum={60} send={send}/></div></aside>
     </section> : tab === "grid" ? <section className="grid-layout"><div className="button-grid">{Array.from({ length: 50 }, (_, index) => index + 41).map((slot) => <ControlButton key={slot} label={String(slot)} lamp={lamps[`${slot}/1`]} onDown={() => send(`${oscPaths.pagePlayback(slot)}/button/1`, [true])} onUp={() => send(`${oscPaths.pagePlayback(slot)}/button/1`, [false])}/>)}</div><aside className="grid-sidebar"><section className="six"><h2>Playbacks 91–96</h2>{Array.from({ length: 6 }, (_, index) => index + 91).map((slot) => <Playback key={slot} slot={slot} buttons={1} levels={levels} lamps={lamps} send={send}/>)}</section>{speedGroups}</aside></section> : <section className="settings"><h2>OSC connection</h2><p>The controller connects automatically when it starts. Changes are saved for the next launch.</p><label>Server<input value={host} onChange={(event) => setHost(event.target.value)}/></label><label>OSC port<input type="number" value={port} onChange={(event) => setPort(Number(event.target.value))}/></label><label>Desk alias<input value={desk} onChange={(event) => setDesk(event.target.value)}/></label><button onClick={connect}>{connected ? "Save and reconnect" : "Connect"}</button><small>{connected ? `Connected to ${desk} on ${host}:${port}` : `Connecting to ${host}:${port}…`}</small></section>}
   </main>;

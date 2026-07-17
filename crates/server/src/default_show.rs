@@ -137,6 +137,9 @@ fn definition(name: &str, device_type: &str, attributes: &[&str]) -> FixtureDefi
         direct_control_protocols: Vec::new(),
         signal_loss_policy: SignalLossPolicy::HoldLast,
         safe_values: BTreeMap::new(),
+        profile_id: None,
+        mode_id: None,
+        profile_snapshot: None,
     }
 }
 
@@ -244,6 +247,7 @@ fn patched(
         definition: definition.clone(),
         universe: Some(universe),
         address: Some(address),
+        split_patches: Vec::new(),
         layer_id: "default".into(),
         direct_control: None,
         location: FixtureLocation {
@@ -268,6 +272,7 @@ fn patched(
         multipatch: Vec::new(),
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
+        highlight_overrides: BTreeMap::new(),
     }
 }
 
@@ -281,6 +286,7 @@ fn multipatch(name: String, x: f32, y: f32, z: f32, rotation_y: f32) -> MultiPat
         name,
         universe: None,
         address: None,
+        split_patches: Vec::new(),
         location: FixtureLocation {
             x: (x * 1000.0) as i32,
             y: (y * 1000.0) as i32,

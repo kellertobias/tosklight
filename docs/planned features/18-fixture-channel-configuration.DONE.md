@@ -1,5 +1,9 @@
 # Fixture Channel Configuration
 
+## Status
+
+**Implementation status: Complete.** The revisioned schema-v2 profile, shared Create/Edit fixture editor and nested mode editor, modes, heads, splits, channels, exact multi-byte encoding, functions and actions, color systems, geometry, runtime, patching, explicit legacy migration and recovery, help, and focused unit, component, API, and paired Playwright coverage described below are implemented. The operator-visible Fixture Library screenshots, PDF/HTML manual, desktop smoke, and authoritative `./build open` path were verified on 2026-07-17.
+
 Replace the current per-mode fixture definitions and compact channel syntax with a desk-wide, revisioned fixture profile containing generic metadata, ordered modes, heads, independently patchable splits, semantic channels, color systems, control actions, and 3D geometry.
 
 This feature includes the complete persistence, migration, editor, patching, DMX-resolution, programmer-control, generated-preset, and visualization behavior described below. Already-patched shows must remain insulated from later fixture-library revisions.

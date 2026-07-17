@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { AttributeValue, PatchedFixture, VisualizationSnapshot } from "../api/types";
+import type { AttributeValue, FixtureMode, GeometryEmitter, PatchedFixture, Vector3Value, VisualizationSnapshot } from "../api/types";
 import type { StagePosition3d } from "../api/ServerContext";
 import { createBuiltInFixtureModel, movingLightTiltRadians } from "./builtInStageModels";
 
@@ -55,7 +55,7 @@ export function migrateStagePosition(position: { x: number; y: number; rotation:
 
 function valuesByFixture(snapshot: VisualizationSnapshot | null) {
   const result = new Map<string, Map<string, AttributeValue>>();
-  for (const entry of snapshot?.values ?? []) {
+  for (const entry of [...(snapshot?.values ?? []), ...(snapshot?.profile_output_values ?? [])]) {
     const attributes = result.get(entry.fixture_id) ?? new Map<string, AttributeValue>();
     attributes.set(entry.attribute, entry.value);
     result.set(entry.fixture_id, attributes);
@@ -104,6 +104,271 @@ function addSelectionOutline(object: THREE.Object3D) {
   });
 }
 
+function profileMode(fixture: PatchedFixture) {
+  const profile = fixture.definition.profile_snapshot;
+  return profile?.modes.find((mode) => mode.id === fixture.definition.mode_id)
+    ?? profile?.modes.find((mode) => mode.name === fixture.definition.mode)
+    ?? null;
+}
+
+function headOwnerId(fixture: PatchedFixture, mode: FixtureMode, headId: string) {
+  const index = mode.heads.findIndex((head) => head.id === headId);
+  const head = mode.heads[index];
+  if (!head || head.master_shared) return fixture.fixture_id;
+  return fixture.logical_heads.find((candidate) => candidate.head_index === index)?.fixture_id
+    ?? fixture.logical_heads.find((candidate) => candidate.head_index === index + 1)?.fixture_id
+    ?? fixture.fixture_id;
+}
+
+function attributesForHead(fixture: PatchedFixture, mode: FixtureMode, headId: string, byFixture: Map<string, Map<string, AttributeValue>>) {
+  const attributes = new Map(byFixture.get(fixture.fixture_id) ?? []);
+  const owner = headOwnerId(fixture, mode, headId);
+  if (owner !== fixture.fixture_id) for (const [attribute, value] of byFixture.get(owner) ?? []) attributes.set(attribute, value);
+  return attributes;
+}
+
+function channelDefault(mode: FixtureMode, headId: string, attribute: string, fallback: number) {
+  const channel = mode.channels.find((candidate) => candidate.head_id === headId && candidate.attribute === attribute);
+  if (!channel) return fallback;
+  const maximum = { u8: 0xff, u16: 0xffff, u24: 0xffffff, u32: 0xffffffff }[channel.resolution];
+  return channel.default_raw / maximum;
+}
+
+const millimetres = (value: Vector3Value) => new THREE.Vector3(value.x / 1_000, value.y / 1_000, value.z / 1_000);
+
+function layoutOffsets(layout: GeometryEmitter["layout"]) {
+  if (layout.type === "point") return [new THREE.Vector3()];
+  if (layout.type === "ring") return Array.from({ length: layout.count }, (_, index) => {
+    const angle = index / layout.count * Math.PI * 2;
+    return new THREE.Vector3(Math.cos(angle) * layout.radius_millimetres / 1_000, 0, Math.sin(angle) * layout.radius_millimetres / 1_000);
+  });
+  if (layout.type === "strip") return Array.from({ length: layout.count }, (_, index) => new THREE.Vector3((index - (layout.count - 1) / 2) * layout.spacing_millimetres / 1_000, 0, 0));
+  if (layout.type === "explicit_pixels") return layout.positions.map(millimetres);
+  const offsets: THREE.Vector3[] = [];
+  for (let row = 0; row < layout.rows; row++) for (let column = 0; column < layout.columns; column++) offsets.push(new THREE.Vector3(
+    (column - (layout.columns - 1) / 2) * layout.spacing.x / 1_000,
+    (row - (layout.rows - 1) / 2) * layout.spacing.y / 1_000,
+    (row - (layout.rows - 1) / 2) * layout.spacing.z / 1_000,
+  ));
+  return offsets;
+}
+
+function geometryBeam(emitter: GeometryEmitter, attributes: Map<string, AttributeValue>, intensity: number, color: THREE.Color) {
+  const distance = 7;
+  const zoom = normalized(attributes.get("beam.zoom") ?? attributes.get("zoom"), .5);
+  const focus = normalized(attributes.get("beam.focus") ?? attributes.get("focus"), emitter.focus);
+  const zoomScale = .6 + zoom * .8;
+  const beamAngle = emitter.beam_angle_degrees * zoomScale;
+  const fieldAngle = emitter.field_angle_degrees * zoomScale;
+  const beamRadius = Math.tan(THREE.MathUtils.degToRad(beamAngle / 2)) * distance;
+  const radius = Math.tan(THREE.MathUtils.degToRad(fieldAngle / 2)) * distance;
+  const group = new THREE.Group();
+  group.name = `geometry-emitter:${emitter.id}`;
+  group.userData.beamAngleDegrees = beamAngle;
+  group.userData.fieldAngleDegrees = fieldAngle;
+  group.userData.feather = emitter.feather;
+  group.userData.focus = focus;
+  group.userData.sourceCount = layoutOffsets(emitter.layout).length;
+  group.userData.intensity = intensity;
+  group.userData.color = `#${color.getHexString()}`;
+  group.position.copy(millimetres(emitter.origin));
+  group.rotation.set(
+    THREE.MathUtils.degToRad(emitter.orientation_degrees.x),
+    THREE.MathUtils.degToRad(emitter.orientation_degrees.y),
+    THREE.MathUtils.degToRad(emitter.orientation_degrees.z),
+  );
+  layoutOffsets(emitter.layout).forEach((offset, index) => {
+    const beam = new THREE.Group();
+    beam.name = `geometry-source:${emitter.id}:${index}`;
+    beam.position.copy(offset);
+    beam.userData.emitterId = emitter.id;
+    beam.userData.headId = emitter.head_id;
+    beam.userData.layout = emitter.layout.type;
+    const source = new THREE.Mesh(new THREE.CircleGeometry(Math.max(.012, Math.min(.08, radius / 18)), 12), new THREE.MeshBasicMaterial({ color: intensity > .001 ? color : new THREE.Color(0x111417) }));
+    source.name = "light-emitting-surface";
+    source.rotation.x = -Math.PI / 2;
+    const coneGeometry = new THREE.ConeGeometry(radius, distance, 24, 1, true);
+    coneGeometry.translate(0, -distance / 2, 0);
+    const volume = new THREE.Mesh(coneGeometry, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: intensity * (.025 + (1 - emitter.feather) * .035 + focus * .04), side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+    volume.name = "beam-volume";
+    const coreGeometry = new THREE.ConeGeometry(beamRadius, distance, 24, 1, true);
+    coreGeometry.translate(0, -distance / 2, 0);
+    const core = new THREE.Mesh(coreGeometry, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: intensity * (.02 + focus * .045), side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+    core.name = "beam-core";
+    const outline = new THREE.LineSegments(new THREE.EdgesGeometry(coneGeometry, 28), intensity > .001
+      ? new THREE.LineBasicMaterial({ color, transparent: true, opacity: .25 + intensity * .5 })
+      : new THREE.LineDashedMaterial({ color: 0x7b858d, transparent: true, opacity: .3, dashSize: .18, gapSize: .14 }));
+    outline.name = "beam-outline";
+    if (intensity <= .001) outline.computeLineDistances();
+    beam.add(source, volume, core, outline);
+    group.add(beam);
+  });
+  return group;
+}
+
+function schemaV2Geometry(fixture: PatchedFixture, mode: FixtureMode, byFixture: Map<string, Map<string, AttributeValue>>, selected: boolean, snapshot: VisualizationSnapshot | null, projectedOwners: Set<string>) {
+  const graph = mode.geometry;
+  if (!graph.nodes.length || !graph.emitters.length) return null;
+  const result = new THREE.Group();
+  result.name = "fixture-profile-geometry";
+  const rootAttributes = byFixture.get(fixture.fixture_id) ?? new Map<string, AttributeValue>();
+  const descendants = (nodeId: string) => graph.emitters.filter((emitter) => {
+    let cursor: string | null = emitter.node_id;
+    while (cursor) {
+      if (cursor === nodeId) return true;
+      cursor = graph.nodes.find((node) => node.id === cursor)?.parent_id ?? null;
+    }
+    return false;
+  });
+  const nodes = new Map<string, { group: THREE.Group; anchor: THREE.Group }>();
+  graph.nodes.forEach((node, index) => {
+    const group = new THREE.Group();
+    const anchor = new THREE.Group();
+    group.name = `geometry-node:${node.id}`;
+    anchor.name = `geometry-node-anchor:${node.id}`;
+    const relatedHeads = [...new Set(descendants(node.id).map((emitter) => emitter.head_id))];
+    const attributes = relatedHeads.length === 1 ? attributesForHead(fixture, mode, relatedHeads[0], byFixture) : new Map(rootAttributes);
+    if (relatedHeads.length > 1) for (const headId of relatedHeads) for (const [attribute, value] of attributesForHead(fixture, mode, headId, byFixture)) if (!attributes.has(attribute)) attributes.set(attribute, value);
+    const translation = millimetres(node.transform.translation);
+    const rotation = { ...node.transform.rotation_degrees };
+    if (node.motion) {
+      const level = normalized(attributes.get(node.motion.attribute), .5);
+      const physical = node.motion.physical_min + (node.motion.physical_max - node.motion.physical_min) * level;
+      if (node.motion.kind === "rotation") {
+        rotation.x += node.motion.axis.x * physical;
+        rotation.y += node.motion.axis.y * physical;
+        rotation.z += node.motion.axis.z * physical;
+      } else {
+        translation.add(millimetres({ x: node.motion.axis.x * physical, y: node.motion.axis.y * physical, z: node.motion.axis.z * physical }));
+      }
+    }
+    const pivot = millimetres(node.pivot);
+    group.position.copy(translation).add(pivot);
+    group.rotation.set(THREE.MathUtils.degToRad(rotation.x), THREE.MathUtils.degToRad(rotation.y), THREE.MathUtils.degToRad(rotation.z));
+    group.scale.set(node.transform.scale.x || 1, node.transform.scale.y || 1, node.transform.scale.z || 1);
+    anchor.position.copy(pivot).multiplyScalar(-1);
+    const dimensions = index === 0 ? [fixture.definition.physical.width_millimetres, fixture.definition.physical.height_millimetres, fixture.definition.physical.depth_millimetres].map((value) => Math.max(.08, (value ?? 160) / 1_000)) : [.12, .12, .12];
+    const marker = new THREE.Mesh(new THREE.BoxGeometry(dimensions[0], dimensions[1], dimensions[2]), new THREE.MeshStandardMaterial({ color: selected ? 0x136f80 : 0x252c33, roughness: .55, metalness: .35 }));
+    marker.name = `geometry-part:${node.id}`;
+    anchor.add(marker);
+    group.add(anchor);
+    nodes.set(node.id, { group, anchor });
+  });
+  for (const node of graph.nodes) {
+    const current = nodes.get(node.id)!;
+    const parent = node.parent_id ? nodes.get(node.parent_id)?.anchor : null;
+    (parent ?? result).add(current.group);
+  }
+  for (const emitter of graph.emitters) {
+    const attributes = attributesForHead(fixture, mode, emitter.head_id, byFixture);
+    const owner = headOwnerId(fixture, mode, emitter.head_id);
+    const resolvedIntensity = normalized(attributes.get("intensity"), channelDefault(mode, emitter.head_id, "intensity", 1));
+    const intensity = projectedOwners.has(owner)
+      ? resolvedIntensity
+      : (snapshot?.blackout ? 0 : resolvedIntensity) * (snapshot?.grand_master ?? 1);
+    const color = xyzToColor(attributes.get("color"), attributes);
+    (nodes.get(emitter.node_id)?.anchor ?? result).add(geometryBeam(emitter, attributes, intensity, color));
+  }
+  if (selected) addSelectionOutline(result);
+  return result;
+}
+
+/** Build the same hierarchy and beam objects used on Stage for the profile editor's live preview. */
+export function buildFixtureProfileGeometryPreview(mode: FixtureMode) {
+  const fixture = {
+    fixture_id: "fixture-profile-preview",
+    logical_heads: [],
+    definition: {
+      physical: {},
+      heads: [],
+    },
+  } as unknown as PatchedFixture;
+  return schemaV2Geometry(fixture, mode, new Map(), false, null, new Set()) ?? new THREE.Group();
+}
+
+function removeGeometryMarker(root: THREE.Object3D, nodeId: string) {
+  const marker = root.getObjectByName(`geometry-part:${nodeId}`);
+  marker?.parent?.remove(marker);
+}
+
+function normalizedModelScale(model: THREE.Object3D, fixture: PatchedFixture) {
+  const size = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());
+  const desiredHeight = (fixture.definition.physical.height_millimetres ?? 600) / 1_000;
+  return desiredHeight / Math.max(size.y, size.x, size.z, .001);
+}
+
+function removeNestedBoundParts(model: THREE.Object3D, boundNames: Set<string>, ownName: string) {
+  const nested: THREE.Object3D[] = [];
+  model.traverse((object) => {
+    if (object !== model && object.name !== ownName && boundNames.has(object.name)) nested.push(object);
+  });
+  for (const object of nested) object.parent?.remove(object);
+}
+
+/**
+ * Attach a loaded profile GLB to the schema-v2 geometry hierarchy. A bound GLB node contributes
+ * visual content while the profile node remains authoritative for hierarchy, pivot, and motion.
+ */
+export function mountFixtureModel(
+  root: THREE.Object3D,
+  model: THREE.Object3D,
+  fixture: PatchedFixture,
+  selected = false,
+) {
+  const instanceId = root.userData.instanceId ?? fixture.fixture_id;
+  model.updateMatrixWorld(true);
+  const scale = normalizedModelScale(model, fixture);
+  const mode = profileMode(fixture);
+  const bindings = mode?.geometry.nodes.filter((node) => node.glb_node) ?? [];
+  const boundNames = new Set(bindings.flatMap((node) => node.glb_node ? [node.glb_node] : []));
+  let mounted = 0;
+
+  for (const node of bindings) {
+    const source = node.glb_node ? model.getObjectByName(node.glb_node) : null;
+    const anchor = root.getObjectByName(`geometry-node-anchor:${node.id}`);
+    if (!source || !anchor) continue;
+    const part = source.clone(true);
+    removeNestedBoundParts(part, boundNames, source.name);
+    // The profile graph owns this node's transform. Retain GLB-local scale and child transforms,
+    // but do not apply the source node's authored position/rotation a second time.
+    part.position.set(0, 0, 0);
+    part.quaternion.identity();
+    const wrapper = new THREE.Group();
+    wrapper.name = `fixture-model-part:${node.id}`;
+    wrapper.scale.setScalar(scale);
+    wrapper.add(part);
+    wrapper.traverse((object) => {
+      object.userData.fixtureId = fixture.fixture_id;
+      object.userData.instanceId = instanceId;
+    });
+    if (selected) addSelectionOutline(wrapper);
+    removeGeometryMarker(root, node.id);
+    anchor.add(wrapper);
+    mounted += 1;
+  }
+
+  if (mounted) return mounted;
+
+  model.name = "fixture-model";
+  model.traverse((object) => {
+    object.userData.fixtureId = fixture.fixture_id;
+    object.userData.instanceId = instanceId;
+  });
+  model.scale.setScalar(scale);
+  const scaledBox = new THREE.Box3().setFromObject(model);
+  const center = scaledBox.getCenter(new THREE.Vector3());
+  model.position.sub(center);
+  model.position.y -= scaledBox.min.y - center.y;
+  if (selected) addSelectionOutline(model);
+  const profileRoot = mode?.geometry.nodes.find((node) => node.parent_id == null);
+  const target = profileRoot
+    ? root.getObjectByName(`geometry-node-anchor:${profileRoot.id}`) ?? root
+    : root;
+  if (profileRoot) removeGeometryMarker(root, profileRoot.id);
+  target.add(model);
+  return 1;
+}
+
 export function buildStageScene(
   fixtures: Stage3dFixture[],
   snapshot: VisualizationSnapshot | null,
@@ -121,6 +386,7 @@ export function buildStageScene(
   grid.position.z = -4;
   scene.add(grid);
   const byFixture = valuesByFixture(snapshot);
+  const projectedOwners = new Set((snapshot?.profile_output_values ?? []).map((entry) => entry.fixture_id));
   const fixtureObjects = new Map<string, THREE.Object3D>();
 
   for (const item of fixtures) {
@@ -137,6 +403,14 @@ export function buildStageScene(
       THREE.MathUtils.degToRad(item.position.rotationZ),
       THREE.MathUtils.degToRad(item.position.rotationY),
     );
+    const mode = profileMode(item.fixture);
+    const profileGeometry = mode ? schemaV2Geometry(item.fixture, mode, byFixture, selected.has(id), snapshot, projectedOwners) : null;
+    if (profileGeometry) {
+      root.add(profileGeometry);
+      scene.add(root);
+      fixtureObjects.set(instanceId, root);
+      continue;
+    }
     const intensity = (snapshot?.blackout ? 0 : normalized(attributes.get("intensity"), parameterDefault(item.fixture, "intensity", 0))) * (snapshot?.grand_master ?? 1);
     const pan = (normalized(attributes.get("pan"), parameterDefault(item.fixture, "pan", .5)) - .5) * Math.PI * 2;
     const tilt = movingLightTiltRadians(normalized(attributes.get("tilt"), parameterDefault(item.fixture, "tilt", .5)));

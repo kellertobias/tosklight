@@ -7,6 +7,10 @@ import type {
   Cue,
   DeskConfiguration,
   FixtureDefinition,
+  FixtureProfile,
+  HighlightAction,
+  HighlightState,
+  MatterBridgeStatus,
   DmxSnapshot,
   MediaServerFixture,
   OutputRoute,
@@ -20,6 +24,13 @@ import type {
   ShowEntry,
   StoredGroup,
   StoredPreset,
+  UpdateMenuEntry,
+  UpdateMode,
+  UpdatePreview,
+  UpdateResult,
+  UpdateSettings,
+  UpdateTargetFilter,
+  UpdateTargetRequest,
   VersionedObject,
   VisualizationSnapshot,
 } from "./types";
@@ -159,7 +170,10 @@ interface ServerContextValue {
   setScreenPage: (id: string, page: number) => Promise<void>;
   shows: ShowEntry[];
   configuration: DeskConfiguration | null;
+  matter: MatterBridgeStatus | null;
   fixtureLibrary: FixtureDefinition[];
+  fixtureProfiles: FixtureProfile[];
+  fixtureProfileWarnings: string[];
   mediaServers: MediaServerFixture[];
   mediaPreviewUrls: Record<string, string>;
   groups: VersionedObject<StoredGroup>[];
@@ -175,6 +189,15 @@ interface ServerContextValue {
   pendingCommandChoice: PendingCommandChoice | null;
   selectedFixtures: string[];
   selectedGroupId: string | null;
+  highlight: HighlightState | null;
+  highlightError: string | null;
+  dismissHighlightError: () => void;
+  highlightAction: (action: HighlightAction) => Promise<boolean>;
+  updateSettings: () => Promise<UpdateSettings | null>;
+  saveUpdateSettings: (settings: UpdateSettings) => Promise<boolean>;
+  previewUpdate: (target: UpdateTargetRequest, mode: UpdateMode) => Promise<UpdatePreview | null>;
+  applyUpdate: (target: UpdateTargetRequest, mode: UpdateMode, expectedRevision?: number, expectedProgrammerRevision?: string) => Promise<UpdateResult | null>;
+  updateTargets: (filter: UpdateTargetFilter) => Promise<UpdateMenuEntry[] | null>;
   refresh: () => Promise<void>;
   setCommandLine: (value: string, pristine?: boolean) => void;
   resetCommandLine: () => void;
@@ -190,6 +213,15 @@ interface ServerContextValue {
     remove?: boolean,
   ) => Promise<void>;
   setProgrammer: (fixtureId: string, attribute: string, value: number) => Promise<void>;
+  setProgrammerValue: (
+    fixtureId: string,
+    attribute: string,
+    value: import("./types").AttributeValue,
+  ) => Promise<void>;
+  controlFixtureAction: (fixtureId: string, actionId: string, active: boolean) => Promise<void>;
+  generateFixturePresets: (
+    fixtureIds: string[],
+  ) => Promise<import("./types").GeneratedFixturePresetResult | null>;
   releaseProgrammer: (fixtureId: string, attribute: string) => Promise<void>;
   setGroupValue: (attribute: string, value: number) => Promise<void>;
   releaseGroupValue: (attribute: string) => Promise<void>;
@@ -223,6 +255,7 @@ interface ServerContextValue {
   deleteOutputRoute: (id: string, revision: number) => Promise<boolean>;
   createShow: (name: string) => Promise<void>;
   saveShowAs: (name: string) => Promise<boolean>;
+  overwriteShow: (destinationId: string) => Promise<boolean>;
   initializeEmptyShow: () => Promise<boolean>;
   uploadShow: (file: File, overwrite?: boolean) => Promise<void>;
   openShow: (id: string, transition?: "hold_current" | "timed_fade" | "safe_blackout") => Promise<void>;
@@ -290,7 +323,11 @@ interface ServerContextValue {
   configureMediaServer: (fixtureId: string, ipAddress: string | null, port?: number) => Promise<void>;
   saveFixtureDefinition: (definition: FixtureDefinition) => Promise<boolean>;
   deleteFixtureDefinition: (id: string, revision: number) => Promise<void>;
-  patchFixture: (input: { name: string; definition: FixtureDefinition; universe: number | null; address: number | null; layer_id?: string }) => Promise<string | null>;
+  saveFixtureProfile: (profile: FixtureProfile, expectedRevision: number) => Promise<FixtureProfile>;
+  deleteFixtureProfile: (id: string, revision: number) => Promise<void>;
+  fixtureProfileRevisions: (id: string) => Promise<FixtureProfile[]>;
+  saveFixtureProfileSourceGdtf: (id: string, revision: number, source: Uint8Array) => Promise<boolean>;
+  patchFixture: (input: { name: string; definition: FixtureDefinition; universe: number | null; address: number | null; split_patches?: import("./types").SplitPatch[]; layer_id?: string }) => Promise<string | null>;
   updatePatchedFixture: (fixtureId: string, changes: Partial<PatchedFixture>) => Promise<boolean>;
   savePatchLayer: (layer: PatchLayer) => Promise<boolean>;
 }
@@ -311,7 +348,10 @@ export function ServerProvider({ children }: PropsWithChildren) {
   const [screens, setScreens] = useState<ScreenSnapshot | null>(null);
   const [shows, setShows] = useState<ShowEntry[]>([]);
   const [configuration, setConfiguration] = useState<DeskConfiguration | null>(null);
+  const [matter, setMatter] = useState<MatterBridgeStatus | null>(null);
   const [fixtureLibrary, setFixtureLibrary] = useState<FixtureDefinition[]>([]);
+  const [fixtureProfiles, setFixtureProfiles] = useState<FixtureProfile[]>([]);
+  const [fixtureProfileWarnings, setFixtureProfileWarnings] = useState<string[]>([]);
   const [mediaServers, setMediaServers] = useState<MediaServerFixture[]>([]);
   const [mediaPreviewUrls, setMediaPreviewUrls] = useState<Record<string, string>>({});
   const mediaPreviewUrlsRef = useRef<Record<string, string>>({});
@@ -332,6 +372,11 @@ export function ServerProvider({ children }: PropsWithChildren) {
   const [pendingCommandChoice, setPendingCommandChoice] = useState<PendingCommandChoice | null>(null);
   const [selectedFixtures, setSelectedFixtures] = useState<string[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [highlight, setHighlight] = useState<HighlightState | null>(null);
+  const [highlightError, setHighlightError] = useState<string | null>(null);
+  const highlightEpoch = useRef(0);
+  const highlightWrite = useRef<Promise<unknown>>(Promise.resolve());
+  const highlightErrorSticky = useRef(false);
   useEffect(
     () => () => {
       for (const url of Object.values(mediaPreviewUrlsRef.current)) URL.revokeObjectURL(url);
@@ -360,6 +405,39 @@ export function ServerProvider({ children }: PropsWithChildren) {
     mediaPreviewUrlsRef.current = {};
     setMediaPreviewUrls({});
   }, [bootstrap?.active_show?.id]);
+
+  useEffect(() => {
+    if (!session) {
+      highlightEpoch.current += 1;
+      highlightErrorSticky.current = false;
+      setHighlight(null);
+      setHighlightError(null);
+      return;
+    }
+    let cancelled = false;
+    const load = () => {
+      const request = ++highlightEpoch.current;
+      void highlightWrite.current
+        .catch(() => undefined)
+        .then(() => client.highlight())
+        .then((next) => {
+          if (cancelled || request !== highlightEpoch.current) return;
+          setHighlight(next);
+          if (!highlightErrorSticky.current) setHighlightError(null);
+        })
+        .catch((reason) => {
+          if (!cancelled && request === highlightEpoch.current) setHighlightError(reason instanceof Error ? reason.message : String(reason));
+        });
+    };
+    load();
+    // WebSocket events provide the normal fast path. This slow refresh keeps a secondary
+    // device authoritative after reconnects or when an older server omits the event.
+    const timer = window.setInterval(load, 2_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [client, session]);
 
   const loadShowObjects = useCallback(
     async (showId: string | null, userId: string | null) => {
@@ -420,11 +498,24 @@ export function ServerProvider({ children }: PropsWithChildren) {
     setPatch(await client.patch());
     if (client.currentSession) setPlaybacks(await client.playbacks());
     setShows(await client.shows());
-    setConfiguration((await client.configuration()).configuration);
+    const nextConfiguration = await client.configuration();
+    setConfiguration(nextConfiguration.configuration);
+    setMatter(nextConfiguration.matter);
     setFixtureLibrary(await client.fixtureLibrary());
+    setFixtureProfiles(await client.fixtureProfiles().catch(() => []));
+    setFixtureProfileWarnings(await client.fixtureProfileWarnings().catch(() => []));
     if (client.currentSession) setMediaServers((await client.mediaServers()).fixtures);
     await loadShowObjects(nextBootstrap.active_show?.id ?? null, client.currentSession?.user.id ?? null);
   }, [client, loadShowObjects]);
+
+  useEffect(() => {
+    if (!session || !configuration?.matter_enabled) return;
+    let cancelled = false;
+    const poll = () => void client.matterStatus().then((next) => { if (!cancelled) setMatter(next); }).catch(() => undefined);
+    poll();
+    const timer = window.setInterval(poll, 1_000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [client, session, configuration?.matter_enabled]);
 
   useEffect(() => {
     let cancelled = false;
@@ -461,7 +552,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
           effectiveBootstrap = await client.bootstrap();
           setBootstrap(effectiveBootstrap);
         }
-        const [nextPatch, nextPlaybacks, programmers, nextShows, nextConfiguration, nextMedia, nextFixtureLibrary, nextScreens] = await Promise.all([client.patch(), client.playbacks(), client.programmers(), client.shows(), client.configuration(), client.mediaServers(), client.fixtureLibrary(), client.screens()]);
+        const [nextPatch, nextPlaybacks, programmers, nextShows, nextConfiguration, nextMedia, nextFixtureLibrary, nextFixtureProfiles, nextFixtureProfileWarnings, nextScreens] = await Promise.all([client.patch(), client.playbacks(), client.programmers(), client.shows(), client.configuration(), client.mediaServers(), client.fixtureLibrary(), client.fixtureProfiles().catch(() => []), client.fixtureProfileWarnings().catch(() => []), client.screens()]);
         if (cancelled) return;
         setSession(nextSession);
         setDeskLock(nextDeskLock);
@@ -469,8 +560,11 @@ export function ServerProvider({ children }: PropsWithChildren) {
         setPlaybacks(nextPlaybacks);
         setShows(nextShows);
         setConfiguration(nextConfiguration.configuration);
+        setMatter(nextConfiguration.matter);
         setMediaServers(nextMedia.fixtures);
         setFixtureLibrary(nextFixtureLibrary);
+        setFixtureProfiles(nextFixtureProfiles);
+        setFixtureProfileWarnings(nextFixtureProfileWarnings);
         setScreens(nextScreens);
         await loadShowObjects(effectiveBootstrap.active_show_error ? null : (effectiveBootstrap.active_show?.id ?? null), nextSession.user.id);
         const ownProgrammer = programmers.find((programmer) => programmer.session_id === nextSession.session_id);
@@ -504,6 +598,28 @@ export function ServerProvider({ children }: PropsWithChildren) {
             if (request.group_id && request.desk_id === nextSession.desk.id)
               window.dispatchEvent(new CustomEvent("light:group-configuration", { detail: request.group_id }));
           }
+          if (["update_armed", "update_target_requested", "update_target_rejected", "update_targets_requested", "update_settings_requested"].includes(event.kind)) {
+            const request = event.payload as { armed?: boolean; desk_id?: string; session_id?: string; target?: UpdateTargetRequest; error?: string };
+            if (request.desk_id === nextSession.desk.id) {
+              if (event.kind === "update_armed") window.dispatchEvent(new CustomEvent("light:update-armed", { detail: request.armed ?? true }));
+              if (event.kind === "update_target_requested" && request.target) window.dispatchEvent(new CustomEvent("light:update-target", { detail: request.target }));
+              if (event.kind === "update_target_rejected") window.dispatchEvent(new CustomEvent("light:command-error", { detail: request.error ?? "This playback is not a recordable Update target." }));
+              if (event.kind === "update_targets_requested") window.dispatchEvent(new Event("light:update-target-menu"));
+              if (event.kind === "update_settings_requested") window.dispatchEvent(new Event("light:update-settings"));
+            }
+          }
+          if (event.kind === "highlight_changed") {
+            const request = ++highlightEpoch.current;
+            void highlightWrite.current
+              .catch(() => undefined)
+              .then(() => client.highlight())
+              .then((next) => {
+                if (request !== highlightEpoch.current) return;
+                setHighlight(next);
+                if (!highlightErrorSticky.current) setHighlightError(null);
+              })
+              .catch(() => undefined);
+          }
           if (["playback_changed", "playback_page_changed", "show_opened", "show_object_changed", "preload_stored"].includes(event.kind)) {
             void client
               .playbacks()
@@ -513,7 +629,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
           if (["server_configuration_changed", "speed_group_command", "speed_group_action"].includes(event.kind)) {
             void client
               .configuration()
-              .then((next) => setConfiguration(next.configuration))
+              .then((next) => { setConfiguration(next.configuration); setMatter(next.matter); })
               .catch(() => undefined);
             void client
               .playbacks()
@@ -560,10 +676,18 @@ export function ServerProvider({ children }: PropsWithChildren) {
               .then(setPatch)
               .catch(() => undefined);
           }
-          if (event.kind === "fixture_library_changed") {
+          if (["fixture_library_changed", "fixture_profile_changed"].includes(event.kind)) {
             void client
               .fixtureLibrary()
               .then(setFixtureLibrary)
+              .catch(() => undefined);
+            void client
+              .fixtureProfiles()
+              .then(setFixtureProfiles)
+              .catch(() => undefined);
+            void client
+              .fixtureProfileWarnings()
+              .then(setFixtureProfileWarnings)
               .catch(() => undefined);
           }
           if (["show_uploaded", "show_deleted", "show_opened", "show_rolled_back"].includes(event.kind))
@@ -740,7 +864,10 @@ export function ServerProvider({ children }: PropsWithChildren) {
       },
       shows,
       configuration,
+      matter,
       fixtureLibrary,
+      fixtureProfiles,
+      fixtureProfileWarnings,
       mediaServers,
       mediaPreviewUrls,
       groups,
@@ -756,6 +883,95 @@ export function ServerProvider({ children }: PropsWithChildren) {
       pendingCommandChoice,
       selectedFixtures,
       selectedGroupId,
+      highlight,
+      highlightError,
+      dismissHighlightError: () => {
+        highlightErrorSticky.current = false;
+        setHighlightError(null);
+      },
+      highlightAction: async (action) => {
+        const request = ++highlightEpoch.current;
+        highlightErrorSticky.current = false;
+        setHighlightError(null);
+        try {
+          const write = client.highlightAction(action);
+          highlightWrite.current = write.catch(() => undefined);
+          const next = await write;
+          if (request === highlightEpoch.current) {
+            setHighlight(next);
+            highlightErrorSticky.current = false;
+            setHighlightError(null);
+          }
+          return true;
+        } catch (reason) {
+          const raw = reason instanceof Error ? reason.message : String(reason);
+          let message = raw;
+          try {
+            const parsed = JSON.parse(raw) as { error?: string; message?: string };
+            message = parsed.error ?? parsed.message ?? raw;
+          } catch {
+            // The server may already have returned a plain operator-facing message.
+          }
+          if (/409|ownership|owned by|another (?:user|operator)/i.test(message)) {
+            const owner = highlight?.owner_user_name?.trim();
+            message = `Highlight is controlled by ${owner || "another operator"}. ${message}`;
+          }
+          highlightErrorSticky.current = true;
+          setHighlightError(message);
+          return false;
+        }
+      },
+      updateSettings: async () => {
+        try {
+          const settings = await client.updateSettings();
+          setError(null);
+          return settings;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return null;
+        }
+      },
+      saveUpdateSettings: async (settings) => {
+        try {
+          await client.saveUpdateSettings(settings);
+          setError(null);
+          return true;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return false;
+        }
+      },
+      previewUpdate: async (target, mode) => {
+        try {
+          const preview = await client.previewUpdate(target, mode);
+          setError(null);
+          return preview;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return null;
+        }
+      },
+      applyUpdate: async (target, mode, expectedRevision, expectedProgrammerRevision) => {
+        try {
+          const result = await client.applyUpdate(target, mode, expectedRevision, expectedProgrammerRevision);
+          await refresh();
+          setError(null);
+          return result;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return null;
+        }
+      },
+      updateTargets: async (filter) => {
+        try {
+          const entries = await client.updateTargets(filter);
+          setError(null);
+          return entries;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return null;
+        }
+      },
       refresh,
       setCommandLine,
       resetCommandLine,
@@ -871,6 +1087,34 @@ export function ServerProvider({ children }: PropsWithChildren) {
           setError(null);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      },
+      setProgrammerValue: async (fixtureId, attribute, value) => {
+        try {
+          await client.setProgrammerValue(fixtureId, attribute, value);
+          setError(null);
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      },
+      controlFixtureAction: async (fixtureId, actionId, active) => {
+        try {
+          await client.controlFixtureAction(fixtureId, actionId, active);
+          setError(null);
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      },
+      generateFixturePresets: async (fixtureIds) => {
+        try {
+          if (!bootstrap?.active_show) throw new Error("Open a show before generating presets");
+          const result = await client.generateFixturePresets(fixtureIds);
+          setPresets(await client.objects<StoredPreset>(bootstrap.active_show.id, "preset"));
+          setError(null);
+          return result;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return null;
         }
       },
       releaseProgrammer: async (fixtureId, attribute) => {
@@ -1112,6 +1356,21 @@ export function ServerProvider({ children }: PropsWithChildren) {
           return false;
         }
       },
+      overwriteShow: async (destinationId) => {
+        try {
+          if (!bootstrap?.active_show) throw new Error("Open a show before choosing an overwrite destination");
+          if (bootstrap.active_show.id === destinationId) throw new Error("The active show is already that destination");
+          const destination = shows.find((show) => show.id === destinationId);
+          if (!destination) throw new Error("The overwrite destination is no longer available");
+          await client.overwriteShow(bootstrap.active_show.id, destination.id);
+          await refresh();
+          setError(null);
+          return true;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return false;
+        }
+      },
       initializeEmptyShow: async () => {
         try {
           const names = new Set(shows.map((show) => show.name.toLowerCase()));
@@ -1257,6 +1516,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
         try {
           const result = await client.updateConfiguration(next);
           setConfiguration(result.configuration);
+          setMatter(result.matter);
           setError(null);
           return result.requires_restart;
         } catch (reason) {
@@ -1272,6 +1532,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
             ...input,
           });
           setConfiguration(result.configuration);
+          setMatter(result.matter);
           setError(null);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason));
@@ -1885,6 +2146,41 @@ export function ServerProvider({ children }: PropsWithChildren) {
           setError(reason instanceof Error ? reason.message : String(reason));
         }
       },
+      saveFixtureProfile: async (profile, expectedRevision) => {
+        try {
+          const saved = await client.putFixtureProfile(profile, expectedRevision);
+          setFixtureProfiles(await client.fixtureProfiles());
+          setFixtureProfileWarnings(await client.fixtureProfileWarnings());
+          setFixtureLibrary(await client.fixtureLibrary());
+          setError(null);
+          return saved;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          throw reason;
+        }
+      },
+      deleteFixtureProfile: async (id, revision) => {
+        try {
+          await client.deleteFixtureProfile(id, revision);
+          setFixtureProfiles(await client.fixtureProfiles());
+          setFixtureProfileWarnings(await client.fixtureProfileWarnings());
+          setFixtureLibrary(await client.fixtureLibrary());
+          setError(null);
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+        }
+      },
+      fixtureProfileRevisions: (id) => client.fixtureProfileRevisions(id),
+      saveFixtureProfileSourceGdtf: async (id, revision, source) => {
+        try {
+          await client.putFixtureProfileSourceGdtf(id, revision, source);
+          setError(null);
+          return true;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return false;
+        }
+      },
       patchFixture: async (input) => {
         try {
           if (!bootstrap?.active_show) throw new Error("No active show is available");
@@ -1897,6 +2193,8 @@ export function ServerProvider({ children }: PropsWithChildren) {
             definition: input.definition,
             universe: input.universe,
             address: input.address,
+            split_patches: input.split_patches ?? [],
+            highlight_overrides: {},
             layer_id: input.layer_id ?? "default",
             direct_control: null,
             location: { x: 0, y: 0, z: 0 },
@@ -1953,6 +2251,10 @@ export function ServerProvider({ children }: PropsWithChildren) {
       playbacks,
       shows,
       configuration,
+      matter,
+      fixtureLibrary,
+      fixtureProfiles,
+      fixtureProfileWarnings,
       mediaServers,
       mediaPreviewUrls,
       groups,
@@ -1968,6 +2270,8 @@ export function ServerProvider({ children }: PropsWithChildren) {
       pendingCommandChoice,
       selectedFixtures,
       selectedGroupId,
+      highlight,
+      highlightError,
       refresh,
       setCommandLine,
       resetCommandLine,

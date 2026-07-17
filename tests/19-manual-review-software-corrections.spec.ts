@@ -150,12 +150,12 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 
     await desk.recordStep("FIXTURE ASSET PICKERS", "Fixture Library image and 3D-model fields use the same confined picker while preserving their distinct browser-image and GLB contracts.");
     await page.getByRole("button", { name: "Create fixture", exact: true }).click();
-    const fixtureEditor = page.locator(".fixture-editor-modal");
-    await fixtureEditor.getByRole("button", { name: "Choose stage icon", exact: true }).click();
+    const fixtureEditor = page.locator(".fixture-profile-editor-modal");
+    await fixtureEditor.getByRole("button", { name: "Choose fixture icon", exact: true }).click();
     await expectPickerConstraint(page, files.invalid, files.wallpaper);
-    await fixtureEditor.getByRole("button", { name: "Choose 3D fixture model", exact: true }).click();
+    await fixtureEditor.getByRole("button", { name: "Choose visualizer glb model", exact: true }).click();
     await expectPickerConstraint(page, files.invalid, files.scene);
-    await fixtureEditor.locator("header button").click();
+    await fixtureEditor.getByRole("button", { name: "Close fixture editor" }).click();
 
     await desk.recordStep("WALLPAPER FILE PICKER", "Desk Lock wallpaper selection stays inside configured roots and accepts browser image formats only.");
     await setupNav.getByRole("button", { name: "Desk Lock", exact: true }).click();

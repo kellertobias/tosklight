@@ -147,6 +147,7 @@ export interface AppState {
   systemControlsOpen: boolean;
   preloadStoreOpen: boolean;
   storeArmed: boolean;
+  updateArmed: boolean;
   shiftArmed: boolean;
   storeSettingsOpen: boolean;
   patchSetArmed: boolean;

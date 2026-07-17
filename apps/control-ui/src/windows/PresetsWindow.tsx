@@ -8,6 +8,7 @@ import { Button, ColorPickerField, FormLayout, IconPickerField, SwitchField, Tex
 import { ButtonGrid, WindowHeader, WindowScrollArea, WindowSettings } from "../components/window-kit";
 import { useState, type CSSProperties } from "react";
 import { RecordModeDialog, type RecordMode } from "../components/shared/RecordModeDialog";
+import { requestUpdateTarget } from "../components/control/updateWorkflow";
 
 type PresetCustomization = { title?: string; icon?: string; color?: string };
 export function PresetsWindow({ compact, paneId, showGroupShortcuts, presetFamily, presetPoolColors }: WindowProps) {
@@ -57,6 +58,10 @@ export function PresetsWindow({ compact, paneId, showGroupShortcuts, presetFamil
 
   const activate = (index: number) => {
     const preset = cards[index];
+    if (state.updateArmed) {
+      requestUpdateTarget({ family: { type: "preset" }, object_id: preset?.id ?? String(index + 1) });
+      return;
+    }
     if (state.presetSetArmed) { const saved = customizations[String(index + 1)] ?? {}; setConfigureDraft({ title: saved.title ?? preset?.body.name ?? `Preset ${index + 1}`, icon: saved.icon ?? preset?.body.icon ?? "◇", color: saved.color ?? preset?.body.color ?? "#d98236" }); setConfigureIndex(index); dispatch({ type: "SET_PRESET_SET_ARMED", value: false }); return; }
     if (!preset && !state.storeArmed) return;
     if (state.storeArmed) {
@@ -78,7 +83,7 @@ export function PresetsWindow({ compact, paneId, showGroupShortcuts, presetFamil
             <Button
               disabled={filtered}
               key={index + 1}
-              className={`preset-card pool-cell preset-family-${String(preset?.body.family ?? family).toLowerCase()} ${!preset ? "empty" : ""} ${filtered ? "filtered" : ""} ${state.storeArmed ? "store-target" : ""} ${state.presetSetArmed ? "set-target" : ""}`}
+              className={`preset-card pool-cell preset-family-${String(preset?.body.family ?? family).toLowerCase()} ${!preset ? "empty" : ""} ${filtered ? "filtered" : ""} ${state.storeArmed ? "store-target" : ""} ${state.updateArmed ? "update-target" : ""} ${state.presetSetArmed ? "set-target" : ""}`}
               style={colorsEnabled && customizations[String(index + 1)]?.color ? { "--preset-family": customizations[String(index + 1)].color } as CSSProperties : undefined}
               onClick={() => activate(index)}
             >
@@ -104,7 +109,9 @@ export function PresetsWindow({ compact, paneId, showGroupShortcuts, presetFamil
                   {customizations[String(index + 1)]?.icon && <span className="preset-art">{customizations[String(index + 1)].icon}</span>}
                   <b>{customizations[String(index + 1)]?.title ?? "Empty"}</b>
                   <small>
-                    {server.selectedFixtures.length
+                    {state.updateArmed
+                      ? "Touch to check Update eligibility"
+                      : server.selectedFixtures.length
                       ? state.storeArmed
                         ? "Record here"
                         : "Tap to record programmer"

@@ -177,6 +177,31 @@ Timing cases run in `--test-bench`; persistence cases use a dedicated serial fix
 
 **Implementation status:** Implemented as supplemental `SHOW-004 @restart` Playwright matrix cases for fixture-number, Group, playback, route, virtual-dimmer-metadata, and Cue-identity/default migration. Every case opens through the production Show Store, asserts the documented normalized object, and proves object revision and whole-file byte stability on the second reopen. Rust fixture tests additionally retain exhaustive logical-head repair and built-in default-patch coverage. Raw historical-field removal remains a harness operation rather than a simulated operator gesture.
 
+## SHOW-005 — Named revisions load as independent copies
+
+**Priority:** P0
+**Primary layer:** Server persistence plus operator UI
+
+**Starting show:** Load canonical `compact-rig.show`, immediately Save As `show-005.show`, and use that active working copy as the original for this scenario.
+
+**Detailed procedure:**
+
+1. Change Group 4's name to `Named revision state`, save a named revision called `Approved focus`, then change Group 4 again to `Newer autosave state`.
+2. Use **Load Latest Autosave** for `show-005.show` and prove the newer value remains. Then choose **Load Revision as Copy** for `Approved focus`.
+3. Confirm the active show has a different show ID and a generated name containing the original base name, revision number, and copy date. Repeat the load and confirm a disambiguating suffix creates another file rather than overwriting the first copy.
+4. In the left dock and Show menu, confirm the desk labels the active show as a separate revision copy and displays the original show name, source revision number and name, creation time, and the statement that current changes autosave to the copy rather than the original.
+5. Change the copy's Group 4 to `Copy-only edit` and save a named revision called `Copy checkpoint`. Confirm the original remains `Newer autosave state`, its `Approved focus` revision remains immutable, and `Copy checkpoint` belongs only to the copy.
+6. Restart the desk. Confirm the same revision-copy ID, provenance, Latest Autosave, and copy-only named revision return.
+7. Choose manual **Save**. Confirm **Keep as Separate Show** and **Overwrite Original Show** are explicit choices. Cancel the overwrite confirmation and prove no bytes, revisions, or identities changed.
+8. Reopen **Save As**, select another existing show, and confirm it also requires a separate confirmation naming that destination. Confirm the overwrite and prove an internal recovery backup was created, only the destination's Latest Autosave was replaced, and its ID, name, and named revisions were preserved. The revision copy remains in the library and active.
+9. Delete the original from a separate active show. Reopen the revision copy and confirm it remains usable with its source provenance visible while **Overwrite Original Show** is unavailable.
+
+**Assertions:** Latest Autosave is never confused with immutable named revisions. Loading a named revision creates a durable, separately autosaved and visibly identified show. Copy edits and copy revisions cannot alter the source. Every existing-show overwrite is separately confirmed, recovery backed up, identity preserving, and revision preserving. Missing source shows do not invalidate their copies.
+
+**Pass condition:** An operator can explore or continue from any named revision without silently rewinding newer work or mistaking the resulting show for the original.
+
+**Implementation status:** Implemented as paired `SHOW-005 @api` and `SHOW-005 @ui` Playwright cases with one shared starting state and authoritative oracle, plus Rust desk/show migration and metadata tests, server handler tests for unique naming, copy isolation, alternate-destination overwrite/recovery preservation, source deletion, and overwrite preservation, and Quick Setup component tests for provenance, safe cancellation, original deletion, and explicit overwrite confirmation.
+
 ## DESKTOP-001 — Packaged app owns its child server
 
 **Priority:** P0  

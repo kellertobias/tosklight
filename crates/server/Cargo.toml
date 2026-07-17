@@ -40,6 +40,17 @@ image = { version = "0.25", default-features = false, features = ["gif", "jpeg",
 tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
+async-io = "2"
+embassy-futures = "0.1"
+embassy-time-queue-utils = { version = "0.3", features = ["generic-queue-64"] }
+futures-lite = "2"
+if-addrs = "0.15"
+rand = { version = "0.8", features = ["std", "std_rng"] }
+rs-matter = { version = "0.2.0", features = ["async-io", "max-groups-per-fabric-12", "max-group-keys-per-fabric-2", "max-group-endpoints-per-fabric-3", "max-sessions-32"] }
+socket2 = { version = "0.5", features = ["all"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
 
 [target.'cfg(unix)'.dependencies]
 xattr = "1.6"

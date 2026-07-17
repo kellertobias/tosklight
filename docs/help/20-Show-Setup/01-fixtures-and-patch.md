@@ -10,15 +10,23 @@ After you have selected the fixture type you want, you can patch your fixtures w
 
 The patch refuses addresses outside 1-512 and detects overlaps across primary and multi-patch instances. Unpatched fixtures remain valid show fixtures and can still be selected and programmed; they simply produce no routed DMX until addressed.
 
+For a multi-split profile mode, the placement dialog shows **Independent split patches** with one optional `universe.address` field per split and its separate footprint. Clear a field to leave only that split unpatched. Batch placement advances every patched split by its own footprint, validates all split ranges independently, and rejects overlap between splits, fixtures, and multi-patch instances. The Patch table presents every split as its own `S<number> <universe>.<address>` or `—` target.
+
+To repatch, select a split target and press `[SET]`, or press `[SET]` first and then touch the required split. Software SET, computer-keyboard Home, and attached-hardware SET all open the same selected-split editor. Changing or clearing that address preserves every other split and never deletes the logical fixture, its heads, selection, or programming. A one-split fixture keeps the ordinary single Address field and command behavior.
+
 Use **+ Add fixture** to search by type, manufacturer, fixture family, and mode, then check the footprint and physical details before placement. Search sits in the Add Fixture title bar. Manufacturer and fixture names align left, while type/mode counts and detail values align right for quick scanning.
 
 The **MIB** and **MIB Delay** columns configure fixture-level Move in Black behavior. Like the other editable patch cells, an ordinary click selects the fixture without changing show data. Press `[SET]` and then the cell to open its editor; confirm with **Set** or leave the stored value untouched with **Cancel**. MIB is On by default, and MIB Delay is a non-negative duration in seconds.
+
+The **Highlight Look** column configures how one patched fixture identifies itself during [Highlight and Step Through](../30-Programmer/02-selecting-and-setting-values.md#highlight-and-step-through). Press `[SET]`, then the cell. Leave a channel blank to inherit its profile's **Highlight raw** value, or enter an exact raw value within that channel's resolution to override it for this fixture. The usual profile look is full intensity and physical white: RGB/RGBW and calibrated additive emitters produce white, CMY uses no filtration, and a discrete wheel uses a named Open/White slot when available. Non-identifying or unmatched wheel channels retain their safe/default raw value unless the profile deliberately opens a shutter or supplies another required value. A per-fixture override can instead produce a useful identification color such as blue. It belongs to the fixture, not its universe/address, so repatching does not change it.
+
+Highlight Look is persisted in the portable show snapshot as a map from stable profile-channel IDs to raw overrides. Existing shows that have no override map load it as empty and inherit deterministic Highlight values from their embedded legacy definition or migrated profile. Saving the migrated show writes the current profile snapshot and override map; it does not add transient Highlight on/off, owner, captured-selection, or step state. Copying a fixture preserves the configured override map, while changing to a different mode validates overrides against that mode's channel identities and resolutions.
 
 ![Fixture-library browser used while patching](../assets/screenshots/workflows/patch-add-fixture.png)
 
 ## Multi-patch
 
-Multi-patch gives one logical fixture additional physical output instances. Use it when several physical units must always share the same logical programming. Every instance uses the same fixture mode and values but has its own universe, address, and optional stage position. Do not use multi-patch for separately selectable heads; use a multi-head fixture definition instead.
+Multi-patch gives one logical fixture additional physical output instances. Use it when several physical units must always share the same logical programming. Every instance uses the same embedded fixture profile and values but has its own per-split universe/address assignments and optional stage position. The same independent footprint and overlap checks apply to every instance. Do not use multi-patch for separately selectable heads; use a multi-head fixture definition instead.
 
 
 ## Multi Head Fixtures

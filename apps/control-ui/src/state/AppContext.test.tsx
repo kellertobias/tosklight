@@ -1,10 +1,16 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Button } from "../components/common";
 import { AppProvider, useApp } from "./AppContext";
 
 function ModalState() {
   const { state } = useApp();
   return <><span>{state.systemControlsOpen ? "running-open" : "running-closed"}</span><span>built-in-{state.builtIn ?? "none"}</span></>;
+}
+
+function PatchState() {
+  const { state, dispatch } = useApp();
+  return <><Button onClick={() => dispatch({ type: "OPEN_BUILTIN", kind: "patch" })}>Open Patch</Button><span>{state.patchSetArmed ? "patch-set-armed" : "patch-set-idle"}</span></>;
 }
 
 const values = new Map<string, string>();
@@ -37,5 +43,14 @@ describe("desk shortcuts", () => {
 
     act(() => window.dispatchEvent(new CustomEvent("light:desk-action", { detail: "shift-9" })));
     expect(screen.getByText("built-in-help")).toBeInTheDocument();
+  });
+
+  it("routes attached-hardware SET into the selected Patch surface", () => {
+    render(<AppProvider><PatchState/></AppProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Open Patch" }));
+
+    act(() => window.dispatchEvent(new CustomEvent("light:desk-action", { detail: "set" })));
+
+    expect(screen.getByText("patch-set-armed")).toBeInTheDocument();
   });
 });

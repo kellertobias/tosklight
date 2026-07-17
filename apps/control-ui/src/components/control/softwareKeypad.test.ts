@@ -1,7 +1,27 @@
 import { describe, expect, it } from "vitest";
+import { numericPadLayout, oscProgrammerActionForKey } from "../../../../shared/programmerKeypad";
 import { commandTargetAfterEnter, defaultCommandLine, editCommandWithSoftwareKey, editTargetedCommandWithSoftwareKey, softwareKeyFromKeyboard, softwareKeypadRows } from "./softwareKeypad";
 
 describe("software keypad", () => {
+  it("shares the current physical number-block layout and OSC actions with hardware surfaces", () => {
+    const matrix = Array.from({ length: 5 }, () => Array<string>(6).fill(""));
+    for (const item of numericPadLayout) {
+      const column = item.section === "commands" ? item.column : item.column - 1;
+      matrix[item.row - 1][column - 1] = item.key;
+    }
+    expect(matrix).toEqual([
+      ["", "", "GRP", "CUE", "TIME", "DIV"],
+      ["DEL", "CLR", "7", "8", "9", "-"],
+      ["MOV", "BACKSPACE", "4", "5", "6", "+"],
+      ["CPY", "UND", "1", "2", "3", "TRU"],
+      ["SET", "SHIFT", ".", "0", "AT", "ENT"],
+    ]);
+    expect(oscProgrammerActionForKey("7")).toBe("digit-7");
+    expect(oscProgrammerActionForKey("TRU")).toBe("thru");
+    expect(oscProgrammerActionForKey("ENT")).toBe("enter");
+    expect(oscProgrammerActionForKey("BACKSPACE")).toBe("backspace");
+  });
+
   it("keeps the documented keypad layout with timing, minus, and shift", () => {
     expect(softwareKeypadRows).toEqual([
       ["SET", "GRP", "CUE", "UND", "CLR"],

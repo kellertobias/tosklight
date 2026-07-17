@@ -1,17 +1,18 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PlaybackFaderBank } from "./PlaybackFaderBank";
+import { UPDATE_TARGET_EVENT } from "./updateWorkflow";
 
 const mocks = vi.hoisted(() => ({
   dispatch: vi.fn(), executeCommandLine: vi.fn(), refresh: vi.fn(), poolPlaybackAction: vi.fn(), resetCommandLine: vi.fn(), savePlaybackSlot: vi.fn(), clearPlaybackSlot: vi.fn(),
   commandLine: "FIXTURE", error: null as string | null,
-  state: { midiProfile: null, playbackColumns: 1, playbackRows: 1, playbackPage: 0, cueListSetTarget: 12 as number | null, cueListSetArmed: true, playbackSetArmed: false, shiftArmed: false, blackout: false },
+  state: { midiProfile: null, playbackColumns: 1, playbackRows: 1, playbackPage: 0, cueListSetTarget: 12 as number | null, cueListSetArmed: true, playbackSetArmed: false, shiftArmed: false, updateArmed: false, blackout: false },
   playbacks: {
     active_page: 1,
     pages: [{ number: 1, name: "Main", slots: {} as Record<string, number> }],
     pool: [] as Array<Record<string, any>>,
     active: [] as Array<Record<string, any>>,
-    cue_lists: [{ id: "front", name: "Front sequence", cues: [], mode: "sequence", priority: 0, looped: false }],
+    cue_lists: [{ id: "front", name: "Front sequence", cues: [] as Array<Record<string, any>>, mode: "sequence", priority: 0, looped: false }],
     desk: { buttons: 3 }, selected_playback: null as number | null,
   },
 }));
@@ -29,7 +30,7 @@ describe("PlaybackFaderBank authoritative playback surfaces", () => {
   beforeEach(() => {
     mocks.dispatch.mockReset(); mocks.executeCommandLine.mockReset().mockResolvedValue(true); mocks.refresh.mockReset().mockResolvedValue(undefined); mocks.poolPlaybackAction.mockReset().mockResolvedValue(undefined); mocks.resetCommandLine.mockReset(); mocks.savePlaybackSlot.mockReset().mockResolvedValue(true); mocks.clearPlaybackSlot.mockReset().mockResolvedValue(true);
     mocks.commandLine = "FIXTURE"; mocks.error = null;
-    Object.assign(mocks.state, { cueListSetTarget: 12, cueListSetArmed: true, playbackSetArmed: false, shiftArmed: false, blackout: false });
+    Object.assign(mocks.state, { cueListSetTarget: 12, cueListSetArmed: true, playbackSetArmed: false, shiftArmed: false, updateArmed: false, blackout: false });
     mocks.playbacks.pages[0].slots = {}; mocks.playbacks.pool = []; mocks.playbacks.active = []; mocks.playbacks.selected_playback = null;
   });
 
@@ -82,6 +83,20 @@ describe("PlaybackFaderBank authoritative playback surfaces", () => {
     fireEvent.click(screen.getByRole("button", { name: "GO +" }));
     expect(screen.getByRole("dialog", { name: "Playback Configuration" })).toBeInTheDocument();
     expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
+  });
+
+  it("routes Update before playback execution with concrete playback and current Cue context", () => {
+    assignPlayback();
+    mocks.state.updateArmed = true;
+    mocks.playbacks.cue_lists[0].cues = [{ id: "cue-2", number: 2, name: "Look", fade_millis: 0, delay_millis: 0, trigger: { type: "manual" }, changes: [] }];
+    mocks.playbacks.active = [{ playback_number: 7, cue_list_id: "front", cue_index: 0, paused: false, master: 1, flash: false }];
+    const selected = vi.fn();
+    window.addEventListener(UPDATE_TARGET_EVENT, selected);
+    render(<PlaybackFaderBank count={1}/>);
+    fireEvent.click(screen.getByRole("button", { name: "GO +" }));
+    expect((selected.mock.calls[0][0] as CustomEvent).detail).toEqual({ family: { type: "cue" }, object_id: "front", playback_number: 7, cue_id: "cue-2", cue_number: 2, validate_active_context: true });
+    expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
+    window.removeEventListener(UPDATE_TARGET_EVENT, selected);
   });
 
   it("uses SELECT then any playback touch without firing the mapped button", async () => {

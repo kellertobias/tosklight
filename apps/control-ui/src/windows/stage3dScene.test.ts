@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { VisualizationSnapshot } from "../api/types";
-import { buildStageScene, cueVisualization, migrateStagePosition } from "./stage3dScene";
+import { buildStageScene, cueVisualization, migrateStagePosition, mountFixtureModel } from "./stage3dScene";
 import { BUILT_IN_STAGE_ASSETS, createBuiltInStageAsset, createBuiltInFixtureModel, inferBuiltInFixtureKind, movingLightTiltRadians } from "./builtInStageModels";
 import * as THREE from "three";
 import type { PatchedFixture } from "../api/types";
+import { blankChannel, blankFixtureProfile, blankHead, fixtureDefinitionFromProfileMode, geometryTemplate } from "../components/setup/fixtureProfileModel";
 
 describe("3D stage state", () => {
   it("migrates legacy percentage positions into the meter-based stage", () => {
@@ -20,6 +21,192 @@ describe("3D stage state", () => {
     expect(first.values).toHaveLength(1);
     const released = cueVisualization(first, [{ fixture_id: "one", attribute: "intensity", value: null }]);
     expect(released.values).toHaveLength(0);
+  });
+
+  it("consumes schema-v2 hierarchy motion, logical-head values, multiple emitters, and source layouts", () => {
+    const profile = blankFixtureProfile();
+    profile.manufacturer = "Acme";
+    profile.name = "Twin Beam";
+    profile.revision = 1;
+    const mode = profile.modes[0];
+    const second = { ...blankHead(1, 1), master_shared: false };
+    mode.heads.push(second);
+    mode.channels = [
+      { ...blankChannel(mode), head_id: mode.heads[0].id, attribute: "intensity" },
+      { ...blankChannel(mode), head_id: second.id, attribute: "intensity" },
+    ];
+    mode.geometry = geometryTemplate("shared_pan_multi_head", mode.heads.map((head) => head.id));
+    mode.geometry.emitters[0].layout = { type: "matrix", columns: 2, rows: 2, spacing: { x: 40, y: 40, z: 0 } };
+    mode.geometry.emitters[0].feather = .35;
+    mode.geometry.emitters[0].focus = .7;
+    const definition = fixtureDefinitionFromProfileMode(profile, mode);
+    const fixture = {
+      fixture_id: profile.id,
+      universe: 1,
+      address: 1,
+      definition,
+      logical_heads: [{ head_index: 1, fixture_id: "head-two" }],
+    } as PatchedFixture;
+    const snapshot: VisualizationSnapshot = {
+      revision: 1,
+      generated_at: "",
+      grand_master: 1,
+      blackout: false,
+      values: [
+        { fixture_id: profile.id, attribute: "pan", value: { kind: "normalized", value: .75 } },
+        { fixture_id: profile.id, attribute: "tilt", value: { kind: "normalized", value: .25 } },
+        { fixture_id: profile.id, attribute: "intensity", value: { kind: "normalized", value: .4 } },
+        { fixture_id: profile.id, attribute: "beam.focus", value: { kind: "normalized", value: .2 } },
+        { fixture_id: profile.id, attribute: "beam.zoom", value: { kind: "normalized", value: .75 } },
+        { fixture_id: "head-two", attribute: "tilt", value: { kind: "normalized", value: .75 } },
+        { fixture_id: "head-two", attribute: "intensity", value: { kind: "normalized", value: .8 } },
+      ],
+    };
+    const { scene } = buildStageScene([{ fixture, index: 0, position: { x: 0, y: 0, z: 3, rotationX: 0, rotationY: 0, rotationZ: 0 } }], snapshot);
+    const pan = mode.geometry.nodes.find((node) => node.motion?.attribute === "pan")!;
+    const tilts = mode.geometry.nodes.filter((node) => node.motion?.attribute === "tilt");
+    expect(scene.getObjectByName(`geometry-node:${pan.id}`)?.rotation.y).toBeCloseTo(THREE.MathUtils.degToRad(135));
+    expect(scene.getObjectByName(`geometry-node:${tilts[0].id}`)?.rotation.x).toBeCloseTo(THREE.MathUtils.degToRad(-67.5));
+    expect(scene.getObjectByName(`geometry-node:${tilts[1].id}`)?.rotation.x).toBeCloseTo(THREE.MathUtils.degToRad(67.5));
+    const sources: THREE.Object3D[] = [];
+    scene.traverse((object) => { if (object.name.startsWith("geometry-source:")) sources.push(object); });
+    expect(sources).toHaveLength(5);
+    expect(sources.filter((source) => source.userData.layout === "matrix")).toHaveLength(4);
+    const emitter = scene.getObjectByName(`geometry-emitter:${mode.geometry.emitters[0].id}`)!;
+    expect(emitter.userData.sourceCount).toBe(4);
+    expect(emitter.userData.beamAngleDegrees).toBeLessThan(emitter.userData.fieldAngleDegrees);
+    expect(emitter.userData.feather).toBe(.35);
+    expect(emitter.userData.focus).toBe(.2);
+    const cores: THREE.Object3D[] = [];
+    scene.traverse((object) => { if (object.name === "beam-core") cores.push(object); });
+    expect(cores).toHaveLength(5);
+  });
+
+  it("places point, ring, strip, matrix, and explicit-pixel beam sources", () => {
+    const profile = blankFixtureProfile();
+    profile.manufacturer = "Acme";
+    profile.name = "Pixel Lamp";
+    profile.revision = 1;
+    const mode = profile.modes[0];
+    mode.channels = [{ ...blankChannel(mode), attribute: "intensity" }];
+    const nodeId = mode.geometry.nodes[0].id;
+    const headId = mode.heads[0].id;
+    const emitter = mode.geometry.emitters[0];
+    mode.geometry.emitters = [
+      { ...emitter, id: "point", node_id: nodeId, head_id: headId, layout: { type: "point" } },
+      { ...emitter, id: "ring", node_id: nodeId, head_id: headId, layout: { type: "ring", count: 4, radius_millimetres: 100 } },
+      { ...emitter, id: "strip", node_id: nodeId, head_id: headId, layout: { type: "strip", count: 3, spacing_millimetres: 50 } },
+      { ...emitter, id: "matrix", node_id: nodeId, head_id: headId, layout: { type: "matrix", columns: 2, rows: 2, spacing: { x: 40, y: 30, z: 10 } } },
+      { ...emitter, id: "pixels", node_id: nodeId, head_id: headId, layout: { type: "explicit_pixels", positions: [{ x: 0, y: 0, z: 0 }, { x: 100, y: 200, z: 300 }] } },
+    ];
+    const fixture = {
+      fixture_id: profile.id,
+      universe: 1,
+      address: 1,
+      definition: fixtureDefinitionFromProfileMode(profile, mode),
+      logical_heads: [],
+    } as PatchedFixture;
+    const { scene } = buildStageScene([{
+      fixture,
+      index: 0,
+      position: { x: 0, y: 0, z: 3, rotationX: 0, rotationY: 0, rotationZ: 0 },
+    }], null);
+    const sources: THREE.Object3D[] = [];
+    scene.traverse((object) => { if (object.name.startsWith("geometry-source:")) sources.push(object); });
+
+    expect(sources).toHaveLength(14);
+    expect(Object.fromEntries(["point", "ring", "strip", "matrix", "explicit_pixels"].map((layout) => [
+      layout,
+      sources.filter((source) => source.userData.layout === layout).length,
+    ]))).toEqual({ point: 1, ring: 4, strip: 3, matrix: 4, explicit_pixels: 2 });
+    expect(scene.getObjectByName("geometry-source:pixels:1")?.position.toArray()).toEqual([.1, .2, .3]);
+  });
+
+  it("mounts named GLB parts on their profile geometry anchors", () => {
+    const profile = blankFixtureProfile();
+    profile.manufacturer = "Acme";
+    profile.name = "Bound Mover";
+    profile.revision = 1;
+    const mode = profile.modes[0];
+    mode.geometry = geometryTemplate("moving_head", [mode.heads[0].id]);
+    const pan = mode.geometry.nodes.find((node) => node.motion?.attribute === "pan")!;
+    const tilt = mode.geometry.nodes.find((node) => node.motion?.attribute === "tilt")!;
+    pan.glb_node = "PanVisual";
+    tilt.glb_node = "TiltVisual";
+    const fixture = {
+      fixture_id: profile.id,
+      universe: 1,
+      address: 1,
+      definition: fixtureDefinitionFromProfileMode(profile, mode),
+      logical_heads: [],
+    } as PatchedFixture;
+    const { scene, fixtureObjects } = buildStageScene([{
+      fixture,
+      index: 0,
+      position: { x: 0, y: 0, z: 3, rotationX: 0, rotationY: 0, rotationZ: 0 },
+    }], {
+      revision: 1,
+      generated_at: "",
+      grand_master: 1,
+      blackout: false,
+      values: [{ fixture_id: profile.id, attribute: "pan", value: { kind: "normalized", value: .75 } }],
+    });
+    const model = new THREE.Group();
+    const panVisual = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1));
+    panVisual.name = "PanVisual";
+    const tiltVisual = new THREE.Mesh(new THREE.SphereGeometry(.5));
+    tiltVisual.name = "TiltVisual";
+    panVisual.add(tiltVisual);
+    model.add(panVisual);
+    const root = fixtureObjects.get(profile.id)!;
+
+    expect(mountFixtureModel(root, model, fixture)).toBe(2);
+    const panPart = scene.getObjectByName(`fixture-model-part:${pan.id}`)!;
+    const tiltPart = scene.getObjectByName(`fixture-model-part:${tilt.id}`)!;
+    expect(panPart.parent?.name).toBe(`geometry-node-anchor:${pan.id}`);
+    expect(tiltPart.parent?.name).toBe(`geometry-node-anchor:${tilt.id}`);
+    expect(panPart.getObjectByName("PanVisual")).toBeTruthy();
+    expect(panPart.getObjectByName("TiltVisual")).toBeUndefined();
+    expect(tiltPart.getObjectByName("TiltVisual")).toBeTruthy();
+    expect(scene.getObjectByName(`geometry-part:${pan.id}`)).toBeUndefined();
+    expect(scene.getObjectByName(`geometry-node:${pan.id}`)?.rotation.y).toBeCloseTo(THREE.MathUtils.degToRad(135));
+  });
+
+  it("uses post-profile calibrated color and mastered intensity without applying desk masters twice", () => {
+    const profile = blankFixtureProfile();
+    profile.manufacturer = "Acme";
+    profile.name = "Projected Lamp";
+    profile.revision = 1;
+    const mode = profile.modes[0];
+    mode.channels = [{ ...blankChannel(mode), attribute: "intensity" }];
+    const fixture = {
+      fixture_id: profile.id,
+      universe: 1,
+      address: 1,
+      definition: fixtureDefinitionFromProfileMode(profile, mode),
+      logical_heads: [],
+    } as PatchedFixture;
+    const { scene } = buildStageScene([{
+      fixture,
+      index: 0,
+      position: { x: 0, y: 0, z: 3, rotationX: 0, rotationY: 0, rotationZ: 0 },
+    }], {
+      revision: 1,
+      generated_at: "",
+      grand_master: .1,
+      blackout: true,
+      values: [
+        { fixture_id: profile.id, attribute: "intensity", value: { kind: "normalized", value: 1 } },
+        { fixture_id: profile.id, attribute: "color", value: { kind: "color_xyz", value: { x: .4124564, y: .2126729, z: .0193339 } } },
+      ],
+      profile_output_values: [
+        { fixture_id: profile.id, attribute: "intensity", value: { kind: "normalized", value: .25 } },
+        { fixture_id: profile.id, attribute: "color", value: { kind: "color_xyz", value: { x: .1804375, y: .072175, z: .9503041 } } },
+      ],
+    });
+    const emitter = scene.getObjectByName(`geometry-emitter:${mode.geometry.emitters[0].id}`)!;
+    expect(emitter.userData.intensity).toBe(.25);
+    expect(emitter.userData.color).toBe("#0000ff");
   });
 });
 

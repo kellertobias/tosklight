@@ -20,6 +20,7 @@ interface Show000State {
   compactRevisionName: string;
   defaultRevisionName: string;
   compactCopy?: ShowEntry;
+  compactRevisionCopy?: ShowEntry;
   defaultCopy?: ShowEntry;
   compactFixture: string;
   defaultFixture: string;
@@ -57,7 +58,10 @@ test.describe("docs/testing/00-generate-show-files.md", () => {
     },
     api: async ({ api }, state) => {
       state.compactCopy = await copyShow(api, state.canonical.compact, state.compactCopyName);
-      state.compactInitiallyMatched = JSON.stringify(await showSnapshot(api, state.compactCopy.id)) === JSON.stringify(await showSnapshot(api, state.canonical.compact.id));
+      await openShow(api, state.canonical.compact.id);
+      const compactCanonicalSnapshot = await showSnapshot(api, state.canonical.compact.id);
+      await openShow(api, state.compactCopy.id);
+      state.compactInitiallyMatched = JSON.stringify(await showSnapshot(api, state.compactCopy.id)) === JSON.stringify(compactCanonicalSnapshot);
       await updateGroup(api, state.compactCopy.id, "4", {
         name: "Copy Center Spot",
         color: "#1bd6ec",
@@ -66,10 +70,13 @@ test.describe("docs/testing/00-generate-show-files.md", () => {
       });
       const revision = await saveNamedRevision(api, state.compactCopy.id, state.compactRevisionName);
       await updateGroup(api, state.compactCopy.id, "4", { name: "Temporary mutation" });
-      await openNamedRevision(api, state.compactCopy.id, revision.revision);
+      state.compactRevisionCopy = await openNamedRevision(api, state.compactCopy.id, revision.revision);
 
       state.defaultCopy = await copyShow(api, state.canonical.defaultStage, state.defaultCopyName);
-      state.defaultInitiallyMatched = JSON.stringify(await showSnapshot(api, state.defaultCopy.id)) === JSON.stringify(await showSnapshot(api, state.canonical.defaultStage.id));
+      await openShow(api, state.canonical.defaultStage.id);
+      const defaultCanonicalSnapshot = await showSnapshot(api, state.canonical.defaultStage.id);
+      await openShow(api, state.defaultCopy.id);
+      state.defaultInitiallyMatched = JSON.stringify(await showSnapshot(api, state.defaultCopy.id)) === JSON.stringify(defaultCanonicalSnapshot);
       await createGroup(api, state.defaultCopy.id, "900", "Copy Marker", [state.defaultFixture]);
       await saveNamedRevision(api, state.defaultCopy.id, state.defaultRevisionName);
       await openShow(api, state.canonical.defaultStage.id);
@@ -104,6 +111,7 @@ test.describe("docs/testing/00-generate-show-files.md", () => {
       await expect(groupTile(page, "Copy Center Spot")).toBeVisible();
       await saveNamedRevisionThroughUi(page, state.compactRevisionName);
       await loadNamedRevisionThroughUi(page, state.compactCopyName, state.compactRevisionName);
+      state.compactRevisionCopy = await activeShowEntry(api);
 
       await loadThroughUi(page, state.canonical.defaultStage.name);
       await saveAsThroughUi(page, state.defaultCopyName);
@@ -117,10 +125,11 @@ test.describe("docs/testing/00-generate-show-files.md", () => {
     },
     assert: async ({ api }, state) => {
       expect(state.compactCopy).toBeDefined();
+      expect(state.compactRevisionCopy).toBeDefined();
       expect(state.defaultCopy).toBeDefined();
       expect(state.compactInitiallyMatched).toBe(true);
       expect(state.defaultInitiallyMatched).toBe(true);
-      expect(await groupBody(api, state.compactCopy!.id, "4")).toMatchObject({
+      expect(await groupBody(api, state.compactRevisionCopy!.id, "4")).toMatchObject({
         name: "Copy Center Spot",
         color: "#1bd6ec",
         icon: "★",
@@ -145,7 +154,10 @@ test.describe("docs/testing/00-generate-show-files.md", () => {
     const compactCopy = await copyShow(api, canonical.compact, compactCopyName);
     await expectActiveShow(api, compactCopyName);
     await assertCompactRig(api, compactCopy.id);
-    await expect(showSnapshot(api, compactCopy.id)).resolves.toEqual(await showSnapshot(api, canonical.compact.id));
+    await openShow(api, canonical.compact.id);
+    const compactCanonicalSnapshot = await showSnapshot(api, canonical.compact.id);
+    await openShow(api, compactCopy.id);
+    await expect(showSnapshot(api, compactCopy.id)).resolves.toEqual(compactCanonicalSnapshot);
     const compactFixture = String((await objects(api, compactCopy.id, "patched_fixture"))[0].body.fixture_id);
     await updateGroup(api, compactCopy.id, "4", {
       name: "Copy Center Spot",
@@ -155,15 +167,20 @@ test.describe("docs/testing/00-generate-show-files.md", () => {
     });
     const compactRevision = await saveNamedRevision(api, compactCopy.id, "SHOW-000 compact API mutation");
     await updateGroup(api, compactCopy.id, "4", { name: "Temporary mutation" });
-    await openNamedRevision(api, compactCopy.id, compactRevision.revision);
-    expect(await groupBody(api, compactCopy.id, "4")).toMatchObject({ name: "Copy Center Spot", color: "#1bd6ec", icon: "★", fixtures: [compactFixture] });
+    const revisionCopy = await openNamedRevision(api, compactCopy.id, compactRevision.revision);
+    expect(revisionCopy.id).not.toBe(compactCopy.id);
+    expect(await groupBody(api, revisionCopy.id, "4")).toMatchObject({ name: "Copy Center Spot", color: "#1bd6ec", icon: "★", fixtures: [compactFixture] });
+    expect(await groupBody(api, compactCopy.id, "4")).toMatchObject({ name: "Temporary mutation" });
     await openShow(api, canonical.compact.id);
     expect(await groupBody(api, canonical.compact.id, "4")).toMatchObject({ name: "Center Spot", fixtures: [] });
 
     const defaultCopy = await copyShow(api, canonical.defaultStage, defaultCopyName);
     await expectActiveShow(api, defaultCopyName);
     await assertDefaultStage(api, defaultCopy.id);
-    await expect(showSnapshot(api, defaultCopy.id)).resolves.toEqual(await showSnapshot(api, canonical.defaultStage.id));
+    await openShow(api, canonical.defaultStage.id);
+    const defaultCanonicalSnapshot = await showSnapshot(api, canonical.defaultStage.id);
+    await openShow(api, defaultCopy.id);
+    await expect(showSnapshot(api, defaultCopy.id)).resolves.toEqual(defaultCanonicalSnapshot);
     const defaultFixture = String((await objects(api, defaultCopy.id, "patched_fixture"))[0].body.fixture_id);
     await createGroup(api, defaultCopy.id, "900", "Copy Marker", [defaultFixture]);
     await saveNamedRevision(api, defaultCopy.id, "SHOW-000 default API mutation");
@@ -225,7 +242,7 @@ test.describe("docs/testing/00-generate-show-files.md", () => {
     await expect(properties.getByRole("button", { name: /Choose icon/ })).toContainText("★");
     await properties.getByRole("button", { name: "Cancel" }).click();
 
-    await desk.recordStep("PERSIST", "Save a named revision, restore that revision, and verify the Group mutation is still present only in the copy.");
+    await desk.recordStep("PERSIST", "Save a named revision, load it as a separate revision copy, and verify the Group mutation is present without rewinding the working show's Latest Autosave.");
     await saveNamedRevisionThroughUi(page, compactRevisionName);
     await loadNamedRevisionThroughUi(page, compactCopyName, compactRevisionName);
     await openGroups(page);
@@ -294,7 +311,7 @@ async function saveAsThroughUi(page: Page, name: string): Promise<void> {
   await openShowMenu(page);
   await page.getByRole("button", { name: "Save As", exact: true }).click();
   await page.getByRole("textbox", { name: "Show name" }).fill(name);
-  await page.getByRole("button", { name: "Save show", exact: true }).click();
+  await page.getByRole("button", { name: "Save as New Show", exact: true }).click();
   await expect(page.locator(".dock-identity b")).toContainText(name);
   await closeShowMenu(page);
 }
@@ -461,8 +478,8 @@ async function saveNamedRevision(api: ApiDriver, showId: string, name: string): 
   return api.request("POST", `/api/v1/shows/${showId}/revisions`, { name });
 }
 
-async function openNamedRevision(api: ApiDriver, showId: string, revision: number): Promise<void> {
-  await api.request("POST", `/api/v1/shows/${showId}/revisions/${revision}/open`, { transition: "hold_current" });
+async function openNamedRevision(api: ApiDriver, showId: string, revision: number): Promise<ShowEntry> {
+  return api.request("POST", `/api/v1/shows/${showId}/revisions/${revision}/open`, { transition: "hold_current" });
 }
 
 async function openShow(api: ApiDriver, id: string): Promise<void> {
@@ -478,6 +495,12 @@ async function showNamed(api: ApiDriver, name: string): Promise<ShowEntry> {
 async function expectActiveShow(api: ApiDriver, name: string): Promise<void> {
   const bootstrap = await api.request<{ active_show: ShowEntry | null }>("GET", "/api/v1/bootstrap", undefined, false);
   expect(bootstrap.active_show?.name).toBe(name);
+}
+
+async function activeShowEntry(api: ApiDriver): Promise<ShowEntry> {
+  const bootstrap = await api.request<{ active_show: ShowEntry | null }>("GET", "/api/v1/bootstrap", undefined, false);
+  expect(bootstrap.active_show).toBeTruthy();
+  return bootstrap.active_show!;
 }
 
 function group(name: string, fixtures: string[], playback_fader: number | null) {
