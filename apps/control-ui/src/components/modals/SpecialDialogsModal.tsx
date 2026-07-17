@@ -7,6 +7,12 @@ import {
   resolveLampPositions,
   returnHomeAssignments,
 } from "./specialPosition";
+import {
+  colorProgrammerAssignments,
+  hsvToRgb,
+  interpolatePickerRange,
+  type PickerColor,
+} from "./specialColor";
 import { Button } from "../common";
 import type { PatchedFixture } from "../../api/types";
 
@@ -26,24 +32,6 @@ export function compatibleSpecialDialogActions(fixtures: PatchedFixture[], attri
   return [...new Map(actions.map((action) => [`${action.fixtureId}\u0000${action.attribute}`, action])).values()];
 }
 
-function hsvToRgb(h: number, s: number, v: number) {
-  const i = Math.floor(h * 6),
-    f = h * 6 - i,
-    p = v * (1 - s),
-    q = v * (1 - f * s),
-    t = v * (1 - (1 - f) * s);
-  return (
-    [
-      [v, t, p],
-      [q, v, p],
-      [p, v, t],
-      [p, q, v],
-      [t, p, v],
-      [v, p, q],
-    ] as number[][]
-  )[i % 6];
-}
-
 export function SpecialDialogsModal() {
   const { state, dispatch } = useApp();
   const server = useServer();
@@ -52,11 +40,20 @@ export function SpecialDialogsModal() {
   const [hue, setHue] = useState(0.52),
     [saturation, setSaturation] = useState(0.8),
     [brightness, setBrightness] = useState(0.85);
+  const [colorRangePreview, setColorRangePreview] = useState<{
+    start: PickerColor;
+    end: PickerColor;
+    active: boolean;
+  } | null>(null);
   const [beamPage, setBeamPage] = useState(0),
     [dynamicSpeed, setDynamicSpeed] = useState(30);
   const trackball = useRef<HTMLDivElement>(null),
     colorSheet = useRef<HTMLDivElement>(null);
   const joystick = useRef({ x: 0, y: 0 });
+  const colorRangeGesture = useRef<{
+    pointerId: number;
+    start: PickerColor;
+  } | null>(null);
   const fixturePositions = useRef(new Map<string, { pan: number; tilt: number }>());
   const selectedFixtureKey = server.selectedFixtures.join("\u0000");
   const homeAssignments = useMemo(
@@ -92,15 +89,13 @@ export function SpecialDialogsModal() {
       server.setProgrammer(action.fixtureId, action.attribute, value),
     ));
   };
-  const applyColor = async (h = hue, s = saturation, v = brightness) => {
-    const [red, green, blue] = hsvToRgb(h, s, v);
-    await Promise.all(
-      server.selectedFixtures.flatMap((fixture) => [
-        server.setProgrammer(fixture, "color.red", red),
-        server.setProgrammer(fixture, "color.green", green),
-        server.setProgrammer(fixture, "color.blue", blue),
-      ]),
+  const applyColors = async (colors: PickerColor[]) => {
+    const assignments = colorProgrammerAssignments(
+      server.selectedFixtures,
+      server.patch?.fixtures ?? [],
+      colors,
     );
+    if (assignments.length) await server.setProgrammerMany(assignments);
   };
   const point = (
     event: PointerEvent<HTMLDivElement>,
@@ -119,11 +114,53 @@ export function SpecialDialogsModal() {
   const releasePosition = () => {
     joystick.current = { x: 0, y: 0 };
   };
-  const moveColor = (event: PointerEvent<HTMLDivElement>) => {
+  const pickerColor = (event: PointerEvent<HTMLDivElement>): PickerColor => {
     const next = point(event, colorSheet);
-    setHue(next.x);
-    setSaturation(1 - next.y);
-    void applyColor(next.x, 1 - next.y, brightness);
+    return { hue: next.x, saturation: 1 - next.y, brightness };
+  };
+  const moveColor = (event: PointerEvent<HTMLDivElement>) => {
+    const next = pickerColor(event);
+    setHue(next.hue);
+    setSaturation(next.saturation);
+    const gesture = colorRangeGesture.current;
+    if (gesture?.pointerId === event.pointerId) {
+      setColorRangePreview({ start: gesture.start, end: next, active: true });
+      return;
+    }
+    void applyColors(server.selectedFixtures.map(() => next));
+  };
+  const startColor = (event: PointerEvent<HTMLDivElement>) => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const start = pickerColor(event);
+    if (event.shiftKey || state.shiftArmed) {
+      colorRangeGesture.current = { pointerId: event.pointerId, start };
+      setHue(start.hue);
+      setSaturation(start.saturation);
+      setColorRangePreview({ start, end: start, active: true });
+      return;
+    }
+    moveColor(event);
+  };
+  const completeColor = (event: PointerEvent<HTMLDivElement>) => {
+    const gesture = colorRangeGesture.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    const end = pickerColor(event);
+    colorRangeGesture.current = null;
+    setHue(end.hue);
+    setSaturation(end.saturation);
+    setColorRangePreview({ start: gesture.start, end, active: false });
+    void applyColors(
+      interpolatePickerRange(
+        server.selectedFixtures.length,
+        gesture.start,
+        end,
+      ),
+    );
+  };
+  const cancelColor = (event: PointerEvent<HTMLDivElement>) => {
+    if (colorRangeGesture.current?.pointerId !== event.pointerId) return;
+    colorRangeGesture.current = null;
+    setColorRangePreview(null);
   };
   useEffect(() => {
     if (!state.specialDialogsOpen || state.specialDialogFamily !== "Position") return;
@@ -173,7 +210,7 @@ export function SpecialDialogsModal() {
       : /^(gobo|prism|iris)/.test(attribute),
   );
   const pageAttributes = beamAttributes.slice(beamPage * 4, beamPage * 4 + 4);
-  const color = hsvToRgb(hue, saturation, brightness);
+  const color = hsvToRgb({ hue, saturation, brightness });
   const swatch = `rgb(${color.map((channel) => Math.round(channel * 255)).join(",")})`;
   return (
     <div
@@ -236,16 +273,40 @@ export function SpecialDialogsModal() {
               <div
                 ref={colorSheet}
                 className="color-sheet"
+                data-range-shift={state.shiftArmed ? "armed" : "idle"}
                 style={{ backgroundColor: `hsl(${hue * 360} 100% 50%)` }}
-                onPointerDown={(event) => {
-                  event.currentTarget.setPointerCapture(event.pointerId);
-                  moveColor(event);
-                }}
+                onPointerDown={startColor}
                 onPointerMove={(event) => {
                   if (event.currentTarget.hasPointerCapture(event.pointerId))
                     moveColor(event);
                 }}
+                onPointerUp={completeColor}
+                onPointerCancel={cancelColor}
+                onLostPointerCapture={cancelColor}
               >
+                {colorRangePreview && (
+                  <svg
+                    className="color-range-preview"
+                    data-active={colorRangePreview.active}
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                    style={{ position: "absolute", zIndex: 2, inset: 0, width: "100%", height: "100%", overflow: "visible", pointerEvents: "none" }}
+                    aria-hidden="true"
+                  >
+                    <line
+                      x1={colorRangePreview.start.hue * 100}
+                      y1={(1 - colorRangePreview.start.saturation) * 100}
+                      x2={colorRangePreview.end.hue * 100}
+                      y2={(1 - colorRangePreview.end.saturation) * 100}
+                      stroke="white"
+                      strokeWidth="1.5"
+                      strokeDasharray={colorRangePreview.active ? "3 2" : undefined}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                    <circle cx={colorRangePreview.start.hue * 100} cy={(1 - colorRangePreview.start.saturation) * 100} r="2.5" fill="white" vectorEffect="non-scaling-stroke" />
+                    <circle cx={colorRangePreview.end.hue * 100} cy={(1 - colorRangePreview.end.saturation) * 100} r="2.5" fill="none" stroke="white" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+                  </svg>
+                )}
                 <i
                   style={{
                     left: `${hue * 100}%`,
@@ -253,7 +314,7 @@ export function SpecialDialogsModal() {
                   }}
                 />
               </div>
-              <div className="brightness-control"><span>Brightness</span><Button aria-label="Decrease brightness" onClick={() => { const value = Math.max(0, brightness - .05); setBrightness(value); void applyColor(hue, saturation, value); }}>−</Button><b>{Math.round(brightness * 100)}%</b><Button aria-label="Increase brightness" onClick={() => { const value = Math.min(1, brightness + .05); setBrightness(value); void applyColor(hue, saturation, value); }}>+</Button></div>
+              <div className="brightness-control"><span>Brightness</span><Button aria-label="Decrease brightness" onClick={() => { const value = Math.max(0, brightness - .05); setBrightness(value); void applyColors(server.selectedFixtures.map(() => ({ hue, saturation, brightness: value }))); }}>−</Button><b>{Math.round(brightness * 100)}%</b><Button aria-label="Increase brightness" onClick={() => { const value = Math.min(1, brightness + .05); setBrightness(value); void applyColors(server.selectedFixtures.map(() => ({ hue, saturation, brightness: value }))); }}>+</Button></div>
               <strong style={{ color: swatch }}>{swatch}</strong>
             </div>
           )}

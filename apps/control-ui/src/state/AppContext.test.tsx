@@ -5,7 +5,7 @@ import { AppProvider, useApp } from "./AppContext";
 
 function ModalState() {
   const { state } = useApp();
-  return <><span>{state.systemControlsOpen ? "running-open" : "running-closed"}</span><span>built-in-{state.builtIn ?? "none"}</span></>;
+  return <><span>{state.systemControlsOpen ? "running-open" : "running-closed"}</span><span>built-in-{state.builtIn ?? "none"}</span><span>{state.shiftArmed ? "shift-held" : "shift-released"}</span></>;
 }
 
 function PatchState() {
@@ -43,6 +43,14 @@ describe("desk shortcuts", () => {
 
     act(() => window.dispatchEvent(new CustomEvent("light:desk-action", { detail: "shift-9" })));
     expect(screen.getByText("built-in-help")).toBeInTheDocument();
+  });
+
+  it("tracks attached-hardware Shift press and release for pointer gestures", () => {
+    render(<AppProvider><ModalState/></AppProvider>);
+    act(() => window.dispatchEvent(new CustomEvent("light:desk-action", { detail: "shift-down" })));
+    expect(screen.getByText("shift-held")).toBeInTheDocument();
+    act(() => window.dispatchEvent(new CustomEvent("light:desk-action", { detail: "shift-up" })));
+    expect(screen.getByText("shift-released")).toBeInTheDocument();
   });
 
   it("routes attached-hardware SET into the selected Patch surface", () => {

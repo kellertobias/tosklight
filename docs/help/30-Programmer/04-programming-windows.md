@@ -21,6 +21,14 @@ Open **Position → Special Dialog** and press **Return Home** beside the relati
 
 Return Home is one normal programmer gesture. It follows Programmer Fade and the current Blind, Preview, or Preload mode, and one **UND** restores the preceding programmer values. Record or Update the result when it should become show data. Return Home itself does not edit fixture-profile defaults or save values into a Cue or Preset.
 
+## Align a Color range
+
+Open **Color → Special Dialog** to apply the picker's chosen color uniformly to the current selection. To create a range, hold Shift on the normal keyboard or attached hardware while pressing a start point, drag to the end point, and release. The preview line and endpoint markers show the active range without covering the picker.
+
+The first selected fixture receives the start color, the last receives the end color, and intermediate fixtures receive equal steps in the current selection order. Horizontal hue follows the visible drag direction directly rather than wrapping around the color wheel. Every step uses the displayed Brightness. Reversing the selection reverses which fixtures receive the steps; fixtures or logical heads without compatible RGB or CMY Color attributes are skipped without changing the spacing.
+
+The complete range lands once on release as one normal Programmer Fade and Undo gesture. Leaving or cancelling the pointer gesture applies nothing. Blind, Preview, Preload, Record, and Update use the same programmer behavior as other Color edits.
+
 The Fixture Sheet is also the on-desk step-state view: remembered-base rows remain subtly selected while the actual step is prominent, including on multi-head rows and collapsed parents. The indication remains with HIGH off. The command bar and hardware simulator do not add separate Highlight status panels.
 
 Pane settings are local to that pane. A Stage pane can follow Preload while another shows live output; a Preset pane can remain on Position while another shows Color.

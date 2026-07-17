@@ -88,6 +88,15 @@ Configure two enabled routes for logical universe 1: Art-Net universe 1 to the b
 - **Pass:** Return Home affects only compatible heads in the current selection, participates in ordinary programmer timing and Undo, and does not modify profile or recorded show data.
 - **Executable scenario:** [POSITION-HOME-001](../../../tests/25-return-home-position-special-dialog.spec.ts)
 
+### COLOR-RANGE-001 — Align an ordered range in the Color special dialog
+
+- **Starting show:** Load canonical `default-stage.show`, immediately Save As separate `color-range-001-api.show` and `color-range-001-ui.show` working copies, and use the active copy.
+- **Surface:** Paired authenticated batch command and the Color special dialog using normal keyboard Shift and attached OSC hardware Shift.
+- **Actions:** Apply one uniform picker color, Undo, Shift-drag across the visible picker, prove no mutation before release and one mutation on release, Undo, cancel another active range, then repeat the completed range while attached hardware holds Shift.
+- **Oracle:** Current ordered selection, exact straight-line hue/saturation interpolation at the displayed Brightness, RGB/CMY per-head assignments, skipped unsupported targets, visible start/end/line preview, batch audit count, and prior values after one Undo.
+- **Pass:** Uniform color remains available, completed ranges apply once in selection order from either Shift source, and cancellation cannot leave partial programmer values.
+- **Executable scenario:** [COLOR-RANGE-001](../../../tests/26-color-special-dialog-alignment.spec.ts)
+
 ## Default Stage Show
 
 Canonical `default-stage.show` contains the complete 49-record built-in patch:
@@ -151,6 +160,7 @@ The executable workflows that use this patch are cataloged under the concrete Gr
 | GROUP-003–005 | Group semantics | derived membership, frozen membership, stored empty Groups, skipped missing range IDs, unpatched members, and safe invalid references | Group objects, selection, visible panes, rendered output |
 | PROG-001–004 | Programmer | selection gesture lifetime, ordered spreading, fixture/Group LTP, and two-stage Clear | programmer state, audit, panes, exact output |
 | POSITION-HOME-001 | Position Return Home | ordered per-head profile defaults, independent 50% fallback, skipped incompatible fixtures, one faded Undo gesture, empty-selection safety, and software/hardware layout parity | paired programmer state, atomic batch audit, prior values after Undo, and production dialog controls |
+| COLOR-RANGE-001 | Color range alignment | uniform click, ordered straight-line hue/saturation interpolation, current Brightness, RGB/CMY and logical-head resolution, reversed order, one-fixture endpoint, cancel safety, single release mutation, and software/hardware Shift | paired programmer state, batch audit counts, visible range overlay, exact prior values after Undo, and attached OSC Shift state |
 | UPDATE-001–002 | Update | four Cue modes and authoritative tracked sources, exact eligibility, Preset/Group existing-versus-new semantics, touch/default/menu flows, current/explicit page context, pre-Update desk-settings migration with a schema-3 show, actual simulator pointer gesture exclusivity, and atomic revisions | paired and process-backed stored-object results, previews, revision history/undo, programmer retention, unrelated-object isolation, restart, simulator transport writes, and same-desk feedback |
 | HIGHLIGHT-001 | Transient Highlight output | independent HIGH state, complete/singleton application, programmer/store isolation, fixture-look overrides, first-frame Off reveal, ownership, and safety/master behavior | paired Highlight/programmer state, stored objects, and resolved raw output |
 | HIGHLIGHT-002 | Live selection source and lifecycle | Fixtures/Stage/Group/command selection reset, live Group ALL restoration, additive/subtractive stepped selection, multi-head/multipatch/unpatched/invalid items, empty selection, reconnect, and show-load clearing | paired actual selection, live source resolution, Highlight output, reconnect, and reload |

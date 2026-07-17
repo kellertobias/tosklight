@@ -588,9 +588,9 @@ export function ServerProvider({ children }: PropsWithChildren) {
               .deskLock()
               .then(setDeskLock)
               .catch(() => undefined);
-          if (event.kind === "desk_action" && (event.payload as { action?: string; session_id?: string })?.action) {
-            const action = event.payload as { action: string; session_id?: string };
-            if (!action.session_id || action.session_id === nextSession.session_id)
+          if (event.kind === "desk_action" && (event.payload as { action?: string; session_id?: string; desk_id?: string })?.action) {
+            const action = event.payload as { action: string; session_id?: string; desk_id?: string };
+            if ((!action.session_id && !action.desk_id) || action.session_id === nextSession.session_id || action.desk_id === nextSession.desk.id)
               window.dispatchEvent(new CustomEvent("light:desk-action", { detail: action.action }));
           }
           if (event.kind === "file_input_action") {

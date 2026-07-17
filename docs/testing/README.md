@@ -9,6 +9,7 @@ The [canonical test catalog](../help/99-Development/02-test-bench-coverage.md) i
 - [Client history and removal](../plans/Done/22-client-history-and-removal.DONE.md) retains the `CLIENT-001` desk-persistent presence, history, removal, and clean re-registration contract.
 - [Planned demo run](../plans/Done/23-planned-demo-run.DONE.md) retains the single `DEMO-001` narrated show-build, programming, busking, and Preload contract.
 - [Return Home in the Position special dialog](../plans/Done/25-return-home-position-special-dialog.DONE.md) retains the paired `POSITION-HOME-001` per-head defaults, atomic programmer gesture, Undo, and software/hardware layout contract.
+- [Color special-dialog alignment](../plans/Done/26-color-special-dialog-alignment.DONE.md) retains the paired `COLOR-RANGE-001` uniform click, ordered range, cancellation, Undo, and software/hardware Shift contract.
 
 This file remains because OSC-002, OSC-004, OSC-006, API-002, and CROSS-001 still contain contract assertions that are not fully represented by executable tests.
 

@@ -12582,6 +12582,17 @@ fn handle_programmer_osc(
                 }
             }
         }
+        emit(
+            state,
+            "desk_action",
+            serde_json::json!({
+                "desk_alias":parts[1],
+                "desk_id":session.desk.id,
+                "session_id":session.id,
+                "action":if pressed { "shift-down" } else { "shift-up" },
+                "source":"osc"
+            }),
+        );
         return;
     }
     if action == "record" {
