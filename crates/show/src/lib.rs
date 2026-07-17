@@ -262,13 +262,34 @@ impl DeskStore {
         Ok(())
     }
     pub fn selected_playback(&self, desk: Uuid, show: ShowId) -> Result<Option<u16>, StoreError> {
-        self.conn.query_row("SELECT playback FROM control_desk_selections WHERE desk_id=?1 AND show_id=?2", params![desk.to_string(),show.0.to_string()], |row| row.get(0)).optional().map_err(Into::into)
+        self.conn
+            .query_row(
+                "SELECT playback FROM control_desk_selections WHERE desk_id=?1 AND show_id=?2",
+                params![desk.to_string(), show.0.to_string()],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(Into::into)
     }
-    pub fn set_selected_playback(&self, desk: Uuid, show: ShowId, playback: Option<u16>) -> Result<(), StoreError> {
-        if playback.is_some_and(|number| !(1..=1_000).contains(&number)) { return Err(StoreError::Invalid("playback must be within 1-1000".into())); }
+    pub fn set_selected_playback(
+        &self,
+        desk: Uuid,
+        show: ShowId,
+        playback: Option<u16>,
+    ) -> Result<(), StoreError> {
+        if playback.is_some_and(|number| !(1..=1_000).contains(&number)) {
+            return Err(StoreError::Invalid("playback must be within 1-1000".into()));
+        }
         match playback {
-            Some(number) => { self.conn.execute("INSERT INTO control_desk_selections(desk_id,show_id,playback) VALUES (?1,?2,?3) ON CONFLICT(desk_id,show_id) DO UPDATE SET playback=excluded.playback", params![desk.to_string(),show.0.to_string(),number])?; }
-            None => { self.conn.execute("DELETE FROM control_desk_selections WHERE desk_id=?1 AND show_id=?2", params![desk.to_string(),show.0.to_string()])?; }
+            Some(number) => {
+                self.conn.execute("INSERT INTO control_desk_selections(desk_id,show_id,playback) VALUES (?1,?2,?3) ON CONFLICT(desk_id,show_id) DO UPDATE SET playback=excluded.playback", params![desk.to_string(),show.0.to_string(),number])?;
+            }
+            None => {
+                self.conn.execute(
+                    "DELETE FROM control_desk_selections WHERE desk_id=?1 AND show_id=?2",
+                    params![desk.to_string(), show.0.to_string()],
+                )?;
+            }
         }
         Ok(())
     }
@@ -702,6 +723,19 @@ pub struct ShowStore {
     conn: Connection,
 }
 
+pub struct AtomicObjectWrite<'a> {
+    pub kind: &'a str,
+    pub id: &'a str,
+    pub body: &'a serde_json::Value,
+    pub expected: Revision,
+}
+
+pub struct AtomicObjectDelete<'a> {
+    pub kind: &'a str,
+    pub id: &'a str,
+    pub expected: Revision,
+}
+
 impl ShowStore {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         let mut conn = Connection::open(path)?;
@@ -775,6 +809,70 @@ impl ShowStore {
         }
         self.conn.execute("INSERT INTO objects(kind,id,body_json,revision,updated_at) VALUES (?1,?2,?3,?4,?5) ON CONFLICT(kind,id) DO UPDATE SET body_json=excluded.body_json,revision=excluded.revision,updated_at=excluded.updated_at", params![kind,id,serde_json::to_string(body)?,revision as i64,Utc::now().to_rfc3339()])?;
         Ok(revision)
+    }
+
+    /// Applies related versioned object writes/deletes in one SQLite transaction. Playback slot
+    /// assignment uses this so a definition and its page identity can never be partially saved.
+    pub fn mutate_objects_atomically(
+        &self,
+        writes: &[AtomicObjectWrite<'_>],
+        deletes: &[AtomicObjectDelete<'_>],
+    ) -> Result<Vec<Revision>, StoreError> {
+        let transaction = self.conn.unchecked_transaction()?;
+        let mut revisions = Vec::with_capacity(writes.len());
+        for write in writes {
+            let current_row = transaction
+                .query_row(
+                    "SELECT revision,body_json FROM objects WHERE kind=?1 AND id=?2",
+                    params![write.kind, write.id],
+                    |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+                )
+                .optional()?;
+            let current = current_row.as_ref().map(|row| row.0 as u64).unwrap_or(0);
+            if current != write.expected {
+                return Err(StoreError::RevisionConflict {
+                    expected: write.expected,
+                    current,
+                });
+            }
+            let revision = current + 1;
+            if let Some((previous_revision, previous_body)) = current_row {
+                transaction.execute(
+                    "INSERT INTO object_history(kind,id,revision,body_json,created_at) VALUES (?1,?2,?3,?4,?5)",
+                    params![write.kind, write.id, previous_revision, previous_body, Utc::now().to_rfc3339()],
+                )?;
+            }
+            transaction.execute(
+                "INSERT INTO objects(kind,id,body_json,revision,updated_at) VALUES (?1,?2,?3,?4,?5) ON CONFLICT(kind,id) DO UPDATE SET body_json=excluded.body_json,revision=excluded.revision,updated_at=excluded.updated_at",
+                params![write.kind, write.id, serde_json::to_string(write.body)?, revision as i64, Utc::now().to_rfc3339()],
+            )?;
+            revisions.push(revision);
+        }
+        for delete in deletes {
+            let current = transaction
+                .query_row(
+                    "SELECT revision FROM objects WHERE kind=?1 AND id=?2",
+                    params![delete.kind, delete.id],
+                    |row| row.get::<_, i64>(0),
+                )
+                .optional()?
+                .map(|revision| revision as u64)
+                .unwrap_or(0);
+            if current != delete.expected {
+                return Err(StoreError::RevisionConflict {
+                    expected: delete.expected,
+                    current,
+                });
+            }
+            if current > 0 {
+                transaction.execute(
+                    "DELETE FROM objects WHERE kind=?1 AND id=?2",
+                    params![delete.kind, delete.id],
+                )?;
+            }
+        }
+        transaction.commit()?;
+        Ok(revisions)
     }
 
     pub fn undo_object(
@@ -1105,16 +1203,34 @@ mod tests {
             let store = DeskStore::open(&path).unwrap();
             let first = store.add_desk("Front", "front").unwrap();
             let second = store.add_desk("Backup", "backup").unwrap();
-            store.set_selected_playback(first.id, first_show, Some(17)).unwrap();
-            store.set_selected_playback(second.id, first_show, Some(23)).unwrap();
+            store
+                .set_selected_playback(first.id, first_show, Some(17))
+                .unwrap();
+            store
+                .set_selected_playback(second.id, first_show, Some(23))
+                .unwrap();
             (first.id, second.id)
         };
         let store = DeskStore::open(&path).unwrap();
-        assert_eq!(store.selected_playback(first_desk, first_show).unwrap(), Some(17));
-        assert_eq!(store.selected_playback(second_desk, first_show).unwrap(), Some(23));
-        assert_eq!(store.selected_playback(first_desk, second_show).unwrap(), None);
-        store.set_selected_playback(first_desk, first_show, None).unwrap();
-        assert_eq!(store.selected_playback(first_desk, first_show).unwrap(), None);
+        assert_eq!(
+            store.selected_playback(first_desk, first_show).unwrap(),
+            Some(17)
+        );
+        assert_eq!(
+            store.selected_playback(second_desk, first_show).unwrap(),
+            Some(23)
+        );
+        assert_eq!(
+            store.selected_playback(first_desk, second_show).unwrap(),
+            None
+        );
+        store
+            .set_selected_playback(first_desk, first_show, None)
+            .unwrap();
+        assert_eq!(
+            store.selected_playback(first_desk, first_show).unwrap(),
+            None
+        );
         drop(store);
         let _ = fs::remove_file(path);
     }
@@ -1136,6 +1252,118 @@ mod tests {
             })
         ));
         assert_eq!(show.objects("preset").unwrap()[0].revision, 1);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn related_object_writes_and_deletes_roll_back_together_on_revision_conflict() {
+        let path = temporary("atomic-objects");
+        let (show, _) = ShowStore::create(&path, "Atomic objects").unwrap();
+        let page = serde_json::json!({"number":1,"slots":{"1":41}});
+        let playback = serde_json::json!({"number":41,"name":"Original"});
+        show.put_object("playback_page", "1", &page, 0).unwrap();
+        show.put_object("playback", "41", &playback, 0).unwrap();
+
+        let changed_page = serde_json::json!({"number":1,"slots":{"1":42}});
+        let changed_playback = serde_json::json!({"number":41,"name":"Changed"});
+        assert!(matches!(
+            show.mutate_objects_atomically(
+                &[
+                    AtomicObjectWrite {
+                        kind: "playback_page",
+                        id: "1",
+                        body: &changed_page,
+                        expected: 1,
+                    },
+                    AtomicObjectWrite {
+                        kind: "playback",
+                        id: "41",
+                        body: &changed_playback,
+                        expected: 0,
+                    },
+                ],
+                &[],
+            ),
+            Err(StoreError::RevisionConflict {
+                expected: 0,
+                current: 1
+            })
+        ));
+        let stored_page = show.objects("playback_page").unwrap().remove(0);
+        let stored_playback = show.objects("playback").unwrap().remove(0);
+        assert_eq!((stored_page.revision, stored_page.body), (1, page.clone()));
+        assert_eq!(
+            (stored_playback.revision, stored_playback.body),
+            (1, playback.clone())
+        );
+
+        assert_eq!(
+            show.mutate_objects_atomically(
+                &[
+                    AtomicObjectWrite {
+                        kind: "playback_page",
+                        id: "1",
+                        body: &changed_page,
+                        expected: 1,
+                    },
+                    AtomicObjectWrite {
+                        kind: "playback",
+                        id: "41",
+                        body: &changed_playback,
+                        expected: 1,
+                    },
+                ],
+                &[],
+            )
+            .unwrap(),
+            vec![2, 2]
+        );
+
+        let cleared_page = serde_json::json!({"number":1,"slots":{}});
+        assert!(matches!(
+            show.mutate_objects_atomically(
+                &[AtomicObjectWrite {
+                    kind: "playback_page",
+                    id: "1",
+                    body: &cleared_page,
+                    expected: 2,
+                }],
+                &[AtomicObjectDelete {
+                    kind: "playback",
+                    id: "41",
+                    expected: 1,
+                }],
+            ),
+            Err(StoreError::RevisionConflict {
+                expected: 1,
+                current: 2
+            })
+        ));
+        assert_eq!(
+            show.objects("playback_page").unwrap().remove(0).body,
+            changed_page
+        );
+        assert_eq!(show.objects("playback").unwrap().len(), 1);
+
+        show.mutate_objects_atomically(
+            &[AtomicObjectWrite {
+                kind: "playback_page",
+                id: "1",
+                body: &cleared_page,
+                expected: 2,
+            }],
+            &[AtomicObjectDelete {
+                kind: "playback",
+                id: "41",
+                expected: 2,
+            }],
+        )
+        .unwrap();
+        assert_eq!(
+            show.objects("playback_page").unwrap().remove(0).body,
+            cleared_page
+        );
+        assert!(show.objects("playback").unwrap().is_empty());
         let _ = fs::remove_file(path);
     }
 

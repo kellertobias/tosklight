@@ -91,9 +91,9 @@ pub(crate) fn read_native_note(path: &Path) -> io::Result<Option<String>> {
     {
         let stream = alternate_data_stream(path);
         match fs::read(stream) {
-            Ok(bytes) => String::from_utf8(bytes)
-                .map(Some)
-                .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "native note is not UTF-8")),
+            Ok(bytes) => String::from_utf8(bytes).map(Some).map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData, "native note is not UTF-8")
+            }),
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
             Err(error) => Err(error),
         }
@@ -101,7 +101,10 @@ pub(crate) fn read_native_note(path: &Path) -> io::Result<Option<String>> {
     #[cfg(not(any(unix, target_os = "windows")))]
     {
         let _ = path;
-        Err(io::Error::new(io::ErrorKind::Unsupported, "native notes are unavailable"))
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "native notes are unavailable",
+        ))
     }
 }
 
@@ -134,7 +137,10 @@ pub(crate) fn write_native_note(path: &Path, note: &str) -> io::Result<()> {
     #[cfg(not(any(unix, target_os = "windows")))]
     {
         let _ = (path, note);
-        Err(io::Error::new(io::ErrorKind::Unsupported, "native notes are unavailable"))
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "native notes are unavailable",
+        ))
     }
 }
 
@@ -168,8 +174,7 @@ pub(crate) fn trash_supported() -> bool {
     }
     #[cfg(target_os = "windows")]
     {
-        executable_in_path("powershell.exe").is_some()
-            || executable_in_path("pwsh.exe").is_some()
+        executable_in_path("powershell.exe").is_some() || executable_in_path("pwsh.exe").is_some()
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
@@ -186,26 +191,38 @@ pub(crate) fn trash_path(path: &Path) -> io::Result<()> {
     } else if let Some(command) = executable_in_path("trash-put") {
         Command::new(command).arg(path).status()?
     } else {
-        return Err(io::Error::new(io::ErrorKind::Unsupported, "platform trash is unavailable"));
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "platform trash is unavailable",
+        ));
     };
     #[cfg(target_os = "windows")]
     let status = {
         let shell = executable_in_path("powershell.exe")
             .or_else(|| executable_in_path("pwsh.exe"))
-            .ok_or_else(|| io::Error::new(io::ErrorKind::Unsupported, "platform trash is unavailable"))?;
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::Unsupported, "platform trash is unavailable")
+            })?;
         let escaped = path.to_string_lossy().replace(char::from(39), "''");
         let script = format!(
             "Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile('{escaped}','OnlyErrorDialogs','SendToRecycleBin')"
         );
-        Command::new(shell).args(["-NoProfile", "-NonInteractive", "-Command", &script]).status()?
+        Command::new(shell)
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .status()?
     };
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    return Err(io::Error::new(io::ErrorKind::Unsupported, "platform trash is unavailable"));
+    return Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "platform trash is unavailable",
+    ));
 
     if status.success() {
         Ok(())
     } else {
-        Err(io::Error::other(format!("platform trash failed with {status}")))
+        Err(io::Error::other(format!(
+            "platform trash failed with {status}"
+        )))
     }
 }
 
@@ -225,10 +242,10 @@ fn executable_in_path(name: &str) -> Option<PathBuf> {
 pub(crate) fn discover_removable_paths() -> Vec<PathBuf> {
     #[cfg(target_os = "macos")]
     {
-        return discover_directories_under(Path::new("/Volumes"), false)
+        discover_directories_under(Path::new("/Volumes"), false)
             .into_iter()
             .filter(|path| fs::canonicalize(path).ok().as_deref() != Some(Path::new("/")))
-            .collect();
+            .collect()
     }
     #[cfg(target_os = "linux")]
     {
@@ -243,10 +260,19 @@ pub(crate) fn discover_removable_paths() -> Vec<PathBuf> {
     }
     #[cfg(target_os = "windows")]
     {
-        let Some(shell) = executable_in_path("powershell.exe").or_else(|| executable_in_path("pwsh.exe")) else { return Vec::new(); };
+        let Some(shell) =
+            executable_in_path("powershell.exe").or_else(|| executable_in_path("pwsh.exe"))
+        else {
+            return Vec::new();
+        };
         let Ok(output) = Command::new(shell).args(["-NoProfile", "-NonInteractive", "-Command", "Get-CimInstance Win32_LogicalDisk | Where-Object DriveType -eq 2 | ForEach-Object DeviceID"]).output() else { return Vec::new(); };
-        if !output.status.success() { return Vec::new(); }
-        return String::from_utf8_lossy(&output.stdout).lines().map(str::trim).filter(|line| line.len() == 2 && line.ends_with(':')).map(|drive| PathBuf::from(format!("{drive}\\"))).filter(|path| path.is_dir()).collect();
+        if !output.status.success() {
+            return Vec::new();
+        }
+        return windows_removable_drive_paths(&output.stdout)
+            .into_iter()
+            .filter(|path| path.is_dir())
+            .collect();
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     Vec::new()
@@ -254,16 +280,48 @@ pub(crate) fn discover_removable_paths() -> Vec<PathBuf> {
 
 #[cfg(target_os = "linux")]
 fn linux_removable_mounts() -> Vec<PathBuf> {
-    let Ok(mounts) = fs::read_to_string("/proc/self/mountinfo") else { return Vec::new(); };
-    mounts.lines().filter_map(|line| {
-        let mount = line.split_whitespace().nth(4)?
-            .replace("\\040", " ").replace("\\011", "\t").replace("\\134", "\\");
-        let path = PathBuf::from(mount);
-        (path.starts_with("/media") || path.starts_with("/run/media")).then_some(path)
-    }).filter(|path| path.is_dir()).collect()
+    let Ok(mounts) = fs::read_to_string("/proc/self/mountinfo") else {
+        return Vec::new();
+    };
+    linux_removable_mount_paths(&mounts)
+        .into_iter()
+        .filter(|path| path.is_dir())
+        .collect()
 }
 
-pub(crate) fn discover_directories_under(parent: &Path, include_second_level: bool) -> Vec<PathBuf> {
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn linux_removable_mount_paths(mounts: &str) -> Vec<PathBuf> {
+    mounts
+        .lines()
+        .filter_map(|line| {
+            let mount = line
+                .split_whitespace()
+                .nth(4)?
+                .replace("\\040", " ")
+                .replace("\\011", "\t")
+                .replace("\\134", "\\");
+            let path = PathBuf::from(mount);
+            (path.starts_with("/media") || path.starts_with("/run/media")).then_some(path)
+        })
+        .collect()
+}
+
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn windows_removable_drive_paths(output: &[u8]) -> Vec<PathBuf> {
+    String::from_utf8_lossy(output)
+        .lines()
+        .map(str::trim)
+        .filter(|line| {
+            line.len() == 2 && line.ends_with(':') && line.as_bytes()[0].is_ascii_alphabetic()
+        })
+        .map(|drive| PathBuf::from(format!("{drive}\\")))
+        .collect()
+}
+
+pub(crate) fn discover_directories_under(
+    parent: &Path,
+    include_second_level: bool,
+) -> Vec<PathBuf> {
     let mut result = Vec::new();
     let Ok(entries) = fs::read_dir(parent) else {
         return result;
@@ -294,20 +352,32 @@ pub(crate) fn discover_directories_under(parent: &Path, include_second_level: bo
 }
 
 pub(crate) fn keep_both_path(target: &Path) -> io::Result<PathBuf> {
-    let parent = target.parent().ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "target has no parent"))?;
-    let name = target.file_name().and_then(OsStr::to_str).ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "target name is invalid"))?;
+    let parent = target
+        .parent()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "target has no parent"))?;
+    let name = target
+        .file_name()
+        .and_then(OsStr::to_str)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "target name is invalid"))?;
     let (stem, suffix) = match name.rsplit_once('.') {
         Some((stem, suffix)) if !stem.is_empty() => (stem, format!(".{suffix}")),
         _ => (name, String::new()),
     };
     for sequence in 1..=10_000 {
-        let marker = if sequence == 1 { " copy".to_owned() } else { format!(" copy {sequence}") };
+        let marker = if sequence == 1 {
+            " copy".to_owned()
+        } else {
+            format!(" copy {sequence}")
+        };
         let candidate = parent.join(format!("{stem}{marker}{suffix}"));
         if !candidate.exists() {
             return Ok(candidate);
         }
     }
-    Err(io::Error::new(io::ErrorKind::AlreadyExists, "could not find a Keep Both name"))
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
+        "could not find a Keep Both name",
+    ))
 }
 
 pub(crate) fn copy_or_move(
@@ -319,20 +389,37 @@ pub(crate) fn copy_or_move(
 ) -> io::Result<TransferOutcome> {
     if source == requested_target {
         return match conflict {
-            ConflictChoice::KeepBoth if !move_source => {
-                copy_or_move(source, &keep_both_path(requested_target)?, false, cross_root, ConflictChoice::Error)
-            }
+            ConflictChoice::KeepBoth if !move_source => copy_or_move(
+                source,
+                &keep_both_path(requested_target)?,
+                false,
+                cross_root,
+                ConflictChoice::Error,
+            ),
             ConflictChoice::Skip => Ok(TransferOutcome::Skipped(requested_target.to_owned())),
-            _ => Err(io::Error::new(io::ErrorKind::InvalidInput, "source and destination are the same item")),
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "source and destination are the same item",
+            )),
         };
     }
     if source.is_dir() && requested_target.starts_with(source) {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "a folder cannot be copied or moved into itself"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "a folder cannot be copied or moved into itself",
+        ));
     }
     let target = if requested_target.exists() {
         match conflict {
-            ConflictChoice::Error => return Err(io::Error::new(io::ErrorKind::AlreadyExists, "an item with that name already exists")),
-            ConflictChoice::Skip => return Ok(TransferOutcome::Skipped(requested_target.to_owned())),
+            ConflictChoice::Error => {
+                return Err(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    "an item with that name already exists",
+                ));
+            }
+            ConflictChoice::Skip => {
+                return Ok(TransferOutcome::Skipped(requested_target.to_owned()));
+            }
             ConflictChoice::KeepBoth => keep_both_path(requested_target)?,
             ConflictChoice::Replace => requested_target.to_owned(),
         }
@@ -401,7 +488,10 @@ fn commit_staged(staged: &Path, target: &Path) -> io::Result<()> {
 pub(crate) fn copy_recursive(source: &Path, target: &Path) -> io::Result<()> {
     let metadata = fs::symlink_metadata(source)?;
     if metadata.file_type().is_symlink() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "symbolic links are not copied by File Manager"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "symbolic links are not copied by File Manager",
+        ));
     }
     if metadata.is_dir() {
         fs::create_dir(target)?;
@@ -413,7 +503,10 @@ pub(crate) fn copy_recursive(source: &Path, target: &Path) -> io::Result<()> {
     } else if metadata.is_file() {
         fs::copy(source, target)?;
     } else {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "unsupported filesystem item"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "unsupported filesystem item",
+        ));
     }
     copy_native_note(source, target)?;
     Ok(())
@@ -438,20 +531,37 @@ fn copy_native_note(source: &Path, target: &Path) -> io::Result<()> {
 pub(crate) fn verify_tree(source: &Path, target: &Path) -> io::Result<()> {
     let source_metadata = fs::metadata(source)?;
     let target_metadata = fs::metadata(target)?;
-    if source_metadata.is_dir() != target_metadata.is_dir() || source_metadata.is_file() != target_metadata.is_file() {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "copied item type does not match source"));
+    if source_metadata.is_dir() != target_metadata.is_dir()
+        || source_metadata.is_file() != target_metadata.is_file()
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "copied item type does not match source",
+        ));
     }
     if source_metadata.is_file() {
-        if source_metadata.len() != target_metadata.len() || hash_file(source)? != hash_file(target)? {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "copied file verification failed"));
+        if source_metadata.len() != target_metadata.len()
+            || hash_file(source)? != hash_file(target)?
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "copied file verification failed",
+            ));
         }
     } else {
-        let mut source_names = fs::read_dir(source)?.map(|entry| entry.map(|entry| entry.file_name())).collect::<io::Result<Vec<_>>>()?;
-        let mut target_names = fs::read_dir(target)?.map(|entry| entry.map(|entry| entry.file_name())).collect::<io::Result<Vec<_>>>()?;
+        let mut source_names = fs::read_dir(source)?
+            .map(|entry| entry.map(|entry| entry.file_name()))
+            .collect::<io::Result<Vec<_>>>()?;
+        let mut target_names = fs::read_dir(target)?
+            .map(|entry| entry.map(|entry| entry.file_name()))
+            .collect::<io::Result<Vec<_>>>()?;
         source_names.sort();
         target_names.sort();
         if source_names != target_names {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "copied folder contents do not match source"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "copied folder contents do not match source",
+            ));
         }
         for name in source_names {
             verify_tree(&source.join(&name), &target.join(name))?;
@@ -460,10 +570,16 @@ pub(crate) fn verify_tree(source: &Path, target: &Path) -> io::Result<()> {
     if native_notes_supported(source) {
         let source_note = read_native_note(source)?;
         if source_note.is_some() && !native_notes_supported(target) {
-            return Err(io::Error::new(io::ErrorKind::Unsupported, "destination filesystem cannot preserve the source native note"));
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "destination filesystem cannot preserve the source native note",
+            ));
         }
         if native_notes_supported(target) && source_note != read_native_note(target)? {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "copied native note verification failed"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "copied native note verification failed",
+            ));
         }
     }
     Ok(())
@@ -493,20 +609,33 @@ pub(crate) fn remove_permanent(path: &Path) -> io::Result<()> {
 
 pub(crate) fn thumbnail_png(source: &Path, max_size: u32) -> io::Result<Vec<u8>> {
     let max_size = max_size.clamp(32, 1_024);
-    let extension = source.extension().and_then(OsStr::to_str).unwrap_or("").to_ascii_lowercase();
+    let extension = source
+        .extension()
+        .and_then(OsStr::to_str)
+        .unwrap_or("")
+        .to_ascii_lowercase();
     if !matches!(extension.as_str(), "jpg" | "jpeg" | "png" | "gif" | "webp") {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "this file type does not support raster thumbnails"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "this file type does not support raster thumbnails",
+        ));
     }
     let metadata = fs::metadata(source)?;
     if !metadata.is_file() || metadata.len() > 256 * 1024 * 1024 {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "image is unavailable or exceeds the 256 MiB thumbnail limit"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "image is unavailable or exceeds the 256 MiB thumbnail limit",
+        ));
     }
     let dimensions = ImageReader::open(source)
         .and_then(|reader| reader.with_guessed_format())?
         .into_dimensions()
         .map_err(io::Error::other)?;
     if u64::from(dimensions.0) * u64::from(dimensions.1) > 100_000_000 {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "image exceeds the 100 megapixel thumbnail limit"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "image exceeds the 100 megapixel thumbnail limit",
+        ));
     }
     let image = ImageReader::open(source)
         .and_then(|reader| reader.with_guessed_format())?
@@ -518,7 +647,9 @@ pub(crate) fn thumbnail_png(source: &Path, max_size: u32) -> io::Result<Vec<u8>>
 fn encode_thumbnail(image: DynamicImage, max_size: u32) -> io::Result<Vec<u8>> {
     let thumbnail = image.thumbnail(max_size, max_size);
     let mut bytes = Cursor::new(Vec::new());
-    thumbnail.write_to(&mut bytes, ImageFormat::Png).map_err(io::Error::other)?;
+    thumbnail
+        .write_to(&mut bytes, ImageFormat::Png)
+        .map_err(io::Error::other)?;
     Ok(bytes.into_inner())
 }
 
@@ -527,19 +658,39 @@ mod tests {
     use super::*;
 
     fn temporary_root(name: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("light-file-support-{name}-{}", Uuid::new_v4()));
+        let root =
+            std::env::temp_dir().join(format!("light-file-support-{name}-{}", Uuid::new_v4()));
         fs::create_dir_all(&root).unwrap();
         root
     }
 
     #[test]
-    fn discovery_adapter_handles_direct_and_user_mount_layouts() {
+    fn discovery_adapters_cover_macos_linux_and_windows_mount_layouts() {
         let root = temporary_root("mounts");
         fs::create_dir_all(root.join("direct")).unwrap();
-        assert_eq!(discover_directories_under(&root, false), vec![root.join("direct")]);
+        assert_eq!(
+            discover_directories_under(&root, false),
+            vec![root.join("direct")]
+        );
         fs::create_dir_all(root.join("operator/usb")).unwrap();
         let nested = discover_directories_under(&root, true);
         assert!(nested.contains(&root.join("operator/usb")));
+
+        let linux = linux_removable_mount_paths(
+            "24 1 8:1 / /media/operator/TOUR\\040USB rw - vfat /dev/sdb1 rw\n25 1 8:2 / /run/media/operator/SECOND rw - exfat /dev/sdc1 rw\n26 1 8:3 / /mnt/internal rw - ext4 /dev/sda1 rw\n",
+        );
+        assert_eq!(
+            linux,
+            vec![
+                PathBuf::from("/media/operator/TOUR USB"),
+                PathBuf::from("/run/media/operator/SECOND"),
+            ]
+        );
+
+        assert_eq!(
+            windows_removable_drive_paths(b"E:\r\nnot-a-drive\r\nF:\r\n"),
+            vec![PathBuf::from("E:\\"), PathBuf::from("F:\\")],
+        );
         remove_permanent(&root).unwrap();
     }
 
@@ -550,8 +701,11 @@ mod tests {
         let target = root.join("target.txt");
         fs::write(&source, b"new").unwrap();
         fs::write(&target, b"old").unwrap();
-        let copied = copy_or_move(&source, &target, false, false, ConflictChoice::KeepBoth).unwrap();
-        let TransferOutcome::Completed(copied) = copied else { panic!("copy unexpectedly skipped") };
+        let copied =
+            copy_or_move(&source, &target, false, false, ConflictChoice::KeepBoth).unwrap();
+        let TransferOutcome::Completed(copied) = copied else {
+            panic!("copy unexpectedly skipped")
+        };
         assert_eq!(copied.file_name().unwrap(), "target copy.txt");
         assert_eq!(fs::read(&target).unwrap(), b"old");
         copy_or_move(&source, &target, false, false, ConflictChoice::Replace).unwrap();
@@ -569,7 +723,10 @@ mod tests {
         let target = target_root.join("folder");
         copy_or_move(&source, &target, true, true, ConflictChoice::Error).unwrap();
         assert!(!source.exists());
-        assert_eq!(fs::read(target.join("show.txt")).unwrap(), b"verified payload");
+        assert_eq!(
+            fs::read(target.join("show.txt")).unwrap(),
+            b"verified payload"
+        );
         remove_permanent(&source_root).unwrap();
         remove_permanent(&target_root).unwrap();
     }
@@ -594,7 +751,10 @@ mod tests {
         let target = root.join("target.txt");
         fs::write(&source, b"source").unwrap();
         fs::write(&target, b"target").unwrap();
-        assert_eq!(copy_or_move(&source, &target, true, false, ConflictChoice::Skip).unwrap(), TransferOutcome::Skipped(target.clone()));
+        assert_eq!(
+            copy_or_move(&source, &target, true, false, ConflictChoice::Skip).unwrap(),
+            TransferOutcome::Skipped(target.clone())
+        );
         assert_eq!(fs::read(&source).unwrap(), b"source");
         assert_eq!(fs::read(&target).unwrap(), b"target");
         remove_permanent(&root).unwrap();
@@ -621,8 +781,14 @@ mod tests {
         fs::write(&hidden, []).unwrap();
         #[cfg(not(target_os = "windows"))]
         {
-            assert!(!is_hidden(visible.file_name().unwrap(), &fs::metadata(&visible).unwrap()));
-            assert!(is_hidden(hidden.file_name().unwrap(), &fs::metadata(&hidden).unwrap()));
+            assert!(!is_hidden(
+                visible.file_name().unwrap(),
+                &fs::metadata(&visible).unwrap()
+            ));
+            assert!(is_hidden(
+                hidden.file_name().unwrap(),
+                &fs::metadata(&hidden).unwrap()
+            ));
         }
         remove_permanent(&root).unwrap();
     }
@@ -634,7 +800,10 @@ mod tests {
         fs::write(&file, b"item").unwrap();
         if native_notes_supported(&file) {
             write_native_note(&file, "operator note").unwrap();
-            assert_eq!(read_native_note(&file).unwrap().as_deref(), Some("operator note"));
+            assert_eq!(
+                read_native_note(&file).unwrap().as_deref(),
+                Some("operator note")
+            );
             assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
             write_native_note(&file, "").unwrap();
             assert_eq!(read_native_note(&file).unwrap(), None);

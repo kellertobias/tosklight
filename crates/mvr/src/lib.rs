@@ -116,26 +116,24 @@ pub fn read_gdtf(bytes: &[u8]) -> Result<Vec<GdtfMode>, MvrError> {
                         name: attr(&e, b"name").unwrap_or_else(|| "Standard".into()),
                         channels: Vec::new(),
                     });
-                } else if tag == "dmxchannel" {
-                    if let Some(mode) = current.as_mut() {
-                        let offsets = attr(&e, b"offset")
-                            .unwrap_or_else(|| "1".into())
-                            .split(',')
-                            .filter_map(|v| v.trim().parse::<u16>().ok())
-                            .map(|v| v.saturating_sub(1))
-                            .collect::<Vec<_>>();
-                        let attribute = attr(&e, b"name").unwrap_or_else(|| {
-                            format!("channel.{}", offsets.first().copied().unwrap_or(0) + 1)
-                        });
-                        mode.channels.push(GdtfChannel { attribute, offsets });
-                    }
+                } else if tag == "dmxchannel"
+                    && let Some(mode) = current.as_mut()
+                {
+                    let offsets = attr(&e, b"offset")
+                        .unwrap_or_else(|| "1".into())
+                        .split(',')
+                        .filter_map(|v| v.trim().parse::<u16>().ok())
+                        .map(|v| v.saturating_sub(1))
+                        .collect::<Vec<_>>();
+                    let attribute = attr(&e, b"name").unwrap_or_else(|| {
+                        format!("channel.{}", offsets.first().copied().unwrap_or(0) + 1)
+                    });
+                    mode.channels.push(GdtfChannel { attribute, offsets });
                 }
             }
-            Event::End(e) => {
-                if local(e.name().as_ref()).eq_ignore_ascii_case(b"dmxmode") {
-                    if let Some(mode) = current.take() {
-                        modes.push(mode);
-                    }
+            Event::End(e) if local(e.name().as_ref()).eq_ignore_ascii_case(b"dmxmode") => {
+                if let Some(mode) = current.take() {
+                    modes.push(mode);
                 }
             }
             Event::Eof => break,
@@ -281,10 +279,10 @@ pub fn read(bytes: &[u8]) -> Result<MvrDocument, MvrError> {
                         _ => {}
                     }
                 }
-                if let Some(g) = current_geometry.as_mut() {
-                    if tag == "matrix" {
-                        g.matrix = matrix(value);
-                    }
+                if let Some(g) = current_geometry.as_mut()
+                    && tag == "matrix"
+                {
+                    g.matrix = matrix(value);
                 }
                 if tag == "fixture" {
                     let f = current_fixture.take().unwrap();

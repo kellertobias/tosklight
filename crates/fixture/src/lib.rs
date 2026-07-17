@@ -693,9 +693,9 @@ impl FixtureLibrary {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, FixtureError> {
         let conn = Connection::open(path)?;
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; CREATE TABLE IF NOT EXISTS fixture_definitions(id TEXT NOT NULL,revision INTEGER NOT NULL,manufacturer TEXT NOT NULL,model TEXT NOT NULL,mode TEXT NOT NULL,definition_json TEXT NOT NULL,source_gdtf BLOB,PRIMARY KEY(id,revision));")?;
-        if !conn
+        if conn
             .prepare("SELECT source_gdtf FROM fixture_definitions LIMIT 0")
-            .is_ok()
+            .is_err()
         {
             conn.execute(
                 "ALTER TABLE fixture_definitions ADD COLUMN source_gdtf BLOB",

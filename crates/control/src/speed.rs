@@ -226,6 +226,12 @@ pub struct SpeedSnapshot {
     pub usable_signal: bool,
     pub input_level: f32,
     pub selected_band_level: f32,
+    /// One-based peer Speed Group number while two groups share an operator-established beat
+    /// phase. This is authoritative feedback, not a second speed source.
+    pub synchronized_with: Option<u8>,
+    pub phase_origin_millis: u64,
+    /// Normalized beat position in `[0, 1)`, frozen while paused.
+    pub beat_phase: f64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -279,6 +285,9 @@ pub struct SpeedGroupController {
     loss_reason: SoundLossReason,
     last_learn_tap_millis: Option<u64>,
     learn_intervals: VecDeque<u64>,
+    synchronized_with: Option<u8>,
+    phase_origin_millis: u64,
+    phase_frozen_at_millis: Option<u64>,
 }
 
 impl SpeedGroupController {
@@ -298,6 +307,9 @@ impl SpeedGroupController {
             loss_reason: SoundLossReason::WaitingForAnalysis,
             last_learn_tap_millis: None,
             learn_intervals: VecDeque::new(),
+            synchronized_with: None,
+            phase_origin_millis: 0,
+            phase_frozen_at_millis: None,
         })
     }
 
@@ -357,11 +369,71 @@ impl SpeedGroupController {
 
     pub fn set_paused(&mut self, paused: bool) {
         self.paused = paused;
+        if !paused {
+            self.phase_frozen_at_millis = None;
+        }
     }
 
     pub fn toggle_paused(&mut self) -> bool {
         self.paused = !self.paused;
+        if !self.paused {
+            self.phase_frozen_at_millis = None;
+        }
         self.paused
+    }
+
+    pub fn set_paused_at(&mut self, paused: bool, now_millis: u64) {
+        if paused == self.paused {
+            return;
+        }
+        if paused {
+            self.phase_frozen_at_millis = Some(now_millis);
+        } else if let Some(frozen_at) = self.phase_frozen_at_millis.take() {
+            self.phase_origin_millis = self
+                .phase_origin_millis
+                .saturating_add(now_millis.saturating_sub(frozen_at));
+        }
+        self.paused = paused;
+    }
+
+    pub fn toggle_paused_at(&mut self, now_millis: u64) -> bool {
+        self.set_paused_at(!self.paused, now_millis);
+        self.paused
+    }
+
+    pub fn synchronized_with(&self) -> Option<u8> {
+        self.synchronized_with
+    }
+
+    pub fn phase_origin_millis(&self) -> u64 {
+        self.phase_origin_millis
+    }
+
+    pub fn phase_reference_millis(&self, now_millis: u64) -> u64 {
+        self.phase_frozen_at_millis.unwrap_or(now_millis)
+    }
+
+    pub fn synchronize_phase(
+        &mut self,
+        peer_group: u8,
+        phase_origin_millis: u64,
+        phase_reference_millis: u64,
+    ) {
+        self.synchronized_with = Some(peer_group);
+        self.phase_origin_millis = phase_origin_millis;
+        self.phase_frozen_at_millis = self.paused.then_some(phase_reference_millis);
+    }
+
+    pub fn break_synchronization(&mut self, phase_origin_millis: u64) {
+        self.synchronized_with = None;
+        self.phase_origin_millis = phase_origin_millis;
+        self.phase_frozen_at_millis = self.paused.then_some(phase_origin_millis);
+    }
+
+    /// Removes only the peer relationship. This is used for the unaffected side when its peer
+    /// takes an independent manual action: that group keeps its current beat origin and rate.
+    pub fn clear_synchronization(&mut self) {
+        self.synchronized_with = None;
     }
 
     /// Accepts analyzer feedback in monotonic order. Stale packets never replace newer desk state.
@@ -462,6 +534,14 @@ impl SpeedGroupController {
         let (base_bpm, source, sound_status) = self.select_source(now_millis);
         let effective_bpm = (base_bpm * self.speed_master_scale).clamp(0.0, MAX_BPM);
         let observation = self.last_observation;
+        let phase_at = self.phase_frozen_at_millis.unwrap_or(now_millis);
+        let beat_phase = if effective_bpm > 0.0 {
+            ((phase_at.saturating_sub(self.phase_origin_millis) as f64 * effective_bpm / 60_000.0)
+                % 1.0)
+                .max(0.0)
+        } else {
+            0.0
+        };
         SpeedSnapshot {
             manual_bpm: self.manual_bpm,
             sound_bpm: self.smoothed_sound_bpm,
@@ -476,6 +556,9 @@ impl SpeedGroupController {
             usable_signal: observation.is_some_and(|value| value.usable_signal),
             input_level: observation.map_or(0.0, |value| value.level),
             selected_band_level: observation.map_or(0.0, |value| value.selected_band_level),
+            synchronized_with: self.synchronized_with,
+            phase_origin_millis: self.phase_origin_millis,
+            beat_phase,
         }
     }
 
@@ -684,17 +767,37 @@ mod tests {
     fn pause_freezes_phase_without_discarding_live_sound_rate() {
         let mut speed = SpeedGroupController::new(90.0, enabled_config()).unwrap();
         speed.observe_sound(SoundObservation::tempo(1_000, 120.0, 1.0));
-        speed.set_paused(true);
+        speed.set_paused_at(true, 1_000);
         speed.observe_sound(SoundObservation::tempo(1_200, 130.0, 1.0));
         let paused = speed.snapshot(1_200);
         assert!(paused.paused);
         assert!(!paused.phase_advancing);
         assert_eq!(paused.effective_bpm, 130.0);
 
-        speed.set_paused(false);
+        speed.set_paused_at(false, 1_201);
         let resumed = speed.snapshot(1_201);
         assert!(resumed.phase_advancing);
         assert_eq!(resumed.effective_bpm, 130.0);
+    }
+
+    #[test]
+    fn synchronized_phase_feedback_freezes_and_resumes_from_the_same_beat() {
+        let mut speed = SpeedGroupController::new(120.0, SoundToLightConfig::default()).unwrap();
+        speed.synchronize_phase(3, 1_000, 1_000);
+        let half_beat = speed.snapshot(1_250);
+        assert_eq!(half_beat.synchronized_with, Some(3));
+        assert_eq!(half_beat.phase_origin_millis, 1_000);
+        assert!((half_beat.beat_phase - 0.5).abs() < 0.000_001);
+
+        speed.set_paused_at(true, 1_250);
+        assert!((speed.snapshot(5_000).beat_phase - 0.5).abs() < 0.000_001);
+        speed.set_paused_at(false, 5_000);
+        assert!((speed.snapshot(5_250).beat_phase - 0.0).abs() < 0.000_001);
+
+        speed.break_synchronization(6_000);
+        let independent = speed.snapshot(6_000);
+        assert_eq!(independent.synchronized_with, None);
+        assert_eq!(independent.beat_phase, 0.0);
     }
 
     #[test]

@@ -18,7 +18,7 @@ fn trailing_number(name: &str) -> Option<u32> {
     name.rsplit_once(' ')?.1.parse().ok()
 }
 
-fn default_fixture_number(name: &str) -> Option<u32> {
+pub(crate) fn default_fixture_number(name: &str) -> Option<u32> {
     match name {
         "Middle ACL Set" => Some(28),
         "Outside ACL Set" => Some(29),
@@ -35,6 +35,8 @@ fn default_fixture_number(name: &str) -> Option<u32> {
         _ if name.starts_with("Front RGB Strobe ") => {
             trailing_number(name).map(|value| 600 + value)
         }
+        _ if name.starts_with("Dimmer ") => trailing_number(name),
+        _ if name.starts_with("RGB LED ") => trailing_number(name).map(|value| 20 + value),
         _ => None,
     }
 }
@@ -118,9 +120,7 @@ fn definition(name: &str, device_type: &str, attributes: &[&str]) -> FixtureDefi
                     parameter(
                         attribute,
                         offset as u16,
-                        if *attribute == "pan" {
-                            0.5
-                        } else if *attribute == "tilt" {
+                        if matches!(*attribute, "pan" | "tilt") {
                             0.5
                         } else {
                             0.0
@@ -208,12 +208,12 @@ pub fn upgrade(path: impl AsRef<Path>) -> Result<(), StoreError> {
             fixture.definition = sunstrip_definition();
             changed = true;
         }
-        if migrate_single_universe_patch {
-            if let Some((universe, address)) = default_patch(&fixture.name) {
-                fixture.universe = Some(universe);
-                fixture.address = Some(address);
-                changed = true;
-            }
+        if migrate_single_universe_patch
+            && let Some((universe, address)) = default_patch(&fixture.name)
+        {
+            fixture.universe = Some(universe);
+            fixture.address = Some(address);
+            changed = true;
         }
         if changed {
             store.put_object(

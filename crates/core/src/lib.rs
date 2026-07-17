@@ -109,6 +109,9 @@ pub struct TimedValue {
     pub value: AttributeValue,
     pub priority: i16,
     pub changed_at: DateTime<Utc>,
+    /// Stable programmer-local edit order for values that intentionally share one timestamp.
+    #[serde(default)]
+    pub programmer_order: u64,
     pub merge_mode: MergeMode,
     /// Whether this direct-entry value should use the configured programmer fade.
     #[serde(default)]

@@ -21,6 +21,14 @@ enum PlaybackKey {
     CueList(CueListId),
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+enum TemporaryPlaybackKind {
+    Flash,
+    TempButton,
+    TempFader,
+    Swap,
+}
+
 pub const MAX_PLAYBACKS: u16 = 1_000;
 pub const MAX_PLAYBACK_PAGES: u8 = 127;
 pub const MAX_PAGE_SLOTS: u8 = 127;
@@ -51,6 +59,7 @@ pub enum PlaybackButtonAction {
     Swap,
     Select,
     SelectContents,
+    SelectDereferenced,
     Learn,
     Double,
     Half,
@@ -82,15 +91,19 @@ pub enum FlashReleaseMode {
     ReleaseIntensityOnly,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct PlaybackDefinition {
     pub number: u16,
     pub name: String,
     pub target: PlaybackTarget,
     #[serde(default)]
     pub buttons: [PlaybackButtonAction; 3],
+    #[serde(default = "default_button_count")]
+    pub button_count: u8,
     #[serde(default)]
     pub fader: PlaybackFaderMode,
+    #[serde(default = "default_true")]
+    pub has_fader: bool,
     #[serde(default = "default_true")]
     pub go_activates: bool,
     #[serde(default = "default_true")]
@@ -103,16 +116,135 @@ pub struct PlaybackDefinition {
     pub flash_release: FlashReleaseMode,
     #[serde(default)]
     pub protect_from_swap: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub presentation_icon: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub presentation_image: Option<String>,
 }
 
 fn default_true() -> bool {
     true
+}
+fn default_button_count() -> u8 {
+    3
 }
 fn default_playback_color() -> String {
     "#20c997".into()
 }
 
 impl PlaybackDefinition {
+    pub fn default_buttons(target: &PlaybackTarget) -> [PlaybackButtonAction; 3] {
+        match target {
+            PlaybackTarget::CueList { .. } => [
+                PlaybackButtonAction::GoMinus,
+                PlaybackButtonAction::Go,
+                PlaybackButtonAction::Flash,
+            ],
+            PlaybackTarget::Group { .. } => [
+                PlaybackButtonAction::Select,
+                PlaybackButtonAction::Flash,
+                PlaybackButtonAction::SelectDereferenced,
+            ],
+            PlaybackTarget::SpeedGroup { .. } => [
+                PlaybackButtonAction::Double,
+                PlaybackButtonAction::Half,
+                PlaybackButtonAction::Learn,
+            ],
+            PlaybackTarget::ProgrammerFade | PlaybackTarget::CueFade => {
+                [PlaybackButtonAction::None; 3]
+            }
+            PlaybackTarget::GrandMaster => [
+                PlaybackButtonAction::Blackout,
+                PlaybackButtonAction::Flash,
+                PlaybackButtonAction::PauseDynamics,
+            ],
+        }
+    }
+
+    pub fn default_fader(target: &PlaybackTarget) -> PlaybackFaderMode {
+        match target {
+            PlaybackTarget::SpeedGroup { .. } => PlaybackFaderMode::LearnedPercentage,
+            _ => PlaybackFaderMode::Master,
+        }
+    }
+
+    pub fn reset_incompatible_layout(&mut self) {
+        if self.layout_is_compatible() {
+            return;
+        }
+        self.buttons = Self::default_buttons(&self.target);
+        self.fader = Self::default_fader(&self.target);
+    }
+
+    pub fn layout_is_compatible(&self) -> bool {
+        let buttons_compatible = self.buttons.iter().enumerate().all(|(index, action)| {
+            if index >= usize::from(self.button_count) {
+                return *action == PlaybackButtonAction::None;
+            }
+            match &self.target {
+                PlaybackTarget::CueList { .. } => matches!(
+                    action,
+                    PlaybackButtonAction::On
+                        | PlaybackButtonAction::Off
+                        | PlaybackButtonAction::Toggle
+                        | PlaybackButtonAction::Go
+                        | PlaybackButtonAction::GoMinus
+                        | PlaybackButtonAction::FastForward
+                        | PlaybackButtonAction::FastRewind
+                        | PlaybackButtonAction::Pause
+                        | PlaybackButtonAction::Flash
+                        | PlaybackButtonAction::Temp
+                        | PlaybackButtonAction::Swap
+                        | PlaybackButtonAction::Select
+                        | PlaybackButtonAction::SelectContents
+                        | PlaybackButtonAction::None
+                ),
+                PlaybackTarget::Group { .. } => matches!(
+                    action,
+                    PlaybackButtonAction::Select
+                        | PlaybackButtonAction::SelectDereferenced
+                        | PlaybackButtonAction::Flash
+                        | PlaybackButtonAction::None
+                ),
+                PlaybackTarget::SpeedGroup { .. } => matches!(
+                    action,
+                    PlaybackButtonAction::Learn
+                        | PlaybackButtonAction::Double
+                        | PlaybackButtonAction::Half
+                        | PlaybackButtonAction::Pause
+                        | PlaybackButtonAction::None
+                ),
+                PlaybackTarget::ProgrammerFade | PlaybackTarget::CueFade => {
+                    *action == PlaybackButtonAction::None
+                }
+                PlaybackTarget::GrandMaster => matches!(
+                    action,
+                    PlaybackButtonAction::Blackout
+                        | PlaybackButtonAction::Flash
+                        | PlaybackButtonAction::PauseDynamics
+                        | PlaybackButtonAction::None
+                ),
+            }
+        });
+        let fader_compatible = match &self.target {
+            PlaybackTarget::CueList { .. } => matches!(
+                self.fader,
+                PlaybackFaderMode::Master | PlaybackFaderMode::Temp | PlaybackFaderMode::XFade
+            ),
+            PlaybackTarget::SpeedGroup { .. } => matches!(
+                self.fader,
+                PlaybackFaderMode::DirectBpm
+                    | PlaybackFaderMode::CenteredRelative
+                    | PlaybackFaderMode::LearnedPercentage
+            ),
+            PlaybackTarget::Group { .. }
+            | PlaybackTarget::ProgrammerFade
+            | PlaybackTarget::CueFade
+            | PlaybackTarget::GrandMaster => self.fader == PlaybackFaderMode::Master,
+        };
+        buttons_compatible && fader_compatible
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         if !(1..=MAX_PLAYBACKS).contains(&self.number) {
             return Err("playback number must be within 1-1000".into());
@@ -123,7 +255,105 @@ impl PlaybackDefinition {
         if self.xfade_millis > 60_000 {
             return Err("playback x-fade must not exceed 60 seconds".into());
         }
+        if self.button_count > 3 {
+            return Err("playback button count must be within 0-3".into());
+        }
+        if !self.layout_is_compatible() {
+            return Err("playback layout is incompatible with its function".into());
+        }
+        if let PlaybackTarget::SpeedGroup { group } = &self.target
+            && !matches!(
+                group.to_ascii_uppercase().as_str(),
+                "A" | "B" | "C" | "D" | "E"
+            )
+        {
+            return Err("Speed Group must be A-E".into());
+        }
+        let bytes = self.color.as_bytes();
+        if bytes.len() != 7 || bytes[0] != b'#' || !bytes[1..].iter().all(u8::is_ascii_hexdigit) {
+            return Err("playback color must be a six-digit hexadecimal color".into());
+        }
+        if self.presentation_icon.is_some() && self.presentation_image.is_some() {
+            return Err(
+                "playback presentation accepts either an icon or an image, not both".into(),
+            );
+        }
+        for (name, value) in [
+            ("icon", self.presentation_icon.as_deref()),
+            ("image", self.presentation_image.as_deref()),
+        ] {
+            if value.is_some_and(|value| value.trim().is_empty() || value.len() > 1_024) {
+                return Err(format!(
+                    "playback presentation {name} must contain 1-1024 characters"
+                ));
+            }
+        }
         Ok(())
+    }
+}
+
+impl<'de> Deserialize<'de> for PlaybackDefinition {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct StoredPlaybackDefinition {
+            number: u16,
+            name: String,
+            target: PlaybackTarget,
+            #[serde(default)]
+            buttons: Option<[PlaybackButtonAction; 3]>,
+            #[serde(default = "default_button_count")]
+            button_count: u8,
+            #[serde(default)]
+            fader: Option<PlaybackFaderMode>,
+            #[serde(default = "default_true")]
+            has_fader: bool,
+            #[serde(default = "default_true")]
+            go_activates: bool,
+            #[serde(default = "default_true")]
+            auto_off: bool,
+            #[serde(default)]
+            xfade_millis: u64,
+            #[serde(default = "default_playback_color")]
+            color: String,
+            #[serde(default)]
+            flash_release: FlashReleaseMode,
+            #[serde(default)]
+            protect_from_swap: bool,
+            #[serde(default)]
+            presentation_icon: Option<String>,
+            #[serde(default)]
+            presentation_image: Option<String>,
+        }
+
+        let stored = StoredPlaybackDefinition::deserialize(deserializer)?;
+        let buttons = stored
+            .buttons
+            .unwrap_or_else(|| PlaybackDefinition::default_buttons(&stored.target));
+        let mut fader = stored
+            .fader
+            .unwrap_or_else(|| PlaybackDefinition::default_fader(&stored.target));
+        if matches!(stored.target, PlaybackTarget::SpeedGroup { .. })
+            && fader == PlaybackFaderMode::Speed
+        {
+            fader = PlaybackFaderMode::LearnedPercentage;
+        }
+        Ok(Self {
+            number: stored.number,
+            name: stored.name,
+            target: stored.target,
+            buttons,
+            button_count: stored.button_count,
+            fader,
+            has_fader: stored.has_fader,
+            go_activates: stored.go_activates,
+            auto_off: stored.auto_off,
+            xfade_millis: stored.xfade_millis,
+            color: stored.color,
+            flash_release: stored.flash_release,
+            protect_from_swap: stored.protect_from_swap,
+            presentation_icon: stored.presentation_icon,
+            presentation_image: stored.presentation_image,
+        })
     }
 }
 
@@ -191,6 +421,10 @@ pub struct Cue {
     pub fade_millis: u64,
     pub delay_millis: u64,
     pub trigger: CueTrigger,
+    /// Marks an operator-recorded Cue-only Cue so an appended following Cue can generate the
+    /// required automatic restore/release delta after a save, refresh, or reopen.
+    #[serde(default)]
+    pub cue_only: bool,
     #[serde(default)]
     pub phasers: Vec<AttributePhaser>,
     #[serde(default)]
@@ -202,6 +436,8 @@ pub struct GroupCueChange {
     pub group_id: String,
     pub attribute: AttributeKey,
     pub value: Option<AttributeValue>,
+    #[serde(default)]
+    pub automatic_restore: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fade_millis: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -218,6 +454,7 @@ impl Cue {
             fade_millis: 0,
             delay_millis: 0,
             trigger: CueTrigger::Manual,
+            cue_only: false,
             phasers: Vec::new(),
             group_changes: Vec::new(),
         }
@@ -330,6 +567,25 @@ fn cue_completion_millis(cue_list: &CueList, cue: &Cue, sequence_master_fade_mil
         .unwrap_or_else(|| cue.delay_millis.saturating_add(cue_fade_millis))
 }
 
+fn effective_chaser_step_millis(cue_list: &CueList, speed_groups_bpm: &[f64; 5]) -> u64 {
+    cue_list
+        .speed_group
+        .as_ref()
+        .map(|group| {
+            let index = group
+                .as_bytes()
+                .first()
+                .copied()
+                .unwrap_or(b'A')
+                .saturating_sub(b'A')
+                .min(4) as usize;
+            (60_000.0 / speed_groups_bpm[index] / f64::from(cue_list.speed_multiplier)).round()
+                as u64
+        })
+        .unwrap_or(cue_list.chaser_step_millis)
+        .max(1)
+}
+
 impl CueList {
     pub fn effective_wrap_mode(&self) -> WrapMode {
         self.wrap_mode.unwrap_or(if self.looped {
@@ -416,6 +672,7 @@ impl CueList {
             .changes
             .retain(|existing| !addresses.contains(&existing.address()));
         self.cues[index].changes.extend(changes);
+        self.cues[index].cue_only = true;
         if let Some(next) = self.cues.get_mut(index + 1) {
             next.changes.retain(|change| {
                 !(change.automatic_restore && addresses.contains(&change.address()))
@@ -466,6 +723,12 @@ pub struct ActivePlayback {
     pub paused_at: Option<DateTime<Utc>>,
     #[serde(default = "default_master")]
     pub master: f32,
+    /// Last physical control position. On deliberately does not move this value.
+    #[serde(default = "default_master")]
+    pub fader_position: f32,
+    /// Off at a non-zero physical position latches the fader until it reaches zero.
+    #[serde(default)]
+    pub fader_pickup_required: bool,
     #[serde(default)]
     pub flash: bool,
     #[serde(default)]
@@ -476,6 +739,23 @@ pub struct ActivePlayback {
     pub enabled: bool,
     #[serde(default)]
     pub flash_restore_off: bool,
+    /// Fast navigation bypasses Cue and per-attribute delay/fade for only this transition.
+    #[serde(default)]
+    pub transition_timing_bypassed: bool,
+    /// A one-transition fallback supplied by an atomic Preload GO. Explicit Cue and
+    /// per-attribute timings remain authoritative; this replaces only the Cue Fade master.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transition_fade_fallback_millis: Option<u64>,
+    #[serde(default)]
+    pub manual_xfade_position: f32,
+    #[serde(default)]
+    pub manual_xfade_direction: ManualXFadeDirection,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manual_xfade_from_index: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manual_xfade_to_index: Option<usize>,
+    #[serde(default)]
+    pub manual_xfade_progress: f32,
     /// While set, forward navigation has wrapped in Tracking mode and the final
     /// tracked state remains the base until a Cue explicitly changes it.
     #[serde(default)]
@@ -497,6 +777,14 @@ pub struct ActivePlayback {
     pub loaded_cue_number: Option<f64>,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ManualXFadeDirection {
+    #[default]
+    TowardsHigh,
+    TowardsLow,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct PlaybackRuntimeStatus {
     #[serde(flatten)]
@@ -506,6 +794,9 @@ pub struct PlaybackRuntimeStatus {
     pub effective_next_cue_id: Option<Uuid>,
     pub effective_next_cue_number: Option<f64>,
     pub effective_next_is_loaded: bool,
+    pub temporary_active: bool,
+    pub temporary_master: f32,
+    pub swap_active: bool,
 }
 
 /// A Position-family value which an active Cuelist can safely preposition while its fixture is
@@ -540,6 +831,38 @@ pub struct DeletedCueHold {
     pub contributions: Vec<TimedValue>,
 }
 
+fn advance_chaser_steps(playback: &mut ActivePlayback, cue_list: &CueList, steps: u64) {
+    if steps == 0 {
+        return;
+    }
+    playback.deleted_cue_transition_source = None;
+    let start = playback.cue_index as u128;
+    let total = start + u128::from(steps);
+    let last = cue_list.cues.len() - 1;
+    if cue_list.effective_wrap_mode() == WrapMode::Off {
+        playback.cue_index =
+            usize::try_from(total.min(last as u128)).expect("clamped Cue index fits usize");
+        playback.previous_index = Some(if total > last as u128 {
+            last
+        } else {
+            playback.cue_index.saturating_sub(1)
+        });
+    } else {
+        let cue_count = cue_list.cues.len() as u128;
+        playback.cue_index =
+            usize::try_from(total % cue_count).expect("modulo Cue index fits usize");
+        playback.previous_index =
+            Some(usize::try_from((total - 1) % cue_count).expect("modulo Cue index fits usize"));
+        if cue_list.effective_wrap_mode() == WrapMode::Tracking && total >= cue_count {
+            playback.tracking_wrap = true;
+        } else if cue_list.effective_wrap_mode() == WrapMode::Reset {
+            playback.tracking_wrap = false;
+        }
+    }
+    playback.current_cue_number = Some(cue_list.cues[playback.cue_index].number);
+    playback.current_cue_id = Some(cue_list.cues[playback.cue_index].id);
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PlaybackMasterTransition {
     pub from: f32,
@@ -553,11 +876,62 @@ fn default_master() -> f32 {
     1.0
 }
 
+fn reset_manual_transition(playback: &mut ActivePlayback) {
+    playback.transition_timing_bypassed = false;
+    playback.transition_fade_fallback_millis = None;
+    playback.manual_xfade_from_index = None;
+    playback.manual_xfade_to_index = None;
+    playback.manual_xfade_progress = 0.0;
+}
+
+fn new_active_playback(
+    playback_number: Option<u16>,
+    cue_list: &CueList,
+    now: DateTime<Utc>,
+    master: f32,
+    enabled: bool,
+) -> ActivePlayback {
+    ActivePlayback {
+        playback_number,
+        cue_list_id: cue_list.id,
+        cue_index: 0,
+        previous_index: None,
+        paused: false,
+        activated_at: now,
+        paused_at: None,
+        master,
+        fader_position: master,
+        fader_pickup_required: false,
+        flash: false,
+        master_transition: None,
+        temporary: false,
+        enabled,
+        flash_restore_off: false,
+        transition_timing_bypassed: false,
+        transition_fade_fallback_millis: None,
+        manual_xfade_position: 0.0,
+        manual_xfade_direction: ManualXFadeDirection::TowardsHigh,
+        manual_xfade_from_index: None,
+        manual_xfade_to_index: None,
+        manual_xfade_progress: 0.0,
+        tracking_wrap: false,
+        current_cue_id: cue_list.cues.first().map(|cue| cue.id),
+        current_cue_number: cue_list.cues.first().map(|cue| cue.number),
+        deleted_cue_hold: None,
+        deleted_cue_transition_source: None,
+        loaded_cue_id: None,
+        loaded_cue_number: None,
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct PlaybackEngine {
     cue_lists: HashMap<CueListId, CueList>,
     active: HashMap<PlaybackKey, ActivePlayback>,
-    speed_groups_bpm: [u16; 5],
+    temporary: HashMap<(u16, TemporaryPlaybackKind), ActivePlayback>,
+    swap_held: HashSet<u16>,
+    dynamics_paused_at: Option<DateTime<Utc>>,
+    speed_groups_bpm: [f64; 5],
     speed_groups_paused: [bool; 5],
     sequence_master_fade_millis: u64,
     definitions: HashMap<u16, PlaybackDefinition>,
@@ -575,7 +949,10 @@ impl PlaybackEngine {
         Self {
             cue_lists: HashMap::new(),
             active: HashMap::new(),
-            speed_groups_bpm: [120, 90, 60, 30, 15],
+            temporary: HashMap::new(),
+            swap_held: HashSet::new(),
+            dynamics_paused_at: None,
+            speed_groups_bpm: [120.0, 90.0, 60.0, 30.0, 15.0],
             speed_groups_paused: [false; 5],
             sequence_master_fade_millis: 0,
             definitions: HashMap::new(),
@@ -588,29 +965,88 @@ impl PlaybackEngine {
     }
     pub fn set_control_timing(
         &mut self,
-        speed_groups_bpm: [u16; 5],
+        speed_groups_bpm: [f64; 5],
         sequence_master_fade_millis: u64,
     ) {
-        self.speed_groups_bpm = speed_groups_bpm.map(|bpm| bpm.clamp(1, 999));
+        let next_speed_groups_bpm = speed_groups_bpm.map(|bpm| {
+            if bpm.is_finite() {
+                bpm.clamp(0.1, 999.0)
+            } else {
+                120.0
+            }
+        });
+        let now = self.clock.now();
+        for playback in self.active.values_mut() {
+            let Some(cue_list) = self.cue_lists.get(&playback.cue_list_id) else {
+                continue;
+            };
+            if cue_list.mode != CueListMode::Chaser || cue_list.speed_group.is_none() {
+                continue;
+            }
+            let old_step = effective_chaser_step_millis(cue_list, &self.speed_groups_bpm);
+            let next_step = effective_chaser_step_millis(cue_list, &next_speed_groups_bpm);
+            if old_step == next_step {
+                continue;
+            }
+            let phase_at = playback.paused_at.unwrap_or(now);
+            let elapsed = (phase_at - playback.activated_at).num_milliseconds().max(0) as u64;
+            let completed_steps = elapsed / old_step;
+            advance_chaser_steps(playback, cue_list, completed_steps);
+            let old_phase = elapsed % old_step;
+            let next_phase =
+                ((old_phase as f64 / old_step as f64) * next_step as f64).round() as i64;
+            playback.activated_at = phase_at - ChronoDuration::milliseconds(next_phase);
+        }
+        self.speed_groups_bpm = next_speed_groups_bpm;
         self.sequence_master_fade_millis = sequence_master_fade_millis.min(60_000);
     }
     pub fn set_speed_groups_paused(&mut self, paused: [bool; 5]) {
         self.speed_groups_paused = paused;
     }
+    pub fn dynamics_paused(&self) -> bool {
+        self.dynamics_paused_at.is_some()
+    }
+    pub fn dynamics_paused_since(&self) -> Option<DateTime<Utc>> {
+        self.dynamics_paused_at
+    }
+    pub fn restore_dynamics_paused_since(&mut self, paused_at: Option<DateTime<Utc>>) {
+        self.dynamics_paused_at = paused_at;
+    }
+    pub fn set_dynamics_paused(&mut self, paused: bool) {
+        let now = self.clock.now();
+        match (paused, self.dynamics_paused_at) {
+            (true, None) => self.dynamics_paused_at = Some(now),
+            (false, Some(paused_at)) => {
+                let shift_timestamp = |timestamp: &mut DateTime<Utc>| {
+                    if *timestamp <= paused_at {
+                        *timestamp += now - paused_at;
+                    } else {
+                        *timestamp = now;
+                    }
+                };
+                for playback in self.active.values_mut().chain(self.temporary.values_mut()) {
+                    shift_timestamp(&mut playback.activated_at);
+                    if let Some(paused) = &mut playback.paused_at {
+                        shift_timestamp(paused);
+                    }
+                    if let Some(transition) = &mut playback.master_transition {
+                        shift_timestamp(&mut transition.started_at);
+                    }
+                }
+                self.dynamics_paused_at = None;
+            }
+            _ => {}
+        }
+    }
+    pub fn toggle_dynamics_paused(&mut self) -> bool {
+        let paused = !self.dynamics_paused();
+        self.set_dynamics_paused(paused);
+        paused
+    }
     pub fn register(&mut self, cue_list: CueList) -> Result<(), String> {
         cue_list.validate()?;
         if cue_list.mode == CueListMode::Chaser {
-            let step = cue_list
-                .speed_group
-                .as_ref()
-                .map(|group| {
-                    let index = group.as_bytes()[0].saturating_sub(b'A').min(4) as usize;
-                    (60_000.0
-                        / f64::from(self.speed_groups_bpm[index])
-                        / f64::from(cue_list.speed_multiplier))
-                    .round() as u64
-                })
-                .unwrap_or(cue_list.chaser_step_millis);
+            let step = effective_chaser_step_millis(&cue_list, &self.speed_groups_bpm);
             if cue_list.chaser_xfade_millis > step {
                 return Err("chaser x-fade must not exceed the effective step duration".into());
             }
@@ -694,6 +1130,26 @@ impl PlaybackEngine {
         self.back_at_key(PlaybackKey::Number(number), id, self.clock.now())
     }
 
+    pub fn fast_forward_playback(&mut self, number: u16) -> Result<&ActivePlayback, String> {
+        self.go_playback(number)?;
+        let playback = self
+            .active
+            .get_mut(&PlaybackKey::Number(number))
+            .ok_or("playback is not active")?;
+        playback.transition_timing_bypassed = true;
+        Ok(playback)
+    }
+
+    pub fn fast_rewind_playback(&mut self, number: u16) -> Result<&ActivePlayback, String> {
+        self.back_playback(number)?;
+        let playback = self
+            .active
+            .get_mut(&PlaybackKey::Number(number))
+            .ok_or("playback is not active")?;
+        playback.transition_timing_bypassed = true;
+        Ok(playback)
+    }
+
     pub fn goto_playback(
         &mut self,
         number: u16,
@@ -742,11 +1198,20 @@ impl PlaybackEngine {
             activated_at: self.clock.now(),
             paused_at: None,
             master: 0.0,
+            fader_position: 0.0,
+            fader_pickup_required: false,
             flash: false,
             master_transition: None,
             temporary: false,
             enabled: false,
             flash_restore_off: false,
+            transition_timing_bypassed: false,
+            transition_fade_fallback_millis: None,
+            manual_xfade_position: 0.0,
+            manual_xfade_direction: ManualXFadeDirection::TowardsHigh,
+            manual_xfade_from_index: None,
+            manual_xfade_to_index: None,
+            manual_xfade_progress: 0.0,
             tracking_wrap: false,
             current_cue_id: None,
             current_cue_number: None,
@@ -802,8 +1267,10 @@ impl PlaybackEngine {
         active.master = 1.0;
         active.enabled = true;
         active.temporary = false;
+        active.fader_pickup_required = false;
         active.master_transition = None;
         active.deleted_cue_transition_source = None;
+        reset_manual_transition(active);
         self.auto_off_overwritten();
         Ok(())
     }
@@ -817,6 +1284,7 @@ impl PlaybackEngine {
                 let was = playback.enabled;
                 playback.enabled = false;
                 playback.flash = false;
+                playback.fader_pickup_required = playback.fader_position > 0.0;
                 playback.master_transition = None;
                 playback.deleted_cue_hold = None;
                 playback.deleted_cue_transition_source = None;
@@ -844,17 +1312,40 @@ impl PlaybackEngine {
         if !value.is_finite() || !(0.0..=1.0).contains(&value) {
             return Err("playback master must be within 0-1".into());
         }
+        let definition = self
+            .definitions
+            .get(&number)
+            .ok_or("playback does not exist")?;
+        if !definition.has_fader {
+            return Err("playback does not have a fader".into());
+        }
+        match definition.fader {
+            PlaybackFaderMode::Temp => return self.set_temp_fader(number, value),
+            PlaybackFaderMode::XFade => return self.set_manual_xfade(number, value),
+            PlaybackFaderMode::Master => {}
+            _ => return Err("fader mode is not handled by the Cuelist engine".into()),
+        }
         let id = self.cue_list_for(number)?;
         let key = PlaybackKey::Number(number);
+        if let Some(active) = self.active.get_mut(&key) {
+            active.fader_position = value;
+            if active.fader_pickup_required {
+                if value == 0.0 {
+                    active.fader_pickup_required = false;
+                    active.master = 0.0;
+                }
+                return Ok(());
+            }
+        }
         if value > 0.0 && !self.active.contains_key(&key) {
             self.go_at_key(key, id, self.clock.now())?;
         }
-        let temporary = self.definitions[&number].fader == PlaybackFaderMode::Temp;
         if let Some(active) = self.active.get_mut(&key) {
             active.playback_number = Some(number);
             active.master = value;
+            active.fader_position = value;
             active.master_transition = None;
-            active.temporary = temporary;
+            active.temporary = false;
             if value > 0.0 {
                 active.enabled = true;
             }
@@ -863,23 +1354,139 @@ impl PlaybackEngine {
         Ok(())
     }
     pub fn set_flash(&mut self, number: u16, pressed: bool) -> Result<(), String> {
-        let id = self.cue_list_for(number)?;
-        let key = PlaybackKey::Number(number);
-        if pressed && !self.active.contains_key(&key) {
-            self.go_at_key(key, id, self.clock.now())?;
-        }
-        if let Some(active) = self.active.get_mut(&key) {
-            active.playback_number = Some(number);
-            if pressed {
-                active.flash_restore_off = !active.enabled;
+        self.cue_list_for(number)?;
+        if pressed {
+            let playback = self.temporary_playback(number, 1.0, true)?;
+            self.temporary
+                .insert((number, TemporaryPlaybackKind::Flash), playback);
+        } else {
+            let released = self
+                .temporary
+                .remove(&(number, TemporaryPlaybackKind::Flash));
+            if self.definitions[&number].flash_release == FlashReleaseMode::ReleaseIntensityOnly
+                && let Some(mut released) = released
+            {
+                let key = PlaybackKey::Number(number);
+                let active = self.active.entry(key).or_insert_with(|| {
+                    released.temporary = false;
+                    released.flash = false;
+                    released
+                });
                 active.enabled = true;
-                active.flash = true;
-            } else {
+                active.master = 0.0;
                 active.flash = false;
-                if active.flash_restore_off {
-                    active.enabled = false;
-                    active.flash_restore_off = false;
-                }
+                active.temporary = false;
+                active.flash_restore_off = false;
+            }
+        }
+        Ok(())
+    }
+
+    fn temporary_playback(
+        &self,
+        number: u16,
+        master: f32,
+        flash: bool,
+    ) -> Result<ActivePlayback, String> {
+        let cue_list_id = self.cue_list_for(number)?;
+        let cue_list = self
+            .cue_lists
+            .get(&cue_list_id)
+            .ok_or("playback cue list does not exist")?;
+        let now = self.clock.now();
+        let mut playback = self
+            .active
+            .get(&PlaybackKey::Number(number))
+            .cloned()
+            .unwrap_or_else(|| new_active_playback(Some(number), cue_list, now, master, true));
+        playback.playback_number = Some(number);
+        playback.enabled = true;
+        playback.temporary = true;
+        playback.flash = flash;
+        playback.master = master;
+        playback.fader_position = master;
+        playback.fader_pickup_required = false;
+        playback.master_transition = None;
+        playback.activated_at = now + ChronoDuration::microseconds(1);
+        playback.paused = false;
+        playback.paused_at = None;
+        playback.previous_index = None;
+        playback.transition_timing_bypassed = true;
+        playback.transition_fade_fallback_millis = None;
+        playback.manual_xfade_from_index = None;
+        playback.manual_xfade_to_index = None;
+        playback.manual_xfade_progress = 0.0;
+        Ok(playback)
+    }
+
+    pub fn toggle_temp(&mut self, number: u16) -> Result<bool, String> {
+        let key = (number, TemporaryPlaybackKind::TempButton);
+        if self.temporary.remove(&key).is_some() {
+            return Ok(false);
+        }
+        let playback = self.temporary_playback(number, 1.0, false)?;
+        self.temporary.insert(key, playback);
+        Ok(true)
+    }
+
+    pub fn set_temp_button(&mut self, number: u16, active: bool) -> Result<(), String> {
+        let key = (number, TemporaryPlaybackKind::TempButton);
+        if active {
+            if !self.temporary.contains_key(&key) {
+                let playback = self.temporary_playback(number, 1.0, false)?;
+                self.temporary.insert(key, playback);
+            }
+        } else {
+            self.cue_list_for(number)?;
+            self.temporary.remove(&key);
+        }
+        Ok(())
+    }
+
+    pub fn set_temp_fader(&mut self, number: u16, value: f32) -> Result<(), String> {
+        if !value.is_finite() || !(0.0..=1.0).contains(&value) {
+            return Err("playback Temp fader must be within 0-1".into());
+        }
+        let key = (number, TemporaryPlaybackKind::TempFader);
+        if value == 0.0 {
+            self.temporary.remove(&key);
+            return Ok(());
+        }
+        if let Some(playback) = self.temporary.get_mut(&key) {
+            playback.master = value;
+            playback.fader_position = value;
+        } else {
+            let playback = self.temporary_playback(number, value, false)?;
+            self.temporary.insert(key, playback);
+        }
+        Ok(())
+    }
+
+    pub fn set_swap(&mut self, number: u16, pressed: bool) -> Result<(), String> {
+        self.cue_list_for(number)?;
+        let key = (number, TemporaryPlaybackKind::Swap);
+        if pressed {
+            let playback = self.temporary_playback(number, 1.0, true)?;
+            self.temporary.insert(key, playback);
+            self.swap_held.insert(number);
+        } else {
+            let released = self.temporary.remove(&key);
+            self.swap_held.remove(&number);
+            if self.definitions[&number].flash_release == FlashReleaseMode::ReleaseIntensityOnly
+                && let Some(mut released) = released
+            {
+                let active = self
+                    .active
+                    .entry(PlaybackKey::Number(number))
+                    .or_insert_with(|| {
+                        released.temporary = false;
+                        released.flash = false;
+                        released
+                    });
+                active.enabled = true;
+                active.master = 0.0;
+                active.temporary = false;
+                active.flash = false;
             }
         }
         Ok(())
@@ -892,6 +1499,9 @@ impl PlaybackEngine {
             .buttons
             .get(button.checked_sub(1).ok_or("button must be within 1-3")? as usize)
             .ok_or("button must be within 1-3")?;
+        if button > self.definitions[&number].button_count {
+            return Err("button is not present on this playback".into());
+        }
         if !pressed
             && !matches!(
                 action,
@@ -906,19 +1516,20 @@ impl PlaybackEngine {
             PlaybackButtonAction::Toggle => self.toggle(number).map(|_| ()),
             PlaybackButtonAction::Go => self.go_playback(number).map(|_| ()),
             PlaybackButtonAction::GoMinus => self.back_playback(number).map(|_| ()),
-            PlaybackButtonAction::FastForward => self.go_playback(number).map(|_| ()),
-            PlaybackButtonAction::FastRewind => self.back_playback(number).map(|_| ()),
+            PlaybackButtonAction::FastForward => self.fast_forward_playback(number).map(|_| ()),
+            PlaybackButtonAction::FastRewind => self.fast_rewind_playback(number).map(|_| ()),
             PlaybackButtonAction::Flash => self.set_flash(number, pressed),
             PlaybackButtonAction::Temp => {
                 if pressed {
-                    self.toggle(number).map(|_| ())
+                    self.toggle_temp(number).map(|_| ())
                 } else {
                     Ok(())
                 }
             }
-            PlaybackButtonAction::Swap => self.set_flash(number, pressed),
+            PlaybackButtonAction::Swap => self.set_swap(number, pressed),
             PlaybackButtonAction::Select
             | PlaybackButtonAction::SelectContents
+            | PlaybackButtonAction::SelectDereferenced
             | PlaybackButtonAction::Learn
             | PlaybackButtonAction::Double
             | PlaybackButtonAction::Half
@@ -928,6 +1539,85 @@ impl PlaybackEngine {
             PlaybackButtonAction::None => Ok(()),
         }
     }
+
+    pub fn set_manual_xfade(&mut self, number: u16, value: f32) -> Result<(), String> {
+        if !value.is_finite() || !(0.0..=1.0).contains(&value) {
+            return Err("manual X-fade must be within 0-1".into());
+        }
+        let definition = self
+            .definitions
+            .get(&number)
+            .ok_or("playback does not exist")?;
+        if !definition.has_fader || definition.fader != PlaybackFaderMode::XFade {
+            return Err("playback is not configured for manual X-fade".into());
+        }
+        let cue_list_id = self.cue_list_for(number)?;
+        let key = PlaybackKey::Number(number);
+        if !self.active.contains_key(&key) {
+            let cue_list = self
+                .cue_lists
+                .get(&cue_list_id)
+                .ok_or("playback cue list does not exist")?;
+            self.active.insert(
+                key,
+                new_active_playback(Some(number), cue_list, self.clock.now(), 1.0, true),
+            );
+        }
+        let cue_list = self
+            .cue_lists
+            .get(&cue_list_id)
+            .ok_or("playback cue list does not exist")?;
+        let active = self.active.get_mut(&key).expect("X-fade playback exists");
+        active.playback_number = Some(number);
+        active.enabled = true;
+        active.fader_position = value;
+        active.manual_xfade_position = value;
+        let progress = match active.manual_xfade_direction {
+            ManualXFadeDirection::TowardsHigh => value,
+            ManualXFadeDirection::TowardsLow => 1.0 - value,
+        };
+        if active.manual_xfade_from_index.is_none() && progress > 0.0 {
+            let next = if active.cue_index + 1 < cue_list.cues.len() {
+                Some(active.cue_index + 1)
+            } else if cue_list.effective_wrap_mode() != WrapMode::Off {
+                Some(0)
+            } else {
+                None
+            };
+            if let Some(next) = next {
+                active.manual_xfade_from_index = Some(active.cue_index);
+                active.manual_xfade_to_index = Some(next);
+                active.transition_timing_bypassed = false;
+            }
+        }
+        if active.manual_xfade_from_index.is_none() {
+            active.manual_xfade_progress = 0.0;
+            return Ok(());
+        }
+        active.manual_xfade_progress = progress.clamp(0.0, 1.0);
+        if progress >= 1.0 {
+            let target = active
+                .manual_xfade_to_index
+                .expect("manual X-fade target accompanies source");
+            active.cue_index = target;
+            active.current_cue_id = Some(cue_list.cues[target].id);
+            active.current_cue_number = Some(cue_list.cues[target].number);
+            active.previous_index = None;
+            active.transition_timing_bypassed = true;
+            active.tracking_wrap =
+                target == 0 && cue_list.effective_wrap_mode() == WrapMode::Tracking;
+            active.activated_at = self.clock.now();
+            active.manual_xfade_from_index = None;
+            active.manual_xfade_to_index = None;
+            active.manual_xfade_progress = 0.0;
+            active.manual_xfade_direction = match active.manual_xfade_direction {
+                ManualXFadeDirection::TowardsHigh => ManualXFadeDirection::TowardsLow,
+                ManualXFadeDirection::TowardsLow => ManualXFadeDirection::TowardsHigh,
+            };
+        }
+        Ok(())
+    }
+
     pub fn xfade(&mut self, number: u16, on: bool) -> Result<(), String> {
         let duration = self
             .definitions
@@ -961,6 +1651,82 @@ impl PlaybackEngine {
         }
         Ok(())
     }
+
+    /// Applies the timing envelope owned by one atomic Preload GO after the retained action verb
+    /// has executed against the playback's then-current state. This does not rewrite Cue data:
+    /// explicit Cue/attribute timing still wins, while a zero Cue time falls back to Programmer
+    /// Fade for this transition only.
+    pub fn apply_preload_timing(
+        &mut self,
+        number: u16,
+        action: &str,
+        started_at: DateTime<Utc>,
+        fallback_millis: u64,
+        previous: Option<(bool, f32)>,
+    ) -> Result<(), String> {
+        self.cue_list_for(number)?;
+        let key = PlaybackKey::Number(number);
+        if let Some(playback) = self.active.get_mut(&key) {
+            if playback.enabled && matches!(action, "go" | "go-minus" | "on" | "toggle") {
+                playback.activated_at = started_at;
+                playback.transition_timing_bypassed = false;
+                playback.transition_fade_fallback_millis = Some(fallback_millis);
+            }
+
+            match (previous, playback.enabled) {
+                (Some((false, _)), true)
+                    if matches!(action, "go" | "on" | "toggle") && fallback_millis > 0 =>
+                {
+                    let target = playback.master;
+                    playback.master = 0.0;
+                    playback.master_transition = Some(PlaybackMasterTransition {
+                        from: 0.0,
+                        to: target,
+                        started_at,
+                        duration_millis: fallback_millis,
+                        release_after: false,
+                    });
+                }
+                (Some((true, previous_master)), false)
+                    if matches!(action, "off" | "toggle") && fallback_millis > 0 =>
+                {
+                    playback.enabled = true;
+                    playback.master = previous_master;
+                    playback.master_transition = Some(PlaybackMasterTransition {
+                        from: previous_master,
+                        to: 0.0,
+                        started_at,
+                        duration_millis: fallback_millis,
+                        release_after: true,
+                    });
+                }
+                _ => {}
+            }
+        }
+
+        if action == "temp-on"
+            && let Some(playback) = self
+                .temporary
+                .get_mut(&(number, TemporaryPlaybackKind::TempButton))
+        {
+            let target = playback.master;
+            playback.activated_at = started_at;
+            playback.transition_timing_bypassed = false;
+            playback.transition_fade_fallback_millis = Some(fallback_millis);
+            if fallback_millis > 0 {
+                playback.master = 0.0;
+                playback.master_transition = Some(PlaybackMasterTransition {
+                    from: 0.0,
+                    to: target,
+                    started_at,
+                    duration_millis: fallback_millis,
+                    release_after: false,
+                });
+            }
+        }
+        Ok(())
+    }
+
     fn cue_list_for(&self, number: u16) -> Result<CueListId, String> {
         match &self
             .definitions
@@ -1022,11 +1788,20 @@ impl PlaybackEngine {
                 activated_at: now,
                 paused_at: None,
                 master: 1.0,
+                fader_position: 1.0,
+                fader_pickup_required: false,
                 flash: false,
                 master_transition: None,
                 temporary: false,
                 enabled: true,
                 flash_restore_off: false,
+                transition_timing_bypassed: false,
+                transition_fade_fallback_millis: None,
+                manual_xfade_position: 0.0,
+                manual_xfade_direction: ManualXFadeDirection::TowardsHigh,
+                manual_xfade_from_index: None,
+                manual_xfade_to_index: None,
+                manual_xfade_progress: 0.0,
                 tracking_wrap: false,
                 current_cue_id: Some(cue_list.cues[0].id),
                 current_cue_number: Some(cue_list.cues[0].number),
@@ -1057,6 +1832,7 @@ impl PlaybackEngine {
                     playback.paused = false;
                     playback.paused_at = None;
                     playback.activated_at = now;
+                    reset_manual_transition(playback);
                     return Ok(playback);
                 }
                 if let Some(hold) = playback.deleted_cue_hold.take() {
@@ -1073,6 +1849,7 @@ impl PlaybackEngine {
                     } else {
                         playback.deleted_cue_hold = Some(hold);
                     }
+                    reset_manual_transition(playback);
                     return Ok(playback);
                 }
                 playback.deleted_cue_transition_source = None;
@@ -1098,6 +1875,7 @@ impl PlaybackEngine {
                 playback
             }
         };
+        reset_manual_transition(playback);
         Ok(playback)
     }
 
@@ -1137,11 +1915,20 @@ impl PlaybackEngine {
             activated_at: now,
             paused_at: None,
             master: 1.0,
+            fader_position: 1.0,
+            fader_pickup_required: false,
             flash: false,
             master_transition: None,
             temporary: false,
             enabled: true,
             flash_restore_off: false,
+            transition_timing_bypassed: false,
+            transition_fade_fallback_millis: None,
+            manual_xfade_position: 0.0,
+            manual_xfade_direction: ManualXFadeDirection::TowardsHigh,
+            manual_xfade_from_index: None,
+            manual_xfade_to_index: None,
+            manual_xfade_progress: 0.0,
             tracking_wrap: false,
             current_cue_id: Some(cue_list.cues[index].id),
             current_cue_number: Some(cue_list.cues[index].number),
@@ -1164,6 +1951,7 @@ impl PlaybackEngine {
         playback.paused = false;
         playback.paused_at = None;
         playback.activated_at = now;
+        reset_manual_transition(playback);
         Ok(playback)
     }
 
@@ -1185,6 +1973,7 @@ impl PlaybackEngine {
         now: DateTime<Utc>,
     ) -> Result<&ActivePlayback, String> {
         let playback = self.active.get_mut(&key).ok_or("cue list is not active")?;
+        reset_manual_transition(playback);
         if let Some(hold) = playback.deleted_cue_hold.take() {
             if let Some(previous) = hold.previous_number
                 && let Some(index) = self.cue_lists[&id]
@@ -1220,6 +2009,16 @@ impl PlaybackEngine {
     pub fn pause(&mut self, id: CueListId) -> Result<(), String> {
         self.pause_at(id, self.clock.now())
     }
+    pub fn pause_playback(&mut self, number: u16) -> Result<(), String> {
+        let now = self.clock.now();
+        let key = PlaybackKey::Number(number);
+        let playback = self.active.get_mut(&key).ok_or("playback is not active")?;
+        if !playback.paused {
+            playback.paused = true;
+            playback.paused_at = Some(now);
+        }
+        Ok(())
+    }
     pub fn pause_at(&mut self, id: CueListId, now: DateTime<Utc>) -> Result<(), String> {
         let key = self.key_for_cue_list(id)?;
         let playback = self.active.get_mut(&key).ok_or("cue list is not active")?;
@@ -1238,6 +2037,7 @@ impl PlaybackEngine {
         self.active
             .values()
             .filter(|playback| playback.enabled)
+            .chain(self.temporary.values())
             .cloned()
             .collect()
     }
@@ -1247,9 +2047,46 @@ impl PlaybackEngine {
         runtime
     }
     pub fn runtime_status(&self) -> Vec<PlaybackRuntimeStatus> {
-        self.runtime()
+        let mut runtime = self.runtime();
+        for ((number, _), temporary) in &self.temporary {
+            if runtime
+                .iter()
+                .any(|playback| playback.playback_number == Some(*number))
+            {
+                continue;
+            }
+            let mut inactive = temporary.clone();
+            inactive.enabled = false;
+            inactive.master = 0.0;
+            inactive.temporary = false;
+            inactive.flash = false;
+            runtime.push(inactive);
+        }
+        runtime.sort_by_key(|playback| playback.playback_number.unwrap_or(u16::MAX));
+        runtime
             .into_iter()
-            .map(|playback| {
+            .map(|mut playback| {
+                let number = playback.playback_number;
+                let temporary_master = number
+                    .map(|number| {
+                        self.temporary
+                            .iter()
+                            .filter(|((candidate, _), _)| *candidate == number)
+                            .map(|(_, playback)| playback.master)
+                            .fold(0.0_f32, f32::max)
+                    })
+                    .unwrap_or(0.0);
+                let temporary_active = temporary_master > 0.0
+                    || number.is_some_and(|number| {
+                        self.temporary
+                            .keys()
+                            .any(|(candidate, _)| *candidate == number)
+                    });
+                let swap_active = number.is_some_and(|number| self.swap_held.contains(&number));
+                playback.flash = number.is_some_and(|number| {
+                    self.temporary
+                        .contains_key(&(number, TemporaryPlaybackKind::Flash))
+                });
                 let cue_list = self.cue_lists.get(&playback.cue_list_id);
                 let normal = cue_list.and_then(|list| {
                     if let Some(hold) = &playback.deleted_cue_hold {
@@ -1287,6 +2124,9 @@ impl PlaybackEngine {
                     effective_next_cue_id: effective.map(|cue| cue.id),
                     effective_next_cue_number: effective.map(|cue| cue.number),
                     effective_next_is_loaded: loaded.is_some(),
+                    temporary_active,
+                    temporary_master,
+                    swap_active,
                     playback,
                 }
             })
@@ -1494,6 +2334,17 @@ impl PlaybackEngine {
     }
     pub fn restore_active(&mut self, playbacks: impl IntoIterator<Item = ActivePlayback>) {
         for mut playback in playbacks {
+            if let Some(number) = playback.playback_number
+                && !self.definitions.get(&number).is_some_and(|definition| {
+                    matches!(
+                        definition.target,
+                        PlaybackTarget::CueList { cue_list_id }
+                            if cue_list_id == playback.cue_list_id
+                    )
+                })
+            {
+                continue;
+            }
             let Some(cue_list) = self.cue_lists.get(&playback.cue_list_id) else {
                 continue;
             };
@@ -1517,6 +2368,13 @@ impl PlaybackEngine {
                 playback.cue_index = playback.cue_index.min(last);
             }
             playback.previous_index = playback.previous_index.map(|index| index.min(last));
+            playback.manual_xfade_from_index = playback
+                .manual_xfade_from_index
+                .map(|index| index.min(last));
+            playback.manual_xfade_to_index =
+                playback.manual_xfade_to_index.map(|index| index.min(last));
+            playback.manual_xfade_position = playback.manual_xfade_position.clamp(0.0, 1.0);
+            playback.manual_xfade_progress = playback.manual_xfade_progress.clamp(0.0, 1.0);
             if let Some(loaded) = playback.loaded_cue_id
                 && let Some(cue) = cue_list.cues.iter().find(|cue| cue.id == loaded)
             {
@@ -1588,8 +2446,7 @@ impl PlaybackEngine {
                 let previous_number = next
                     .cues
                     .iter()
-                    .filter(|cue| cue.number < number)
-                    .next_back()
+                    .rfind(|cue| cue.number < number)
                     .map(|cue| cue.number);
                 let next_number = next
                     .cues
@@ -1599,6 +2456,9 @@ impl PlaybackEngine {
                 let mut isolated = PlaybackEngine {
                     cue_lists: self.cue_lists.clone(),
                     active: HashMap::from([(*key, playback.clone())]),
+                    temporary: HashMap::new(),
+                    swap_held: HashSet::new(),
+                    dynamics_paused_at: None,
                     speed_groups_bpm: self.speed_groups_bpm,
                     speed_groups_paused: self.speed_groups_paused,
                     sequence_master_fade_millis: self.sequence_master_fade_millis,
@@ -1624,6 +2484,9 @@ impl PlaybackEngine {
     }
 
     pub fn tick(&mut self, now: DateTime<Utc>, timecode_frame: Option<u64>) {
+        if self.dynamics_paused_at.is_some() {
+            return;
+        }
         let mut transition_releases = Vec::new();
         for (key, playback) in &mut self.active {
             let Some(transition) = playback.master_transition.clone() else {
@@ -1647,6 +2510,22 @@ impl PlaybackEngine {
         for key in transition_releases {
             if let Some(playback) = self.active.get_mut(&key) {
                 playback.enabled = false;
+            }
+        }
+        for playback in self.temporary.values_mut() {
+            let Some(transition) = playback.master_transition.clone() else {
+                continue;
+            };
+            let progress = if transition.duration_millis == 0 {
+                1.0
+            } else {
+                ((now - transition.started_at).num_milliseconds().max(0) as f32
+                    / transition.duration_millis as f32)
+                    .clamp(0.0, 1.0)
+            };
+            playback.master = transition.from + (transition.to - transition.from) * progress;
+            if progress >= 1.0 {
+                playback.master_transition = None;
             }
         }
         let ids: Vec<_> = self.active.keys().copied().collect();
@@ -1702,57 +2581,10 @@ impl PlaybackEngine {
             let elapsed = (now - playback.activated_at).num_milliseconds().max(0) as u64;
             let current = &cue_list.cues[playback.cue_index];
             if cue_list.mode == CueListMode::Chaser {
-                let step_millis = cue_list
-                    .speed_group
-                    .as_ref()
-                    .map(|group| {
-                        let index = group
-                            .as_bytes()
-                            .first()
-                            .copied()
-                            .unwrap_or(b'A')
-                            .saturating_sub(b'A')
-                            .min(4) as usize;
-                        (60_000.0
-                            / f64::from(self.speed_groups_bpm[index])
-                            / f64::from(cue_list.speed_multiplier))
-                        .round() as u64
-                    })
-                    .unwrap_or(cue_list.chaser_step_millis)
-                    .max(1);
+                let step_millis = effective_chaser_step_millis(cue_list, &self.speed_groups_bpm);
                 let steps = elapsed / step_millis;
                 if steps > 0 {
-                    playback.deleted_cue_transition_source = None;
-                    let start = playback.cue_index as u128;
-                    let total = start + u128::from(steps);
-                    let last = cue_list.cues.len() - 1;
-                    if cue_list.effective_wrap_mode() == WrapMode::Off {
-                        playback.cue_index = usize::try_from(total.min(last as u128))
-                            .expect("clamped Cue index fits usize");
-                        playback.previous_index = Some(if total > last as u128 {
-                            last
-                        } else {
-                            playback.cue_index.saturating_sub(1)
-                        });
-                    } else {
-                        let cue_count = cue_list.cues.len() as u128;
-                        playback.cue_index = usize::try_from(total % cue_count)
-                            .expect("modulo Cue index fits usize");
-                        playback.previous_index = Some(
-                            usize::try_from((total - 1) % cue_count)
-                                .expect("modulo Cue index fits usize"),
-                        );
-                        if cue_list.effective_wrap_mode() == WrapMode::Tracking
-                            && total >= cue_count
-                        {
-                            playback.tracking_wrap = true;
-                        } else if cue_list.effective_wrap_mode() == WrapMode::Reset {
-                            playback.tracking_wrap = false;
-                        }
-                    }
-                    playback.current_cue_number =
-                        Some(cue_list.cues[playback.cue_index].number);
-                    playback.current_cue_id = Some(cue_list.cues[playback.cue_index].id);
+                    advance_chaser_steps(playback, cue_list, steps);
                     let advanced_millis = step_millis.saturating_mul(steps);
                     playback.activated_at += ChronoDuration::milliseconds(
                         i64::try_from(advanced_millis).unwrap_or(i64::MAX),
@@ -1805,7 +2637,25 @@ impl PlaybackEngine {
 
     pub fn contributions_at(&self, now: DateTime<Utc>) -> Vec<TimedValue> {
         let mut values = Vec::new();
-        for playback in self.active.values() {
+        let dynamics_now = self.dynamics_paused_at.unwrap_or(now);
+        let suppressed = |playback: &ActivePlayback| {
+            let Some(number) = playback.playback_number else {
+                return false;
+            };
+            self.swap_held.iter().any(|source| {
+                *source != number
+                    && !self
+                        .definitions
+                        .get(&number)
+                        .is_some_and(|definition| definition.protect_from_swap)
+            })
+        };
+        for playback in self
+            .active
+            .values()
+            .chain(self.temporary.values())
+            .filter(|playback| !suppressed(playback))
+        {
             if !playback.enabled {
                 continue;
             }
@@ -1814,16 +2664,19 @@ impl PlaybackEngine {
                 continue;
             }
             let cue_list = &self.cue_lists[&playback.cue_list_id];
-            let target = if playback.tracking_wrap {
+            let target_index = playback.manual_xfade_to_index.unwrap_or(playback.cue_index);
+            let target = if playback.tracking_wrap && playback.manual_xfade_to_index.is_none() {
                 let mut state = cue_list.state_at_index(cue_list.cues.len() - 1);
-                for cue in cue_list.cues.iter().take(playback.cue_index + 1) {
+                for cue in cue_list.cues.iter().take(target_index + 1) {
                     apply_changes(&mut state, &cue.changes);
                 }
                 state
             } else {
-                cue_list.state_at_index(playback.cue_index)
+                cue_list.state_at_index(target_index)
             };
-            let previous = if let Some(source) = &playback.deleted_cue_transition_source {
+            let previous = if let Some(index) = playback.manual_xfade_from_index {
+                cue_list.state_at_index(index)
+            } else if let Some(source) = &playback.deleted_cue_transition_source {
                 let intensity_scale = if playback.flash { 1.0 } else { playback.master };
                 source
                     .iter()
@@ -1852,8 +2705,8 @@ impl PlaybackEngine {
                     .map(|index| cue_list.state_at_index(index))
                     .unwrap_or_default()
             };
-            let cue = &cue_list.cues[playback.cue_index];
-            let effective_now = playback.paused_at.unwrap_or(now);
+            let cue = &cue_list.cues[target_index];
+            let effective_now = playback.paused_at.unwrap_or(dynamics_now);
             let elapsed = (effective_now - playback.activated_at)
                 .num_milliseconds()
                 .max(0) as u64;
@@ -1862,7 +2715,9 @@ impl PlaybackEngine {
             } else if cue_list.mode == CueListMode::Chaser {
                 cue_list.chaser_xfade_millis
             } else if cue_list.mode == CueListMode::Sequence && cue.fade_millis == 0 {
-                self.sequence_master_fade_millis
+                playback
+                    .transition_fade_fallback_millis
+                    .unwrap_or(self.sequence_master_fade_millis)
             } else {
                 cue.fade_millis
             };
@@ -1887,7 +2742,11 @@ impl PlaybackEngine {
                         delay_override.unwrap_or(cue.delay_millis),
                     )
                 };
-                let progress = if elapsed < delay_millis {
+                let progress = if playback.manual_xfade_from_index.is_some() {
+                    playback.manual_xfade_progress
+                } else if playback.transition_timing_bypassed {
+                    1.0
+                } else if elapsed < delay_millis {
                     0.0
                 } else if fade_millis == 0 {
                     1.0
@@ -1929,6 +2788,7 @@ impl PlaybackEngine {
                     value,
                     priority: cue_list.priority,
                     changed_at: playback.activated_at,
+                    programmer_order: 0,
                     fade: false,
                     fade_millis: None,
                     delay_millis: None,
@@ -1962,6 +2822,7 @@ impl PlaybackEngine {
                         value: AttributeValue::Normalized(level),
                         priority: cue_list.priority,
                         changed_at: playback.activated_at,
+                        programmer_order: 0,
                         merge_mode: if attribute_phaser.attribute.is_intensity() {
                             if cue_list.intensity_priority_mode == IntensityPriorityMode::Htp {
                                 MergeMode::Htp
@@ -2181,18 +3042,102 @@ mod tests {
             name: format!("Playback {number}"),
             target: PlaybackTarget::CueList { cue_list_id },
             buttons: [
-                PlaybackButtonAction::Go,
                 PlaybackButtonAction::GoMinus,
+                PlaybackButtonAction::Go,
                 PlaybackButtonAction::Flash,
             ],
+            button_count: 3,
             fader: PlaybackFaderMode::Master,
+            has_fader: true,
             go_activates: true,
             auto_off: true,
             xfade_millis: 0,
             color: default_playback_color(),
             flash_release: FlashReleaseMode::default(),
             protect_from_swap: false,
+            presentation_icon: None,
+            presentation_image: None,
         }
+    }
+
+    #[test]
+    fn preload_transition_uses_one_timestamp_and_programmer_fade_only_as_fallback() {
+        let fixture = FixtureId::new();
+        let mut first = Cue::new(1.0);
+        first.changes.push(value(fixture, "intensity", 0.0));
+        let mut second = Cue::new(2.0);
+        second.changes.push(value(fixture, "intensity", 1.0));
+        let cue_list = list(vec![first, second]);
+        let id = cue_list.id;
+        let started = chrono::DateTime::parse_from_rfc3339("2026-07-16T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let clock = Arc::new(light_core::ManualClock::new(started));
+        let mut engine = PlaybackEngine::with_clock(clock.clone());
+        engine.set_control_timing([120.0, 90.0, 60.0, 30.0, 15.0], 7_000);
+        engine.register(cue_list).unwrap();
+        engine.register_definition(definition(1, id)).unwrap();
+        engine.go_playback(1).unwrap();
+
+        let committed_at = started + ChronoDuration::milliseconds(750);
+        clock.set(committed_at);
+        let previous = engine
+            .runtime()
+            .into_iter()
+            .find(|playback| playback.playback_number == Some(1))
+            .map(|playback| (playback.enabled, playback.master));
+        engine.go_playback(1).unwrap();
+        engine
+            .apply_preload_timing(1, "go", committed_at, 2_000, previous)
+            .unwrap();
+
+        let active = &engine.runtime()[0];
+        assert_eq!(active.activated_at, committed_at);
+        assert_eq!(active.transition_fade_fallback_millis, Some(2_000));
+        assert!(
+            (contribution_level(
+                &engine,
+                committed_at + ChronoDuration::milliseconds(1_000),
+                fixture,
+            ) - 0.5)
+                .abs()
+                < 0.01
+        );
+    }
+
+    #[test]
+    fn explicit_cue_time_remains_authoritative_for_a_preload_transition() {
+        let fixture = FixtureId::new();
+        let mut first = Cue::new(1.0);
+        first.changes.push(value(fixture, "intensity", 0.0));
+        let mut second = Cue::new(2.0);
+        second.fade_millis = 500;
+        second.changes.push(value(fixture, "intensity", 1.0));
+        let cue_list = list(vec![first, second]);
+        let id = cue_list.id;
+        let started = Utc::now();
+        let mut engine = PlaybackEngine::default();
+        engine.register(cue_list).unwrap();
+        engine.register_definition(definition(1, id)).unwrap();
+        engine.go_playback(1).unwrap();
+        let previous = engine
+            .runtime()
+            .into_iter()
+            .find(|playback| playback.playback_number == Some(1))
+            .map(|playback| (playback.enabled, playback.master));
+        engine.go_playback(1).unwrap();
+        engine
+            .apply_preload_timing(1, "go", started, 2_000, previous)
+            .unwrap();
+        assert!(
+            (contribution_level(
+                &engine,
+                started + ChronoDuration::milliseconds(250),
+                fixture,
+            ) - 0.5)
+                .abs()
+                < 0.01
+        );
     }
 
     #[test]
@@ -2310,6 +3255,361 @@ mod tests {
     }
 
     #[test]
+    fn legacy_layout_defaults_are_target_specific_and_invalid_layouts_are_rejected() {
+        let cue_list_id = CueListId::new();
+        let legacy = serde_json::json!({
+            "number": 1,
+            "name": "Legacy",
+            "target": { "type": "cue_list", "cue_list_id": cue_list_id }
+        });
+        let definition: PlaybackDefinition = serde_json::from_value(legacy).unwrap();
+        assert_eq!(
+            definition.buttons,
+            [
+                PlaybackButtonAction::GoMinus,
+                PlaybackButtonAction::Go,
+                PlaybackButtonAction::Flash,
+            ]
+        );
+        assert_eq!(definition.fader, PlaybackFaderMode::Master);
+        assert_eq!(definition.button_count, 3);
+        assert!(definition.has_fader);
+
+        let mut pausable = definition.clone();
+        pausable.buttons[2] = PlaybackButtonAction::Pause;
+        assert!(pausable.validate().is_ok());
+
+        let mut incompatible = definition.clone();
+        incompatible.target = PlaybackTarget::GrandMaster;
+        assert!(incompatible.validate().is_err());
+        incompatible.reset_incompatible_layout();
+        assert_eq!(
+            incompatible.buttons,
+            [
+                PlaybackButtonAction::Blackout,
+                PlaybackButtonAction::Flash,
+                PlaybackButtonAction::PauseDynamics,
+            ]
+        );
+        assert!(incompatible.validate().is_ok());
+
+        incompatible.button_count = 1;
+        incompatible.buttons[1] = PlaybackButtonAction::None;
+        incompatible.buttons[2] = PlaybackButtonAction::None;
+        incompatible.has_fader = false;
+        incompatible.presentation_icon = Some("star".into());
+        assert!(incompatible.validate().is_ok());
+        incompatible.presentation_image = Some("asset://background".into());
+        assert!(incompatible.validate().is_err());
+    }
+
+    #[test]
+    fn fast_navigation_bypasses_only_the_current_transition_timing() {
+        let started = Utc::now();
+        let clock = Arc::new(light_core::ManualClock::new(started));
+        let fixture = FixtureId::new();
+        let mut one = Cue::new(1.0);
+        one.changes.push(value(fixture, "pan", 0.2));
+        let mut two = Cue::new(2.0);
+        two.fade_millis = 10_000;
+        two.delay_millis = 5_000;
+        let mut change = value(fixture, "pan", 0.8);
+        change.fade_millis = Some(8_000);
+        change.delay_millis = Some(4_000);
+        two.changes.push(change);
+        let cue_list = list(vec![one, two]);
+        let cue_list_id = cue_list.id;
+        let mut engine = PlaybackEngine::with_clock(clock.clone());
+        engine.register(cue_list).unwrap();
+        engine
+            .register_definition(definition(1, cue_list_id))
+            .unwrap();
+        engine.on(1).unwrap();
+        clock.advance_millis(20_000);
+        engine.fast_forward_playback(1).unwrap();
+        let pan = engine
+            .contributions()
+            .into_iter()
+            .find(|value| value.attribute.0 == "pan")
+            .unwrap();
+        assert_eq!(pan.value, AttributeValue::Normalized(0.8));
+        let stored = &engine.cue_lists[&cue_list_id].cues[1];
+        assert_eq!((stored.fade_millis, stored.delay_millis), (10_000, 5_000));
+        assert_eq!(stored.changes[0].fade_millis, Some(8_000));
+        assert_eq!(stored.changes[0].delay_millis, Some(4_000));
+
+        engine.fast_rewind_playback(1).unwrap();
+        let pan = engine
+            .contributions()
+            .into_iter()
+            .find(|value| value.attribute.0 == "pan")
+            .unwrap();
+        assert_eq!(pan.value, AttributeValue::Normalized(0.2));
+    }
+
+    #[test]
+    fn off_requires_zero_pickup_without_moving_the_recorded_fader() {
+        let fixture = FixtureId::new();
+        let mut cue = Cue::new(1.0);
+        cue.changes.push(value(fixture, "intensity", 1.0));
+        let cue_list = list(vec![cue]);
+        let cue_list_id = cue_list.id;
+        let mut engine = PlaybackEngine::default();
+        engine.register(cue_list).unwrap();
+        engine
+            .register_definition(definition(1, cue_list_id))
+            .unwrap();
+        engine.set_master(1, 0.6).unwrap();
+        engine.on(1).unwrap();
+        engine.off(1).unwrap();
+        let runtime = &engine.runtime()[0];
+        assert_eq!(runtime.fader_position, 0.6);
+        assert!(runtime.fader_pickup_required);
+
+        engine.set_master(1, 0.9).unwrap();
+        assert!(!engine.runtime()[0].enabled);
+        assert_eq!(engine.runtime()[0].master, 1.0);
+        engine.set_master(1, 0.0).unwrap();
+        assert!(!engine.runtime()[0].fader_pickup_required);
+        assert!(!engine.runtime()[0].enabled);
+        engine.set_master(1, 0.4).unwrap();
+        assert!(engine.runtime()[0].enabled);
+        assert_eq!(engine.runtime()[0].master, 0.4);
+    }
+
+    #[test]
+    fn temp_is_a_separate_entry_and_never_auto_offs_the_underlying_playback() {
+        let started = Utc::now();
+        let clock = Arc::new(light_core::ManualClock::new(started));
+        let fixture = FixtureId::new();
+        let mut a = Cue::new(1.0);
+        a.changes.push(value(fixture, "pan", 0.2));
+        let mut b = Cue::new(1.0);
+        b.changes.push(value(fixture, "pan", 0.8));
+        let a = list(vec![a]);
+        let a_id = a.id;
+        let b = list(vec![b]);
+        let b_id = b.id;
+        let mut engine = PlaybackEngine::with_clock(clock.clone());
+        engine.register(a).unwrap();
+        engine.register(b).unwrap();
+        engine.register_definition(definition(1, a_id)).unwrap();
+        engine.register_definition(definition(2, b_id)).unwrap();
+        engine.on(1).unwrap();
+        clock.advance_millis(1);
+        assert!(engine.toggle_temp(2).unwrap());
+        assert!(engine.runtime()[0].enabled);
+        assert_eq!(
+            resolve(engine.contributions())[&(fixture, AttributeKey("pan".into()))],
+            AttributeValue::Normalized(0.8)
+        );
+        assert!(!engine.toggle_temp(2).unwrap());
+        assert!(engine.runtime()[0].enabled);
+        assert_eq!(
+            resolve(engine.contributions())[&(fixture, AttributeKey("pan".into()))],
+            AttributeValue::Normalized(0.2)
+        );
+
+        let mut temp_definition = engine.definitions[&2].clone();
+        temp_definition.fader = PlaybackFaderMode::Temp;
+        engine.definitions.insert(2, temp_definition);
+        engine.set_master(2, 0.5).unwrap();
+        assert_eq!(engine.runtime_status()[1].temporary_master, 0.5);
+        engine.set_master(2, 0.0).unwrap();
+        assert!(!engine.runtime_status().iter().any(|status| {
+            status.playback.playback_number == Some(2) && status.temporary_active
+        }));
+    }
+
+    #[test]
+    fn flash_release_modes_and_swap_protection_preserve_normal_runtime() {
+        let fixture_a = FixtureId::new();
+        let fixture_b = FixtureId::new();
+        let fixture_c = FixtureId::new();
+        let make = |fixture, level| {
+            let mut cue = Cue::new(1.0);
+            cue.changes.push(value(fixture, "intensity", level));
+            cue.changes.push(value(fixture, "pan", level));
+            list(vec![cue])
+        };
+        let a = make(fixture_a, 0.2);
+        let a_id = a.id;
+        let b = make(fixture_b, 0.8);
+        let b_id = b.id;
+        let c = make(fixture_c, 0.6);
+        let c_id = c.id;
+        let mut engine = PlaybackEngine::default();
+        engine.register(a).unwrap();
+        engine.register(b).unwrap();
+        engine.register(c).unwrap();
+        engine.register_definition(definition(1, a_id)).unwrap();
+        let mut b_definition = definition(2, b_id);
+        b_definition.flash_release = FlashReleaseMode::ReleaseIntensityOnly;
+        engine.register_definition(b_definition).unwrap();
+        let mut c_definition = definition(3, c_id);
+        c_definition.protect_from_swap = true;
+        engine.register_definition(c_definition).unwrap();
+        engine.on(1).unwrap();
+        engine.on(3).unwrap();
+
+        engine.set_flash(2, true).unwrap();
+        let flash_status = engine
+            .runtime_status()
+            .into_iter()
+            .find(|status| status.playback.playback_number == Some(2))
+            .unwrap();
+        assert!(flash_status.playback.flash);
+        assert!(flash_status.temporary_active);
+        engine.set_flash(2, false).unwrap();
+        assert!(engine.runtime_status().into_iter().all(|status| {
+            status.playback.playback_number != Some(2) || !status.playback.flash
+        }));
+        let b_runtime = engine
+            .runtime()
+            .into_iter()
+            .find(|runtime| runtime.playback_number == Some(2))
+            .unwrap();
+        assert!(b_runtime.enabled);
+        assert_eq!(b_runtime.master, 0.0);
+        let b_values = engine
+            .contributions()
+            .into_iter()
+            .filter(|value| value.fixture_id == fixture_b)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            b_values
+                .iter()
+                .find(|value| value.attribute.is_intensity())
+                .unwrap()
+                .value,
+            AttributeValue::Normalized(0.0)
+        );
+        assert_eq!(
+            b_values
+                .iter()
+                .find(|value| value.attribute.0 == "pan")
+                .unwrap()
+                .value,
+            AttributeValue::Normalized(0.8)
+        );
+
+        let a_before = engine
+            .runtime()
+            .into_iter()
+            .find(|runtime| runtime.playback_number == Some(1))
+            .unwrap();
+        engine.set_swap(2, true).unwrap();
+        let fixtures = engine
+            .contributions()
+            .into_iter()
+            .map(|value| value.fixture_id)
+            .collect::<HashSet<_>>();
+        assert!(!fixtures.contains(&fixture_a));
+        assert!(fixtures.contains(&fixture_b));
+        assert!(fixtures.contains(&fixture_c));
+        engine.set_swap(2, false).unwrap();
+        let a_after = engine
+            .runtime()
+            .into_iter()
+            .find(|runtime| runtime.playback_number == Some(1))
+            .unwrap();
+        assert_eq!(a_after.cue_index, a_before.cue_index);
+        assert_eq!(a_after.master, a_before.master);
+        assert_eq!(a_after.activated_at, a_before.activated_at);
+    }
+
+    #[test]
+    fn manual_xfade_uses_authoritative_alternating_progress_and_survives_restore() {
+        let fixture = FixtureId::new();
+        let cues = [0.0, 1.0, 0.5]
+            .into_iter()
+            .enumerate()
+            .map(|(index, level)| {
+                let mut cue = Cue::new(index as f64 + 1.0);
+                cue.fade_millis = 30_000;
+                cue.delay_millis = 10_000;
+                cue.changes.push(value(fixture, "intensity", level));
+                cue
+            })
+            .collect();
+        let cue_list = list(cues);
+        let cue_list_id = cue_list.id;
+        let mut playback_definition = definition(1, cue_list_id);
+        playback_definition.fader = PlaybackFaderMode::XFade;
+        let mut engine = PlaybackEngine::default();
+        engine.register(cue_list).unwrap();
+        engine
+            .register_definition(playback_definition.clone())
+            .unwrap();
+        engine.on(1).unwrap();
+        engine.set_master(1, 0.25).unwrap();
+        assert_eq!(
+            resolve(engine.contributions())[&(fixture, AttributeKey::intensity())],
+            AttributeValue::Normalized(0.25)
+        );
+        engine.set_master(1, 1.0).unwrap();
+        assert_eq!(engine.runtime()[0].current_cue_number, Some(2.0));
+        assert_eq!(
+            resolve(engine.contributions())[&(fixture, AttributeKey::intensity())],
+            AttributeValue::Normalized(1.0)
+        );
+        assert_eq!(
+            engine.runtime()[0].manual_xfade_direction,
+            ManualXFadeDirection::TowardsLow
+        );
+        engine.set_master(1, 1.0).unwrap();
+        assert_eq!(engine.runtime()[0].current_cue_number, Some(2.0));
+        engine.set_master(1, 0.5).unwrap();
+        assert_eq!(
+            resolve(engine.contributions())[&(fixture, AttributeKey::intensity())],
+            AttributeValue::Normalized(0.75)
+        );
+
+        let runtime = engine.runtime();
+        let mut restored = PlaybackEngine::default();
+        restored
+            .register(engine.cue_lists[&cue_list_id].clone())
+            .unwrap();
+        restored.register_definition(playback_definition).unwrap();
+        restored.restore_active(runtime);
+        assert_eq!(restored.runtime()[0].manual_xfade_position, 0.5);
+        assert_eq!(restored.runtime()[0].manual_xfade_progress, 0.5);
+        restored.set_master(1, 0.0).unwrap();
+        assert_eq!(restored.runtime()[0].current_cue_number, Some(3.0));
+    }
+
+    #[test]
+    fn pause_dynamics_freezes_and_resumes_from_the_same_phase() {
+        let started = Utc::now();
+        let clock = Arc::new(light_core::ManualClock::new(started));
+        let fixture = FixtureId::new();
+        let mut cue = Cue::new(1.0);
+        cue.fade_millis = 1_000;
+        cue.changes.push(value(fixture, "intensity", 1.0));
+        let cue_list = list(vec![cue]);
+        let cue_list_id = cue_list.id;
+        let mut engine = PlaybackEngine::with_clock(clock.clone());
+        engine.register(cue_list).unwrap();
+        engine
+            .register_definition(definition(1, cue_list_id))
+            .unwrap();
+        engine.on(1).unwrap();
+        clock.advance_millis(500);
+        let level = |engine: &PlaybackEngine| {
+            resolve(engine.contributions())[&(fixture, AttributeKey::intensity())]
+                .normalized()
+                .unwrap()
+        };
+        assert!((level(&engine) - 0.5).abs() < 0.001);
+        engine.set_dynamics_paused(true);
+        clock.advance_millis(500);
+        assert!((level(&engine) - 0.5).abs() < 0.001);
+        engine.set_dynamics_paused(false);
+        clock.advance_millis(250);
+        assert!((level(&engine) - 0.75).abs() < 0.001);
+    }
+
+    #[test]
     fn tracked_direct_jump_equals_sequential_state() {
         let fixture = FixtureId::new();
         let mut one = Cue::new(1.0);
@@ -2348,6 +3648,8 @@ mod tests {
         let mut list = list(vec![one, two, three]);
         list.store_cue_only(1, vec![value(fixture, "intensity", 1.0)])
             .unwrap();
+        assert!(list.cues[1].cue_only);
+        assert!(list.cues[2].changes[0].automatic_restore);
         assert_eq!(
             list.state_at_index(1)[&(fixture, AttributeKey::intensity())],
             AttributeValue::Normalized(1.0)
@@ -2365,6 +3667,20 @@ mod tests {
         list.store_cue_only(1, vec![value(fixture, "intensity", 1.0)])
             .unwrap();
         assert!(list.state_at_index(2).is_empty());
+    }
+
+    #[test]
+    fn legacy_cues_default_cue_only_and_group_restore_metadata_to_false() {
+        let mut body = serde_json::to_value(Cue::new(1.0)).unwrap();
+        body.as_object_mut().unwrap().remove("cue_only");
+        body["group_changes"] = serde_json::json!([{
+            "group_id": "1",
+            "attribute": "intensity",
+            "value": { "kind": "normalized", "value": 0.5 }
+        }]);
+        let cue: Cue = serde_json::from_value(body).unwrap();
+        assert!(!cue.cue_only);
+        assert!(!cue.group_changes[0].automatic_restore);
     }
 
     #[test]
@@ -2393,6 +3709,7 @@ mod tests {
             value: AttributeValue::Normalized(level),
             priority,
             changed_at: now,
+            programmer_order: 0,
             merge_mode: MergeMode::Htp,
             fade: false,
             fade_millis: None,
@@ -3021,7 +4338,7 @@ mod tests {
         cue_list.speed_group = Some("B".into());
         let id = cue_list.id;
         let mut engine = PlaybackEngine::default();
-        engine.set_control_timing([60, 120, 30, 15, 10], 0);
+        engine.set_control_timing([60.0, 120.0, 30.0, 15.0, 10.0], 0);
         engine.register(cue_list).unwrap();
         let started = Utc::now();
         engine.go_at(id, started).unwrap();
@@ -3084,9 +4401,63 @@ mod tests {
             incremental.tick(started + ChronoDuration::milliseconds(millis), None);
         }
 
-        assert_eq!(direct.active()[0].cue_index, incremental.active()[0].cue_index);
-        assert_eq!(direct.active()[0].previous_index, incremental.active()[0].previous_index);
-        assert_eq!(direct.active()[0].activated_at, incremental.active()[0].activated_at);
+        assert_eq!(
+            direct.active()[0].cue_index,
+            incremental.active()[0].cue_index
+        );
+        assert_eq!(
+            direct.active()[0].previous_index,
+            incremental.active()[0].previous_index
+        );
+        assert_eq!(
+            direct.active()[0].activated_at,
+            incremental.active()[0].activated_at
+        );
+    }
+
+    #[test]
+    fn decimal_speed_group_bpm_reaches_chaser_scheduling_without_integer_rounding() {
+        let mut cue_list = list(vec![Cue::new(1.0), Cue::new(2.0)]);
+        cue_list.mode = CueListMode::Chaser;
+        cue_list.speed_group = Some("B".into());
+        let id = cue_list.id;
+        let mut engine = PlaybackEngine::default();
+        engine.set_control_timing([120.0, 127.5, 60.0, 30.0, 15.0], 0);
+        engine.register(cue_list).unwrap();
+        let started = Utc::now();
+        engine.go_at(id, started).unwrap();
+
+        // 60,000 / 127.5 rounds to a 471 ms step. Integer-rounding the BPM to 128 would
+        // incorrectly advance at 469 ms instead.
+        engine.tick(started + ChronoDuration::milliseconds(470), None);
+        assert_eq!(engine.active()[0].cue_index, 0);
+        engine.tick(started + ChronoDuration::milliseconds(471), None);
+        assert_eq!(engine.active()[0].cue_index, 1);
+    }
+
+    #[test]
+    fn chaser_bpm_change_preserves_normalized_step_phase() {
+        let mut cue_list = list(vec![Cue::new(1.0), Cue::new(2.0)]);
+        cue_list.mode = CueListMode::Chaser;
+        cue_list.speed_group = Some("A".into());
+        let id = cue_list.id;
+        let started = Utc::now();
+        let clock = Arc::new(light_core::ManualClock::new(started));
+        let mut engine = PlaybackEngine::with_clock(clock.clone());
+        engine.register(cue_list).unwrap();
+        engine.go_at(id, started).unwrap();
+
+        clock.set(started + ChronoDuration::milliseconds(250));
+        engine.tick(started + ChronoDuration::milliseconds(250), None);
+        engine.set_control_timing([60.0, 90.0, 60.0, 30.0, 15.0], 0);
+        engine.tick(started + ChronoDuration::milliseconds(749), None);
+        assert_eq!(engine.active()[0].cue_index, 0);
+        engine.tick(started + ChronoDuration::milliseconds(750), None);
+        assert_eq!(engine.active()[0].cue_index, 1);
+        assert_eq!(
+            engine.active()[0].activated_at,
+            started + ChronoDuration::milliseconds(750)
+        );
     }
 
     #[test]
@@ -3097,7 +4468,7 @@ mod tests {
         let mut cue_list = list(vec![fallback]);
         let id = cue_list.id;
         let mut engine = PlaybackEngine::default();
-        engine.set_control_timing([120, 90, 60, 30, 15], 1_000);
+        engine.set_control_timing([120.0, 90.0, 60.0, 30.0, 15.0], 1_000);
         engine.register(cue_list.clone()).unwrap();
         let started = Utc::now();
         engine.go_at(id, started).unwrap();
@@ -3113,7 +4484,7 @@ mod tests {
 
         cue_list.cues[0].fade_millis = 2_000;
         let mut explicit = PlaybackEngine::default();
-        explicit.set_control_timing([120, 90, 60, 30, 15], 1_000);
+        explicit.set_control_timing([120.0, 90.0, 60.0, 30.0, 15.0], 1_000);
         explicit.register(cue_list).unwrap();
         explicit.go_at(id, started).unwrap();
         assert!(

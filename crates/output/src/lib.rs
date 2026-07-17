@@ -102,6 +102,7 @@ pub struct NetworkOutput {
     sacn_priority: u8,
     injected_failures: Mutex<HashSet<SocketAddr>>,
     send_errors: AtomicU64,
+    route_send_errors: Mutex<HashMap<(Protocol, Universe, SocketAddr), u64>>,
 }
 
 #[derive(Clone, Debug)]
@@ -110,6 +111,14 @@ pub struct EncodedPacket {
     pub universe: Universe,
     pub destination: SocketAddr,
     pub bytes: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct RouteSendError {
+    pub protocol: Protocol,
+    pub universe: Universe,
+    pub destination: SocketAddr,
+    pub errors: u64,
 }
 
 impl NetworkOutput {
@@ -128,6 +137,7 @@ impl NetworkOutput {
             sacn_priority: 100,
             injected_failures: Mutex::new(HashSet::new()),
             send_errors: AtomicU64::new(0),
+            route_send_errors: Mutex::new(HashMap::new()),
         })
     }
 
@@ -146,6 +156,25 @@ impl NetworkOutput {
 
     pub fn take_send_errors(&self) -> u64 {
         self.send_errors.swap(0, Ordering::Relaxed)
+    }
+
+    pub fn route_send_errors(&self) -> Vec<RouteSendError> {
+        let mut errors = self
+            .route_send_errors
+            .lock()
+            .expect("route output failure mutex poisoned")
+            .iter()
+            .map(
+                |(&(protocol, universe, destination), &errors)| RouteSendError {
+                    protocol,
+                    universe,
+                    destination,
+                    errors,
+                },
+            )
+            .collect::<Vec<_>>();
+        errors.sort_by_key(|error| (error.protocol as u8, error.universe, error.destination));
+        errors
     }
 
     pub async fn send_routes(
@@ -187,6 +216,12 @@ impl NetworkOutput {
                 Ok(_) => sent += 1,
                 Err(error) => {
                     self.send_errors.fetch_add(1, Ordering::Relaxed);
+                    *self
+                        .route_send_errors
+                        .lock()
+                        .expect("route output failure mutex poisoned")
+                        .entry((packet.protocol, packet.universe, packet.destination))
+                        .or_default() += 1;
                     if first_error.is_none() {
                         first_error = Some(error);
                     }
@@ -210,18 +245,15 @@ impl NetworkOutput {
             let sequence = next_sequence(sequences, (route.protocol, route.destination_universe));
             match route.protocol {
                 Protocol::ArtNet => {
-                    if let Some(destination) = route.destination {
-                        self.artnet
-                            .send_to(
-                                &artdmx_packet(
-                                    route.destination_universe,
-                                    sequence,
-                                    &[0; DMX_SLOTS],
-                                ),
-                                destination,
-                            )
-                            .await?;
-                    }
+                    let destination = route
+                        .destination
+                        .unwrap_or_else(artnet_broadcast_destination);
+                    self.artnet
+                        .send_to(
+                            &artdmx_packet(route.destination_universe, sequence, &[0; DMX_SLOTS]),
+                            destination,
+                        )
+                        .await?;
                 }
                 Protocol::Sacn => {
                     let destination = route
@@ -266,12 +298,9 @@ pub fn encode_routes(
             let sequence = next_sequence(sequences, (route.protocol, route.destination_universe));
             let (destination, bytes) = match route.protocol {
                 Protocol::ArtNet => (
-                    route.destination.ok_or_else(|| {
-                        io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            "Art-Net routes require a directed unicast/broadcast destination",
-                        )
-                    })?,
+                    route
+                        .destination
+                        .unwrap_or_else(artnet_broadcast_destination),
                     artdmx_packet(route.destination_universe, sequence, frame),
                 ),
                 Protocol::Sacn => (
@@ -332,6 +361,10 @@ pub fn sacn_multicast_destination(universe: Universe) -> SocketAddr {
         )),
         SACN_PORT,
     )
+}
+
+pub fn artnet_broadcast_destination() -> SocketAddr {
+    SocketAddr::from((Ipv4Addr::BROADCAST, ARTNET_PORT))
 }
 
 #[async_trait]
@@ -584,7 +617,7 @@ mod tests {
     }
 
     #[test]
-    fn artnet_route_requires_an_explicit_destination() {
+    fn artnet_route_without_an_explicit_destination_uses_standard_broadcast() {
         let routes = [OutputRoute {
             protocol: Protocol::ArtNet,
             logical_universe: 1,
@@ -593,9 +626,82 @@ mod tests {
             enabled: true,
         }];
         let frames = HashMap::from([(1, [0; DMX_SLOTS])]);
-        assert!(
-            encode_routes(&routes, &frames, &mut HashMap::new(), [0; 16], "Light", 100).is_err()
+        let packets =
+            encode_routes(&routes, &frames, &mut HashMap::new(), [0; 16], "Light", 100).unwrap();
+        assert_eq!(packets[0].destination, artnet_broadcast_destination());
+    }
+
+    #[tokio::test]
+    async fn route_scoped_failure_is_observable_without_stopping_healthy_output() {
+        let output = NetworkOutput::bind(IpAddr::V4(Ipv4Addr::LOCALHOST), [7; 16], "Light")
+            .await
+            .unwrap();
+        let healthy = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let failing = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let healthy_destination = healthy.local_addr().unwrap();
+        let failing_destination = failing.local_addr().unwrap();
+        let routes = [
+            OutputRoute {
+                protocol: Protocol::ArtNet,
+                logical_universe: 1,
+                destination_universe: 10,
+                destination: Some(healthy_destination),
+                enabled: true,
+            },
+            OutputRoute {
+                protocol: Protocol::ArtNet,
+                logical_universe: 1,
+                destination_universe: 11,
+                destination: Some(failing_destination),
+                enabled: true,
+            },
+        ];
+        let frames = HashMap::from([(1, [0x44; DMX_SLOTS])]);
+        let mut sequences = HashMap::new();
+
+        output.inject_failure(failing_destination, true);
+        assert_eq!(
+            output
+                .send_routes(&routes, &frames, &mut sequences)
+                .await
+                .unwrap(),
+            1
         );
+        let mut healthy_packet = [0_u8; 18 + DMX_SLOTS];
+        tokio::time::timeout(
+            Duration::from_secs(1),
+            healthy.recv_from(&mut healthy_packet),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(healthy_packet[18], 0x44);
+        let errors = output.route_send_errors();
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].protocol, Protocol::ArtNet);
+        assert_eq!(errors[0].universe, 11);
+        assert_eq!(errors[0].destination, failing_destination);
+        assert_eq!(errors[0].errors, 1);
+        assert_eq!(output.take_send_errors(), 1);
+
+        output.inject_failure(failing_destination, false);
+        assert_eq!(
+            output
+                .send_routes(&routes, &frames, &mut sequences)
+                .await
+                .unwrap(),
+            2
+        );
+        let mut recovered_packet = [0_u8; 18 + DMX_SLOTS];
+        tokio::time::timeout(
+            Duration::from_secs(1),
+            failing.recv_from(&mut recovered_packet),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(recovered_packet[18], 0x44);
+        assert_eq!(output.route_send_errors()[0].errors, 1);
     }
 
     #[tokio::test]

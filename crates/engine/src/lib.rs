@@ -3,7 +3,8 @@
 
 use arc_swap::ArcSwap;
 use light_core::{
-    AttributeKey, AttributeValue, FixtureId, MergeMode, SharedClock, TimedValue, Universe,
+    AttributeKey, AttributeValue, FixtureId, MergeMode, ProgrammerId, SharedClock, TimedValue,
+    Universe,
 };
 use light_fixture::{
     PatchedFixture, SignalLossPolicy, encode_parameter, mix_color, validate_patch,
@@ -21,7 +22,7 @@ use std::{
     collections::HashMap,
     sync::{
         Arc,
-        atomic::{AtomicBool, AtomicU16, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
 };
 use thiserror::Error;
@@ -127,11 +128,6 @@ impl EngineSnapshot {
                     "universe zero is not valid for show routes".into(),
                 ));
             }
-            if route.protocol == light_output::Protocol::ArtNet && route.destination.is_none() {
-                return Err(EngineError::Invalid(
-                    "Art-Net routes require a destination".into(),
-                ));
-            }
         }
         Ok(())
     }
@@ -209,10 +205,12 @@ pub struct Engine {
     programmers: ProgrammerRegistry,
     timecode_frame: AtomicU64,
     programmer_fade_millis: AtomicU64,
-    speed_groups_bpm: [AtomicU16; 5],
+    /// Exact BPM bits. AtomicU64 keeps snapshot recompilation lock-free without rounding the
+    /// operator's decimal Speed Group value to an integer.
+    speed_groups_bpm: [AtomicU64; 5],
     speed_groups_paused: [AtomicBool; 5],
     sequence_master_fade_millis: AtomicU64,
-    programmer_transitions: Mutex<HashMap<(FixtureId, AttributeKey), ProgrammerTransition>>,
+    programmer_transitions: Mutex<HashMap<ProgrammerTransitionKey, ProgrammerTransition>>,
     move_in_black: Mutex<HashMap<MoveInBlackKey, MoveInBlackRuntime>>,
     group_master_flashes: RwLock<HashMap<String, f32>>,
     clock: SharedClock,
@@ -249,6 +247,22 @@ struct ProgrammerTransition {
     target: AttributeValue,
 }
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct ProgrammerTransitionKey {
+    programmer_id: ProgrammerId,
+    source: ProgrammerTransitionSource,
+    fixture_id: FixtureId,
+    attribute: AttributeKey,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+enum ProgrammerTransitionSource {
+    Programmer,
+    Preload,
+    Group(String),
+    PreloadGroup(String),
+}
+
 impl Engine {
     pub fn new(programmers: ProgrammerRegistry) -> Self {
         let clock = programmers.clock();
@@ -259,11 +273,11 @@ impl Engine {
             timecode_frame: AtomicU64::new(u64::MAX),
             programmer_fade_millis: AtomicU64::new(0),
             speed_groups_bpm: [
-                AtomicU16::new(120),
-                AtomicU16::new(90),
-                AtomicU16::new(60),
-                AtomicU16::new(30),
-                AtomicU16::new(15),
+                AtomicU64::new(120.0_f64.to_bits()),
+                AtomicU64::new(90.0_f64.to_bits()),
+                AtomicU64::new(60.0_f64.to_bits()),
+                AtomicU64::new(30.0_f64.to_bits()),
+                AtomicU64::new(15.0_f64.to_bits()),
             ],
             speed_groups_paused: std::array::from_fn(|_| AtomicBool::new(false)),
             sequence_master_fade_millis: AtomicU64::new(0),
@@ -276,14 +290,21 @@ impl Engine {
 
     pub fn set_control_timing(
         &self,
-        speed_groups_bpm: [u16; 5],
+        speed_groups_bpm: [f64; 5],
         programmer_fade_millis: u64,
         sequence_master_fade_millis: u64,
     ) {
         self.programmer_fade_millis
             .store(programmer_fade_millis.min(60_000), Ordering::Relaxed);
+        let speed_groups_bpm = speed_groups_bpm.map(|bpm| {
+            if bpm.is_finite() {
+                bpm.clamp(0.1, 999.0)
+            } else {
+                120.0
+            }
+        });
         for (target, bpm) in self.speed_groups_bpm.iter().zip(speed_groups_bpm) {
-            target.store(bpm.clamp(1, 999), Ordering::Relaxed);
+            target.store(bpm.to_bits(), Ordering::Relaxed);
         }
         self.sequence_master_fade_millis
             .store(sequence_master_fade_millis.min(60_000), Ordering::Relaxed);
@@ -482,13 +503,10 @@ impl Engine {
                 runtime.current = base_position;
                 runtime.changed_at = now;
                 runtime.cancellation_reason = None;
-            } else if delay_changed {
-                let dark_since = runtime.dark_since.expect("dark runtime has a start");
+            } else if delay_changed && let Some(dark_since) = runtime.dark_since {
                 runtime.delay_deadline = Some(
                     dark_since
-                        + chrono::Duration::milliseconds(
-                            delay_millis.min(i64::MAX as u64) as i64,
-                        ),
+                        + chrono::Duration::milliseconds(delay_millis.min(i64::MAX as u64) as i64),
                 );
                 runtime.movement_started_at = None;
                 runtime.movement_ends_at = None;
@@ -514,9 +532,7 @@ impl Engine {
                 runtime.movement_started_at = Some(started_at);
                 runtime.movement_ends_at = Some(
                     started_at
-                        + chrono::Duration::milliseconds(
-                            longest_fade.min(i64::MAX as u64) as i64,
-                        ),
+                        + chrono::Duration::milliseconds(longest_fade.min(i64::MAX as u64) as i64),
                 );
                 runtime.changed_at = started_at;
             }
@@ -566,7 +582,7 @@ impl Engine {
                     runtime.movement_ends_at = Some(
                         playback.activated_at
                             + chrono::Duration::milliseconds(
-                                longest_fade.min(i64::MAX as u64) as i64,
+                                longest_fade.min(i64::MAX as u64) as i64
                             ),
                     );
                     runtime.handoff_until = runtime.movement_ends_at;
@@ -584,14 +600,16 @@ impl Engine {
             } else if runtime.state != MoveInBlackState::Cancelled {
                 runtime.state = MoveInBlackState::Cancelled;
                 runtime.handoff_until = None;
-                runtime.cancellation_reason = Some(if active.iter().any(|playback| {
-                    playback.playback_number == key.playback_number
-                        && playback.cue_list_id == key.cue_list_id
-                }) {
-                    "future_target_invalidated".into()
-                } else {
-                    "cuelist_released".into()
-                });
+                runtime.cancellation_reason = Some(
+                    if active.iter().any(|playback| {
+                        playback.playback_number == key.playback_number
+                            && playback.cue_list_id == key.cue_list_id
+                    }) {
+                        "future_target_invalidated".into()
+                    } else {
+                        "cuelist_released".into()
+                    },
+                );
             }
         }
 
@@ -613,6 +631,7 @@ impl Engine {
                     value: value.clone(),
                     priority: runtime.candidate.priority,
                     changed_at: runtime.changed_at,
+                    programmer_order: 0,
                     merge_mode: MergeMode::Ltp,
                     fade: false,
                     fade_millis: None,
@@ -626,6 +645,9 @@ impl Engine {
         &self,
         mut value: TimedValue,
         now: chrono::DateTime<chrono::Utc>,
+        underlying: Option<&AttributeValue>,
+        programmer_id: ProgrammerId,
+        source: ProgrammerTransitionSource,
     ) -> TimedValue {
         let duration = value
             .fade_millis
@@ -633,13 +655,20 @@ impl Engine {
         if duration == 0 || value.value.normalized().is_none() {
             return value;
         }
-        let key = (value.fixture_id, value.attribute.clone());
+        let key = ProgrammerTransitionKey {
+            programmer_id,
+            source,
+            fixture_id: value.fixture_id,
+            attribute: value.attribute.clone(),
+        };
         let mut transitions = self.programmer_transitions.lock();
         let transition = transitions
             .entry(key)
             .or_insert_with(|| ProgrammerTransition {
                 changed_at: value.changed_at,
-                from: AttributeValue::Normalized(0.0),
+                from: underlying
+                    .cloned()
+                    .unwrap_or(AttributeValue::Normalized(0.0)),
                 target: value.value.clone(),
             });
         let interpolate = |transition: &ProgrammerTransition| {
@@ -692,16 +721,19 @@ impl Engine {
         preserve_playback: bool,
     ) -> Result<(), EngineError> {
         snapshot.validate()?;
-        let active_playbacks = if preserve_playback {
-            self.playback
-                .read()
-                .active_for_snapshot(&snapshot.cue_lists, self.clock.now())
+        let (active_playbacks, dynamics_paused_at) = if preserve_playback {
+            let playback = self.playback.read();
+            (
+                playback.active_for_snapshot(&snapshot.cue_lists, self.clock.now()),
+                playback.dynamics_paused_since(),
+            )
         } else {
-            Vec::new()
+            (Vec::new(), None)
         };
         let (mut playback, groups) = self.compile_playback(&snapshot)?;
         self.programmers.refresh_live_selections(&groups);
         playback.restore_active(active_playbacks);
+        playback.restore_dynamics_paused_since(dynamics_paused_at);
         *self.playback.write() = playback;
         self.snapshot.store(Arc::new(snapshot));
         Ok(())
@@ -715,7 +747,7 @@ impl Engine {
         playback.set_control_timing(
             self.speed_groups_bpm
                 .each_ref()
-                .map(|bpm| bpm.load(Ordering::Relaxed)),
+                .map(|bpm| f64::from_bits(bpm.load(Ordering::Relaxed))),
             self.sequence_master_fade_millis.load(Ordering::Relaxed),
         );
         playback.set_speed_groups_paused(
@@ -798,6 +830,14 @@ impl Engine {
         }
     }
 
+    pub fn group_master_flash(&self, group_id: &str) -> f32 {
+        self.group_master_flashes
+            .read()
+            .get(group_id)
+            .copied()
+            .unwrap_or(0.0)
+    }
+
     pub fn render(&self, options: RenderOptions) -> Result<RenderResult, EngineError> {
         let snapshot = self.snapshot.load_full();
         let now = self.clock.now();
@@ -863,34 +903,52 @@ impl Engine {
                 playback.runtime(),
             )
         };
-        contributions.extend(
-            self.programmers
-                .active()
-                .into_iter()
-                .flat_map(|programmer| {
-                    programmer
-                        .values
-                        .into_iter()
-                        .chain(programmer.preload_active)
-                })
-                .map(|value| {
-                    if value.fade {
-                        self.faded_programmer_value(value, now)
-                    } else {
-                        value
-                    }
-                }),
-        );
+        // A newly faded programmer source starts at the resolved playback underneath it. This is
+        // especially visible for Preload: GO must not introduce a zero/default frame before the
+        // temporary programmer contribution takes ownership.
+        let programmer_underlay = resolve(contributions.clone());
         let groups = snapshot
             .groups
             .iter()
             .map(|group| (group.id.clone(), group.clone()))
             .collect::<HashMap<_, _>>();
         for programmer in self.programmers.active() {
-            for (group_id, attributes) in programmer
-                .group_values
+            let programmer_id = programmer.id;
+            let programmer_priority = programmer.priority;
+            let mut scoped_contributions = Vec::new();
+            for (value, source) in programmer
+                .values
                 .into_iter()
-                .chain(programmer.preload_group_active)
+                .map(|value| (value, ProgrammerTransitionSource::Programmer))
+                .chain(
+                    programmer
+                        .preload_active
+                        .into_iter()
+                        .map(|value| (value, ProgrammerTransitionSource::Preload)),
+                )
+            {
+                scoped_contributions.push(if value.fade {
+                    let underlying =
+                        programmer_underlay.get(&(value.fixture_id, value.attribute.clone()));
+                    self.faded_programmer_value(value, now, underlying, programmer_id, source)
+                } else {
+                    value
+                });
+            }
+            for (group_id, attributes, source) in
+                programmer
+                    .group_values
+                    .into_iter()
+                    .map(|(group_id, attributes)| {
+                        let source = ProgrammerTransitionSource::Group(group_id.clone());
+                        (group_id, attributes, source)
+                    })
+                    .chain(programmer.preload_group_active.into_iter().map(
+                        |(group_id, attributes)| {
+                            let source = ProgrammerTransitionSource::PreloadGroup(group_id.clone());
+                            (group_id, attributes, source)
+                        },
+                    ))
             {
                 let Ok(fixtures) = resolve_group(&group_id, &groups) else {
                     continue;
@@ -902,21 +960,54 @@ impl Engine {
                             fixture_id,
                             attribute: attribute.clone(),
                             value: value_for_ordered_position(&scoped.value, index, count),
-                            priority: programmer.priority,
+                            priority: programmer_priority,
                             changed_at: scoped.changed_at,
+                            programmer_order: scoped.programmer_order,
                             merge_mode: MergeMode::Ltp,
                             fade: scoped.fade,
                             fade_millis: scoped.fade_millis,
                             delay_millis: scoped.delay_millis,
                         };
-                        contributions.push(if value.fade {
-                            self.faded_programmer_value(value, now)
+                        scoped_contributions.push(if value.fade {
+                            let underlying = programmer_underlay
+                                .get(&(value.fixture_id, value.attribute.clone()));
+                            self.faded_programmer_value(
+                                value,
+                                now,
+                                underlying,
+                                programmer_id,
+                                source.clone(),
+                            )
                         } else {
                             value
                         });
                     }
                 }
             }
+            // Fixture and live-Group values remain LTP within one programmer. Only after that
+            // programmer-local scope has one winner per address do intensity values participate in
+            // desk-wide HTP against other programmers and playbacks at the same numeric priority.
+            let mut programmer_winners = HashMap::new();
+            for value in scoped_contributions {
+                let key = (value.fixture_id, value.attribute.clone());
+                let replace = programmer_winners
+                    .get(&key)
+                    .is_none_or(|current: &TimedValue| {
+                        (value.changed_at, value.programmer_order)
+                            > (current.changed_at, current.programmer_order)
+                    });
+                if replace {
+                    programmer_winners.insert(key, value);
+                }
+            }
+            contributions.extend(programmer_winners.into_values().map(|mut value| {
+                value.merge_mode = if value.attribute.is_intensity() {
+                    MergeMode::Htp
+                } else {
+                    MergeMode::Ltp
+                };
+                value
+            }));
         }
         for group in &snapshot.groups {
             let Ok(fixtures) = resolve_group(&group.id, &groups) else {
@@ -930,6 +1021,7 @@ impl Engine {
                         value: value.clone(),
                         priority: 0,
                         changed_at: now,
+                        programmer_order: 0,
                         merge_mode: if attribute.is_intensity() {
                             MergeMode::Htp
                         } else {
@@ -977,9 +1069,7 @@ fn move_in_black_values_at(
                 (elapsed as f32 / target.fade_millis as f32).clamp(0.0, 1.0)
             };
             let value = match (from.normalized(), target.target.normalized()) {
-                (Some(from), Some(to)) => {
-                    AttributeValue::Normalized(from + (to - from) * progress)
-                }
+                (Some(from), Some(to)) => AttributeValue::Normalized(from + (to - from) * progress),
                 _ if progress >= 1.0 => target.target.clone(),
                 _ => from.clone(),
             };
@@ -993,10 +1083,12 @@ fn move_in_black_is_at_target(runtime: &MoveInBlackRuntime) -> bool {
         runtime
             .current
             .get(&target.attribute)
-            .is_some_and(|current| match (current.normalized(), target.target.normalized()) {
-                (Some(current), Some(target)) => (current - target).abs() <= f32::EPSILON * 8.0,
-                _ => current == &target.target,
-            })
+            .is_some_and(
+                |current| match (current.normalized(), target.target.normalized()) {
+                    (Some(current), Some(target)) => (current - target).abs() <= f32::EPSILON * 8.0,
+                    _ => current == &target.target,
+                },
+            )
     })
 }
 fn render_fixture(
@@ -1252,10 +1344,7 @@ mod tests {
         (fixture, logical)
     }
 
-    fn mib_snapshot(
-        fixtures: Vec<PatchedFixture>,
-        fixture_ids: &[FixtureId],
-    ) -> EngineSnapshot {
+    fn mib_snapshot(fixtures: Vec<PatchedFixture>, fixture_ids: &[FixtureId]) -> EngineSnapshot {
         let mut first = Cue::new(1.0);
         let mut dark = Cue::new(2.0);
         dark.fade_millis = 2_000;
@@ -1313,17 +1402,21 @@ mod tests {
                 cue_list_id: cue_list.id,
             },
             buttons: [
-                PlaybackButtonAction::Go,
                 PlaybackButtonAction::GoMinus,
+                PlaybackButtonAction::Go,
                 PlaybackButtonAction::Flash,
             ],
+            button_count: 3,
             fader: PlaybackFaderMode::Master,
+            has_fader: true,
             go_activates: true,
             auto_off: true,
             xfade_millis: 0,
             color: "#20c997".into(),
             flash_release: light_playback::FlashReleaseMode::ReleaseAll,
             protect_from_swap: false,
+            presentation_icon: None,
+            presentation_image: None,
         };
         EngineSnapshot {
             fixtures,
@@ -1814,6 +1907,71 @@ mod tests {
     }
 
     #[test]
+    fn programmer_intensity_is_ltp_within_one_programmer_and_htp_between_programmers() {
+        let programmers = ProgrammerRegistry::default();
+        let first = light_core::SessionId::new();
+        let second = light_core::SessionId::new();
+        programmers.start(first, light_core::UserId::new());
+        programmers.start(second, light_core::UserId::new());
+        let (fixture, logical) = fixture();
+        programmers.set_group(
+            first,
+            "wash".into(),
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.8),
+        );
+        programmers.set(
+            first,
+            logical,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.3),
+        );
+        programmers.set(
+            second,
+            logical,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.6),
+        );
+        let engine = Engine::new(programmers.clone());
+        engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![fixture],
+                groups: vec![GroupDefinition {
+                    id: "wash".into(),
+                    name: "Wash".into(),
+                    fixtures: vec![logical],
+                    ..Default::default()
+                }],
+                ..Default::default()
+            })
+            .unwrap();
+
+        assert_eq!(
+            engine.render(RenderOptions::default()).unwrap().universes[&1][0],
+            153,
+            "the first programmer resolves its newer 30% fixture value before cross-source HTP chooses the second programmer's 60%",
+        );
+        assert!(programmers.set_priority(second, 110));
+        programmers.set(
+            second,
+            logical,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.2),
+        );
+        assert_eq!(
+            engine.render(RenderOptions::default()).unwrap().universes[&1][0],
+            51,
+            "numeric priority resolves before HTP magnitude",
+        );
+        assert!(programmers.set_priority(second, 90));
+        assert_eq!(
+            engine.render(RenderOptions::default()).unwrap().universes[&1][0],
+            77,
+            "changing programmer priority retags its existing values and reveals the higher-priority programmer",
+        );
+    }
+
+    #[test]
     fn empty_group_programming_becomes_effective_when_members_are_added() {
         let programmers = ProgrammerRegistry::default();
         let (fixture, logical) = fixture();
@@ -1940,6 +2098,7 @@ mod tests {
             value: Some(AttributeValue::Normalized(0.5)),
             fade_millis: None,
             delay_millis: None,
+            automatic_restore: false,
         });
         let cue_list = light_playback::CueList {
             id: light_core::CueListId::new(),
@@ -1972,6 +2131,8 @@ mod tests {
                     programming: Default::default(),
                     derived_from: None,
                     frozen_from: None,
+                    color: None,
+                    icon: None,
                 }],
                 revision: 1,
                 ..Default::default()
@@ -1993,6 +2154,7 @@ mod tests {
             value: Some(AttributeValue::Normalized(0.6)),
             fade_millis: None,
             delay_millis: None,
+            automatic_restore: false,
         });
         let list = light_playback::CueList {
             id: list_id,
@@ -2282,14 +2444,20 @@ mod tests {
         clock.set(started + ChronoDuration::milliseconds(5_000));
         engine.resolved_values();
         let runtime = engine.move_in_black_runtime();
-        let runtime = runtime.iter().find(|item| item.fixture_id == logical).unwrap();
+        let runtime = runtime
+            .iter()
+            .find(|item| item.fixture_id == logical)
+            .unwrap();
         assert_eq!(runtime.state, MoveInBlackState::Blocked);
         assert_eq!(runtime.dark_since, None);
 
         programmers.clear(session);
         engine.resolved_values();
         let runtime = engine.move_in_black_runtime();
-        let runtime = runtime.iter().find(|item| item.fixture_id == logical).unwrap();
+        let runtime = runtime
+            .iter()
+            .find(|item| item.fixture_id == logical)
+            .unwrap();
         assert_eq!(runtime.dark_since, Some(clock.now()));
         assert_eq!(
             runtime.delay_deadline,
@@ -2319,7 +2487,10 @@ mod tests {
         programmers.clear(session);
         engine.resolved_values();
         let runtime = engine.move_in_black_runtime();
-        let runtime = runtime.iter().find(|item| item.fixture_id == logical).unwrap();
+        let runtime = runtime
+            .iter()
+            .find(|item| item.fixture_id == logical)
+            .unwrap();
         assert_eq!(runtime.dark_since, Some(clock.now()));
         assert_eq!(
             runtime.delay_deadline,
@@ -2395,9 +2566,125 @@ mod tests {
     }
 
     #[test]
+    fn programmer_fade_starts_from_resolved_playback_underlay_and_release_reveals_it() {
+        let started = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+        let clock = Arc::new(ManualClock::new(started));
+        let shared: SharedClock = clock.clone();
+        let programmers = ProgrammerRegistry::with_clock(shared);
+        let session = SessionId::new();
+        programmers.start(session, UserId::new());
+        let (fixture, logical) = fixture();
+        let mut snapshot = mib_snapshot(vec![fixture], &[logical]);
+        snapshot.cue_lists[0].cues[0]
+            .changes
+            .iter_mut()
+            .find(|change| change.attribute.is_intensity())
+            .unwrap()
+            .value = Some(AttributeValue::Normalized(0.25));
+        let engine = Engine::new(programmers.clone());
+        engine.set_control_timing([120.0; 5], 1_000, 0);
+        engine.replace_snapshot(snapshot).unwrap();
+        engine.playback().write().go_playback(1).unwrap();
+
+        clock.set(started + ChronoDuration::seconds(5));
+        assert!((normalized(&engine.resolved_values(), logical, "intensity") - 0.25).abs() < 0.001);
+        programmers.set_faded(
+            session,
+            logical,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.8),
+        );
+        assert!((normalized(&engine.resolved_values(), logical, "intensity") - 0.25).abs() < 0.001);
+
+        clock.set(started + ChronoDuration::milliseconds(5_500));
+        assert!(
+            (normalized(&engine.resolved_values(), logical, "intensity") - 0.525).abs() < 0.001,
+            "the programmer transition interpolates from the live playback, not zero"
+        );
+        programmers.clear(session);
+        assert!(
+            (normalized(&engine.resolved_values(), logical, "intensity") - 0.25).abs() < 0.001,
+            "release immediately reveals the unchanged playback underlay"
+        );
+    }
+
+    #[test]
+    fn overlapping_preload_group_fades_keep_edit_order_at_one_commit_timestamp() {
+        let started = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+        let clock = Arc::new(ManualClock::new(started));
+        let shared: SharedClock = clock.clone();
+        let programmers = ProgrammerRegistry::with_clock(shared);
+        let session = SessionId::new();
+        programmers.start(session, UserId::new());
+        let (fixture, logical) = fixture();
+        let engine = Engine::new(programmers.clone());
+        engine.set_control_timing([120.0; 5], 3_000, 0);
+        engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![fixture],
+                groups: vec![
+                    GroupDefinition {
+                        id: "1".into(),
+                        name: "Broad".into(),
+                        fixtures: vec![logical],
+                        ..Default::default()
+                    },
+                    GroupDefinition {
+                        id: "2".into(),
+                        name: "Subset".into(),
+                        fixtures: vec![logical],
+                        ..Default::default()
+                    },
+                ],
+                revision: 1,
+                ..Default::default()
+            })
+            .unwrap();
+        assert!(programmers.arm_preload(session, true));
+        assert!(programmers.set_group_faded(
+            session,
+            "1".into(),
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.5),
+        ));
+        assert!(programmers.set_group_faded_with_timing(
+            session,
+            "2".into(),
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.7),
+            Some(1_000),
+            None,
+        ));
+        let committed_at = started + ChronoDuration::seconds(2);
+        assert!(programmers.activate_preload_at(session, committed_at));
+        let active = programmers.get(session).unwrap();
+        assert_eq!(
+            active.preload_group_active["1"][&AttributeKey::intensity()].changed_at,
+            committed_at
+        );
+        assert_eq!(
+            active.preload_group_active["2"][&AttributeKey::intensity()].changed_at,
+            committed_at
+        );
+        assert!(
+            active.preload_group_active["2"][&AttributeKey::intensity()].programmer_order
+                > active.preload_group_active["1"][&AttributeKey::intensity()].programmer_order
+        );
+
+        for millis in (2_000..=3_000).step_by(25) {
+            clock.set(started + ChronoDuration::milliseconds(millis));
+            engine.resolved_values();
+        }
+        assert!(
+            (normalized(&engine.resolved_values(), logical, "intensity") - 0.7).abs() < 0.001,
+            "rendering one group must not continually restart another group's explicit fade"
+        );
+    }
+
+    #[test]
     fn programmer_master_fade_interpolates_live_values() {
         let engine = Engine::new(ProgrammerRegistry::default());
-        engine.set_control_timing([120, 90, 60, 30, 15], 1_000, 0);
+        engine.set_control_timing([120.0, 90.0, 60.0, 30.0, 15.0], 1_000, 0);
         let now = chrono::Utc::now();
         let value = TimedValue {
             fixture_id: FixtureId::new(),
@@ -2405,12 +2692,19 @@ mod tests {
             value: AttributeValue::Normalized(1.0),
             priority: 100,
             changed_at: now - chrono::Duration::milliseconds(500),
+            programmer_order: 0,
             merge_mode: MergeMode::Htp,
             fade: true,
             fade_millis: None,
             delay_millis: None,
         };
-        let faded = engine.faded_programmer_value(value, now);
+        let faded = engine.faded_programmer_value(
+            value,
+            now,
+            None,
+            ProgrammerId::new(),
+            ProgrammerTransitionSource::Programmer,
+        );
         assert!(
             faded
                 .value
