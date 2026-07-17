@@ -244,6 +244,7 @@ interface ServerContextValue {
   savePlaybackPage: (page: import("./types").PlaybackPage) => Promise<boolean>;
   updateControlDesk: (desk: import("./types").ControlDesk) => Promise<void>;
   selectControlDesk: (id: string) => void;
+  removeClient: (deskId: string) => Promise<boolean>;
   savePlaybackDefinition: (playback: import("./types").PlaybackDefinition) => Promise<void>;
   savePlaybackSlot: (page: number, slot: number, playback: import("./types").PlaybackDefinition) => Promise<boolean>;
   clearPlaybackSlot: (page: number, slot: number) => Promise<boolean>;
@@ -644,7 +645,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
               .screens()
               .then(setScreens)
               .catch(() => undefined);
-          if (["show_opened", "show_renamed", "show_rolled_back", "server_configuration_changed", "session_started", "session_disconnected", "programmer_changed", "programmer_cleared", "hardware_connection_changed"].includes(event.kind)) {
+          if (["show_opened", "show_renamed", "show_rolled_back", "server_configuration_changed", "session_started", "session_disconnected", "client_removed", "programmer_changed", "programmer_cleared", "hardware_connection_changed"].includes(event.kind)) {
             const requestedCommandLineEpoch = commandLineEpoch.current;
             // Read the shared desk command line only after every local key/reset write that was
             // already queued when this event arrived. In particular, programmer.execute can
@@ -1230,6 +1231,17 @@ export function ServerProvider({ children }: PropsWithChildren) {
       selectControlDesk: (id) => {
         localStorage.setItem("light.control-desk", id);
         window.location.reload();
+      },
+      removeClient: async (deskId) => {
+        try {
+          await client.removeClient(deskId);
+          setBootstrap(await client.bootstrap());
+          setError(null);
+          return true;
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason));
+          return false;
+        }
       },
       savePlaybackDefinition: async (playback) => {
         if (!bootstrap?.active_show) return;

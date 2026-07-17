@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ScreenConfiguration } from "../../api/types";
+import type { ClientSummary, ScreenConfiguration } from "../../api/types";
 import { DefaultScreenPicker, ScreenSettingsCard } from "./ScreensSetup";
 
 const configuredScreen: ScreenConfiguration = {
@@ -110,31 +110,31 @@ describe("additional screen settings", () => {
 });
 
 describe("default screen picker", () => {
-	it("marks the current client and selects another known client", () => {
+	const client = (id: string, name: string, connected: boolean, last: string | null, canRemove = !connected): ClientSummary => ({
+		client_id: id,
+		name,
+		connected,
+		last_connected_at: last,
+		can_remove: canRemove,
+		desk: { id: `desk-${id}`, name: `${name} screen`, osc_alias: id, columns: 8, rows: 2, buttons: 3 },
+	});
+
+	it("groups and sorts authoritative presence while identifying current client and default separately", () => {
 		const select = vi.fn();
 		const close = vi.fn();
+		const remove = vi.fn(async () => true);
 		render(
 			<DefaultScreenPicker
-				desks={[
-					{
-						id: "desk-a",
-						name: "Main client",
-						osc_alias: "main",
-						columns: 8,
-						rows: 2,
-						buttons: 3,
-					},
-					{
-						id: "desk-b",
-						name: "Backup client",
-						osc_alias: "backup",
-						columns: 6,
-						rows: 1,
-						buttons: 2,
-					},
+				clients={[
+					client("connected-old", "Connected old", true, "2026-07-15T10:00:00Z", false),
+					client("unknown", "Unknown", false, null),
+					client("historical-new", "Historical new", false, "2026-07-17T10:00:00Z", false),
+					client("connected-new", "Connected new", true, "2026-07-17T11:00:00Z", false),
 				]}
-				currentDeskId="desk-a"
+				currentClientId="connected-old"
+				currentDeskId="desk-historical-new"
 				onSelect={select}
+				onRemove={remove}
 				onClose={close}
 			/>,
 		);
@@ -142,16 +142,31 @@ describe("default screen picker", () => {
 		expect(
 			screen.getByRole("heading", { name: "Choose default screen" }),
 		).toBeInTheDocument();
-		expect(
-			screen.getByRole("button", { name: "Current default screen" }),
-		).toBeDisabled();
+		const rows = screen.getAllByRole("article");
+		expect(rows.map((row) => row.querySelector("b")?.textContent)).toEqual(["Connected new", "Connected old", "Historical new", "Unknown"]);
+		expect(screen.getByText("Current client")).toBeInTheDocument();
+		expect(screen.getAllByText("Current default screen")).toHaveLength(2);
+		expect(screen.getByText(/Last connected unknown/)).toBeInTheDocument();
+		expect(screen.getAllByRole("button", { name: "Remove client" }).filter((button) => !button.hasAttribute("disabled"))).toHaveLength(1);
 		fireEvent.click(
-			screen.getByRole("button", { name: "Use as default screen" }),
+			screen.getAllByRole("button", { name: "Use as default screen" })[0],
 		);
-		expect(select).toHaveBeenCalledWith("desk-b");
+		expect(select).toHaveBeenCalled();
 		fireEvent.click(
 			screen.getByRole("button", { name: "Close default screen chooser" }),
 		);
 		expect(close).toHaveBeenCalledOnce();
+	});
+
+	it("requires named confirmation and reports a reconnect race without removing other state claims", async () => {
+		const remove = vi.fn(async () => false);
+		render(<DefaultScreenPicker clients={[client("old", "Old wing", false, "2026-07-01T10:00:00Z")]} currentClientId="current" currentDeskId="desk-current" onSelect={vi.fn()} onRemove={remove} onClose={vi.fn()}/>);
+		fireEvent.click(screen.getByRole("button", { name: "Remove client" }));
+		const confirmation = screen.getByRole("alertdialog", { name: "Remove client Old wing?" });
+		expect(confirmation).toHaveTextContent("per-show page and playback selection, desk lock, Update defaults, and virtual-playback exclusion settings");
+		expect(confirmation).toHaveTextContent("Portable shows, users, optional screens, other clients, and installation-wide configuration will not change");
+		fireEvent.click(screen.getAllByRole("button", { name: "Remove client" }).at(-1)!);
+		await waitFor(() => expect(remove).toHaveBeenCalledWith("desk-old"));
+		expect(await screen.findByRole("alert")).toHaveTextContent("may have reconnected");
 	});
 });

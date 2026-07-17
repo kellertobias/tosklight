@@ -9,7 +9,7 @@ use std::path::Path;
 use thiserror::Error;
 use uuid::Uuid;
 
-const DESK_SCHEMA_VERSION: i64 = 8;
+const DESK_SCHEMA_VERSION: i64 = 9;
 const SHOW_SCHEMA_VERSION: i64 = 3;
 
 #[derive(Debug, Error)]
@@ -59,6 +59,13 @@ pub struct ControlDesk {
     pub buttons: u8,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub playback_layout: Option<PlaybackSurfaceLayout>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ClientDesk {
+    pub client_id: Option<Uuid>,
+    pub last_connected_at: Option<String>,
+    pub desk: ControlDesk,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -245,6 +252,128 @@ impl DeskStore {
             .desks()?
             .into_iter()
             .find(|desk| desk.osc_alias.eq_ignore_ascii_case(alias)))
+    }
+    pub fn client_desks(&self) -> Result<Vec<ClientDesk>, StoreError> {
+        let desks = self.desks()?;
+        desks
+            .into_iter()
+            .map(|desk| {
+                let (client_id, last_connected_at) = self.conn.query_row(
+                    "SELECT client_id,last_connected_at FROM control_desks WHERE id=?1",
+                    [desk.id.to_string()],
+                    |row| Ok((row.get::<_, Option<String>>(0)?, row.get(1)?)),
+                )?;
+                Ok(ClientDesk {
+                    client_id: client_id.map(|value| Uuid::parse_str(&value)).transpose()?,
+                    last_connected_at,
+                    desk,
+                })
+            })
+            .collect()
+    }
+    pub fn resolve_client_desk(
+        &self,
+        client_id: Uuid,
+        remembered_desk_id: Option<Uuid>,
+    ) -> Result<ControlDesk, StoreError> {
+        let now = Utc::now().to_rfc3339();
+        if let Some(home) = self
+            .client_desks()?
+            .into_iter()
+            .find(|entry| entry.client_id == Some(client_id))
+        {
+            self.conn.execute(
+                "UPDATE control_desks SET last_connected_at=?1 WHERE client_id=?2",
+                params![now, client_id.to_string()],
+            )?;
+            return Ok(remembered_desk_id
+                .and_then(|id| self.control_desk(id).ok().flatten())
+                .unwrap_or(home.desk));
+        }
+        if let Some(remembered) = remembered_desk_id
+            && let Some(candidate) = self
+                .client_desks()?
+                .into_iter()
+                .find(|entry| entry.desk.id == remembered && entry.client_id.is_none())
+        {
+            self.conn.execute(
+                "UPDATE control_desks SET client_id=?1,last_connected_at=?2 WHERE id=?3 AND client_id IS NULL",
+                params![client_id.to_string(), now, candidate.desk.id.to_string()],
+            )?;
+            return Ok(candidate.desk);
+        }
+        let remembered_default = remembered_desk_id
+            .map(|id| self.control_desk(id))
+            .transpose()?
+            .flatten();
+        let suffix = client_id.simple().to_string();
+        let desk = self.add_desk(
+            &format!("Client {}", &suffix[..6]),
+            &format!("desk-{}", &suffix[..8]),
+        )?;
+        self.conn.execute(
+            "UPDATE control_desks SET client_id=?1,last_connected_at=?2 WHERE id=?3",
+            params![client_id.to_string(), now, desk.id.to_string()],
+        )?;
+        Ok(remembered_default.unwrap_or(desk))
+    }
+    pub fn touch_client(&self, client_id: Uuid) -> Result<(), StoreError> {
+        self.conn.execute(
+            "UPDATE control_desks SET last_connected_at=?1 WHERE client_id=?2",
+            params![Utc::now().to_rfc3339(), client_id.to_string()],
+        )?;
+        Ok(())
+    }
+    pub fn remove_client_desk(&mut self, desk_id: Uuid) -> Result<bool, StoreError> {
+        let transaction = self.conn.transaction()?;
+        let exists = transaction
+            .query_row(
+                "SELECT 1 FROM control_desks WHERE id=?1",
+                [desk_id.to_string()],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some();
+        if !exists {
+            return Ok(false);
+        }
+        let desk_key = desk_id.to_string();
+        transaction.execute(
+            "DELETE FROM settings WHERE key=?1",
+            [format!("desk_lock:{desk_key}")],
+        )?;
+        let settings = {
+            let mut statement = transaction.prepare(
+                "SELECT key,value FROM settings WHERE key='server_configuration' OR key LIKE 'virtual_playback_exclusion_zones:%'",
+            )?;
+            statement
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })?
+                .collect::<Result<Vec<_>, _>>()?
+        };
+        for (key, encoded) in settings {
+            let mut value: serde_json::Value = serde_json::from_str(&encoded)?;
+            let changed = if key == "server_configuration" {
+                value
+                    .get_mut("update_settings_by_desk")
+                    .and_then(serde_json::Value::as_object_mut)
+                    .is_some_and(|entries| entries.remove(&desk_key).is_some())
+            } else {
+                value
+                    .as_object_mut()
+                    .is_some_and(|entries| entries.remove(&desk_key).is_some())
+            };
+            if changed {
+                transaction.execute(
+                    "UPDATE settings SET value=?1 WHERE key=?2",
+                    params![serde_json::to_string(&value)?, key],
+                )?;
+            }
+        }
+        transaction.execute("DELETE FROM control_desks WHERE id=?1", [desk_key])?;
+        transaction.commit()?;
+        Ok(true)
     }
     pub fn add_desk(&self, name: &str, alias: &str) -> Result<ControlDesk, StoreError> {
         let alias = alias.trim().to_ascii_lowercase();
@@ -1220,7 +1349,7 @@ fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
       CREATE TABLE IF NOT EXISTS show_library(id TEXT PRIMARY KEY,name TEXT NOT NULL UNIQUE COLLATE NOCASE,path TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL,revision_source_show_id TEXT,revision_source_show_name TEXT,revision_source_revision INTEGER,revision_source_name TEXT,revision_copy_created_at TEXT);
       CREATE TABLE IF NOT EXISTS show_revisions(show_id TEXT NOT NULL,revision INTEGER NOT NULL,name TEXT NOT NULL,path TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(show_id,revision),FOREIGN KEY(show_id) REFERENCES show_library(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS control_desks(id TEXT PRIMARY KEY,name TEXT NOT NULL,osc_alias TEXT NOT NULL UNIQUE COLLATE NOCASE,columns_count INTEGER NOT NULL DEFAULT 8,rows_count INTEGER NOT NULL DEFAULT 1,buttons_count INTEGER NOT NULL DEFAULT 3,playback_layout_json TEXT);
+      CREATE TABLE IF NOT EXISTS control_desks(id TEXT PRIMARY KEY,name TEXT NOT NULL,osc_alias TEXT NOT NULL UNIQUE COLLATE NOCASE,columns_count INTEGER NOT NULL DEFAULT 8,rows_count INTEGER NOT NULL DEFAULT 1,buttons_count INTEGER NOT NULL DEFAULT 3,playback_layout_json TEXT,client_id TEXT,last_connected_at TEXT);
       CREATE TABLE IF NOT EXISTS control_desk_pages(desk_id TEXT NOT NULL,show_id TEXT NOT NULL,page INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(desk_id,show_id),FOREIGN KEY(desk_id) REFERENCES control_desks(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS control_desk_selections(desk_id TEXT NOT NULL,show_id TEXT NOT NULL,playback INTEGER NOT NULL,PRIMARY KEY(desk_id,show_id),FOREIGN KEY(desk_id) REFERENCES control_desks(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS screens(id TEXT PRIMARY KEY,name TEXT NOT NULL,layout_json TEXT NOT NULL DEFAULT '{"desks":[],"activeDeskId":""}',show_dock INTEGER NOT NULL DEFAULT 1,show_playbacks INTEGER NOT NULL DEFAULT 1,playback_count INTEGER NOT NULL DEFAULT 8,playback_rows INTEGER NOT NULL DEFAULT 1,first_playback_slot INTEGER NOT NULL DEFAULT 1,page_mode TEXT NOT NULL DEFAULT 'follow_main',show_page_controls INTEGER NOT NULL DEFAULT 1,desired_open INTEGER NOT NULL DEFAULT 0,display_id TEXT,bounds_json TEXT,fullscreen INTEGER NOT NULL DEFAULT 0,playback_layout_json TEXT);
@@ -1237,6 +1366,17 @@ fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
         "control_desks",
         "playback_layout_json",
         "playback_layout_json TEXT",
+    )?;
+    add_column_if_missing(&tx, "control_desks", "client_id", "client_id TEXT")?;
+    add_column_if_missing(
+        &tx,
+        "control_desks",
+        "last_connected_at",
+        "last_connected_at TEXT",
+    )?;
+    tx.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS control_desks_client_id ON control_desks(client_id) WHERE client_id IS NOT NULL",
+        [],
     )?;
     add_column_if_missing(
         &tx,
@@ -1589,6 +1729,154 @@ mod tests {
         assert_eq!(desk.desk_page(control.id, second).unwrap(), 1);
         assert!(desk.set_desk_page(control.id, first, 128).is_err());
         drop(desk);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn client_history_migrates_unknown_rows_reuses_identity_and_recreates_removed_defaults() {
+        let path = temporary("client-history");
+        let client_id = Uuid::new_v4();
+        let (legacy_id, first_connected_at) = {
+            let store = DeskStore::open(&path).unwrap();
+            let legacy = store.add_desk("Legacy wing", "legacy-wing").unwrap();
+            let before = store.client_desks().unwrap();
+            assert_eq!(before.len(), 1);
+            assert_eq!(before[0].client_id, None);
+            assert_eq!(before[0].last_connected_at, None);
+
+            let resolved = store
+                .resolve_client_desk(client_id, Some(legacy.id))
+                .unwrap();
+            assert_eq!(resolved.id, legacy.id);
+            let connected = store.client_desks().unwrap();
+            assert_eq!(connected.len(), 1);
+            assert_eq!(connected[0].client_id, Some(client_id));
+            (legacy.id, connected[0].last_connected_at.clone().unwrap())
+        };
+
+        let mut reopened = DeskStore::open(&path).unwrap();
+        let same = reopened.resolve_client_desk(client_id, None).unwrap();
+        assert_eq!(same.id, legacy_id);
+        let history = reopened.client_desks().unwrap();
+        assert_eq!(history.len(), 1);
+        assert!(history[0].last_connected_at.as_deref() >= Some(first_connected_at.as_str()));
+        assert!(reopened.remove_client_desk(legacy_id).unwrap());
+
+        let recreated = reopened
+            .resolve_client_desk(client_id, Some(legacy_id))
+            .unwrap();
+        assert_ne!(recreated.id, legacy_id);
+        assert_eq!(
+            (recreated.columns, recreated.rows, recreated.buttons),
+            (8, 1, 3)
+        );
+        assert_eq!(recreated.playback_layout, None);
+        assert_eq!(reopened.client_desks().unwrap().len(), 1);
+        drop(reopened);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn removing_a_client_cleans_only_its_desk_owned_installation_state() {
+        let path = temporary("client-removal");
+        let mut store = DeskStore::open(&path).unwrap();
+        let removed_client = Uuid::new_v4();
+        let retained_client = Uuid::new_v4();
+        let removed = store.resolve_client_desk(removed_client, None).unwrap();
+        let retained = store.resolve_client_desk(retained_client, None).unwrap();
+        let show_id = ShowId::new();
+        store.set_desk_page(removed.id, show_id, 17).unwrap();
+        store
+            .set_selected_playback(removed.id, show_id, Some(23))
+            .unwrap();
+        store
+            .set_setting(&format!("desk_lock:{}", removed.id), "locked")
+            .unwrap();
+        store
+            .set_setting(
+                "server_configuration",
+                &serde_json::json!({
+                    "update_settings_by_desk": {
+                        (removed.id.to_string()): { "mode": "all" },
+                        (retained.id.to_string()): { "mode": "tracked" }
+                    },
+                    "matter_enabled": true
+                })
+                .to_string(),
+            )
+            .unwrap();
+        store
+            .set_setting(
+                &format!("virtual_playback_exclusion_zones:{}", show_id.0),
+                &serde_json::json!({
+                    (removed.id.to_string()): [{ "id": "old" }],
+                    (retained.id.to_string()): [{ "id": "keep" }]
+                })
+                .to_string(),
+            )
+            .unwrap();
+        let screen = ScreenConfiguration {
+            id: Uuid::new_v4(),
+            name: "Shared optional screen".into(),
+            layout: serde_json::json!({"desks":[],"activeDeskId":""}),
+            show_dock: true,
+            show_playbacks: true,
+            playback_count: 8,
+            playback_rows: 1,
+            first_playback_slot: 1,
+            page_mode: "follow_main".into(),
+            show_page_controls: true,
+            desired_open: false,
+            display_id: None,
+            bounds: None,
+            fullscreen: false,
+            playback_layout: None,
+        };
+        store.put_screen(screen.clone()).unwrap();
+
+        assert!(store.remove_client_desk(removed.id).unwrap());
+        assert!(store.control_desk(removed.id).unwrap().is_none());
+        assert_eq!(
+            store.control_desk(retained.id).unwrap(),
+            Some(retained.clone())
+        );
+        let retained_screen = store.screen(screen.id).unwrap().unwrap();
+        assert_eq!(retained_screen.id, screen.id);
+        assert_eq!(retained_screen.name, screen.name);
+        assert!(
+            store
+                .users()
+                .unwrap()
+                .iter()
+                .any(|user| user.name == "Operator")
+        );
+        assert_eq!(
+            store.setting(&format!("desk_lock:{}", removed.id)).unwrap(),
+            None
+        );
+        let configuration: serde_json::Value =
+            serde_json::from_str(&store.setting("server_configuration").unwrap().unwrap()).unwrap();
+        assert!(configuration["matter_enabled"].as_bool().unwrap());
+        assert!(
+            configuration["update_settings_by_desk"]
+                .get(removed.id.to_string())
+                .is_none()
+        );
+        assert!(
+            configuration["update_settings_by_desk"]
+                .get(retained.id.to_string())
+                .is_some()
+        );
+        let zones: serde_json::Value = serde_json::from_str(
+            &store
+                .setting(&format!("virtual_playback_exclusion_zones:{}", show_id.0))
+                .unwrap()
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(zones.get(removed.id.to_string()).is_none());
+        assert!(zones.get(retained.id.to_string()).is_some());
+        drop(store);
         let _ = fs::remove_file(path);
     }
 

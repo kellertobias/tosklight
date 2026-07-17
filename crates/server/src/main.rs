@@ -79,6 +79,7 @@ struct AppState {
     fixture_library: Arc<Mutex<light_fixture::FixtureLibrary>>,
     data_dir: PathBuf,
     sessions: Arc<RwLock<HashMap<SessionId, Session>>>,
+    session_clients: Arc<RwLock<HashMap<SessionId, Uuid>>>,
     ws_connections: Arc<Mutex<HashMap<SessionId, u32>>>,
     programmers: ProgrammerRegistry,
     engine: Arc<Engine>,
@@ -371,6 +372,7 @@ fn default_true() -> bool {
 #[derive(Serialize)]
 struct SessionResponse {
     session_id: SessionId,
+    client_id: Uuid,
     token: String,
     user: DeskUser,
     desk: ControlDesk,
@@ -569,6 +571,7 @@ struct Bootstrap {
     attribute_registry: &'static [light_core::AttributeDescriptor],
     users: Vec<DeskUser>,
     desks: Vec<ControlDesk>,
+    clients: Vec<ClientSummary>,
     active_show: Option<ShowEntry>,
     active_programmers: Vec<light_programmer::ProgrammerState>,
     highlight_states: Vec<BootstrapHighlightState>,
@@ -578,6 +581,16 @@ struct Bootstrap {
     active_timecode: Option<String>,
     active_show_error: Option<String>,
     hardware_connected: bool,
+}
+
+#[derive(Clone, Serialize)]
+struct ClientSummary {
+    client_id: Uuid,
+    name: String,
+    connected: bool,
+    last_connected_at: Option<String>,
+    desk: ControlDesk,
+    can_remove: bool,
 }
 
 fn default_speed_groups() -> [f64; 5] {
@@ -1038,6 +1051,7 @@ async fn main() -> anyhow::Result<()> {
         fixture_library: Arc::new(Mutex::new(fixture_library)),
         data_dir,
         sessions: Arc::default(),
+        session_clients: Arc::default(),
         ws_connections: Arc::new(Mutex::new(HashMap::new())),
         programmers,
         engine,
@@ -1185,6 +1199,7 @@ fn router(state: AppState) -> Router {
         )
         .route("/api/v1/sessions", post(create_session))
         .route("/api/v1/sessions/{id}", delete(close_session))
+        .route("/api/v1/clients/{id}", delete(remove_client))
         .route("/api/v1/desk-lock", get(desk_lock).put(update_desk_lock))
         .route("/api/v1/desk-lock/lock", post(lock_desk))
         .route("/api/v1/desk-lock/unlock", post(unlock_desk))
@@ -2009,13 +2024,46 @@ async fn diagnostics(
     ))
 }
 async fn bootstrap(State(state): State<AppState>) -> Json<Bootstrap> {
-    let (users, desks) = {
+    let (users, desks, client_desks) = {
         let desk = state.desk.lock();
         (
             desk.users().unwrap_or_default(),
             desk.desks().unwrap_or_default(),
+            desk.client_desks().unwrap_or_default(),
         )
     };
+    let sessions = state.sessions.read();
+    let session_clients = state.session_clients.read();
+    let mut clients = client_desks
+        .into_iter()
+        .map(|entry| {
+            let client_id = entry.client_id.unwrap_or(entry.desk.id);
+            let connected = sessions
+                .values()
+                .any(|session| session_clients.get(&session.id) == Some(&client_id));
+            let desk_in_use = sessions
+                .values()
+                .any(|session| session.desk.id == entry.desk.id);
+            ClientSummary {
+                client_id,
+                name: entry.desk.name.clone(),
+                connected,
+                last_connected_at: entry.last_connected_at,
+                desk: entry.desk,
+                can_remove: !connected && !desk_in_use,
+            }
+        })
+        .collect::<Vec<_>>();
+    drop(sessions);
+    drop(session_clients);
+    clients.sort_by(|left, right| {
+        right
+            .connected
+            .cmp(&left.connected)
+            .then_with(|| right.last_connected_at.cmp(&left.last_connected_at))
+            .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+            .then_with(|| left.client_id.cmp(&right.client_id))
+    });
     let (active_timecode_source, active_timecode) = {
         let router = state.timecode_router.lock();
         (
@@ -2060,6 +2108,7 @@ async fn bootstrap(State(state): State<AppState>) -> Json<Bootstrap> {
         attribute_registry: ATTRIBUTE_REGISTRY,
         users,
         desks,
+        clients,
         active_show: state.active_show.read().clone(),
         active_programmers: state.programmers.active_for_sessions(),
         highlight_states,
@@ -3068,6 +3117,21 @@ async fn create_session(
     State(state): State<AppState>,
     Json(input): Json<CreateSession>,
 ) -> Result<Json<SessionResponse>, ApiError> {
+    let client_id = input
+        .client_id
+        .or_else(|| {
+            input.desk_id.and_then(|desk_id| {
+                state
+                    .desk
+                    .lock()
+                    .client_desks()
+                    .ok()?
+                    .into_iter()
+                    .find(|entry| entry.desk.id == desk_id)?
+                    .client_id
+            })
+        })
+        .unwrap_or_else(Uuid::new_v4);
     let user = state
         .desk
         .lock()
@@ -3075,29 +3139,11 @@ async fn create_session(
         .map_err(ApiError::store)?
         .filter(|u| u.enabled)
         .ok_or_else(|| ApiError::not_found("enabled user"))?;
-    let desk = {
-        let store = state.desk.lock();
-        let remembered = match input.desk_id {
-            Some(id) => store.control_desk(id).map_err(ApiError::store)?,
-            None => None,
-        };
-        if let Some(desk) = remembered {
-            desk
-        } else {
-            let client = input.client_id.unwrap_or_else(Uuid::new_v4);
-            let suffix = client.simple().to_string();
-            let alias = format!("desk-{}", &suffix[..8]);
-            match store
-                .control_desk_by_alias(&alias)
-                .map_err(ApiError::store)?
-            {
-                Some(desk) => desk,
-                None => store
-                    .add_desk(&format!("Client {}", &suffix[..6]), &alias)
-                    .map_err(ApiError::store)?,
-            }
-        }
-    };
+    let desk = state
+        .desk
+        .lock()
+        .resolve_client_desk(client_id, input.desk_id)
+        .map_err(ApiError::store)?;
     let session = Session {
         id: SessionId::new(),
         user: user.clone(),
@@ -3105,6 +3151,7 @@ async fn create_session(
         connected: true,
         desk: desk.clone(),
     };
+    state.session_clients.write().insert(session.id, client_id);
     state.programmers.start(session.id, user.id);
     attach_session_command_context(&state, &session);
     state.sessions.write().insert(session.id, session.clone());
@@ -3116,6 +3163,7 @@ async fn create_session(
     );
     Ok(Json(SessionResponse {
         session_id: session.id,
+        client_id,
         token: session.token,
         user,
         desk,
@@ -3202,6 +3250,13 @@ async fn close_session(
     let Some(session) = state.sessions.write().remove(&id) else {
         return Err(ApiError::not_found("session"));
     };
+    if let Some(client_id) = state.session_clients.write().remove(&id) {
+        state
+            .desk
+            .lock()
+            .touch_client(client_id)
+            .map_err(ApiError::store)?;
+    }
     let same_context_connected = state.sessions.read().values().any(|candidate| {
         candidate.user.id == session.user.id && candidate.desk.id == session.desk.id
     });
@@ -3218,6 +3273,62 @@ async fn close_session(
         &state,
         "session_disconnected",
         serde_json::json!({"session_id":id}),
+    );
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn remove_client(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+) -> Result<StatusCode, ApiError> {
+    let caller = authenticate(&state, &headers)?;
+    let target = state
+        .desk
+        .lock()
+        .client_desks()
+        .map_err(ApiError::store)?
+        .into_iter()
+        .find(|entry| entry.desk.id == id)
+        .ok_or_else(|| ApiError::not_found("client"))?;
+    let target_client_id = target.client_id.unwrap_or(target.desk.id);
+    let caller_client_id = state.session_clients.read().get(&caller.id).copied();
+    if caller_client_id == Some(target_client_id) || caller.desk.id == id {
+        return Err(ApiError::conflict(
+            "the current client cannot remove itself",
+        ));
+    }
+    let sessions = state.sessions.read();
+    let session_clients = state.session_clients.read();
+    if sessions.values().any(|session| {
+        session_clients.get(&session.id) == Some(&target_client_id)
+            || session.desk.id == target.desk.id
+    }) {
+        return Err(ApiError::conflict(
+            "an actively connected client cannot be removed",
+        ));
+    }
+    drop(sessions);
+    drop(session_clients);
+    if !state
+        .desk
+        .lock()
+        .remove_client_desk(id)
+        .map_err(ApiError::store)?
+    {
+        return Err(ApiError::not_found("client"));
+    }
+    state
+        .configuration
+        .write()
+        .update_settings_by_desk
+        .remove(&id);
+    state.highlight.clear_desk(id);
+    sync_highlight_output(&state);
+    emit(
+        &state,
+        "client_removed",
+        serde_json::json!({"client_id":target_client_id,"desk_id":id}),
     );
     Ok(StatusCode::NO_CONTENT)
 }
@@ -15573,6 +15684,7 @@ mod tests {
                 fixture_library: Arc::new(Mutex::new(fixture_library)),
                 data_dir: data_dir.clone(),
                 sessions: Arc::default(),
+                session_clients: Arc::default(),
                 ws_connections: Arc::new(Mutex::new(HashMap::new())),
                 programmers,
                 engine,

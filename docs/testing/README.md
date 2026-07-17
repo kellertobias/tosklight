@@ -6,6 +6,7 @@ The [canonical test catalog](../help/99-Development/02-test-bench-coverage.md) i
 
 - [OSC, API, and cross-surface agreement](04-osc-api-and-cross-surface.md) covers OSC hardware behavior, REST revisions, WebSocket/audit events, equivalent commands, authoritative PREV/NEXT/ALL and independent HIGH boundaries, and the focused Matter bridge transport/UI boundaries.
 - [Feature 21 completion coverage](../plans/Done/21-completion-coverage-and-release-verification.DONE.md) retains the extended `SHOW-005`, `UPDATE-002`, `HIGHLIGHT-004` through `HIGHLIGHT-006`, `FIXTURE-002`, and `MATTER-002` release-verification contracts.
+- [Client history and removal](../plans/Done/22-client-history-and-removal.DONE.md) retains the `CLIENT-001` desk-persistent presence, history, removal, and clean re-registration contract.
 
 This file remains because OSC-002, OSC-004, OSC-006, API-002, and CROSS-001 still contain contract assertions that are not fully represented by executable tests.
 

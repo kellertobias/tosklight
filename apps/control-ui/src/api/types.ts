@@ -353,6 +353,7 @@ export interface BootstrapSnapshot {
   attribute_registry: AttributeDescriptor[];
   users: DeskUser[];
   desks: ControlDesk[];
+  clients: ClientSummary[];
   active_show: ShowEntry | null;
   active_programmers: ProgrammerState[];
   frame_rate_hz: number;
@@ -373,9 +374,18 @@ export interface AttributeDescriptor {
 
 export interface SessionResponse {
   session_id: string;
+  client_id: string;
   token: string;
   user: DeskUser;
   desk: ControlDesk;
+}
+export interface ClientSummary {
+  client_id: string;
+  name: string;
+  connected: boolean;
+  last_connected_at: string | null;
+  desk: ControlDesk;
+  can_remove: boolean;
 }
 export interface DeskLockState {
   locked: boolean;

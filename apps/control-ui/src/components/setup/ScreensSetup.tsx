@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useServer } from "../../api/ServerContext";
-import type { ControlDesk, ScreenConfiguration } from "../../api/types";
+import type { ClientSummary, ControlDesk, ScreenConfiguration } from "../../api/types";
 import { useApp } from "../../state/AppContext";
 import {
 	Button,
@@ -31,16 +31,31 @@ async function invoke<T>(
 }
 
 export function DefaultScreenPicker({
-	desks,
+	clients,
+	currentClientId,
 	currentDeskId,
 	onSelect,
+	onRemove,
 	onClose,
 }: {
-	desks: ControlDesk[];
+	clients: ClientSummary[];
+	currentClientId?: string;
 	currentDeskId?: string;
 	onSelect: (id: string) => void;
+	onRemove: (deskId: string) => Promise<boolean>;
 	onClose: () => void;
 }) {
+	const [removeCandidate, setRemoveCandidate] = useState<ClientSummary | null>(null);
+	const [removing, setRemoving] = useState(false);
+	const [removeError, setRemoveError] = useState<string | null>(null);
+	const sorted = [...clients].sort((left, right) =>
+		Number(right.connected) - Number(left.connected) ||
+		(right.last_connected_at ?? "").localeCompare(left.last_connected_at ?? "") ||
+		left.name.localeCompare(right.name) || left.client_id.localeCompare(right.client_id));
+	const groups = [
+		{ heading: "Connected clients", clients: sorted.filter((client) => client.connected) },
+		{ heading: "Disconnected clients", clients: sorted.filter((client) => !client.connected) },
+	].filter((group) => group.clients.length > 0);
 	return (
 		<div
 			className="stacked-modal-layer"
@@ -64,29 +79,34 @@ export function DefaultScreenPicker({
 					default screen.
 				</p>
 				<WindowScrollArea className="default-screen-client-list">
-					{desks.map((desk) => {
-						const current = desk.id === currentDeskId;
-						return (
-							<article key={desk.id}>
-								<span>
-									<b>{desk.name}</b>
-									<small>
-										/{desk.osc_alias}/ · {desk.columns}×{desk.rows} ·{" "}
-										{desk.buttons} buttons
-									</small>
-								</span>
-								<Button
-									disabled={current}
-									variant={current ? "success" : "secondary"}
-									onClick={() => onSelect(desk.id)}
-								>
-									{current ? "Current default screen" : "Use as default screen"}
-								</Button>
-							</article>
-						);
-					})}
+					{groups.map((group) => <section className="default-screen-client-group" key={group.heading} aria-labelledby={`client-group-${group.heading.replaceAll(" ", "-").toLowerCase()}`}>
+						<h3 id={`client-group-${group.heading.replaceAll(" ", "-").toLowerCase()}`}>{group.heading}</h3>
+						{group.clients.map((client) => {
+							const currentClient = client.client_id === currentClientId;
+							const currentDefault = client.desk.id === currentDeskId;
+							return <article key={client.client_id}>
+								<div className="default-screen-client-details">
+									<div className="default-screen-client-title"><b>{client.name}</b>{currentClient && <strong>Current client</strong>}{currentDefault && <strong>Current default screen</strong>}</div>
+									<small>Client identity <code>{client.client_id}</code></small>
+									<small>{client.connected ? "Connected" : "Disconnected"} · {client.last_connected_at ? `Last connected ${new Date(client.last_connected_at).toLocaleString()}` : "Last connected unknown"}</small>
+									<small>Screen {client.desk.name} · /{client.desk.osc_alias}/ · {client.desk.columns}×{client.desk.rows} · {client.desk.buttons} buttons</small>
+								</div>
+								<div className="default-screen-client-actions">
+									<Button disabled={currentDefault} variant={currentDefault ? "success" : "secondary"} onClick={() => onSelect(client.desk.id)}>{currentDefault ? "Current default screen" : "Use as default screen"}</Button>
+									<Button variant="danger" disabled={!client.can_remove || currentClient || client.connected} title={currentClient ? "The current client cannot remove itself" : client.connected ? "Disconnect this client before removing it" : !client.can_remove ? "This screen configuration is in use by an active session" : undefined} onClick={() => { setRemoveError(null); setRemoveCandidate(client); }}>Remove client</Button>
+								</div>
+							</article>;
+						})}
+					</section>)}
 				</WindowScrollArea>
+				{removeError && <p className="default-screen-remove-error" role="alert">{removeError}</p>}
 			</section>
+			{removeCandidate && <div className="stacked-modal-layer"><section className="nested-modal default-screen-remove-confirm" role="alertdialog" aria-modal="true" aria-label={`Remove client ${removeCandidate.name}?`}>
+				<ModalTitleBar title={`Remove client ${removeCandidate.name}?`}/>
+				<p>Remove {removeCandidate.name} and its client registration, default-screen configuration, per-show page and playback selection, desk lock, Update defaults, and virtual-playback exclusion settings.</p>
+				<p>Portable shows, users, optional screens, other clients, and installation-wide configuration will not change.</p>
+				<div className="modal-actions"><Button disabled={removing} onClick={() => setRemoveCandidate(null)}>Cancel</Button><Button variant="danger" disabled={removing} onClick={() => { setRemoving(true); setRemoveError(null); void onRemove(removeCandidate.desk.id).then((removed) => { setRemoving(false); if (removed) setRemoveCandidate(null); else { setRemoveCandidate(null); setRemoveError(`${removeCandidate.name} could not be removed. It may have reconnected; disconnect it and try again.`); } }); }}>{removing ? "Removing…" : "Remove client"}</Button></div>
+			</section></div>}
 		</div>
 	);
 }
@@ -369,9 +389,11 @@ export function ScreensSetup() {
 			</div>
 			{defaultScreenPickerOpen && (
 				<DefaultScreenPicker
-					desks={server.bootstrap?.desks ?? []}
+					clients={server.bootstrap?.clients ?? []}
+					currentClientId={server.session?.client_id}
 					currentDeskId={server.session?.desk.id}
 					onSelect={server.selectControlDesk}
+					onRemove={server.removeClient}
 					onClose={() => setDefaultScreenPickerOpen(false)}
 				/>
 			)}

@@ -1,4 +1,4 @@
-export interface Session { session_id: string; token: string; user: { id: string; name: string }; desk: { id: string; osc_alias: string } }
+export interface Session { session_id: string; client_id: string; token: string; user: { id: string; name: string }; desk: { id: string; osc_alias: string } }
 export interface CommandResponse<T = unknown> { protocol_version: number; request_id: string; ok: boolean; revision: number; payload?: T; error?: string }
 
 const WEB_SOCKET_TIMEOUT_MILLIS = 5_000;

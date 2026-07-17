@@ -769,6 +769,9 @@ export class LightApiClient {
       body: JSON.stringify(desk),
     });
   }
+  removeClient(deskId: string) {
+    return this.request<void>(`/api/v1/clients/${deskId}`, { method: "DELETE" });
+  }
 
   setProgrammer(fixtureId: string, attribute: string, value: number) {
     return this.command("programmer.set", {

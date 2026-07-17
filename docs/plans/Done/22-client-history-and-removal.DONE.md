@@ -2,7 +2,11 @@
 
 ## Status and scope
 
-This is a future Desk Setup feature. Do not implement it as part of the current settings-screen UI pass.
+**Completed 2026-07-17.** This Desk Setup feature now persists each stable client identity and nullable last-connected timestamp with its home default-screen configuration. Bootstrap exposes authoritative, session-derived presence and removability; the production chooser identifies current client and current default screen independently, groups connected clients first, sorts each group by recency, and preserves explicit unknown history for migrated records.
+
+Removal is intentionally scoped to the client's home control desk. It deletes the control-desk record, its cascading per-show page and selected-playback rows, desk lock, per-desk Update defaults, and virtual-playback exclusion entries. Optional Tauri screens are installation-wide rather than client-owned and are retained, as are portable shows, users, fixture data, persisted programmer data, other clients, and global configuration. A removed identity reconnecting with its stale desk ID receives a new control desk with the normal 8×1, three-button defaults and no prior playback layout.
+
+`CLIENT-001` covers two live clients, active/self conflict responses, disconnect timestamping, restart survival, duplicate-free reconnect, the production chooser and named confirmation, scoped removal, unchanged users/show objects, and clean same-ID re-registration. Store tests cover legacy unknown timestamps, schema-v9 persistence, relational and JSON cleanup, retained optional screens/other clients, and default recreation.
 
 Desk Setup currently lets an operator choose a known client configuration as the app's default screen. Over time, clients that are no longer used remain in that chooser. The desk needs enough client-presence information to distinguish a client that is connected now from a historical client, show when each historical client was last connected, and let an operator remove obsolete clients deliberately.
 
