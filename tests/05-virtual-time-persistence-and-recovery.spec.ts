@@ -1290,7 +1290,7 @@ async function stageLegacyMigration(file: string, migration: Show004Case, cueLis
     await runSql(file, "UPDATE objects SET body_json=json_remove(body_json, '$.definition.heads[0].parameters[0].metadata', '$.definition.heads[0].parameters[0].capabilities') WHERE kind='patched_fixture' AND json_extract(body_json, '$.fixture_number')=21");
   } else {
     if (!cueListId) throw new Error("cue-defaults migration needs a Cuelist");
-    await runSql(file, `UPDATE objects SET body_json=json_remove(body_json, '$.cues[0].id', '$.cues[1].id', '$.intensity_priority_mode', '$.wrap_mode', '$.restart_mode', '$.force_cue_timing', '$.disable_cue_timing', '$.chaser_xfade_millis', '$.speed_multiplier') WHERE kind='cue_list' AND id='${cueListId}'`);
+    await runSql(file, `UPDATE objects SET body_json=json_remove(body_json, '$.cues[0].id', '$.cues[1].id', '$.intensity_priority_mode', '$.wrap_mode', '$.restart_mode', '$.force_cue_timing', '$.disable_cue_timing', '$.chaser_xfade_millis', '$.chaser_xfade_percent', '$.speed_multiplier') WHERE kind='cue_list' AND id='${cueListId}'`);
   }
 }
 
@@ -1323,7 +1323,7 @@ function assertMigrationSnapshot(migration: Show004Case, snapshot: any): void {
     const intensity = snapshot.body.definition.heads[0].parameters.find((parameter: any) => parameter.attribute === "intensity");
     expect(intensity).toMatchObject({ virtual_dimmer: true, capabilities: [], metadata: { physical_min: 0, physical_max: 1, unit: null, invert: false, wrap: false, curve: "linear" } });
   } else {
-    expect(snapshot.body).toMatchObject({ intensity_priority_mode: "htp", restart_mode: "first_cue", force_cue_timing: false, disable_cue_timing: false, chaser_xfade_millis: 0, speed_multiplier: 1 });
+    expect(snapshot.body).toMatchObject({ intensity_priority_mode: "htp", restart_mode: "first_cue", force_cue_timing: false, disable_cue_timing: false, chaser_xfade_percent: 0, speed_multiplier: 1 });
     expect(snapshot.body.cues.map((cue: any) => cue.id)).toHaveLength(2);
     expect(snapshot.body.cues.every((cue: any) => /^[0-9a-f-]{36}$/.test(cue.id))).toBe(true);
   }

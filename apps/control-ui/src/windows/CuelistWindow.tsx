@@ -19,6 +19,14 @@ function cueDraftIdentity(cue: Cue | null | undefined): string | null {
   return cue.id ?? `number:${cue.number}`;
 }
 
+function legacyChaserXfadePercent(cueList: CueList, speedGroupsBpm: number[]): number {
+  const groupIndex = cueList.speed_group ? cueList.speed_group.charCodeAt(0) - 65 : -1;
+  const stepMillis = groupIndex >= 0
+    ? Math.round(60_000 / Math.max(0.1, speedGroupsBpm[groupIndex] ?? 120) / Math.max(0.01, cueList.speed_multiplier ?? 1))
+    : (cueList.chaser_step_millis ?? 1_000);
+  return Math.min(100, Math.max(0, Math.round(((cueList.chaser_xfade_millis ?? 0) / Math.max(1, stepMillis)) * 100)));
+}
+
 function CuelistSettings({
   object,
   speedGroupsBpm,
@@ -40,6 +48,7 @@ function CuelistSettings({
     force_cue_timing: object.body.force_cue_timing ?? false,
     disable_cue_timing: object.body.disable_cue_timing ?? false,
     chaser_xfade_millis: object.body.chaser_xfade_millis ?? 0,
+    chaser_xfade_percent: object.body.chaser_xfade_percent ?? legacyChaserXfadePercent(object.body, speedGroupsBpm),
     speed_multiplier: object.body.speed_multiplier ?? 1,
   });
   const draftRef = useRef(draft);
@@ -67,17 +76,11 @@ function CuelistSettings({
       return;
     }
     const next = { ...draftRef.current, priority };
-    if (next.mode === "chaser") {
-      const groupIndex = next.speed_group ? next.speed_group.charCodeAt(0) - 65 : -1;
-      const stepMillis =
-        groupIndex >= 0
-          ? Math.round(60_000 / Math.max(1, speedGroupsBpm[groupIndex] ?? 120) / Math.max(0.01, next.speed_multiplier ?? 1))
-          : (next.chaser_step_millis ?? 1_000);
-      if ((next.chaser_xfade_millis ?? 0) > stepMillis) {
-        setSettingsError(`Chaser X-fade must not exceed the effective ${stepMillis} ms step duration.`);
-        return;
-      }
+    if (!Number.isInteger(next.chaser_xfade_percent) || (next.chaser_xfade_percent ?? 0) < 0 || (next.chaser_xfade_percent ?? 0) > 100) {
+      setSettingsError("Chaser X-fade must be a whole percentage from 0% to 100%.");
+      return;
     }
+    next.chaser_xfade_millis = 0;
     if (await save(next, object.revision)) close();
     else setSettingsError("Unable to save Cuelist settings. Check the values or refresh after a revision conflict.");
   };
@@ -200,7 +203,7 @@ function CuelistSettings({
                   label: `${value}×`,
                 }))}
               />
-              <NumberField label="Chaser X-fade" unit="s" allowDecimal min="0" value={(draft.chaser_xfade_millis ?? 0) / 1000} onChange={(event) => update("chaser_xfade_millis", Math.round(Number(event.target.value) * 1000))} />
+              <NumberField label="Chaser X-fade" unit="%" min="0" max="100" step="1" value={draft.chaser_xfade_percent ?? 0} onChange={(event) => update("chaser_xfade_percent", Number(event.target.value))} />
             </>
           )}
         </FormLayout>

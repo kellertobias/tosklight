@@ -841,6 +841,7 @@ export interface CueList {
   disable_cue_timing?: boolean;
   chaser_step_millis?: number;
   chaser_xfade_millis?: number;
+  chaser_xfade_percent?: number;
   speed_group?: "A" | "B" | "C" | "D" | "E" | null;
   speed_multiplier?: number;
 }

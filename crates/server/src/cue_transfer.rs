@@ -99,6 +99,7 @@ mod tests {
             force_cue_timing: false,
             disable_cue_timing: false,
             chaser_xfade_millis: 0,
+            chaser_xfade_percent: Some(0),
             speed_multiplier: 1.0,
             cues,
         }

@@ -523,8 +523,10 @@ pub struct CueList {
     pub force_cue_timing: bool,
     #[serde(default)]
     pub disable_cue_timing: bool,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
     pub chaser_xfade_millis: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chaser_xfade_percent: Option<u8>,
     #[serde(default = "default_speed_multiplier")]
     pub speed_multiplier: f32,
     pub cues: Vec<Cue>,
@@ -535,6 +537,9 @@ fn default_chaser_step_millis() -> u64 {
 }
 fn default_speed_multiplier() -> f32 {
     1.0
+}
+fn is_zero_u64(value: &u64) -> bool {
+    *value == 0
 }
 
 fn cue_completion_millis(cue_list: &CueList, cue: &Cue, sequence_master_fade_millis: u64) -> u64 {
@@ -586,7 +591,34 @@ fn effective_chaser_step_millis(cue_list: &CueList, speed_groups_bpm: &[f64; 5])
         .max(1)
 }
 
+pub fn effective_chaser_xfade_percent(cue_list: &CueList, speed_groups_bpm: &[f64; 5]) -> u8 {
+    cue_list.chaser_xfade_percent.unwrap_or_else(|| {
+        let step = effective_chaser_step_millis(cue_list, speed_groups_bpm);
+        ((cue_list.chaser_xfade_millis.saturating_mul(100) + step / 2) / step).min(100) as u8
+    })
+}
+
+pub fn effective_chaser_xfade_millis(cue_list: &CueList, speed_groups_bpm: &[f64; 5]) -> u64 {
+    if cue_list.disable_cue_timing {
+        return 0;
+    }
+    let step = effective_chaser_step_millis(cue_list, speed_groups_bpm);
+    (step.saturating_mul(u64::from(effective_chaser_xfade_percent(
+        cue_list,
+        speed_groups_bpm,
+    ))) + 50)
+        / 100
+}
+
 impl CueList {
+    pub fn migrate_legacy_chaser_xfade(&mut self, speed_groups_bpm: &[f64; 5]) {
+        if self.chaser_xfade_percent.is_some() {
+            self.chaser_xfade_millis = 0;
+            return;
+        }
+        self.chaser_xfade_percent = Some(effective_chaser_xfade_percent(self, speed_groups_bpm));
+        self.chaser_xfade_millis = 0;
+    }
     pub fn effective_wrap_mode(&self) -> WrapMode {
         self.wrap_mode.unwrap_or(if self.looped {
             WrapMode::Tracking
@@ -598,7 +630,13 @@ impl CueList {
         if !self.speed_multiplier.is_finite() || !(0.01..=100.0).contains(&self.speed_multiplier) {
             return Err("speed multiplier must be within 0.01-100".into());
         }
-        if self.chaser_xfade_millis > 60_000 {
+        if self
+            .chaser_xfade_percent
+            .is_some_and(|percent| percent > 100)
+        {
+            return Err("chaser x-fade percent must be within 0-100".into());
+        }
+        if self.chaser_xfade_percent.is_none() && self.chaser_xfade_millis > 60_000 {
             return Err("chaser x-fade must not exceed 60 seconds".into());
         }
         if let Some(group) = &self.speed_group
@@ -1060,14 +1098,9 @@ impl PlaybackEngine {
         self.set_dynamics_paused(paused);
         paused
     }
-    pub fn register(&mut self, cue_list: CueList) -> Result<(), String> {
+    pub fn register(&mut self, mut cue_list: CueList) -> Result<(), String> {
         cue_list.validate()?;
-        if cue_list.mode == CueListMode::Chaser {
-            let step = effective_chaser_step_millis(&cue_list, &self.speed_groups_bpm);
-            if cue_list.chaser_xfade_millis > step {
-                return Err("chaser x-fade must not exceed the effective step duration".into());
-            }
-        }
+        cue_list.migrate_legacy_chaser_xfade(&self.speed_groups_bpm);
         self.cue_lists.insert(cue_list.id, cue_list);
         Ok(())
     }
@@ -2245,7 +2278,7 @@ impl PlaybackEngine {
                 let cue_fade_millis = if cue_list.disable_cue_timing {
                     0
                 } else if cue_list.mode == CueListMode::Chaser {
-                    cue_list.chaser_xfade_millis
+                    effective_chaser_xfade_millis(cue_list, &self.speed_groups_bpm)
                 } else if target_cue.fade_millis == 0 {
                     self.sequence_master_fade_millis
                 } else {
@@ -2811,7 +2844,7 @@ impl PlaybackEngine {
             let cue_fade_millis = if cue_list.disable_cue_timing {
                 0
             } else if cue_list.mode == CueListMode::Chaser {
-                cue_list.chaser_xfade_millis
+                effective_chaser_xfade_millis(cue_list, &self.speed_groups_bpm)
             } else if cue_list.mode == CueListMode::Sequence && cue.fade_millis == 0 {
                 playback
                     .transition_fade_fallback_millis
@@ -3151,6 +3184,7 @@ mod tests {
             disable_cue_timing: false,
             chaser_step_millis: 1_000,
             chaser_xfade_millis: 0,
+            chaser_xfade_percent: Some(0),
             speed_group: None,
             speed_multiplier: 1.0,
             cues,
@@ -4110,6 +4144,7 @@ mod tests {
             "force_cue_timing",
             "disable_cue_timing",
             "chaser_xfade_millis",
+            "chaser_xfade_percent",
             "speed_multiplier",
         ] {
             object.remove(field);
@@ -4120,6 +4155,49 @@ mod tests {
         assert_eq!(migrated.restart_mode, RestartMode::FirstCue);
         assert_eq!(migrated.intensity_priority_mode, IntensityPriorityMode::Htp);
         assert_eq!(migrated.speed_multiplier, 1.0);
+    }
+
+    #[test]
+    fn legacy_chaser_xfade_migrates_once_to_stable_integer_percent() {
+        let mut legacy = list(vec![Cue::new(1.0)]);
+        legacy.mode = CueListMode::Chaser;
+        legacy.chaser_step_millis = 1_000;
+        legacy.chaser_xfade_millis = 255;
+        legacy.chaser_xfade_percent = None;
+        let mut encoded = serde_json::to_value(&legacy).unwrap();
+        encoded
+            .as_object_mut()
+            .unwrap()
+            .remove("chaser_xfade_percent");
+
+        let mut migrated: CueList = serde_json::from_value(encoded).unwrap();
+        migrated.migrate_legacy_chaser_xfade(&[120.0, 90.0, 60.0, 30.0, 15.0]);
+        assert_eq!(migrated.chaser_xfade_percent, Some(26));
+        assert_eq!(migrated.chaser_xfade_millis, 0);
+        let normalized = serde_json::to_value(&migrated).unwrap();
+        assert_eq!(normalized["chaser_xfade_percent"], 26);
+        assert!(normalized.get("chaser_xfade_millis").is_none());
+        let reloaded: CueList = serde_json::from_value(normalized).unwrap();
+        assert_eq!(reloaded.chaser_xfade_percent, Some(26));
+    }
+
+    #[test]
+    fn chaser_xfade_percent_tracks_live_step_duration_exactly() {
+        let mut chaser = list(vec![Cue::new(1.0)]);
+        chaser.mode = CueListMode::Chaser;
+        chaser.speed_group = Some("A".into());
+        chaser.chaser_xfade_percent = Some(50);
+        assert_eq!(effective_chaser_xfade_millis(&chaser, &[120.0; 5]), 250);
+        assert_eq!(effective_chaser_xfade_millis(&chaser, &[60.0; 5]), 500);
+        chaser.speed_multiplier = 2.0;
+        assert_eq!(effective_chaser_xfade_millis(&chaser, &[120.0; 5]), 125);
+        chaser.chaser_xfade_percent = Some(0);
+        assert_eq!(effective_chaser_xfade_millis(&chaser, &[120.0; 5]), 0);
+        chaser.chaser_xfade_percent = Some(100);
+        assert_eq!(effective_chaser_xfade_millis(&chaser, &[120.0; 5]), 250);
+        chaser.disable_cue_timing = true;
+        assert_eq!(effective_chaser_xfade_millis(&chaser, &[120.0; 5]), 0);
+        assert_eq!(chaser.chaser_xfade_percent, Some(100));
     }
 
     #[test]

@@ -4812,8 +4812,10 @@ async fn put_object(
             serde_json::to_value(fixture).map_err(|error| ApiError::internal(error.to_string()))?;
     }
     if kind == "cue_list" {
-        let cue_list = serde_json::from_value::<light_playback::CueList>(body)
+        let mut cue_list = serde_json::from_value::<light_playback::CueList>(body)
             .map_err(|error| ApiError::bad_request(error.to_string()))?;
+        cue_list.migrate_legacy_chaser_xfade(&state.configuration.read().speed_groups_bpm);
+        cue_list.validate().map_err(ApiError::bad_request)?;
         body = serde_json::to_value(cue_list)
             .map_err(|error| ApiError::internal(error.to_string()))?;
     }
@@ -10307,6 +10309,7 @@ fn store_cue_at(
             force_cue_timing: false,
             disable_cue_timing: false,
             chaser_xfade_millis: 0,
+            chaser_xfade_percent: Some(0),
             speed_multiplier: 1.0,
             cues: vec![programmer_cue(&programmer, number, timing)],
         };
@@ -13894,8 +13897,9 @@ fn reconcile_show_schema_defaults(entry: &ShowEntry) -> Result<(), String> {
         .map_err(|error| error.to_string())?
     {
         let original = object.body;
-        let cue_list = serde_json::from_value::<light_playback::CueList>(original.clone())
+        let mut cue_list = serde_json::from_value::<light_playback::CueList>(original.clone())
             .map_err(|error| format!("invalid cue list: {error}"))?;
+        cue_list.migrate_legacy_chaser_xfade(&default_speed_groups());
         let normalized = serde_json::to_value(cue_list).map_err(|error| error.to_string())?;
         if normalized != original {
             updates.push((object.kind, object.id, normalized, object.revision));
@@ -14476,6 +14480,7 @@ mod tests {
             force_cue_timing: false,
             disable_cue_timing: false,
             chaser_xfade_millis: 0,
+            chaser_xfade_percent: Some(0),
             speed_multiplier: 1.0,
             cues: vec![light_playback::Cue::new(1.0)],
         };
@@ -15533,6 +15538,7 @@ mod tests {
             force_cue_timing: false,
             disable_cue_timing: false,
             chaser_xfade_millis: 0,
+            chaser_xfade_percent: Some(0),
             speed_multiplier: 1.0,
             cues: vec![first_cue, light_playback::Cue::new(2.0)],
         };
@@ -17969,6 +17975,7 @@ mod tests {
                 force_cue_timing: false,
                 disable_cue_timing: false,
                 chaser_xfade_millis: 0,
+                chaser_xfade_percent: Some(0),
                 speed_multiplier: 1.0,
                 cues,
             };
@@ -18382,6 +18389,7 @@ mod tests {
             force_cue_timing: false,
             disable_cue_timing: false,
             chaser_xfade_millis: 0,
+            chaser_xfade_percent: Some(0),
             speed_multiplier: 1.0,
             cues: vec![first, second, third],
         };
@@ -18553,6 +18561,7 @@ mod tests {
             force_cue_timing: false,
             disable_cue_timing: false,
             chaser_xfade_millis: 0,
+            chaser_xfade_percent: Some(0),
             speed_multiplier: 1.0,
             cues: vec![
                 light_playback::Cue::new(1.0),
@@ -21625,6 +21634,7 @@ mod tests {
             disable_cue_timing: false,
             chaser_step_millis: 1_000,
             chaser_xfade_millis: 0,
+            chaser_xfade_percent: Some(0),
             speed_group: None,
             speed_multiplier: 1.0,
             cues: vec![cue],
@@ -22255,6 +22265,7 @@ mod tests {
             disable_cue_timing: false,
             chaser_step_millis: 1_000,
             chaser_xfade_millis: 0,
+            chaser_xfade_percent: Some(0),
             speed_group: None,
             speed_multiplier: 1.0,
             cues: vec![cue],

@@ -1770,7 +1770,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
             force_cue_timing: false,
             disable_cue_timing: false,
             chaser_step_millis: 1000,
-            chaser_xfade_millis: 0,
+            chaser_xfade_percent: 0,
             speed_group: null,
             speed_multiplier: 1,
             cues: [],

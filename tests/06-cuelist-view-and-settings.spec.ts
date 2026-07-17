@@ -382,12 +382,12 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     await expect(settings.getByLabel("Numeric priority")).toHaveValue("42");
     await expect(selectField(settings, "Speed Group")).toContainText("A");
     await choose(page, settings, "1×", "2×");
-    await settings.getByLabel("Chaser X-fade").fill("0.3");
+    await settings.getByLabel("Chaser X-fade").fill("101");
     const beforeInvalid = await object<any>(api, "cue_list", installed.id);
-    await settings.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(settings.getByRole("alert")).toContainText("Chaser X-fade must not exceed");
+    await settings.getByLabel("Chaser X-fade").press("Tab");
+    await expect(settings.getByLabel("Chaser X-fade")).toHaveValue("100");
     expect((await object<any>(api, "cue_list", installed.id)).revision).toBe(beforeInvalid.revision);
-    await settings.getByLabel("Chaser X-fade").fill("0.1");
+    await settings.getByLabel("Chaser X-fade").fill("50");
     await settings.getByRole("button", { name: "Save", exact: true }).click();
     await expect(settings).toBeHidden();
     await expect
@@ -402,7 +402,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
         disable_cue_timing: true,
         speed_group: "A",
         speed_multiplier: 2,
-        chaser_xfade_millis: 100,
+        chaser_xfade_percent: 50,
       });
 
     await page.getByRole("button", { name: "← Cuelist Pool", exact: true }).click();
@@ -440,7 +440,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       disable_cue_timing: true,
       speed_group: "A",
       speed_multiplier: 2,
-      chaser_xfade_millis: 100,
+      chaser_xfade_percent: 50,
     });
     const migratedOff = await object<any>(api, "cue_list", legacyOff.id);
     expect(migratedOff.body).toMatchObject({ wrap_mode: "off", restart_mode: "first_cue", disable_cue_timing: false, intensity_priority_mode: "htp", speed_multiplier: 1 });
@@ -594,20 +594,43 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 
       await loadCanonicalCopy(api, bench, "cue-012-chaser", "compact-rig");
       await setControlTiming(api, [120, 90, 60, 30, 15], 0);
-      const chaser = await installCuelist(api, { name: "Chaser", numbers: [1, 2, 3, 4], mode: "chaser", speedGroup: "A", speedMultiplier: 1, chaserXfade: 100 });
+      const chaser = await installCuelist(api, { name: "Chaser", numbers: [1, 2, 3, 4], mode: "chaser", speedGroup: "A", speedMultiplier: 1, chaserXfade: 50 });
       const chaserShowId = await activeShowId(api);
       const valid = await object<any>(api, "cue_list", chaser.id);
-      await expect(putObject(api, "cue_list", chaser.id, { ...valid.body, chaser_xfade_millis: 501 }, valid.revision)).rejects.toThrow(/effective step duration/i);
+      const legacyBody = { ...valid.body, chaser_xfade_millis: 250 };
+      delete legacyBody.chaser_xfade_percent;
+      await putObject(api, "cue_list", chaser.id, legacyBody, valid.revision);
+      const migrated = await object<any>(api, "cue_list", chaser.id);
+      expect(migrated.body.chaser_xfade_percent).toBe(50);
+      expect(migrated.body.chaser_xfade_millis).toBeUndefined();
+      await expect(putObject(api, "cue_list", chaser.id, { ...migrated.body, chaser_xfade_percent: 101 }, migrated.revision)).rejects.toThrow(/0-100/i);
       const afterRejectedXfade = await object<any>(api, "cue_list", chaser.id);
-      expect(afterRejectedXfade.revision).toBe(valid.revision);
+      expect(afterRejectedXfade.revision).toBe(migrated.revision);
       await api.request("POST", "/api/v1/cuelists/1/go", {});
       expect((await runtime(api, 1)).current_cue_number).toBe(1);
       await bench.tick(499);
       expect((await runtime(api, 1)).current_cue_number).toBe(1);
       await bench.tick(1);
       expect((await runtime(api, 1)).current_cue_number).toBe(2);
-      expect(slot(await bench.tick(50), 1)).toBe(96);
-      expect(slot(await bench.tick(50), 1)).toBe(128);
+      expect(slot(await bench.tick(125), 1)).toBe(96);
+      expect(slot(await bench.tick(125), 1)).toBe(128);
+
+      await reopenAndReset(api, chaserShowId);
+      let exactBody = await object<any>(api, "cue_list", chaser.id);
+      await putObject(api, "cue_list", chaser.id, { ...exactBody.body, chaser_xfade_percent: 0 }, exactBody.revision);
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
+      expect(slot(await bench.tick(500), 1)).toBe(128);
+
+      await reopenAndReset(api, chaserShowId);
+      exactBody = await object<any>(api, "cue_list", chaser.id);
+      await putObject(api, "cue_list", chaser.id, { ...exactBody.body, chaser_xfade_percent: 100 }, exactBody.revision);
+      await api.request("POST", "/api/v1/cuelists/1/go", {});
+      await bench.tick(500);
+      expect(slot(await bench.tick(250), 1)).toBe(96);
+      expect(slot(await bench.tick(250), 1)).toBe(128);
+
+      exactBody = await object<any>(api, "cue_list", chaser.id);
+      await putObject(api, "cue_list", chaser.id, { ...exactBody.body, chaser_xfade_percent: 50 }, exactBody.revision);
 
       await reopenAndReset(api, chaserShowId);
       let chaserBody = await object<any>(api, "cue_list", chaser.id);
@@ -622,9 +645,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       chaserBody = await object<any>(api, "cue_list", chaser.id);
       await putObject(api, "cue_list", chaser.id, { ...chaserBody.body, speed_multiplier: 2 }, chaserBody.revision);
       chaserBody = await object<any>(api, "cue_list", chaser.id);
-      await expect(putObject(api, "cue_list", chaser.id, { ...chaserBody.body, chaser_xfade_millis: 251 }, chaserBody.revision)).rejects.toThrow(/effective step duration/i);
-      const afterRejectedFastXfade = await object<any>(api, "cue_list", chaser.id);
-      expect(afterRejectedFastXfade.revision).toBe(chaserBody.revision);
+      expect(chaserBody.body.chaser_xfade_percent).toBe(50);
       await api.request("POST", "/api/v1/cuelists/1/go", {});
       await bench.tick(249);
       expect((await runtime(api, 1)).current_cue_number).toBe(1);
@@ -713,7 +734,7 @@ async function installCuelist(api: ApiDriver, options: InstallOptions): Promise<
       restart_mode: "first_cue",
       force_cue_timing: false,
       disable_cue_timing: false,
-      chaser_xfade_millis: options.chaserXfade ?? 0,
+      chaser_xfade_percent: options.chaserXfade ?? 0,
       speed_multiplier: options.speedMultiplier ?? 1,
     });
   }

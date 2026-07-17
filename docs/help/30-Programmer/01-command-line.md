@@ -299,7 +299,7 @@ A Cue-record command without `DELAY` stores the Cue with a **GO** trigger, so it
 
 The Cuelist setting **Force Cue Timing** makes each Cue's master Fade and Delay authoritative for every value during playback, ignoring stored per-value fades and start delays without deleting them. When the setting is disabled again, the original per-value timing applies on the next execution.
 
-The Cuelist setting **Disable Cue Timing** is a rehearsal bypass. It treats per-value and Cue Fade/Delay, TIME-trigger waits, and Chaser X-fade as zero without rewriting them. Chaser step cadence remains active. Disable Cue Timing takes precedence over Force Cue Timing; turning it off restores every configured duration.
+The Cuelist setting **Disable Cue Timing** is a rehearsal bypass. It treats per-value and Cue Fade/Delay, TIME-trigger waits, and the effective Chaser X-fade duration as zero without rewriting them. Chaser X-fade remains stored as its `0–100%` share of the current Speed Group/BPM/multiplier step, and Chaser step cadence remains active. Disable Cue Timing takes precedence over Force Cue Timing; turning it off restores every configured duration.
 
 ## Deleting, moving, and copying
 
