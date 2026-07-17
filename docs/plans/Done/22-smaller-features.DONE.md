@@ -13,4 +13,3 @@ The outline should remain visible at supported display scaling and in both softw
 3. White and bright colors remain legible without the outline dominating the dot.
 4. Dot dimensions, row geometry, selection styling, and other Fixture Sheet state indicators do not move or change.
 5. Component and visual coverage includes dark, bright, absent, and mixed color states at representative software-only and hardware-connected sizes.
-

@@ -45,7 +45,7 @@ During PREV/NEXT stepping, every row in the remembered base selection remains vi
 | **ID** | The fixture number. Multi-head targets add `.0` for the master and `.1` onward for logical heads. |
 | **Name / type** | Operator name, manufacturer, mode, and patch address in `Uuniverse.address` form. A Group-master badge appears when a playback-fader Group is limiting this fixture. |
 | **Dimmer** | A level meter and resolved intensity percentage. During Preload, an arrow shows the pending target percentage. |
-| **Color** | An RGB swatch and label. During Preload, a second swatch identifies the pending color. Fixtures without color parameters show the neutral fallback. |
+| **Color** | An RGB swatch and label. Every swatch has the same thin light-grey boundary so black, dark, bright, absent, and mixed colors remain distinct from the table without changing the resolved fill. During Preload, a second swatch identifies the pending color. Fixtures without color parameters show the neutral fallback. |
 | **Position** | A position glyph and pan/tilt values. Fixtures without position parameters show a dash. During Preload, the pending pan/tilt values appear below. |
 | **Beam** | Reserved beam-summary column. Its current compact summary is not yet an authoritative live engine value. |
 | **Focus** | Reserved focus-summary column. Its current compact summary is not yet an authoritative live engine value. |
