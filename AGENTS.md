@@ -54,7 +54,7 @@ Honor the narrowest requested scope. If the request says to edit planning or tes
 - `apps/control-ui/e2e/bench`: shared E2E bench helpers
 - `docs/help`: operator help and manual source
 - `docs/testing`: human-readable acceptance scenarios
-- `light-data`: local development data and current server log
+- `.artifacts/runtime/light-data`: local development data and current server log
 
 ## Verification
 
@@ -77,7 +77,7 @@ When real operator behavior changed, `./build open` is the authoritative desktop
 curl -fsS http://127.0.0.1:5000/api/v1/readiness
 ```
 
-Inspect `light-data/light-server.log` first for app-owned server startup/runtime problems. If readiness is healthy but the app appears stuck, time `/api/v1/readiness`, `/api/v1/health`, and `/api/v1/bootstrap` separately.
+Inspect `.artifacts/runtime/light-data/light-server.log` first for app-owned server startup/runtime problems. If readiness is healthy but the app appears stuck, time `/api/v1/readiness`, `/api/v1/health`, and `/api/v1/bootstrap` separately.
 
 If the app looks stale, verify the bundle opened by the current `build` script before reworking UI code.
 

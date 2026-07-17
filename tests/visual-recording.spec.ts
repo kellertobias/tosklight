@@ -1,9 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
+import artifactResolver from "../tools/artifact-paths.cjs";
 
-const ROOT = path.resolve(import.meta.dirname, "..");
-const VIDEO = path.join(ROOT, "artifacts", "visual-inspection", "light-visual-inspection.webm");
+const { artifactPaths } = artifactResolver;
+
+const VIDEO = path.join(artifactPaths.visual, "light-visual-inspection.webm");
 
 test("records the complete desk with OSC and DMX observers", async ({ api, bench, desk, page }, testInfo) => {
   test.setTimeout(90_000);

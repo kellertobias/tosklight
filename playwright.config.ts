@@ -1,4 +1,7 @@
 import { defineConfig } from "./apps/control-ui/node_modules/@playwright/test/index.js";
+import artifactResolver from "./tools/artifact-paths.cjs";
+
+const { artifactPaths } = artifactResolver;
 
 const visualRecording = process.env.LIGHT_VISUAL_RECORDING === "1";
 const helpScreenshots = process.env.LIGHT_HELP_SCREENSHOTS === "1";
@@ -14,9 +17,9 @@ export default defineConfig({
   fullyParallel: true,
   workers: 4,
   retries: process.env.CI ? 2 : 0,
-  outputDir: "./test-results",
+  outputDir: artifactPaths.results,
   reporter: process.env.CI
-    ? [["html", { open: "never", outputFolder: "playwright-report" }], ["list"]]
+    ? [["html", { open: "never", outputFolder: artifactPaths.report }], ["list"]]
     : "list",
   use: {
     browserName: "chromium",

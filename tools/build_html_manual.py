@@ -16,9 +16,11 @@ from markdown_it import MarkdownIt
 from PIL import Image as PILImage
 
 from build_manual import HELP, ROOT, SourcePage, slug, source_pages, validate_sources, workspace_version
+from artifact_paths import artifact_path
 
-DEFAULT_SITE = ROOT / "output" / "html" / "tosklight-manual"
-DEFAULT_ARCHIVE = ROOT / "output" / "html" / "tosklight-manual-html.zip"
+DEFAULT_MANUAL_ROOT = artifact_path("LIGHT_MANUAL_ROOT", "MANUAL_ROOT")
+DEFAULT_SITE = DEFAULT_MANUAL_ROOT / "html" / "tosklight-manual"
+DEFAULT_ARCHIVE = DEFAULT_MANUAL_ROOT / "html" / "tosklight-manual-html.zip"
 
 
 def keycap_category(label: str) -> str:
@@ -209,7 +211,7 @@ def build(site: Path, archive: Path) -> None:
     version = workspace_version()
     (site / "index.html").write_text(document_html(pages, articles, navigation(pages), version, "assets/brand/icon.png"), encoding="utf-8")
     deterministic_zip(site, archive)
-    print(f"Built {site.relative_to(ROOT)}/index.html and {archive.relative_to(ROOT)} from {len(pages)} Markdown pages and {len(copied_images)} referenced images")
+    print(f"Built {site / 'index.html'} and {archive} from {len(pages)} Markdown pages and {len(copied_images)} referenced images")
 
 
 def main() -> int:

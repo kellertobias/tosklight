@@ -83,11 +83,11 @@ Every automated scenario should follow the same visible structure:
 
 ## Visual inspection recording
 
-Run `./test record` to execute the complete Playwright catalog in serial recording mode. Every browser test receives its own 1920×1080 video under `test-results/`, with deliberately slowed browser actions and a non-interactive narration bar showing the scenario ID, current phase, purpose, recent desk events, explicit external OSC transmissions and feedback, and current logical DMX output. After the run, ffmpeg joins those clips into `artifacts/visual-inspection/light-ui-test-catalog.webm`, so the entire browser-tested catalog can be watched as one reel rather than inspecting only one test.
+Run `./test record` to execute the complete Playwright catalog in serial recording mode. Every browser test receives its own 1920×1080 video under `.artifacts/test/results/`, with deliberately slowed browser actions and a non-interactive narration bar showing the scenario ID, current phase, purpose, recent desk events, explicit external OSC transmissions and feedback, and current logical DMX output. After the run, ffmpeg joins those clips into `.artifacts/test/visual-inspection/light-ui-test-catalog.webm`, so the entire browser-tested catalog can be watched as one reel rather than inspecting only one test.
 
-Run `./test demo` for the single maintained `DEMO-001` product walkthrough. It opens `?demo=product`, keeps the complete application, Stage, live DMX grid, simulated keypad, and playback surface visible, and overlays compact phase titles without resizing the desk. The run writes `artifacts/product-demo/tosklight-product-demo.webm` and `artifacts/product-demo/tosklight-product-demo-1920x1080.png`.
+Run `./test demo` for the single maintained `DEMO-001` product walkthrough. It opens `?demo=product`, keeps the complete application, Stage, live DMX grid, simulated keypad, and playback surface visible, and overlays compact phase titles without resizing the desk. The run writes the maintained video and screenshot below `.artifacts/test/visual-inspection/product-demo/`.
 
-The catalog also includes the more detailed narrated walkthrough at `artifacts/visual-inspection/light-visual-inspection.webm`. That chapter keeps the complete desk application visible and adds expanded external observer panels for:
+The catalog also includes the more detailed narrated walkthrough at `.artifacts/test/visual-inspection/light-visual-inspection.webm`. That chapter keeps the complete desk application visible and adds expanded external observer panels for:
 
 - OSC packets sent by the simulated physical controller and decoded feedback returned by the subscribed desk alias;
 - the desk-local command line after each UI or OSC button press;

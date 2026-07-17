@@ -39,9 +39,9 @@ jobs:
         run: |
           python3 tools/publish_forgejo_manual.py \
             --tag "${{ forgejo.ref_name }}" \
-            --file output/pdf/tosklight-manual.pdf \
+            --file "$(./build path manual-pdf)" \
             --asset-name "tosklight-manual-${{ forgejo.ref_name }}.pdf"
           python3 tools/publish_forgejo_manual.py \
             --tag "${{ forgejo.ref_name }}" \
-            --file output/html/tosklight-manual-html.zip \
+            --file "$(./build path manual-html)" \
             --asset-name "tosklight-manual-${{ forgejo.ref_name }}-html.zip"

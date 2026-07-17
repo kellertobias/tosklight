@@ -1,3 +1,6 @@
+# Canonical repository-local development artifacts
+/.artifacts/
+
 # Rust
 /target/
 

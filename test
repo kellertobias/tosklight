@@ -2,11 +2,15 @@
 
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$ROOT/tools/artifact-paths.sh"
+source "$ROOT/tools/artifact-maintenance.sh"
+light_init_artifact_paths "$ROOT"
 UI="$ROOT/apps/control-ui"
+CONTROL_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-control-artifacts.json"
 
-usage(){ echo "Usage: ./test {unit|e2e|e2e-api|e2e-ui|e2e-supplemental|help-screenshots|record|demo|desktop-smoke|all}"; }
+usage(){ echo "Usage: ./test {artifact-paths|unit|e2e|e2e-api|e2e-ui|e2e-supplemental|help-screenshots|record|demo|desktop-smoke|all}"; }
 build_e2e(){ (cd "$UI" && npm run build); cargo build --manifest-path "$ROOT/Cargo.toml" -p light-server --no-default-features; }
-unit(){ cargo test --manifest-path "$ROOT/Cargo.toml" --workspace --exclude light-control-ui --exclude light-hardware-controls --no-default-features; (cd "$UI" && npm test); }
+unit(){ (cd "$UI" && npm run build); cargo test --manifest-path "$ROOT/Cargo.toml" --workspace --exclude light-control-ui --exclude light-hardware-controls --no-default-features; (cd "$UI" && npm test); }
 e2e(){ build_e2e; (cd "$UI" && npm run test:e2e -- "$@"); }
 e2e_api(){ e2e --grep '@api' "$@"; }
 e2e_ui(){ e2e --grep '@ui' "$@"; }
@@ -26,13 +30,15 @@ help_screenshots(){ build_e2e; (cd "$UI" && LIGHT_HELP_SCREENSHOTS=1 npm run tes
 desktop_smoke(){
   [[ "$(uname -s)" == Darwin ]] || { echo "desktop-smoke requires macOS" >&2; exit 2; }
   build_e2e
-  (cd "$UI" && npm run tauri:build -- --debug --bundles app)
-  cp "$ROOT/target/debug/light-server" "$ROOT/target/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-server"
+  node "$ROOT/tools/write-tauri-artifact-config.mjs" control "$CONTROL_TAURI_CONFIG"
+  (cd "$UI" && npm run tauri:build -- --debug --bundles app --config "$CONTROL_TAURI_CONFIG")
+  cp "$CARGO_TARGET_DIR/debug/light-server" "$CARGO_TARGET_DIR/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-server"
   (cd "$UI" && LIGHT_DESKTOP_SMOKE=1 npm run test:e2e -- 05-desktop-process-integration.spec.ts --workers=1)
 }
 
 command="${1:-}"; shift || true
 case "$command" in
+  artifact-paths) "$ROOT/tools/test-artifact-paths.sh" ;;
   unit) unit ;;
   e2e) e2e "$@" ;;
   e2e-api) e2e_api "$@" ;;

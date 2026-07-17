@@ -3,8 +3,13 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$ROOT/tools/artifact-paths.sh"
+source "$ROOT/tools/artifact-maintenance.sh"
+light_init_artifact_paths "$ROOT"
 UI_DIR="$ROOT/apps/control-ui"
-DATA_DIR="${LIGHT_DATA_DIR:-$ROOT/light-data}"
+DATA_DIR="$LIGHT_DATA_DIR"
+FIXTURE_LIBRARY_DIR="$ROOT/fixture-library"
+TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-control-artifacts.json"
 SERVER_PID=""
 
 cleanup() {
@@ -17,14 +22,23 @@ trap cleanup EXIT INT TERM
 
 command -v cargo >/dev/null 2>&1 || { echo "error: cargo is required" >&2; exit 1; }
 command -v npm >/dev/null 2>&1 || { echo "error: npm is required" >&2; exit 1; }
+command -v curl >/dev/null 2>&1 || { echo "error: curl is required" >&2; exit 1; }
 
+light_check_runtime_migration
 mkdir -p "$DATA_DIR"
+node "$ROOT/tools/write-tauri-artifact-config.mjs" control "$TAURI_CONFIG"
 
 echo "Starting Light server with Rust hot reload disabled..."
 echo "The Tauri app and UI will hot reload; restart ./dev after backend changes."
 cargo run --manifest-path "$ROOT/Cargo.toml" -p light-server --bin light-server -- \
-  --data-dir "$DATA_DIR" &
+  --data-dir "$DATA_DIR" --fixture-package-dir "$FIXTURE_LIBRARY_DIR" &
 SERVER_PID=$!
 
+for _ in {1..100}; do
+  curl -fsS http://127.0.0.1:5000/api/v1/readiness >/dev/null 2>&1 && break
+  kill -0 "$SERVER_PID" 2>/dev/null || { echo "error: Light server exited during startup" >&2; exit 1; }
+  sleep 0.1
+done
+curl -fsS http://127.0.0.1:5000/api/v1/readiness >/dev/null || { echo "error: Light server did not become ready; see $DATA_DIR/light-server.log" >&2; exit 1; }
 echo "Starting Tauri development app..."
-(cd "$UI_DIR" && npm run tauri:dev)
+(cd "$UI_DIR" && npm run tauri:dev -- --config "$TAURI_CONFIG")

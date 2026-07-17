@@ -7,9 +7,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ApiDriver, type Session } from "./api";
 import { DmxReceiver, OscHardware } from "./protocols";
+import artifactResolver from "../../../../tools/artifact-paths.cjs";
+
+const { artifactPaths } = artifactResolver;
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
-const SERVER = path.join(ROOT, "target", "debug", process.platform === "win32" ? "light-server.exe" : "light-server");
+const SERVER = path.join(artifactPaths.cargo, "debug", process.platform === "win32" ? "light-server.exe" : "light-server");
 
 export interface TestShow { id: string; fixtureIds: string[]; session: Session }
 

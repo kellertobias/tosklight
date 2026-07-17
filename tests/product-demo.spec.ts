@@ -10,10 +10,12 @@ import {
   seedPlannedDemoProgramming,
   seedPlannedDemoRoutes,
 } from "./support/plannedDemoState";
+import artifactResolver from "../tools/artifact-paths.cjs";
 
-const ROOT = path.resolve(import.meta.dirname, "..");
-const VIDEO = path.join(ROOT, "artifacts", "product-demo", "tosklight-product-demo.webm");
-const SCREENSHOT = path.join(ROOT, "artifacts", "product-demo", "tosklight-product-demo-1920x1080.png");
+const { artifactPaths } = artifactResolver;
+
+const VIDEO = path.join(artifactPaths.visual, "product-demo", "tosklight-product-demo.webm");
+const SCREENSHOT = path.join(artifactPaths.visual, "product-demo", "tosklight-product-demo-1920x1080.png");
 const RECORDING = process.env.LIGHT_VISUAL_RECORDING === "1";
 
 test("@ui narrates the complete Full HD product demo surface in one regression run", async ({ api, bench, desk, page }, testInfo) => {

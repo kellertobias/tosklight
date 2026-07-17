@@ -15,7 +15,7 @@ Start with the [quickstart help](docs/help/00-quickstart.markdown) or browse the
 ## Run the server
 
 ```sh
-cargo run -p light-server --bin light-server -- --data-dir ./light-data
+./dev
 ```
 
 Open `http://127.0.0.1:5000`. A new desk contains an enabled `Operator` user. Use `--bind 0.0.0.0:5000` only on a trusted control network.
@@ -30,11 +30,13 @@ Set `LIGHT_DESK_TOKEN` when exposing the server on a LAN. API clients then send 
 ./build manual           # PDF and deployable HTML manuals from docs/help Markdown
 ./build archive          # self-contained server ZIPs for macOS, Windows, Linux AMD64, and Linux ARM64
 ./build archive install  # build archives and install/open ~/Applications/ToskLight.app
+./build migrate-artifacts # explicitly move legacy ./light-data into .artifacts/runtime/
+./build clean             # remove reproducible artifacts while preserving runtime data
 ```
 
-The generated manuals are written to `output/pdf/tosklight-manual.pdf` and
-`output/html/tosklight-manual/index.html`. The webhost-ready package is
-`output/html/tosklight-manual-html.zip`; extract it directly into a document
+The generated manuals are written to `.artifacts/generated/manual/pdf/tosklight-manual.pdf` and
+`.artifacts/generated/manual/html/tosklight-manual/index.html`. The webhost-ready package is
+`.artifacts/generated/manual/html/tosklight-manual-html.zip`; extract it directly into a document
 root to deploy the single-page manual and its images.
 Use `./test help-screenshots` to intentionally refresh the application images
 consumed by the Help window, PDF, and HTML manual. See the
@@ -43,13 +45,15 @@ contract.
 
 `./build archive` ships the web UI inside each `light-server` binary. It creates a
 universal macOS binary plus Windows, Linux AMD64, and Linux ARM64 binaries in
-`artifacts/`; Linux binaries are statically linked. Building the non-macOS
+`.artifacts/release/`; Linux binaries are statically linked. Building the non-macOS
 targets requires `zig`, `cargo-zigbuild`, and the Rust targets named by the
 build script. The portable Linux binaries omit native USB-MIDI because it
 depends on the target machine's ALSA library; RTP-MIDI, OSC, and network output
 remain available.
 
-Both local run commands store desk data in `./light-data` by default. Set `LIGHT_DATA_DIR` to use a different directory. The app talks to the server on `127.0.0.1:5000`; `./dev` restarts cleanly as one foreground environment, while backend source changes currently require restarting the command.
+Both local run commands store desk data in `.artifacts/runtime/light-data/` by default. Existing `./light-data` state is never moved implicitly: run `./build migrate-artifacts` once after reviewing the destination. If both locations contain data, the command stops without merging them. Set `LIGHT_DATA_DIR` to use a different directory. The app talks to the server on `127.0.0.1:5000`; `./dev` restarts cleanly as one foreground environment, while backend source changes currently require restarting the command.
+
+All repository-local build products, manuals, release packages, test evidence, caches, and scratch files live below ignored `.artifacts/`. `./build clean` removes only reproducible subtrees and preserves the active development runtime. Runtime removal is deliberately separate and prints the exact confirmation command because it includes local shows and desk state.
 
 The server maintains:
 

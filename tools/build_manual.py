@@ -18,6 +18,7 @@ from markdown_it import MarkdownIt
 from PIL import Image as PILImage, ImageDraw, ImageFont
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from artifact_paths import artifact_path
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
@@ -44,7 +45,7 @@ from reportlab.platypus.tableofcontents import SimpleIndex, TableOfContents
 
 ROOT = Path(__file__).resolve().parents[1]
 HELP = ROOT / "docs" / "help"
-DEFAULT_OUTPUT = ROOT / "output" / "pdf" / "tosklight-manual.pdf"
+DEFAULT_OUTPUT = artifact_path("LIGHT_MANUAL_ROOT", "MANUAL_ROOT") / "pdf" / "tosklight-manual.pdf"
 PAGE_WIDTH, PAGE_HEIGHT = A4
 INK = colors.HexColor("#17202a")
 MUTED = colors.HexColor("#64748b")
@@ -208,7 +209,7 @@ KEYCAP_PALETTES = {
     "record": ("#21090c", "#ff6872", "#70181f", "#ff6872"),
     "keyboard": ("#ffffff", "#cbd5e1", "#7d8b94", "#17202a"),
 }
-KEYCAP_ASSET_DIR = ROOT / "output" / "pdf" / ".manual-keycaps"
+KEYCAP_ASSET_DIR = DEFAULT_OUTPUT.parent / ".manual-keycaps"
 
 
 def keycap_asset(label: str, category: str) -> tuple[Path, float, float]:
@@ -659,13 +660,15 @@ def build(output: Path) -> None:
     index.textStyle = ParagraphStyle(name="IndexText", fontName=SANS, fontSize=8, leading=11, textColor=INK)
     story.append(index)
     doc.multiBuild(story, canvasmaker=index.getCanvasMaker())
-    print(f"Built {output.relative_to(ROOT)} from {len(pages)} Markdown pages")
+    print(f"Built {output} from {len(pages)} Markdown pages")
 
 
 def main() -> int:
+    global KEYCAP_ASSET_DIR
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     args = parser.parse_args()
+    KEYCAP_ASSET_DIR = Path(os.environ.get("LIGHT_MANUAL_KEYCAP_DIR", args.output.resolve().parent / ".manual-keycaps"))
     try:
         build(args.output.resolve())
     except Exception as error:

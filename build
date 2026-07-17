@@ -3,14 +3,20 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$ROOT/tools/artifact-paths.sh"
+source "$ROOT/tools/artifact-maintenance.sh"
+light_init_artifact_paths "$ROOT"
 UI_DIR="$ROOT/apps/control-ui"
 HARDWARE_DIR="$ROOT/apps/hardware-controls"
-TARGET_DIR="$ROOT/target"
-DATA_DIR="${LIGHT_DATA_DIR:-$ROOT/light-data}"
+TARGET_DIR="$CARGO_TARGET_DIR"
+DATA_DIR="$LIGHT_DATA_DIR"
 FIXTURE_LIBRARY_DIR="$ROOT/fixture-library"
 MANUAL_REQUIREMENTS="$ROOT/docs/help/.tooling/requirements.txt"
-MANUAL_VENV_DIR="$TARGET_DIR/manual-venv"
+MANUAL_VENV_DIR="$LIGHT_ARTIFACTS_DIR/cache/manual-venv"
 MANUAL_PYTHON="$MANUAL_VENV_DIR/bin/python"
+CONTROL_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-control-artifacts.json"
+HARDWARE_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-hardware-artifacts.json"
+DEV_SERVER_LABEL="de.tokenet.tosklight.dev-server"
 
 usage() {
   cat <<'EOF'
@@ -19,17 +25,25 @@ Usage:
   ./build manual           Build PDF and deployable HTML manuals from docs/help Markdown
   ./build archive          Create self-contained server archives for macOS, Windows, Linux AMD64, and Linux ARM64
   ./build archive install  Also install and open ToskLight.app in ~/Applications
+  ./build migrate-artifacts
+                           Move legacy ./light-data to the canonical development runtime directory
+  ./build clean            Remove reproducible artifacts while preserving development runtime data
+  ./build clean runtime PATH
+                           Remove runtime data after confirming its exact absolute path
+  ./build path NAME        Print a resolved artifact path (for CI and tooling)
 EOF
 }
 
 build_manual() {
   ensure_manual_dependencies
-  PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" "$MANUAL_PYTHON" "$ROOT/tools/build_manual.py"
-  PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" "$MANUAL_PYTHON" "$ROOT/tools/verify_manual.py" "$ROOT/output/pdf/tosklight-manual.pdf"
-  PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" "$MANUAL_PYTHON" "$ROOT/tools/build_html_manual.py"
+  PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" LIGHT_MANUAL_KEYCAP_DIR="$LIGHT_MANUAL_ROOT/pdf/.manual-keycaps" \
+    "$MANUAL_PYTHON" "$ROOT/tools/build_manual.py" --output "$LIGHT_MANUAL_PDF"
+  PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" "$MANUAL_PYTHON" "$ROOT/tools/verify_manual.py" "$LIGHT_MANUAL_PDF"
+  PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" "$MANUAL_PYTHON" "$ROOT/tools/build_html_manual.py" \
+    --site "$LIGHT_MANUAL_HTML_DIR" --archive "$LIGHT_MANUAL_HTML_ARCHIVE"
   PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" "$MANUAL_PYTHON" "$ROOT/tools/verify_html_manual.py" \
-    "$ROOT/output/html/tosklight-manual" \
-    "$ROOT/output/html/tosklight-manual-html.zip"
+    "$LIGHT_MANUAL_HTML_DIR" \
+    "$LIGHT_MANUAL_HTML_ARCHIVE"
 }
 
 ensure_manual_dependencies() {
@@ -41,7 +55,7 @@ ensure_manual_dependencies() {
 
   if [[ ! -x "$MANUAL_PYTHON" ]]; then
     echo "Creating isolated manual build environment..."
-    mkdir -p "$TARGET_DIR"
+    mkdir -p "$(dirname "$MANUAL_VENV_DIR")"
     python3 -m venv "$MANUAL_VENV_DIR"
   fi
 
@@ -77,15 +91,17 @@ require() {
 
 stop_running() {
   echo "Stopping running Light instances..."
-  launchctl remove de.tokenet.tosklight.dev-server 2>/dev/null || true
+  launchctl remove "$DEV_SERVER_LABEL" 2>/dev/null || true
   pkill -x light-server 2>/dev/null || true
   pkill -x light-control-ui 2>/dev/null || true
   pkill -x ToskLight 2>/dev/null || true
   pkill -x light-hardware-controls 2>/dev/null || true
   pkill -x Light 2>/dev/null || true
   pkill -f "$ROOT/apps/control-ui/node_modules/.bin/vite" 2>/dev/null || true
-  pkill -f "$ROOT/target/debug/light-control-ui" 2>/dev/null || true
-  pkill -f "$ROOT/target/release/light-control-ui" 2>/dev/null || true
+  pkill -f "$ROOT/target/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-server" 2>/dev/null || true
+  pkill -f "$ROOT/target/debug/light-server" 2>/dev/null || true
+  pkill -f "$TARGET_DIR/debug/light-control-ui" 2>/dev/null || true
+  pkill -f "$TARGET_DIR/release/light-control-ui" 2>/dev/null || true
 }
 
 wait_for_endpoint() {
@@ -96,6 +112,26 @@ wait_for_endpoint() {
     attempts=$((attempts + 1))
   done
   echo "error: timed out waiting for the Light server; see $DATA_DIR/light-server.log" >&2
+  return 1
+}
+
+wait_for_launchd_server() {
+  local attempts=0 details pid command
+  while (( attempts < 100 )); do
+    details="$(launchctl print "gui/$(id -u)/$DEV_SERVER_LABEL" 2>/dev/null || true)"
+    pid="$(sed -n 's/^[[:space:]]*pid = \([0-9][0-9]*\)$/\1/p' <<<"$details" | head -1)"
+    if [[ -n "$pid" ]]; then
+      command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+      if [[ "$command" == "$TARGET_DIR/debug/light-server --data-dir $DATA_DIR"* ]] && \
+        curl -fsS http://127.0.0.1:5000/api/v1/readiness >/dev/null 2>&1; then
+        return 0
+      fi
+    fi
+    sleep 0.1
+    attempts=$((attempts + 1))
+  done
+  echo "error: canonical Light server did not own readiness; see $DATA_DIR/light-server.log" >&2
+  launchctl remove "$DEV_SERVER_LABEL" 2>/dev/null || true
   return 1
 }
 
@@ -132,7 +168,9 @@ build_debug_and_open() {
   require curl
   require open
 
+  light_check_runtime_migration
   stop_running
+  write_tauri_configs
   echo "Installing UI dependencies..."
   (cd "$HARDWARE_DIR" && npm ci)
   (cd "$UI_DIR" && npm ci)
@@ -141,12 +179,12 @@ build_debug_and_open() {
   echo "Building debug server for the app bundle..."
   cargo build --manifest-path "$ROOT/Cargo.toml" -p light-server --bin light-server
   echo "Building debug Tauri app..."
-  (cd "$HARDWARE_DIR" && npm run tauri:build -- --debug --bundles app)
-  (cd "$UI_DIR" && npm run tauri:build -- --debug --bundles app)
+  (cd "$HARDWARE_DIR" && npm run tauri:build -- --debug --bundles app --config "$HARDWARE_TAURI_CONFIG")
+  (cd "$UI_DIR" && npm run tauri:build -- --debug --bundles app --config "$CONTROL_TAURI_CONFIG")
   cp "$TARGET_DIR/debug/light-server" "$TARGET_DIR/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-server"
   echo "Starting development server service..."
-  launchctl submit -l de.tokenet.tosklight.dev-server -o "$DATA_DIR/light-server.log" -e "$DATA_DIR/light-server.log" -- "$TARGET_DIR/debug/light-server" --data-dir "$DATA_DIR" --fixture-package-dir "$FIXTURE_LIBRARY_DIR"
-  wait_for_endpoint
+  launchctl submit -l "$DEV_SERVER_LABEL" -o "$DATA_DIR/light-server.log" -e "$DATA_DIR/light-server.log" -- "$TARGET_DIR/debug/light-server" --data-dir "$DATA_DIR" --fixture-package-dir "$FIXTURE_LIBRARY_DIR"
+  wait_for_launchd_server
   open "$TARGET_DIR/debug/bundle/macos/ToskLight.app"
   echo "ToskLight is open. Server log: $DATA_DIR/light-server.log"
 }
@@ -165,10 +203,11 @@ archive_release() {
   require zig
 
   version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$ROOT/Cargo.toml" | head -1)"
-  artifact_dir="$ROOT/artifacts"
+  artifact_dir="$LIGHT_RELEASE_DIR"
   app_zip="$artifact_dir/tosklight-$version-macos-$(uname -m).zip"
   hardware_app_zip="$artifact_dir/tosklight-hardware-controls-$version-macos-$(uname -m).zip"
 
+  write_tauri_configs
   echo "Installing UI dependencies..."
   (cd "$HARDWARE_DIR" && npm ci)
   (cd "$UI_DIR" && npm ci)
@@ -198,8 +237,8 @@ archive_release() {
   cargo zigbuild --manifest-path "$ROOT/Cargo.toml" --release --no-default-features --target aarch64-unknown-linux-musl -p light-server --bin light-server
 
   echo "Building release Tauri app..."
-  (cd "$HARDWARE_DIR" && npm run tauri:build -- --bundles app)
-  (cd "$UI_DIR" && npm run tauri:build -- --bundles app)
+  (cd "$HARDWARE_DIR" && npm run tauri:build -- --bundles app --config "$HARDWARE_TAURI_CONFIG")
+  (cd "$UI_DIR" && npm run tauri:build -- --bundles app --config "$CONTROL_TAURI_CONFIG")
 
   app_path="$TARGET_DIR/release/bundle/macos/ToskLight.app"
   hardware_app_path="$TARGET_DIR/release/bundle/macos/ToskLight Hardware Controls.app"
@@ -248,7 +287,8 @@ archive_binary() {
   [[ -d "$FIXTURE_LIBRARY_DIR" ]] || { echo "error: fixture library not found: $FIXTURE_LIBRARY_DIR" >&2; exit 1; }
   archive_name="${archive##*/}"
   archive_name="${archive_name%.zip}"
-  staging="$(mktemp -d "$TARGET_DIR/archive.XXXXXX")"
+  mkdir -p "$LIGHT_TMP_DIR"
+  staging="$(mktemp -d "$LIGHT_TMP_DIR/archive.XXXXXX")"
   mkdir -p "$staging/$archive_name"
   cp "$binary" "$staging/$archive_name/$binary_name"
   cp -R "$FIXTURE_LIBRARY_DIR" "$staging/$archive_name/fixture-library"
@@ -256,6 +296,27 @@ archive_binary() {
   (cd "$staging" && zip -q -r "$archive" "$archive_name")
   rm -rf "$staging"
   echo "Created $archive"
+}
+
+write_tauri_configs() {
+  require node
+  node "$ROOT/tools/write-tauri-artifact-config.mjs" control "$CONTROL_TAURI_CONFIG"
+  node "$ROOT/tools/write-tauri-artifact-config.mjs" hardware "$HARDWARE_TAURI_CONFIG"
+}
+
+print_artifact_path() {
+  case "$1" in
+    root) printf '%s\n' "$LIGHT_ARTIFACTS_DIR" ;;
+    cargo) printf '%s\n' "$CARGO_TARGET_DIR" ;;
+    manual-pdf) printf '%s\n' "$LIGHT_MANUAL_PDF" ;;
+    manual-html) printf '%s\n' "$LIGHT_MANUAL_HTML_ARCHIVE" ;;
+    release) printf '%s\n' "$LIGHT_RELEASE_DIR" ;;
+    runtime) printf '%s\n' "$LIGHT_RUNTIME_DATA_DIR" ;;
+    test-results) printf '%s\n' "$LIGHT_TEST_RESULTS_DIR" ;;
+    playwright-report) printf '%s\n' "$LIGHT_PLAYWRIGHT_REPORT_DIR" ;;
+    visual-inspection) printf '%s\n' "$LIGHT_VISUAL_INSPECTION_DIR" ;;
+    *) echo "error: unknown artifact path: $1" >&2; return 2 ;;
+  esac
 }
 
 case "${1:-}" in
@@ -273,6 +334,21 @@ case "${1:-}" in
       install) [[ $# -eq 2 ]] || { usage >&2; exit 2; }; archive_release true ;;
       *) usage >&2; exit 2 ;;
     esac
+    ;;
+  migrate-artifacts)
+    [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+    light_migrate_runtime
+    ;;
+  clean)
+    case "${2:-}" in
+      "") [[ $# -eq 1 ]] || { usage >&2; exit 2; }; light_clean_reproducible ;;
+      runtime) [[ $# -eq 3 ]] || { usage >&2; exit 2; }; light_clean_runtime "$3" ;;
+      *) usage >&2; exit 2 ;;
+    esac
+    ;;
+  path)
+    [[ $# -eq 2 ]] || { usage >&2; exit 2; }
+    print_artifact_path "$2"
     ;;
   *)
     usage >&2

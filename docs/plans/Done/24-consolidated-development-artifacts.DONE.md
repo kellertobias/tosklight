@@ -1,4 +1,6 @@
-# Consolidated Development Artifacts
+# Completed: Consolidated Development Artifacts
+
+Implemented through the repository-owned artifact layout and resolvers under `tools/`, with every supported build, frontend, server, desktop, test, manual, visual-recording, CI, and release path routed below `.artifacts/`. Runtime migration is explicit and conflict-safe; default cleanup preserves runtime data and guarded cleanup names the exact show-and-desk-state directory.
 
 Consolidate repository-local build products, caches, generated documents, test evidence, scratch files, and development runtime data beneath one ignored `.artifacts/` directory. A normal checkout should show source, configuration, documentation, and the repository entry-point scripts at its root, with `.artifacts/` as the only root-level home for files created by local development.
 

@@ -227,7 +227,7 @@ struct OscSubscriber {
 }
 
 #[derive(RustEmbed)]
-#[folder = "../../apps/control-ui/dist"]
+#[folder = "$LIGHT_CONTROL_FRONTEND_DIR"]
 struct ControlUiAssets;
 #[derive(Default)]
 struct OutputControl {
@@ -779,7 +779,9 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter("light_server=info,tower_http=info")
         .init();
-    let mut data_dir = PathBuf::from("light-data");
+    let mut data_dir = env::var_os("LIGHT_DATA_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("light-data"));
     let mut fixture_package_dir: Option<PathBuf> = None;
     let mut bind = "127.0.0.1:5000".parse::<SocketAddr>()?;
     let mut test_bench = false;

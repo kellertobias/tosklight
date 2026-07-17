@@ -4,7 +4,7 @@ use serde::Serialize;
 use std::{
     fs::OpenOptions,
     net::{SocketAddr, TcpStream},
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::{Child, Command, Stdio},
     sync::{
         Arc, Mutex,
@@ -216,12 +216,20 @@ fn server_is_running(address: SocketAddr) -> bool {
     TcpStream::connect_timeout(&address, Duration::from_millis(120)).is_ok()
 }
 
-fn debug_data_dir(executable: &Path) -> Option<PathBuf> {
-    executable
-        .ancestors()
-        .find(|path| path.file_name().is_some_and(|name| name == "target"))
-        .and_then(Path::parent)
-        .map(|root| root.join("light-data"))
+fn debug_target_dir() -> PathBuf {
+    option_env!("LIGHT_CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../.artifacts/build/cargo")
+        })
+}
+
+fn debug_data_dir() -> PathBuf {
+    option_env!("LIGHT_RUNTIME_DATA_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../.artifacts/runtime/light-data")
+        })
 }
 
 fn launch_server(app: &tauri::AppHandle) -> Result<Option<Child>, Box<dyn std::error::Error>> {
@@ -242,12 +250,7 @@ fn launch_server(app: &tauri::AppHandle) -> Result<Option<Child>, Box<dyn std::e
     let server = if bundled.is_file() {
         bundled
     } else if cfg!(debug_assertions) {
-        debug_data_dir(&executable)
-            .and_then(|data| {
-                data.parent()
-                    .map(|root| root.join("target/debug").join(binary_name))
-            })
-            .unwrap_or(bundled)
+        debug_target_dir().join("debug").join(binary_name)
     } else {
         bundled
     };
@@ -257,7 +260,9 @@ fn launch_server(app: &tauri::AppHandle) -> Result<Option<Child>, Box<dyn std::e
     let data_dir = std::env::var_os("LIGHT_DESKTOP_TEST_DATA_DIR")
         .map(PathBuf::from)
         .unwrap_or(if cfg!(debug_assertions) {
-            debug_data_dir(&executable).unwrap_or(app.path().app_data_dir()?)
+            std::env::var_os("LIGHT_DATA_DIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(debug_data_dir)
         } else {
             app.path().app_data_dir()?
         });

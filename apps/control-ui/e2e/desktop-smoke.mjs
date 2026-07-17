@@ -5,13 +5,14 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { artifactPaths } from "../../../tools/artifact-paths.mjs";
 
 if (process.platform !== "darwin") throw new Error("desktop-smoke currently targets the macOS Tauri bundle");
 
 const exec = promisify(execFile);
 const root = path.resolve(import.meta.dirname, "../../..");
-const app = path.join(root, "target/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-control-ui");
-const server = path.join(root, "target/debug/light-server");
+const app = path.join(artifactPaths.cargo, "debug/bundle/macos/ToskLight.app/Contents/MacOS/light-control-ui");
+const server = path.join(artifactPaths.cargo, "debug/light-server");
 const canonical = await fs.readFile(path.join(root, "tests/fixtures/default-stage.show"));
 
 const requestedScenario = process.argv[2] ?? "all";

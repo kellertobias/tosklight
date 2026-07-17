@@ -4,10 +4,10 @@ import { spawnSync } from "node:child_process";
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
+import { artifactPaths } from "./artifact-paths.mjs";
 
-const root = path.resolve(import.meta.dirname, "..");
-const results = path.join(root, "test-results");
-const destinationDirectory = path.join(root, "artifacts", "visual-inspection");
+const results = artifactPaths.results;
+const destinationDirectory = artifactPaths.visual;
 const destination = path.join(destinationDirectory, "light-ui-test-catalog.webm");
 const manifest = path.join(destinationDirectory, "catalog-videos.txt");
 
@@ -45,7 +45,7 @@ const ffmpeg = spawnSync("ffmpeg", [
 ], { stdio: "inherit" });
 
 if (ffmpeg.error?.code === "ENOENT") {
-  console.error("ffmpeg is required to assemble the catalog reel; the individual videos remain in test-results.");
+  console.error(`ffmpeg is required to assemble the catalog reel; the individual videos remain in ${results}.`);
   process.exit(1);
 }
 if (ffmpeg.status !== 0) process.exit(ffmpeg.status ?? 1);

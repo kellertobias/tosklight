@@ -4,13 +4,13 @@ The Markdown tree below `docs/help` is the single source for in-application Help
 
 ## Build the manual
 
-Run `./build manual`. The command creates an isolated Python environment under the ignored `target/` directory and automatically installs the pinned packages from `docs/help/.tooling/requirements.txt` when the environment is missing, incomplete, or the manifest changes. No separate `pip install` step is required. The generator validates local links and images and creates both formats from the same Markdown. The PDF has a cover, hierarchical contents, bookmarks, running headers, alternating version/page-number footers, keycaps, widow/orphan control, and alphabetical index. The HTML version is an offline single-page application with responsive hierarchical navigation, search, deep links, print styling, and inline CSS/JavaScript. Deploy `output/html/tosklight-manual-html.zip` by extracting its root-level `index.html` and `assets/` directory into a webhost document root.
+Run `./build manual`. The command creates an isolated Python environment under ignored `.artifacts/cache/` and automatically installs the pinned packages from `docs/help/.tooling/requirements.txt` when the environment is missing, incomplete, or the manifest changes. No separate `pip install` step is required. The generator validates local links and images and creates both formats from the same Markdown. The PDF has a cover, hierarchical contents, bookmarks, running headers, alternating version/page-number footers, keycaps, widow/orphan control, and alphabetical index. The HTML version is an offline single-page application with responsive hierarchical navigation, search, deep links, print styling, and inline CSS/JavaScript. Deploy `.artifacts/generated/manual/html/tosklight-manual-html.zip` by extracting its root-level `index.html` and `assets/` directory into a webhost document root.
 
 The stable outputs are:
 
-- `output/pdf/tosklight-manual.pdf` — the paginated print manual.
-- `output/html/tosklight-manual/index.html` — the offline single-page HTML manual.
-- `output/html/tosklight-manual-html.zip` — the webhost-ready archive containing root-level `index.html` and referenced images under `assets/`.
+- `.artifacts/generated/manual/pdf/tosklight-manual.pdf` — the paginated print manual.
+- `.artifacts/generated/manual/html/tosklight-manual/index.html` — the offline single-page HTML manual.
+- `.artifacts/generated/manual/html/tosklight-manual-html.zip` — the webhost-ready archive containing root-level `index.html` and referenced images under `assets/`.
 
 ## Refresh screenshots
 

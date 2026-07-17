@@ -36,7 +36,7 @@ jobs:
         if: failure()
         with:
           name: playwright-${{ matrix.artifact }}
-          path: test-results
+          path: .artifacts/test/results
   desktop-smoke:
     runs-on: macos-14
     steps:
@@ -49,4 +49,4 @@ jobs:
       - run: ./test desktop-smoke
       - uses: actions/upload-artifact@v4
         if: failure()
-        with: { name: desktop-smoke-data, path: target/debug/bundle/macos }
+        with: { name: desktop-smoke-data, path: .artifacts/build/cargo/debug/bundle/macos }
