@@ -27,17 +27,101 @@ pub enum Protocol {
     Sacn,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeliveryMode {
+    Broadcast,
+    Multicast,
+    Unicast,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OutputRoute {
     pub protocol: Protocol,
     pub logical_universe: Universe,
     pub destination_universe: Universe,
+    /// Explicit for current show data. `None` is accepted only so legacy routes can be loaded and
+    /// migrated according to their protocol and whether they had a destination.
+    #[serde(default)]
+    pub delivery_mode: Option<DeliveryMode>,
     pub destination: Option<SocketAddr>,
     pub enabled: bool,
     /// Smallest DMX payload emitted for this route. Historical routes omitted this field and
     /// continue to emit full universes for wire compatibility.
     #[serde(default = "legacy_route_minimum_slots")]
     pub minimum_slots: u16,
+}
+
+impl OutputRoute {
+    pub fn resolved_delivery_mode(&self) -> DeliveryMode {
+        self.delivery_mode.unwrap_or_else(|| {
+            if self.destination.is_some() {
+                DeliveryMode::Unicast
+            } else {
+                match self.protocol {
+                    Protocol::ArtNet => DeliveryMode::Broadcast,
+                    Protocol::Sacn => DeliveryMode::Multicast,
+                }
+            }
+        })
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        let mode = self.resolved_delivery_mode();
+        match (self.protocol, mode) {
+            (Protocol::ArtNet, DeliveryMode::Broadcast | DeliveryMode::Unicast)
+            | (Protocol::Sacn, DeliveryMode::Multicast | DeliveryMode::Unicast) => {}
+            (Protocol::ArtNet, DeliveryMode::Multicast) => {
+                return Err("Art-Net supports Broadcast or Unicast delivery, not Multicast".into());
+            }
+            (Protocol::Sacn, DeliveryMode::Broadcast) => {
+                return Err("sACN supports Multicast or Unicast delivery, not Broadcast".into());
+            }
+        }
+        let maximum_universe = match self.protocol {
+            Protocol::ArtNet => 32_767,
+            Protocol::Sacn => 63_999,
+        };
+        if self.destination_universe == 0 || self.destination_universe > maximum_universe {
+            return Err(format!(
+                "{} destination universe must be from 1 to {maximum_universe}",
+                match self.protocol {
+                    Protocol::ArtNet => "Art-Net",
+                    Protocol::Sacn => "sACN",
+                }
+            ));
+        }
+        match (mode, self.destination) {
+            (DeliveryMode::Unicast, None) => {
+                return Err("Unicast delivery requires a destination IPv4 address and port".into());
+            }
+            (DeliveryMode::Unicast, Some(destination)) if !destination.is_ipv4() => {
+                return Err("Unicast output currently requires an IPv4 destination".into());
+            }
+            (DeliveryMode::Unicast, Some(destination)) if destination.port() == 0 => {
+                return Err("Unicast destination port must be from 1 to 65535".into());
+            }
+            (DeliveryMode::Broadcast | DeliveryMode::Multicast, Some(_)) => {
+                return Err("Only Unicast delivery accepts an explicit destination".into());
+            }
+            _ => {}
+        }
+        if !(1..=DMX_SLOTS as u16).contains(&self.minimum_slots) {
+            return Err("minimum universe size must be from 1 to 512".into());
+        }
+        Ok(())
+    }
+
+    pub fn resolved_destination(&self) -> Result<SocketAddr, String> {
+        self.validate()?;
+        match self.resolved_delivery_mode() {
+            DeliveryMode::Broadcast => Ok(artnet_broadcast_destination()),
+            DeliveryMode::Multicast => Ok(sacn_multicast_destination(self.destination_universe)),
+            DeliveryMode::Unicast => self
+                .destination
+                .ok_or_else(|| "Unicast delivery requires a destination".into()),
+        }
+    }
 }
 
 const fn legacy_route_minimum_slots() -> u16 {
@@ -129,6 +213,15 @@ pub struct RouteSendError {
     pub errors: u64,
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct RouteDiagnostic {
+    pub protocol: Protocol,
+    pub universe: Universe,
+    pub delivery_mode: DeliveryMode,
+    pub destination: SocketAddr,
+    pub enabled: bool,
+}
+
 impl NetworkOutput {
     pub async fn bind(
         bind_ip: IpAddr,
@@ -183,6 +276,21 @@ impl NetworkOutput {
             .collect::<Vec<_>>();
         errors.sort_by_key(|error| (error.protocol as u8, error.universe, error.destination));
         errors
+    }
+
+    pub fn route_diagnostics(routes: &[OutputRoute]) -> Vec<RouteDiagnostic> {
+        routes
+            .iter()
+            .filter_map(|route| {
+                Some(RouteDiagnostic {
+                    protocol: route.protocol,
+                    universe: route.destination_universe,
+                    delivery_mode: route.resolved_delivery_mode(),
+                    destination: route.resolved_destination().ok()?,
+                    enabled: route.enabled,
+                })
+            })
+            .collect()
     }
 
     pub async fn send_routes(
@@ -259,9 +367,7 @@ impl NetworkOutput {
                 Protocol::Sacn => {
                     let sequence =
                         next_sequence(sequences, (route.protocol, route.destination_universe));
-                    let destination = route
-                        .destination
-                        .unwrap_or_else(|| sacn_multicast_destination(route.destination_universe));
+                    let destination = route.resolved_destination().map_err(io::Error::other)?;
                     let packet = sacn_data_packet(
                         route.destination_universe,
                         sequence,
@@ -309,26 +415,17 @@ pub fn encode_routes(
             }
             let payload = &frame[..slot_count];
             let sequence = next_sequence(sequences, (route.protocol, route.destination_universe));
-            let (destination, bytes) = match route.protocol {
-                Protocol::ArtNet => (
-                    route
-                        .destination
-                        .unwrap_or_else(artnet_broadcast_destination),
-                    artdmx_packet(route.destination_universe, sequence, payload),
-                ),
-                Protocol::Sacn => (
-                    route
-                        .destination
-                        .unwrap_or_else(|| sacn_multicast_destination(route.destination_universe)),
-                    sacn_data_packet(
-                        route.destination_universe,
-                        sequence,
-                        payload,
-                        cid,
-                        source_name,
-                        sacn_priority,
-                        false,
-                    ),
+            let destination = route.resolved_destination().map_err(io::Error::other)?;
+            let bytes = match route.protocol {
+                Protocol::ArtNet => artdmx_packet(route.destination_universe, sequence, payload),
+                Protocol::Sacn => sacn_data_packet(
+                    route.destination_universe,
+                    sequence,
+                    payload,
+                    cid,
+                    source_name,
+                    sacn_priority,
+                    false,
                 ),
             };
             Ok(EncodedPacket {
@@ -600,6 +697,7 @@ mod tests {
                 protocol: Protocol::ArtNet,
                 logical_universe: 1,
                 destination_universe: 10,
+                delivery_mode: Some(DeliveryMode::Unicast),
                 destination: Some("127.0.0.1:6454".parse().unwrap()),
                 enabled: true,
                 minimum_slots: 512,
@@ -608,6 +706,7 @@ mod tests {
                 protocol: Protocol::Sacn,
                 logical_universe: 1,
                 destination_universe: 20,
+                delivery_mode: Some(DeliveryMode::Multicast),
                 destination: None,
                 enabled: true,
                 minimum_slots: 512,
@@ -616,6 +715,7 @@ mod tests {
                 protocol: Protocol::Sacn,
                 logical_universe: 2,
                 destination_universe: 21,
+                delivery_mode: Some(DeliveryMode::Multicast),
                 destination: None,
                 enabled: false,
                 minimum_slots: 512,
@@ -646,6 +746,7 @@ mod tests {
             protocol: Protocol::ArtNet,
             logical_universe: 1,
             destination_universe: 1,
+            delivery_mode: Some(DeliveryMode::Unicast),
             destination: Some("127.0.0.1:6454".parse().unwrap()),
             enabled: false,
             minimum_slots: 1,
@@ -672,6 +773,7 @@ mod tests {
             protocol: Protocol::ArtNet,
             logical_universe: 1,
             destination_universe: 1,
+            delivery_mode: Some(DeliveryMode::Broadcast),
             destination: None,
             enabled: true,
             minimum_slots: 512,
@@ -691,12 +793,106 @@ mod tests {
     }
 
     #[test]
+    fn explicit_delivery_modes_resolve_protocol_correct_destinations_with_equal_payloads() {
+        let unicast_artnet: SocketAddr = "127.0.0.1:6454".parse().unwrap();
+        let unicast_sacn: SocketAddr = "127.0.0.1:5568".parse().unwrap();
+        let routes = [
+            OutputRoute {
+                protocol: Protocol::ArtNet,
+                logical_universe: 1,
+                destination_universe: 10,
+                delivery_mode: Some(DeliveryMode::Broadcast),
+                destination: None,
+                enabled: true,
+                minimum_slots: 128,
+            },
+            OutputRoute {
+                protocol: Protocol::ArtNet,
+                logical_universe: 1,
+                destination_universe: 10,
+                delivery_mode: Some(DeliveryMode::Unicast),
+                destination: Some(unicast_artnet),
+                enabled: true,
+                minimum_slots: 128,
+            },
+            OutputRoute {
+                protocol: Protocol::Sacn,
+                logical_universe: 1,
+                destination_universe: 110,
+                delivery_mode: Some(DeliveryMode::Multicast),
+                destination: None,
+                enabled: true,
+                minimum_slots: 128,
+            },
+            OutputRoute {
+                protocol: Protocol::Sacn,
+                logical_universe: 1,
+                destination_universe: 110,
+                delivery_mode: Some(DeliveryMode::Unicast),
+                destination: Some(unicast_sacn),
+                enabled: true,
+                minimum_slots: 128,
+            },
+        ];
+        let packets = encode_routes(
+            &routes,
+            &HashMap::from([(1, [0x5a; DMX_SLOTS])]),
+            &HashMap::new(),
+            &mut HashMap::new(),
+            [9; 16],
+            "Delivery test",
+            100,
+        )
+        .unwrap();
+
+        assert_eq!(packets[0].destination, artnet_broadcast_destination());
+        assert_eq!(packets[1].destination, unicast_artnet);
+        assert_eq!(packets[2].destination, sacn_multicast_destination(110));
+        assert_eq!(packets[3].destination, unicast_sacn);
+        assert_eq!(&packets[0].bytes[18..], &packets[1].bytes[18..]);
+        assert_eq!(&packets[2].bytes[126..], &packets[3].bytes[126..]);
+        assert!(
+            packets
+                .iter()
+                .all(|packet| packet.bytes.ends_with(&[0x5a; 128]))
+        );
+    }
+
+    #[test]
+    fn route_validation_rejects_protocol_invalid_modes_and_destinations() {
+        let route = OutputRoute {
+            protocol: Protocol::ArtNet,
+            logical_universe: 1,
+            destination_universe: 1,
+            delivery_mode: Some(DeliveryMode::Multicast),
+            destination: None,
+            enabled: true,
+            minimum_slots: 128,
+        };
+        assert_eq!(
+            route.validate().unwrap_err(),
+            "Art-Net supports Broadcast or Unicast delivery, not Multicast"
+        );
+        assert!(
+            OutputRoute {
+                protocol: Protocol::Sacn,
+                delivery_mode: Some(DeliveryMode::Unicast),
+                ..route
+            }
+            .validate()
+            .unwrap_err()
+            .contains("requires a destination")
+        );
+    }
+
+    #[test]
     fn enabled_empty_routes_emit_their_minimum_and_patched_zero_slots_extend_payloads() {
         let routes = [
             OutputRoute {
                 protocol: Protocol::ArtNet,
                 logical_universe: 32,
                 destination_universe: 10,
+                delivery_mode: Some(DeliveryMode::Unicast),
                 destination: Some("127.0.0.1:6454".parse().unwrap()),
                 enabled: true,
                 minimum_slots: 128,
@@ -705,6 +901,7 @@ mod tests {
                 protocol: Protocol::Sacn,
                 logical_universe: 33,
                 destination_universe: 101,
+                delivery_mode: Some(DeliveryMode::Unicast),
                 destination: Some("127.0.0.1:5568".parse().unwrap()),
                 enabled: true,
                 minimum_slots: 128,
@@ -739,6 +936,20 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(route.minimum_slots, 512);
+        assert_eq!(route.resolved_delivery_mode(), DeliveryMode::Broadcast);
+
+        let legacy_unicast: OutputRoute = serde_json::from_value(serde_json::json!({
+            "protocol": "sacn",
+            "logical_universe": 1,
+            "destination_universe": 101,
+            "destination": "127.0.0.1:5568",
+            "enabled": true
+        }))
+        .unwrap();
+        assert_eq!(
+            legacy_unicast.resolved_delivery_mode(),
+            DeliveryMode::Unicast
+        );
     }
 
     #[tokio::test]
@@ -755,6 +966,7 @@ mod tests {
                 protocol: Protocol::ArtNet,
                 logical_universe: 1,
                 destination_universe: 10,
+                delivery_mode: Some(DeliveryMode::Unicast),
                 destination: Some(healthy_destination),
                 enabled: true,
                 minimum_slots: 512,
@@ -763,6 +975,7 @@ mod tests {
                 protocol: Protocol::ArtNet,
                 logical_universe: 1,
                 destination_universe: 11,
+                delivery_mode: Some(DeliveryMode::Unicast),
                 destination: Some(failing_destination),
                 enabled: true,
                 minimum_slots: 512,

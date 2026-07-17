@@ -14,6 +14,7 @@ const route: VersionedObject<OutputRoute> = {
     protocol: "art_net",
     logical_universe: 1,
     destination_universe: 11,
+    delivery_mode: "unicast",
     destination: "10.0.0.20:6454",
     enabled: true,
     minimum_slots: 128,
@@ -40,21 +41,31 @@ describe("OutputRoutesSetup", () => {
     expect(screen.queryByRole("dialog", { name: "Output route editor" })).not.toBeInTheDocument();
   });
 
-  it("validates an Art-Net destination before creating a route", async () => {
+  it("offers protocol-correct delivery modes and validates Unicast destinations", async () => {
     const save = vi.fn().mockResolvedValue(true);
     render(<OutputRoutesSetup routes={[]} onSave={save} onDelete={vi.fn().mockResolvedValue(true)}/>);
 
     fireEvent.click(screen.getByRole("button", { name: "Add route" }));
+    expect(screen.getByRole("button", { name: "Broadcast" })).toBeVisible();
+    expect(screen.queryByLabelText("Destination")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Save route" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("Art-Net routes require a destination");
-    expect(save).not.toHaveBeenCalled();
+    await waitFor(() => expect(save).toHaveBeenCalledWith(expect.stringMatching(/^route-/), expect.objectContaining({ delivery_mode: "broadcast", destination: null }), 0));
 
+    fireEvent.click(screen.getByRole("button", { name: "Add route" }));
+    fireEvent.click(screen.getByRole("button", { name: "Broadcast" }));
+    fireEvent.click(screen.getByRole("option", { name: "Unicast" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save route" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Unicast delivery requires an IPv4 destination and port");
     fireEvent.change(screen.getByLabelText("Destination"), { target: { value: "127.0.0.1:6454" } });
     fireEvent.click(screen.getByRole("button", { name: "Save route" }));
-    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
-    expect(save.mock.calls[0][0]).toMatch(/^route-/);
-    expect(save.mock.calls[0][1]).toMatchObject({ destination: "127.0.0.1:6454", enabled: true, minimum_slots: 128 });
-    expect(save.mock.calls[0][2]).toBe(0);
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    expect(save.mock.calls[1][1]).toMatchObject({ delivery_mode: "unicast", destination: "127.0.0.1:6454", enabled: true, minimum_slots: 128 });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add route" }));
+    fireEvent.click(screen.getByRole("button", { name: "Art-Net" }));
+    fireEvent.click(screen.getByRole("option", { name: "sACN" }));
+    expect(screen.getByRole("button", { name: "Multicast" })).toBeVisible();
+    expect(screen.getByText(/derives its 239\.255\.x\.y:5568 destination/)).toBeVisible();
   });
 
   it("requires an explicit confirmation before removing a route", async () => {

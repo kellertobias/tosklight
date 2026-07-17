@@ -1285,7 +1285,7 @@ async function stageLegacyMigration(file: string, migration: Show004Case, cueLis
   } else if (migration === "playback-defaults") {
     await runSql(file, "UPDATE objects SET body_json=json_remove(body_json, '$.buttons', '$.button_count', '$.fader', '$.has_fader', '$.go_activates', '$.auto_off', '$.xfade_millis', '$.color', '$.flash_release', '$.protect_from_swap', '$.presentation_icon', '$.presentation_image') WHERE kind='playback' AND id='1'");
   } else if (migration === "route-defaults") {
-    await runSql(file, "UPDATE objects SET body_json=json_remove(body_json, '$.destination') WHERE kind='route'");
+    await runSql(file, "UPDATE objects SET body_json=json_remove(body_json, '$.destination', '$.delivery_mode') WHERE kind='route'");
   } else if (migration === "virtual-dimmer-metadata") {
     await runSql(file, "UPDATE objects SET body_json=json_remove(body_json, '$.definition.heads[0].parameters[0].metadata', '$.definition.heads[0].parameters[0].capabilities') WHERE kind='patched_fixture' AND json_extract(body_json, '$.fixture_number')=21");
   } else {
@@ -1318,7 +1318,7 @@ function assertMigrationSnapshot(migration: Show004Case, snapshot: any): void {
   } else if (migration === "playback-defaults") {
     expect(snapshot.body).toMatchObject({ buttons: ["go_minus", "go", "flash"], button_count: 3, fader: "master", has_fader: true, go_activates: true, auto_off: true, xfade_millis: 0, color: "#20c997", flash_release: "release_all", protect_from_swap: false });
   } else if (migration === "route-defaults") {
-    expect(snapshot.body).toMatchObject({ protocol: "art_net", logical_universe: 1, destination_universe: 1, destination: null, enabled: true });
+    expect(snapshot.body).toMatchObject({ protocol: "art_net", logical_universe: 1, destination_universe: 1, delivery_mode: "broadcast", destination: null, enabled: true });
   } else if (migration === "virtual-dimmer-metadata") {
     const intensity = snapshot.body.definition.heads[0].parameters.find((parameter: any) => parameter.attribute === "intensity");
     expect(intensity).toMatchObject({ virtual_dimmer: true, capabilities: [], metadata: { physical_min: 0, physical_max: 1, unit: null, invert: false, wrap: false, curve: "linear" } });

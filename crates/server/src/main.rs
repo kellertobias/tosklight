@@ -2039,8 +2039,10 @@ async fn diagnostics(
         .as_ref()
         .map(|output| output.route_send_errors())
         .unwrap_or_default();
+    let output_routes = NetworkOutput::route_diagnostics(&state.engine.snapshot().routes);
+    let output_bind_ip = state.configuration.read().output_bind_ip;
     Ok(Json(
-        serde_json::json!({"output":state.output_health.lock().expect("output health mutex poisoned").clone(),"route_send_errors":route_send_errors,"event_queue_pressure":state.events.len(),"active_programmers":state.programmers.active(),"active_playbacks":state.engine.playback().read().active(),"move_in_black":state.engine.move_in_black_runtime(),"timecode_source":state.timecode_router.lock().active_source(),"media_servers":state.media_status.read().clone(),"snapshot_revision":state.engine.snapshot().revision}),
+        serde_json::json!({"output":state.output_health.lock().expect("output health mutex poisoned").clone(),"output_bind_ip":output_bind_ip,"output_routes":output_routes,"route_send_errors":route_send_errors,"event_queue_pressure":state.events.len(),"active_programmers":state.programmers.active(),"active_playbacks":state.engine.playback().read().active(),"move_in_black":state.engine.move_in_black_runtime(),"timecode_source":state.timecode_router.lock().active_source(),"media_servers":state.media_status.read().clone(),"snapshot_revision":state.engine.snapshot().revision}),
     ))
 }
 async fn bootstrap(State(state): State<AppState>) -> Json<Bootstrap> {
@@ -4849,6 +4851,16 @@ async fn put_object(
         page.validate().map_err(ApiError::bad_request)?;
         body = serde_json::to_value(page).map_err(|error| ApiError::internal(error.to_string()))?;
     }
+    if kind == "route" {
+        let mut route = serde_json::from_value::<light_output::OutputRoute>(body)
+            .map_err(|error| ApiError::bad_request(error.to_string()))?;
+        if route.delivery_mode.is_none() {
+            route.delivery_mode = Some(route.resolved_delivery_mode());
+        }
+        route.validate().map_err(ApiError::bad_request)?;
+        body =
+            serde_json::to_value(route).map_err(|error| ApiError::internal(error.to_string()))?;
+    }
     let active = state
         .active_show
         .read()
@@ -4871,6 +4883,7 @@ async fn put_object(
                     !new.enabled
                         || old.protocol != new.protocol
                         || old.destination_universe != new.destination_universe
+                        || old.resolved_delivery_mode() != new.resolved_delivery_mode()
                         || old.destination != new.destination
                 })
         })
@@ -13921,11 +13934,18 @@ fn reconcile_show_schema_defaults(entry: &ShowEntry) -> Result<(), String> {
     for object in store.objects("route").map_err(|error| error.to_string())? {
         let original = object.body;
         let destination_was_missing = original.get("destination").is_none();
+        let delivery_mode_was_missing = original.get("delivery_mode").is_none();
         let mut route = serde_json::from_value::<light_output::OutputRoute>(original.clone())
             .map_err(|error| format!("invalid output route: {error}"))?;
         if destination_was_missing {
             route.destination = None;
         }
+        if delivery_mode_was_missing {
+            route.delivery_mode = Some(route.resolved_delivery_mode());
+        }
+        route
+            .validate()
+            .map_err(|error| format!("invalid output route: {error}"))?;
         let mut normalized = serde_json::to_value(&route).map_err(|error| error.to_string())?;
         // Preserve the supported historical default as explicit current-schema data. `None`
         // selects the protocol's standard destination, but an omitted legacy field must migrate
@@ -21643,6 +21663,7 @@ mod tests {
             protocol: light_output::Protocol::Sacn,
             logical_universe: 1,
             destination_universe: 1,
+            delivery_mode: Some(light_output::DeliveryMode::Multicast),
             destination: None,
             enabled: true,
             minimum_slots: 512,

@@ -334,6 +334,7 @@ export function SetupWindow(_: WindowProps) {
 										routes={server.outputRoutes}
 										onSave={server.saveOutputRoute}
 										onDelete={server.deleteOutputRoute}
+										outputBindIp={draft.output_bind_ip}
 									/>
 								</>
 							)}

@@ -57,6 +57,10 @@ interface MinimumRouteState {
   artDisabled?: boolean;
 }
 
+interface DeliveryRouteState {
+  receiver: DmxReceiver;
+}
+
 test.describe("docs/testing/03-network-output-protocols.md", () => {
   pairedScenario<{ values: number[]; observations: ConversionObservation[] }>({
     id: "DMX-001",
@@ -337,6 +341,7 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
         protocol: "art_net",
         logical_universe: 1,
         destination_universe: 11,
+        delivery_mode: "unicast",
         destination,
         enabled: true,
       });
@@ -434,6 +439,61 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
       await state.receiver.close();
     },
   });
+
+  pairedScenario<DeliveryRouteState>({
+    id: "DMX-009",
+    title: "protocol-correct delivery modes persist and resolve to the actual socket destinations",
+    arrange: async ({ api, bench }, surface) => {
+      await loadCanonicalCopy(api, bench, `dmx-009-${surface}`);
+      return { receiver: await DmxReceiver.bind() };
+    },
+    api: async ({ api }, state) => {
+      await putObject(api, "route", "dmx-009-art-broadcast", deliveryRoute("art_net", 201, "broadcast"));
+      await putObject(api, "route", "dmx-009-art-unicast", deliveryRoute("art_net", 202, "unicast", state.receiver.port));
+      await putObject(api, "route", "dmx-009-sacn-multicast", deliveryRoute("sacn", 301, "multicast"));
+      await putObject(api, "route", "dmx-009-sacn-unicast", deliveryRoute("sacn", 302, "unicast", state.receiver.port));
+      const fixture = (await fixtureIdsByNumber(api))[1];
+      await api.command("programmer.set", { fixture_id: fixture, attribute: "intensity", value: 0.5 });
+    },
+    ui: async ({ bench, desk, page }, state) => {
+      await desk.open(bench.baseUrl);
+      await pressCommand(page, "1 AT 50");
+      await page.locator(".dock-identity").click();
+      await page.locator(".show-modal").getByRole("button", { name: "Enter Setup", exact: true }).click();
+      await page.locator(".setup-window nav").getByRole("button", { name: "Outputs", exact: true }).click();
+      const routes = page.getByRole("region", { name: "Output routes" });
+      await createDeliveryRouteThroughUi(routes, page, "Art-Net", 201, "Broadcast");
+      await createDeliveryRouteThroughUi(routes, page, "Art-Net", 202, "Unicast", state.receiver.port);
+      await createDeliveryRouteThroughUi(routes, page, "sACN", 301, "Multicast");
+      await createDeliveryRouteThroughUi(routes, page, "sACN", 302, "Unicast", state.receiver.port);
+    },
+    assert: async ({ api, bench }, state) => {
+      const stored = (await objects<any>(api, "route"))
+        .filter((entry) => [201, 202, 301, 302].includes(entry.body.destination_universe))
+        .sort((left, right) => left.body.destination_universe - right.body.destination_universe);
+      expect(stored.map((entry) => [entry.body.protocol, entry.body.delivery_mode, entry.body.destination])).toEqual([
+        ["art_net", "broadcast", null],
+        ["art_net", "unicast", `127.0.0.1:${state.receiver.port}`],
+        ["sacn", "multicast", null],
+        ["sacn", "unicast", `127.0.0.1:${state.receiver.port}`],
+      ]);
+      const diagnostics = await api.request<any>("GET", "/api/v1/diagnostics");
+      expect(diagnostics.output_routes).toEqual(expect.arrayContaining([
+        expect.objectContaining({ protocol: "art_net", universe: 201, delivery_mode: "broadcast", destination: "255.255.255.255:6454", enabled: true }),
+        expect.objectContaining({ protocol: "art_net", universe: 202, delivery_mode: "unicast", destination: `127.0.0.1:${state.receiver.port}`, enabled: true }),
+        expect.objectContaining({ protocol: "sacn", universe: 301, delivery_mode: "multicast", destination: "239.255.1.45:5568", enabled: true }),
+        expect.objectContaining({ protocol: "sacn", universe: 302, delivery_mode: "unicast", destination: `127.0.0.1:${state.receiver.port}`, enabled: true }),
+      ]));
+      const mark = state.receiver.mark();
+      await bench.tick(3_000);
+      const artnet = await state.receiver.nextAfter(mark, "artnet", 202);
+      const sacn = await state.receiver.nextAfter(mark, "sacn", 302);
+      expect(artnet.slots[0]).toBe(128);
+      expect(sacn.slots[0]).toBe(128);
+      expect(Array.from(artnet.slots)).toEqual(Array.from(sacn.slots));
+      await state.receiver.close();
+    },
+  });
 });
 
 function routeSendErrors(diagnostics: any, destination: string): number {
@@ -458,7 +518,37 @@ async function captureConversion(api: ApiDriver, bench: any, fixtureId: string, 
 }
 
 function route(protocol: "art_net" | "sacn", logical: number, destination: number, port: number, enabled: boolean, minimumSlots = 512) {
-  return { protocol, logical_universe: logical, destination_universe: destination, destination: `127.0.0.1:${port}`, enabled, minimum_slots: minimumSlots };
+  return { protocol, logical_universe: logical, destination_universe: destination, delivery_mode: "unicast", destination: `127.0.0.1:${port}`, enabled, minimum_slots: minimumSlots };
+}
+
+function deliveryRoute(protocol: "art_net" | "sacn", destinationUniverse: number, deliveryMode: "broadcast" | "multicast" | "unicast", port?: number) {
+  return {
+    protocol,
+    logical_universe: 1,
+    destination_universe: destinationUniverse,
+    delivery_mode: deliveryMode,
+    destination: deliveryMode === "unicast" ? `127.0.0.1:${port}` : null,
+    enabled: true,
+    minimum_slots: 128,
+  };
+}
+
+async function createDeliveryRouteThroughUi(routes: any, page: any, protocol: "Art-Net" | "sACN", destinationUniverse: number, mode: "Broadcast" | "Multicast" | "Unicast", port?: number) {
+  await routes.getByRole("button", { name: "Add route", exact: true }).click();
+  const editor = page.getByRole("dialog", { name: "Output route editor" });
+  if (protocol === "sACN") {
+    await editor.getByRole("button", { name: "Art-Net", exact: true }).click();
+    await page.getByRole("option", { name: "sACN", exact: true }).click();
+  }
+  const defaultMode = protocol === "Art-Net" ? "Broadcast" : "Multicast";
+  if (mode !== defaultMode) {
+    await editor.getByRole("button", { name: defaultMode, exact: true }).click();
+    await page.getByRole("option", { name: mode, exact: true }).click();
+  }
+  await editor.getByLabel("Destination universe").fill(String(destinationUniverse));
+  if (mode === "Unicast") await editor.getByLabel("Destination", { exact: true }).fill(`127.0.0.1:${port}`);
+  await editor.getByRole("button", { name: "Save route", exact: true }).click();
+  await expect(routes.locator("article").filter({ hasText: `Logical 1 → ${protocol} ${destinationUniverse}` })).toBeVisible();
 }
 
 async function createRouteThroughUi(routes: any, page: any, protocol: "Art-Net" | "sACN", logical: number, destination: number, port: number, minimumSlots: number) {
@@ -468,6 +558,8 @@ async function createRouteThroughUi(routes: any, page: any, protocol: "Art-Net" 
     await editor.getByRole("button", { name: "Art-Net", exact: true }).click();
     await page.getByRole("option", { name: "sACN", exact: true }).click();
   }
+  await editor.getByRole("button", { name: protocol === "Art-Net" ? "Broadcast" : "Multicast", exact: true }).click();
+  await page.getByRole("option", { name: "Unicast", exact: true }).click();
   await editor.getByLabel("Logical universe").fill(String(logical));
   await editor.getByLabel("Destination universe").fill(String(destination));
   await editor.getByLabel("Destination", { exact: true }).fill(`127.0.0.1:${port}`);

@@ -757,6 +757,7 @@ export interface OutputRoute {
   protocol: "art_net" | "sacn";
   logical_universe: number;
   destination_universe: number;
+  delivery_mode: "broadcast" | "multicast" | "unicast";
   destination: string | null;
   enabled: boolean;
   minimum_slots: number;
