@@ -124,6 +124,15 @@ Configure two enabled routes for logical universe 1: Art-Net universe 1 to the b
 - **Pass:** The software surface truthfully mirrors the six physical targets without implying draggable faders, stale mappings, shifted gaps, clipped values, or cross-desk input.
 - **Executable scenario:** [ENCODER-DISPLAY-001](../../../tests/31-hardware-connected-encoders.spec.ts)
 
+### WORKFLOW-COLOR-001 — Distinguish Record and Update workflows
+
+- **Starting show:** Load canonical `default-stage.show`, immediately Save As `workflow-color-001.show`, and use the active copy.
+- **Surface:** Record Settings, Record target/choice surfaces, Update Settings, Update target/preview/result surfaces, and the global armed control in software-only and attached-hardware layouts.
+- **Actions:** Open each settings workflow, inspect textual identity and choices, arm each mode, and repeat after attaching the OSC hardware surface.
+- **Oracle:** Shared red Record and amber Update computed tokens/boundaries, explicit RECORD/UPDATE text, neutral Cancel, destructive Overwrite, independent error/disabled styling, focus/pressed states, and stable colors after the hardware layout activates.
+- **Pass:** Operators can distinguish Record from Update without relying on color alone, while workflow color remains consistent and never masks destructive, disabled, Cancel, or error meaning.
+- **Executable scenario:** [WORKFLOW-COLOR-001](../../../tests/33-record-and-update-menu-colors.spec.ts)
+
 ## Default Stage Show
 
 Canonical `default-stage.show` contains the complete 49-record built-in patch:

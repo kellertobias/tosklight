@@ -19,5 +19,5 @@ export function StoreSettingsModal() {
     setSettings(next);
     saveRecordSettings(next);
   };
-  return <div className="modal-backdrop" onPointerDown={(event) => event.target === event.currentTarget && close()}><section className="modal-card store-settings-modal"><Button className="modal-close" onClick={close}>×</Button><h2>Record Settings</h2><p>Defaults for the armed Record workflow.</p><RecordDefaultsFields settings={settings} onChange={change}/><div className="modal-actions"><Button onClick={close}>Done</Button></div></section></div>;
+  return <div className="modal-backdrop" onPointerDown={(event) => event.target === event.currentTarget && close()}><section className="modal-card store-settings-modal workflow-theme record-workflow" role="dialog" aria-modal="true" aria-label="Record Settings"><Button className="modal-close" aria-label="Close Record Settings" onClick={close}>×</Button><h2><span className="workflow-badge">RECORD</span> Record Settings</h2><p>Defaults for the armed Record workflow.</p><RecordDefaultsFields settings={settings} onChange={change}/><div className="modal-actions"><Button className="workflow-primary" onClick={close}>Done</Button></div></section></div>;
 }

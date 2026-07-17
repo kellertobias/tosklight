@@ -26,6 +26,8 @@ describe("Update workflow", () => {
     render(<UpdateOperationDialog operation={{ request, preview }} busy={false} error={null} onMode={onMode} onApply={onApply} onCancel={onCancel}/>);
 
     const dialog = screen.getByRole("dialog", { name: "Update Main Cuelist" });
+    expect(dialog).toHaveClass("workflow-theme", "update-workflow");
+    expect(within(dialog).getByText("UPDATE")).toBeInTheDocument();
     expect(within(dialog).getByText("Cuelist · Playback 7 · Current Cue 2")).toBeInTheDocument();
     for (const label of ["Existing Only", "Existing in Current Cue", "Add to Current Cue", "Add New"]) expect(within(dialog).getByRole("button", { name: label })).toBeInTheDocument();
     expect(within(dialog).getByText("Change at source Cue 1")).toBeInTheDocument();
@@ -45,6 +47,8 @@ describe("Update workflow", () => {
     const onSave = vi.fn();
     render(<UpdateSettingsDialog settings={defaultUpdateSettings} busy={false} error={null} onChange={onChange} onSave={onSave} onCancel={vi.fn()}/>);
     const dialog = screen.getByRole("dialog", { name: "Update Settings" });
+    expect(dialog).toHaveClass("workflow-theme", "update-workflow");
+    expect(within(dialog).getByText("UPDATE")).toHaveClass("workflow-badge");
     expect(within(dialog).getByText("Desk workflow preferences for Update. These settings do not change show programming.")).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: /Add to Current Cue/ })).toBeInTheDocument();
     expect(within(dialog).getAllByRole("button", { name: /Update Existing/ })).toHaveLength(2);

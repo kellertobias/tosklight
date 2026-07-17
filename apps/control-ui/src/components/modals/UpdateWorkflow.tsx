@@ -102,7 +102,7 @@ export function UpdateOperationDialog({ operation, busy, error, onMode, onApply,
   const stats = updatePreviewStats(preview);
   const cueModes = preview.target.family.type === "cue";
   return <div className="modal-backdrop update-workflow-layer" onPointerDown={(event) => event.target === event.currentTarget && onCancel()}>
-    <section className="modal-card update-operation-modal" role="dialog" aria-modal="true" aria-label={`Update ${preview.target.name}`}>
+    <section className="modal-card update-operation-modal workflow-theme update-workflow" role="dialog" aria-modal="true" aria-label={`Update ${preview.target.name}`}>
       <Button className="modal-close" aria-label="Cancel Update" onClick={onCancel}>×</Button>
       <header className="update-modal-header"><span>UPDATE</span><div><h2>{preview.target.name}</h2><p>{targetContext(preview.target)}</p></div></header>
       <p>Choose how the current programmer changes apply to this existing target. Nothing changes until Update is confirmed.</p>
@@ -140,9 +140,9 @@ export function UpdateSettingsDialog({ settings, busy, error, onChange, onSave, 
   onCancel: () => void;
 }) {
   return <div className="modal-backdrop update-workflow-layer" onPointerDown={(event) => event.target === event.currentTarget && onCancel()}>
-    <section className="modal-card update-settings-modal" role="dialog" aria-modal="true" aria-label="Update Settings">
+    <section className="modal-card update-settings-modal workflow-theme update-workflow" role="dialog" aria-modal="true" aria-label="Update Settings">
       <Button className="modal-close" aria-label="Close Update Settings" onClick={onCancel}>×</Button>
-      <h2>Update Settings</h2>
+      <h2><span className="workflow-badge">UPDATE</span> Update Settings</h2>
       <p>Desk workflow preferences for Update. These settings do not change show programming.</p>
       <UpdateDefaultsFields settings={settings} onChange={onChange}/>
       {error && <p className="modal-error" role="alert">{error}</p>}
@@ -169,9 +169,9 @@ export function UpdateTargetMenu({ entries, filter, modes, busyKey, error, onFil
   onCancel: () => void;
 }) {
   return <div className="modal-backdrop update-workflow-layer" onPointerDown={(event) => event.target === event.currentTarget && onCancel()}>
-    <section className="modal-card update-target-menu" role="dialog" aria-modal="true" aria-label="Update Update">
+    <section className="modal-card update-target-menu workflow-theme update-workflow" role="dialog" aria-modal="true" aria-label="Update Update">
       <Button className="modal-close" aria-label="Close Update Update" onClick={onCancel}>×</Button>
-      <h2>Update Update</h2>
+      <h2><span className="workflow-badge">UPDATE</span> Update Update</h2>
       <p>Choose an active or referenced target related to the current programmer changes.</p>
       <div className="segmented-control" aria-label="Eligible target filter"><Button className={filter === "eligible_for_update_existing" ? "active" : ""} onClick={() => onFilter("eligible_for_update_existing")}>Eligible for Update Existing</Button><Button className={filter === "show_all_active" ? "active" : ""} onClick={() => onFilter("show_all_active")}>Show All Active</Button></div>
       <div className="update-target-list">
@@ -197,8 +197,8 @@ export function UpdateTargetMenu({ entries, filter, modes, busyKey, error, onFil
 
 function UpdateResultDialog({ result, onClose }: { result: UpdateResult; onClose: () => void }) {
   return <div className="modal-backdrop update-workflow-layer">
-    <section className="modal-card update-result-modal" role="dialog" aria-modal="true" aria-label="Update complete">
-      <h2>Update complete</h2>
+    <section className="modal-card update-result-modal workflow-theme update-workflow" role="dialog" aria-modal="true" aria-label="Update complete">
+      <h2><span className="workflow-badge">UPDATE</span> Update complete</h2>
       <p><b>{targetFamilyLabel(result.target)} · {result.target.name}</b></p>
       <p>{targetContext(result.target)}</p>
       <div className="update-preview-summary"><span>Changed {result.changed_count}</span><span>Added {result.added_count}</span><span>Ineligible {result.ignored_count}</span><span>Revision {result.revision_before} → {result.revision_after}</span></div>

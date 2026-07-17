@@ -8,6 +8,7 @@ import "./window-kit.css";
 import "./hardware.css";
 import "./chrome.css";
 import "./hardware-dense.css";
+import "./workflow-themes.css";
 import { UiKitCatalog } from "./components/window-kit/UiKitCatalog";
 import { enableSetOnContextMenu } from "./disableContextMenu";
 import { ProductDemoApp } from "./ProductDemoApp";

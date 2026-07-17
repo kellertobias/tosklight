@@ -17,7 +17,7 @@ export function RecordModeDialog({
       onPointerDown={(event) => event.target === event.currentTarget && onCancel()}
     >
       <section
-        className="modal-card record-mode-dialog"
+        className="modal-card record-mode-dialog workflow-theme record-workflow"
         role="dialog"
         aria-modal="true"
         aria-label={`Record to ${target}`}
@@ -25,12 +25,12 @@ export function RecordModeDialog({
         <Button className="modal-close" aria-label="Cancel recording" onClick={onCancel}>
           ×
         </Button>
-        <h2>Record to {target}</h2>
+        <h2><span className="workflow-badge">RECORD</span> Record to {target}</h2>
         <p>Choose how the current programmer content is recorded into this existing target.</p>
         <div className="modal-actions three">
           <Button onClick={onCancel}>Cancel</Button>
-          <Button onClick={() => onChoose("merge")}>Merge</Button>
-          <Button className="primary" onClick={() => onChoose("overwrite")}>
+          <Button className="workflow-choice" onClick={() => onChoose("merge")}>Merge</Button>
+          <Button className="danger" onClick={() => onChoose("overwrite")}>
             Overwrite
           </Button>
         </div>
