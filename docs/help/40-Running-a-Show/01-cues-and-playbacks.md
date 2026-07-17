@@ -20,6 +20,8 @@ GO advances to the next Cue and applies its tracking state with configured timin
 
 The active playback is an explicit operator selection. Running another playback must not silently steal that selection. Cuelist View shows current/next state, Cue detail, and playback configuration.
 
+In the hardware-connected layout, touch any descriptive area of an assigned playback card to select that concrete playback. Cuelist cards also open that playback in Cuelist View; when **REC** is armed, the same touch records to that Cuelist instead. Group playback cards select the playback and its Group without opening Cuelist View. The labeled playback buttons and fader remain independent controls: operating them does not also select the card. Selection retains the playback's explicit identity when pages change, even when another page uses the same slot.
+
 ## Restart behavior
 
 First and Continue policies determine how a Cuelist starts after release or restart. Looping and chaser modes change end-of-list behavior. Test the exact production policy after a real server/app restart.

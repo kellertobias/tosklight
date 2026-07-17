@@ -97,6 +97,15 @@ Configure two enabled routes for logical universe 1: Art-Net universe 1 to the b
 - **Pass:** Uniform color remains available, completed ranges apply once in selection order from either Shift source, and cancellation cannot leave partial programmer values.
 - **Executable scenario:** [COLOR-RANGE-001](../../../tests/26-color-special-dialog-alignment.spec.ts)
 
+### PLAYBACK-SELECT-001 — Hardware-connected playback card ownership
+
+- **Starting show:** Load canonical `default-stage.show`, immediately Save As separate paired and supplemental working copies, and use the active copy.
+- **Surface:** Paired authenticated playback selection and a hardware-connected playback card, with supplemental pointer, fader, button, Record, page-picker, Group, and OSC actions.
+- **Actions:** Select a Cuelist card through its display-only label area, operate its real GO button and fader, Record to that card, select the same slot on another explicit page, return to page 1, select a Group card, and repeat Group selection through its attached-hardware button.
+- **Oracle:** Desk-selected playback number, opened concrete Cuelist View, exact target Cuelist revision, unchanged other Cuelist, current programmer Group selection, persistent identity across page changes, and absence of nested representation buttons.
+- **Pass:** The card owns one selection action, real controls remain independent, Cuelist and Group workflows stay distinct, Record uses the concrete page/playback target, and UI, API, and OSC converge on the same desk-local selected playback.
+- **Executable scenario:** [PLAYBACK-SELECT-001](../../../tests/28-hardware-connected-playback-selection.spec.ts)
+
 ## Default Stage Show
 
 Canonical `default-stage.show` contains the complete 49-record built-in patch:
@@ -161,6 +170,7 @@ The executable workflows that use this patch are cataloged under the concrete Gr
 | PROG-001–004 | Programmer | selection gesture lifetime, ordered spreading, fixture/Group LTP, and two-stage Clear | programmer state, audit, panes, exact output |
 | POSITION-HOME-001 | Position Return Home | ordered per-head profile defaults, independent 50% fallback, skipped incompatible fixtures, one faded Undo gesture, empty-selection safety, and software/hardware layout parity | paired programmer state, atomic batch audit, prior values after Undo, and production dialog controls |
 | COLOR-RANGE-001 | Color range alignment | uniform click, ordered straight-line hue/saturation interpolation, current Brightness, RGB/CMY and logical-head resolution, reversed order, one-fixture endpoint, cancel safety, single release mutation, and software/hardware Shift | paired programmer state, batch audit counts, visible range overlay, exact prior values after Undo, and attached OSC Shift state |
+| PLAYBACK-SELECT-001 | Hardware playback selection | single card-owned selection, display-only labels, independent real controls, concrete Cuelist Record/open behavior, Group selection, explicit page identity, and OSC convergence | paired selected playback, Cuelist revisions, Group programmer selection, rendered semantics, page picker, and attached OSC action |
 | UPDATE-001–002 | Update | four Cue modes and authoritative tracked sources, exact eligibility, Preset/Group existing-versus-new semantics, touch/default/menu flows, current/explicit page context, pre-Update desk-settings migration with a schema-3 show, actual simulator pointer gesture exclusivity, and atomic revisions | paired and process-backed stored-object results, previews, revision history/undo, programmer retention, unrelated-object isolation, restart, simulator transport writes, and same-desk feedback |
 | HIGHLIGHT-001 | Transient Highlight output | independent HIGH state, complete/singleton application, programmer/store isolation, fixture-look overrides, first-frame Off reveal, ownership, and safety/master behavior | paired Highlight/programmer state, stored objects, and resolved raw output |
 | HIGHLIGHT-002 | Live selection source and lifecycle | Fixtures/Stage/Group/command selection reset, live Group ALL restoration, additive/subtractive stepped selection, multi-head/multipatch/unpatched/invalid items, empty selection, reconnect, and show-load clearing | paired actual selection, live source resolution, Highlight output, reconnect, and reload |

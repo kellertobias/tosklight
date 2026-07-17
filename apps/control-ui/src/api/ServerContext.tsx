@@ -305,7 +305,7 @@ interface ServerContextValue {
     revision: number,
   ) => Promise<boolean>;
   storeDynamic: (speed: number, width: number, direction: string) => Promise<void>;
-  storePlayback: (slot: number, cueListId?: string) => Promise<void>;
+  storePlayback: (slot: number, cueListId?: string, pageNumber?: number) => Promise<void>;
   storeGroup: (id: string, name: string, mode?: "merge" | "overwrite") => Promise<void>;
   updateGroup: (id: string, update: Pick<StoredGroup, "name" | "color" | "icon">) => Promise<boolean>;
   setGroupMaster: (id: string, master: number) => Promise<void>;
@@ -1733,7 +1733,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
           setError(reason instanceof Error ? reason.message : String(reason));
         }
       },
-      storePlayback: async (slot, cueListId) => {
+      storePlayback: async (slot, cueListId, explicitPageNumber) => {
         try {
           if (!bootstrap?.active_show || !session) throw new Error("Open a show before storing a Cue");
           const programmers = await client.programmers();
@@ -1840,7 +1840,7 @@ export function ServerProvider({ children }: PropsWithChildren) {
               updated_at: "",
             };
           }
-          const pageNumber = playbacks?.active_page ?? 1;
+          const pageNumber = explicitPageNumber ?? playbacks?.active_page ?? 1;
           const pages = await client.objects<import("./types").PlaybackPage>(bootstrap.active_show.id, "playback_page");
           const pageObject = pages.find((item) => item.body.number === pageNumber);
           const page = pageObject?.body ?? {

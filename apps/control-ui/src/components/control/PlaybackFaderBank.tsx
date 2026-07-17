@@ -42,12 +42,9 @@ export function PlaybackFaderBank({ pageNumber, firstSlot = 1, count, rows, butt
   const [configuration, setConfiguration] = useState<{ playback: PlaybackDefinition; page: number; slot: number; empty: boolean } | null>(null);
   const assignmentPending = state.cueListSetTarget != null;
   const selectionPending = /^SELECT\s*$/i.test(server.commandLine);
-  const selectPlayback = async (event: ReactMouseEvent, playback: PlaybackDefinition | null) => {
-    if (!selectionPending || !playback) return;
-    event.preventDefault();
-    event.stopPropagation();
+  const selectPlayback = async (playback: PlaybackDefinition) => {
     await server.poolPlaybackAction(playback.number, "select");
-    server.resetCommandLine();
+    if (selectionPending) server.resetCommandLine();
     await server.refresh();
   };
   const recordPlayback = async (event: ReactMouseEvent, playback: PlaybackDefinition | null, slot: number) => {
@@ -57,6 +54,38 @@ export function PlaybackFaderBank({ pageNumber, firstSlot = 1, count, rows, butt
     const cueListId = playback?.target.type === "cue_list" ? playback.target.cue_list_id : undefined;
     await server.storePlayback(slot - 1, cueListId);
     dispatch({ type: "SET_STORE_ARMED", value: false });
+  };
+  const activateHardwareCard = async (
+    event: ReactMouseEvent<HTMLElement>,
+    playback: PlaybackDefinition | null,
+    slot: number,
+  ) => {
+    if (!playback || isPlaybackControlTarget(event.target)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (isSetContextClick(event.nativeEvent) || setClickArmed()) {
+      openConfiguration(playback, slot);
+      return;
+    }
+    if (state.updateArmed) {
+      if (playback.target.type === "cue_list")
+        requestUpdateTarget(cueUpdateTarget(playback.target.cue_list_id, playback.number, null));
+      return;
+    }
+    await selectPlayback(playback);
+    if (state.storeArmed && playback.target.type === "cue_list") {
+      await server.storePlayback(
+        slot - 1,
+        playback.target.cue_list_id,
+        activePageNumber,
+      );
+      dispatch({ type: "SET_STORE_ARMED", value: false });
+      return;
+    }
+    if (playback.target.type === "cue_list") {
+      dispatch({ type: "OPEN_BUILTIN", kind: "cuelists" });
+      dispatch({ type: "OPEN_BUILTIN_CUELIST", number: playback.number });
+    }
   };
   const assignPlayback = async (slot: number) => {
     if (state.cueListSetTarget == null) return;
@@ -145,20 +174,31 @@ export function PlaybackFaderBank({ pageNumber, firstSlot = 1, count, rows, butt
         event.preventDefault(); event.stopPropagation(); openConfiguration(playback, slot);
       };
       const interceptClick = (event: ReactMouseEvent<HTMLElement>) => {
+        if (!hardware) {
+          if (state.updateArmed) { event.preventDefault(); event.stopPropagation(); requestPlaybackUpdate(); return; }
+          if (state.storeArmed) { void recordPlayback(event, playback, slot); return; }
+          const firstButton = (event.target as Element).closest('[data-playback-button-index="1"]');
+          if (setClickArmed() || (firstButton && (event.shiftKey || state.shiftArmed))) { event.preventDefault(); event.stopPropagation(); openConfiguration(playback, slot); return; }
+          if (selectionPending && playback) {
+            event.preventDefault();
+            event.stopPropagation();
+            void selectPlayback(playback);
+          }
+          return;
+        }
+        if (isPlaybackControlTarget(event.target)) return;
         if (state.updateArmed) { event.preventDefault(); event.stopPropagation(); requestPlaybackUpdate(); return; }
-        if (state.storeArmed) { void recordPlayback(event, playback, slot); return; }
-        const firstButton = (event.target as Element).closest('[data-playback-button-index="1"]');
-        if (setClickArmed() || (firstButton && (event.shiftKey || state.shiftArmed))) { event.preventDefault(); event.stopPropagation(); openConfiguration(playback, slot); return; }
-        void selectPlayback(event, playback);
+        if (setClickArmed()) { event.preventDefault(); event.stopPropagation(); openConfiguration(playback, slot); }
       };
       const cardStyle = playback ? { "--playback-color": playback.color ?? "#20c997" } as CSSProperties : undefined;
       const representation = <Button className="playback-software-representation" aria-label={`Playback representation page ${activePageNumber} playback ${slot}`}><b>{slot} · {playback?.name ?? "Empty"}</b></Button>;
       if (hardware) {
         const cueIndex = active?.enabled === false ? -1 : active?.cue_index ?? -1;
-        return <article data-set-click-target data-page={activePageNumber} data-playback-slot={slot} data-playback-row={rowIndex} data-row-units={row ? playbackRowUnits(row, hardware) : 1} data-selected-playback={selected || undefined} data-selection-pending={selectionPending || undefined} className={`hardware-playback-card playback-colored ${active?.enabled !== false && active ? "running" : ""} ${active?.loaded_cue_number != null ? "loaded" : ""} ${active?.fader_pickup_required ? "pickup-required" : ""} ${active?.swap_active ? "swap-active" : ""} ${selected ? "selected" : ""} ${!playback ? "empty" : ""} ${assignmentPending ? "assignment-pending" : ""} ${state.updateArmed ? "update-target" : ""}`} style={cardStyle} key={`${slot}-${playback?.number ?? "empty"}`} onPointerDownCapture={interceptPointer} onClickCapture={interceptClick} onClick={(event: ReactMouseEvent) => { if (isSetContextClick(event.nativeEvent)) openConfiguration(playback, slot); }}>
+        const hardwareRepresentation = <div className="playback-software-representation" style={{ minWidth: 0, width: "100%", overflow: "hidden", padding: 0, textAlign: "left", textOverflow: "ellipsis", whiteSpace: "nowrap", userSelect: "none", cursor: "default" }}><b>{slot} · {playback?.name ?? "Empty"}</b></div>;
+        return <article data-set-click-target data-page={activePageNumber} data-playback-slot={slot} data-playback-row={rowIndex} data-row-units={row ? playbackRowUnits(row, hardware) : 1} data-selected-playback={selected || undefined} data-selection-pending={selectionPending || undefined} className={`hardware-playback-card playback-colored ${active?.enabled !== false && active ? "running" : ""} ${active?.loaded_cue_number != null ? "loaded" : ""} ${active?.fader_pickup_required ? "pickup-required" : ""} ${active?.swap_active ? "swap-active" : ""} ${selected ? "selected" : ""} ${!playback ? "empty" : ""} ${assignmentPending ? "assignment-pending" : ""} ${state.updateArmed ? "update-target" : ""}`} style={cardStyle} key={`${slot}-${playback?.number ?? "empty"}`} onClickCapture={interceptClick} onClick={(event) => void activateHardwareCard(event, playback, slot)}>
           {assignmentTarget}
           {configurationTarget}
-          <header>{representation}<strong>{page?.number ?? pageNumber ?? state.playbackPage + 1}.{slot}</strong></header>
+          <header>{hardwareRepresentation}<strong>{page?.number ?? pageNumber ?? state.playbackPage + 1}.{slot}</strong></header>
           {cue ? <HardwareCueRows cues={cue.cues} cueIndex={cueIndex} activatedAt={active?.activated_at} compact={rowCount === 2} effectiveNextCueNumber={active?.effective_next_cue_number} effectiveNextIsLoaded={active?.effective_next_is_loaded} /> : group ? <div className="hardware-cue-list single"><div className="hardware-cue-row current"><i/><span>GRP</span><b>{group.body.name ?? `Group ${group.id}`}</b><small>{value}% master</small></div></div> : <div className="hardware-cue-list single" />}
           <div className="hardware-playback-controls"><footer>{actionButtons}</footer>{hasFader && <label className="hardware-fader" style={{ "--hardware-fader-level": `${value}%` } as CSSProperties}><i/><b>{playbackFaderDisplay(playback, active, value, server.configuration, server.playbacks?.authoritative_controls, state.blackout)}</b><Input aria-label={`Page ${activePageNumber} playback ${slot} fader`} type="range" min="0" max="100" step="0.1" value={value} onInput={(event) => playback && void server.poolPlaybackAction(playback.number, "master", { value: Number(event.currentTarget.value) / 100, surface: "physical" })}/></label>}</div>
         </article>;
@@ -176,6 +216,10 @@ export function PlaybackFaderBank({ pageNumber, firstSlot = 1, count, rows, butt
       </article>;
     })}
   </div>{configuration && <PlaybackConfigurationModal playback={configuration.playback} page={configuration.page} slot={configuration.slot} empty={configuration.empty} onClose={() => setConfiguration(null)}/>}</>;
+}
+
+function isPlaybackControlTarget(target: EventTarget) {
+  return target instanceof Element && Boolean(target.closest("button,input,.hardware-playback-controls"));
 }
 
 export function emptyConfiguration(page: number, slot: number, buttons: number, hasFader: boolean, cueListId: string): PlaybackDefinition {

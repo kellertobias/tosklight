@@ -18,10 +18,10 @@ describe("playback row height units", () => {
 });
 
 const mocks = vi.hoisted(() => ({
-  dispatch: vi.fn(), executeCommandLine: vi.fn(), refresh: vi.fn(), poolPlaybackAction: vi.fn(), resetCommandLine: vi.fn(), savePlaybackSlot: vi.fn(), clearPlaybackSlot: vi.fn(),
+  dispatch: vi.fn(), executeCommandLine: vi.fn(), refresh: vi.fn(), poolPlaybackAction: vi.fn(), resetCommandLine: vi.fn(), savePlaybackSlot: vi.fn(), clearPlaybackSlot: vi.fn(), storePlayback: vi.fn(),
   commandLine: "FIXTURE", error: null as string | null,
   hardwareConnected: false,
-  state: { midiProfile: null, playbackColumns: 1, playbackRows: 1, playbackPage: 0, cueListSetTarget: 12 as number | null, cueListSetArmed: true, playbackSetArmed: false, shiftArmed: false, updateArmed: false, blackout: false },
+  state: { midiProfile: null, playbackColumns: 1, playbackRows: 1, playbackPage: 0, cueListSetTarget: 12 as number | null, cueListSetArmed: true, playbackSetArmed: false, shiftArmed: false, updateArmed: false, storeArmed: false, blackout: false },
   playbacks: {
     active_page: 1,
     pages: [{ number: 1, name: "Main", slots: {} as Record<string, number> }],
@@ -35,7 +35,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../api/ServerContext", () => ({ useServer: () => ({
   bootstrap: { hardware_connected: mocks.hardwareConnected }, playbacks: mocks.playbacks, groups: [], configuration: { speed_groups_bpm: [120, 90, 60, 30, 15], programmer_fade_millis: 3_000, sequence_master_fade_millis: 4_000 },
   commandLine: mocks.commandLine, error: mocks.error, resetCommandLine: mocks.resetCommandLine, executeCommandLine: mocks.executeCommandLine, refresh: mocks.refresh,
-  poolPlaybackAction: mocks.poolPlaybackAction, savePlaybackSlot: mocks.savePlaybackSlot, clearPlaybackSlot: mocks.clearPlaybackSlot,
+  poolPlaybackAction: mocks.poolPlaybackAction, savePlaybackSlot: mocks.savePlaybackSlot, clearPlaybackSlot: mocks.clearPlaybackSlot, storePlayback: mocks.storePlayback,
 }) }));
 vi.mock("../../state/AppContext", () => ({ useApp: () => ({ state: mocks.state, dispatch: mocks.dispatch }) }));
 
@@ -43,10 +43,10 @@ afterEach(cleanup);
 
 describe("PlaybackFaderBank authoritative playback surfaces", () => {
   beforeEach(() => {
-    mocks.dispatch.mockReset(); mocks.executeCommandLine.mockReset().mockResolvedValue(true); mocks.refresh.mockReset().mockResolvedValue(undefined); mocks.poolPlaybackAction.mockReset().mockResolvedValue(undefined); mocks.resetCommandLine.mockReset(); mocks.savePlaybackSlot.mockReset().mockResolvedValue(true); mocks.clearPlaybackSlot.mockReset().mockResolvedValue(true);
+    mocks.dispatch.mockReset(); mocks.executeCommandLine.mockReset().mockResolvedValue(true); mocks.refresh.mockReset().mockResolvedValue(undefined); mocks.poolPlaybackAction.mockReset().mockResolvedValue(undefined); mocks.resetCommandLine.mockReset(); mocks.savePlaybackSlot.mockReset().mockResolvedValue(true); mocks.clearPlaybackSlot.mockReset().mockResolvedValue(true); mocks.storePlayback.mockReset().mockResolvedValue(undefined);
     mocks.commandLine = "FIXTURE"; mocks.error = null;
     mocks.hardwareConnected = false;
-    Object.assign(mocks.state, { cueListSetTarget: 12, cueListSetArmed: true, playbackSetArmed: false, shiftArmed: false, updateArmed: false, blackout: false });
+    Object.assign(mocks.state, { cueListSetTarget: 12, cueListSetArmed: true, playbackSetArmed: false, shiftArmed: false, updateArmed: false, storeArmed: false, blackout: false });
     mocks.playbacks.pages[0].slots = {}; mocks.playbacks.pool = []; mocks.playbacks.active = []; mocks.playbacks.selected_playback = null;
   });
 
@@ -155,6 +155,40 @@ describe("PlaybackFaderBank authoritative playback surfaces", () => {
     await waitFor(() => expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "select"));
     expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(1);
     expect(mocks.refresh).toHaveBeenCalledOnce(); expect(mocks.resetCommandLine).toHaveBeenCalledOnce();
+  });
+
+  it("makes the hardware card one display-only Cuelist selection surface", async () => {
+    assignPlayback(); mocks.hardwareConnected = true;
+    mocks.playbacks.cue_lists[0].cues = [{ id: "cue-1", number: 1, name: "Opening", fade_millis: 0, delay_millis: 0, trigger: { type: "manual" }, changes: [] }];
+    const { container } = render(<PlaybackFaderBank count={1}/>);
+    expect(screen.queryByRole("button", { name: /Playback representation/ })).not.toBeInTheDocument();
+    const card = container.querySelector(".hardware-playback-card")!;
+    fireEvent.click(card.querySelector("header b")!);
+    await waitFor(() => expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "select"));
+    expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(1);
+    expect(mocks.dispatch).toHaveBeenCalledWith({ type: "OPEN_BUILTIN", kind: "cuelists" });
+    expect(mocks.dispatch).toHaveBeenCalledWith({ type: "OPEN_BUILTIN_CUELIST", number: 7 });
+  });
+
+  it("does not select the hardware card when a real button or fader operates", () => {
+    assignPlayback(); mocks.hardwareConnected = true;
+    render(<PlaybackFaderBank count={1}/>);
+    fireEvent.click(screen.getByRole("button", { name: "GO +" }));
+    fireEvent.input(screen.getByRole("slider", { name: "Page 1 playback 1 fader" }), { target: { value: "42" } });
+    expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "button", { button: 1, pressed: true, surface: "physical" });
+    expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "master", { value: 0.42, surface: "physical" });
+    expect(mocks.poolPlaybackAction).not.toHaveBeenCalledWith(7, "select");
+  });
+
+  it("records to the concrete hardware-card Cuelist and explicit page", async () => {
+    assignPlayback(); mocks.hardwareConnected = true; mocks.state.storeArmed = true;
+    mocks.playbacks.pages.push({ number: 3, name: "Page 3", slots: { "1": 7 } });
+    const { container } = render(<PlaybackFaderBank pageNumber={3} count={1}/>);
+    fireEvent.click(container.querySelector(".hardware-playback-card header")!);
+    await waitFor(() => expect(mocks.storePlayback).toHaveBeenCalledWith(0, "front", 3));
+    expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "select");
+    expect(mocks.dispatch).toHaveBeenCalledWith({ type: "SET_STORE_ARMED", value: false });
+    mocks.playbacks.pages.pop();
   });
 
   it("dispatches the authoritative button index, including held Flash lifetime", () => {

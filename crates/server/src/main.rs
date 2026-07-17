@@ -6604,6 +6604,24 @@ fn dispatch_playback_action_inner(
     if !pressed && !matches!(action, Action::Flash | Action::Swap) {
         return Ok(false);
     }
+    if action == Action::Select
+        && matches!(
+            definition.target,
+            PlaybackTarget::CueList { .. } | PlaybackTarget::Group { .. }
+        )
+    {
+        let desk = desk.ok_or_else(|| ApiError::bad_request("playback selection needs a desk"))?;
+        let show = state
+            .active_show
+            .read()
+            .clone()
+            .ok_or_else(|| ApiError::bad_request("no show is open"))?;
+        state
+            .desk
+            .lock()
+            .set_selected_playback(desk.id, show.id, Some(definition.number))
+            .map_err(ApiError::store)?;
+    }
     match &definition.target {
         PlaybackTarget::CueList { cue_list_id } => match action {
             Action::On => state
@@ -6706,20 +6724,7 @@ fn dispatch_playback_action_inner(
                 .write()
                 .set_swap(definition.number, pressed)
                 .map_err(ApiError::bad_request)?,
-            Action::Select => {
-                let desk =
-                    desk.ok_or_else(|| ApiError::bad_request("playback selection needs a desk"))?;
-                let show = state
-                    .active_show
-                    .read()
-                    .clone()
-                    .ok_or_else(|| ApiError::bad_request("no show is open"))?;
-                state
-                    .desk
-                    .lock()
-                    .set_selected_playback(desk.id, show.id, Some(definition.number))
-                    .map_err(ApiError::store)?;
-            }
+            Action::Select => {}
             Action::SelectContents => {
                 let session =
                     session.ok_or_else(|| ApiError::bad_request("selection needs a session"))?;
