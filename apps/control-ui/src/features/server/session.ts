@@ -53,6 +53,8 @@ export function createSessionActions(
 		},
 		createUser: async (name) => {
 			try {
+				if (model.sessionRole !== "primary")
+					throw new Error("Only the primary screen can change the desk user");
 				setError(null);
 				const user = await client.createUser(name);
 				setBootstrap(await client.bootstrap());
@@ -64,6 +66,10 @@ export function createSessionActions(
 			}
 		},
 		changeUser: async (user) => {
+			if (model.sessionRole !== "primary") {
+				setError("Only the primary screen can change the desk user");
+				return;
+			}
 			localStorage.setItem("light.operator", user.name);
 			await client.closeSession();
 			window.location.reload();

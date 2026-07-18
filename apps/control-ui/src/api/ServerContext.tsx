@@ -12,6 +12,7 @@ import {
 	useServerRefresh,
 	useShowObjects,
 } from "../features/server/useShowData";
+import type { SessionRole } from "../features/session/ownership";
 
 export type {
 	CommandChoiceOption,
@@ -27,16 +28,20 @@ export {
 
 const ServerContext = createContext<ServerContextValue | null>(null);
 
-export function ServerProvider({ children }: PropsWithChildren) {
+export function ServerProvider({
+	children,
+	sessionRole = "primary",
+}: PropsWithChildren<{ sessionRole?: SessionRole }>) {
 	const state = useServerState();
 	useServerPolling(state);
 	const loadShowObjects = useShowObjects(state);
 	const refresh = useServerRefresh(state, loadShowObjects);
-	useServerConnection(state, loadShowObjects);
+	useServerConnection(state, loadShowObjects, sessionRole);
 	const commandLine = useCommandLineController(state);
 	const fileAccess = useFileAccess(state);
 	const model = {
 		...state,
+		sessionRole,
 		...commandLine,
 		...fileAccess,
 		loadShowObjects,

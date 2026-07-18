@@ -1,6 +1,8 @@
+import type { SessionRole } from "../session/ownership";
 import type { ServerState } from "./useServerState";
 
 export type ServerController = ServerState & {
+	sessionRole: SessionRole;
 	loadShowObjects: (
 		showId: string | null,
 		userId: string | null,

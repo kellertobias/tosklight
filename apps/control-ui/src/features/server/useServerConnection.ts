@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { closeOwnedSession, type SessionRole } from "../session/ownership";
 import { bootstrapConnection } from "./connectionBootstrap";
 import { createServerEventRouter } from "./serverEventRouter";
 import type { LoadShowObjects } from "./stateEventRouting";
@@ -7,6 +8,7 @@ import type { ServerState } from "./useServerState";
 export function useServerConnection(
 	state: ServerState,
 	loadShowObjects: LoadShowObjects,
+	role: SessionRole,
 ) {
 	const { client, setError, setStatus } = state;
 	const stateRef = useRef(state);
@@ -29,6 +31,7 @@ export function useServerConnection(
 					stateRef.current,
 					loadShowObjects,
 					() => cancelled,
+					role,
 				);
 				if (!session || cancelled) return;
 				unsubscribe = client.onEvent(
@@ -49,7 +52,7 @@ export function useServerConnection(
 			window.clearTimeout(retryTimer);
 			unsubscribe();
 			client.disconnectEvents();
-			void client.closeSession();
+			closeOwnedSession(role, () => void client.closeSession());
 		};
-	}, [client, loadShowObjects, setError, setStatus]);
+	}, [client, loadShowObjects, role, setError, setStatus]);
 }

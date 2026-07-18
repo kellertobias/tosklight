@@ -5,6 +5,11 @@ import type {
 	ProgrammerState,
 	SessionResponse,
 } from "../../api/types";
+import {
+	mayCreateSession,
+	requirePrimarySession,
+	type SessionRole,
+} from "../session/ownership";
 import type { LoadShowObjects } from "./stateEventRouting";
 import type { ServerState } from "./useServerState";
 
@@ -22,16 +27,12 @@ function selectOperator(bootstrap: BootstrapSnapshot): DeskUser {
 async function restoreOrLogin(
 	client: LightApiClient,
 	user: DeskUser,
+	role: SessionRole,
 ): Promise<SessionResponse> {
-	const screenWindow = new URLSearchParams(window.location.search).has(
-		"screen",
-	);
-	const restored = screenWindow
-		? (JSON.parse(
-				localStorage.getItem("light.primary-session") ?? "null",
-			) as SessionResponse | null)
-		: null;
-	if (restored) {
+	if (!mayCreateSession(role)) {
+		const restored = requirePrimarySession(
+			localStorage.getItem("light.primary-session"),
+		);
 		client.restoreSession(restored);
 		return restored;
 	}
@@ -135,12 +136,13 @@ export async function bootstrapConnection(
 	state: ServerState,
 	loadShowObjects: LoadShowObjects,
 	isCancelled: () => boolean,
+	role: SessionRole,
 ) {
 	const initial = await state.client.bootstrap();
 	if (isCancelled()) return null;
 	state.setBootstrap(initial);
 	const user = selectOperator(initial);
-	const session = await restoreOrLogin(state.client, user);
+	const session = await restoreOrLogin(state.client, user, role);
 	const deskLock = await state.client.deskLock();
 	localStorage.setItem("light.operator", user.name);
 	const bootstrap = await ensureActiveShow(state, initial, deskLock.locked);

@@ -167,7 +167,7 @@ function ScreenSurface({ id }: { id: string }) {
 
 export function ScreenApp({ id }: { id: string }) {
   return (
-    <ServerProvider>
+    <ServerProvider sessionRole="secondary">
       <AppProvider>
         <ScreenSurface id={id} />
       </AppProvider>

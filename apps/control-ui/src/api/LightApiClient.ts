@@ -252,21 +252,23 @@ export class LightApiClient {
 		const session = this.session;
 		if (!session) return;
 		try {
-			const response = await fetch(
-				`${this.baseUrl}/api/v1/sessions/${session.session_id}`,
-				{
-					method: "DELETE",
-					keepalive: true,
-					headers: this.boundaryHeaders(
-						new Headers({ authorization: `Bearer ${session.token}` }),
-					),
-				},
-			);
+			const response = await this.deleteSession(session);
 			if (!response.ok && response.status !== 404)
 				throw new Error(await response.text());
 		} finally {
 			if (this.session?.session_id === session.session_id) this.session = null;
+			browserStorage()?.removeItem("light.primary-session");
 		}
+	}
+
+	private deleteSession(session: SessionResponse) {
+		return fetch(`${this.baseUrl}/api/v1/sessions/${session.session_id}`, {
+			method: "DELETE",
+			keepalive: true,
+			headers: this.boundaryHeaders(
+				new Headers({ authorization: `Bearer ${session.token}` }),
+			),
+		});
 	}
 
 	createUser(name: string): Promise<import("./types").DeskUser> {
