@@ -134,9 +134,9 @@ describe("GroupsWindow command routing", () => {
     expect(screen.getByRole("dialog", { name: "Group properties" })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Group name"), { target: { value: "Copy Center Spot" } });
     fireEvent.click(screen.getByRole("button", { name: /#718596/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Use color #1bd6ec" }));
+    fireEvent.click(screen.getByRole("option", { name: "Use color #1bd6ec" }));
     fireEvent.click(screen.getByRole("button", { name: /Choose icon/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Use ★" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Use ★" }));
     fireEvent.click(screen.getByRole("button", { name: "Save group" }));
     await waitFor(() => expect(mocks.updateGroup).toHaveBeenCalledWith("4", {
       name: "Copy Center Spot",
