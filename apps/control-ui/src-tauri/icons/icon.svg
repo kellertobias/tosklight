@@ -1,52 +1,110 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title description">
   <title id="title">ToskLight application icon</title>
-  <desc id="description">A white triangular play mark containing a theatrical spotlight and a blue beam on a dark navy tile.</desc>
+  <desc id="description">A glowing white triangular play mark containing a theatrical spotlight and a luminous blue beam.</desc>
+
   <defs>
-    <linearGradient id="tile" x1="176" y1="82" x2="842" y2="944" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#0b1731"/>
-      <stop offset="0.5" stop-color="#061026"/>
-      <stop offset="1" stop-color="#020713"/>
+    <!-- Background -->
+    <linearGradient id="background-gradient" x1="134" y1="76" x2="876" y2="942" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#101d3b"/>
+      <stop offset="0.48" stop-color="#07132b"/>
+      <stop offset="1" stop-color="#020714"/>
     </linearGradient>
-    <radialGradient id="tileGlow" cx="512" cy="412" r="500" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#15346a" stop-opacity="0.38"/>
-      <stop offset="0.58" stop-color="#07152e" stop-opacity="0.14"/>
-      <stop offset="1" stop-color="#020713" stop-opacity="0"/>
+    <radialGradient id="background-light" cx="488" cy="414" r="480" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#15508c" stop-opacity="0.24"/>
+      <stop offset="0.46" stop-color="#0a3262" stop-opacity="0.11"/>
+      <stop offset="1" stop-color="#020714" stop-opacity="0"/>
     </radialGradient>
-    <linearGradient id="beam" x1="516" y1="427" x2="704" y2="718" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#c9f5ff" stop-opacity="0.98"/>
-      <stop offset="0.24" stop-color="#70dcff" stop-opacity="0.92"/>
-      <stop offset="0.68" stop-color="#27aaf5" stop-opacity="0.74"/>
-      <stop offset="1" stop-color="#1261c2" stop-opacity="0.48"/>
+
+    <!-- Beam and lens -->
+    <linearGradient id="beam-gradient" x1="516" y1="420" x2="694" y2="724" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#d9f9ff" stop-opacity="0.98"/>
+      <stop offset="0.24" stop-color="#79e4ff" stop-opacity="0.94"/>
+      <stop offset="0.66" stop-color="#2aaef7" stop-opacity="0.78"/>
+      <stop offset="1" stop-color="#1768cd" stop-opacity="0.46"/>
     </linearGradient>
-    <radialGradient id="lens" cx="0.35" cy="0.28" r="0.9">
+    <radialGradient id="lens-gradient" cx="0.34" cy="0.28" r="0.88">
       <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="0.54" stop-color="#d8f8ff"/>
-      <stop offset="1" stop-color="#72d8ff"/>
+      <stop offset="0.48" stop-color="#e2fbff"/>
+      <stop offset="1" stop-color="#72d9ff"/>
     </radialGradient>
-    <filter id="tileShadow" x="-20%" y="-18%" width="140%" height="150%" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="24" stdDeviation="24" flood-color="#000000" flood-opacity="0.5"/>
+
+    <!-- Tile shadow. Kept separate from all icon artwork for predictable rendering. -->
+    <filter id="tile-shadow" x="-15%" y="-15%" width="130%" height="145%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="20" result="tile-shadow-blur"/>
+      <feOffset in="tile-shadow-blur" dx="0" dy="22" result="tile-shadow-offset"/>
+      <feFlood flood-color="#000000" flood-opacity="0.52" result="tile-shadow-color"/>
+      <feComposite in="tile-shadow-color" in2="tile-shadow-offset" operator="in" result="tile-shadow-layer"/>
+      <feMerge>
+        <feMergeNode in="tile-shadow-layer"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
     </filter>
-    <filter id="markGlow" x="-20%" y="-25%" width="140%" height="150%" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#62d8ff" flood-opacity="0.22"/>
+
+    <!-- Soft cool-white glow around the triangular frame and spotlight body. -->
+    <filter id="white-mark-glow" x="-18%" y="-18%" width="136%" height="136%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="white-outer-blur"/>
+      <feFlood flood-color="#60cfff" flood-opacity="0.22" result="white-outer-color"/>
+      <feComposite in="white-outer-color" in2="white-outer-blur" operator="in" result="white-outer-glow"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3.5" result="white-inner-blur"/>
+      <feFlood flood-color="#d9f7ff" flood-opacity="0.38" result="white-inner-color"/>
+      <feComposite in="white-inner-color" in2="white-inner-blur" operator="in" result="white-inner-glow"/>
+      <feMerge>
+        <feMergeNode in="white-outer-glow"/>
+        <feMergeNode in="white-inner-glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
     </filter>
-    <clipPath id="tileClip">
-      <rect x="54" y="42" width="916" height="916" rx="198"/>
-    </clipPath>
+
+    <!-- Blue bloom around the projected light beam. -->
+    <filter id="beam-glow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="18" result="beam-outer-blur"/>
+      <feFlood flood-color="#087ee8" flood-opacity="0.28" result="beam-outer-color"/>
+      <feComposite in="beam-outer-color" in2="beam-outer-blur" operator="in" result="beam-outer-glow"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="beam-inner-blur"/>
+      <feFlood flood-color="#70e4ff" flood-opacity="0.42" result="beam-inner-color"/>
+      <feComposite in="beam-inner-color" in2="beam-inner-blur" operator="in" result="beam-inner-glow"/>
+      <feMerge>
+        <feMergeNode in="beam-outer-glow"/>
+        <feMergeNode in="beam-inner-glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Small bloom around the spotlight lens. -->
+    <filter id="lens-glow" x="-85%" y="-85%" width="270%" height="270%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="lens-blur"/>
+      <feFlood flood-color="#79e6ff" flood-opacity="0.52" result="lens-color"/>
+      <feComposite in="lens-color" in2="lens-blur" operator="in" result="lens-bloom"/>
+      <feMerge>
+        <feMergeNode in="lens-bloom"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
   </defs>
 
-  <rect x="54" y="42" width="916" height="916" rx="198" fill="url(#tile)" filter="url(#tileShadow)"/>
-  <g clip-path="url(#tileClip)">
-    <rect x="54" y="42" width="916" height="916" fill="url(#tileGlow)"/>
+  <!-- Rounded application tile -->
+  <g id="application-tile">
+    <rect x="54" y="42" width="916" height="916" rx="198" fill="url(#background-gradient)" filter="url(#tile-shadow)"/>
+    <rect x="54" y="42" width="916" height="916" rx="198" fill="url(#background-light)"/>
+    <rect x="58" y="46" width="908" height="908" rx="194" fill="none" stroke="#7798ca" stroke-opacity="0.2" stroke-width="6"/>
   </g>
-  <rect x="57" y="45" width="910" height="910" rx="195" fill="none" stroke="#7b9ed2" stroke-opacity="0.18" stroke-width="6"/>
 
-  <g filter="url(#markGlow)">
-    <path d="M355 740V326c0-74 52-103 116-65l330 196c66 39 66 91 1 135L468 817c-63 42-113 14-113-77Z" fill="none" stroke="#f8fbff" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M357 361c25-50 70-59 115-26l80 59" fill="none" stroke="#f8fbff" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M358 385 458 475" fill="none" stroke="#f8fbff" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M420 424c10-50 50-78 94-66 46 13 68 54 54 99" fill="none" stroke="#f8fbff" stroke-width="32" stroke-linecap="round"/>
-    <path d="M532 427 796 553 655 716Z" fill="url(#beam)" stroke="#9de8ff" stroke-width="8" stroke-linejoin="round"/>
-    <ellipse cx="522" cy="425" rx="36" ry="31" transform="rotate(-24 522 425)" fill="url(#lens)"/>
-    <path d="M500 409c10-12 27-17 41-10" fill="none" stroke="#ffffff" stroke-opacity="0.68" stroke-width="7" stroke-linecap="round"/>
+  <!-- Projected beam sits behind the white mark. -->
+  <g id="light-beam" filter="url(#beam-glow)">
+    <path d="M532 427 796 553 655 716Z" fill="url(#beam-gradient)" stroke="#a4ebff" stroke-width="8" stroke-linejoin="round"/>
+  </g>
+
+  <!-- White triangular frame and spotlight body. -->
+  <g id="white-mark" fill="none" stroke="#fbfdff" stroke-linecap="round" stroke-linejoin="round" filter="url(#white-mark-glow)">
+    <path id="triangle-frame" d="M355 740V326c0-74 52-103 116-65l330 196c66 39 66 91 1 135L468 817c-63 42-113 14-113-77Z" stroke-width="38"/>
+    <path id="spotlight-upper-body" d="M357 361c25-50 70-59 115-26l80 59" stroke-width="32"/>
+    <path id="spotlight-lower-body" d="M358 385 458 475" stroke-width="32"/>
+    <path id="spotlight-lens-ring" d="M420 424c10-50 50-78 94-66 46 13 68 54 54 99" stroke-width="32"/>
+  </g>
+
+  <!-- Lens and highlight stay independently editable. -->
+  <g id="spotlight-lens" filter="url(#lens-glow)">
+    <ellipse cx="522" cy="425" rx="36" ry="31" transform="rotate(-24 522 425)" fill="url(#lens-gradient)"/>
+    <path d="M500 409c10-12 27-17 41-10" fill="none" stroke="#ffffff" stroke-opacity="0.72" stroke-width="7" stroke-linecap="round"/>
   </g>
 </svg>

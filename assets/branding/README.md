@@ -16,4 +16,5 @@ The platform-specific macOS, Windows, and PNG application assets are generated f
 - `tosklight-hardware-controls-mark.svg` is the standalone transparent vector mark.
 - `tosklight-hardware-controls-mark.png` is the high-resolution transparent raster mark.
 
-The platform-specific Hardware Controls assets are generated from `apps/hardware-controls/src-tauri/icons/icon.svg`.
+The platform-specific Hardware Controls assets are generated from
+`assets/branding/tosklight-hardware-controls-icon.png` with the Tauri icon generator.

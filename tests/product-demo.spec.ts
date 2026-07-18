@@ -265,6 +265,7 @@ test("@ui narrates the complete Full HD product demo surface in one regression r
     await chooseRecordMode(desk, page, "Overwrite");
     await expect.poll(async () => (await demoObjects<any>(api, showId, "group")).find((item) => item.id === "9")?.body.fixtures.length).toBe(8);
 
+    await clearSelection(desk, keypad, api);
     await keypadCommand(desk, keypad, ["2", "0", "1", "TRU", "2", "0", "7", "ENT"]);
     await expect.poll(async () => (await programmer(api)).selected.length).toBe(rig.washTargets.length);
     await keypadCommand(desk, keypad, ["RECORD", "GRP", "2", "ENT"], false);

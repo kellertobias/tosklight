@@ -1,82 +1,162 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title description">
   <title id="title">ToskLight Hardware Controls application icon</title>
-  <desc id="description">Three ascending white control faders connected by a blue light line on a dark navy tile.</desc>
+  <desc id="description">Three illuminated hardware faders connected by a glowing blue line on a dark gradient tile.</desc>
+
   <defs>
-    <linearGradient id="tile" x1="176" y1="82" x2="842" y2="944" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#0b1731"/>
-      <stop offset="0.5" stop-color="#061026"/>
-      <stop offset="1" stop-color="#020713"/>
+    <!-- Background -->
+    <linearGradient id="background-gradient" x1="134" y1="76" x2="876" y2="942" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#101d3b"/>
+      <stop offset="0.48" stop-color="#07132b"/>
+      <stop offset="1" stop-color="#020714"/>
     </linearGradient>
-    <linearGradient id="track" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#cdd7e4"/>
-      <stop offset="0.34" stop-color="#ffffff"/>
-      <stop offset="0.72" stop-color="#f7f9fc"/>
-      <stop offset="1" stop-color="#b9c4d2"/>
+    <radialGradient id="background-light" cx="504" cy="470" r="480" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#15508c" stop-opacity="0.22"/>
+      <stop offset="0.46" stop-color="#0a3262" stop-opacity="0.1"/>
+      <stop offset="1" stop-color="#020714" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Fader slot and body surfaces -->
+    <linearGradient id="slot-gradient" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#aebccc"/>
+      <stop offset="0.28" stop-color="#f7f9fc"/>
+      <stop offset="0.52" stop-color="#ffffff"/>
+      <stop offset="0.78" stop-color="#e6ebf2"/>
+      <stop offset="1" stop-color="#9caabc"/>
     </linearGradient>
-    <linearGradient id="cap" x1="0" y1="0" x2="0.85" y2="1">
+    <linearGradient id="fader-surface" x1="0" y1="0" x2="0.78" y2="1">
       <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="0.58" stop-color="#f6f8fc"/>
-      <stop offset="1" stop-color="#cbd5e2"/>
+      <stop offset="0.48" stop-color="#f7f9fc"/>
+      <stop offset="1" stop-color="#c4cfdd"/>
     </linearGradient>
-    <linearGradient id="indicator" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#1674d2"/>
-      <stop offset="0.5" stop-color="#66e6ff"/>
+    <linearGradient id="fader-inner-shadow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.42"/>
+      <stop offset="0.46" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="1" stop-color="#687c94" stop-opacity="0.24"/>
+    </linearGradient>
+    <radialGradient id="fader-inner-glow" cx="0.5" cy="0.5" r="0.68">
+      <stop offset="0" stop-color="#72e9ff" stop-opacity="0.34"/>
+      <stop offset="0.36" stop-color="#1fbfff" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#1768cd" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="indicator-gradient" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#126dd0"/>
+      <stop offset="0.5" stop-color="#76ecff"/>
       <stop offset="1" stop-color="#1598ea"/>
     </linearGradient>
-    <radialGradient id="ambientGlow" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#087fd1" stop-opacity="0.25"/>
-      <stop offset="0.46" stop-color="#075da8" stop-opacity="0.14"/>
-      <stop offset="1" stop-color="#03142c" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="controlBloom" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#6be7ff" stop-opacity="0.38"/>
-      <stop offset="0.32" stop-color="#19b8ff" stop-opacity="0.2"/>
-      <stop offset="1" stop-color="#0965d8" stop-opacity="0"/>
-    </radialGradient>
+
+    <!-- Tile shadow -->
+    <filter id="tile-shadow" x="-15%" y="-15%" width="130%" height="145%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="20" result="tile-shadow-blur"/>
+      <feOffset in="tile-shadow-blur" dx="0" dy="22" result="tile-shadow-offset"/>
+      <feFlood flood-color="#000000" flood-opacity="0.52" result="tile-shadow-color"/>
+      <feComposite in="tile-shadow-color" in2="tile-shadow-offset" operator="in" result="tile-shadow-layer"/>
+      <feMerge>
+        <feMergeNode in="tile-shadow-layer"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Shadow around each vertical fader slot. -->
+    <filter id="slot-shadow" x="-85%" y="-12%" width="270%" height="124%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="10" result="slot-shadow-blur"/>
+      <feOffset in="slot-shadow-blur" dx="0" dy="7" result="slot-shadow-offset"/>
+      <feFlood flood-color="#000000" flood-opacity="0.62" result="slot-shadow-color"/>
+      <feComposite in="slot-shadow-color" in2="slot-shadow-offset" operator="in" result="slot-shadow-layer"/>
+      <feMerge>
+        <feMergeNode in="slot-shadow-layer"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Shadow around each movable fader body. -->
+    <filter id="fader-shadow" x="-28%" y="-30%" width="156%" height="170%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="11" result="fader-shadow-blur"/>
+      <feOffset in="fader-shadow-blur" dx="0" dy="10" result="fader-shadow-offset"/>
+      <feFlood flood-color="#000000" flood-opacity="0.58" result="fader-shadow-color"/>
+      <feComposite in="fader-shadow-color" in2="fader-shadow-offset" operator="in" result="fader-shadow-layer"/>
+      <feMerge>
+        <feMergeNode in="fader-shadow-layer"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Soft neon glow for the diagonal connection line. -->
+    <filter id="line-glow" x="-22%" y="-35%" width="144%" height="170%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="22" result="line-outer-blur"/>
+      <feFlood flood-color="#087ee8" flood-opacity="0.34" result="line-outer-color"/>
+      <feComposite in="line-outer-color" in2="line-outer-blur" operator="in" result="line-outer-glow"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="line-inner-blur"/>
+      <feFlood flood-color="#6be7ff" flood-opacity="0.58" result="line-inner-color"/>
+      <feComposite in="line-inner-color" in2="line-inner-blur" operator="in" result="line-inner-glow"/>
+      <feMerge>
+        <feMergeNode in="line-outer-glow"/>
+        <feMergeNode in="line-inner-glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Glow from the illuminated strip inside each fader body. -->
+    <filter id="indicator-glow" x="-25%" y="-180%" width="150%" height="460%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="indicator-outer-blur"/>
+      <feFlood flood-color="#119ff2" flood-opacity="0.34" result="indicator-outer-color"/>
+      <feComposite in="indicator-outer-color" in2="indicator-outer-blur" operator="in" result="indicator-outer-glow"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="indicator-inner-blur"/>
+      <feFlood flood-color="#8cf1ff" flood-opacity="0.62" result="indicator-inner-color"/>
+      <feComposite in="indicator-inner-color" in2="indicator-inner-blur" operator="in" result="indicator-inner-glow"/>
+      <feMerge>
+        <feMergeNode in="indicator-outer-glow"/>
+        <feMergeNode in="indicator-inner-glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
   </defs>
 
-  <rect x="54" y="60" width="916" height="916" rx="198" fill="#000000" opacity="0.48"/>
-  <rect x="54" y="42" width="916" height="916" rx="198" fill="url(#tile)"/>
-  <ellipse cx="512" cy="522" rx="430" ry="380" fill="url(#ambientGlow)"/>
-  <rect x="57" y="45" width="910" height="910" rx="195" fill="none" stroke="#7b9ed2" stroke-opacity="0.18" stroke-width="6"/>
-
-  <path d="M170 818 302 704 512 520 722 342 852 230" fill="none" stroke="#0b75e3" stroke-opacity="0.09" stroke-width="118" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M170 818 302 704 512 520 722 342 852 230" fill="none" stroke="#13aef5" stroke-opacity="0.25" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M170 818 302 704 512 520 722 342 852 230" fill="none" stroke="#65e2ff" stroke-opacity="0.5" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M170 818 302 704 512 520 722 342 852 230" fill="none" stroke="#7eeaff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
-  <g>
-    <ellipse cx="302" cy="706" rx="132" ry="108" fill="url(#controlBloom)"/>
-    <ellipse cx="512" cy="520" rx="132" ry="108" fill="url(#controlBloom)"/>
-    <ellipse cx="722" cy="342" rx="132" ry="108" fill="url(#controlBloom)"/>
+  <!-- Rounded application tile -->
+  <g id="application-tile">
+    <rect x="54" y="42" width="916" height="916" rx="198" fill="url(#background-gradient)" filter="url(#tile-shadow)"/>
+    <rect x="54" y="42" width="916" height="916" rx="198" fill="url(#background-light)"/>
+    <rect x="58" y="46" width="908" height="908" rx="194" fill="none" stroke="#7798ca" stroke-opacity="0.2" stroke-width="6"/>
   </g>
 
-  <g fill="url(#track)">
-    <rect x="284" y="224" width="36" height="602" rx="18"/>
-    <rect x="494" y="224" width="36" height="602" rx="18"/>
-    <rect x="704" y="224" width="36" height="602" rx="18"/>
+  <!-- Glowing diagonal line passes behind all faders. -->
+  <g id="connection-line" filter="url(#line-glow)">
+    <path d="M166 822 302 704 512 520 722 342 856 226" fill="none" stroke="#7deaff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
   </g>
 
-  <g fill="#000713" opacity="0.48">
-    <rect x="236" y="650" width="132" height="128" rx="22"/>
-    <rect x="446" y="464" width="132" height="128" rx="22"/>
-    <rect x="656" y="286" width="132" height="128" rx="22"/>
+  <!-- Three vertical fader slots, each with its own editable shadow. -->
+  <g id="fader-slots">
+    <rect id="left-slot" x="282" y="224" width="40" height="602" rx="20" fill="url(#slot-gradient)" filter="url(#slot-shadow)"/>
+    <rect id="center-slot" x="492" y="224" width="40" height="602" rx="20" fill="url(#slot-gradient)" filter="url(#slot-shadow)"/>
+    <rect id="right-slot" x="702" y="224" width="40" height="602" rx="20" fill="url(#slot-gradient)" filter="url(#slot-shadow)"/>
   </g>
 
-  <g>
-    <g>
-      <rect x="236" y="642" width="132" height="128" rx="22" fill="url(#cap)" stroke="#ffffff" stroke-width="4"/>
-      <rect x="238" y="696" width="128" height="20" fill="url(#indicator)"/>
-      <path d="M250 656h104" stroke="#ffffff" stroke-opacity="0.62" stroke-width="5" stroke-linecap="round"/>
-    </g>
-    <g>
-      <rect x="446" y="456" width="132" height="128" rx="22" fill="url(#cap)" stroke="#ffffff" stroke-width="4"/>
-      <rect x="448" y="510" width="128" height="20" fill="url(#indicator)"/>
-      <path d="M460 470h104" stroke="#ffffff" stroke-opacity="0.62" stroke-width="5" stroke-linecap="round"/>
-    </g>
-    <g>
-      <rect x="656" y="278" width="132" height="128" rx="22" fill="url(#cap)" stroke="#ffffff" stroke-width="4"/>
-      <rect x="658" y="332" width="128" height="20" fill="url(#indicator)"/>
-      <path d="M670 292h104" stroke="#ffffff" stroke-opacity="0.62" stroke-width="5" stroke-linecap="round"/>
-    </g>
+  <!-- Low fader -->
+  <g id="left-fader" filter="url(#fader-shadow)">
+    <rect x="234" y="640" width="136" height="132" rx="24" fill="url(#fader-surface)" stroke="#ffffff" stroke-width="4"/>
+    <rect x="240" y="646" width="124" height="120" rx="18" fill="url(#fader-inner-shadow)"/>
+    <rect x="240" y="646" width="124" height="120" rx="18" fill="url(#fader-inner-glow)"/>
+    <rect x="238" y="695" width="128" height="22" fill="url(#indicator-gradient)" filter="url(#indicator-glow)"/>
+    <rect x="242" y="648" width="120" height="116" rx="17" fill="none" stroke="#ffffff" stroke-opacity="0.52" stroke-width="3"/>
+    <path d="M250 656h104" fill="none" stroke="#ffffff" stroke-opacity="0.7" stroke-width="5" stroke-linecap="round"/>
+  </g>
+
+  <!-- Mid fader -->
+  <g id="center-fader" filter="url(#fader-shadow)">
+    <rect x="444" y="454" width="136" height="132" rx="24" fill="url(#fader-surface)" stroke="#ffffff" stroke-width="4"/>
+    <rect x="450" y="460" width="124" height="120" rx="18" fill="url(#fader-inner-shadow)"/>
+    <rect x="450" y="460" width="124" height="120" rx="18" fill="url(#fader-inner-glow)"/>
+    <rect x="448" y="509" width="128" height="22" fill="url(#indicator-gradient)" filter="url(#indicator-glow)"/>
+    <rect x="452" y="462" width="120" height="116" rx="17" fill="none" stroke="#ffffff" stroke-opacity="0.52" stroke-width="3"/>
+    <path d="M460 470h104" fill="none" stroke="#ffffff" stroke-opacity="0.7" stroke-width="5" stroke-linecap="round"/>
+  </g>
+
+  <!-- High fader -->
+  <g id="right-fader" filter="url(#fader-shadow)">
+    <rect x="654" y="276" width="136" height="132" rx="24" fill="url(#fader-surface)" stroke="#ffffff" stroke-width="4"/>
+    <rect x="660" y="282" width="124" height="120" rx="18" fill="url(#fader-inner-shadow)"/>
+    <rect x="660" y="282" width="124" height="120" rx="18" fill="url(#fader-inner-glow)"/>
+    <rect x="658" y="331" width="128" height="22" fill="url(#indicator-gradient)" filter="url(#indicator-glow)"/>
+    <rect x="662" y="284" width="120" height="116" rx="17" fill="none" stroke="#ffffff" stroke-opacity="0.52" stroke-width="3"/>
+    <path d="M670 292h104" fill="none" stroke="#ffffff" stroke-opacity="0.7" stroke-width="5" stroke-linecap="round"/>
   </g>
 </svg>
