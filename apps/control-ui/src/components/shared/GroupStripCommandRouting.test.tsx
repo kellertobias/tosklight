@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   dispatch: vi.fn(),
   executeCommandLine: vi.fn(),
   selectionGesture: vi.fn(),
+  setCommandLine: vi.fn(),
   selectGroup: vi.fn(),
   refresh: vi.fn(),
   state: { storeArmed: false, updateArmed: false },
@@ -28,6 +29,7 @@ vi.mock("../../api/ServerContext", () => ({
     selectedGroupId: null,
     executeCommandLine: mocks.executeCommandLine,
     selectionGesture: mocks.selectionGesture,
+    setCommandLine: mocks.setCommandLine,
     selectGroup: mocks.selectGroup,
     refresh: mocks.refresh,
   }),
@@ -47,6 +49,7 @@ describe("GroupStrip command routing", () => {
     mocks.dispatch.mockReset();
     mocks.executeCommandLine.mockReset().mockResolvedValue(true);
     mocks.selectionGesture.mockReset().mockResolvedValue(undefined);
+    mocks.setCommandLine.mockReset();
     mocks.selectGroup.mockReset().mockResolvedValue(undefined);
     mocks.refresh.mockReset().mockResolvedValue(undefined);
     mocks.state.storeArmed = false;
@@ -66,6 +69,7 @@ describe("GroupStrip command routing", () => {
     render(<GroupStrip />);
     fireEvent.click(screen.getByText("Shortcut Group").closest("button")!);
     expect(mocks.selectionGesture).toHaveBeenCalledWith({ type: "live_group", group_id: "1" });
+    expect(mocks.setCommandLine).toHaveBeenCalledWith("GROUP 1");
   });
 
   it("routes an armed Update touch to the exact Group target without selecting it", () => {

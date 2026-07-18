@@ -10,9 +10,9 @@ function TextHarness({ enter, escape }: { enter: () => void; escape: () => void 
   return <div className="modal-backdrop"><output aria-label="value">{value}</output><ModalTextKeyboard value={value} onChange={setValue} onEnter={enter} onEscape={escape}/></div>;
 }
 
-function NumberHarness({ enter, escape, initial = "", replaceOnFirstInput = false, allowDecimal = true }: { enter: () => void; escape: () => void; initial?: string; replaceOnFirstInput?: boolean; allowDecimal?: boolean }) {
+function NumberHarness({ enter, escape, initial = "", replaceOnFirstInput = false, allowDecimal = true, allowThrough = false }: { enter: () => void; escape: () => void; initial?: string; replaceOnFirstInput?: boolean; allowDecimal?: boolean; allowThrough?: boolean }) {
   const [value, setValue] = useState(initial);
-  return <div className="modal-backdrop"><output aria-label="value">{value}</output><ModalNumberInput value={value} onChange={setValue} onEnter={enter} onEscape={escape} replaceOnFirstInput={replaceOnFirstInput} allowDecimal={allowDecimal}/></div>;
+  return <div className="modal-backdrop"><output aria-label="value">{value}</output><ModalNumberInput value={value} onChange={setValue} onEnter={enter} onEscape={escape} replaceOnFirstInput={replaceOnFirstInput} allowDecimal={allowDecimal} allowThrough={allowThrough}/></div>;
 }
 
 describe("modal input controls", () => {
@@ -78,6 +78,18 @@ describe("modal input controls", () => {
     render(<NumberHarness enter={vi.fn()} escape={vi.fn()} allowDecimal={false}/>);
     fireEvent.click(screen.getByRole("button", { name: "." }));
     expect(screen.getByLabelText("value")).toBeEmptyDOMElement();
+  });
+
+  it("builds a THRU expression when value spreading is enabled", () => {
+    const enter = vi.fn();
+    render(<NumberHarness enter={enter} escape={vi.fn()} initial="75" replaceOnFirstInput allowThrough/>);
+    fireEvent.click(screen.getByRole("button", { name: "0" }));
+    fireEvent.click(screen.getByRole("button", { name: "THRU" }));
+    fireEvent.click(screen.getByRole("button", { name: "5" }));
+    fireEvent.click(screen.getByRole("button", { name: "0" }));
+    expect(screen.getByLabelText("value")).toHaveTextContent("0 THRU 50");
+    fireEvent.click(screen.getByRole("button", { name: "ENTER" }));
+    expect(enter).toHaveBeenCalledOnce();
   });
 
   it("closes the number input from its ESC button", () => {

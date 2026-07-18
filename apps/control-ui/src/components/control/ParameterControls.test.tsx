@@ -23,6 +23,7 @@ const server = {
   readVisualization: vi.fn().mockResolvedValue({ values: [] }),
   alignSelection: vi.fn(),
   setProgrammer: vi.fn(),
+  setProgrammerMany: vi.fn(),
   setProgrammerValue: vi.fn(),
   controlFixtureAction: vi.fn(),
   generateFixturePresets: vi.fn().mockResolvedValue({ created: [] }),
@@ -107,6 +108,44 @@ describe("ParameterControls alignment", () => {
     expect(server.setProgrammer).toHaveBeenLastCalledWith("fixture-1", "intensity", .1);
   });
 
+  it("uses the hardware encoder card itself as the set-value target", () => {
+    server.bootstrap.hardware_connected = true;
+    server.selectedFixtures = ["fixture-1"];
+    server.patch.fixtures = [{
+      fixture_id: "fixture-1",
+      logical_heads: [],
+      definition: { heads: [{ shared: true, parameters: [{ attribute: "intensity", capabilities: [] }] }] },
+    }];
+    render(<ParameterControls />);
+
+    expect(screen.queryByRole("button", { name: "Set value for Dimmer" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Encoder 1: Dimmer, 0%" }));
+
+    expect(screen.getByRole("dialog", { name: "Encoder 1 value" })).toBeInTheDocument();
+  });
+
+  it("spreads a typed hardware encoder range over the ordered fixture selection", () => {
+    server.bootstrap.hardware_connected = true;
+    server.selectedFixtures = ["fixture-3", "fixture-1", "fixture-2"];
+    server.patch.fixtures = server.selectedFixtures.map((fixture_id) => ({
+      fixture_id,
+      logical_heads: [],
+      definition: { heads: [{ shared: true, parameters: [{ attribute: "intensity", capabilities: [] }] }] },
+    }));
+    render(<ParameterControls />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Encoder 1: Dimmer, 0%" }));
+    for (const key of ["0", "THRU", "5", "0", "ENTER"]) {
+      fireEvent.click(screen.getByRole("button", { name: key }));
+    }
+
+    expect(server.setProgrammerMany).toHaveBeenCalledWith([
+      { fixtureId: "fixture-3", attribute: "intensity", value: 0 },
+      { fixtureId: "fixture-1", attribute: "intensity", value: 0.25 },
+      { fixtureId: "fixture-2", attribute: "intensity", value: 0.5 },
+    ]);
+  });
+
   it("clears all physical encoder mappings in Direct mode", () => {
     server.bootstrap.hardware_connected = true;
     server.selectedFixtures = ["fixture-1"];
@@ -132,8 +171,39 @@ describe("ParameterControls alignment", () => {
     }];
     render(<ParameterControls />);
     fireEvent.click(screen.getByRole("button", { name: "Control" }));
-    expect(screen.getByLabelText("Encoder 1: control reset, fixture.reset.safe")).toHaveTextContent("Discrete");
+    expect(screen.getByLabelText("Encoder 1: control reset, fixture.reset.safe")).not.toHaveTextContent("Built-in");
     expect(screen.queryByRole("button", { name: "Set value for control reset" })).not.toBeInTheDocument();
+  });
+
+  it("shows a hardware encoder percentage range for mixed selected fixture values", async () => {
+    server.bootstrap.hardware_connected = true;
+    server.selectedFixtures = ["fixture-1", "fixture-2"];
+    server.patch.fixtures = [
+      {
+        fixture_id: "fixture-1",
+        logical_heads: [],
+        definition: { heads: [{ shared: true, parameters: [{ attribute: "intensity", capabilities: [] }] }] },
+      },
+      {
+        fixture_id: "fixture-2",
+        logical_heads: [],
+        definition: { heads: [{ shared: true, parameters: [{ attribute: "intensity", capabilities: [] }] }] },
+      },
+    ];
+    server.readVisualization.mockResolvedValue({
+      values: [
+        { fixture_id: "fixture-1", attribute: "intensity", value: { kind: "normalized", value: 0.25 } },
+        { fixture_id: "fixture-2", attribute: "intensity", value: { kind: "normalized", value: 0.75 } },
+      ],
+    });
+
+    render(<ParameterControls />);
+
+    const encoder = await screen.findByLabelText("Encoder 1: Dimmer, 25%...75%");
+    expect(encoder).toHaveTextContent("Dimmer");
+    expect(encoder).toHaveTextContent("Enc 1");
+    expect(encoder).not.toHaveTextContent("Turn");
+    expect(encoder).not.toHaveTextContent("Intensity");
   });
 
   it("releases only the visible fixture-scoped attribute", () => {
@@ -304,7 +374,14 @@ describe("ParameterControls schema-v2 direct picker", () => {
     server.selectedFixtures = ["fixture-1"];
     server.patch.fixtures = [schemaV2Fixture()];
     server.generateFixturePresets.mockResolvedValueOnce({
-      created: [{ id: "1", name: "Dots", family: "Beam" }],
+      created: [
+        {
+          address: { family: "Beam", number: 1 },
+          number: 1,
+          name: "Dots",
+          family: "Beam",
+        },
+      ],
     });
 
     render(<ParameterControls />);

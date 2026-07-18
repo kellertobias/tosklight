@@ -228,7 +228,7 @@ test("HIGHLIGHT-005 @ui › Highlight errors remain reachable above production c
   }
 });
 
-test("FIXTURE-002 @restart › complete assets and physical metadata remain immutable across edit, patch, and restart", async ({ api, bench, desk, page }) => {
+test("FIXTURE-002 @restart › focused assets and physical metadata remain immutable across edit, patch, and restart", async ({ api, bench, desk, page }) => {
   test.setTimeout(90_000);
   await loadCanonicalCopy(api, bench, "fixture-002", "default-stage");
   const manufacturer = `Feature 21 ${crypto.randomUUID()}`;
@@ -239,12 +239,8 @@ test("FIXTURE-002 @restart › complete assets and physical metadata remain immu
     depth_millimetres: 310,
     weight_kilograms: 24.5,
     power_watts: 720,
-    connectors: "powerCON TRUE1 TOP; 5-pin XLR in/out",
-    light_source: "600 W LED engine",
     color_temperature_kelvin: 6500,
-    color_rendering_index: 92,
     luminous_output_lumens: 18500,
-    lens: "Fresnel zoom",
     beam_angle_degrees: 36,
   };
   const files = {
@@ -282,12 +278,23 @@ test("FIXTURE-002 @restart › complete assets and physical metadata remain immu
     ["Width (mm)", physical.width_millimetres], ["Height (mm)", physical.height_millimetres],
     ["Depth (mm)", physical.depth_millimetres], ["Weight (kg)", physical.weight_kilograms],
     ["Power consumption (W)", physical.power_watts], ["Color temperature (K)", physical.color_temperature_kelvin],
-    ["Color rendering index (CRI)", physical.color_rendering_index], ["Luminous output (lm)", physical.luminous_output_lumens],
+    ["Luminous output (lm)", physical.luminous_output_lumens],
     ["Beam angle (degrees)", physical.beam_angle_degrees],
   ] as const) await editor.getByLabel(label).fill(String(value));
-  await editor.getByLabel("Connectors").fill(physical.connectors);
-  await editor.getByLabel("Light source").fill(physical.light_source);
-  await editor.getByLabel("Lens").fill(physical.lens);
+  await expect(editor.getByLabel("Connectors")).toHaveCount(0);
+  await expect(editor.getByLabel("Light source")).toHaveCount(0);
+  await expect(editor.getByLabel("Color rendering index (CRI)")).toHaveCount(0);
+  await expect(editor.getByLabel("Lens")).toHaveCount(0);
+  const assetColumns = editor.locator(".fixture-notes-assets > div");
+  await expect(assetColumns).toHaveCount(3);
+  await expect(assetColumns.nth(0).getByRole("heading", { name: "Notes" })).toBeVisible();
+  await expect(assetColumns.nth(1).getByRole("heading", { name: "Fixture photograph" })).toBeVisible();
+  await expect(assetColumns.nth(2).getByRole("heading", { name: "Visualizer" })).toBeVisible();
+  const assetColumnBoxes = await Promise.all([0, 1, 2].map((index) => assetColumns.nth(index).boundingBox()));
+  expect(assetColumnBoxes.every(Boolean)).toBe(true);
+  expect(Math.max(...assetColumnBoxes.map((box) => box!.width)) - Math.min(...assetColumnBoxes.map((box) => box!.width))).toBeLessThan(2);
+  expect(assetColumnBoxes[0]!.x).toBeLessThan(assetColumnBoxes[1]!.x);
+  expect(assetColumnBoxes[1]!.x).toBeLessThan(assetColumnBoxes[2]!.x);
 
   await editor.getByRole("button", { name: "Choose photograph", exact: true }).click();
   await selectConfinedFile(page, files.photoA);
@@ -303,7 +310,19 @@ test("FIXTURE-002 @restart › complete assets and physical metadata remain immu
   await editor.getByRole("button", { name: "Choose visualizer glb model", exact: true }).click();
   await selectConfinedFile(page, files.modelA);
   await expect(editor.getByRole("status")).toContainText("GLB 2.0 · 1268 bytes");
-  await expect(editor.getByLabel("Visualizer GLB model preview").locator("canvas")).toBeVisible();
+  const preview = editor.getByLabel("Visualizer GLB model preview");
+  const previewCanvas = preview.locator("canvas");
+  await expect(preview).toHaveAttribute("title", "Drag to rotate; scroll to zoom");
+  await expect(previewCanvas).toBeVisible();
+  const beforeOrbit = await previewCanvas.screenshot();
+  const previewBox = await previewCanvas.boundingBox();
+  expect(previewBox).not.toBeNull();
+  await page.mouse.move(previewBox!.x + previewBox!.width / 2, previewBox!.y + previewBox!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(previewBox!.x + previewBox!.width * .8, previewBox!.y + previewBox!.height * .6, { steps: 5 });
+  await page.mouse.up();
+  const afterOrbit = await previewCanvas.screenshot();
+  expect(afterOrbit.equals(beforeOrbit)).toBe(false);
   await editor.getByRole("button", { name: "Replace visualizer glb model", exact: true }).click();
   await selectConfinedFile(page, files.modelB);
   await expect(editor.getByRole("status")).toContainText("GLB 2.0 · 1448 bytes");
@@ -319,12 +338,8 @@ test("FIXTURE-002 @restart › complete assets and physical metadata remain immu
   await page.getByRole("button", { name: "Edit fixture", exact: true }).click();
   editor = page.getByRole("dialog", { name: "Edit fixture profile" });
   await expect(editor.getByLabel("Width (mm)")).toHaveValue("420");
-  await expect(editor.getByLabel("Connectors")).toHaveValue(physical.connectors);
-  await expect(editor.getByLabel("Light source")).toHaveValue(physical.light_source);
   await expect(editor.getByLabel("Color temperature (K)")).toHaveValue("6500");
-  await expect(editor.getByLabel("Color rendering index (CRI)")).toHaveValue("92");
   await expect(editor.getByLabel("Luminous output (lm)")).toHaveValue("18500");
-  await expect(editor.getByLabel("Lens")).toHaveValue(physical.lens);
   await expect(editor.getByLabel("Beam angle (degrees)")).toHaveValue("36");
   await expect(editor.getByAltText("Fixture photograph preview")).toHaveCount(0);
   await expect(editor.getByText("Fixture icon assigned")).toBeVisible();
@@ -466,7 +481,7 @@ test("UPDATE-002 @restart › pre-Update desk settings migrate once and Cue, Pre
   const presetId = "0.1";
   const presetBaseline = {
     name: "Legacy Update Preset",
-    family: "All",
+    family: "Mixed",
     values: { [first]: { intensity: { kind: "normalized", value: 0.1 } } },
     group_values: {},
   };
@@ -1102,7 +1117,7 @@ async function storeCurrentProgrammerPreset(api: Parameters<typeof objects>[0], 
   }
   await api.request("POST", `/api/v1/shows/${showId}/presets/${presetId}/store`, {
     mode: "overwrite",
-    preset: { name: "Highlight isolation", family: "All", values, group_values: {} },
+    preset: { name: "Highlight isolation", family: "Mixed", values, group_values: {} },
   }, true, 0);
 }
 

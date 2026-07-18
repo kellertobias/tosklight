@@ -34,6 +34,7 @@ export function ModalTitleBar({
 		<header className={`ui-modal-titlebar ${className}`.trim()}>
 			<h2 className="ui-modal-title-heading">{title}</h2>
 			{details && <div className="ui-modal-title-details">{details}</div>}
+			<span className="ui-modal-title-spacer" />
 			{hasTabs && (
 				<div className="ui-modal-title-tabs" role="tablist">
 					{tabs?.map((tab) => (
@@ -51,7 +52,6 @@ export function ModalTitleBar({
 					))}
 				</div>
 			)}
-			<span className="ui-modal-title-spacer" />
 			{search && <div className="ui-modal-title-search">{search}</div>}
 			{actions && <div className="ui-modal-title-actions">{actions}</div>}
 			{onClose && (

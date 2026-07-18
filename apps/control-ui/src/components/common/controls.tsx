@@ -92,8 +92,20 @@ function emitInputValue(
   onChange?.({ target: input, currentTarget: input } as ChangeEvent<HTMLInputElement>);
 }
 
+function emitTextAreaValue(
+  input: HTMLTextAreaElement | null,
+  next: string,
+  onChange?: (event: ChangeEvent<HTMLTextAreaElement>) => void,
+  onValueChange?: (value: string) => void,
+) {
+  if (!input) return;
+  input.value = next;
+  onValueChange?.(next);
+  onChange?.({ target: input, currentTarget: input } as ChangeEvent<HTMLTextAreaElement>);
+}
+
 function InputModal({ kind, value, allowDecimal = false, secure = false, label, unit, onCommit, onDraftChange, onCancel }: {
-  kind: "text" | "number";
+  kind: "text" | "multiline" | "number";
   value: string;
   allowDecimal?: boolean;
   secure?: boolean;
@@ -106,11 +118,11 @@ function InputModal({ kind, value, allowDecimal = false, secure = false, label, 
   const [draft, setDraft] = useState(value);
   const updateDraft = (next: string) => { setDraft(next); onDraftChange?.(next); };
   return createPortal(<div className="stacked-modal-layer ui-input-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && onCancel()}>
-    <section className={`nested-modal ${kind === "text" ? "keyboard-modal" : "number-field-modal"}`} role="dialog" aria-modal="true" aria-label={label ?? (kind === "text" ? "Text input" : "Number input")}>
-      <ModalTitleBar title={label ?? (kind === "text" ? "Text input" : "Number input")} closeLabel="Close input" onClose={onCancel}/>
-      {kind === "number" && unit ? <div className="modal-number-value"><input className="ui-input" type="text" aria-label={`${label ?? kind} value`} value={draft} readOnly/><span aria-label="Unit">{unit}</span></div> : <input className="ui-input" type={secure ? "password" : "text"} aria-label={`${label ?? kind} value`} value={draft} readOnly/>}
-      {kind === "text"
-        ? <ModalTextKeyboard value={draft} onChange={updateDraft} onEnter={() => onCommit(draft)} onEscape={onCancel}/>
+    <section className={`nested-modal ${kind !== "number" ? "keyboard-modal" : "number-field-modal"}`} role="dialog" aria-modal="true" aria-label={label ?? (kind === "number" ? "Number input" : "Text input")}>
+      <ModalTitleBar title={label ?? (kind === "number" ? "Number input" : "Text input")} closeLabel="Close input" onClose={onCancel}/>
+      {kind === "multiline" ? <textarea className="ui-textarea modal-multiline-value" aria-label={`${label ?? "Text input"} value`} value={draft} readOnly/> : kind === "number" && unit ? <div className="modal-number-value"><input className="ui-input" type="text" aria-label={`${label ?? kind} value`} value={draft} readOnly/><span aria-label="Unit">{unit}</span></div> : <input className="ui-input" type={secure ? "password" : "text"} aria-label={`${label ?? kind} value`} value={draft} readOnly/>}
+      {kind !== "number"
+        ? <ModalTextKeyboard value={draft} onChange={updateDraft} onEnter={() => onCommit(draft)} onEscape={onCancel} multiline={kind === "multiline"}/>
         : <ModalNumberInput value={draft} allowDecimal={allowDecimal} onChange={updateDraft} onEnter={() => onCommit(draft)} onEscape={onCancel}/>
       }
     </section>
@@ -222,6 +234,64 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
   return <textarea ref={ref} className={`ui-textarea ${className}`.trim()} {...props}/>;
 });
 
+export interface LargeTextInputProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+  keyboardLabel?: string;
+  liveKeyboard?: boolean;
+  onKeyboardCommit?: (value: string) => void;
+  onValueChange?: (value: string) => void;
+}
+
+export const LargeTextInput = forwardRef<HTMLTextAreaElement, LargeTextInputProps>(function LargeTextInput(
+  { className = "", value, defaultValue, onChange, onValueChange, onKeyboardCommit, keyboardLabel, liveKeyboard = false, disabled, readOnly, ...props },
+  ref,
+) {
+  const [open, setOpen] = useState(false);
+  const native = useRef<HTMLTextAreaElement>(null);
+  useImperativeHandle(ref, () => native.current!);
+  const current = String(value ?? native.current?.value ?? defaultValue ?? "");
+  const update = (next: string) => emitTextAreaValue(native.current, next, onChange, onValueChange);
+  const moveCursor = (direction: -1 | 1) => {
+    const area = native.current;
+    if (!area) return;
+    const position = area.selectionStart;
+    const lineStart = area.value.lastIndexOf("\n", Math.max(0, position - 1)) + 1;
+    const column = position - lineStart;
+    let target = position;
+    if (direction < 0) {
+      if (lineStart > 0) {
+        const previousEnd = lineStart - 1;
+        const previousStart = area.value.lastIndexOf("\n", Math.max(0, previousEnd - 1)) + 1;
+        target = previousStart + Math.min(column, previousEnd - previousStart);
+      } else target = 0;
+    } else {
+      const lineEnd = area.value.indexOf("\n", position);
+      if (lineEnd >= 0) {
+        const nextStart = lineEnd + 1;
+        const nextEnd = area.value.indexOf("\n", nextStart);
+        target = nextStart + Math.min(column, (nextEnd < 0 ? area.value.length : nextEnd) - nextStart);
+      } else target = area.value.length;
+    }
+    area.focus();
+    area.setSelectionRange(target, target);
+    const lineHeight = Number.parseFloat(getComputedStyle(area).lineHeight) || 22;
+    area.scrollBy({ top: direction * lineHeight * 2, behavior: "smooth" });
+  };
+  return <span className="ui-large-text-control">
+    <textarea {...props} ref={native} value={value} defaultValue={defaultValue} onChange={(event) => { onValueChange?.(event.target.value); onChange?.(event); }} disabled={disabled} readOnly={readOnly} className={`ui-textarea ${className}`.trim()}/>
+    <Button size="compact" iconOnly className="ui-large-text-up" aria-label="Move cursor and scroll up" disabled={disabled} onClick={() => moveCursor(-1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 15 7-7 7 7"/></svg></Button>
+    <Button size="compact" iconOnly className="ui-large-text-down" aria-label="Move cursor and scroll down" disabled={disabled} onClick={() => moveCursor(1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 9 7 7 7-7"/></svg></Button>
+    <Button size="compact" iconOnly className="ui-large-text-keyboard" aria-label="Open keyboard" disabled={disabled || readOnly} onClick={() => setOpen(true)}><span className="ui-keyboard-icon" aria-hidden="true">⌨</span></Button>
+    {open && <InputModal
+      kind="multiline"
+      value={current}
+      label={keyboardLabel ?? props["aria-label"]}
+      onDraftChange={liveKeyboard ? update : undefined}
+      onCommit={(next) => { update(next); setOpen(false); onKeyboardCommit?.(next); requestAnimationFrame(() => native.current?.focus()); }}
+      onCancel={() => { setOpen(false); requestAnimationFrame(() => native.current?.focus()); }}
+    />}
+  </span>;
+});
+
 type TextFieldProps = TextInputProps & { label?: ReactNode; description?: ReactNode; error?: ReactNode; controlSize?: ControlSize; labelPlacement?: LabelPlacement };
 export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function TextField({ label, description, error, controlSize = "default", id, className = "", required, labelPlacement, ...props }, ref) {
   const generated = useId();
@@ -240,6 +310,12 @@ export const TextAreaField = forwardRef<HTMLTextAreaElement, TextareaHTMLAttribu
   const generated = useId();
   const fieldId = id ?? generated;
   return <FormField label={label} description={description} error={error} required={required} htmlFor={fieldId} labelPlacement={labelPlacement}><textarea {...props} required={required} ref={ref} id={fieldId} aria-invalid={Boolean(error) || undefined} className={`ui-textarea ${className}`.trim()}/></FormField>;
+});
+
+export const LargeTextField = forwardRef<HTMLTextAreaElement, LargeTextInputProps & { label?: ReactNode; description?: ReactNode; error?: ReactNode; labelPlacement?: LabelPlacement }>(function LargeTextField({ label, description, error, id, className = "", required, labelPlacement, ...props }, ref) {
+  const generated = useId();
+  const fieldId = id ?? generated;
+  return <FormField label={label} description={description} error={error} required={required} htmlFor={fieldId} labelPlacement={labelPlacement}><LargeTextInput {...props} required={required} ref={ref} id={fieldId} aria-invalid={Boolean(error) || undefined} className={className} keyboardLabel={props.keyboardLabel ?? (typeof label === "string" ? label : undefined)}/></FormField>;
 });
 
 export interface SelectOption<T extends string = string> { value: T; label: ReactNode; disabled?: boolean }

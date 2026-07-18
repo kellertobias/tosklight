@@ -324,6 +324,18 @@ test.describe("docs/testing/01-foundational-dimmers-and-groups.md", () => {
     },
   });
 
+  test("PROG-002 @ui › fixture ranges and retained selections spread through the desk command line", async ({ api, bench, desk, page }) => {
+    await loadCompactRig(api, bench, "prog-002-fixture-command-ui");
+    await desk.open(api.baseUrl);
+
+    await pressCommandAndWait(page, "1 THRU 5 AT 20 THRU 50", "F1 THRU 5 AT 20 THRU 50");
+    await expectSlotsAfterTick(bench, 3_000, [51, 70, 89, 108, 128, 0, 0, 0, 0, 0, 0, 0]);
+
+    await pressCommandAndWait(page, "1 THRU 5", "F1 THRU 5");
+    await pressCommandAndWait(page, "AT 0 THRU 50", "AT 0 THRU 50");
+    await expectSlotsAfterTick(bench, 3_000, [0, 32, 64, 96, 128, 0, 0, 0, 0, 0, 0, 0]);
+  });
+
   pairedScenario<{ overrideSlots: number[]; fixture: string }>({
     id: "PROG-003",
     title: "newer fixture intensity wins LTP and releases back to its Group value",
@@ -669,6 +681,42 @@ test.describe("docs/testing/01-foundational-dimmers-and-groups.md", () => {
     expect(preset.body.group_values["5"]?.[INTENSITY]).toBeDefined();
   });
 
+  test("PROG-001 @supplemental › Preset numbers are local to each family pool", async ({ api, bench }) => {
+    await loadCompactRig(api, bench, "prog-001-family-local-preset-numbers");
+    const fixtures = await fixtureIdsByNumber(api);
+    const fixture = fixtures[1];
+
+    await putObject(api, "preset", "2.1", {
+      name: "Color one",
+      family: "Color",
+      number: 1,
+      values: { [fixture]: { "color.red": { kind: "normalized", value: 1 } } },
+      group_values: {},
+    });
+    await putObject(api, "preset", "3.1", {
+      name: "Position one",
+      family: "Position",
+      number: 1,
+      values: { [fixture]: { pan: { kind: "normalized", value: 0.25 } } },
+      group_values: {},
+    });
+
+    const colorOne = await object(api, "preset", "2.1");
+    const positionOne = await object(api, "preset", "3.1");
+    expect(colorOne.body).toMatchObject({ family: "Color", number: 1 });
+    expect(positionOne.body).toMatchObject({ family: "Position", number: 1 });
+
+    await select(api, [fixture]);
+    await api.command("preset.apply", { family: "Color", number: 1 });
+    await api.command("preset.apply", { family: "Position", number: 1 });
+    await expectProgrammer(api, (programmer) => {
+      expect(programmer.values).toEqual(expect.arrayContaining([
+        expect.objectContaining({ fixture_id: fixture, attribute: "color.red" }),
+        expect.objectContaining({ fixture_id: fixture, attribute: "pan" }),
+      ]));
+    });
+  });
+
   test("GROUP-005 @supplemental › API deletion and missing-reference errors remain atomic", async ({ api, bench }) => {
     await loadCompactRig(api, bench, "group-005-api");
     const fixtures = await fixtureIdsByNumber(api);
@@ -1011,9 +1059,10 @@ test.describe("docs/testing/01-foundational-dimmers-and-groups.md", () => {
       if (surface === "ui") {
         test.setTimeout(90_000);
         const fixtures = await fixtureIdsByNumber(api);
-        await putObject(api, "preset", "199", {
+        await putObject(api, "preset", "1.199", {
           name: "Selection Intensity",
           family: "Intensity",
+          number: 199,
           values: {
             [fixtures[21]]: { intensity: { kind: "normalized", value: 0.6 } },
             [fixtures[22]]: { intensity: { kind: "normalized", value: 0.6 } },
@@ -1113,9 +1162,10 @@ test.describe("docs/testing/01-foundational-dimmers-and-groups.md", () => {
     const fixtures = await fixtureIdsByNumber(api);
     await gestureFixture(api, fixtures[21]);
     await gestureFixture(api, fixtures[22]);
-    await putObject(api, "preset", "200", {
+    await putObject(api, "preset", "1.200", {
       name: "LED intensity",
       family: "Intensity",
+      number: 200,
       values: {
         [fixtures[21]]: { intensity: { kind: "normalized", value: 0.4 } },
         [fixtures[22]]: { intensity: { kind: "normalized", value: 0.4 } },
@@ -1132,7 +1182,7 @@ test.describe("docs/testing/01-foundational-dimmers-and-groups.md", () => {
       ],
     });
 
-    await api.command("preset.apply", { preset_id: "200" });
+    await api.command("preset.apply", { family: "Intensity", number: 200 });
     const recalled = await programmer(api);
     expect(recalled.selected).toEqual(before.selected);
     expect(recalled.selection_expression).toEqual(before.selection_expression);

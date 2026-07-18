@@ -99,6 +99,24 @@ function discreteProgrammerTarget(value: unknown): string | undefined {
   return record.value === value ? undefined : discreteProgrammerTarget(record.value);
 }
 
+function formatNormalizedValue(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatNormalizedRange(values: number[]): string | undefined {
+  if (!values.length) return undefined;
+  const rounded = values.map((value) => Math.round(value * 100));
+  const minimum = Math.min(...rounded);
+  const maximum = Math.max(...rounded);
+  return minimum === maximum ? `${minimum}%` : `${minimum}%...${maximum}%`;
+}
+
+function formatDiscreteValues(values: string[]): string | undefined {
+  if (!values.length) return undefined;
+  const unique = [...new Set(values)];
+  return unique.length === 1 ? unique[0] : "Mixed";
+}
+
 interface DirectValueAssignment {
   fixtureId: string;
   attribute: string;
@@ -279,11 +297,31 @@ export function ParameterControls() {
         result.set(entry.attribute, entry.value.value);
     return result;
   }, [visualization, server.selectedFixtures]);
+  const normalizedValuesByFixture = useMemo(() => {
+    const result = new Map<string, Map<string, number>>();
+    for (const entry of visualization?.values ?? []) {
+      if (!server.selectedFixtures.includes(entry.fixture_id) || entry.value.kind !== "normalized") continue;
+      const fixtureValues = result.get(entry.fixture_id) ?? new Map<string, number>();
+      fixtureValues.set(entry.attribute, entry.value.value);
+      result.set(entry.fixture_id, fixtureValues);
+    }
+    return result;
+  }, [visualization, server.selectedFixtures]);
   const discreteValues = useMemo(() => {
     const result = new Map<string, string>();
     for (const entry of visualization?.values ?? [])
       if (server.selectedFixtures.includes(entry.fixture_id) && entry.value.kind === "discrete" && !result.has(entry.attribute))
         result.set(entry.attribute, entry.value.value);
+    return result;
+  }, [visualization, server.selectedFixtures]);
+  const discreteValuesByFixture = useMemo(() => {
+    const result = new Map<string, Map<string, string>>();
+    for (const entry of visualization?.values ?? []) {
+      if (!server.selectedFixtures.includes(entry.fixture_id) || entry.value.kind !== "discrete") continue;
+      const fixtureValues = result.get(entry.fixture_id) ?? new Map<string, string>();
+      fixtureValues.set(entry.attribute, entry.value.value);
+      result.set(entry.fixture_id, fixtureValues);
+    }
     return result;
   }, [visualization, server.selectedFixtures]);
   const programmerTarget = (attribute: string): number | undefined => {
@@ -311,6 +349,31 @@ export function ParameterControls() {
     }
     return undefined;
   };
+  const encoderNormalizedDisplay = (attribute: string): string | undefined => {
+    if (server.selectedGroupId) {
+      const target = programmerTarget(attribute);
+      return target == null ? undefined : formatNormalizedValue(target);
+    }
+    const targets = server.selectedFixtures.flatMap((fixtureId) => {
+      const entry = programmerValues.find((candidate) => candidate.fixture_id === fixtureId && candidate.attribute === attribute);
+      const target = normalizedProgrammerTarget(entry?.value);
+      const resolved = normalizedValuesByFixture.get(fixtureId)?.get(attribute);
+      const value = target ?? resolved;
+      return value == null ? [] : [value];
+    });
+    return formatNormalizedRange(targets);
+  };
+  const encoderDiscreteDisplay = (attribute: string): string | undefined => {
+    if (server.selectedGroupId) return programmerDiscreteTarget(attribute);
+    const targets = server.selectedFixtures.flatMap((fixtureId) => {
+      const entry = programmerValues.find((candidate) => candidate.fixture_id === fixtureId && candidate.attribute === attribute);
+      const target = discreteProgrammerTarget(entry?.value);
+      const resolved = discreteValuesByFixture.get(fixtureId)?.get(attribute);
+      const value = target ?? resolved;
+      return value == null ? [] : [value];
+    });
+    return formatDiscreteValues(targets);
+  };
   const applyParameter = async (attribute: string, level: number) => {
     if (server.selectedGroupId) {
       // The server owns the capture-domain decision. Sending the normal programmer action keeps
@@ -323,6 +386,26 @@ export function ParameterControls() {
         server.setProgrammer(fixtureId, attribute, level),
       ),
     );
+  };
+  const applyParameterRange = async (attribute: string, percentages: number[]) => {
+    const points = percentages.map((value) => Math.max(0, Math.min(100, value)) / 100);
+    if (server.selectedGroupId) {
+      await server.setGroupValue(attribute, { kind: "spread", value: points });
+      return;
+    }
+    const count = server.selectedFixtures.length;
+    const valueAt = (index: number) => {
+      if (points.length === 1 || count <= 1) return points[0] ?? 0;
+      const position = index * (points.length - 1) / (count - 1);
+      const left = Math.floor(position);
+      const right = Math.ceil(position);
+      return points[left] + (points[right] - points[left]) * (position - left);
+    };
+    await server.setProgrammerMany(server.selectedFixtures.map((fixtureId, index) => ({
+      fixtureId,
+      attribute,
+      value: valueAt(index),
+    })));
   };
   const releaseParameter = async (attribute: string) => {
     if (server.selectedGroupId) {
@@ -552,7 +635,8 @@ export function ParameterControls() {
             // Encoders show the operator's target immediately. Fixture/Stage views continue to
             // read the resolved visualization so a configured Programmer Fade stays visible.
             const value = programmerTarget(attribute) ?? values.get(attribute) ?? 0;
-            const discreteValue = programmerDiscreteTarget(attribute) ?? discreteValues.get(attribute);
+            const discreteValue = encoderDiscreteDisplay(attribute);
+            const normalizedDisplay = encoderNormalizedDisplay(attribute) ?? formatNormalizedValue(value);
             const hasScopedValue = server.selectedGroupId
               ? Boolean(ownProgrammer?.group_values?.[server.selectedGroupId]?.[attribute])
               : programmerValues.some(
@@ -561,17 +645,17 @@ export function ParameterControls() {
             return hardwareConnected ? <HardwareEncoderDisplay
               key={attribute}
               slot={index + 1}
-              target={{ label: labels[attribute] ?? attribute.replaceAll(".", " "), value: discreteValue ?? `${Math.round(value * 100)}%`, role: discreteValue ? "Discrete" : "Turn · %" }}
-              state={`${family}${dynamicsMode ? " · Dynamics" : ""}${hasScopedValue ? " · Programmer" : " · Default"}`}
+              target={{ label: labels[attribute] ?? attribute.replaceAll(".", " "), value: discreteValue ?? normalizedDisplay }}
               editValue={discreteValue ? undefined : value * 100}
               onEdit={discreteValue ? undefined : (next) => void applyParameter(attribute, Math.max(0, Math.min(100, next)) / 100)}
+              onEditRange={discreteValue ? undefined : (points) => void applyParameterRange(attribute, points)}
               onRelease={hasScopedValue ? () => void releaseParameter(attribute) : undefined}
             /> : (
               <VerticalTouchFader
                 key={attribute}
                 label={`Enc ${index + 1} · ${labels[attribute] ?? attribute.replaceAll(".", " ")}`}
                 value={value * 100}
-                display={`${Math.round(value * 100)}%`}
+                display={formatNormalizedValue(value)}
                 accentColor={attribute === "color.red" ? "#ff3d45" : attribute === "color.green" ? "#35d568" : attribute === "color.blue" ? "#378eff" : attribute === "color.white" ? "#ffffff" : attribute === "color.amber" ? "#ffb30f" : attribute === "color.uv" ? "#9a55ff" : undefined}
                 mode={dynamicsMode ? "Dynamics" : undefined}
                 directInput

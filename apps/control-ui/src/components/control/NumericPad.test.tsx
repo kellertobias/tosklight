@@ -184,7 +184,7 @@ describe("NumericPad layout", () => {
     shifted("1");
     expect(dispatch).toHaveBeenCalledWith({ type: "OPEN_BUILTIN", kind: "groups" });
     shifted("2");
-    expect(dispatch).toHaveBeenCalledWith({ type: "SET_PRESET_FAMILY", family: "All" });
+    expect(dispatch).toHaveBeenCalledWith({ type: "SET_PRESET_FAMILY", family: "Mixed" });
     expect(dispatch).toHaveBeenCalledWith({ type: "OPEN_BUILTIN", kind: "presets" });
     shifted("3");
     expect(dispatch).toHaveBeenCalledWith({ type: "OPEN_BUILTIN", kind: "cuelists" });

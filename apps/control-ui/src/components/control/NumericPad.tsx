@@ -53,7 +53,7 @@ export function NumericPad({ demo = false }: { demo?: boolean } = {}) {
         return;
       }
       if (key === "2") {
-        dispatch({ type: "SET_PRESET_FAMILY", family: "All" });
+        dispatch({ type: "SET_PRESET_FAMILY", family: "Mixed" });
         dispatch({ type: "OPEN_BUILTIN", kind: "presets" });
         return;
       }

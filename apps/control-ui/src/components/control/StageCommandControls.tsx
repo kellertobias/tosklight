@@ -25,7 +25,7 @@ export function StageCommandControls() {
     const delta = nextValue - first[key];
     const nextPositions = { ...positions };
     for (const id of selected) if (nextPositions[id]) nextPositions[id] = { ...nextPositions[id], [key]: nextPositions[id][key] + delta };
-    void server.saveStageLayout({ version: 2, positions: server.stageLayout?.body.positions ?? {}, positions3d: nextPositions, assets: server.stageLayout?.body.assets ?? [] });
+    void server.saveStageLayout({ version: 2, positions: server.stageLayout?.body.positions ?? {}, positions3d: nextPositions });
   };
   useEffect(() => {
     if (!hardwareConnected) return;

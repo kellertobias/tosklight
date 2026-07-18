@@ -29,7 +29,7 @@ function useModalInput(onKey: (key: string) => void) {
   return root;
 }
 
-export function ModalNumberInput({ value, onChange, onEnter, onEscape, replaceOnFirstInput = false, allowDecimal = true }: { value: string; onChange: (value: string) => void; onEnter: () => void; onEscape: () => void; replaceOnFirstInput?: boolean; allowDecimal?: boolean }) {
+export function ModalNumberInput({ value, onChange, onEnter, onEscape, replaceOnFirstInput = false, allowDecimal = true, allowThrough = false }: { value: string; onChange: (value: string) => void; onEnter: () => void; onEscape: () => void; replaceOnFirstInput?: boolean; allowDecimal?: boolean; allowThrough?: boolean }) {
   const replace = useRef(replaceOnFirstInput);
   const press = (key: string) => {
     if (key === "Escape") return onEscape();
@@ -37,7 +37,11 @@ export function ModalNumberInput({ value, onChange, onEnter, onEscape, replaceOn
     if (key === "Backspace" || key === "←") { const next = replace.current ? "" : value.slice(0, -1); replace.current = false; return onChange(next); }
     if (key === "−" || key === "-") { const next = replace.current ? "-" : value.startsWith("-") ? value.slice(1) : `-${value || "0"}`; replace.current = false; return onChange(next); }
     if (key === "+") { replace.current = false; return onChange(value.startsWith("-") ? value.slice(1) : value); }
-    if (key === "THRU") return;
+    if (key === "THRU") {
+      if (!allowThrough || replace.current || !value.trim() || /\bTHRU\s*$/i.test(value)) return;
+      replace.current = false;
+      return onChange(`${value.trim()} THRU `);
+    }
     if (/^\d$/.test(key)) { const next = replace.current ? key : value + key; replace.current = false; return onChange(next); }
     if (allowDecimal && key === "." && (replace.current || !value.includes("."))) { const next = replace.current ? "0." : `${value || "0"}.`; replace.current = false; onChange(next); }
   };
@@ -82,7 +86,7 @@ function displayKey(value: string) {
   return value.length === 1 && value !== "ß" ? value.toLocaleUpperCase() : value;
 }
 
-export function ModalTextKeyboard({ value, onChange, onEnter, onEscape, actionLabel = "Confirm" }: { value: string; onChange: (value: string) => void; onEnter: () => void; onEscape: () => void; actionLabel?: string }) {
+export function ModalTextKeyboard({ value, onChange, onEnter, onEscape, actionLabel = "Confirm", multiline = false }: { value: string; onChange: (value: string) => void; onEnter: () => void; onEscape: () => void; actionLabel?: string; multiline?: boolean }) {
   const [layout, setLayout] = useState<Record<string, string>>(() => fallbackKeyboardLayout(navigator.language));
   useEffect(() => {
     let cancelled = false;
@@ -95,7 +99,8 @@ export function ModalTextKeyboard({ value, onChange, onEnter, onEscape, actionLa
   }, []);
   const press = (key: string) => {
     if (key === "Escape") return onEscape();
-    if (key === "Enter") return onEnter();
+    if (key === "Enter") return multiline ? onChange(`${value}\n`) : onEnter();
+    if (key === "Confirm") return onEnter();
     if (key === "Backspace" || key === "←") return onChange(value.slice(0, -1));
     if (key === "SPACE") return onChange(`${value} `);
     if (key.length === 1) onChange(value + key);
@@ -107,6 +112,6 @@ export function ModalTextKeyboard({ value, onChange, onEnter, onEscape, actionLa
       {physicalRows.slice(1).map((row, index) => <div className={`modal-keyboard-row row-${index + 2}`} key={index}>{row.map((code) => <Button key={code} onClick={() => press(layout[code])}>{displayKey(layout[code])}</Button>)}</div>)}
       <div className="modal-keyboard-row modal-keyboard-bottom"><Button className="space" onClick={() => press("SPACE")}>SPACE</Button></div>
     </div>
-    <div className="modal-keyboard-actions"><Button className="action backspace" onClick={() => press("Backspace")}><b>⌫</b><small>Backspace</small></Button><Button className="enter" aria-label={`Enter · ${actionLabel}`} onClick={() => press("Enter")}><b>ENTER</b><small>{actionLabel}</small></Button></div>
+    <div className="modal-keyboard-actions"><Button className="action backspace" onClick={() => press("Backspace")}><b>⌫</b><small>Backspace</small></Button>{multiline && <Button className="action newline" aria-label="Enter · New line" onClick={() => press("Enter")}><b>ENTER</b><small>New line</small></Button>}<Button className="enter" aria-label={`${multiline ? "Done" : "Enter"} · ${actionLabel}`} onClick={() => press(multiline ? "Confirm" : "Enter")}><b>{multiline ? "DONE" : "ENTER"}</b><small>{actionLabel}</small></Button></div>
   </div>;
 }
