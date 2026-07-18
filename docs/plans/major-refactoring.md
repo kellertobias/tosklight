@@ -84,6 +84,16 @@ The objective is not merely to shorten these files. The refactor must create own
 - Replace internal string-plus-JSON commands and events with discriminated types. Serialization belongs only in transport adapters.
 - Keep OSC exactly compatible. REST/WebSocket v1 may remain temporary adapters and be removed after the UI and tests migrate to the replacement interfaces.
 
+### Engine and runtime event publication
+
+- Every externally observable state transition produced inside Engine, Playback, Programmer, Control, Output, or another runtime service must have a typed domain event. This includes automatic changes, not only operator commands: Chaser steps, FOLLOW/TIME/timecode Cue advances, transition completion, loaded-Cue changes, playback release, Programmer ownership changes, Highlight movement, output-health changes, and future Dynamic or Macro state changes.
+- Domain services publish these events through an application-owned event bus. The render engine must not know about WebSocket clients, frontend stores, OSC serialization, or other transport subscribers; adapters translate typed domain events into the appropriate wire or feedback contract.
+- Clients subscribe explicitly by capability, object identity, desk, and event class. A UI may subscribe to only the selected Cuelist's Cue transitions, for example, while another surface subscribes to playback summaries or output health. Not subscribing remains valid; clients can continue to use authoritative query projections and snapshots.
+- Events describe meaningful state boundaries, not every render sample, DMX frame, or intermediate fade value. High-frequency values use retained projections, client-side interpolation from authoritative timing metadata, bounded sampling, or an explicitly requested telemetry stream.
+- Subscription delivery must support filtering, coalescing, per-topic rate limits, bounded queues, backpressure policy, and priority classes. Safety, command outcomes, errors, and discrete state transitions must not be dropped; replaceable telemetry and progress updates may be collapsed to the newest value.
+- Every event carries a monotonic sequence or projection revision, event time, source, correlation identity where applicable, and enough stable identity to request the authoritative current projection. Reconnect detects sequence gaps and repairs them with a snapshot before resuming incremental delivery.
+- One semantic transition produces one domain event regardless of whether it originated from UI, OSC, HTTP, MIDI, Matter, a Chaser timer, Timecode, a Macro, or another internal scheduler. Adapters must not synthesize competing client-local state or require broad polling to discover ordinary runtime changes.
+
 ### Show management and persistence
 
 - Introduce `ActiveShowService` as the only application boundary for active-show mutation.
@@ -307,6 +317,7 @@ Each stage must leave the application buildable, testable, and usable.
 - Create `light-application` and `light-wire`.
 - Move process startup, shutdown, routers, schedulers, and adapters into the server library.
 - Introduce typed commands, outcomes, errors, and events behind temporary compatibility adapters.
+- Introduce the typed application event bus, filtered subscription contract, sequence-gap recovery, coalescing, and bounded backpressure behavior. Publish automatic Playback transitions such as Chaser and FOLLOW advances as the first runtime slice.
 - Add automated Rust and TypeScript dependency-direction checks to CI.
 
 ### 3. Migrate the first cross-surface slice
@@ -337,6 +348,7 @@ Each stage must leave the application buildable, testable, and usable.
 - Refactor Engine, Programmer, Playback, Fixture, Show, Control, and Output behind stable facades.
 - Remove mutable lock exposure and direct transport dependencies from the render domain.
 - Introduce immutable contribution batches, compiled fixtures, monotonic scheduling, and rendered-output batches.
+- Publish every externally observable engine and runtime state transition through the typed application event boundary without adding transport work to the timing-critical render loop.
 - Keep existing Cue Phaser behavior compatible while ensuring future stateful animated-value sources fit the contribution boundary.
 - Add release-build output benchmarks and profiling hooks for the hard 32-universe 100 Hz floor, the 64-universe 120 Hz target, and the 4-to-8-universe 40 Hz low-power goal.
 
@@ -373,6 +385,7 @@ These are architectural tests using fakes, not production feature implementation
 - Invalid active shows still enter actionable recovery without destroying the original.
 - Preserve unpatched fixtures, stored-empty Groups, missing Group IDs, ordered selections, Programmer LTP, Playback arbitration, Preload, Highlight, Update, Move in Black, route termination, safe shutdown, and first post-restart output.
 - Add contract coverage for command concurrency, primary/secondary session closure, reconnect gaps, atomic revision failure, unknown stored objects, fixture-profile upgrades, selective imports, and adapter lifecycle.
+- Event contract coverage proves that manual and automatic transitions publish the same semantic event once, a running Chaser updates subscribed Cue views without polling, narrow subscriptions receive only requested topics, reconnect gaps repair from an authoritative snapshot, and high-rate replaceable updates are coalesced without losing safety, error, or discrete transition events.
 - A fake animated value source, fake external-device adapter, and fake Macro runtime must plug in without modifying existing transport adapters, render arbitration, or output drivers.
 - At every stage run formatting, Clippy, Rust tests, TypeScript checks, frontend tests and build, focused UI/API/OSC coverage, and desktop smoke tests.
 - Socket-based CITP and output tests run in normal CI or an unrestricted local environment.
