@@ -14,6 +14,7 @@ mod file_manager_support;
 mod help;
 #[path = "matter.rs"]
 mod matter;
+mod output_scheduler;
 mod startup_options;
 
 use crate::highlight::{
@@ -49,7 +50,7 @@ use light_core::{
 };
 use light_engine::{Engine, EngineSnapshot, RenderOptions};
 use light_media::{CitpClient, LibraryId, MediaCache, PreviewKey, ThumbnailKey};
-use light_output::{NetworkOutput, OutputHealth, run_scheduler_dynamic};
+use light_output::{NetworkOutput, OutputHealth};
 use light_programmer::ProgrammerRegistry;
 use light_show::{
     AtomicObjectDelete, AtomicObjectWrite, ControlDesk, DeskStore, DeskUser, PersistedSession,
@@ -62,7 +63,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
-    env, io,
+    env,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::{Path as FsPath, PathBuf},
     sync::{
@@ -1042,104 +1043,21 @@ pub async fn run() -> anyhow::Result<()> {
         .configure(configuration.timecode_sources.clone());
     let output_rate = Arc::new(AtomicU16::new(configuration.frame_rate_hz));
     let matter_bridge = Arc::new(matter::MatterBridgeAdapter::default());
-    let output = Arc::new(
-        NetworkOutput::bind(
-            configuration.output_bind_ip,
-            *Uuid::new_v4().as_bytes(),
-            "Light",
-        )
-        .await?,
-    );
     let output_cancel = CancellationToken::new();
-    let scheduler_cancel = output_cancel.clone();
-    let scheduler_engine = Arc::clone(&engine);
-    let scheduler_output = Arc::clone(&output);
-    let scheduler_health = Arc::clone(&output_health);
-    let scheduler_rate = Arc::clone(&output_rate);
-    let sequences = Arc::new(tokio::sync::Mutex::new(HashMap::new()));
-    let scheduler_sequences = Arc::clone(&sequences);
-    let output_control = Arc::new(Mutex::new(OutputControl {
-        options: RenderOptions {
-            grand_master: output_runtime.grand_master,
-            blackout: output_runtime.blackout,
-            control_loss_progress: None,
-        },
-        ..OutputControl::default()
-    }));
-    let scheduler_control = Arc::clone(&output_control);
-    let scheduler_timecode = Arc::clone(&timecode_router);
-    let scheduler = tokio::spawn(async move {
-        if test_bench {
-            scheduler_cancel.cancelled().await;
-        } else {
-            run_scheduler_dynamic(
-                scheduler_rate,
-                scheduler_cancel.clone(),
-                scheduler_health,
-                || {
-                    let engine = Arc::clone(&scheduler_engine);
-                    let output = Arc::clone(&scheduler_output);
-                    let sequences = Arc::clone(&scheduler_sequences);
-                    let control = Arc::clone(&scheduler_control);
-                    let timecode = Arc::clone(&scheduler_timecode);
-                    async move {
-                        let current = { timecode.lock().poll_loss().cloned() };
-                        engine.set_timecode_frame(current.map(|timecode| {
-                            let fps = u64::from(timecode.rate.nominal_frames());
-                            (u64::from(timecode.hours) * 3600
-                                + u64::from(timecode.minutes) * 60
-                                + u64::from(timecode.seconds))
-                                * fps
-                                + u64::from(timecode.frames)
-                        }));
-                        let options = control.lock().render_options();
-                        let rendered = engine.render(options).map_err(io::Error::other)?;
-                        let snapshot = engine.snapshot();
-                        let frames = {
-                            let mut control = control.lock();
-                            if control.hold {
-                                control.last_frames.clone()
-                            } else {
-                                let mut frames = rendered.universes;
-                                for (&(universe, address), &value) in &control.raw_overrides {
-                                    if let Some(frame) = frames.get_mut(&universe) {
-                                        frame[usize::from(address - 1)] = value;
-                                    }
-                                }
-                                control.last_frames = frames.clone();
-                                frames
-                            }
-                        };
-                        output
-                            .send_routes(
-                                &snapshot.routes,
-                                &frames,
-                                &rendered.patched_slots,
-                                &mut *sequences.lock().await,
-                            )
-                            .await
-                    }
-                },
-            )
-            .await;
-        }
-        let snapshot = scheduler_engine.snapshot();
-        let mut shutdown_options = scheduler_control.lock().options;
-        shutdown_options.control_loss_progress = Some(1.0);
-        if let Ok(safe) = scheduler_engine.render(shutdown_options) {
-            let _ = scheduler_output
-                .send_routes(
-                    &snapshot.routes,
-                    &safe.universes,
-                    &safe.patched_slots,
-                    &mut *scheduler_sequences.lock().await,
-                )
-                .await;
-        }
-        let _ = scheduler_output
-            .terminate_routes(&snapshot.routes, &mut *scheduler_sequences.lock().await)
-            .await;
-    });
+    let scheduler = output_scheduler::start(output_scheduler::Config {
+        bind_ip: configuration.output_bind_ip,
+        engine: Arc::clone(&engine),
+        health: Arc::clone(&output_health),
+        rate: Arc::clone(&output_rate),
+        timecode: Arc::clone(&timecode_router),
+        cancellation: output_cancel.clone(),
+        persisted_runtime: output_runtime,
+        test_bench,
+    })
+    .await?;
+    let output = scheduler.network_output();
+    let sequences = scheduler.sequences();
+    let output_control = scheduler.control();
     let matter_transport = Arc::new(matter::MatterTransport::new(&data_dir));
     let state = AppState {
         desk: Arc::new(Mutex::new(desk)),
@@ -1204,7 +1122,7 @@ pub async fn run() -> anyhow::Result<()> {
             output_cancel.cancel();
         })
         .await?;
-    let _ = scheduler.await;
+    scheduler.wait().await;
     for task in input_tasks {
         let _ = task.await;
     }
