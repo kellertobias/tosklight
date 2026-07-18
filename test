@@ -8,9 +8,10 @@ light_init_artifact_paths "$ROOT"
 UI="$ROOT/apps/control-ui"
 CONTROL_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-control-artifacts.json"
 
-usage(){ echo "Usage: ./test {app-icons|artifact-paths|unit|e2e|e2e-api|e2e-ui|e2e-supplemental|help-screenshots|record|demo|desktop-smoke|all}"; }
+usage(){ echo "Usage: ./test {app-icons|architecture|artifact-paths|unit|e2e|e2e-api|e2e-ui|e2e-supplemental|help-screenshots|record|demo|desktop-smoke|all}"; }
 build_e2e(){ (cd "$UI" && npm run build); cargo build --manifest-path "$ROOT/Cargo.toml" -p light-server --no-default-features; }
-unit(){ (cd "$UI" && npm run build); cargo test --manifest-path "$ROOT/Cargo.toml" --workspace --exclude light-control-ui --exclude light-hardware-controls --no-default-features; (cd "$UI" && npm test); }
+architecture(){ node "$ROOT/tools/check-architecture.mjs"; }
+unit(){ architecture; (cd "$UI" && npm run build); cargo test --manifest-path "$ROOT/Cargo.toml" --workspace --exclude light-control-ui --exclude light-hardware-controls --no-default-features; (cd "$UI" && npm test); }
 e2e(){ build_e2e; (cd "$UI" && npm run test:e2e -- "$@"); }
 e2e_api(){ e2e --grep '@api' "$@"; }
 e2e_ui(){ e2e --grep '@ui' "$@"; }
@@ -41,6 +42,7 @@ desktop_smoke(){
 command="${1:-}"; shift || true
 case "$command" in
   app-icons) node "$ROOT/tools/test-app-icons.mjs" ;;
+  architecture) architecture ;;
   artifact-paths) "$ROOT/tools/test-artifact-paths.sh" ;;
   unit) unit ;;
   e2e) e2e "$@" ;;
