@@ -2,13 +2,13 @@
 
 ## Preset pool
 
-The Preset pool recalls reusable attribute values into the programmer. A preset can contain Intensity, Color, Position, or Beam values for one or more fixtures; it does not execute a Cue by itself. Tap a populated tile to apply it to the current fixture selection. With Record armed, an empty tile stores a new preset and a populated tile offers overwrite or merge.
+The Preset pool recalls reusable attribute values into the programmer. Intensity, Color, Position, and Beam presets contain only attributes from that family. A Mixed preset can contain any combination of attributes. A preset does not execute a Cue by itself. Tap a populated tile to apply it to the current fixture selection. With Record armed, an empty tile stores a new preset and a populated tile offers overwrite or merge.
 
 Each tile shows its number, title, family, icon or artwork, and how many fixture-value entries it contains. The pool provides at least 200 numbered positions and grows to include the highest stored preset number. Filtering to one family disables tiles from the other families instead of deleting or renumbering them.
 
 **Pane configuration:**
 
-- **Preset family** selects All, Intensity, Color, Position, or Beam for this pane only. Two Preset panes can therefore show different families.
+- **Preset family** selects Mixed, Intensity, Color, Position, or Beam for this pane only. Mixed is a family for presets containing any combination of attributes; it is not an aggregate list of the other families. Two Preset panes can therefore show different families.
 - **Enable pool colors** enables the family and custom-button color treatment.
 - **Show group shortcuts** adds the Group strip below the pool so fixtures can be selected before a preset is recalled or recorded.
 
@@ -20,7 +20,7 @@ The full Presets window additionally exposes family buttons in its header. With 
 
 ## Group pool
 
-The Group pool stores ordered fixture selections. Order matters for operations such as value spreading, and an intentionally stored empty Group remains different from an unused pool position. Tap a populated Group to select its current ordered members. Record plus an empty tile stores the current selection; recording over an existing Group offers overwrite or merge.
+The Group pool stores ordered fixture selections. Order matters for operations such as value spreading, and an intentionally stored empty Group remains different from an unused pool position. Tap a populated Group to select its current ordered members and place that Group reference on the command line, ready for an operation such as **DIV**. Record plus an empty tile stores the current selection; recording over an existing Group offers overwrite or merge.
 
 A populated tile shows its number, name, member count, and status information such as missing members, portable stored attributes, unsupported values, or whether it is derived or frozen. A selected Group is highlighted. Hold a populated tile to open its operational controls: adjust its Group master, select the live or frozen membership, refresh a frozen snapshot, detach a derived Group, replace membership, or undo the latest membership/programming change.
 
@@ -32,39 +32,39 @@ The Group master limits the intensity of members when that Group is assigned to 
 
 ## Fixture sheet
 
-The Fixture sheet is the detailed live inspection and selection table. It refreshes resolved output values continuously and, while Preload is active, adds the pending Preload values for comparison. Activating a row selects that fixture or logical head. A compact pane shows the first 12 rows after its active ordering and filters have been applied.
+The Fixture sheet is the detailed live inspection and selection table. It refreshes resolved output values continuously and, while Preload is active, adds the pending Preload values for comparison. Activating a row selects that fixture or logical head. A compact pane shows the first 12 rows in Fixture ID order.
 
 Simple fixtures use one row. Multi-head fixtures can expose a `.0` master row for shared parameters and `.1`, `.2`, and following logical-head rows for the individual heads.
 
-During PREV/NEXT stepping, every row in the remembered base selection remains visibly selected with a subdued patterned treatment, while the actual current fixture or head uses the prominent selected treatment and a stronger left marker. This distinction does not rely on color alone and remains visible whether HIGH is off or on. PREV and NEXT move the prominent marker without hiding the base; ALL restores ordinary complete-selection styling, and an external selection replaces both indications. Multi-head state appears on the actual head rows. Collapse the heads when more space is needed; the parent row then retains a contained-base or contained-step indication so the active state is not hidden.
+During PREV/NEXT stepping, every row in the remembered base selection remains visibly selected with a subdued patterned treatment, while the actual current fixture or head uses the prominent selected treatment and a stronger left marker. This distinction does not rely on color alone and remains visible whether HIGH is off or on. PREV and NEXT move the prominent marker without hiding the base; ALL restores ordinary complete-selection styling, and an external selection replaces both indications. Multi-head state appears on the actual subhead rows. When subheads are hidden, the visible master row retains a contained-base or contained-step indication so the active state is not hidden.
 
 ### Fixture sheet columns
 
 | Column | What it shows |
 | --- | --- |
 | **ID** | The fixture number. Multi-head targets add `.0` for the master and `.1` onward for logical heads. |
-| **Name / type** | Operator name, manufacturer, mode, and patch address in `Uuniverse.address` form. A Group-master badge appears when a playback-fader Group is limiting this fixture. |
+| **Name / type** | Operator name with optional manufacturer/mode and patch address details. The **Columns** settings can hide the type and patch independently. A Group-master badge appears when a playback-fader Group is limiting this fixture. |
 | **Dimmer** | A level meter and resolved intensity percentage. During Preload, an arrow shows the pending target percentage. |
 | **Color** | An RGB swatch and label. Every swatch has the same thin light-grey boundary so black, dark, bright, absent, and mixed colors remain distinct from the table without changing the resolved fill. During Preload, a second swatch identifies the pending color. Fixtures without color parameters show the neutral fallback. |
 | **Position** | A position glyph and pan/tilt values. Fixtures without position parameters show a dash. During Preload, the pending pan/tilt values appear below. |
 | **Beam** | Reserved beam-summary column. Its current compact summary is not yet an authoritative live engine value. |
 | **Focus** | Reserved focus-summary column. Its current compact summary is not yet an authoritative live engine value. |
 
-The source colors currently distinguish resolved programmer data from defaults for Dimmer, Color, and Position. Do not use this table alone as proof of complete cross-source ownership; detailed playback/programmer arbitration is documented separately.
+The **Columns** settings can show or hide ID, Name, Dimmer, Color, Position, Beam, and Focus. At least one column remains visible. The source colors currently distinguish resolved programmer data from defaults for Dimmer, Color, and Position. Do not use this table alone as proof of complete cross-source ownership; detailed playback/programmer arbitration is documented separately.
 
-**Pane configuration:** **Show group shortcuts** adds the Group strip. The common size and removal controls also apply. Ordering and filters are available only in the full Fixture Sheet window: order by Fixture ID or put active programmer fixtures first; show only active fixtures; filter membership to one Cuelist; and enable the Group strip.
+**Pane configuration:** **Show group shortcuts** adds the Group strip. The common size and removal controls also apply. In the full Fixture Sheet window, open **Fixture Sheet** settings and use **View** for fixture heads, ordering, and filters; **Columns** for visible data and optional Name details; and **Groups** for the Group strip. **Show Subheads** and **Show Master Heads** default on. Turn off **Show Subheads** for master rows only, or turn off **Show Master Heads** for subhead rows only. At least one remains enabled. There is no per-row expand or collapse button. These full-sheet choices persist with the desk layout. Ordering can use Fixture ID or put active programmer fixtures first; filters can show only active fixtures or limit membership to one Cuelist.
 
 ![Fixture sheet pane](../assets/screenshots/panes/fixtures.png)
 
 ![Fixture sheet pane settings](../assets/screenshots/panes/fixtures-settings.png)
 
-![Full Fixture Sheet ordering controls](../assets/screenshots/workflows/fixture-sheet-settings-ordering.png)
+![Full Fixture Sheet view controls](../assets/screenshots/workflows/fixture-sheet-settings-view.png)
 
-![Full Fixture Sheet filter controls](../assets/screenshots/workflows/fixture-sheet-settings-filters.png)
+![Full Fixture Sheet column controls](../assets/screenshots/workflows/fixture-sheet-settings-columns.png)
 
 ## Stage
 
-The Stage is the spatial selection and visualization surface. In 2D it shows fixture symbols, position, color, intensity, and direction. In 3D it renders patched fixtures, multi-patch physical instances, beams, and imported or built-in scenery. Tap or marquee fixtures to select them; Shift extends a range and Control/Command toggles fixtures. **Follow Preload** changes the Stage from live output to the pending Preload visualization.
+The Stage is the spatial selection and visualization surface. In 2D it shows fixture symbols, position, color, intensity, and direction. In 3D it renders patched fixtures, multi-patch physical instances, beams, and visual-only Venue fixtures. Tap or marquee fixtures to select them; Shift extends a range and Control/Command toggles fixtures. **Follow Preload** changes the Stage from live output to the pending Preload visualization.
 
 **Pane configuration:**
 
@@ -77,9 +77,9 @@ The Stage is the spatial selection and visualization surface. In 2D it shows fix
 
 Only the full Stage window exposes **Select fixtures**, **Setup positions**, and **Navigate**. A Stage pane reflects the global mode and can therefore visibly enter setup mode, but it does not contain the controls that enter that mode.
 
-In 2D **Setup positions**, drag fixtures to their show positions. In 3D setup, selected fixtures expose X, Y, Z and three rotation controls. Physical patch and multi-patch positions provide the starting point when no separate Stage transform exists. **Import scene** accepts supported scene assets; **Add element** opens the element chooser and then inserts a built-in truss, platform, curtain, or other scenery element. Selected elements can be translated, rotated, scaled, and removed.
+In 2D **Setup positions**, drag fixtures to their show positions. In 3D setup, selected fixtures expose X, Y, Z and three rotation controls. Physical patch and multi-patch positions provide the starting point when no separate Stage transform exists. Add a truss, platform, curtain, or other scenery object from the **Venue** manufacturer in **Show Patch**; these visual-only fixtures receive `0.x` fixture IDs and no DMX address.
 
-The full Stage settings also control the 2D/3D view, Group shortcuts, selection visibility, and environment brightness. Element choice belongs to the **Add element** action, not Stage Settings. These are full-window controls, not extra pane-settings tabs.
+The full Stage settings also control the 2D/3D view, Group shortcuts, selection visibility, 3D beam direction guides, the 3D floor grid, and environment brightness. **Beam direction guides** shows a dotted off-state aim line for every emitter configured as directional, including fixed conventional fixtures; broad strobes and Sunstrip-style emitters have no guide. Turn **Floor grid** off when the neutral base plane and its reference lines should not be rendered. A Stage pane stores its own beam-guide choice in that pane's settings.
 
 ![Stage pane](../assets/screenshots/panes/stage.png)
 

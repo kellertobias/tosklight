@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-**Completed 2026-07-17.** This verification feature closes the remaining executable-coverage and release-evidence gaps found while re-auditing completed Features 01, 04, 08, 11, 18, and 20. The underlying operator behavior was already implemented except for the complete fixture physical-metadata and GLB-preview fields required by `FIXTURE-002`; those production paths were added with the acceptance coverage. The work adds missing proof, strengthens existing acceptance cases, and corrects completion bookkeeping where prior evidence was incomplete or stale.
+**Completed 2026-07-17.** This verification feature closes the remaining executable-coverage and release-evidence gaps found while re-auditing completed Features 01, 04, 08, 11, 18, and 20. The underlying operator behavior was already implemented except for the focused fixture physical-metadata and GLB-preview fields required by `FIXTURE-002`; those production paths were added with the acceptance coverage. The work adds missing proof, strengthens existing acceptance cases, and corrects completion bookkeeping where prior evidence was incomplete or stale.
 
 The final checkout passed the hermetic unit and focused browser gates, the real desktop smoke path,
 the hardware-controls production build and browser harness, strict formatting and Clippy, the manual
@@ -29,7 +29,7 @@ Extend the existing scenarios rather than creating parallel mock-only contracts:
 - `SHOW-005` remains the named-revision acceptance scenario.
 - `UPDATE-001` remains the Update acceptance scenario.
 - `HIGHLIGHT-001` through `HIGHLIGHT-003` remain the Highlight scenarios.
-- `FIXTURE-001` remains the fixture-profile creation and migration scenario; add `FIXTURE-002` for the complete asset and physical-metadata workflow.
+- `FIXTURE-001` remains the fixture-profile creation and migration scenario; add `FIXTURE-002` for the asset and focused physical-metadata workflow.
 - `MATTER-001` remains the bridge behavior scenario; add `MATTER-002` for desk persistence across shows and restart.
 - Add a `RELEASE-023` verification record for non-automatable Matter certification evidence and final completion bookkeeping.
 
@@ -214,11 +214,11 @@ Launch the built hardware-controls frontend in a browser harness with determinis
 
 The actual rendered hardware simulator proves the restored geometry and sends independent authoritative control values from both full-height faders.
 
-## FIXTURE-002 — Complete asset and physical-metadata revision
+## FIXTURE-002 — Asset and focused physical-metadata revision
 
 ### Missing proof
 
-Fixture-profile tests cover schema, modes, channels, color, geometry, migration, and minimal UI creation, but no acceptance case explicitly saves and reloads the complete Generic asset workflow: photograph preview/replace/remove, fixture icon, GLB model, and all physical metadata.
+Fixture-profile tests cover schema, modes, channels, color, geometry, migration, and minimal UI creation, but no acceptance case explicitly saves and reloads the Generic asset workflow: photograph preview/replace/remove, fixture icon, orbitable GLB model, and the focused physical fields.
 
 ### Implementation needed
 
@@ -226,11 +226,11 @@ Extend the production Fixture Profile editor tests and add a browser-level Fixtu
 
 ### Test case
 
-1. Open **Create fixture** and populate manufacturer, name, model, device type, description, dimensions, weight, power, connectors, light source, color temperature, CRI, luminous output, lens/beam fields, and every other exposed Generic physical field.
+1. Open **Create fixture** and populate manufacturer, name, model, device type, description, width, height, depth, weight, power consumption, color temperature, luminous output, and beam angle. Connectors, light source, CRI, and lens remain supported in persisted profiles but are not separate editor fields.
 2. Add a valid fixture photograph and verify its preview, persisted media identity, and accessible replacement/removal controls.
 3. Replace the photograph and verify the old preview and stored media are no longer referenced; remove it and verify the empty state survives save/reopen.
 4. Select a fixture icon and save.
-5. Add a deterministic valid GLB model, verify preview/metadata, replace it, and verify the stored revision references only the replacement.
+5. Add a deterministic valid GLB model, verify preview/metadata and pointer orbiting, replace it, and verify the stored revision references only the replacement. Notes, photograph, and visualizer occupy equal thirds in that order.
 6. Save through the title-bar action and read revision 1 from the desk-wide profile API.
 7. Reopen Edit fixture and compare every Generic, asset, and physical field with the authored values.
 8. Change one physical field and one asset, save revision 2, and verify revision 1 remains immutable while revision 2 contains the complete new snapshot.

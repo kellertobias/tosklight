@@ -27,20 +27,20 @@ Ideally we also have titles on the video that explains what we are currently doi
     - The second Truss is named "Mid Truss";  Place them at Y =  0m and X = -3m THRU 3m 
     - The third Truss is named "Front Truss"; Place them at Y = -3m and X = -3m THRU 3m 
     - INFO: the center point of the truss is in the middle, so a 2m truss placed at -3m goes from -4m to -2m
-  - 4x Venue -> 1-Point Truss/ Pipe -> 2.5 Meters: Place at X = -1.5m THRU 1.5m, Y = 4.2m, Z = 3.05m, name them Pipe 1-4
+  - 4x Venue -> 1-Point Truss/ Pipe -> 2.5 Meters: Place at X = -1.5m THRU 1.5m, Y = 4.2m, Z = 2.9m, rotate Y = 90° so they stand vertically, name them Pipe 1-4
   - 2x Venue -> Curtain -> 4 Meters: Place at X = -2 THRU 2, Y = 4.3, Z = 2.5m and scale so that the curtain is 5m high
 - Now, Patch the lamps:
-  - 4x Generic -> Dimmer: Fresnel -> 1ch: Name: "Front Left 1-4",  X = -3.8m THRU -3m,  Y = -3, Z = 4m, mount = Front Truss, layer = Front Truss, Patch 2.1-2.4, Fixture ID: 1-4
-  - 4x Generic -> Dimmer: Fresnel -> 1ch: Name: "Front Right 1-4", X =    3m THRU 3.8m, Y = -3, Z = 4m, mount = Front Truss, layer = Front Truss, Patch 2.7-2.10, Fixture ID: 5-8
+  - 4x Generic -> Dimmer: Fresnel -> 1ch: Name: "Front Left 1-4",  X = -3.8m THRU -3m,  Y = -3, Z = 4m, mount = Front Truss, layer = Front Truss, Patch 2.1-2.4, Fixture ID: 1-4. Aim from the left to the right stage corners.
+  - 4x Generic -> Dimmer: Fresnel -> 1ch: Name: "Front Right 1-4", X =    3m THRU 3.8m, Y = -3, Z = 4m, mount = Front Truss, layer = Front Truss, Patch 2.7-2.10, Fixture ID: 5-8. Mirror the left fan.
   - 1x Generic -> Dimmer -> 1ch: Name: "House Light", layer: "House Light", patch 2.13, multipatch 2.14-2.16, Fixture ID: 99
   - 1x Generic -> Dimmer -> 1ch: Name: "House Mood",  layer: "House Light", patch 2.17, multipatch 2.14-2.24, Fixture ID: 98
   - 2x Generic -> Dimmer: Single ACL -> 1ch: Names: "ACL In" & "ACL Out", Both get 7 multipatch, unpatched. , layer = Back Truss, patch, 1.1 & 1.2, Fixture IDs: 81 & 82
-    - ACL In gets mounted to the Back Truss on the top in the middle, and angled, so that it does a proper fan out
-    - ACL Out gets mounted to the Back Truss on the top 4 left, 4 rigfht, and angled, so that it does a proper fan in
+    - ACL In gets mounted across the middle 80 cm of the Back Truss at Z = 4.3m. Aim its eight lamps from the left stage edge through the center to the right stage edge at the front edge.
+    - ACL Out gets mounted in two groups of four at the top of the Back Truss. Each group is exactly 80 cm wide. The outside lamps aim toward the outside stage corners and the inside lamps cross toward the opposite half.
   - 8x Robe -> Robin DLS Profile -> Choose any mode: Name Profile 1-8. X = -3.8 THRU 3.8, Y = 3.85, Z=4. Rotate, so it points down. Layer: Back Truss, Mounted to Back Truss. Fixture IDs: 101+. Patch: 1.13+
   - 7x JBLed -> A7 -> 16 bit mode: Name Was 1-7. X = So that they sit between the Profiles, Y = 3.85, Z=4. Rotate, so it points down. Layer: Back Truss, Mounted to Back Truss. Fixture IDs: 201+ Patch: Next suggested address on Universe 1
-  - 8x Showtec -> Sunstrip LED RGB -> 10 Cell mode: Mount so, that they point forward on the 4 pipes, mount to pipe, layer: Back truss. Patch to Universe 3 Fixture IDs: 401+
-  - 16x Generic -> RGBW LED Par -> 8 Bit RGBWI: Name Floor Spot 1-16. Place in 4 Groups of 4, fanned. Position: Y = 3.5m, Z = 5m. Pointed upwards, in a fan fowards the audience. Beam angle narrow. Layer "Floor". Patch: Next free on Universe 3. Fixture ID: 301+
+  - 8x Showtec -> Sunstrip LED RGB -> 10 Cell mode: Put two on each vertical pipe, one near the top and one near the bottom. Rotate Y = 90°, point forward, layer: Back Truss. Patch to Universe 3 Fixture IDs: 401+
+  - 16x Generic -> RGBW LED Par -> 8 Bit RGBWI: Name Floor Spot 1-16. Place in four compact groups of four with every lamp at Y = 1.6m and Z = 0.2m. Vary only X within and between groups, then fan each group upward toward the Front Truss. Layer "Floor". Patch: Next free on Universe 3. Fixture ID: 301+
   - 2x Generic -> Blind -> 2ch 4 Blind: Name Blind left and blind right. Mount top stacked on front truss, pointing towards audience. Fixture ID: 801+
   - 2x Generic -> Haze -> Fan, Fog: Name Haze Left & Haze Right. Fixture ID: 998 & 999
 - Save the show as "Demo Show"
@@ -51,7 +51,7 @@ Ideally we also have titles on the video that explains what we are currently doi
 
 # Group Preparation
 - Open Fixture view. Go into settings, enable the group overlay.
-- `1 THRU 8 REC GROUP 9 ENTER` to store the front lights in Group 9
+- Touch fixtures 1 through 8 in the Fixture Sheet, press **RECORD**, then touch Group 9 in the group pool to store the front lights.
 - `SET GROUP 9 ENTER` to open the group settings modal. Give the Group the name "Front"
 - `SET GROUP 1 ENTER` to open the group settings modal and make it an empty group (from a null group). Give the Group the name "Profiles"
 - `SET GROUP 2 ENTER` to open the group settings modal and make it an empty group (from a null group). Give the Group the name "Wash"
@@ -59,8 +59,8 @@ Ideally we also have titles on the video that explains what we are currently doi
 - `SET GROUP 4 ENTER` to open the group settings modal and make it an empty group (from a null group). Give the Group the name "Strips"
 - `GROUP 1 DIV 2 REC GROUP 11 ENTER`, then `SET GROUP 11 ENTER` and name it "Profiles Odd`
 - `GROUP 1 DIV 2 + 1 REC GROUP 11 ENTER`, then `SET GROUP 21 ENTER` and name it "Profiles Even`
-- `101 THRU 199 REC GROUP 1` to actually assign lamps to the group 1
-- `201 THRU 299 REC GROUP 2` to actually assign lamps to the group 2
+- Group 1 is visibly overwritten from the Fixture Sheet selection; use mixed command-line and pool-tile recording for its odd/even reference groups.
+- Select fixtures 201 through 207 and record Group 2 through the command line.
 - `301 THRU 399 REC GROUP 3` to actually assign lamps to the group 3
 - `401 THRU 499 REC GROUP 4` to actually assign lamps to the group 4
 - `SET GROUP 11 AT SET 1.1 ENTER` to assign group 11 at playback 1 on page 1
@@ -115,7 +115,7 @@ Here is how to use the demo recording
 Use [product-demo.spec.ts](/Users/keller/repos/light/tests/product-demo.spec.ts) as the template:
 Load a known show state with loadCanonicalCopy(...).
 Open ?demo=product.
-Perform the demo using normal Playwright interactions or API commands.
+Use API writes only inside the labelled show-generation fast-forward. After the generated-show boundary, perform every state-changing demo step through normal Playwright interactions with the operator UI, keypad, or command line.
 Add short waits where viewers need time to understand the result.
 Assert the expected state—so it remains a real regression test.
 Run:

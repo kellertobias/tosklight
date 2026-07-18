@@ -164,13 +164,6 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
     await page.getByRole("button", { name: "Choose lock wallpaper", exact: true }).click();
     await expectPickerConstraint(page, files.invalid, files.wallpaper);
 
-    await desk.recordStep("STAGE FILE PICKER", "Stage scene import uses the same application picker while retaining the scene/model extension contract.");
-    await openBuiltIn(page, "Stage");
-    const stage = page.locator(".stage-window");
-    await stage.getByRole("button", { name: "Setup positions", exact: true }).click();
-    await stage.getByRole("button", { name: "Import scene", exact: true }).click();
-    await expectPickerConstraint(page, files.invalid, files.scene);
-
     await api.request("POST", "/api/v1/files/shows/operations", { operation: "delete", sources: Object.values(files) });
   });
 
@@ -335,21 +328,12 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
     await expect(dmx.locator(".dmx-fixture-card")).not.toContainText("Fixture: Empty");
     await expect(dmx.locator(".dmx-fixture-card")).toContainText(String(patched.fixture_number ?? patched.fixture_id));
 
-    await desk.recordStep("STAGE ELEMENT CHOICE", "Add Element asks which built-in object to add; Stage Settings no longer preselects an object behind the operator's back.");
+    await desk.recordStep("STAGE SCENERY MODEL", "Stage no longer has a separate scene-asset workflow; scenery is added as a visual-only Venue fixture in Show Patch.");
     await openBuiltIn(page, "Stage");
     const stage = page.locator(".stage-window");
     await stage.getByRole("button", { name: "Setup positions", exact: true }).click();
-    await stage.getByRole("button", { name: "Settings", exact: true }).click();
-    const stageSettings = page.getByRole("dialog", { name: "Stage Settings" });
-    await expect(stageSettings.getByLabel("Built-in element")).toHaveCount(0);
-    await stageSettings.getByRole("radio", { name: "3D", exact: true }).click();
-    await stageSettings.getByRole("button", { name: "Close settings" }).click();
-    await stage.getByRole("button", { name: "Add element", exact: true }).click();
-    const chooser = page.getByRole("dialog", { name: "Add Stage Element" });
-    await expect(chooser.getByRole("button", { name: "4-point truss · 1 m", exact: true })).toBeVisible();
-    await chooser.getByRole("button", { name: "Stage deck · 2 × 1 m", exact: true }).click();
-    await expect(chooser).toBeHidden();
-    await expect(stage.locator(".stage-3d-asset-inspector")).toContainText("Stage deck · 2 × 1 m");
+    await expect(stage.getByRole("button", { name: "Import scene", exact: true })).toHaveCount(0);
+    await expect(stage.getByRole("button", { name: "Add element", exact: true })).toHaveCount(0);
   });
 
   test("MANUAL-019 @ui › Development stays out of operator panes and remains available through Desk Status", async ({ api, desk, page }) => {

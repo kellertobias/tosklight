@@ -12,11 +12,15 @@ Open **Stage**, choose 2D or 3D in settings, and switch to **Setup positions**. 
 
 Switch back to **Select fixtures** for programming or **Navigate** to orbit and inspect without moving show objects. The position data is stored in the show.
 
-The mode buttons exist only in the full Stage built-in. A Stage pane can display the current global setup mode and offers Import Scene while that mode is active, but it cannot enter Setup positions by itself.
+In 3D, **Beam direction guides** adds a dotted aim line while a directional emitter is off. This applies to fixed Profiles, Fresnels, PARs, washes, and moving fixtures alike. Emitters marked as broad sources, such as strobes and Sunstrip-style fixtures, remain visibly distinct from their dark housings but do not receive an aim line. The full Stage and every Stage pane can disable these guides independently in their settings.
+
+The mode buttons exist only in the full Stage built-in. A Stage pane can display the current global setup mode, but it cannot enter Setup positions by itself.
 
 ## Add scenery and models
 
-In 3D setup, add built-in stage elements or import GLB, STL, 3MF, or GDTF scene assets. Position, rotate, scale, duplicate, or remove them as required. Import an entire MVR through the Show dialog so fixtures, profiles, transforms, and scenery can be resolved together.
+Add scenery through **Show > Show Patch**. Choose a visual-only profile from the **Venue** manufacturer, such as Stage, Truss, Pipe, or Curtain. Patch assigns these objects IDs in the reserved `0.x` range (`0.1`, `0.2`, and so on) and does not ask for a DMX address. Return to 3D **Setup positions** to position and rotate them.
+
+Stage does not maintain a second scene-asset collection. Standalone MVR geometry is reported as an import warning; recreate required scenery with Venue fixtures so it remains visible and editable through Patch and the Fixture Library.
 
 ## Visualization limits
 

@@ -44,7 +44,7 @@ Identity contains manufacturer, fixture name, fixture short name, fixture type, 
 
 Physical contains width, height, and depth in millimetres, weight in kilograms, and power consumption in watts.
 
-Notes and picture contains free-form fixture notes and a fixture photograph with preview, replace, and remove actions. The photograph is distinct from the stage icon and from the optional GLB model used by the visualizer.
+Notes, fixture photograph, and visualizer occupy equal thirds of one row. The photograph has preview, replace, and remove actions and remains distinct from the stage icon. The optional GLB preview supports pointer orbiting and scroll zoom.
 
 ### Modes tab
 
@@ -173,7 +173,7 @@ Add focused unit, API, component, Playwright, and desktop coverage for:
 - create/edit layout parity, title-bar save, edit confirmation, and every dirty-close path;
 - manufacturer lookup, search, selection, and shared keyboard input;
 - mode, head, and channel add/remove/reorder behavior;
-- optional exclusive master heads and one-split-per-head validation;
+- optional exclusive master heads and per-channel split validation, including one head spanning several splits;
 - the single-open split accordion and the unwrapped one-split table;
 - primary-slot derivation, reserved fine/third/fourth-byte positions, raw multi-byte encoding, and validation errors;
 - defaults, highlight, static, snap, invert, virtual intensity, and master reactions;

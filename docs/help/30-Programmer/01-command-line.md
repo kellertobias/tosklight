@@ -182,17 +182,22 @@ Double-pressing a group in the Groups pool also dereferences it. A group recorde
 | Value | Example | Result |
 | --- | --- | --- |
 | Intensity | `<selection> [AT] 75 [ENTER]` | Set the selected fixtures to 75% intensity. |
+| Intensity spread | `<selection> [AT] 0 [THRU] 50 [ENTER]` | Set the first selected fixture to 0%, the last to 50%, and interpolate equal steps over the ordered selection. |
 | Relative increase | `<selection> [AT] [+] 5 [ENTER]` | Add five percentage points to each selected fixture's current intensity. |
 | Relative decrease | `<selection> [AT] [−] 5 [ENTER]` | Subtract five percentage points from each selected fixture's current intensity. |
-| All preset | `<selection> [AT] 0.1 [ENTER]` | Apply All preset 1. |
+| Mixed preset | `<selection> [AT] 0.1 [ENTER]` | Apply Mixed preset 1. |
 | Intensity preset | `<selection> [AT] 1.1 [ENTER]` | Apply Intensity preset 1. |
 | Color preset | `<selection> [AT] 2.1 [ENTER]` | Apply Color preset 1. |
 | Position preset | `<selection> [AT] 3.1 [ENTER]` | Apply Position preset 1. |
 | Beam preset | `<selection> [AT] 4.1 [ENTER]` | Apply Beam preset 1. |
 
+The dotted value is a preset address, not one global decimal or object ID: the part before the dot is the preset type and the part after it is that pool's local preset number. Every family has its own numbering, so Color preset `2.1` and Position preset `3.1` are both preset 1 in their respective pools and can coexist.
+
 Relative values are calculated independently for every selected fixture and clamped to the attribute's valid range. A live Group reference must be dereferenced with `[GRP][GRP]` before using a relative value so the per-fixture results can be retained.
 
-An attribute touch encoder shows its new target immediately: moving it or entering `100` through **Set value** makes the encoder read 100% at once. The resolved value in the Fixture Sheet and the actual output still interpolate to that target over Programmer Fade. That fade belongs to the programmer value, so recording it into a scene/Cue retains the timing for later playback; an explicit `[TIME]` overrides it for that value.
+A spread follows the authoritative selection order, including a separately completed selection followed by `[AT] 0 [THRU] 50 [ENTER]`. Two endpoints create equal intervals from the first selected fixture to the last; additional `[THRU]` levels create evenly distributed control points. A single selected fixture takes the first level. A live Group retains the spread relative to its ordered membership, while a fixture or dereferenced selection stores the resulting fixture-scoped values.
+
+An attribute touch encoder shows its new target immediately: moving it or entering `100` through **Set value** makes the encoder read 100% at once. With multiple fixtures selected, the same modal accepts `0 [THRU] 50 [ENTER]` and spreads that attribute over the ordered selection exactly like the command line. The resolved value in the Fixture Sheet and the actual output still interpolate to that target over Programmer Fade. That fade belongs to the programmer value, so recording it into a scene/Cue retains the timing for later playback; an explicit `[TIME]` overrides it for that value.
 
 ### Value fade and delay times
 
@@ -223,7 +228,7 @@ For a Group or a specific Cue, `[-]` with an empty applicable source deletes the
 | Target | Command | Result |
 | --- | --- | --- |
 | UI target | `[REC] <target+>` | Record the programmer into the chosen UI or hardware target. |
-| Numbered preset | `[REC] <preset-type> [ . ] <preset-number> [ENTER]` | Record a preset. Types 0 through 4 are All, Intensity, Color, Position, and Beam. |
+| Numbered preset | `[REC] <preset-type> [ . ] <preset-number> [ENTER]` | Record a preset. Types 0 through 4 are Mixed, Intensity, Color, Position, and Beam; only Mixed accepts attributes from any family. |
 | Overwrite Group | `[REC] [GRP] <group-number> [ENTER]` | Replace the complete ordered membership with the resolved current selection. Recording a live reference back onto the same Group materializes concrete fixtures and cannot create a self-reference. |
 | Merge into Group | `[REC] [+] [GRP] <group-number> [ENTER]` | Retain the existing order and append selected fixtures that are not already members. |
 | Subtract from Group | `[REC] [-] [GRP] <group-number> [ENTER]` | Remove every currently selected fixture and retain the relative order of the other members. |

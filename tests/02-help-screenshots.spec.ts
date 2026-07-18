@@ -102,8 +102,8 @@ const workflowScreenshots = [
   "fixture-library-import.png",
   "fixture-library-mode-editor.png",
   "fixture-library.png",
-  "fixture-sheet-settings-filters.png",
-  "fixture-sheet-settings-ordering.png",
+  "fixture-sheet-settings-columns.png",
+  "fixture-sheet-settings-view.png",
   "mvr-export.png",
   "mvr-new-show.png",
   "patch-add-fixture.png",
@@ -231,10 +231,10 @@ async function captureWorkflowReference(page: Page) {
 
   await page.locator(".dock-entry").filter({ hasText: "Fixtures" }).click();
   await page.locator(".fixture-window").getByRole("button", { name: "Settings" }).click();
-  const fixtureSettings = page.getByRole("dialog", { name: "Fixture Sheet Settings" });
-  await fixtureSettings.screenshot({ path: workflowShot("fixture-sheet-settings-ordering.png") });
-  await fixtureSettings.getByRole("tab", { name: "Filters", exact: true }).click();
-  await fixtureSettings.screenshot({ path: workflowShot("fixture-sheet-settings-filters.png") });
+  const fixtureSettings = page.getByRole("dialog", { name: "Fixture Sheet" });
+  await fixtureSettings.screenshot({ path: workflowShot("fixture-sheet-settings-view.png") });
+  await fixtureSettings.getByRole("tab", { name: "Columns", exact: true }).click();
+  await fixtureSettings.screenshot({ path: workflowShot("fixture-sheet-settings-columns.png") });
   await fixtureSettings.getByRole("button", { name: "Close settings" }).click();
 
 }
@@ -311,15 +311,17 @@ async function seedScreenshotProgramming(api: ApiDriver, showId: string) {
       playback_fader: playbackFader,
     });
   }
-  await put(api, showId, "preset", "1", {
+  await put(api, showId, "preset", "1.1", {
     name: "House Half",
     family: "Intensity",
+    number: 1,
     values: {},
     group_values: { "1": { intensity: { kind: "normalized", value: 0.5 } } },
   });
-  await put(api, showId, "preset", "2", {
+  await put(api, showId, "preset", "2.1", {
     name: "Warm Stage",
     family: "Color",
+    number: 1,
     values: {},
     group_values: { "3": { "color.red": { kind: "normalized", value: 1 }, "color.green": { kind: "normalized", value: 0.55 }, "color.blue": { kind: "normalized", value: 0.25 } } },
   });

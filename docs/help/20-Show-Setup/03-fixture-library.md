@@ -12,9 +12,10 @@ ToskLight has no fixture definitions compiled into the application. Every fixtur
 
 Select a fixture and choose **Export fixture** to download its complete immutable revision. On another desk, choose **Import fixture** and select that file. A package keeps the stable fixture, mode, head, channel, function, split, and geometry IDs. Importing identical content is a no-op; importing changed content with the same fixture ID and manufacturer/name creates the next local revision. Reusing an existing ID for a different fixture family is rejected.
 
-The shipped package directory currently provides the exhaustive Generic family and these manufacturer profiles with complete ordered mode lists:
+The shipped package directory currently provides an operator-focused Generic family and these manufacturer profiles with complete ordered mode lists:
 
 - **Generic Blinder** — the seven requested two-, four-, and eight-lamp one-, two-, and four-channel groupings. Each dimmer channel owns a non-master logical head and the corresponding physical emitters. **Fogger** provides Fog, Fan/Fog, and Fog/Fan modes; **Hazer** provides both two-channel orderings.
+- **Generic RGBW, RGBWA, and RGBWAUV LED** — one canonical RGB-first emitter order with an 8-bit dimmer first, an 8-bit dimmer last, or a virtual dimmer. **Generic RGBCCT LED** provides the six useful placements of the RGB block, cold white, and warm white (`RGBCW`, `RGBWC`, `CRGBW`, `CWRGB`, `WRGBC`, and `WCRGB`), each with those same three dimmer choices. The library deliberately avoids factorial permutations of individual RGB emitters that do not represent normal fixture personalities.
 - **Venue** visual-only profiles — 1 × 1 m, 2 × 1 m, and 1 × 0.5 m stage elements; correctly rising stage stairs; one-, two-, three-, and four-point truss; and 1 m, 2 m, 3 m, 5 m, and 6 m curtains. Their modes select leg height, target stage height, truss/pipe length, or curtain height. Every archive includes portable icon, photograph, and metre-authored GLB geometry.
 
 - **JB-Lighting JBLED A7** — Standard and Compressed RGB personalities in 8-bit and 16-bit color.
@@ -85,7 +86,7 @@ Closing an unchanged editor is immediate. Closing a changed editor through Close
 
 ### Generic
 
-Generic information includes manufacturer, full and short names, fixture type, notes, stage icon, photograph, optional visualizer GLB model, dimensions, weight, and power consumption. Manufacturer remains free text. Use its lookup button to search the unique desk-library manufacturers with the shared full-text keyboard and fill the field without saving the editor.
+Generic information includes manufacturer, full and short names, fixture type, notes, stage icon, photograph, optional visualizer GLB model, dimensions, weight, power consumption, color temperature, luminous output, and beam angle. Notes, photograph, and visualizer are shown side by side; drag the visualizer preview to inspect the GLB from another angle and scroll to zoom. Manufacturer remains free text. Use its lookup button to search the unique desk-library manufacturers with the shared full-text keyboard and fill the field without saving the editor.
 
 ### Modes and heads
 
@@ -109,7 +110,7 @@ Changing a newly added channel's attribute, additive/subtractive calibration, or
 
 Each channel chooses its head and canonical attribute and can configure physical range/unit, invert, snap, virtual-intensity reaction, sequence/group/grand-master reactions, and prioritized functions. **Static** channels normally output their default and use their Highlight value only while identified. Snap channels bypass programmer, Cue, Move in Black, and safety transitions.
 
-A physical channel may contain ordered continuous, fixed, indexed-color/gobo, or control functions. Only an explicitly programmed function claims it; the highest configured priority wins, and releasing it reveals the next claim or channel default. Typed control actions can atomically set several channels and be latched, momentary, or timed. Fixed and indexed functions appear in the direct programmer picker.
+A physical channel may contain ordered continuous, fixed, indexed-color/gobo, or control functions. Only an explicitly programmed function claims it; the highest configured priority wins, and releasing it reveals the next claim or channel default. Typed control actions can atomically set several channels and be latched, momentary, or timed. Assign their operator meaning explicitly as Lamp On, Lamp Off, Reset, Fan Auto, Fan Low, Fan High, Fan Max, or Custom. Lamp On is the fixture manufacturer's discharge-lamp ignition/strike command; it does not set intensity or color and fixtures without that authored action are skipped. Lamp On, Lamp Off, and Reset are normally momentary or timed runtime overrides and are never recorded or persisted as programmer values. Releasing them reveals the latest underlying value on a shared control channel, so a latched fan mode remains in force. Fan modes are normally latched. Highlight is a separate transient identification look and is toggled off with Highlight itself; it is not a control action or programmer value. Fixed and indexed functions appear in the direct programmer picker.
 
 ### Color
 
@@ -119,7 +120,7 @@ Portable presets are never created merely by patching. Use the explicit **Genera
 
 ### Geometry
 
-Start with **Fixed fixture**, **Moving head**, **Bar**, **Matrix**, or **Shared-pan multi-head**, then edit the generated hierarchy. Parts have parents, transforms, pivots, optional GLB-node bindings, and attribute-driven rotation or translation. Emitters attach to any part and define logical head, origin, orientation, beam and field angles, feather, focus, and point/matrix/ring/strip/explicit-pixel layout.
+Start with **Fixed fixture**, **Moving head**, **Bar**, **Matrix**, or **Shared-pan multi-head**, then edit the generated hierarchy. Parts have parents, transforms, pivots, optional GLB-node bindings, and attribute-driven rotation or translation. Emitters attach to any part and define logical head, origin, orientation, beam and field angles, feather, focus, point/matrix/ring/strip/explicit-pixel layout, and whether the source projects a directional beam. Disable **Projects a directional beam** for broad sources such as strobes and Sunstrip-style emitters; their inactive lens remains visible in Stage without receiving an aim guide.
 
 The editor preview and Stage visualizer use the configured graph, multiple emitters, resolved motion attributes, and the same resolved color used for output. This supports a shared pan ancestor with independent tilt children and multiple offset beam sources instead of assuming one hard-coded beam.
 

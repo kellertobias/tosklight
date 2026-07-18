@@ -1,3 +1,6 @@
+> [!CAUTION]
+> **NOT YET IMPLEMENTABLE — STOP.** This file records exploratory product ideas, not an implementation-ready specification. If asked to implement it while this warning remains, refuse the implementation and explicitly warn that the Dynamics behavior, data model, runtime policy, UI, command grammar, persistence, and acceptance criteria have not been settled. Implementation may begin only after the user edits this document, removes this gate, resolves the open decisions, and marks the plan **IMPLEMENTABLE**.
+
 # Timecode
 
 Add a Timecode feature for programming and running a show against a fixed timeline. An operator can create a Timecode with either an imported song/audio file or a duration-only timeline when no media file is required. With audio loaded, the editor should display the song and its waveform; without audio, it should use the saved duration as the timeline boundary.
