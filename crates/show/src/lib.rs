@@ -9,6 +9,13 @@ use std::path::Path;
 use thiserror::Error;
 use uuid::Uuid;
 
+mod portable;
+
+pub use portable::{
+    PortableShowCommit, PortableShowDocument, PortableShowObject, PortableShowObjectKey,
+    PortableShowRevision, PortableShowTransaction,
+};
+
 const DESK_SCHEMA_VERSION: i64 = 9;
 const SHOW_SCHEMA_VERSION: i64 = 3;
 
@@ -26,6 +33,11 @@ pub enum StoreError {
     RevisionConflict {
         expected: Revision,
         current: Revision,
+    },
+    #[error("portable show revision conflict: expected {expected}, current {current}")]
+    DocumentRevisionConflict {
+        expected: PortableShowRevision,
+        current: PortableShowRevision,
     },
 }
 
@@ -1089,6 +1101,7 @@ impl ShowStore {
             [id.0.to_string()],
         )?;
         transaction.execute("INSERT INTO metadata(key,value) VALUES ('name',?1)", [name])?;
+        portable::initialise_revision(&transaction)?;
         transaction.commit()?;
         Ok((Self { conn }, id))
     }
@@ -1143,6 +1156,7 @@ impl ShowStore {
                 )?;
             }
         }
+        portable::bump_revision(&transaction)?;
         transaction.commit()?;
         Ok(())
     }
@@ -1182,24 +1196,7 @@ impl ShowStore {
         body: &serde_json::Value,
         expected: Revision,
     ) -> Result<Revision, StoreError> {
-        let current_row = self
-            .conn
-            .query_row(
-                "SELECT revision,body_json FROM objects WHERE kind=?1 AND id=?2",
-                params![kind, id],
-                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
-            )
-            .optional()?;
-        let current = current_row.as_ref().map(|row| row.0 as u64).unwrap_or(0);
-        if current != expected {
-            return Err(StoreError::RevisionConflict { expected, current });
-        }
-        let revision = current + 1;
-        if let Some((previous_revision, previous_body)) = current_row {
-            self.conn.execute("INSERT INTO object_history(kind,id,revision,body_json,created_at) VALUES (?1,?2,?3,?4,?5)", params![kind,id,previous_revision,previous_body,Utc::now().to_rfc3339()])?;
-        }
-        self.conn.execute("INSERT INTO objects(kind,id,body_json,revision,updated_at) VALUES (?1,?2,?3,?4,?5) ON CONFLICT(kind,id) DO UPDATE SET body_json=excluded.body_json,revision=excluded.revision,updated_at=excluded.updated_at", params![kind,id,serde_json::to_string(body)?,revision as i64,Utc::now().to_rfc3339()])?;
-        Ok(revision)
+        portable::put_legacy_object(&self.conn, kind, id, body, expected)
     }
 
     /// Applies related versioned object writes/deletes in one SQLite transaction. Playback slot
@@ -1209,61 +1206,7 @@ impl ShowStore {
         writes: &[AtomicObjectWrite<'_>],
         deletes: &[AtomicObjectDelete<'_>],
     ) -> Result<Vec<Revision>, StoreError> {
-        let transaction = self.conn.unchecked_transaction()?;
-        let mut revisions = Vec::with_capacity(writes.len());
-        for write in writes {
-            let current_row = transaction
-                .query_row(
-                    "SELECT revision,body_json FROM objects WHERE kind=?1 AND id=?2",
-                    params![write.kind, write.id],
-                    |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
-                )
-                .optional()?;
-            let current = current_row.as_ref().map(|row| row.0 as u64).unwrap_or(0);
-            if current != write.expected {
-                return Err(StoreError::RevisionConflict {
-                    expected: write.expected,
-                    current,
-                });
-            }
-            let revision = current + 1;
-            if let Some((previous_revision, previous_body)) = current_row {
-                transaction.execute(
-                    "INSERT INTO object_history(kind,id,revision,body_json,created_at) VALUES (?1,?2,?3,?4,?5)",
-                    params![write.kind, write.id, previous_revision, previous_body, Utc::now().to_rfc3339()],
-                )?;
-            }
-            transaction.execute(
-                "INSERT INTO objects(kind,id,body_json,revision,updated_at) VALUES (?1,?2,?3,?4,?5) ON CONFLICT(kind,id) DO UPDATE SET body_json=excluded.body_json,revision=excluded.revision,updated_at=excluded.updated_at",
-                params![write.kind, write.id, serde_json::to_string(write.body)?, revision as i64, Utc::now().to_rfc3339()],
-            )?;
-            revisions.push(revision);
-        }
-        for delete in deletes {
-            let current = transaction
-                .query_row(
-                    "SELECT revision FROM objects WHERE kind=?1 AND id=?2",
-                    params![delete.kind, delete.id],
-                    |row| row.get::<_, i64>(0),
-                )
-                .optional()?
-                .map(|revision| revision as u64)
-                .unwrap_or(0);
-            if current != delete.expected {
-                return Err(StoreError::RevisionConflict {
-                    expected: delete.expected,
-                    current,
-                });
-            }
-            if current > 0 {
-                transaction.execute(
-                    "DELETE FROM objects WHERE kind=?1 AND id=?2",
-                    params![delete.kind, delete.id],
-                )?;
-            }
-        }
-        transaction.commit()?;
-        Ok(revisions)
+        portable::mutate_legacy_objects(&self.conn, writes, deletes)
     }
 
     pub fn undo_object(
@@ -1272,32 +1215,7 @@ impl ShowStore {
         id: &str,
         expected: Revision,
     ) -> Result<Revision, StoreError> {
-        let current: i64 = self.conn.query_row(
-            "SELECT revision FROM objects WHERE kind=?1 AND id=?2",
-            params![kind, id],
-            |row| row.get(0),
-        )?;
-        if current as u64 != expected {
-            return Err(StoreError::RevisionConflict {
-                expected,
-                current: current as u64,
-            });
-        }
-        let previous = self.conn.query_row("SELECT rowid,body_json FROM object_history WHERE kind=?1 AND id=?2 ORDER BY rowid DESC LIMIT 1", params![kind,id], |row| Ok((row.get::<_,i64>(0)?,row.get::<_,String>(1)?))).optional()?.ok_or_else(|| StoreError::Invalid("object has no undo history".into()))?;
-        let revision = expected + 1;
-        self.conn.execute(
-            "UPDATE objects SET body_json=?3,revision=?4,updated_at=?5 WHERE kind=?1 AND id=?2",
-            params![
-                kind,
-                id,
-                previous.1,
-                revision as i64,
-                Utc::now().to_rfc3339()
-            ],
-        )?;
-        self.conn
-            .execute("DELETE FROM object_history WHERE rowid=?1", [previous.0])?;
-        Ok(revision)
+        portable::undo_legacy_object(&self.conn, kind, id, expected)
     }
 
     pub fn objects(&self, kind: &str) -> Result<Vec<VersionedObject>, StoreError> {
@@ -1326,10 +1244,7 @@ impl ShowStore {
     }
 
     pub fn delete_object(&self, kind: &str, id: &str) -> Result<bool, StoreError> {
-        Ok(self.conn.execute(
-            "DELETE FROM objects WHERE kind=?1 AND id=?2",
-            params![kind, id],
-        )? == 1)
+        portable::delete_legacy_object(&self.conn, kind, id)
     }
 
     pub fn put_user_layout(
