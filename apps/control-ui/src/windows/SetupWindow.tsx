@@ -46,8 +46,9 @@ export function SetupWindow(_: WindowProps) {
 	);
 	const [recordSettings, setRecordSettings] =
 		useState<RecordSettings>(loadRecordSettings);
-	const [updateSettings, setUpdateSettings] =
-		useState<UpdateSettings>(defaultUpdateSettings);
+	const [updateSettings, setUpdateSettings] = useState<UpdateSettings>(
+		defaultUpdateSettings,
+	);
 	const [programmerSettingsLoaded, setProgrammerSettingsLoaded] =
 		useState(false);
 	const [programmerSettingsError, setProgrammerSettingsError] = useState<
@@ -130,16 +131,28 @@ export function SetupWindow(_: WindowProps) {
 					primary: sections[section],
 					secondary: restartRequired ? "Restart required" : undefined,
 				}}
-				actions={section === 6 ? [[
-						{ id: "desk-lock", label: "Desk Lock", onClick: () => setDeskLockSettingsOpen(true) },
-					]] : [[
-						{
-							id: "save",
-							label: "Save changes",
-							disabled: !draft,
-							onClick: () => void save(),
-						},
-					]]}
+				actions={
+					section === 6
+						? [
+								[
+									{
+										id: "desk-lock",
+										label: "Desk Lock",
+										onClick: () => setDeskLockSettingsOpen(true),
+									},
+								],
+							]
+						: [
+								[
+									{
+										id: "save",
+										label: "Save changes",
+										disabled: !draft,
+										onClick: () => void save(),
+									},
+								],
+							]
+				}
 			/>
 			<div className="setup-window-body">
 				<nav>
@@ -183,7 +196,9 @@ export function SetupWindow(_: WindowProps) {
 											</small>
 										</section>
 									</div>
-									<ShowRecoveryFileManager onOpenFixtureLibrary={() => setFixtureLibraryOpen(true)} />
+									<ShowRecoveryFileManager
+										onOpenFixtureLibrary={() => setFixtureLibraryOpen(true)}
+									/>
 								</>
 							)}
 							{section === 1 && (
@@ -236,7 +251,31 @@ export function SetupWindow(_: WindowProps) {
 												onChange={setUpdateSettings}
 											/>
 										</article>
-										<h3 className="programmer-setup-section-title">Preload</h3>
+										{draft && (
+											<article>
+												<header>
+													<b>Show Patch</b>
+													<small>
+														Virtual Stage highlighting remains active regardless
+														of this option.
+													</small>
+												</header>
+												<FormLayout labelPlacement="side">
+													<SwitchField
+														label="Highlight patch selection via DMX"
+														checked={draft.patch_preview_highlight_dmx ?? false}
+														onChange={(event) =>
+															editDraft({
+																...draft,
+																patch_preview_highlight_dmx:
+																	event.target.checked,
+															})
+														}
+													/>
+												</FormLayout>
+											</article>
+										)}
+										<h3 className="setup-subsection-title">Preload</h3>
 										{draft && (
 											<article>
 												<header>
@@ -249,7 +288,8 @@ export function SetupWindow(_: WindowProps) {
 														onChange={(event) =>
 															editDraft({
 																...draft,
-																preload_programmer_changes: event.target.checked,
+																preload_programmer_changes:
+																	event.target.checked,
 															})
 														}
 													/>
@@ -358,7 +398,7 @@ export function SetupWindow(_: WindowProps) {
 							)}
 							{section === 5 && (
 								<>
-									<h2>Network & Inputs</h2>
+									<h2>Network</h2>
 									<FormLayout
 										className="configuration-form"
 										labelPlacement="side"
@@ -389,11 +429,26 @@ export function SetupWindow(_: WindowProps) {
 											<small>Live events and control</small>
 										</section>
 									</div>
+									<h3 className="setup-subsection-title">Inputs</h3>
 									<div className="setup-list network-input-list">
-										<article><b>MIDI inputs</b><span>{draft?.midi_inputs.length ? draft.midi_inputs.join(", ") : "No MIDI inputs selected"}</span></article>
-										<article><b>OSC</b><span>{draft?.osc_bind ?? "Disabled"}</span></article>
-										<article><b>RTP-MIDI</b><span>{draft?.rtp_midi_bind ?? "Disabled"}</span></article>
+										<article>
+											<b>MIDI inputs</b>
+											<span>
+												{draft?.midi_inputs.length
+													? draft.midi_inputs.join(", ")
+													: "No MIDI inputs selected"}
+											</span>
+										</article>
+										<article>
+											<b>OSC</b>
+											<span>{draft?.osc_bind ?? "Disabled"}</span>
+										</article>
+										<article>
+											<b>RTP-MIDI</b>
+											<span>{draft?.rtp_midi_bind ?? "Disabled"}</span>
+										</article>
 									</div>
+									<h3 className="setup-subsection-title">Services</h3>
 									<MatterBridgeSettings />
 								</>
 							)}
@@ -406,14 +461,44 @@ export function SetupWindow(_: WindowProps) {
 				</main>
 			</div>
 			{fixtureLibraryOpen && (
-				<div className="stacked-modal-layer fixture-library-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && setFixtureLibraryOpen(false)}>
-					<section className="fixture-library-modal" role="dialog" aria-modal="true" aria-label="Fixture Library">
-						<ModalTitleBar title="Fixture Library" search={<div id="setup-section-search" className="setup-section-search" />} actions={<div id="setup-section-actions" className="setup-section-actions" />} closeLabel="Close Fixture Library" onClose={() => setFixtureLibraryOpen(false)} />
-						<div className="fixture-library-modal-body"><FixtureLibrarySetup /></div>
+				<div
+					className="stacked-modal-layer fixture-library-modal-layer"
+					onPointerDown={(event) =>
+						event.target === event.currentTarget && setFixtureLibraryOpen(false)
+					}
+				>
+					<section
+						className="fixture-library-modal"
+						role="dialog"
+						aria-modal="true"
+						aria-label="Fixture Library"
+					>
+						<ModalTitleBar
+							title="Fixture Library"
+							search={
+								<div
+									id="setup-section-search"
+									className="setup-section-search"
+								/>
+							}
+							actions={
+								<div
+									id="setup-section-actions"
+									className="setup-section-actions"
+								/>
+							}
+							closeLabel="Close Fixture Library"
+							onClose={() => setFixtureLibraryOpen(false)}
+						/>
+						<div className="fixture-library-modal-body">
+							<FixtureLibrarySetup />
+						</div>
 					</section>
 				</div>
 			)}
-			{deskLockSettingsOpen && <DeskLockSettingsModal onClose={() => setDeskLockSettingsOpen(false)} />}
+			{deskLockSettingsOpen && (
+				<DeskLockSettingsModal onClose={() => setDeskLockSettingsOpen(false)} />
+			)}
 		</div>
 	);
 }

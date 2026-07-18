@@ -57,6 +57,7 @@ export function blankGeometry(headIds: string[] = []): GeometryGraph {
       field_angle_degrees: 24,
       feather: 0,
       focus: 1,
+      directional: true,
       layout: { type: "point" as const },
     })),
   };
@@ -104,6 +105,7 @@ export function geometryTemplate(template: GeometryTemplateName, headIds: string
     field_angle_degrees: 24,
     feather: 0,
     focus: 1,
+    directional: template !== "bar" && template !== "matrix",
     layout: template === "bar"
       ? { type: "strip", count: 8, spacing_millimetres: 50 }
       : template === "matrix"

@@ -37,43 +37,39 @@ function openModeEditor(tab: "Heads" | "Channels" | "Color" | "Geometry" = "Chan
   return screen.getByRole("dialog", { name: "Edit Default mode" });
 }
 
-function touchDrag(source: HTMLElement, target: HTMLElement, pointerId: number) {
+function touchDrag(source: HTMLElement, target: HTMLElement, pointerId: number, pointerType = "touch") {
   Object.defineProperties(source, {
     setPointerCapture: { configurable: true, value: vi.fn() },
     hasPointerCapture: { configurable: true, value: vi.fn(() => true) },
     releasePointerCapture: { configurable: true, value: vi.fn() },
   });
   Object.defineProperty(document, "elementFromPoint", { configurable: true, value: vi.fn(() => target) });
-  fireEvent.pointerDown(source, { pointerId, pointerType: "touch" });
-  fireEvent.pointerMove(source, { pointerId, pointerType: "touch", clientX: 40, clientY: 80 });
-  fireEvent.pointerUp(source, { pointerId, pointerType: "touch" });
+  fireEvent.pointerDown(source, { pointerId, pointerType });
+  fireEvent.pointerMove(source, { pointerId, pointerType, clientX: 40, clientY: 80 });
+  fireEvent.pointerUp(source, { pointerId, pointerType });
 }
 
 describe("FixtureProfileEditor", () => {
-  it("authors the complete Generic physical metadata snapshot while older profiles keep empty defaults", async () => {
+  it("authors the focused Generic physical metadata while preserving hidden legacy facts", async () => {
     const profile = validProfile();
-    delete profile.physical.connectors;
-    delete profile.physical.light_source;
-    delete profile.physical.color_temperature_kelvin;
-    delete profile.physical.color_rendering_index;
-    delete profile.physical.luminous_output_lumens;
-    delete profile.physical.lens;
-    delete profile.physical.beam_angle_degrees;
+    profile.physical.connectors = "powerCON TRUE1 TOP; 5-pin XLR in/out";
+    profile.physical.light_source = "600 W LED engine";
+    profile.physical.color_rendering_index = 92;
+    profile.physical.lens = "Fresnel zoom";
     const save = vi.fn(async (draft: FixtureProfile) => draft);
     render(<FixtureProfileEditor initialProfile={profile} manufacturers={[]} onSave={save} onClose={vi.fn()}/>);
 
-    expect(screen.getByLabelText("Connectors")).toHaveValue("");
+    expect(screen.queryByLabelText("Connectors")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Light source")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Color rendering index (CRI)")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Lens")).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Width (mm)"), { target: { value: "420" } });
     fireEvent.change(screen.getByLabelText("Height (mm)"), { target: { value: "680" } });
     fireEvent.change(screen.getByLabelText("Depth (mm)"), { target: { value: "310" } });
     fireEvent.change(screen.getByLabelText("Weight (kg)"), { target: { value: "24.5" } });
     fireEvent.change(screen.getByLabelText("Power consumption (W)"), { target: { value: "720" } });
-    fireEvent.change(screen.getByLabelText("Connectors"), { target: { value: "powerCON TRUE1 TOP; 5-pin XLR in/out" } });
-    fireEvent.change(screen.getByLabelText("Light source"), { target: { value: "600 W LED engine" } });
     fireEvent.change(screen.getByLabelText("Color temperature (K)"), { target: { value: "6500" } });
-    fireEvent.change(screen.getByLabelText("Color rendering index (CRI)"), { target: { value: "92" } });
     fireEvent.change(screen.getByLabelText("Luminous output (lm)"), { target: { value: "18500" } });
-    fireEvent.change(screen.getByLabelText("Lens"), { target: { value: "Fresnel zoom" } });
     fireEvent.change(screen.getByLabelText("Beam angle (degrees)"), { target: { value: "36" } });
     fireEvent.click(screen.getByRole("button", { name: "Save fixture" }));
 
@@ -197,6 +193,7 @@ describe("FixtureProfileEditor", () => {
     openModeEditor();
     fireEvent.click(screen.getByRole("button", { name: "Edit intensity channel" }));
     fireEvent.click(screen.getByRole("button", { name: "Channel functions (0)" }));
+    expect(screen.getByText("No functions are configured for this channel.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Add function" }));
     expect(screen.getByLabelText("Priority")).toHaveValue("0");
 
@@ -319,7 +316,29 @@ describe("FixtureProfileEditor", () => {
     expect(within(screen.getByText("No logical channels are assigned to split 2.").parentElement!).getByRole("button", { name: "Add channel" })).toBeInTheDocument();
   });
 
-  it("reorders modes through the touch drag handle as well as explicit move buttons", () => {
+  it("assigns channels to splits independently while retaining one logical head", () => {
+    const profile = validProfile();
+    const headId = profile.modes[0].heads[0].id;
+    profile.modes[0].splits = [{ number: 1, footprint: 1 }, { number: 2, footprint: 1 }];
+    profile.modes[0].channels = [{ ...blankChannel(profile.modes[0], 1), head_id: headId }];
+    const save = vi.fn(async (draft: FixtureProfile) => draft);
+    render(<FixtureProfileEditor initialProfile={profile} manufacturers={[]} onSave={save} onClose={vi.fn()}/>);
+    fireEvent.click(screen.getByRole("tab", { name: "Modes" }));
+    openModeEditor();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit intensity channel" }));
+    choose("Address split", "Split 2");
+    fireEvent.click(screen.getByRole("button", { name: "Close channel editor" }));
+
+    expect(screen.getByRole("button", { name: /Split 2/ })).toHaveAttribute("aria-expanded", "true");
+    expect(document.querySelectorAll(".fixture-channel-row")).toHaveLength(1);
+    expect(screen.queryAllByLabelText("Head name")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Save fixture" }));
+    expect(save.mock.calls[0][0].modes[0].heads).toHaveLength(1);
+    expect(save.mock.calls[0][0].modes[0].channels[0]).toMatchObject({ head_id: headId, split: 2 });
+  });
+
+  it("reorders modes through the drag handle for touch and mouse without move buttons", () => {
     render(<FixtureProfileEditor initialProfile={validProfile()} manufacturers={[]} onSave={vi.fn()} onClose={vi.fn()}/>);
     fireEvent.click(screen.getByRole("tab", { name: "Modes" }));
     fireEvent.click(screen.getByRole("button", { name: "Add mode" }));
@@ -339,7 +358,25 @@ describe("FixtureProfileEditor", () => {
     const names = [...document.querySelectorAll<HTMLElement>(".fixture-mode-list > article")].map((row) => row.querySelector<HTMLInputElement>("input")?.value);
     expect(names[0]).toMatch(/^Mode 2/);
     expect(names[1]).toMatch(/^Default/);
-    expect(screen.getByRole("button", { name: "Move Mode 2 down" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Move Mode 2 (?:up|down)/ })).not.toBeInTheDocument();
+
+    const reordered = document.querySelectorAll<HTMLElement>(".fixture-mode-list > article");
+    touchDrag(reordered[0].querySelector<HTMLElement>(".touch-drag-handle")!, reordered[1], 8, "mouse");
+    expect([...document.querySelectorAll<HTMLElement>(".fixture-mode-list > article")].map((row) => row.querySelector<HTMLInputElement>("input")?.value)).toEqual(["Default", "Mode 2"]);
+  });
+
+  it("uses the two-row mode layout with a trash action and multiline notes keyboard", () => {
+    render(<FixtureProfileEditor initialProfile={validProfile()} manufacturers={[]} onSave={vi.fn()} onClose={vi.fn()}/>);
+    fireEvent.click(screen.getByRole("tab", { name: "Modes" }));
+    const mode = document.querySelector<HTMLElement>(".fixture-mode-list > article")!;
+    expect(within(mode).getByRole("button", { name: "Edit channels for Default" })).toHaveTextContent("Edit");
+    expect(within(mode).getByRole("button", { name: "Remove Default" }).querySelector("svg")).toBeInTheDocument();
+    expect(within(mode).getByLabelText("Mode notes").tagName).toBe("TEXTAREA");
+    fireEvent.click(mode.querySelector<HTMLButtonElement>(".ui-large-text-keyboard")!);
+    expect(screen.getByRole("dialog", { name: "Mode notes" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Enter · New line" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done · Confirm" }));
+    expect(within(mode).getByLabelText("Mode notes")).toHaveValue("\n");
   });
 
   it("adds, reorders, and removes heads and channels through the editor controls", () => {
@@ -420,6 +457,7 @@ describe("FixtureProfileEditor", () => {
     expect(screen.getByText("1 parts · 2 emitters. Preview uses the Stage renderer's hierarchy, transforms, source layouts, and beam angles.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("treeitem", { name: /Beam 1/ }));
     expect(sourceLayout()).toHaveTextContent("Point");
+    expect(screen.getByLabelText("Projects a directional beam")).toBeChecked();
 
     fireEvent.click(screen.getByRole("button", { name: "Moving head" }));
     expect(screen.getByText("4 parts · 2 emitters. Preview uses the Stage renderer's hierarchy, transforms, source layouts, and beam angles.")).toBeInTheDocument();
@@ -427,10 +465,12 @@ describe("FixtureProfileEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Bar" }));
     fireEvent.click(screen.getByRole("treeitem", { name: /Beam 1/ }));
     expect(sourceLayout()).toHaveTextContent("Strip");
+    expect(screen.getByLabelText("Projects a directional beam")).not.toBeChecked();
 
     fireEvent.click(screen.getByRole("button", { name: "Matrix" }));
     fireEvent.click(screen.getByRole("treeitem", { name: /Beam 1/ }));
     expect(sourceLayout()).toHaveTextContent("Matrix");
+    expect(screen.getByLabelText("Projects a directional beam")).not.toBeChecked();
 
     fireEvent.click(screen.getByRole("button", { name: "Shared-pan multi-head" }));
     expect(screen.getByText("4 parts · 2 emitters. Preview uses the Stage renderer's hierarchy, transforms, source layouts, and beam angles.")).toBeInTheDocument();

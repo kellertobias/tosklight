@@ -129,10 +129,13 @@ describe("QuickSetupModal named revision copies", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save As" }));
     const dialog = screen.getByRole("dialog", { name: "Save show" });
     expect(dialog).toHaveTextContent("This empty show is already autosaved");
-    expect(within(dialog).getByRole("button", { name: "Rename Show" })).toBeInTheDocument();
+    const titleBar = dialog.querySelector(".ui-modal-titlebar") as HTMLElement;
+    expect(within(titleBar).getByRole("button", { name: "Name Empty Show" })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Rename Show" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
     expect(within(dialog).queryByText("Or replace an existing Latest Autosave")).not.toBeInTheDocument();
     fireEvent.change(within(dialog).getByLabelText("Show name"), { target: { value: "Opening Night" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Rename Show" }));
+    fireEvent.click(within(titleBar).getByRole("button", { name: "Name Empty Show" }));
     await waitFor(() => expect(mocks.server.saveShowAs).toHaveBeenCalledWith("Opening Night"));
   });
 

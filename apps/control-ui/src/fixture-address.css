@@ -6,9 +6,10 @@
 	display: none;
 }
 .fixture-address-screen {
-	width: calc(100vw - 24px) !important;
-	height: calc(100vh - 24px);
+	width: 100% !important;
+	height: 100%;
 	max-width: none !important;
+	max-height: none !important;
 	display: grid;
 	grid-template-rows: auto auto auto minmax(0, 1fr) auto;
 	gap: 8px;
