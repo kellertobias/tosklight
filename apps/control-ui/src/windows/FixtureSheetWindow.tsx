@@ -8,12 +8,22 @@ import { GroupStrip } from "../components/shared/GroupStrip";
 import { SourceLegend } from "../components/shared/SourceLegend";
 import { useApp } from "../state/AppContext";
 import { DataTable, WindowHeader, WindowScrollArea, WindowSettings, type DataTableColumn } from "../components/window-kit";
-import { Button, Select, SwitchField } from "../components/common";
+import { Select, SwitchField } from "../components/common";
 import { FixtureColorDot } from "../components/shared/FixtureColorDot";
 import { activeProgrammerFixtureIds, compareFixtureIds, cueListFixtureIds } from "./fixtureSheetFilters";
 import { fixtureSheetTargets, targetHasAttribute, targetValue } from "./fixtureSheetTargets";
+import type { FixtureSheetColumn } from "../types";
 
-type FixtureOrder = "fixture-id" | "active";
+const defaultFixtureSheetColumns: FixtureSheetColumn[] = ["id", "name", "dimmer", "color", "position", "beam", "focus"];
+const fixtureSheetColumnLabels: Record<FixtureSheetColumn, string> = {
+  id: "Fixture ID",
+  name: "Name",
+  dimmer: "Dimmer",
+  color: "Color",
+  position: "Position",
+  beam: "Beam",
+  focus: "Focus",
+};
 
 export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps) {
   const server = useServer();
@@ -21,11 +31,15 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
   const [visualization, setVisualization] = useState<VisualizationSnapshot | null>(null);
   const [preloadVisualization, setPreloadVisualization] = useState<VisualizationSnapshot | null>(null);
   const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
-  const [fixtureOrder, setFixtureOrder] = useState<FixtureOrder>("fixture-id");
-  const [activeOnly, setActiveOnly] = useState(false);
-  const [cueListId, setCueListId] = useState("");
-  const [collapsedFixtureIds, setCollapsedFixtureIds] = useState<Set<string>>(() => new Set());
   const groupsVisible = compact ? Boolean(showGroupShortcuts) : state.fixtureGroupsVisible;
+  const fixtureOrder = compact ? "fixture-id" : state.fixtureSheetOrder;
+  const activeOnly = compact ? false : state.fixtureSheetActiveOnly;
+  const cueListId = compact || !(server.playbacks?.cue_lists ?? []).some((cueList) => cueList.id === state.fixtureSheetCueListId) ? "" : state.fixtureSheetCueListId;
+  const visibleColumnIds = compact ? defaultFixtureSheetColumns : state.fixtureSheetColumns;
+  const showType = compact || state.fixtureSheetShowType;
+  const showPatch = compact || state.fixtureSheetShowPatch;
+  const showSubheads = compact || state.fixtureSheetShowSubheads;
+  const showMasterHeads = compact || state.fixtureSheetShowMasterHeads;
   useEffect(() => {
     let cancelled = false;
     const refresh = () => void Promise.all([server.readVisualization(), state.preload !== "idle" ? server.readVisualization(true) : Promise.resolve(null)]).then(([next, preload]) => { if (!cancelled) { setVisualization(next); setPreloadVisualization(preload); } }).catch(() => undefined);
@@ -42,6 +56,7 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
   const orderedPatch = [...(server.patch?.fixtures ?? [])].sort(compareFixtureIds);
   const orderedTargets = orderedPatch
     .flatMap(fixtureSheetTargets)
+    .filter((target) => target.fixture.logical_heads.length === 0 || (target.order === 0 ? showMasterHeads : showSubheads))
     .filter((target) => !activeOnly || activeFixtureIds.has(target.fixtureId) || (target.order === 0 && target.fixture.logical_heads.some((head) => activeFixtureIds.has(head.fixture_id))))
     .filter((target) => cueFixtureIds == null || cueFixtureIds.has(target.fixtureId) || (target.order === 0 && target.fixture.logical_heads.some((head) => cueFixtureIds.has(head.fixture_id))))
     .sort((a, b) => {
@@ -77,7 +92,8 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
       ...base,
       id: target.displayId,
       name: target.name,
-      type: `${patched.definition.manufacturer} · ${patched.definition.mode} · U${patched.universe}.${patched.address}`,
+      fixtureType: `${patched.definition.manufacturer} · ${patched.definition.mode}`,
+      patch: patched.universe != null && patched.address != null ? `U${patched.universe}.${patched.address}` : "Unpatched",
       fixtureId: target.fixtureId,
       targetKind: (patched.logical_heads.length ? target.order === 0 ? "master" : "head" : "fixture") as "fixture" | "master" | "head",
       parentFixtureId: patched.fixture_id,
@@ -109,6 +125,8 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
     ? liveFixtures
     : fixtures.map((fixture) => ({
         ...fixture,
+        fixtureType: fixture.type,
+        patch: "",
         fixtureId: "",
         targetKind: "fixture" as const,
         parentFixtureId: "",
@@ -116,8 +134,7 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
         limitingGroups: [],
         preloadDimmer: null, preloadColor: null, preloadPan: null, preloadTilt: null,
       }));
-  const expandedRows = rows.filter((fixture) => fixture.targetKind !== "head" || !collapsedFixtureIds.has(fixture.parentFixtureId));
-  const visible = compact ? expandedRows.slice(0, 12) : expandedRows;
+  const visible = compact ? rows.slice(0, 12) : rows;
   const [activeRow, setActiveRow] = useState(0);
   type Row = (typeof visible)[number];
   const stepMode = server.highlight?.mode === "step";
@@ -133,17 +150,9 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
     const containedBase = Boolean(stepMode && fixture.targetKind === "master" && fixture.childFixtureIds.some((fixtureId) => rememberedStepIds.has(fixtureId)));
     return { current, base, containedCurrent, containedBase };
   };
-  const toggleCollapsed = (fixtureId: string) => setCollapsedFixtureIds((current) => {
-    const next = new Set(current);
-    if (next.has(fixtureId)) next.delete(fixtureId);
-    else next.add(fixtureId);
-    return next;
-  });
-  const columns: DataTableColumn<Row>[] = [
+  const allColumns: DataTableColumn<Row>[] = [
     { id: "id", header: "ID", width: "88px", render: (fixture) => {
       const presentation = stepPresentation(fixture);
-      const collapsible = fixture.targetKind === "master" && fixture.childFixtureIds.length > 0;
-      const collapsed = collapsible && collapsedFixtureIds.has(fixture.parentFixtureId);
       const marker = presentation.current
         ? "STEP"
         : presentation.containedCurrent
@@ -153,20 +162,20 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
             : presentation.containedBase
               ? "BASE INSIDE"
               : null;
-      return <span className="fixture-sheet-id"><span>{fixture.id}</span>{collapsible && <Button
-        className="fixture-head-toggle"
-        aria-label={`${collapsed ? "Expand" : "Collapse"} fixture ${fixture.id} heads`}
-        aria-expanded={!collapsed}
-        onClick={(event) => { event.stopPropagation(); toggleCollapsed(fixture.parentFixtureId); }}
-      >{collapsed ? "▶" : "▼"}</Button>}{marker && <small className="fixture-step-marker">{marker}</small>}</span>;
+      return <span className="fixture-sheet-id"><span>{fixture.id}</span>{marker && <small className="fixture-step-marker">{marker}</small>}</span>;
     } },
-    { id: "name", header: "Name / type", width: "minmax(190px,1.4fr)", render: (fixture) => <span className="fixture-name"><b>{fixture.name}</b><small>{fixture.type}</small>{fixture.limitingGroups.length > 0 && <em title={fixture.limitingGroups.map((group) => `${group.body.name}: ${Math.round((group.body.master ?? 1) * 100)}%`).join(", ")}>◒ Group master {Math.round(Math.max(...fixture.limitingGroups.map((group) => group.body.master ?? 1)) * 100)}%</em>}</span> },
+    { id: "name", header: showType ? "Name / type" : "Name", width: "minmax(190px,1.4fr)", render: (fixture) => <span className="fixture-name"><b>{fixture.name}</b>{(showType || showPatch) && <small>{[showType ? fixture.fixtureType : "", showPatch ? fixture.patch : ""].filter(Boolean).join(" · ")}</small>}{fixture.limitingGroups.length > 0 && <em title={fixture.limitingGroups.map((group) => `${group.body.name}: ${Math.round((group.body.master ?? 1) * 100)}%`).join(", ")}>◒ Group master {Math.round(Math.max(...fixture.limitingGroups.map((group) => group.body.master ?? 1)) * 100)}%</em>}</span> },
     { id: "dimmer", header: "Dimmer", width: "minmax(95px,.7fr)", render: (fixture) => <SourceValue source={fixture.sources.dimmer}><i className="vertical-meter"><i style={{ height: `${fixture.dimmer}%` }} /></i>{fixture.dimmer}%{fixture.preloadDimmer != null && <small className="preload-value">→ {fixture.preloadDimmer}%</small>}</SourceValue> },
     { id: "color", header: "Color", width: "minmax(105px,1fr)", render: (fixture) => <SourceValue source={fixture.sources.color}><FixtureColorDot color={fixture.color}/>{fixture.colorLabel}{fixture.preloadColor && <small className="preload-value"><FixtureColorDot color={fixture.preloadColor}/> Preload</small>}</SourceValue> },
     { id: "position", header: "Position", width: "minmax(145px,1.25fr)", render: (fixture) => <SourceValue source={fixture.sources.position}><i className="position-glyph"><i style={{ left: `${fixture.pan % 75}%`, top: `${fixture.tilt % 65}%` }} /></i>{fixture.positionLabel ?? `${fixture.pan}° / ${fixture.tilt}°`}{fixture.preloadPan != null && fixture.preloadTilt != null && <small className="preload-value">→ {fixture.preloadPan} / {fixture.preloadTilt}</small>}</SourceValue> },
     { id: "beam", header: "Beam", width: "minmax(80px,.8fr)", render: (fixture) => <SourceValue source={fixture.sources.beam}>{fixture.beam}</SourceValue> },
     { id: "focus", header: "Focus", width: "minmax(80px,.8fr)", render: (fixture) => <SourceValue source={fixture.sources.focus}>{fixture.focus}</SourceValue> },
   ];
+  const columns = allColumns.filter((column) => visibleColumnIds.includes(column.id as FixtureSheetColumn));
+  const toggleColumn = (column: FixtureSheetColumn, checked: boolean) => dispatch({
+    type: "SET_FIXTURE_SHEET_OPTIONS",
+    columns: checked ? [...state.fixtureSheetColumns, column] : state.fixtureSheetColumns.filter((candidate) => candidate !== column),
+  });
   return (
     <div className="fixture-window">
       {!compact && <WindowHeader title="Fixture Sheet" info={{ primary: `${server.selectedFixtures.length} selected`, secondary: <SourceLegend /> }} settings onSettings={(anchor) => setSettingsAnchor(anchor.getBoundingClientRect())} />}
@@ -193,7 +202,6 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
             "data-parent-fixture-id": fixture.parentFixtureId || undefined,
             "data-step-selection": presentation.current ? "active" : presentation.base ? "base" : undefined,
             "data-step-contained": presentation.containedCurrent ? "active" : presentation.containedBase ? "base" : undefined,
-            "data-collapsed": fixture.targetKind === "master" ? String(collapsedFixtureIds.has(fixture.parentFixtureId)) : undefined,
           };
         }}
         activeIndex={activeRow}
@@ -201,9 +209,9 @@ export function FixtureSheetWindow({ compact, showGroupShortcuts }: WindowProps)
         onActivate={(fixture) => fixture.fixtureId && void server.selectionGesture({ type: "fixture", fixture_id: fixture.fixtureId })}
       /></WindowScrollArea>
       {groupsVisible && <GroupStrip />}
-      {settingsAnchor && <WindowSettings modal={false} anchor={settingsAnchor} title="Fixture Sheet Settings" onClose={() => setSettingsAnchor(null)} tabs={[
-        { id: "ordering", label: "Ordering", content: <label className="pane-option-toggle">Order fixtures <Select aria-label="Fixture sheet ordering" value={fixtureOrder} onChange={(event) => setFixtureOrder(event.target.value as FixtureOrder)}><option value="fixture-id">Fixture ID</option><option value="active">Active fixtures first</option></Select></label> },
-        { id: "filters", label: "Filters", content: <><SwitchField label="Show active fixtures only" checked={activeOnly} onChange={(event) => setActiveOnly(event.target.checked)}/><label className="pane-option-toggle">Cuelist <Select aria-label="Fixture sheet Cuelist filter" value={cueListId} onChange={(event) => setCueListId(event.target.value)}><option value="">All fixtures</option>{(server.playbacks?.cue_lists ?? []).map((cueList) => <option key={cueList.id} value={cueList.id}>{cueList.name}</option>)}</Select></label></> },
+      {settingsAnchor && <WindowSettings modal={false} anchor={settingsAnchor} title="Fixture Sheet" onClose={() => setSettingsAnchor(null)} tabs={[
+        { id: "view", label: "View", content: <div className="fixture-sheet-settings-sections"><section><h3>Fixture heads</h3><SwitchField label="Show Subheads" description="Show the individual heads of multi-head fixtures." checked={showSubheads} disabled={showSubheads && !showMasterHeads} onChange={(event) => dispatch({ type: "SET_FIXTURE_SHEET_OPTIONS", showSubheads: event.target.checked })}/><SwitchField label="Show Master Heads" description="Show the master row when a fixture also has subheads." checked={showMasterHeads} disabled={showMasterHeads && !showSubheads} onChange={(event) => dispatch({ type: "SET_FIXTURE_SHEET_OPTIONS", showMasterHeads: event.target.checked })}/></section><section><h3>Ordering</h3><label className="pane-option-toggle">Order fixtures <Select aria-label="Fixture sheet ordering" value={fixtureOrder} onChange={(event) => dispatch({ type: "SET_FIXTURE_SHEET_OPTIONS", order: event.target.value as typeof fixtureOrder })}><option value="fixture-id">Fixture ID</option><option value="active">Active fixtures first</option></Select></label></section><section><h3>Filters</h3><SwitchField label="Show active fixtures only" checked={activeOnly} onChange={(event) => dispatch({ type: "SET_FIXTURE_SHEET_OPTIONS", activeOnly: event.target.checked })}/><label className="pane-option-toggle">Cuelist <Select aria-label="Fixture sheet Cuelist filter" value={cueListId} onChange={(event) => dispatch({ type: "SET_FIXTURE_SHEET_OPTIONS", cueListId: event.target.value })}><option value="">All fixtures</option>{(server.playbacks?.cue_lists ?? []).map((cueList) => <option key={cueList.id} value={cueList.id}>{cueList.name}</option>)}</Select></label></section></div> },
+        { id: "columns", label: "Columns", content: <div className="fixture-sheet-settings-sections"><section><h3>Visible columns</h3><div className="fixture-sheet-column-options">{defaultFixtureSheetColumns.map((column) => <SwitchField key={column} label={fixtureSheetColumnLabels[column]} checked={state.fixtureSheetColumns.includes(column)} disabled={state.fixtureSheetColumns.length === 1 && state.fixtureSheetColumns.includes(column)} onChange={(event) => toggleColumn(column, event.target.checked)}/>)}</div></section><section><h3>Name details</h3><SwitchField label="Show fixture type" checked={state.fixtureSheetShowType} disabled={!state.fixtureSheetColumns.includes("name")} onChange={(event) => dispatch({ type: "SET_FIXTURE_SHEET_OPTIONS", showType: event.target.checked })}/><SwitchField label="Show patch address" checked={state.fixtureSheetShowPatch} disabled={!state.fixtureSheetColumns.includes("name")} onChange={(event) => dispatch({ type: "SET_FIXTURE_SHEET_OPTIONS", showPatch: event.target.checked })}/></section></div> },
         { id: "groups", label: "Groups", content: <SwitchField label="Enable group shortcuts" checked={groupsVisible} onChange={(event) => dispatch({ type: "SET_BUILTIN_GROUPS_VISIBLE", window: "fixtures", value: event.target.checked })}/> },
       ]} />}
     </div>

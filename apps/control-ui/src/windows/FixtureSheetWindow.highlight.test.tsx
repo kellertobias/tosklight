@@ -74,7 +74,18 @@ const server = {
   readVisualization: vi.fn().mockResolvedValue({ values: [] }),
   selectionGesture: vi.fn().mockResolvedValue(undefined),
 };
-const state = { preload: "idle", fixtureGroupsVisible: false };
+const state = {
+  preload: "idle",
+  fixtureGroupsVisible: false,
+  fixtureSheetOrder: "fixture-id" as const,
+  fixtureSheetActiveOnly: false,
+  fixtureSheetCueListId: "",
+  fixtureSheetColumns: ["id", "name", "dimmer", "color", "position", "beam", "focus"] as ("id" | "name" | "dimmer" | "color" | "position" | "beam" | "focus")[],
+  fixtureSheetShowType: true,
+  fixtureSheetShowPatch: true,
+  fixtureSheetShowSubheads: true,
+  fixtureSheetShowMasterHeads: true,
+};
 const dispatch = vi.fn();
 
 vi.mock("../api/ServerContext", () => ({ useServer: () => server }));
@@ -85,6 +96,12 @@ beforeEach(() => {
   server.highlight = stepState(false);
   server.readVisualization.mockClear().mockResolvedValue({ values: [] });
   server.selectionGesture.mockClear();
+  state.fixtureSheetColumns = ["id", "name", "dimmer", "color", "position", "beam", "focus"];
+  state.fixtureSheetShowType = true;
+  state.fixtureSheetShowPatch = true;
+  state.fixtureSheetShowSubheads = true;
+  state.fixtureSheetShowMasterHeads = true;
+  dispatch.mockClear();
 });
 
 afterEach(() => cleanup());
@@ -112,22 +129,32 @@ describe("Fixture Sheet Highlight stepping visualization", () => {
     expect(row("master")).toHaveAttribute("data-step-contained", "active");
   });
 
-  it("keeps contained state on a collapsed parent and removes every step marker after ALL", async () => {
-    const { container, rerender } = render(<FixtureSheetWindow compact/>);
+  it("uses settings instead of row buttons to show masters, subheads, or both", async () => {
+    const { container, rerender } = render(<FixtureSheetWindow/>);
     await waitFor(() => expect(container.querySelector('[data-fixture-id="master"]')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole("button", { name: "Collapse fixture 100.0 heads" }));
-    const parent = container.querySelector<HTMLElement>('[data-fixture-id="master"]');
-    expect(parent).toHaveAttribute("data-collapsed", "true");
-    expect(parent).toHaveAttribute("data-step-contained", "active");
-    expect(parent).toHaveTextContent("STEP INSIDE");
+    expect(screen.queryByRole("button", { name: /fixture 100\.0 heads/i })).not.toBeInTheDocument();
+    expect(container.querySelector('[data-fixture-id="left"]')).toHaveClass("fixture-head-row");
+    expect(container.querySelector('[data-fixture-id="left"] .fixture-sheet-id')).toBeInTheDocument();
+    expect(container.querySelector('[data-fixture-id="left"] .fixture-name')).toBeInTheDocument();
+
+    state.fixtureSheetShowSubheads = false;
+    rerender(<FixtureSheetWindow/>);
+    expect(container.querySelector('[data-fixture-id="master"]')).toBeInTheDocument();
     expect(container.querySelector('[data-fixture-id="left"]')).not.toBeInTheDocument();
     expect(container.querySelector('[data-fixture-id="right"]')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand fixture 100.0 heads" }));
+    state.fixtureSheetShowSubheads = true;
+    state.fixtureSheetShowMasterHeads = false;
+    rerender(<FixtureSheetWindow/>);
+    expect(container.querySelector('[data-fixture-id="master"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-fixture-id="left"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-fixture-id="right"]')).toBeInTheDocument();
+
+    state.fixtureSheetShowMasterHeads = true;
     server.highlight = { ...stepState(false), mode: "selection", active_index: null, active_fixture: null };
     server.selectedFixtures = ["left", "right"];
-    rerender(<FixtureSheetWindow compact/>);
+    rerender(<FixtureSheetWindow/>);
 
     const left = container.querySelector<HTMLElement>('[data-fixture-id="left"]');
     const right = container.querySelector<HTMLElement>('[data-fixture-id="right"]');
@@ -136,5 +163,37 @@ describe("Fixture Sheet Highlight stepping visualization", () => {
     expect(left).toHaveClass("selected");
     expect(right).toHaveClass("selected");
     expect(container.querySelector('[data-fixture-id="master"]')).not.toHaveAttribute("data-step-contained");
+  });
+
+  it("uses a compact View tab, exposes column controls, and hides optional name details", async () => {
+    state.fixtureSheetColumns = ["id", "name", "dimmer"];
+    state.fixtureSheetShowType = false;
+    state.fixtureSheetShowPatch = false;
+    render(<FixtureSheetWindow/>);
+
+    expect(screen.getByText("Name", { selector: ".ui-data-table-row.header span" })).toBeInTheDocument();
+    expect(screen.queryByText("Beam", { selector: ".ui-data-table-row.header span" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Test · 2 cells/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/U1\.1/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    const settings = screen.getByRole("dialog", { name: "Fixture Sheet" });
+    expect(settings).toBeVisible();
+    expect(screen.getByRole("tab", { name: "View" })).toBeVisible();
+    expect(screen.queryByRole("tab", { name: "Ordering" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Filters" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Ordering" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Filters" })).toBeVisible();
+    expect(screen.getByRole("switch", { name: "Show Subheads" })).toBeChecked();
+    expect(screen.getByRole("switch", { name: "Show Master Heads" })).toBeChecked();
+    fireEvent.click(screen.getByRole("switch", { name: "Show Subheads" }));
+    expect(dispatch).toHaveBeenCalledWith({ type: "SET_FIXTURE_SHEET_OPTIONS", showSubheads: false });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Columns" }));
+    expect(screen.getByRole("switch", { name: "Fixture ID" })).toBeChecked();
+    expect(screen.getByRole("switch", { name: "Beam" })).not.toBeChecked();
+    expect(screen.getByRole("switch", { name: "Show fixture type" })).not.toBeChecked();
+    fireEvent.click(screen.getByRole("switch", { name: "Show patch address" }));
+    expect(dispatch).toHaveBeenCalledWith({ type: "SET_FIXTURE_SHEET_OPTIONS", showPatch: true });
   });
 });

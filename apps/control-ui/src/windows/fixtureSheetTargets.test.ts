@@ -78,4 +78,13 @@ describe("fixture sheet targets", () => {
     ordinary.definition.heads = [{ index: 0, name: "Main", shared: true, parameters: [] }];
     expect(fixtureSheetTargets(ordinary)[0].displayId).toBe(42);
   });
+
+  it("shows a visual-only fixture in the reserved 0.x namespace", () => {
+    const visual = fixture();
+    visual.fixture_number = null;
+    visual.virtual_fixture_number = 3;
+    visual.logical_heads = [];
+    visual.definition.heads = [{ index: 0, name: "Visual", shared: true, parameters: [] }];
+    expect(fixtureSheetTargets(visual)[0].displayId).toBe("0.3");
+  });
 });

@@ -49,5 +49,9 @@ describe("fixture sheet filters", () => {
       { fixture_id: "missing", fixture_number: null } as PatchedFixture,
       { fixture_id: "numbered", fixture_number: 12 } as PatchedFixture,
     )).toBeGreaterThan(0);
+    expect(compareFixtureIds(
+      { fixture_id: "visual", fixture_number: null, virtual_fixture_number: 1 } as PatchedFixture,
+      { fixture_id: "numbered", fixture_number: 1 } as PatchedFixture,
+    )).toBeLessThan(0);
   });
 });

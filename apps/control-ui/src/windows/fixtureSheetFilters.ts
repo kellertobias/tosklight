@@ -50,6 +50,11 @@ export function fixtureIsIncluded(
 }
 
 export function compareFixtureIds(a: PatchedFixture, b: PatchedFixture) {
+  const aVirtual = a.virtual_fixture_number ?? Number.POSITIVE_INFINITY;
+  const bVirtual = b.virtual_fixture_number ?? Number.POSITIVE_INFINITY;
+  if (aVirtual !== bVirtual) return aVirtual - bVirtual;
+  if (a.virtual_fixture_number != null) return -1;
+  if (b.virtual_fixture_number != null) return 1;
   const aNumber = a.fixture_number ?? Number.POSITIVE_INFINITY;
   const bNumber = b.fixture_number ?? Number.POSITIVE_INFINITY;
   return aNumber - bNumber || a.fixture_id.localeCompare(b.fixture_id);

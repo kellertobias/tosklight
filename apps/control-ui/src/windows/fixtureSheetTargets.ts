@@ -17,14 +17,14 @@ export function fixtureSheetTargets(fixture: PatchedFixture): FixtureSheetTarget
     return [{
       fixture,
       fixtureId: fixture.fixture_id,
-      displayId: fixture.fixture_number ?? "—",
+      displayId: fixture.virtual_fixture_number != null ? `0.${fixture.virtual_fixture_number}` : fixture.fixture_number ?? "—",
       name: fixtureName,
       heads: fixture.definition.heads,
       order: 0,
     }];
   }
 
-  const prefix = fixture.fixture_number == null ? "—" : String(fixture.fixture_number);
+  const prefix = fixture.virtual_fixture_number != null ? `0.${fixture.virtual_fixture_number}` : fixture.fixture_number == null ? "—" : String(fixture.fixture_number);
   const targets: FixtureSheetTarget[] = [{
     fixture,
     fixtureId: fixture.fixture_id,
