@@ -7,11 +7,16 @@ use axum::{
     routing::{get, post},
 };
 use light_core::SessionId;
-use light_programmer::{
-    CommandLineReplaceError, CommandLineState, CommandTarget, ProgrammerSelection,
+use light_programmer::{CommandLineReplaceError, CommandLineState, ProgrammerSelection};
+use light_wire::v2::command_line::{
+    CommandAcceptedAction, CommandHttpSource, CommandKey as WireCommandKey,
+    CommandKeyPhase as WireCommandKeyPhase, CommandKeyRequest, CommandLineChangedEvent,
+    CommandLineResponse, CommandOperationOutcome, CommandOperationResponse,
+    CommandTarget as WireCommandTarget, CueMoveCopyChoice, ExecuteCommandLineRequest,
+    ReplaceCommandLineRequest,
 };
 use parking_lot::Mutex;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::{
     collections::{HashMap, VecDeque},
@@ -170,92 +175,6 @@ struct CachedRequest {
     response: CommandOperationResponse,
 }
 
-#[derive(Deserialize)]
-struct ReplaceCommandLineRequest {
-    text: String,
-}
-
-#[derive(Deserialize, Serialize)]
-struct CommandKeyRequest {
-    key: String,
-    phase: String,
-    request_id: String,
-}
-
-#[derive(Deserialize, Serialize)]
-struct ExecuteCommandLineRequest {
-    #[serde(default)]
-    command: Option<String>,
-    request_id: String,
-}
-
-#[derive(Clone, Debug, Serialize)]
-struct CommandLineResponse {
-    text: String,
-    target: CommandTarget,
-    pristine: bool,
-    revision: u64,
-    pending_choice: Option<serde_json::Value>,
-}
-
-impl CommandLineResponse {
-    fn from_state(state: CommandLineState) -> Self {
-        let text = state.visible_text().to_owned();
-        let pending_choice = super::pending_cue_transfer_choice(&text);
-        Self {
-            text,
-            target: state.target,
-            pristine: state.pristine,
-            revision: state.revision,
-            pending_choice,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Serialize)]
-struct CommandOperationResponse {
-    request_id: String,
-    #[serde(flatten)]
-    outcome: CommandOperationOutcome,
-    command_line: CommandLineResponse,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(tag = "outcome", rename_all = "snake_case")]
-enum CommandOperationOutcome {
-    Accepted {
-        action: CommandAcceptedAction,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        applied: Option<usize>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        warning: Option<String>,
-    },
-    ChoiceRequired {
-        pending_choice: serde_json::Value,
-    },
-    Rejected {
-        error: String,
-    },
-}
-
-#[derive(Clone, Copy, Debug, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum CommandAcceptedAction {
-    Edited,
-    Executed,
-    ClearedCommandLine,
-    ClearedPreload,
-    ClearedSelection,
-    ClearedValues,
-    Undone,
-    NoChange,
-    PreloadEntered,
-    PreloadCommitted,
-    ShiftPressed,
-    ShiftReleased,
-    IgnoredRelease,
-}
-
 pub(super) enum ExistingCommandOutcome {
     Accepted {
         applied: usize,
@@ -404,7 +323,7 @@ async fn put_command_line(
         .replace_command_line(session.id, expected_revision, input.text)
         .map_err(replace_error)?;
     publish_command_line_change(&state, &session, &before, &after, "http", None);
-    Ok(with_etag(CommandLineResponse::from_state(after)))
+    Ok(with_etag(command_line_from_state(after)))
 }
 
 async fn apply_command_key(
@@ -414,10 +333,8 @@ async fn apply_command_key(
     Json(input): Json<CommandKeyRequest>,
 ) -> Result<Response, ApiError> {
     validate_request_id(&input.request_id)?;
-    let key = CommandKey::try_from(input.key.as_str())
-        .map_err(|()| ApiError::bad_request("unknown logical command key"))?;
-    let phase = CommandKeyPhase::try_from(input.phase.as_str())
-        .map_err(|()| ApiError::bad_request("phase must be press or release"))?;
+    let key = command_key(input.key);
+    let phase = command_key_phase(input.phase);
     let fingerprint = fingerprint("key", &input)?;
     let session = authenticate_desk_mutation(&state, &headers, desk_id)?;
     let operation_lock = state.command_http.operation_lock(desk_id);
@@ -643,6 +560,8 @@ fn execute_locked(
                     "source":"http",
                 }),
             );
+            let pending_choice = serde_json::from_value(pending_choice)
+                .map_err(|error| ApiError::internal(error.to_string()))?;
             CommandOperationOutcome::ChoiceRequired { pending_choice }
         }
         ExistingCommandOutcome::Rejected { error } => {
@@ -1016,7 +935,69 @@ fn command_line_response(
     state: &AppState,
     session: &Session,
 ) -> Result<CommandLineResponse, ApiError> {
-    command_state(state, session).map(CommandLineResponse::from_state)
+    command_state(state, session).map(command_line_from_state)
+}
+
+fn command_line_from_state(state: CommandLineState) -> CommandLineResponse {
+    let text = state.visible_text().to_owned();
+    let pending_choice = super::pending_cue_transfer_choice(&text).map(|choice| {
+        serde_json::from_value::<CueMoveCopyChoice>(choice)
+            .expect("the server's Cue transfer choice must satisfy the v2 wire contract")
+    });
+    CommandLineResponse {
+        text,
+        target: match state.target {
+            light_programmer::CommandTarget::Fixture => WireCommandTarget::Fixture,
+            light_programmer::CommandTarget::Group => WireCommandTarget::Group,
+        },
+        pristine: state.pristine,
+        revision: state.revision,
+        pending_choice,
+    }
+}
+
+const fn command_key_phase(phase: WireCommandKeyPhase) -> CommandKeyPhase {
+    match phase {
+        WireCommandKeyPhase::Press => CommandKeyPhase::Press,
+        WireCommandKeyPhase::Release => CommandKeyPhase::Release,
+    }
+}
+
+const fn command_key(key: WireCommandKey) -> CommandKey {
+    match key {
+        WireCommandKey::Set => CommandKey::Set,
+        WireCommandKey::Group => CommandKey::Group,
+        WireCommandKey::Cue => CommandKey::Cue,
+        WireCommandKey::Undo => CommandKey::Undo,
+        WireCommandKey::Clear => CommandKey::Clear,
+        WireCommandKey::Delete => CommandKey::Delete,
+        WireCommandKey::Move => CommandKey::Move,
+        WireCommandKey::Copy => CommandKey::Copy,
+        WireCommandKey::Thru => CommandKey::Thru,
+        WireCommandKey::Divide => CommandKey::Divide,
+        WireCommandKey::Backspace => CommandKey::Backspace,
+        WireCommandKey::At => CommandKey::At,
+        WireCommandKey::Enter => CommandKey::Enter,
+        WireCommandKey::Preload => CommandKey::Preload,
+        WireCommandKey::Record => CommandKey::Record,
+        WireCommandKey::Escape => CommandKey::Escape,
+        WireCommandKey::Shift => CommandKey::Shift,
+        WireCommandKey::Time => CommandKey::Time,
+        WireCommandKey::Select => CommandKey::Select,
+        WireCommandKey::Plus => CommandKey::Plus,
+        WireCommandKey::Minus => CommandKey::Minus,
+        WireCommandKey::Dot => CommandKey::Dot,
+        WireCommandKey::Digit0 => CommandKey::Digit(0),
+        WireCommandKey::Digit1 => CommandKey::Digit(1),
+        WireCommandKey::Digit2 => CommandKey::Digit(2),
+        WireCommandKey::Digit3 => CommandKey::Digit(3),
+        WireCommandKey::Digit4 => CommandKey::Digit(4),
+        WireCommandKey::Digit5 => CommandKey::Digit(5),
+        WireCommandKey::Digit6 => CommandKey::Digit(6),
+        WireCommandKey::Digit7 => CommandKey::Digit(7),
+        WireCommandKey::Digit8 => CommandKey::Digit(8),
+        WireCommandKey::Digit9 => CommandKey::Digit(9),
+    }
 }
 
 fn selection(state: &AppState, session: &Session) -> Result<ProgrammerSelection, ApiError> {
@@ -1054,35 +1035,35 @@ fn publish_command_line_change(
         super::command_line_arms_update(after.visible_text()),
         source,
     );
-    let payload = serde_json::json!({
-        "desk_id":session.desk.id,
-        "session_id":session.id,
-        "user_id":session.user.id,
-        "text":after.visible_text(),
-        "target":after.target,
-        "pristine":after.pristine,
-        "revision":after.revision,
-        "source":source,
-        "request_id":request_id,
-    });
     let (retained_text, sensitive) = super::command_audit_projection(after.visible_text());
-    let event_payload = if sensitive {
-        serde_json::json!({
-            "desk_id":session.desk.id,
-            "session_id":session.id,
-            "user_id":session.user.id,
-            "text":retained_text,
-            "target":after.target,
-            "pristine":after.pristine,
-            "revision":after.revision,
-            "source":source,
-            "request_id":request_id,
-            "redacted":true,
-        })
-    } else {
-        payload
+    let event = CommandLineChangedEvent {
+        desk_id: session.desk.id,
+        session_id: session.id.0,
+        user_id: session.user.id.0,
+        text: if sensitive {
+            retained_text
+        } else {
+            after.visible_text().to_owned()
+        },
+        target: match after.target {
+            light_programmer::CommandTarget::Fixture => WireCommandTarget::Fixture,
+            light_programmer::CommandTarget::Group => WireCommandTarget::Group,
+        },
+        pristine: after.pristine,
+        revision: after.revision,
+        source: match source {
+            "http" => CommandHttpSource::Http,
+            "http_key" => CommandHttpSource::HttpKey,
+            _ => unreachable!("the command HTTP adapter has a bounded source enum"),
+        },
+        request_id: request_id.map(str::to_owned),
+        redacted: sensitive,
     };
-    super::emit(state, "command_line_changed", event_payload);
+    super::emit(
+        state,
+        "command_line_changed",
+        serde_json::to_value(event).expect("command-line wire events serialize"),
+    );
 }
 
 fn replace_error(error: CommandLineReplaceError) -> ApiError {
@@ -1167,7 +1148,7 @@ mod unit_tests {
                 applied: None,
                 warning: None,
             },
-            command_line: CommandLineResponse::from_state(CommandLineState::default()),
+            command_line: command_line_from_state(CommandLineState::default()),
         }
     }
 
