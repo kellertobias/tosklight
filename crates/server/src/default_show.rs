@@ -577,6 +577,7 @@ pub fn initialise(path: impl AsRef<Path>) -> Result<light_core::ShowId, StoreErr
 
 #[cfg(test)]
 mod tests {
+    use super::super::{parse_fixture_selection, resolve_fixture_reference};
     use super::*;
     #[test]
     fn seeds_the_complete_non_overlapping_default_rig() {
@@ -671,7 +672,7 @@ mod tests {
                 .all(|parameter| parameter.virtual_dimmer)
         }));
         assert_eq!(
-            crate::resolve_fixture_reference(&fixtures, "501.2").unwrap(),
+            resolve_fixture_reference(&fixtures, "501.2").unwrap(),
             sunstrip
                 .logical_heads
                 .iter()
@@ -680,8 +681,7 @@ mod tests {
                 .fixture_id
         );
         assert_eq!(
-            crate::parse_fixture_selection(&fixtures, &["501".into(), ".".into(), "2".into()])
-                .unwrap(),
+            parse_fixture_selection(&fixtures, &["501".into(), ".".into(), "2".into()]).unwrap(),
             vec![
                 sunstrip
                     .logical_heads
@@ -706,15 +706,12 @@ mod tests {
             .map(|head| head.fixture_id)
             .collect::<Vec<_>>();
         assert_eq!(
-            crate::parse_fixture_selection(&fixtures, &["501".into()]).unwrap(),
+            parse_fixture_selection(&fixtures, &["501".into()]).unwrap(),
             children_501.clone()
         );
         assert_eq!(
-            crate::parse_fixture_selection(
-                &fixtures,
-                &["501".into(), "THRU".into(), "502".into()],
-            )
-            .unwrap(),
+            parse_fixture_selection(&fixtures, &["501".into(), "THRU".into(), "502".into()],)
+                .unwrap(),
             children_501
                 .iter()
                 .chain(&children_502)
@@ -722,7 +719,7 @@ mod tests {
                 .collect::<Vec<_>>()
         );
         assert_eq!(
-            crate::parse_fixture_selection(
+            parse_fixture_selection(
                 &fixtures,
                 &[
                     "501".into(),
@@ -738,7 +735,7 @@ mod tests {
             vec![sunstrip.fixture_id, sunstrip_502.fixture_id]
         );
         assert_eq!(
-            crate::parse_fixture_selection(
+            parse_fixture_selection(
                 &fixtures,
                 &[
                     "501".into(),
@@ -754,7 +751,7 @@ mod tests {
             children_501[1..4].to_vec()
         );
         assert_eq!(
-            crate::parse_fixture_selection(
+            parse_fixture_selection(
                 &fixtures,
                 &[
                     "501".into(),
@@ -768,7 +765,7 @@ mod tests {
             children_501.clone()
         );
         assert!(
-            crate::parse_fixture_selection(
+            parse_fixture_selection(
                 &fixtures,
                 &[
                     "501".into(),
@@ -782,8 +779,8 @@ mod tests {
             )
             .is_err()
         );
-        assert!(crate::parse_fixture_selection(&fixtures, &["501".into(), "+".into()],).is_err());
-        assert!(crate::resolve_fixture_reference(&fixtures, "501.11").is_err());
+        assert!(parse_fixture_selection(&fixtures, &["501".into(), "+".into()],).is_err());
+        assert!(resolve_fixture_reference(&fixtures, "501.11").is_err());
         for (name, expected_universe, expected_address) in [
             ("Front Fresnel 1", 1, 1),
             ("Front Fresnel 6", 1, 6),

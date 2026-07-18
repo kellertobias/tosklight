@@ -11,6 +11,7 @@ use parking_lot::RwLock;
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap};
 
+#[path = "matter/transport.rs"]
 mod transport;
 
 pub use transport::{

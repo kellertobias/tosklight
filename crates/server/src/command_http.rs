@@ -1,3 +1,4 @@
+use crate::command_line::{CommandKey, CommandKeyIntent, CommandKeyPhase, command_key_intent};
 use axum::{
     Json, Router,
     extract::{DefaultBodyLimit, Path, State},
@@ -8,9 +9,6 @@ use axum::{
 use light_core::SessionId;
 use light_programmer::{
     CommandLineReplaceError, CommandLineState, CommandTarget, ProgrammerSelection,
-};
-use light_server::command_line::{
-    CommandKey, CommandKeyIntent, CommandKeyPhase, command_key_intent,
 };
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};

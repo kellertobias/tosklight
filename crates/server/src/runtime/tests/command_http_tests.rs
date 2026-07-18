@@ -1,3 +1,5 @@
+//! Public-boundary coverage for the versioned command-line adapter.
+
 use super::*;
 
 #[tokio::test]
