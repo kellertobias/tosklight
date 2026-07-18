@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ExecuteCommandLineRequest",
+  "description": "Executes either the desk's current command line or an explicitly supplied complete line.",
+  "type": "object",
+  "properties": {
+    "command": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "request_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "request_id"
+  ]
+}

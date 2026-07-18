@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CommandLineChangedEvent",
+  "description": "Typed payload for the existing command-line change compatibility event.",
+  "type": "object",
+  "properties": {
+    "desk_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "pristine": {
+      "type": "boolean"
+    },
+    "redacted": {
+      "type": "boolean"
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "session_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "source": {
+      "$ref": "#/$defs/CommandHttpSource"
+    },
+    "target": {
+      "$ref": "#/$defs/CommandTarget"
+    },
+    "text": {
+      "type": "string"
+    },
+    "user_id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "desk_id",
+    "session_id",
+    "user_id",
+    "text",
+    "target",
+    "pristine",
+    "revision",
+    "source"
+  ],
+  "$defs": {
+    "CommandHttpSource": {
+      "description": "Source names currently emitted by the v2 HTTP command-line adapter.",
+      "type": "string",
+      "enum": [
+        "http",
+        "http_key"
+      ]
+    },
+    "CommandTarget": {
+      "description": "The desk-local default scope used when an operator starts a command.",
+      "type": "string",
+      "enum": [
+        "FIXTURE",
+        "GROUP"
+      ]
+    }
+  }
+}

@@ -1,0 +1,15 @@
+[package]
+name = "light-wire"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+schemars = { workspace = true, features = ["uuid1"] }
+serde.workspace = true
+serde_json.workspace = true
+ts-rs = { workspace = true, features = ["uuid-impl"] }
+uuid.workspace = true
+
+[lints]
+workspace = true

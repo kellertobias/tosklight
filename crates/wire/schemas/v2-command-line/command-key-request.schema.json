@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CommandKeyRequest",
+  "description": "Applies one logical key through the shared desk command-line state machine.",
+  "type": "object",
+  "properties": {
+    "key": {
+      "$ref": "#/$defs/CommandKey"
+    },
+    "phase": {
+      "$ref": "#/$defs/CommandKeyPhase"
+    },
+    "request_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "key",
+    "phase",
+    "request_id"
+  ],
+  "$defs": {
+    "CommandKey": {
+      "description": "A logical key name, independent of keyboard layout and transport.",
+      "type": "string",
+      "enum": [
+        "SET",
+        "GRP",
+        "CUE",
+        "UND",
+        "CLR",
+        "DEL",
+        "MOV",
+        "CPY",
+        "TRU",
+        "DIV",
+        "BACKSPACE",
+        "AT",
+        "ENT",
+        "PRE",
+        "REC",
+        "ESC",
+        "SHIFT",
+        "TIME",
+        "SELECT",
+        "+",
+        "-",
+        ".",
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9"
+      ]
+    },
+    "CommandKeyPhase": {
+      "description": "Physical key edge. Non-Shift release edges are accepted as idempotent no-ops.",
+      "type": "string",
+      "enum": [
+        "press",
+        "release"
+      ]
+    }
+  }
+}
