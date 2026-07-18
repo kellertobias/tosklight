@@ -1,21 +1,40 @@
-MIT License
+ToskLight Community License
 
-Copyright (c) 2026 Light contributors
+Copyright (c) 2026 Tobias S. Keller
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+You MAY use, copy, modify, and distribute this software for free, including for
+private, artistic, educational, nonprofit, venue, show, event, rehearsal, and
+commercial production purposes.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+You MAY be paid to install, configure, integrate, operate, support, or maintain
+this software for someone else, including by renting out hardware with this
+software preinstalled.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+You MAY NOT sell the software itself, or sell hardware with this software
+preinstalled, bundled, included, or advertised as part of the hardware product,
+unless you have a separate written license from the copyright holder.
+
+If you modify the software and provide, distribute, install, or otherwise make
+that modified version available to someone else, you MUST visibly and publicly
+publish the complete source code of that modified version under this license, at
+no charge.
+
+If you submit a contribution to ToskLight, or publish source code for a modified
+version under this license, you grant Tobias S. Keller and any later designated
+ToskLight copyright holder a perpetual, worldwide, irrevocable, royalty-free
+license to use, copy, modify, publish, distribute, sublicense, relicense, sell,
+and include your contribution or modification in ToskLight and related products,
+including commercial hardware products.
+
+You MAY NOT use the ToskLight name, logos, icons, trademarks, or branding to
+imply endorsement, certification, official compatibility, or partnership without
+written permission.
+
+Third-party components remain under their own licenses.
+
+For common examples and intent, see docs/license-faq.md.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. THE COPYRIGHT
+HOLDERS AND CONTRIBUTORS ARE NOT LIABLE FOR ANY CLAIM, DAMAGES, EQUIPMENT
+DAMAGE, PRODUCTION LOSS, INJURY, OR OTHER LIABILITY ARISING FROM THE SOFTWARE
+OR ITS USE.
