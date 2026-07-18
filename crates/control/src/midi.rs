@@ -1,4 +1,6 @@
-use crate::{ControlEvent, ControlInput, MidiTimecodeDecoder};
+#[cfg(feature = "native-midi")]
+use crate::MidiTimecodeDecoder;
+use crate::{ControlEvent, ControlInput};
 use async_trait::async_trait;
 #[cfg(feature = "native-midi")]
 use midir::{Ignore, MidiInput, MidiInputConnection};
