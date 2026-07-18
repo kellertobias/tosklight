@@ -24,8 +24,43 @@ export interface TargetedCommandEdit {
 	pristine: boolean;
 }
 
+const pristineRootTokens: Partial<Record<SoftwareKey, string>> = {
+	GRP: "GROUP",
+	CUE: "CUE",
+	DEL: "DELETE",
+	MOV: "MOVE",
+	CPY: "COPY",
+	SET: "SET",
+	AT: "AT",
+	TIME: "TIME",
+	SELECT: "SELECT",
+	"+": "+",
+	"-": "-",
+	".": ".",
+};
+
 function shortTarget(target: CommandTargetMode): "F" | "G" {
 	return target === "FIXTURE" ? "F" : "G";
+}
+
+function editPristineCommand(
+	key: SoftwareKey,
+	target: CommandTargetMode,
+): TargetedCommandEdit | null {
+	if (/^\d$/.test(key))
+		return {
+			command: `${shortTarget(target)}${key}`,
+			execute: false,
+			pristine: false,
+		};
+	if (key === "GRP")
+		return {
+			command: target === "GROUP" ? "FIXTURE" : "GROUP",
+			execute: false,
+			pristine: false,
+		};
+	const command = pristineRootTokens[key];
+	return command ? { command, execute: false, pristine: false } : null;
 }
 
 export function softwareKeyFromKeyboard(
@@ -88,35 +123,8 @@ export function editTargetedCommandWithSoftwareKey(
 	if (key === "SHIFT") return { command, execute: false, pristine };
 
 	if (pristine) {
-		if (/^\d$/.test(key))
-			return {
-				command: `${shortTarget(target)}${key}`,
-				execute: false,
-				pristine: false,
-			};
-		if (key === "GRP")
-			return {
-				command: target === "GROUP" ? "FIXTURE" : "GROUP",
-				execute: false,
-				pristine: false,
-			};
-		const root = (
-			{
-				GRP: "GROUP",
-				CUE: "CUE",
-				DEL: "DELETE",
-				MOV: "MOVE",
-				CPY: "COPY",
-				SET: "SET",
-				AT: "AT",
-				TIME: "TIME",
-				SELECT: "SELECT",
-				"+": "+",
-				"-": "-",
-				".": ".",
-			} as Partial<Record<SoftwareKey, string>>
-		)[key];
-		if (root) return { command: root, execute: false, pristine: false };
+		const edit = editPristineCommand(key, target);
+		if (edit) return edit;
 	}
 
 	const selectionCommand = /^\s*(?:F\d|G\d|FIXTURE\b|GROUP\b|DEGRP\b)/i.test(

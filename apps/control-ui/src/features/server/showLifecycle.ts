@@ -2,9 +2,7 @@ import type { ShowEntry } from "../../api/types";
 import type { ServerController } from "./model";
 import type { ServerContextValue } from "./ServerContextValue";
 
-export function createShowLifecycleActions(
-	model: ServerController,
-): Pick<
+type ShowLifecycleActions = Pick<
 	ServerContextValue,
 	| "createShow"
 	| "saveShowAs"
@@ -14,7 +12,27 @@ export function createShowLifecycleActions(
 	| "openShow"
 	| "openCleanDefaultShow"
 	| "openShowFile"
-> {
+>;
+
+type ShowCreationActions = Pick<
+	ShowLifecycleActions,
+	"createShow" | "saveShowAs" | "overwriteShow" | "initializeEmptyShow"
+>;
+
+type ShowOpeningActions = Omit<ShowLifecycleActions, keyof ShowCreationActions>;
+
+export function createShowLifecycleActions(
+	model: ServerController,
+): ShowLifecycleActions {
+	return {
+		...createShowCreationActions(model),
+		...createShowOpeningActions(model),
+	};
+}
+
+function createShowCreationActions(
+	model: ServerController,
+): ShowCreationActions {
 	const { client, setError, bootstrap, shows, setShows, refresh } = model;
 	return {
 		createShow: async (name) => {
@@ -88,6 +106,12 @@ export function createShowLifecycleActions(
 				return false;
 			}
 		},
+	};
+}
+
+function createShowOpeningActions(model: ServerController): ShowOpeningActions {
+	const { client, setError, shows, setShows, refresh } = model;
+	return {
 		uploadShow: async (file, overwrite = false) => {
 			try {
 				const bytes = new Uint8Array(await file.arrayBuffer());
