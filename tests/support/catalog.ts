@@ -1,7 +1,10 @@
 import fs from "node:fs/promises";
 import type { Page } from "../../apps/control-ui/node_modules/@playwright/test/index.js";
 import { expect } from "../../apps/control-ui/e2e/bench/fixtures";
-import type { ApiDriver } from "../../apps/control-ui/e2e/bench/api";
+import {
+  commandLineRequiresLegacyCompatibility,
+  type ApiDriver,
+} from "../../apps/control-ui/e2e/bench/api";
 
 export interface VersionedObject<T = Record<string, any>> {
   kind: string;
@@ -57,7 +60,11 @@ export async function loadCanonicalCopy(api: ApiDriver, bench: any, name: string
 }
 
 export async function command(api: ApiDriver, value: string): Promise<void> {
-  await api.command("programmer.execute", { value });
+  if (commandLineRequiresLegacyCompatibility(value)) {
+    await api.executeLegacyCommandLine(value);
+  } else {
+    await api.executeCommandLine(value);
+  }
 }
 
 export async function pressCommand(page: Page, value: string, visibleValue?: string): Promise<void> {

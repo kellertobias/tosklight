@@ -7,7 +7,7 @@ const cue001Ui = async ({ api, bench, desk, page }: BenchUiContext, state: { com
   await emptyPlaybackPage(api);
   const beforeCuelists = new Set((await objects(api, "cue_list")).map((item) => item.id));
 
-  await api.command("programmer.execute", { value: "GROUP 1 AT 100" });
+  await api.executeCommandLine("GROUP 1 AT 100");
   await desk.open(bench.baseUrl);
   await page.locator(".mode-toggle").click();
   await page.getByRole("button", { name: "REC", exact: true }).click();
@@ -31,7 +31,7 @@ const cue001Ui = async ({ api, bench, desk, page }: BenchUiContext, state: { com
     ["FLASH", "1", 0.5],
   ] as const) {
     await api.command("programmer.clear", {});
-    await api.command("programmer.execute", { value: `GROUP ${group} AT ${level * 100}` });
+    await api.executeCommandLine(`GROUP ${group} AT ${level * 100}`);
     await page.getByRole("button", { name: "REC", exact: true }).click();
     const card = page.locator(".playback-fader-bank article").filter({ hasText: stored.body.name });
     await card.getByRole("button", { name: button, exact: true }).click();
@@ -54,7 +54,7 @@ const cue001Ui = async ({ api, bench, desk, page }: BenchUiContext, state: { com
     ["OFF", "1", 0.4],
   ].entries()) {
     await api.command("programmer.clear", {});
-    await api.command("programmer.execute", { value: `GROUP ${group} AT ${level * 100}` });
+    await api.executeCommandLine(`GROUP ${group} AT ${level * 100}`);
     await page.getByRole("button", { name: "REC", exact: true }).click();
     const card = page.locator(".playback-fader-bank article").filter({ hasText: stored.body.name });
     await card.getByRole("button", { name: button, exact: true }).click();
@@ -94,7 +94,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     },
     api: async ({ api, bench }, state) => {
       await api.command("preload.enter", {});
-      await api.command("programmer.execute", { value: "GROUP 1 AT 100" });
+      await api.executeCommandLine("GROUP 1 AT 100");
       const pending = await currentProgrammer(api);
       expect(pending.preload_group_pending["1"].intensity.value).toMatchObject({ kind: "normalized", value: 1 });
       const installed = await installPlaybackSequence(api, 1, [groupCue(1, [["1", "intensity", 1]])]);
@@ -111,7 +111,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       await emptyPlaybackPage(api);
       const beforeCuelists = new Set((await objects(api, "cue_list")).map((item) => item.id));
       await api.command("preload.enter", {});
-      await api.command("programmer.execute", { value: "GROUP 1 AT 100" });
+      await api.executeCommandLine("GROUP 1 AT 100");
 
       await desk.open(bench.baseUrl);
       await page.locator(".mode-toggle").click();
@@ -152,7 +152,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       ]);
 
       await api.command("programmer.group.set", { group_id: "3", attribute: "intensity", value: 1 });
-      await api.command("programmer.execute", { value: "RECORD SET 1 CUE 1.5" });
+      await api.executeLegacyCommandLine("RECORD SET 1 CUE 1.5");
       let stored = await object<any>(api, "cue_list", installed.id);
       expect(stored.body.cues.map((cue: any) => cue.number)).toEqual([1, 1.5, 2]);
       expect(groupValues(stored.body.cues[0])).toEqual({ "1:intensity": 1 });
@@ -166,7 +166,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
           ["2", "red", 0.2],
         ]),
       ]);
-      await api.command("programmer.execute", { value: "RECORD SET 1 . 2 CUE 1.5" });
+      await api.executeLegacyCommandLine("RECORD SET 1 . 2 CUE 1.5");
       const pageStored = await object<any>(api, "cue_list", pageAddressed.id);
       const cueSemantics = (body: any) => body.cues.map((cue: any) => ({ number: cue.number, values: groupValues(cue) }));
       expect(cueSemantics(pageStored.body)).toEqual(cueSemantics(stored.body));
@@ -184,13 +184,13 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       await api.request("POST", "/api/v1/cuelists/1/off", {});
 
       await api.command("programmer.group.set", { group_id: "2", attribute: "intensity", value: 0.8 });
-      await api.command("programmer.execute", { value: "RECORD + SET 1 CUE 2" });
+      await api.executeLegacyCommandLine("RECORD + SET 1 CUE 2");
       stored = await object<any>(api, "cue_list", installed.id);
       expect(groupValues(stored.body.cues.find((cue: any) => cue.number === 2))).toEqual({ "2:intensity": 0.8, "2:red": 0.2 });
 
       await api.command("programmer.clear", {});
       await api.command("programmer.group.set", { group_id: "2", attribute: "red", value: 0.9 });
-      await api.command("programmer.execute", { value: "RECORD - SET 1 CUE 2" });
+      await api.executeLegacyCommandLine("RECORD - SET 1 CUE 2");
       stored = await object<any>(api, "cue_list", installed.id);
       expect(groupValues(stored.body.cues.find((cue: any) => cue.number === 2))).toEqual({ "2:intensity": 0.8 });
 
@@ -199,7 +199,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       const stream = await openEventStream(api);
       try {
         let mark = stream.events.length;
-        await api.command("programmer.execute", { value: "RECORD - SET 1 CUE 2" });
+        await api.executeLegacyCommandLine("RECORD - SET 1 CUE 2");
         const recordMinusEvent = await showObjectEventAfter(stream.events, mark, installed.id);
         const afterRecordMinus = await object<any>(api, "cue_list", installed.id);
         const recordMinusRuntime = await playbackState(api);
@@ -208,7 +208,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 
         await putObject(api, "cue_list", installed.id, beforeDelete, afterRecordMinus.revision);
         mark = stream.events.length;
-        await api.command("programmer.execute", { value: "DELETE SET 1 CUE 2" });
+        await api.executeLegacyCommandLine("DELETE SET 1 CUE 2");
         const deleteEvent = await showObjectEventAfter(stream.events, mark, installed.id);
         stored = await object<any>(api, "cue_list", installed.id);
         expect(stored.body).toEqual(afterRecordMinus.body);
@@ -575,13 +575,13 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       expect((await playbackState(api)).selected_playback).toBe(2);
 
       await api.command("programmer.set", { fixture_id: fixtures[3], attribute: "intensity", value: 0.7 });
-      await api.command("programmer.execute", { value: "RECORD CUE 7" });
+      await api.executeLegacyCommandLine("RECORD CUE 7");
       expect((await object<any>(api, "cue_list", second.id)).body.cues.map((cue: any) => cue.number)).toEqual([1, 7]);
       expect((await object<any>(api, "cue_list", first.id)).body.cues.map((cue: any) => cue.number)).toEqual([1]);
 
       await api.command("programmer.clear", {});
       await api.command("programmer.set", { fixture_id: fixtures[4], attribute: "intensity", value: 0.6 });
-      await api.command("programmer.execute", { value: "RECORD SET 1 CUE 8" });
+      await api.executeLegacyCommandLine("RECORD SET 1 CUE 8");
       expect((await object<any>(api, "cue_list", first.id)).body.cues.map((cue: any) => cue.number)).toEqual([1, 8]);
       expect((await playbackState(api)).selected_playback).toBe(2);
       state.completed = true;
@@ -805,7 +805,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     expect(await runtime(api, 1)).toMatchObject({ current_cue_number: 1, activated_at: beforeRuntime.activated_at });
     expect(logicalSlots(await bench.tick(0), 12)).toEqual(beforeSlots);
 
-    await api.command("programmer.execute", { value: "DELETE SET 1 CUE 1" });
+    await api.executeLegacyCommandLine("DELETE SET 1 CUE 1");
     expect((await object<any>(api, "cue_list", installed.id)).body.cues.map((cue: any) => cue.number)).toEqual([2]);
     expect(await runtime(api, 1)).toMatchObject({
       current_cue_number: 1,
@@ -820,10 +820,10 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     const fixtures = await fixtureIdsByNumber(api);
     const sole = await installPlaybackSequence(api, 2, [fixtureCue(1, [[fixtures[1], "intensity", 0.2]])]);
     const soleBefore = await object<any>(api, "cue_list", sole.id);
-    await expect(api.command("programmer.execute", { value: "DELETE SET 2 CUE 1" })).rejects.toThrow();
+    await expect(api.executeLegacyCommandLine("DELETE SET 2 CUE 1")).rejects.toThrow();
     expect((await object<any>(api, "cue_list", sole.id)).body).toEqual(soleBefore.body);
     await api.command("programmer.clear", {});
-    await expect(api.command("programmer.execute", { value: "RECORD - SET 2 CUE 1" })).rejects.toThrow();
+    await expect(api.executeLegacyCommandLine("RECORD - SET 2 CUE 1")).rejects.toThrow();
     expect((await object<any>(api, "cue_list", sole.id)).body).toEqual(soleBefore.body);
   });
 

@@ -108,7 +108,7 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
       return {};
     },
     api: async ({ api }) => {
-      await api.command("programmer.execute", { value: "FIXTURE 1 AT 25 TIME 0" });
+      await api.executeCommandLine("FIXTURE 1 AT 25 TIME 0");
     },
     ui: async ({ bench, desk, page }) => {
       await desk.open(bench.baseUrl);
@@ -140,7 +140,7 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
       return {};
     },
     api: async ({ api }) => {
-      await api.command("programmer.execute", { value: "FIXTURE 1 AT 50 TIME 0" });
+      await api.executeCommandLine("FIXTURE 1 AT 50 TIME 0");
     },
     ui: async ({ bench, desk, page }) => {
       await desk.open(bench.baseUrl);

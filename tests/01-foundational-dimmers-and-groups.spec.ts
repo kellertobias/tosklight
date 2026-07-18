@@ -1,6 +1,9 @@
 import type { Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
 import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
-import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
+import {
+  commandLineRequiresLegacyCompatibility,
+  type ApiDriver,
+} from "../apps/control-ui/e2e/bench/api";
 import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
 import { loadCanonicalCopy } from "./support/catalog";
 
@@ -1389,7 +1392,11 @@ async function loadCompactRig(api: ApiDriver, bench: any, name: string): Promise
 }
 
 async function command(api: ApiDriver, value: string): Promise<void> {
-  await api.command("programmer.execute", { value });
+  if (commandLineRequiresLegacyCompatibility(value)) {
+    await api.executeLegacyCommandLine(value);
+  } else {
+    await api.executeCommandLine(value);
+  }
 }
 
 async function commandError(api: ApiDriver, value: string): Promise<string> {

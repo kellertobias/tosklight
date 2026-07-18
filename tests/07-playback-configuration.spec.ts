@@ -917,7 +917,7 @@ test.describe("docs/testing/07-playback-configuration.md", () => {
       const prepared = await prepareShow(api, bench, `pbk-006-paired-${surface}`, "default-stage");
       await setSpeedRates(api, [120, 96, 72, 60, 48]);
       for (const [group, bpm] of [[1, 120], [2, 96], [3, 72], [4, 60], [5, 48]] as const)
-        await api.command("programmer.execute", { value: `SPD GRP ${group} AT ${bpm}` });
+        await api.executeLegacyCommandLine(`SPD GRP ${group} AT ${bpm}`);
       await installPlaybacks(api, [
         definition(61, "Speed A", { type: "speed_group", group: "A" }, { buttons: ["double", "half", "learn"], fader: "learned_percentage", color: "#8b5cf6" }),
         definition(62, "Group 1", { type: "group", group_id: "1" }, { buttons: ["select", "select_dereferenced", "flash"] }),

@@ -108,8 +108,8 @@ test.describe("docs/testing/06-preload-modes-and-virtual-playbacks.md", () => {
     },
     api: async ({ api, bench }, state) => {
       await api.command("preload.enter", {});
-      await api.command("programmer.execute", { value: "GROUP 1 AT 50" });
-      await api.command("programmer.execute", { value: "GROUP 2 AT 70 TIME 1" });
+      await api.executeCommandLine("GROUP 1 AT 50");
+      await api.executeCommandLine("GROUP 2 AT 70 TIME 1");
       await poolAction(api, 31, "button", { button: 1, pressed: true, surface: "physical" });
       state.pending = await preloadProgrammerObservation(api, state.groupFixtures);
       state.applicationTimestamp = (await api.command<any>("preload.go", {})).payload!.application_timestamp;
@@ -159,8 +159,8 @@ test.describe("docs/testing/06-preload-modes-and-virtual-playbacks.md", () => {
     const before2 = await visualizationLevel(api, group2Fixture);
 
     await api.command("preload.enter", {});
-    await api.command("programmer.execute", { value: "GROUP 1 AT 50" });
-    await api.command("programmer.execute", { value: "GROUP 2 AT 70 TIME 1" });
+    await api.executeCommandLine("GROUP 1 AT 50");
+    await api.executeCommandLine("GROUP 2 AT 70 TIME 1");
     const pending = await programmer(api);
     expect(pending.blind).toBe(true);
     expect(pending.preload_group_pending["1"].intensity.fade_millis).toBe(3_000);
@@ -298,7 +298,7 @@ test.describe("docs/testing/06-preload-modes-and-virtual-playbacks.md", () => {
     await poolAction(api, 9, "go");
 
     await api.command("preload.enter", {});
-    await api.command("programmer.execute", { value: "GROUP 1 AT 40" });
+    await api.executeCommandLine("GROUP 1 AT 40");
     expect((await programmer(api)).preload_group_pending).toEqual({});
     expect((await programmer(api)).group_values["1"]).toBeDefined();
     // The disabled-domain assertion is complete; clear its live value so the playback timing
@@ -501,7 +501,7 @@ test.describe("docs/testing/06-preload-modes-and-virtual-playbacks.md", () => {
       await api.command("preload.enter", {});
       // Keep the disabled-domain programmer proof on a distinct fixture: programmer priority is
       // intentionally higher than these Cuelists and must not mask the playback fade under test.
-      await api.command("programmer.execute", { value: "FIXTURE 1 AT 35" });
+      await api.executeCommandLine("FIXTURE 1 AT 35");
       await poolAction(api, 46, "button", { button: 1, pressed: true, surface: "physical" });
       await poolAction(api, 44, "button", { button: 1, pressed: true, surface: "virtual" });
       await poolAction(api, 45, "button", { button: 1, pressed: true, surface: "virtual" });
@@ -551,7 +551,7 @@ test.describe("docs/testing/06-preload-modes-and-virtual-playbacks.md", () => {
     ], { 1: 41, 2: 42, 3: 43 });
     await setCaptureMask(api, false, false, true, 2_500, 8_000);
     await api.command("preload.enter", {});
-    await api.command("programmer.execute", { value: "GROUP 1 AT 35" });
+    await api.executeCommandLine("GROUP 1 AT 35");
     await poolAction(api, 43, "button", { button: 1, pressed: true, surface: "physical" });
     await poolAction(api, 41, "button", { button: 1, pressed: true, surface: "virtual" });
     await poolAction(api, 42, "button", { button: 1, pressed: true, surface: "virtual" });
@@ -587,7 +587,7 @@ test.describe("docs/testing/06-preload-modes-and-virtual-playbacks.md", () => {
     await desk.open(bench.baseUrl);
     const pane = await addVirtualPlaybackPane(page);
     await page.getByRole("button", { name: "PRELOAD", exact: true }).click();
-    await api.command("programmer.execute", { value: "GROUP 1 AT 35" });
+    await api.executeCommandLine("GROUP 1 AT 35");
     await poolAction(api, 46, "button", { button: 1, pressed: true, surface: "physical" });
     await desk.recordStep("QUEUE VIRTUAL CELLS", "Click the real GO and TOGGLE cells; their underlying playbacks must remain unchanged.");
     await pane.getByRole("button", { name: /Virtual playback page 1 cell 1 Virtual GO/ }).click();
@@ -647,7 +647,7 @@ test.describe("docs/testing/06-preload-modes-and-virtual-playbacks.md", () => {
       const saved = await configuration(api);
       expect([saved.preload_programmer_changes, saved.preload_physical_playback_actions, saved.preload_virtual_playback_actions]).toEqual([programmerCapture, physicalCapture, virtualCapture]);
       await api.command("preload.enter", {});
-      await api.command("programmer.execute", { value: "GROUP 1 AT 45" });
+      await api.executeCommandLine("GROUP 1 AT 45");
       await poolAction(api, 51, "button", { button: 1, pressed: true, surface: "physical" });
       await poolAction(api, 52, "button", { button: 1, pressed: true, surface: "virtual" });
       const pending = await programmer(api);
@@ -719,7 +719,7 @@ test.describe("docs/testing/06-preload-modes-and-virtual-playbacks.md", () => {
     },
     api: async ({ api, bench }, state) => {
       await api.command("preload.enter", {});
-      await api.command("programmer.execute", { value: "GROUP 1 AT 80" });
+      await api.executeCommandLine("GROUP 1 AT 80");
       await poolAction(api, 61, "button", { button: 1, pressed: true, surface: "physical" });
       await poolAction(api, 62, "button", { button: 1, pressed: true, surface: "virtual" });
       state.pending = preloadCombinedObservation(await programmer(api));
@@ -773,7 +773,7 @@ test.describe("docs/testing/06-preload-modes-and-virtual-playbacks.md", () => {
     await bench.tick(8_000);
     expect(await visualizationLevel(api, groupFixture)).toBeCloseTo(0.25, 2);
     await api.command("preload.enter", {});
-    await api.command("programmer.execute", { value: "GROUP 1 AT 80" });
+    await api.executeCommandLine("GROUP 1 AT 80");
     await poolAction(api, 61, "button", { button: 1, pressed: true, surface: "physical" });
     await poolAction(api, 62, "button", { button: 1, pressed: true, surface: "virtual" });
     const pending = await programmer(api);

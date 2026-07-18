@@ -779,9 +779,9 @@ pairedScenario<HighlightSequenceState>({
 
     await restoreSecondStep(api);
     await api.command("programmer.set", { fixture_id: state.fixtures[1].id, attribute: "pan", value: 0.72 });
-    await api.command("programmer.execute", { value: `RECORD GROUP ${state.singletonGroupId}` });
+    await api.executeLegacyCommandLine(`RECORD GROUP ${state.singletonGroupId}`);
     await highlightAction(api, "all");
-    await api.command("programmer.execute", { value: `RECORD GROUP ${state.completeGroupId}` });
+    await api.executeLegacyCommandLine(`RECORD GROUP ${state.completeGroupId}`);
 
     await highlightAction(api, "on");
     await api.command("selection.set", { fixtures: [] });

@@ -274,7 +274,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       await api.request("POST", "/api/v1/cuelists/1/go", {});
       await api.request("POST", "/api/v1/cuelists/1/go", {});
       const heldLevel = slot(await bench.tick(0), 1);
-      await api.command("programmer.execute", { value: "DELETE SET 1 CUE 2" });
+      await api.executeLegacyCommandLine("DELETE SET 1 CUE 2");
       expect((await object<any>(api, "cue_list", installed.id)).body.cues.map((item: any) => item.number)).toEqual([1, 3]);
       expect(await runtime(api, 1)).toMatchObject({
         current_cue_number: 2,
@@ -288,7 +288,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 
       const sole = await installCuelist(api, { name: "Sole Cue Safeguard", numbers: [1], playback: 2 });
       const soleBefore = await object<any>(api, "cue_list", sole.id);
-      await expect(api.command("programmer.execute", { value: "DELETE SET 2 CUE 1" })).rejects.toThrow();
+      await expect(api.executeLegacyCommandLine("DELETE SET 2 CUE 1")).rejects.toThrow();
       expect((await object<any>(api, "cue_list", sole.id)).body).toEqual(soleBefore.body);
       state.completed = true;
     },

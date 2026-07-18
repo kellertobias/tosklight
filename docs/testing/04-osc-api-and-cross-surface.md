@@ -145,7 +145,8 @@ OSC scenarios still receive the mandatory `@api` and `@ui` variants for their op
 
 ## API-001 — Authentication and revision conflict
 
-**Priority:** P0  
+**Priority:** P0
+
 **Primary layer:** REST integration
 
 **Starting show:** Load canonical `compact-rig.show`, immediately Save As `api-001.show`, and use the active copy for this scenario.
@@ -181,6 +182,26 @@ OSC scenarios still receive the mandatory `@api` and `@ui` variants for their op
 **Assertions:** Each accepted mutation has one strictly increasing revision, one appropriate WebSocket event, and one audit entry containing the acting user/session and object identity.
 
 **Pass condition:** REST response, event stream, audit log, and subsequent reads describe the same mutation order.
+
+## API-003 — Revisioned command-line HTTP is atomic and replay-safe
+
+**Priority:** P0
+
+**Primary layer:** REST integration
+
+**Starting show:** Load canonical `compact-rig.show`, immediately Save As `api-003.show`, and use the active copy for this scenario.
+
+**Detailed procedure:**
+
+1. Authenticate and GET `/api/v2/desks/{desk-id}/command-line`. Record the returned command state and `ETag`; the numeric ETag must equal the body revision.
+2. POST logical `GRP` and then `ENT` presses to `/keys` with distinct request IDs. Verify the first press shows the unfinished opposite target and the second confirms pristine Group mode, matching the physical desk grammar; each accepted edit increments the revision once.
+3. PUT `GROUP 1 AT 50` with `If-Match` set to that revision. Repeat a different PUT with the now-stale revision and verify it is rejected without changing the line.
+4. POST `/execute` with a unique request ID and no supplied full line. Verify the typed accepted outcome, cleared pristine Group line, Programmer value, and output.
+5. Replay the identical execute request ID and body. Byte-compare the typed response and prove that command history, Programmer mutation, and output were not applied a second time.
+
+**Assertions:** Authentication is desk-scoped. Every response ETag matches its command-line revision. A stale writer makes no mutation. Execution is atomic, rejected commands retain their visible text and pre-command Programmer state, and an idempotent replay returns the original outcome without duplicating side effects.
+
+**Pass condition:** The supported command-line HTTP boundary preserves desk semantics, concurrency control, and exactly-once request behavior.
 
 ## CROSS-001 — Equivalent group value through four surfaces
 
@@ -259,5 +280,6 @@ Run both deterministic server layers with `cargo test -p light-server --no-defau
 | OSC-006 | Add three independent screen aliases, sparse page assignments, unassigned Cuelists, and legacy-alias compatibility. | Compare each alias's active page, resolved page/slot assignment, selected Cuelist, and emitted canonical feedback address. |
 | API-001 | Test concurrent writers and token invalidation after session shutdown. | Compare pre/post object and revision; failed writes must be byte-for-byte unchanged. |
 | API-002 | Reconnect the event socket and request audit from the last seen revision. | Compare response revision, broadcast revision, and audit revision. |
+| API-003 | Interleave HTTP keys with UI and OSC keys, then retry accepted and rejected executions after reconnect. | Compare request IDs, ETags, retained text, mutation count, and the authoritative Programmer projection. |
 | CROSS-001 | Add fixture selection, cue GO, and group membership as further equivalence families. | Normalize surface-specific metadata before diffing application state. |
 | CROSS-002 | Disconnect/reconnect WebSocket and mutate while offline. | Determine whether divergence begins in event delivery, refetch, or UI rendering. |

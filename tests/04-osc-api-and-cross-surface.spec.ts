@@ -338,6 +338,67 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     },
   });
 
+  test("API-003 @api › revisioned command-line HTTP is atomic and replay-safe", async ({ api, bench }) => {
+    await loadCanonicalCopy(api, bench, "api-003-command-line-http");
+
+    const initial = await api.getCommandLine();
+    expect(initial.commandLine).toMatchObject({
+      text: "FIXTURE",
+      target: "FIXTURE",
+      pristine: true,
+      revision: 0,
+    });
+
+    const groupPrefix = await api.sendCommandKey("GRP", "press", "api-003-group-prefix");
+    expect(groupPrefix).toMatchObject({
+      outcome: "accepted",
+      action: "edited",
+      command_line: { text: "GROUP", target: "FIXTURE", pristine: false, revision: 1 },
+    });
+    const toggled = await api.sendCommandKey("ENT", "press", "api-003-group-mode");
+    expect(toggled).toMatchObject({
+      outcome: "accepted",
+      action: "edited",
+      command_line: { text: "GROUP", target: "GROUP", pristine: true, revision: 2 },
+    });
+
+    const replaced = await api.replaceCommandLine("GROUP 1 AT 50", toggled.command_line.revision);
+    expect(replaced.commandLine).toMatchObject({ text: "GROUP 1 AT 50", revision: 3 });
+    await expect(api.replaceCommandLine("GROUP 2 AT 25", toggled.command_line.revision))
+      .rejects.toThrow(/409.*revision conflict/i);
+
+    const requestId = "api-003-execute-group-1";
+    const historyBefore = await api.request<any[]>("GET", "/api/v1/command-history");
+    const auditBefore = (await audit(api)).at(-1)?.revision ?? 0;
+    const executed = await api.executeCommandLineRaw(undefined, requestId);
+    expect(executed).toMatchObject({
+      outcome: "accepted",
+      action: "executed",
+      applied: 12,
+      command_line: { text: "GROUP", target: "GROUP", pristine: true },
+    });
+    const historyAfterExecution = await api.request<any[]>("GET", "/api/v1/command-history");
+    expect(historyAfterExecution).toHaveLength(historyBefore.length + 1);
+    const executionEvents = (await api.request<any[]>("GET", `/api/v1/audit?after=${auditBefore}`))
+      .filter((event) => event.payload?.request_id === requestId);
+    expect(executionEvents.filter((event) => event.kind === "command_applied")).toHaveLength(1);
+    expect(executionEvents.filter((event) => event.kind === "programmer_changed")).toHaveLength(1);
+
+    expect(await api.executeCommandLineRaw(undefined, requestId)).toEqual(executed);
+    expect(await api.request<any[]>("GET", "/api/v1/command-history")).toEqual(historyAfterExecution);
+    const replayEvents = (await api.request<any[]>("GET", `/api/v1/audit?after=${auditBefore}`))
+      .filter((event) => event.payload?.request_id === requestId);
+    expect(replayEvents).toEqual(executionEvents);
+
+    const artnetMark = bench.artnet.mark();
+    const sacnMark = bench.sacn.mark();
+    await bench.tick(3_000);
+    expect(Array.from((await bench.artnet.nextAfter(artnetMark, "artnet", 1)).slots.slice(0, 12)))
+      .toEqual(Array(12).fill(128));
+    expect(Array.from((await bench.sacn.nextAfter(sacnMark, "sacn", 101)).slots.slice(0, 12)))
+      .toEqual(Array(12).fill(128));
+  });
+
   registerGroupOutputPair("CROSS-001", 50, 128, "equivalent group value agrees across command surfaces");
 
   pairedScenario<CrossMutationState>({

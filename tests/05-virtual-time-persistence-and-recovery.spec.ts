@@ -92,7 +92,7 @@ test.describe("docs/testing/05-virtual-time-persistence-and-recovery.md", () => 
     },
     api: async ({ api }) => {
       await setProgrammerFade(api, 0, 3_000);
-      await api.command("programmer.execute", { value: "FIXTURE 1 AT 50" });
+      await api.executeCommandLine("FIXTURE 1 AT 50");
     },
     ui: async ({ api, bench, desk, page }, state) => {
       await connectHardware(api, bench, state, "time-001-ui");
@@ -120,9 +120,9 @@ test.describe("docs/testing/05-virtual-time-persistence-and-recovery.md", () => 
     },
     api: async ({ api, bench }) => {
       await setProgrammerFade(api, 3_000);
-      await api.command("programmer.execute", { value: "FIXTURE 1 AT 0" });
+      await api.executeCommandLine("FIXTURE 1 AT 0");
       await bench.tick(3_000);
-      await api.command("programmer.execute", { value: "FIXTURE 1 AT 100" });
+      await api.executeCommandLine("FIXTURE 1 AT 100");
     },
     ui: async ({ api, bench, desk, page }, state) => {
       await connectHardware(api, bench, state, "time-002-ui");
@@ -322,14 +322,14 @@ test.describe("docs/testing/05-virtual-time-persistence-and-recovery.md", () => 
     },
     api: async ({ api }, state) => {
       await api.command("selection.set", { fixtures: [state.fixtureIds[5], state.fixtureIds[6]] });
-      await api.command("programmer.execute", { value: "RECORD + GROUP 3" });
-      await api.command("programmer.execute", { value: "GROUP 3 AT 40" });
-      await api.command("programmer.execute", { value: "RECORD SET 1" });
-      await api.command("programmer.execute", { value: "SET 1 AT 1.1" });
+      await api.executeLegacyCommandLine("RECORD + GROUP 3");
+      await api.executeCommandLine("GROUP 3 AT 40");
+      await api.executeLegacyCommandLine("RECORD SET 1");
+      await api.executeLegacyCommandLine("SET 1 AT 1.1");
       await api.command("programmer.clear", {});
       await api.command("programmer.clear", {});
       await api.request("POST", "/api/v1/cuelists/1/go", {});
-      await api.command("programmer.execute", { value: "FIXTURE 12 AT 65" });
+      await api.executeCommandLine("FIXTURE 12 AT 65");
       await api.request("POST", `/api/v1/shows/${state.copyId}/revisions`, { name: state.revisionName });
     },
     ui: async ({ api, bench, desk, page }, state) => {
@@ -401,7 +401,7 @@ test.describe("docs/testing/05-virtual-time-persistence-and-recovery.md", () => 
     const cueListId = await installGroupCue(api, "3", 0.4);
     expect((await object<any>(api, "group", "3")).body.fixtures).toEqual(expectedGroup);
     await api.request("POST", "/api/v1/cuelists/1/go", {});
-    await api.command("programmer.execute", { value: "FIXTURE 12 AT 65" });
+    await api.executeCommandLine("FIXTURE 12 AT 65");
     await bench.tick(0);
     await api.command("master.set", { grand_master: 0.5, blackout: false });
     const durableBefore = (await programmer(api));

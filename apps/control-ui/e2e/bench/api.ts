@@ -1,5 +1,54 @@
+import type { SoftwareKey } from "../../../shared/programmerKeypad";
+
 export interface Session { session_id: string; client_id: string; token: string; user: { id: string; name: string }; desk: { id: string; osc_alias: string } }
 export interface CommandResponse<T = unknown> { protocol_version: number; request_id: string; ok: boolean; revision: number; payload?: T; error?: string }
+
+export type CommandTarget = "FIXTURE" | "GROUP";
+export type CommandKeyPhase = "press" | "release";
+
+export interface CommandLineState {
+  text: string;
+  target: CommandTarget;
+  pristine: boolean;
+  revision: number;
+  pending_choice: unknown | null;
+}
+
+export interface RevisionedCommandLine {
+  commandLine: CommandLineState;
+  etag: string;
+}
+
+interface CommandOperationBase {
+  request_id: string;
+  command_line: CommandLineState;
+}
+
+export type CommandOperationResponse = CommandOperationBase & (
+  | {
+      outcome: "accepted";
+      action: string;
+      applied?: number;
+      warning?: string;
+    }
+  | {
+      outcome: "choice_required";
+      pending_choice: unknown;
+    }
+  | {
+      outcome: "rejected";
+      error: string;
+    }
+);
+
+const LEGACY_COMMAND_FAMILIES = new Set([
+  "CUE", "SPD", "RECORD", "REC", "UPDATE", "DELETE", "DEL", "MOVE", "MOV", "COPY", "CPY", "SET",
+]);
+
+export function commandLineRequiresLegacyCompatibility(command: string): boolean {
+  const family = command.trim().match(/^[A-Za-z]+/)?.[0]?.toUpperCase();
+  return family !== undefined && LEGACY_COMMAND_FAMILIES.has(family);
+}
 
 const WEB_SOCKET_TIMEOUT_MILLIS = 5_000;
 
@@ -13,6 +62,12 @@ export class ApiDriver {
   }
 
   async request<T>(method: string, path: string, body?: unknown, authenticate = true, revision?: number): Promise<T> {
+    const response = await this.response(method, path, body, authenticate, revision);
+    if (response.status === 204) return undefined as T;
+    return response.json() as Promise<T>;
+  }
+
+  private async response(method: string, path: string, body?: unknown, authenticate = true, revision?: number): Promise<Response> {
     const headers: Record<string, string> = {};
     if (body !== undefined) headers["content-type"] = "application/json";
     if (authenticate) {
@@ -22,8 +77,54 @@ export class ApiDriver {
     if (revision !== undefined) headers["if-match"] = String(revision);
     const response = await fetch(`${this.baseUrl}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
     if (!response.ok) throw new Error(`${method} ${path} returned ${response.status}: ${await response.text()}`);
-    if (response.status === 204) return undefined as T;
-    return response.json() as Promise<T>;
+    return response;
+  }
+
+  async getCommandLine(): Promise<RevisionedCommandLine> {
+    const response = await this.response("GET", this.commandLinePath());
+    return parseRevisionedCommandLine(response);
+  }
+
+  async replaceCommandLine(text: string, expectedRevision: number): Promise<RevisionedCommandLine> {
+    const response = await this.response("PUT", this.commandLinePath(), { text }, true, expectedRevision);
+    return parseRevisionedCommandLine(response);
+  }
+
+  async sendCommandKey(
+    key: SoftwareKey,
+    phase: CommandKeyPhase = "press",
+    requestId = crypto.randomUUID(),
+  ): Promise<CommandOperationResponse> {
+    return this.commandLineOperation("keys", { key, phase, request_id: requestId });
+  }
+
+  async executeCommandLineRaw(command?: string, requestId = crypto.randomUUID()): Promise<CommandOperationResponse> {
+    return this.commandLineOperation("execute", { command, request_id: requestId });
+  }
+
+  async executeCommandLine(command?: string, requestId = crypto.randomUUID()): Promise<CommandOperationResponse> {
+    const response = await this.executeCommandLineRaw(command, requestId);
+    if (response.outcome === "rejected") {
+      throw new Error(`programmer.execute failed: ${response.error}`);
+    }
+    return response;
+  }
+
+  /** Temporary, deliberately named compatibility path for command families not yet atomic in v2. */
+  async executeLegacyCommandLine(command: string): Promise<CommandResponse> {
+    return this.command("programmer.execute", { value: command });
+  }
+
+  private async commandLineOperation(operation: "keys" | "execute", body: unknown): Promise<CommandOperationResponse> {
+    const response = await this.response("POST", `${this.commandLinePath()}/${operation}`, body);
+    const result = await response.json() as CommandOperationResponse;
+    validateCommandRevision(response, result.command_line);
+    return result;
+  }
+
+  private commandLinePath(): string {
+    if (!this.session) throw new Error("API session is not initialized");
+    return `/api/v2/desks/${this.session.desk.id}/command-line`;
   }
 
   async command<T>(command: string, payload: unknown, expectedRevision?: number): Promise<CommandResponse<T>> {
@@ -75,6 +176,22 @@ export class ApiDriver {
       await closeWebSocket(socket, `API command ${command}`);
     }
   }
+}
+
+async function parseRevisionedCommandLine(response: Response): Promise<RevisionedCommandLine> {
+  const commandLine = await response.json() as CommandLineState;
+  const etag = validateCommandRevision(response, commandLine);
+  return { commandLine, etag };
+}
+
+function validateCommandRevision(response: Response, commandLine: CommandLineState): string {
+  const etag = response.headers.get("etag");
+  if (etag === null) throw new Error("Command-line response is missing its ETag");
+  const revision = Number(etag.replace(/^W\//, "").replace(/^\"|\"$/g, ""));
+  if (!Number.isSafeInteger(revision) || revision !== commandLine.revision) {
+    throw new Error(`Command-line ETag ${etag} does not match revision ${commandLine.revision}`);
+  }
+  return etag;
 }
 
 async function waitForWebSocketOpen(socket: WebSocket): Promise<void> {

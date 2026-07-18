@@ -118,3 +118,10 @@ Every later full-suite result must be compared with this named list. A changed f
 6. Replace frontend implementation imports and private Tauri/event/local-storage observations with generated wire DTOs, authoritative projections, or narrow explicit test adapters.
 7. As each Rust service boundary becomes public, move router/auth/persistence/OSC/lifecycle coverage out of `main.rs`; keep only pure unit tests inline and prohibit direct service-lock access from integration tests.
 8. Run focused migrated specs first, then `./test e2e-api`, comparing scenario identities and outcomes with the measured baseline above before removing any facade.
+
+## Stage 1 migration progress
+
+- `ApiDriver` now exposes the revisioned desk-scoped command-line HTTP contract, including ETag validation, compare-and-set replacement, logical key phases, typed outcomes, and request IDs.
+- Both command helpers route Programmer-owned command families through `/api/v2/desks/{desk_id}/command-line/execute`. Show-, Playback-, and configuration-owned families (`CUE`, `SPD`, `RECORD`, `UPDATE`, `DELETE`, `MOVE`, `COPY`, and `SET`, including aliases) use the deliberately named `executeLegacyCommandLine` compatibility path until their owning services can provide the same atomic guarantee. The only direct `programmer.execute` text remaining in the root suite is an audit-event assertion.
+- `API-003` exercises GET, logical keys, compare-and-set PUT, stale-writer rejection, execution, idempotent replay, Programmer state, and both network-output protocols at the process boundary.
+- The remaining 129 `api.command()` calls exercise bounded selection, Programmer value, Preload, Playback, Preset, and compatibility-error families. They remain explicitly inventoried for the Programming and Playback service migration rather than being hidden behind the new command-line client.

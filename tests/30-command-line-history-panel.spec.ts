@@ -115,7 +115,7 @@ test("COMMAND-HISTORY-001 @supplemental-ui › inspection, reuse, dismissal, rec
 });
 
 async function execute(api: ApiDriver, value: string) {
-  await api.command("programmer.execute", { value });
+  await api.executeCommandLine(value);
 }
 
 async function executeRejected(api: ApiDriver, value: string) {

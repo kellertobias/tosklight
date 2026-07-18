@@ -36,7 +36,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 			await expect(lateLock).toContainText("Call the operator");
 
 			await expect(api.request("PUT", "/api/v1/master", { grand_master: 0.25 })).rejects.toThrow(/409.*desk is locked/);
-			await expect(api.command("programmer.execute", { value: "1 AT 50" })).rejects.toThrow(/desk is locked/i);
+			await expect(api.executeCommandLine("1 AT 50")).rejects.toThrow(/desk is locked/i);
 			await hardware.send(`/light/${api.session!.desk.osc_alias}/programmer/digit-5`, [true]);
 			await page.waitForTimeout(100);
 			expect(await commandLine(api)).toBe("");
