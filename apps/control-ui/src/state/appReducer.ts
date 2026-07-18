@@ -22,6 +22,8 @@ export type Action =
 	| { type: "SET_PANE_SETTINGS"; id: string | null }
 	| { type: "SET_PANE_RECT"; id: string; rect: Partial<GridRect> }
 	| { type: "SET_PANE_GROUP_SHORTCUTS"; id: string; value: boolean }
+	| { type: "SET_PANE_CUE_SIDEBAR"; id: string; value: boolean }
+	| { type: "SET_PANE_CUELIST"; id: string; source?: "fixed" | "follow-selection"; number?: number }
 	| {
 			type: "SET_PANE_STAGE_OPTION";
 			id: string;
@@ -96,9 +98,7 @@ export type Action =
 			cueListId?: string;
 			columns?: FixtureSheetColumn[];
 			showType?: boolean;
-			showPatch?: boolean;
-			showSubheads?: boolean;
-			showMasterHeads?: boolean;
+			includedHeads?: AppState["fixtureSheetIncludedHeads"];
 	  }
 	| {
 			type: "SET_BUILTIN_GROUPS_VISIBLE";
@@ -228,6 +228,7 @@ export const initialState: AppState = {
 	fixtureSheetCueListId: "",
 	fixtureSheetColumns: [
 		"id",
+		"icon",
 		"name",
 		"dimmer",
 		"color",
@@ -236,9 +237,7 @@ export const initialState: AppState = {
 		"focus",
 	],
 	fixtureSheetShowType: true,
-	fixtureSheetShowPatch: true,
-	fixtureSheetShowSubheads: true,
-	fixtureSheetShowMasterHeads: true,
+	fixtureSheetIncludedHeads: "all",
 	fixtureGroupsVisible: true,
 	presetGroupsVisible: true,
 	groupsReturnToStage: null,
@@ -247,6 +246,22 @@ export const initialState: AppState = {
 
 const clamp = (value: number, minimum: number, maximum: number) =>
 	Math.max(minimum, Math.min(maximum, value));
+const normalizeFixtureSheetIncludedHeads = (
+	value: unknown,
+	legacyShowSubheads: unknown,
+	legacyShowMasterHeads: unknown,
+	fallback: AppState["fixtureSheetIncludedHeads"],
+): AppState["fixtureSheetIncludedHeads"] => {
+	if (
+		value === "all" ||
+		value === "no-sub-heads" ||
+		value === "no-master-heads"
+	) return value;
+	if (legacyShowSubheads === false && legacyShowMasterHeads !== false) return "no-sub-heads";
+	if (legacyShowMasterHeads === false && legacyShowSubheads !== false) return "no-master-heads";
+	if (legacyShowSubheads === true || legacyShowMasterHeads === true) return "all";
+	return fallback;
+};
 const overlaps = (a: GridRect, b: GridRect) =>
 	a.x < b.x + b.width &&
 	a.x + a.width > b.x &&
@@ -269,7 +284,9 @@ const cueListWindowTitle = (title: string, kind: BuiltInWindow) => {
 };
 const fixtureSheetColumnIds = new Set<FixtureSheetColumn>([
 	"id",
+	"icon",
 	"name",
+	"patch",
 	"dimmer",
 	"color",
 	"position",
@@ -279,11 +296,16 @@ const fixtureSheetColumnIds = new Set<FixtureSheetColumn>([
 const normalizeFixtureSheetColumns = (
 	columns: FixtureSheetColumn[] | undefined,
 	fallback: FixtureSheetColumn[],
+	legacyShowPatch?: boolean,
 ) => {
 	const normalized = columns?.filter(
 		(column, index) =>
 			fixtureSheetColumnIds.has(column) && columns.indexOf(column) === index,
 	);
+	if (normalized?.length && legacyShowPatch && !normalized.includes("patch")) {
+		const nameIndex = normalized.indexOf("name");
+		normalized.splice(nameIndex < 0 ? normalized.length : nameIndex + 1, 0, "patch");
+	}
 	return normalized?.length ? normalized : fallback;
 };
 
@@ -419,9 +441,16 @@ export function appReducer(state: AppState, action: Action): AppState {
 			return {
 				...state,
 				...action.windowSettings,
+				fixtureSheetIncludedHeads: normalizeFixtureSheetIncludedHeads(
+					action.windowSettings?.fixtureSheetIncludedHeads,
+					action.windowSettings?.fixtureSheetShowSubheads,
+					action.windowSettings?.fixtureSheetShowMasterHeads,
+					state.fixtureSheetIncludedHeads,
+				),
 				fixtureSheetColumns: normalizeFixtureSheetColumns(
 					action.windowSettings?.fixtureSheetColumns,
 					state.fixtureSheetColumns,
+					action.windowSettings?.fixtureSheetShowPatch,
 				),
 				presetFamily: normalizePresetFamily(
 					action.windowSettings?.presetFamily,
@@ -540,6 +569,46 @@ export function appReducer(state: AppState, action: Action): AppState {
 								panes: desk.panes.map((pane) =>
 									pane.id === action.id
 										? { ...pane, showGroupShortcuts: action.value }
+										: pane,
+								),
+							},
+				),
+			};
+		case "SET_PANE_CUE_SIDEBAR":
+			return {
+				...state,
+				desks: state.desks.map((desk) =>
+					desk.id !== state.activeDeskId
+						? desk
+						: {
+								...desk,
+								panes: desk.panes.map((pane) =>
+									pane.id === action.id
+										? { ...pane, showCueSidebar: action.value }
+										: pane,
+								),
+							},
+				),
+			};
+		case "SET_PANE_CUELIST":
+			return {
+				...state,
+				desks: state.desks.map((desk) =>
+					desk.id !== state.activeDeskId
+						? desk
+						: {
+								...desk,
+								panes: desk.panes.map((pane) =>
+									pane.id === action.id
+										? {
+											...pane,
+											cueListSource: action.source ?? pane.cueListSource ?? "fixed",
+											...(action.number != null
+												? { fixedCueListNumber: action.number }
+												: pane.fixedCueListNumber != null
+													? { fixedCueListNumber: pane.fixedCueListNumber }
+													: {}),
+										}
 										: pane,
 								),
 							},
@@ -733,11 +802,8 @@ export function appReducer(state: AppState, action: Action): AppState {
 					state.fixtureSheetColumns,
 				),
 				fixtureSheetShowType: action.showType ?? state.fixtureSheetShowType,
-				fixtureSheetShowPatch: action.showPatch ?? state.fixtureSheetShowPatch,
-				fixtureSheetShowSubheads:
-					action.showSubheads ?? state.fixtureSheetShowSubheads,
-				fixtureSheetShowMasterHeads:
-					action.showMasterHeads ?? state.fixtureSheetShowMasterHeads,
+				fixtureSheetIncludedHeads:
+					action.includedHeads ?? state.fixtureSheetIncludedHeads,
 			};
 		case "SET_BUILTIN_GROUPS_VISIBLE":
 			return action.window === "fixtures"

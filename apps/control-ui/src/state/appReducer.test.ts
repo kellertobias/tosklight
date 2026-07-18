@@ -157,6 +157,30 @@ describe("appReducer", () => {
     expect(updated.desks[0].panes[0].developmentView).toBe("faders");
   });
 
+  it("persists Cue sidebar visibility while older pane layouts keep it visible", () => {
+    const desks = [{ id: "cues", name: "Cues", panes: [{ id: "cues-1", kind: "cues" as const, title: "Cues · Main", x: 1, y: 1, width: 12, height: 12 }] }];
+    const legacy = appReducer(initialState, { type: "HYDRATE_LAYOUT", desks, activeDeskId: "cues" });
+    expect(legacy.desks[0].panes[0].showCueSidebar ?? true).toBe(true);
+
+    const hidden = appReducer(legacy, { type: "SET_PANE_CUE_SIDEBAR", id: "cues-1", value: false });
+    expect(hidden.desks[0].panes[0].showCueSidebar).toBe(false);
+  });
+
+  it("persists each Cues pane's fixed or follow-selection display choice", () => {
+    const desks = [{ id: "cues", name: "Cues", panes: [
+      { id: "cues-1", kind: "cues" as const, title: "Cues 1", x: 1, y: 1, width: 12, height: 9 },
+      { id: "cues-2", kind: "cues" as const, title: "Cues 2", x: 13, y: 1, width: 12, height: 9 },
+    ] }];
+    const legacy = appReducer(initialState, { type: "HYDRATE_LAYOUT", desks, activeDeskId: "cues" });
+    expect(legacy.desks[0].panes[0].cueListSource ?? "fixed").toBe("fixed");
+
+    const fixed = appReducer(legacy, { type: "SET_PANE_CUELIST", id: "cues-1", number: 7 });
+    const followed = appReducer(fixed, { type: "SET_PANE_CUELIST", id: "cues-2", source: "follow-selection" });
+    expect(followed.desks[0].panes[0]).toEqual(expect.objectContaining({ cueListSource: "fixed", fixedCueListNumber: 7 }));
+    expect(followed.desks[0].panes[1]).toEqual(expect.objectContaining({ cueListSource: "follow-selection" }));
+    expect(followed.desks[0].panes[1]).not.toHaveProperty("fixedCueListNumber");
+  });
+
   it("persists only non-authoritative Text Editor view state in the pane layout", () => {
     const desks = [{ id: "notes", name: "Notes", panes: [{ id: "editor", kind: "text_editor" as const, title: "Text Editor", x: 1, y: 1, width: 8, height: 8, textFileRoot: "shows", textFilePath: "run.md" }] }];
     const hydrated = appReducer(initialState, { type: "HYDRATE_LAYOUT", desks, activeDeskId: "notes" });
@@ -211,9 +235,7 @@ describe("appReducer", () => {
     expect(hydrated.dmxDotSize).toBe("large");
     expect(hydrated.fixtureSheetColumns).toEqual(["id", "name", "dimmer"]);
     expect(hydrated.fixtureSheetShowType).toBe(false);
-    expect(hydrated.fixtureSheetShowPatch).toBe(false);
-    expect(hydrated.fixtureSheetShowSubheads).toBe(false);
-    expect(hydrated.fixtureSheetShowMasterHeads).toBe(true);
+    expect(hydrated.fixtureSheetIncludedHeads).toBe("no-sub-heads");
     expect(hydrated.fixtureGroupsVisible).toBe(false);
     expect(hydrated.presetGroupsVisible).toBe(false);
     const legacy = appReducer(initialState, { type: "HYDRATE_LAYOUT", desks: initialState.desks, activeDeskId: initialState.activeDeskId });
@@ -222,9 +244,13 @@ describe("appReducer", () => {
     expect(legacy.stageShowBeamGuides).toBe(true);
     expect(legacy.fixtureSheetColumns).toEqual(initialState.fixtureSheetColumns);
     expect(legacy.fixtureSheetShowType).toBe(true);
-    expect(legacy.fixtureSheetShowPatch).toBe(true);
-    expect(legacy.fixtureSheetShowSubheads).toBe(true);
-    expect(legacy.fixtureSheetShowMasterHeads).toBe(true);
+    expect(legacy.fixtureSheetIncludedHeads).toBe("all");
+
+    const current = appReducer(initialState, { type: "HYDRATE_LAYOUT", desks: initialState.desks, activeDeskId: initialState.activeDeskId, windowSettings: { fixtureSheetIncludedHeads: "no-master-heads" } });
+    expect(current.fixtureSheetIncludedHeads).toBe("no-master-heads");
+
+    const oldPatchDetail = appReducer(initialState, { type: "HYDRATE_LAYOUT", desks: initialState.desks, activeDeskId: initialState.activeDeskId, windowSettings: { fixtureSheetColumns: ["id", "name", "dimmer"], fixtureSheetShowPatch: true } });
+    expect(oldPatchDetail.fixtureSheetColumns).toEqual(["id", "name", "patch", "dimmer"]);
   });
 
   it("keeps at least one valid fixture-sheet column when updating or migrating settings", () => {

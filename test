@@ -8,7 +8,7 @@ light_init_artifact_paths "$ROOT"
 UI="$ROOT/apps/control-ui"
 CONTROL_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-control-artifacts.json"
 
-usage(){ echo "Usage: ./test {artifact-paths|unit|e2e|e2e-api|e2e-ui|e2e-supplemental|help-screenshots|record|demo|desktop-smoke|all}"; }
+usage(){ echo "Usage: ./test {app-icons|artifact-paths|unit|e2e|e2e-api|e2e-ui|e2e-supplemental|help-screenshots|record|demo|desktop-smoke|all}"; }
 build_e2e(){ (cd "$UI" && npm run build); cargo build --manifest-path "$ROOT/Cargo.toml" -p light-server --no-default-features; }
 unit(){ (cd "$UI" && npm run build); cargo test --manifest-path "$ROOT/Cargo.toml" --workspace --exclude light-control-ui --exclude light-hardware-controls --no-default-features; (cd "$UI" && npm test); }
 e2e(){ build_e2e; (cd "$UI" && npm run test:e2e -- "$@"); }
@@ -25,7 +25,7 @@ record(){
 demo(){
   build_e2e
   node "$ROOT/tools/configure-playwright-video-quality.mjs"
-  (cd "$UI" && LIGHT_VISUAL_RECORDING=1 LIGHT_TEST_RESULTS_DIR="$LIGHT_ARTIFACTS_DIR/test/product-demo-results" npm run test:e2e -- --workers=1 product-demo.spec.ts "$@")
+  (cd "$UI" && LIGHT_VISUAL_RECORDING=1 LIGHT_UPDATE_DEMO_SHOW=1 LIGHT_TEST_RESULTS_DIR="$LIGHT_ARTIFACTS_DIR/test/product-demo-results" npm run test:e2e -- --workers=1 product-demo.spec.ts "$@")
   node "$ROOT/tools/encode-product-demo.mjs"
 }
 help_screenshots(){ build_e2e; (cd "$UI" && LIGHT_HELP_SCREENSHOTS=1 npm run test:e2e -- 02-help-screenshots.spec.ts --workers=1 "$@"); }
@@ -40,6 +40,7 @@ desktop_smoke(){
 
 command="${1:-}"; shift || true
 case "$command" in
+  app-icons) node "$ROOT/tools/test-app-icons.mjs" ;;
   artifact-paths) "$ROOT/tools/test-artifact-paths.sh" ;;
   unit) unit ;;
   e2e) e2e "$@" ;;

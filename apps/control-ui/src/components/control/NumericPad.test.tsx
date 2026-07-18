@@ -96,6 +96,22 @@ describe("NumericPad layout", () => {
     grid.remove();
   });
 
+  it("routes software SET to a height-constrained Cue settings editor", () => {
+    const fallback = document.createElement("section");
+    fallback.className = "cue-settings-compact-fallback";
+    document.body.append(fallback);
+    const set = vi.fn();
+    window.addEventListener("light:desk-action", set, { once: true });
+    render(<NumericPad/>);
+
+    fireEvent.click(screen.getByRole("button", { name: "SET" }));
+
+    expect(set).toHaveBeenCalledOnce();
+    expect((set.mock.calls[0][0] as CustomEvent<string>).detail).toBe("set");
+    expect(server.setCommandLine).not.toHaveBeenCalled();
+    fallback.remove();
+  });
+
   it("arms the same selected Patch target from the software SET key", () => {
     state.builtIn = "patch";
     render(<NumericPad/>);

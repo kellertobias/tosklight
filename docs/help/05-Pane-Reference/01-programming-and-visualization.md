@@ -32,7 +32,7 @@ The Group master limits the intensity of members when that Group is assigned to 
 
 ## Fixture sheet
 
-The Fixture sheet is the detailed live inspection and selection table. It refreshes resolved output values continuously and, while Preload is active, adds the pending Preload values for comparison. Activating a row selects that fixture or logical head. A compact pane shows the first 12 rows in Fixture ID order.
+The Fixture sheet is the detailed live inspection and selection table. It refreshes resolved output values continuously and, while Preload is active, adds the pending Preload values for comparison. Activating a row selects that fixture or logical head. A compact pane shows every row in Fixture ID order and scrolls when the rows exceed the available pane height.
 
 Simple fixtures use one row. Multi-head fixtures can expose a `.0` master row for shared parameters and `.1`, `.2`, and following logical-head rows for the individual heads.
 
@@ -43,16 +43,18 @@ During PREV/NEXT stepping, every row in the remembered base selection remains vi
 | Column | What it shows |
 | --- | --- |
 | **ID** | The fixture number. Multi-head targets add `.0` for the master and `.1` onward for logical heads. |
-| **Name / type** | Operator name with optional manufacturer/mode and patch address details. The **Columns** settings can hide the type and patch independently. A Group-master badge appears when a playback-fader Group is limiting this fixture. |
+| **Icon** | The fixture profile's stage icon. This column normally appears between ID and Name. |
+| **Name / type** | Operator name with optional manufacturer/mode on its own line at the same horizontal position as the name. A Group-master badge appears when a playback-fader Group is limiting this fixture. |
+| **Patch** | The fixture's universe and address, or **Unpatched**. This dedicated column is off by default. |
 | **Dimmer** | A level meter and resolved intensity percentage. During Preload, an arrow shows the pending target percentage. |
 | **Color** | An RGB swatch and label. Every swatch has the same thin light-grey boundary so black, dark, bright, absent, and mixed colors remain distinct from the table without changing the resolved fill. During Preload, a second swatch identifies the pending color. Fixtures without color parameters show the neutral fallback. |
 | **Position** | A position glyph and pan/tilt values. Fixtures without position parameters show a dash. During Preload, the pending pan/tilt values appear below. |
 | **Beam** | Reserved beam-summary column. Its current compact summary is not yet an authoritative live engine value. |
 | **Focus** | Reserved focus-summary column. Its current compact summary is not yet an authoritative live engine value. |
 
-The **Columns** settings can show or hide ID, Name, Dimmer, Color, Position, Beam, and Focus. At least one column remains visible. The source colors currently distinguish resolved programmer data from defaults for Dimmer, Color, and Position. Do not use this table alone as proof of complete cross-source ownership; detailed playback/programmer arbitration is documented separately.
+The **Columns** settings can show or hide ID, Icon, Name, Patch address, Dimmer, Color, Position, Beam, and Focus. At least one column remains visible. Icon is on by default; Patch address is off by default. The source colors currently distinguish resolved programmer data from defaults for Dimmer, Color, and Position. Do not use this table alone as proof of complete cross-source ownership; detailed playback/programmer arbitration is documented separately.
 
-**Pane configuration:** **Show group shortcuts** adds the Group strip. The common size and removal controls also apply. In the full Fixture Sheet window, open **Fixture Sheet** settings and use **View** for fixture heads, ordering, and filters; **Columns** for visible data and optional Name details; and **Groups** for the Group strip. **Show Subheads** and **Show Master Heads** default on. Turn off **Show Subheads** for master rows only, or turn off **Show Master Heads** for subhead rows only. At least one remains enabled. There is no per-row expand or collapse button. These full-sheet choices persist with the desk layout. Ordering can use Fixture ID or put active programmer fixtures first; filters can show only active fixtures or limit membership to one Cuelist.
+**Pane configuration:** **Show group shortcuts** adds the Group strip. The common size and removal controls also apply. In the full Fixture Sheet window, open **Fixture Sheet** settings and use **View** for fixture heads, ordering, and filters; **Columns** for visible data and optional Name details; and **Groups** for the Group strip. **Included heads** defaults to **All**. Choose **No sub heads** to show only master rows with the fixture's bare ID, or **No master heads** to show only subhead rows without indentation. There is no per-row expand or collapse button. These full-sheet choices persist with the desk layout. Ordering can use Fixture ID or put active programmer fixtures first; filters can show only active fixtures or limit membership to one Cuelist.
 
 ![Fixture sheet pane](../assets/screenshots/panes/fixtures.png)
 

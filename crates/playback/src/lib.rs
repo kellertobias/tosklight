@@ -142,21 +142,23 @@ impl PlaybackDefinition {
             ],
             PlaybackTarget::Group { .. } => [
                 PlaybackButtonAction::Select,
-                PlaybackButtonAction::Flash,
                 PlaybackButtonAction::SelectDereferenced,
+                PlaybackButtonAction::Flash,
             ],
             PlaybackTarget::SpeedGroup { .. } => [
                 PlaybackButtonAction::Double,
                 PlaybackButtonAction::Half,
                 PlaybackButtonAction::Learn,
             ],
-            PlaybackTarget::ProgrammerFade | PlaybackTarget::CueFade => {
-                [PlaybackButtonAction::None; 3]
-            }
+            PlaybackTarget::ProgrammerFade | PlaybackTarget::CueFade => [
+                PlaybackButtonAction::Double,
+                PlaybackButtonAction::Half,
+                PlaybackButtonAction::Off,
+            ],
             PlaybackTarget::GrandMaster => [
                 PlaybackButtonAction::Blackout,
-                PlaybackButtonAction::Flash,
                 PlaybackButtonAction::PauseDynamics,
+                PlaybackButtonAction::Flash,
             ],
         }
     }
@@ -214,9 +216,13 @@ impl PlaybackDefinition {
                         | PlaybackButtonAction::Pause
                         | PlaybackButtonAction::None
                 ),
-                PlaybackTarget::ProgrammerFade | PlaybackTarget::CueFade => {
-                    *action == PlaybackButtonAction::None
-                }
+                PlaybackTarget::ProgrammerFade | PlaybackTarget::CueFade => matches!(
+                    action,
+                    PlaybackButtonAction::Double
+                        | PlaybackButtonAction::Half
+                        | PlaybackButtonAction::Off
+                        | PlaybackButtonAction::None
+                ),
                 PlaybackTarget::GrandMaster => matches!(
                     action,
                     PlaybackButtonAction::Blackout
@@ -3511,11 +3517,32 @@ mod tests {
             incompatible.buttons,
             [
                 PlaybackButtonAction::Blackout,
-                PlaybackButtonAction::Flash,
                 PlaybackButtonAction::PauseDynamics,
+                PlaybackButtonAction::Flash,
             ]
         );
         assert!(incompatible.validate().is_ok());
+
+        assert_eq!(
+            PlaybackDefinition::default_buttons(&PlaybackTarget::Group {
+                group_id: "front".into(),
+            }),
+            [
+                PlaybackButtonAction::Select,
+                PlaybackButtonAction::SelectDereferenced,
+                PlaybackButtonAction::Flash,
+            ]
+        );
+        for target in [PlaybackTarget::ProgrammerFade, PlaybackTarget::CueFade] {
+            assert_eq!(
+                PlaybackDefinition::default_buttons(&target),
+                [
+                    PlaybackButtonAction::Double,
+                    PlaybackButtonAction::Half,
+                    PlaybackButtonAction::Off,
+                ]
+            );
+        }
 
         incompatible.button_count = 1;
         incompatible.buttons[1] = PlaybackButtonAction::None;

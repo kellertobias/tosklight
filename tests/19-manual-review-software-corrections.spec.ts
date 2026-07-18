@@ -124,11 +124,17 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
     }
 
     await desk.open(api.baseUrl);
-    await desk.recordStep("SHOW FILE PICKER", "Load from flash drive starts in ToskLight's confined file manager and accepts only portable .show files.");
+    await desk.recordStep("SHOW FILE PICKER", "Show from USB in the Load Show title bar starts ToskLight's confined file manager and accepts only portable .show files; Show from OS opens the operating-system picker directly.");
     await page.getByRole("button", { name: /Open show menu/ }).click();
     await page.getByRole("button", { name: "Load", exact: true }).click();
     const loadShow = page.getByRole("dialog", { name: "Load show" });
-    await loadShow.getByRole("button", { name: "Load from flash drive", exact: true }).click();
+    const loadShowTitle = loadShow.locator(".ui-modal-titlebar");
+    await expect(loadShowTitle.getByRole("button", { name: "Show from USB", exact: true })).toBeVisible();
+    await expect(loadShowTitle.getByRole("button", { name: "Show from OS", exact: true })).toBeVisible();
+    const osFileChooser = page.waitForEvent("filechooser");
+    await loadShowTitle.getByRole("button", { name: "Show from OS", exact: true }).click();
+    await osFileChooser;
+    await loadShow.getByRole("button", { name: "Show from USB", exact: true }).click();
     await expectPickerConstraint(page, files.invalid, files.show);
 
     await desk.recordStep("MVR FILE PICKER", "New Show from MVR reuses the same picker but changes the accepted extension to .mvr.");

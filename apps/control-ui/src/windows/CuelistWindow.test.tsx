@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { CueList, PlaybackDefinition } from "../api/types";
+import type { CueList, PlaybackDefinition, PlaybackSnapshot } from "../api/types";
+import { PaneSettingsModal } from "../components/modals/PaneSettingsModal";
 import { CuelistWindow } from "./CuelistWindow";
 
 const mocks = vi.hoisted(() => ({
@@ -10,16 +11,21 @@ const mocks = vi.hoisted(() => ({
   refresh: vi.fn(),
   saveCueList: vi.fn(),
   state: {
+    activeDeskId: "desk-1",
+    paneSettingsId: null as string | null,
+    presetFamily: "Mixed" as const,
     storeArmed: true,
     cueListSetArmed: false,
     cueListSetTarget: null as number | null,
+    desks: [{ id: "desk-1", name: "Desk 1", panes: [{ id: "cues-1", kind: "cues" as const, title: "Cues · Main", x: 1, y: 1, width: 12, height: 12 }] }],
   },
   playbacks: {
     pool: [] as PlaybackDefinition[],
-    active: [],
+    active: [] as PlaybackSnapshot["active"],
     pages: [],
     cue_lists: [] as CueList[],
     active_page: 1,
+    selected_playback: null as number | null,
   },
   cueObjects: [] as Array<Record<string, unknown>>,
 }));
@@ -60,14 +66,24 @@ describe("CuelistWindow pool recording", () => {
     mocks.refresh.mockReset().mockResolvedValue(undefined);
     mocks.saveCueList.mockReset().mockResolvedValue(true);
     mocks.state.storeArmed = true;
+    mocks.state.paneSettingsId = null;
     mocks.state.cueListSetArmed = false;
     mocks.state.cueListSetTarget = null;
     mocks.playbacks.pool = [];
     mocks.playbacks.cue_lists = [];
+    mocks.playbacks.active = [];
+    mocks.playbacks.selected_playback = null;
     mocks.cueObjects = [];
   });
 
-  it("keeps Cue rows selection-only and exposes the five-column editor", () => {
+  it("keeps Cue rows selection-only and exposes the compact Cue settings grid", () => {
+    let measure: ResizeObserverCallback = () => undefined;
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(callback: ResizeObserverCallback) { measure = callback; }
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    });
     mocks.state.storeArmed = false;
     mocks.playbacks.pool = [
       {
@@ -109,10 +125,98 @@ describe("CuelistWindow pool recording", () => {
     expect(screen.queryByRole("button", { name: "TOGGLE" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "OFF" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Title")).toHaveValue("Opening");
-    expect(screen.getByRole("heading", { name: "Cue Settings" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Cue Settings" })).not.toBeInTheDocument();
+    expect(screen.getByText("Selected Cue · 1")).toHaveClass("cue-selected-label");
+    expect([...document.querySelectorAll(".cue-settings-grid-measure > .ui-form-field > label")].map((label) => label.textContent)).toEqual(["Title", "Fade", "Delay", "Trigger"]);
+    expect(screen.getByLabelText("Title").closest(".ui-form-field")).toContainElement(screen.getByRole("button", { name: "Open keyboard" }));
+    expect(screen.getByLabelText("Fade").closest(".ui-form-field")).toContainElement(screen.getAllByRole("button", { name: "Open number pad" })[0]);
+    expect(screen.getByRole("button", { name: "Open Trigger picker" })).toBeInTheDocument();
+
+    const sidebar = document.querySelector(".cue-properties") as HTMLElement;
+    const preview = document.querySelector(".cue-selected-preview") as HTMLElement;
+    const fields = document.querySelector(".cue-settings-grid-measure") as HTMLElement;
+    Object.defineProperty(sidebar, "clientHeight", { configurable: true, value: 150 });
+    Object.defineProperty(preview, "offsetHeight", { configurable: true, value: 74 });
+    Object.defineProperty(fields, "scrollHeight", { configurable: true, value: 180 });
+    act(() => measure([], {} as ResizeObserver));
+    expect(screen.getByText("Press SET, then press an attribute value to edit it.")).toBeInTheDocument();
+    act(() => window.dispatchEvent(new CustomEvent("light:desk-action", { detail: "set" })));
+    expect(screen.getByText("SET is active. Press an attribute value to edit it.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Set Cue Fade" }));
+    expect(screen.getByRole("dialog", { name: "Fade" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close input" }));
+    vi.unstubAllGlobals();
   });
 
-  it("replaces the Cue sidebar with full-width Cuelist Settings and confirms dirty cancellation", () => {
+  it("hides the selected-Cue sidebar when the pane preference is disabled", () => {
+    mocks.state.storeArmed = false;
+    mocks.playbacks.cue_lists = [{
+      id: "main",
+      name: "Main",
+      priority: 10,
+      mode: "sequence",
+      looped: false,
+      cues: [{ number: 1, name: "Opening", fade_millis: 1000, delay_millis: 0, trigger: { type: "manual" }, changes: [] }],
+    }];
+
+    const { container } = render(<CuelistWindow compact cueListTab="cues" showCueSidebar={false} />);
+
+    expect(container.querySelector(".sequence-layout")).not.toHaveClass("with-cue-properties");
+    expect(container.querySelector(".cue-properties")).not.toBeInTheDocument();
+    expect(within(container).getByRole("table")).toBeInTheDocument();
+  });
+
+  it("shows a fixed Cuelist or follows the desk's selected Cuelist playback", () => {
+    mocks.state.storeArmed = false;
+    mocks.playbacks.pool = [
+      { number: 1, name: "Main", target: { type: "cue_list", cue_list_id: "main" }, buttons: ["go", "go_minus", "flash"], fader: "master", go_activates: true, auto_off: true, xfade_millis: 0 },
+      { number: 2, name: "Encore", target: { type: "cue_list", cue_list_id: "encore" }, buttons: ["go", "go_minus", "flash"], fader: "master", go_activates: true, auto_off: true, xfade_millis: 0 },
+    ];
+    mocks.playbacks.cue_lists = [
+      { id: "main", name: "Main", priority: 10, mode: "sequence", looped: false, cues: [
+        { number: 1, name: "Main opening", fade_millis: 0, delay_millis: 0, trigger: { type: "manual" }, changes: [] },
+        { number: 2, name: "Main chase step", fade_millis: 0, delay_millis: 0, trigger: { type: "manual" }, changes: [] },
+      ] },
+      { id: "encore", name: "Encore", priority: 10, mode: "sequence", looped: false, cues: [{ number: 1, name: "Encore look", fade_millis: 0, delay_millis: 0, trigger: { type: "manual" }, changes: [] }] },
+    ];
+
+    const view = render(<CuelistWindow compact cueListTab="cues" cueListSource="fixed" fixedCueListNumber={2} />);
+    expect(within(view.container).getByText("Encore look")).toBeInTheDocument();
+    expect(within(view.container).queryByText("Main opening")).not.toBeInTheDocument();
+
+    mocks.playbacks.selected_playback = 1;
+    view.rerender(<CuelistWindow compact cueListTab="cues" cueListSource="follow-selection" />);
+    expect(within(view.container).getByText("Main opening")).toBeInTheDocument();
+
+    mocks.playbacks.active = [{ playback_number: 1, cue_list_id: "main", cue_index: 1, paused: false, master: 1, flash: false }];
+    view.rerender(<CuelistWindow compact cueListTab="cues" cueListSource="follow-selection" />);
+    expect(within(view.container).getByText("Selected Cue · 2")).toBeInTheDocument();
+    expect(within(view.container).getByText("Main chase step").closest("tr")).toHaveClass("current", "selected");
+
+    mocks.playbacks.selected_playback = 2;
+    view.rerender(<CuelistWindow compact cueListTab="cues" cueListSource="follow-selection" />);
+    expect(within(view.container).getByText("Encore look")).toBeInTheDocument();
+
+    mocks.playbacks.selected_playback = null;
+    view.rerender(<CuelistWindow compact cueListTab="cues" cueListSource="follow-selection" />);
+    expect(within(view.container).getByText("No Cuelist selected")).toBeInTheDocument();
+  });
+
+  it("offers the persisted sidebar switch in Cues pane settings", () => {
+    mocks.state.paneSettingsId = "cues-1";
+    mocks.playbacks.pool = [{ number: 7, name: "Main", target: { type: "cue_list", cue_list_id: "main" }, buttons: ["go", "go_minus", "flash"], fader: "master", go_activates: true, auto_off: true, xfade_millis: 0 }];
+    render(<PaneSettingsModal />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Cues" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Follow selection" }));
+    expect(mocks.dispatch).toHaveBeenCalledWith({ type: "SET_PANE_CUELIST", id: "cues-1", source: "follow-selection" });
+    expect(screen.getByRole("button", { name: "7 · Main" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("switch", { name: "Show Cue sidebar" }));
+
+    expect(mocks.dispatch).toHaveBeenCalledWith({ type: "SET_PANE_CUE_SIDEBAR", id: "cues-1", value: false });
+  });
+
+  it("opens Cuelist Settings as a title-controlled modal and confirms dirty close", () => {
     mocks.state.storeArmed = false;
     const cueList: CueList = {
       id: "main",
@@ -139,22 +243,31 @@ describe("CuelistWindow pool recording", () => {
     fireEvent.click(ui.getByText("Main").closest("button")!);
     fireEvent.click(ui.getByRole("button", { name: "Cuelist Settings" }));
 
-    const settings = ui.getByRole("dialog", { name: "Cuelist Settings" });
+    const settings = screen.getByRole("dialog", { name: "Cuelist Settings" });
     const sidebar = container.querySelector(".cue-properties")!;
-    expect(sidebar).toHaveClass("cuelist-settings-active");
-    expect(sidebar).toContainElement(settings);
+    expect(sidebar).not.toContainElement(settings);
     expect(ui.getByRole("table")).toBeInTheDocument();
     expect(ui.queryByRole("heading", { name: "Cue Settings" })).not.toBeInTheDocument();
+    expect(within(settings).getByRole("button", { name: "Save" }).closest(".ui-modal-titlebar")).toBeInTheDocument();
+    expect(within(settings).queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+    expect(within(settings).getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual(["Priority", "Restart behavior", "Timing"]);
+    const mode = within(settings).getByRole("button", { name: /Mode\s*\(Sequence\)/ });
+    fireEvent.click(mode);
+    fireEvent.click(within(settings).getByRole("menuitemradio", { name: "Chaser" }));
+    expect(within(settings).getByRole("button", { name: /Mode\s*\(Chaser\)/ })).toBeInTheDocument();
+    expect(within(settings).getByLabelText("Speed multiplier")).toHaveAttribute("inputmode", "decimal");
+    expect(within(settings).getByRole("slider", { name: "Chaser X-fade" })).toHaveAttribute("max", "100");
 
     fireEvent.change(within(settings).getByLabelText("Numeric priority"), { target: { value: "11" } });
-    fireEvent.click(within(settings).getByRole("button", { name: "Cancel" }));
-    const confirmation = ui.getByRole("dialog", { name: "Unsaved Cuelist Settings" });
+    fireEvent.click(within(settings).getByRole("button", { name: "Close Cuelist Settings" }));
+    const confirmation = screen.getByRole("dialog", { name: "Unsaved Cuelist Settings" });
     fireEvent.click(within(confirmation).getByRole("button", { name: "Stay" }));
     expect(settings).toBeInTheDocument();
-    fireEvent.click(within(settings).getByRole("button", { name: "Cancel" }));
-    fireEvent.click(within(ui.getByRole("dialog", { name: "Unsaved Cuelist Settings" })).getByRole("button", { name: "Discard changes" }));
-    expect(ui.queryByRole("dialog", { name: "Cuelist Settings" })).not.toBeInTheDocument();
-    expect(ui.getByRole("heading", { name: "Cue Settings" })).toBeInTheDocument();
+    fireEvent.click(within(settings).getByRole("button", { name: "Close Cuelist Settings" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Unsaved Cuelist Settings" })).getByRole("button", { name: "Discard changes" }));
+    expect(screen.queryByRole("dialog", { name: "Cuelist Settings" })).not.toBeInTheDocument();
+    expect(ui.queryByRole("heading", { name: "Cue Settings" })).not.toBeInTheDocument();
+    expect(ui.getByText("Selected Cue · 1")).toBeInTheDocument();
     expect(mocks.saveCueList).not.toHaveBeenCalled();
   });
 

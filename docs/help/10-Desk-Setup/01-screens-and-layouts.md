@@ -14,7 +14,7 @@ Choose **Desk Lock** in the Screens & playback title bar to open its configurati
 
 The Tauri desktop application can add optional screens. Each optional screen can show or hide the Dock, Playbacks, and Page Controls; select a physical display; and enter fullscreen. Its **Configure Playbacks** dialog provides the same row controls as the default screen and also selects its page mode. Choose **Follow Main** when its page tracks the primary page. Choose **Dedicated Page** for an independent operator surface. Browser-only operation displays the default-screen controls but cannot create native desktop windows.
 
-Playback rows share all available playback height according to their controls. With attached playback hardware, a row without faders uses one height unit and a row with faders uses two. On a touch surface, a one-button row uses one unit, a multi-button row uses two, and a fader row uses four. The unit size adapts so the configured rows fill the playback area.
+Playback rows share all available playback height according to their controls. With attached playback hardware, a row without faders uses one height unit and a row with faders uses two. On a touch surface, a one-button row uses one unit and makes the whole playback section its button, with the function label at bottom-right. A two- or three-button faderless row uses two units and places its buttons side by side. A fader row uses four units. The unit size adapts so the configured rows fill the playback area.
 
 ![Default screen and playback configuration](../assets/screenshots/workflows/desk-setup-screens.png)
 

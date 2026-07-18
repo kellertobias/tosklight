@@ -164,6 +164,7 @@ export interface NumberInputProps extends Omit<InputHTMLAttributes<HTMLInputElem
   showStepButtons?: boolean;
   keyboardLabel?: string;
   onValueChange?: (value: string) => void;
+  onKeyboardCommit?: (value: string) => void;
   unit?: ReactNode;
 }
 
@@ -172,7 +173,7 @@ function clampNumber(value: number, min: NumberInputProps["min"], max: NumberInp
 }
 
 export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(function NumberInput(
-  { className = "", value, defaultValue, onChange, onValueChange, allowDecimal = false, showStepButtons = true, keyboardLabel, unit, disabled, readOnly, min, max, step = 1, ...props },
+  { className = "", value, defaultValue, onChange, onValueChange, onKeyboardCommit, allowDecimal = false, showStepButtons = true, keyboardLabel, unit, disabled, readOnly, min, max, step = 1, ...props },
   ref,
 ) {
   const [open, setOpen] = useState(false);
@@ -189,7 +190,9 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(functi
   const bump = (direction: -1 | 1) => update(String(clampNumber((Number(current) || 0) + Number(step) * direction, min, max)));
   const commit = (next: string) => {
     const parsed = Number(next);
-    update(next === "" || next === "-" || Number.isNaN(parsed) ? "" : String(clampNumber(parsed, min, max)));
+    const committed = next === "" || next === "-" || Number.isNaN(parsed) ? "" : String(clampNumber(parsed, min, max));
+    update(committed);
+    return committed;
   };
   return <span className={`ui-number-control ${showStepButtons ? "with-steppers" : "without-steppers"}`}>
     {showStepButtons && <Button size="compact" iconOnly className="ui-number-minus" aria-label="Decrease value" disabled={disabled || readOnly} onClick={() => bump(-1)}><span className="ui-step-icon" aria-hidden="true">−</span></Button>}
@@ -197,7 +200,7 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(functi
     {showStepButtons && <Button size="compact" iconOnly className="ui-number-plus" aria-label="Increase value" disabled={disabled || readOnly} onClick={() => bump(1)}><span className="ui-step-icon" aria-hidden="true">+</span></Button>}
     <Button size="compact" iconOnly className="ui-input-keyboard" aria-label="Open number pad" disabled={disabled || readOnly} onClick={() => setOpen(true)}><span className="ui-keyboard-icon" aria-hidden="true">⌨</span></Button>
     {open && (
-      <InputModal kind="number" value={current} allowDecimal={allowDecimal} label={keyboardLabel ?? props["aria-label"]} unit={unit} onCommit={(next) => { commit(next); setOpen(false); requestAnimationFrame(() => native.current?.focus()); }} onCancel={() => { setOpen(false); requestAnimationFrame(() => native.current?.focus()); }}/>
+      <InputModal kind="number" value={current} allowDecimal={allowDecimal} label={keyboardLabel ?? props["aria-label"]} unit={unit} onCommit={(next) => { const committed = commit(next); setOpen(false); onKeyboardCommit?.(committed); requestAnimationFrame(() => native.current?.focus()); }} onCancel={() => { setOpen(false); requestAnimationFrame(() => native.current?.focus()); }}/>
     )}
   </span>;
 });
@@ -444,9 +447,46 @@ export function IconPickerField({ label, value, onChange, icons = DEFAULT_ICONS,
 }
 
 function validHex(value: string) { return /^#[0-9a-f]{6}$/i.test(value); }
+function colorInputText(color: string) {
+  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
+  if (!match) return "#fff";
+  const luminance = Number.parseInt(match[1], 16) * .299 + Number.parseInt(match[2], 16) * .587 + Number.parseInt(match[3], 16) * .114;
+  return luminance > 155 ? "#101419" : "#fff";
+}
 export function ColorPickerField({ label, value, onChange, colors = DEFAULT_COLORS, description, disabled, labelPlacement }: { label?: ReactNode; value: string; onChange: (value: string) => void; colors?: string[]; description?: ReactNode; disabled?: boolean; labelPlacement?: LabelPlacement }) {
   const [open, setOpen] = useState(false);
   const [custom, setCustom] = useState(value);
+  const [position, setPosition] = useState<CSSProperties>({});
+  const button = useRef<HTMLButtonElement>(null);
   const normalized = validHex(value) ? value : "#d98236";
-  return <FormField label={label} description={description} labelPlacement={labelPlacement}><Button className="ui-picker-trigger" disabled={disabled} aria-haspopup="dialog" onClick={() => { setCustom(normalized); setOpen(true); }}><span className="ui-color-preview" style={{ background: normalized }}/><span>{normalized.toUpperCase()}</span></Button>{open && <PickerDialog title="Choose color" onClose={() => setOpen(false)}><div className="ui-color-grid">{colors.map((color) => <Button key={color} active={color.toLowerCase() === normalized.toLowerCase()} aria-label={`Use color ${color}`} style={{ "--picker-color": color } as CSSProperties} onClick={() => { onChange(color); setOpen(false); }}><span style={{ background: color }}/></Button>)}</div><FormLayout labelPlacement="side"><TextField label="Custom hex" value={custom} clearable onChange={(event) => setCustom(event.target.value)}/><FormField label="Preview"><span className="ui-custom-color-preview" style={{ background: validHex(custom) ? custom : "transparent" }}/></FormField><FormField label=""><Button variant="primary" disabled={!validHex(custom)} onClick={() => { onChange(custom.toLowerCase()); setOpen(false); }}>Use custom color</Button></FormField></FormLayout></PickerDialog>}</FormField>;
+  const place = () => {
+    const box = button.current?.getBoundingClientRect();
+    const layoutWidth = button.current?.offsetWidth;
+    const layoutHeight = button.current?.offsetHeight;
+    if (!box || !layoutWidth || !layoutHeight) return;
+    const left = box.left - (layoutWidth - box.width) / 2;
+    const top = box.top - (layoutHeight - box.height) / 2;
+    const bottom = top + layoutHeight;
+    const popupWidth = Math.max(layoutWidth, Math.min(420, window.innerWidth - 16));
+    const below = window.innerHeight - bottom;
+    const maxHeight = Math.max(180, Math.min(470, below > 260 ? below - 8 : top - 8));
+    setPosition({ left: Math.max(8, Math.min(left, window.innerWidth - popupWidth - 8)), top: below > 260 ? bottom + 4 : undefined, bottom: below <= 260 ? window.innerHeight - top + 4 : undefined, width: popupWidth, maxHeight });
+  };
+  useEffect(() => {
+    if (!open) return;
+    place();
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") { setOpen(false); button.current?.focus(); } };
+    window.addEventListener("keydown", close, true);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => { window.removeEventListener("keydown", close, true); window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); };
+  }, [open]);
+  const choose = (color: string) => { onChange(color.toLowerCase()); setOpen(false); button.current?.focus(); };
+  return <FormField label={label} description={description} labelPlacement={labelPlacement}>
+    <Button ref={button} className="ui-color-input-trigger" disabled={disabled} aria-haspopup="listbox" aria-expanded={open} style={{ "--picker-color": normalized, color: colorInputText(normalized) } as CSSProperties} onClick={() => { if (!open) { setCustom(normalized); place(); } setOpen(!open); }}><span>{normalized.toUpperCase()}</span><i aria-hidden="true">▼</i></Button>
+    {open && createPortal(<div className="ui-color-dropdown-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) { setOpen(false); button.current?.focus(); } }}><section className="ui-color-dropdown-panel touch-scrollbars" style={position} aria-label={typeof label === "string" ? label : "Color picker"}>
+      <div className="ui-color-dropdown-grid" role="listbox" aria-label={typeof label === "string" ? label : "Colors"}>{colors.map((color) => <Button role="option" aria-selected={color.toLowerCase() === normalized.toLowerCase()} key={color} active={color.toLowerCase() === normalized.toLowerCase()} aria-label={`Use color ${color}`} style={{ "--picker-color": color } as CSSProperties} onClick={() => choose(color)}><span style={{ background: color }}/></Button>)}</div>
+      <div className="ui-color-dropdown-custom"><TextField label="Custom hex" value={custom} clearable onChange={(event) => setCustom(event.target.value)}/><span className="ui-custom-color-preview" aria-label="Color preview" style={{ background: validHex(custom) ? custom : "transparent" }}/><Button variant="primary" disabled={!validHex(custom)} onClick={() => choose(custom)}>Use custom color</Button></div>
+    </section></div>, document.body)}
+  </FormField>;
 }

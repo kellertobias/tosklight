@@ -19,6 +19,7 @@
 *.sqlite-shm
 *.sqlite-wal
 *.show
+!/assets/demo.show
 *.log
 *.pid
 *.pyc

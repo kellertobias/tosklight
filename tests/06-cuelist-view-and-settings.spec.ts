@@ -90,6 +90,8 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       const installed = await installCuelist(api, { name: "CUE-011 Sequence", numbers: [1, 2, 3] });
       await api.request("POST", "/api/v1/cuelists/1/go", {});
       await openCuelistView(page, desk, bench.baseUrl, installed.name);
+      await page.setViewportSize({ width: 1280, height: 1100 });
+      await expect(page.locator(".cue-settings-compact-fallback")).toBeHidden();
 
       await expect(page.locator(".ui-window-header")).toContainText("Cuelist View · Cuelist 1");
       await expect(page.locator(".ui-window-header")).toContainText(installed.name);
@@ -141,7 +143,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       await page.getByRole("button", { name: "Cuelist Settings", exact: true }).click();
       const settings = page.getByRole("dialog", { name: "Cuelist Settings" });
       await expect(settings).toContainText(installed.name);
-      await settings.getByRole("button", { name: "Cancel", exact: true }).click();
+      await settings.getByRole("button", { name: "Close Cuelist Settings", exact: true }).click();
       await expect(rows.nth(1)).toHaveClass(/selected/);
 
       const lastValid = await object<any>(api, "cue_list", installed.id);
@@ -238,7 +240,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     expect((await object<any>(api, "cue_list", installed.id)).body.cues.map((cue: any) => cue.number)).toEqual([1, 2, 3, 4]);
     await page.unroute(`**/objects/cue_list/${installed.id}`);
     await staleDialog.getByRole("button", { name: "Cancel", exact: true }).click();
-    await page.getByRole("dialog", { name: "Cuelist Settings" }).getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.getByRole("dialog", { name: "Cuelist Settings" }).getByRole("button", { name: "Close Cuelist Settings", exact: true }).click();
     await expect(page.locator(".ui-window-header")).toContainText("Concurrent Renumber Sequence");
 
     await openRenumber(page);
@@ -363,14 +365,15 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     await page.getByRole("button", { name: "Cuelist Settings", exact: true }).click();
     const settings = page.getByRole("dialog", { name: "Cuelist Settings" });
     await expect(settings).toContainText(installed.name);
-    await expect(selectField(settings, "Mode")).toContainText("Sequence");
+    await expect(settings.getByRole("button", { name: /Mode\s*\(Sequence\)/ })).toBeVisible();
     await expect(selectField(settings, "Intensity priority mode")).toContainText("HTP");
     await expect(selectField(settings, "Wrap Around")).toContainText("Tracking");
     await expect(selectField(settings, "Restart mode")).toContainText("First Cue");
     await expect(settings.getByLabel("Force Cue Timing")).not.toBeChecked();
     await expect(settings.getByLabel("Disable Cue Timing")).not.toBeChecked();
 
-    await choose(page, settings, "Sequence", "Chaser");
+    await settings.getByRole("button", { name: /Mode\s*\(Sequence\)/ }).click();
+    await settings.getByRole("menuitemradio", { name: "Chaser", exact: true }).click();
     await settings.getByLabel("Numeric priority").fill("42");
     await expect(settings.getByLabel("Numeric priority")).toHaveValue("42");
     await choose(page, settings, "HTP", "LTP");
@@ -381,13 +384,15 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     await clickSwitch(settings, "Disable Cue Timing");
     await expect(settings.getByLabel("Numeric priority")).toHaveValue("42");
     await expect(selectField(settings, "Speed Group")).toContainText("A");
-    await choose(page, settings, "1×", "2×");
-    await settings.getByLabel("Chaser X-fade").fill("101");
-    const beforeInvalid = await object<any>(api, "cue_list", installed.id);
-    await settings.getByLabel("Chaser X-fade").press("Tab");
-    await expect(settings.getByLabel("Chaser X-fade")).toHaveValue("100");
-    expect((await object<any>(api, "cue_list", installed.id)).revision).toBe(beforeInvalid.revision);
-    await settings.getByLabel("Chaser X-fade").fill("50");
+    await settings.getByLabel("Speed multiplier").fill("2");
+    const xfade = settings.getByRole("slider", { name: "Chaser X-fade" });
+    await expect(xfade).toHaveAttribute("min", "0");
+    await expect(xfade).toHaveAttribute("max", "100");
+    await xfade.evaluate((input: HTMLInputElement) => {
+      input.value = "50";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
     await settings.getByRole("button", { name: "Save", exact: true }).click();
     await expect(settings).toBeHidden();
     await expect
@@ -825,7 +830,8 @@ async function chooseCueTrigger(page: Page, api: ApiDriver, cueListId: string, c
 }
 
 async function clickSwitch(scope: ReturnType<Page["locator"]>, label: string): Promise<void> {
-  await scope.locator(".ui-form-field").filter({ hasText: label }).locator(".ui-switch-control").click();
+  const input = scope.getByLabel(label, { exact: true });
+  await input.locator("xpath=ancestor::label[contains(@class, 'ui-switch-control')]").click();
 }
 
 function selectField(scope: ReturnType<Page["locator"]>, label: string) {

@@ -8,7 +8,7 @@ source "$ROOT/tools/artifact-maintenance.sh"
 light_init_artifact_paths "$ROOT"
 UI_DIR="$ROOT/apps/control-ui"
 DATA_DIR="$LIGHT_DATA_DIR"
-FIXTURE_LIBRARY_DIR="$ROOT/fixture-library"
+FIXTURE_LIBRARY_DIR="$ROOT/assets/fixture-library"
 TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-control-artifacts.json"
 SERVER_PID=""
 

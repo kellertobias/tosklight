@@ -149,6 +149,24 @@ describe("QuickSetupModal named revision copies", () => {
     await waitFor(() => expect(mocks.server.openShowRevision).toHaveBeenCalledWith("original", 3));
   });
 
+  it("offers USB and operating-system show sources in the Load Show title bar", async () => {
+    render(<QuickSetupModal />);
+    fireEvent.click(screen.getByRole("button", { name: "Load" }));
+    const load = await screen.findByRole("dialog", { name: "Load show" });
+    const titleBar = load.querySelector(".ui-modal-titlebar") as HTMLElement;
+
+    expect(within(titleBar).getByRole("button", { name: "Show from USB" })).toBeInTheDocument();
+    expect(within(titleBar).getByRole("button", { name: "Show from OS" })).toBeInTheDocument();
+    expect(within(load).queryByRole("button", { name: "Load from flash drive" })).not.toBeInTheDocument();
+
+    const input = titleBar.querySelector<HTMLInputElement>('input[type="file"]')!;
+    expect(input).toHaveAttribute("accept", ".show");
+    const showFile = new File(["portable show"], "tour.show", { type: "application/octet-stream" });
+    fireEvent.change(input, { target: { files: [showFile] } });
+
+    await waitFor(() => expect(mocks.server.uploadShow).toHaveBeenCalledWith(showFile));
+  });
+
   it("keeps an orphaned revision copy usable without an overwrite-original action", () => {
     mocks.server.shows = mocks.server.shows.filter((show) => show.id !== "original");
     render(<QuickSetupModal />);

@@ -57,6 +57,9 @@ export interface PaneModel extends GridRect {
 	kind: BuiltInWindow;
 	title: string;
 	showGroupShortcuts?: boolean;
+	showCueSidebar?: boolean;
+	cueListSource?: "fixed" | "follow-selection";
+	fixedCueListNumber?: number;
 	stageView?: StageView;
 	followPreload?: boolean;
 	showBeamGuides?: boolean;
@@ -196,9 +199,7 @@ export interface AppState {
 	fixtureSheetCueListId: string;
 	fixtureSheetColumns: FixtureSheetColumn[];
 	fixtureSheetShowType: boolean;
-	fixtureSheetShowPatch: boolean;
-	fixtureSheetShowSubheads: boolean;
-	fixtureSheetShowMasterHeads: boolean;
+	fixtureSheetIncludedHeads: FixtureSheetIncludedHeads;
 	fixtureGroupsVisible: boolean;
 	presetGroupsVisible: boolean;
 	groupsReturnToStage: "builtin" | "desk" | null;
@@ -206,9 +207,15 @@ export interface AppState {
 }
 
 export type FixtureSheetOrder = "fixture-id" | "active";
+export type FixtureSheetIncludedHeads =
+	| "all"
+	| "no-sub-heads"
+	| "no-master-heads";
 export type FixtureSheetColumn =
 	| "id"
+	| "icon"
 	| "name"
+	| "patch"
 	| "dimmer"
 	| "color"
 	| "position"
@@ -242,9 +249,12 @@ export interface WindowSettings {
 	fixtureSheetCueListId: string;
 	fixtureSheetColumns: FixtureSheetColumn[];
 	fixtureSheetShowType: boolean;
-	fixtureSheetShowPatch: boolean;
-	fixtureSheetShowSubheads: boolean;
-	fixtureSheetShowMasterHeads: boolean;
+	fixtureSheetIncludedHeads: FixtureSheetIncludedHeads;
+	/** Legacy layout field retained only for migration to the Patch column. */
+	fixtureSheetShowPatch?: boolean;
+	/** Legacy layout fields retained only for migration. */
+	fixtureSheetShowSubheads?: boolean;
+	fixtureSheetShowMasterHeads?: boolean;
 	fixtureGroupsVisible: boolean;
 	presetGroupsVisible: boolean;
 }

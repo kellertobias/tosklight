@@ -1,4 +1,4 @@
-import { Button } from "../common";
+import { Button, ModalPortal } from "../common";
 
 export type RecordMode = "merge" | "overwrite";
 
@@ -11,7 +11,7 @@ export function RecordModeDialog({
   onChoose: (mode: RecordMode) => void;
   onCancel: () => void;
 }) {
-  return (
+  return <ModalPortal>
     <div
       className="modal-backdrop"
       onPointerDown={(event) => event.target === event.currentTarget && onCancel()}
@@ -36,5 +36,5 @@ export function RecordModeDialog({
         </div>
       </section>
     </div>
-  );
+  </ModalPortal>;
 }

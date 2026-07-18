@@ -49,7 +49,7 @@ describe("VirtualPlaybacksWindow", () => {
     const modal = screen.getByRole("dialog", { name: "Playback Configuration" });
     expect(modal).toHaveAttribute("data-page", "1"); expect(modal).toHaveAttribute("data-slot", "2"); expect(modal).toHaveAttribute("data-topology", "1 button · faderless");
     expect(screen.getByText("Presentation", { selector: "label", exact: true }).closest(".ui-form-field")?.querySelector(".ui-select-trigger")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close playback configuration" }));
     expect(mocks.savePlaybackSlot).not.toHaveBeenCalled(); expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
   });
 

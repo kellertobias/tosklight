@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { OutputRoute, VersionedObject } from "../../api/types";
-import { Button, FormLayout, NumberField, SelectField, SwitchField, TextField } from "../common";
+import { Button, FormLayout, ModalPortal, NumberField, SelectField, SwitchField, TextField } from "../common";
 
 interface RouteDraft {
   id: string;
@@ -125,7 +125,7 @@ export function OutputRoutesSetup({ routes, onSave, onDelete, outputBindIp }: Ou
       </article>)}
       {!ordered.length && <p className="empty-window-message">No output routes are configured.</p>}
     </div>
-    {draft && <div className="modal-backdrop" onPointerDown={(event) => event.target === event.currentTarget && close()}>
+    {draft && <ModalPortal><div className="modal-backdrop" onPointerDown={(event) => event.target === event.currentTarget && close()}>
       <section className="modal-card output-route-editor" role="dialog" aria-modal="true" aria-label="Output route editor">
         <Button className="modal-close" disabled={busy} onClick={close}>×</Button>
         <h2>{draft.revision ? "Edit output route" : "Add output route"}</h2>
@@ -163,6 +163,6 @@ export function OutputRoutesSetup({ routes, onSave, onDelete, outputBindIp }: Ou
           <Button variant="primary" disabled={busy} onClick={() => void save()}>{busy ? "Saving…" : "Save route"}</Button>
         </footer>}
       </section>
-    </div>}
+    </div></ModalPortal>}
   </section>;
 }

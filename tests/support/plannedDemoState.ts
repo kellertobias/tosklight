@@ -37,7 +37,7 @@ export async function ensurePlannedDemoFixtureLibrary(api: ApiDriver): Promise<v
   let profiles = await api.request<FixtureProfile[]>("GET", "/api/v1/fixture-profiles", undefined, false);
   for (const [manufacturer, name, archive] of PLANNED_DEMO_PACKAGES) {
     if (profiles.some((candidate) => candidate.manufacturer === manufacturer && candidate.name === name)) continue;
-    const bytes = await fs.readFile(new URL(`../../fixture-library/${archive}`, import.meta.url));
+    const bytes = await fs.readFile(new URL(`../../assets/fixture-library/${archive}`, import.meta.url));
     const response = await fetch(`${api.baseUrl}/api/v1/fixture-packages/import`, {
       method: "POST",
       headers: {
@@ -116,9 +116,9 @@ export async function seedPlannedDemoPatch(
 
   let venueNumber = 10_001;
   inputs.push({
-    phase: "stage", number: venueNumber++, name: "Stage", definition: stage, layerId: layers.Stage, x: -3, y: -1.5, z: 0,
-    multipatch: [-3, -1, 1, 3].flatMap((x) => [-1.5, -.5, .5, 1.5].map((y) => ({ x, y })))
-      .filter(({ x, y }) => x !== -3 || y !== -1.5)
+    phase: "stage", number: venueNumber++, name: "Stage", definition: stage, layerId: layers.Stage, x: -3, y: .5, z: 0,
+    multipatch: [-3, -1, 1, 3].flatMap((x) => [.5, 1.5, 2.5, 3.5].map((y) => ({ x, y })))
+      .filter(({ x, y }) => x !== -3 || y !== .5)
       .map(({ x, y }, index) => ({ name: `Stage ${index + 2}`, x, y, z: 0 })),
   });
   for (const [name, y] of [["Back Truss", 4], ["Mid Truss", 0], ["Front Truss", -3]] as const) {
@@ -128,29 +128,29 @@ export async function seedPlannedDemoPatch(
     });
   }
   [-1.5, -.5, .5, 1.5].forEach((x, index) => inputs.push({ phase: "strips", number: venueNumber++, name: `Pipe ${index + 1}`, definition: pipe, layerId: layers.Stage, x, y: 4.2, z: 2.9, rotation: { x: 0, y: 90, z: 0 } }));
-  [-2, 2].forEach((x, index) => inputs.push({ phase: "stage", number: venueNumber++, name: `Curtain ${index + 1}`, definition: curtain, layerId: layers.Stage, x, y: 4.3, z: 2.5 }));
+  [-2, 0, 2].forEach((x, index) => inputs.push({ phase: "stage", number: venueNumber++, name: `Curtain ${index + 1}`, definition: curtain, layerId: layers.Stage, x, y: 4.3, z: -.5 }));
 
   const frontTargets = spread(4, -3.8, 3.8);
   [-3.8, -3.533, -3.267, -3].forEach((x, index) => inputs.push({ phase: "front", number: index + 1, name: `Front Left ${index + 1}`, definition: fresnel, layerId: layers["Front Truss"], universe: 2, address: index + 1, x, y: -3, z: 4, rotation: aimFixtureAt({ x, y: -3, z: 4 }, { x: frontTargets[index], y: 1.5, z: 0 }) }));
   [3, 3.267, 3.533, 3.8].forEach((x, index) => inputs.push({ phase: "front", number: index + 5, name: `Front Right ${index + 1}`, definition: fresnel, layerId: layers["Front Truss"], universe: 2, address: index + 7, x, y: -3, z: 4, rotation: aimFixtureAt({ x, y: -3, z: 4 }, { x: frontTargets[index], y: 1.5, z: 0 }) }));
   inputs.push({
-    phase: "house", number: 99, name: "House Light", definition: dimmer, layerId: layers["House Lights"], universe: 2, address: 13, x: 0, y: -6, z: 4,
-    multipatch: [14, 15, 16].map((address) => ({ name: `House Light ${address - 12}`, universe: 2, address, x: 0, y: -5 + address - 14, z: 4 })),
+    phase: "house", number: 99, name: "House Light", definition: dimmer, layerId: layers["House Lights"], universe: 2, address: 13, x: 0, y: -7, z: 5,
+    multipatch: [14, 15, 16].map((address) => ({ name: `House Light ${address - 12}`, universe: 2, address, x: 0, y: -6 + address - 14, z: 5 })),
   });
   inputs.push({
-    phase: "house", number: 98, name: "House Mood", definition: dimmer, layerId: layers["House Lights"], universe: 2, address: 17,
-    multipatch: [18, 19, 20, 21, 22, 23, 24].map((address) => ({ name: `House Mood ${address - 16}`, universe: 2, address, x: -3 + address - 18, y: -4, z: 3 })),
+    phase: "house", number: 98, name: "House Mood", definition: dimmer, layerId: layers["House Lights"], universe: 2, address: 17, x: -3.5, y: -5, z: 4,
+    multipatch: [18, 19, 20, 21, 22, 23, 24].map((address) => ({ name: `House Mood ${address - 16}`, universe: 2, address, x: -2.5 + address - 18, y: -5, z: 4 })),
   });
   const aclInPositions = spread(8, -.4, .4);
   const aclInTargets = spread(8, -3.8, 3.8);
   const aclInInstances = aclInPositions.map((x, index) => ({
-    name: `ACL In ${index + 1}`, x, y: 4, z: 4.3,
+    name: `ACL In ${index + 1}`, x, y: 3.8, z: 4.5,
     rotation: aimFixtureAt({ x, y: 4, z: 4.3 }, { x: aclInTargets[index], y: -2, z: 0 }),
   }));
   const aclOutPositions = [...spread(4, -3.8, -3), ...spread(4, 3, 3.8)];
   const aclOutTargets = [...spread(4, -4, 2), ...spread(4, -2, 4)];
   const aclOutInstances = aclOutPositions.map((x, index) => ({
-    name: `ACL Out ${index + 1}`, x, y: 4, z: 4.3,
+    name: `ACL Out ${index + 1}`, x, y: 3.8, z: 4.5,
     rotation: aimFixtureAt({ x, y: 4, z: 4.3 }, { x: aclOutTargets[index], y: -2, z: 0 }),
   }));
   inputs.push({ phase: "acl", number: 81, name: "ACL In", definition: acl, layerId: layers["Back Truss"], universe: 1, address: 1, x: aclInInstances[0].x, y: aclInInstances[0].y, z: aclInInstances[0].z, rotation: aclInInstances[0].rotation, multipatch: aclInInstances.slice(1) });
@@ -166,7 +166,7 @@ export async function seedPlannedDemoPatch(
     address += wash.footprint;
   });
   address = 1;
-  const stripPositions = [-1.5, -.5, .5, 1.5].flatMap((x) => [{ x, z: 3.45 }, { x, z: 2.2 }]);
+  const stripPositions = [-1.5, -.5, .5, 1.5].flatMap((x) => [{ x, z: 2.85 }, { x, z: 1.7 }]);
   stripPositions.forEach(({ x, z }, index) => {
     inputs.push({ phase: "strips", number: 401 + index, name: `Strip ${index + 1}`, definition: strip, layerId: layers["Back Truss"], universe: 3, address, x, y: 4.05, z, rotation: { x: 0, y: 90, z: 0 } });
     address += strip.footprint;
@@ -174,11 +174,11 @@ export async function seedPlannedDemoPatch(
   const floorGroupCenters = [-3, -1, 1, 3];
   floorGroupCenters.flatMap((center) => spread(4, center - .3, center + .3).map((x, fanIndex) => ({ center, x, fanIndex }))).forEach(({ center, x, fanIndex }, index) => {
     const targetX = center + spread(4, -1.1, 1.1)[fanIndex];
-    inputs.push({ phase: "floor", number: 301 + index, name: `Floor Spot ${index + 1}`, definition: floor, layerId: layers.Floor, universe: 3, address, x, y: 1.6, z: .2, rotation: aimFixtureAt({ x, y: 1.6, z: .2 }, { x: targetX, y: -3, z: 4 }) });
+    inputs.push({ phase: "floor", number: 301 + index, name: `Floor Spot ${index + 1}`, definition: floor, layerId: layers.Floor, universe: 3, address, x, y: 3.9, z: .6, rotation: aimFixtureAt({ x, y: 1.6, z: .2 }, { x: targetX, y: -3, z: 4 }) });
     address += floor.footprint;
   });
-  inputs.push({ phase: "remaining", number: 801, name: "Blinder Left", definition: blinder, layerId: layers["Front Truss"], x: -2, y: -3, z: 4.25, rotation: { x: 0, y: 0, z: 0 } });
-  inputs.push({ phase: "remaining", number: 802, name: "Blinder Right", definition: blinder, layerId: layers["Front Truss"], x: 2, y: -3, z: 4.25, rotation: { x: 0, y: 0, z: 0 } });
+  inputs.push({ phase: "remaining", number: 801, name: "Blinder Left", definition: blinder, layerId: layers["Front Truss"], x: -2, y: -2, z: 4.25, rotation: { x: -20, y: 0, z: 0 } });
+  inputs.push({ phase: "remaining", number: 802, name: "Blinder Right", definition: blinder, layerId: layers["Front Truss"], x: 2, y: -2, z: 4.25, rotation: { x: -20, y: 0, z: 0 } });
   inputs.push({ phase: "remaining", number: 998, name: "Haze Left", definition: hazer, layerId: layers.Floor, x: -3.5, y: 3.7, z: .2 });
   inputs.push({ phase: "remaining", number: 999, name: "Haze Right", definition: hazer, layerId: layers.Floor, x: 3.5, y: 3.7, z: .2 });
 

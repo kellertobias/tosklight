@@ -103,24 +103,27 @@ describe("PlaybackFaderBank authoritative playback surfaces", () => {
     ["middle button", () => screen.getByRole("button", { name: "GO −" })],
     ["bottom button", () => screen.getByRole("button", { name: "FLASH" })],
     ["fader track and handle", () => screen.getByRole("slider", { name: "Master" })],
-  ])("SET intercepts the %s without executing it and Cancel is inert", (_surface, target) => {
+  ])("SET intercepts the %s without executing it and Close is inert", (_surface, target) => {
     assignPlayback(); mocks.state.playbackSetArmed = true;
     render(<PlaybackFaderBank count={1}/>);
     fireEvent.click(target());
     expect(screen.getByRole("dialog", { name: "Playback Configuration" })).toHaveAttribute("data-page", "1");
     expect(screen.getByRole("dialog", { name: "Playback Configuration" })).toHaveAttribute("data-slot", "1");
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close playback configuration" }));
     expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
     expect(mocks.savePlaybackSlot).not.toHaveBeenCalled();
     expect(mocks.clearPlaybackSlot).not.toHaveBeenCalled();
   });
 
-  it("opens an empty slot without fabricating a playback number and allocates only on Apply", async () => {
+  it("opens an empty slot without fabricating a playback number and allocates a changed draft on Apply", async () => {
     Object.assign(mocks.state, { cueListSetTarget: null, cueListSetArmed: false, playbackSetArmed: true });
     render(<PlaybackFaderBank count={1}/>);
     fireEvent.click(screen.getByRole("button", { name: "Playback representation page 1 playback 1" }));
-    expect(screen.getByText(/Empty slot/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Clear Playback" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Playback Configuration" })).toHaveAttribute("data-topology", "3 buttons · fader");
+    expect(screen.getByRole("radio", { name: "None" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Playback name"), { target: { value: "New Playback" } });
+    expect(screen.getByRole("button", { name: "Apply" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     await waitFor(() => expect(mocks.savePlaybackSlot).toHaveBeenCalledOnce());
     expect(mocks.savePlaybackSlot).toHaveBeenCalledWith(1, 1, expect.objectContaining({ number: 0, button_count: 3, has_fader: true }));
@@ -191,15 +194,34 @@ describe("PlaybackFaderBank authoritative playback surfaces", () => {
     expect(mocks.poolPlaybackAction).not.toHaveBeenCalledWith(7, "select");
   });
 
-  it("records to the concrete hardware-card Cuelist and explicit page", async () => {
-    assignPlayback(); mocks.hardwareConnected = true; mocks.state.storeArmed = true;
+  it.each([["touch", false], ["hardware-connected", true]] as const)("makes the entire %s playback area one explicit-page Record target", async (_surface, hardware) => {
+    assignPlayback(); mocks.hardwareConnected = hardware; mocks.state.storeArmed = true;
     mocks.playbacks.pages.push({ number: 3, name: "Page 3", slots: { "1": 7 } });
     const { container } = render(<PlaybackFaderBank pageNumber={3} count={1}/>);
-    fireEvent.click(container.querySelector(".hardware-playback-card header")!);
-    await waitFor(() => expect(mocks.storePlayback).toHaveBeenCalledWith(0, "front", 3));
-    expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "select");
+    const card = container.querySelector("article")!;
+    expect(card).toHaveClass("store-target");
+    const surfaces = hardware
+      ? [card.querySelector("header")!, screen.getByRole("button", { name: "GO +" }), screen.getByRole("button", { name: "GO −" }), screen.getByRole("button", { name: "FLASH" }), screen.getByRole("slider", { name: "Page 3 playback 1 fader" })]
+      : [screen.getByRole("button", { name: "Playback representation page 3 playback 1" }), screen.getByRole("button", { name: "GO +" }), screen.getByRole("button", { name: "GO −" }), screen.getByRole("button", { name: "FLASH" }), screen.getByRole("slider", { name: "Master" })];
+    for (const surface of surfaces) {
+      fireEvent.pointerDown(surface, { pointerId: 4 });
+      fireEvent.click(surface);
+    }
+    await waitFor(() => expect(mocks.storePlayback).toHaveBeenCalledTimes(surfaces.length));
+    for (const call of mocks.storePlayback.mock.calls) expect(call).toEqual([0, "front", 3]);
+    expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
+    expect(mocks.dispatch).toHaveBeenCalledTimes(surfaces.length);
     expect(mocks.dispatch).toHaveBeenCalledWith({ type: "SET_STORE_ARMED", value: false });
     mocks.playbacks.pages.pop();
+  });
+
+  it.each([["touch", false], ["hardware-connected", true]] as const)("records an empty %s playback card instead of requiring a child control", async (_surface, hardware) => {
+    mocks.hardwareConnected = hardware;
+    Object.assign(mocks.state, { cueListSetTarget: null, cueListSetArmed: false, storeArmed: true });
+    const { container } = render(<PlaybackFaderBank pageNumber={4} count={1}/>);
+    fireEvent.click(container.querySelector("article")!);
+    await waitFor(() => expect(mocks.storePlayback).toHaveBeenCalledWith(0, undefined, 4));
+    expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
   });
 
   it("dispatches the authoritative button index, including held Flash lifetime", () => {
@@ -223,13 +245,25 @@ describe("PlaybackFaderBank authoritative playback surfaces", () => {
     expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "button", { button: 3, pressed: true, surface: "physical" });
   });
 
-  it("renders one configured faderless touch button as the only action", () => {
+  it("makes one configured faderless touch button fill its playback section", () => {
     assignPlayback({ buttons: ["flash", "none", "none"], button_count: 1, has_fader: false });
     const { container } = render(<PlaybackFaderBank count={1}/>);
-    expect(container.querySelector(".faderless-playback-actions")).toHaveClass("action-count-1");
-    expect(container.querySelectorAll(".faderless-playback-actions .ui-button")).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "FLASH" })).toBeInTheDocument();
+    const action = screen.getByRole("button", { name: "FLASH" });
+    expect(action).toHaveClass("single-button-playback-action");
+    expect(action).toHaveTextContent("1 · Front Wash");
+    expect(action).toHaveTextContent("FLASH");
+    expect(container.querySelector(".faderless-playback-actions")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Playback representation page 1 playback 1" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "DISABLED" })).not.toBeInTheDocument();
+  });
+
+  it.each([["two", ["go", "flash", "none"], 2], ["three", ["go", "go_minus", "flash"], 3]] as const)("lays out %s faderless touch buttons side by side", (_count, actions, visibleCount) => {
+    assignPlayback({ buttons: actions, button_count: visibleCount, has_fader: false });
+    const { container } = render(<PlaybackFaderBank count={1}/>);
+    const actionRow = container.querySelector(".faderless-playback-actions")!;
+    expect(actionRow).toHaveStyle({ "--playback-action-count": String(visibleCount) });
+    expect(actionRow.querySelectorAll(".ui-button")).toHaveLength(visibleCount);
+    expect(container.querySelector(".single-button-playback-action")).not.toBeInTheDocument();
   });
 
   it("dispatches TEMP as a press-to-toggle action on successive clicks", () => {
@@ -266,14 +300,12 @@ describe("PlaybackFaderBank authoritative playback surfaces", () => {
     expect(screen.getByRole("dialog", { name: "Playback Configuration" })).toBeInTheDocument();
   });
 
-  it("confirms atomic clear and retains the source object outside this UI operation", async () => {
+  it("clears atomically through None plus Apply", async () => {
     assignPlayback(); mocks.state.playbackSetArmed = true; render(<PlaybackFaderBank count={1}/>);
     fireEvent.click(screen.getByRole("button", { name: "Playback representation page 1 playback 1" }));
-    fireEvent.click(screen.getByRole("button", { name: "Clear Playback" }));
-    fireEvent.click(screen.getByRole("button", { name: "Keep Playback" }));
+    fireEvent.click(screen.getByRole("radio", { name: "None" }));
     expect(mocks.clearPlaybackSlot).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Clear Playback" }));
-    fireEvent.click(screen.getByRole("button", { name: "Confirm Clear Playback" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     await waitFor(() => expect(mocks.clearPlaybackSlot).toHaveBeenCalledWith(1, 1));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Playback Configuration" })).not.toBeInTheDocument());
   });

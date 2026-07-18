@@ -542,7 +542,7 @@ mod tests {
     fn shipped_profile(filename: &str) -> FixtureProfile {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
-            .join("fixture-library")
+            .join("assets/fixture-library")
             .join(filename);
         read_fixture_package(&fs::read(path).unwrap()).unwrap()
     }

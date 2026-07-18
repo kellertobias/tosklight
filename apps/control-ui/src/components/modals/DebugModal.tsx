@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useApp } from "../../state/AppContext";
 import { useServer } from "../../api/ServerContext";
-import { Button } from "../common";
+import { Button, ModalPortal } from "../common";
 import { ModalTitleBar } from "../common/ModalTitleBar";
 
 type LogEntry = { revision: number; kind: string; payload: unknown };
@@ -53,5 +53,5 @@ export function DebugModal() {
       <Button role="menuitem" onClick={() => { server.simulateError(null); closeDebugMenu(); }}>Clear Simulated Errors</Button>
     </div>}
   </div>;
-  return <div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && close()}><section className="nested-modal debug-modal" role="dialog" aria-modal="true" aria-label="Desk Status"><ModalTitleBar title="Desk Status" actions={debugMenu} closeLabel="Close Desk Status" onClose={close}/><div className="debug-diagnostics"><section><b>{server.bootstrap?.output_health.frame_hz.toFixed(1) ?? "—"} Hz</b><small>Current frame rate</small></section><section><b>{server.bootstrap?.output_health.deadline_misses ?? 0}</b><small>Scheduler deadline misses</small></section><section><b>{server.bootstrap?.output_health.send_errors ?? 0}</b><small>Network output errors</small></section></div><h4>Server event log</h4><pre className="server-log">{logs.length ? logs.map((entry) => `${entry.revision.toString().padStart(6, "0")}  ${entry.kind}  ${JSON.stringify(entry.payload)}`).join("\n") : "No server events logged."}</pre></section></div>;
+  return <ModalPortal><div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && close()}><section className="nested-modal debug-modal" role="dialog" aria-modal="true" aria-label="Desk Status"><ModalTitleBar title="Desk Status" actions={debugMenu} closeLabel="Close Desk Status" onClose={close}/><div className="debug-diagnostics"><section><b>{server.bootstrap?.output_health.frame_hz.toFixed(1) ?? "—"} Hz</b><small>Current frame rate</small></section><section><b>{server.bootstrap?.output_health.deadline_misses ?? 0}</b><small>Scheduler deadline misses</small></section><section><b>{server.bootstrap?.output_health.send_errors ?? 0}</b><small>Network output errors</small></section></div><h4>Server event log</h4><pre className="server-log">{logs.length ? logs.map((entry) => `${entry.revision.toString().padStart(6, "0")}  ${entry.kind}  ${JSON.stringify(entry.payload)}`).join("\n") : "No server events logged."}</pre></section></div></ModalPortal>;
 }

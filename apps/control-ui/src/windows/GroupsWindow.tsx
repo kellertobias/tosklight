@@ -4,7 +4,7 @@ import type { WindowProps } from "./windowTypes";
 import { useServer } from "../api/ServerContext";
 import type { StoredGroup, VersionedObject } from "../api/types";
 import { useApp } from "../state/AppContext";
-import { Button, ColorPickerField, FormLayout, IconPickerField, Input, TextField } from "../components/common";
+import { Button, ColorPickerField, FormLayout, IconPickerField, Input, ModalPortal, TextField } from "../components/common";
 import { ButtonGrid, WindowHeader, WindowScrollArea } from "../components/window-kit";
 import { RecordModeDialog, type RecordMode } from "../components/shared/RecordModeDialog";
 import { requestUpdateTarget } from "../components/control/updateWorkflow";
@@ -376,7 +376,7 @@ function GroupPropertiesDialog({ group, onClose, onSave }: {
     await onSave({ name: name.trim(), color, icon });
     setSaving(false);
   };
-  return <div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
+  return <ModalPortal><div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
     <section className="nested-modal group-properties-modal" role="dialog" aria-modal="true" aria-label="Group properties">
       <Button className="modal-close" onClick={onClose}>×</Button>
       <h3>Group {group.id} properties</h3>
@@ -390,5 +390,5 @@ function GroupPropertiesDialog({ group, onClose, onSave }: {
         <Button variant="primary" disabled={!name.trim() || saving} onClick={() => void save()}>{saving ? "Saving…" : "Save group"}</Button>
       </footer>
     </section>
-  </div>;
+  </div></ModalPortal>;
 }

@@ -83,6 +83,10 @@ export function NumericPad({ demo = false }: { demo?: boolean } = {}) {
       return;
     }
     if (key === "SET" && server.commandLinePristine && state.builtIn === "patch") return dispatch({ type: "SET_PATCH_ARMED", value: !state.patchSetArmed });
+    if (key === "SET" && server.commandLinePristine && document.querySelector(".cue-settings-compact-fallback")) {
+      window.dispatchEvent(new CustomEvent("light:desk-action", { detail: "set" }));
+      return;
+    }
     if (key === "SET" && server.commandLinePristine && document.querySelector(".cuelist-window.pool-window")) {
       if (state.storeArmed) dispatch({ type: "SET_STORE_ARMED", value: false });
       return dispatch({ type: "SET_CUELIST_SET_ARMED", value: !state.cueListSetArmed });

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { useServer } from "../../api/ServerContext";
 import { useApp } from "../../state/AppContext";
 import { HorizontalTouchFader } from "../control/HorizontalTouchFader";
-import { Button } from "../common";
+import { Button, ModalPortal } from "../common";
 import { compatibleSpecialDialogActions } from "./SpecialDialogsModal";
 
 function countProgrammerValues(programmer: { values: unknown[]; group_values?: Record<string, Record<string, unknown>> }) {
@@ -67,7 +67,7 @@ export function SystemControlsModal() {
       setStoppingAll(false);
     }
   };
-  return <div className="modal-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) close(); }}><section className="modal-card system-controls-card" role="dialog" aria-modal="true" aria-label="Running and output">
+  return <ModalPortal><div className="modal-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) close(); }}><section className="modal-card system-controls-card" role="dialog" aria-modal="true" aria-label="Running and output">
     <header className="system-controls-header"><div><h2>Running & Output</h2><small>Shift + Clear / Shift + Delete</small></div><Button className="modal-close" onClick={close}>×</Button></header>
     <div className="running-summary"><span><b>{pagePlaybacks.length + virtualPlaybacks.length + activeProgrammers.length + runningDynamics.length}</b> active items</span><Button className="danger" disabled={stoppingAll || (!runningPlaybacks.length && !activeProgrammers.length)} onClick={() => void stopEverything()}>{stoppingAll ? "Stopping…" : "Stop everything"}</Button></div>
     <div className="running-sections">
@@ -77,5 +77,5 @@ export function SystemControlsModal() {
       <section><h3>Dynamics <small>{runningDynamics.length}</small></h3><div className="programmer-list">{runningDynamics.map(({ playback, cueList, cue, index }) => <article key={`${playback.cue_list_id}-${index}`}><span><b>{cueList?.name ?? "Cuelist"} · Dynamic {index + 1}</b><small>Cue {cue?.number ?? playback.cue_index + 1} · Stop releases its source playback</small></span><Button className="danger" title="Stops this Dynamic by releasing its source playback" aria-label={`Stop Dynamic ${index + 1} from ${cueList?.name ?? "Cuelist"}`} onClick={() => void server.playbackAction(playback.cue_list_id, "release")}>Stop</Button></article>)}{!runningDynamics.length && <p className="empty-window-message">No dynamics are running.</p>}</div></section>
     </div>
     <h3>Output controls</h3><section className="master-controls"><HorizontalTouchFader label="Grand master" value={master} onChange={(value) => { setMaster(value); void server.setMaster(value / 100, undefined); }}/><Button className={blackout ? "danger active" : "danger"} onClick={() => { const next = !blackout; setBlackout(next); dispatch({ type: "SET_BLACKOUT", value: next }); void server.setMaster(undefined, next); }}>{blackout ? "RELEASE BLACKOUT" : "BLACKOUT"}</Button><Button className="lamp-on-all" disabled={!server.selectedFixtures.length} onClick={() => void allLampsOn("click")} onPointerDown={() => void allLampsOn("press")} onPointerUp={() => void allLampsOn("release")} onPointerCancel={() => void allLampsOn("release")} onKeyDown={(event: KeyboardEvent) => { if (!event.repeat && (event.key === "Enter" || event.key === " ")) void allLampsOn("press"); }} onKeyUp={(event: KeyboardEvent) => { if (event.key === "Enter" || event.key === " ") void allLampsOn("release"); }}>All Lamps On</Button></section>{lampResult && <p className="lamp-command-result">{lampResult}</p>}
-  </section></div>;
+  </section></div></ModalPortal>;
 }

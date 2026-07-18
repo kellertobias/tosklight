@@ -213,7 +213,7 @@ The programmer remembers fade and start delay on each changed value. When no `[T
 
 ## Recording
 
-After building a scene in the programmer, press `[REC]` and choose a recordable target in the UI. Targets include presets, groups, and Cuelists in their pools, as well as playback buttons and faders on physical or simulated hardware. Recording a Cuelist in the pool does not assign it to any playback page.
+After building a scene in the programmer, press `[REC]` and choose a recordable target in the UI. Targets include presets, groups, and Cuelists in their pools, as well as the whole playback area on physical or simulated hardware. While Record is armed, touching a playback label, button, or fader records to that playback instead of operating the touched control. Recording a Cuelist in the pool does not assign it to any playback page.
 
 The key immediately after `[REC]` chooses the record operation:
 

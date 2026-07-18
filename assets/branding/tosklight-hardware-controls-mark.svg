@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title description">
+  <title id="title">ToskLight Hardware Controls mark</title>
+  <desc id="description">Three ascending control faders on a transparent background.</desc>
+  <defs>
+    <linearGradient id="track" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#cdd7e4"/>
+      <stop offset="0.4" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#b9c4d2"/>
+    </linearGradient>
+    <linearGradient id="cap" x1="0" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#cbd5e2"/>
+    </linearGradient>
+    <linearGradient id="indicator" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#1674d2"/>
+      <stop offset="0.5" stop-color="#66e6ff"/>
+      <stop offset="1" stop-color="#1598ea"/>
+    </linearGradient>
+  </defs>
+  <path d="M260 720 512 500 764 286" fill="none" stroke="#55d8ff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="url(#track)">
+    <rect x="238" y="150" width="44" height="724" rx="22"/>
+    <rect x="490" y="150" width="44" height="724" rx="22"/>
+    <rect x="742" y="150" width="44" height="724" rx="22"/>
+  </g>
+  <g fill="url(#cap)" stroke="#ffffff" stroke-width="5">
+    <rect x="184" y="642" width="152" height="146" rx="25"/>
+    <rect x="436" y="428" width="152" height="146" rx="25"/>
+    <rect x="688" y="214" width="152" height="146" rx="25"/>
+  </g>
+  <g fill="url(#indicator)">
+    <rect x="187" y="704" width="146" height="23"/>
+    <rect x="439" y="490" width="146" height="23"/>
+    <rect x="691" y="276" width="146" height="23"/>
+  </g>
+</svg>

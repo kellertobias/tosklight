@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title description">
+  <title id="title">ToskLight print icon</title>
+  <desc id="description">A print-ready ToskLight icon without raster effects.</desc>
+  <defs>
+    <linearGradient id="tile" x1="150" y1="96" x2="852" y2="930" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0b1731"/>
+      <stop offset="1" stop-color="#020713"/>
+    </linearGradient>
+    <linearGradient id="beam" x1="516" y1="427" x2="704" y2="718" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#d4f8ff"/>
+      <stop offset="0.28" stop-color="#72dcff"/>
+      <stop offset="0.72" stop-color="#25a9f5"/>
+      <stop offset="1" stop-color="#1261c2"/>
+    </linearGradient>
+  </defs>
+  <rect x="54" y="42" width="916" height="916" rx="198" fill="url(#tile)"/>
+  <rect x="57" y="45" width="910" height="910" rx="195" fill="none" stroke="#7b9ed2" stroke-opacity="0.28" stroke-width="6"/>
+  <path d="M355 740V326c0-74 52-103 116-65l330 196c66 39 66 91 1 135L468 817c-63 42-113 14-113-77Z" fill="none" stroke="#ffffff" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M357 361c25-50 70-59 115-26l80 59" fill="none" stroke="#ffffff" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M358 385 458 475" fill="none" stroke="#ffffff" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M420 424c10-50 50-78 94-66 46 13 68 54 54 99" fill="none" stroke="#ffffff" stroke-width="32" stroke-linecap="round"/>
+  <path d="M532 427 796 553 655 716Z" fill="url(#beam)" stroke="#9de8ff" stroke-width="8" stroke-linejoin="round"/>
+  <ellipse cx="522" cy="425" rx="36" ry="31" transform="rotate(-24 522 425)" fill="#d8f8ff"/>
+  <path d="M500 409c10-12 27-17 41-10" fill="none" stroke="#ffffff" stroke-opacity="0.72" stroke-width="7" stroke-linecap="round"/>
+</svg>

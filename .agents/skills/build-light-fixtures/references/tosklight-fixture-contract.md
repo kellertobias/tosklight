@@ -4,7 +4,7 @@ Re-check the implementation because schema and verification seams can evolve.
 
 ## Package ownership
 
-All shipped and operator-transferred fixtures use `fixture-library/*.toskfixture`. Fixture definitions must not be added to Rust or TypeScript catalogs. A `.toskfixture` is a ZIP containing one root `fixture.json` plus only the assets referenced by that manifest.
+All shipped and operator-transferred fixtures use `assets/fixture-library/*.toskfixture`. Fixture definitions must not be added to Rust or TypeScript catalogs. A `.toskfixture` is a ZIP containing one root `fixture.json` plus only the assets referenced by that manifest.
 
 The wrapper is:
 
@@ -47,9 +47,9 @@ Represent documented unused slots as static channels. Mark unknown facts unknown
 
 ## Package and runtime verification
 
-- Validate every archive with `cargo run -p light-fixture --bin fixture-package -- validate fixture-library/*.toskfixture`; write/export round trips must retain normalized content and stable IDs.
+- Validate every archive with `cargo run -p light-fixture --bin fixture-package -- validate assets/fixture-library/*.toskfixture`; write/export round trips must retain normalized content and stable IDs.
 - Assert exact profile/mode inventory, slot coverage, resolution bytes, logical heads, safe/Highlight values, and GLB/icon presence where required.
-- Start `light-server` with `--fixture-package-dir "$PWD/fixture-library"` and verify `/api/v1/fixture-profiles` plus `/api/v1/fixture-library`.
+- Start `light-server` with `--fixture-package-dir "$PWD/assets/fixture-library"` and verify `/api/v1/fixture-profiles` plus `/api/v1/fixture-library`.
 - Start twice against the same temporary data directory to prove idempotence.
 - Verify a later operator revision is not overwritten by a changed startup package.
 

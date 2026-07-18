@@ -52,8 +52,8 @@ export function PlaybackFaderBank({ pageNumber, firstSlot = 1, count, rows, butt
     event.preventDefault();
     event.stopPropagation();
     const cueListId = playback?.target.type === "cue_list" ? playback.target.cue_list_id : undefined;
-    await server.storePlayback(slot - 1, cueListId);
     dispatch({ type: "SET_STORE_ARMED", value: false });
+    await server.storePlayback(slot - 1, cueListId, activePageNumber);
   };
   const activateHardwareCard = async (
     event: ReactMouseEvent<HTMLElement>,
@@ -73,15 +73,6 @@ export function PlaybackFaderBank({ pageNumber, firstSlot = 1, count, rows, butt
       return;
     }
     await selectPlayback(playback);
-    if (state.storeArmed && playback.target.type === "cue_list") {
-      await server.storePlayback(
-        slot - 1,
-        playback.target.cue_list_id,
-        activePageNumber,
-      );
-      dispatch({ type: "SET_STORE_ARMED", value: false });
-      return;
-    }
     if (playback.target.type === "cue_list") {
       dispatch({ type: "OPEN_BUILTIN", kind: "cuelists" });
       dispatch({ type: "OPEN_BUILTIN_CUELIST", number: playback.number });
@@ -164,6 +155,11 @@ export function PlaybackFaderBank({ pageNumber, firstSlot = 1, count, rows, butt
       const actionButtons = faderActions.map(({ id, label, ...props }) => <Button {...props} key={id}>{label}</Button>);
       const touchActions = faderActions.filter((_, button) => actions[button] !== "none");
       const touchActionButtons = touchActions.map(({ id, label, ...props }) => <Button {...props} key={id}>{label}</Button>);
+      const singleFaderlessAction = !hasFader && touchActions.length === 1 ? touchActions[0] : null;
+      const singleFaderlessButton = singleFaderlessAction ? (() => {
+        const { id, label, className, ...props } = singleFaderlessAction;
+        return <Button {...props} aria-label={typeof label === "string" ? label : undefined} className={`${className ?? ""} single-button-playback-action`} key={id}><b>{slot} · {playback?.name ?? "Empty"}</b><span>{label}</span></Button>;
+      })() : null;
       const assignmentTarget = assignmentPending && <Button className="playback-assignment-target" aria-label={`Assign Cuelist ${state.cueListSetTarget} to page ${activePageNumber} playback ${slot}`} onClick={() => void assignPlayback(slot)}><b>Assign Cuelist {state.cueListSetTarget}</b><small>to playback {activePageNumber}.{slot}</small></Button>;
       const configurationTarget = !assignmentPending && setClickArmed() && <div className="playback-assignment-target playback-configuration-target" aria-hidden="true"><b>Configure Playback</b><small>{activePageNumber}.{slot} · {playback?.name ?? "Empty"}</small></div>;
       const interceptPointer = (event: ReactPointerEvent<HTMLElement>) => {
@@ -174,9 +170,9 @@ export function PlaybackFaderBank({ pageNumber, firstSlot = 1, count, rows, butt
         event.preventDefault(); event.stopPropagation(); openConfiguration(playback, slot);
       };
       const interceptClick = (event: ReactMouseEvent<HTMLElement>) => {
+        if (state.storeArmed) { void recordPlayback(event, playback, slot); return; }
         if (!hardware) {
           if (state.updateArmed) { event.preventDefault(); event.stopPropagation(); requestPlaybackUpdate(); return; }
-          if (state.storeArmed) { void recordPlayback(event, playback, slot); return; }
           const firstButton = (event.target as Element).closest('[data-playback-button-index="1"]');
           if (setClickArmed() || (firstButton && (event.shiftKey || state.shiftArmed))) { event.preventDefault(); event.stopPropagation(); openConfiguration(playback, slot); return; }
           if (selectionPending && playback) {
@@ -195,7 +191,7 @@ export function PlaybackFaderBank({ pageNumber, firstSlot = 1, count, rows, butt
       if (hardware) {
         const cueIndex = active?.enabled === false ? -1 : active?.cue_index ?? -1;
         const hardwareRepresentation = <div className="playback-software-representation" style={{ minWidth: 0, width: "100%", overflow: "hidden", padding: 0, textAlign: "left", textOverflow: "ellipsis", whiteSpace: "nowrap", userSelect: "none", cursor: "default" }}><b>{slot} · {playback?.name ?? "Empty"}</b></div>;
-        return <article data-set-click-target data-page={activePageNumber} data-playback-slot={slot} data-playback-row={rowIndex} data-row-units={row ? playbackRowUnits(row, hardware) : 1} data-selected-playback={selected || undefined} data-selection-pending={selectionPending || undefined} className={`hardware-playback-card ${playback ? "playback-colored" : ""} ${active?.enabled !== false && active ? "running" : ""} ${active?.loaded_cue_number != null ? "loaded" : ""} ${active?.fader_pickup_required ? "pickup-required" : ""} ${active?.swap_active ? "swap-active" : ""} ${selected ? "selected" : ""} ${!playback ? "empty" : ""} ${assignmentPending ? "assignment-pending" : ""} ${state.updateArmed ? "update-target" : ""}`} style={cardStyle} key={`${slot}-${playback?.number ?? "empty"}`} onClickCapture={interceptClick} onClick={(event) => void activateHardwareCard(event, playback, slot)}>
+        return <article data-set-click-target data-page={activePageNumber} data-playback-slot={slot} data-playback-row={rowIndex} data-row-units={row ? playbackRowUnits(row, hardware) : 1} data-selected-playback={selected || undefined} data-selection-pending={selectionPending || undefined} className={`hardware-playback-card ${playback ? "playback-colored" : ""} ${active?.enabled !== false && active ? "running" : ""} ${active?.loaded_cue_number != null ? "loaded" : ""} ${active?.fader_pickup_required ? "pickup-required" : ""} ${active?.swap_active ? "swap-active" : ""} ${selected ? "selected" : ""} ${!playback ? "empty" : ""} ${assignmentPending ? "assignment-pending" : ""} ${state.storeArmed ? "store-target" : ""} ${state.updateArmed ? "update-target" : ""}`} style={cardStyle} key={`${slot}-${playback?.number ?? "empty"}`} onPointerDownCapture={interceptPointer} onClickCapture={interceptClick} onClick={(event) => void activateHardwareCard(event, playback, slot)}>
           {assignmentTarget}
           {configurationTarget}
           <header>{hardwareRepresentation}<strong>{page?.number ?? pageNumber ?? state.playbackPage + 1}.{slot}</strong></header>
@@ -203,16 +199,17 @@ export function PlaybackFaderBank({ pageNumber, firstSlot = 1, count, rows, butt
           <div className="hardware-playback-controls"><footer>{actionButtons}</footer>{hasFader && <label className="hardware-fader" style={{ "--hardware-fader-level": `${value}%` } as CSSProperties}><i/><b>{playbackFaderDisplay(playback, active, value, server.configuration, server.playbacks?.authoritative_controls, state.blackout)}</b><Input aria-label={`Page ${activePageNumber} playback ${slot} fader`} type="range" min="0" max="100" step="0.1" value={value} onInput={(event) => playback && void server.poolPlaybackAction(playback.number, "master", { value: Number(event.currentTarget.value) / 100, surface: "physical" })}/></label>}</div>
         </article>;
       }
-      return <article data-set-click-target data-page={activePageNumber} data-playback-slot={slot} data-playback-row={rowIndex} data-row-units={row ? playbackRowUnits(row, hardware) : 1} data-selected-playback={selected || undefined} data-selection-pending={selectionPending || undefined} className={`${playback ? "playback-colored" : ""} ${active?.enabled !== false && active ? "running" : ""} ${active?.loaded_cue_number != null ? "loaded" : ""} ${active?.fader_pickup_required ? "pickup-required" : ""} ${active?.swap_active ? "swap-active" : ""} ${selected ? "selected" : ""} ${!playback ? "empty" : ""} ${assignmentPending ? "assignment-pending" : ""} ${state.updateArmed ? "update-target" : ""}`} style={cardStyle} key={`${slot}-${playback?.number ?? "empty"}`} onPointerDownCapture={interceptPointer} onClickCapture={interceptClick} onClick={(event: ReactMouseEvent) => { if (isSetContextClick(event.nativeEvent)) openConfiguration(playback, slot); }}>
+      return <article data-set-click-target data-page={activePageNumber} data-playback-slot={slot} data-playback-row={rowIndex} data-row-units={row ? playbackRowUnits(row, hardware) : 1} data-selected-playback={selected || undefined} data-selection-pending={selectionPending || undefined} className={`${playback ? "playback-colored" : ""} ${active?.enabled !== false && active ? "running" : ""} ${active?.loaded_cue_number != null ? "loaded" : ""} ${active?.fader_pickup_required ? "pickup-required" : ""} ${active?.swap_active ? "swap-active" : ""} ${selected ? "selected" : ""} ${!playback ? "empty" : ""} ${assignmentPending ? "assignment-pending" : ""} ${state.storeArmed ? "store-target" : ""} ${state.updateArmed ? "update-target" : ""}`} style={cardStyle} key={`${slot}-${playback?.number ?? "empty"}`} onPointerDownCapture={interceptPointer} onClickCapture={interceptClick} onClick={(event: ReactMouseEvent) => { if (isSetContextClick(event.nativeEvent)) openConfiguration(playback, slot); }}>
         {assignmentTarget}
         {configurationTarget}
-        {representation}
+        {!singleFaderlessButton && representation}
         {hasFader && <VerticalTouchFader disabled={assignmentPending || !playback} label={playbackFaderLabel(playback)} value={value} accentColor={playback?.color}
           mode={playbackFaderModeFeedback(playback, active)}
           display={playbackFaderDisplay(playback, active, value, server.configuration, server.playbacks?.authoritative_controls, state.blackout)}
           actions={touchActions}
           onChange={(next) => playback && void server.poolPlaybackAction(playback.number, "master", { value: next / 100, surface: "physical" })}/>}
-        {!hasFader && touchActionButtons.length > 0 && <footer className={`faderless-playback-actions action-count-${touchActionButtons.length}`}>{touchActionButtons}</footer>}
+        {singleFaderlessButton}
+        {!hasFader && !singleFaderlessButton && touchActionButtons.length > 0 && <footer className={`faderless-playback-actions action-count-${touchActionButtons.length}`} style={{ "--playback-action-count": touchActionButtons.length } as CSSProperties}>{touchActionButtons}</footer>}
       </article>;
     })}
   </div>{configuration && <PlaybackConfigurationModal playback={configuration.playback} page={configuration.page} slot={configuration.slot} empty={configuration.empty} onClose={() => setConfiguration(null)}/>}</>;

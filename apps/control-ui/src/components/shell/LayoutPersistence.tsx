@@ -41,12 +41,12 @@ export function LayoutPersistence() {
       stageOrbitX: state.stageOrbitX, stageOrbitY: state.stageOrbitY, stageGroupsVisible: state.stageGroupsVisible,
       stageShowSelection: state.stageShowSelection, stageShowFloorGrid: state.stageShowFloorGrid, stageShowBeamGuides: state.stageShowBeamGuides, stageEnvironmentBrightness: state.stageEnvironmentBrightness, dmxDotSize: state.dmxDotSize,
       fixtureSheetOrder: state.fixtureSheetOrder, fixtureSheetActiveOnly: state.fixtureSheetActiveOnly, fixtureSheetCueListId: state.fixtureSheetCueListId,
-      fixtureSheetColumns: state.fixtureSheetColumns, fixtureSheetShowType: state.fixtureSheetShowType, fixtureSheetShowPatch: state.fixtureSheetShowPatch,
-      fixtureSheetShowSubheads: state.fixtureSheetShowSubheads, fixtureSheetShowMasterHeads: state.fixtureSheetShowMasterHeads,
+      fixtureSheetColumns: state.fixtureSheetColumns, fixtureSheetShowType: state.fixtureSheetShowType,
+      fixtureSheetIncludedHeads: state.fixtureSheetIncludedHeads,
       fixtureGroupsVisible: state.fixtureGroupsVisible, presetGroupsVisible: state.presetGroupsVisible,
     } }), 600);
     return () => window.clearTimeout(timer);
-  }, [state.desks, state.activeDeskId, state.dockMode, state.builtIn, state.lastBuiltIn, state.presetFamily, state.presetPoolColors, state.playbackColumns, state.playbackRows, state.playbackPage, state.stageMode, state.stageView, state.stageZoom, state.stagePanX, state.stagePanY, state.stageOrbitX, state.stageOrbitY, state.stageGroupsVisible, state.stageShowSelection, state.stageShowFloorGrid, state.stageShowBeamGuides, state.stageEnvironmentBrightness, state.dmxDotSize, state.fixtureSheetOrder, state.fixtureSheetActiveOnly, state.fixtureSheetCueListId, state.fixtureSheetColumns, state.fixtureSheetShowType, state.fixtureSheetShowPatch, state.fixtureSheetShowSubheads, state.fixtureSheetShowMasterHeads, state.fixtureGroupsVisible, state.presetGroupsVisible, scope, server.deskLayoutScope]);
+  }, [state.desks, state.activeDeskId, state.dockMode, state.builtIn, state.lastBuiltIn, state.presetFamily, state.presetPoolColors, state.playbackColumns, state.playbackRows, state.playbackPage, state.stageMode, state.stageView, state.stageZoom, state.stagePanX, state.stagePanY, state.stageOrbitX, state.stageOrbitY, state.stageGroupsVisible, state.stageShowSelection, state.stageShowFloorGrid, state.stageShowBeamGuides, state.stageEnvironmentBrightness, state.dmxDotSize, state.fixtureSheetOrder, state.fixtureSheetActiveOnly, state.fixtureSheetCueListId, state.fixtureSheetColumns, state.fixtureSheetShowType, state.fixtureSheetIncludedHeads, state.fixtureGroupsVisible, state.presetGroupsVisible, scope, server.deskLayoutScope]);
 
   return null;
 }

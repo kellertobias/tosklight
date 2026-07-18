@@ -13,7 +13,7 @@ Build desk-transferable fixture packages from authoritative documentation and pr
 2. Identify the exact manufacturer, model, hardware revision, firmware/manual revision, and requested scope. Treat similarly named products as different fixtures unless the manual explicitly defines them as modes of one product.
 3. Find the official product page, user manual, and DMX chart. Prefer manufacturer-hosted sources. Record exact mode names, footprints, channel order, coarse/fine relationships, functions, defaults, safe shutter/open values, pan/tilt ranges, dimensions, weight, power, emitters, zones, and pixels. Do not invent undocumented data.
 4. Write a compact inventory before editing: stable profile identity, every requested mode and footprint, multi-head layout, physical facts, assets, and source URLs. Reconcile “all modes” against the complete manual list.
-5. Export or unpack a nearby `.toskfixture` as the schema template. Author `fixture.json` and optional `assets/photograph.*`, `assets/icon.*`, and `assets/model.glb` under `fixture-library/`. The archive itself, not a code generator retained in the product, is the deliverable.
+5. Export or unpack a nearby `.toskfixture` as the schema template. Author `fixture.json` and optional `assets/photograph.*`, `assets/icon.*`, and `assets/model.glb` under `assets/fixture-library/`. The archive itself, not a code generator retained in the product, is the deliverable.
 6. Generate UUIDs once for the profile, modes, heads, channels, functions, and geometry parts, then retain them. UUID v4 is acceptable. Splits use stable positive numbers, not UUIDs. Preserve manual mode order and create new identities only for genuinely different semantic objects.
 7. Validate every new or changed archive with the repository package validator. Add focused tests for exact mode names and footprints, slot ownership, fine-byte allocation, logical heads, safe Highlight values, asset round trips, startup idempotency, and custom Stage geometry.
 8. Run the non-interactive verification ladder below. Inspect the loaded API profile and package inventory; do not claim success from JSON or source inspection alone.
@@ -40,7 +40,7 @@ Start narrow, then widen according to risk:
 
 ```sh
 cargo fmt --all -- --check
-cargo run -p light-fixture --bin fixture-package -- validate fixture-library/*.toskfixture
+cargo run -p light-fixture --bin fixture-package -- validate assets/fixture-library/*.toskfixture
 cargo test -p light-fixture
 cargo check -p light-server
 (cd apps/control-ui && npm run typecheck)
@@ -55,7 +55,7 @@ cargo build -p light-server
 fixture_verify_dir=$(mktemp -d)
 target/debug/light-server \
   --data-dir "$fixture_verify_dir" \
-  --fixture-package-dir "$PWD/fixture-library" \
+  --fixture-package-dir "$PWD/assets/fixture-library" \
   --bind 127.0.0.1:5011 \
   --osc-bind 127.0.0.1:0 \
   >"$fixture_verify_dir/server.log" 2>&1 &

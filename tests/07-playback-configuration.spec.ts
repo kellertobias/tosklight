@@ -92,7 +92,7 @@ type Pbk005State = PreparedShow & {
 test.describe("docs/testing/07-playback-configuration.md", () => {
   pairedScenario<Pbk001State>({
     id: "PBK-001",
-    title: "Set inspection resolves one playback identity and Cancel is mutation-free",
+    title: "Set inspection resolves one playback identity and Close is mutation-free",
     arrange: async ({ api, bench }, surface) => {
       const prepared = await prepareShow(api, bench, `pbk-001-paired-${surface}`, "compact-rig");
       await installPlaybacks(api, [definition(40, "Configured Sequence", { type: "cue_list", cue_list_id: prepared.cueListId })], { 1: 40 });
@@ -111,10 +111,11 @@ test.describe("docs/testing/07-playback-configuration.md", () => {
       await armSet(page);
       await page.getByRole("button", { name: "Playback representation page 1 playback 1" }).click();
       const modal = await expectConfigurationModal(page, 1, 1);
-      await expect(modal.getByRole("button", { name: "Playback Function", exact: true })).toBeVisible();
-      await expect(modal.getByRole("button", { name: "Playback Layout", exact: true })).toBeVisible();
+      await expect(modal.getByRole("button", { name: "Function", exact: true })).toBeVisible();
+      await expect(modal.getByRole("button", { name: "Behavior", exact: true })).toBeVisible();
+      await expect(modal.getByRole("button", { name: "Layout", exact: true })).toBeVisible();
       state.inspected = await playbackConfigurationObservation(api, 1, 1, state.cueListId);
-      await modal.getByRole("button", { name: "Cancel", exact: true }).click();
+      await modal.getByRole("button", { name: "Close playback configuration", exact: true }).click();
       await expect(modal).toBeHidden();
     },
     assert: async ({ api }, state) => {
@@ -173,9 +174,10 @@ test.describe("docs/testing/07-playback-configuration.md", () => {
         await armSet(page);
         await target().click();
         const modal = await expectConfigurationModal(page, 1, 1);
-        await expect(modal.getByRole("button", { name: "Playback Function", exact: true })).toBeVisible();
-        await expect(modal.getByRole("button", { name: "Playback Layout", exact: true })).toBeVisible();
-        await modal.getByRole("button", { name: "Cancel", exact: true }).click();
+        await expect(modal.getByRole("button", { name: "Function", exact: true })).toBeVisible();
+        await expect(modal.getByRole("button", { name: "Behavior", exact: true })).toBeVisible();
+        await expect(modal.getByRole("button", { name: "Layout", exact: true })).toBeVisible();
+        await modal.getByRole("button", { name: "Close playback configuration", exact: true }).click();
         await expect(modal).toBeHidden();
         expect(await inertSnapshot(api, 41)).toEqual(before);
       });
@@ -184,9 +186,8 @@ test.describe("docs/testing/07-playback-configuration.md", () => {
     await armSet(page);
     await page.getByRole("button", { name: "Playback representation page 1 playback 2" }).click();
     const empty = await expectConfigurationModal(page, 1, 2);
-    await expect(empty.getByText(/Empty slot/)).toBeVisible();
-    await expect(empty.getByRole("button", { name: "Clear Playback" })).toHaveCount(0);
-    await empty.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(empty.getByRole("radio", { name: "None" })).toBeVisible();
+    await empty.getByRole("button", { name: "Close playback configuration", exact: true }).click();
     expect((await pageObject(api, 1)).body.slots["2"]).toBeUndefined();
     expect(await inertSnapshot(api, 41)).toEqual(before);
   });
@@ -217,11 +218,11 @@ test.describe("docs/testing/07-playback-configuration.md", () => {
     await expect(selectTrigger(modal, "Presentation")).toBeVisible();
     await chooseSelect(page, modal, "Presentation", "Image background");
     await expect(modal.getByLabel("Image background")).toBeVisible();
-    await modal.getByRole("button", { name: "Playback Layout", exact: true }).click();
+    await modal.getByRole("button", { name: "Layout", exact: true }).click();
     await expect(selectTrigger(modal, "Top button")).toBeVisible();
     await expect(selectTrigger(modal, "Middle button")).toHaveCount(0);
     await expect(modal.getByText("No fader on this playback.", { exact: true })).toBeVisible();
-    await modal.getByRole("button", { name: "Cancel", exact: true }).click();
+    await modal.getByRole("button", { name: "Close playback configuration", exact: true }).click();
     expect(await inertSnapshot(api, 42)).toEqual(before);
 
     await armSet(page);
@@ -229,13 +230,13 @@ test.describe("docs/testing/07-playback-configuration.md", () => {
     modal = await expectConfigurationModal(page, 1, 2);
     await expect(modal).toHaveAttribute("data-topology", "1 button · faderless");
     await expect(selectTrigger(modal, "Presentation")).toBeVisible();
-    await modal.getByRole("button", { name: "Cancel", exact: true }).click();
+    await modal.getByRole("button", { name: "Close playback configuration", exact: true }).click();
     expect((await pageObject(api, 1)).body.slots["2"]).toBeUndefined();
   });
 
   pairedScenario<Pbk002State>({
     id: "PBK-002",
-    title: "Cuelist assignment, color, and confirmed Clear are atomic",
+    title: "Cue List assignment, color, and None plus Apply clear are atomic",
     arrange: async ({ api, bench }, surface) => {
       const prepared = await prepareShow(api, bench, `pbk-002-paired-${surface}`, "default-stage");
       await writePage(api, 1, {});
@@ -252,17 +253,17 @@ test.describe("docs/testing/07-playback-configuration.md", () => {
       await armSet(page);
       await page.getByRole("button", { name: "Playback representation page 1 playback 1" }).click();
       let modal = await expectConfigurationModal(page, 1, 1);
-      await chooseSelect(page, modal, "Cuelist", "Configured Sequence");
-      const swatch = modal.getByRole("button", { name: "Playback color #8b5cf6" });
-      await swatch.click();
+      await modal.getByRole("radio", { name: "Configured Sequence", exact: true }).click();
+      await choosePlaybackColor(page, modal, "#8b5cf6");
       await modal.getByRole("button", { name: "Apply", exact: true }).click();
       await expect(modal).toBeHidden();
       state.assigned = await playbackConfigurationObservation(api, 1, 1, state.cueListId);
       await armSet(page);
       await page.getByRole("button", { name: "Playback representation page 1 playback 1" }).click();
       modal = await expectConfigurationModal(page, 1, 1);
-      await modal.getByRole("button", { name: "Clear Playback", exact: true }).click();
-      await modal.getByRole("button", { name: "Confirm Clear Playback", exact: true }).click();
+      await modal.getByRole("radio", { name: "None", exact: true }).click();
+      await expect(modal.getByText("Playback will be cleared", { exact: true })).toBeVisible();
+      await modal.getByRole("button", { name: "Apply", exact: true }).click();
       await expect(modal).toBeHidden();
     },
     assert: async ({ api }, state) => {
@@ -287,11 +288,11 @@ test.describe("docs/testing/07-playback-configuration.md", () => {
     await writePage(api, 1, {});
     const assignments: Array<{ slot: number; target: PlaybackTarget; buttons: [string, string, string]; count: number; fader: string; hasFader: boolean }> = [
       { slot: 1, target: { type: "cue_list", cue_list_id: prepared.cueListId }, buttons: ["go_minus", "go", "flash"], count: 1, fader: "master", hasFader: false },
-      { slot: 2, target: { type: "group", group_id: "1" }, buttons: ["select", "flash", "select_dereferenced"], count: 2, fader: "master", hasFader: true },
+      { slot: 2, target: { type: "group", group_id: "1" }, buttons: ["select", "select_dereferenced", "flash"], count: 2, fader: "master", hasFader: true },
       ...["A", "B", "C", "D", "E"].map((group, index) => ({ slot: index + 3, target: { type: "speed_group", group } as PlaybackTarget, buttons: ["double", "half", "learn"] as [string, string, string], count: 3, fader: "learned_percentage", hasFader: true })),
-      { slot: 8, target: { type: "programmer_fade" }, buttons: ["none", "none", "none"], count: 0, fader: "master", hasFader: true },
-      { slot: 9, target: { type: "cue_fade" }, buttons: ["none", "none", "none"], count: 3, fader: "master", hasFader: true },
-      { slot: 10, target: { type: "grand_master" }, buttons: ["blackout", "flash", "pause_dynamics"], count: 3, fader: "master", hasFader: true },
+      { slot: 8, target: { type: "programmer_fade" }, buttons: ["double", "half", "off"], count: 0, fader: "master", hasFader: true },
+      { slot: 9, target: { type: "cue_fade" }, buttons: ["double", "half", "off"], count: 3, fader: "master", hasFader: true },
+      { slot: 10, target: { type: "grand_master" }, buttons: ["blackout", "pause_dynamics", "flash"], count: 3, fader: "master", hasFader: true },
     ];
 
     for (const assignment of assignments) {
@@ -371,7 +372,7 @@ test.describe("docs/testing/07-playback-configuration.md", () => {
     expect(await object<any>(api, "cue_list", prepared.cueListId)).toEqual(sourceBefore);
   });
 
-  test("PBK-002 @supplemental-ui › function changes reset layout defaults and Clear confirmation is explicit", async ({ api, bench, desk, page }) => {
+  test("PBK-002 @supplemental-ui › grouped functions reset layout defaults and None plus Apply is explicit", async ({ api, bench, desk, page }) => {
     const prepared = await prepareShow(api, bench, "pbk-002-ui", "default-stage");
     await writePage(api, 1, {});
     await desk.open(bench.baseUrl);
@@ -379,33 +380,40 @@ test.describe("docs/testing/07-playback-configuration.md", () => {
     await armSet(page);
     await page.getByRole("button", { name: "Playback representation page 1 playback 1" }).click();
     let modal = await expectConfigurationModal(page, 1, 1);
-    await chooseSelect(page, modal, "Function", "Group Master");
-    await modal.getByRole("button", { name: "Playback Layout", exact: true }).click();
+    await expect(modal.getByRole("button", { name: "Apply", exact: true })).toBeDisabled();
+    await modal.getByRole("radio", { name: "Group Master", exact: true }).click();
+    await expect(modal.getByRole("button", { name: "Apply", exact: true })).toBeEnabled();
+    await modal.getByRole("button", { name: "Layout", exact: true }).click();
     await expect(selectTrigger(modal, "Top button")).toContainText("Select");
-    await expect(selectTrigger(modal, "Middle button")).toContainText("Flash");
-    await expect(selectTrigger(modal, "Bottom button")).toContainText("Select dereferenced");
+    await expect(selectTrigger(modal, "Middle button")).toContainText("Select dereferenced");
+    await expect(selectTrigger(modal, "Bottom button")).toContainText("Flash");
     await expect(selectTrigger(modal, "Fader")).toContainText("Group intensity master");
-    await modal.getByRole("button", { name: "Playback Function", exact: true }).click();
-    await chooseSelect(page, modal, "Function", "Speed Master / Speed Group");
-    await modal.getByRole("button", { name: "Playback Layout", exact: true }).click();
+    await modal.getByRole("button", { name: "Function", exact: true }).click();
+    await modal.getByRole("radio", { name: "Speed Master", exact: true }).click();
+    await modal.getByRole("button", { name: "Layout", exact: true }).click();
     await expect(selectTrigger(modal, "Top button")).toContainText("Double");
     await expect(selectTrigger(modal, "Middle button")).toContainText("Half");
     await expect(selectTrigger(modal, "Bottom button")).toContainText("Learn");
     await expect(selectTrigger(modal, "Fader")).toContainText("Learned-speed percentage");
-    await modal.getByRole("button", { name: "Playback Function", exact: true }).click();
-    await chooseSelect(page, modal, "Function", "Cuelist");
-    await modal.getByRole("button", { name: "Playback Layout", exact: true }).click();
-    await expect(selectTrigger(modal, "Top button")).toContainText("Go minus");
-    await expect(selectTrigger(modal, "Middle button")).toContainText("Go plus");
+    await modal.getByRole("button", { name: "Function", exact: true }).click();
+    await modal.getByRole("radio", { name: "Cue List", exact: true }).click();
+    await modal.getByRole("button", { name: "Layout", exact: true }).click();
+    await expect(selectTrigger(modal, "Top button")).toContainText("GO −");
+    await expect(selectTrigger(modal, "Middle button")).toContainText("GO +");
     await expect(selectTrigger(modal, "Bottom button")).toContainText("Flash");
-    const swatch = modal.getByRole("button", { name: "Playback color #8b5cf6" });
-    await swatch.click();
-    await expect(swatch).toHaveClass(/active/);
+    await modal.getByRole("button", { name: "Function", exact: true }).click();
+    await choosePlaybackColor(page, modal, "#8b5cf6");
+    await modal.getByRole("button", { name: "Behavior", exact: true }).click();
+    await expect(modal.getByRole("radiogroup", { name: "When Flash or Swap is released", exact: true })).toBeVisible();
+    await expect(modal.getByText(/leaves this Cue List active at zero intensity/)).toBeVisible();
+    await expect(modal.getByRole("switch", { name: "Turn off when other playbacks take full control", exact: true })).toBeVisible();
+    await modal.getByRole("radio", { name: "Intensity only", exact: true }).click();
+    await modal.getByRole("switch", { name: "Protect from Swap", exact: true }).locator("..").click();
     await modal.getByRole("button", { name: "Apply", exact: true }).click();
     await expect(modal).toBeHidden();
 
     let stored = await playbackAt(api, 1, 1);
-    expect(stored.body).toMatchObject({ target: { type: "cue_list", cue_list_id: prepared.cueListId }, buttons: ["go_minus", "go", "flash"], color: "#8b5cf6" });
+    expect(stored.body).toMatchObject({ target: { type: "cue_list", cue_list_id: prepared.cueListId }, buttons: ["go_minus", "go", "flash"], color: "#8b5cf6", flash_release: "release_intensity_only", protect_from_swap: true });
     await expect(playbackCard(page, 1)).toHaveCSS("--playback-color", "#8b5cf6");
     await page.reload();
     await openPlaybackMode(page);
@@ -414,12 +422,15 @@ test.describe("docs/testing/07-playback-configuration.md", () => {
     await armSet(page);
     await page.getByRole("button", { name: "Playback representation page 1 playback 1" }).click();
     modal = await expectConfigurationModal(page, 1, 1);
-    await modal.getByRole("button", { name: "Clear Playback", exact: true }).click();
-    await modal.getByRole("button", { name: "Keep Playback", exact: true }).click();
+    await modal.getByRole("radio", { name: "None", exact: true }).click();
+    await modal.getByRole("button", { name: "Close playback configuration", exact: true }).click();
     stored = await playbackAt(api, 1, 1);
     expect(stored.body.color).toBe("#8b5cf6");
-    await modal.getByRole("button", { name: "Clear Playback", exact: true }).click();
-    await modal.getByRole("button", { name: "Confirm Clear Playback", exact: true }).click();
+    await armSet(page);
+    await page.getByRole("button", { name: "Playback representation page 1 playback 1" }).click();
+    modal = await expectConfigurationModal(page, 1, 1);
+    await modal.getByRole("radio", { name: "None", exact: true }).click();
+    await modal.getByRole("button", { name: "Apply", exact: true }).click();
     await expect(modal).toBeHidden();
     expect((await pageObject(api, 1)).body.slots["1"]).toBeUndefined();
     expect((await objects(api, "cue_list")).some((item) => item.id === prepared.cueListId)).toBe(true);
@@ -455,7 +466,7 @@ test.describe("docs/testing/07-playback-configuration.md", () => {
       await armSet(page);
       await card.getByRole("button", { name: "GO −", exact: true }).click();
       const modal = await expectConfigurationModal(page, 1, 1);
-      await modal.getByRole("button", { name: "Playback Layout", exact: true }).click();
+      await modal.getByRole("button", { name: "Layout", exact: true }).click();
       await chooseSelect(page, modal, "Top button", "Select contents");
       await modal.getByRole("button", { name: "Apply", exact: true }).click();
       await expect(modal).toBeHidden();
@@ -567,7 +578,7 @@ test.describe("docs/testing/07-playback-configuration.md", () => {
     await armSet(page);
     await card.getByRole("button", { name: "GO −", exact: true }).click();
     const modal = await expectConfigurationModal(page, 1, 1);
-    await modal.getByRole("button", { name: "Playback Layout", exact: true }).click();
+    await modal.getByRole("button", { name: "Layout", exact: true }).click();
     await chooseSelect(page, modal, "Top button", "Select contents");
     await modal.getByRole("button", { name: "Apply", exact: true }).click();
     await expect(modal).toBeHidden();
@@ -909,10 +920,10 @@ test.describe("docs/testing/07-playback-configuration.md", () => {
         await api.command("programmer.execute", { value: `SPD GRP ${group} AT ${bpm}` });
       await installPlaybacks(api, [
         definition(61, "Speed A", { type: "speed_group", group: "A" }, { buttons: ["double", "half", "learn"], fader: "learned_percentage", color: "#8b5cf6" }),
-        definition(62, "Group 1", { type: "group", group_id: "1" }, { buttons: ["select", "flash", "select_dereferenced"] }),
-        definition(63, "Grand", { type: "grand_master" }, { buttons: ["blackout", "flash", "pause_dynamics"] }),
-        definition(64, "Programmer Fade", { type: "programmer_fade" }, { buttons: ["none", "none", "none"] }),
-        definition(65, "Cue Fade", { type: "cue_fade" }, { buttons: ["none", "none", "none"] }),
+        definition(62, "Group 1", { type: "group", group_id: "1" }, { buttons: ["select", "select_dereferenced", "flash"] }),
+        definition(63, "Grand", { type: "grand_master" }, { buttons: ["blackout", "pause_dynamics", "flash"] }),
+        definition(64, "Programmer Fade", { type: "programmer_fade" }, { buttons: ["double", "half", "off"] }),
+        definition(65, "Cue Fade", { type: "cue_fade" }, { buttons: ["double", "half", "off"] }),
       ], { 1: 61, 2: 62, 3: 63, 4: 64, 5: 65 });
       return prepared;
     },
@@ -951,8 +962,8 @@ test.describe("docs/testing/07-playback-configuration.md", () => {
       expect((await playbackAt(api, 1, 1)).body).toMatchObject({ target: { type: "speed_group", group: "A" }, buttons: ["double", "half", "learn"], fader: "learned_percentage", color: "#8b5cf6" });
       expect((await playbackAt(api, 1, 2)).body.target).toEqual({ type: "group", group_id: "1" });
       expect((await playbackAt(api, 1, 3)).body.target).toEqual({ type: "grand_master" });
-      expect((await playbackAt(api, 1, 4)).body).toMatchObject({ target: { type: "programmer_fade" }, buttons: ["none", "none", "none"] });
-      expect((await playbackAt(api, 1, 5)).body).toMatchObject({ target: { type: "cue_fade" }, buttons: ["none", "none", "none"] });
+      expect((await playbackAt(api, 1, 4)).body).toMatchObject({ target: { type: "programmer_fade" }, buttons: ["double", "half", "off"] });
+      expect((await playbackAt(api, 1, 5)).body).toMatchObject({ target: { type: "cue_fade" }, buttons: ["double", "half", "off"] });
     },
   });
 
@@ -961,10 +972,10 @@ test.describe("docs/testing/07-playback-configuration.md", () => {
     await setSpeedRates(api, [120, 96, 72, 60, 48]);
     await installPlaybacks(api, [
       definition(61, "Speed A", { type: "speed_group", group: "A" }, { buttons: ["double", "half", "learn"], fader: "learned_percentage" }),
-      definition(62, "Group 1", { type: "group", group_id: "1" }, { buttons: ["select", "flash", "select_dereferenced"] }),
-      definition(63, "Grand", { type: "grand_master" }, { buttons: ["blackout", "flash", "pause_dynamics"] }),
-      definition(64, "Programmer Fade", { type: "programmer_fade" }, { buttons: ["none", "none", "none"] }),
-      definition(65, "Cue Fade", { type: "cue_fade" }, { buttons: ["none", "none", "none"] }),
+      definition(62, "Group 1", { type: "group", group_id: "1" }, { buttons: ["select", "select_dereferenced", "flash"] }),
+      definition(63, "Grand", { type: "grand_master" }, { buttons: ["blackout", "pause_dynamics", "flash"] }),
+      definition(64, "Programmer Fade", { type: "programmer_fade" }, { buttons: ["double", "half", "off"] }),
+      definition(65, "Cue Fade", { type: "cue_fade" }, { buttons: ["double", "half", "off"] }),
     ], { 1: 61, 2: 62, 3: 63, 4: 64, 5: 65 });
 
     expect((await playbackAt(api, 1, 1)).body).toMatchObject({ buttons: ["double", "half", "learn"], fader: "learned_percentage" });
@@ -1009,13 +1020,13 @@ test.describe("docs/testing/07-playback-configuration.md", () => {
     expect(groupControl.master).toBeCloseTo(0.4, 5);
     await pressButton(api, 62, 1);
     expect((await programmer(api)).selection_expression).toMatchObject({ type: "live_group", group_id: "1" });
-    await pressButton(api, 62, 3);
+    await pressButton(api, 62, 2);
     expect((await programmer(api)).selection_expression).toEqual({ type: "static" });
-    await pressButton(api, 62, 2, true);
+    await pressButton(api, 62, 3, true);
     groupControl = (await controls(api)).groups.find((group: any) => group.id === "1");
     expect(groupControl.flash_level).toBe(1);
     expect(groupControl.master).toBeCloseTo(0.4, 5);
-    await pressButton(api, 62, 2, false);
+    await pressButton(api, 62, 3, false);
     groupControl = (await controls(api)).groups.find((group: any) => group.id === "1");
     expect(groupControl.flash_level).toBe(0);
     expect(groupControl.master).toBeCloseTo(0.4, 5);
@@ -1026,30 +1037,33 @@ test.describe("docs/testing/07-playback-configuration.md", () => {
     expect(grandMaster.blackout).toBe(true);
     expect(grandMaster.level).toBeCloseTo(0.3, 5);
     expect(grandMaster.effective_level).toBeCloseTo(0.3, 5);
-    await pressButton(api, 63, 2, true);
+    await pressButton(api, 63, 3, true);
     grandMaster = (await controls(api)).grand_master;
     expect(grandMaster.flash_active).toBe(true);
     expect(grandMaster.level).toBeCloseTo(0.3, 5);
     expect(grandMaster.effective_level).toBe(1);
-    await pressButton(api, 63, 2, false);
+    await pressButton(api, 63, 3, false);
     grandMaster = (await controls(api)).grand_master;
     expect(grandMaster.flash_active).toBe(false);
     expect(grandMaster.level).toBeCloseTo(0.3, 5);
     expect(grandMaster.effective_level).toBeCloseTo(0.3, 5);
-    await pressButton(api, 63, 3);
+    await pressButton(api, 63, 2);
     expect((await controls(api)).grand_master.dynamics_paused).toBe(true);
-    await pressButton(api, 63, 3);
+    await pressButton(api, 63, 2);
     expect((await controls(api)).grand_master.dynamics_paused).toBe(false);
 
     await poolAction(api, 64, "master", { value: 0.25 });
     await poolAction(api, 65, "master", { value: 0.25 });
     expect(await controls(api)).toMatchObject({ programmer_fade_millis: 5_000, cue_fade_millis: 15_000 });
-    const auditBefore = (await audit(api)).length;
-    const programmerButton = await poolAction<any>(api, 64, "button", { button: 1, pressed: true });
-    const cueButton = await poolAction<any>(api, 65, "button", { button: 1, pressed: true });
-    expect(programmerButton.changed).toBe(false);
-    expect(cueButton.changed).toBe(false);
-    expect((await audit(api)).length).toBe(auditBefore);
+    await pressButton(api, 64, 1);
+    await pressButton(api, 65, 1);
+    expect(await controls(api)).toMatchObject({ programmer_fade_millis: 10_000, cue_fade_millis: 30_000 });
+    await pressButton(api, 64, 2);
+    await pressButton(api, 65, 2);
+    expect(await controls(api)).toMatchObject({ programmer_fade_millis: 5_000, cue_fade_millis: 15_000 });
+    await pressButton(api, 64, 3);
+    await pressButton(api, 65, 3);
+    expect(await controls(api)).toMatchObject({ programmer_fade_millis: 0, cue_fade_millis: 0 });
   });
 
   test("PBK-006 @supplemental-ui › specialized controls render fixed layouts and detailed feedback", async ({ api, bench, desk, page }) => {
@@ -1057,10 +1071,10 @@ test.describe("docs/testing/07-playback-configuration.md", () => {
     await setSpeedRates(api, [120, 96, 72, 60, 48]);
     await installPlaybacks(api, [
       definition(66, "Speed A", { type: "speed_group", group: "A" }, { buttons: ["double", "half", "learn"], fader: "learned_percentage", color: "#8b5cf6" }),
-      definition(67, "Group 1", { type: "group", group_id: "1" }, { buttons: ["select", "flash", "select_dereferenced"] }),
-      definition(68, "Grand", { type: "grand_master" }, { buttons: ["blackout", "flash", "pause_dynamics"] }),
-      definition(69, "Programmer Fade", { type: "programmer_fade" }, { buttons: ["none", "none", "none"] }),
-      definition(70, "Cue Fade", { type: "cue_fade" }, { buttons: ["none", "none", "none"] }),
+      definition(67, "Group 1", { type: "group", group_id: "1" }, { buttons: ["select", "select_dereferenced", "flash"] }),
+      definition(68, "Grand", { type: "grand_master" }, { buttons: ["blackout", "pause_dynamics", "flash"] }),
+      definition(69, "Programmer Fade", { type: "programmer_fade" }, { buttons: ["double", "half", "off"] }),
+      definition(70, "Cue Fade", { type: "cue_fade" }, { buttons: ["double", "half", "off"] }),
     ], { 1: 66, 2: 67, 3: 68, 4: 69, 5: 70 });
     await desk.open(bench.baseUrl);
     await setSpeedRates(api, [120, 96, 72, 60, 48]);
@@ -1090,19 +1104,20 @@ test.describe("docs/testing/07-playback-configuration.md", () => {
     await expect(playbackCard(page, 4)).toContainText("5.0 s");
     await expect(playbackCard(page, 5)).toContainText("15.0 s");
     for (const slot of [4, 5]) {
-      await expect(playbackCard(page, slot).getByRole("button", { name: "DISABLED" })).toHaveCount(0);
-      await expect(playbackCard(page, slot).locator(".vertical-touch-fader-actions")).toHaveCount(0);
+      await expect(playbackCard(page, slot).getByRole("button", { name: "DOUBLE", exact: true })).toBeVisible();
+      await expect(playbackCard(page, slot).getByRole("button", { name: "HALF", exact: true })).toBeVisible();
+      await expect(playbackCard(page, slot).getByRole("button", { name: "OFF", exact: true })).toBeVisible();
     }
 
     await armSet(page);
     await page.getByRole("button", { name: "Playback representation page 1 playback 1" }).click();
     const modal = await expectConfigurationModal(page, 1, 1);
-    await modal.getByRole("button", { name: "Playback Layout", exact: true }).click();
+    await modal.getByRole("button", { name: "Layout", exact: true }).click();
     await expect(selectTrigger(modal, "Top button")).toContainText("Double");
     await expect(selectTrigger(modal, "Middle button")).toContainText("Half");
     await expect(selectTrigger(modal, "Bottom button")).toContainText("Learn");
     await expect(selectTrigger(modal, "Fader")).toContainText("Learned-speed percentage");
-    await modal.getByRole("button", { name: "Cancel", exact: true }).click();
+    await modal.getByRole("button", { name: "Close playback configuration", exact: true }).click();
   });
 
   test("PBK-006 @osc › external controls and LED/fader/action feedback share the authoritative master state", async ({ api, bench }) => {
@@ -1224,11 +1239,11 @@ function definition(number: number, name: string, target: PlaybackTarget, overri
   const defaults = target.type === "speed_group"
     ? { buttons: ["double", "half", "learn"] as [string, string, string], fader: "learned_percentage" }
     : target.type === "group"
-      ? { buttons: ["select", "flash", "select_dereferenced"] as [string, string, string], fader: "master" }
+      ? { buttons: ["select", "select_dereferenced", "flash"] as [string, string, string], fader: "master" }
       : target.type === "grand_master"
-        ? { buttons: ["blackout", "flash", "pause_dynamics"] as [string, string, string], fader: "master" }
+        ? { buttons: ["blackout", "pause_dynamics", "flash"] as [string, string, string], fader: "master" }
         : target.type === "programmer_fade" || target.type === "cue_fade"
-          ? { buttons: ["none", "none", "none"] as [string, string, string], fader: "master" }
+          ? { buttons: ["double", "half", "off"] as [string, string, string], fader: "master" }
           : { buttons: ["go_minus", "go", "flash"] as [string, string, string], fader: "master" };
   return {
     number,
@@ -1469,8 +1484,24 @@ function selectTrigger(container: Locator, label: string): Locator {
 }
 
 async function chooseSelect(page: Page, container: Locator, label: string, option: string): Promise<void> {
-  await selectTrigger(container, label).click();
+  const trigger = selectTrigger(container, label);
+  await trigger.click();
+  if (await trigger.getAttribute("aria-haspopup") === "dialog") {
+    const dialog = page.getByRole("dialog", { name: `Choose ${label} function` });
+    await dialog.getByRole("button").filter({ hasText: new RegExp(`^${option.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`) }).click();
+    return;
+  }
   await page.getByRole("option", { name: option, exact: true }).click();
+}
+
+async function choosePlaybackColor(page: Page, container: Locator, color: string): Promise<void> {
+  const before = await container.boundingBox();
+  await container.locator(".ui-form-field", { hasText: "Playback color" }).locator(".ui-color-input-trigger").click();
+  await expect(page.locator("body > .ui-color-dropdown-backdrop .ui-color-dropdown-panel")).toBeVisible();
+  const after = await container.boundingBox();
+  expect(after?.width).toBeCloseTo(before?.width ?? 0, 0);
+  expect(after?.height).toBeCloseTo(before?.height ?? 0, 0);
+  await page.getByRole("option", { name: `Use color ${color}`, exact: true }).click();
 }
 
 async function addVirtualPlaybackPane(page: Page): Promise<Locator> {

@@ -7011,12 +7011,26 @@ fn dispatch_playback_action_inner(
             }
         },
         PlaybackTarget::ProgrammerFade | PlaybackTarget::CueFade => {
-            if action == Action::None {
-                return Ok(false);
+            let mut configuration = state.configuration.write();
+            let (time, maximum) = if matches!(definition.target, PlaybackTarget::ProgrammerFade) {
+                (&mut configuration.programmer_fade_millis, 20_000)
+            } else {
+                (&mut configuration.sequence_master_fade_millis, 60_000)
+            };
+            match action {
+                Action::Double => *time = time.saturating_mul(2).min(maximum),
+                Action::Half => *time /= 2,
+                Action::Off => *time = 0,
+                Action::None => return Ok(false),
+                _ => {
+                    return Err(ApiError::bad_request(
+                        "action is incompatible with a time-master playback",
+                    ));
+                }
             }
-            return Err(ApiError::bad_request(
-                "time-master playback buttons are disabled",
-            ));
+            drop(configuration);
+            persist_server_configuration(state)?;
+            refresh_speed_group_engine(state);
         }
     }
     Ok(true)
@@ -16186,7 +16200,8 @@ mod tests {
         let expected_profile_id = rows[0].0.id;
         seed_schema_v1_fixture_database(&data_dir, &rows);
 
-        let package_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixture-library");
+        let package_dir =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/fixture-library");
         let package_count = std::fs::read_dir(&package_dir)
             .unwrap()
             .filter_map(Result::ok)

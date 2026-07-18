@@ -671,6 +671,29 @@ export function ServerProvider({ children }: PropsWithChildren) {
 		};
 	}, [client, session]);
 	useEffect(() => {
+		if (!session) return;
+		let cancelled = false;
+		let inFlight = false;
+		const refreshPlaybacks = () => {
+			if (inFlight) return;
+			inFlight = true;
+			void client
+				.playbacks()
+				.then((next) => {
+					if (!cancelled) setPlaybacks(next);
+				})
+				.catch(() => undefined)
+				.finally(() => {
+					inFlight = false;
+				});
+		};
+		const timer = window.setInterval(refreshPlaybacks, 250);
+		return () => {
+			cancelled = true;
+			window.clearInterval(timer);
+		};
+	}, [client, session]);
+	useEffect(() => {
 		for (const url of Object.values(mediaPreviewUrlsRef.current))
 			URL.revokeObjectURL(url);
 		mediaPreviewUrlsRef.current = {};

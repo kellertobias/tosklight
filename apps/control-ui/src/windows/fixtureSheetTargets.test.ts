@@ -49,10 +49,23 @@ function fixture(): PatchedFixture {
 describe("fixture sheet targets", () => {
   it("shows an exact master row followed by definition-ordered child rows", () => {
     const targets = fixtureSheetTargets(fixture());
-    expect(targets.map((target) => [target.displayId, target.fixtureId, target.name])).toEqual([
-      ["100.0", "master", "Bar · Master"],
-      ["100.1", "left", "Bar · Left"],
-      ["100.2", "right", "Bar · Right"],
+    expect(targets.map((target) => [target.displayId, target.fixtureId, target.name, target.indented])).toEqual([
+      ["100.0", "master", "Bar · Master", false],
+      ["100.1", "left", "Bar · Left", true],
+      ["100.2", "right", "Bar · Right", true],
+    ]);
+  });
+
+  it("uses the fixture ID for a master-only row", () => {
+    expect(fixtureSheetTargets(fixture(), "no-sub-heads").map((target) => [target.displayId, target.fixtureId])).toEqual([
+      ["100", "master"],
+    ]);
+  });
+
+  it("shows unindented subheads when master rows are excluded", () => {
+    expect(fixtureSheetTargets(fixture(), "no-master-heads").map((target) => [target.displayId, target.fixtureId, target.indented])).toEqual([
+      ["100.1", "left", false],
+      ["100.2", "right", false],
     ]);
   });
 

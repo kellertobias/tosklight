@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
 import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
@@ -19,13 +20,16 @@ const { artifactPaths } = artifactResolver;
 
 const VIDEO = path.join(artifactPaths.visual, "product-demo", "tosklight-product-demo.webm");
 const SCREENSHOT = path.join(artifactPaths.visual, "product-demo", "tosklight-product-demo-1920x1080.png");
+const DEMO_SHOW = fileURLToPath(new URL("../assets/demo.show", import.meta.url));
 const RECORDING = process.env.LIGHT_VISUAL_RECORDING === "1";
+const UPDATE_DEMO_SHOW = process.env.LIGHT_UPDATE_DEMO_SHOW === "1";
 
 test("@ui narrates the complete Full HD product demo surface in one regression run", async ({ api, bench, desk, page }, testInfo) => {
   test.setTimeout(RECORDING ? 900_000 : 300_000);
   page.setDefaultTimeout(15_000);
   await loadCanonicalCopy(api, bench, "planned-product-demo", "default-stage");
   const video = page.video();
+  let completedShow: Buffer | null = null;
   try {
     await desk.open(`${bench.baseUrl}/?demo=product`);
     const demo = page.getByTestId("product-demo");
@@ -102,7 +106,7 @@ test("@ui narrates the complete Full HD product demo surface in one regression r
       search: "Stage Element 2 × 1 m", family: "Stage Element 2 × 1 m", mode: "50 cm",
       name: "Stage", fixtureNumber: "0.1",
     });
-    await positionFixtureViaUi(desk, page, keypad, fixtureRow(patchWindow, "0.1"), { x: -3, y: -1.5, z: 0 });
+    await positionFixtureViaUi(desk, page, keypad, fixtureRow(patchWindow, "0.1"), { x: -3, y: .5, z: 0 });
     await fastForwardPatchPhase(desk, page, api, showId, patchWindow, layerIds, "stage", ["Stage"], "Building the remaining stage decks, trusses and curtains via API.");
 
     await desk.titleCard("SHOW SETUP · ACL", "Patch both ACL control fixtures first, place the first ACL by hand, then reveal the two tightly mounted physical fans.");
@@ -110,8 +114,8 @@ test("@ui narrates the complete Full HD product demo surface in one regression r
       search: "Dimmer PAR Can", family: "Dimmer PAR Can", mode: "8-bit",
       name: "ACL In", fixtureNumber: 81, patch: "1.1", count: 2,
     });
-    const firstAclLocation = { x: -.4, y: 4, z: 4.3 };
-    await positionFixtureViaUi(desk, page, keypad, fixtureRow(patchWindow, 81), firstAclLocation, aimFixtureAt(firstAclLocation, { x: -3.8, y: -2, z: 0 }));
+    const firstAclLocation = { x: -.4, y: 3.8, z: 4.5 };
+    await positionFixtureViaUi(desk, page, keypad, fixtureRow(patchWindow, 81), firstAclLocation, aimFixtureAt({ x: -.4, y: 4, z: 4.3 }, { x: -3.8, y: -2, z: 0 }));
     await fastForwardPatchPhase(desk, page, api, showId, patchWindow, layerIds, "acl", ["Back Truss"], "Completing the centered ACL fan-out and the two 80 cm-wide outside ACL clusters.");
     await fastForwardPatchPhase(desk, page, api, showId, patchWindow, layerIds, "strips", ["Stage", "Back Truss"], "Mounting four vertical pipes and two vertical Sunstrips per pipe.");
 
@@ -129,8 +133,8 @@ test("@ui narrates the complete Full HD product demo surface in one regression r
       search: "RGBW LED", family: "RGBW LED", mode: "DRGBW 8-bit dimmer first",
       name: "Floor Spot 1", fixtureNumber: 301, patch: "3.241",
     });
-    const firstFloorLocation = { x: -3.3, y: 1.6, z: .2 };
-    await positionFixtureViaUi(desk, page, keypad, fixtureRow(patchWindow, 301), firstFloorLocation, aimFixtureAt(firstFloorLocation, { x: -4.1, y: -3, z: 4 }));
+    const firstFloorLocation = { x: -3.3, y: 3.9, z: .6 };
+    await positionFixtureViaUi(desk, page, keypad, fixtureRow(patchWindow, 301), firstFloorLocation, aimFixtureAt({ x: -3.3, y: 1.6, z: .2 }, { x: -4.1, y: -3, z: 4 }));
     await fastForwardPatchPhase(desk, page, api, showId, patchWindow, layerIds, "floor", ["Floor"], "Completing four floor-LED groups with shared depth and height.");
 
     await desk.titleCard("SHOW SETUP · HOUSE", "Patch the first house light and its first physical multi-patch through the desk UI.");
@@ -139,7 +143,7 @@ test("@ui narrates the complete Full HD product demo surface in one regression r
       name: "House Light", fixtureNumber: 99, patch: "2.13",
     });
     const houseLightRow = fixtureRow(patchWindow, 99);
-    await positionFixtureViaUi(desk, page, keypad, houseLightRow, { x: 0, y: -6, z: 4 });
+    await positionFixtureViaUi(desk, page, keypad, houseLightRow, { x: 0, y: -7, z: 5 });
     await desk.click(houseLightRow);
     await desk.click(patchWindow.getByRole("button", { name: "+ Add multi-patch", exact: true }));
     const firstMultipatch = patchWindow.locator(".multipatch-row").last();
@@ -148,7 +152,7 @@ test("@ui narrates the complete Full HD product demo surface in one regression r
     for (const key of ["2", "Universe separator", "1", "4"])
       await desk.click(multipatchAddress.getByRole("button", { name: key === "Universe separator" ? key : `Address ${key}`, exact: true }));
     await desk.click(multipatchAddress.getByRole("button", { name: "Set Address", exact: true }));
-    await positionMultipatchViaUi(desk, page, firstMultipatch, { x: 0, y: -5, z: 4 });
+    await positionMultipatchViaUi(desk, page, firstMultipatch, { x: 0, y: -6, z: 5 });
     await fastForwardPatchPhase(desk, page, api, showId, patchWindow, layerIds, "house", ["House Lights"], "Completing the repeated house-light and house-mood multi-patches.");
 
     const rig = await fastForwardPatchPhase(
@@ -163,35 +167,54 @@ test("@ui narrates the complete Full HD product demo surface in one regression r
       "Adding the remaining profiles, washes, blinders and haze while the patch visibly fills.",
       (generatedRig) => seedPlannedDemoProgramming(api, showId, generatedRig),
     );
-    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/patch", undefined, false)).fixtures.length).toBe(65);
-    await expect(patchWindow.locator(".ui-window-info")).toContainText("65 fixtures");
+    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/patch", undefined, false)).fixtures.length).toBe(66);
+    await expect(patchWindow.locator(".ui-window-info")).toContainText("66 fixtures");
     const physicalCount = (await api.request<any>("GET", "/api/v1/patch", undefined, false)).fixtures
       .reduce((count: number, fixture: any) => count + 1 + (fixture.multipatch?.length ?? 0), 0);
-    expect(physicalCount).toBe(113);
+    expect(physicalCount).toBe(114);
     const physicalInstances = (fixtureNumber: number) => {
       const fixture = rig.fixtures[fixtureNumber];
       return [{ location: fixture.location, rotation: fixture.rotation }, ...(fixture.multipatch ?? [])];
     };
+    const stageDeck = physicalInstances(10_001);
+    expect(stageDeck).toHaveLength(16);
+    expect(stageDeck.map((item) => item.location.y).sort((left, right) => left - right)).toEqual([
+      500, 500, 500, 500, 1500, 1500, 1500, 1500, 2500, 2500, 2500, 2500, 3500, 3500, 3500, 3500,
+    ]);
+    const curtains = [10_009, 10_010, 10_011].map((number) => rig.fixtures[number]);
+    expect(curtains.map((fixture) => fixture.location)).toEqual([
+      { x: -2000, y: 4300, z: -500 }, { x: 0, y: 4300, z: -500 }, { x: 2000, y: 4300, z: -500 },
+    ]);
     const aclIn = physicalInstances(81);
     const aclOut = physicalInstances(82);
     expect(aclIn).toHaveLength(8);
     expect(Math.max(...aclIn.map((item) => item.location.x)) - Math.min(...aclIn.map((item) => item.location.x))).toBe(800);
-    expect(new Set(aclIn.map((item) => `${item.location.y}:${item.location.z}`))).toEqual(new Set(["4000:4300"]));
+    expect(new Set(aclIn.map((item) => `${item.location.y}:${item.location.z}`))).toEqual(new Set(["3800:4500"]));
     expect(aclOut).toHaveLength(8);
     expect(aclOut[3].location.x - aclOut[0].location.x).toBe(800);
     expect(aclOut[7].location.x - aclOut[4].location.x).toBe(800);
-    expect(new Set(aclOut.map((item) => `${item.location.y}:${item.location.z}`))).toEqual(new Set(["4000:4300"]));
+    expect(new Set(aclOut.map((item) => `${item.location.y}:${item.location.z}`))).toEqual(new Set(["3800:4500"]));
     for (const fixtureNumber of [10_005, 10_006, 10_007, 10_008]) expect(rig.fixtures[fixtureNumber].rotation.y).toBe(90);
     const strips = Array.from({ length: 8 }, (_, index) => rig.fixtures[401 + index]);
     expect(strips.map((fixture) => fixture.location.x)).toEqual([-1500, -1500, -500, -500, 500, 500, 1500, 1500]);
-    expect(strips.map((fixture) => fixture.location.z)).toEqual([3450, 2200, 3450, 2200, 3450, 2200, 3450, 2200]);
+    expect(strips.map((fixture) => fixture.location.z)).toEqual([2850, 1700, 2850, 1700, 2850, 1700, 2850, 1700]);
     expect(strips.every((fixture) => fixture.rotation.y === 90)).toBe(true);
     const frontLeftAim = [1, 2, 3, 4].map((number) => rig.fixtures[number].rotation.y);
     const frontRightAim = [5, 6, 7, 8].map((number) => rig.fixtures[number].rotation.y);
     for (let index = 0; index < 4; index++) expect(frontLeftAim[index]).toBeCloseTo(-frontRightAim[3 - index], 6);
     const floor = Array.from({ length: 16 }, (_, index) => rig.fixtures[301 + index]);
-    expect(new Set(floor.map((fixture) => `${fixture.location.y}:${fixture.location.z}`))).toEqual(new Set(["1600:200"]));
+    expect(new Set(floor.map((fixture) => `${fixture.location.y}:${fixture.location.z}`))).toEqual(new Set(["3900:600"]));
     expect(floor.map((fixture) => fixture.location.x)).toEqual([-3300, -3100, -2900, -2700, -1300, -1100, -900, -700, 700, 900, 1100, 1300, 2700, 2900, 3100, 3300]);
+    const houseLight = physicalInstances(99);
+    expect(houseLight.map((item) => `${item.location.y}:${item.location.z}`)).toEqual(["-7000:5000", "-6000:5000", "-5000:5000", "-4000:5000"]);
+    const houseMood = physicalInstances(98);
+    expect(houseMood).toHaveLength(8);
+    expect(houseMood.map((item) => item.location.x)).toEqual([-3500, -2500, -1500, -500, 500, 1500, 2500, 3500]);
+    expect(new Set(houseMood.map((item) => `${item.location.y}:${item.location.z}`))).toEqual(new Set(["-5000:4000"]));
+    for (const fixtureNumber of [801, 802]) {
+      expect(rig.fixtures[fixtureNumber].location.y).toBe(-2000);
+      expect(rig.fixtures[fixtureNumber].rotation).toEqual({ x: -20, y: 0, z: 0 });
+    }
     await expect(demo.locator(".stage-3d-canvas canvas")).toBeVisible();
     await expect(demo.locator(".stage-3d-canvas canvas")).toHaveAttribute("data-recording-canvas", "stable");
 
@@ -243,7 +266,7 @@ test("@ui narrates the complete Full HD product demo surface in one regression r
     await expect.poll(async () => (await demoObjects<any>(api, showId, "group")).find((item) => item.id === "9")?.body.fixtures.length).toBe(8);
 
     await keypadCommand(desk, keypad, ["2", "0", "1", "TRU", "2", "0", "7", "ENT"]);
-    await expect.poll(async () => (await programmer(api)).selected.length).toBe(7);
+    await expect.poll(async () => (await programmer(api)).selected.length).toBe(rig.washTargets.length);
     await keypadCommand(desk, keypad, ["RECORD", "GRP", "2", "ENT"], false);
     await expect(keypad.getByRole("button", { name: "RECORD", exact: true })).toHaveAttribute("aria-pressed", "false");
 
@@ -279,7 +302,7 @@ test("@ui narrates the complete Full HD product demo surface in one regression r
 
     await desk.titleCard("PRESET PROGRAMMING", "Seven merged colours, five moving-light positions and portable gobo looks are ready for live programming.");
     await desk.click(fixtureWindow.locator(".group-strip .group-card").nth(1));
-    await expect.poll(async () => (await programmer(api)).selected.length).toBe(7);
+    await expect.poll(async () => (await programmer(api)).selected.length).toBe(rig.washTargets.length);
     await openBuiltIn(desk, app, "Presets");
     const presetWindow = app.locator(".preset-pool-window");
     await desk.click(presetWindow.getByRole("button", { name: "Color", exact: true }));
@@ -328,7 +351,7 @@ test("@ui narrates the complete Full HD product demo surface in one regression r
     await desk.click(demo.getByRole("button", { name: "Playback 3 button 1", exact: true }));
     await expect.poll(async () => activeNumbers(api)).toContain(3);
     await desk.click(presetWindow.locator(".group-strip .group-card").nth(1));
-    await expect.poll(async () => (await programmer(api)).selected.length).toBe(7);
+    await expect.poll(async () => (await programmer(api)).selected.length).toBe(rig.washTargets.length);
     await desk.click(presetWindow.getByRole("button", { name: /Blue Color ·/ }));
     await expect.poll(async () => blueStageColors(api, rig)).toBeGreaterThanOrEqual(7);
 
@@ -362,6 +385,7 @@ test("@ui narrates the complete Full HD product demo surface in one regression r
     await expect.poll(async () => activeNumbers(api)).toContain(4);
     await bench.tick(2_000);
     await expect.poll(async () => (await api.request<any>("GET", "/api/v1/dmx", undefined, false)).universes.some((frame: any) => frame.slots.some((value: number) => value > 0))).toBe(true);
+    if (UPDATE_DEMO_SHOW) completedShow = await downloadCompletedDemoShow(api, showId);
     await pause(page, 2_000);
 
     if (RECORDING) {
@@ -380,7 +404,34 @@ test("@ui narrates the complete Full HD product demo surface in one regression r
       await testInfo.attach("planned-demo-video", { path: VIDEO, contentType: "video/webm" });
     }
   }
+  if (UPDATE_DEMO_SHOW) {
+    expect(completedShow).not.toBeNull();
+    await publishDemoShowAsset(completedShow!);
+    await testInfo.attach("completed-demo-show", { path: DEMO_SHOW, contentType: "application/vnd.light.show" });
+  }
 });
+
+async function downloadCompletedDemoShow(api: ApiDriver, showId: string): Promise<Buffer> {
+  for (const route of await demoObjects<any>(api, showId, "route")) {
+    const port = route.body.protocol === "sacn" ? 5568 : 6454;
+    await api.request("PUT", `/api/v1/shows/${showId}/objects/route/${route.id}`, {
+      ...route.body,
+      destination: `127.0.0.1:${port}`,
+    }, true, route.revision);
+  }
+  const response = await fetch(`${api.baseUrl}/api/v1/shows/${showId}/download`, {
+    headers: { authorization: `Bearer ${api.session?.token}` },
+  });
+  expect(response.ok).toBe(true);
+  return Buffer.from(await response.arrayBuffer());
+}
+
+async function publishDemoShowAsset(show: Buffer): Promise<void> {
+  const temporary = `${DEMO_SHOW}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  await fs.mkdir(path.dirname(DEMO_SHOW), { recursive: true });
+  await fs.writeFile(temporary, show);
+  await fs.rename(temporary, DEMO_SHOW);
+}
 
 interface DemoFixturePlacement {
   search: string;
@@ -554,6 +605,12 @@ function fixtureSheetRow(fixtureWindow: Locator, fixtureId: string): Locator {
 async function chooseRecordMode(desk: DeskDriver, page: Page, mode: "Overwrite" | "Merge"): Promise<void> {
   const dialog = page.locator(".record-mode-dialog");
   await expect(dialog).toBeVisible();
+  const dialogBox = await dialog.boundingBox();
+  const viewport = page.viewportSize();
+  expect(dialogBox).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  expect(dialogBox!.x + dialogBox!.width / 2).toBeCloseTo(viewport!.width / 2, 0);
+  expect(dialogBox!.y + dialogBox!.height / 2).toBeCloseTo(viewport!.height / 2, 0);
   await desk.click(dialog.getByRole("button", { name: mode, exact: true }));
   await expect(dialog).toBeHidden();
 }

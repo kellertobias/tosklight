@@ -35,6 +35,7 @@ function multiHeadFixture(): PatchedFixture {
       ],
       color_calibration: null,
       physical: {},
+      icon_asset: "data:image/png;base64,fixture-icon",
       hazardous: false,
       direct_control_protocols: [],
       signal_loss_policy: { type: "hold_last" },
@@ -80,11 +81,9 @@ const state = {
   fixtureSheetOrder: "fixture-id" as const,
   fixtureSheetActiveOnly: false,
   fixtureSheetCueListId: "",
-  fixtureSheetColumns: ["id", "name", "dimmer", "color", "position", "beam", "focus"] as ("id" | "name" | "dimmer" | "color" | "position" | "beam" | "focus")[],
+  fixtureSheetColumns: ["id", "icon", "name", "dimmer", "color", "position", "beam", "focus"] as ("id" | "icon" | "name" | "patch" | "dimmer" | "color" | "position" | "beam" | "focus")[],
   fixtureSheetShowType: true,
-  fixtureSheetShowPatch: true,
-  fixtureSheetShowSubheads: true,
-  fixtureSheetShowMasterHeads: true,
+  fixtureSheetIncludedHeads: "all" as "all" | "no-sub-heads" | "no-master-heads",
 };
 const dispatch = vi.fn();
 
@@ -92,21 +91,37 @@ vi.mock("../api/ServerContext", () => ({ useServer: () => server }));
 vi.mock("../state/AppContext", () => ({ useApp: () => ({ state, dispatch }) }));
 
 beforeEach(() => {
+  server.patch.fixtures = [multiHeadFixture()];
   server.selectedFixtures = ["left"];
   server.highlight = stepState(false);
   server.readVisualization.mockClear().mockResolvedValue({ values: [] });
   server.selectionGesture.mockClear();
-  state.fixtureSheetColumns = ["id", "name", "dimmer", "color", "position", "beam", "focus"];
+  state.fixtureSheetColumns = ["id", "icon", "name", "dimmer", "color", "position", "beam", "focus"];
   state.fixtureSheetShowType = true;
-  state.fixtureSheetShowPatch = true;
-  state.fixtureSheetShowSubheads = true;
-  state.fixtureSheetShowMasterHeads = true;
+  state.fixtureSheetIncludedHeads = "all";
   dispatch.mockClear();
 });
 
 afterEach(() => cleanup());
 
 describe("Fixture Sheet Highlight stepping visualization", () => {
+  it("keeps every fixture row available in a compact scrollable pane", async () => {
+    server.patch.fixtures = Array.from({ length: 13 }, (_, index) => {
+      const fixture = multiHeadFixture();
+      return {
+        ...fixture,
+        fixture_id: `fixture-${index + 1}`,
+        fixture_number: index + 1,
+        name: `Fixture ${index + 1}`,
+        logical_heads: [],
+        definition: { ...fixture.definition, heads: [fixture.definition.heads[0]] },
+      };
+    });
+    const { container } = render(<FixtureSheetWindow compact/>);
+    await waitFor(() => expect(container.querySelector('[data-fixture-id="fixture-13"]')).toBeInTheDocument());
+    expect(container.querySelectorAll(".ui-data-table-row:not(.header)")).toHaveLength(13);
+  });
+
   it("keeps the remembered heads subdued, marks the actual step prominently, and survives HIGH toggles", async () => {
     const { container, rerender } = render(<FixtureSheetWindow compact/>);
     await waitFor(() => expect(container.querySelector('[data-fixture-id="left"]')).toBeInTheDocument());
@@ -138,20 +153,22 @@ describe("Fixture Sheet Highlight stepping visualization", () => {
     expect(container.querySelector('[data-fixture-id="left"] .fixture-sheet-id')).toBeInTheDocument();
     expect(container.querySelector('[data-fixture-id="left"] .fixture-name')).toBeInTheDocument();
 
-    state.fixtureSheetShowSubheads = false;
+    state.fixtureSheetIncludedHeads = "no-sub-heads";
     rerender(<FixtureSheetWindow/>);
-    expect(container.querySelector('[data-fixture-id="master"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-fixture-id="master"]')).toHaveTextContent(/^100/);
+    expect(container.querySelector('[data-fixture-id="master"]')).not.toHaveTextContent("100.0");
     expect(container.querySelector('[data-fixture-id="left"]')).not.toBeInTheDocument();
     expect(container.querySelector('[data-fixture-id="right"]')).not.toBeInTheDocument();
 
-    state.fixtureSheetShowSubheads = true;
-    state.fixtureSheetShowMasterHeads = false;
+    state.fixtureSheetIncludedHeads = "no-master-heads";
     rerender(<FixtureSheetWindow/>);
     expect(container.querySelector('[data-fixture-id="master"]')).not.toBeInTheDocument();
     expect(container.querySelector('[data-fixture-id="left"]')).toBeInTheDocument();
     expect(container.querySelector('[data-fixture-id="right"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-fixture-id="left"]')).not.toHaveClass("fixture-head-indented-row");
+    expect(container.querySelector('[data-fixture-id="right"]')).not.toHaveClass("fixture-head-indented-row");
 
-    state.fixtureSheetShowMasterHeads = true;
+    state.fixtureSheetIncludedHeads = "all";
     server.highlight = { ...stepState(false), mode: "selection", active_index: null, active_fixture: null };
     server.selectedFixtures = ["left", "right"];
     rerender(<FixtureSheetWindow/>);
@@ -168,7 +185,6 @@ describe("Fixture Sheet Highlight stepping visualization", () => {
   it("uses a compact View tab, exposes column controls, and hides optional name details", async () => {
     state.fixtureSheetColumns = ["id", "name", "dimmer"];
     state.fixtureSheetShowType = false;
-    state.fixtureSheetShowPatch = false;
     render(<FixtureSheetWindow/>);
 
     expect(screen.getByText("Name", { selector: ".ui-data-table-row.header span" })).toBeInTheDocument();
@@ -184,16 +200,34 @@ describe("Fixture Sheet Highlight stepping visualization", () => {
     expect(screen.queryByRole("tab", { name: "Filters" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Ordering" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Filters" })).toBeVisible();
-    expect(screen.getByRole("switch", { name: "Show Subheads" })).toBeChecked();
-    expect(screen.getByRole("switch", { name: "Show Master Heads" })).toBeChecked();
-    fireEvent.click(screen.getByRole("switch", { name: "Show Subheads" }));
-    expect(dispatch).toHaveBeenCalledWith({ type: "SET_FIXTURE_SHEET_OPTIONS", showSubheads: false });
+    const includedHeads = screen.getByRole("button", { name: /^All$/ });
+    fireEvent.click(includedHeads);
+    fireEvent.click(screen.getByRole("option", { name: "No master heads" }));
+    expect(dispatch).toHaveBeenCalledWith({ type: "SET_FIXTURE_SHEET_OPTIONS", includedHeads: "no-master-heads" });
 
     fireEvent.click(screen.getByRole("tab", { name: "Columns" }));
     expect(screen.getByRole("switch", { name: "Fixture ID" })).toBeChecked();
+    expect(screen.getByRole("switch", { name: "Icon" })).not.toBeChecked();
+    expect(screen.getByRole("switch", { name: "Patch address" })).not.toBeChecked();
     expect(screen.getByRole("switch", { name: "Beam" })).not.toBeChecked();
     expect(screen.getByRole("switch", { name: "Show fixture type" })).not.toBeChecked();
-    fireEvent.click(screen.getByRole("switch", { name: "Show patch address" }));
-    expect(dispatch).toHaveBeenCalledWith({ type: "SET_FIXTURE_SHEET_OPTIONS", showPatch: true });
+    fireEvent.click(screen.getByRole("switch", { name: "Patch address" }));
+    expect(dispatch).toHaveBeenCalledWith({ type: "SET_FIXTURE_SHEET_OPTIONS", columns: ["id", "name", "dimmer", "patch"] });
+  });
+
+  it("keeps fixture type aligned with the name and renders icon and patch as dedicated columns", async () => {
+    state.fixtureSheetColumns = ["id", "icon", "name", "patch"];
+    render(<FixtureSheetWindow/>);
+
+    const master = await screen.findByRole("row", { name: /100\.0.*Pixel Bar · Master.*Test · 2 cells.*U1\.1/ });
+    const name = master.querySelector<HTMLElement>(".fixture-name");
+    expect(name).toHaveTextContent("Pixel Bar · MasterTest · 2 cells");
+    expect(name).not.toHaveTextContent("U1.1");
+    expect(name?.querySelector(".fixture-type")).toBeInTheDocument();
+    expect(master.querySelector('.fixture-sheet-icon img[src="data:image/png;base64,fixture-icon"]')).toBeInTheDocument();
+    expect(master.querySelector(".fixture-sheet-patch")).toHaveTextContent("U1.1");
+
+    const headers = screen.getAllByRole("columnheader").map((header) => header.textContent);
+    expect(headers).toEqual(["ID", "Icon", "Name / type", "Patch"]);
   });
 });

@@ -12,6 +12,7 @@ describe("RecordModeDialog", () => {
     expect(screen.getByText("RECORD")).toHaveClass("workflow-badge");
     expect(screen.getByRole("button", { name: "Merge" })).toHaveClass("workflow-choice");
     expect(screen.getByRole("button", { name: "Overwrite" })).toHaveClass("danger");
+    expect(dialog.closest(".modal-backdrop")?.parentElement).toBe(document.body);
   });
 
   it.each([

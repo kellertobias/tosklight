@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title description">
+  <title id="title">ToskLight mark</title>
+  <desc id="description">A triangular play mark containing a theatrical spotlight and a blue beam.</desc>
+  <defs>
+    <linearGradient id="beam" x1="412" y1="328" x2="650" y2="730" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#d4f8ff"/>
+      <stop offset="0.28" stop-color="#72dcff" stop-opacity="0.94"/>
+      <stop offset="0.72" stop-color="#25a9f5" stop-opacity="0.78"/>
+      <stop offset="1" stop-color="#1261c2" stop-opacity="0.52"/>
+    </linearGradient>
+    <radialGradient id="lens" cx="0.35" cy="0.28" r="0.9">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.54" stop-color="#d8f8ff"/>
+      <stop offset="1" stop-color="#72d8ff"/>
+    </radialGradient>
+  </defs>
+  <path d="M222 720V250c0-81 58-114 129-72l378 224c73 43 73 101 1 149L348 808c-69 46-126 16-126-88Z" fill="none" stroke="#ffffff" stroke-width="42" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M224 291c28-56 79-66 129-29l91 67" fill="none" stroke="#ffffff" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M225 318 339 420" fill="none" stroke="#ffffff" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M296 362c11-57 57-89 107-75 52 15 77 62 61 113" fill="none" stroke="#ffffff" stroke-width="36" stroke-linecap="round"/>
+  <path d="M423 364 731 510 566 701Z" fill="url(#beam)" stroke="#9de8ff" stroke-width="9" stroke-linejoin="round"/>
+  <ellipse cx="411" cy="362" rx="41" ry="35" transform="rotate(-24 411 362)" fill="url(#lens)"/>
+  <path d="M386 344c11-14 30-19 47-11" fill="none" stroke="#ffffff" stroke-opacity="0.68" stroke-width="8" stroke-linecap="round"/>
+</svg>

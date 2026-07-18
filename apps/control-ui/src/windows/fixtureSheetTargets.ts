@@ -1,4 +1,5 @@
 import type { FixtureDefinition, PatchedFixture, VisualizationSnapshot } from "../api/types";
+import type { FixtureSheetIncludedHeads } from "../types";
 
 type FixtureHead = FixtureDefinition["heads"][number];
 
@@ -9,9 +10,13 @@ export interface FixtureSheetTarget {
   name: string;
   heads: FixtureHead[];
   order: number;
+  indented: boolean;
 }
 
-export function fixtureSheetTargets(fixture: PatchedFixture): FixtureSheetTarget[] {
+export function fixtureSheetTargets(
+  fixture: PatchedFixture,
+  includedHeads: FixtureSheetIncludedHeads = "all",
+): FixtureSheetTarget[] {
   const fixtureName = fixture.name || fixture.definition.name || fixture.definition.model;
   if (!fixture.logical_heads.length) {
     return [{
@@ -21,6 +26,7 @@ export function fixtureSheetTargets(fixture: PatchedFixture): FixtureSheetTarget
       name: fixtureName,
       heads: fixture.definition.heads,
       order: 0,
+      indented: false,
     }];
   }
 
@@ -28,10 +34,11 @@ export function fixtureSheetTargets(fixture: PatchedFixture): FixtureSheetTarget
   const targets: FixtureSheetTarget[] = [{
     fixture,
     fixtureId: fixture.fixture_id,
-    displayId: `${prefix}.0`,
+    displayId: includedHeads === "no-sub-heads" ? prefix : `${prefix}.0`,
     name: `${fixtureName} · Master`,
     heads: fixture.definition.heads.filter((head) => head.shared),
     order: 0,
+    indented: false,
   }];
   fixture.definition.heads.filter((head) => !head.shared).forEach((head, index) => {
     const patched = fixture.logical_heads.find((candidate) => candidate.head_index === head.index);
@@ -43,8 +50,11 @@ export function fixtureSheetTargets(fixture: PatchedFixture): FixtureSheetTarget
       name: `${fixtureName} · ${head.name}`,
       heads: [head],
       order: index + 1,
+      indented: includedHeads !== "no-master-heads",
     });
   });
+  if (includedHeads === "no-sub-heads") return targets.slice(0, 1);
+  if (includedHeads === "no-master-heads") return targets.slice(1);
   return targets;
 }
 

@@ -1172,7 +1172,7 @@ async function objectRows(file: string, excludedKind: string, excludedId: string
 }
 
 async function extractFixtureAsset(archive: string, asset: string, destination: string): Promise<void> {
-  const archivePath = fileURLToPath(new URL(`../fixture-library/${archive}`, import.meta.url));
+  const archivePath = fileURLToPath(new URL(`../assets/fixture-library/${archive}`, import.meta.url));
   const bytes = await new Promise<Buffer>((resolve, reject) => {
     execFile("unzip", ["-p", archivePath, asset], { encoding: "buffer", maxBuffer: 2 * 1024 * 1024 }, (error, stdout) => {
       if (error) reject(error);

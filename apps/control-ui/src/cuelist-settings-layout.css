@@ -1,65 +1,302 @@
-.cue-properties.cuelist-settings-active {
-  display: block;
+.cue-selected-preview {
+  position: relative;
+  width: 100%;
+  min-height: 74px;
+  padding: 0 !important;
+  overflow: hidden;
+  border-radius: 7px !important;
+  background: #080b0f;
+}
+
+.cue-selected-preview .cue-selected-thumbnail {
+  width: 100%;
+  min-height: 74px;
+  margin: 0;
+  object-fit: cover;
+}
+
+.cue-selected-label {
+  position: absolute;
+  z-index: 1;
+  left: 8px;
+  top: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.86);
+  color: #fff;
+  line-height: 1.2;
+}
+
+.cue-settings-grid {
+  grid-column: 1 / -1;
+  width: 100%;
+  gap: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.cue-settings-grid-measure {
   min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.cue-settings-grid .ui-form-field {
+  min-width: 0;
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  padding: 2px 0;
+  background: transparent;
+}
+
+.cue-settings-grid .ui-form-field > label {
+  width: auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.cue-settings-grid .ui-form-control,
+.cue-settings-grid .ui-text-control,
+.cue-settings-grid .ui-number-control,
+.cue-settings-grid .ui-select-field {
+  width: 100%;
+  min-width: 0;
+}
+
+.cue-settings-grid .ui-number-control.with-steppers {
+  grid-template-columns: minmax(0, 1fr) 42px;
+}
+
+.cue-settings-grid .ui-number-minus,
+.cue-settings-grid .ui-number-plus {
+  display: none;
+}
+
+.cue-settings-grid .ui-input,
+.cue-settings-grid .ui-select-trigger {
+  border-color: transparent;
+  background: transparent;
+}
+
+.cue-trigger-grid-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  gap: 1px;
+}
+
+.cue-trigger-grid-control > .ui-form-field {
+  display: block;
+  min-height: 0;
   padding: 0;
+}
+
+.cue-trigger-grid-control > .ui-button {
+  min-width: 42px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.cue-properties {
+  position: relative;
   overflow: hidden;
 }
 
-.cuelist-settings-inline {
-  position: relative;
-  width: 100%;
-  max-width: none;
-  height: 100%;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  overflow: auto;
-  background: var(--panel);
+.cue-properties.compact-cue-settings .cue-settings-grid {
+  position: absolute;
+  left: -10000px;
+  top: 0;
+  width: calc(100% - 16px);
+  visibility: hidden;
+  pointer-events: none;
 }
 
-.cuelist-settings-inline > h2 {
-  margin: 0;
-  padding-right: 38px;
-  font-size: 16px;
-}
-
-.cuelist-settings-inline .ui-form-layout,
-.cuelist-settings-inline .ui-form-field,
-.cuelist-settings-inline .ui-select-field,
-.cuelist-settings-inline input,
-.cuelist-settings-inline select {
-  width: 100%;
-  min-width: 0;
-}
-
-.cuelist-settings-inline .ui-switch-control {
-  position: relative;
-  width: 100%;
-  min-width: 0;
-}
-
-.cuelist-settings-inline .ui-switch-control > input {
-  top: 50%;
-  left: 12px;
-}
-
-.cuelist-settings-inline > .modal-actions {
-  display: grid;
-  grid-template-columns: 1fr;
-  margin-top: auto;
-}
-
-.cuelist-settings-inline > .modal-actions .ui-button {
-  width: 100%;
-  min-height: 42px;
-}
-
-.cue-settings-title {
+.cue-settings-compact-fallback {
   grid-column: 1 / -1;
-  margin: 0;
-  font-size: 16px;
+  min-width: 0;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent;
+}
+
+.cue-settings-compact-fallback > p {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.cue-settings-compact-fallback[data-set-armed="true"] > p {
+  color: var(--cyan);
+}
+
+.cue-settings-compact-fallback > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 6px;
+}
+
+.cue-settings-compact-fallback .ui-button {
+  min-width: 0;
+  min-height: 37px;
+  display: grid;
+  justify-items: start;
+  align-content: center;
+  gap: 1px;
+  padding: 3px 2px;
+  overflow: hidden;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.cue-settings-compact-fallback .ui-button small,
+.cue-settings-compact-fallback .ui-button b {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cue-settings-compact-fallback .ui-button small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.cue-settings-compact-fallback .ui-button b {
+  font-size: 12px;
+}
+
+.cue-settings-compact-fallback .ui-button.is-active {
+  color: var(--cyan);
+  box-shadow: inset 3px 0 var(--cyan);
+}
+
+.cue-trigger-modal {
+  width: min(480px, 100%) !important;
+}
+
+.cue-trigger-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.cue-trigger-options .ui-button {
+  min-height: 64px;
+}
+
+.cuelist-settings-backdrop {
+  z-index: 1600;
+}
+
+.stacked-modal-layer .cuelist-settings-modal {
+  width: min(1120px, 100%);
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+}
+
+.cuelist-settings-modal > .ui-modal-titlebar {
+  position: sticky;
+  z-index: 12;
+  top: -16px;
+  overflow: visible;
+}
+
+.cuelist-settings-columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cuelist-settings-columns > section {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel2);
+}
+
+.cuelist-settings-columns h3 {
+  margin: 0 0 12px;
+  font-size: 17px;
+}
+
+.cuelist-settings-columns .ui-form-layout {
+  gap: 14px;
+}
+
+.cuelist-settings-columns .ui-form-field > small {
+  line-height: 1.35;
+}
+
+.cuelist-mode-title-menu {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+.ui-modal-title-actions > .cuelist-mode-title-menu > .cuelist-mode-title-trigger {
+  min-width: 118px;
+  min-height: 53px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: 1fr 1fr;
+  align-content: center;
+  padding: 7px 12px;
+  border: 0;
+  border-left: 1px solid var(--line2);
+  border-radius: 0;
+  background: #151d24;
+  text-align: left;
+}
+
+.cuelist-mode-title-trigger > span,
+.cuelist-mode-title-trigger > small {
+  line-height: 1.05;
+}
+
+.cuelist-mode-title-trigger > small {
+  color: var(--muted);
+}
+
+.cuelist-mode-title-trigger > i {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  align-self: center;
+  margin-left: 8px;
+  font-style: normal;
+}
+
+.cuelist-mode-title-panel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  right: 0;
+  width: 190px;
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--cyan);
+  border-radius: 7px;
+  background: #10171d;
+  box-shadow: 0 14px 40px #000b;
+}
+
+.cuelist-mode-title-panel > .ui-button {
+  justify-content: flex-start;
+  border-color: var(--line2);
+}
+
+.cuelist-mode-title-panel > .ui-button > span {
+  width: 14px;
+  color: var(--cyan);
 }
 
 .cue-table tbody tr[aria-disabled="true"] {
@@ -73,5 +310,9 @@
 @media (max-width: 900px) {
   .sequence-layout.with-cue-properties {
     grid-template-columns: minmax(0, 1fr) minmax(240px, 38%);
+  }
+
+  .cuelist-settings-columns {
+    grid-template-columns: 1fr;
   }
 }

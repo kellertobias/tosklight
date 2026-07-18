@@ -55,7 +55,7 @@ test("PLAYBACK-SELECT-001 @supplemental-ui › controls, Record, Group selection
     const beforeFirst = (await object<any>(api, "cue_list", prepared.firstCuelist)).body.cues.length;
     const beforeSecond = (await object<any>(api, "cue_list", prepared.secondCuelist)).body.cues.length;
     await page.getByRole("button", { name: "REC", exact: true }).click();
-    await first.locator(".hardware-cue-list").click();
+    await first.getByRole("button", { name: "GO +", exact: true }).click();
     await expect.poll(async () => (await object<any>(api, "cue_list", prepared.firstCuelist)).body.cues.length).toBe(beforeFirst + 1);
     expect((await object<any>(api, "cue_list", prepared.secondCuelist)).body.cues).toHaveLength(beforeSecond);
     expect((await playbackState(api)).selected_playback).toBe(41);

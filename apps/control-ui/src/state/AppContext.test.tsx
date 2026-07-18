@@ -61,4 +61,13 @@ describe("desk shortcuts", () => {
 
     expect(screen.getByText("patch-set-armed")).toBeInTheDocument();
   });
+
+  it("reserves attached-hardware SET for the constrained Cue settings editor", () => {
+    render(<AppProvider><PatchState/><section className="cue-settings-compact-fallback"/></AppProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Open Patch" }));
+
+    act(() => window.dispatchEvent(new CustomEvent("light:desk-action", { detail: "set" })));
+
+    expect(screen.getByText("patch-set-idle")).toBeInTheDocument();
+  });
 });

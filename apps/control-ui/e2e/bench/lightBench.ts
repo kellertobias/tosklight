@@ -81,7 +81,7 @@ export class LightBench {
     const httpPort = Number(new URL(this.baseUrl).port);
     this.process = spawn(SERVER, [
       "--data-dir", this.dataDir,
-      "--fixture-package-dir", path.join(ROOT, "fixture-library"),
+      "--fixture-package-dir", path.join(ROOT, "assets", "fixture-library"),
       "--bind", `127.0.0.1:${httpPort}`,
       "--test-bench",
       "--osc-bind", `127.0.0.1:${this.oscPort}`,

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type RefObject } from "react";
 import { useApp } from "../../state/AppContext";
 import { useServer } from "../../api/ServerContext";
+import { ModalPortal } from "../common";
 import { VerticalTouchFader } from "../control/VerticalTouchFader";
 import {
   moveLampPositions,
@@ -270,7 +271,7 @@ export function SpecialDialogsModal() {
   const pageAttributes = beamAttributes.slice(beamPage * 4, beamPage * 4 + 4);
   const color = hsvToRgb({ hue, saturation, brightness });
   const swatch = `rgb(${color.map((channel) => Math.round(channel * 255)).join(",")})`;
-  return (
+  return <ModalPortal>
     <div
       className="modal-backdrop"
       onPointerDown={(event) => {
@@ -452,5 +453,5 @@ export function SpecialDialogsModal() {
         {server.error && <p className="modal-error" role="alert">{server.error}</p>}
       </section>
     </div>
-  );
+  </ModalPortal>;
 }

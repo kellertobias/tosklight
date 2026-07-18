@@ -43,6 +43,10 @@ consumed by the Help window, PDF, and HTML manual. See the
 [manual authoring guide](docs/help/99-Development/04-manual-and-help-screenshots.md) for the Markdown and screenshot
 contract.
 
+Repository-owned assets live under `assets/`. The transferable shipped
+fixture packages are in `assets/fixture-library/`; a successful `./test demo`
+atomically refreshes the completed portable show at `assets/demo.show`.
+
 `./build archive` ships the web UI inside each `light-server` binary. It creates a
 universal macOS binary plus Windows, Linux AMD64, and Linux ARM64 binaries in
 `.artifacts/release/`; Linux binaries are statically linked. Building the non-macOS
