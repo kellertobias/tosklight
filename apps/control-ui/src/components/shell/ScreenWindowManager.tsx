@@ -1,15 +1,77 @@
 import { useEffect, useRef } from "react";
+import type { ScreenConfiguration } from "../../api/types";
 import { useScreens } from "../../features/screens/ScreensContext";
+import { type DesktopBridge, useDesktopBridge } from "../../platform/desktop";
+
+async function reconcileScreen(
+  desktop: DesktopBridge,
+  screen: ScreenConfiguration,
+  displays: ReadonlySet<string>,
+) {
+  if (!screen.desired_open) return desktop.closeConsoleScreen(screen.id);
+  if (screen.display_id && !displays.has(screen.display_id)) return desktop.hideConsoleScreen(screen.id);
+  return desktop.openConsoleScreen({
+    screenId: screen.id,
+    title: screen.name,
+    displayId: screen.display_id,
+    bounds: screen.bounds,
+    fullscreen: screen.fullscreen,
+  });
+}
+
+async function reconcileWindows(
+  desktop: DesktopBridge,
+  screens: readonly ScreenConfiguration[],
+  cancelled: () => boolean,
+) {
+  const available = new Set((await desktop.listDisplays()).map((display) => display.id));
+  for (const screen of screens) {
+    if (cancelled()) return;
+    await reconcileScreen(desktop, screen, available);
+  }
+}
+
+function createReconciler(
+  desktop: DesktopBridge,
+  screens: () => readonly ScreenConfiguration[],
+  cancelled: () => boolean,
+) {
+  let running = false;
+  let requested = false;
+  return async function request() {
+    requested = true;
+    if (running) return;
+    running = true;
+    try {
+      while (requested && !cancelled()) {
+        requested = false;
+        await reconcileWindows(desktop, screens(), cancelled);
+      }
+    } finally {
+      running = false;
+    }
+  };
+}
 
 export function ScreenWindowManager() {
-  const server=useScreens();
-  const screensRef=useRef(server.screens);
-  const requestReconcile=useRef<()=>void>(()=>undefined);
-  screensRef.current=server.screens;
-  useEffect(()=>{if(!("__TAURI_INTERNALS__" in window))return;let cancelled=false;let running=false;let requested=false;
-    const reconcile=async()=>{if(running){requested=true;return;}running=true;do{requested=false;const {invoke}=await import("@tauri-apps/api/core");const displays=await invoke<Array<{id:string}>>("list_console_displays");if(cancelled)break;const available=new Set(displays.map((display)=>display.id));for(const configured of screensRef.current?.screens??[]){if(cancelled)break;const screen=screensRef.current?.screens.find((item)=>item.id===configured.id);if(!screen)continue;if(screen.desired_open&&(!screen.display_id||available.has(screen.display_id)))await invoke("open_console_screen",{screenId:screen.id,title:screen.name,displayId:screen.display_id,bounds:screen.bounds,fullscreen:screen.fullscreen});else if(screen.desired_open)await invoke("hide_console_screen",{screenId:screen.id});else await invoke("close_console_screen",{screenId:screen.id});}}while(requested&&!cancelled);running=false;};
-    requestReconcile.current=()=>void reconcile();requestReconcile.current();const timer=window.setInterval(requestReconcile.current,2000);return()=>{cancelled=true;requestReconcile.current=()=>undefined;window.clearInterval(timer);};
-  },[]);
-  useEffect(()=>{requestReconcile.current();},[server.screens]);
+  const desktop = useDesktopBridge();
+  const screens = useScreens().screens;
+  const screensRef = useRef(screens);
+  const requestReconcile = useRef<() => void>(() => undefined);
+  screensRef.current = screens;
+  useEffect(() => {
+    if (!desktop.available) return;
+    let cancelled = false;
+    const request = createReconciler(desktop, () => screensRef.current?.screens ?? [], () => cancelled);
+    requestReconcile.current = () => void request();
+    requestReconcile.current();
+    const timer = window.setInterval(requestReconcile.current, 2_000);
+    return () => {
+      cancelled = true;
+      requestReconcile.current = () => undefined;
+      window.clearInterval(timer);
+    };
+  }, [desktop]);
+  useEffect(() => requestReconcile.current(), [screens]);
   return null;
 }

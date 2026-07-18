@@ -3,13 +3,15 @@ import { useServer } from "../../api/ServerContext";
 import { configuredServerUrl } from "../../api/LightApiClient";
 import appIcon from "../../../src-tauri/icons/icon.svg";
 import { Button, TextField } from "../common";
+import { useDesktopBridge } from "../../platform/desktop";
 
 export function ConnectionState() {
   const server = useServer();
+  const desktop = useDesktopBridge();
   const [deskToken, setDeskToken] = useState("");
   const [serverUrl, setServerUrl] = useState(configuredServerUrl());
   const [startupGrace, setStartupGrace] = useState(true);
-  const isTauri = "__TAURI_INTERNALS__" in window;
+  const isTauri = desktop.available;
   const usesBuiltInServer = useMemo(() => {
     try {
       const host = new URL(serverUrl).hostname;
@@ -44,7 +46,7 @@ export function ConnectionState() {
   return (
     <div className="connection-cover" role="status">
       <div className="connection-card">
-        <div className="app-mark" aria-label="ToskLight application">
+        <div className="app-mark" role="img" aria-label="ToskLight application">
           <img src={appIcon} alt="" />
         </div>
         <span className="status-pulse" />

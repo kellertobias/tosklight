@@ -7,6 +7,7 @@ import { Button, FormField, FormLayout, HorizontalFaderField, ModalPortal, Modal
 import { ButtonGrid, WindowHeader, WindowScrollArea } from "../components/window-kit";
 import { useApp } from "../state/AppContext";
 import { cueUpdateTarget, requestUpdateTarget } from "../components/control/updateWorkflow";
+import { useDesktopBridge } from "../platform/desktop";
 
 function cueTriggerKind(cue: Cue | null | undefined): "go" | "follow" | "time" {
   if (cue?.trigger.type === "manual") return "go";
@@ -349,7 +350,7 @@ export function CuelistWindow({ builtIn = false, compact, cueListTab, showCueSid
   const [cueTriggerModalOpen, setCueTriggerModalOpen] = useState(false);
   const [cueEditError, setCueEditError] = useState("");
   const cueSavePending = useRef("");
-  const tauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+  const tauri = useDesktopBridge().available;
   const [thumbnails, setThumbnails] = useState<Record<number, string>>({});
   const settingsDefinition = pool.find((definition) => definition.number === settingsCuelist);
   const settingsCueListId = settingsDefinition?.target.type === "cue_list" ? settingsDefinition.target.cue_list_id : null;

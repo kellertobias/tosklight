@@ -2,10 +2,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { WindowProps } from "./windowTypes";
 import { FixturePatchSetup } from "../components/setup/FixturePatchSetup";
 import { MediaServerSetup } from "../components/setup/MediaServerSetup";
-import { Button } from "../components/common";
 import { WindowHeader, WindowScrollArea } from "../components/window-kit";
 import { StageWindow } from "./StageWindow";
 import { useServer } from "../api/ServerContext";
+import { useDesktopBridge } from "../platform/desktop";
 
 export function PatchWindow(_: WindowProps) {
 	const server = useServer();
@@ -45,8 +45,7 @@ export function PatchWindow(_: WindowProps) {
 		observer.observe(overlay);
 		return () => observer.disconnect();
 	}, [previewVisible]);
-	const tauri =
-		typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+	const tauri = useDesktopBridge().available;
 	return (
 		<div
 			className={`patch-window ${previewVisible ? "stage-preview-open" : ""}`}

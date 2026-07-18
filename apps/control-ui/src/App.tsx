@@ -5,13 +5,15 @@ import { ServerProvider, useServer } from "./api/ServerContext";
 import { useEffect } from "react";
 import { DeskLockOverlay } from "./components/modals/DeskLockOverlay";
 import { FileManagerPickerHost } from "./windows/FileManagerPickerHost";
+import { useDesktopBridge } from "./platform/desktop";
 
 function DesktopReady() {
   const server = useServer();
+  const desktop = useDesktopBridge();
   useEffect(() => {
-    if (server.status !== "connected" || !server.bootstrap || !("__TAURI_INTERNALS__" in window)) return;
-    void import("@tauri-apps/api/core").then(({ invoke }) => invoke("frontend_ready"));
-  }, [server.status, server.bootstrap]);
+    if (server.status !== "connected" || !server.bootstrap || !desktop.available) return;
+    void desktop.frontendReady();
+  }, [server.status, server.bootstrap, desktop]);
   return null;
 }
 

@@ -26,6 +26,7 @@ import type { StagePosition3d } from "../api/ServerContext";
 import type { VisualizationSnapshot } from "../api/types";
 import { useApp } from "../state/AppContext";
 import { WindowHeader, WindowSettings } from "../components/window-kit";
+import { useDesktopBridge } from "../platform/desktop";
 
 const symbols = ["◉", "◈", "◎", "◐", "◇", "◍"];
 type Point = { x: number; y: number };
@@ -74,8 +75,7 @@ export function StageWindow({
 	const showBeamGuides = forcedShowBeamGuides ?? state.stageShowBeamGuides;
 	const environmentBrightness =
 		forcedEnvironmentBrightness ?? state.stageEnvironmentBrightness;
-	const tauri =
-		typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+	const tauri = useDesktopBridge().available;
 	const zoom = state.stageZoom;
 	const [positions, setPositions] = useState<
 		Record<string, { x: number; y: number; rotation: number }>

@@ -6,7 +6,6 @@ import {
 	Button,
 	FormLayout,
 	ModalTitleBar,
-	NumberField,
 	SelectField,
 	SwitchField,
 	TextField,
@@ -20,15 +19,7 @@ import {
 	screenPlaybackLayout,
 } from "./screenConfiguration";
 import type { PlaybackSurfaceLayout } from "../../api/types";
-
-const tauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-async function invoke<T>(
-	command: string,
-	args?: Record<string, unknown>,
-): Promise<T> {
-	const api = await import("@tauri-apps/api/core");
-	return api.invoke<T>(command, args);
-}
+import { useDesktopBridge } from "../../platform/desktop";
 
 export function DefaultScreenPicker({
 	clients,
@@ -241,6 +232,7 @@ export function ScreenSettingsCard({
 
 export function ScreensSetup() {
 	const server = useScreens();
+	const desktop = useDesktopBridge();
 	const { state, dispatch } = useApp();
 	const [displays, setDisplays] = useState<Array<{ id: string; name: string }>>(
 		[],
@@ -254,11 +246,8 @@ export function ScreensSetup() {
 	const deskSaveQueue = useRef(Promise.resolve());
 	const pendingDeskSaves = useRef(0);
 	useEffect(() => {
-		if (tauri)
-			void invoke<Array<{ id: string; name: string }>>(
-				"list_console_displays",
-			).then(setDisplays);
-	}, []);
+		if (desktop.available) void desktop.listDisplays().then(setDisplays);
+	}, [desktop]);
 	useEffect(() => {
 		const desk = server.session?.desk;
 		if (!desk || pendingDeskSaves.current > 0) return;
@@ -306,7 +295,7 @@ export function ScreensSetup() {
 			}),
 		);
 	const remove = async (screen: ScreenConfiguration) => {
-		await invoke("close_console_screen", { screenId: screen.id });
+		await desktop.closeConsoleScreen(screen.id);
 		await server.deleteScreen(screen.id);
 	};
 	return (
@@ -319,7 +308,7 @@ export function ScreensSetup() {
 						control, then optional operator screens.
 					</p>
 				</div>
-				{tauri && (
+				{desktop.available && (
 					<Button variant="primary" onClick={create}>
 						+ Add screen
 					</Button>
@@ -370,13 +359,13 @@ export function ScreensSetup() {
 						</div>
 					</footer>
 				</article>
-				{!tauri && (
+				{!desktop.available && (
 					<p>
 						Additional console screens are available in the ToskLight desktop
 						app.
 					</p>
 				)}
-				{tauri &&
+				{desktop.available &&
 					(server.screens?.screens ?? []).map((screen) => (
 						<ScreenSettingsCard
 							key={screen.id}

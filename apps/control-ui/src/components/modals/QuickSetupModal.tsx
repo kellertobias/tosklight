@@ -15,6 +15,7 @@ import { RootConfinedFilePickerButton } from "../files/RootConfinedFilePickerBut
 import type { MvrExportPreview, MvrImportPreview, ShowEntry, ShowRevision } from "../../api/types";
 import { getShowIndicator } from "../shell/showIndicator";
 import { screenForAddAction } from "../setup/screenConfiguration";
+import { useDesktopBridge } from "../../platform/desktop";
 
 interface QuickSetupKeyboardOptions {
 	enabled: boolean;
@@ -156,6 +157,7 @@ function AddScreenAction({
 export function QuickSetupModal() {
   const { state, dispatch } = useApp();
   const server = useServer();
+  const desktop = useDesktopBridge();
   const [showName, setShowName] = useState("");
   const [revisionOpen, setRevisionOpen] = useState(false);
   const [revisionName, setRevisionName] = useState("");
@@ -256,10 +258,7 @@ export function QuickSetupModal() {
   }
   async function shutDownDesk() {
     if (!await server.shutdownServer()) return;
-    if ("__TAURI_INTERNALS__" in window) {
-      const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("exit_desktop_app");
-    }
+    if (desktop.available) await desktop.exitApplication();
   }
   async function lockDesk() {
     close();
@@ -279,7 +278,7 @@ export function QuickSetupModal() {
   return <div className="modal-backdrop" onPointerDown={(event) => { if (event.currentTarget === event.target) close(); }}><section className="modal-card show-modal" role="dialog" aria-modal="true" aria-label="Show">
     <ModalTitleBar title="Show" closeLabel="Close Show" onClose={close} actions={<>
       <Button onClick={() => setChangeUserOpen(true)}><span aria-hidden="true">♙</span> Change User</Button>
-      {"__TAURI_INTERNALS__" in window && <AddScreenAction layout={{ desks: state.desks, activeDeskId: state.activeDeskId }} onAdded={close} />}
+      {desktop.available && <AddScreenAction layout={{ desks: state.desks, activeDeskId: state.activeDeskId }} onAdded={close} />}
       <Button onClick={() => dispatch({ type: "SET_MODAL", modal: "debugOpen", value: true })}><span aria-hidden="true">⌁</span> Desk Status</Button>
     </>}/>
     <div className="show-details"><b>{activeShow?.name ?? "No active show"}</b>{revisionCopy && <div className="revision-copy-notice" role="status"><strong>Separate revision copy</strong><span>Created from <b>{revisionCopy.show_name}</b>, Revision {revisionCopy.revision} · {revisionCopy.revision_name}</span><small>Created {new Date(revisionCopy.copied_at).toLocaleString()}. Current changes are autosaved to this copy, not to {revisionCopy.show_name}.</small></div>}<div className={`show-status-explanation ${showIndicator.className}`} role="status"><span className="show-status-dot" aria-hidden="true">●</span><span><strong>{showIndicator.label}</strong><small>{showIndicator.detail}</small></span></div><span>Server connected <strong>{server.status === "connected" ? "Yes" : "No"}</strong></span><span>Latest named revision <strong>{activeRevisions[0] ? `${activeRevisions[0].revision} · ${activeRevisions[0].name}` : "None"}</strong></span><span>Operator <strong>{server.session?.user.name ?? "—"}</strong></span><div className="show-primary-actions"><Button onClick={() => setRevisionOpen(true)}><span aria-hidden="true">💾</span> Save Named Revision</Button>{revisionCopy && <Button onClick={() => setCopySaveOpen(true)}><span aria-hidden="true">✓</span> Save</Button>}<Button onClick={() => setSaveAsOpen(true)}><span aria-hidden="true">✎</span> Save As</Button><Button onClick={() => void openLoadMenu()}><span aria-hidden="true">↥</span> Load</Button><Button onClick={() => setNewShowOpen(true)}><span aria-hidden="true">＋</span> New Show</Button></div></div>

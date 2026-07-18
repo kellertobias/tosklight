@@ -16,13 +16,17 @@ import { UiKitCatalog } from "./components/window-kit/UiKitCatalog";
 import { enableSetOnContextMenu } from "./disableContextMenu";
 import { ProductDemoApp } from "./ProductDemoApp";
 import "./product-demo.css";
+import { createDesktopBridge, DesktopProvider } from "./platform/desktop";
 
 enableSetOnContextMenu();
+const desktop = createDesktopBridge();
 const screenId = new URLSearchParams(window.location.search).get("screen");
 const uiKit = import.meta.env.DEV && new URLSearchParams(window.location.search).get("ui-kit") === "1";
 const productDemo = new URLSearchParams(window.location.search).get("demo") === "product";
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    {productDemo ? <ProductDemoApp /> : uiKit ? <UiKitCatalog /> : screenId ? <ScreenApp id={screenId}/> : <App />}
+    <DesktopProvider bridge={desktop}>
+      {productDemo ? <ProductDemoApp /> : uiKit ? <UiKitCatalog /> : screenId ? <ScreenApp id={screenId}/> : <App />}
+    </DesktopProvider>
   </StrictMode>,
 );

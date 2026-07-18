@@ -1,39 +1,37 @@
 import { useEffect, useState } from "react";
+import { useDesktopBridge } from "../../platform/desktop";
 import { Button } from "../common";
 
-const nativeWindow = () => import("@tauri-apps/api/window").then(({ getCurrentWindow }) => getCurrentWindow());
-
 export function NativeDragStrip() {
+  const desktop = useDesktopBridge();
   const [fullscreen, setFullscreen] = useState(false);
 
   useEffect(() => {
-    if (!("__TAURI_INTERNALS__" in window)) return;
+    if (!desktop.available) return;
     let active = true;
-    void nativeWindow().then(async (current) => {
-      const next = await current.isFullscreen();
+    void desktop.currentWindowFullscreen().then((next) => {
       if (active) setFullscreen(next);
     });
     return () => { active = false; };
-  }, []);
+  }, [desktop]);
 
   const closeWindow = () => {
-    if (!("__TAURI_INTERNALS__" in window)) return;
-    void nativeWindow().then((current) => current.close());
+    if (desktop.available) void desktop.closeCurrentWindow();
   };
   const toggleFullscreen = () => {
-    if (!("__TAURI_INTERNALS__" in window)) return;
-    void nativeWindow().then(async (current) => {
-      const next = !(await current.isFullscreen());
-      await current.setFullscreen(next);
+    if (!desktop.available) return;
+    void desktop.currentWindowFullscreen().then(async (current) => {
+      const next = !current;
+      await desktop.setCurrentWindowFullscreen(next);
       setFullscreen(next);
     });
   };
   const startDragging = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 0 || !("__TAURI_INTERNALS__" in window)) return;
+    if (event.button !== 0 || !desktop.available) return;
     event.preventDefault();
-    void nativeWindow().then((current) => current.startDragging());
+    void desktop.startCurrentWindowDrag();
   };
-  return <div className="native-drag-strip" aria-label="Window controls">
+  return <div className="native-drag-strip">
     <Button className="native-window-close" aria-label="Close window" title="Close window" onClick={closeWindow}>
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>
     </Button>
