@@ -3,6 +3,10 @@ import {
 	type PresetFamily,
 	presetStorageKey,
 } from "../presetFamilies";
+import {
+	ConfigurationApiClient,
+	type DeskLockInput,
+} from "./client/configuration";
 import { FileApiClient, type FileOperationInput } from "./client/files";
 import { FixtureApiClient } from "./client/fixtures";
 import { MediaApiClient } from "./client/media";
@@ -101,6 +105,7 @@ export class LightApiClient {
 	private readonly fixtureApi: FixtureApiClient;
 	private readonly mediaApi: MediaApiClient;
 	private readonly showApi: ShowApiClient;
+	private readonly configurationApi: ConfigurationApiClient;
 
 	constructor(private readonly baseUrl = defaultServerUrl()) {
 		const transport: ClientTransport = {
@@ -113,6 +118,7 @@ export class LightApiClient {
 		this.fixtureApi = new FixtureApiClient(transport);
 		this.mediaApi = new MediaApiClient(transport);
 		this.showApi = new ShowApiClient(transport);
+		this.configurationApi = new ConfigurationApiClient(transport);
 	}
 
 	helpCatalog(): Promise<HelpCatalog> {
@@ -472,7 +478,7 @@ export class LightApiClient {
 		output_health: import("./types").OutputHealth;
 		matter: import("./types").MatterBridgeStatus;
 	}> {
-		return this.request("/api/v1/configuration", {}, false);
+		return this.configurationApi.configuration();
 	}
 
 	updateConfiguration(configuration: DeskConfiguration): Promise<{
@@ -480,88 +486,55 @@ export class LightApiClient {
 		requires_restart: boolean;
 		matter: import("./types").MatterBridgeStatus;
 	}> {
-		return this.request("/api/v1/configuration", {
-			method: "PUT",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify(configuration),
-		});
+		return this.configurationApi.updateConfiguration(configuration);
 	}
 
 	matterStatus(): Promise<import("./types").MatterBridgeStatus> {
-		return this.request("/api/v1/matter/status");
+		return this.configurationApi.matterStatus();
 	}
 
 	speedGroup(
 		group: import("./types").SpeedGroupId,
 	): Promise<import("./types").SpeedGroupSoundState> {
-		return this.request(`/api/v1/speed-groups/${group}`);
+		return this.configurationApi.speedGroup(group);
 	}
 
 	updateSpeedGroup(
 		group: import("./types").SpeedGroupId,
 		configuration: import("./types").SoundToLightConfig,
 	): Promise<import("./types").SpeedGroupSoundState> {
-		return this.request(`/api/v1/speed-groups/${group}`, {
-			method: "PUT",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify(configuration),
-		});
+		return this.configurationApi.updateSpeedGroup(group, configuration);
 	}
 
 	observeSpeedGroup(
 		group: import("./types").SpeedGroupId,
 		observation: import("./types").SoundObservation,
 	): Promise<import("./types").SpeedGroupSoundState> {
-		return this.request(`/api/v1/speed-groups/${group}/observation`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify(observation),
-		});
+		return this.configurationApi.observeSpeedGroup(group, observation);
 	}
 
 	speedGroupAction(
 		group: import("./types").SpeedGroupId,
 		input: import("./types").SpeedGroupActionInput,
 	): Promise<import("./types").SpeedGroupSoundState> {
-		return this.request(`/api/v1/speed-groups/${group}/action`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify(input),
-		});
+		return this.configurationApi.speedGroupAction(group, input);
 	}
 
 	shutdown(): Promise<{ shutting_down: boolean }> {
-		return this.request("/api/v1/shutdown", { method: "POST" });
+		return this.configurationApi.shutdown();
 	}
 
 	deskLock(): Promise<import("./types").DeskLockState> {
-		return this.request("/api/v1/desk-lock");
+		return this.configurationApi.deskLock();
 	}
-	configureDeskLock(input: {
-		message: string;
-		wallpaper: string | null;
-		unlock_mode: "button" | "pin";
-		pin?: string;
-	}): Promise<import("./types").DeskLockState> {
-		return this.request("/api/v1/desk-lock", {
-			method: "PUT",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify(input),
-		});
+	configureDeskLock(input: DeskLockInput) {
+		return this.configurationApi.configureDeskLock(input);
 	}
 	lockDesk(): Promise<import("./types").DeskLockState> {
-		return this.request("/api/v1/desk-lock/lock", {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: "{}",
-		});
+		return this.configurationApi.lockDesk();
 	}
 	unlockDesk(pin?: string): Promise<import("./types").DeskLockState> {
-		return this.request("/api/v1/desk-lock/unlock", {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ pin }),
-		});
+		return this.configurationApi.unlockDesk(pin);
 	}
 
 	objects<T>(showId: string, kind: string): Promise<VersionedObject<T>[]> {
