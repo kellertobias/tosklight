@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod bootstrap;
 #[path = "command_http.rs"]
 mod command_http;
 #[path = "cue_transfer.rs"]
@@ -17,6 +18,7 @@ mod http_router;
 mod matter;
 mod output_scheduler;
 mod startup_options;
+mod startup_state;
 
 use crate::highlight::{
     HighlightAction, HighlightError, HighlightFixture, HighlightMode, HighlightRegistry,
@@ -46,9 +48,7 @@ use light_control::{
     RtpMidiInput, SmpteTimecode, TimecodeRouter, TimecodeSourceConfig, UdpControlInput,
     UdpInputProtocol, encode_osc_message,
 };
-use light_core::{
-    ATTRIBUTE_REGISTRY, ApplicationClock, ManualClock, SessionId, SharedClock, SystemClock,
-};
+use light_core::{ATTRIBUTE_REGISTRY, ApplicationClock, ManualClock, SessionId};
 use light_engine::{Engine, EngineSnapshot, RenderOptions};
 use light_media::{CitpClient, LibraryId, MediaCache, PreviewKey, ThumbnailKey};
 use light_output::{NetworkOutput, OutputHealth};
@@ -898,237 +898,7 @@ fn ensure_default_show_available(desk: &DeskStore, data_dir: &FsPath) -> anyhow:
 }
 
 pub async fn run() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter("light_server=info,tower_http=info")
-        .init();
-    let startup_options::StartupAction::Run(options) = startup_options::from_process()? else {
-        println!("{}", startup_options::HELP);
-        return Ok(());
-    };
-    let startup_options::StartupOptions {
-        data_dir,
-        mut fixture_package_dir,
-        bind,
-        test_bench,
-        osc_bind_override,
-        output_bind_override,
-    } = options;
-    if fixture_package_dir.is_none() {
-        fixture_package_dir = env::current_exe()
-            .ok()
-            .as_deref()
-            .and_then(sibling_fixture_package_dir);
-    }
-    std::fs::create_dir_all(data_dir.join("shows"))?;
-    tracing::info!(path=%data_dir.display(), "opening desk data");
-    let desk = DeskStore::open(data_dir.join("desk.sqlite"))?;
-    rebase_desk_show_paths(&desk, &data_dir)?;
-    let default_show_entry = ensure_default_show_available(&desk, &data_dir)?;
-    let fixture_library =
-        open_fixture_library_for_startup(&data_dir, fixture_package_dir.as_deref())?;
-    let mut configuration: DeskConfiguration = desk
-        .setting("server_configuration")?
-        .map(|json| serde_json::from_str(&json))
-        .transpose()?
-        .unwrap_or_default();
-    if configuration.osc_bind.is_none() {
-        configuration.osc_bind = Some(SocketAddr::from(([127, 0, 0, 1], 9000)));
-    }
-    if let Some(osc_bind) = osc_bind_override {
-        configuration.osc_bind = Some(osc_bind);
-    }
-    if let Some(output_bind_ip) = output_bind_override {
-        configuration.output_bind_ip = output_bind_ip;
-    }
-    configuration
-        .validate()
-        .map_err(|error| anyhow::anyhow!(error.message))?;
-    let speed_groups = Arc::new(Mutex::new(std::array::from_fn(|index| {
-        SpeedGroupController::new(
-            configuration.speed_groups_bpm[index],
-            configuration.speed_group_sound_to_light[index].clone(),
-        )
-        .expect("validated Speed Group configuration")
-    })));
-    let active_show = match desk.active_show()? {
-        Some(active) => Some(active),
-        None => {
-            desk.set_active_show(Some(default_show_entry.id))?;
-            Some(default_show_entry)
-        }
-    };
-    tracing::info!(active_show=?active_show.as_ref().map(|show| &show.name), "desk state loaded");
-    let manual_clock = test_bench.then(|| Arc::new(ManualClock::new(fixed_test_time())));
-    let application_clock: SharedClock = manual_clock
-        .as_ref()
-        .map(|clock| Arc::clone(clock) as SharedClock)
-        .unwrap_or_else(|| Arc::new(SystemClock));
-    let programmers = ProgrammerRegistry::with_clock(application_clock);
-    let users = desk.users()?;
-    for persisted in desk.persisted_sessions()? {
-        if !users.iter().any(|user| user.id == persisted.user_id) {
-            continue;
-        }
-        match serde_json::from_str::<light_programmer::ProgrammerState>(&persisted.programmer_json)
-        {
-            Ok(mut programmer) => {
-                programmer.connected = false;
-                programmers.restore(programmer);
-            }
-            Err(error) => {
-                tracing::warn!(session_id=%persisted.id.0, %error, "ignoring invalid persisted programmer")
-            }
-        }
-    }
-    tracing::info!("persisted programmers restored");
-    let (events, _) = broadcast::channel(256);
-    let engine = Arc::new(Engine::new(programmers.clone()));
-    let mut active_show_error = None;
-    if let Some(active) = &active_show {
-        tracing::info!(show=%active.name, "compiling active show");
-        if let Some(message) = compile_active_show_for_startup(&engine, active) {
-            let error = &message;
-            tracing::error!(show=%active.name, %error, "starting in show recovery mode");
-            active_show_error = Some(message);
-        }
-    }
-    tracing::info!("engine snapshot ready");
-    engine.set_control_timing(
-        configuration.speed_groups_bpm,
-        configuration.programmer_fade_millis,
-        configuration.sequence_master_fade_millis,
-    );
-    if active_show_error.is_none()
-        && let Some(show) = active_show.as_ref()
-        && let Some(serialized) = desk.setting(&active_playbacks_setting(show.id))?
-    {
-        match serde_json::from_str::<Vec<light_playback::ActivePlayback>>(&serialized) {
-            Ok(playbacks) => engine.playback().write().restore_active(playbacks),
-            Err(error) => {
-                tracing::warn!(show_id=?show.id, %error, "ignoring invalid persisted playback runtime")
-            }
-        }
-    }
-    let mut output_runtime = PersistedOutputRuntime::default();
-    if active_show_error.is_none()
-        && let Some(show) = active_show.as_ref()
-        && let Some(serialized) = desk.setting(&output_runtime_setting(show.id))?
-    {
-        match serde_json::from_str::<PersistedOutputRuntime>(&serialized) {
-            Ok(runtime) if runtime.is_valid() => output_runtime = runtime,
-            Ok(_) => tracing::warn!(show_id=?show.id, "ignoring invalid persisted output runtime"),
-            Err(error) => {
-                tracing::warn!(show_id=?show.id, %error, "ignoring invalid persisted output runtime")
-            }
-        }
-    }
-    if !output_runtime.group_masters.is_empty() {
-        let mut snapshot = (*engine.snapshot()).clone();
-        for group in &mut snapshot.groups {
-            if let Some(master) = output_runtime.group_masters.get(&group.id) {
-                group.master = *master;
-            }
-        }
-        if let Err(error) = engine.replace_snapshot(snapshot) {
-            tracing::warn!(%error, "ignoring persisted group output masters");
-        }
-    }
-    engine
-        .playback()
-        .write()
-        .restore_dynamics_paused_since(output_runtime.dynamics_paused_at);
-    let output_health = Arc::new(std::sync::Mutex::new(OutputHealth::default()));
-    let timecode_router = Arc::new(Mutex::new(TimecodeRouter::default()));
-    timecode_router
-        .lock()
-        .configure(configuration.timecode_sources.clone());
-    let output_rate = Arc::new(AtomicU16::new(configuration.frame_rate_hz));
-    let matter_bridge = Arc::new(matter::MatterBridgeAdapter::default());
-    let output_cancel = CancellationToken::new();
-    let scheduler = output_scheduler::start(output_scheduler::Config {
-        bind_ip: configuration.output_bind_ip,
-        engine: Arc::clone(&engine),
-        health: Arc::clone(&output_health),
-        rate: Arc::clone(&output_rate),
-        timecode: Arc::clone(&timecode_router),
-        cancellation: output_cancel.clone(),
-        persisted_runtime: output_runtime,
-        test_bench,
-    })
-    .await?;
-    let output = scheduler.network_output();
-    let sequences = scheduler.sequences();
-    let output_control = scheduler.control();
-    let matter_transport = Arc::new(matter::MatterTransport::new(&data_dir));
-    let state = AppState {
-        desk: Arc::new(Mutex::new(desk)),
-        fixture_library: Arc::new(Mutex::new(fixture_library)),
-        data_dir,
-        sessions: Arc::default(),
-        session_clients: Arc::default(),
-        ws_connections: Arc::new(Mutex::new(HashMap::new())),
-        programmers,
-        engine,
-        highlight: Arc::new(HighlightRegistry::default()),
-        patch_preview_highlights: Arc::default(),
-        output_health,
-        output_rate,
-        configuration: Arc::new(RwLock::new(configuration)),
-        matter_bridge,
-        matter_transport: Some(matter_transport),
-        output_control,
-        activation_lock: Arc::new(tokio::sync::Mutex::new(())),
-        playback_action_lock: Arc::new(Mutex::new(())),
-        timecode_router,
-        active_show: Arc::new(RwLock::new(active_show)),
-        active_show_error: Arc::new(RwLock::new(active_show_error)),
-        events,
-        audit_events: Arc::new(Mutex::new(VecDeque::with_capacity(2048))),
-        command_history: Arc::new(Mutex::new(HashMap::new())),
-        command_http: command_http::CommandHttpState::default(),
-        event_revision: Arc::new(AtomicU64::new(0)),
-        desk_token: env::var("LIGHT_DESK_TOKEN")
-            .ok()
-            .filter(|token| !token.is_empty())
-            .map(Arc::from),
-        shutdown: output_cancel.clone(),
-        media_cache: Arc::new(Mutex::new(MediaCache::default())),
-        media_status: Arc::new(RwLock::new(HashMap::new())),
-        input_locks: Arc::new(Mutex::new(HashMap::new())),
-        file_input_contexts: Arc::new(Mutex::new(HashMap::new())),
-        osc_subscribers: Arc::new(Mutex::new(HashMap::new())),
-        osc_feedback: Some(Arc::new(std::net::UdpSocket::bind("0.0.0.0:0")?)),
-        #[cfg(test)]
-        osc_feedback_capture: Arc::new(Mutex::new(Vec::new())),
-        mvr_imports: Arc::new(Mutex::new(HashMap::new())),
-        network_output: Some(Arc::clone(&output)),
-        output_sequences: Arc::clone(&sequences),
-        manual_clock,
-        speed_groups,
-        sound_capture_owners: Arc::new(Mutex::new([None; 5])),
-    };
-    normalize_restored_virtual_playback_exclusions(&state);
-    refresh_matter_bridge(&state);
-    let matter_sync = spawn_matter_bridge_sync(state.clone(), output_cancel.clone());
-    refresh_speed_group_engine(&state);
-    let input_tasks = spawn_control_inputs(&state, output_cancel.clone());
-    let app = router(state);
-    tracing::info!(%bind, "starting light control server");
-    axum::serve(tokio::net::TcpListener::bind(bind).await?, app)
-        .with_graceful_shutdown(async move {
-            tokio::select! {
-                _ = tokio::signal::ctrl_c() => {},
-                _ = output_cancel.cancelled() => {},
-            }
-            output_cancel.cancel();
-        })
-        .await?;
-    scheduler.wait().await;
-    for task in input_tasks {
-        let _ = task.await;
-    }
-    let _ = matter_sync.await;
-    Ok(())
+    bootstrap::run().await
 }
 
 fn router(state: AppState) -> Router {
