@@ -1,12 +1,157 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+	type Dispatch,
+	type ReactNode,
+	type SetStateAction,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { useApp } from "../../state/AppContext";
 import { useServer } from "../../api/ServerContext";
+import { useScreens } from "../../features/screens/ScreensContext";
 import { Button, Input, ModalTitleBar, NumberField, SelectField, TextInput } from "../common";
 import { RootConfinedFilePickerButton } from "../files/RootConfinedFilePickerButton";
 import type { MvrExportPreview, MvrImportPreview, ShowEntry, ShowRevision } from "../../api/types";
 import { getShowIndicator } from "../shell/showIndicator";
 import { screenForAddAction } from "../setup/screenConfiguration";
+
+interface QuickSetupKeyboardOptions {
+	enabled: boolean;
+	revisionOpen: boolean;
+	saveAsOpen: boolean;
+	changeUserOpen: boolean;
+	newUserName: string;
+	closeTopLayer: () => void;
+	saveNamedRevision: () => Promise<void>;
+	saveAs: () => Promise<void>;
+	createUser: (name: string) => Promise<void>;
+	setRevisionName: Dispatch<SetStateAction<string>>;
+	setShowName: Dispatch<SetStateAction<string>>;
+	setNewUserName: Dispatch<SetStateAction<string>>;
+}
+
+function useQuickSetupKeyboard(options: QuickSetupKeyboardOptions) {
+	const optionsRef = useRef(options);
+	optionsRef.current = options;
+	useEffect(() => {
+		if (!options.enabled) return;
+		const handle = (event: KeyboardEvent) => {
+			if (document.querySelector(".ui-input-modal-layer")) return;
+			const current = optionsRef.current;
+			if (event.key === "Escape") {
+				event.preventDefault();
+				event.stopImmediatePropagation();
+				current.closeTopLayer();
+				return;
+			}
+			if (!current.revisionOpen && !current.saveAsOpen && !current.changeUserOpen)
+				return;
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			if (event.key === "Enter") {
+				if (current.revisionOpen) void current.saveNamedRevision();
+				else if (current.saveAsOpen) void current.saveAs();
+				else if (current.newUserName.trim())
+					void current.createUser(current.newUserName.trim());
+				return;
+			}
+			const setValue = current.revisionOpen
+				? current.setRevisionName
+				: current.saveAsOpen
+					? current.setShowName
+					: current.setNewUserName;
+			if (event.key === "Backspace") setValue((value) => value.slice(0, -1));
+			else if (event.key.length === 1) setValue((value) => value + event.key);
+		};
+		window.addEventListener("keydown", handle, true);
+		return () => window.removeEventListener("keydown", handle, true);
+	}, [options.enabled, optionsRef]);
+}
+
+interface ShowRevisionControllerOptions {
+	enabled: boolean;
+	activeShowId?: string;
+	revisionName: string;
+	shows: ShowEntry[];
+	listShowRevisions: (showId: string) => Promise<ShowRevision[]>;
+	saveShowRevision: (name: string) => Promise<ShowRevision | null>;
+	openShowRevision: (showId: string, revision: number) => Promise<boolean>;
+	setRevisionName: Dispatch<SetStateAction<string>>;
+	setRevisionOpen: Dispatch<SetStateAction<boolean>>;
+	setLoadOpen: Dispatch<SetStateAction<boolean>>;
+}
+
+function useShowRevisionController(options: ShowRevisionControllerOptions) {
+	const optionsRef = useRef(options);
+	optionsRef.current = options;
+	const [byShow, setByShow] = useState<Record<string, ShowRevision[]>>({});
+	useEffect(() => {
+		if (!options.enabled || !options.activeShowId) return;
+		const showId = options.activeShowId;
+		void optionsRef.current.listShowRevisions(showId).then((revisions) =>
+			setByShow((current) => ({ ...current, [showId]: revisions })),
+		);
+	}, [options.enabled, options.activeShowId, optionsRef]);
+	const saveNamed = async (value = optionsRef.current.revisionName) => {
+		const current = optionsRef.current;
+		const name = value.trim();
+		if (!name || !current.activeShowId) return;
+		const showId = current.activeShowId;
+		const revision = await current.saveShowRevision(name);
+		if (!revision) return;
+		setByShow((loaded) => ({
+			...loaded,
+			[showId]: [revision, ...(loaded[showId] ?? [])],
+		}));
+		current.setRevisionName("");
+		current.setRevisionOpen(false);
+	};
+	const openLoadMenu = async () => {
+		const current = optionsRef.current;
+		current.setLoadOpen(true);
+		const entries = await Promise.all(
+			current.shows.map(async (show) => [
+				show.id,
+				await current.listShowRevisions(show.id),
+			] as const),
+		);
+		setByShow(Object.fromEntries(entries));
+	};
+	const loadNamed = async (showId: string, revision: number) => {
+		const current = optionsRef.current;
+		if (await current.openShowRevision(showId, revision))
+			current.setLoadOpen(false);
+	};
+	return {
+		activeRevisions: options.activeShowId ? byShow[options.activeShowId] ?? [] : [],
+		byShow,
+		loadNamed,
+		openLoadMenu,
+		saveNamed,
+	};
+}
+
+function AddScreenAction({
+	layout,
+	onAdded,
+}: {
+	layout: Parameters<typeof screenForAddAction>[1];
+	onAdded: () => void;
+}) {
+	const screens = useScreens();
+	const add = async () => {
+		await screens.saveScreen(
+			screenForAddAction(screens.screens?.screens ?? [], layout),
+		);
+		onAdded();
+	};
+	return (
+		<Button onClick={() => void add()}>
+			<span aria-hidden="true">▣</span> Add Screen
+		</Button>
+	);
+}
 
 export function QuickSetupModal() {
   const { state, dispatch } = useApp();
@@ -14,7 +159,6 @@ export function QuickSetupModal() {
   const [showName, setShowName] = useState("");
   const [revisionOpen, setRevisionOpen] = useState(false);
   const [revisionName, setRevisionName] = useState("");
-  const [revisionsByShow, setRevisionsByShow] = useState<Record<string, ShowRevision[]>>({});
   const [saveAsOpen, setSaveAsOpen] = useState(false);
   const [copySaveOpen, setCopySaveOpen] = useState(false);
   const [overwriteTarget, setOverwriteTarget] = useState<ShowEntry | null>(null);
@@ -41,64 +185,42 @@ export function QuickSetupModal() {
   const activeShowId = activeShow?.id;
   const revisionCopy = activeShow?.revision_copy;
   const originalShow = revisionCopy ? server.shows.find((show) => show.id === revisionCopy.show_id) : undefined;
-  const activeRevisions = activeShowId ? revisionsByShow[activeShowId] ?? [] : [];
-  useEffect(() => {
-    if (!state.setupOpen || !activeShowId) return;
-    void server.listShowRevisions(activeShowId).then((revisions) =>
-      setRevisionsByShow((current) => ({ ...current, [activeShowId]: revisions })),
-    );
-  }, [state.setupOpen, activeShowId]);
-  useEffect(() => {
-    if (!state.setupOpen) return;
-    const handle = (event: KeyboardEvent) => {
-      if (document.querySelector(".ui-input-modal-layer")) return;
-      const keyboardInputOpen = saveAsOpen || revisionOpen || changeUserOpen;
-      if (event.key === "Escape") {
-        event.preventDefault(); event.stopImmediatePropagation();
-        if (overwriteTarget && !overwriteBusy) setOverwriteTarget(null);
-        else if (copySaveOpen) setCopySaveOpen(false);
-        else if (revisionOpen) setRevisionOpen(false);
-        else if (saveAsOpen) setSaveAsOpen(false);
-        else if (changeUserOpen) setChangeUserOpen(false);
-        else if (loadOpen) setLoadOpen(false);
-        else if (newShowOpen) setNewShowOpen(false);
-        else if (confirmShutdown) setConfirmShutdown(false);
-        else dispatch({ type: "SET_MODAL", modal: "setupOpen", value: false });
-        return;
-      }
-      if (!keyboardInputOpen) return;
-      event.preventDefault(); event.stopImmediatePropagation();
-      if (event.key === "Enter") { if (revisionOpen) void saveNamedRevision(); else if (saveAsOpen) void saveAs(); else if (newUserName.trim()) void server.createUser(newUserName.trim()); return; }
-      const setValue = revisionOpen ? setRevisionName : saveAsOpen ? setShowName : setNewUserName;
-      if (event.key === "Backspace") setValue((value) => value.slice(0, -1));
-      else if (event.key.length === 1) setValue((value) => value + event.key);
-    };
-    window.addEventListener("keydown", handle, true);
-    return () => window.removeEventListener("keydown", handle, true);
-  }, [state.setupOpen, revisionOpen, saveAsOpen, copySaveOpen, overwriteTarget, overwriteBusy, changeUserOpen, loadOpen, newShowOpen, confirmShutdown, revisionName, showName, newUserName]);
-  if (!state.setupOpen) return null;
   const close = () => dispatch({ type: "SET_MODAL", modal: "setupOpen", value: false });
-  async function saveNamedRevision(value = revisionName) {
-    const name = value.trim();
-    if (!name || !activeShowId) return;
-    const revision = await server.saveShowRevision(name);
-    if (!revision) return;
-    setRevisionsByShow((current) => ({
-      ...current,
-      [activeShowId]: [revision, ...(current[activeShowId] ?? [])],
-    }));
-    setRevisionName("");
-    setRevisionOpen(false);
+  const {
+    activeRevisions, byShow: revisionsByShow, loadNamed: loadNamedRevision,
+    openLoadMenu, saveNamed: saveNamedRevision,
+  } = useShowRevisionController({
+    enabled: state.setupOpen, activeShowId, revisionName, shows: server.shows,
+    listShowRevisions: server.listShowRevisions, saveShowRevision: server.saveShowRevision,
+    openShowRevision: server.openShowRevision,
+    setRevisionName, setRevisionOpen, setLoadOpen,
+  });
+  function closeTopLayer() {
+    if (overwriteTarget && !overwriteBusy) setOverwriteTarget(null);
+    else if (copySaveOpen) setCopySaveOpen(false);
+    else if (revisionOpen) setRevisionOpen(false);
+    else if (saveAsOpen) setSaveAsOpen(false);
+    else if (changeUserOpen) setChangeUserOpen(false);
+    else if (loadOpen) setLoadOpen(false);
+    else if (newShowOpen) setNewShowOpen(false);
+    else if (confirmShutdown) setConfirmShutdown(false);
+    else close();
   }
-  async function openLoadMenu() {
-    setLoadOpen(true);
-    const entries = await Promise.all(server.shows.map(async (show) => [show.id, await server.listShowRevisions(show.id)] as const));
-    setRevisionsByShow(Object.fromEntries(entries));
-  }
-  async function loadNamedRevision(showId: string, revision: number) {
-    if (!await server.openShowRevision(showId, revision)) return;
-    setLoadOpen(false);
-  }
+  useQuickSetupKeyboard({
+    enabled: state.setupOpen,
+    revisionOpen,
+    saveAsOpen,
+    changeUserOpen,
+    newUserName,
+    closeTopLayer,
+    saveNamedRevision,
+    saveAs: () => saveAs(),
+    createUser: server.createUser,
+    setRevisionName,
+    setShowName,
+    setNewUserName,
+  });
+  if (!state.setupOpen) return null;
   async function saveAs(value = showName) {
     const name = value.trim();
     if (!name) return;
@@ -143,14 +265,6 @@ export function QuickSetupModal() {
     close();
     await server.lockDesk();
   }
-  async function addScreen() {
-    const screen = screenForAddAction(server.screens?.screens ?? [], {
-      desks: state.desks,
-      activeDeskId: state.activeDeskId,
-    });
-    await server.saveScreen(screen);
-    close();
-  }
   async function inspectExport(show: ShowEntry) { setMvrTarget(show); setMvrBusy(true); try { setMvrExportPreview(await server.previewMvrExport(show.id)); } finally { setMvrBusy(false); } }
   function openMvrImport(closeSource: () => void) { closeSource(); setMvrMode("new"); setMvrTarget(null); setMvrPreview(null); }
   function openMvrExport() {
@@ -165,7 +279,7 @@ export function QuickSetupModal() {
   return <div className="modal-backdrop" onPointerDown={(event) => { if (event.currentTarget === event.target) close(); }}><section className="modal-card show-modal" role="dialog" aria-modal="true" aria-label="Show">
     <ModalTitleBar title="Show" closeLabel="Close Show" onClose={close} actions={<>
       <Button onClick={() => setChangeUserOpen(true)}><span aria-hidden="true">♙</span> Change User</Button>
-      {"__TAURI_INTERNALS__" in window && <Button onClick={() => void addScreen()}><span aria-hidden="true">▣</span> Add Screen</Button>}
+      {"__TAURI_INTERNALS__" in window && <AddScreenAction layout={{ desks: state.desks, activeDeskId: state.activeDeskId }} onAdded={close} />}
       <Button onClick={() => dispatch({ type: "SET_MODAL", modal: "debugOpen", value: true })}><span aria-hidden="true">⌁</span> Desk Status</Button>
     </>}/>
     <div className="show-details"><b>{activeShow?.name ?? "No active show"}</b>{revisionCopy && <div className="revision-copy-notice" role="status"><strong>Separate revision copy</strong><span>Created from <b>{revisionCopy.show_name}</b>, Revision {revisionCopy.revision} · {revisionCopy.revision_name}</span><small>Created {new Date(revisionCopy.copied_at).toLocaleString()}. Current changes are autosaved to this copy, not to {revisionCopy.show_name}.</small></div>}<div className={`show-status-explanation ${showIndicator.className}`} role="status"><span className="show-status-dot" aria-hidden="true">●</span><span><strong>{showIndicator.label}</strong><small>{showIndicator.detail}</small></span></div><span>Server connected <strong>{server.status === "connected" ? "Yes" : "No"}</strong></span><span>Latest named revision <strong>{activeRevisions[0] ? `${activeRevisions[0].revision} · ${activeRevisions[0].name}` : "None"}</strong></span><span>Operator <strong>{server.session?.user.name ?? "—"}</strong></span><div className="show-primary-actions"><Button onClick={() => setRevisionOpen(true)}><span aria-hidden="true">💾</span> Save Named Revision</Button>{revisionCopy && <Button onClick={() => setCopySaveOpen(true)}><span aria-hidden="true">✓</span> Save</Button>}<Button onClick={() => setSaveAsOpen(true)}><span aria-hidden="true">✎</span> Save As</Button><Button onClick={() => void openLoadMenu()}><span aria-hidden="true">↥</span> Load</Button><Button onClick={() => setNewShowOpen(true)}><span aria-hidden="true">＋</span> New Show</Button></div></div>

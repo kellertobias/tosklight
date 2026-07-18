@@ -8,7 +8,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../../windows/FileManagerPickerHost", () => ({ openFileManagerPicker: mocks.open }));
-vi.mock("../../api/ServerContext", () => ({ useServer: () => ({ fileContent: mocks.fileContent }) }));
+vi.mock("../../features/files/FilesContext", () => ({
+	useFiles: () => ({ fileContent: mocks.fileContent }),
+}));
 
 afterEach(() => {
   cleanup();

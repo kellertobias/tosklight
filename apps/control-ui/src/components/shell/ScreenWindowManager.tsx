@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
-import { useServer } from "../../api/ServerContext";
+import { useScreens } from "../../features/screens/ScreensContext";
 
 export function ScreenWindowManager() {
-  const server=useServer();
+  const server=useScreens();
   const screensRef=useRef(server.screens);
   const requestReconcile=useRef<()=>void>(()=>undefined);
   screensRef.current=server.screens;

@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { useServer } from "../api/ServerContext";
+import { useFiles } from "../features/files/FilesContext";
 import type { FileConflictChoice, FileDirectory, FileEntry, FileNativeNote, FileOperationResult, FileRoot, TextDocument } from "../api/types";
 import { Button, CheckboxField, TextArea, TextInput } from "../components/common";
 import { registerPaneRemovalGuard } from "../components/shell/paneRemovalGuard";
@@ -251,7 +251,7 @@ export function FileManagerWindow({ builtIn, paneId }: WindowProps) {
 }
 
 export function FileManager({ picker, instanceId: suppliedInstanceId, paneId, closeable = false, purpose = "Browse and manage files" }: FileManagerProps) {
-  const server = useServer();
+  const server = useFiles();
   const serverRef = useRef(server);
   serverRef.current = server;
   const fileRoots = server.fileRoots;

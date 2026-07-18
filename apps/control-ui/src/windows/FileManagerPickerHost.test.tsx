@@ -5,7 +5,13 @@ import { FileManagerPickerHost, openFileManagerPicker } from "./FileManagerPicke
 
 const mocks = vi.hoisted(() => ({ configuration: { file_manager_system_picker_fallback: false } }));
 
-vi.mock("../api/ServerContext", () => ({ useServer: () => ({ configuration: mocks.configuration }) }));
+vi.mock("../features/files/FilesContext", () => ({
+	useFiles: () => ({
+		get systemPickerFallback() {
+			return mocks.configuration.file_manager_system_picker_fallback;
+		},
+	}),
+}));
 
 vi.mock("./FileManagerWindow", () => ({
   extension: (name: string) => name.includes(".") ? name.split(".").pop()?.toLowerCase() ?? "" : "",

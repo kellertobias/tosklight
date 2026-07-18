@@ -186,6 +186,23 @@ export interface FileNativeNote {
 	note: string | null;
 }
 export type FileConflictChoice = "replace" | "keep_both" | "skip";
+export interface FileOperationInput {
+	operation:
+		| "create_file"
+		| "create_folder"
+		| "rename"
+		| "copy"
+		| "move"
+		| "trash"
+		| "delete";
+	sources?: string[];
+	destination?: string;
+	destination_root_id?: string;
+	name?: string;
+	replace?: boolean;
+	conflict?: FileConflictChoice;
+	apply_to_all?: boolean;
+}
 export interface FileOperationResult {
 	paths: string[];
 	complete: boolean;

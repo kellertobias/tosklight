@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useServer } from "../../api/ServerContext";
+import { useScreens } from "../../features/screens/ScreensContext";
 import type { ClientSummary, ControlDesk, ScreenConfiguration } from "../../api/types";
 import { useApp } from "../../state/AppContext";
 import {
@@ -240,7 +240,7 @@ export function ScreenSettingsCard({
 }
 
 export function ScreensSetup() {
-	const server = useServer();
+	const server = useScreens();
 	const { state, dispatch } = useApp();
 	const [displays, setDisplays] = useState<Array<{ id: string; name: string }>>(
 		[],

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type MutableRefObject } from "react";
-import { useServer } from "../../api/ServerContext";
+import { useFiles } from "../../features/files/FilesContext";
 import { Button, type ButtonProps } from "../common/controls";
 import { openFileManagerPicker } from "../../windows/FileManagerPickerHost";
 
@@ -26,7 +26,7 @@ export function RootConfinedFilePickerButton({
   triggerRef,
   onFiles,
 }: RootConfinedFilePickerButtonProps) {
-  const server = useServer();
+  const server = useFiles();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 

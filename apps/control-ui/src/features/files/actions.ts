@@ -1,24 +1,15 @@
-import type { ServerController } from "./model";
-import type { ServerContextValue } from "./ServerContextValue";
+import type { LightApiClient } from "../../api/LightApiClient";
+import type { FileCapabilities } from "./types";
+
+interface FileActionDependencies {
+	client: LightApiClient;
+	fileRoots: FileCapabilities["fileRoots"];
+	fileEntries: FileCapabilities["fileEntries"];
+}
 
 export function createFileActions(
-	model: ServerController,
-): Pick<
-	ServerContextValue,
-	| "fileRoots"
-	| "fileEntries"
-	| "fileMetadata"
-	| "readFileNote"
-	| "saveFileNote"
-	| "readTextFile"
-	| "saveTextFile"
-	| "fileOperation"
-	| "fileContent"
-	| "fileStreamUrl"
-	| "fileThumbnail"
-	| "claimFileInput"
-	| "releaseFileInput"
-> {
+	model: FileActionDependencies,
+): FileCapabilities {
 	const { client, fileRoots, fileEntries } = model;
 	return {
 		fileRoots,

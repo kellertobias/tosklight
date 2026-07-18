@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { ServerProvider, useServer } from "./api/ServerContext";
+import { ServerProvider } from "./api/ServerContext";
+import { useScreens } from "./features/screens/ScreensContext";
 import { DeskLockOverlay } from "./components/modals/DeskLockOverlay";
 import { AppProvider, useApp } from "./state/AppContext";
 import { LeftDock } from "./components/shell/LeftDock";
@@ -11,7 +12,7 @@ import { NativeDragStrip } from "./components/shell/NativeDragStrip";
 import { canAdvancePlaybackPage, nextPlaybackPageNumber } from "./components/control/PlaybackPageDialogs";
 
 function ScreenPageControls({ screen, page }: { screen: ScreenConfiguration; page: number }) {
-  const server = useServer();
+  const server = useScreens();
   const [picker, setPicker] = useState(false);
   const pages = server.playbacks?.pages ?? [];
   const setPage = (next: number) => screen.page_mode === "independent" && void server.setScreenPage(screen.id, next);
@@ -61,7 +62,7 @@ function ScreenPageControls({ screen, page }: { screen: ScreenConfiguration; pag
 }
 
 function ScreenSurface({ id }: { id: string }) {
-  const server = useServer();
+  const server = useScreens();
   const { state, dispatch } = useApp();
   const screen = server.screens?.screens.find((item) => item.id === id);
   const hydrated = useRef(false);

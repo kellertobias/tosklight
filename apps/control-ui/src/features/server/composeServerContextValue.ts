@@ -1,7 +1,8 @@
+import { createFileActions } from "../files/actions";
+import { createScreenActions } from "../screens/actions";
 import { createCommandLineActions } from "./commandLine";
 import { createConfigurationActions } from "./configuration";
 import { createCueListActions } from "./cueLists";
-import { createFileActions } from "./files";
 import { createFixtureLibraryActions } from "./fixtureLibrary";
 import { createGroupDerivationActions } from "./groupDerivation";
 import { createGroupEditingActions } from "./groupEditing";
@@ -20,7 +21,6 @@ import { createPreloadActions } from "./preload";
 import { createPresetActions } from "./presets";
 import { createProgrammerSelectionActions } from "./programmerSelection";
 import { createProgrammerValueActions } from "./programmerValues";
-import { createScreenActions } from "./screens";
 import { createSessionActions } from "./session";
 import { createShowLifecycleActions } from "./showLifecycle";
 import { createShowRevisionActions } from "./showRevisions";

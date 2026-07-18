@@ -1,34 +1,16 @@
 import type {
-	FileConflictChoice,
 	FileDirectory,
 	FileInputAction,
 	FileInputContext,
 	FileMetadata,
 	FileNativeNote,
+	FileOperationInput,
 	FileOperationResult,
 	FileRoot,
 	TextDocument,
 } from "../types";
 import type { ClientTransport } from "./transport";
 import { jsonRequest } from "./transport";
-
-export interface FileOperationInput {
-	operation:
-		| "create_file"
-		| "create_folder"
-		| "rename"
-		| "copy"
-		| "move"
-		| "trash"
-		| "delete";
-	sources?: string[];
-	destination?: string;
-	destination_root_id?: string;
-	name?: string;
-	replace?: boolean;
-	conflict?: FileConflictChoice;
-	apply_to_all?: boolean;
-}
 
 export class FileApiClient {
 	constructor(private readonly transport: ClientTransport) {}

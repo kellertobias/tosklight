@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useServer } from "../api/ServerContext";
+import { useFiles } from "../features/files/FilesContext";
 import { Button, Input, ModalTitleBar } from "../components/common";
 import { PaneChromeProvider } from "../components/shell/PaneChromeContext";
 import { extension, FileManager, type FileManagerPickerOptions, type FileManagerSelection, type FileManagerTarget } from "./FileManagerWindow";
@@ -37,7 +37,7 @@ export function openFileManagerPicker(options: FileManagerPickerRequest) {
 }
 
 export function FileManagerPickerHost() {
-  const server = useServer();
+  const files = useFiles();
   const [request, setRequest] = useState<HostedPickerRequest | null>(null);
   const [systemError, setSystemError] = useState("");
   const [chromeInfo, setChromeInfo] = useState<HTMLSpanElement | null>(null);
@@ -126,7 +126,7 @@ export function FileManagerPickerHost() {
           }}
         />
       </PaneChromeProvider>
-      {server.configuration?.file_manager_system_picker_fallback && <footer className="file-picker-system-fallback">
+      {files.systemPickerFallback && <footer className="file-picker-system-fallback">
         <Button onClick={() => systemInput.current?.click()}>Open system file picker</Button>
         <small>This secondary picker keeps the calling form's target, selection-count, and extension constraints.</small>
         {systemError && <span role="alert">{systemError}</span>}

@@ -38,7 +38,9 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("../api/ServerContext", () => ({ useServer: () => mocks.server }));
+vi.mock("../features/files/FilesContext", () => ({
+	useFiles: () => mocks.server,
+}));
 
 describe("FileManager helpers", () => {
   it("sorts folders first and names naturally", () => {

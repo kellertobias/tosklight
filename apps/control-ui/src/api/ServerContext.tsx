@@ -1,4 +1,6 @@
 import { createContext, type PropsWithChildren, useContext } from "react";
+import { FilesProvider } from "../features/files/FilesContext";
+import { ScreensProvider } from "../features/screens/ScreensContext";
 import { composeServerContextValue } from "../features/server/composeServerContextValue";
 import type { ServerContextValue } from "../features/server/ServerContextValue";
 import { useCommandLineController } from "../features/server/useCommandLineController";
@@ -32,17 +34,54 @@ export function ServerProvider({ children }: PropsWithChildren) {
 	const refresh = useServerRefresh(state, loadShowObjects);
 	useServerConnection(state, loadShowObjects);
 	const commandLine = useCommandLineController(state);
-	const files = useFileAccess(state);
+	const fileAccess = useFileAccess(state);
 	const model = {
 		...state,
 		...commandLine,
-		...files,
+		...fileAccess,
 		loadShowObjects,
 		refresh,
 	};
 	const value = composeServerContextValue(model);
+	const fileSource = {
+		status: value.status,
+		commandLine: value.commandLine,
+		resetCommandLine: value.resetCommandLine,
+		fileRoots: value.fileRoots,
+		fileEntries: value.fileEntries,
+		fileMetadata: value.fileMetadata,
+		readFileNote: value.readFileNote,
+		saveFileNote: value.saveFileNote,
+		readTextFile: value.readTextFile,
+		saveTextFile: value.saveTextFile,
+		fileOperation: value.fileOperation,
+		fileContent: value.fileContent,
+		fileStreamUrl: value.fileStreamUrl,
+		fileThumbnail: value.fileThumbnail,
+		claimFileInput: value.claimFileInput,
+		releaseFileInput: value.releaseFileInput,
+		systemPickerFallback:
+			value.configuration?.file_manager_system_picker_fallback ?? false,
+	};
+	const screenSource = {
+		screens: value.screens,
+		bootstrap: value.bootstrap,
+		session: value.session,
+		playbacks: value.playbacks,
+		saveScreen: value.saveScreen,
+		deleteScreen: value.deleteScreen,
+		setScreenPage: value.setScreenPage,
+		savePlaybackPage: value.savePlaybackPage,
+		updateControlDesk: value.updateControlDesk,
+		selectControlDesk: value.selectControlDesk,
+		removeClient: value.removeClient,
+	};
 	return (
-		<ServerContext.Provider value={value}>{children}</ServerContext.Provider>
+		<ServerContext.Provider value={value}>
+			<FilesProvider source={fileSource}>
+				<ScreensProvider source={screenSource}>{children}</ScreensProvider>
+			</FilesProvider>
+		</ServerContext.Provider>
 	);
 }
 

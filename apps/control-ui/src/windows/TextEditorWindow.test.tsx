@@ -32,8 +32,8 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("../api/ServerContext", () => ({
-  useServer: () => mocks.server,
+vi.mock("../features/files/FilesContext", () => ({
+	useFiles: () => mocks.server,
 }));
 
 vi.mock("../state/AppContext", () => ({

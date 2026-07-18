@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useServer } from "../api/ServerContext";
+import { useFiles } from "../features/files/FilesContext";
 import type { FileEntry, FileRoot, TextDocument } from "../api/types";
 import { Button, Select, TextArea } from "../components/common";
 import { registerPaneRemovalGuard } from "../components/shell/paneRemovalGuard";
@@ -104,7 +104,7 @@ export async function listTextEditorFiles(
 }
 
 export function TextEditorWindow({ paneId }: WindowProps) {
-  const server = useServer();
+  const server = useFiles();
   const serverRef = useRef(server);
   serverRef.current = server;
   const { state, dispatch } = useApp();

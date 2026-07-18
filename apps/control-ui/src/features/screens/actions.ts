@@ -1,9 +1,16 @@
-import type { ServerController } from "./model";
-import type { ServerContextValue } from "./ServerContextValue";
+import type { LightApiClient } from "../../api/LightApiClient";
+import type { ScreenSnapshot } from "../../api/types";
+import type { ScreenCapabilities } from "./types";
+
+interface ScreenActionDependencies {
+	client: LightApiClient;
+	setError: (error: string | null) => void;
+	setScreens: (screens: ScreenSnapshot | null) => void;
+}
 
 export function createScreenActions(
-	model: ServerController,
-): Pick<ServerContextValue, "saveScreen" | "deleteScreen" | "setScreenPage"> {
+	model: ScreenActionDependencies,
+): Omit<ScreenCapabilities, "screens"> {
 	const { client, setError, setScreens } = model;
 	return {
 		saveScreen: async (screen) => {

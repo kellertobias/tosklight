@@ -7,7 +7,7 @@ import {
 	ConfigurationApiClient,
 	type DeskLockInput,
 } from "./client/configuration";
-import { FileApiClient, type FileOperationInput } from "./client/files";
+import { FileApiClient } from "./client/files";
 import { FixtureApiClient } from "./client/fixtures";
 import { MediaApiClient } from "./client/media";
 import {
@@ -21,6 +21,7 @@ import type {
 	CommandHistoryEntry,
 	DeskConfiguration,
 	DmxSnapshot,
+	FileOperationInput,
 	HelpCatalog,
 	HelpTopic,
 	PatchSnapshot,

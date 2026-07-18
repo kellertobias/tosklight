@@ -13,8 +13,6 @@ import type {
 	PatchLayer,
 	PatchSnapshot,
 	PlaybackSnapshot,
-	ScreenConfiguration,
-	ScreenSnapshot,
 	SessionResponse,
 	ShowEntry,
 	StoredGroup,
@@ -29,13 +27,17 @@ import type {
 	VersionedObject,
 } from "../../api/types";
 import type { CommandTargetMode } from "../../controlSurface/commandTarget";
+import type { FileCapabilities } from "../files/types";
+import type { ScreenCapabilities } from "../screens/types";
 import type {
 	PendingCommandChoice,
 	StoredDeskLayout,
 	StoredStageLayout,
 } from "./contracts";
 
-export interface ServerCoreContext {
+export interface ServerCoreContext
+	extends FileCapabilities,
+		ScreenCapabilities {
 	status: ConnectionStatus;
 	error: string | null;
 	dismissError: () => void;
@@ -43,68 +45,6 @@ export interface ServerCoreContext {
 	readServerLogs: () => Promise<
 		Array<{ revision: number; kind: string; payload: unknown }>
 	>;
-	fileRoots: () => Promise<import("../../api/types").FileRoot[]>;
-	fileEntries: (
-		root: string,
-		path?: string,
-		hidden?: boolean,
-	) => Promise<import("../../api/types").FileDirectory>;
-	fileMetadata: (
-		root: string,
-		path: string,
-	) => Promise<import("../../api/types").FileMetadata>;
-	readFileNote: (
-		root: string,
-		path: string,
-	) => Promise<import("../../api/types").FileNativeNote>;
-	saveFileNote: (
-		root: string,
-		path: string,
-		note: string,
-	) => Promise<import("../../api/types").FileNativeNote>;
-	readTextFile: (
-		root: string,
-		path: string,
-	) => Promise<import("../../api/types").TextDocument>;
-	saveTextFile: (
-		root: string,
-		path: string,
-		text: string,
-		revision: string | null,
-	) => Promise<import("../../api/types").TextDocument>;
-	fileOperation: (
-		root: string,
-		input: {
-			operation:
-				| "create_file"
-				| "create_folder"
-				| "rename"
-				| "copy"
-				| "move"
-				| "trash"
-				| "delete";
-			sources?: string[];
-			destination?: string;
-			destination_root_id?: string;
-			name?: string;
-			replace?: boolean;
-			conflict?: import("../../api/types").FileConflictChoice;
-			apply_to_all?: boolean;
-		},
-	) => Promise<import("../../api/types").FileOperationResult>;
-	fileContent: (root: string, path: string) => Promise<Blob>;
-	fileStreamUrl: (root: string, path: string) => Promise<string>;
-	fileThumbnail: (
-		root: string,
-		path: string,
-		maxSize?: number,
-	) => Promise<Blob>;
-	claimFileInput: (
-		instanceId: string,
-		action: import("../../api/types").FileInputAction,
-		origin: "pending" | "toolbar",
-	) => Promise<import("../../api/types").FileInputContext>;
-	releaseFileInput: (instanceId: string) => Promise<void>;
 	bootstrap: BootstrapSnapshot | null;
 	session: SessionResponse | null;
 	deskLock: import("../../api/types").DeskLockState | null;
@@ -122,10 +62,6 @@ export interface ServerCoreContext {
 	outputRoutes: VersionedObject<OutputRoute>[];
 	patchLayers: VersionedObject<PatchLayer>[];
 	playbacks: PlaybackSnapshot | null;
-	screens: ScreenSnapshot | null;
-	saveScreen: (screen: ScreenConfiguration) => Promise<void>;
-	deleteScreen: (id: string) => Promise<void>;
-	setScreenPage: (id: string, page: number) => Promise<void>;
 	shows: ShowEntry[];
 	configuration: DeskConfiguration | null;
 	matter: MatterBridgeStatus | null;

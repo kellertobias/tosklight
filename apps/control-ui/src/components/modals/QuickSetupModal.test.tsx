@@ -4,6 +4,7 @@ import { QuickSetupModal } from "./QuickSetupModal";
 
 const mocks = vi.hoisted(() => ({
   dispatch: vi.fn(),
+  fileContent: vi.fn(),
   server: {
     status: "connected" as const,
     bootstrap: {
@@ -52,6 +53,15 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => mocks.server }));
+vi.mock("../../features/screens/ScreensContext", () => ({
+	useScreens: () => ({
+		screens: null,
+		saveScreen: mocks.server.saveScreen,
+	}),
+}));
+vi.mock("../../features/files/FilesContext", () => ({
+	useFiles: () => ({ fileContent: mocks.fileContent }),
+}));
 vi.mock("../../state/AppContext", () => ({
   useApp: () => ({
     state: { setupOpen: true, desks: [], activeDeskId: "" },
@@ -59,8 +69,7 @@ vi.mock("../../state/AppContext", () => ({
   }),
 }));
 
-describe("QuickSetupModal named revision copies", () => {
-  beforeEach(() => {
+beforeEach(() => {
     mocks.server.bootstrap.active_show.id = "copy";
     mocks.server.bootstrap.active_show.name = "Tour-rev-3-2026-07-17";
     mocks.server.bootstrap.active_show.revision_copy = {
@@ -79,13 +88,14 @@ describe("QuickSetupModal named revision copies", () => {
     mocks.server.openShowRevision.mockReset().mockResolvedValue(true);
     mocks.server.overwriteShow.mockReset().mockResolvedValue(true);
     mocks.server.saveShowAs.mockReset().mockResolvedValue(true);
-  });
+});
 
-  afterEach(() => {
+afterEach(() => {
     cleanup();
     vi.clearAllMocks();
-  });
+});
 
+describe("QuickSetupModal show workflows", () => {
   it("identifies the active copy and requires confirmation before overwriting the original", async () => {
     render(<QuickSetupModal />);
     const menu = screen.getByRole("dialog", { name: "Show" });
@@ -115,6 +125,21 @@ describe("QuickSetupModal named revision copies", () => {
     const confirmation = screen.getByRole("alertdialog", { name: "Confirm overwrite Festival" });
     fireEvent.click(within(confirmation).getByRole("button", { name: "Cancel" }));
     expect(mocks.server.overwriteShow).not.toHaveBeenCalled();
+  });
+
+  it("closes the top dialog on Escape before closing the Show menu", () => {
+    render(<QuickSetupModal />);
+    fireEvent.click(screen.getByRole("button", { name: "Save As" }));
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog", { name: "Save show" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Show" })).toBeVisible();
+    expect(mocks.dispatch).not.toHaveBeenCalledWith({
+      type: "SET_MODAL",
+      modal: "setupOpen",
+      value: false,
+    });
   });
 
   it("names an autosaved empty show by renaming the existing identity", async () => {
@@ -175,7 +200,9 @@ describe("QuickSetupModal named revision copies", () => {
     expect(save).toHaveTextContent("original show is no longer available");
     expect(within(save).queryByRole("button", { name: "Overwrite Original Show" })).not.toBeInTheDocument();
   });
+});
 
+describe("QuickSetupModal operator actions", () => {
   it("locks the desk directly from the Show menu and closes the menu", async () => {
     mocks.server.lockDesk.mockResolvedValue(undefined);
     render(<QuickSetupModal />);
