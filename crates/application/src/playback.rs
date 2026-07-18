@@ -3,6 +3,22 @@ use light_playback::{
 };
 use std::sync::Arc;
 
+mod command;
+mod ports;
+mod service;
+
+pub use command::{
+    CueNumber, PendingPlaybackAction, PlaybackAction, PlaybackAddress, PlaybackCommand,
+    PlaybackExecution, PlaybackLevel, PlaybackOutcome, PlaybackResult, PlaybackSurface,
+    ResolvedPlaybackAddress,
+};
+pub use ports::PlaybackPorts;
+pub use service::PlaybackService;
+
+#[cfg(test)]
+#[path = "playback/service_tests.rs"]
+mod service_tests;
+
 use crate::{
     CueReference, EventBus, EventDraft, EventEnvelope, EventSource, PlaybackCueTransition,
     PlaybackTransitionCause,

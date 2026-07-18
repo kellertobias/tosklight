@@ -18,6 +18,7 @@ mod http_router;
 #[path = "matter.rs"]
 mod matter;
 mod output_scheduler;
+mod playback_service;
 mod startup_options;
 mod startup_state;
 
@@ -41,7 +42,10 @@ use base64::{
     engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
 };
 use bytes::Bytes;
-use light_application::{EventBus, ProgrammingService, publish_automatic_playback_events};
+use light_application::{
+    EventBus, PlaybackAddress, PlaybackExecution, PlaybackService, ProgrammingService,
+    publish_automatic_playback_events,
+};
 use light_control::speed::{
     SoundObservation, SoundToLightConfig, SpeedGroupController, SpeedSnapshot,
 };
@@ -95,6 +99,7 @@ struct AppState {
     ws_connections: Arc<Mutex<HashMap<SessionId, u32>>>,
     programmers: ProgrammerRegistry,
     programming: ProgrammingService,
+    playback_service: PlaybackService,
     engine: Arc<Engine>,
     highlight: Arc<HighlightRegistry>,
     patch_preview_highlights: Arc<Mutex<HashMap<SessionId, HashSet<light_core::FixtureId>>>>,
@@ -4938,29 +4943,20 @@ async fn playback_action(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let session = authenticate(&state, &headers)?;
     let id = light_core::CueListId(id);
-    let mut playback = state.engine.playback().write();
-    let result = match action.as_str() {
-        "go" => serde_json::to_value(playback.go(id).map_err(ApiError::bad_request)?),
-        "back" => serde_json::to_value(playback.back(id).map_err(ApiError::bad_request)?),
-        "pause" => {
-            playback.pause(id).map_err(ApiError::bad_request)?;
-            serde_json::to_value(playback.active())
-        }
-        "release" => {
-            let released = playback.release(id);
-            Ok(serde_json::json!({"released":released}))
-        }
-        _ => return Err(ApiError::not_found("playback action")),
-    }
-    .map_err(|error| ApiError::internal(error.to_string()))?;
-    drop(playback);
-    persist_active_playbacks(&state)?;
+    let result = playback_service::http_action(
+        &state,
+        &session,
+        PlaybackAddress::CueList(id),
+        &action,
+        &PoolPlaybackInput::default(),
+    )?;
+    let payload = playback_service::cue_list_http_payload(result)?;
     emit(
         &state,
         "playback_changed",
         serde_json::json!({"cue_list_id":id,"action":action,"session_id":session.id}),
     );
-    Ok(Json(result))
+    Ok(Json(payload))
 }
 async fn playbacks(
     State(state): State<AppState>,
@@ -5635,14 +5631,17 @@ async fn update_desk_page(
         .read()
         .clone()
         .ok_or_else(|| ApiError::bad_request("no show is open"))?;
-    if !ensure_playback_page_for_advance(&state, &show, input.page)? {
-        return Err(ApiError::bad_request("playback page does not exist"));
+    {
+        let _ordered = state.playback_service.operation_lock();
+        if !ensure_playback_page_for_advance(&state, &show, input.page)? {
+            return Err(ApiError::bad_request("playback page does not exist"));
+        }
+        state
+            .desk
+            .lock()
+            .set_desk_page(id, show.id, input.page)
+            .map_err(ApiError::store)?;
     }
-    state
-        .desk
-        .lock()
-        .set_desk_page(id, show.id, input.page)
-        .map_err(ApiError::store)?;
     emit(
         &state,
         "playback_page_changed",
@@ -5814,19 +5813,17 @@ async fn paged_playback_action(
             "session is not attached to this desk",
         ));
     }
-    let show = state
-        .active_show
-        .read()
-        .clone()
-        .ok_or_else(|| ApiError::bad_request("no show is open"))?;
-    let page_number = state
-        .desk
-        .lock()
-        .desk_page(id, show.id)
-        .map_err(ApiError::store)?;
-    let number = cuelist_for_page_playback(&state.engine.snapshot(), page_number, slot)
-        .ok_or_else(|| ApiError::not_found("paged playback"))?;
-    pool_playback_action(State(state), Path((number, action)), headers, input).await
+    let input = input.map(|Json(value)| value).unwrap_or_default();
+    let result = playback_service::http_action(
+        &state,
+        &session,
+        PlaybackAddress::CurrentPage { slot },
+        &action,
+        &input,
+    )?;
+    Ok(Json(playback_service::pool_http_payload(
+        &state, &session, &action, result,
+    )?))
 }
 
 async fn pool_playback_action(
@@ -5837,71 +5834,16 @@ async fn pool_playback_action(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let session = authenticate(&state, &headers)?;
     let input = input.map(|Json(value)| value).unwrap_or_default();
-    let definition = state
-        .engine
-        .snapshot()
-        .playbacks
-        .iter()
-        .find(|playback| playback.number == number)
-        .cloned()
-        .ok_or_else(|| ApiError::not_found("playback"))?;
-    let surface = input.surface.as_deref().unwrap_or("physical");
-    let temp_active = predicted_preload_temp_state(&state, session.id, number);
-    let pending_action =
-        preload_capture_action_with_temp_state(&definition, &action, &input, temp_active)?;
-    let capture = state
-        .programmers
-        .get(session.id)
-        .is_some_and(|programmer| programmer.blind)
-        && pending_action.is_some()
-        && if surface == "virtual" {
-            state.configuration.read().preload_virtual_playback_actions
-        } else {
-            state.configuration.read().preload_physical_playback_actions
-        };
-    if capture {
-        let pending_action = pending_action.expect("capture requires a retained action verb");
-        state.programmers.queue_preload_playback_action(
-            session.id,
-            number,
-            pending_action.to_owned(),
-            surface.to_owned(),
-        );
-        persist_programmer(&state, &session)?;
-        emit(
-            &state,
-            "programmer_changed",
-            serde_json::json!({"session_id":session.id,"preload_playback_action":pending_action,"playback_number":number,"surface":surface}),
-        );
-        return Ok(Json(
-            serde_json::json!({"pending":true,"action":pending_action,"playback":definition}),
-        ));
-    }
-    let changed = dispatch_playback_action(
+    let result = playback_service::http_action(
         &state,
-        Some(&session),
-        Some(&session.desk),
-        &definition,
+        &session,
+        PlaybackAddress::Pool(number),
         &action,
         &input,
-        "ui",
     )?;
-    if changed {
-        persist_active_playbacks(&state)?;
-        emit(
-            &state,
-            "playback_changed",
-            serde_json::json!({"playback_number":number,"action":action,"session_id":session.id}),
-        );
-    }
-    let snapshot = state.engine.snapshot();
-    Ok(Json(serde_json::json!({
-        "playback":definition,
-        "active":state.engine.playback().read().runtime_status(),
-        "groups":snapshot.groups,
-        "authoritative_controls":authoritative_playback_controls(&state),
-        "changed":changed
-    })))
+    Ok(Json(playback_service::pool_http_payload(
+        &state, &session, &action, result,
+    )?))
 }
 
 fn predicted_preload_temp_state(state: &AppState, session: SessionId, number: u16) -> bool {
@@ -9234,27 +9176,13 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
             }
             let input: Input =
                 serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
-            let playback = state.engine.playback();
-            let mut playback = playback.write();
-            match command.command.as_str() {
-                "playback.go" => {
-                    serde_json::to_value(playback.go(input.cue_list_id).map_err(|e| e.to_string())?)
-                        .map_err(|e| e.to_string())
-                }
-                "playback.back" => serde_json::to_value(
-                    playback
-                        .back(input.cue_list_id)
-                        .map_err(|e| e.to_string())?,
-                )
-                .map_err(|e| e.to_string()),
-                "playback.pause" => {
-                    playback
-                        .pause(input.cue_list_id)
-                        .map_err(|e| e.to_string())?;
-                    Ok(serde_json::json!({"paused":true}))
-                }
-                _ => Ok(serde_json::json!({"released":playback.release(input.cue_list_id)})),
-            }
+            playback_service::websocket_payload(
+                state,
+                session,
+                &command.command,
+                input.cue_list_id,
+                &command.request_id,
+            )
         }
         _ => Err("unknown command".into()),
     })();
@@ -13439,6 +13367,17 @@ fn handle_playback_osc(
     arguments: &[OscArgument],
     source: Option<&str>,
 ) {
+    // Preserve the three established OSC address families as distinct typed intents:
+    //
+    // - `/light/playback/{page}/{slot}` always targets that explicit page.
+    // - `/light/{desk}/page-playback/{slot}` resolves the desk's current page under the
+    //   PlaybackService operation gate.
+    // - `/light/playback/{number}` and its Cuelist aliases address the global pool directly.
+    //
+    // Keeping this distinction until the application boundary prevents page changes from
+    // retargeting explicit hardware input while retaining current-page behavior for desk wings.
+    // Parsing stops at typed intent here; address resolution and mutation ordering stay in the
+    // application service, alongside the HTTP and compatibility WebSocket paths.
     let parts = address.trim_matches('/').split('/').collect::<Vec<_>>();
     let pressed = arguments
         .first()
@@ -13467,10 +13406,13 @@ fn handle_playback_osc(
         };
         let desk = osc_control_desk(state, parts[1]);
         if let Some(desk) = desk {
-            if !ensure_playback_page_for_advance(state, &show, page).unwrap_or(false) {
-                return;
+            {
+                let _ordered = state.playback_service.operation_lock();
+                if !ensure_playback_page_for_advance(state, &show, page).unwrap_or(false) {
+                    return;
+                }
+                let _ = state.desk.lock().set_desk_page(desk.id, show.id, page);
             }
-            let _ = state.desk.lock().set_desk_page(desk.id, show.id, page);
             emit(
                 state,
                 "playback_page_changed",
@@ -13479,17 +13421,13 @@ fn handle_playback_osc(
         }
         return;
     }
-    let (number, action_index) =
+    let (playback_address, action_index) =
         if parts.len() >= 5 && parts.first() == Some(&"light") && parts.get(1) == Some(&"playback")
         {
             let (Ok(page), Ok(slot)) = (parts[2].parse::<u8>(), parts[3].parse::<u8>()) else {
                 return;
             };
-            let snapshot = state.engine.snapshot();
-            let Some(number) = cuelist_for_page_playback(&snapshot, page, slot) else {
-                return;
-            };
-            (number, 4)
+            (PlaybackAddress::ExplicitPage { page, slot }, 4)
         } else if parts.len() >= 4
             && parts.first() == Some(&"light")
             && parts
@@ -13499,7 +13437,7 @@ fn handle_playback_osc(
             let Ok(number) = parts[2].parse::<u16>() else {
                 return;
             };
-            (number, 3)
+            (PlaybackAddress::Pool(number), 3)
         } else if parts.len() >= 5
             && parts.first() == Some(&"light")
             && parts
@@ -13509,31 +13447,10 @@ fn handle_playback_osc(
             let Ok(slot) = parts[3].parse::<u8>() else {
                 return;
             };
-            let Some(show) = state.active_show.read().clone() else {
-                return;
-            };
-            let Some(desk) = osc_control_desk(state, parts[1]) else {
-                return;
-            };
-            let page_number = state.desk.lock().desk_page(desk.id, show.id).unwrap_or(1);
-            let snapshot = state.engine.snapshot();
-            let Some(number) = cuelist_for_page_playback(&snapshot, page_number, slot) else {
-                return;
-            };
-            (number, 4)
+            (PlaybackAddress::CurrentPage { slot }, 4)
         } else {
             return;
         };
-    let Some(definition) = state
-        .engine
-        .snapshot()
-        .playbacks
-        .iter()
-        .find(|definition| definition.number == number)
-        .cloned()
-    else {
-        return;
-    };
     let button = (parts[action_index] == "button")
         .then(|| parts.get(action_index + 1)?.parse::<u8>().ok())
         .flatten();
@@ -13576,27 +13493,21 @@ fn handle_playback_osc(
     } else {
         parts[action_index]
     };
-    let target_touched = if action == "master" {
-        value.is_some()
-    } else {
-        pressed
-    };
-    if session.as_ref().is_some_and(|session| {
-        intercept_update_playback_target(state, session, &definition, target_touched)
-    }) {
-        return;
-    }
-    if dispatch_playback_action(
+    let Ok(result) = playback_service::osc_action(
         state,
         session.as_ref(),
         action_desk.as_ref(),
-        &definition,
+        playback_address,
         action,
         &input,
-        "osc",
-    )
-    .is_ok_and(|changed| changed)
-    {
+    ) else {
+        return;
+    };
+    let changed = matches!(
+        result.execution,
+        PlaybackExecution::Pool { changed: true, .. }
+    );
+    if changed && let Some(number) = result.resolved.playback_number() {
         emit(
             state,
             "playback_changed",
@@ -16004,6 +15915,7 @@ mod tests {
                 ws_connections: Arc::new(Mutex::new(HashMap::new())),
                 programmers: programmers.clone(),
                 programming: ProgrammingService::new(programmers),
+                playback_service: PlaybackService::default(),
                 engine,
                 highlight: Arc::new(HighlightRegistry::default()),
                 patch_preview_highlights: Arc::default(),

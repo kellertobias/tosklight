@@ -18,7 +18,12 @@ pub use event::{
     EventSubscription, PlaybackCueTransition, PlaybackEvent, PlaybackTransitionCause,
     ReplaceableEventRateLimit, SequenceGap, SubscriptionDelivery, SubscriptionOptions,
 };
-pub use playback::{automatic_playback_events, publish_automatic_playback_events};
+pub use playback::{
+    CueNumber, PendingPlaybackAction, PlaybackAction, PlaybackAddress, PlaybackCommand,
+    PlaybackExecution, PlaybackLevel, PlaybackOutcome, PlaybackPorts, PlaybackResult,
+    PlaybackService, PlaybackSurface, ResolvedPlaybackAddress, automatic_playback_events,
+    publish_automatic_playback_events,
+};
 pub use programming::{
     CueMoveCopyChoice, CueTransferOperation, ExecutionPolicy, ProgrammingAction,
     ProgrammingChoiceOption, ProgrammingChoiceOptionId, ProgrammingCommand, ProgrammingExecution,

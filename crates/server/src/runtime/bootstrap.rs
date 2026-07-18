@@ -6,7 +6,7 @@ use super::{
     spawn_control_inputs, spawn_matter_bridge_sync, startup_options, startup_state::StartupState,
 };
 use axum::Router;
-use light_application::{EventBus, ProgrammingService};
+use light_application::{EventBus, PlaybackService, ProgrammingService};
 use light_control::TimecodeRouter;
 use light_media::MediaCache;
 use light_output::OutputHealth;
@@ -172,6 +172,7 @@ fn build_app_state(
         ws_connections: Arc::new(Mutex::new(HashMap::new())),
         programmers: startup.programmers.clone(),
         programming: ProgrammingService::new(startup.programmers),
+        playback_service: PlaybackService::default(),
         engine: startup.engine,
         highlight: Arc::new(HighlightRegistry::default()),
         patch_preview_highlights: Arc::default(),
