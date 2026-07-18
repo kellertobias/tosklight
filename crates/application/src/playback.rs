@@ -1,9 +1,11 @@
 use light_playback::{
     AutomaticPlaybackTransition, AutomaticPlaybackTransitionCause, PlaybackCueReference,
 };
+use std::sync::Arc;
 
 use crate::{
-    CueReference, EventDraft, EventSource, PlaybackCueTransition, PlaybackTransitionCause,
+    CueReference, EventBus, EventDraft, EventEnvelope, EventSource, PlaybackCueTransition,
+    PlaybackTransitionCause,
 };
 
 /// Maps scheduler-owned domain transitions to installation-global application events.
@@ -16,6 +18,17 @@ pub fn automatic_playback_events(
     transitions
         .into_iter()
         .map(automatic_playback_event)
+        .collect()
+}
+
+/// Publishes automatic transitions after the caller has released its playback/render locks.
+pub fn publish_automatic_playback_events(
+    bus: &EventBus,
+    transitions: impl IntoIterator<Item = AutomaticPlaybackTransition>,
+) -> Vec<Arc<EventEnvelope>> {
+    automatic_playback_events(transitions)
+        .into_iter()
+        .map(|draft| bus.publish(draft))
         .collect()
 }
 
@@ -82,6 +95,26 @@ mod tests {
         assert_eq!(event.advanced_steps, 7);
         assert_eq!(event.previous.as_ref().map(|cue| cue.number), Some(1.0));
         assert_eq!(event.current.as_ref().map(|cue| cue.number), Some(4.0));
+    }
+
+    #[test]
+    fn publishing_occurs_through_the_application_bus() {
+        let bus = EventBus::default();
+        let published = publish_automatic_playback_events(
+            &bus,
+            [AutomaticPlaybackTransition {
+                playback_number: None,
+                cue_list_id: Default::default(),
+                previous: domain_cue(1, 1.0),
+                current: domain_cue(2, 2.0),
+                cause: AutomaticPlaybackTransitionCause::Follow,
+                advanced_steps: 1,
+            }],
+        );
+
+        assert_eq!(published.len(), 1);
+        assert_eq!(published[0].sequence, 1);
+        assert_eq!(bus.latest_sequence(), 1);
     }
 
     fn domain_cue(value: u128, number: f64) -> PlaybackCueReference {

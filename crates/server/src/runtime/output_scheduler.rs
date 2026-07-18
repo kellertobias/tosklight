@@ -1,6 +1,7 @@
 //! Network-output scheduling and safe shutdown for the server runtime.
 
 use super::{OutputControl, PersistedOutputRuntime};
+use light_application::{EventBus, publish_automatic_playback_events};
 use light_control::{SmpteTimecode, TimecodeRouter};
 use light_core::Universe;
 use light_engine::{Engine, EngineSnapshot, RenderOptions};
@@ -27,6 +28,7 @@ pub(super) struct Config {
     pub timecode: Arc<Mutex<TimecodeRouter>>,
     pub cancellation: CancellationToken,
     pub persisted_runtime: PersistedOutputRuntime,
+    pub events: EventBus,
     pub test_bench: bool,
 }
 
@@ -50,6 +52,7 @@ struct Runtime {
     sequences: SharedSequences,
     control: Arc<Mutex<OutputControl>>,
     timecode: Arc<Mutex<TimecodeRouter>>,
+    events: EventBus,
     cancellation: CancellationToken,
 }
 
@@ -107,6 +110,7 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
     let options = runtime.control.lock().render_options();
     let rendered = runtime.engine.render(options).map_err(io::Error::other)?;
     let snapshot = runtime.engine.snapshot();
+    publish_automatic_playback_events(&runtime.events, rendered.automatic_playback_transitions);
     let frames = output_frames(&mut runtime.control.lock(), rendered.universes);
     runtime
         .output
@@ -221,6 +225,7 @@ impl SharedResources {
             sequences: Arc::clone(&self.sequences),
             control: Arc::clone(&self.control),
             timecode: Arc::clone(&config.timecode),
+            events: config.events.clone(),
             cancellation: config.cancellation.clone(),
         }
     }

@@ -7,6 +7,7 @@ use super::{
     startup_options, startup_state::StartupState,
 };
 use axum::Router;
+use light_application::EventBus;
 use light_control::TimecodeRouter;
 use light_media::MediaCache;
 use light_output::OutputHealth;
@@ -57,6 +58,7 @@ struct RuntimeResources {
     matter_bridge: Arc<matter::MatterBridgeAdapter>,
     cancellation: CancellationToken,
     scheduler: output_scheduler::OutputScheduler,
+    events: EventBus,
 }
 
 impl RuntimeResources {
@@ -71,6 +73,7 @@ impl RuntimeResources {
         let output_rate = Arc::new(AtomicU16::new(configuration.frame_rate_hz));
         let matter_bridge = Arc::new(matter::MatterBridgeAdapter::default());
         let cancellation = CancellationToken::new();
+        let events = EventBus::default();
         let scheduler = output_scheduler::start(output_scheduler::Config {
             bind_ip: configuration.output_bind_ip,
             engine: Arc::clone(&startup.engine),
@@ -79,6 +82,7 @@ impl RuntimeResources {
             timecode: Arc::clone(&timecode_router),
             cancellation: cancellation.clone(),
             persisted_runtime,
+            events: events.clone(),
             test_bench: startup.persistent.test_bench,
         })
         .await?;
@@ -89,6 +93,7 @@ impl RuntimeResources {
             matter_bridge,
             cancellation,
             scheduler,
+            events,
         })
     }
 }
@@ -182,6 +187,7 @@ fn build_app_state(
         active_show: Arc::new(RwLock::new(startup.persistent.active_show)),
         active_show_error: Arc::new(RwLock::new(startup.active_show_error)),
         events: startup.events,
+        application_events: resources.events.clone(),
         audit_events: Arc::new(Mutex::new(VecDeque::with_capacity(2048))),
         command_history: Arc::new(Mutex::new(HashMap::new())),
         command_http: command_http::CommandHttpState::default(),

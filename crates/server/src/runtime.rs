@@ -40,6 +40,7 @@ use base64::{
     engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
 };
 use bytes::Bytes;
+use light_application::{EventBus, publish_automatic_playback_events};
 use light_control::speed::{
     SoundObservation, SoundToLightConfig, SpeedGroupController, SpeedSnapshot,
 };
@@ -107,6 +108,7 @@ struct AppState {
     active_show: Arc<RwLock<Option<ShowEntry>>>,
     active_show_error: Arc<RwLock<Option<String>>>,
     events: broadcast::Sender<Event>,
+    application_events: EventBus,
     audit_events: Arc<Mutex<VecDeque<Event>>>,
     command_history: Arc<Mutex<HashMap<Uuid, VecDeque<CommandHistoryEntry>>>>,
     command_http: command_http::CommandHttpState,
@@ -966,6 +968,10 @@ async fn advance_test_clock(
         .engine
         .render(state.output_control.lock().render_options())
         .map_err(|error| ApiError::internal(error.to_string()))?;
+    publish_automatic_playback_events(
+        &state.application_events,
+        rendered.automatic_playback_transitions,
+    );
     let frames = {
         let mut control = state.output_control.lock();
         if control.hold {
@@ -16201,6 +16207,7 @@ mod tests {
                 active_show: Arc::default(),
                 active_show_error: Arc::default(),
                 events,
+                application_events: EventBus::default(),
                 audit_events: Arc::new(Mutex::new(VecDeque::with_capacity(2048))),
                 command_history: Arc::new(Mutex::new(HashMap::new())),
                 command_http: command_http::CommandHttpState::default(),

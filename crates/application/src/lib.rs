@@ -17,4 +17,4 @@ pub use event::{
     EventSubscription, PlaybackCueTransition, PlaybackEvent, PlaybackTransitionCause, SequenceGap,
     SubscriptionDelivery, SubscriptionOptions,
 };
-pub use playback::automatic_playback_events;
+pub use playback::{automatic_playback_events, publish_automatic_playback_events};
