@@ -12,9 +12,17 @@ use crate::v2::command_line::{
     CueMoveCopyChoice, CueMoveCopyChoiceType, CueTransferOperation, ExecuteCommandLineRequest,
     ReplaceCommandLineRequest,
 };
+use crate::v2::events::{
+    CueReference, EventActionSource, EventCapability, EventClass, EventClientMessage,
+    EventDeliveryPolicy, EventEnvelope, EventObject, EventPayload, EventRateLimit,
+    EventServerMessage, EventSnapshotCursor, EventSource, EventSubscriptionFilter,
+    PlaybackCueTransition, PlaybackEventSnapshot, PlaybackStateSnapshot, PlaybackTransitionCause,
+    SequenceGap,
+};
 
 const TYPESCRIPT_PATH: &str = "apps/control-ui/src/api/generated/light-wire.ts";
 const SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-command-line";
+const EVENT_SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-events";
 
 /// One generated artifact relative to the workspace root.
 #[derive(Debug, Eq, PartialEq)]
@@ -37,6 +45,9 @@ pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
         response_schema_artifact::<CommandOperationResponse>("command-operation-response"),
         response_schema_artifact::<CommandErrorResponse>("command-error-response"),
         response_schema_artifact::<CommandLineChangedEvent>("command-line-changed-event"),
+        event_request_schema::<EventClientMessage>("event-client-message"),
+        event_response_schema::<EventServerMessage>("event-server-message"),
+        event_response_schema::<PlaybackEventSnapshot>("playback-event-snapshot"),
     ]
 }
 
@@ -58,6 +69,20 @@ fn request_schema_artifact<T: JsonSchema>(name: &str) -> GeneratedArtifact {
 
 fn response_schema_artifact<T: JsonSchema>(name: &str) -> GeneratedArtifact {
     schema_artifact::<T>(name, SchemaSettings::draft2020_12().for_serialize())
+}
+
+fn event_request_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
+    event_schema::<T>(name, SchemaSettings::draft2020_12().for_deserialize())
+}
+
+fn event_response_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
+    event_schema::<T>(name, SchemaSettings::draft2020_12().for_serialize())
+}
+
+fn event_schema<T: JsonSchema>(name: &str, settings: SchemaSettings) -> GeneratedArtifact {
+    let mut artifact = schema_artifact::<T>(name, settings);
+    artifact.path = format!("{EVENT_SCHEMA_DIRECTORY}/{name}.schema.json");
+    artifact
 }
 
 fn schema_artifact<T: JsonSchema>(name: &str, settings: SchemaSettings) -> GeneratedArtifact {
@@ -92,6 +117,25 @@ fn typescript_bindings() -> String {
         CommandOperationResponse::decl(&config),
         CommandErrorResponse::decl(&config),
         CommandLineChangedEvent::decl(&config),
+        EventCapability::decl(&config),
+        EventClass::decl(&config),
+        EventDeliveryPolicy::decl(&config),
+        EventActionSource::decl(&config),
+        PlaybackTransitionCause::decl(&config),
+        EventObject::decl(&config),
+        EventSubscriptionFilter::decl(&config),
+        EventRateLimit::decl(&config),
+        EventSnapshotCursor::decl(&config),
+        SequenceGap::decl(&config),
+        EventSource::decl(&config),
+        CueReference::decl(&config),
+        PlaybackCueTransition::decl(&config),
+        EventPayload::decl(&config),
+        EventEnvelope::decl(&config),
+        EventClientMessage::decl(&config),
+        EventServerMessage::decl(&config),
+        PlaybackStateSnapshot::decl(&config),
+        PlaybackEventSnapshot::decl(&config),
     ];
     let declarations = declarations
         .into_iter()

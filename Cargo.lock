@@ -2599,8 +2599,11 @@ name = "light-application"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "light-core",
  "light-playback",
+ "light-programmer",
  "parking_lot",
+ "tokio",
  "uuid",
 ]
 

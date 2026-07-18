@@ -1,13 +1,12 @@
 //! Process bootstrap and ownership of server background tasks.
 
 use super::{
-    AppState, HighlightRegistry, command_http, matter,
-    normalize_restored_virtual_playback_exclusions, output_scheduler, refresh_matter_bridge,
-    refresh_speed_group_engine, router, spawn_control_inputs, spawn_matter_bridge_sync,
-    startup_options, startup_state::StartupState,
+    AppState, HighlightRegistry, matter, normalize_restored_virtual_playback_exclusions,
+    output_scheduler, refresh_matter_bridge, refresh_speed_group_engine, router,
+    spawn_control_inputs, spawn_matter_bridge_sync, startup_options, startup_state::StartupState,
 };
 use axum::Router;
-use light_application::EventBus;
+use light_application::{EventBus, ProgrammingService};
 use light_control::TimecodeRouter;
 use light_media::MediaCache;
 use light_output::OutputHealth;
@@ -171,7 +170,8 @@ fn build_app_state(
         sessions: Arc::default(),
         session_clients: Arc::default(),
         ws_connections: Arc::new(Mutex::new(HashMap::new())),
-        programmers: startup.programmers,
+        programmers: startup.programmers.clone(),
+        programming: ProgrammingService::new(startup.programmers),
         engine: startup.engine,
         highlight: Arc::new(HighlightRegistry::default()),
         patch_preview_highlights: Arc::default(),
@@ -190,7 +190,6 @@ fn build_app_state(
         application_events: resources.events.clone(),
         audit_events: Arc::new(Mutex::new(VecDeque::with_capacity(2048))),
         command_history: Arc::new(Mutex::new(HashMap::new())),
-        command_http: command_http::CommandHttpState::default(),
         event_revision: Arc::new(AtomicU64::new(0)),
         desk_token: desk_token(),
         shutdown: resources.cancellation.clone(),

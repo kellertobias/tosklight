@@ -1,6 +1,14 @@
-use light_programmer::{CommandLineState, CommandTarget};
+use crate::{CommandLineState, CommandTarget};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+mod helpers;
+
+pub use helpers::remove_command_token;
+use helpers::{
+    collapse_whitespace, contains_word, ends_operator, is_selection_command, last_word_is_any,
+    replace_last_word, starts_with_words, strip_prefix_word,
+};
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum CommandKeyPhase {
     Press,
     Release,
@@ -18,7 +26,7 @@ impl TryFrom<&str> for CommandKeyPhase {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum CommandKey {
     Set,
     Group,
@@ -38,6 +46,7 @@ pub enum CommandKey {
     Escape,
     Shift,
     Time,
+    Delay,
     Select,
     Plus,
     Minus,
@@ -74,6 +83,7 @@ impl TryFrom<&str> for CommandKey {
             "ESC" => Ok(Self::Escape),
             "SHIFT" => Ok(Self::Shift),
             "TIME" => Ok(Self::Time),
+            "DELAY" => Ok(Self::Delay),
             "SELECT" => Ok(Self::Select),
             "+" => Ok(Self::Plus),
             "-" => Ok(Self::Minus),
@@ -263,6 +273,7 @@ fn edit_text(state: &CommandLineState, key: CommandKey) -> CommandLineEdit {
             | CommandKey::Set
             | CommandKey::At
             | CommandKey::Time
+            | CommandKey::Delay
             | CommandKey::Select
             | CommandKey::Plus
             | CommandKey::Minus
@@ -298,11 +309,14 @@ fn edit_text(state: &CommandLineState, key: CommandKey) -> CommandLineEdit {
         }
         _ => token,
     };
-    let combined = if spaced {
-        format!("{command} {next_token} ")
-    } else {
-        format!("{command}{next_token}")
-    };
+    let combined =
+        if matches!(key, CommandKey::Digit(_)) && selection_continuation && command.trim() != "+" {
+            format!("{} {next_token}", command.trim_end())
+        } else if spaced {
+            format!("{command} {next_token} ")
+        } else {
+            format!("{command}{next_token}")
+        };
     edited(collapse_whitespace(&combined), state.target)
 }
 
@@ -344,6 +358,7 @@ fn command_token(key: CommandKey) -> String {
         CommandKey::Set => "SET".into(),
         CommandKey::At => "AT".into(),
         CommandKey::Time => "TIME".into(),
+        CommandKey::Delay => "DELAY".into(),
         CommandKey::Select => "SELECT".into(),
         CommandKey::Plus => "+".into(),
         CommandKey::Minus => "-".into(),
@@ -360,261 +375,6 @@ fn short_target(target: CommandTarget) -> char {
     }
 }
 
-fn strip_prefix_word<'a>(value: &'a str, prefix: &str) -> Option<&'a str> {
-    let head = value.get(..prefix.len())?;
-    if !head.eq_ignore_ascii_case(prefix) {
-        return None;
-    }
-    let remainder = &value[prefix.len()..];
-    (remainder.is_empty() || remainder.starts_with(char::is_whitespace))
-        .then(|| remainder.trim_start())
-}
-
-fn starts_with_words(value: &str, words: &[&str]) -> bool {
-    value
-        .split_whitespace()
-        .zip(words)
-        .all(|(actual, expected)| actual.eq_ignore_ascii_case(expected))
-        && value.split_whitespace().count() >= words.len()
-}
-
-fn is_selection_command(value: &str) -> bool {
-    let trimmed = value.trim_start();
-    let mut characters = trimmed.chars();
-    if matches!(characters.next(), Some('F' | 'f' | 'G' | 'g'))
-        && characters
-            .next()
-            .is_some_and(|value| value.is_ascii_digit())
-    {
-        return true;
-    }
-    ["FIXTURE", "GROUP", "DEGRP"].iter().any(|prefix| {
-        trimmed
-            .get(..prefix.len())
-            .is_some_and(|head| head.eq_ignore_ascii_case(prefix))
-            && trimmed
-                .get(prefix.len()..)
-                .is_some_and(|tail| tail.is_empty() || tail.starts_with(char::is_whitespace))
-    })
-}
-
-fn contains_word(value: &str, word: &str) -> bool {
-    value
-        .split_whitespace()
-        .any(|candidate| candidate.eq_ignore_ascii_case(word))
-}
-
-fn last_word_is_any(value: &str, expected: &[&str]) -> bool {
-    value.split_whitespace().next_back().is_some_and(|word| {
-        expected
-            .iter()
-            .any(|candidate| word.eq_ignore_ascii_case(candidate))
-    })
-}
-
-fn ends_operator(value: &str) -> bool {
-    value
-        .trim_end()
-        .chars()
-        .next_back()
-        .is_some_and(|character| matches!(character, '+' | '-'))
-}
-
-fn replace_last_word(value: &str, replacement: &str) -> String {
-    let trimmed = value.trim_end();
-    let start = trimmed
-        .char_indices()
-        .rev()
-        .find_map(|(index, character)| character.is_whitespace().then_some(index + 1))
-        .unwrap_or(0);
-    format!("{}{replacement}", &trimmed[..start])
-}
-
-pub fn remove_command_token(value: &str) -> String {
-    let trimmed = value.trim_end();
-    let Some(last) = trimmed.chars().next_back() else {
-        return String::new();
-    };
-    if last.is_ascii_digit() || matches!(last, '.' | '-') {
-        let end = trimmed.len() - last.len_utf8();
-        return trimmed[..end].trim_end().to_owned();
-    }
-    let mut start = trimmed.len();
-    for (index, character) in trimmed.char_indices().rev() {
-        if character.is_ascii_alphabetic() {
-            start = index;
-        } else {
-            break;
-        }
-    }
-    trimmed[..start].trim_end().to_owned()
-}
-
-fn collapse_whitespace(value: &str) -> String {
-    let trailing = value.chars().next_back().is_some_and(char::is_whitespace);
-    let mut collapsed = value.split_whitespace().collect::<Vec<_>>().join(" ");
-    if trailing && !collapsed.is_empty() {
-        collapsed.push(' ');
-    }
-    collapsed
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn state(text: &str, target: CommandTarget, pristine: bool) -> CommandLineState {
-        CommandLineState {
-            text: text.into(),
-            target,
-            pristine,
-            revision: 0,
-        }
-    }
-
-    fn press(text: &str, target: CommandTarget, pristine: bool, key: &str) -> CommandLineEdit {
-        let CommandKeyIntent::Edit(edit) = command_key_intent(
-            &state(text, target, pristine),
-            CommandKey::try_from(key).unwrap(),
-            CommandKeyPhase::Press,
-        ) else {
-            panic!("expected an edit intent");
-        };
-        edit
-    }
-
-    #[test]
-    fn edits_documented_shortcuts_and_timing_tokens() {
-        assert_eq!(
-            press("1 AT ", CommandTarget::Fixture, false, "AT").text,
-            "1 AT FULL"
-        );
-        assert!(press("1 AT ", CommandTarget::Fixture, false, "AT").execute);
-        assert_eq!(
-            press("1.", CommandTarget::Fixture, false, ".").text,
-            "1 AT 0"
-        );
-        assert!(press("1.", CommandTarget::Fixture, false, ".").execute);
-        assert_eq!(
-            press("1..", CommandTarget::Fixture, false, ".").text,
-            "1. AT 0"
-        );
-        assert_eq!(
-            press("1 AT 100 TIME ", CommandTarget::Fixture, false, "TIME").text,
-            "1 AT 100 DELAY "
-        );
-        assert_eq!(
-            press("SPD GRP 2 AT 127", CommandTarget::Fixture, false, ".").text,
-            "SPD GRP 2 AT 127,"
-        );
-    }
-
-    #[test]
-    fn keeps_target_scoping_and_group_dereference_rules() {
-        assert_eq!(
-            press("FIXTURE", CommandTarget::Fixture, true, "7").text,
-            "F7"
-        );
-        assert_eq!(
-            press("G7 + ", CommandTarget::Fixture, false, "8").text,
-            "G7 + F8"
-        );
-        assert_eq!(press("+", CommandTarget::Group, false, "4").text, "+G4");
-        assert_eq!(
-            press("G7 + ", CommandTarget::Fixture, false, "GRP").text,
-            "G7 + G"
-        );
-        assert_eq!(
-            press("G7 + ", CommandTarget::Group, false, "GRP").text,
-            "G7 + F"
-        );
-        assert_eq!(
-            press("GROUP", CommandTarget::Fixture, false, "GRP").text,
-            "DEGRP"
-        );
-        assert_eq!(
-            press("RECORD + ", CommandTarget::Group, false, "GRP").text,
-            "RECORD + GROUP "
-        );
-        assert_eq!(
-            press("RECORD GROUP", CommandTarget::Fixture, false, "7").text,
-            "RECORD GROUP 7"
-        );
-    }
-
-    #[test]
-    fn builds_cue_select_and_complete_group_mode_sequences() {
-        let cue = press("FIXTURE", CommandTarget::Fixture, true, "CUE");
-        assert_eq!(
-            press(&cue.text, CommandTarget::Fixture, cue.pristine, "8").text,
-            "CUE 8"
-        );
-        let nested_cue = press(&cue.text, CommandTarget::Fixture, cue.pristine, "CUE");
-        assert_eq!(
-            press(
-                &nested_cue.text,
-                CommandTarget::Fixture,
-                nested_cue.pristine,
-                "8"
-            )
-            .text,
-            "CUE CUE 8"
-        );
-        assert_eq!(
-            press("FIXTURE", CommandTarget::Fixture, true, "SELECT").text,
-            "SELECT"
-        );
-
-        let fixture_override = press("G7 + ", CommandTarget::Group, false, "GRP");
-        assert_eq!(fixture_override.text, "G7 + F");
-        assert_eq!(
-            press(
-                &fixture_override.text,
-                CommandTarget::Group,
-                fixture_override.pristine,
-                "8"
-            )
-            .text,
-            "G7 + F8"
-        );
-        let fixture = press("GROUP", CommandTarget::Group, true, "GRP");
-        assert_eq!(fixture.text, "FIXTURE");
-        assert_eq!(
-            press(&fixture.text, CommandTarget::Group, fixture.pristine, "1").text,
-            "F1"
-        );
-    }
-
-    #[test]
-    fn bare_opposite_target_enter_changes_the_persistent_scope() {
-        let group = press("GROUP", CommandTarget::Fixture, false, "ENT");
-        assert_eq!(group, default_edit(CommandTarget::Group));
-        let fixture = press("FIXTURE", CommandTarget::Group, false, "ENT");
-        assert_eq!(fixture, default_edit(CommandTarget::Fixture));
-    }
-
-    #[test]
-    fn release_is_ignored_and_shift_keeps_both_phases() {
-        let current = state("F1", CommandTarget::Fixture, false);
-        assert_eq!(
-            command_key_intent(&current, CommandKey::Digit(2), CommandKeyPhase::Release),
-            CommandKeyIntent::NoOp
-        );
-        assert_eq!(
-            command_key_intent(&current, CommandKey::Shift, CommandKeyPhase::Press),
-            CommandKeyIntent::Shift { pressed: true }
-        );
-        assert_eq!(
-            command_key_intent(&current, CommandKey::Shift, CommandKeyPhase::Release),
-            CommandKeyIntent::Shift { pressed: false }
-        );
-    }
-
-    #[test]
-    fn backspace_removes_words_as_tokens_and_numbers_as_characters() {
-        assert_eq!(remove_command_token("FIXTURE 12 THRU"), "FIXTURE 12");
-        assert_eq!(remove_command_token("FIXTURE 12"), "FIXTURE 1");
-        assert_eq!(remove_command_token("FIXTURE 1.5"), "FIXTURE 1.");
-        assert_eq!(remove_command_token("FIXTURE 1 -"), "FIXTURE 1");
-    }
-}
+#[path = "command_line/tests.rs"]
+mod tests;

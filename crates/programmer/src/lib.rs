@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 //! User-scoped selection and programmer state, shared by all of a user's sessions.
-
+pub mod command_line;
 use chrono::{DateTime, Utc};
 use light_core::{
     AttributeKey, AttributeValue, FixtureId, ProgrammerId, SessionId, SharedClock, SystemClock,

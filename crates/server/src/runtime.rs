@@ -7,6 +7,7 @@ mod command_http;
 mod cue_transfer;
 #[path = "default_show.rs"]
 mod default_show;
+mod event_transport;
 #[path = "file_manager.rs"]
 mod file_manager;
 #[path = "file_manager_support.rs"]
@@ -40,7 +41,7 @@ use base64::{
     engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
 };
 use bytes::Bytes;
-use light_application::{EventBus, publish_automatic_playback_events};
+use light_application::{EventBus, ProgrammingService, publish_automatic_playback_events};
 use light_control::speed::{
     SoundObservation, SoundToLightConfig, SpeedGroupController, SpeedSnapshot,
 };
@@ -93,6 +94,7 @@ struct AppState {
     session_clients: Arc<RwLock<HashMap<SessionId, Uuid>>>,
     ws_connections: Arc<Mutex<HashMap<SessionId, u32>>>,
     programmers: ProgrammerRegistry,
+    programming: ProgrammingService,
     engine: Arc<Engine>,
     highlight: Arc<HighlightRegistry>,
     patch_preview_highlights: Arc<Mutex<HashMap<SessionId, HashSet<light_core::FixtureId>>>>,
@@ -111,7 +113,6 @@ struct AppState {
     application_events: EventBus,
     audit_events: Arc<Mutex<VecDeque<Event>>>,
     command_history: Arc<Mutex<HashMap<Uuid, VecDeque<CommandHistoryEntry>>>>,
-    command_http: command_http::CommandHttpState,
     event_revision: Arc<AtomicU64>,
     desk_token: Option<Arc<str>>,
     shutdown: CancellationToken,
@@ -1410,7 +1411,7 @@ async fn update_desk_lock(
     Json(input): Json<DeskLockUpdate>,
 ) -> Result<Json<DeskLockResponse>, ApiError> {
     let session = authenticate(&state, &headers)?;
-    let operation_lock = state.command_http.operation_lock(session.desk.id);
+    let operation_lock = state.programming.desk_lock(session.desk.id);
     let _operation = operation_lock.lock();
     let mut configuration = read_desk_lock(&state, session.desk.id);
     if configuration.locked {
@@ -1463,7 +1464,7 @@ async fn lock_desk(
     headers: HeaderMap,
 ) -> Result<Json<DeskLockResponse>, ApiError> {
     let session = authenticate(&state, &headers)?;
-    let operation_lock = state.command_http.operation_lock(session.desk.id);
+    let operation_lock = state.programming.desk_lock(session.desk.id);
     let _operation = operation_lock.lock();
     let mut configuration = read_desk_lock(&state, session.desk.id);
     configuration.locked = true;
@@ -1482,7 +1483,7 @@ async fn unlock_desk(
     Json(input): Json<DeskUnlockInput>,
 ) -> Result<Json<DeskLockResponse>, ApiError> {
     let session = authenticate(&state, &headers)?;
-    let operation_lock = state.command_http.operation_lock(session.desk.id);
+    let operation_lock = state.programming.desk_lock(session.desk.id);
     let _operation = operation_lock.lock();
     let mut configuration = read_desk_lock(&state, session.desk.id);
     if configuration.unlock_mode == "pin" {
@@ -1513,7 +1514,7 @@ async fn force_unlock_desk(
     headers: HeaderMap,
 ) -> Result<Json<DeskLockResponse>, ApiError> {
     let session = authenticate(&state, &headers)?;
-    let operation_lock = state.command_http.operation_lock(session.desk.id);
+    let operation_lock = state.programming.desk_lock(session.desk.id);
     let _operation = operation_lock.lock();
     let supplied = headers
         .get("x-light-admin-recovery")
@@ -8260,8 +8261,7 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
             | "playback.release"
             | "preset.apply"
     );
-    let command_operation =
-        live_absolute.then(|| state.command_http.operation_lock(session.desk.id));
+    let command_operation = live_absolute.then(|| state.programming.desk_lock(session.desk.id));
     let _command_operation_guard = command_operation.as_ref().map(|lock| lock.lock());
     let selection_revision_before = state
         .programmers
@@ -12425,101 +12425,6 @@ fn osc_pressed(arguments: &[OscArgument]) -> bool {
         .unwrap_or(true)
 }
 
-fn remove_command_token(value: &str) -> String {
-    let trimmed = value.trim_end();
-    let Some(last) = trimmed.chars().next_back() else {
-        return String::new();
-    };
-    if last.is_ascii_digit() || matches!(last, '.' | '-' | '+') {
-        let end = trimmed.len() - last.len_utf8();
-        return trimmed[..end].trim_end().to_string();
-    }
-    let mut start = trimmed.len();
-    for (index, character) in trimmed.char_indices().rev() {
-        if character.is_ascii_alphabetic() {
-            start = index;
-        } else {
-            break;
-        }
-    }
-    trimmed[..start].trim_end().to_string()
-}
-
-fn edit_osc_programmer_command(command: &str, key: &str, target: &str) -> String {
-    let trimmed = command.trim();
-    let default_scope = if target == "GROUP" { 'G' } else { 'F' };
-    let pending_file_action = match key {
-        "set" => Some("SET"),
-        "cpy" | "copy" => Some("COPY"),
-        "mov" | "move" => Some("MOVE"),
-        "del" | "delete" => Some("DELETE"),
-        _ => None,
-    };
-    if let Some(action) = pending_file_action
-        && (trimmed.is_empty() || matches!(trimmed, "FIXTURE" | "GROUP"))
-    {
-        return action.into();
-    }
-    if let Some(digit) = key.strip_prefix("digit-") {
-        if trimmed.is_empty() {
-            return format!("F{digit}");
-        }
-        if trimmed.eq_ignore_ascii_case("GROUP") {
-            return format!("G{digit}");
-        }
-        if trimmed.ends_with(['+', '-']) {
-            return format!("{trimmed} {default_scope}{digit}");
-        }
-        if trimmed.ends_with(['F', 'G', 'f', 'g']) {
-            return format!("{trimmed}{digit}");
-        }
-        if trimmed
-            .chars()
-            .last()
-            .is_some_and(|c| c.is_ascii_alphabetic())
-        {
-            return format!("{trimmed} {digit}");
-        }
-        return format!("{trimmed}{digit}");
-    }
-    if matches!(key, "grp" | "group") {
-        if trimmed.is_empty() {
-            return "GROUP".into();
-        }
-        if trimmed.ends_with(['+', '-']) {
-            let scope = if default_scope == 'G' { 'F' } else { 'G' };
-            return format!("{trimmed} {scope}");
-        }
-    }
-    let token = match key {
-        "grp" | "group" => "GROUP",
-        "thru" => "THRU",
-        "plus" | "add" => "+",
-        "minus" | "subtract" => "-",
-        "at" => "AT",
-        "time" => "TIME",
-        "delay" => "DELAY",
-        "dot" => ".",
-        "div" => "DIV",
-        "set" => "SET",
-        "cue" => "CUE",
-        "rec" => "RECORD",
-        value => value,
-    };
-    if matches!(
-        token,
-        "GROUP" | "THRU" | "+" | "-" | "AT" | "TIME" | "DELAY" | "DIV" | "SET" | "CUE" | "RECORD"
-    ) {
-        format!("{trimmed} {token}")
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ")
-            + " "
-    } else {
-        format!("{trimmed}{token}")
-    }
-}
-
 fn handle_highlight_osc(
     state: &AppState,
     address: &str,
@@ -12652,19 +12557,16 @@ fn handle_programmer_osc(
     let Some(session) = state.sessions.read().get(&subscriber.session_id).cloned() else {
         return;
     };
-    let command_operation = state.command_http.operation_lock(session.desk.id);
-    let _command_operation_guard = command_operation.lock();
-    // The desk may have locked while this OSC action waited behind an HTTP/key operation. The
-    // lock transition uses the same serializer, so this post-wait check closes that ordering race.
     if read_desk_lock(state, session.desk.id).locked {
         return;
     }
-    let selection_revision_before = state
-        .programmers
-        .selection(session.id)
-        .map(|selection| selection.revision);
     let action = parts[3];
     if action == "shift" {
+        let command_operation = state.programming.desk_lock(session.desk.id);
+        let _command_operation_guard = command_operation.lock();
+        if read_desk_lock(state, session.desk.id).locked {
+            return;
+        }
         if let Some(source) = source
             && let Some(target) = state
                 .osc_subscribers
@@ -12696,6 +12598,11 @@ fn handle_programmer_osc(
         return;
     }
     if action == "record" {
+        let command_operation = state.programming.desk_lock(session.desk.id);
+        let _command_operation_guard = command_operation.lock();
+        if read_desk_lock(state, session.desk.id).locked {
+            return;
+        }
         #[derive(Clone, Copy)]
         enum Gesture {
             None,
@@ -12810,166 +12717,42 @@ fn handle_programmer_osc(
         );
         return;
     }
-    if file_manager::route_osc_input(state, &session, action) {
+    {
+        let command_operation = state.programming.desk_lock(session.desk.id);
+        let _command_operation_guard = command_operation.lock();
+        if read_desk_lock(state, session.desk.id).locked {
+            return;
+        }
+        if file_manager::route_osc_input(state, &session, action) {
+            return;
+        }
+    }
+    if action == "set"
+        && state.programmers.get(session.id).is_some_and(|programmer| {
+            matches!(programmer.command_line.trim(), "" | "FIXTURE" | "GROUP")
+        })
+    {
+        emit(
+            state,
+            "desk_action",
+            serde_json::json!({
+                "desk_alias":parts[1],
+                "session_id":session.id,
+                "action":"set",
+                "source":"osc"
+            }),
+        );
         return;
     }
-    match action {
-        "set"
-            if state.programmers.get(session.id).is_some_and(|programmer| {
-                matches!(programmer.command_line.trim(), "" | "FIXTURE" | "GROUP")
-            }) =>
-        {
-            emit(
-                state,
-                "desk_action",
-                serde_json::json!({
-                    "desk_alias":parts[1],
-                    "session_id":session.id,
-                    "action":"set",
-                    "source":"osc"
-                }),
-            );
-        }
-        "enter" => {
-            if let Some(programmer) = state.programmers.get(session.id) {
-                let (retained_command, sensitive) =
-                    command_audit_projection(&programmer.command_line);
-                match command_http::execute_existing_command(
-                    state,
-                    &session,
-                    &programmer.command_line,
-                    "osc",
-                    None,
-                    command_http::ExistingCommandPolicy::Compatibility,
-                ) {
-                    command_http::ExistingCommandOutcome::Accepted { .. } => {
-                        emit(
-                            state,
-                            "command_applied",
-                            serde_json::json!({
-                                "session_id":session.id,
-                                "desk_id":session.desk.id,
-                                "user_id":session.user.id,
-                                "desk_alias":parts[1],
-                                "command":retained_command,
-                                "source":"osc"
-                            }),
-                        );
-                        state
-                            .programmers
-                            .set_command_line(session.id, String::new());
-                    }
-                    command_http::ExistingCommandOutcome::ChoiceRequired { pending_choice } => {
-                        emit(
-                            state,
-                            "programmer_choice_requested",
-                            serde_json::json!({
-                                "session_id":session.id,
-                                "desk_id":session.desk.id,
-                                "user_id":session.user.id,
-                                "pending_choice":pending_choice,
-                                "source":"osc"
-                            }),
-                        );
-                    }
-                    command_http::ExistingCommandOutcome::Rejected { error } => {
-                        let retained_error = if sensitive {
-                            "Sensitive input omitted"
-                        } else {
-                            error.as_str()
-                        };
-                        emit(
-                            state,
-                            "programmer_command_rejected",
-                            serde_json::json!({
-                                "session_id":session.id,
-                                "desk_id":session.desk.id,
-                                "user_id":session.user.id,
-                                "command":retained_command,
-                                "error":retained_error,
-                                "source":"osc"
-                            }),
-                        );
-                    }
-                }
-            }
-        }
-        "clear" => {
-            if let Some(p) = state.programmers.get(session.id) {
-                if !p.command_line.is_empty() {
-                    state
-                        .programmers
-                        .set_command_line(session.id, String::new());
-                } else if !p.selected.is_empty() {
-                    state.programmers.select(session.id, vec![]);
-                } else {
-                    state.programmers.clear_values(session.id);
-                }
-            }
-        }
-        "undo" => {
-            state.programmers.undo(session.id);
-        }
-        "backspace" => {
-            if let Some(p) = state.programmers.get(session.id) {
-                state
-                    .programmers
-                    .set_command_line(session.id, remove_command_token(&p.command_line));
-            }
-        }
-        "preload" => {
-            if state
-                .programmers
-                .get(session.id)
-                .is_some_and(|programmer| programmer.blind)
-            {
-                if let Err(error) = commit_preload(state, &session) {
-                    emit(
-                        state,
-                        "desk_action",
-                        serde_json::json!({"desk_alias":parts[1],"session_id":session.id,"action":"preload","source":"osc","error":error}),
-                    );
-                }
-                return;
-            }
-            let capture_programmer = state.configuration.read().preload_programmer_changes;
-            state
-                .programmers
-                .arm_preload(session.id, capture_programmer);
-            reconcile_highlight_capture_mode(state, &session, "osc_preload");
-        }
-        "escape" | "menu" | "prog-playback" | "record" => emit(
+    if matches!(action, "escape" | "menu" | "prog-playback" | "record") {
+        emit(
             state,
             "desk_action",
             serde_json::json!({"desk_alias":parts[1],"session_id":session.id,"action":action,"source":"osc"}),
-        ),
-        key => {
-            if let Some(p) = state.programmers.get(session.id) {
-                state.programmers.set_command_line(
-                    session.id,
-                    edit_osc_programmer_command(
-                        &p.command_line,
-                        key,
-                        &state.programmers.command_target(session.id),
-                    ),
-                );
-            }
-        }
+        );
+        return;
     }
-    let _ = persist_programmer(state, &session);
-    if state
-        .programmers
-        .selection(session.id)
-        .map(|selection| selection.revision)
-        != selection_revision_before
-    {
-        reconcile_highlight_selection(state, &session, "osc_programmer_selection");
-    }
-    emit(
-        state,
-        "programmer_changed",
-        serde_json::json!({"session_id":session.id}),
-    );
+    command_http::route_osc_command_key(state, &session, parts[1], action);
 }
 
 fn handle_timing_osc(state: &AppState, address: &str, arguments: &[OscArgument]) {
@@ -14555,6 +14338,8 @@ mod tests {
 
     #[path = "command_http_tests.rs"]
     mod command_http_tests;
+    #[path = "event_transport_route_tests.rs"]
+    mod event_transport_route_tests;
 
     fn test_control_desk() -> ControlDesk {
         ControlDesk {
@@ -14920,28 +14705,54 @@ mod tests {
             "GROUP",
             "",
         ] {
-            value = remove_command_token(&value);
+            value = light_programmer::command_line::remove_command_token(&value);
             assert_eq!(value, expected);
         }
     }
 
     #[test]
     fn osc_keypad_uses_the_same_scoped_selection_edits_as_the_ui() {
-        let mut value = edit_osc_programmer_command("", "grp", "FIXTURE");
-        value = edit_osc_programmer_command(&value, "digit-7", "FIXTURE");
-        value = edit_osc_programmer_command(&value, "plus", "FIXTURE");
-        value = edit_osc_programmer_command(&value, "digit-8", "FIXTURE");
-        assert_eq!(value, "G7 + F8");
+        use light_programmer::command_line::{
+            CommandKeyIntent, CommandKeyPhase, command_key_intent,
+        };
+        use light_programmer::{CommandLineState, CommandTarget};
 
-        let override_scope = edit_osc_programmer_command("G7 +", "grp", "FIXTURE");
-        assert_eq!(
-            edit_osc_programmer_command(&override_scope, "digit-8", "FIXTURE"),
-            "G7 + G8"
-        );
-        assert_eq!(
-            edit_osc_programmer_command("G7 +", "digit-8", "GROUP"),
-            "G7 + G8"
-        );
+        fn press(state: &mut CommandLineState, action: &str) {
+            let key = command_http::osc_command_key(action).expect("known OSC keypad action");
+            let CommandKeyIntent::Edit(edit) =
+                command_key_intent(state, key, CommandKeyPhase::Press)
+            else {
+                panic!("expected OSC edit")
+            };
+            state.text = edit.text;
+            state.target = edit.target;
+            state.pristine = edit.pristine;
+        }
+
+        let mut state = CommandLineState::default();
+        for action in ["grp", "digit-7", "plus", "digit-8"] {
+            press(&mut state, action);
+        }
+        assert_eq!(state.visible_text(), "G7 + F8");
+
+        let mut override_scope = CommandLineState {
+            text: "G7 +".into(),
+            target: CommandTarget::Fixture,
+            pristine: false,
+            revision: 0,
+        };
+        press(&mut override_scope, "grp");
+        press(&mut override_scope, "digit-8");
+        assert_eq!(override_scope.visible_text(), "G7 + G8");
+
+        let mut group_scope = CommandLineState {
+            text: "G7 +".into(),
+            target: CommandTarget::Group,
+            pristine: false,
+            revision: 0,
+        };
+        press(&mut group_scope, "digit-8");
+        assert_eq!(group_scope.visible_text(), "G7 + G8");
     }
 
     #[test]
@@ -16191,7 +16002,8 @@ mod tests {
                 sessions: Arc::default(),
                 session_clients: Arc::default(),
                 ws_connections: Arc::new(Mutex::new(HashMap::new())),
-                programmers,
+                programmers: programmers.clone(),
+                programming: ProgrammingService::new(programmers),
                 engine,
                 highlight: Arc::new(HighlightRegistry::default()),
                 patch_preview_highlights: Arc::default(),
@@ -16210,7 +16022,6 @@ mod tests {
                 application_events: EventBus::default(),
                 audit_events: Arc::new(Mutex::new(VecDeque::with_capacity(2048))),
                 command_history: Arc::new(Mutex::new(HashMap::new())),
-                command_http: command_http::CommandHttpState::default(),
                 event_revision: Arc::new(AtomicU64::new(0)),
                 desk_token: None,
                 shutdown: CancellationToken::new(),

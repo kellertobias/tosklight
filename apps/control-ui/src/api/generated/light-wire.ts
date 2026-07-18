@@ -36,3 +36,41 @@ export type CommandOperationResponse = { request_id: string, command_line: Comma
 export type CommandErrorResponse = { error: string, };
 
 export type CommandLineChangedEvent = { desk_id: string, session_id: string, user_id: string, text: string, target: CommandTarget, pristine: boolean, revision: number, source: CommandHttpSource, request_id?: string | null, redacted?: boolean, };
+
+export type EventCapability = "programmer" | "playback" | "show" | "desk" | "output" | "system";
+
+export type EventClass = "transition" | "projection" | "command_outcome" | "error" | "safety" | "telemetry";
+
+export type EventDeliveryPolicy = "lossless" | "replaceable";
+
+export type EventActionSource = "user_interface" | "keyboard" | "osc" | "http" | "midi" | "matter" | "cue" | "timecode" | "scheduler" | "macro" | "system";
+
+export type PlaybackTransitionCause = "go" | "back" | "jump" | "chaser" | "follow" | "wait" | "timecode";
+
+export type EventObject = { capability: EventCapability, id: string, };
+
+export type EventSubscriptionFilter = { capabilities: Array<EventCapability>, classes: Array<EventClass>, objects: Array<EventObject>, };
+
+export type EventRateLimit = { capability: EventCapability, class: EventClass, object: EventObject | null, min_interval_millis: number, };
+
+export type EventSnapshotCursor = { sequence: number, };
+
+export type SequenceGap = { after_sequence: number, oldest_available: number, latest_sequence: number, };
+
+export type EventSource = { "kind": "runtime" } | { "kind": "action", source: EventActionSource, };
+
+export type CueReference = { id: string, number: number, };
+
+export type PlaybackCueTransition = { playback_number: number | null, cue_list_id: string, previous: CueReference | null, current: CueReference | null, cause: PlaybackTransitionCause, advanced_steps: number, };
+
+export type EventPayload = { "type": "playback_cue_transition", transition: PlaybackCueTransition, };
+
+export type EventEnvelope = { sequence: number, occurred_at: string, desk_id: string | null, class: EventClass, object: EventObject | null, source: EventSource, correlation_id: string | null, delivery: EventDeliveryPolicy, payload: EventPayload, };
+
+export type EventClientMessage = { "type": "subscribe", filter: EventSubscriptionFilter, after_sequence?: number | null, capacity?: number | null, rate_limits: Array<EventRateLimit>, } | { "type": "repair", cursor: EventSnapshotCursor, };
+
+export type EventServerMessage = { "type": "ready", cursor: EventSnapshotCursor, } | { "type": "event", event: EventEnvelope, } | { "type": "gap", gap: SequenceGap, } | { "type": "repaired", cursor: EventSnapshotCursor, } | { "type": "error", error: string, };
+
+export type PlaybackStateSnapshot = { object: EventObject, playback_number: number | null, cue_list_id: string, current: CueReference | null, loaded: CueReference | null, paused: boolean, enabled: boolean, };
+
+export type PlaybackEventSnapshot = { desk_id: string, cursor: EventSnapshotCursor, playbacks: Array<PlaybackStateSnapshot>, };

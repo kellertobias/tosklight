@@ -6,6 +6,7 @@
 pub mod action;
 pub mod event;
 pub mod playback;
+pub mod programming;
 
 pub use action::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionOutcome, ActionSource,
@@ -14,7 +15,12 @@ pub use action::{
 pub use event::{
     ApplicationEvent, CueReference, DeliveryPolicy, EventBus, EventCapability, EventClass,
     EventDraft, EventEnvelope, EventFilter, EventObject, EventReplay, EventSource,
-    EventSubscription, PlaybackCueTransition, PlaybackEvent, PlaybackTransitionCause, SequenceGap,
-    SubscriptionDelivery, SubscriptionOptions,
+    EventSubscription, PlaybackCueTransition, PlaybackEvent, PlaybackTransitionCause,
+    ReplaceableEventRateLimit, SequenceGap, SubscriptionDelivery, SubscriptionOptions,
 };
 pub use playback::{automatic_playback_events, publish_automatic_playback_events};
+pub use programming::{
+    CueMoveCopyChoice, CueTransferOperation, ExecutionPolicy, ProgrammingAction,
+    ProgrammingChoiceOption, ProgrammingChoiceOptionId, ProgrammingCommand, ProgrammingExecution,
+    ProgrammingOutcome, ProgrammingPorts, ProgrammingResult, ProgrammingService,
+};

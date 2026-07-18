@@ -6,6 +6,7 @@ pub(super) fn build(state: AppState) -> Router {
     let test_bench = state.manual_clock.is_some();
     let router = Router::new()
         .merge(help::router::<AppState>())
+        .merge(event_transport::router())
         .merge(operator_routes())
         .merge(fixture_routes())
         .merge(media_and_output_routes())

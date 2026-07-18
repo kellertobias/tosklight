@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EventClientMessage",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "after_sequence": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "default": null,
+          "minimum": 0
+        },
+        "capacity": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "default": null,
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "filter": {
+          "$ref": "#/$defs/EventSubscriptionFilter",
+          "default": {
+            "capabilities": [],
+            "classes": [],
+            "objects": []
+          }
+        },
+        "rate_limits": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/EventRateLimit"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "subscribe"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "cursor": {
+          "$ref": "#/$defs/EventSnapshotCursor"
+        },
+        "type": {
+          "type": "string",
+          "const": "repair"
+        }
+      },
+      "required": [
+        "type",
+        "cursor"
+      ]
+    }
+  ],
+  "$defs": {
+    "EventCapability": {
+      "type": "string",
+      "enum": [
+        "programmer",
+        "playback",
+        "show",
+        "desk",
+        "output",
+        "system"
+      ]
+    },
+    "EventClass": {
+      "type": "string",
+      "enum": [
+        "transition",
+        "projection",
+        "command_outcome",
+        "error",
+        "safety",
+        "telemetry"
+      ]
+    },
+    "EventObject": {
+      "type": "object",
+      "properties": {
+        "capability": {
+          "$ref": "#/$defs/EventCapability"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "capability",
+        "id"
+      ]
+    },
+    "EventRateLimit": {
+      "type": "object",
+      "properties": {
+        "capability": {
+          "$ref": "#/$defs/EventCapability"
+        },
+        "class": {
+          "$ref": "#/$defs/EventClass"
+        },
+        "min_interval_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "object": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EventObject"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "capability",
+        "class",
+        "min_interval_millis"
+      ]
+    },
+    "EventSnapshotCursor": {
+      "type": "object",
+      "properties": {
+        "sequence": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "sequence"
+      ]
+    },
+    "EventSubscriptionFilter": {
+      "type": "object",
+      "properties": {
+        "capabilities": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/EventCapability"
+          }
+        },
+        "classes": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/EventClass"
+          }
+        },
+        "objects": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/EventObject"
+          }
+        }
+      }
+    }
+  }
+}

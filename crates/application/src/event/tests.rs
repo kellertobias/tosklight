@@ -112,6 +112,7 @@ fn stale_cursor_reports_gap_and_snapshot_repair_resumes() {
         SubscriptionOptions {
             capacity: 3,
             after_sequence: Some(0),
+            rate_limits: Vec::new(),
         },
     );
     assert_eq!(
@@ -138,6 +139,7 @@ fn replaceable_updates_coalesce_to_the_newest_value() {
         SubscriptionOptions {
             capacity: 1,
             after_sequence: None,
+            rate_limits: Vec::new(),
         },
     );
     bus.publish(transition_draft(desk, 2, DeliveryPolicy::Replaceable));
@@ -156,6 +158,7 @@ fn lossless_queue_overflow_becomes_an_explicit_gap() {
         SubscriptionOptions {
             capacity: 1,
             after_sequence: None,
+            rate_limits: Vec::new(),
         },
     );
     bus.publish(transition_draft(desk, 2, DeliveryPolicy::Lossless));
@@ -169,4 +172,109 @@ fn lossless_queue_overflow_becomes_an_explicit_gap() {
             latest_sequence: 2,
         }))
     );
+}
+
+#[tokio::test]
+async fn async_delivery_wakes_without_polling() {
+    let bus = EventBus::new(4);
+    let desk = Uuid::from_u128(1);
+    let mut subscription =
+        bus.subscribe(EventFilter::for_desk(desk), SubscriptionOptions::default());
+    let waiting = tokio::spawn(async move { subscription.next().await });
+    tokio::task::yield_now().await;
+
+    let expected = bus.publish(transition_draft(desk, 2, DeliveryPolicy::Lossless));
+    let delivery = tokio::time::timeout(std::time::Duration::from_secs(1), waiting)
+        .await
+        .expect("subscriber should wake")
+        .expect("subscriber task should finish");
+
+    assert_eq!(delivery, Some(SubscriptionDelivery::Event(expected)));
+}
+
+#[tokio::test(start_paused = true)]
+async fn replaceable_topic_rate_limit_delivers_the_latest_update() {
+    let bus = EventBus::new(8);
+    let desk = Uuid::from_u128(1);
+    let object = EventObject::new(EventCapability::Playback, "playback:2");
+    let mut subscription = bus.subscribe(
+        EventFilter::for_desk(desk),
+        SubscriptionOptions {
+            capacity: 4,
+            after_sequence: None,
+            rate_limits: vec![ReplaceableEventRateLimit {
+                capability: EventCapability::Playback,
+                class: EventClass::Projection,
+                object: Some(object),
+                min_interval: std::time::Duration::from_millis(100),
+            }],
+        },
+    );
+
+    let first = bus.publish(projection_draft(desk, 2));
+    assert_eq!(
+        subscription.next().await,
+        Some(SubscriptionDelivery::Event(first))
+    );
+    bus.publish(projection_draft(desk, 2));
+    let latest = bus.publish(projection_draft(desk, 2));
+    assert!(subscription.try_next().is_none());
+
+    tokio::time::advance(std::time::Duration::from_millis(100)).await;
+    assert_eq!(
+        subscription.next().await,
+        Some(SubscriptionDelivery::Event(latest))
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn lossless_safety_error_and_transitions_bypass_rate_limits() {
+    let bus = EventBus::new(8);
+    let desk = Uuid::from_u128(1);
+    let mut subscription = bus.subscribe(
+        EventFilter::for_desk(desk),
+        SubscriptionOptions {
+            capacity: 4,
+            after_sequence: None,
+            rate_limits: [
+                EventClass::Transition,
+                EventClass::Error,
+                EventClass::Safety,
+            ]
+            .map(|class| ReplaceableEventRateLimit {
+                capability: EventCapability::Playback,
+                class,
+                object: None,
+                min_interval: std::time::Duration::from_secs(60),
+            })
+            .into(),
+        },
+    );
+    let expected = [
+        EventClass::Transition,
+        EventClass::Error,
+        EventClass::Safety,
+    ]
+    .into_iter()
+    .map(|class| bus.publish(lossless_draft(desk, class)))
+    .collect::<Vec<_>>();
+
+    for event in expected {
+        assert_eq!(
+            subscription.next().await,
+            Some(SubscriptionDelivery::Event(event))
+        );
+    }
+}
+
+fn projection_draft(desk_id: Uuid, playback_number: u16) -> EventDraft {
+    let mut draft = transition_draft(desk_id, playback_number, DeliveryPolicy::Replaceable);
+    draft.class = EventClass::Projection;
+    draft
+}
+
+fn lossless_draft(desk_id: Uuid, class: EventClass) -> EventDraft {
+    let mut draft = transition_draft(desk_id, 2, DeliveryPolicy::Lossless);
+    draft.class = class;
+    draft
 }

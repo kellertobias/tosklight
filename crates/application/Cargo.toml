@@ -6,9 +6,15 @@ license.workspace = true
 
 [dependencies]
 chrono.workspace = true
+light-core = { path = "../core" }
 light-playback = { path = "../playback" }
+light-programmer = { path = "../programmer" }
 parking_lot.workspace = true
+tokio = { workspace = true, features = ["sync", "time"] }
 uuid.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
 
 [lints]
 workspace = true

@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
@@ -207,10 +207,11 @@ impl EventFilter {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SubscriptionOptions {
     pub capacity: usize,
     pub after_sequence: Option<u64>,
+    pub rate_limits: Vec<ReplaceableEventRateLimit>,
 }
 
 impl Default for SubscriptionOptions {
@@ -218,7 +219,35 @@ impl Default for SubscriptionOptions {
         Self {
             capacity: 256,
             after_sequence: None,
+            rate_limits: Vec::new(),
         }
+    }
+}
+
+/// A delivery bucket for high-rate replaceable projections or telemetry.
+///
+/// `object: None` limits the complete capability/class pair. An object-specific rule takes
+/// precedence over a broader rule. Lossless and discrete event classes always bypass limits.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReplaceableEventRateLimit {
+    pub capability: EventCapability,
+    pub class: EventClass,
+    pub object: Option<EventObject>,
+    pub min_interval: Duration,
+}
+
+impl ReplaceableEventRateLimit {
+    pub(super) fn matches(&self, event: &EventEnvelope) -> bool {
+        event.delivery == DeliveryPolicy::Replaceable
+            && matches!(event.class, EventClass::Projection | EventClass::Telemetry)
+            && event.class == self.class
+            && event.object.as_ref().is_some_and(|object| {
+                object.capability == self.capability
+                    && self
+                        .object
+                        .as_ref()
+                        .is_none_or(|expected| expected == object)
+            })
     }
 }
 

@@ -1,4 +1,3 @@
-use crate::command_line::{CommandKey, CommandKeyIntent, CommandKeyPhase, command_key_intent};
 use axum::{
     Json, Router,
     extract::{DefaultBodyLimit, Path, State},
@@ -6,32 +5,28 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use light_core::SessionId;
-use light_programmer::{CommandLineReplaceError, CommandLineState, ProgrammerSelection};
+use light_application::{
+    ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionSource,
+    CueMoveCopyChoice as ApplicationCueChoice, CueTransferOperation as ApplicationCueOperation,
+    ExecutionPolicy, ProgrammingAction, ProgrammingChoiceOption,
+    ProgrammingChoiceOptionId as ApplicationChoiceOptionId, ProgrammingCommand,
+    ProgrammingExecution, ProgrammingOutcome, ProgrammingPorts, ProgrammingResult,
+};
+use light_programmer::command_line::{CommandKey, CommandKeyPhase};
+use light_programmer::{CommandLineState, ProgrammerRegistry};
 use light_wire::v2::command_line::{
-    CommandAcceptedAction, CommandHttpSource, CommandKey as WireCommandKey,
+    CommandAcceptedAction, CommandChoiceOption as WireChoiceOption,
+    CommandChoiceOptionId as WireChoiceOptionId, CommandHttpSource, CommandKey as WireCommandKey,
     CommandKeyPhase as WireCommandKeyPhase, CommandKeyRequest, CommandLineChangedEvent,
     CommandLineResponse, CommandOperationOutcome, CommandOperationResponse,
-    CommandTarget as WireCommandTarget, CueMoveCopyChoice, ExecuteCommandLineRequest,
-    ReplaceCommandLineRequest,
+    CommandTarget as WireCommandTarget, CueMoveCopyChoice, CueMoveCopyChoiceType as WireChoiceType,
+    CueTransferOperation as WireCueOperation, ExecuteCommandLineRequest, ReplaceCommandLineRequest,
 };
-use parking_lot::Mutex;
 use serde::Serialize;
-use sha2::{Digest, Sha256};
-use std::{
-    collections::{HashMap, VecDeque},
-    sync::Arc,
-};
 use uuid::Uuid;
 
 use super::{ApiError, AppState, Session};
 
-/// Global replay horizon for mutating command-line requests.
-///
-/// A global bound matters here: a per-session limit can still grow without bound when clients
-/// reconnect or an installation has many users. Request IDs remain exactly-once within this
-/// documented in-memory horizon and are deliberately forgotten on server restart.
-const REQUEST_CACHE_LIMIT: usize = 4_096;
 const REQUEST_ID_LIMIT: usize = 128;
 const COMMAND_LINE_LIMIT: usize = 16 * 1024;
 
@@ -50,129 +45,6 @@ pub(super) fn router() -> Router<AppState> {
             post(execute_command_line),
         )
         .layer(DefaultBodyLimit::max(32 * 1024))
-}
-
-#[derive(Clone, Default)]
-pub(super) struct CommandHttpState {
-    operation_locks: Arc<Mutex<HashMap<Uuid, Arc<Mutex<()>>>>>,
-    request_cache: Arc<Mutex<RequestCache>>,
-}
-
-impl CommandHttpState {
-    pub(super) fn operation_lock(&self, desk_id: Uuid) -> Arc<Mutex<()>> {
-        let mut locks = self.operation_locks.lock();
-        // A lock with no outstanding clone cannot be protecting an operation. Pruning those
-        // entries keeps desk churn from growing this process-lifetime map without ever splitting
-        // serialization for an in-flight operation.
-        locks.retain(|existing_desk_id, lock| {
-            *existing_desk_id == desk_id || Arc::strong_count(lock) > 1
-        });
-        Arc::clone(
-            locks
-                .entry(desk_id)
-                .or_insert_with(|| Arc::new(Mutex::new(()))),
-        )
-    }
-
-    fn cached(
-        &self,
-        desk_id: Uuid,
-        session_id: SessionId,
-        request_id: &str,
-        fingerprint: &RequestFingerprint,
-    ) -> Result<Option<CommandOperationResponse>, ApiError> {
-        self.request_cache
-            .lock()
-            .get(desk_id, session_id, request_id, fingerprint)
-    }
-
-    fn remember(
-        &self,
-        desk_id: Uuid,
-        session_id: SessionId,
-        request_id: String,
-        fingerprint: RequestFingerprint,
-        response: CommandOperationResponse,
-    ) {
-        self.request_cache
-            .lock()
-            .insert(desk_id, session_id, request_id, fingerprint, response);
-    }
-}
-
-#[derive(Default)]
-struct RequestCache {
-    entries: HashMap<RequestCacheKey, CachedRequest>,
-    order: VecDeque<RequestCacheKey>,
-}
-
-impl RequestCache {
-    fn get(
-        &self,
-        desk_id: Uuid,
-        session_id: SessionId,
-        request_id: &str,
-        fingerprint: &RequestFingerprint,
-    ) -> Result<Option<CommandOperationResponse>, ApiError> {
-        let key = RequestCacheKey {
-            desk_id,
-            session_id,
-            request_id: request_id.to_owned(),
-        };
-        let Some(cached) = self.entries.get(&key) else {
-            return Ok(None);
-        };
-        if cached.fingerprint != *fingerprint {
-            return Err(ApiError::conflict(
-                "request_id was already used for a different command-line operation",
-            ));
-        }
-        Ok(Some(cached.response.clone()))
-    }
-
-    fn insert(
-        &mut self,
-        desk_id: Uuid,
-        session_id: SessionId,
-        request_id: String,
-        fingerprint: RequestFingerprint,
-        response: CommandOperationResponse,
-    ) {
-        let key = RequestCacheKey {
-            desk_id,
-            session_id,
-            request_id,
-        };
-        if !self.entries.contains_key(&key) {
-            self.order.push_back(key.clone());
-        }
-        self.entries.insert(
-            key,
-            CachedRequest {
-                fingerprint,
-                response,
-            },
-        );
-        while self.entries.len() > REQUEST_CACHE_LIMIT {
-            if let Some(oldest) = self.order.pop_front() {
-                self.entries.remove(&oldest);
-            }
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-struct RequestCacheKey {
-    desk_id: Uuid,
-    session_id: SessionId,
-    request_id: String,
-}
-
-type RequestFingerprint = [u8; 32];
-
-struct CachedRequest {
-    fingerprint: RequestFingerprint,
-    response: CommandOperationResponse,
 }
 
 pub(super) enum ExistingCommandOutcome {
@@ -314,16 +186,18 @@ async fn put_command_line(
     validate_command(&input.text)?;
     let session = authenticate_desk_mutation(&state, &headers, desk_id)?;
     let expected_revision = super::parse_if_match(&headers)?;
-    let operation_lock = state.command_http.operation_lock(desk_id);
-    let _operation = operation_lock.lock();
-    ensure_desk_unlocked(&state, desk_id)?;
-    let before = command_state(&state, &session)?;
-    let after = state
-        .programmers
-        .replace_command_line(session.id, expected_revision, input.text)
-        .map_err(replace_error)?;
-    publish_command_line_change(&state, &session, &before, &after, "http", None);
-    Ok(with_etag(command_line_from_state(after)))
+    let context = http_context(&session, None).with_expected_revision(expected_revision);
+    let result = run_service(
+        &state,
+        &session,
+        context,
+        ProgrammingCommand::ReplaceCommandLine {
+            text: input.text,
+            expected_revision,
+        },
+    )?;
+    publish_service_result(&state, &session, &result, "http", None, None);
+    Ok(with_etag(command_line_from_state(result.command_line)))
 }
 
 async fn apply_command_key(
@@ -335,100 +209,27 @@ async fn apply_command_key(
     validate_request_id(&input.request_id)?;
     let key = command_key(input.key);
     let phase = command_key_phase(input.phase);
-    let fingerprint = fingerprint("key", &input)?;
     let session = authenticate_desk_mutation(&state, &headers, desk_id)?;
-    let operation_lock = state.command_http.operation_lock(desk_id);
-    let _operation = operation_lock.lock();
-    ensure_desk_unlocked(&state, desk_id)?;
-    if let Some(response) =
-        state
-            .command_http
-            .cached(desk_id, session.id, &input.request_id, &fingerprint)?
-    {
-        return Ok(with_etag(response));
-    }
-
-    let current = command_state(&state, &session)?;
-    let response = match command_key_intent(&current, key, phase) {
-        CommandKeyIntent::NoOp => accepted_response(
-            &state,
-            &session,
-            input.request_id.clone(),
-            CommandAcceptedAction::IgnoredRelease,
-            None,
-        )?,
-        CommandKeyIntent::Edit(edit) => {
-            validate_command(&edit.text)?;
-            let before = current;
-            let mut execute = false;
-            let after = state
-                .programmers
-                .update_command_line(session.id, |actual| {
-                    let CommandKeyIntent::Edit(edit) = command_key_intent(actual, key, phase)
-                    else {
-                        unreachable!("editing keys retain their intent under the registry lock")
-                    };
-                    execute = edit.execute;
-                    (edit.text, edit.target, edit.pristine)
-                })
-                .ok_or_else(|| ApiError::not_found("programmer command line"))?;
-            publish_command_line_change(
-                &state,
-                &session,
-                &before,
-                &after,
-                "http_key",
-                Some(&input.request_id),
-            );
-            if execute {
-                execute_locked(&state, &session, input.request_id.clone(), None)?
-            } else {
-                accepted_response(
-                    &state,
-                    &session,
-                    input.request_id.clone(),
-                    CommandAcceptedAction::Edited,
-                    None,
-                )?
-            }
-        }
-        CommandKeyIntent::Clear => clear_locked(&state, &session, input.request_id.clone())?,
-        CommandKeyIntent::Undo => undo_locked(&state, &session, input.request_id.clone())?,
-        CommandKeyIntent::Preload => preload_locked(&state, &session, input.request_id.clone())?,
-        CommandKeyIntent::Shift { pressed } => {
-            super::emit(
-                &state,
-                "command_key_phase",
-                serde_json::json!({
-                    "desk_id":session.desk.id,
-                    "session_id":session.id,
-                    "user_id":session.user.id,
-                    "key":"SHIFT",
-                    "phase":if pressed { "press" } else { "release" },
-                    "source":"http",
-                    "request_id":input.request_id,
-                }),
-            );
-            accepted_response(
-                &state,
-                &session,
-                input.request_id.clone(),
-                if pressed {
-                    CommandAcceptedAction::ShiftPressed
-                } else {
-                    CommandAcceptedAction::ShiftReleased
-                },
-                None,
-            )?
-        }
-    };
-    state.command_http.remember(
-        desk_id,
-        session.id,
-        input.request_id,
-        fingerprint,
-        response.clone(),
+    let context = http_context(&session, Some(&input.request_id));
+    let result = run_service(
+        &state,
+        &session,
+        context,
+        ProgrammingCommand::ApplyKey {
+            key,
+            phase,
+            execute_policy: ExecutionPolicy::AtomicProgrammer,
+        },
+    )?;
+    publish_service_result(
+        &state,
+        &session,
+        &result,
+        "http_key",
+        Some(&input.request_id),
+        None,
     );
+    let response = operation_response(input.request_id, result)?;
     Ok(with_etag(response))
 }
 
@@ -442,295 +243,506 @@ async fn execute_command_line(
     if let Some(command) = &input.command {
         validate_command(command)?;
     }
-    let fingerprint = fingerprint("execute", &input)?;
     let session = authenticate_desk_mutation(&state, &headers, desk_id)?;
-    let operation_lock = state.command_http.operation_lock(desk_id);
-    let _operation = operation_lock.lock();
-    ensure_desk_unlocked(&state, desk_id)?;
-    if let Some(response) =
-        state
-            .command_http
-            .cached(desk_id, session.id, &input.request_id, &fingerprint)?
-    {
-        return Ok(with_etag(response));
-    }
-    let response = execute_locked(
+    let context = http_context(&session, Some(&input.request_id));
+    let result = run_service(
         &state,
         &session,
-        input.request_id.clone(),
-        input.command.as_deref(),
+        context,
+        ProgrammingCommand::Execute {
+            command: input.command.clone(),
+            policy: ExecutionPolicy::AtomicProgrammer,
+        },
     )?;
-    state.command_http.remember(
-        desk_id,
-        session.id,
-        input.request_id,
-        fingerprint,
-        response.clone(),
+    publish_service_result(
+        &state,
+        &session,
+        &result,
+        "http",
+        Some(&input.request_id),
+        input.command.as_deref(),
     );
+    let response = operation_response(input.request_id, result)?;
     Ok(with_etag(response))
 }
 
-fn execute_locked(
+fn run_service(
     state: &AppState,
     session: &Session,
-    request_id: String,
-    supplied_command: Option<&str>,
-) -> Result<CommandOperationResponse, ApiError> {
-    let selection_before = selection(state, session)?;
-    let command_before = command_state(state, session)?;
-    let command = supplied_command
-        .unwrap_or_else(|| command_before.visible_text())
-        .to_owned();
-    let (audit_command, sensitive) = super::command_audit_projection(&command);
-    let outcome = match execute_existing_command(
+    context: ActionContext,
+    command: ProgrammingCommand,
+) -> Result<ProgrammingResult, ApiError> {
+    run_service_with_source(state, session, context, command, "http").map_err(action_error)
+}
+
+fn run_service_with_source(
+    state: &AppState,
+    session: &Session,
+    context: ActionContext,
+    command: ProgrammingCommand,
+    source: &'static str,
+) -> Result<ProgrammingResult, ActionError> {
+    let ports = ServerProgrammingPorts {
         state,
         session,
-        &command,
-        "http",
-        Some(&request_id),
-        ExistingCommandPolicy::AtomicProgrammer,
-    ) {
-        ExistingCommandOutcome::Accepted {
-            applied,
-            persistence_warning,
-        } => {
-            let after = command_state(state, session)?;
-            publish_command_line_change(
-                state,
-                session,
-                &command_before,
-                &after,
-                "http",
-                Some(&request_id),
-            );
-            reconcile_selection_change(state, session, selection_before);
-            super::emit(
-                state,
-                "command_applied",
-                serde_json::json!({
-                    "request_id":request_id,
-                    "desk_id":session.desk.id,
-                    "session_id":session.id,
-                    "user_id":session.user.id,
-                    "command":"programmer.execute",
-                    "source":"http",
-                }),
-            );
-            super::emit(
-                state,
-                "programmer_changed",
-                serde_json::json!({
-                    "session_id":session.id,
-                    "desk_id":session.desk.id,
-                    "user_id":session.user.id,
-                    "command":"programmer.execute",
-                    "source":"http",
-                    "request_id":request_id,
-                }),
-            );
-            CommandOperationOutcome::Accepted {
-                action: CommandAcceptedAction::Executed,
-                applied: Some(applied),
-                warning: persistence_warning,
-            }
+        source,
+    };
+    state
+        .programming
+        .handle(ActionEnvelope { context, command }, &ports)
+}
+
+pub(super) fn route_osc_command_key(
+    state: &AppState,
+    session: &Session,
+    desk_alias: &str,
+    action: &str,
+) -> bool {
+    let Some(key) = osc_command_key(action) else {
+        return false;
+    };
+    let context = ActionContext::operator(
+        session.desk.id,
+        session.user.id.0,
+        session.id.0,
+        ActionSource::Osc,
+    );
+    let command = ProgrammingCommand::ApplyKey {
+        key,
+        phase: CommandKeyPhase::Press,
+        execute_policy: ExecutionPolicy::Compatibility,
+    };
+    match run_service_with_source(state, session, context, command, "osc") {
+        Ok(result) => publish_osc_result(state, session, desk_alias, &result),
+        Err(error) => super::emit(
+            state,
+            "programmer_command_rejected",
+            serde_json::json!({
+                "desk_id":session.desk.id,
+                "session_id":session.id,
+                "user_id":session.user.id,
+                "source":"osc",
+                "error":error.message,
+            }),
+        ),
+    }
+    true
+}
+
+pub(super) fn osc_command_key(action: &str) -> Option<CommandKey> {
+    if let Some(digit) = action.strip_prefix("digit-") {
+        return digit
+            .parse::<u8>()
+            .ok()
+            .filter(|digit| *digit <= 9)
+            .map(CommandKey::Digit);
+    }
+    Some(match action {
+        "set" => CommandKey::Set,
+        "grp" | "group" => CommandKey::Group,
+        "cue" => CommandKey::Cue,
+        "undo" => CommandKey::Undo,
+        "clear" => CommandKey::Clear,
+        "del" | "delete" => CommandKey::Delete,
+        "mov" | "move" => CommandKey::Move,
+        "cpy" | "copy" => CommandKey::Copy,
+        "thru" => CommandKey::Thru,
+        "div" => CommandKey::Divide,
+        "backspace" => CommandKey::Backspace,
+        "at" => CommandKey::At,
+        "enter" => CommandKey::Enter,
+        "preload" => CommandKey::Preload,
+        "time" => CommandKey::Time,
+        "delay" => CommandKey::Delay,
+        "select" => CommandKey::Select,
+        "plus" | "add" => CommandKey::Plus,
+        "minus" | "subtract" => CommandKey::Minus,
+        "dot" => CommandKey::Dot,
+        _ => return None,
+    })
+}
+
+fn publish_osc_result(
+    state: &AppState,
+    session: &Session,
+    desk_alias: &str,
+    result: &ProgrammingResult,
+) {
+    if result.replayed {
+        return;
+    }
+    if result.selection_revision_before != result.selection_revision {
+        super::reconcile_highlight_selection(state, session, "osc_programmer_selection");
+    }
+    match &result.outcome {
+        ProgrammingOutcome::Accepted { action, .. } => {
+            publish_osc_accepted(state, session, desk_alias, result, *action)
         }
-        ExistingCommandOutcome::ChoiceRequired { pending_choice } => {
-            retain_supplied_command(
-                state,
-                session,
-                &command_before,
-                supplied_command,
-                &request_id,
-            )?;
-            let audit_choice = if sensitive {
-                serde_json::json!({"type":"cue_move_copy","redacted":true})
-            } else {
-                pending_choice.clone()
-            };
-            super::emit(
-                state,
-                "programmer_choice_requested",
-                serde_json::json!({
-                    "request_id":request_id,
-                    "desk_id":session.desk.id,
-                    "session_id":session.id,
-                    "user_id":session.user.id,
-                    "command":audit_command,
-                    "pending_choice":audit_choice,
-                    "source":"http",
-                }),
-            );
-            let pending_choice = serde_json::from_value(pending_choice)
-                .map_err(|error| ApiError::internal(error.to_string()))?;
-            CommandOperationOutcome::ChoiceRequired { pending_choice }
-        }
-        ExistingCommandOutcome::Rejected { error } => {
-            retain_supplied_command(
-                state,
-                session,
-                &command_before,
-                supplied_command,
-                &request_id,
-            )?;
-            let retained_error = if sensitive {
-                "Sensitive input omitted"
-            } else {
-                error.as_str()
-            };
+        ProgrammingOutcome::ChoiceRequired { pending_choice } => super::emit(
+            state,
+            "programmer_choice_requested",
+            serde_json::json!({
+                "desk_id":session.desk.id,
+                "session_id":session.id,
+                "user_id":session.user.id,
+                "pending_choice":wire_choice(pending_choice.clone()),
+                "source":"osc",
+            }),
+        ),
+        ProgrammingOutcome::Rejected { error } => {
+            let (command, sensitive) =
+                super::command_audit_projection(result.command_line_before.visible_text());
             super::emit(
                 state,
                 "programmer_command_rejected",
                 serde_json::json!({
-                    "request_id":request_id,
                     "desk_id":session.desk.id,
                     "session_id":session.id,
                     "user_id":session.user.id,
-                    "command":audit_command,
-                    "error":retained_error,
-                    "source":"http",
+                    "command":command,
+                    "error":if sensitive { "Sensitive input omitted" } else { error },
+                    "source":"osc",
                 }),
             );
-            CommandOperationOutcome::Rejected { error }
         }
+    }
+}
+
+fn publish_osc_accepted(
+    state: &AppState,
+    session: &Session,
+    desk_alias: &str,
+    result: &ProgrammingResult,
+    action: ProgrammingAction,
+) {
+    if action == ProgrammingAction::Edited {
+        let _ = super::persist_programmer(state, session);
+    }
+    if action == ProgrammingAction::PreloadEntered {
+        super::reconcile_highlight_capture_mode(state, session, "osc_preload");
+    }
+    if action == ProgrammingAction::Executed {
+        let (command, _) =
+            super::command_audit_projection(result.command_line_before.visible_text());
+        super::emit(
+            state,
+            "command_applied",
+            serde_json::json!({
+                "desk_id":session.desk.id,
+                "session_id":session.id,
+                "user_id":session.user.id,
+                "desk_alias":desk_alias,
+                "command":command,
+                "source":"osc",
+            }),
+        );
+    }
+    super::emit(
+        state,
+        "programmer_changed",
+        serde_json::json!({
+            "desk_id":session.desk.id,
+            "session_id":session.id,
+            "user_id":session.user.id,
+            "command":action_name(action),
+            "source":"osc",
+            "command_line":result.command_line.visible_text(),
+            "command_revision":result.command_line.revision,
+        }),
+    );
+}
+
+fn http_context(session: &Session, request_id: Option<&str>) -> ActionContext {
+    let context = ActionContext::operator(
+        session.desk.id,
+        session.user.id.0,
+        session.id.0,
+        ActionSource::Http,
+    );
+    request_id.map_or(context.clone(), |id| context.with_request_id(id))
+}
+
+fn operation_response(
+    request_id: String,
+    result: ProgrammingResult,
+) -> Result<CommandOperationResponse, ApiError> {
+    let outcome = match result.outcome {
+        ProgrammingOutcome::Accepted {
+            action,
+            applied,
+            warning,
+        } => CommandOperationOutcome::Accepted {
+            action: wire_action(action),
+            applied,
+            warning,
+        },
+        ProgrammingOutcome::ChoiceRequired { pending_choice } => {
+            CommandOperationOutcome::ChoiceRequired {
+                pending_choice: wire_choice(pending_choice),
+            }
+        }
+        ProgrammingOutcome::Rejected { error } => CommandOperationOutcome::Rejected { error },
     };
     Ok(CommandOperationResponse {
         request_id,
         outcome,
-        command_line: command_line_response(state, session)?,
+        command_line: command_line_from_state(result.command_line),
     })
 }
 
-fn retain_supplied_command(
-    state: &AppState,
-    session: &Session,
-    before: &CommandLineState,
-    supplied_command: Option<&str>,
-    request_id: &str,
-) -> Result<(), ApiError> {
-    let Some(supplied_command) = supplied_command else {
-        return Ok(());
-    };
-    let supplied_command = supplied_command.to_owned();
-    let after = state
-        .programmers
-        .update_command_line(session.id, |current| {
-            let pristine = supplied_command.trim().is_empty()
-                || supplied_command
-                    .trim()
-                    .eq_ignore_ascii_case(current.target.as_str());
-            (supplied_command, current.target, pristine)
-        })
-        .ok_or_else(|| ApiError::not_found("programmer command line"))?;
-    publish_command_line_change(state, session, before, &after, "http", Some(request_id));
-    Ok(())
+const fn wire_action(action: ProgrammingAction) -> CommandAcceptedAction {
+    match action {
+        ProgrammingAction::Edited => CommandAcceptedAction::Edited,
+        ProgrammingAction::Executed => CommandAcceptedAction::Executed,
+        ProgrammingAction::ClearedCommandLine => CommandAcceptedAction::ClearedCommandLine,
+        ProgrammingAction::ClearedPreload => CommandAcceptedAction::ClearedPreload,
+        ProgrammingAction::ClearedSelection => CommandAcceptedAction::ClearedSelection,
+        ProgrammingAction::ClearedValues => CommandAcceptedAction::ClearedValues,
+        ProgrammingAction::Undone => CommandAcceptedAction::Undone,
+        ProgrammingAction::NoChange => CommandAcceptedAction::NoChange,
+        ProgrammingAction::PreloadEntered => CommandAcceptedAction::PreloadEntered,
+        ProgrammingAction::PreloadCommitted => CommandAcceptedAction::PreloadCommitted,
+        ProgrammingAction::ShiftPressed => CommandAcceptedAction::ShiftPressed,
+        ProgrammingAction::ShiftReleased => CommandAcceptedAction::ShiftReleased,
+        ProgrammingAction::IgnoredRelease => CommandAcceptedAction::IgnoredRelease,
+    }
 }
 
-fn clear_locked(
+fn wire_choice(choice: ApplicationCueChoice) -> CueMoveCopyChoice {
+    CueMoveCopyChoice {
+        choice_type: WireChoiceType::CueMoveCopy,
+        operation: match choice.operation {
+            ApplicationCueOperation::Copy => WireCueOperation::Copy,
+            ApplicationCueOperation::Move => WireCueOperation::Move,
+        },
+        command: choice.command,
+        options: choice
+            .options
+            .into_iter()
+            .map(|option| WireChoiceOption {
+                id: match option.id {
+                    ApplicationChoiceOptionId::Plain => WireChoiceOptionId::Plain,
+                    ApplicationChoiceOptionId::Status => WireChoiceOptionId::Status,
+                },
+                label: option.label,
+                command: option.command,
+            })
+            .collect(),
+        cancel_label: choice.cancel_label,
+    }
+}
+
+fn application_choice(value: serde_json::Value) -> Result<ApplicationCueChoice, String> {
+    let choice: CueMoveCopyChoice =
+        serde_json::from_value(value).map_err(|error| error.to_string())?;
+    Ok(ApplicationCueChoice {
+        operation: match choice.operation {
+            WireCueOperation::Copy => ApplicationCueOperation::Copy,
+            WireCueOperation::Move => ApplicationCueOperation::Move,
+        },
+        command: choice.command,
+        options: choice
+            .options
+            .into_iter()
+            .map(|option| ProgrammingChoiceOption {
+                id: match option.id {
+                    WireChoiceOptionId::Plain => ApplicationChoiceOptionId::Plain,
+                    WireChoiceOptionId::Status => ApplicationChoiceOptionId::Status,
+                },
+                label: option.label,
+                command: option.command,
+            })
+            .collect(),
+        cancel_label: choice.cancel_label,
+    })
+}
+
+fn publish_service_result(
     state: &AppState,
     session: &Session,
-    request_id: String,
-) -> Result<CommandOperationResponse, ApiError> {
-    let command_before = command_state(state, session)?;
-    let selection_before = selection(state, session)?;
-    let action = state
-        .programmers
-        .with_staged_transaction(session.id, |staged| {
-            let programmer = staged
-                .get(session.id)
-                .ok_or_else(|| "programmer does not exist".to_owned())?;
-            let action = if programmer.blind {
-                staged.clear_preload_pending(session.id);
-                CommandAcceptedAction::ClearedPreload
-            } else if !programmer.selected.is_empty() {
-                staged.select(session.id, []);
-                CommandAcceptedAction::ClearedSelection
-            } else if !programmer.values.is_empty() || !programmer.group_values.is_empty() {
-                staged.clear_values(session.id);
-                CommandAcceptedAction::ClearedValues
-            } else if command_before.pristine {
-                CommandAcceptedAction::NoChange
-            } else {
-                CommandAcceptedAction::ClearedCommandLine
-            };
-            staged
-                .update_command_line(session.id, |current| (String::new(), current.target, true))
-                .ok_or_else(|| "programmer command line does not exist".to_owned())?;
-            Ok::<_, String>(action)
-        })
-        .map_err(ApiError::not_found)?;
-    let warning = match action {
-        CommandAcceptedAction::ClearedPreload => persist_with_warning(
-            state,
-            session,
-            "http",
-            Some(&request_id),
-            "programmer.clear_preload",
-        ),
-        CommandAcceptedAction::ClearedSelection => persist_with_warning(
-            state,
-            session,
-            "http",
-            Some(&request_id),
-            "programmer.clear_selection",
-        ),
-        CommandAcceptedAction::ClearedValues => persist_with_warning(
-            state,
-            session,
-            "http",
-            Some(&request_id),
-            "programmer.clear_values",
-        ),
-        _ => None,
-    };
-    let command_after = command_state(state, session)?;
+    result: &ProgrammingResult,
+    source: &str,
+    request_id: Option<&str>,
+    supplied_command: Option<&str>,
+) {
+    if result.replayed {
+        return;
+    }
     publish_command_line_change(
         state,
         session,
-        &command_before,
-        &command_after,
-        "http_key",
-        Some(&request_id),
+        &result.command_line_before,
+        &result.command_line,
+        source,
+        request_id,
     );
-    reconcile_selection_change(state, session, selection_before);
+    if result.selection_revision_before != result.selection_revision {
+        super::reconcile_highlight_selection(state, session, "programmer_selection");
+    }
+    publish_operation_event(state, session, result, request_id, supplied_command);
+}
+
+struct ServerProgrammingPorts<'a> {
+    state: &'a AppState,
+    session: &'a Session,
+    source: &'static str,
+}
+
+impl ProgrammingPorts for ServerProgrammingPorts<'_> {
+    fn authorize(&self, context: &ActionContext) -> Result<(), ActionError> {
+        let identity_matches = context.desk_id == self.session.desk.id
+            && context.session_id == Some(self.session.id.0)
+            && context.user_id == Some(self.session.user.id.0);
+        if !identity_matches {
+            return Err(ActionError::new(
+                ActionErrorKind::Forbidden,
+                "the action context does not match the authenticated operator session",
+            ));
+        }
+        if super::read_desk_lock(self.state, context.desk_id).locked {
+            return Err(ActionError::new(
+                ActionErrorKind::Conflict,
+                "desk is locked",
+            ));
+        }
+        Ok(())
+    }
+
+    fn execute(
+        &self,
+        _programmers: &ProgrammerRegistry,
+        context: &ActionContext,
+        command: &str,
+        policy: ExecutionPolicy,
+    ) -> ProgrammingExecution {
+        let policy = match policy {
+            ExecutionPolicy::AtomicProgrammer => ExistingCommandPolicy::AtomicProgrammer,
+            ExecutionPolicy::Compatibility => ExistingCommandPolicy::Compatibility,
+        };
+        match execute_existing_command(
+            self.state,
+            self.session,
+            command,
+            self.source,
+            context.request_id.as_deref(),
+            policy,
+        ) {
+            ExistingCommandOutcome::Accepted {
+                applied,
+                persistence_warning,
+            } => ProgrammingExecution::Accepted {
+                applied,
+                warning: persistence_warning,
+            },
+            ExistingCommandOutcome::ChoiceRequired { pending_choice } => {
+                match application_choice(pending_choice) {
+                    Ok(pending_choice) => ProgrammingExecution::ChoiceRequired { pending_choice },
+                    Err(error) => ProgrammingExecution::Rejected { error },
+                }
+            }
+            ExistingCommandOutcome::Rejected { error } => ProgrammingExecution::Rejected { error },
+        }
+    }
+
+    fn persist(&self, context: &ActionContext, operation: &'static str) -> Option<String> {
+        persist_with_warning(
+            self.state,
+            self.session,
+            self.source,
+            context.request_id.as_deref(),
+            operation,
+        )
+    }
+
+    fn capture_programmer_on_preload(&self, _context: &ActionContext) -> bool {
+        self.state.configuration.read().preload_programmer_changes
+    }
+
+    fn commit_preload(&self, _context: &ActionContext) -> Result<Option<String>, String> {
+        let committed = super::commit_preload(self.state, self.session)?;
+        Ok(committed
+            .get("warnings")
+            .and_then(serde_json::Value::as_array)
+            .map(|warnings| {
+                warnings
+                    .iter()
+                    .filter_map(serde_json::Value::as_str)
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            })
+            .filter(|warning| !warning.is_empty()))
+    }
+}
+
+fn publish_operation_event(
+    state: &AppState,
+    session: &Session,
+    result: &ProgrammingResult,
+    request_id: Option<&str>,
+    supplied_command: Option<&str>,
+) {
+    match &result.outcome {
+        ProgrammingOutcome::Accepted { action, .. } => {
+            publish_accepted_event(state, session, result, *action, request_id)
+        }
+        ProgrammingOutcome::ChoiceRequired { pending_choice } => publish_choice_event(
+            state,
+            session,
+            result,
+            pending_choice,
+            request_id,
+            supplied_command,
+        ),
+        ProgrammingOutcome::Rejected { error } => {
+            publish_rejection_event(state, session, result, error, request_id, supplied_command)
+        }
+    }
+}
+
+fn publish_accepted_event(
+    state: &AppState,
+    session: &Session,
+    result: &ProgrammingResult,
+    action: ProgrammingAction,
+    request_id: Option<&str>,
+) {
     if matches!(
         action,
-        CommandAcceptedAction::ClearedPreload
-            | CommandAcceptedAction::ClearedSelection
-            | CommandAcceptedAction::ClearedValues
+        ProgrammingAction::ShiftPressed | ProgrammingAction::ShiftReleased
     ) {
         super::emit(
             state,
-            "programmer_changed",
+            "command_key_phase",
             serde_json::json!({
                 "desk_id":session.desk.id,
                 "session_id":session.id,
                 "user_id":session.user.id,
-                "command":"programmer.clear_step",
+                "key":"SHIFT",
+                "phase":if action == ProgrammingAction::ShiftPressed { "press" } else { "release" },
                 "source":"http",
                 "request_id":request_id,
             }),
         );
+        return;
     }
-    accepted_response_with_warning(state, session, request_id, action, None, warning)
-}
-
-fn undo_locked(
-    state: &AppState,
-    session: &Session,
-    request_id: String,
-) -> Result<CommandOperationResponse, ApiError> {
-    let selection_before = selection(state, session)?;
-    let changed = state
-        .programmers
-        .with_staged_transaction(session.id, |staged| {
-            Ok::<_, String>(staged.undo(session.id))
-        })
-        .map_err(ApiError::not_found)?;
-    let mut warning = None;
-    if changed {
-        warning =
-            persist_with_warning(state, session, "http", Some(&request_id), "programmer.undo");
-        reconcile_selection_change(state, session, selection_before);
+    if action == ProgrammingAction::PreloadEntered {
+        super::reconcile_highlight_capture_mode(state, session, "preload");
+    }
+    if action == ProgrammingAction::Executed {
+        super::emit(
+            state,
+            "command_applied",
+            serde_json::json!({
+                "request_id":request_id,
+                "desk_id":session.desk.id,
+                "session_id":session.id,
+                "user_id":session.user.id,
+                "command":"programmer.execute",
+                "source":"http",
+            }),
+        );
+    }
+    if changes_programmer(action) {
         super::emit(
             state,
             "programmer_changed",
@@ -738,130 +750,108 @@ fn undo_locked(
                 "desk_id":session.desk.id,
                 "session_id":session.id,
                 "user_id":session.user.id,
-                "command":"programmer.undo",
+                "command":action_name(action),
                 "source":"http",
                 "request_id":request_id,
+                "preload_armed":action == ProgrammingAction::PreloadEntered,
+                "command_revision":result.command_line.revision,
             }),
         );
     }
-    accepted_response_with_warning(
+}
+
+fn publish_choice_event(
+    state: &AppState,
+    session: &Session,
+    result: &ProgrammingResult,
+    choice: &ApplicationCueChoice,
+    request_id: Option<&str>,
+    supplied_command: Option<&str>,
+) {
+    let command = supplied_command.unwrap_or_else(|| result.command_line_before.visible_text());
+    let (audit_command, sensitive) = super::command_audit_projection(command);
+    let pending_choice = if sensitive {
+        serde_json::json!({"type":"cue_move_copy","redacted":true})
+    } else {
+        serde_json::to_value(wire_choice(choice.clone()))
+            .expect("the application Cue choice satisfies the wire contract")
+    };
+    super::emit(
         state,
-        session,
-        request_id,
-        if changed {
-            CommandAcceptedAction::Undone
-        } else {
-            CommandAcceptedAction::NoChange
-        },
-        None,
-        warning,
+        "programmer_choice_requested",
+        serde_json::json!({
+            "request_id":request_id,
+            "desk_id":session.desk.id,
+            "session_id":session.id,
+            "user_id":session.user.id,
+            "command":audit_command,
+            "pending_choice":pending_choice,
+            "source":"http",
+        }),
+    );
+}
+
+fn publish_rejection_event(
+    state: &AppState,
+    session: &Session,
+    result: &ProgrammingResult,
+    error: &str,
+    request_id: Option<&str>,
+    supplied_command: Option<&str>,
+) {
+    let command = supplied_command.unwrap_or_else(|| result.command_line_before.visible_text());
+    let (audit_command, sensitive) = super::command_audit_projection(command);
+    super::emit(
+        state,
+        "programmer_command_rejected",
+        serde_json::json!({
+            "request_id":request_id,
+            "desk_id":session.desk.id,
+            "session_id":session.id,
+            "user_id":session.user.id,
+            "command":audit_command,
+            "error":if sensitive { "Sensitive input omitted" } else { error },
+            "source":"http",
+        }),
+    );
+}
+
+const fn changes_programmer(action: ProgrammingAction) -> bool {
+    matches!(
+        action,
+        ProgrammingAction::Executed
+            | ProgrammingAction::ClearedPreload
+            | ProgrammingAction::ClearedSelection
+            | ProgrammingAction::ClearedValues
+            | ProgrammingAction::Undone
+            | ProgrammingAction::PreloadEntered
+            | ProgrammingAction::PreloadCommitted
     )
 }
 
-fn preload_locked(
-    state: &AppState,
-    session: &Session,
-    request_id: String,
-) -> Result<CommandOperationResponse, ApiError> {
-    let programmer = state
-        .programmers
-        .get(session.id)
-        .ok_or_else(|| ApiError::not_found("programmer"))?;
-    let (action, warning) = if programmer.blind {
-        match super::commit_preload(state, session) {
-            Ok(committed) => {
-                let warning = committed
-                    .get("warnings")
-                    .and_then(serde_json::Value::as_array)
-                    .map(|warnings| {
-                        warnings
-                            .iter()
-                            .filter_map(serde_json::Value::as_str)
-                            .collect::<Vec<_>>()
-                            .join("; ")
-                    })
-                    .filter(|warning| !warning.is_empty());
-                (CommandAcceptedAction::PreloadCommitted, warning)
-            }
-            Err(error) => {
-                super::emit(
-                    state,
-                    "preload_failed",
-                    serde_json::json!({
-                        "desk_id":session.desk.id,
-                        "session_id":session.id,
-                        "user_id":session.user.id,
-                        "request_id":request_id,
-                        "source":"http",
-                        "error":error,
-                    }),
-                );
-                return Ok(CommandOperationResponse {
-                    request_id,
-                    outcome: CommandOperationOutcome::Rejected { error },
-                    command_line: command_line_response(state, session)?,
-                });
-            }
-        }
-    } else {
-        let capture_programmer = state.configuration.read().preload_programmer_changes;
-        state
-            .programmers
-            .with_staged_transaction(session.id, |staged| {
-                if staged.arm_preload(session.id, capture_programmer) {
-                    Ok::<_, String>(())
-                } else {
-                    Err("programmer does not exist".to_owned())
-                }
-            })
-            .map_err(ApiError::not_found)?;
-        let warning =
-            persist_with_warning(state, session, "http", Some(&request_id), "preload.enter");
-        super::reconcile_highlight_capture_mode(state, session, "preload");
-        super::emit(
-            state,
-            "programmer_changed",
-            serde_json::json!({
-                "desk_id":session.desk.id,
-                "session_id":session.id,
-                "user_id":session.user.id,
-                "preload_armed":true,
-                "source":"http",
-                "request_id":request_id,
-            }),
-        );
-        (CommandAcceptedAction::PreloadEntered, warning)
-    };
-    accepted_response_with_warning(state, session, request_id, action, None, warning)
+const fn action_name(action: ProgrammingAction) -> &'static str {
+    match action {
+        ProgrammingAction::Executed => "programmer.execute",
+        ProgrammingAction::ClearedPreload => "programmer.clear_preload",
+        ProgrammingAction::ClearedSelection => "programmer.clear_selection",
+        ProgrammingAction::ClearedValues => "programmer.clear_values",
+        ProgrammingAction::Undone => "programmer.undo",
+        ProgrammingAction::PreloadEntered => "preload.enter",
+        ProgrammingAction::PreloadCommitted => "preload.go",
+        _ => "programmer.command_line",
+    }
 }
 
-fn accepted_response(
-    state: &AppState,
-    session: &Session,
-    request_id: String,
-    action: CommandAcceptedAction,
-    applied: Option<usize>,
-) -> Result<CommandOperationResponse, ApiError> {
-    accepted_response_with_warning(state, session, request_id, action, applied, None)
-}
-
-fn accepted_response_with_warning(
-    state: &AppState,
-    session: &Session,
-    request_id: String,
-    action: CommandAcceptedAction,
-    applied: Option<usize>,
-    warning: Option<String>,
-) -> Result<CommandOperationResponse, ApiError> {
-    Ok(CommandOperationResponse {
-        request_id,
-        outcome: CommandOperationOutcome::Accepted {
-            action,
-            applied,
-            warning,
-        },
-        command_line: command_line_response(state, session)?,
-    })
+fn action_error(error: ActionError) -> ApiError {
+    match error.kind {
+        ActionErrorKind::Invalid => ApiError::bad_request(error.message),
+        ActionErrorKind::Unauthorized => ApiError::unauthorized(error.message),
+        ActionErrorKind::Forbidden => ApiError::forbidden(error.message),
+        ActionErrorKind::NotFound => ApiError::not_found(error.message),
+        ActionErrorKind::Conflict | ActionErrorKind::Busy => ApiError::conflict(error.message),
+        ActionErrorKind::Unavailable => ApiError::unavailable(error.message),
+        ActionErrorKind::Internal => ApiError::internal(error.message),
+    }
 }
 
 fn persist_with_warning(
@@ -1000,23 +990,6 @@ const fn command_key(key: WireCommandKey) -> CommandKey {
     }
 }
 
-fn selection(state: &AppState, session: &Session) -> Result<ProgrammerSelection, ApiError> {
-    state
-        .programmers
-        .selection(session.id)
-        .ok_or_else(|| ApiError::not_found("programmer selection"))
-}
-
-fn reconcile_selection_change(state: &AppState, session: &Session, before: ProgrammerSelection) {
-    if state
-        .programmers
-        .selection(session.id)
-        .is_some_and(|after| after.revision != before.revision)
-    {
-        super::reconcile_highlight_selection(state, session, "programmer_selection");
-    }
-}
-
 fn publish_command_line_change(
     state: &AppState,
     session: &Session,
@@ -1066,15 +1039,6 @@ fn publish_command_line_change(
     );
 }
 
-fn replace_error(error: CommandLineReplaceError) -> ApiError {
-    match error {
-        CommandLineReplaceError::UnknownSession => ApiError::not_found("programmer command line"),
-        CommandLineReplaceError::RevisionConflict { expected, actual } => ApiError::conflict(
-            format!("command-line revision conflict: expected {expected}, actual {actual}"),
-        ),
-    }
-}
-
 fn validate_request_id(request_id: &str) -> Result<(), ApiError> {
     if request_id.trim().is_empty()
         || request_id.len() > REQUEST_ID_LIMIT
@@ -1094,16 +1058,6 @@ fn validate_command(command: &str) -> Result<(), ApiError> {
         ));
     }
     Ok(())
-}
-
-fn fingerprint<T: Serialize>(kind: &str, input: &T) -> Result<RequestFingerprint, ApiError> {
-    let payload =
-        serde_json::to_vec(input).map_err(|error| ApiError::internal(error.to_string()))?;
-    let mut digest = Sha256::new();
-    digest.update(kind.as_bytes());
-    digest.update([0]);
-    digest.update(payload);
-    Ok(digest.finalize().into())
 }
 
 fn with_etag<T>(value: T) -> Response
