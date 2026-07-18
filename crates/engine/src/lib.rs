@@ -1182,6 +1182,13 @@ impl Engine {
                 .map(|value| (value, ProgrammerTransitionSource::Programmer))
                 .chain(
                     programmer
+                        .transient_values
+                        .into_iter()
+                        .flat_map(|action| action.values)
+                        .map(|value| (value, ProgrammerTransitionSource::Programmer)),
+                )
+                .chain(
+                    programmer
                         .preload_active
                         .into_iter()
                         .map(|value| (value, ProgrammerTransitionSource::Preload)),
@@ -1999,6 +2006,7 @@ mod tests {
             PatchedFixture {
                 fixture_id: physical,
                 fixture_number: None,
+                virtual_fixture_number: None,
                 name: "Cell".into(),
                 layer_id: "default".into(),
                 definition: FixtureDefinition {
@@ -2096,6 +2104,7 @@ mod tests {
             PatchedFixture {
                 fixture_id,
                 fixture_number: Some(1),
+                virtual_fixture_number: None,
                 name: "Semantic fixture".into(),
                 definition,
                 universe: Some(1),
@@ -2215,6 +2224,7 @@ mod tests {
         let fixture = PatchedFixture {
             fixture_id,
             fixture_number: Some(1),
+            virtual_fixture_number: None,
             name: "Calibrated visual".into(),
             definition,
             universe: Some(1),
@@ -2809,6 +2819,7 @@ mod tests {
         let fixture = PatchedFixture {
             fixture_id: physical,
             fixture_number: None,
+            virtual_fixture_number: None,
             name: "Two cell".into(),
             layer_id: "default".into(),
             definition: FixtureDefinition {
@@ -3831,6 +3842,7 @@ mod tests {
         let fixture = PatchedFixture {
             fixture_id: physical,
             fixture_number: Some(1),
+            virtual_fixture_number: None,
             name: "Split fixture".into(),
             definition,
             universe: None,
@@ -4167,6 +4179,7 @@ mod tests {
         let mut fixture = PatchedFixture {
             fixture_id: physical,
             fixture_number: Some(1),
+            virtual_fixture_number: None,
             name: "Highlight fixture".into(),
             definition,
             universe: Some(1),
@@ -4418,6 +4431,7 @@ mod tests {
         let fixture = PatchedFixture {
             fixture_id,
             fixture_number: Some(41),
+            virtual_fixture_number: None,
             name: "Blue identification".into(),
             definition,
             universe: Some(1),
@@ -4540,6 +4554,7 @@ mod tests {
         let fixture = PatchedFixture {
             fixture_id: parent,
             fixture_number: Some(1),
+            virtual_fixture_number: None,
             name: "Two-head fixture".into(),
             definition,
             universe: Some(1),

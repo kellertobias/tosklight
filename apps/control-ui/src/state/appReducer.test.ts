@@ -135,11 +135,19 @@ describe("appReducer", () => {
   });
 
   it("updates stage presentation options and clamps environment brightness", () => {
-    const hidden = appReducer(initialState, { type: "SET_STAGE_OPTIONS", groupsVisible: false, showSelection: false, environmentBrightness: 3 });
+    const hidden = appReducer(initialState, { type: "SET_STAGE_OPTIONS", groupsVisible: false, showSelection: false, showFloorGrid: false, showBeamGuides: false, environmentBrightness: 3 });
     expect(hidden.stageGroupsVisible).toBe(false);
     expect(hidden.stageShowSelection).toBe(false);
+    expect(hidden.stageShowFloorGrid).toBe(false);
+    expect(hidden.stageShowBeamGuides).toBe(false);
     expect(hidden.stageEnvironmentBrightness).toBe(2);
     expect(appReducer(hidden, { type: "SET_STAGE_OPTIONS", environmentBrightness: -1 }).stageEnvironmentBrightness).toBe(0);
+  });
+
+  it("stores beam direction guides independently on a Stage pane", () => {
+    const updated = appReducer(initialState, { type: "SET_PANE_STAGE_OPTION", id: "stage", option: "showBeamGuides", value: false });
+    expect(updated.desks.find((desk) => desk.id === updated.activeDeskId)?.panes.find((pane) => pane.id === "stage")?.showBeamGuides).toBe(false);
+    expect(updated.stageShowBeamGuides).toBe(true);
   });
 
   it("persists the selected Development catalog on its pane", () => {
@@ -196,30 +204,58 @@ describe("appReducer", () => {
   });
 
   it("hydrates persisted built-in window settings without requiring them in older layouts", () => {
-    const hydrated = appReducer(initialState, { type: "HYDRATE_LAYOUT", desks: initialState.desks, activeDeskId: initialState.activeDeskId, windowSettings: { builtIn: "dmx", dockMode: "builtins", stageView: "3d", dmxDotSize: "large", fixtureGroupsVisible: false, presetGroupsVisible: false } });
+    const hydrated = appReducer(initialState, { type: "HYDRATE_LAYOUT", desks: initialState.desks, activeDeskId: initialState.activeDeskId, windowSettings: { builtIn: "dmx", dockMode: "builtins", stageView: "3d", dmxDotSize: "large", fixtureSheetColumns: ["id", "name", "dimmer"], fixtureSheetShowType: false, fixtureSheetShowPatch: false, fixtureSheetShowSubheads: false, fixtureSheetShowMasterHeads: true, fixtureGroupsVisible: false, presetGroupsVisible: false } });
     expect(hydrated.builtIn).toBe("dmx");
     expect(hydrated.dockMode).toBe("builtins");
     expect(hydrated.stageView).toBe("3d");
     expect(hydrated.dmxDotSize).toBe("large");
+    expect(hydrated.fixtureSheetColumns).toEqual(["id", "name", "dimmer"]);
+    expect(hydrated.fixtureSheetShowType).toBe(false);
+    expect(hydrated.fixtureSheetShowPatch).toBe(false);
+    expect(hydrated.fixtureSheetShowSubheads).toBe(false);
+    expect(hydrated.fixtureSheetShowMasterHeads).toBe(true);
     expect(hydrated.fixtureGroupsVisible).toBe(false);
     expect(hydrated.presetGroupsVisible).toBe(false);
     const legacy = appReducer(initialState, { type: "HYDRATE_LAYOUT", desks: initialState.desks, activeDeskId: initialState.activeDeskId });
     expect(legacy.stageView).toBe(initialState.stageView);
+    expect(legacy.stageShowFloorGrid).toBe(true);
+    expect(legacy.stageShowBeamGuides).toBe(true);
+    expect(legacy.fixtureSheetColumns).toEqual(initialState.fixtureSheetColumns);
+    expect(legacy.fixtureSheetShowType).toBe(true);
+    expect(legacy.fixtureSheetShowPatch).toBe(true);
+    expect(legacy.fixtureSheetShowSubheads).toBe(true);
+    expect(legacy.fixtureSheetShowMasterHeads).toBe(true);
+  });
+
+  it("keeps at least one valid fixture-sheet column when updating or migrating settings", () => {
+    const oneColumn = appReducer(initialState, { type: "SET_FIXTURE_SHEET_OPTIONS", columns: ["name"] });
+    expect(oneColumn.fixtureSheetColumns).toEqual(["name"]);
+    const rejectedEmpty = appReducer(oneColumn, { type: "SET_FIXTURE_SHEET_OPTIONS", columns: [] });
+    expect(rejectedEmpty.fixtureSheetColumns).toEqual(["name"]);
+
+    const migrated = appReducer(initialState, {
+      type: "HYDRATE_LAYOUT",
+      desks: initialState.desks,
+      activeDeskId: initialState.activeDeskId,
+      windowSettings: { fixtureSheetColumns: [] },
+    });
+    expect(migrated.fixtureSheetColumns).toEqual(initialState.fixtureSheetColumns);
   });
 
   it("persists preset family independently on a preset pane and migrates legacy panes", () => {
     const desks = [{ id: "test", name: "Test", panes: [{ id: "pool", kind: "presets" as const, title: "Presets", x: 1, y: 1, width: 6, height: 6 }] }];
     const hydrated = appReducer(initialState, { type: "HYDRATE_LAYOUT", desks, activeDeskId: "test" });
-    expect(hydrated.desks[0].panes[0].presetFamily).toBe("All");
+    expect(hydrated.desks[0].panes[0].presetFamily).toBe("Mixed");
     const color = appReducer(hydrated, { type: "SET_PANE_PRESET_FAMILY", id: "pool", family: "Color" });
     expect(color.desks[0].panes[0].presetFamily).toBe("Color");
-    expect(color.presetFamily).toBe("All");
+    expect(color.presetFamily).toBe("Mixed");
   });
 
-  it("migrates the legacy Programming preset pane to the all-presets pool", () => {
-    const desks = [{ id: "programming", name: "Programming", panes: [{ id: "presets", kind: "presets" as const, title: "Color & Position Presets", x: 1, y: 1, width: 9, height: 18, presetFamily: "Position" as const }] }];
-    const hydrated = appReducer(initialState, { type: "HYDRATE_LAYOUT", desks, activeDeskId: "programming" });
-    expect(hydrated.desks[0].panes[0]).toMatchObject({ title: "All Presets", presetFamily: "All" });
+  it("migrates legacy Programming preset panes and All family state to Mixed", () => {
+    const desks = [{ id: "programming", name: "Programming", panes: [{ id: "presets", kind: "presets" as const, title: "All Presets", x: 1, y: 1, width: 9, height: 18, presetFamily: "All" as never }] }];
+    const hydrated = appReducer(initialState, { type: "HYDRATE_LAYOUT", desks, activeDeskId: "programming", windowSettings: { presetFamily: "All" as never } });
+    expect(hydrated.desks[0].panes[0]).toMatchObject({ title: "Mixed Presets", presetFamily: "Mixed" });
+    expect(hydrated.presetFamily).toBe("Mixed");
   });
 
   it("keeps pool colors and Set configuration mode independently configurable", () => {

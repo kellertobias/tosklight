@@ -353,10 +353,29 @@ pub enum ControlActionKind {
     TimedPulse,
 }
 
+/// Portable operator meaning for fixture-control actions. `Custom` preserves profiles authored
+/// before semantic control actions were introduced and actions which intentionally only appear in
+/// Direct Mode.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ControlActionSemantic {
+    #[default]
+    Custom,
+    LampOn,
+    LampOff,
+    Reset,
+    FanAuto,
+    FanLow,
+    FanHigh,
+    FanMax,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ControlAction {
     pub id: Uuid,
     pub name: String,
+    #[serde(default)]
+    pub semantic: ControlActionSemantic,
     pub kind: ControlActionKind,
     #[serde(default)]
     pub duration_millis: Option<u64>,
@@ -587,7 +606,15 @@ pub struct GeometryEmitter {
     pub feather: f32,
     #[serde(default)]
     pub focus: f32,
+    /// Whether this emitter projects light along a meaningful aim direction.
+    /// Broad sources such as strobes and strip fixtures set this to false.
+    #[serde(default = "default_directional_emitter")]
+    pub directional: bool,
     pub layout: EmitterLayout,
+}
+
+fn default_directional_emitter() -> bool {
+    true
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -2435,6 +2462,39 @@ mod tests {
     }
 
     #[test]
+    fn legacy_geometry_emitters_default_to_directional_and_explicit_broad_sources_round_trip() {
+        let mut profile = FixtureProfile::blank();
+        let head_id = profile.modes[0].heads[0].id;
+        profile.modes[0].geometry = GeometryGraph::template(GeometryTemplate::Fixed, &[head_id]);
+        let node_id = profile.modes[0].geometry.nodes[0].id;
+        profile.modes[0].geometry.emitters.push(GeometryEmitter {
+            id: Uuid::new_v4(),
+            name: "Beam".into(),
+            node_id,
+            head_id,
+            origin: Vector3::default(),
+            orientation_degrees: Vector3::default(),
+            beam_angle_degrees: 20.0,
+            field_angle_degrees: 24.0,
+            feather: 0.0,
+            focus: 1.0,
+            directional: true,
+            layout: EmitterLayout::Point,
+        });
+        let mut legacy = serde_json::to_value(&profile).unwrap();
+        legacy["modes"][0]["geometry"]["emitters"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("directional");
+        let mut migrated: FixtureProfile = serde_json::from_value(legacy).unwrap();
+        assert!(migrated.modes[0].geometry.emitters[0].directional);
+        migrated.modes[0].geometry.emitters[0].directional = false;
+        let restored: FixtureProfile =
+            serde_json::from_value(serde_json::to_value(migrated).unwrap()).unwrap();
+        assert!(!restored.modes[0].geometry.emitters[0].directional);
+    }
+
+    #[test]
     fn legacy_head_split_migrates_to_channels_and_serializes_canonically() {
         let mut profile = FixtureProfile::blank();
         profile.manufacturer = "Test".into();
@@ -3201,5 +3261,29 @@ mod tests {
         let decoded: FixtureProfile = serde_json::from_value(value).unwrap();
         assert_eq!(decoded.patch_policy, PatchPolicy::Dmx);
         assert_eq!(decoded.model_units, ModelUnits::Auto);
+    }
+
+    #[test]
+    fn control_action_semantics_are_portable_and_legacy_actions_default_to_custom() {
+        let channel_id = Uuid::new_v4();
+        let mut value = serde_json::json!({
+            "id": Uuid::new_v4(),
+            "name": "Lamp On",
+            "semantic": "lamp_on",
+            "kind": "timed_pulse",
+            "duration_millis": 1000,
+            "assignments": [{
+                "channel_id": channel_id,
+                "active_raw": 255,
+                "inactive_raw": 0
+            }]
+        });
+        let action: ControlAction = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(action.semantic, ControlActionSemantic::LampOn);
+        assert_eq!(serde_json::to_value(action).unwrap()["semantic"], "lamp_on");
+
+        value.as_object_mut().unwrap().remove("semantic");
+        let legacy: ControlAction = serde_json::from_value(value).unwrap();
+        assert_eq!(legacy.semantic, ControlActionSemantic::Custom);
     }
 }

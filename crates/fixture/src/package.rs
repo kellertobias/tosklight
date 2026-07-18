@@ -515,7 +515,7 @@ fn validate_profile(profile: &FixtureProfile) -> Result<(), FixturePackageError>
         .map_err(|error| invalid(error.to_string()))?;
     // FixtureProfile::validate covers every mode and channel. Calling resolved_definition for
     // every mode here would clone the complete profile snapshot into every temporary definition,
-    // becoming quadratic for exhaustive Generic profiles with thousands of ordered modes.
+    // becoming quadratic for large imported or operator-authored profiles with many modes.
     Ok(())
 }
 
@@ -641,6 +641,91 @@ mod tests {
                     footprint: 0
                 }]
                 && mode.channels.is_empty()));
+        }
+    }
+
+    #[test]
+    fn generic_led_packages_keep_only_operator_useful_channel_orders() {
+        let expected = [
+            (
+                "generic--rgbw-led.toskfixture",
+                vec![
+                    "DRGBW 8-bit dimmer first",
+                    "RGBWD 8-bit dimmer last",
+                    "RGBW virtual dimmer",
+                ],
+            ),
+            (
+                "generic--rgbwa-led.toskfixture",
+                vec![
+                    "DRGBWA 8-bit dimmer first",
+                    "RGBWAD 8-bit dimmer last",
+                    "RGBWA virtual dimmer",
+                ],
+            ),
+            (
+                "generic--rgbwauv-led.toskfixture",
+                vec![
+                    "DRGBWAU 8-bit dimmer first",
+                    "RGBWAUD 8-bit dimmer last",
+                    "RGBWAU virtual dimmer",
+                ],
+            ),
+            (
+                "generic--rgbcct-led.toskfixture",
+                vec![
+                    "DRGBCW 8-bit dimmer first",
+                    "RGBCWD 8-bit dimmer last",
+                    "RGBCW virtual dimmer",
+                    "DRGBWC 8-bit dimmer first",
+                    "RGBWCD 8-bit dimmer last",
+                    "RGBWC virtual dimmer",
+                    "DCRGBW 8-bit dimmer first",
+                    "CRGBWD 8-bit dimmer last",
+                    "CRGBW virtual dimmer",
+                    "DCWRGB 8-bit dimmer first",
+                    "CWRGBD 8-bit dimmer last",
+                    "CWRGB virtual dimmer",
+                    "DWRGBC 8-bit dimmer first",
+                    "WRGBCD 8-bit dimmer last",
+                    "WRGBC virtual dimmer",
+                    "DWCRGB 8-bit dimmer first",
+                    "WCRGBD 8-bit dimmer last",
+                    "WCRGB virtual dimmer",
+                ],
+            ),
+        ];
+
+        for (filename, mode_names) in expected {
+            let profile = shipped_profile(filename);
+            assert_eq!(
+                profile
+                    .modes
+                    .iter()
+                    .map(|mode| mode.name.as_str())
+                    .collect::<Vec<_>>(),
+                mode_names
+            );
+            for mode in &profile.modes {
+                assert_eq!(mode.splits.len(), 1);
+                assert_eq!(mode.splits[0].footprint as usize, mode.channels.len());
+                let intensity = mode
+                    .channels
+                    .iter()
+                    .position(|channel| channel.attribute.is_intensity());
+                if mode.name.ends_with("virtual dimmer") {
+                    assert_eq!(intensity, None);
+                    assert!(
+                        mode.channels
+                            .iter()
+                            .all(|channel| channel.reacts_to_virtual_intensity)
+                    );
+                } else if mode.name.starts_with('D') {
+                    assert_eq!(intensity, Some(0));
+                } else {
+                    assert_eq!(intensity, Some(mode.channels.len() - 1));
+                }
+            }
         }
     }
 

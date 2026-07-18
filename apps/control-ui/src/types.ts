@@ -1,31 +1,33 @@
+import type { PresetFamily } from "./presetFamilies";
+
 export const GRID_COLUMNS = 24;
 export const GRID_ROWS = 18;
 
 export type BuiltInWindow =
-  | "stage"
-  | "groups"
-  | "fixtures"
-  | "presets"
-  | "cuelists"
-  | "cuelist_pool"
-  | "cues"
-  // Persisted layout aliases from before the Cuelist terminology migration.
-  | "qlists"
-  | "qlist_pool"
-  | "qs"
-  | "playback"
-  | "playback_pool"
-  | "cue_list"
-  | "dynamics"
-  | "channels"
-  | "dmx"
-  | "patch"
-  | "setup"
-  | "help"
-  | "development"
-  | "virtual_playbacks"
-  | "file_manager"
-  | "text_editor";
+	| "stage"
+	| "groups"
+	| "fixtures"
+	| "presets"
+	| "cuelists"
+	| "cuelist_pool"
+	| "cues"
+	// Persisted layout aliases from before the Cuelist terminology migration.
+	| "qlists"
+	| "qlist_pool"
+	| "qs"
+	| "playback"
+	| "playback_pool"
+	| "cue_list"
+	| "dynamics"
+	| "channels"
+	| "dmx"
+	| "patch"
+	| "setup"
+	| "help"
+	| "development"
+	| "virtual_playbacks"
+	| "file_manager"
+	| "text_editor";
 
 export type ControlMode = "programmer" | "playbacks";
 export type DockMode = "desks" | "builtins";
@@ -37,169 +39,212 @@ export type DevelopmentView = "forms" | "faders" | "buttons";
 export type TextEditorMode = "plain" | "markdown" | "split";
 
 export interface GridRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+	x: number;
+	y: number;
+	width: number;
+	height: number;
 }
 
 export interface VirtualPlaybackExclusionZone {
-  id: string;
-  name: string;
-  /** One-based cells on the surface's current playback page. */
-  slots: number[];
+	id: string;
+	name: string;
+	/** One-based cells on the surface's current playback page. */
+	slots: number[];
 }
 
 export interface PaneModel extends GridRect {
-  id: string;
-  kind: BuiltInWindow;
-  title: string;
-  showGroupShortcuts?: boolean;
-  stageView?: StageView;
-  followPreload?: boolean;
-  presetFamily?: AppState["presetFamily"];
-  presetPoolColors?: boolean;
-  developmentView?: DevelopmentView;
-  virtualPlaybackRows?: number;
-  virtualPlaybackColumns?: number;
-  virtualPlaybackCells?: Array<{ playbackNumber: number | null; action: "go" | "toggle" }>;
-  virtualPlaybackExclusionZones?: VirtualPlaybackExclusionZone[];
-  fileManagerShowHidden?: boolean;
-  textFileRoot?: string;
-  textFilePath?: string;
-  textEditorReadOnly?: boolean;
-  textEditorMode?: TextEditorMode;
-  textEditorView?: {
-    root: string;
-    path: string;
-    selectionStart: number;
-    selectionEnd: number;
-    scrollTop: number;
-  };
+	id: string;
+	kind: BuiltInWindow;
+	title: string;
+	showGroupShortcuts?: boolean;
+	stageView?: StageView;
+	followPreload?: boolean;
+	showBeamGuides?: boolean;
+	presetFamily?: AppState["presetFamily"];
+	presetPoolColors?: boolean;
+	developmentView?: DevelopmentView;
+	virtualPlaybackRows?: number;
+	virtualPlaybackColumns?: number;
+	virtualPlaybackCells?: Array<{
+		playbackNumber: number | null;
+		action: "go" | "toggle";
+	}>;
+	virtualPlaybackExclusionZones?: VirtualPlaybackExclusionZone[];
+	fileManagerShowHidden?: boolean;
+	textFileRoot?: string;
+	textFilePath?: string;
+	textEditorReadOnly?: boolean;
+	textEditorMode?: TextEditorMode;
+	textEditorView?: {
+		root: string;
+		path: string;
+		selectionStart: number;
+		selectionEnd: number;
+		scrollTop: number;
+	};
 }
 
 export interface DeskModel {
-  id: string;
-  name: string;
-  icon?: string;
-  panes: PaneModel[];
+	id: string;
+	name: string;
+	icon?: string;
+	panes: PaneModel[];
 }
 
 export interface FixtureRow {
-  id: number;
-  name: string;
-  type: string;
-  dimmer: number;
-  color: string;
-  colorLabel: string;
-  pan: number;
-  tilt: number;
-  positionLabel?: string;
-  beam: string;
-  focus: string;
-  sources: Record<"dimmer" | "color" | "position" | "beam" | "focus", ValueSource>;
+	id: number;
+	name: string;
+	type: string;
+	dimmer: number;
+	color: string;
+	colorLabel: string;
+	pan: number;
+	tilt: number;
+	positionLabel?: string;
+	beam: string;
+	focus: string;
+	sources: Record<
+		"dimmer" | "color" | "position" | "beam" | "focus",
+		ValueSource
+	>;
 }
 
 export interface PresetModel {
-  id: number;
-  name?: string;
-  family?: string;
-  color?: string;
-  icon?: string;
-  fixtures?: number;
+	id: number;
+	name?: string;
+	family?: string;
+	color?: string;
+	icon?: string;
+	fixtures?: number;
 }
 
 export interface GroupModel {
-  id: number;
-  name: string;
-  fixtures: number;
+	id: number;
+	name: string;
+	fixtures: number;
 }
 
 export interface AppState {
-  dockMode: DockMode;
-  activeDeskId: string;
-  desks: DeskModel[];
-  builtIn: BuiltInWindow | null;
-  lastBuiltIn: BuiltInWindow;
-  fileManagerReturn: {
-    dockMode: DockMode;
-    activeDeskId: string;
-    builtIn: BuiltInWindow | null;
-  } | null;
-  controlMode: ControlMode;
-  paneSettingsId: string | null;
-  maximizedPaneId: string | null;
-  windowPicker: GridRect | null;
-  savingDesk: boolean;
-  preload: "idle" | "blind" | "output";
-  preloadActive: boolean;
-  speedGroup: "A" | "B" | "C" | "D" | "E";
-  playbackColumns: number;
-  playbackRows: number;
-  playbackPage: number;
-  playbackPageNames: string[];
-  presetFamily: "All" | "Intensity" | "Color" | "Position" | "Beam";
-  presetPoolColors: boolean;
-  presetSetArmed: boolean;
-  cuelistBuiltInView: "pool" | "cues";
-  cuelistBuiltInNumber: number | null;
-  cueListSetArmed: boolean;
-  cueListSetTarget: number | null;
-  playbackSetArmed: boolean;
-  setupOpen: boolean;
-  specialDialogsOpen: boolean;
-  specialDialogFamily: "Color" | "Position" | "Beam" | "Shapers" | "Control" | "Dynamics";
-  systemControlsOpen: boolean;
-  preloadStoreOpen: boolean;
-  storeArmed: boolean;
-  updateArmed: boolean;
-  shiftArmed: boolean;
-  storeSettingsOpen: boolean;
-  patchSetArmed: boolean;
-  midiProfile: boolean;
-  debugOpen: boolean;
-  touchScrollbars: boolean;
-  showSectionNames: boolean;
-  regularNumberShortcuts: boolean;
-  deskSettingsOpen: boolean;
-  deskSettingsId: string | null;
-  stageMode: StageMode;
-  stageView: StageView;
-  stageZoom: number;
-  stagePanX: number;
-  stagePanY: number;
-  stageOrbitX: number;
-  stageOrbitY: number;
-  stageGroupsVisible: boolean;
-  stageShowSelection: boolean;
-  stageEnvironmentBrightness: number;
-  dmxDotSize: DmxDotSize;
-  fixtureGroupsVisible: boolean;
-  presetGroupsVisible: boolean;
-  groupsReturnToStage: "builtin" | "desk" | null;
-  blackout: boolean;
+	dockMode: DockMode;
+	activeDeskId: string;
+	desks: DeskModel[];
+	builtIn: BuiltInWindow | null;
+	lastBuiltIn: BuiltInWindow;
+	fileManagerReturn: {
+		dockMode: DockMode;
+		activeDeskId: string;
+		builtIn: BuiltInWindow | null;
+	} | null;
+	controlMode: ControlMode;
+	paneSettingsId: string | null;
+	maximizedPaneId: string | null;
+	windowPicker: GridRect | null;
+	savingDesk: boolean;
+	preload: "idle" | "blind" | "output";
+	preloadActive: boolean;
+	speedGroup: "A" | "B" | "C" | "D" | "E";
+	playbackColumns: number;
+	playbackRows: number;
+	playbackPage: number;
+	playbackPageNames: string[];
+	presetFamily: PresetFamily;
+	presetPoolColors: boolean;
+	presetSetArmed: boolean;
+	cuelistBuiltInView: "pool" | "cues";
+	cuelistBuiltInNumber: number | null;
+	cueListSetArmed: boolean;
+	cueListSetTarget: number | null;
+	playbackSetArmed: boolean;
+	setupOpen: boolean;
+	specialDialogsOpen: boolean;
+	specialDialogFamily:
+		| "Color"
+		| "Position"
+		| "Beam"
+		| "Shapers"
+		| "Control"
+		| "Dynamics";
+	systemControlsOpen: boolean;
+	preloadStoreOpen: boolean;
+	storeArmed: boolean;
+	updateArmed: boolean;
+	shiftArmed: boolean;
+	storeSettingsOpen: boolean;
+	patchSetArmed: boolean;
+	midiProfile: boolean;
+	debugOpen: boolean;
+	touchScrollbars: boolean;
+	showSectionNames: boolean;
+	regularNumberShortcuts: boolean;
+	deskSettingsOpen: boolean;
+	deskSettingsId: string | null;
+	stageMode: StageMode;
+	stageView: StageView;
+	stageZoom: number;
+	stagePanX: number;
+	stagePanY: number;
+	stageOrbitX: number;
+	stageOrbitY: number;
+	stageGroupsVisible: boolean;
+	stageShowSelection: boolean;
+	stageShowFloorGrid: boolean;
+	stageShowBeamGuides: boolean;
+	stageEnvironmentBrightness: number;
+	dmxDotSize: DmxDotSize;
+	fixtureSheetOrder: FixtureSheetOrder;
+	fixtureSheetActiveOnly: boolean;
+	fixtureSheetCueListId: string;
+	fixtureSheetColumns: FixtureSheetColumn[];
+	fixtureSheetShowType: boolean;
+	fixtureSheetShowPatch: boolean;
+	fixtureSheetShowSubheads: boolean;
+	fixtureSheetShowMasterHeads: boolean;
+	fixtureGroupsVisible: boolean;
+	presetGroupsVisible: boolean;
+	groupsReturnToStage: "builtin" | "desk" | null;
+	blackout: boolean;
 }
 
+export type FixtureSheetOrder = "fixture-id" | "active";
+export type FixtureSheetColumn =
+	| "id"
+	| "name"
+	| "dimmer"
+	| "color"
+	| "position"
+	| "beam"
+	| "focus";
+
 export interface WindowSettings {
-  dockMode: DockMode;
-  builtIn: BuiltInWindow | null;
-  lastBuiltIn: BuiltInWindow;
-  presetFamily: AppState["presetFamily"];
-  presetPoolColors: boolean;
-  playbackColumns: number;
-  playbackRows: number;
-  playbackPage: number;
-  stageMode: StageMode;
-  stageView: StageView;
-  stageZoom: number;
-  stagePanX: number;
-  stagePanY: number;
-  stageOrbitX: number;
-  stageOrbitY: number;
-  stageGroupsVisible: boolean;
-  stageShowSelection: boolean;
-  stageEnvironmentBrightness: number;
-  dmxDotSize: DmxDotSize;
-  fixtureGroupsVisible: boolean;
-  presetGroupsVisible: boolean;
+	dockMode: DockMode;
+	builtIn: BuiltInWindow | null;
+	lastBuiltIn: BuiltInWindow;
+	presetFamily: AppState["presetFamily"];
+	presetPoolColors: boolean;
+	playbackColumns: number;
+	playbackRows: number;
+	playbackPage: number;
+	stageMode: StageMode;
+	stageView: StageView;
+	stageZoom: number;
+	stagePanX: number;
+	stagePanY: number;
+	stageOrbitX: number;
+	stageOrbitY: number;
+	stageGroupsVisible: boolean;
+	stageShowSelection: boolean;
+	stageShowFloorGrid: boolean;
+	stageShowBeamGuides: boolean;
+	stageEnvironmentBrightness: number;
+	dmxDotSize: DmxDotSize;
+	fixtureSheetOrder: FixtureSheetOrder;
+	fixtureSheetActiveOnly: boolean;
+	fixtureSheetCueListId: string;
+	fixtureSheetColumns: FixtureSheetColumn[];
+	fixtureSheetShowType: boolean;
+	fixtureSheetShowPatch: boolean;
+	fixtureSheetShowSubheads: boolean;
+	fixtureSheetShowMasterHeads: boolean;
+	fixtureGroupsVisible: boolean;
+	presetGroupsVisible: boolean;
 }

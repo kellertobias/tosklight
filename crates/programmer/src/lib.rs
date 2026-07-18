@@ -121,6 +121,10 @@ pub struct ProgrammerState {
     #[serde(default)]
     pub selection_expression: Option<SelectionExpression>,
     pub values: Vec<TimedValue>,
+    /// Runtime-only fixture-control overrides. These sit above normal programmer values while a
+    /// momentary or timed action is active, but are never recorded, persisted, or added to Undo.
+    #[serde(skip)]
+    pub transient_values: Vec<TransientProgrammerAction>,
     #[serde(default)]
     pub group_values: GroupProgrammerValues,
     #[serde(default)]
@@ -153,6 +157,13 @@ pub struct ProgrammerState {
     pub undo: Vec<ProgrammerSnapshot>,
     #[serde(default)]
     pub redo: Vec<ProgrammerSnapshot>,
+}
+
+#[derive(Clone, Debug)]
+pub struct TransientProgrammerAction {
+    pub source: String,
+    pub generation: u64,
+    pub values: Vec<TimedValue>,
 }
 
 impl ProgrammerState {
@@ -505,19 +516,181 @@ pub enum PresetStoreMode {
     AddMissingFixtures,
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub enum PresetFamily {
+    #[default]
+    #[serde(alias = "All", alias = "all")]
+    Mixed,
+    Intensity,
+    Color,
+    Position,
+    Beam,
+}
+
+impl PresetFamily {
+    pub const fn type_number(self) -> u8 {
+        match self {
+            Self::Mixed => 0,
+            Self::Intensity => 1,
+            Self::Color => 2,
+            Self::Position => 3,
+            Self::Beam => 4,
+        }
+    }
+
+    pub fn from_type_number(value: u8) -> Result<Self, String> {
+        match value {
+            0 => Ok(Self::Mixed),
+            1 => Ok(Self::Intensity),
+            2 => Ok(Self::Color),
+            3 => Ok(Self::Position),
+            4 => Ok(Self::Beam),
+            _ => Err("preset type must be within 0-4".into()),
+        }
+    }
+
+    pub fn accepts(self, attribute: &AttributeKey) -> bool {
+        use light_core::AttributeClass;
+
+        if self == Self::Mixed {
+            return true;
+        }
+        let class = light_core::attribute_descriptor(attribute).family;
+        match self {
+            Self::Mixed => true,
+            Self::Intensity => {
+                attribute.is_intensity()
+                    || attribute.0 == "dimmer"
+                    || attribute.0.ends_with(".dimmer")
+                    || class == AttributeClass::Intensity
+            }
+            Self::Color => {
+                class == AttributeClass::Color
+                    || attribute.0 == "color"
+                    || attribute.0.starts_with("color.")
+                    || attribute.0.contains(".color.")
+            }
+            Self::Position => attribute.is_position() || class == AttributeClass::Position,
+            Self::Beam => {
+                matches!(class, AttributeClass::Beam | AttributeClass::Focus)
+                    || attribute.0.split('.').any(|part| {
+                        matches!(
+                            part,
+                            "beam"
+                                | "focus"
+                                | "zoom"
+                                | "iris"
+                                | "gobo"
+                                | "prism"
+                                | "frost"
+                                | "shaper"
+                                | "shutter"
+                                | "strobe"
+                        )
+                    })
+            }
+        }
+    }
+}
+
+/// Domain identity of a Preset. `number` is local to its family, so Color 1 and Position 1 are
+/// distinct Presets. The dotted `2.1` form is an operator/storage address, not a global ID.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub struct PresetAddress {
+    pub family: PresetFamily,
+    pub number: u32,
+}
+
+impl PresetAddress {
+    pub fn new(family: PresetFamily, number: u32) -> Result<Self, String> {
+        if number == 0 {
+            return Err("preset numbers start at 1".into());
+        }
+        Ok(Self { family, number })
+    }
+
+    pub fn parse(value: &str) -> Result<Self, String> {
+        let (family, number) = value
+            .split_once('.')
+            .ok_or("expected <preset-type>.<preset-number>")?;
+        if number.contains('.') {
+            return Err("expected <preset-type>.<preset-number>".into());
+        }
+        Self::new(
+            PresetFamily::from_type_number(
+                family.parse::<u8>().map_err(|_| "preset type is invalid")?,
+            )?,
+            number
+                .parse::<u32>()
+                .map_err(|_| "preset number is invalid")?,
+        )
+    }
+
+    pub fn storage_key(self) -> String {
+        format!("{}.{}", self.family.type_number(), self.number)
+    }
+
+    pub fn from_storage_key(value: &str, legacy_family: PresetFamily) -> Result<Self, String> {
+        if value.contains('.') {
+            Self::parse(value)
+        } else {
+            Self::new(
+                legacy_family,
+                value
+                    .parse::<u32>()
+                    .map_err(|_| "preset number is invalid")?,
+            )
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Preset {
     pub name: String,
+    pub family: PresetFamily,
+    /// Pool-local number. Legacy Presets decode as zero until their show-object address supplies
+    /// the number during migration/read.
+    pub number: u32,
     pub values: HashMap<FixtureId, HashMap<AttributeKey, AttributeValue>>,
     pub group_values: HashMap<String, HashMap<AttributeKey, AttributeValue>>,
 }
 
 impl Preset {
+    pub fn reconcile_address(&mut self, storage_key: &str) -> Result<PresetAddress, String> {
+        let address = PresetAddress::from_storage_key(storage_key, self.family)?;
+        if address.family != self.family {
+            return Err(format!(
+                "preset address family {} does not match stored {:?} family",
+                address.family.type_number(),
+                self.family
+            ));
+        }
+        if self.number != 0 && self.number != address.number {
+            return Err(format!(
+                "preset address number {} does not match stored number {}",
+                address.number, self.number
+            ));
+        }
+        self.number = address.number;
+        Ok(address)
+    }
+
+    pub fn retain_family_attributes(&mut self) {
+        let family = self.family;
+        for attributes in self.values.values_mut() {
+            attributes.retain(|attribute, _| family.accepts(attribute));
+        }
+        for attributes in self.group_values.values_mut() {
+            attributes.retain(|attribute, _| family.accepts(attribute));
+        }
+    }
+
     pub fn store(&mut self, incoming: Preset, mode: PresetStoreMode) {
         if !incoming.name.is_empty() {
             self.name = incoming.name;
         }
+        self.family = incoming.family;
         match mode {
             PresetStoreMode::Overwrite => {
                 self.values = incoming.values;
@@ -543,6 +716,7 @@ impl Preset {
                 }
             }
         }
+        self.retain_family_attributes();
     }
 }
 
@@ -615,6 +789,12 @@ impl ProgrammerRegistry {
             .iter_mut()
             .chain(&mut state.preload_pending)
             .chain(&mut state.preload_active)
+            .chain(
+                state
+                    .transient_values
+                    .iter_mut()
+                    .flat_map(|action| action.values.iter_mut()),
+            )
         {
             value.priority = priority;
         }
@@ -690,6 +870,7 @@ impl ProgrammerRegistry {
             selected: vec![],
             selection_expression: None,
             values: vec![],
+            transient_values: vec![],
             group_values: HashMap::new(),
             preload_pending: vec![],
             preload_active: vec![],
@@ -1056,6 +1237,73 @@ impl ProgrammerRegistry {
         );
     }
 
+    /// Install or retrigger one runtime-only fixture-control action. Returning the generation lets
+    /// a timed release avoid clearing a newer retrigger of the same action.
+    pub fn set_transient_action(
+        &self,
+        session: SessionId,
+        source: String,
+        assignments: impl IntoIterator<Item = (FixtureId, AttributeKey, AttributeValue)>,
+    ) -> Option<u64> {
+        let assignments = assignments.into_iter().collect::<Vec<_>>();
+        if assignments.is_empty() {
+            return None;
+        }
+        let generation = self.next_programmer_order();
+        let changed_at = self.clock.now();
+        let mut states = self.states.write();
+        let state = states.get_mut(&self.key(session))?;
+        state
+            .transient_values
+            .retain(|action| action.source != source);
+        let values = assignments
+            .into_iter()
+            .map(|(fixture_id, attribute, value)| TimedValue {
+                fixture_id,
+                attribute,
+                value,
+                priority: state.priority,
+                changed_at,
+                programmer_order: self.next_programmer_order(),
+                merge_mode: light_core::MergeMode::Ltp,
+                fade: false,
+                fade_millis: None,
+                delay_millis: None,
+            })
+            .collect();
+        state.transient_values.push(TransientProgrammerAction {
+            source,
+            generation,
+            values,
+        });
+        state.last_activity = changed_at;
+        Some(generation)
+    }
+
+    /// Release a runtime-only action. Timers provide a generation; a pointer-up release passes
+    /// `None` to release whichever generation is currently active.
+    pub fn release_transient_action(
+        &self,
+        session: SessionId,
+        source: &str,
+        generation: Option<u64>,
+    ) -> bool {
+        let mut states = self.states.write();
+        let Some(state) = states.get_mut(&self.key(session)) else {
+            return false;
+        };
+        let before = state.transient_values.len();
+        state.transient_values.retain(|action| {
+            action.source != source
+                || generation.is_some_and(|generation| action.generation != generation)
+        });
+        let changed = state.transient_values.len() != before;
+        if changed {
+            state.last_activity = self.clock.now();
+        }
+        changed
+    }
+
     fn set_many_with_checkpoint(
         &self,
         session: SessionId,
@@ -1072,28 +1320,46 @@ impl ProgrammerRegistry {
             if checkpoint {
                 state.checkpoint();
             }
-            let values = if state.blind && state.preload_capture_programmer {
-                &mut state.preload_pending
-            } else {
-                &mut state.values
-            };
             let changed_at = self.clock.now();
-            for (fixture_id, attribute, value) in assignments {
-                values.retain(|existing| {
-                    existing.fixture_id != fixture_id || existing.attribute != attribute
-                });
-                values.push(TimedValue {
-                    fixture_id,
-                    attribute,
-                    value,
-                    priority: state.priority,
-                    changed_at,
-                    programmer_order: self.next_programmer_order(),
-                    merge_mode: light_core::MergeMode::Ltp,
-                    fade: timing.fade,
-                    fade_millis: timing.fade_millis,
-                    delay_millis: timing.delay_millis,
-                });
+            let touched = assignments
+                .iter()
+                .map(|(fixture_id, attribute, _)| (*fixture_id, attribute.clone()))
+                .collect::<HashSet<_>>();
+            {
+                let values = if state.blind && state.preload_capture_programmer {
+                    &mut state.preload_pending
+                } else {
+                    &mut state.values
+                };
+                for (fixture_id, attribute, value) in assignments {
+                    values.retain(|existing| {
+                        existing.fixture_id != fixture_id || existing.attribute != attribute
+                    });
+                    values.push(TimedValue {
+                        fixture_id,
+                        attribute,
+                        value,
+                        priority: state.priority,
+                        changed_at,
+                        programmer_order: self.next_programmer_order(),
+                        merge_mode: light_core::MergeMode::Ltp,
+                        fade: timing.fade,
+                        fade_millis: timing.fade_millis,
+                        delay_millis: timing.delay_millis,
+                    });
+                }
+            }
+            // A latched mode change made while a pulse is active belongs underneath that pulse.
+            // Restamp the runtime override so it stays on top and reveals the new latched value
+            // only when the momentary/timed action ends.
+            for value in state
+                .transient_values
+                .iter_mut()
+                .flat_map(|action| action.values.iter_mut())
+                .filter(|value| touched.contains(&(value.fixture_id, value.attribute.clone())))
+            {
+                value.changed_at = changed_at;
+                value.programmer_order = self.next_programmer_order();
             }
             state.last_activity = changed_at;
         }
@@ -1560,6 +1826,7 @@ impl ProgrammerRegistry {
         };
         state.checkpoint();
         state.values.clear();
+        state.transient_values.clear();
         state.group_values.clear();
         state.last_activity = self.clock.now();
         true
@@ -2299,6 +2566,79 @@ mod tests {
     }
 
     #[test]
+    fn transient_control_action_is_not_serialized_and_reveals_latest_latched_value() {
+        let registry = ProgrammerRegistry::default();
+        let session = SessionId::new();
+        let fixture = FixtureId::new();
+        let attribute = AttributeKey("__fixture_control_channel.shared".into());
+        registry.start(session, UserId::new());
+        registry.set(
+            session,
+            fixture,
+            attribute.clone(),
+            AttributeValue::RawDmxExact(180),
+        );
+        let generation = registry
+            .set_transient_action(
+                session,
+                "lamp-on".into(),
+                [(fixture, attribute.clone(), AttributeValue::RawDmxExact(255))],
+            )
+            .unwrap();
+
+        let active = registry.get(session).unwrap();
+        assert_eq!(active.values[0].value, AttributeValue::RawDmxExact(180));
+        assert_eq!(
+            active.transient_values[0].values[0].value,
+            AttributeValue::RawDmxExact(255)
+        );
+        let restored: ProgrammerState =
+            serde_json::from_str(&serde_json::to_string(&active).unwrap()).unwrap();
+        assert!(restored.transient_values.is_empty());
+
+        registry.set_many(
+            session,
+            [(fixture, attribute.clone(), AttributeValue::RawDmxExact(120))],
+        );
+        let layered = registry.get(session).unwrap();
+        assert!(
+            layered.transient_values[0].values[0].programmer_order
+                > layered.values[0].programmer_order
+        );
+        assert!(registry.release_transient_action(session, "lamp-on", Some(generation)));
+        let released = registry.get(session).unwrap();
+        assert!(released.transient_values.is_empty());
+        assert_eq!(released.values[0].value, AttributeValue::RawDmxExact(120));
+    }
+
+    #[test]
+    fn stale_timed_release_does_not_clear_a_retriggered_action() {
+        let registry = ProgrammerRegistry::default();
+        let session = SessionId::new();
+        let fixture = FixtureId::new();
+        let attribute = AttributeKey("__fixture_control_channel.shared".into());
+        registry.start(session, UserId::new());
+        let first = registry
+            .set_transient_action(
+                session,
+                "lamp-on".into(),
+                [(fixture, attribute.clone(), AttributeValue::RawDmxExact(200))],
+            )
+            .unwrap();
+        let second = registry
+            .set_transient_action(
+                session,
+                "lamp-on".into(),
+                [(fixture, attribute, AttributeValue::RawDmxExact(255))],
+            )
+            .unwrap();
+
+        assert!(!registry.release_transient_action(session, "lamp-on", Some(first)));
+        assert_eq!(registry.get(session).unwrap().transient_values.len(), 1);
+        assert!(registry.release_transient_action(session, "lamp-on", Some(second)));
+    }
+
+    #[test]
     fn faded_batch_is_one_undo_step_and_respects_preload_capture() {
         let registry = ProgrammerRegistry::default();
         let session = SessionId::new();
@@ -2362,6 +2702,8 @@ mod tests {
         let other = FixtureId::new();
         let mut preset = Preset {
             name: "A".into(),
+            family: PresetFamily::Intensity,
+            number: 1,
             values: HashMap::from([(
                 fixture,
                 HashMap::from([(AttributeKey::intensity(), AttributeValue::Normalized(0.5))]),
@@ -2371,6 +2713,8 @@ mod tests {
         preset.store(
             Preset {
                 name: String::new(),
+                family: PresetFamily::Intensity,
+                number: 1,
                 values: HashMap::from([
                     (
                         fixture,
@@ -2390,6 +2734,8 @@ mod tests {
         preset.store(
             Preset {
                 name: "B".into(),
+                family: PresetFamily::Mixed,
+                number: 1,
                 values: HashMap::from([(
                     fixture,
                     HashMap::from([(AttributeKey("pan".into()), AttributeValue::Normalized(0.2))]),
@@ -2399,7 +2745,74 @@ mod tests {
             PresetStoreMode::Merge,
         );
         assert_eq!(preset.name, "B");
+        assert_eq!(preset.family, PresetFamily::Mixed);
         assert_eq!(preset.values[&fixture].len(), 2);
+    }
+
+    #[test]
+    fn preset_addresses_use_pool_local_numbers() {
+        let color = PresetAddress::new(PresetFamily::Color, 1).unwrap();
+        let position = PresetAddress::new(PresetFamily::Position, 1).unwrap();
+
+        assert_eq!(color.storage_key(), "2.1");
+        assert_eq!(position.storage_key(), "3.1");
+        assert_ne!(color, position);
+        assert_eq!(PresetAddress::parse("2.1").unwrap(), color);
+        assert_eq!(PresetAddress::parse("3.1").unwrap(), position);
+        assert!(PresetAddress::parse("1").is_err());
+        assert!(PresetAddress::new(PresetFamily::Mixed, 0).is_err());
+    }
+
+    #[test]
+    fn legacy_plain_preset_keys_reconcile_with_the_stored_family() {
+        let mut legacy_color = Preset {
+            name: "Red".into(),
+            family: PresetFamily::Color,
+            number: 0,
+            ..Default::default()
+        };
+
+        let address = legacy_color.reconcile_address("1").unwrap();
+        assert_eq!(address, PresetAddress::new(PresetFamily::Color, 1).unwrap());
+        assert_eq!(legacy_color.number, 1);
+
+        let mut mismatched = Preset {
+            family: PresetFamily::Color,
+            number: 1,
+            ..Default::default()
+        };
+        assert!(mismatched.reconcile_address("3.1").is_err());
+    }
+
+    #[test]
+    fn preset_families_accept_only_their_attributes_while_mixed_accepts_any() {
+        let intensity = AttributeKey::intensity();
+        let color_wheel = AttributeKey("color.wheel.1".into());
+        let position = AttributeKey("tilt".into());
+        let beam = AttributeKey("gobo.1".into());
+        let custom = AttributeKey("custom.channel".into());
+
+        assert!(PresetFamily::Intensity.accepts(&intensity));
+        assert!(PresetFamily::Intensity.accepts(&AttributeKey("head.dimmer".into())));
+        assert!(PresetFamily::Color.accepts(&color_wheel));
+        assert!(PresetFamily::Position.accepts(&position));
+        assert!(PresetFamily::Beam.accepts(&beam));
+        assert!(!PresetFamily::Color.accepts(&position));
+        assert!(!PresetFamily::Beam.accepts(&custom));
+        assert!(PresetFamily::Mixed.accepts(&custom));
+    }
+
+    #[test]
+    fn legacy_all_family_deserializes_as_mixed() {
+        let preset: Preset = serde_json::from_value(serde_json::json!({
+            "name": "Legacy",
+            "family": "All",
+            "values": {},
+            "group_values": {}
+        }))
+        .unwrap();
+        assert_eq!(preset.family, PresetFamily::Mixed);
+        assert_eq!(serde_json::to_value(preset).unwrap()["family"], "Mixed");
     }
 
     #[test]

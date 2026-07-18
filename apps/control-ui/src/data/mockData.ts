@@ -38,7 +38,7 @@ const icons = ["☀", "◐", "▰", "⌖", "◉", "✦"];
 export const presets: PresetModel[] = Array.from({ length: 40 }, (_, index) => ({
   id: index + 1,
   name: presetNames[index],
-  family: index < 6 ? "Color" : index < 10 ? "Position" : "All",
+  family: index < 6 ? "Color" : index < 10 ? "Position" : "Mixed",
   color: colors[index % colors.length],
   icon: icons[index % icons.length],
   fixtures: index < presetNames.length ? 24 : undefined,
@@ -49,7 +49,7 @@ export const initialDesks: DeskModel[] = [
     id: "programming",
     name: "Programming",
     panes: [
-      { id: "presets", kind: "presets", title: "All Presets", x: 1, y: 1, width: 9, height: 18, presetFamily: "All" },
+      { id: "presets", kind: "presets", title: "Mixed Presets", x: 1, y: 1, width: 9, height: 18, presetFamily: "Mixed" },
       { id: "fixtures", kind: "fixtures", title: "Fixture Sheet", x: 10, y: 1, width: 15, height: 9 },
       { id: "stage", kind: "stage", title: "Stage · Main floor", x: 10, y: 10, width: 15, height: 9 },
     ],

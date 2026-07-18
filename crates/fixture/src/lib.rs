@@ -179,6 +179,9 @@ pub struct PatchedFixture {
     /// Operator-facing fixture number. This is distinct from the stable internal UUID.
     #[serde(default)]
     pub fixture_number: Option<u32>,
+    /// Operator-facing number in the reserved visual-only `0.x` namespace.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub virtual_fixture_number: Option<u32>,
     /// Show-local operator name. Definition names remain immutable library metadata.
     #[serde(default)]
     pub name: String,
@@ -651,7 +654,13 @@ pub struct GeneratedPreset {
 pub fn validate_patch(fixtures: &[PatchedFixture]) -> Result<(), FixtureError> {
     let mut used: HashMap<Universe, [bool; 512]> = HashMap::new();
     let mut fixture_numbers = HashMap::new();
+    let mut virtual_fixture_numbers = HashMap::new();
     for fixture in fixtures {
+        if fixture.fixture_number.is_some() && fixture.virtual_fixture_number.is_some() {
+            return Err(FixtureError::Invalid(
+                "a fixture cannot have both a regular and virtual fixture ID".into(),
+            ));
+        }
         if let Some(number) = fixture.fixture_number {
             if number == 0 {
                 return Err(FixtureError::Invalid("fixture IDs start at 1".into()));
@@ -662,8 +671,34 @@ pub fn validate_patch(fixtures: &[PatchedFixture]) -> Result<(), FixtureError> {
                 )));
             }
         }
+        if let Some(number) = fixture.virtual_fixture_number {
+            if number == 0 {
+                return Err(FixtureError::Invalid(
+                    "virtual fixture IDs start at 0.1".into(),
+                ));
+            }
+            if fixture.definition.is_dmx_patchable() {
+                return Err(FixtureError::Invalid(format!(
+                    "virtual fixture ID 0.{number} requires a visual-only fixture"
+                )));
+            }
+            if virtual_fixture_numbers
+                .insert(number, fixture.fixture_id)
+                .is_some()
+            {
+                return Err(FixtureError::Invalid(format!(
+                    "virtual fixture ID 0.{number} is already in use"
+                )));
+            }
+        }
         fixture.definition.validate()?;
         if !fixture.definition.is_dmx_patchable() {
+            if fixture.virtual_fixture_number.is_none() || fixture.fixture_number.is_some() {
+                return Err(FixtureError::Invalid(format!(
+                    "visual-only fixture {} requires an ID in the 0.x namespace",
+                    fixture.fixture_id.0
+                )));
+            }
             if fixture.direct_control.is_some()
                 || fixture.universe.is_some()
                 || fixture.address.is_some()
@@ -1761,6 +1796,7 @@ mod tests {
         let first = PatchedFixture {
             fixture_id: FixtureId::new(),
             fixture_number: None,
+            virtual_fixture_number: None,
             name: "First".into(),
             definition: def.clone(),
             universe: Some(1),
@@ -1779,6 +1815,7 @@ mod tests {
         let overlap = PatchedFixture {
             fixture_id: FixtureId::new(),
             fixture_number: None,
+            virtual_fixture_number: None,
             name: "Overlap".into(),
             definition: def.clone(),
             universe: Some(1),
@@ -1798,6 +1835,7 @@ mod tests {
         let overflow = PatchedFixture {
             fixture_id: FixtureId::new(),
             fixture_number: None,
+            virtual_fixture_number: None,
             name: "Overflow".into(),
             definition: def,
             universe: Some(1),
@@ -1821,6 +1859,7 @@ mod tests {
         let mut fixture = PatchedFixture {
             fixture_id: FixtureId::new(),
             fixture_number: None,
+            virtual_fixture_number: None,
             name: "Multi".into(),
             definition: definition(3),
             universe: Some(1),
@@ -1881,6 +1920,7 @@ mod tests {
         PatchedFixture {
             fixture_id: FixtureId::new(),
             fixture_number: Some(1),
+            virtual_fixture_number: None,
             name: "Two split".into(),
             definition,
             universe: None,
@@ -1990,6 +2030,7 @@ mod tests {
         let parent = PatchedFixture {
             fixture_id: FixtureId::new(),
             fixture_number: None,
+            virtual_fixture_number: None,
             name: "Media".into(),
             definition: media_definition,
             universe: Some(1),
@@ -2027,6 +2068,7 @@ mod tests {
         let mut fixture = PatchedFixture {
             fixture_id: FixtureId::new(),
             fixture_number: Some(100),
+            virtual_fixture_number: None,
             name: "Multi".into(),
             definition: definition(2),
             universe: Some(1),
@@ -2255,6 +2297,7 @@ mod tests {
         let mut fixture = PatchedFixture {
             fixture_id: FixtureId::new(),
             fixture_number: Some(1),
+            virtual_fixture_number: None,
             name: "Legacy".into(),
             definition: legacy,
             universe: Some(2),
@@ -2586,7 +2629,15 @@ mod tests {
             }]
         }))
         .unwrap();
+        assert!(validate_patch(std::slice::from_ref(&fixture)).is_err());
+        fixture.virtual_fixture_number = Some(1);
         validate_patch(std::slice::from_ref(&fixture)).unwrap();
+        let mut duplicate = fixture.clone();
+        duplicate.fixture_id = FixtureId::new();
+        assert!(validate_patch(&[fixture.clone(), duplicate]).is_err());
+        fixture.fixture_number = Some(1);
+        assert!(validate_patch(std::slice::from_ref(&fixture)).is_err());
+        fixture.fixture_number = None;
         fixture.universe = Some(1);
         fixture.address = Some(1);
         assert!(validate_patch(&[fixture]).is_err());

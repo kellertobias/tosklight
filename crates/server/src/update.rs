@@ -625,6 +625,22 @@ fn incoming_values(content: &ProgrammerUpdateContent) -> Vec<IncomingValue<'_>> 
         .collect()
 }
 
+fn incoming_preset_values<'a>(
+    preset: &Preset,
+    content: &'a ProgrammerUpdateContent,
+) -> Vec<IncomingValue<'a>> {
+    incoming_values(content)
+        .into_iter()
+        .filter(|incoming| match incoming.address() {
+            UpdateAddress::FixtureAttribute { ref attribute, .. }
+            | UpdateAddress::GroupAttribute { ref attribute, .. } => {
+                preset.family.accepts(attribute)
+            }
+            UpdateAddress::GroupMembership { .. } => false,
+        })
+        .collect()
+}
+
 #[derive(Clone, Copy, Debug)]
 enum CueEventKind {
     Fixture,
@@ -992,7 +1008,7 @@ pub fn preview_preset_update(
         });
     }
     let mut items = Vec::new();
-    for incoming in incoming_values(programmer) {
+    for incoming in incoming_preset_values(preset, programmer) {
         let address = incoming.address();
         let existing = match &address {
             UpdateAddress::FixtureAttribute {
@@ -1065,7 +1081,10 @@ pub fn plan_preset_update(
         });
     }
     let mut updated = preset.clone();
-    for (incoming, item) in incoming_values(programmer).into_iter().zip(&preview.items) {
+    for (incoming, item) in incoming_preset_values(preset, programmer)
+        .into_iter()
+        .zip(&preview.items)
+    {
         if item.outcome.changes_data() {
             write_preset_value(&mut updated, incoming);
         }
@@ -1464,6 +1483,8 @@ mod tests {
         let fixtures = [fixture(1), fixture(2), fixture(3), fixture(4)];
         let preset = Preset {
             name: "Color 1".into(),
+            family: light_programmer::PresetFamily::Color,
+            number: 1,
             values: fixtures[..2]
                 .iter()
                 .map(|fixture_id| {
@@ -1632,6 +1653,8 @@ mod tests {
         let fixture = fixture(1);
         let preset = Preset {
             name: "Intensity".into(),
+            family: light_programmer::PresetFamily::Intensity,
+            number: 1,
             values: HashMap::from([(
                 fixture,
                 HashMap::from([(attribute("intensity"), normalized(0.5))]),
@@ -1669,6 +1692,44 @@ mod tests {
         assert_eq!(
             preset.values[&fixture][&attribute("intensity")].normalized(),
             Some(0.5)
+        );
+    }
+
+    #[test]
+    fn preset_update_ignores_attributes_outside_the_stored_family() {
+        let fixture = fixture(1);
+        let preset = Preset {
+            name: "Color".into(),
+            family: light_programmer::PresetFamily::Color,
+            number: 1,
+            values: HashMap::from([(
+                fixture,
+                HashMap::from([(attribute("color.red"), normalized(0.2))]),
+            )]),
+            group_values: HashMap::new(),
+        };
+        let programmer = content(vec![
+            fixture_update(fixture, "color.red", 0.8, 1),
+            fixture_update(fixture, "pan", 0.6, 2),
+        ]);
+
+        let plan = plan_preset_update(
+            "2.1",
+            &preset,
+            3,
+            3,
+            ExistingContentMode::AddNew,
+            &programmer,
+        )
+        .unwrap();
+        assert_eq!(plan.preview.items.len(), 1);
+        let PlannedUpdateObject::Preset(updated) = plan.object else {
+            panic!("expected preset update")
+        };
+        assert_eq!(updated.values[&fixture].len(), 1);
+        assert_eq!(
+            updated.values[&fixture][&attribute("color.red")],
+            normalized(0.8)
         );
     }
 
@@ -1711,6 +1772,8 @@ mod tests {
         let fixture = fixture(1);
         let preset = Preset {
             name: "Intensity".into(),
+            family: light_programmer::PresetFamily::Intensity,
+            number: 1,
             values: HashMap::from([(
                 fixture,
                 HashMap::from([(attribute("intensity"), normalized(0.5))]),

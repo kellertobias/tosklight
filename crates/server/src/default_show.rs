@@ -243,6 +243,7 @@ fn patched(
     PatchedFixture {
         fixture_id: FixtureId::new(),
         fixture_number: Some(fixture_number),
+        virtual_fixture_number: None,
         name,
         definition: definition.clone(),
         universe: Some(universe),
@@ -565,19 +566,10 @@ pub fn initialise(path: impl AsRef<Path>) -> Result<light_core::ShowId, StoreErr
             0,
         )?;
     }
-    let mut assets = Vec::new();
-    for (side, y) in [("front", 1.0), ("back", 7.0)] {
-        for segment in 0..4 {
-            assets.push(json!({
-                "id":format!("{side}-truss-{segment}"), "name":format!("{} truss segment {}", if side == "front" { "Front" } else { "Back" }, segment + 1),
-                "format":"builtin", "builtinId":"truss-3m", "position":position(-4.5 + segment as f32 * 3.0, y, 5.0, 0.0), "scale":1
-            }));
-        }
-    }
     store.put_object(
         "stage_layout",
         "main",
-        &json!({"version":2,"positions":{},"positions3d":positions3d,"assets":assets}),
+        &json!({"version":2,"positions":{},"positions3d":positions3d}),
         0,
     )?;
     Ok(show_id)
@@ -836,7 +828,7 @@ mod tests {
         }
         let layout = store.objects("stage_layout").unwrap().pop().unwrap().body;
         assert_eq!(layout["positions3d"].as_object().unwrap().len(), 70);
-        assert_eq!(layout["assets"].as_array().unwrap().len(), 8);
+        assert!(layout.get("assets").is_none());
         let multipatched = fixtures
             .iter()
             .filter(|fixture| !fixture.multipatch.is_empty())

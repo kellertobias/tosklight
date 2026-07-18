@@ -862,6 +862,39 @@ impl DeskStore {
             .ok_or_else(|| StoreError::Invalid("show index update failed".into()))
     }
 
+    /// Repoints an indexed show after its containing desk-data directory was moved.
+    ///
+    /// Relocation is metadata repair, not an operator save, so it intentionally does not
+    /// increment the show's content revision or change its updated timestamp.
+    pub fn relocate_show(&self, id: ShowId, path: &str) -> Result<ShowEntry, StoreError> {
+        if self.conn.execute(
+            "UPDATE show_library SET path=?1 WHERE id=?2",
+            params![path, id.0.to_string()],
+        )? != 1
+        {
+            return Err(StoreError::Invalid("show does not exist".into()));
+        }
+        self.show(id)?
+            .ok_or_else(|| StoreError::Invalid("show index update failed".into()))
+    }
+
+    /// Repoints a named revision after its containing desk-data directory was moved.
+    pub fn relocate_show_revision(
+        &self,
+        show_id: ShowId,
+        revision: Revision,
+        path: &str,
+    ) -> Result<(), StoreError> {
+        if self.conn.execute(
+            "UPDATE show_revisions SET path=?1 WHERE show_id=?2 AND revision=?3",
+            params![path, show_id.0.to_string(), revision as i64],
+        )? != 1
+        {
+            return Err(StoreError::Invalid("show revision does not exist".into()));
+        }
+        Ok(())
+    }
+
     pub fn remove_show(&self, id: ShowId) -> Result<bool, StoreError> {
         Ok(self
             .conn
