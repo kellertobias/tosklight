@@ -14,13 +14,13 @@ mod file_manager_support;
 mod help;
 #[path = "matter.rs"]
 mod matter;
+mod startup_options;
 
 use crate::highlight::{
     HighlightAction, HighlightError, HighlightFixture, HighlightMode, HighlightRegistry,
     HighlightSelectionWrite, HighlightState, HighlightTransition, is_duplicate_osc_action,
 };
 use crate::update;
-use anyhow::Context;
 use axum::extract::ws::{Message, WebSocket};
 use axum::{
     Json, Router,
@@ -899,53 +899,18 @@ pub async fn run() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter("light_server=info,tower_http=info")
         .init();
-    let mut data_dir = env::var_os("LIGHT_DATA_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("light-data"));
-    let mut fixture_package_dir: Option<PathBuf> = None;
-    let mut bind = "127.0.0.1:5000".parse::<SocketAddr>()?;
-    let mut test_bench = false;
-    let mut osc_bind_override = None;
-    let mut output_bind_override = None;
-    let mut args = env::args().skip(1);
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--data-dir" => data_dir = args.next().context("--data-dir requires a path")?.into(),
-            "--fixture-package-dir" => {
-                fixture_package_dir = Some(
-                    args.next()
-                        .context("--fixture-package-dir requires a path")?
-                        .into(),
-                )
-            }
-            "--bind" => bind = args.next().context("--bind requires an address")?.parse()?,
-            "--test-bench" => test_bench = true,
-            "--osc-bind" => {
-                osc_bind_override = Some(
-                    args.next()
-                        .context("--osc-bind requires an address")?
-                        .parse()?,
-                )
-            }
-            "--output-bind-ip" => {
-                output_bind_override = Some(
-                    args.next()
-                        .context("--output-bind-ip requires an address")?
-                        .parse()?,
-                )
-            }
-            "--help" => {
-                println!(
-                    "light-server [--data-dir PATH] [--fixture-package-dir PATH] [--bind ADDRESS] [--test-bench] [--osc-bind ADDRESS] [--output-bind-ip ADDRESS]"
-                );
-                return Ok(());
-            }
-            _ => anyhow::bail!("unknown option: {arg}"),
-        }
-    }
-    if test_bench && !bind.ip().is_loopback() {
-        anyhow::bail!("--test-bench requires a loopback HTTP bind");
-    }
+    let startup_options::StartupAction::Run(options) = startup_options::from_process()? else {
+        println!("{}", startup_options::HELP);
+        return Ok(());
+    };
+    let startup_options::StartupOptions {
+        data_dir,
+        mut fixture_package_dir,
+        bind,
+        test_bench,
+        osc_bind_override,
+        output_bind_override,
+    } = options;
     if fixture_package_dir.is_none() {
         fixture_package_dir = env::current_exe()
             .ok()
