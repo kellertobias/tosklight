@@ -234,7 +234,11 @@ fn edit_text(state: &CommandLineState, key: CommandKey) -> CommandLineEdit {
         return edited(format!("{command},"), state.target);
     }
     if key == CommandKey::Dot && command.trim_end().ends_with('.') {
-        let without_dot = command.trim_end().trim_end_matches('.').trim_end();
+        let without_dot = command
+            .trim_end()
+            .strip_suffix('.')
+            .expect("the command was checked to end with a dot")
+            .trim_end();
         let mut edit = edited(format!("{without_dot} AT 0"), state.target);
         edit.execute = true;
         return edit;
@@ -264,9 +268,11 @@ fn edit_text(state: &CommandLineState, key: CommandKey) -> CommandLineEdit {
             | CommandKey::Minus
     );
     if let CommandKey::Digit(digit) = key
-        && last_word_is_any(command, &["GROUP", "FIXTURE"])
+        && ["GROUP", "FIXTURE"]
+            .iter()
+            .any(|target| command.trim().eq_ignore_ascii_case(target))
     {
-        let prefix = if last_word_is_any(command, &["GROUP"]) {
+        let prefix = if command.trim().eq_ignore_ascii_case("GROUP") {
             'G'
         } else {
             'F'
@@ -490,6 +496,10 @@ mod tests {
         );
         assert!(press("1.", CommandTarget::Fixture, false, ".").execute);
         assert_eq!(
+            press("1..", CommandTarget::Fixture, false, ".").text,
+            "1. AT 0"
+        );
+        assert_eq!(
             press("1 AT 100 TIME ", CommandTarget::Fixture, false, "TIME").text,
             "1 AT 100 DELAY "
         );
@@ -525,6 +535,53 @@ mod tests {
         assert_eq!(
             press("RECORD + ", CommandTarget::Group, false, "GRP").text,
             "RECORD + GROUP "
+        );
+        assert_eq!(
+            press("RECORD GROUP", CommandTarget::Fixture, false, "7").text,
+            "RECORD GROUP 7"
+        );
+    }
+
+    #[test]
+    fn builds_cue_select_and_complete_group_mode_sequences() {
+        let cue = press("FIXTURE", CommandTarget::Fixture, true, "CUE");
+        assert_eq!(
+            press(&cue.text, CommandTarget::Fixture, cue.pristine, "8").text,
+            "CUE 8"
+        );
+        let nested_cue = press(&cue.text, CommandTarget::Fixture, cue.pristine, "CUE");
+        assert_eq!(
+            press(
+                &nested_cue.text,
+                CommandTarget::Fixture,
+                nested_cue.pristine,
+                "8"
+            )
+            .text,
+            "CUE CUE 8"
+        );
+        assert_eq!(
+            press("FIXTURE", CommandTarget::Fixture, true, "SELECT").text,
+            "SELECT"
+        );
+
+        let fixture_override = press("G7 + ", CommandTarget::Group, false, "GRP");
+        assert_eq!(fixture_override.text, "G7 + F");
+        assert_eq!(
+            press(
+                &fixture_override.text,
+                CommandTarget::Group,
+                fixture_override.pristine,
+                "8"
+            )
+            .text,
+            "G7 + F8"
+        );
+        let fixture = press("GROUP", CommandTarget::Group, true, "GRP");
+        assert_eq!(fixture.text, "FIXTURE");
+        assert_eq!(
+            press(&fixture.text, CommandTarget::Group, fixture.pristine, "1").text,
+            "F1"
         );
     }
 
