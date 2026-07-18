@@ -24,7 +24,9 @@ record(){
 }
 demo(){
   build_e2e
-  (cd "$UI" && LIGHT_VISUAL_RECORDING=1 npm run test:e2e -- --workers=1 product-demo.spec.ts "$@")
+  node "$ROOT/tools/configure-playwright-video-quality.mjs"
+  (cd "$UI" && LIGHT_VISUAL_RECORDING=1 LIGHT_TEST_RESULTS_DIR="$LIGHT_ARTIFACTS_DIR/test/product-demo-results" npm run test:e2e -- --workers=1 product-demo.spec.ts "$@")
+  node "$ROOT/tools/encode-product-demo.mjs"
 }
 help_screenshots(){ build_e2e; (cd "$UI" && LIGHT_HELP_SCREENSHOTS=1 npm run test:e2e -- 02-help-screenshots.spec.ts --workers=1 "$@"); }
 desktop_smoke(){

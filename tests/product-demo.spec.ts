@@ -3,12 +3,15 @@ import path from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
 import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
+import type { DeskDriver } from "../apps/control-ui/e2e/bench/desk";
 import { activeShowId, loadCanonicalCopy, programmer } from "./support/catalog";
 import {
+  aimFixtureAt,
   demoObjects,
+  ensurePlannedDemoFixtureLibrary,
+  type PlannedDemoPatchPhase,
   seedPlannedDemoPatch,
   seedPlannedDemoProgramming,
-  seedPlannedDemoRoutes,
 } from "./support/plannedDemoState";
 import artifactResolver from "../tools/artifact-paths.cjs";
 
@@ -25,64 +28,198 @@ test("@ui narrates the complete Full HD product demo surface in one regression r
   const video = page.video();
   try {
     await desk.open(`${bench.baseUrl}/?demo=product`);
-    await installTitleOverlay(page);
     const demo = page.getByTestId("product-demo");
     const app = demo.locator(".product-demo-application");
+    const screenFrame = demo.locator(".product-demo-screen-frame");
     const keypad = demo.locator(".demo-number-block");
     await expect(demo).toBeVisible();
+    await expect(screenFrame).toHaveCSS("border-left-width", "10px");
+    const appBox = await app.boundingBox();
+    expect(appBox).not.toBeNull();
+    expect(appBox!.width / appBox!.height).toBeCloseTo(16 / 9, 2);
+    await expect(demo.locator("[data-demo-chapter]")).toHaveCount(8);
     await expect(app.locator(".control-section.hardware-connected")).toBeVisible();
-    await expect(demo.locator(".stage-3d-canvas canvas")).toBeVisible();
+    const stage = demo.locator(".stage-3d-canvas");
+    const stageCanvas = stage.locator("canvas");
+    await expect(stageCanvas).toBeVisible();
+    await stageCanvas.evaluate((canvas) => { canvas.dataset.recordingCanvas = "stable"; });
+    await expect(stage).toHaveAttribute("data-camera-position", "0,1.625,8");
+    await expect(stage).toHaveAttribute("data-camera-target", "0,2.6,-4");
+    await expect(stage).toHaveAttribute("data-environment-brightness", "1");
+    await expect(stage).toHaveAttribute("data-floor-grid", "off");
+    await expect(stage).toHaveAttribute("data-beam-guides", "off");
     for (const universe of [1, 2, 3, 4])
       await expect(demo.getByLabel(`Live DMX universe ${universe}`).locator(".product-demo-dmx-cell")).toHaveCount(512);
-
-    await title(page, "SHOW SETUP", "Create an empty show, build the venue and rig, patch the lamps, then configure live network output.");
+    await desk.titleCard("SHOW SETUP", "Create an empty show, build the venue and rig, patch the lamps, then configure live network output.");
+    await expect(demo.locator('[data-demo-chapter="SHOW SETUP"]')).toHaveClass(/active/);
+    await expect(demo.locator("[data-demo-current-action]")).toContainText("Create an empty show");
+    if (RECORDING) {
+      await expect(page.locator("#light-recording-title-card")).toContainText("SHOW SETUP");
+      await expect(page.locator("#light-recording-title-card")).toHaveAttribute("aria-hidden", "true");
+    }
     const originalShowId = await activeShowId(api);
-    await app.getByRole("button", { name: /Open show menu/ }).click();
-    await page.locator(".show-modal").getByRole("button", { name: "New Show", exact: true }).click();
-    await page.getByRole("dialog", { name: "New show" }).getByRole("button", { name: "Create Empty Show", exact: true }).click();
+    const showMenuButton = app.getByRole("button", { name: /Open show menu/ });
+    await desk.click(showMenuButton);
+    await expect(demo.locator("[data-demo-current-action]")).toContainText("Open show menu");
+    if (RECORDING) await expect(page.locator("#light-recording-click-layer")).toHaveAttribute("data-click-count", "1");
+    await pause(page, 300);
+    await desk.click(page.locator(".show-modal").getByRole("button", { name: "New Show", exact: true }));
+    await pause(page, 250);
+    await desk.click(page.getByRole("dialog", { name: "New show" }).getByRole("button", { name: "Create Empty Show", exact: true }));
     await expect.poll(() => activeShowId(api)).not.toBe(originalShowId);
+    await pause(page, 350);
     const showId = await activeShowId(api);
-    await page.locator(".show-modal").getByRole("button", { name: "Show Patch", exact: true }).click();
+    await desk.click(page.locator(".show-modal").getByRole("button", { name: "Show Patch", exact: true }));
     const patchWindow = app.locator(".show-patch-layout");
     await expect(patchWindow).toBeVisible();
+    await expect(stage).toHaveAttribute("data-beam-guides", "on");
+    await pause(page, 350);
     for (const layer of ["Front Truss", "Back Truss", "Floor", "House Lights", "Stage"]) {
-      await patchWindow.getByRole("button", { name: "+ Add layer", exact: true }).click();
+      await desk.click(patchWindow.getByRole("button", { name: "+ Add layer", exact: true }));
+      await pause(page, 120);
       const layerDialog = page.locator(".patch-small-modal", { hasText: "Add layer" });
       await layerDialog.getByLabel("Layer name").fill(layer);
-      await layerDialog.getByRole("button", { name: "Add layer", exact: true }).click();
+      await pause(page, 100);
+      await desk.click(layerDialog.getByRole("button", { name: "Add layer", exact: true }));
+      await pause(page, 180);
     }
     await expect.poll(async () => (await demoObjects<any>(api, showId, "patch_layer")).map((item) => item.body.name).sort()).toEqual(["Back Truss", "Floor", "Front Truss", "House Lights", "Stage"]);
     const layerObjects = await demoObjects<any>(api, showId, "patch_layer");
     const layerIds = Object.fromEntries(layerObjects.map((item) => [item.body.name, item.id]));
 
-    await title(page, "SHOW SETUP · RIG", "An 8 × 4 metre stage, three four-point trusses, four pipes and two five-metre curtains define the venue.");
-    const rig = await seedPlannedDemoPatch(api, showId, layerIds);
-    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/patch", undefined, false)).fixtures.length).toBe(80);
-    await expect(patchWindow.locator(".ui-window-info")).toContainText("80 fixtures");
-    await expect(demo.locator(".stage-3d-canvas canvas")).toBeVisible();
+    await desk.fastForward("Loading fixture profiles for the visible patch workflow.", async () => {
+      const fastForward = demo.locator("#light-recording-fast-forward");
+      await expect(fastForward).toHaveAttribute("data-placement", "narrative");
+      const [fastForwardBox, applicationBox] = await Promise.all([fastForward.boundingBox(), app.boundingBox()]);
+      expect(fastForwardBox).not.toBeNull();
+      expect(applicationBox).not.toBeNull();
+      expect(fastForwardBox!.y).toBeGreaterThanOrEqual(applicationBox!.y + applicationBox!.height);
+      return ensurePlannedDemoFixtureLibrary(api);
+    });
 
-    await title(page, "SHOW SETUP · SAVE", "The complete venue remains autosaved while the provisional show is named Demo Show.");
-    await app.getByRole("button", { name: /Open show menu/ }).click();
-    await page.locator(".show-modal").getByRole("button", { name: "Save As", exact: true }).click();
+    await desk.titleCard("SHOW SETUP · STAGE", "Add the first stage deck through Show Patch, place it by hand, then build the remaining deck as physical multi-patches.");
+    await addFixtureViaUi(desk, page, patchWindow, "Stage", {
+      search: "Stage Element 2 × 1 m", family: "Stage Element 2 × 1 m", mode: "50 cm",
+      name: "Stage", fixtureNumber: "0.1",
+    });
+    await positionFixtureViaUi(desk, page, keypad, fixtureRow(patchWindow, "0.1"), { x: -3, y: -1.5, z: 0 });
+    await fastForwardPatchPhase(desk, page, api, showId, patchWindow, layerIds, "stage", ["Stage"], "Building the remaining stage decks, trusses and curtains via API.");
+
+    await desk.titleCard("SHOW SETUP · ACL", "Patch both ACL control fixtures first, place the first ACL by hand, then reveal the two tightly mounted physical fans.");
+    await addFixtureViaUi(desk, page, patchWindow, "Back Truss", {
+      search: "Dimmer PAR Can", family: "Dimmer PAR Can", mode: "8-bit",
+      name: "ACL In", fixtureNumber: 81, patch: "1.1", count: 2,
+    });
+    const firstAclLocation = { x: -.4, y: 4, z: 4.3 };
+    await positionFixtureViaUi(desk, page, keypad, fixtureRow(patchWindow, 81), firstAclLocation, aimFixtureAt(firstAclLocation, { x: -3.8, y: -2, z: 0 }));
+    await fastForwardPatchPhase(desk, page, api, showId, patchWindow, layerIds, "acl", ["Back Truss"], "Completing the centered ACL fan-out and the two 80 cm-wide outside ACL clusters.");
+    await fastForwardPatchPhase(desk, page, api, showId, patchWindow, layerIds, "strips", ["Stage", "Back Truss"], "Mounting four vertical pipes and two vertical Sunstrips per pipe.");
+
+    await desk.titleCard("SHOW SETUP · FRONT", "Patch the first front light by hand, aim it across the stage, then complete the mirrored left and right fans.");
+    await addFixtureViaUi(desk, page, patchWindow, "Front Truss", {
+      search: "Dimmer Fresnel", family: "Dimmer Fresnel", mode: "8-bit",
+      name: "Front Left 1", fixtureNumber: 1, patch: "2.1",
+    });
+    const firstFrontLocation = { x: -3.8, y: -3, z: 4 };
+    await positionFixtureViaUi(desk, page, keypad, fixtureRow(patchWindow, 1), firstFrontLocation, aimFixtureAt(firstFrontLocation, { x: -3.8, y: 1.5, z: 0 }));
+    await fastForwardPatchPhase(desk, page, api, showId, patchWindow, layerIds, "front", ["Front Truss"], "Completing the mirrored front-light fans across the stage corners.");
+
+    await desk.titleCard("SHOW SETUP · FLOOR", "Patch and aim the first floor LED by hand, then build four aligned groups of four.");
+    await addFixtureViaUi(desk, page, patchWindow, "Floor", {
+      search: "RGBW LED", family: "RGBW LED", mode: "DRGBW 8-bit dimmer first",
+      name: "Floor Spot 1", fixtureNumber: 301, patch: "3.241",
+    });
+    const firstFloorLocation = { x: -3.3, y: 1.6, z: .2 };
+    await positionFixtureViaUi(desk, page, keypad, fixtureRow(patchWindow, 301), firstFloorLocation, aimFixtureAt(firstFloorLocation, { x: -4.1, y: -3, z: 4 }));
+    await fastForwardPatchPhase(desk, page, api, showId, patchWindow, layerIds, "floor", ["Floor"], "Completing four floor-LED groups with shared depth and height.");
+
+    await desk.titleCard("SHOW SETUP · HOUSE", "Patch the first house light and its first physical multi-patch through the desk UI.");
+    await addFixtureViaUi(desk, page, patchWindow, "House Lights", {
+      search: "Generic Dimmer", family: "Dimmer", mode: "8-bit",
+      name: "House Light", fixtureNumber: 99, patch: "2.13",
+    });
+    const houseLightRow = fixtureRow(patchWindow, 99);
+    await positionFixtureViaUi(desk, page, keypad, houseLightRow, { x: 0, y: -6, z: 4 });
+    await desk.click(houseLightRow);
+    await desk.click(patchWindow.getByRole("button", { name: "+ Add multi-patch", exact: true }));
+    const firstMultipatch = patchWindow.locator(".multipatch-row").last();
+    await desk.click(firstMultipatch.locator(".patch-address"));
+    const multipatchAddress = page.getByRole("dialog", { name: "Multi-patch Address" });
+    for (const key of ["2", "Universe separator", "1", "4"])
+      await desk.click(multipatchAddress.getByRole("button", { name: key === "Universe separator" ? key : `Address ${key}`, exact: true }));
+    await desk.click(multipatchAddress.getByRole("button", { name: "Set Address", exact: true }));
+    await positionMultipatchViaUi(desk, page, firstMultipatch, { x: 0, y: -5, z: 4 });
+    await fastForwardPatchPhase(desk, page, api, showId, patchWindow, layerIds, "house", ["House Lights"], "Completing the repeated house-light and house-mood multi-patches.");
+
+    const rig = await fastForwardPatchPhase(
+      desk,
+      page,
+      api,
+      showId,
+      patchWindow,
+      layerIds,
+      "remaining",
+      ["Back Truss", "Front Truss", "Floor"],
+      "Adding the remaining profiles, washes, blinders and haze while the patch visibly fills.",
+      (generatedRig) => seedPlannedDemoProgramming(api, showId, generatedRig),
+    );
+    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/patch", undefined, false)).fixtures.length).toBe(65);
+    await expect(patchWindow.locator(".ui-window-info")).toContainText("65 fixtures");
+    const physicalCount = (await api.request<any>("GET", "/api/v1/patch", undefined, false)).fixtures
+      .reduce((count: number, fixture: any) => count + 1 + (fixture.multipatch?.length ?? 0), 0);
+    expect(physicalCount).toBe(113);
+    const physicalInstances = (fixtureNumber: number) => {
+      const fixture = rig.fixtures[fixtureNumber];
+      return [{ location: fixture.location, rotation: fixture.rotation }, ...(fixture.multipatch ?? [])];
+    };
+    const aclIn = physicalInstances(81);
+    const aclOut = physicalInstances(82);
+    expect(aclIn).toHaveLength(8);
+    expect(Math.max(...aclIn.map((item) => item.location.x)) - Math.min(...aclIn.map((item) => item.location.x))).toBe(800);
+    expect(new Set(aclIn.map((item) => `${item.location.y}:${item.location.z}`))).toEqual(new Set(["4000:4300"]));
+    expect(aclOut).toHaveLength(8);
+    expect(aclOut[3].location.x - aclOut[0].location.x).toBe(800);
+    expect(aclOut[7].location.x - aclOut[4].location.x).toBe(800);
+    expect(new Set(aclOut.map((item) => `${item.location.y}:${item.location.z}`))).toEqual(new Set(["4000:4300"]));
+    for (const fixtureNumber of [10_005, 10_006, 10_007, 10_008]) expect(rig.fixtures[fixtureNumber].rotation.y).toBe(90);
+    const strips = Array.from({ length: 8 }, (_, index) => rig.fixtures[401 + index]);
+    expect(strips.map((fixture) => fixture.location.x)).toEqual([-1500, -1500, -500, -500, 500, 500, 1500, 1500]);
+    expect(strips.map((fixture) => fixture.location.z)).toEqual([3450, 2200, 3450, 2200, 3450, 2200, 3450, 2200]);
+    expect(strips.every((fixture) => fixture.rotation.y === 90)).toBe(true);
+    const frontLeftAim = [1, 2, 3, 4].map((number) => rig.fixtures[number].rotation.y);
+    const frontRightAim = [5, 6, 7, 8].map((number) => rig.fixtures[number].rotation.y);
+    for (let index = 0; index < 4; index++) expect(frontLeftAim[index]).toBeCloseTo(-frontRightAim[3 - index], 6);
+    const floor = Array.from({ length: 16 }, (_, index) => rig.fixtures[301 + index]);
+    expect(new Set(floor.map((fixture) => `${fixture.location.y}:${fixture.location.z}`))).toEqual(new Set(["1600:200"]));
+    expect(floor.map((fixture) => fixture.location.x)).toEqual([-3300, -3100, -2900, -2700, -1300, -1100, -900, -700, 700, 900, 1100, 1300, 2700, 2900, 3100, 3300]);
+    await expect(demo.locator(".stage-3d-canvas canvas")).toBeVisible();
+    await expect(demo.locator(".stage-3d-canvas canvas")).toHaveAttribute("data-recording-canvas", "stable");
+
+    await desk.titleCard("SHOW SETUP · SAVE", "The complete venue remains autosaved while the provisional show is named Demo Show.");
+    await desk.click(app.getByRole("button", { name: /Open show menu/ }));
+    await desk.click(page.locator(".show-modal").getByRole("button", { name: "Save As", exact: true }));
     const saveDialog = page.getByRole("dialog", { name: "Save show" });
     await saveDialog.getByLabel("Show name").fill("Demo Show");
-    await saveDialog.getByRole("button", { name: "Rename Show", exact: true }).click();
+    await desk.click(saveDialog.getByRole("button", { name: "Name Empty Show", exact: true }));
     await expect.poll(async () => (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).active_show?.name).toBe("Demo Show");
 
-    await seedPlannedDemoRoutes(api, showId, bench.artnet.port, bench.sacn.port);
-    await page.locator(".show-modal").getByRole("button", { name: "Enter Setup", exact: true }).click();
-    await app.locator(".setup-window nav").getByRole("button", { name: "Outputs", exact: true }).click();
+    await desk.click(page.locator(".show-modal").getByRole("button", { name: "Enter Setup", exact: true }));
+    await expect(stage).toHaveAttribute("data-beam-guides", "off");
+    await desk.click(app.locator(".setup-window nav").getByRole("button", { name: "Outputs", exact: true }));
     const routes = app.getByRole("region", { name: "Output routes" });
+    await createOutputRoute(desk, page, routes, "Art-Net", 1, 1, bench.artnet.port);
+    await createOutputRoute(desk, page, routes, "sACN", 2, 1, bench.sacn.port);
+    await createOutputRoute(desk, page, routes, "Art-Net", 3, 1, bench.artnet.port);
     await expect(routes.locator("article")).toHaveCount(3);
     await expect(routes).toContainText("Logical 1 → Art-Net 1");
     await expect(routes).toContainText("Logical 2 → sACN 1");
     await expect(routes).toContainText("Logical 3 → Art-Net 1");
 
-    await title(page, "GROUP PREPARATION", "Fixture-sheet shortcuts expose the working groups; the simulated keypad records the front lights through the operator command path.");
-    await openBuiltIn(app, "Fixtures");
+    await desk.titleCard("GROUP PREPARATION", "Fixture-sheet shortcuts expose the working groups; the simulated keypad records the front lights through the operator command path.");
+    await openBuiltIn(desk, app, "Fixtures");
     const fixtureWindow = app.locator(".fixture-window");
-    await fixtureWindow.getByRole("button", { name: "Settings", exact: true }).click();
-    const fixtureSettings = page.getByRole("dialog", { name: "Fixture Sheet Settings" });
+    await desk.click(fixtureWindow.getByRole("button", { name: "Settings", exact: true }));
+    const fixtureSettings = page.getByRole("dialog", { name: "Fixture Sheet" });
     await expect(fixtureSettings).toBeVisible();
     const groupsTab = fixtureSettings.getByRole("tab", { name: "Groups", exact: true });
     await groupsTab.focus();
@@ -97,39 +234,77 @@ test("@ui narrates the complete Full HD product demo surface in one regression r
     await closeSettings.focus();
     await page.keyboard.press("Enter");
 
-    await seedPlannedDemoProgramming(api, showId, rig);
-    await keypadCommand(keypad, ["1", "TRU", "8", "ENT"]);
-    await keypad.getByRole("button", { name: "RECORD", exact: true }).click();
-    await keypadCommand(keypad, ["GRP", "9", "ENT"], false);
+    await clearSelection(desk, keypad, api);
+    for (const fixture of Array.from({ length: 8 }, (_, index) => index + 1))
+      await desk.click(fixtureSheetRow(fixtureWindow, rig.fixtures[fixture].fixture_id));
+    await desk.click(keypad.getByRole("button", { name: "RECORD", exact: true }));
+    await desk.click(fixtureWindow.locator(".group-strip .group-card").nth(8));
+    await chooseRecordMode(desk, page, "Overwrite");
     await expect.poll(async () => (await demoObjects<any>(api, showId, "group")).find((item) => item.id === "9")?.body.fixtures.length).toBe(8);
-    await keypadCommand(keypad, ["GRP", "1", "DIV", "2", "ENT"]);
-    await expect.poll(async () => (await programmer(api)).selected.length).toBeGreaterThan(0);
+
+    await keypadCommand(desk, keypad, ["2", "0", "1", "TRU", "2", "0", "7", "ENT"]);
+    await expect.poll(async () => (await programmer(api)).selected.length).toBe(7);
+    await keypadCommand(desk, keypad, ["RECORD", "GRP", "2", "ENT"], false);
+    await expect(keypad.getByRole("button", { name: "RECORD", exact: true })).toHaveAttribute("aria-pressed", "false");
+
+    await keypadCommand(desk, keypad, ["GRP", "1", "DIV", "2", "ENT"]);
+    await expect.poll(async () => (await programmer(api)).selected.length).toBe(4);
+    await desk.click(keypad.getByRole("button", { name: "RECORD", exact: true }));
+    await keypadCommand(desk, keypad, ["GRP", "1", "1", "ENT"], false);
+    await expect(keypad.getByRole("button", { name: "RECORD", exact: true })).toHaveAttribute("aria-pressed", "false");
+
+    await desk.click(fixtureWindow.locator(".group-strip .group-card").nth(0));
+    await keypadCommand(desk, keypad, ["DIV", "DIV", "ENT"], false);
+    await expect.poll(async () => (await programmer(api)).selected.length).toBe(4);
+    await desk.click(keypad.getByRole("button", { name: "RECORD", exact: true }));
+    await desk.click(fixtureWindow.locator(".group-strip .group-card").nth(11));
+    await chooseRecordMode(desk, page, "Overwrite");
+    await expect.poll(async () => (await programmer(api)).selected.length).toBe(4);
     const groups = await demoObjects<any>(api, showId, "group");
     expect(Object.fromEntries(groups.map((item) => [item.id, item.body.name]))).toMatchObject({
       "1": "Profiles", "2": "Wash", "3": "LED", "4": "Strips", "9": "Front", "11": "Profiles Odd", "12": "Profiles Even",
     });
     await expect(fixtureWindow.locator(".group-strip")).toContainText("Profiles");
 
-    await title(page, "TURN LIGHTS ON", "With the selection cleared, Control → Special Dialog → Lamps On addresses every compatible lamp across the show.");
-    await clearSelection(keypad, api);
-    await app.getByRole("button", { name: "Control", exact: true }).click();
-    await app.getByRole("button", { name: "Special Dialog", exact: true }).click();
+    await desk.titleCard("LAMP CONTROL", "Lamps On sends only authored discharge-lamp strike commands. It never highlights LEDs or conventional dimmers.");
+    await clearSelection(desk, keypad, api);
+    const programmerBeforeLampControl = await programmer(api);
+    await desk.click(app.getByRole("button", { name: "Control", exact: true }));
+    await desk.click(app.getByRole("button", { name: "Special Dialog", exact: true }));
     const specialDialog = page.locator(".special-dialog-card");
     await expect(specialDialog).toContainText("0 fixtures selected");
-    await specialDialog.getByRole("button", { name: "Lamps On", exact: true }).click();
-    await expect.poll(async () => (await programmer(api)).values.filter((value) => value.attribute === "intensity" || value.attribute === "control.lamp").length).toBeGreaterThan(40);
-    await specialDialog.getByRole("button", { name: "×", exact: true }).click();
+    await desk.click(specialDialog.getByRole("button", { name: "Lamps On", exact: true }));
+    await expect.poll(async () => await programmer(api)).toEqual(programmerBeforeLampControl);
+    await desk.click(specialDialog.getByRole("button", { name: "×", exact: true }));
 
-    await title(page, "PRESET PROGRAMMING", "Seven merged colours, five moving-light positions and portable gobo looks are ready for live programming.");
-    await openBuiltIn(app, "Presets");
+    await desk.titleCard("PRESET PROGRAMMING", "Seven merged colours, five moving-light positions and portable gobo looks are ready for live programming.");
+    await desk.click(fixtureWindow.locator(".group-strip .group-card").nth(1));
+    await expect.poll(async () => (await programmer(api)).selected.length).toBe(7);
+    await openBuiltIn(desk, app, "Presets");
     const presetWindow = app.locator(".preset-pool-window");
+    await desk.click(presetWindow.getByRole("button", { name: "Color", exact: true }));
+    await desk.click(app.getByRole("button", { name: "Color", exact: true }).last());
+    await setEncoderValue(desk, page, "Enc 1 · color red", 100);
+    await setEncoderValue(desk, page, "Enc 2 · color green", 0);
+    await setEncoderValue(desk, page, "Enc 3 · color blue", 0);
+    await desk.click(keypad.getByRole("button", { name: "RECORD", exact: true }));
+    await desk.click(presetWindow.locator(".preset-card").nth(0));
+    await expect.poll(async () => (await demoObjects<any>(api, showId, "preset")).some((item) => item.id === "2.1")).toBe(true);
+    await setPresetButtonTitle(desk, page, keypad, presetWindow, 0, "Red");
+
+    await setEncoderValue(desk, page, "Enc 1 · color red", 0);
+    await setEncoderValue(desk, page, "Enc 3 · color blue", 100);
+    await keypadCommand(desk, keypad, ["RECORD", "2", ".", "5", "ENT"]);
+    await expect.poll(async () => (await demoObjects<any>(api, showId, "preset")).some((item) => item.id === "2.5")).toBe(true);
+    await setPresetButtonTitle(desk, page, keypad, presetWindow, 4, "Blue");
     for (const name of ["Red", "Yellow", "Green", "Cyan", "Blue", "Magenta", "White"])
       await expect(presetWindow.getByRole("button", { name: new RegExp(`${name} Color ·`) })).toBeVisible();
     const presets = await demoObjects<any>(api, showId, "preset");
     expect(presets.filter((item) => item.body.family === "Color")).toHaveLength(7);
     expect(presets.filter((item) => item.body.family === "Position")).toHaveLength(5);
+    await clearProgrammer(desk, keypad, api);
 
-    await title(page, "CUE PROGRAMMING", "A three-step main look, four auto-off colour playbacks and a Reset-wrapped Speed A ACL chaser fill playback page 1.");
+    await desk.titleCard("CUE PROGRAMMING", "A three-step main look, four auto-off colour playbacks and a Reset-wrapped Speed A ACL chaser fill playback page 1.");
     await expect(demo.getByRole("region", { name: "Virtual playback controls" })).toBeVisible();
     const playbackObjects = await demoObjects<any>(api, showId, "playback");
     expect(playbackObjects.map((item) => item.body.number).sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 21, 22, 23, 24]);
@@ -137,47 +312,53 @@ test("@ui narrates the complete Full HD product demo surface in one regression r
     expect(cueLists.find((item) => item.body.name === "Demo Main")?.body.cues).toHaveLength(3);
     expect(cueLists.find((item) => item.body.name === "ACL Chase")?.body).toMatchObject({ mode: "chaser", wrap_mode: "reset", speed_group: "A" });
 
-    await title(page, "BUSKING", "Red wash and profiles start together; group masters and the main sequence build the stage before colour playbacks swap live.");
-    await demo.getByRole("button", { name: "Playback 21 button 1", exact: true }).click();
-    await demo.getByRole("button", { name: "Playback 23 button 1", exact: true }).click();
+    await desk.titleCard("BUSKING", "Red wash and profiles start together; group masters and the main sequence build the stage before colour playbacks swap live.");
+    await desk.click(demo.getByRole("button", { name: "Playback 21 button 1", exact: true }));
+    await desk.click(demo.getByRole("button", { name: "Playback 23 button 1", exact: true }));
     for (const slot of [1, 2, 3]) await demo.getByLabel(`Playback ${slot} fader`).fill("1");
-    await demo.getByRole("button", { name: "Playback 3 button 1", exact: true }).click();
+    await desk.click(demo.getByRole("button", { name: "Playback 3 button 1", exact: true }));
     await bench.tick(1_200);
     await expect.poll(async () => (await api.request<any>("GET", "/api/v1/dmx", undefined, false)).universes.some((frame: any) => frame.slots.some((value: number) => value > 0))).toBe(true);
     await pause(page, 1_800);
 
-    await demo.getByRole("button", { name: "Playback 3 button 1", exact: true }).click();
-    await demo.getByRole("button", { name: "Playback 22 button 1", exact: true }).click();
-    await api.request("POST", "/api/v1/playback-pool/21/off", {});
+    await desk.click(demo.getByRole("button", { name: "Playback 3 button 1", exact: true }));
+    await desk.click(demo.getByRole("button", { name: "Playback 22 button 1", exact: true }));
     await expect.poll(async () => activeNumbers(api)).not.toContain(21);
-    await demo.getByRole("button", { name: "Playback 24 button 1", exact: true }).click();
-    await demo.getByRole("button", { name: "Playback 3 button 1", exact: true }).click();
-    await api.request("POST", "/api/v1/playback-pool/23/off", {});
-    await expect.poll(async () => activeNumbers(api)).not.toContain(23);
-    await api.request("POST", "/api/v1/cuelists/3/off", {});
-    await api.request("POST", "/api/v1/cuelists/3/go-to", { cue_number: 2, surface: "physical" });
+    await desk.click(demo.getByRole("button", { name: "Playback 24 button 1", exact: true }));
+    await desk.click(demo.getByRole("button", { name: "Playback 3 button 1", exact: true }));
     await expect.poll(async () => activeNumbers(api)).toContain(3);
+    await desk.click(presetWindow.locator(".group-strip .group-card").nth(1));
+    await expect.poll(async () => (await programmer(api)).selected.length).toBe(7);
+    await desk.click(presetWindow.getByRole("button", { name: /Blue Color ·/ }));
+    await expect.poll(async () => blueStageColors(api, rig)).toBeGreaterThanOrEqual(7);
 
-    await title(page, "PRELOADING", "Physical playback changes and new moving-light positions are prepared blind, then committed together with a four-second programmer fade.");
-    await keypad.getByRole("button", { name: "PRELOAD GO", exact: true }).click();
-    await demo.getByRole("button", { name: "Playback 21 button 1", exact: true }).click();
-    await demo.getByRole("button", { name: "Playback 24 button 1", exact: true }).click();
-    await api.command("programmer.set", { fixture_id: rig.profileTargets[0], attribute: "pan", value: .2 });
-    await api.command("programmer.set", { fixture_id: rig.washTargets[0], attribute: "pan", value: .8 });
-    const configuration = (await api.request<any>("GET", "/api/v1/configuration")).configuration;
-    await api.request("PUT", "/api/v1/configuration", { ...configuration, programmer_fade_millis: 4_000 });
+    await desk.titleCard("PRELOADING", "Physical playback changes and new moving-light positions are prepared blind, then committed together with a four-second programmer fade.");
+    await clearProgrammer(desk, keypad, api);
+    await desk.click(keypad.getByRole("button", { name: "PRELOAD GO", exact: true }));
+    await desk.click(demo.getByRole("button", { name: "Playback 21 button 1", exact: true }));
+    await desk.click(demo.getByRole("button", { name: "Playback 24 button 1", exact: true }));
+    await openBuiltIn(desk, app, "Fixtures");
+    const preloadFixtures = app.locator(".fixture-window");
+    await desk.click(fixtureSheetRow(preloadFixtures, rig.fixtures[101].fixture_id));
+    await desk.click(fixtureSheetRow(preloadFixtures, rig.fixtures[201].fixture_id));
+    await expect.poll(async () => (await programmer(api)).selected.length).toBe(2);
+    await desk.click(app.getByRole("button", { name: "Position", exact: true }));
+    await setEncoderRange(desk, page, 1, "Pan", [20, 80]);
+    await setEncoderValue(desk, page, "Prog. Fade", 4);
+    await expect.poll(async () => (await programmer(api)).preload_pending.length).toBeGreaterThanOrEqual(2);
     const pending = await programmer(api);
     expect(pending.preload_playback_pending.length).toBeGreaterThanOrEqual(2);
     expect(pending.preload_pending.length).toBeGreaterThanOrEqual(2);
     await pause(page, 1_500);
-    await keypad.getByRole("button", { name: "PRELOAD GO", exact: true }).click();
+    await desk.click(keypad.getByRole("button", { name: "PRELOAD GO", exact: true }));
     await bench.tick(6_000);
     await pause(page, 6_000);
 
-    await title(page, "ACL CHASER · SPEED A", "The final playback starts the alternating ACL fan; two learned taps set its Speed A tempo.");
-    await demo.getByRole("button", { name: "Playback 4 button 1", exact: true }).click();
-    await api.request("POST", "/api/v1/speed-groups/A/action", { action: "learn", captured_at_millis: 1_000 });
-    await api.request("POST", "/api/v1/speed-groups/A/action", { action: "learn", captured_at_millis: 1_650 });
+    await desk.titleCard("ACL CHASER · SPEED A", "The final playback starts the alternating ACL fan; two learned taps set its Speed A tempo.");
+    await desk.click(demo.getByRole("button", { name: "Playback 4 button 1", exact: true }));
+    await page.keyboard.press("F9");
+    await page.waitForTimeout(650);
+    await page.keyboard.press("F9");
     await expect.poll(async () => activeNumbers(api)).toContain(4);
     await bench.tick(2_000);
     await expect.poll(async () => (await api.request<any>("GET", "/api/v1/dmx", undefined, false)).universes.some((frame: any) => frame.slots.some((value: number) => value > 0))).toBe(true);
@@ -191,56 +372,280 @@ test("@ui narrates the complete Full HD product demo surface in one regression r
   } finally {
     if (video) {
       await fs.mkdir(path.dirname(VIDEO), { recursive: true });
-      await page.context().close();
-      await video.saveAs(VIDEO);
+      // Register the durable copy before page closure. The dedicated `./test demo` result directory
+      // prevents unrelated concurrent Playwright runs from deleting the source recording.
+      const saveVideo = video.saveAs(VIDEO);
+      await page.close();
+      await saveVideo;
       await testInfo.attach("planned-demo-video", { path: VIDEO, contentType: "video/webm" });
     }
   }
 });
 
-async function installTitleOverlay(page: Page): Promise<void> {
-  if (!RECORDING) return;
-  await page.evaluate(() => {
-    const overlay = document.createElement("aside");
-    overlay.id = "planned-demo-title";
-    overlay.innerHTML = "<strong></strong><span></span>";
-    Object.assign(overlay.style, {
-      position: "fixed", zIndex: "2147483647", top: "14px", right: "14px", width: "560px",
-      padding: "14px 18px", border: "1px solid #57cbd9", borderRadius: "8px", color: "white",
-      background: "rgba(5, 12, 16, .9)", boxShadow: "0 8px 32px rgba(0,0,0,.45)", pointerEvents: "none",
-      fontFamily: "Inter, system-ui, sans-serif",
-    });
-    Object.assign((overlay.querySelector("strong") as HTMLElement).style, { display: "block", color: "#73e4ef", fontSize: "18px", letterSpacing: ".08em" });
-    Object.assign((overlay.querySelector("span") as HTMLElement).style, { display: "block", marginTop: "5px", fontSize: "13px", lineHeight: "1.35" });
-    document.body.append(overlay);
-  });
+interface DemoFixturePlacement {
+  search: string;
+  family: string;
+  mode: string;
+  name: string;
+  fixtureNumber: number | string;
+  patch?: string;
+  count?: number;
 }
 
-async function title(page: Page, heading: string, copy: string): Promise<void> {
-  if (!RECORDING) return;
-  await page.locator("#planned-demo-title strong").evaluate((node, value) => { node.textContent = value; }, heading);
-  await page.locator("#planned-demo-title span").evaluate((node, value) => { node.textContent = value; }, copy);
-  await page.waitForTimeout(Number(process.env.LIGHT_VISUAL_STEP_PAUSE ?? 1_200));
+async function addFixtureViaUi(
+  desk: DeskDriver,
+  page: Page,
+  patchWindow: Locator,
+  layer: string,
+  fixture: DemoFixturePlacement,
+): Promise<void> {
+  await activatePatchLayer(desk, patchWindow, layer);
+  await desk.click(patchWindow.getByRole("button", { name: "+ Add fixture", exact: true }));
+  const browser = page.locator(".fixture-browser-modal");
+  await browser.getByRole("textbox", { name: "Search", exact: true }).fill(fixture.search);
+  const familyButton = browser.locator(".fixture-picker-columns > section").nth(1).getByRole("button")
+    .filter({ has: page.getByText(fixture.family, { exact: true }) }).first();
+  await desk.click(familyButton);
+  const modeSelect = browser.locator(".fixture-mode-detail select");
+  const modeValue = await modeSelect.locator("option").evaluateAll((options, prefix) =>
+    options.find((option) => option.textContent?.startsWith(prefix as string))?.getAttribute("value") ?? null, fixture.mode);
+  if (!modeValue) throw new Error(`Demo fixture mode ${fixture.mode} was not available for ${fixture.family}`);
+  await modeSelect.selectOption(modeValue);
+  await desk.click(browser.locator(".fixture-mode-detail").getByRole("button", { name: "Add fixture", exact: true }));
+  const placement = page.locator(".fixture-placement-modal");
+  await placement.getByRole("textbox", { name: /^Fixture name\b/ }).fill(fixture.name);
+  await placement.getByRole("textbox", { name: "Start fixture ID", exact: true }).fill(String(fixture.fixtureNumber));
+  await placement.getByRole("textbox", { name: "Count", exact: true }).fill(String(fixture.count ?? 1));
+  if (fixture.patch) await placement.getByRole("textbox", { name: /^Address \(universe\.address\)/ }).fill(fixture.patch);
+  const add = placement.getByRole("button", { name: `Add ${fixture.count ?? 1} fixtures`, exact: true });
+  for (let attempt = 0; attempt < 3 && await placement.isVisible(); attempt++) {
+    await desk.click(add);
+    await placement.waitFor({ state: "hidden", timeout: 5_000 }).catch(() => undefined);
+  }
+  await expect(fixtureRow(patchWindow, fixture.fixtureNumber)).toBeVisible();
 }
+
+async function positionFixtureViaUi(
+  desk: DeskDriver,
+  page: Page,
+  keypad: Locator,
+  row: Locator,
+  location: { x: number; y: number; z: number },
+  rotation?: { x: number; y: number; z: number },
+): Promise<void> {
+  await editFixtureVector(desk, page, keypad, row, 9, "Set fixture location", location, true);
+  if (rotation) await editFixtureVector(desk, page, keypad, row, 10, "Set fixture rotation", rotation, false);
+}
+
+async function editFixtureVector(
+  desk: DeskDriver,
+  page: Page,
+  keypad: Locator,
+  row: Locator,
+  cell: number,
+  heading: string,
+  value: { x: number; y: number; z: number },
+  metres: boolean,
+): Promise<void> {
+  const setButton = keypad.getByRole("button", { name: "SET", exact: true });
+  await expect(setButton).not.toHaveClass(/patch-set-armed/);
+  await desk.click(setButton);
+  await expect(setButton).toHaveClass(/patch-set-armed/);
+  await desk.click(row.locator("td").nth(cell).getByRole("button"));
+  const modal = page.locator(".patch-edit-modal", { hasText: heading });
+  for (const axis of ["X", "Y", "Z"] as const)
+    await modal.getByLabel(`${axis}${metres ? " (m)" : ""}`, { exact: true }).fill(String(value[axis.toLowerCase() as "x" | "y" | "z"]));
+  await desk.click(modal.getByRole("button", { name: "Set", exact: true }));
+}
+
+async function positionMultipatchViaUi(
+  desk: DeskDriver,
+  page: Page,
+  row: Locator,
+  location: { x: number; y: number; z: number },
+): Promise<void> {
+  await desk.click(row.locator("td").nth(9).getByRole("button"));
+  const modal = page.locator(".patch-edit-modal", { hasText: "Set multi-patch location" });
+  for (const axis of ["X", "Y", "Z"] as const)
+    await modal.getByLabel(`${axis} (m)`, { exact: true }).fill(String(location[axis.toLowerCase() as "x" | "y" | "z"]));
+  await desk.click(modal.getByRole("button", { name: "Set", exact: true }));
+}
+
+function fixtureRow(patchWindow: Locator, fixtureNumber: number | string): Locator {
+  return patchWindow.getByRole("cell", { name: String(fixtureNumber), exact: true }).locator("..").first();
+}
+
+function escapeRegex(value: string): string { return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 
 async function pause(page: Page, millis: number): Promise<void> {
   if (RECORDING) await page.waitForTimeout(millis);
 }
 
-async function openBuiltIn(app: Locator, name: string): Promise<void> {
-  await app.getByRole("button", { name: "BUILT-INS", exact: true }).click();
-  await app.locator(".dock-entry").filter({ hasText: name }).first().click();
+async function fastForwardPatchPhase(
+  desk: DeskDriver,
+  page: Page,
+  api: ApiDriver,
+  showId: string,
+  patchWindow: Locator,
+  layerIds: Record<string, string>,
+  phase: PlannedDemoPatchPhase,
+  layerNames: readonly string[],
+  description: string,
+  afterPatch?: (rig: Awaited<ReturnType<typeof seedPlannedDemoPatch>>) => Promise<void>,
+) {
+  return desk.fastForward(description, async () => {
+    let rig: Awaited<ReturnType<typeof seedPlannedDemoPatch>> | null = null;
+    for (const layerName of layerNames) {
+      await activatePatchLayer(desk, patchWindow, layerName);
+      const layerId = layerIds[layerName];
+      if (!layerId) throw new Error(`Patch layer ${layerName} does not exist`);
+      const rows = patchWindow.locator(".patch-table tbody tr");
+      const beforeRows = await rows.count();
+      rig = await seedPlannedDemoPatch(api, showId, layerIds, [phase], [layerId]);
+      await expect.poll(() => rows.count()).toBeGreaterThan(beforeRows);
+      await pause(page, 80);
+    }
+    if (!rig) throw new Error(`Patch phase ${phase} has no destination layers`);
+    if (afterPatch) await afterPatch(rig);
+    return rig;
+  });
 }
 
-async function keypadCommand(keypad: Locator, labels: string[], escape = true): Promise<void> {
-  if (escape) await keypad.getByRole("button", { name: "ESCAPE", exact: true }).click();
-  for (const label of labels) await keypad.getByRole("button", { name: label, exact: true }).click();
+async function activatePatchLayer(desk: DeskDriver, patchWindow: Locator, layer: string): Promise<void> {
+  const layerButton = patchWindow.locator(".patch-layers").getByRole("button")
+    .filter({ hasText: new RegExp(`^${escapeRegex(layer)}\\s*\\d+$`) });
+  if (!await layerButton.evaluate((button) => button.classList.contains("active"))) await desk.click(layerButton);
+  await expect(layerButton).toHaveClass(/active/);
 }
 
-async function clearSelection(keypad: Locator, api: ApiDriver): Promise<void> {
-  for (let attempt = 0; attempt < 3 && (await programmer(api)).selected.length; attempt++)
-    await keypad.getByRole("button", { name: "CLR", exact: true }).click();
+async function openBuiltIn(desk: DeskDriver, app: Locator, name: string): Promise<void> {
+  await desk.click(app.getByRole("button", { name: "BUILT-INS", exact: true }));
+  await desk.click(app.locator(".dock-entry").filter({ hasText: name }).first());
+}
+
+async function createOutputRoute(
+  desk: DeskDriver,
+  page: Page,
+  routes: Locator,
+  protocol: "Art-Net" | "sACN",
+  logicalUniverse: number,
+  destinationUniverse: number,
+  port: number,
+): Promise<void> {
+  await desk.click(routes.getByRole("button", { name: "Add route", exact: true }));
+  const editor = page.getByRole("dialog", { name: "Output route editor" });
+  if (protocol === "sACN") {
+    await desk.click(editor.getByRole("button", { name: "Art-Net", exact: true }));
+    await desk.click(page.getByRole("option", { name: "sACN", exact: true }));
+  }
+  await desk.click(editor.getByRole("button", { name: protocol === "Art-Net" ? "Broadcast" : "Multicast", exact: true }));
+  await desk.click(page.getByRole("option", { name: "Unicast", exact: true }));
+  await editor.getByLabel("Logical universe").fill(String(logicalUniverse));
+  await editor.getByLabel("Destination universe").fill(String(destinationUniverse));
+  await editor.getByLabel("Destination", { exact: true }).fill(`127.0.0.1:${port}`);
+  await editor.getByLabel("Minimum universe size").fill("128");
+  await desk.click(editor.getByRole("button", { name: "Save route", exact: true }));
+}
+
+function fixtureSheetRow(fixtureWindow: Locator, fixtureId: string): Locator {
+  return fixtureWindow.locator(`[data-fixture-id="${fixtureId}"]`).first();
+}
+
+async function chooseRecordMode(desk: DeskDriver, page: Page, mode: "Overwrite" | "Merge"): Promise<void> {
+  const dialog = page.locator(".record-mode-dialog");
+  await expect(dialog).toBeVisible();
+  await desk.click(dialog.getByRole("button", { name: mode, exact: true }));
+  await expect(dialog).toBeHidden();
+}
+
+async function setPresetButtonTitle(desk: DeskDriver, page: Page, keypad: Locator, presetWindow: Locator, index: number, title: string): Promise<void> {
+  await desk.click(keypad.getByRole("button", { name: "ESCAPE", exact: true }));
+  await desk.click(keypad.getByRole("button", { name: "SET", exact: true }));
+  await desk.click(presetWindow.locator(".preset-card").nth(index));
+  const dialog = page.getByRole("dialog", { name: "Configure preset button" });
+  await dialog.getByLabel("Title").fill(title);
+  await desk.click(dialog.getByRole("button", { name: "Save button", exact: true }));
+}
+
+async function setEncoderValue(desk: DeskDriver, page: Page, label: string, value: number): Promise<void> {
+  if (label === "Prog. Fade") {
+    await desk.click(page.locator(".hardware-values").getByRole("button", { name: /Prog Fade/ }));
+    const dialog = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Prog. Fade", exact: true }) });
+    await expect(dialog).toBeVisible();
+    await page.keyboard.type(String(value));
+    await page.keyboard.press("Enter");
+    await expect(dialog).toBeHidden();
+    return;
+  }
+  const control = page.locator(".vertical-touch-fader-stack, .programmer-fade-fader").filter({ hasText: label }).first();
+  const slot = Number(label.match(/^Enc (\d+)/)?.[1] ?? 0);
+  let dialogName = `${label} value`;
+  if (await control.isVisible()) {
+    const directButton = control.getByRole("button", { name: "Set value", exact: true });
+    await desk.click(await directButton.isVisible() ? directButton : control.getByRole("button").first());
+  } else {
+    const attribute = label.replace(/^Enc \d+ · /, "");
+    const hardwareEncoder = page.getByRole("button", { name: new RegExp(`^Encoder ${slot}: ${attribute},`, "i") }).first();
+    await expect(hardwareEncoder).toBeVisible();
+    await desk.click(hardwareEncoder);
+    dialogName = `Encoder ${slot} value`;
+  }
+  const dialog = page.getByRole("dialog", { name: dialogName });
+  await expect(dialog).toBeVisible();
+  await page.keyboard.type(String(value));
+  await page.keyboard.press("Enter");
+  await expect(dialog).toBeHidden();
+}
+
+async function setEncoderRange(desk: DeskDriver, page: Page, slot: number, attribute: string, values: [number, number]): Promise<void> {
+  const encoder = page.getByRole("button", { name: new RegExp(`^Encoder ${slot}: ${attribute},`, "i") }).first();
+  await expect(encoder).toBeVisible();
+  await desk.click(encoder);
+  const dialog = page.getByRole("dialog", { name: `Encoder ${slot} value` });
+  await expect(dialog).toBeVisible();
+  for (const key of [...String(values[0]), "THRU", ...String(values[1]), "ENTER"])
+    await desk.click(dialog.getByRole("button", { name: key, exact: true }));
+  await expect(dialog).toBeHidden();
+}
+
+async function keypadCommand(desk: DeskDriver, keypad: Locator, labels: string[], escape = true): Promise<void> {
+  if (escape) await desk.click(keypad.getByRole("button", { name: "ESCAPE", exact: true }));
+  for (const label of labels) {
+    await desk.click(keypad.getByRole("button", { name: label, exact: true }));
+    if (!RECORDING) await keypad.page().waitForTimeout(20);
+  }
+}
+
+async function clearSelection(desk: DeskDriver, keypad: Locator, api: ApiDriver): Promise<void> {
+  // The first Clear can dismiss a pending command before subsequent presses walk selection back.
+  for (let attempt = 0; attempt < 12 && (await programmer(api)).selected.length; attempt++)
+    await desk.click(keypad.getByRole("button", { name: "CLR", exact: true }));
   await expect.poll(async () => (await programmer(api)).selected).toEqual([]);
+}
+
+async function clearProgrammer(desk: DeskDriver, keypad: Locator, api: ApiDriver): Promise<void> {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const state = await programmer(api);
+    if (!state.selected.length && !state.values.length && !Object.keys(state.group_values).length) return;
+    await desk.click(keypad.getByRole("button", { name: "CLR", exact: true }));
+  }
+  await expect.poll(async () => {
+    const state = await programmer(api);
+    return state.selected.length + state.values.length + Object.keys(state.group_values).length;
+  }).toBe(0);
+}
+
+async function blueStageColors(api: ApiDriver, rig: Awaited<ReturnType<typeof seedPlannedDemoPatch>>): Promise<number> {
+  const ownerIds = new Set(
+    [...Array.from({ length: 8 }, (_, index) => 101 + index), ...Array.from({ length: 7 }, (_, index) => 201 + index)]
+      .flatMap((number) => [rig.fixtures[number].fixture_id, ...rig.fixtures[number].logical_heads.map((head) => head.fixture_id)]),
+  );
+  const visualization = await api.request<any>("GET", "/api/v1/visualization");
+  return (visualization.profile_output_values ?? []).filter((entry: any) => {
+    if (!ownerIds.has(entry.fixture_id) || entry.attribute !== "color" || entry.value?.kind !== "color_xyz") return false;
+    const { x, y, z } = entry.value.value;
+    return z > x * 1.5 && z > y * 1.5;
+  }).length;
 }
 
 async function activeNumbers(api: ApiDriver): Promise<number[]> {
