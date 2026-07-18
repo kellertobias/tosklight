@@ -13216,6 +13216,11 @@ fn handle_programmer_osc(
     };
     let command_operation = state.command_http.operation_lock(session.desk.id);
     let _command_operation_guard = command_operation.lock();
+    // The desk may have locked while this OSC action waited behind an HTTP/key operation. The
+    // lock transition uses the same serializer, so this post-wait check closes that ordering race.
+    if read_desk_lock(state, session.desk.id).locked {
+        return;
+    }
     let selection_revision_before = state
         .programmers
         .selection(session.id)
