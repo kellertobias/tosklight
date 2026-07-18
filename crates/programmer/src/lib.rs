@@ -6,7 +6,7 @@ use light_core::{
     AttributeKey, AttributeValue, FixtureId, ProgrammerId, SessionId, SharedClock, SystemClock,
     TimedValue, UserId,
 };
-use parking_lot::RwLock;
+use parking_lot::{ReentrantMutex, RwLock};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -154,9 +154,9 @@ pub struct ProgrammerState {
     #[serde(default)]
     pub active_context: Option<String>,
     #[serde(default)]
-    pub undo: Vec<ProgrammerSnapshot>,
+    pub undo: Vec<Arc<ProgrammerSnapshot>>,
     #[serde(default)]
-    pub redo: Vec<ProgrammerSnapshot>,
+    pub redo: Vec<Arc<ProgrammerSnapshot>>,
 }
 
 #[derive(Clone, Debug)]
@@ -255,7 +255,7 @@ impl ProgrammerState {
     }
 
     fn checkpoint(&mut self) {
-        self.undo.push(self.snapshot());
+        self.undo.push(Arc::new(self.snapshot()));
         if self.undo.len() > HISTORY_LIMIT {
             self.undo.remove(0);
         }
@@ -742,6 +742,17 @@ pub struct ProgrammerSelection {
     pub revision: u64,
 }
 
+/// Opaque in-memory checkpoint used to roll back one application command that failed validation.
+/// Persistence and transports never serialize this value.
+#[derive(Clone)]
+pub struct ProgrammerTransactionSnapshot {
+    state_key: SessionId,
+    state: ProgrammerState,
+    interaction_context: SessionId,
+    selection: Option<SelectionContext>,
+    command_line: Option<CommandLineState>,
+}
+
 /// The desk-local default scope used when an operator starts a new command.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -803,6 +814,21 @@ impl CommandLineState {
             &self.text
         }
     }
+
+    /// Preserve the legacy `ProgrammerState.command_line` projection while the revisioned command
+    /// state keeps pristine defaults canonical internally. Historically an untouched Fixture line
+    /// was empty, while switching to the Group target stored `GROUP` in the legacy field.
+    fn legacy_text(&self) -> &str {
+        if self.text.trim().is_empty() && self.target == CommandTarget::Group {
+            CommandTarget::Group.as_str()
+        } else {
+            &self.text
+        }
+    }
+}
+
+fn canonical_command_text(text: String, pristine: bool) -> String {
+    if pristine { String::new() } else { text }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -820,6 +846,13 @@ pub struct ProgrammerRegistry {
     selection_contexts: Arc<RwLock<HashMap<SessionId, SelectionContext>>>,
     selection_revision: Arc<AtomicU64>,
     programmer_order: Arc<AtomicU64>,
+    /// Serializes compound mutations per user without preventing unrelated programmers from
+    /// progressing concurrently. The mutex is reentrant because public mutation helpers compose
+    /// other public helpers (for example, `activate_preload` calls `activate_preload_at`).
+    mutation_gates: Arc<RwLock<HashMap<UserId, Arc<ReentrantMutex<()>>>>>,
+    /// Failed mutations for unknown sessions share one gate instead of allocating a permanent
+    /// real-user gate for every arbitrary UUID.
+    unknown_mutation_gate: Arc<ReentrantMutex<()>>,
     clock: SharedClock,
 }
 impl Default for ProgrammerRegistry {
@@ -837,6 +870,8 @@ impl ProgrammerRegistry {
             selection_contexts: Arc::default(),
             selection_revision: Arc::default(),
             programmer_order: Arc::default(),
+            mutation_gates: Arc::default(),
+            unknown_mutation_gate: Arc::new(ReentrantMutex::new(())),
             clock,
         }
     }
@@ -845,7 +880,69 @@ impl ProgrammerRegistry {
         Arc::clone(&self.clock)
     }
 
+    fn mutation_gate_for_user(&self, user_id: UserId) -> Arc<ReentrantMutex<()>> {
+        if let Some(gate) = self.mutation_gates.read().get(&user_id).cloned() {
+            return gate;
+        }
+        Arc::clone(
+            self.mutation_gates
+                .write()
+                .entry(user_id)
+                .or_insert_with(|| Arc::new(ReentrantMutex::new(()))),
+        )
+    }
+
+    fn mutation_gate(&self, session: SessionId) -> Arc<ReentrantMutex<()>> {
+        let state_key = self.key(session);
+        let user_id = self
+            .states
+            .read()
+            .get(&state_key)
+            .map(|state| state.user_id);
+        user_id.map_or_else(
+            || Arc::clone(&self.unknown_mutation_gate),
+            |user_id| self.mutation_gate_for_user(user_id),
+        )
+    }
+
+    /// Run an operation while every currently addressable user gate is held. New user gates are
+    /// prevented from appearing between the stable-set check and the operation, while ordinary
+    /// per-user mutations remain independent at all other times.
+    fn with_all_mutation_gates<R>(&self, operation: impl FnOnce() -> R) -> R {
+        loop {
+            let mut gates = self
+                .mutation_gates
+                .read()
+                .iter()
+                .map(|(user_id, gate)| (*user_id, Arc::clone(gate)))
+                .collect::<Vec<_>>();
+            gates.sort_unstable_by_key(|(user_id, _)| user_id.0);
+            let guards = gates
+                .iter()
+                .map(|(_, gate)| gate.lock())
+                .collect::<Vec<_>>();
+
+            let registered = self.mutation_gates.read();
+            let stable = registered.len() == gates.len()
+                && gates.iter().all(|(user_id, gate)| {
+                    registered
+                        .get(user_id)
+                        .is_some_and(|registered| Arc::ptr_eq(registered, gate))
+                });
+            if stable {
+                let result = operation();
+                drop(registered);
+                drop(guards);
+                return result;
+            }
+            drop(registered);
+            drop(guards);
+        }
+    }
+
     pub fn set_priority(&self, session: SessionId, priority: i16) -> bool {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         let mut states = self.states.write();
         let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
@@ -870,13 +967,15 @@ impl ProgrammerRegistry {
     }
 
     pub fn reset_all(&self) {
-        self.states.write().clear();
-        self.sessions.write().clear();
-        self.command_contexts.write().clear();
-        self.command_states.write().clear();
-        self.selection_contexts.write().clear();
-        self.selection_revision.store(0, Ordering::Relaxed);
-        self.programmer_order.store(0, Ordering::Relaxed);
+        self.with_all_mutation_gates(|| {
+            self.states.write().clear();
+            self.sessions.write().clear();
+            self.command_contexts.write().clear();
+            self.command_states.write().clear();
+            self.selection_contexts.write().clear();
+            self.selection_revision.store(0, Ordering::Relaxed);
+            self.programmer_order.store(0, Ordering::Relaxed);
+        });
     }
 
     fn next_programmer_order(&self) -> u64 {
@@ -888,6 +987,8 @@ impl ProgrammerRegistry {
     }
 
     pub fn start(&self, session_id: SessionId, user_id: UserId) -> ProgrammerState {
+        let mutation_gate = self.mutation_gate_for_user(user_id);
+        let _mutation_guard = mutation_gate.lock();
         let existing = self
             .states
             .read()
@@ -918,7 +1019,7 @@ impl ProgrammerRegistry {
                 .command_states
                 .read()
                 .get(&command_context)
-                .map(|command| command.text.clone())
+                .map(|command| command.legacy_text().to_owned())
                 .unwrap_or_default();
             self.project_selection(&mut projected, command_context);
             return projected;
@@ -967,6 +1068,8 @@ impl ProgrammerRegistry {
         state
     }
     pub fn restore(&self, state: ProgrammerState) {
+        let mutation_gate = self.mutation_gate_for_user(state.user_id);
+        let _mutation_guard = mutation_gate.lock();
         let restored_order = state
             .values
             .iter()
@@ -1004,16 +1107,17 @@ impl ProgrammerRegistry {
         } else {
             CommandTarget::Fixture
         };
+        let pristine = state.command_line.trim().is_empty()
+            || state
+                .command_line
+                .trim()
+                .eq_ignore_ascii_case(target.as_str());
         self.command_states.write().insert(
             session_id,
             CommandLineState {
-                pristine: state.command_line.trim().is_empty()
-                    || state
-                        .command_line
-                        .trim()
-                        .eq_ignore_ascii_case(target.as_str()),
-                text: state.command_line.clone(),
+                text: canonical_command_text(state.command_line.clone(), pristine),
                 target,
+                pristine,
                 revision: 0,
             },
         );
@@ -1073,6 +1177,8 @@ impl ProgrammerRegistry {
     /// visible selection. Recording a target uses this boundary so the next fixture or Group press
     /// starts a fresh selection while the just-recorded source remains inspectable.
     pub fn finish_selection_gesture(&self, session: SessionId) {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         self.close_selection_gesture(session);
     }
 
@@ -1081,6 +1187,11 @@ impl ProgrammerRegistry {
     /// partial command lines, selection gestures, and the active command target are shared only by
     /// sessions attached to this same context.
     pub fn attach_command_context(&self, session: SessionId, context: SessionId) -> bool {
+        if self.sessions.read().contains_key(&session) && self.command_context(session) == context {
+            return true;
+        }
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         if !self.sessions.read().contains_key(&session) {
             return false;
         }
@@ -1136,6 +1247,8 @@ impl ProgrammerRegistry {
         true
     }
     pub fn select(&self, session: SessionId, fixtures: impl IntoIterator<Item = FixtureId>) -> u64 {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         let mut seen = HashSet::new();
         let selected = fixtures
             .into_iter()
@@ -1168,6 +1281,8 @@ impl ProgrammerRegistry {
         fixtures: Vec<FixtureId>,
         expression: SelectionExpression,
     ) -> u64 {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         if let Some(state) = self.states.write().get_mut(&self.key(session)) {
             state.checkpoint();
             state.selected = fixtures.clone();
@@ -1195,6 +1310,8 @@ impl ProgrammerRegistry {
         references: Vec<SelectionReference>,
         groups: &HashMap<String, GroupDefinition>,
     ) -> bool {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         if !self.sessions.read().contains_key(&session) {
             return false;
         }
@@ -1235,6 +1352,8 @@ impl ProgrammerRegistry {
         attribute: AttributeKey,
         value: AttributeValue,
     ) {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         self.set_with_fade(session, fixture_id, attribute, value, false);
     }
 
@@ -1246,6 +1365,8 @@ impl ProgrammerRegistry {
         session: SessionId,
         assignments: impl IntoIterator<Item = (FixtureId, AttributeKey, AttributeValue)>,
     ) {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         self.set_many_with_checkpoint(session, assignments, true, ProgrammerValueTiming::default());
     }
 
@@ -1257,6 +1378,8 @@ impl ProgrammerRegistry {
         fade_millis: Option<u64>,
         delay_millis: Option<u64>,
     ) {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         self.set_many_with_checkpoint(
             session,
             assignments,
@@ -1277,6 +1400,8 @@ impl ProgrammerRegistry {
         session: SessionId,
         assignments: impl IntoIterator<Item = (FixtureId, AttributeKey, AttributeValue)>,
     ) {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         self.set_many_with_checkpoint(
             session,
             assignments,
@@ -1293,6 +1418,8 @@ impl ProgrammerRegistry {
         source: String,
         assignments: impl IntoIterator<Item = (FixtureId, AttributeKey, AttributeValue)>,
     ) -> Option<u64> {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         let assignments = assignments.into_iter().collect::<Vec<_>>();
         if assignments.is_empty() {
             return None;
@@ -1336,6 +1463,8 @@ impl ProgrammerRegistry {
         source: &str,
         generation: Option<u64>,
     ) -> bool {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         let mut states = self.states.write();
         let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
@@ -1419,6 +1548,8 @@ impl ProgrammerRegistry {
         attribute: AttributeKey,
         value: AttributeValue,
     ) {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         self.set_with_fade(session, fixture_id, attribute, value, true);
     }
     pub fn set_faded_with_timing(
@@ -1430,6 +1561,8 @@ impl ProgrammerRegistry {
         fade_millis: Option<u64>,
         delay_millis: Option<u64>,
     ) {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         self.set_with_timing(
             session,
             fixture_id,
@@ -1502,6 +1635,8 @@ impl ProgrammerRegistry {
         attribute: AttributeKey,
         value: AttributeValue,
     ) -> bool {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         self.set_group_with_fade(session, group_id, attribute, value, false)
     }
     pub fn set_group_faded(
@@ -1511,6 +1646,8 @@ impl ProgrammerRegistry {
         attribute: AttributeKey,
         value: AttributeValue,
     ) -> bool {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         self.set_group_with_fade(session, group_id, attribute, value, true)
     }
     pub fn set_group_faded_with_timing(
@@ -1522,6 +1659,8 @@ impl ProgrammerRegistry {
         fade_millis: Option<u64>,
         delay_millis: Option<u64>,
     ) -> bool {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         self.set_group_with_timing(
             session,
             group_id,
@@ -1597,6 +1736,8 @@ impl ProgrammerRegistry {
         fixture_id: FixtureId,
         attribute: &AttributeKey,
     ) -> bool {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         self.close_selection_gesture(session);
         let mut states = self.states.write();
         let Some(state) = states.get_mut(&self.key(session)) else {
@@ -1634,6 +1775,8 @@ impl ProgrammerRegistry {
         group_id: &str,
         attribute: &AttributeKey,
     ) -> bool {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         self.close_selection_gesture(session);
         let mut states = self.states.write();
         let Some(state) = states.get_mut(&self.key(session)) else {
@@ -1666,6 +1809,8 @@ impl ProgrammerRegistry {
         true
     }
     pub fn activate_preload(&self, session: SessionId) -> bool {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         self.activate_preload_at(session, self.clock.now())
     }
 
@@ -1673,6 +1818,8 @@ impl ProgrammerRegistry {
     /// Preload GO. Values deliberately keep their explicit fade/delay metadata; only their
     /// transition origin moves from the blind-edit time to the commit time.
     pub fn activate_preload_at(&self, session: SessionId, committed_at: DateTime<Utc>) -> bool {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         let mut states = self.states.write();
         let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
@@ -1709,6 +1856,8 @@ impl ProgrammerRegistry {
         action: String,
         surface: String,
     ) -> bool {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         let mut states = self.states.write();
         let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
@@ -1724,6 +1873,8 @@ impl ProgrammerRegistry {
     }
 
     pub fn take_preload_playback_actions(&self, session: SessionId) -> Vec<PreloadPlaybackAction> {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         let mut states = self.states.write();
         let Some(state) = states.get_mut(&self.key(session)) else {
             return Vec::new();
@@ -1731,6 +1882,8 @@ impl ProgrammerRegistry {
         std::mem::take(&mut state.preload_playback_pending)
     }
     pub fn clear_preload_pending(&self, session: SessionId) -> bool {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         let mut states = self.states.write();
         let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
@@ -1743,6 +1896,8 @@ impl ProgrammerRegistry {
         true
     }
     pub fn release_preload(&self, session: SessionId) -> bool {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         let mut states = self.states.write();
         let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
@@ -1773,6 +1928,8 @@ impl ProgrammerRegistry {
         attribute: AttributeKey,
         value: AttributeValue,
     ) -> bool {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         let mut states = self.states.write();
         let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
@@ -1798,6 +1955,8 @@ impl ProgrammerRegistry {
         true
     }
     pub fn set_command_line(&self, session: SessionId, command_line: String) -> bool {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         self.update_command_line(session, |current| {
             let pristine = command_line.trim().is_empty()
                 || command_line
@@ -1821,12 +1980,242 @@ impl ProgrammerRegistry {
         )
     }
 
+    /// Execute a fallible compound Programmer mutation atomically for one user.
+    ///
+    /// Every public mutator uses this same reentrant per-user gate, so a transaction may freely
+    /// compose existing registry operations. On rejection, only the user's Programmer state and
+    /// the initiating desk's selection/command interaction are restored; a mutation waiting on
+    /// the gate then runs against that restored state instead of being overwritten by rollback.
+    pub fn with_transaction<T, E, F>(&self, session: SessionId, transaction: F) -> Result<T, E>
+    where
+        F: FnOnce() -> Result<T, E>,
+    {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
+        let snapshot = self.transaction_snapshot(session);
+        match transaction() {
+            Ok(value) => Ok(value),
+            Err(error) => {
+                if let Some(snapshot) = snapshot {
+                    self.restore_transaction_snapshot(snapshot);
+                }
+                Err(error)
+            }
+        }
+    }
+
+    /// Execute a compound command against an isolated copy and publish its complete Programmer
+    /// and desk-interaction result in one commit.
+    ///
+    /// Readers continue to observe the previous live state while `transaction` runs. The
+    /// per-user mutation gate prevents another writer from racing the final commit, while global
+    /// order/revision counters remain shared so staged work cannot duplicate identities used by
+    /// another user's concurrent command.
+    pub fn with_staged_transaction<T, E, F>(
+        &self,
+        session: SessionId,
+        transaction: F,
+    ) -> Result<T, E>
+    where
+        E: From<String>,
+        F: FnOnce(&ProgrammerRegistry) -> Result<T, E>,
+    {
+        self.with_staged_transaction_internal(session, false, transaction)
+    }
+
+    /// Stage one entered Programmer command and collapse all of its internal helper checkpoints
+    /// into one operator-visible Undo step.
+    pub fn with_staged_command<T, E, F>(&self, session: SessionId, transaction: F) -> Result<T, E>
+    where
+        E: From<String>,
+        F: FnOnce(&ProgrammerRegistry) -> Result<T, E>,
+    {
+        self.with_staged_transaction_internal(session, true, transaction)
+    }
+
+    fn with_staged_transaction_internal<T, E, F>(
+        &self,
+        session: SessionId,
+        squash_command_history: bool,
+        transaction: F,
+    ) -> Result<T, E>
+    where
+        E: From<String>,
+        F: FnOnce(&ProgrammerRegistry) -> Result<T, E>,
+    {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
+        let staged = self
+            .detached_session(session)
+            .ok_or_else(|| E::from("programmer does not exist".to_owned()))?;
+        let staged_state_key = staged.key(session);
+        let command_history = squash_command_history.then(|| {
+            let states = staged.states.read();
+            let state = states
+                .get(&staged_state_key)
+                .expect("a detached session retains its staged Programmer state");
+            (state.undo.clone(), Arc::new(state.snapshot()))
+        });
+        let result = transaction(&staged)?;
+        if let Some((undo_before, command_checkpoint)) = command_history {
+            let mut states = staged.states.write();
+            let state = states
+                .get_mut(&staged_state_key)
+                .ok_or_else(|| E::from("programmer does not exist".to_owned()))?;
+            let history_changed = state.undo.len() != undo_before.len()
+                || state
+                    .undo
+                    .iter()
+                    .zip(&undo_before)
+                    .any(|(after, before)| !Arc::ptr_eq(after, before));
+            if history_changed {
+                state.undo = undo_before;
+                state.undo.push(command_checkpoint);
+                if state.undo.len() > HISTORY_LIMIT {
+                    state.undo.remove(0);
+                }
+            }
+        }
+        self.commit_detached_session(session, &staged)
+            .then_some(result)
+            .ok_or_else(|| E::from("programmer does not exist".to_owned()))
+    }
+
+    fn detached_session(&self, session: SessionId) -> Option<ProgrammerRegistry> {
+        let state_key = self.key(session);
+        let context = self.command_context(session);
+        let state = self.states.read().get(&state_key)?.clone();
+        let selection = self.selection_contexts.read().get(&context).cloned();
+        let command = self.command_states.read().get(&context).cloned();
+        Some(ProgrammerRegistry {
+            states: Arc::new(RwLock::new(HashMap::from([(state_key, state)]))),
+            sessions: Arc::new(RwLock::new(HashMap::from([(session, state_key)]))),
+            command_contexts: Arc::new(RwLock::new(HashMap::from([(session, context)]))),
+            command_states: Arc::new(RwLock::new(
+                command
+                    .map(|command| HashMap::from([(context, command)]))
+                    .unwrap_or_default(),
+            )),
+            selection_contexts: Arc::new(RwLock::new(
+                selection
+                    .map(|selection| HashMap::from([(context, selection)]))
+                    .unwrap_or_default(),
+            )),
+            selection_revision: Arc::clone(&self.selection_revision),
+            programmer_order: Arc::clone(&self.programmer_order),
+            mutation_gates: Arc::default(),
+            unknown_mutation_gate: Arc::new(ReentrantMutex::new(())),
+            clock: Arc::clone(&self.clock),
+        })
+    }
+
+    fn commit_detached_session(&self, session: SessionId, staged: &ProgrammerRegistry) -> bool {
+        if !self.sessions.read().contains_key(&session) {
+            return false;
+        }
+        let live_state_key = self.key(session);
+        let staged_state_key = staged.key(session);
+        let context = self.command_context(session);
+        let Some(state) = staged.states.read().get(&staged_state_key).cloned() else {
+            return false;
+        };
+        let selection = staged.selection_contexts.read().get(&context).cloned();
+        let command = staged.command_states.read().get(&context).cloned();
+
+        // Populate every replacement before releasing any write guard. A reader that needs more
+        // than one projection either sees the complete previous set or waits and sees the complete
+        // replacement set.
+        let mut states = self.states.write();
+        let mut commands = self.command_states.write();
+        let mut selections = self.selection_contexts.write();
+        states.insert(live_state_key, state);
+        match command {
+            Some(command) => {
+                commands.insert(context, command);
+            }
+            None => {
+                commands.remove(&context);
+            }
+        }
+        match selection {
+            Some(selection) => {
+                selections.insert(context, selection);
+            }
+            None => {
+                selections.remove(&context);
+            }
+        }
+        true
+    }
+
+    /// Capture the complete user Programmer and desk interaction state before a fallible command.
+    pub fn transaction_snapshot(
+        &self,
+        session: SessionId,
+    ) -> Option<ProgrammerTransactionSnapshot> {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
+        if !self.sessions.read().contains_key(&session) {
+            return None;
+        }
+        let state_key = self.key(session);
+        let interaction_context = self.command_context(session);
+        let state = self.states.read().get(&state_key)?.clone();
+        let selection = self
+            .selection_contexts
+            .read()
+            .get(&interaction_context)
+            .cloned();
+        let command_line = self
+            .command_states
+            .read()
+            .get(&interaction_context)
+            .cloned();
+        Some(ProgrammerTransactionSnapshot {
+            state_key,
+            state,
+            interaction_context,
+            selection,
+            command_line,
+        })
+    }
+
+    /// Restore an exact checkpoint after a command rejected without committing.
+    pub fn restore_transaction_snapshot(&self, snapshot: ProgrammerTransactionSnapshot) {
+        let mutation_gate = self.mutation_gate_for_user(snapshot.state.user_id);
+        let _mutation_guard = mutation_gate.lock();
+        self.states
+            .write()
+            .insert(snapshot.state_key, snapshot.state);
+        let mut selections = self.selection_contexts.write();
+        match snapshot.selection {
+            Some(selection) => {
+                selections.insert(snapshot.interaction_context, selection);
+            }
+            None => {
+                selections.remove(&snapshot.interaction_context);
+            }
+        }
+        drop(selections);
+        let mut commands = self.command_states.write();
+        match snapshot.command_line {
+            Some(command_line) => {
+                commands.insert(snapshot.interaction_context, command_line);
+            }
+            None => {
+                commands.remove(&snapshot.interaction_context);
+            }
+        }
+    }
+
     pub fn replace_command_line(
         &self,
         session: SessionId,
         expected_revision: u64,
         text: String,
     ) -> Result<CommandLineState, CommandLineReplaceError> {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         if !self.sessions.read().contains_key(&session) {
             return Err(CommandLineReplaceError::UnknownSession);
         }
@@ -1841,6 +2230,7 @@ impl ProgrammerRegistry {
         }
         let pristine =
             text.trim().is_empty() || text.trim().eq_ignore_ascii_case(current.target.as_str());
+        let text = canonical_command_text(text, pristine);
         if current.text != text || current.pristine != pristine {
             current.text = text;
             current.pristine = pristine;
@@ -1857,6 +2247,8 @@ impl ProgrammerRegistry {
     where
         F: FnOnce(&CommandLineState) -> (String, CommandTarget, bool),
     {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         if !self.sessions.read().contains_key(&session) {
             return None;
         }
@@ -1864,6 +2256,7 @@ impl ProgrammerRegistry {
         let mut commands = self.command_states.write();
         let current = commands.entry(context).or_default();
         let (text, target, pristine) = update(current);
+        let text = canonical_command_text(text, pristine);
         if current.text != text || current.target != target || current.pristine != pristine {
             current.text = text;
             current.target = target;
@@ -1888,6 +2281,8 @@ impl ProgrammerRegistry {
             .unwrap_or_else(|| CommandTarget::Fixture.as_str().to_owned())
     }
     pub fn set_command_target(&self, session: SessionId, target: String) -> bool {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         let Ok(target) = CommandTarget::try_from(target.as_str()) else {
             return false;
         };
@@ -1906,6 +2301,8 @@ impl ProgrammerRegistry {
         highlight: Option<bool>,
         active_context: Option<Option<String>>,
     ) -> bool {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         let mut states = self.states.write();
         let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
@@ -1927,6 +2324,8 @@ impl ProgrammerRegistry {
     }
 
     pub fn arm_preload(&self, session: SessionId, capture_programmer: bool) -> bool {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         let mut states = self.states.write();
         let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
@@ -1938,6 +2337,8 @@ impl ProgrammerRegistry {
         true
     }
     pub fn clear_values(&self, session: SessionId) -> bool {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         self.close_selection_gesture(session);
         let mut states = self.states.write();
         let Some(state) = states.get_mut(&self.key(session)) else {
@@ -1951,6 +2352,8 @@ impl ProgrammerRegistry {
         true
     }
     pub fn undo(&self, session: SessionId) -> bool {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         let (selected, expression) = {
             let mut states = self.states.write();
             let Some(state) = states.get_mut(&self.key(session)) else {
@@ -1959,8 +2362,8 @@ impl ProgrammerRegistry {
             let Some(previous) = state.undo.pop() else {
                 return false;
             };
-            state.redo.push(state.snapshot());
-            state.restore_snapshot(previous, self.clock.now());
+            state.redo.push(Arc::new(state.snapshot()));
+            state.restore_snapshot(Arc::unwrap_or_clone(previous), self.clock.now());
             (state.selected.clone(), state.selection_expression.clone())
         };
         self.selection_contexts.write().insert(
@@ -1975,6 +2378,8 @@ impl ProgrammerRegistry {
         true
     }
     pub fn redo(&self, session: SessionId) -> bool {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         let (selected, expression) = {
             let mut states = self.states.write();
             let Some(state) = states.get_mut(&self.key(session)) else {
@@ -1983,8 +2388,8 @@ impl ProgrammerRegistry {
             let Some(next) = state.redo.pop() else {
                 return false;
             };
-            state.undo.push(state.snapshot());
-            state.restore_snapshot(next, self.clock.now());
+            state.undo.push(Arc::new(state.snapshot()));
+            state.restore_snapshot(Arc::unwrap_or_clone(next), self.clock.now());
             (state.selected.clone(), state.selection_expression.clone())
         };
         self.selection_contexts.write().insert(
@@ -1999,6 +2404,8 @@ impl ProgrammerRegistry {
         true
     }
     pub fn disconnect(&self, session: SessionId) {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         let key = self.key(session);
         self.sessions.write().remove(&session);
         let still_connected = self.sessions.read().values().any(|bound| *bound == key);
@@ -2007,12 +2414,16 @@ impl ProgrammerRegistry {
         }
     }
     pub fn connect(&self, session: SessionId) {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         if let Some(state) = self.states.write().get_mut(&self.key(session)) {
             state.connected = true;
             state.last_activity = self.clock.now();
         }
     }
     pub fn clear(&self, session: SessionId) -> bool {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
         let key = self.key(session);
         self.sessions.write().retain(|_, bound| *bound != key);
         self.states.write().remove(&key).is_some()
@@ -2034,7 +2445,7 @@ impl ProgrammerRegistry {
                 let command_context = command_contexts.get(session).unwrap_or(session);
                 state.command_line = command_states
                     .get(command_context)
-                    .map(|command| command.text.clone())
+                    .map(|command| command.legacy_text().to_owned())
                     .unwrap_or_default();
                 if let Some(selection) = selection_contexts.get(command_context) {
                     state.selected = selection.selected.clone();
@@ -2048,16 +2459,26 @@ impl ProgrammerRegistry {
             .collect()
     }
     pub fn get(&self, session: SessionId) -> Option<ProgrammerState> {
-        let mut state = self.states.read().get(&self.key(session)).cloned()?;
-        state.session_id = session;
+        let state_key = self.key(session);
         let command_context = self.command_context(session);
-        state.command_line = self
-            .command_states
-            .read()
+        // Staged publication acquires these write locks in the same order. Holding all three read
+        // guards while building a projection guarantees an old or new result, never a torn mix.
+        let states = self.states.read();
+        let command_states = self.command_states.read();
+        let selection_contexts = self.selection_contexts.read();
+        let mut state = states.get(&state_key).cloned()?;
+        state.session_id = session;
+        state.command_line = command_states
             .get(&command_context)
-            .map(|command| command.text.clone())
+            .map(|command| command.legacy_text().to_owned())
             .unwrap_or_default();
-        self.project_selection(&mut state, command_context);
+        if let Some(selection) = selection_contexts.get(&command_context) {
+            state.selected = selection.selected.clone();
+            state.selection_expression = selection.expression.clone();
+        } else {
+            state.selected.clear();
+            state.selection_expression = None;
+        }
         Some(state)
     }
 
@@ -2074,26 +2495,28 @@ impl ProgrammerRegistry {
     }
 
     pub fn refresh_live_selections(&self, groups: &HashMap<String, GroupDefinition>) {
-        for selection in self.selection_contexts.write().values_mut() {
-            let resolved = match selection.expression.clone() {
-                Some(SelectionExpression::LiveGroup { group_id, rule }) => {
-                    resolve_group(&group_id, groups)
-                        .ok()
-                        .map(|fixtures| apply_selection_rule(&fixtures, &rule))
+        self.with_all_mutation_gates(|| {
+            for selection in self.selection_contexts.write().values_mut() {
+                let resolved = match selection.expression.clone() {
+                    Some(SelectionExpression::LiveGroup { group_id, rule }) => {
+                        resolve_group(&group_id, groups)
+                            .ok()
+                            .map(|fixtures| apply_selection_rule(&fixtures, &rule))
+                    }
+                    Some(
+                        SelectionExpression::PlaybackContents { items }
+                        | SelectionExpression::Sources { items },
+                    ) => Some(resolve_selection_references(&items, groups)),
+                    _ => None,
+                };
+                if let Some(resolved) = resolved
+                    && selection.selected != resolved
+                {
+                    selection.selected = resolved;
+                    selection.revision = self.next_selection_revision();
                 }
-                Some(
-                    SelectionExpression::PlaybackContents { items }
-                    | SelectionExpression::Sources { items },
-                ) => Some(resolve_selection_references(&items, groups)),
-                _ => None,
-            };
-            if let Some(resolved) = resolved
-                && selection.selected != resolved
-            {
-                selection.selected = resolved;
-                selection.revision = self.next_selection_revision();
             }
-        }
+        });
     }
 }
 
@@ -2267,12 +2690,33 @@ mod tests {
         assert!(initial.pristine);
         assert_eq!(initial.revision, 0);
 
+        let same_default = registry
+            .replace_command_line(other, 0, "FIXTURE".into())
+            .unwrap();
+        assert_eq!(same_default.text, "");
+        assert_eq!(same_default.visible_text(), "FIXTURE");
+        assert_eq!(same_default.revision, 0);
+
+        let group_default = registry
+            .update_command_line(other, |_| ("GROUP".into(), CommandTarget::Group, true))
+            .unwrap();
+        assert_eq!(group_default.text, "");
+        assert_eq!(group_default.visible_text(), "GROUP");
+        assert_eq!(group_default.revision, 1);
+        assert_eq!(
+            registry
+                .replace_command_line(other, group_default.revision, "GROUP".into())
+                .unwrap()
+                .revision,
+            group_default.revision
+        );
+
         let changed = registry
             .replace_command_line(first, 0, "GROUP 1 +".into())
             .unwrap();
         assert_eq!(changed.revision, 1);
         assert_eq!(registry.command_line_state(second).unwrap(), changed);
-        assert_eq!(registry.command_line_state(other).unwrap().revision, 0);
+        assert_eq!(registry.command_line_state(other).unwrap(), group_default);
 
         assert_eq!(
             registry.replace_command_line(second, 0, "GROUP 2".into()),
@@ -3079,5 +3523,360 @@ mod tests {
             ),
             vec![first, second, third, fourth]
         );
+    }
+
+    #[test]
+    fn transaction_snapshot_restores_programmer_and_desk_interaction_exactly() {
+        let registry = ProgrammerRegistry::default();
+        let session = SessionId::new();
+        let fixture = FixtureId::new();
+        registry.start(session, UserId::new());
+        registry.select(session, [fixture]);
+        registry.set(
+            session,
+            fixture,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.5),
+        );
+        registry.set_command_line(session, "GROUP 1 AT BOGUS".into());
+        let programmer_before = serde_json::to_value(registry.get(session).unwrap()).unwrap();
+        let selection_before = registry.selection(session).unwrap();
+        let command_before = registry.command_line_state(session).unwrap();
+        let checkpoint = registry.transaction_snapshot(session).unwrap();
+
+        registry.clear_values(session);
+        registry.select(session, [FixtureId::new()]);
+        registry.set_command_target(session, "GROUP".into());
+        registry.set_command_line(session, "GROUP 9".into());
+        registry.restore_transaction_snapshot(checkpoint);
+
+        assert_eq!(
+            serde_json::to_value(registry.get(session).unwrap()).unwrap(),
+            programmer_before
+        );
+        assert_eq!(registry.selection(session).unwrap(), selection_before);
+        assert_eq!(
+            registry.command_line_state(session).unwrap(),
+            command_before
+        );
+    }
+
+    #[test]
+    fn rejected_transaction_rolls_back_before_a_same_user_mutation_can_run() {
+        use std::sync::mpsc;
+        use std::thread;
+        use std::time::Duration;
+
+        let registry = Arc::new(ProgrammerRegistry::default());
+        let user = UserId::new();
+        let transaction_session = SessionId::new();
+        let concurrent_session = SessionId::new();
+        let unrelated_session = SessionId::new();
+        let fixture = FixtureId::new();
+        let unrelated_fixture = FixtureId::new();
+        registry.start(transaction_session, user);
+        registry.start(concurrent_session, user);
+        registry.start(unrelated_session, UserId::new());
+        registry.set(
+            transaction_session,
+            fixture,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.1),
+        );
+        registry.set_command_line(transaction_session, "FIXTURE 1".into());
+
+        let transaction_gate = registry.mutation_gate(transaction_session);
+        let concurrent_gate = registry.mutation_gate(concurrent_session);
+        assert!(Arc::ptr_eq(&transaction_gate, &concurrent_gate));
+
+        let (transaction_entered_tx, transaction_entered_rx) = mpsc::channel();
+        let (reject_tx, reject_rx) = mpsc::channel();
+        let transaction_registry = Arc::clone(&registry);
+        let transaction_thread = thread::spawn(move || {
+            let result = transaction_registry.with_transaction(transaction_session, || {
+                transaction_registry.set(
+                    transaction_session,
+                    fixture,
+                    AttributeKey::intensity(),
+                    AttributeValue::Normalized(0.5),
+                );
+                transaction_registry
+                    .set_command_line(transaction_session, "FIXTURE 1 AT BOGUS".into());
+                transaction_entered_tx.send(()).unwrap();
+                reject_rx.recv().unwrap();
+                Err::<(), _>("rejected")
+            });
+            assert_eq!(result, Err("rejected"));
+        });
+
+        transaction_entered_rx.recv().unwrap();
+        assert!(concurrent_gate.try_lock().is_none());
+        registry.set(
+            unrelated_session,
+            unrelated_fixture,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.7),
+        );
+        assert_eq!(
+            registry.get(unrelated_session).unwrap().values[0].value,
+            AttributeValue::Normalized(0.7)
+        );
+
+        let (mutation_attempted_tx, mutation_attempted_rx) = mpsc::channel();
+        let (mutation_finished_tx, mutation_finished_rx) = mpsc::channel();
+        let concurrent_registry = Arc::clone(&registry);
+        let concurrent_thread = thread::spawn(move || {
+            mutation_attempted_tx.send(()).unwrap();
+            concurrent_registry.set(
+                concurrent_session,
+                fixture,
+                AttributeKey::intensity(),
+                AttributeValue::Normalized(0.9),
+            );
+            concurrent_registry.set_command_line(concurrent_session, "GROUP 2".into());
+            mutation_finished_tx.send(()).unwrap();
+        });
+
+        mutation_attempted_rx.recv().unwrap();
+        assert!(matches!(
+            mutation_finished_rx.recv_timeout(Duration::from_millis(50)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ));
+        reject_tx.send(()).unwrap();
+        transaction_thread.join().unwrap();
+        mutation_finished_rx
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap();
+        concurrent_thread.join().unwrap();
+
+        let programmer = registry.get(transaction_session).unwrap();
+        assert_eq!(programmer.values.len(), 1);
+        assert_eq!(programmer.values[0].value, AttributeValue::Normalized(0.9));
+        assert_eq!(
+            registry
+                .command_line_state(transaction_session)
+                .unwrap()
+                .text,
+            "FIXTURE 1"
+        );
+        assert_eq!(
+            registry
+                .command_line_state(concurrent_session)
+                .unwrap()
+                .text,
+            "GROUP 2"
+        );
+    }
+
+    #[test]
+    fn staged_transaction_is_invisible_until_one_successful_commit() {
+        use std::sync::mpsc;
+        use std::thread;
+
+        let registry = Arc::new(ProgrammerRegistry::default());
+        let session = SessionId::new();
+        let fixture = FixtureId::new();
+        registry.start(session, UserId::new());
+        registry.select(session, [fixture]);
+        registry.set(
+            session,
+            fixture,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.25),
+        );
+        let before = registry.get(session).unwrap();
+        let (staged_tx, staged_rx) = mpsc::channel();
+        let (commit_tx, commit_rx) = mpsc::channel();
+        let worker_registry = Arc::clone(&registry);
+        let worker = thread::spawn(move || {
+            worker_registry.with_staged_transaction(session, |staged| {
+                staged.set(
+                    session,
+                    fixture,
+                    AttributeKey::intensity(),
+                    AttributeValue::Normalized(0.75),
+                );
+                staged.select(session, [fixture, FixtureId::new()]);
+                staged_tx.send(()).unwrap();
+                commit_rx.recv().unwrap();
+                Ok::<_, String>(())
+            })
+        });
+
+        staged_rx.recv().unwrap();
+        assert_eq!(
+            serde_json::to_value(registry.get(session).unwrap()).unwrap(),
+            serde_json::to_value(&before).unwrap()
+        );
+        commit_tx.send(()).unwrap();
+        worker.join().unwrap().unwrap();
+
+        let after = registry.get(session).unwrap();
+        assert_ne!(
+            serde_json::to_value(&after).unwrap(),
+            serde_json::to_value(&before).unwrap()
+        );
+        assert_eq!(after.selected.len(), 2);
+        assert_eq!(
+            after
+                .values
+                .iter()
+                .find(|value| value.fixture_id == fixture)
+                .and_then(|value| value.value.normalized()),
+            Some(0.75)
+        );
+    }
+
+    #[test]
+    fn staged_command_is_one_undo_step_even_when_helpers_checkpoint_internally() {
+        let registry = ProgrammerRegistry::default();
+        let session = SessionId::new();
+        let original = FixtureId::new();
+        let first = FixtureId::new();
+        let second = FixtureId::new();
+        registry.start(session, UserId::new());
+        registry.select(session, [original]);
+        registry.set(
+            session,
+            original,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.25),
+        );
+        let before = registry.get(session).unwrap();
+        let undo_before = before.undo.len();
+
+        registry
+            .with_staged_command(session, |staged| {
+                staged.select(session, [first, second]);
+                staged.set_many_faded_with_timing(
+                    session,
+                    [
+                        (
+                            first,
+                            AttributeKey::intensity(),
+                            AttributeValue::Normalized(0.5),
+                        ),
+                        (
+                            second,
+                            AttributeKey::intensity(),
+                            AttributeValue::Normalized(0.75),
+                        ),
+                    ],
+                    Some(1_000),
+                    None,
+                );
+                Ok::<_, String>(())
+            })
+            .unwrap();
+
+        assert_eq!(registry.get(session).unwrap().undo.len(), undo_before + 1);
+        assert!(registry.undo(session));
+        let restored = registry.get(session).unwrap();
+        assert_eq!(restored.selected, before.selected);
+        assert_eq!(
+            serde_json::to_value(restored.values).unwrap(),
+            serde_json::to_value(before.values).unwrap()
+        );
+    }
+
+    #[test]
+    fn rejected_staged_transaction_never_changes_live_state() {
+        let registry = ProgrammerRegistry::default();
+        let session = SessionId::new();
+        let fixture = FixtureId::new();
+        registry.start(session, UserId::new());
+        let before = serde_json::to_value(registry.get(session).unwrap()).unwrap();
+
+        let result = registry.with_staged_transaction(session, |staged| {
+            staged.set(
+                session,
+                fixture,
+                AttributeKey::intensity(),
+                AttributeValue::Normalized(1.0),
+            );
+            Err::<(), _>("rejected".to_owned())
+        });
+
+        assert_eq!(result, Err("rejected".to_owned()));
+        assert_eq!(
+            serde_json::to_value(registry.get(session).unwrap()).unwrap(),
+            before
+        );
+    }
+
+    #[test]
+    fn projected_reads_cannot_mix_old_state_with_a_staged_commit() {
+        use std::thread;
+        use std::time::Duration;
+
+        let registry = Arc::new(ProgrammerRegistry::default());
+        let session = SessionId::new();
+        let old_fixture = FixtureId::new();
+        let new_fixture = FixtureId::new();
+        registry.start(session, UserId::new());
+        registry.select(session, [old_fixture]);
+        registry.set_command_line(session, "FIXTURE 1".into());
+
+        let staged = registry.detached_session(session).unwrap();
+        staged.select(session, [new_fixture]);
+        staged.set_command_line(session, "GROUP 2".into());
+
+        // Block the reader on its second projection lock after it has acquired the state lock.
+        let command_guard = registry.command_states.write();
+        let reader_registry = Arc::clone(&registry);
+        let reader = thread::spawn(move || reader_registry.get(session).unwrap());
+        for _ in 0..100 {
+            if registry.states.try_write().is_none() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(1));
+        }
+        assert!(
+            registry.states.try_write().is_none(),
+            "the reader never acquired the state projection lock"
+        );
+
+        let commit_registry = Arc::clone(&registry);
+        let commit =
+            thread::spawn(move || commit_registry.commit_detached_session(session, &staged));
+        drop(command_guard);
+
+        let projected = reader.join().unwrap();
+        assert_eq!(projected.selected, vec![old_fixture]);
+        assert_eq!(projected.command_line, "FIXTURE 1");
+        assert!(commit.join().unwrap());
+        let committed = registry.get(session).unwrap();
+        assert_eq!(committed.selected, vec![new_fixture]);
+        assert_eq!(committed.command_line, "GROUP 2");
+    }
+
+    #[test]
+    fn unknown_sessions_share_one_fallback_gate_without_growing_the_user_registry() {
+        let registry = ProgrammerRegistry::default();
+        let first = registry.mutation_gate(SessionId::new());
+        for _ in 0..1_000 {
+            let session = SessionId::new();
+            assert!(!registry.clear(session));
+            assert!(Arc::ptr_eq(&first, &registry.mutation_gate(session)));
+        }
+        assert!(registry.mutation_gates.read().is_empty());
+    }
+
+    #[test]
+    fn reset_preserves_the_per_user_gate_across_session_aliases() {
+        let registry = ProgrammerRegistry::default();
+        let user = UserId::new();
+        let first_session = SessionId::new();
+        let alias_session = SessionId::new();
+        registry.start(first_session, user);
+        registry.start(alias_session, user);
+
+        let before = registry.mutation_gate(alias_session);
+        registry.reset_all();
+
+        let restored_session = SessionId::new();
+        registry.start(restored_session, user);
+        let after = registry.mutation_gate(restored_session);
+        assert!(Arc::ptr_eq(&before, &after));
     }
 }
