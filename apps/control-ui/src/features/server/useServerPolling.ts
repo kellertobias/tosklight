@@ -1,0 +1,143 @@
+import { useEffect } from "react";
+import type { ServerState } from "./useServerState";
+
+function useMediaPreviewCleanup(state: ServerState) {
+	const { bootstrap, mediaPreviewUrlsRef, setMediaPreviewUrls } = state;
+	useEffect(
+		() => () => {
+			for (const url of Object.values(mediaPreviewUrlsRef.current))
+				URL.revokeObjectURL(url);
+		},
+		[mediaPreviewUrlsRef],
+	);
+	useEffect(() => {
+		for (const url of Object.values(mediaPreviewUrlsRef.current))
+			URL.revokeObjectURL(url);
+		mediaPreviewUrlsRef.current = {};
+		setMediaPreviewUrls({});
+	}, [bootstrap?.active_show?.id, mediaPreviewUrlsRef, setMediaPreviewUrls]);
+}
+
+function useDeskLockPolling(state: ServerState) {
+	const { client, session, setDeskLock } = state;
+	useEffect(() => {
+		if (!session) return;
+		let cancelled = false;
+		const refresh = () =>
+			void client
+				.deskLock()
+				.then((value) => !cancelled && setDeskLock(value))
+				.catch(() => undefined);
+		refresh();
+		const timer = window.setInterval(refresh, 500);
+		return () => {
+			cancelled = true;
+			window.clearInterval(timer);
+		};
+	}, [client, session, setDeskLock]);
+}
+
+function usePlaybackPolling(state: ServerState) {
+	const { client, session, setPlaybacks } = state;
+	useEffect(() => {
+		if (!session) return;
+		let cancelled = false;
+		let inFlight = false;
+		const refresh = () => {
+			if (inFlight) return;
+			inFlight = true;
+			void client
+				.playbacks()
+				.then((value) => !cancelled && setPlaybacks(value))
+				.catch(() => undefined)
+				.finally(() => {
+					inFlight = false;
+				});
+		};
+		const timer = window.setInterval(refresh, 250);
+		return () => {
+			cancelled = true;
+			window.clearInterval(timer);
+		};
+	}, [client, session, setPlaybacks]);
+}
+
+function useHighlightPolling(state: ServerState) {
+	const {
+		client,
+		session,
+		highlightEpoch,
+		highlightErrorSticky,
+		highlightWrite,
+		setHighlight,
+		setHighlightError,
+	} = state;
+	useEffect(() => {
+		if (!session) {
+			highlightEpoch.current += 1;
+			highlightErrorSticky.current = false;
+			setHighlight(null);
+			setHighlightError(null);
+			return;
+		}
+		let cancelled = false;
+		const load = () => {
+			const request = ++highlightEpoch.current;
+			void highlightWrite.current
+				.catch(() => undefined)
+				.then(() => client.highlight())
+				.then((next) => {
+					if (cancelled || request !== highlightEpoch.current) return;
+					setHighlight(next);
+					if (!highlightErrorSticky.current) setHighlightError(null);
+				})
+				.catch((reason) => {
+					if (!cancelled && request === highlightEpoch.current)
+						setHighlightError(
+							reason instanceof Error ? reason.message : String(reason),
+						);
+				});
+		};
+		load();
+		const timer = window.setInterval(load, 2_000);
+		return () => {
+			cancelled = true;
+			window.clearInterval(timer);
+		};
+	}, [
+		client,
+		session,
+		highlightEpoch,
+		highlightErrorSticky,
+		highlightWrite,
+		setHighlight,
+		setHighlightError,
+	]);
+}
+
+function useMatterPolling(state: ServerState) {
+	const { client, configuration, session, setMatter } = state;
+	useEffect(() => {
+		if (!session || !configuration?.matter_enabled) return;
+		let cancelled = false;
+		const poll = () =>
+			void client
+				.matterStatus()
+				.then((next) => !cancelled && setMatter(next))
+				.catch(() => undefined);
+		poll();
+		const timer = window.setInterval(poll, 1_000);
+		return () => {
+			cancelled = true;
+			window.clearInterval(timer);
+		};
+	}, [client, configuration?.matter_enabled, session, setMatter]);
+}
+
+export function useServerPolling(state: ServerState) {
+	useMediaPreviewCleanup(state);
+	useDeskLockPolling(state);
+	usePlaybackPolling(state);
+	useHighlightPolling(state);
+	useMatterPolling(state);
+}

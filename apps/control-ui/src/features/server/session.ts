@@ -1,0 +1,102 @@
+import type { ServerController } from "./model";
+import type { ServerContextValue } from "./ServerContextValue";
+
+export function createSessionActions(
+	model: ServerController,
+): Pick<
+	ServerContextValue,
+	| "configureDeskLock"
+	| "lockDesk"
+	| "unlockDesk"
+	| "createUser"
+	| "changeUser"
+	| "updateControlDesk"
+	| "selectControlDesk"
+	| "removeClient"
+> {
+	const {
+		client,
+		setError,
+		setBootstrap,
+		setSession,
+		setDeskLock,
+		setPlaybacks,
+	} = model;
+	return {
+		configureDeskLock: async (input) => {
+			try {
+				setDeskLock(await client.configureDeskLock(input));
+				setError(null);
+				return true;
+			} catch (reason) {
+				setError(reason instanceof Error ? reason.message : String(reason));
+				return false;
+			}
+		},
+		lockDesk: async () => {
+			try {
+				setDeskLock(await client.lockDesk());
+				setError(null);
+			} catch (reason) {
+				setError(reason instanceof Error ? reason.message : String(reason));
+			}
+		},
+		unlockDesk: async (pin) => {
+			try {
+				setDeskLock(await client.unlockDesk(pin));
+				setError(null);
+				return true;
+			} catch (reason) {
+				setError(reason instanceof Error ? reason.message : String(reason));
+				return false;
+			}
+		},
+		createUser: async (name) => {
+			try {
+				setError(null);
+				const user = await client.createUser(name);
+				setBootstrap(await client.bootstrap());
+				await client.closeSession();
+				localStorage.setItem("light.operator", user.name);
+				window.location.reload();
+			} catch (caught) {
+				setError(caught instanceof Error ? caught.message : String(caught));
+			}
+		},
+		changeUser: async (user) => {
+			localStorage.setItem("light.operator", user.name);
+			await client.closeSession();
+			window.location.reload();
+		},
+		updateControlDesk: async (desk) => {
+			try {
+				const updated = await client.updateControlDesk(desk);
+				setSession((current) =>
+					current ? { ...current, desk: updated } : current,
+				);
+				setBootstrap(await client.bootstrap());
+				setPlaybacks((current) =>
+					current ? { ...current, desk: updated } : current,
+				);
+				setError(null);
+			} catch (reason) {
+				setError(reason instanceof Error ? reason.message : String(reason));
+			}
+		},
+		selectControlDesk: (id) => {
+			localStorage.setItem("light.control-desk", id);
+			window.location.reload();
+		},
+		removeClient: async (deskId) => {
+			try {
+				await client.removeClient(deskId);
+				setBootstrap(await client.bootstrap());
+				setError(null);
+				return true;
+			} catch (reason) {
+				setError(reason instanceof Error ? reason.message : String(reason));
+				return false;
+			}
+		},
+	};
+}
