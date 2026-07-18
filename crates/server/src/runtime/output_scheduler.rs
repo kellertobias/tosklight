@@ -33,27 +33,27 @@ pub(super) struct Config {
 }
 
 pub(super) struct OutputScheduler {
-    output: Arc<NetworkOutput>,
-    sequences: SharedSequences,
-    control: Arc<Mutex<OutputControl>>,
-    task: JoinHandle<()>,
+    pub(super) output: Arc<NetworkOutput>,
+    pub(super) sequences: SharedSequences,
+    pub(super) control: Arc<Mutex<OutputControl>>,
+    pub(super) task: JoinHandle<()>,
 }
 
 struct SharedResources {
-    output: Arc<NetworkOutput>,
-    sequences: SharedSequences,
-    control: Arc<Mutex<OutputControl>>,
+    pub(super) output: Arc<NetworkOutput>,
+    pub(super) sequences: SharedSequences,
+    pub(super) control: Arc<Mutex<OutputControl>>,
 }
 
 #[derive(Clone)]
 struct Runtime {
-    engine: Arc<Engine>,
-    output: Arc<NetworkOutput>,
-    sequences: SharedSequences,
-    control: Arc<Mutex<OutputControl>>,
-    timecode: Arc<Mutex<TimecodeRouter>>,
-    events: EventBus,
-    cancellation: CancellationToken,
+    pub(super) engine: Arc<Engine>,
+    pub(super) output: Arc<NetworkOutput>,
+    pub(super) sequences: SharedSequences,
+    pub(super) control: Arc<Mutex<OutputControl>>,
+    pub(super) timecode: Arc<Mutex<TimecodeRouter>>,
+    pub(super) events: EventBus,
+    pub(super) cancellation: CancellationToken,
 }
 
 pub(super) async fn start(config: Config) -> anyhow::Result<OutputScheduler> {

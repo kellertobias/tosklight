@@ -140,8 +140,8 @@ async fn send_wire(socket: &mut WebSocket, message: wire::EventServerMessage) ->
 }
 
 pub(super) struct EventStream {
-    bus: application::EventBus,
-    subscription: application::EventSubscription,
+    pub(super) bus: application::EventBus,
+    pub(super) subscription: application::EventSubscription,
 }
 
 impl EventStream {

@@ -51,13 +51,13 @@ fn process_options() -> anyhow::Result<Option<startup_options::StartupOptions>> 
 }
 
 struct RuntimeResources {
-    output_health: Arc<std::sync::Mutex<OutputHealth>>,
-    output_rate: Arc<AtomicU16>,
-    timecode_router: Arc<Mutex<TimecodeRouter>>,
-    matter_bridge: Arc<matter::MatterBridgeAdapter>,
-    cancellation: CancellationToken,
-    scheduler: output_scheduler::OutputScheduler,
-    events: EventBus,
+    pub(super) output_health: Arc<std::sync::Mutex<OutputHealth>>,
+    pub(super) output_rate: Arc<AtomicU16>,
+    pub(super) timecode_router: Arc<Mutex<TimecodeRouter>>,
+    pub(super) matter_bridge: Arc<matter::MatterBridgeAdapter>,
+    pub(super) cancellation: CancellationToken,
+    pub(super) scheduler: output_scheduler::OutputScheduler,
+    pub(super) events: EventBus,
 }
 
 impl RuntimeResources {
@@ -98,12 +98,12 @@ impl RuntimeResources {
 }
 
 struct RunningServer {
-    bind: SocketAddr,
-    app: Router,
-    cancellation: CancellationToken,
-    scheduler: output_scheduler::OutputScheduler,
-    input_tasks: Vec<JoinHandle<()>>,
-    matter_sync: JoinHandle<()>,
+    pub(super) bind: SocketAddr,
+    pub(super) app: Router,
+    pub(super) cancellation: CancellationToken,
+    pub(super) scheduler: output_scheduler::OutputScheduler,
+    pub(super) input_tasks: Vec<JoinHandle<()>>,
+    pub(super) matter_sync: JoinHandle<()>,
 }
 
 impl RunningServer {

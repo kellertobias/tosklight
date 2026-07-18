@@ -1,0 +1,362 @@
+use super::*;
+
+pub(super) async fn list_objects(
+    State(state): State<AppState>,
+    Path((id, kind)): Path<(Uuid, String)>,
+) -> Result<Json<Vec<light_show::VersionedObject>>, ApiError> {
+    let entry = state
+        .desk
+        .lock()
+        .show(light_core::ShowId(id))
+        .map_err(ApiError::store)?
+        .ok_or_else(|| ApiError::not_found("show"))?;
+    let mut objects = ShowStore::open(entry.path)
+        .map_err(ApiError::store)?
+        .objects(&kind)
+        .map_err(ApiError::store)?;
+    if kind == "group" {
+        materialize_derived_group_memberships(&mut objects);
+    }
+    if kind == "preset" {
+        materialize_preset_addresses(&mut objects)?;
+    }
+    Ok(Json(objects))
+}
+pub(super) async fn get_object(
+    State(state): State<AppState>,
+    Path((id, kind, object_id)): Path<(Uuid, String, String)>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    let _session = authenticate(&state, &headers)?;
+    let entry = state
+        .desk
+        .lock()
+        .show(light_core::ShowId(id))
+        .map_err(ApiError::store)?
+        .ok_or_else(|| ApiError::not_found("show"))?;
+    let mut objects = ShowStore::open(entry.path)
+        .map_err(ApiError::store)?
+        .objects(&kind)
+        .map_err(ApiError::store)?;
+    if kind == "group" {
+        materialize_derived_group_memberships(&mut objects);
+    }
+    if kind == "preset" {
+        materialize_preset_addresses(&mut objects)?;
+    }
+    let object = objects
+        .into_iter()
+        .find(|object| object.id == object_id)
+        .ok_or_else(|| ApiError::not_found("show object"))?;
+    Ok((
+        [(header::ETAG, format!("\"{}\"", object.revision))],
+        Json(object),
+    )
+        .into_response())
+}
+
+pub(super) fn materialize_derived_group_memberships(objects: &mut [light_show::VersionedObject]) {
+    let groups = objects
+        .iter()
+        .filter_map(|object| {
+            serde_json::from_value::<light_programmer::GroupDefinition>(object.body.clone())
+                .ok()
+                .map(|mut group| {
+                    group.id = object.id.clone();
+                    (group.id.clone(), group)
+                })
+        })
+        .collect::<HashMap<_, _>>();
+    for object in objects {
+        let Ok(mut group) =
+            serde_json::from_value::<light_programmer::GroupDefinition>(object.body.clone())
+        else {
+            continue;
+        };
+        group.id = object.id.clone();
+        let Ok(fixtures) = light_programmer::resolve_group(&group.id, &groups) else {
+            continue;
+        };
+        group.fixtures = fixtures;
+        if let Ok(body) = serde_json::to_value(group) {
+            object.body = body;
+        }
+    }
+}
+pub(super) fn materialize_preset_addresses(
+    objects: &mut [light_show::VersionedObject],
+) -> Result<(), ApiError> {
+    for object in objects {
+        let (_, preset) = decode_preset_object(object).map_err(ApiError::bad_request)?;
+        object.body = serialize_preset_preserving_extensions(&object.body, &preset)
+            .map_err(|error| ApiError::internal(error.to_string()))?;
+    }
+    Ok(())
+}
+
+fn normalize_object_body(
+    state: &AppState,
+    kind: &str,
+    object_id: &str,
+    body: serde_json::Value,
+) -> Result<serde_json::Value, ApiError> {
+    let normalized = match kind {
+        "patched_fixture" => {
+            let mut fixture = serde_json::from_value::<light_fixture::PatchedFixture>(body)
+                .map_err(|error| ApiError::bad_request(error.to_string()))?;
+            light_fixture::migrate_patched_fixture_to_v2(&mut fixture)
+                .map_err(ApiError::fixture)?;
+            serde_json::to_value(fixture)
+        }
+        "cue_list" => {
+            let mut cue_list = serde_json::from_value::<light_playback::CueList>(body)
+                .map_err(|error| ApiError::bad_request(error.to_string()))?;
+            cue_list.migrate_legacy_chaser_xfade(&state.configuration.read().speed_groups_bpm);
+            cue_list.validate().map_err(ApiError::bad_request)?;
+            serde_json::to_value(cue_list)
+        }
+        "group" => {
+            let mut group = serde_json::from_value::<light_programmer::GroupDefinition>(body)
+                .map_err(|error| ApiError::bad_request(error.to_string()))?;
+            group.id = object_id.to_owned();
+            serde_json::to_value(group)
+        }
+        "preset" => {
+            let address =
+                light_programmer::PresetAddress::parse(object_id).map_err(ApiError::bad_request)?;
+            let mut preset = serde_json::from_value::<light_programmer::Preset>(body)
+                .map_err(|error| ApiError::bad_request(error.to_string()))?;
+            if preset.family != address.family {
+                return Err(ApiError::bad_request(
+                    "preset family must match its pool address",
+                ));
+            }
+            if preset.number != 0 && preset.number != address.number {
+                return Err(ApiError::bad_request(
+                    "preset number must match its pool-local address",
+                ));
+            }
+            preset.number = address.number;
+            serde_json::to_value(preset)
+        }
+        "playback" => {
+            let playback = serde_json::from_value::<light_playback::PlaybackDefinition>(body)
+                .map_err(|error| ApiError::bad_request(error.to_string()))?;
+            if object_id != playback.number.to_string() {
+                return Err(ApiError::bad_request(
+                    "playback object id must match its playback number",
+                ));
+            }
+            playback.validate().map_err(ApiError::bad_request)?;
+            serde_json::to_value(playback)
+        }
+        "playback_page" => {
+            let page = serde_json::from_value::<light_playback::PlaybackPage>(body)
+                .map_err(|error| ApiError::bad_request(error.to_string()))?;
+            if object_id != page.number.to_string() {
+                return Err(ApiError::bad_request(
+                    "playback page object id must match its page number",
+                ));
+            }
+            page.validate().map_err(ApiError::bad_request)?;
+            serde_json::to_value(page)
+        }
+        "route" => {
+            let mut route = serde_json::from_value::<light_output::OutputRoute>(body)
+                .map_err(|error| ApiError::bad_request(error.to_string()))?;
+            if route.delivery_mode.is_none() {
+                route.delivery_mode = Some(route.resolved_delivery_mode());
+            }
+            route.validate().map_err(ApiError::bad_request)?;
+            serde_json::to_value(route)
+        }
+        _ => return Ok(body),
+    };
+    normalized.map_err(|error| ApiError::internal(error.to_string()))
+}
+
+fn changed_active_route(
+    entry: &ShowEntry,
+    kind: &str,
+    object_id: &str,
+    body: &serde_json::Value,
+    active: bool,
+) -> Result<Option<light_output::OutputRoute>, ApiError> {
+    if !active || kind != "route" {
+        return Ok(None);
+    }
+    let previous = ShowStore::open(&entry.path)
+        .map_err(ApiError::store)?
+        .objects("route")
+        .map_err(ApiError::store)?
+        .into_iter()
+        .find(|object| object.id == object_id)
+        .and_then(|object| serde_json::from_value(object.body).ok());
+    let next = serde_json::from_value::<light_output::OutputRoute>(body.clone()).ok();
+    Ok(previous.filter(|old: &light_output::OutputRoute| {
+        old.enabled
+            && next.as_ref().is_none_or(|new| {
+                !new.enabled
+                    || old.protocol != new.protocol
+                    || old.destination_universe != new.destination_universe
+                    || old.resolved_delivery_mode() != new.resolved_delivery_mode()
+                    || old.destination != new.destination
+            })
+    }))
+}
+
+fn validate_object_candidate(
+    state: &AppState,
+    entry: &ShowEntry,
+    kind: &str,
+    object_id: &str,
+    body: &serde_json::Value,
+    active: bool,
+) -> Result<(), ApiError> {
+    if !active && !matches!(kind, "patched_fixture" | "playback" | "playback_page") {
+        return Ok(());
+    }
+    let candidate = load_engine_snapshot_with_override(entry, Some((kind, object_id, body)))
+        .map_err(ApiError::internal)?;
+    if active || matches!(kind, "playback" | "playback_page") {
+        state.engine.validate_snapshot_for_runtime(&candidate)
+    } else {
+        candidate.validate()
+    }
+    .map_err(|error| ApiError::bad_request(error.to_string()))
+}
+
+async fn activate_object_change(
+    state: &AppState,
+    entry: &ShowEntry,
+    kind: &str,
+    body: &serde_json::Value,
+    route: Option<light_output::OutputRoute>,
+) -> Result<(), ApiError> {
+    if let (Some(output), Some(route)) = (&state.network_output, route) {
+        let _ = output
+            .terminate_routes(&[route], &mut *state.output_sequences.lock().await)
+            .await;
+    }
+    state
+        .engine
+        .replace_snapshot(load_engine_snapshot(entry).map_err(ApiError::internal)?)
+        .map_err(|error| ApiError::internal(error.to_string()))?;
+    if kind == "patched_fixture"
+        && let Ok(fixture) = serde_json::from_value::<light_fixture::PatchedFixture>(body.clone())
+    {
+        state
+            .media_cache
+            .lock()
+            .clear_fixture(&fixture.fixture_id.0.to_string());
+        state.media_status.write().remove(&fixture.fixture_id);
+    }
+    Ok(())
+}
+pub(super) async fn put_object(
+    State(state): State<AppState>,
+    Path((id, kind, object_id)): Path<(Uuid, String, String)>,
+    headers: HeaderMap,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Response, ApiError> {
+    let _session = authenticate(&state, &headers)?;
+    let expected = parse_if_match(&headers)?;
+    let show_id = light_core::ShowId(id);
+    let entry = state
+        .desk
+        .lock()
+        .show(show_id)
+        .map_err(ApiError::store)?
+        .ok_or_else(|| ApiError::not_found("show"))?;
+    let body = normalize_object_body(&state, &kind, &object_id, body)?;
+    let active = state
+        .active_show
+        .read()
+        .as_ref()
+        .is_some_and(|active| active.id == show_id);
+    let route_to_terminate = changed_active_route(&entry, &kind, &object_id, &body, active)?;
+    validate_object_candidate(&state, &entry, &kind, &object_id, &body, active)?;
+    let store = ShowStore::open(&entry.path).map_err(ApiError::store)?;
+    backup_show(&state, &entry)?;
+    let revision = store
+        .put_object(&kind, &object_id, &body, expected)
+        .map_err(ApiError::store)?;
+    if active {
+        activate_object_change(&state, &entry, &kind, &body, route_to_terminate).await?;
+    }
+    emit(
+        &state,
+        "show_object_changed",
+        serde_json::json!({"show_id":show_id,"kind":kind,"id":object_id,"revision":revision}),
+    );
+    Ok((
+        [(header::ETAG, format!("\"{revision}\""))],
+        Json(serde_json::json!({"revision":revision})),
+    )
+        .into_response())
+}
+
+pub(super) async fn delete_object(
+    State(state): State<AppState>,
+    Path((id, kind, object_id)): Path<(Uuid, String, String)>,
+    headers: HeaderMap,
+) -> Result<StatusCode, ApiError> {
+    let _session = authenticate(&state, &headers)?;
+    if kind != "route" {
+        return Err(ApiError::bad_request(
+            "generic object deletion is currently limited to output routes",
+        ));
+    }
+    let expected = parse_if_match(&headers)?;
+    let show_id = light_core::ShowId(id);
+    let entry = state
+        .desk
+        .lock()
+        .show(show_id)
+        .map_err(ApiError::store)?
+        .ok_or_else(|| ApiError::not_found("show"))?;
+    let store = ShowStore::open(&entry.path).map_err(ApiError::store)?;
+    let object = store
+        .objects(&kind)
+        .map_err(ApiError::store)?
+        .into_iter()
+        .find(|object| object.id == object_id)
+        .ok_or_else(|| ApiError::not_found("show object"))?;
+    let active = state
+        .active_show
+        .read()
+        .as_ref()
+        .is_some_and(|active| active.id == show_id);
+    let route = active
+        .then(|| serde_json::from_value::<light_output::OutputRoute>(object.body.clone()))
+        .transpose()
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    backup_show(&state, &entry)?;
+    store
+        .mutate_objects_atomically(
+            &[],
+            &[AtomicObjectDelete {
+                kind: &kind,
+                id: &object_id,
+                expected,
+            }],
+        )
+        .map_err(ApiError::store)?;
+    if active {
+        if let (Some(output), Some(route)) = (&state.network_output, route) {
+            let _ = output
+                .terminate_routes(&[route], &mut *state.output_sequences.lock().await)
+                .await;
+        }
+        state
+            .engine
+            .replace_snapshot(load_engine_snapshot(&entry).map_err(ApiError::internal)?)
+            .map_err(|error| ApiError::internal(error.to_string()))?;
+    }
+    emit(
+        &state,
+        "show_object_changed",
+        serde_json::json!({"show_id":show_id,"kind":kind,"id":object_id,"revision":expected + 1,"deleted":true}),
+    );
+    Ok(StatusCode::NO_CONTENT)
+}

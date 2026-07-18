@@ -101,9 +101,9 @@ fn execute(
 }
 
 struct ServerPlaybackPorts<'a> {
-    state: &'a AppState,
-    session: Option<&'a Session>,
-    desk: Option<&'a ControlDesk>,
+    pub(super) state: &'a AppState,
+    pub(super) session: Option<&'a Session>,
+    pub(super) desk: Option<&'a ControlDesk>,
 }
 
 impl PlaybackPorts for ServerPlaybackPorts<'_> {
