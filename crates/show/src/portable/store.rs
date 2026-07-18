@@ -1,5 +1,6 @@
 use super::{
     PortableShowDocument, PortableShowObject, PortableShowObjectKey, PortableShowRevision,
+    profile_revision::load_fixture_profile_revisions,
 };
 use crate::{ShowStore, StoreError};
 use light_core::ShowId;
@@ -30,12 +31,14 @@ pub(crate) fn load_document(conn: &Connection) -> Result<PortableShowDocument, S
     let id = required_metadata(&metadata, "show_id")?;
     let name = required_metadata(&metadata, "name")?;
     let objects = load_objects(conn)?;
+    let profile_revisions = load_fixture_profile_revisions(conn)?;
     Ok(PortableShowDocument::new(
         ShowId(Uuid::parse_str(id)?),
         name.to_owned(),
         revision,
         metadata,
         objects,
+        profile_revisions,
     ))
 }
 

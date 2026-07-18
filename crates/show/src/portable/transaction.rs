@@ -1,6 +1,9 @@
 use super::{
-    PortableShowDocument, PortableShowObject, PortableShowObjectKey, PortableShowRevision,
-    bump_revision,
+    FixtureProfileRevision, FixtureProfileRevisionId, PortableShowDocument, PortableShowObject,
+    PortableShowObjectKey, PortableShowRevision, bump_revision,
+    profile_revision::{
+        FixtureProfileRevisionInsertStatus, insert_fixture_profile_revision_in, profile_conflict,
+    },
     repository::{delete_current, immediate_transaction, write_current},
     store::current_revision,
 };
@@ -15,6 +18,7 @@ pub struct PortableShowTransaction {
     expected: PortableShowRevision,
     writes: BTreeMap<PortableShowObjectKey, Value>,
     deletes: BTreeSet<PortableShowObjectKey>,
+    profile_revisions: BTreeMap<FixtureProfileRevisionId, FixtureProfileRevision>,
 }
 
 /// Targeted result of one committed portable-show transaction.
@@ -23,6 +27,7 @@ pub struct PortableShowCommit {
     revision: PortableShowRevision,
     written: Vec<PortableShowObject>,
     deleted: Vec<PortableShowObjectKey>,
+    profile_revisions: Vec<FixtureProfileRevision>,
 }
 
 impl PortableShowCommit {
@@ -38,6 +43,10 @@ impl PortableShowCommit {
         &self.deleted
     }
 
+    pub fn fixture_profile_revisions(&self) -> &[FixtureProfileRevision] {
+        &self.profile_revisions
+    }
+
     pub fn written_object(&self, kind: &str, id: &str) -> Option<&PortableShowObject> {
         self.written
             .iter()
@@ -51,6 +60,7 @@ impl PortableShowTransaction {
             expected,
             writes: BTreeMap::new(),
             deletes: BTreeSet::new(),
+            profile_revisions: BTreeMap::new(),
         }
     }
 
@@ -86,12 +96,27 @@ impl PortableShowTransaction {
         self
     }
 
+    pub fn put_fixture_profile_revision(
+        &mut self,
+        candidate: FixtureProfileRevision,
+    ) -> Result<&mut Self, StoreError> {
+        if let Some(existing) = self.profile_revisions.get(candidate.id()) {
+            if existing.digest() != candidate.digest() {
+                return Err(profile_conflict(existing, &candidate));
+            }
+            return Ok(self);
+        }
+        self.profile_revisions
+            .insert(candidate.id().clone(), candidate);
+        Ok(self)
+    }
+
     pub fn is_empty(&self) -> bool {
-        self.writes.is_empty() && self.deletes.is_empty()
+        self.writes.is_empty() && self.deletes.is_empty() && self.profile_revisions.is_empty()
     }
 
     pub fn change_count(&self) -> usize {
-        self.writes.len() + self.deletes.len()
+        self.writes.len() + self.deletes.len() + self.profile_revisions.len()
     }
 }
 
@@ -120,11 +145,12 @@ impl ShowStore {
 struct AppliedChanges {
     written: Vec<PortableShowObject>,
     deleted: Vec<PortableShowObjectKey>,
+    profile_revisions: Vec<FixtureProfileRevision>,
 }
 
 impl AppliedChanges {
     fn changed(&self) -> bool {
-        !self.written.is_empty() || !self.deleted.is_empty()
+        !self.written.is_empty() || !self.deleted.is_empty() || !self.profile_revisions.is_empty()
     }
 
     fn into_commit(self, revision: PortableShowRevision) -> PortableShowCommit {
@@ -132,6 +158,7 @@ impl AppliedChanges {
             revision,
             written: self.written,
             deleted: self.deleted,
+            profile_revisions: self.profile_revisions,
         }
     }
 }
@@ -156,10 +183,31 @@ fn apply_changes(
         expected: _,
         writes,
         deletes,
+        profile_revisions,
     } = changes;
+    let profile_revisions = apply_profile_revisions(tx, profile_revisions)?;
     let written = apply_writes(tx, writes)?;
     let deleted = apply_deletes(tx, deletes)?;
-    Ok(AppliedChanges { written, deleted })
+    Ok(AppliedChanges {
+        written,
+        deleted,
+        profile_revisions,
+    })
+}
+
+fn apply_profile_revisions(
+    tx: &rusqlite::Transaction<'_>,
+    profiles: BTreeMap<FixtureProfileRevisionId, FixtureProfileRevision>,
+) -> Result<Vec<FixtureProfileRevision>, StoreError> {
+    let mut inserted = Vec::with_capacity(profiles.len());
+    for profile in profiles.into_values() {
+        if insert_fixture_profile_revision_in(tx, &profile)?
+            == FixtureProfileRevisionInsertStatus::Inserted
+        {
+            inserted.push(profile);
+        }
+    }
+    Ok(inserted)
 }
 
 fn apply_writes(

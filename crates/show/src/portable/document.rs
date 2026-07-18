@@ -1,7 +1,9 @@
-use light_core::{Revision, ShowId};
+use light_core::{FixtureId, Revision, ShowId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{cmp::Ordering, collections::BTreeMap, fmt};
+
+use super::FixtureProfileRevision;
 
 /// Monotonic revision of the complete portable show document.
 #[derive(
@@ -106,6 +108,7 @@ pub struct PortableShowDocument {
     revision: PortableShowRevision,
     metadata: BTreeMap<String, String>,
     objects: Vec<PortableShowObject>,
+    fixture_profile_revisions: Vec<FixtureProfileRevision>,
 }
 
 impl PortableShowDocument {
@@ -115,14 +118,17 @@ impl PortableShowDocument {
         revision: PortableShowRevision,
         metadata: BTreeMap<String, String>,
         mut objects: Vec<PortableShowObject>,
+        mut fixture_profile_revisions: Vec<FixtureProfileRevision>,
     ) -> Self {
         objects.sort_by(|left, right| left.key.cmp(&right.key));
+        fixture_profile_revisions.sort_by(|left, right| left.id().cmp(right.id()));
         Self {
             id,
             name,
             revision,
             metadata,
             objects,
+            fixture_profile_revisions,
         }
     }
 
@@ -166,6 +172,29 @@ impl PortableShowDocument {
         self.object_index(kind, id)
             .ok()
             .map(|index| &mut self.objects[index])
+    }
+
+    pub fn fixture_profile_revisions(&self) -> &[FixtureProfileRevision] {
+        &self.fixture_profile_revisions
+    }
+
+    pub fn fixture_profile_revision(
+        &self,
+        profile_id: FixtureId,
+        revision: Revision,
+    ) -> Option<&FixtureProfileRevision> {
+        self.fixture_profile_revisions
+            .binary_search_by(|profile| {
+                profile
+                    .id()
+                    .profile_id()
+                    .0
+                    .as_bytes()
+                    .cmp(profile_id.0.as_bytes())
+                    .then_with(|| profile.id().revision().cmp(&revision))
+            })
+            .ok()
+            .map(|index| &self.fixture_profile_revisions[index])
     }
 
     fn object_index(&self, kind: &str, id: &str) -> Result<usize, usize> {

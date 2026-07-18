@@ -495,7 +495,7 @@ test("UPDATE-002 @restart › pre-Update desk settings migrate once and Cue, Pre
   await api.request("PUT", "/api/v1/configuration", configuration.configuration);
   await bench.stopServerGracefully(api.session!.token);
   await runSql(`${bench.dataDir}/desk.sqlite`, "UPDATE settings SET value=json_remove(value,'$.update_settings_by_desk') WHERE key='server_configuration'; UPDATE schema_info SET version=6;");
-  expect(await readSql(showEntry.path, "SELECT version FROM schema_info")).toBe("3");
+  expect(await readSql(showEntry.path, "SELECT version FROM schema_info")).toBe("4");
   expect(await readSql(showEntry.path, "SELECT count(*) FROM metadata WHERE key LIKE 'update_%'")).toBe("0");
 
   await bench.startServer();
@@ -588,7 +588,7 @@ test("UPDATE-002 @restart › pre-Update desk settings migrate once and Cue, Pre
   await bench.startServer();
   await api.login();
   expect(await api.request<any>("GET", "/api/v1/update/settings")).toEqual(migratedDefaults);
-  expect(await readSql(showEntry.path, "SELECT version FROM schema_info")).toBe("3");
+  expect(await readSql(showEntry.path, "SELECT version FROM schema_info")).toBe("4");
   const reopenedPreset = await object<any>(api, "preset", presetId);
   const repeated = await api.request<any>("POST", "/api/v1/update/apply", {
     target: { family: { type: "preset" }, object_id: presetId },

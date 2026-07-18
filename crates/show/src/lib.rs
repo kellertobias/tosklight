@@ -12,12 +12,16 @@ use uuid::Uuid;
 mod portable;
 
 pub use portable::{
-    PortableShowCommit, PortableShowDocument, PortableShowObject, PortableShowObjectKey,
-    PortableShowRevision, PortableShowTransaction,
+    FixtureProfileDigest, FixtureProfileRevision, FixtureProfileRevisionId,
+    FixtureProfileRevisionInsertResult, FixtureProfileRevisionInsertStatus,
+    LegacyInlineProfileSnapshot, PortableShowCommit, PortableShowDocument, PortableShowObject,
+    PortableShowObjectKey, PortableShowRevision, PortableShowTransaction,
+    canonical_fixture_profile_json, canonicalize_legacy_inline_profile_snapshots,
+    discover_legacy_inline_profile_snapshots,
 };
+use portable::{SHOW_SCHEMA_VERSION, migrate_show, validate_show_connection};
 
 const DESK_SCHEMA_VERSION: i64 = 9;
-const SHOW_SCHEMA_VERSION: i64 = 3;
 
 #[derive(Debug, Error)]
 pub enum StoreError {
@@ -38,6 +42,15 @@ pub enum StoreError {
     DocumentRevisionConflict {
         expected: PortableShowRevision,
         current: PortableShowRevision,
+    },
+    #[error(
+        "fixture profile {profile_id} revision {revision} conflicts: stored digest {existing_digest}, candidate digest {candidate_digest}"
+    )]
+    FixtureProfileRevisionConflict {
+        profile_id: String,
+        revision: Revision,
+        existing_digest: String,
+        candidate_digest: String,
     },
 }
 
@@ -1361,20 +1374,6 @@ fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
     Ok(())
 }
 
-fn migrate_show(conn: &mut Connection) -> Result<(), StoreError> {
-    let tx = conn.transaction()?;
-    tx.execute_batch("CREATE TABLE IF NOT EXISTS schema_info(version INTEGER NOT NULL); INSERT INTO schema_info(version) SELECT 0 WHERE NOT EXISTS(SELECT 1 FROM schema_info);
-      CREATE TABLE IF NOT EXISTS metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS embedded_fixtures(id TEXT NOT NULL,revision INTEGER NOT NULL,definition_json TEXT NOT NULL,PRIMARY KEY(id,revision));
-      CREATE TABLE IF NOT EXISTS objects(kind TEXT NOT NULL,id TEXT NOT NULL,body_json TEXT NOT NULL,revision INTEGER NOT NULL,updated_at TEXT NOT NULL,PRIMARY KEY(kind,id));
-      CREATE TABLE IF NOT EXISTS object_history(kind TEXT NOT NULL,id TEXT NOT NULL,revision INTEGER NOT NULL,body_json TEXT NOT NULL,created_at TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS cues(cue_list_id TEXT NOT NULL,cue_number REAL NOT NULL,values_json TEXT NOT NULL,cue_only_restore_json TEXT,revision INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(cue_list_id,cue_number));
-      CREATE INDEX IF NOT EXISTS objects_kind ON objects(kind);")?;
-    set_schema_version(&tx, SHOW_SCHEMA_VERSION)?;
-    tx.commit()?;
-    Ok(())
-}
-
 fn set_schema_version(tx: &Transaction<'_>, version: i64) -> Result<(), rusqlite::Error> {
     tx.execute("UPDATE schema_info SET version=?1", [version])?;
     Ok(())
@@ -1396,36 +1395,6 @@ fn add_column_if_missing(
     drop(rows);
     drop(statement);
     tx.execute_batch(&format!("ALTER TABLE {table} ADD COLUMN {definition}"))?;
-    Ok(())
-}
-
-fn validate_show_connection(conn: &Connection) -> Result<(), StoreError> {
-    let integrity: String = conn.query_row("PRAGMA quick_check", [], |row| row.get(0))?;
-    if integrity != "ok" {
-        return Err(StoreError::Invalid(format!(
-            "SQLite integrity check failed: {integrity}"
-        )));
-    }
-    let version: i64 = conn
-        .query_row("SELECT version FROM schema_info", [], |row| row.get(0))
-        .map_err(|_| StoreError::Invalid("not a Light show file: schema_info is missing".into()))?;
-    if version > SHOW_SCHEMA_VERSION {
-        return Err(StoreError::Invalid(format!(
-            "show schema {version} is newer than supported schema {SHOW_SCHEMA_VERSION}"
-        )));
-    }
-    for key in ["show_id", "name"] {
-        let exists: bool = conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM metadata WHERE key=?1)",
-            [key],
-            |row| row.get(0),
-        )?;
-        if !exists {
-            return Err(StoreError::Invalid(format!(
-                "show metadata is missing {key}"
-            )));
-        }
-    }
     Ok(())
 }
 
