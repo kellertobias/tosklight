@@ -742,13 +742,81 @@ pub struct ProgrammerSelection {
     pub revision: u64,
 }
 
+/// The desk-local default scope used when an operator starts a new command.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum CommandTarget {
+    #[default]
+    Fixture,
+    Group,
+}
+
+impl CommandTarget {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Fixture => "FIXTURE",
+            Self::Group => "GROUP",
+        }
+    }
+}
+
+impl TryFrom<&str> for CommandTarget {
+    type Error = ();
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "FIXTURE" => Ok(Self::Fixture),
+            "GROUP" => Ok(Self::Group),
+            _ => Err(()),
+        }
+    }
+}
+
+/// One authoritative command-line snapshot for a desk interaction context.
+///
+/// `text` retains the legacy raw representation, where an empty string means the visible default
+/// target. `visible_text` provides the normalized operator-facing value used by new adapters.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct CommandLineState {
+    pub text: String,
+    pub target: CommandTarget,
+    pub pristine: bool,
+    pub revision: u64,
+}
+
+impl Default for CommandLineState {
+    fn default() -> Self {
+        Self {
+            text: String::new(),
+            target: CommandTarget::Fixture,
+            pristine: true,
+            revision: 0,
+        }
+    }
+}
+
+impl CommandLineState {
+    pub fn visible_text(&self) -> &str {
+        if self.text.trim().is_empty() {
+            self.target.as_str()
+        } else {
+            &self.text
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum CommandLineReplaceError {
+    UnknownSession,
+    RevisionConflict { expected: u64, actual: u64 },
+}
+
 #[derive(Clone)]
 pub struct ProgrammerRegistry {
     states: Arc<RwLock<HashMap<SessionId, ProgrammerState>>>,
     sessions: Arc<RwLock<HashMap<SessionId, SessionId>>>,
     command_contexts: Arc<RwLock<HashMap<SessionId, SessionId>>>,
-    command_lines: Arc<RwLock<HashMap<SessionId, String>>>,
-    command_targets: Arc<RwLock<HashMap<SessionId, String>>>,
+    command_states: Arc<RwLock<HashMap<SessionId, CommandLineState>>>,
     selection_contexts: Arc<RwLock<HashMap<SessionId, SelectionContext>>>,
     selection_revision: Arc<AtomicU64>,
     programmer_order: Arc<AtomicU64>,
@@ -765,8 +833,7 @@ impl ProgrammerRegistry {
             states: Arc::default(),
             sessions: Arc::default(),
             command_contexts: Arc::default(),
-            command_lines: Arc::default(),
-            command_targets: Arc::default(),
+            command_states: Arc::default(),
             selection_contexts: Arc::default(),
             selection_revision: Arc::default(),
             programmer_order: Arc::default(),
@@ -806,8 +873,7 @@ impl ProgrammerRegistry {
         self.states.write().clear();
         self.sessions.write().clear();
         self.command_contexts.write().clear();
-        self.command_lines.write().clear();
-        self.command_targets.write().clear();
+        self.command_states.write().clear();
         self.selection_contexts.write().clear();
         self.selection_revision.store(0, Ordering::Relaxed);
         self.programmer_order.store(0, Ordering::Relaxed);
@@ -834,14 +900,10 @@ impl ProgrammerRegistry {
                 .entry(session_id)
                 .or_insert(session_id);
             let command_context = self.command_context(session_id);
-            self.command_lines
+            self.command_states
                 .write()
                 .entry(command_context)
                 .or_default();
-            self.command_targets
-                .write()
-                .entry(command_context)
-                .or_insert_with(|| "FIXTURE".into());
             self.selection_contexts
                 .write()
                 .entry(command_context)
@@ -853,10 +915,10 @@ impl ProgrammerRegistry {
             let mut projected = state.clone();
             projected.session_id = session_id;
             projected.command_line = self
-                .command_lines
+                .command_states
                 .read()
                 .get(&command_context)
-                .cloned()
+                .map(|command| command.text.clone())
                 .unwrap_or_default();
             self.project_selection(&mut projected, command_context);
             return projected;
@@ -894,14 +956,10 @@ impl ProgrammerRegistry {
             .entry(session_id)
             .or_insert(session_id);
         let command_context = self.command_context(session_id);
-        self.command_lines
+        self.command_states
             .write()
             .entry(command_context)
             .or_default();
-        self.command_targets
-            .write()
-            .entry(command_context)
-            .or_insert_with(|| "FIXTURE".into());
         self.selection_contexts
             .write()
             .entry(command_context)
@@ -941,15 +999,22 @@ impl ProgrammerRegistry {
             .write()
             .entry(session_id)
             .or_insert(session_id);
-        self.command_lines
-            .write()
-            .insert(session_id, state.command_line.clone());
-        self.command_targets.write().insert(
+        let target = if state.command_line.trim().eq_ignore_ascii_case("GROUP") {
+            CommandTarget::Group
+        } else {
+            CommandTarget::Fixture
+        };
+        self.command_states.write().insert(
             session_id,
-            if state.command_line.trim().eq_ignore_ascii_case("GROUP") {
-                "GROUP".into()
-            } else {
-                "FIXTURE".into()
+            CommandLineState {
+                pristine: state.command_line.trim().is_empty()
+                    || state
+                        .command_line
+                        .trim()
+                        .eq_ignore_ascii_case(target.as_str()),
+                text: state.command_line.clone(),
+                target,
+                revision: 0,
             },
         );
         let existing = self
@@ -1024,18 +1089,12 @@ impl ProgrammerRegistry {
             return true;
         }
 
-        let previous_line = self
-            .command_lines
+        let previous_command = self
+            .command_states
             .read()
             .get(&previous)
             .cloned()
             .unwrap_or_default();
-        let previous_target = self
-            .command_targets
-            .read()
-            .get(&previous)
-            .cloned()
-            .unwrap_or_else(|| "FIXTURE".into());
         let previous_selection = self
             .selection_contexts
             .read()
@@ -1043,28 +1102,18 @@ impl ProgrammerRegistry {
             .cloned()
             .unwrap_or_default();
         let promote_previous = self
-            .command_lines
+            .command_states
             .read()
             .get(&context)
-            .is_none_or(|current| current.is_empty() && !previous_line.is_empty());
+            .is_none_or(|current| current.text.is_empty() && !previous_command.text.is_empty());
 
         self.command_contexts.write().insert(session, context);
         {
-            let mut command_lines = self.command_lines.write();
+            let mut command_states = self.command_states.write();
             if promote_previous {
-                command_lines.insert(context, previous_line);
+                command_states.insert(context, previous_command);
             } else {
-                command_lines.entry(context).or_default();
-            }
-        }
-        {
-            let mut command_targets = self.command_targets.write();
-            if promote_previous {
-                command_targets.insert(context, previous_target);
-            } else {
-                command_targets
-                    .entry(context)
-                    .or_insert_with(|| "FIXTURE".into());
+                command_states.entry(context).or_default();
             }
         }
         {
@@ -1081,8 +1130,7 @@ impl ProgrammerRegistry {
                 .values()
                 .any(|candidate| *candidate == previous)
         {
-            self.command_lines.write().remove(&previous);
-            self.command_targets.write().remove(&previous);
+            self.command_states.write().remove(&previous);
             self.selection_contexts.write().remove(&previous);
         }
         true
@@ -1750,34 +1798,105 @@ impl ProgrammerRegistry {
         true
     }
     pub fn set_command_line(&self, session: SessionId, command_line: String) -> bool {
+        self.update_command_line(session, |current| {
+            let pristine = command_line.trim().is_empty()
+                || command_line
+                    .trim()
+                    .eq_ignore_ascii_case(current.target.as_str());
+            (command_line, current.target, pristine)
+        })
+        .is_some()
+    }
+
+    pub fn command_line_state(&self, session: SessionId) -> Option<CommandLineState> {
         if !self.sessions.read().contains_key(&session) {
-            return false;
+            return None;
         }
-        self.command_lines
-            .write()
-            .insert(self.command_context(session), command_line);
+        Some(
+            self.command_states
+                .read()
+                .get(&self.command_context(session))
+                .cloned()
+                .unwrap_or_default(),
+        )
+    }
+
+    pub fn replace_command_line(
+        &self,
+        session: SessionId,
+        expected_revision: u64,
+        text: String,
+    ) -> Result<CommandLineState, CommandLineReplaceError> {
+        if !self.sessions.read().contains_key(&session) {
+            return Err(CommandLineReplaceError::UnknownSession);
+        }
+        let context = self.command_context(session);
+        let mut commands = self.command_states.write();
+        let current = commands.entry(context).or_default();
+        if current.revision != expected_revision {
+            return Err(CommandLineReplaceError::RevisionConflict {
+                expected: expected_revision,
+                actual: current.revision,
+            });
+        }
+        let pristine =
+            text.trim().is_empty() || text.trim().eq_ignore_ascii_case(current.target.as_str());
+        if current.text != text || current.pristine != pristine {
+            current.text = text;
+            current.pristine = pristine;
+            current.revision += 1;
+        }
+        let result = current.clone();
+        drop(commands);
+        self.touch(session);
+        Ok(result)
+    }
+
+    /// Atomically derive a new command-line state from the current desk-local snapshot.
+    pub fn update_command_line<F>(&self, session: SessionId, update: F) -> Option<CommandLineState>
+    where
+        F: FnOnce(&CommandLineState) -> (String, CommandTarget, bool),
+    {
+        if !self.sessions.read().contains_key(&session) {
+            return None;
+        }
+        let context = self.command_context(session);
+        let mut commands = self.command_states.write();
+        let current = commands.entry(context).or_default();
+        let (text, target, pristine) = update(current);
+        if current.text != text || current.target != target || current.pristine != pristine {
+            current.text = text;
+            current.target = target;
+            current.pristine = pristine;
+            current.revision += 1;
+        }
+        let result = current.clone();
+        drop(commands);
+        self.touch(session);
+        Some(result)
+    }
+
+    fn touch(&self, session: SessionId) {
         if let Some(state) = self.states.write().get_mut(&self.key(session)) {
             state.last_activity = self.clock.now();
         }
-        true
     }
+
     pub fn command_target(&self, session: SessionId) -> String {
-        self.command_targets
-            .read()
-            .get(&self.command_context(session))
-            .cloned()
-            .unwrap_or_else(|| "FIXTURE".into())
+        self.command_line_state(session)
+            .map(|state| state.target.as_str().to_owned())
+            .unwrap_or_else(|| CommandTarget::Fixture.as_str().to_owned())
     }
     pub fn set_command_target(&self, session: SessionId, target: String) -> bool {
-        if !self.sessions.read().contains_key(&session)
-            || !matches!(target.as_str(), "FIXTURE" | "GROUP")
-        {
+        let Ok(target) = CommandTarget::try_from(target.as_str()) else {
             return false;
-        }
-        self.command_targets
-            .write()
-            .insert(self.command_context(session), target);
-        true
+        };
+        self.update_command_line(session, |current| {
+            let pristine = current.text.trim().is_empty()
+                || current.text.trim().eq_ignore_ascii_case(target.as_str());
+            (current.text.clone(), target, pristine)
+        })
+        .is_some()
     }
     pub fn set_modes(
         &self,
@@ -1904,7 +2023,7 @@ impl ProgrammerRegistry {
     pub fn active_for_sessions(&self) -> Vec<ProgrammerState> {
         let states = self.states.read();
         let command_contexts = self.command_contexts.read();
-        let command_lines = self.command_lines.read();
+        let command_states = self.command_states.read();
         let selection_contexts = self.selection_contexts.read();
         self.sessions
             .read()
@@ -1913,9 +2032,9 @@ impl ProgrammerRegistry {
                 let mut state = states.get(key)?.clone();
                 state.session_id = *session;
                 let command_context = command_contexts.get(session).unwrap_or(session);
-                state.command_line = command_lines
+                state.command_line = command_states
                     .get(command_context)
-                    .cloned()
+                    .map(|command| command.text.clone())
                     .unwrap_or_default();
                 if let Some(selection) = selection_contexts.get(command_context) {
                     state.selected = selection.selected.clone();
@@ -1933,10 +2052,10 @@ impl ProgrammerRegistry {
         state.session_id = session;
         let command_context = self.command_context(session);
         state.command_line = self
-            .command_lines
+            .command_states
             .read()
             .get(&command_context)
-            .cloned()
+            .map(|command| command.text.clone())
             .unwrap_or_default();
         self.project_selection(&mut state, command_context);
         Some(state)
@@ -2124,6 +2243,90 @@ mod tests {
 
         assert!(registry.set_command_line(other_desk_session, "FIXTURE 9".into()));
         assert_eq!(registry.get(first).unwrap().command_line, "GROUP 1 +");
+    }
+
+    #[test]
+    fn command_line_revisions_are_shared_by_desk_and_reject_stale_replacements() {
+        let registry = ProgrammerRegistry::default();
+        let user = UserId::new();
+        let first = SessionId::new();
+        let second = SessionId::new();
+        let other = SessionId::new();
+        let desk = SessionId::new();
+        let other_desk = SessionId::new();
+        registry.start(first, user);
+        registry.start(second, user);
+        registry.start(other, user);
+        assert!(registry.attach_command_context(first, desk));
+        assert!(registry.attach_command_context(second, desk));
+        assert!(registry.attach_command_context(other, other_desk));
+
+        let initial = registry.command_line_state(first).unwrap();
+        assert_eq!(initial.visible_text(), "FIXTURE");
+        assert_eq!(initial.target, CommandTarget::Fixture);
+        assert!(initial.pristine);
+        assert_eq!(initial.revision, 0);
+
+        let changed = registry
+            .replace_command_line(first, 0, "GROUP 1 +".into())
+            .unwrap();
+        assert_eq!(changed.revision, 1);
+        assert_eq!(registry.command_line_state(second).unwrap(), changed);
+        assert_eq!(registry.command_line_state(other).unwrap().revision, 0);
+
+        assert_eq!(
+            registry.replace_command_line(second, 0, "GROUP 2".into()),
+            Err(CommandLineReplaceError::RevisionConflict {
+                expected: 0,
+                actual: 1,
+            })
+        );
+        assert_eq!(
+            registry.command_line_state(first).unwrap().text,
+            "GROUP 1 +"
+        );
+
+        let edited = registry
+            .update_command_line(second, |current| {
+                (format!("{} F2", current.text), current.target, false)
+            })
+            .unwrap();
+        assert_eq!(edited.text, "GROUP 1 + F2");
+        assert_eq!(edited.revision, 2);
+    }
+
+    #[test]
+    fn concurrent_command_line_replacements_have_one_cas_winner() {
+        let registry = ProgrammerRegistry::default();
+        let session = SessionId::new();
+        registry.start(session, UserId::new());
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(3));
+        let mut workers = Vec::new();
+        for command in ["FIXTURE 1", "GROUP 1"] {
+            let registry = registry.clone();
+            let barrier = std::sync::Arc::clone(&barrier);
+            workers.push(std::thread::spawn(move || {
+                barrier.wait();
+                registry.replace_command_line(session, 0, command.into())
+            }));
+        }
+        barrier.wait();
+        let results = workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+        assert_eq!(
+            results
+                .iter()
+                .filter(|result| matches!(
+                    result,
+                    Err(CommandLineReplaceError::RevisionConflict { .. })
+                ))
+                .count(),
+            1
+        );
+        assert_eq!(registry.command_line_state(session).unwrap().revision, 1);
     }
 
     #[test]
