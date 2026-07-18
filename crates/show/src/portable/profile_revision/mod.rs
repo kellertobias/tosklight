@@ -1,4 +1,5 @@
 mod legacy;
+mod migration;
 mod model;
 mod repository;
 
@@ -12,6 +13,8 @@ pub use model::{
 };
 pub use repository::{FixtureProfileRevisionInsertResult, FixtureProfileRevisionInsertStatus};
 
+pub(crate) use legacy::visit_legacy_inline_profile_snapshots;
+pub(crate) use migration::materialize_legacy_fixture_profile_revisions;
 pub(crate) use model::profile_conflict;
 pub(crate) use repository::{insert_fixture_profile_revision_in, load_fixture_profile_revisions};
 

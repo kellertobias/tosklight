@@ -1,14 +1,23 @@
+use super::profile_revision::materialize_legacy_fixture_profile_revisions;
 use crate::{StoreError, set_schema_version};
-use rusqlite::Connection;
+use rusqlite::{Connection, TransactionBehavior};
 
 pub(crate) const SHOW_SCHEMA_VERSION: i64 = 4;
 
 pub(crate) fn migrate_show(conn: &mut Connection) -> Result<(), StoreError> {
-    let tx = conn.transaction()?;
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     tx.execute_batch(SHOW_SCHEMA)?;
+    if schema_version(&tx)? < SHOW_SCHEMA_VERSION {
+        materialize_legacy_fixture_profile_revisions(&tx)?;
+    }
     set_schema_version(&tx, SHOW_SCHEMA_VERSION)?;
     tx.commit()?;
     Ok(())
+}
+
+fn schema_version(conn: &Connection) -> Result<i64, StoreError> {
+    conn.query_row("SELECT version FROM schema_info", [], |row| row.get(0))
+        .map_err(Into::into)
 }
 
 pub(crate) fn validate_show_connection(conn: &Connection) -> Result<(), StoreError> {
