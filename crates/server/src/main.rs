@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod command_http;
 mod cue_transfer;
 mod default_show;
 mod file_manager;
@@ -99,6 +100,7 @@ struct AppState {
     events: broadcast::Sender<Event>,
     audit_events: Arc<Mutex<VecDeque<Event>>>,
     command_history: Arc<Mutex<HashMap<Uuid, VecDeque<CommandHistoryEntry>>>>,
+    command_http: command_http::CommandHttpState,
     event_revision: Arc<AtomicU64>,
     desk_token: Option<Arc<str>>,
     shutdown: CancellationToken,
@@ -305,6 +307,8 @@ struct CommandHistoryEntry {
     status: String,
     feedback: String,
     source: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    request_id: Option<String>,
     at: String,
 }
 #[derive(Deserialize)]
@@ -1191,6 +1195,7 @@ async fn main() -> anyhow::Result<()> {
         events,
         audit_events: Arc::new(Mutex::new(VecDeque::with_capacity(2048))),
         command_history: Arc::new(Mutex::new(HashMap::new())),
+        command_http: command_http::CommandHttpState::default(),
         event_revision: Arc::new(AtomicU64::new(0)),
         desk_token: env::var("LIGHT_DESK_TOKEN")
             .ok()
@@ -1413,6 +1418,7 @@ fn router(state: AppState) -> Router {
         .route("/api/v1/programmers", get(list_programmers))
         .route("/api/v1/programmers/{id}/clear", post(clear_programmer))
         .route("/api/v1/programmer/set", post(set_programmer))
+        .merge(command_http::router())
         .route(
             "/api/v1/update/settings",
             get(update_settings).put(put_update_settings),
@@ -1966,6 +1972,8 @@ async fn update_desk_lock(
     Json(input): Json<DeskLockUpdate>,
 ) -> Result<Json<DeskLockResponse>, ApiError> {
     let session = authenticate(&state, &headers)?;
+    let operation_lock = state.command_http.operation_lock(session.desk.id);
+    let _operation = operation_lock.lock();
     let mut configuration = read_desk_lock(&state, session.desk.id);
     if configuration.locked {
         return Err(ApiError::conflict(
@@ -2017,6 +2025,8 @@ async fn lock_desk(
     headers: HeaderMap,
 ) -> Result<Json<DeskLockResponse>, ApiError> {
     let session = authenticate(&state, &headers)?;
+    let operation_lock = state.command_http.operation_lock(session.desk.id);
+    let _operation = operation_lock.lock();
     let mut configuration = read_desk_lock(&state, session.desk.id);
     configuration.locked = true;
     write_desk_lock(&state, session.desk.id, &configuration)?;
@@ -2034,6 +2044,8 @@ async fn unlock_desk(
     Json(input): Json<DeskUnlockInput>,
 ) -> Result<Json<DeskLockResponse>, ApiError> {
     let session = authenticate(&state, &headers)?;
+    let operation_lock = state.command_http.operation_lock(session.desk.id);
+    let _operation = operation_lock.lock();
     let mut configuration = read_desk_lock(&state, session.desk.id);
     if configuration.unlock_mode == "pin" {
         let Some(pin) = input.pin else {
@@ -2063,6 +2075,8 @@ async fn force_unlock_desk(
     headers: HeaderMap,
 ) -> Result<Json<DeskLockResponse>, ApiError> {
     let session = authenticate(&state, &headers)?;
+    let operation_lock = state.command_http.operation_lock(session.desk.id);
+    let _operation = operation_lock.lock();
     let supplied = headers
         .get("x-light-admin-recovery")
         .and_then(|value| value.to_str().ok());
@@ -5736,10 +5750,22 @@ fn enforce_virtual_playback_exclusions(
     activated_number: u16,
 ) -> Vec<u16> {
     let zones = virtual_playback_zone_numbers(state, desk_id);
+    let mut playback = state.engine.playback().write();
+    enforce_virtual_playback_exclusions_on(&mut playback, &zones, activated_number)
+}
+
+/// Apply one desk's virtual-playback exclusion zones to an arbitrary playback engine.
+///
+/// Keeping this operation independent from [`AppState`] lets Preload validate a complete batch
+/// against an isolated engine before publishing any live playback state.
+fn enforce_virtual_playback_exclusions_on(
+    playback: &mut light_playback::PlaybackEngine,
+    zones: &[Vec<u16>],
+    activated_number: u16,
+) -> Vec<u16> {
     if !zones.iter().any(|zone| zone.contains(&activated_number)) {
         return Vec::new();
     }
-    let mut playback = state.engine.playback().write();
     if !playback
         .runtime()
         .iter()
@@ -8186,7 +8212,125 @@ fn lock_live_input(state: &AppState, session: &Session, key: String) -> Result<(
     Ok(())
 }
 
+#[derive(Debug)]
+struct StagedPreloadPlaybackAction {
+    playback_number: u16,
+    action: String,
+    surface: String,
+    released_playbacks: Vec<u16>,
+}
+
+fn apply_preload_playback_verb(
+    playback: &mut light_playback::PlaybackEngine,
+    number: u16,
+    action: &str,
+) -> Result<(), String> {
+    match action {
+        "toggle" => playback.toggle(number).map(|_| ()),
+        "go" => playback.go_playback(number).map(|_| ()),
+        "go-minus" => playback.back_playback(number).map(|_| ()),
+        "off" => playback.off(number).map(|_| ()),
+        "on" => playback.on(number).map(|_| ()),
+        "temp-on" => playback.set_temp_button(number, true),
+        "temp-off" => playback.set_temp_button(number, false),
+        _ => Err(format!("unsupported queued Preload action {action}")),
+    }
+}
+
+/// Build one complete Preload playback result without changing the live engine. A rejected verb,
+/// stale definition, or timing error therefore discards only this clone, even when it follows
+/// actions that would otherwise have succeeded.
+fn stage_preload_playback_batch(
+    current: &light_playback::PlaybackEngine,
+    definitions: &[(
+        light_programmer::PreloadPlaybackAction,
+        light_playback::PlaybackDefinition,
+    )],
+    committed_at: chrono::DateTime<chrono::Utc>,
+    programmer_fade_millis: u64,
+    exclusion_zones: &[Vec<u16>],
+) -> Result<
+    (
+        light_playback::PlaybackEngine,
+        Vec<StagedPreloadPlaybackAction>,
+    ),
+    String,
+> {
+    let mut staged = current.clone();
+    let mut actions = Vec::with_capacity(definitions.len());
+    for (pending, definition) in definitions {
+        let previous = staged
+            .runtime()
+            .into_iter()
+            .find(|playback| playback.playback_number == Some(definition.number))
+            .map(|playback| (playback.enabled, playback.master));
+        let was_enabled = previous.is_some_and(|(enabled, _)| enabled);
+
+        apply_preload_playback_verb(&mut staged, definition.number, &pending.action)?;
+        let now_enabled = staged.runtime().into_iter().any(|playback| {
+            playback.playback_number == Some(definition.number) && playback.enabled
+        });
+        let released_playbacks = if !was_enabled && now_enabled {
+            enforce_virtual_playback_exclusions_on(&mut staged, exclusion_zones, definition.number)
+        } else {
+            Vec::new()
+        };
+        staged.apply_preload_timing(
+            definition.number,
+            &pending.action,
+            committed_at,
+            programmer_fade_millis,
+            previous,
+        )?;
+        actions.push(StagedPreloadPlaybackAction {
+            playback_number: definition.number,
+            action: pending.action.clone(),
+            surface: pending.surface.clone(),
+            released_playbacks,
+        });
+    }
+    Ok((staged, actions))
+}
+
+fn record_preload_persistence_failure(
+    state: &AppState,
+    session: &Session,
+    domain: &str,
+    error: ApiError,
+) -> String {
+    let warning = format!(
+        "Preload committed but {domain} persistence failed: {}",
+        error.message
+    );
+    emit(
+        state,
+        "preload_persistence_failed",
+        serde_json::json!({
+            "desk_id":session.desk.id,
+            "session_id":session.id,
+            "domain":domain,
+            "source":"preload",
+            "accepted":true,
+            "error":error.message,
+        }),
+    );
+    warning
+}
+
 fn commit_preload(state: &AppState, session: &Session) -> Result<serde_json::Value, String> {
+    // Use the same lock ordering as normal playback actions: playback serialization first, then
+    // the user's reentrant Programmer transaction gate. This keeps queued actions stable while
+    // the candidate playback engine is validated.
+    let _serialized = state.playback_action_lock.lock();
+    state
+        .programmers
+        .with_transaction(session.id, || commit_preload_transaction(state, session))
+}
+
+fn commit_preload_transaction(
+    state: &AppState,
+    session: &Session,
+) -> Result<serde_json::Value, String> {
     let pending = state
         .programmers
         .get(session.id)
@@ -8208,67 +8352,101 @@ fn commit_preload(state: &AppState, session: &Session) -> Result<serde_json::Val
 
     let committed_at = state.programmers.clock().now();
     let programmer_fade_millis = state.configuration.read().programmer_fade_millis;
+    let exclusion_zones = virtual_playback_zone_numbers(state, session.desk.id);
+    let playback = state.engine.playback();
+    let mut live_playback = playback.write();
+    let (staged_playback, staged_actions) = stage_preload_playback_batch(
+        &live_playback,
+        &definitions,
+        committed_at,
+        programmer_fade_millis,
+        &exclusion_zones,
+    )?;
+
+    // Nothing live has changed before this point. The Programmer transaction restores its exact
+    // checkpoint if the queue somehow differs despite holding the per-user mutation gate.
     state
         .programmers
         .activate_preload_at(session.id, committed_at);
     let drained = state.programmers.take_preload_playback_actions(session.id);
-    debug_assert_eq!(
-        drained, pending,
-        "the validated Preload queue must be the queue executed at GO"
-    );
-
-    let mut executed = Vec::with_capacity(definitions.len());
-    for (pending, definition) in definitions {
-        let previous = state
-            .engine
-            .playback()
-            .read()
-            .runtime()
-            .into_iter()
-            .find(|playback| playback.playback_number == Some(definition.number))
-            .map(|playback| (playback.enabled, playback.master));
-        let input = PoolPlaybackInput {
-            surface: Some(pending.surface.clone()),
-            ..PoolPlaybackInput::default()
-        };
-        dispatch_playback_action(
-            state,
-            Some(session),
-            Some(&session.desk),
-            &definition,
-            &pending.action,
-            &input,
-            "preload",
-        )
-        .map_err(|error| error.message)?;
-        state
-            .engine
-            .playback()
-            .write()
-            .apply_preload_timing(
-                definition.number,
-                &pending.action,
-                committed_at,
-                programmer_fade_millis,
-                previous,
-            )
-            .map_err(|error| error.to_string())?;
-        executed.push(serde_json::json!({
-            "playback_number":definition.number,
-            "action":pending.action,
-            "surface":pending.surface,
-            "started_at":committed_at,
-            "fallback_millis":programmer_fade_millis
-        }));
+    if drained != pending {
+        return Err("the Preload queue changed while GO was being prepared".into());
     }
 
-    persist_programmer(state, session).map_err(|error| error.message)?;
-    let payload = serde_json::json!({
+    // Publishing the already validated clone is the only live playback mutation and cannot fail.
+    // Engine resolution acquires Playback before reading Programmer sources, so retaining this
+    // write guard across Programmer activation also exposes the combined result at one render
+    // boundary instead of allowing a torn frame between the two domains.
+    *live_playback = staged_playback;
+    drop(live_playback);
+
+    for action in &staged_actions {
+        if !action.released_playbacks.is_empty() {
+            emit(
+                state,
+                "playback_exclusion_applied",
+                serde_json::json!({
+                    "desk_id":session.desk.id,
+                    "activated_playback":action.playback_number,
+                    "released_playbacks":action.released_playbacks,
+                    "source":"preload",
+                }),
+            );
+        }
+    }
+    let executed = staged_actions
+        .into_iter()
+        .map(|action| {
+            serde_json::json!({
+                "playback_number":action.playback_number,
+                "action":action.action,
+                "surface":action.surface,
+                "started_at":committed_at,
+                "fallback_millis":programmer_fade_millis
+            })
+        })
+        .collect::<Vec<_>>();
+
+    // Persistence is deliberately downstream of the commit point. A disk/store error is an
+    // accepted operation with an explicit warning and audit event, never a false rejection after
+    // the live Programmer and Playback states have changed.
+    let mut warnings = Vec::new();
+    if let Err(error) = persist_programmer(state, session) {
+        warnings.push(record_preload_persistence_failure(
+            state,
+            session,
+            "programmer",
+            error,
+        ));
+    }
+    if !executed.is_empty() {
+        if let Err(error) = persist_active_playbacks(state) {
+            warnings.push(record_preload_persistence_failure(
+                state,
+                session,
+                "active playbacks",
+                error,
+            ));
+        }
+        if let Err(error) = persist_output_runtime(state) {
+            warnings.push(record_preload_persistence_failure(
+                state,
+                session,
+                "output runtime",
+                error,
+            ));
+        }
+    }
+
+    let mut payload = serde_json::json!({
         "session_id":session.id,
         "application_timestamp":committed_at,
         "programmer_fade_millis":programmer_fade_millis,
         "playback_actions":executed
     });
+    if !warnings.is_empty() {
+        payload["warnings"] = serde_json::json!(warnings);
+    }
     emit(state, "preload_committed", payload.clone());
     emit(
         state,
@@ -8282,13 +8460,17 @@ fn commit_preload(state: &AppState, session: &Session) -> Result<serde_json::Val
             serde_json::json!({"session_id":session.id,"source":"preload","application_timestamp":committed_at,"actions":executed}),
         );
     }
-    Ok(serde_json::json!({
+    let mut response = serde_json::json!({
         "active":true,
         "application_timestamp":committed_at,
         "programmer_fade_millis":programmer_fade_millis,
         "playback_actions":payload["playback_actions"],
         "programmer":state.programmers.get(session.id)
-    }))
+    });
+    if let Some(warnings) = payload.get("warnings") {
+        response["warnings"] = warnings.clone();
+    }
+    Ok(response)
 }
 
 fn validate_programmer_attribute_value(value: &light_core::AttributeValue) -> Result<(), String> {
@@ -8587,10 +8769,6 @@ fn generate_profile_presets(
 
 fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) -> WsResponse {
     let revision = state.engine.snapshot().revision;
-    let selection_revision_before = state
-        .programmers
-        .selection(session.id)
-        .map(|selection| selection.revision);
     let fail = |message: String| WsResponse {
         protocol_version: 1,
         request_id: command.request_id.clone(),
@@ -8644,6 +8822,13 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
             | "playback.release"
             | "preset.apply"
     );
+    let command_operation =
+        live_absolute.then(|| state.command_http.operation_lock(session.desk.id));
+    let _command_operation_guard = command_operation.as_ref().map(|lock| lock.lock());
+    let selection_revision_before = state
+        .programmers
+        .selection(session.id)
+        .map(|selection| selection.revision);
     if !live_absolute
         && command
             .expected_revision
@@ -9301,18 +9486,31 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
             }
             let input: Input =
                 serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
-            if let Some(pending_choice) = pending_cue_transfer_choice(&input.value) {
-                return Ok(serde_json::json!({
-                    "applied":0,
-                    "pending_choice":pending_choice,
+            match command_http::execute_existing_command(
+                state,
+                session,
+                &input.value,
+                "software",
+                Some(&command.request_id),
+                command_http::ExistingCommandPolicy::Compatibility,
+            ) {
+                command_http::ExistingCommandOutcome::ChoiceRequired { pending_choice } => {
+                    Ok(serde_json::json!({
+                        "applied":0,
+                        "pending_choice":pending_choice,
+                        "programmer":state.programmers.get(session.id)
+                    }))
+                }
+                command_http::ExistingCommandOutcome::Accepted {
+                    applied,
+                    persistence_warning,
+                } => Ok(serde_json::json!({
+                    "applied":applied,
+                    "persistence_warning":persistence_warning,
                     "programmer":state.programmers.get(session.id)
-                }));
+                })),
+                command_http::ExistingCommandOutcome::Rejected { error } => Err(error),
             }
-            let applied = execute_programmer_command(state, session, &input.value)?;
-            persist_programmer(state, session).map_err(|e| e.message)?;
-            Ok(
-                serde_json::json!({"applied":applied,"programmer":state.programmers.get(session.id)}),
-            )
         }
         "preset.apply" => {
             #[derive(Deserialize)]
@@ -9639,27 +9837,6 @@ fn dispatch_ws_command(state: &AppState, session: &Session, command: WsCommand) 
         && let Err(error) = persist_programmer(state, session)
     {
         return fail(error.message);
-    }
-    if command.command == "programmer.execute"
-        && let Some(value) = command
-            .payload
-            .get("value")
-            .and_then(serde_json::Value::as_str)
-    {
-        match &result {
-            Ok(payload) if payload.get("pending_choice").is_none() => {
-                let feedback = payload
-                    .get("applied")
-                    .and_then(serde_json::Value::as_u64)
-                    .map(|applied| format!("Applied to {applied} target(s)"))
-                    .unwrap_or_else(|| "Accepted".into());
-                record_command_history(state, session, value, "accepted", &feedback, "software");
-            }
-            Err(error) => {
-                record_command_history(state, session, value, "rejected", error, "software");
-            }
-            Ok(_) => {}
-        }
     }
     match result {
         Ok(payload) => {
@@ -10068,6 +10245,26 @@ fn programmer_value_timing(state: &AppState, timing: CommandTiming) -> CommandTi
     }
 }
 
+fn set_command_fixture_intensities(
+    state: &AppState,
+    session: &Session,
+    values: impl IntoIterator<Item = (light_core::FixtureId, f32)>,
+    timing: CommandTiming,
+) {
+    state.programmers.set_many_faded_with_timing(
+        session.id,
+        values.into_iter().map(|(fixture_id, value)| {
+            (
+                fixture_id,
+                light_core::AttributeKey::intensity(),
+                light_core::AttributeValue::Normalized(value),
+            )
+        }),
+        timing.fade_millis,
+        timing.delay_millis,
+    );
+}
+
 fn command_time_millis(token: &str) -> Result<u64, String> {
     let seconds = token
         .parse::<f64>()
@@ -10117,6 +10314,47 @@ fn extract_command_timing(tokens: &[String]) -> Result<(Vec<String>, CommandTimi
         }
     }
     Ok((command, timing))
+}
+
+fn tokenize_programmer_command(command_line: &str) -> Result<(Vec<String>, CommandTiming), String> {
+    let spaced = command_line
+        .replace(',', ".")
+        .replace('.', " . ")
+        .replace('+', " + ")
+        .replace('-', " - ");
+    let mut raw_tokens = Vec::new();
+    for token in spaced
+        .split_whitespace()
+        .map(|token| token.to_ascii_uppercase())
+    {
+        if token == "DEGRP" {
+            raw_tokens.extend(["GROUP".to_owned(), "GROUP".to_owned()]);
+            continue;
+        }
+        if token == "F" || token == "G" {
+            raw_tokens.push(if token == "F" { "FIXTURE" } else { "GROUP" }.to_owned());
+            continue;
+        }
+        if token.len() > 1 && matches!(token.as_bytes()[0], b'F' | b'G') {
+            let (prefix, number) = token.split_at(1);
+            if matches!(prefix, "F" | "G")
+                && number.chars().all(|character| character.is_ascii_digit())
+            {
+                raw_tokens.push(if prefix == "F" { "FIXTURE" } else { "GROUP" }.to_owned());
+                raw_tokens.push(number.to_owned());
+                continue;
+            }
+        }
+        raw_tokens.push(token);
+    }
+    extract_command_timing(&raw_tokens)
+}
+
+/// Return the same normalized first command token used by execution, after removing valid timing
+/// clauses. Transport adapters use this to enforce capability ownership without maintaining a
+/// second, subtly different command parser.
+fn normalized_programmer_command_family(command_line: &str) -> Result<Option<String>, String> {
+    tokenize_programmer_command(command_line).map(|(tokens, _)| tokens.into_iter().next())
 }
 
 fn active_show_store(state: &AppState) -> Result<(ShowEntry, ShowStore), String> {
@@ -11843,37 +12081,7 @@ fn execute_programmer_command(
     session: &Session,
     command_line: &str,
 ) -> Result<usize, String> {
-    let spaced = command_line
-        .replace(',', ".")
-        .replace('.', " . ")
-        .replace('+', " + ")
-        .replace('-', " - ");
-    let mut raw_tokens = Vec::new();
-    for token in spaced
-        .split_whitespace()
-        .map(|token| token.to_ascii_uppercase())
-    {
-        if token == "DEGRP" {
-            raw_tokens.extend(["GROUP".to_owned(), "GROUP".to_owned()]);
-            continue;
-        }
-        if token == "F" || token == "G" {
-            raw_tokens.push(if token == "F" { "FIXTURE" } else { "GROUP" }.to_owned());
-            continue;
-        }
-        if token.len() > 1 && matches!(token.as_bytes()[0], b'F' | b'G') {
-            let (prefix, number) = token.split_at(1);
-            if matches!(prefix, "F" | "G")
-                && number.chars().all(|character| character.is_ascii_digit())
-            {
-                raw_tokens.push(if prefix == "F" { "FIXTURE" } else { "GROUP" }.to_owned());
-                raw_tokens.push(number.to_owned());
-                continue;
-            }
-        }
-        raw_tokens.push(token);
-    }
-    let (tokens, timing) = extract_command_timing(&raw_tokens)?;
+    let (tokens, timing) = tokenize_programmer_command(command_line)?;
     if tokens.is_empty() {
         return Err("the command line is empty".into());
     }
@@ -11967,16 +12175,16 @@ fn execute_programmer_command(
                     }
                 }
             } else {
-                for fixture in &parsed.fixtures {
-                    state.programmers.set_faded_with_timing(
-                        session.id,
-                        *fixture,
-                        light_core::AttributeKey::intensity(),
-                        light_core::AttributeValue::Normalized(percent / 100.0),
-                        timing.fade_millis,
-                        timing.delay_millis,
-                    );
-                }
+                set_command_fixture_intensities(
+                    state,
+                    session,
+                    parsed
+                        .fixtures
+                        .iter()
+                        .copied()
+                        .map(|fixture_id| (fixture_id, percent / 100.0)),
+                    timing,
+                );
             }
             return Ok(parsed.fixtures.len());
         }
@@ -12040,18 +12248,14 @@ fn execute_programmer_command(
                 let points = parse_spread_points(value)?;
                 if frozen {
                     let count = fixtures.len();
-                    for (index, fixture) in fixtures.iter().enumerate() {
-                        state.programmers.set_faded_with_timing(
-                            session.id,
-                            *fixture,
-                            light_core::AttributeKey::intensity(),
-                            light_core::AttributeValue::Normalized(spread_position(
-                                &points, index, count,
-                            )),
-                            timing.fade_millis,
-                            timing.delay_millis,
-                        );
-                    }
+                    set_command_fixture_intensities(
+                        state,
+                        session,
+                        fixtures.iter().enumerate().map(|(index, fixture_id)| {
+                            (*fixture_id, spread_position(&points, index, count))
+                        }),
+                        timing,
+                    );
                 } else {
                     state.programmers.set_group_faded_with_timing(
                         session.id,
@@ -12082,10 +12286,10 @@ fn execute_programmer_command(
                 }
                 if frozen {
                     let resolved = state.engine.resolved_values();
-                    for fixture in &fixtures {
+                    let values = fixtures.iter().map(|fixture_id| {
                         let target = if relative {
                             let current = resolved
-                                .get(&(*fixture, light_core::AttributeKey::intensity()))
+                                .get(&(*fixture_id, light_core::AttributeKey::intensity()))
                                 .and_then(light_core::AttributeValue::normalized)
                                 .unwrap_or(0.0)
                                 * 100.0;
@@ -12094,15 +12298,9 @@ fn execute_programmer_command(
                         } else {
                             percent
                         };
-                        state.programmers.set_faded_with_timing(
-                            session.id,
-                            *fixture,
-                            light_core::AttributeKey::intensity(),
-                            light_core::AttributeValue::Normalized(target / 100.0),
-                            timing.fade_millis,
-                            timing.delay_millis,
-                        );
-                    }
+                        (*fixture_id, target / 100.0)
+                    });
+                    set_command_fixture_intensities(state, session, values, timing);
                 } else {
                     state.programmers.set_group_faded_with_timing(
                         session.id,
@@ -12205,16 +12403,15 @@ fn execute_programmer_command(
         state
             .programmers
             .select_expression(session.id, fixture_ids.clone(), selection_expression);
-        for (index, fixture_id) in fixture_ids.iter().enumerate() {
-            state.programmers.set_faded_with_timing(
-                session.id,
-                *fixture_id,
-                light_core::AttributeKey::intensity(),
-                light_core::AttributeValue::Normalized(spread_position(&points, index, count)),
-                timing.fade_millis,
-                timing.delay_millis,
-            );
-        }
+        set_command_fixture_intensities(
+            state,
+            session,
+            fixture_ids
+                .iter()
+                .enumerate()
+                .map(|(index, fixture_id)| (*fixture_id, spread_position(&points, index, count))),
+            timing,
+        );
         return Ok(fixture_ids.len());
     }
     let relative = value.len() == 2 && matches!(value[0].as_str(), "+" | "-");
@@ -12238,7 +12435,7 @@ fn execute_programmer_command(
         .programmers
         .set_command_line(session.id, command_line.to_owned());
     let resolved = relative.then(|| state.engine.resolved_values());
-    for fixture_id in &fixture_ids {
+    let values = fixture_ids.iter().map(|fixture_id| {
         let target = if let Some(resolved) = &resolved {
             let current = resolved
                 .get(&(*fixture_id, light_core::AttributeKey::intensity()))
@@ -12249,15 +12446,9 @@ fn execute_programmer_command(
         } else {
             percent
         };
-        state.programmers.set_faded_with_timing(
-            session.id,
-            *fixture_id,
-            light_core::AttributeKey::intensity(),
-            light_core::AttributeValue::Normalized(target / 100.0),
-            timing.fade_millis,
-            timing.delay_millis,
-        );
-    }
+        (*fixture_id, target / 100.0)
+    });
+    set_command_fixture_intensities(state, session, values, timing);
     Ok(fixture_ids.len())
 }
 
@@ -12299,16 +12490,16 @@ fn apply_current_selection_value(
             return Ok(current.selected.len());
         }
         let count = current.selected.len();
-        for (index, fixture_id) in current.selected.iter().enumerate() {
-            state.programmers.set_faded_with_timing(
-                session.id,
-                *fixture_id,
-                light_core::AttributeKey::intensity(),
-                light_core::AttributeValue::Normalized(spread_position(&points, index, count)),
-                timing.fade_millis,
-                timing.delay_millis,
-            );
-        }
+        set_command_fixture_intensities(
+            state,
+            session,
+            current
+                .selected
+                .iter()
+                .enumerate()
+                .map(|(index, fixture_id)| (*fixture_id, spread_position(&points, index, count))),
+            timing,
+        );
         return Ok(current.selected.len());
     }
     let relative = value.len() == 2 && matches!(value[0].as_str(), "+" | "-");
@@ -12348,7 +12539,7 @@ fn apply_current_selection_value(
         return Ok(current.selected.len());
     }
     let resolved = relative.then(|| state.engine.resolved_values());
-    for fixture_id in &current.selected {
+    let values = current.selected.iter().map(|fixture_id| {
         let target = if let Some(resolved) = &resolved {
             let current = resolved
                 .get(&(*fixture_id, light_core::AttributeKey::intensity()))
@@ -12359,15 +12550,9 @@ fn apply_current_selection_value(
         } else {
             percent
         };
-        state.programmers.set_faded_with_timing(
-            session.id,
-            *fixture_id,
-            light_core::AttributeKey::intensity(),
-            light_core::AttributeValue::Normalized(target / 100.0),
-            timing.fade_millis,
-            timing.delay_millis,
-        );
-    }
+        (*fixture_id, target / 100.0)
+    });
+    set_command_fixture_intensities(state, session, values, timing);
     Ok(current.selected.len())
 }
 fn authenticate(state: &AppState, headers: &HeaderMap) -> Result<Session, ApiError> {
@@ -13029,6 +13214,8 @@ fn handle_programmer_osc(
     let Some(session) = state.sessions.read().get(&subscriber.session_id).cloned() else {
         return;
     };
+    let command_operation = state.command_http.operation_lock(session.desk.id);
+    let _command_operation_guard = command_operation.lock();
     let selection_revision_before = state
         .programmers
         .selection(session.id)
@@ -13202,64 +13389,64 @@ fn handle_programmer_osc(
         }
         "enter" => {
             if let Some(programmer) = state.programmers.get(session.id) {
-                if let Some(pending_choice) = pending_cue_transfer_choice(&programmer.command_line)
-                {
-                    emit(
-                        state,
-                        "programmer_choice_requested",
-                        serde_json::json!({
-                            "session_id":session.id,
-                            "desk_id":session.desk.id,
-                            "pending_choice":pending_choice,
-                            "source":"osc"
-                        }),
-                    );
-                } else {
-                    match execute_programmer_command(state, &session, &programmer.command_line) {
-                        Ok(applied) => {
-                            record_command_history(
-                                state,
-                                &session,
-                                &programmer.command_line,
-                                "accepted",
-                                &format!("Applied to {applied} target(s)"),
-                                "osc",
-                            );
-                            emit(
-                                state,
-                                "command_applied",
-                                serde_json::json!({
-                                    "session_id":session.id,
-                                    "desk_alias":parts[1],
-                                    "command":programmer.command_line,
-                                    "source":"osc"
-                                }),
-                            );
-                            state
-                                .programmers
-                                .set_command_line(session.id, String::new());
-                        }
-                        Err(error) => {
-                            record_command_history(
-                                state,
-                                &session,
-                                &programmer.command_line,
-                                "rejected",
-                                &error,
-                                "osc",
-                            );
-                            emit(
-                                state,
-                                "programmer_command_rejected",
-                                serde_json::json!({
-                                    "session_id":session.id,
-                                    "desk_id":session.desk.id,
-                                    "command":programmer.command_line,
-                                    "error":error,
-                                    "source":"osc"
-                                }),
-                            );
-                        }
+                let (retained_command, sensitive) =
+                    command_audit_projection(&programmer.command_line);
+                match command_http::execute_existing_command(
+                    state,
+                    &session,
+                    &programmer.command_line,
+                    "osc",
+                    None,
+                    command_http::ExistingCommandPolicy::Compatibility,
+                ) {
+                    command_http::ExistingCommandOutcome::Accepted { .. } => {
+                        emit(
+                            state,
+                            "command_applied",
+                            serde_json::json!({
+                                "session_id":session.id,
+                                "desk_id":session.desk.id,
+                                "user_id":session.user.id,
+                                "desk_alias":parts[1],
+                                "command":retained_command,
+                                "source":"osc"
+                            }),
+                        );
+                        state
+                            .programmers
+                            .set_command_line(session.id, String::new());
+                    }
+                    command_http::ExistingCommandOutcome::ChoiceRequired { pending_choice } => {
+                        emit(
+                            state,
+                            "programmer_choice_requested",
+                            serde_json::json!({
+                                "session_id":session.id,
+                                "desk_id":session.desk.id,
+                                "user_id":session.user.id,
+                                "pending_choice":pending_choice,
+                                "source":"osc"
+                            }),
+                        );
+                    }
+                    command_http::ExistingCommandOutcome::Rejected { error } => {
+                        let retained_error = if sensitive {
+                            "Sensitive input omitted"
+                        } else {
+                            error.as_str()
+                        };
+                        emit(
+                            state,
+                            "programmer_command_rejected",
+                            serde_json::json!({
+                                "session_id":session.id,
+                                "desk_id":session.desk.id,
+                                "user_id":session.user.id,
+                                "command":retained_command,
+                                "error":retained_error,
+                                "source":"osc"
+                            }),
+                        );
                     }
                 }
             }
@@ -14703,27 +14890,12 @@ fn record_command_history(
     status: &str,
     feedback: &str,
     source: &str,
+    request_id: Option<&str>,
 ) {
-    let normalized = command.split_whitespace().collect::<Vec<_>>().join(" ");
-    if normalized.is_empty() {
+    let (retained_command, sensitive) = command_audit_projection(command);
+    if retained_command.is_empty() {
         return;
     }
-    let upper = normalized.to_ascii_uppercase();
-    let sensitive = [
-        "PASSWORD",
-        "PASSCODE",
-        "TOKEN",
-        "SECRET",
-        "AUTHORIZATION",
-        "API_KEY",
-    ]
-    .iter()
-    .any(|term| upper.split_whitespace().any(|token| token.contains(term)));
-    let retained_command = if sensitive {
-        "[REDACTED SENSITIVE COMMAND]".into()
-    } else {
-        normalized.chars().take(512).collect::<String>()
-    };
     let retained_feedback = if sensitive {
         "Sensitive input omitted".into()
     } else {
@@ -14737,6 +14909,7 @@ fn record_command_history(
         status: status.into(),
         feedback: retained_feedback,
         source: source.into(),
+        request_id: request_id.map(str::to_owned),
         at: chrono::Utc::now().to_rfc3339(),
     };
     {
@@ -14750,6 +14923,26 @@ fn record_command_history(
         "command_history",
         serde_json::to_value(entry).expect("command history entries serialize"),
     );
+}
+
+fn command_audit_projection(command: &str) -> (String, bool) {
+    let normalized = command.split_whitespace().collect::<Vec<_>>().join(" ");
+    let upper = normalized.to_ascii_uppercase();
+    let sensitive = [
+        "PASSWORD",
+        "PASSCODE",
+        "TOKEN",
+        "SECRET",
+        "AUTHORIZATION",
+        "API_KEY",
+    ]
+    .iter()
+    .any(|term| upper.split_whitespace().any(|token| token.contains(term)));
+    if sensitive {
+        ("[REDACTED SENSITIVE COMMAND]".into(), true)
+    } else {
+        (normalized.chars().take(512).collect(), false)
+    }
 }
 fn validate_show_name(name: &str) -> Result<(), ApiError> {
     if name.is_empty() || name.len() > 100 || name.contains(['/', '\\']) {
@@ -14910,6 +15103,10 @@ impl IntoResponse for ApiError {
 #[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
+
+    #[path = "command_http_tests.rs"]
+    mod command_http_tests;
+
     fn test_control_desk() -> ControlDesk {
         ControlDesk {
             id: Uuid::nil(),
@@ -14943,6 +15140,78 @@ mod tests {
             protect_from_swap: false,
             presentation_icon: None,
             presentation_image: None,
+        }
+    }
+
+    fn preload_atomicity_test_snapshot() -> EngineSnapshot {
+        let first_cue_list_id = light_core::CueListId::new();
+        let second_cue_list_id = light_core::CueListId::new();
+        let cue_list = |id, name: &str| light_playback::CueList {
+            id,
+            name: name.into(),
+            priority: 0,
+            mode: light_playback::CueListMode::Sequence,
+            looped: false,
+            chaser_step_millis: 1_000,
+            speed_group: None,
+            intensity_priority_mode: light_playback::IntensityPriorityMode::Htp,
+            wrap_mode: Some(light_playback::WrapMode::Off),
+            restart_mode: light_playback::RestartMode::FirstCue,
+            force_cue_timing: false,
+            disable_cue_timing: false,
+            chaser_xfade_millis: 0,
+            chaser_xfade_percent: Some(0),
+            speed_multiplier: 1.0,
+            cues: vec![light_playback::Cue::new(1.0)],
+        };
+        let playback = |number, target| light_playback::PlaybackDefinition {
+            number,
+            name: format!("Atomic Preload {number}"),
+            target,
+            buttons: [light_playback::PlaybackButtonAction::None; 3],
+            button_count: 3,
+            fader: light_playback::PlaybackFaderMode::Master,
+            has_fader: true,
+            go_activates: true,
+            auto_off: false,
+            xfade_millis: 0,
+            color: "#20c997".into(),
+            flash_release: light_playback::FlashReleaseMode::ReleaseAll,
+            protect_from_swap: false,
+            presentation_icon: None,
+            presentation_image: None,
+        };
+        EngineSnapshot {
+            groups: vec![light_programmer::GroupDefinition {
+                id: "front".into(),
+                name: "Front".into(),
+                ..Default::default()
+            }],
+            cue_lists: vec![
+                cue_list(first_cue_list_id, "Atomic Preload A"),
+                cue_list(second_cue_list_id, "Atomic Preload B"),
+            ],
+            playbacks: vec![
+                playback(
+                    1,
+                    light_playback::PlaybackTarget::CueList {
+                        cue_list_id: first_cue_list_id,
+                    },
+                ),
+                playback(
+                    2,
+                    light_playback::PlaybackTarget::CueList {
+                        cue_list_id: second_cue_list_id,
+                    },
+                ),
+                playback(
+                    3,
+                    light_playback::PlaybackTarget::Group {
+                        group_id: "front".into(),
+                    },
+                ),
+            ],
+            ..Default::default()
         }
     }
 
@@ -15080,6 +15349,114 @@ mod tests {
                 Some(retained)
             );
         }
+    }
+
+    #[test]
+    fn preload_rejects_a_late_invalid_action_without_publishing_earlier_actions() {
+        let (state, data_dir) = test_state();
+        let user = state.desk.lock().users().unwrap().remove(0);
+        let session = Session {
+            id: SessionId::new(),
+            user: user.clone(),
+            token: "atomic-preload".into(),
+            connected: true,
+            desk: test_control_desk(),
+        };
+        state.programmers.start(session.id, user.id);
+        state
+            .engine
+            .replace_snapshot(preload_atomicity_test_snapshot())
+            .unwrap();
+        assert!(state.programmers.arm_preload(session.id, true));
+        assert!(state.programmers.queue_preload_playback_action(
+            session.id,
+            1,
+            "go".into(),
+            "physical".into(),
+        ));
+        assert!(state.programmers.queue_preload_playback_action(
+            session.id,
+            3,
+            "on".into(),
+            "virtual".into(),
+        ));
+        let programmer_before = state.programmers.get(session.id).unwrap();
+
+        let error = commit_preload(&state, &session).unwrap_err();
+
+        assert!(error.contains("group playback"), "{error}");
+        assert!(state.engine.playback().read().runtime().is_empty());
+        let programmer_after = state.programmers.get(session.id).unwrap();
+        assert_eq!(
+            programmer_after.preload_playback_pending,
+            programmer_before.preload_playback_pending
+        );
+        assert_eq!(programmer_after.blind, programmer_before.blind);
+        assert!(
+            state
+                .audit_events
+                .lock()
+                .iter()
+                .all(|event| event.kind != "preload_committed")
+        );
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+
+    #[test]
+    fn staged_preload_applies_exclusions_without_mutating_the_source_engine() {
+        let (state, data_dir) = test_state();
+        state
+            .engine
+            .replace_snapshot(preload_atomicity_test_snapshot())
+            .unwrap();
+        state.engine.playback().write().on(2).unwrap();
+        let snapshot = state.engine.snapshot();
+        let definition = snapshot
+            .playbacks
+            .iter()
+            .find(|definition| definition.number == 1)
+            .cloned()
+            .unwrap();
+        let pending = light_programmer::PreloadPlaybackAction {
+            playback_number: 1,
+            action: "on".into(),
+            surface: "virtual".into(),
+        };
+        let current = state.engine.playback().read().clone();
+
+        let (staged, actions) = stage_preload_playback_batch(
+            &current,
+            &[(pending, definition)],
+            chrono::Utc::now(),
+            0,
+            &[vec![1, 2]],
+        )
+        .unwrap();
+
+        let source = current.runtime();
+        assert!(
+            source
+                .iter()
+                .any(|runtime| { runtime.playback_number == Some(2) && runtime.enabled })
+        );
+        assert!(
+            source
+                .iter()
+                .all(|runtime| runtime.playback_number != Some(1))
+        );
+        let result = staged.runtime();
+        assert!(
+            result
+                .iter()
+                .any(|runtime| { runtime.playback_number == Some(1) && runtime.enabled })
+        );
+        assert!(
+            result
+                .iter()
+                .any(|runtime| { runtime.playback_number == Some(2) && !runtime.enabled })
+        );
+        assert_eq!(actions[0].released_playbacks, vec![2]);
+        let _ = std::fs::remove_dir_all(data_dir);
     }
 
     #[test]
@@ -16383,6 +16760,7 @@ mod tests {
                 events,
                 audit_events: Arc::new(Mutex::new(VecDeque::with_capacity(2048))),
                 command_history: Arc::new(Mutex::new(HashMap::new())),
+                command_http: command_http::CommandHttpState::default(),
                 event_revision: Arc::new(AtomicU64::new(0)),
                 desk_token: None,
                 shutdown: CancellationToken::new(),
@@ -16526,6 +16904,7 @@ mod tests {
                 "accepted",
                 "Accepted",
                 "software",
+                None,
             );
         }
         record_command_history(
@@ -16535,6 +16914,7 @@ mod tests {
             "rejected",
             "parser included super-secret-value",
             "software",
+            None,
         );
         record_command_history(
             &state,
@@ -16543,6 +16923,7 @@ mod tests {
             "accepted",
             "Accepted",
             "osc",
+            None,
         );
 
         let mut headers = HeaderMap::new();
