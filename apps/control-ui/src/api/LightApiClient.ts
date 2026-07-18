@@ -1,20 +1,33 @@
+import {
+	type PresetAddress,
+	type PresetFamily,
+	presetStorageKey,
+} from "../presetFamilies";
+import { FileApiClient, type FileOperationInput } from "./client/files";
+import { FixtureApiClient } from "./client/fixtures";
+import { MediaApiClient } from "./client/media";
+import {
+	type MvrApplyInput,
+	ShowApiClient,
+	type ShowOpenTransition,
+} from "./client/shows";
+import type { ClientTransport } from "./client/transport";
 import type {
 	BootstrapSnapshot,
 	CommandHistoryEntry,
-	DmxSnapshot,
 	DeskConfiguration,
-	PatchSnapshot,
-	PlaybackSnapshot,
-	ServerEvent,
-	SessionResponse,
-	ScreenConfiguration,
-	ScreenSnapshot,
-	ShowEntry,
-	VersionedObject,
+	DmxSnapshot,
 	HelpCatalog,
 	HelpTopic,
+	PatchSnapshot,
+	PlaybackSnapshot,
+	ScreenConfiguration,
+	ScreenSnapshot,
+	ServerEvent,
+	SessionResponse,
+	ShowEntry,
+	VersionedObject,
 } from "./types";
-import { presetStorageKey, type PresetAddress, type PresetFamily } from "../presetFamilies";
 
 type EventListener = (event: ServerEvent) => void;
 
@@ -84,8 +97,23 @@ export class LightApiClient {
 		}
 	>();
 	private deskToken = browserStorage()?.getItem("light.desk-token") ?? "";
+	private readonly fileApi: FileApiClient;
+	private readonly fixtureApi: FixtureApiClient;
+	private readonly mediaApi: MediaApiClient;
+	private readonly showApi: ShowApiClient;
 
-	constructor(private readonly baseUrl = defaultServerUrl()) {}
+	constructor(private readonly baseUrl = defaultServerUrl()) {
+		const transport: ClientTransport = {
+			request: <T>(path: string, init?: RequestInit, authenticate?: boolean) =>
+				this.request<T>(path, init, authenticate),
+			blob: (path: string, init?: RequestInit) => this.requestBlob(path, init),
+			absoluteUrl: (path: string) => `${this.baseUrl}${path}`,
+		};
+		this.fileApi = new FileApiClient(transport);
+		this.fixtureApi = new FixtureApiClient(transport);
+		this.mediaApi = new MediaApiClient(transport);
+		this.showApi = new ShowApiClient(transport);
+	}
 
 	helpCatalog(): Promise<HelpCatalog> {
 		return this.request("/api/v1/help", {}, false);
@@ -101,51 +129,39 @@ export class LightApiClient {
 		return this.request("/api/v1/command-history");
 	}
 	fileRoots(): Promise<import("./types").FileRoot[]> {
-		return this.request("/api/v1/files/roots");
+		return this.fileApi.fileRoots();
 	}
 	fileEntries(
 		root: string,
 		path = "",
 		hidden = false,
 	): Promise<import("./types").FileDirectory> {
-		return this.request(
-			`/api/v1/files/${encodeURIComponent(root)}/entries?path=${encodeURIComponent(path)}&hidden=${hidden}`,
-		);
+		return this.fileApi.fileEntries(root, path, hidden);
 	}
 	fileMetadata(
 		root: string,
 		path: string,
 	): Promise<import("./types").FileMetadata> {
-		return this.request(
-			`/api/v1/files/${encodeURIComponent(root)}/metadata?path=${encodeURIComponent(path)}`,
-		);
+		return this.fileApi.fileMetadata(root, path);
 	}
 	readFileNote(
 		root: string,
 		path: string,
 	): Promise<import("./types").FileNativeNote> {
-		return this.request(
-			`/api/v1/files/${encodeURIComponent(root)}/notes?path=${encodeURIComponent(path)}`,
-		);
+		return this.fileApi.readFileNote(root, path);
 	}
 	saveFileNote(
 		root: string,
 		path: string,
 		note: string,
 	): Promise<import("./types").FileNativeNote> {
-		return this.request(`/api/v1/files/${encodeURIComponent(root)}/notes`, {
-			method: "PUT",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ path, note }),
-		});
+		return this.fileApi.saveFileNote(root, path, note);
 	}
 	readTextFile(
 		root: string,
 		path: string,
 	): Promise<import("./types").TextDocument> {
-		return this.request(
-			`/api/v1/files/${encodeURIComponent(root)}/text?path=${encodeURIComponent(path)}`,
-		);
+		return this.fileApi.readTextFile(root, path);
 	}
 	saveTextFile(
 		root: string,
@@ -153,98 +169,29 @@ export class LightApiClient {
 		text: string,
 		revision: string | null,
 	): Promise<import("./types").TextDocument> {
-		return this.request(`/api/v1/files/${encodeURIComponent(root)}/text`, {
-			method: "PUT",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ path, text, revision }),
-		});
+		return this.fileApi.saveTextFile(root, path, text, revision);
 	}
-	fileOperation(
-		root: string,
-		input: {
-			operation:
-				| "create_file"
-				| "create_folder"
-				| "rename"
-				| "copy"
-				| "move"
-				| "trash"
-				| "delete";
-			sources?: string[];
-			destination?: string;
-			destination_root_id?: string;
-			name?: string;
-			replace?: boolean;
-			conflict?: import("./types").FileConflictChoice;
-			apply_to_all?: boolean;
-		},
-	): Promise<import("./types").FileOperationResult> {
-		return this.request(
-			`/api/v1/files/${encodeURIComponent(root)}/operations`,
-			{
-				method: "POST",
-				headers: { "content-type": "application/json" },
-				body: JSON.stringify({ sources: [], ...input }),
-			},
-		);
+	fileOperation(root: string, input: FileOperationInput) {
+		return this.fileApi.fileOperation(root, input);
 	}
-	async fileContent(root: string, path: string): Promise<Blob> {
-		if (!this.session) throw new Error("A server session is required");
-		const response = await fetch(
-			`${this.baseUrl}/api/v1/files/${encodeURIComponent(root)}/content?path=${encodeURIComponent(path)}`,
-			{
-				headers: this.boundaryHeaders(
-					new Headers({ authorization: `Bearer ${this.session.token}` }),
-				),
-			},
-		);
-		if (!response.ok) throw new Error(await response.text());
-		return response.blob();
+	fileContent(root: string, path: string): Promise<Blob> {
+		return this.fileApi.fileContent(root, path);
 	}
-	async fileStreamUrl(root: string, path: string): Promise<string> {
-		const response = await this.request<{ ticket: string }>(
-			`/api/v1/files/${encodeURIComponent(root)}/stream-ticket`,
-			{
-				method: "POST",
-				headers: { "content-type": "application/json" },
-				body: JSON.stringify({ path }),
-			},
-		);
-		return `${this.baseUrl}/api/v1/files/${encodeURIComponent(root)}/content?path=${encodeURIComponent(path)}&ticket=${encodeURIComponent(response.ticket)}`;
+	fileStreamUrl(root: string, path: string): Promise<string> {
+		return this.fileApi.fileStreamUrl(root, path);
 	}
-	async fileThumbnail(
-		root: string,
-		path: string,
-		maxSize = 256,
-	): Promise<Blob> {
-		if (!this.session) throw new Error("A server session is required");
-		const response = await fetch(
-			`${this.baseUrl}/api/v1/files/${encodeURIComponent(root)}/thumbnail?path=${encodeURIComponent(path)}&max_size=${maxSize}`,
-			{
-				headers: this.boundaryHeaders(
-					new Headers({ authorization: `Bearer ${this.session.token}` }),
-				),
-			},
-		);
-		if (!response.ok) throw new Error(await response.text());
-		return response.blob();
+	fileThumbnail(root: string, path: string, maxSize = 256): Promise<Blob> {
+		return this.fileApi.fileThumbnail(root, path, maxSize);
 	}
 	claimFileInput(
 		instanceId: string,
 		action: import("./types").FileInputAction,
 		origin: "pending" | "toolbar",
 	): Promise<import("./types").FileInputContext> {
-		return this.request("/api/v1/files/input-context", {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ instance_id: instanceId, action, origin }),
-		});
+		return this.fileApi.claimFileInput(instanceId, action, origin);
 	}
 	releaseFileInput(instanceId: string): Promise<void> {
-		return this.request(
-			`/api/v1/files/input-context?instance_id=${encodeURIComponent(instanceId)}`,
-			{ method: "DELETE" },
-		);
+		return this.fileApi.releaseFileInput(instanceId);
 	}
 
 	get currentSession() {
@@ -324,53 +271,36 @@ export class LightApiClient {
 	}
 
 	patch(): Promise<PatchSnapshot> {
-		return this.request("/api/v1/patch", {}, false);
+		return this.fixtureApi.patch();
 	}
 
 	fixtureLibrary(): Promise<import("./types").FixtureDefinition[]> {
-		return this.request("/api/v1/fixture-library", {}, false);
+		return this.fixtureApi.fixtureLibrary();
 	}
 
 	fixtureProfiles(): Promise<import("./types").FixtureProfile[]> {
-		return this.request("/api/v1/fixture-profiles", {}, false);
+		return this.fixtureApi.fixtureProfiles();
 	}
 
 	fixtureProfileWarnings(): Promise<string[]> {
-		return this.request("/api/v1/fixture-profiles/warnings", {}, false);
+		return this.fixtureApi.fixtureProfileWarnings();
 	}
 
 	fixtureProfileRevisions(
 		id: string,
 	): Promise<import("./types").FixtureProfile[]> {
-		return this.request(
-			`/api/v1/fixture-profiles/${encodeURIComponent(id)}/revisions`,
-			{},
-			false,
-		);
+		return this.fixtureApi.fixtureProfileRevisions(id);
 	}
 
 	putFixtureProfile(
 		profile: import("./types").FixtureProfile,
 		expectedRevision: number,
 	) {
-		return this.request<import("./types").FixtureProfile>(
-			"/api/v1/fixture-profiles",
-			{
-				method: "PUT",
-				headers: {
-					"content-type": "application/json",
-					"if-match": String(expectedRevision),
-				},
-				body: JSON.stringify(profile),
-			},
-		);
+		return this.fixtureApi.putFixtureProfile(profile, expectedRevision);
 	}
 
 	deleteFixtureProfile(id: string, revision: number) {
-		return this.request<void>(
-			`/api/v1/fixture-profiles/${encodeURIComponent(id)}/${revision}`,
-			{ method: "DELETE" },
-		);
+		return this.fixtureApi.deleteFixtureProfile(id, revision);
 	}
 
 	putFixtureProfileSourceGdtf(
@@ -378,63 +308,23 @@ export class LightApiClient {
 		revision: number,
 		source: Uint8Array,
 	) {
-		const bytes = source.buffer.slice(
-			source.byteOffset,
-			source.byteOffset + source.byteLength,
-		) as ArrayBuffer;
-		return this.request<void>(
-			`/api/v1/fixture-profiles/${encodeURIComponent(id)}/${revision}/source-gdtf`,
-			{
-				method: "PUT",
-				headers: { "content-type": "application/octet-stream" },
-				body: bytes,
-			},
-		);
+		return this.fixtureApi.putFixtureProfileSourceGdtf(id, revision, source);
 	}
 
 	importFixturePackage(source: Uint8Array) {
-		const bytes = source.buffer.slice(
-			source.byteOffset,
-			source.byteOffset + source.byteLength,
-		) as ArrayBuffer;
-		return this.request<import("./types").FixtureProfile>(
-			"/api/v1/fixture-packages/import",
-			{
-				method: "POST",
-				headers: { "content-type": "application/vnd.tosklight.fixture+zip" },
-				body: bytes,
-			},
-		);
+		return this.fixtureApi.importFixturePackage(source);
 	}
 
-	async exportFixturePackage(id: string, revision: number): Promise<Blob> {
-		if (!this.session) throw new Error("A server session is required");
-		const headers = this.boundaryHeaders(
-			new Headers({ authorization: `Bearer ${this.session.token}` }),
-		);
-		const response = await fetch(
-			`${this.baseUrl}/api/v1/fixture-profiles/${encodeURIComponent(id)}/${revision}/package`,
-			{ headers },
-		);
-		if (!response.ok) throw new Error(await response.text());
-		return response.blob();
+	exportFixturePackage(id: string, revision: number): Promise<Blob> {
+		return this.fixtureApi.exportFixturePackage(id, revision);
 	}
 
 	putFixtureDefinition(definition: import("./types").FixtureDefinition) {
-		return this.request<import("./types").FixtureDefinition>(
-			"/api/v1/fixture-library",
-			{
-				method: "PUT",
-				headers: { "content-type": "application/json" },
-				body: JSON.stringify(definition),
-			},
-		);
+		return this.fixtureApi.putFixtureDefinition(definition);
 	}
 
 	deleteFixtureDefinition(id: string, revision: number) {
-		return this.request<void>(`/api/v1/fixture-library/${id}/${revision}`, {
-			method: "DELETE",
-		});
+		return this.fixtureApi.deleteFixtureDefinition(id, revision);
 	}
 
 	playbacks(): Promise<PlaybackSnapshot> {
@@ -464,19 +354,17 @@ export class LightApiClient {
 	visualization(
 		preload = false,
 	): Promise<import("./types").VisualizationSnapshot> {
-		return this.request(
-			`/api/v1/visualization${preload ? "?preload=true" : ""}`,
-		);
+		return this.mediaApi.visualization(preload);
 	}
 
 	dmx(): Promise<DmxSnapshot> {
-		return this.request("/api/v1/dmx", {}, false);
+		return this.mediaApi.dmx();
 	}
 
 	mediaServers(): Promise<{
 		fixtures: import("./types").MediaServerFixture[];
 	}> {
-		return this.request("/api/v1/media");
+		return this.mediaApi.mediaServers();
 	}
 
 	refreshMediaPreview(
@@ -485,31 +373,11 @@ export class LightApiClient {
 		width = 320,
 		height = 180,
 	) {
-		return this.request<{
-			fixture_id: string;
-			source: number;
-			format: string;
-			width: number;
-			height: number;
-		}>(`/api/v1/media/${fixtureId}/preview/refresh`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ source, width, height }),
-		});
+		return this.mediaApi.refreshMediaPreview(fixtureId, source, width, height);
 	}
 
-	async mediaPreview(fixtureId: string, source = 0): Promise<Blob> {
-		if (!this.session) throw new Error("A server session is required");
-		const response = await fetch(
-			`${this.baseUrl}/api/v1/media/${fixtureId}/preview/${source}`,
-			{
-				headers: this.boundaryHeaders(
-					new Headers({ authorization: `Bearer ${this.session.token}` }),
-				),
-			},
-		);
-		if (!response.ok) throw new Error(await response.text());
-		return response.blob();
+	mediaPreview(fixtureId: string, source = 0): Promise<Blob> {
+		return this.mediaApi.mediaPreview(fixtureId, source);
 	}
 
 	refreshMediaThumbnails(
@@ -518,18 +386,16 @@ export class LightApiClient {
 		width = 128,
 		height = 72,
 	) {
-		return this.request<{ fixture_id: string; count: number }>(
-			`/api/v1/media/${fixtureId}/thumbnails/refresh`,
-			{
-				method: "POST",
-				headers: { "content-type": "application/json" },
-				body: JSON.stringify({ library_type: 1, elements, width, height }),
-			},
+		return this.mediaApi.refreshMediaThumbnails(
+			fixtureId,
+			elements,
+			width,
+			height,
 		);
 	}
 
 	shows(): Promise<ShowEntry[]> {
-		return this.request("/api/v1/shows", {}, false);
+		return this.showApi.shows();
 	}
 
 	createShow(
@@ -537,147 +403,68 @@ export class LightApiClient {
 		dataBase64: string | null = null,
 		overwrite = false,
 	): Promise<ShowEntry> {
-		return this.request("/api/v1/shows", {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ name, data_base64: dataBase64, overwrite }),
-		});
+		return this.showApi.createShow(name, dataBase64, overwrite);
 	}
 
 	openShow(
 		id: string,
-		transition:
-			| "hold_current"
-			| "timed_fade"
-			| "safe_blackout" = "safe_blackout",
+		transition: ShowOpenTransition = "safe_blackout",
 		transitionMillis?: number,
 	): Promise<ShowEntry> {
-		return this.request(`/api/v1/shows/${id}/open`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ transition, transition_millis: transitionMillis }),
-		});
+		return this.showApi.openShow(id, transition, transitionMillis);
 	}
 
 	openCleanDefaultShow(): Promise<ShowEntry> {
-		return this.request("/api/v1/shows/default/open", {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ transition: "safe_blackout" }),
-		});
+		return this.showApi.openCleanDefaultShow();
 	}
 
 	renameShow(id: string, name: string): Promise<ShowEntry> {
-		return this.request(`/api/v1/shows/${id}/rename`, {
-			method: "PUT",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ name }),
-		});
+		return this.showApi.renameShow(id, name);
 	}
 
 	overwriteShow(sourceId: string, destinationId: string): Promise<ShowEntry> {
-		return this.request(
-			`/api/v1/shows/${sourceId}/overwrite/${destinationId}`,
-			{
-				method: "POST",
-			},
-		);
+		return this.showApi.overwriteShow(sourceId, destinationId);
 	}
 
 	showRevisions(id: string): Promise<import("./types").ShowRevision[]> {
-		return this.request(`/api/v1/shows/${id}/revisions`);
+		return this.showApi.showRevisions(id);
 	}
 
 	saveShowRevision(
 		id: string,
 		name: string,
 	): Promise<import("./types").ShowRevision> {
-		return this.request(`/api/v1/shows/${id}/revisions`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ name }),
-		});
+		return this.showApi.saveShowRevision(id, name);
 	}
 
 	openShowRevision(id: string, revision: number): Promise<ShowEntry> {
-		return this.request(`/api/v1/shows/${id}/revisions/${revision}/open`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ transition: "safe_blackout" }),
-		});
+		return this.showApi.openShowRevision(id, revision);
 	}
 
 	rollbackShow(): Promise<ShowEntry> {
-		return this.request("/api/v1/shows/rollback", {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ transition: "safe_blackout" }),
-		});
+		return this.showApi.rollbackShow();
 	}
 
-	async downloadShow(id: string): Promise<Blob> {
-		const headers = this.boundaryHeaders(new Headers());
-		if (!this.session) throw new Error("A server session is required");
-		headers.set("authorization", `Bearer ${this.session.token}`);
-		const response = await fetch(
-			`${this.baseUrl}/api/v1/shows/${id}/download`,
-			{ headers },
-		);
-		if (!response.ok) throw new Error(await response.text());
-		return response.blob();
+	downloadShow(id: string): Promise<Blob> {
+		return this.showApi.downloadShow(id);
 	}
 
-	async previewMvr(
+	previewMvr(
 		file: File,
 		showId?: string,
 	): Promise<import("./types").MvrImportPreview> {
-		if (!this.session) throw new Error("A server session is required");
-		const query = showId ? `?show_id=${encodeURIComponent(showId)}` : "";
-		const headers = this.boundaryHeaders(
-			new Headers({
-				authorization: `Bearer ${this.session.token}`,
-				"content-type": "application/octet-stream",
-			}),
-		);
-		const response = await fetch(
-			`${this.baseUrl}/api/v1/mvr/imports/preview${query}`,
-			{ method: "POST", headers, body: file },
-		);
-		if (!response.ok) throw new Error(await response.text());
-		return response.json();
+		return this.showApi.previewMvr(file, showId);
 	}
 
-	applyMvr(
-		token: string,
-		input: {
-			new_show?: { name: string; open_after_import: boolean };
-			existing_show_id?: string;
-			resolutions?: Record<
-				string,
-				{ action: string; universe?: number; address?: number }
-			>;
-		},
-	): Promise<import("./types").MvrApplyResult> {
-		return this.request(`/api/v1/mvr/imports/${token}/apply`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify(input),
-		});
+	applyMvr(token: string, input: MvrApplyInput) {
+		return this.showApi.applyMvr(token, input);
 	}
 
 	mvrExportPreview(id: string): Promise<import("./types").MvrExportPreview> {
-		return this.request(`/api/v1/shows/${id}/mvr/preview`);
+		return this.showApi.mvrExportPreview(id);
 	}
-	async downloadMvr(id: string): Promise<Blob> {
-		if (!this.session) throw new Error("A server session is required");
-		const headers = this.boundaryHeaders(
-			new Headers({ authorization: `Bearer ${this.session.token}` }),
-		);
-		const response = await fetch(`${this.baseUrl}/api/v1/shows/${id}/mvr`, {
-			headers,
-		});
-		if (!response.ok) throw new Error(await response.text());
-		return response.blob();
+	downloadMvr(id: string): Promise<Blob> {
+		return this.showApi.downloadMvr(id);
 	}
 
 	configuration(): Promise<{
@@ -688,9 +475,7 @@ export class LightApiClient {
 		return this.request("/api/v1/configuration", {}, false);
 	}
 
-	updateConfiguration(
-		configuration: DeskConfiguration,
-	): Promise<{
+	updateConfiguration(configuration: DeskConfiguration): Promise<{
 		configuration: DeskConfiguration;
 		requires_restart: boolean;
 		matter: import("./types").MatterBridgeStatus;
@@ -1182,7 +967,11 @@ export class LightApiClient {
 			attribute,
 		});
 	}
-	setGroupProgrammer(groupId: string, attribute: string, value: number | import("./types").AttributeValue) {
+	setGroupProgrammer(
+		groupId: string,
+		attribute: string,
+		value: number | import("./types").AttributeValue,
+	) {
 		return this.command("programmer.group.set", {
 			group_id: groupId,
 			attribute,
@@ -1298,7 +1087,9 @@ export class LightApiClient {
 					: pending.reject(new Error(data.error ?? "Command failed"));
 				return;
 			}
-			this.listeners.forEach((listener) => listener(data));
+			this.listeners.forEach((listener) => {
+				listener(data);
+			});
 		});
 		return new Promise<void>((resolve, reject) => {
 			socket.addEventListener("open", () => resolve(), { once: true });
@@ -1347,6 +1138,21 @@ export class LightApiClient {
 			this.pending.set(requestId, { resolve, reject, timer });
 			this.socket?.send(JSON.stringify(envelope));
 		});
+	}
+
+	private async requestBlob(
+		path: string,
+		init: RequestInit = {},
+	): Promise<Blob> {
+		if (!this.session) throw new Error("A server session is required");
+		const headers = this.boundaryHeaders(new Headers(init.headers));
+		headers.set("authorization", `Bearer ${this.session.token}`);
+		const response = await fetch(`${this.baseUrl}${path}`, {
+			...init,
+			headers,
+		});
+		if (!response.ok) throw new Error(await response.text());
+		return response.blob();
 	}
 
 	private async request<T>(
