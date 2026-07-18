@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 chrono.workspace = true
+light-playback = { path = "../playback" }
 parking_lot.workspace = true
 uuid.workspace = true
 

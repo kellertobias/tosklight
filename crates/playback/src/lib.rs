@@ -1,6 +1,13 @@
 #![forbid(unsafe_code)]
 //! Tracking cue lists, live playback state, phasers, and HTP/LTP arbitration.
 
+mod automatic;
+
+pub use automatic::{
+    AutomaticPlaybackTransition, AutomaticPlaybackTransitionCause, PlaybackCueReference,
+    PlaybackTickResult,
+};
+
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use light_core::{
     AttributeKey, AttributeValue, CueListId, FixtureId, MergeMode, SharedClock, SystemClock,
@@ -892,9 +899,9 @@ pub struct DeletedCueHold {
     pub contributions: Vec<TimedValue>,
 }
 
-fn advance_chaser_steps(playback: &mut ActivePlayback, cue_list: &CueList, steps: u64) {
+fn advance_chaser_steps(playback: &mut ActivePlayback, cue_list: &CueList, steps: u64) -> u64 {
     if steps == 0 {
-        return;
+        return 0;
     }
     playback.deleted_cue_transition_source = None;
     let start = playback.cue_index as u128;
@@ -922,6 +929,11 @@ fn advance_chaser_steps(playback: &mut ActivePlayback, cue_list: &CueList, steps
     }
     playback.current_cue_number = Some(cue_list.cues[playback.cue_index].number);
     playback.current_cue_id = Some(cue_list.cues[playback.cue_index].id);
+    if cue_list.effective_wrap_mode() == WrapMode::Off {
+        steps.min(last.saturating_sub(start as usize) as u64)
+    } else {
+        steps
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -2566,154 +2578,6 @@ impl PlaybackEngine {
                 playback
             })
             .collect()
-    }
-
-    pub fn tick(&mut self, now: DateTime<Utc>, timecode_frame: Option<u64>) {
-        if self.dynamics_paused_at.is_some() {
-            return;
-        }
-        let mut transition_releases = Vec::new();
-        for (key, playback) in &mut self.active {
-            let Some(transition) = playback.master_transition.clone() else {
-                continue;
-            };
-            let progress = if transition.duration_millis == 0 {
-                1.0
-            } else {
-                ((now - transition.started_at).num_milliseconds().max(0) as f32
-                    / transition.duration_millis as f32)
-                    .clamp(0.0, 1.0)
-            };
-            playback.master = transition.from + (transition.to - transition.from) * progress;
-            if progress >= 1.0 {
-                playback.master_transition = None;
-                if transition.release_after {
-                    transition_releases.push(*key);
-                }
-            }
-        }
-        for key in transition_releases {
-            if let Some(playback) = self.active.get_mut(&key) {
-                playback.enabled = false;
-            }
-        }
-        for playback in self.temporary.values_mut() {
-            let Some(transition) = playback.master_transition.clone() else {
-                continue;
-            };
-            let progress = if transition.duration_millis == 0 {
-                1.0
-            } else {
-                ((now - transition.started_at).num_milliseconds().max(0) as f32
-                    / transition.duration_millis as f32)
-                    .clamp(0.0, 1.0)
-            };
-            playback.master = transition.from + (transition.to - transition.from) * progress;
-            if progress >= 1.0 {
-                playback.master_transition = None;
-            }
-        }
-        let ids: Vec<_> = self.active.keys().copied().collect();
-        for key in ids {
-            let Some(playback) = self.active.get_mut(&key) else {
-                continue;
-            };
-            let Some(cue_list) = self.cue_lists.get(&playback.cue_list_id) else {
-                continue;
-            };
-            if !playback.enabled {
-                continue;
-            }
-            if playback.paused {
-                continue;
-            }
-            if cue_list.mode == CueListMode::Chaser
-                && cue_list.speed_group.as_ref().is_some_and(|group| {
-                    let index = group
-                        .as_bytes()
-                        .first()
-                        .copied()
-                        .unwrap_or(b'A')
-                        .saturating_sub(b'A')
-                        .min(4) as usize;
-                    self.speed_groups_paused[index]
-                })
-            {
-                continue;
-            }
-            if let Some(frame) = timecode_frame
-                && let Some(index) = cue_list
-                    .cues
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(index, cue)| match cue.trigger {
-                        CueTrigger::Timecode { frame: cue_frame } if cue_frame <= frame => {
-                            Some(index)
-                        }
-                        _ => None,
-                    })
-                    .next_back()
-                && index != playback.cue_index
-            {
-                playback.previous_index = Some(playback.cue_index);
-                playback.cue_index = index;
-                playback.current_cue_id = Some(cue_list.cues[index].id);
-                playback.current_cue_number = Some(cue_list.cues[index].number);
-                playback.deleted_cue_hold = None;
-                playback.activated_at = now;
-                continue;
-            }
-            let elapsed = (now - playback.activated_at).num_milliseconds().max(0) as u64;
-            let current = &cue_list.cues[playback.cue_index];
-            if cue_list.mode == CueListMode::Chaser {
-                let step_millis = effective_chaser_step_millis(cue_list, &self.speed_groups_bpm);
-                let steps = elapsed / step_millis;
-                if steps > 0 {
-                    advance_chaser_steps(playback, cue_list, steps);
-                    let advanced_millis = step_millis.saturating_mul(steps);
-                    playback.activated_at += ChronoDuration::milliseconds(
-                        i64::try_from(advanced_millis).unwrap_or(i64::MAX),
-                    );
-                }
-                continue;
-            }
-            let next_index = if playback.cue_index + 1 < cue_list.cues.len() {
-                Some(playback.cue_index + 1)
-            } else if cue_list.effective_wrap_mode() != WrapMode::Off {
-                Some(0)
-            } else {
-                None
-            };
-            let automatic_delay = next_index.and_then(|index| {
-                let trigger_delay = match cue_list.cues[index].trigger {
-                    CueTrigger::Follow { delay_millis } | CueTrigger::Wait { delay_millis } => {
-                        delay_millis
-                    }
-                    _ => return None,
-                };
-                Some(
-                    cue_completion_millis(cue_list, current, self.sequence_master_fade_millis)
-                        .saturating_add(if cue_list.disable_cue_timing {
-                            0
-                        } else {
-                            trigger_delay
-                        }),
-                )
-            });
-            if automatic_delay.is_some_and(|delay| elapsed >= delay) {
-                playback.deleted_cue_transition_source = None;
-                playback.previous_index = Some(playback.cue_index);
-                if playback.cue_index + 1 < cue_list.cues.len() {
-                    playback.cue_index += 1;
-                } else if cue_list.effective_wrap_mode() != WrapMode::Off {
-                    playback.cue_index = 0;
-                    playback.tracking_wrap = cue_list.effective_wrap_mode() == WrapMode::Tracking;
-                }
-                playback.current_cue_number = Some(cue_list.cues[playback.cue_index].number);
-                playback.current_cue_id = Some(cue_list.cues[playback.cue_index].id);
-                playback.activated_at = now;
-            }
-        }
     }
 
     pub fn contributions(&self) -> Vec<TimedValue> {

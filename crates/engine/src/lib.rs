@@ -1,6 +1,9 @@
 #![forbid(unsafe_code)]
 //! Deterministic bridge from fixture attributes and playbacks to immutable DMX universe frames.
 
+mod render;
+mod resolution;
+
 use arc_swap::ArcSwap;
 use light_core::{
     AttributeKey, AttributeValue, FixtureId, MergeMode, ProgrammerId, SharedClock, TimedValue,
@@ -12,8 +15,9 @@ use light_fixture::{
 };
 use light_output::{DmxFrame, OutputRoute};
 use light_playback::{
-    ActivePlayback, CueList, MoveInBlackCandidate, PlaybackContribution, PlaybackDefinition,
-    PlaybackEngine, PlaybackPage, PlaybackTarget, SequenceMasterSource,
+    ActivePlayback, AutomaticPlaybackTransition, CueList, MoveInBlackCandidate,
+    PlaybackContribution, PlaybackDefinition, PlaybackEngine, PlaybackPage, PlaybackTarget,
+    SequenceMasterSource,
 };
 use light_programmer::ProgrammerRegistry;
 use light_programmer::{GroupDefinition, resolve_group};
@@ -86,6 +90,7 @@ impl From<PlaybackContribution> for EngineContribution {
 struct ResolvedAttributes {
     values: HashMap<(FixtureId, AttributeKey), AttributeValue>,
     sequence_masters: HashMap<(FixtureId, AttributeKey), ApplicableSequenceMaster>,
+    automatic_playback_transitions: Vec<AutomaticPlaybackTransition>,
 }
 
 fn resolve_engine_contributions(
@@ -235,6 +240,9 @@ pub struct RenderResult {
     /// patched channel whose default is zero still extends the network payload.
     pub patched_slots: HashMap<Universe, u16>,
     pub revision: u64,
+    /// Scheduler transitions collected under the playback lock and returned for publication only
+    /// after rendering has left the domain lock boundary.
+    pub automatic_playback_transitions: Vec<AutomaticPlaybackTransition>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -962,115 +970,6 @@ impl Engine {
         fixtures
     }
 
-    pub fn render(&self, options: RenderOptions) -> Result<RenderResult, EngineError> {
-        let snapshot = self.snapshot.load_full();
-        let now = self.clock.now();
-        let resolved = self.resolved_attributes_at(&snapshot, now);
-        let groups = snapshot
-            .groups
-            .iter()
-            .map(|group| (group.id.clone(), group.clone()))
-            .collect::<HashMap<_, _>>();
-        let group_master_flashes = self.group_master_flashes.read();
-        let highlighted_fixtures = self.highlighted_fixtures.read();
-        let mut universes = HashMap::new();
-        let mut patched_slots: HashMap<Universe, u16> = HashMap::new();
-        for fixture in &snapshot.fixtures {
-            if fixture.definition.schema_version == light_fixture::FIXTURE_PROFILE_SCHEMA_VERSION {
-                let profile = fixture
-                    .definition
-                    .profile_snapshot
-                    .as_deref()
-                    .ok_or_else(|| {
-                        EngineError::Invalid(
-                            "schema-v2 fixture is missing its profile snapshot".into(),
-                        )
-                    })?;
-                let mode_id = fixture.definition.mode_id.ok_or_else(|| {
-                    EngineError::Invalid("schema-v2 fixture is missing its mode identity".into())
-                })?;
-                let mode = profile.mode(mode_id).ok_or_else(|| {
-                    EngineError::Invalid("schema-v2 fixture mode is missing".into())
-                })?;
-                let footprints = fixture.definition.split_footprints();
-                let mut patches = fixture.effective_split_patches();
-                for instance in &fixture.multipatch {
-                    patches.extend(instance.effective_split_patches());
-                }
-                for patch in patches {
-                    let (Some(universe), Some(address)) = (patch.universe, patch.address) else {
-                        continue;
-                    };
-                    let footprint = footprints.get(&patch.split).copied().ok_or_else(|| {
-                        EngineError::Invalid(format!(
-                            "fixture split {} has no footprint",
-                            patch.split
-                        ))
-                    })?;
-                    let frame = universes.entry(universe).or_insert([0; 512]);
-                    let last_slot = address
-                        .saturating_sub(1)
-                        .saturating_add(footprint)
-                        .min(light_output::DMX_SLOTS as u16);
-                    patched_slots
-                        .entry(universe)
-                        .and_modify(|current| *current = (*current).max(last_slot))
-                        .or_insert(last_slot);
-                    render_profile_split(
-                        frame,
-                        fixture,
-                        mode,
-                        patch.split,
-                        address,
-                        &resolved,
-                        options,
-                        &groups,
-                        &group_master_flashes,
-                        &highlighted_fixtures,
-                    )?;
-                }
-                continue;
-            }
-            let mut patches = vec![(fixture.universe, fixture.address)];
-            patches.extend(
-                fixture
-                    .multipatch
-                    .iter()
-                    .map(|instance| (instance.universe, instance.address)),
-            );
-            for (universe, address) in patches {
-                let (Some(universe), Some(address)) = (universe, address) else {
-                    continue;
-                };
-                let frame = universes.entry(universe).or_insert([0; 512]);
-                let last_slot = address
-                    .saturating_sub(1)
-                    .saturating_add(fixture.definition.footprint)
-                    .min(light_output::DMX_SLOTS as u16);
-                patched_slots
-                    .entry(universe)
-                    .and_modify(|current| *current = (*current).max(last_slot))
-                    .or_insert(last_slot);
-                let mut instance = fixture.clone();
-                instance.universe = Some(universe);
-                instance.address = Some(address);
-                render_fixture(
-                    frame,
-                    &instance,
-                    &resolved.values,
-                    options,
-                    &groups,
-                    &group_master_flashes,
-                )?;
-            }
-        }
-        Ok(RenderResult {
-            universes,
-            patched_slots,
-            revision: snapshot.revision,
-        })
-    }
-
     /// Returns the same merged abstract attributes that feed DMX rendering. Consumers such as
     /// visualizers can use this without attempting to reverse fixture-specific DMX encoding.
     pub fn resolved_values(&self) -> HashMap<(FixtureId, AttributeKey), AttributeValue> {
@@ -1140,193 +1039,6 @@ impl Engine {
             }
         }
         Ok(projected)
-    }
-
-    fn resolved_attributes_at(
-        &self,
-        snapshot: &EngineSnapshot,
-        now: chrono::DateTime<chrono::Utc>,
-    ) -> ResolvedAttributes {
-        let timecode = self.timecode_frame.load(Ordering::Relaxed);
-        let (mut contributions, move_in_black_candidates, active_playbacks) = {
-            let mut playback = self.playback.write();
-            playback.tick(now, (timecode != u64::MAX).then_some(timecode));
-            (
-                playback
-                    .contributions_with_context_at(now, |fixture_id, attribute| {
-                        snapshot_attribute_is_snap(snapshot, fixture_id, attribute)
-                    })
-                    .into_iter()
-                    .map(EngineContribution::from)
-                    .collect::<Vec<_>>(),
-                playback.move_in_black_candidates(),
-                playback.runtime(),
-            )
-        };
-        // A newly faded programmer source starts at the resolved playback underneath it. This is
-        // especially visible for Preload: GO must not introduce a zero/default frame before the
-        // temporary programmer contribution takes ownership.
-        let programmer_underlay = resolve_engine_contributions(contributions.clone()).values;
-        let groups = snapshot
-            .groups
-            .iter()
-            .map(|group| (group.id.clone(), group.clone()))
-            .collect::<HashMap<_, _>>();
-        for programmer in self.programmers.active() {
-            let programmer_id = programmer.id;
-            let programmer_priority = programmer.priority;
-            let mut scoped_contributions = Vec::new();
-            for (value, source) in programmer
-                .values
-                .into_iter()
-                .map(|value| (value, ProgrammerTransitionSource::Programmer))
-                .chain(
-                    programmer
-                        .transient_values
-                        .into_iter()
-                        .flat_map(|action| action.values)
-                        .map(|value| (value, ProgrammerTransitionSource::Programmer)),
-                )
-                .chain(
-                    programmer
-                        .preload_active
-                        .into_iter()
-                        .map(|value| (value, ProgrammerTransitionSource::Preload)),
-                )
-            {
-                scoped_contributions.push(if value.fade {
-                    let underlying =
-                        programmer_underlay.get(&(value.fixture_id, value.attribute.clone()));
-                    let snap =
-                        snapshot_attribute_is_snap(snapshot, value.fixture_id, &value.attribute);
-                    self.faded_programmer_value(value, now, underlying, programmer_id, source, snap)
-                } else {
-                    value
-                });
-            }
-            for (group_id, attributes, source) in
-                programmer
-                    .group_values
-                    .into_iter()
-                    .map(|(group_id, attributes)| {
-                        let source = ProgrammerTransitionSource::Group(group_id.clone());
-                        (group_id, attributes, source)
-                    })
-                    .chain(programmer.preload_group_active.into_iter().map(
-                        |(group_id, attributes)| {
-                            let source = ProgrammerTransitionSource::PreloadGroup(group_id.clone());
-                            (group_id, attributes, source)
-                        },
-                    ))
-            {
-                let Ok(fixtures) = resolve_group(&group_id, &groups) else {
-                    continue;
-                };
-                let count = fixtures.len();
-                for (index, fixture_id) in fixtures.into_iter().enumerate() {
-                    for (attribute, scoped) in &attributes {
-                        let value = TimedValue {
-                            fixture_id,
-                            attribute: attribute.clone(),
-                            value: value_for_ordered_position(&scoped.value, index, count),
-                            priority: programmer_priority,
-                            changed_at: scoped.changed_at,
-                            programmer_order: scoped.programmer_order,
-                            merge_mode: MergeMode::Ltp,
-                            fade: scoped.fade,
-                            fade_millis: scoped.fade_millis,
-                            delay_millis: scoped.delay_millis,
-                        };
-                        scoped_contributions.push(if value.fade {
-                            let underlying = programmer_underlay
-                                .get(&(value.fixture_id, value.attribute.clone()));
-                            let snap = snapshot_attribute_is_snap(
-                                snapshot,
-                                value.fixture_id,
-                                &value.attribute,
-                            );
-                            self.faded_programmer_value(
-                                value,
-                                now,
-                                underlying,
-                                programmer_id,
-                                source.clone(),
-                                snap,
-                            )
-                        } else {
-                            value
-                        });
-                    }
-                }
-            }
-            // Fixture and live-Group values remain LTP within one programmer. Only after that
-            // programmer-local scope has one winner per address do intensity values participate in
-            // desk-wide HTP against other programmers and playbacks at the same numeric priority.
-            let mut programmer_winners = HashMap::new();
-            for value in scoped_contributions {
-                let key = (value.fixture_id, value.attribute.clone());
-                let replace = programmer_winners
-                    .get(&key)
-                    .is_none_or(|current: &TimedValue| {
-                        (value.changed_at, value.programmer_order)
-                            > (current.changed_at, current.programmer_order)
-                    });
-                if replace {
-                    programmer_winners.insert(key, value);
-                }
-            }
-            contributions.extend(
-                programmer_winners
-                    .into_values()
-                    .map(|mut value| {
-                        value.merge_mode = if value.attribute.is_intensity() {
-                            MergeMode::Htp
-                        } else {
-                            MergeMode::Ltp
-                        };
-                        value
-                    })
-                    .map(EngineContribution::unscaled),
-            );
-        }
-        for group in &snapshot.groups {
-            let Ok(fixtures) = resolve_group(&group.id, &groups) else {
-                continue;
-            };
-            for fixture_id in fixtures {
-                for (attribute, value) in &group.programming {
-                    contributions.push(EngineContribution::unscaled(TimedValue {
-                        fixture_id,
-                        attribute: attribute.clone(),
-                        value: value.clone(),
-                        priority: 0,
-                        changed_at: now,
-                        programmer_order: 0,
-                        merge_mode: if attribute.is_intensity() {
-                            MergeMode::Htp
-                        } else {
-                            MergeMode::Ltp
-                        },
-                        fade: false,
-                        fade_millis: None,
-                        delay_millis: None,
-                    }));
-                }
-            }
-        }
-        let base_resolved = resolve_engine_contributions(contributions.clone());
-        contributions.extend(
-            self.move_in_black_contributions(
-                snapshot,
-                move_in_black_candidates,
-                &active_playbacks,
-                &base_resolved.values,
-                now,
-            )
-            .into_iter()
-            .map(EngineContribution::unscaled),
-        );
-        resolve_engine_contributions(contributions)
     }
 }
 

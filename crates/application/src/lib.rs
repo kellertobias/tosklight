@@ -5,6 +5,7 @@
 
 pub mod action;
 pub mod event;
+pub mod playback;
 
 pub use action::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionOutcome, ActionSource,
@@ -16,3 +17,4 @@ pub use event::{
     EventSubscription, PlaybackCueTransition, PlaybackEvent, PlaybackTransitionCause, SequenceGap,
     SubscriptionDelivery, SubscriptionOptions,
 };
+pub use playback::automatic_playback_events;
