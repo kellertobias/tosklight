@@ -1,4 +1,9 @@
+mod active;
+mod legacy;
+
 use super::*;
+use active::*;
+use legacy::*;
 
 pub(super) async fn apply_mvr_import(
     State(state): State<AppState>,
@@ -6,7 +11,7 @@ pub(super) async fn apply_mvr_import(
     headers: HeaderMap,
     Json(input): Json<ApplyMvrImport>,
 ) -> Result<Json<ApplyMvrResult>, ApiError> {
-    let _session = authenticate(&state, &headers)?;
+    let session = authenticate(&state, &headers)?;
     let staged = state
         .mvr_imports
         .lock()
@@ -15,12 +20,46 @@ pub(super) async fn apply_mvr_import(
     if staged.created.elapsed() > Duration::from_secs(30 * 60) {
         return Err(ApiError::bad_request("MVR import preview expired"));
     }
-    if input.new_show.is_some() == input.existing_show_id.is_some() {
+    let ApplyMvrImport {
+        new_show,
+        existing_show_id,
+        resolutions,
+    } = input;
+    if new_show.is_some() == existing_show_id.is_some() {
         return Err(ApiError::bad_request(
             "choose exactly one MVR import destination",
         ));
     }
-    let (entry, is_new, open_after) = if let Some(new) = input.new_show {
+    let (entry, is_new, open_after) = import_destination(&state, new_show, existing_show_id)?;
+    let (definitions, new_definitions) = mvr_definitions(&state, &staged.document)?;
+    let import = ActiveMvrImport {
+        entry,
+        document: staged.document,
+        definitions,
+        new_definitions,
+        resolutions,
+    };
+    if !is_new && active_show_is(&state, import.entry.id) {
+        return apply_active_mvr_import(&state, &session, import).await;
+    }
+    apply_legacy_mvr_import(
+        &state,
+        session,
+        LegacyMvrImport {
+            import,
+            is_new,
+            open_after,
+        },
+    )
+    .await
+}
+
+fn import_destination(
+    state: &AppState,
+    new_show: Option<NewMvrShow>,
+    existing_show_id: Option<Uuid>,
+) -> Result<(ShowEntry, bool, bool), ApiError> {
+    if let Some(new) = new_show {
         validate_show_name(&new.name)?;
         let path = state
             .data_dir
@@ -30,7 +69,7 @@ pub(super) async fn apply_mvr_import(
             return Err(ApiError::conflict("a show with that name already exists"));
         }
         initialise_show(&path, &new.name).map_err(ApiError::store)?;
-        (
+        Ok((
             state
                 .desk
                 .lock()
@@ -38,10 +77,10 @@ pub(super) async fn apply_mvr_import(
                 .map_err(ApiError::store)?,
             true,
             new.open_after_import,
-        )
+        ))
     } else {
-        let id = light_core::ShowId(input.existing_show_id.unwrap());
-        (
+        let id = light_core::ShowId(existing_show_id.expect("destination was validated"));
+        Ok((
             state
                 .desk
                 .lock()
@@ -50,86 +89,8 @@ pub(super) async fn apply_mvr_import(
                 .ok_or_else(|| ApiError::not_found("show"))?,
             false,
             false,
-        )
-    };
-    let temporary = state
-        .data_dir
-        .join("shows")
-        .join(format!(".mvr-{}.show", Uuid::new_v4()));
-    ShowStore::open(&entry.path)
-        .map_err(ApiError::store)?
-        .backup_to(&temporary)
-        .map_err(ApiError::store)?;
-    let (definitions, new_definitions) = mvr_definitions(&state, &staged.document)?;
-    let result = (|| {
-        let store = ShowStore::open(&temporary).map_err(ApiError::store)?;
-        let applied =
-            apply_mvr_to_store(&store, &staged.document, &definitions, &input.resolutions)?;
-        validate_show_file(&temporary).map_err(ApiError::store)?;
-        let probe = ShowEntry {
-            path: temporary.display().to_string(),
-            ..entry.clone()
-        };
-        load_engine_snapshot(&probe)
-            .map_err(ApiError::bad_request)?
-            .validate()
-            .map_err(|e| ApiError::bad_request(e.to_string()))?;
-        Ok::<_, ApiError>(applied)
-    })();
-    let (imported, unresolved, warnings) = match result {
-        Ok(v) => v,
-        Err(e) => {
-            let _ = std::fs::remove_file(&temporary);
-            if is_new {
-                let _ = state.desk.lock().remove_show(entry.id);
-                let _ = std::fs::remove_file(&entry.path);
-            }
-            return Err(e);
-        }
-    };
-    if !is_new {
-        backup_show(&state, &entry)?;
+        ))
     }
-    std::fs::rename(&temporary, &entry.path).map_err(ApiError::io)?;
-    for (definition, source) in new_definitions {
-        let json =
-            serde_json::to_string(&definition).map_err(|e| ApiError::internal(e.to_string()))?;
-        state
-            .fixture_library
-            .lock()
-            .import_json_with_source(&json, Some(&source))
-            .map_err(ApiError::fixture)?;
-    }
-    let should_open = open_after
-        || state
-            .active_show
-            .read()
-            .as_ref()
-            .is_some_and(|s| s.id == entry.id);
-    if should_open {
-        let compiled = load_engine_snapshot(&entry).map_err(ApiError::bad_request)?;
-        let _lock = state.activation_lock.lock().await;
-        activate_snapshot(&state, compiled, &Transition::HoldCurrent, None).await?;
-        state
-            .desk
-            .lock()
-            .set_active_show(Some(entry.id))
-            .map_err(ApiError::store)?;
-        *state.active_show.write() = Some(entry.clone());
-    }
-    emit(
-        &state,
-        "mvr_imported",
-        serde_json::json!({"show":entry,"fixtures":imported,"unresolved":unresolved,"scenery":0}),
-    );
-    Ok(Json(ApplyMvrResult {
-        show: entry,
-        imported_fixtures: imported,
-        unresolved_fixtures: unresolved,
-        imported_scenery: 0,
-        opened: should_open,
-        warnings,
-    }))
 }
 
 pub(super) fn build_mvr_export(

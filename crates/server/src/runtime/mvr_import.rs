@@ -93,21 +93,7 @@ pub(super) fn resolve_mvr_definition(
     definitions: &[light_fixture::FixtureDefinition],
     fixture: &light_mvr::MvrFixture,
 ) -> Option<light_fixture::FixtureDefinition> {
-    let spec = fixture
-        .gdtf_spec
-        .rsplit('/')
-        .next()
-        .unwrap_or(&fixture.gdtf_spec)
-        .trim_end_matches(".gdtf");
-    definitions
-        .iter()
-        .find(|d| {
-            d.mode.eq_ignore_ascii_case(&fixture.gdtf_mode)
-                && (d.model.eq_ignore_ascii_case(spec)
-                    || d.name.eq_ignore_ascii_case(spec)
-                    || format!("{}@{}", d.manufacturer, d.model).eq_ignore_ascii_case(spec))
-        })
-        .cloned()
+    light_application::resolve_mvr_definition(definitions, fixture)
 }
 
 pub(super) type MvrDefinitions = (
