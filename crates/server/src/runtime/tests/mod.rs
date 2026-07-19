@@ -20,6 +20,8 @@ mod event_transport_route_tests;
 mod output_runtime_tests;
 #[path = "playback_v2_route_tests.rs"]
 mod playback_v2_route_tests;
+#[path = "programming_interaction_adapter_tests.rs"]
+mod programming_interaction_adapter_tests;
 #[path = "selective_import_route_tests.rs"]
 mod selective_import_route_tests;
 #[path = "show_patch_route_tests.rs"]

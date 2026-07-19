@@ -1,7 +1,8 @@
 use super::{
-    ApiError, AppState, ControlDesk, PoolPlaybackInput, Session, cuelist_for_page_playback,
-    dispatch_playback_action, emit, intercept_update_playback_target, persist_active_playbacks,
-    persist_programmer, predicted_preload_temp_state, preload_capture_action_with_temp_state,
+    ApiError, AppState, ControlDesk, PoolPlaybackInput, ProgrammingLockPolicy, Session,
+    cuelist_for_page_playback, dispatch_playback_action, emit, intercept_update_playback_target,
+    persist_active_playbacks, persist_programmer, predicted_preload_temp_state,
+    preload_capture_action_with_temp_state, programming_context, run_programming_interaction,
 };
 use light_application::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionSource,
@@ -50,8 +51,25 @@ pub(super) fn http_action(
         action: parse_action(action_name, input)?,
         surface: parse_surface(input.surface.as_deref()),
     };
-    let context = operator_context(session, session.desk.id, ActionSource::Http, None);
-    execute(state, Some(session), Some(&session.desk), context, command)
+    let context = programming_context(session, ActionSource::Http, None);
+    let playback_context = context.clone();
+    run_programming_interaction(
+        state,
+        session,
+        &context,
+        "http",
+        ProgrammingLockPolicy::RequireUnlocked,
+        || {
+            execute(
+                state,
+                Some(session),
+                Some(&session.desk),
+                playback_context,
+                command,
+            )
+        },
+    )?
+    .output
 }
 
 pub(super) fn osc_action(
@@ -75,7 +93,19 @@ pub(super) fn osc_action(
         || ActionContext::system(desk_id, ActionSource::Osc),
         |session| operator_context(session, desk_id, ActionSource::Osc, None),
     );
-    execute(state, session, desk, context, command)
+    let Some(session) = session else {
+        return execute(state, None, desk, context, command);
+    };
+    let playback_context = context.clone();
+    run_programming_interaction(
+        state,
+        session,
+        &context,
+        "osc",
+        ProgrammingLockPolicy::RequireUnlocked,
+        || execute(state, Some(session), desk, playback_context, command),
+    )?
+    .output
 }
 
 pub(super) fn websocket_action(

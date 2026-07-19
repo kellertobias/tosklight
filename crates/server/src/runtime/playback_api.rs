@@ -6,6 +6,7 @@ pub(super) async fn playback_action(
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let session = authenticate(&state, &headers)?;
+    let _activation = state.activation_lock.clone().lock_owned().await;
     let id = light_core::CueListId(id);
     let result = playback_service::http_action(
         &state,

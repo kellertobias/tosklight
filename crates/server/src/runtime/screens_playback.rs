@@ -180,6 +180,7 @@ pub(super) async fn paged_playback_action(
             "session is not attached to this desk",
         ));
     }
+    let _activation = state.activation_lock.clone().lock_owned().await;
     let input = input.map(|Json(value)| value).unwrap_or_default();
     let result = playback_service::http_action(
         &state,
@@ -200,6 +201,7 @@ pub(super) async fn pool_playback_action(
     input: Option<Json<PoolPlaybackInput>>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let session = authenticate(&state, &headers)?;
+    let _activation = state.activation_lock.clone().lock_owned().await;
     let input = input.map(|Json(value)| value).unwrap_or_default();
     let result = playback_service::http_action(
         &state,

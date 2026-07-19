@@ -10,17 +10,31 @@ pub(super) async fn highlight_status(
     headers: HeaderMap,
 ) -> Result<Json<HighlightState>, ApiError> {
     let session = authenticate(&state, &headers)?;
-    let transition = current_highlight_transition(&state, &session)
+    let status = run_highlight_http_interaction(
+        &state,
+        &session,
+        ProgrammingLockPolicy::AllowLockedReconciliation,
+        reconcile_highlight_status,
+    )
+    .await?;
+    Ok(Json(status))
+}
+
+fn reconcile_highlight_status(
+    state: &AppState,
+    session: &Session,
+) -> Result<HighlightState, ApiError> {
+    let transition = current_highlight_transition(state, session)
         .ok_or_else(|| ApiError::not_found("programmer"))?;
-    if apply_highlight_selection_write(&state, &session, transition.working_selection.as_ref())? {
+    if apply_highlight_selection_write(state, session, transition.working_selection.as_ref())? {
         emit(
-            &state,
+            state,
             "programmer_changed",
             serde_json::json!({"session_id":session.id,"source":"highlight_status_reconcile"}),
         );
     }
-    sync_highlight_output(&state);
-    Ok(Json(transition.state))
+    sync_highlight_output(state);
+    Ok(transition.state)
 }
 
 pub(super) async fn highlight_action(
@@ -29,6 +43,51 @@ pub(super) async fn highlight_action(
     Json(input): Json<HighlightActionInput>,
 ) -> Result<Json<HighlightState>, ApiError> {
     let session = authenticate(&state, &headers)?;
+    let action = input.action;
+    let highlight = run_highlight_http_interaction(
+        &state,
+        &session,
+        ProgrammingLockPolicy::RequireUnlocked,
+        move |state, session| apply_highlight_action(state, session, action),
+    )
+    .await?;
+    Ok(Json(highlight))
+}
+
+async fn run_highlight_http_interaction<T: Send + 'static>(
+    state: &AppState,
+    session: &Session,
+    lock_policy: ProgrammingLockPolicy,
+    operation: impl FnOnce(&AppState, &Session) -> Result<T, ApiError> + Send + 'static,
+) -> Result<T, ApiError> {
+    let activation = state.activation_lock.clone().lock_owned().await;
+    let worker_state = state.clone();
+    let worker_session = session.clone();
+    let (completed, _activation) = tokio::task::spawn_blocking(move || {
+        let context =
+            programming_context(&worker_session, light_application::ActionSource::Http, None);
+        (
+            run_programming_interaction(
+                &worker_state,
+                &worker_session,
+                &context,
+                "http",
+                lock_policy,
+                || operation(&worker_state, &worker_session),
+            ),
+            activation,
+        )
+    })
+    .await
+    .map_err(|error| ApiError::internal(format!("Highlight interaction task failed: {error}")))?;
+    completed?.output
+}
+
+fn apply_highlight_action(
+    state: &AppState,
+    session: &Session,
+    action: HighlightAction,
+) -> Result<HighlightState, ApiError> {
     let programmer = state
         .programmers
         .get(session.id)
@@ -46,7 +105,7 @@ pub(super) async fn highlight_action(
             session.desk.id,
             session.user.id,
             Some(&session.user.name),
-            input.action,
+            action,
             &selection,
             &fixtures,
             &groups,
@@ -55,26 +114,26 @@ pub(super) async fn highlight_action(
         .map_err(|error| match error {
             HighlightError::OwnedByAnotherUser(_) => ApiError::conflict(error.to_string()),
         })?;
-    if apply_highlight_selection_write(&state, &session, transition.working_selection.as_ref())? {
+    if apply_highlight_selection_write(state, session, transition.working_selection.as_ref())? {
         emit(
-            &state,
+            state,
             "programmer_changed",
-            serde_json::json!({"session_id":session.id,"source":"highlight","action":input.action}),
+            serde_json::json!({"session_id":session.id,"source":"highlight","action":action}),
         );
     }
-    sync_highlight_output(&state);
+    sync_highlight_output(state);
     emit(
-        &state,
+        state,
         "highlight_changed",
         serde_json::json!({
             "desk_id": session.desk.id,
             "user_id": session.user.id,
-            "action": input.action,
+            "action": action,
             "state": &transition.state,
         }),
     );
-    send_osc_feedback(&state, false);
-    Ok(Json(transition.state))
+    send_osc_feedback(state, false);
+    Ok(transition.state)
 }
 
 pub(super) fn highlight_fixture_summaries(

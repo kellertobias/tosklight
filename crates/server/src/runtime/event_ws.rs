@@ -79,19 +79,48 @@ pub(super) async fn set_programmer(
     Json(input): Json<ProgrammerSet>,
 ) -> Result<StatusCode, ApiError> {
     let session = authenticate(&state, &headers)?;
+    let _activation = state.activation_lock.clone().lock_owned().await;
+    let context = programming_context(&session, light_application::ActionSource::Http, None);
+    run_programming_interaction(
+        &state,
+        &session,
+        &context,
+        "http",
+        ProgrammingLockPolicy::RequireUnlocked,
+        || set_programmer_value(&state, &session, input),
+    )?
+    .output
+}
+
+fn set_programmer_value(
+    state: &AppState,
+    session: &Session,
+    input: ProgrammerSet,
+) -> Result<StatusCode, ApiError> {
+    let before = selection_revision(state, session);
     state.programmers.set(
         session.id,
         input.fixture_id,
         light_core::AttributeKey(input.attribute),
         light_core::AttributeValue::Normalized(input.value),
     );
-    persist_programmer(&state, &session)?;
+    if before != selection_revision(state, session) {
+        reconcile_highlight_selection(state, session, "legacy_programmer_set");
+    }
+    persist_programmer(state, session)?;
     emit(
-        &state,
+        state,
         "programmer_changed",
         serde_json::json!({"session_id":session.id}),
     );
     Ok(StatusCode::NO_CONTENT)
+}
+
+fn selection_revision(state: &AppState, session: &Session) -> Option<u64> {
+    state
+        .programmers
+        .interaction_version(session.id)
+        .map(|version| version.selection_revision)
 }
 pub(super) async fn update_master(
     State(state): State<AppState>,

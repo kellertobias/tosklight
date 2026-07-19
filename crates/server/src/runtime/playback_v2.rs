@@ -4,7 +4,10 @@ mod wire;
 
 pub(super) use wire::{desk_projection, runtime_change};
 
-use super::{AppState, Session, authenticate, playback_service};
+use super::{
+    AppState, ProgrammingLockPolicy, Session, authenticate, playback_service,
+    run_programming_interaction,
+};
 use axum::{
     Json, Router,
     extract::{Path, State, rejection::JsonRejection},
@@ -42,13 +45,25 @@ async fn playback_action(
         wire::application_command(request).map_err(PlaybackHttpError::invalid)?;
     let _activation = state.activation_lock.clone().lock_owned().await;
     let context = http_context(&session).with_request_id(request_id);
-    let result = playback_service::execute(
+    let playback_context = context.clone();
+    let result = run_programming_interaction(
         &state,
-        Some(&session),
-        Some(&session.desk),
-        context,
-        command,
+        &session,
+        &context,
+        "http",
+        ProgrammingLockPolicy::RequireUnlocked,
+        || {
+            playback_service::execute(
+                &state,
+                Some(&session),
+                Some(&session.desk),
+                playback_context,
+                command,
+            )
+        },
     )
+    .map_err(PlaybackHttpError::api)?
+    .output
     .map_err(PlaybackHttpError::api)?;
     Ok(Json(wire::action_outcome(result)).into_response())
 }

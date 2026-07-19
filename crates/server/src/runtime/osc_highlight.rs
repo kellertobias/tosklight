@@ -60,6 +60,29 @@ pub(super) fn handle_highlight_osc(
         return;
     };
     attach_session_command_context(state, &session);
+    let Ok(_activation) = state.activation_lock.clone().try_lock_owned() else {
+        emit_highlight_osc_rejection(
+            state,
+            &session,
+            action,
+            "the active show is changing; retry Highlight",
+        );
+        return;
+    };
+    let context = programming_context(&session, light_application::ActionSource::Osc, None);
+    if let Err(error) = run_programming_interaction(
+        state,
+        &session,
+        &context,
+        "osc",
+        ProgrammingLockPolicy::RequireUnlocked,
+        || apply_highlight_osc_action(state, &session, action),
+    ) {
+        emit_highlight_osc_rejection(state, &session, action, &error.message);
+    }
+}
+
+fn apply_highlight_osc_action(state: &AppState, session: &Session, action: HighlightAction) {
     let Some(programmer) = state.programmers.get(session.id) else {
         return;
     };
@@ -82,7 +105,7 @@ pub(super) fn handle_highlight_osc(
         Ok(transition) => {
             let selection_changed = apply_highlight_selection_write(
                 state,
-                &session,
+                session,
                 transition.working_selection.as_ref(),
             )
             .unwrap_or(false);
@@ -106,18 +129,27 @@ pub(super) fn handle_highlight_osc(
                 }),
             );
         }
-        Err(error) => emit(
-            state,
-            "highlight_rejected",
-            serde_json::json!({
-                "desk_id":session.desk.id,
-                "user_id":session.user.id,
-                "action":action,
-                "source":"osc",
-                "error":error.to_string(),
-            }),
-        ),
+        Err(error) => emit_highlight_osc_rejection(state, session, action, &error.to_string()),
     }
+}
+
+fn emit_highlight_osc_rejection(
+    state: &AppState,
+    session: &Session,
+    action: HighlightAction,
+    error: &str,
+) {
+    emit(
+        state,
+        "highlight_rejected",
+        serde_json::json!({
+            "desk_id":session.desk.id,
+            "user_id":session.user.id,
+            "action":action,
+            "source":"osc",
+            "error":error,
+        }),
+    );
 }
 
 #[derive(Clone, Copy)]

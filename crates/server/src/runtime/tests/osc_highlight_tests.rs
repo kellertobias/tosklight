@@ -97,6 +97,7 @@ fn verify_highlight_alias_dedupe(
         apply_highlight_selection_write(state, session, transition.working_selection.as_ref())
             .unwrap();
     }
+    let before_aliases = state.application_events.latest_sequence();
     send_highlight_osc(state, session, "previous");
     send_highlight_osc(state, session, "prev");
     let selection = state.programmers.selection(session.id).unwrap();
@@ -111,11 +112,27 @@ fn verify_highlight_alias_dedupe(
     );
     assert_eq!(after_aliases.state.active_index, Some(1));
     assert_eq!(after_aliases.output_fixtures, vec![fixture_ids[1]]);
-    assert!(state.audit_events.lock().iter().any(|event| {
-        event.kind == "highlight_changed"
-            && event.payload["source"] == "osc"
-            && event.payload["action"] == "previous"
-    }));
+    assert_programming_selection_event(
+        state,
+        session,
+        before_aliases,
+        light_application::ActionSource::Osc,
+        &fixture_ids[1..2],
+    );
+    assert_eq!(
+        state
+            .audit_events
+            .lock()
+            .iter()
+            .filter(|event| {
+                event.kind == "highlight_changed"
+                    && event.payload["source"] == "osc"
+                    && event.payload["action"] == "previous"
+            })
+            .count(),
+        1,
+        "the previous/prev aliases must share one subscriber-level dedupe key"
+    );
 }
 
 fn verify_highlight_osc_feedback(state: &AppState, session: &Session) {

@@ -76,3 +76,41 @@ fn test_state() -> (AppState, PathBuf) {
         data_dir,
     )
 }
+
+fn assert_programming_selection_event(
+    state: &AppState,
+    session: &Session,
+    after_sequence: u64,
+    source: light_application::ActionSource,
+    expected_selection: &[light_core::FixtureId],
+) {
+    assert_eq!(state.application_events.latest_sequence(), after_sequence + 1);
+    let filter = light_application::EventFilter::for_desk(session.desk.id).with_object(
+        light_application::EventObject::programming_selection(session.desk.id),
+    );
+    let light_application::EventReplay::Events(events) =
+        state.application_events.replay(after_sequence, &filter)
+    else {
+        panic!("expected a replayable Programming selection event");
+    };
+    assert_eq!(events.len(), 1);
+    let event = &events[0];
+    assert_eq!(event.desk_id, Some(session.desk.id));
+    assert_eq!(
+        event.source,
+        light_application::EventSource::Action(source)
+    );
+    assert!(event.correlation_id.is_some());
+    let light_application::ApplicationEvent::Programming(
+        light_application::ProgrammingEvent::InteractionChanged(change),
+    ) = &event.payload
+    else {
+        panic!("expected a Programming interaction change");
+    };
+    assert!(change.command_line().is_none());
+    assert_eq!(
+        change.selection().unwrap().selected,
+        expected_selection,
+        "the event must carry the authoritative post-interaction selection"
+    );
+}

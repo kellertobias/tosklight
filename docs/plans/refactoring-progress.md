@@ -4,7 +4,7 @@ This is the living handoff for [`major-refactoring.md`](major-refactoring.md). U
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-19 after the external Programmer interaction boundary.
+Last updated: 2026-07-19 after the external Programmer selection adapters.
 
 ## Guardrails
 
@@ -82,6 +82,11 @@ Last updated: 2026-07-19 after the external Programmer interaction boundary.
   lightweight coherent version, Preload GO follows activation → Programming → Playback ordering,
   unrelated Output/Playback commands no longer take the Programming gate, and the superseded
   public Programming unit-of-work escape hatch is removed.
+- [x] Routed direct Highlight HTTP/OSC, the legacy Programmer value write, and selection-capable
+  Playback v1/v2/OSC input through that ordered Programming boundary. Real selection changes now
+  publish one authoritative source-scoped event, including the final gesture state; releases,
+  Highlight ON/OFF, request replays, and already-current reconciliation publish none. Highlight
+  status retains its locked-desk repair behavior while mutating actions remain lock-protected.
 - [x] Migrated the production command-line editors and action consumers onto the scoped
   Programming store. A provider-owned latest-wins writer gives immediate optimistic feedback,
   bounds slow writes to one in flight plus the newest pending value, waits for accepted writes
@@ -131,9 +136,9 @@ Last updated: 2026-07-19 after the external Programmer interaction boundary.
 - [ ] Move the remaining selection consumers onto the scoped Programming store, then remove their
   legacy bootstrap fields and broad Programmer refresh paths. Group Pool, Group Strip, and the
   command bar have moved; Stage, channel, Patch, and miscellaneous readers still use the facade.
-- [ ] Route direct Highlight HTTP/OSC, legacy Programmer writes, selection-capable Playback input,
-  and engine-wide live-Group refreshes through the same ordered typed-event boundary. Multi-desk
-  generation installs need deterministic desk locking and exactly one event per changed desk.
+- [ ] Route engine-wide live-Group refreshes through the same ordered typed-event boundary.
+  Multi-desk generation installs need deterministic desk locking and exactly one event per changed
+  desk.
 - [ ] Replace inferred Cue ambiguity in the command-line text projection with explicit desk-local
   pending-choice state that is set only by `ChoiceRequired` after ENT and cleared by edit, reset,
   selection, or Cancel. Until then, cross-session choice visibility remains a documented
@@ -191,7 +196,10 @@ Last updated: 2026-07-19 after the external Programmer interaction boundary.
   Playback, Preload, Patch, Output, event, shared-control, Stage 3D, build, and strict Clippy checks
   have passed for their committed slices. The latest command-line slice passed 18 Programming
   application tests, 4 command HTTP scenarios, the focused OSC shortcut test, 219 combined scoped
-  frontend tests, and 114 focused consumer tests.
+  frontend tests, and 114 focused consumer tests. The external selection-adapter slice passes all
+  7 Playback route tests, focused Highlight HTTP/OSC coverage, the legacy Programmer gesture test,
+  formatting, and strict server Clippy. The full server library run passes 212 tests with only the
+  sandbox-blocked CITP socket test failing and one standard-port Matter test ignored.
 - The current complete frontend suite passes all 811 tests, and the production frontend build
   passes. A final repository-wide suite and real desktop run has not yet been completed.
 

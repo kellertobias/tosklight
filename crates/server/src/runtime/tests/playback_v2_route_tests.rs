@@ -79,6 +79,171 @@ async fn v2_playback_action_is_desk_scoped_typed_and_idempotent() {
 }
 
 #[tokio::test]
+async fn v2_group_selection_publishes_one_live_or_static_programming_event() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let desk_id = session_desk_id(&state, &token);
+    open_playback_test_show(&app, &token).await;
+    let fixture = install_playback_test_state(&state);
+
+    let cursor = state.application_events.latest_sequence();
+    let request = action_request(
+        "select-live-group",
+        2,
+        serde_json::json!({"type":"select","pressed":true}),
+    );
+    let response = post_action(&app, Some(&token), desk_id, request.clone()).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = json(response).await;
+    let events = playback_selection_events(&state, desk_id, cursor);
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        events[0].correlation_id.unwrap().to_string(),
+        response["correlation_id"]
+    );
+    let selection = programming_selection(&events[0]);
+    assert_eq!(selection.selected, vec![fixture]);
+    assert!(matches!(
+        selection.expression.as_ref(),
+        Some(light_programmer::SelectionExpression::LiveGroup { group_id, .. })
+            if group_id == "front"
+    ));
+
+    let after_live = state.application_events.latest_sequence();
+    let replay = post_action(&app, Some(&token), desk_id, request).await;
+    assert_eq!(replay.status(), StatusCode::OK);
+    assert!(json(replay).await["replayed"].as_bool().unwrap());
+    assert!(playback_selection_events(&state, desk_id, after_live).is_empty());
+
+    let cursor = state.application_events.latest_sequence();
+    let response = post_action(
+        &app,
+        Some(&token),
+        desk_id,
+        action_request(
+            "select-static-group",
+            2,
+            serde_json::json!({"type":"select_dereferenced","pressed":true}),
+        ),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let events = playback_selection_events(&state, desk_id, cursor);
+    assert_eq!(events.len(), 1);
+    let selection = programming_selection(&events[0]);
+    assert_eq!(selection.selected, vec![fixture]);
+    assert!(matches!(
+        selection.expression.as_ref(),
+        Some(light_programmer::SelectionExpression::Static)
+    ));
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn legacy_http_group_playback_selection_uses_the_same_typed_event_boundary() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let desk_id = session_desk_id(&state, &token);
+    open_playback_test_show(&app, &token).await;
+    let fixture = install_playback_test_state(&state);
+    let cursor = state.application_events.latest_sequence();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v1/playback-pool/2/select")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let events = playback_selection_events(&state, desk_id, cursor);
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        events[0].source,
+        light_application::EventSource::Action(light_application::ActionSource::Http)
+    );
+    let selection = programming_selection(&events[0]);
+    assert_eq!(selection.selected, vec![fixture]);
+    assert!(matches!(
+        selection.expression.as_ref(),
+        Some(light_programmer::SelectionExpression::LiveGroup { group_id, .. })
+            if group_id == "front"
+    ));
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn osc_group_playback_selection_uses_the_same_typed_event_boundary() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = state
+        .sessions
+        .read()
+        .values()
+        .find(|session| session.token == token)
+        .cloned()
+        .unwrap();
+    let desk_id = session.desk.id;
+    open_playback_test_show(&app, &token).await;
+    let fixture = install_playback_test_state(&state);
+    let source: SocketAddr = "127.0.0.1:9020".parse().unwrap();
+    state.osc_subscribers.lock().insert(
+        "playback-selection-test".into(),
+        OscSubscriber {
+            desk_alias: session.desk.osc_alias.clone(),
+            target: source,
+            command_source: source,
+            session_id: session.id,
+            last_seen: Instant::now(),
+            shifted: false,
+            shift_held: false,
+            update_record_started: None,
+            update_first_release: None,
+            last_highlight_action: None,
+        },
+    );
+    let cursor = state.application_events.latest_sequence();
+
+    handle_playback_osc(
+        &state,
+        "/light/playback/2/select",
+        &[OscArgument::Bool(true)],
+        Some("127.0.0.1:9020"),
+    );
+
+    let events = playback_selection_events(&state, desk_id, cursor);
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        events[0].source,
+        light_application::EventSource::Action(light_application::ActionSource::Osc)
+    );
+    let selection = programming_selection(&events[0]);
+    assert_eq!(selection.selected, vec![fixture]);
+    assert!(matches!(
+        selection.expression.as_ref(),
+        Some(light_programmer::SelectionExpression::LiveGroup { group_id, .. })
+            if group_id == "front"
+    ));
+
+    let after_press = state.application_events.latest_sequence();
+    handle_playback_osc(
+        &state,
+        "/light/playback/2/select",
+        &[OscArgument::Bool(false)],
+        Some("127.0.0.1:9020"),
+    );
+    assert!(playback_selection_events(&state, desk_id, after_press).is_empty());
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn v2_snapshot_returns_only_requested_runtime_and_a_pre_read_cursor() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
@@ -262,9 +427,10 @@ async fn open_playback_test_show(app: &Router, token: &str) {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
-fn install_playback_test_state(state: &AppState) {
+fn install_playback_test_state(state: &AppState) -> light_core::FixtureId {
     let cue_list = playback_test_cue_list();
     let cue_list_id = cue_list.id;
+    let fixture = light_core::FixtureId::new();
     state
         .engine
         .replace_snapshot(EngineSnapshot {
@@ -284,12 +450,42 @@ fn install_playback_test_state(state: &AppState) {
             groups: vec![light_programmer::GroupDefinition {
                 id: "front".into(),
                 name: "Front".into(),
+                fixtures: vec![fixture],
                 master: 0.75,
                 ..light_programmer::GroupDefinition::default()
             }],
             ..EngineSnapshot::default()
         })
         .unwrap();
+    fixture
+}
+
+fn playback_selection_events(
+    state: &AppState,
+    desk_id: Uuid,
+    after: u64,
+) -> Vec<Arc<light_application::EventEnvelope>> {
+    let filter = light_application::EventFilter::for_desk(desk_id).with_object(
+        light_application::EventObject::programming_selection(desk_id),
+    );
+    let light_application::EventReplay::Events(events) =
+        state.application_events.replay(after, &filter)
+    else {
+        panic!("selection events should remain replayable")
+    };
+    events
+}
+
+fn programming_selection(
+    event: &light_application::EventEnvelope,
+) -> &light_programmer::ProgrammerSelection {
+    let light_application::ApplicationEvent::Programming(
+        light_application::ProgrammingEvent::InteractionChanged(change),
+    ) = &event.payload
+    else {
+        panic!("expected a typed Programming interaction event")
+    };
+    change.selection().unwrap()
 }
 
 fn playback_test_cue_list() -> light_playback::CueList {

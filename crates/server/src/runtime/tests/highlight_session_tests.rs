@@ -89,6 +89,7 @@ async fn rest_prev_next_all_change_the_real_selection_while_high_remains_indepen
         .unwrap();
     state.programmers.select(session.id, fixture_ids.clone());
 
+    let before_next = state.application_events.latest_sequence();
     let next = post_highlight_action(&app, &token, "next").await;
     assert_eq!(next["active"], false);
     assert_eq!(next["mode"], "step");
@@ -96,14 +97,29 @@ async fn rest_prev_next_all_change_the_real_selection_while_high_remains_indepen
         state.programmers.get(session.id).unwrap().selected,
         fixture_ids[..1]
     );
+    assert_programming_selection_event(
+        &state,
+        &session,
+        before_next,
+        light_application::ActionSource::Http,
+        &fixture_ids[..1],
+    );
     verify_bootstrapped_step_highlight(&app, &state, &session, fixture_ids[0]).await;
 
+    let before_all = state.application_events.latest_sequence();
     let all = post_highlight_action(&app, &token, "all").await;
     assert_eq!(all["active"], false);
     assert_eq!(all["mode"], "selection");
     assert_eq!(
         state.programmers.get(session.id).unwrap().selected,
         fixture_ids
+    );
+    assert_programming_selection_event(
+        &state,
+        &session,
+        before_all,
+        light_application::ActionSource::Http,
+        &fixture_ids,
     );
 
     let previous = post_highlight_action(&app, &token, "previous").await;
@@ -112,10 +128,12 @@ async fn rest_prev_next_all_change_the_real_selection_while_high_remains_indepen
         state.programmers.get(session.id).unwrap().selected,
         fixture_ids[2..]
     );
+    let before_high = state.application_events.latest_sequence();
     let high = post_highlight_action(&app, &token, "on").await;
     assert_eq!(high["active"], true);
     assert_eq!(high["mode"], "step");
     assert_eq!(state.engine.highlighted_fixtures(), fixture_ids[2..]);
+    assert_eq!(state.application_events.latest_sequence(), before_high);
 
     // An external selection write resets the step basis without toggling HIGH, including when
     // the new source is live. Editing that Group before ALL is then re-resolved at action time.
@@ -173,6 +191,88 @@ async fn rest_prev_next_all_change_the_real_selection_while_high_remains_indepen
     reconcile_highlight_selection(&state, &session, "test_new_selection");
     assert_eq!(state.engine.highlighted_fixtures(), vec![fixture_ids[1]]);
 
+    let before_off = state.application_events.latest_sequence();
+    let off = post_highlight_action(&app, &token, "off").await;
+    assert_eq!(off["active"], false);
+    assert_eq!(state.application_events.latest_sequence(), before_off);
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn rest_highlight_status_publishes_only_an_authoritative_selection_repair() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, session_id) = login(&app, "Operator").await;
+    let session_id = SessionId(Uuid::parse_str(&session_id).unwrap());
+    let session = state.sessions.read()[&session_id].clone();
+    let fixtures = highlight_test_fixtures();
+    let fixture_ids = fixtures
+        .iter()
+        .map(|fixture| fixture.fixture_id)
+        .collect::<Vec<_>>();
+    state
+        .engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures,
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+    state.programmers.select(session.id, fixture_ids.clone());
+    post_highlight_action(&app, &token, "next").await;
+
+    let mut snapshot = (*state.engine.snapshot()).clone();
+    snapshot.fixtures.remove(0);
+    state.engine.replace_snapshot(snapshot).unwrap();
+    write_desk_lock(
+        &state,
+        session.desk.id,
+        &DeskLockConfiguration {
+            locked: true,
+            ..DeskLockConfiguration::default()
+        },
+    )
+    .unwrap();
+    let before_status = state.application_events.latest_sequence();
+    let status = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v1/highlight")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(status.status(), StatusCode::OK);
+    let status = json(status).await;
+    assert_eq!(status["active_fixture"]["fixture_id"], fixture_ids[1].0.to_string());
+    assert_eq!(
+        state.programmers.get(session.id).unwrap().selected,
+        fixture_ids[1..2]
+    );
+    assert_programming_selection_event(
+        &state,
+        &session,
+        before_status,
+        light_application::ActionSource::Http,
+        &fixture_ids[1..2],
+    );
+
+    // GET remains a reconciliation endpoint while the desk is locked; it must not publish when
+    // the authoritative projection is already current.
+    let before_no_op = state.application_events.latest_sequence();
+    let no_op = app
+        .oneshot(
+            Request::get("/api/v1/highlight")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(no_op.status(), StatusCode::OK);
+    assert_eq!(state.application_events.latest_sequence(), before_no_op);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
