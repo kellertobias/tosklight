@@ -4,7 +4,7 @@ This is the living handoff for [`major-refactoring.md`](major-refactoring.md). U
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-19 after the parameter-bank selection migration.
+Last updated: 2026-07-19 after the modal selection migration.
 
 ## Guardrails
 
@@ -134,6 +134,11 @@ Last updated: 2026-07-19 after the parameter-bank selection migration.
   selection immediately retargets writes, and inactive parameter views perform no selection
   hydration, visualization polling, or hardware-listener work. Normal Programmer values remain on
   the compatibility projection until the values store is connected.
+- [x] Migrated Special Dialogs and System Controls selection onto visibility-scoped streams. The
+  ordered projection is passed explicitly through Color, Position, Beam/Shapers, Dynamics, Control,
+  and Lamp On helpers without per-interaction copies; external changes update open modals, closed
+  modals do no hydration and tear down their stream, and System Controls retains its separate
+  compatibility list of all active Programmers pending the lifecycle slice.
 - [x] Exposed Selective Show Import through authenticated v2 catalog, preview, and atomic apply
   adapters with checked-in schemas, generated TypeScript, exact source/target revisions, strict
   response validation, and focused server contracts. **Show → Load → Partial Show Load** now uses a
@@ -171,8 +176,8 @@ Last updated: 2026-07-19 after the parameter-bank selection migration.
 - [ ] Move the remaining selection consumers onto the scoped Programming store, then remove their
   legacy bootstrap fields and broad Programmer refresh paths. Group Pool, Group Strip, and the
   command bar, Stage, Stage/Fixture pane chrome, Channels, Fixture Sheet, Patch, and Presets have
-  moved, as has the complete parameter bank; miscellaneous modal/setup readers still use the
-  facade.
+  moved, as have the complete parameter bank and selection-driven operator modals; Patch setup and
+  a small number of keypad/miscellaneous readers still use the facade.
 - [ ] Connect the user-scoped normal Programmer-values snapshot/event transport, mount the provider,
   and migrate value consumers and optimistic writers before removing value-triggered bootstrap
   refreshes. Keep Preload, modes, priority, connectivity, Highlight, and transient state outside
@@ -247,7 +252,8 @@ Last updated: 2026-07-19 after the parameter-bank selection migration.
   19 tests together with the existing selection and Highlight coverage. The isolated
   Programmer-values frontend core passes all 24 focused store/session/view tests and passed the
   full frontend typecheck. The parameter-bank migration passes 17 focused tests across its legacy
-  behavior and streamed selection suites, plus the full frontend typecheck.
+  behavior and streamed selection suites. The modal migration passes 13 focused tests including
+  ordered streamed writes and closed-view teardown. Both slices pass the full frontend typecheck.
 - The current complete frontend suite passes all 811 tests, and the production frontend build
   passes. A final repository-wide suite and real desktop run has not yet been completed.
 

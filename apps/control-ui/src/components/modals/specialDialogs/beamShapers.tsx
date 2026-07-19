@@ -14,7 +14,7 @@ interface BeamShapersDialogProps {
 
 export function availableSpecialDialogAttributes(
 	fixtures: PatchedFixture[],
-	selectedFixtureIds: string[],
+	selectedFixtureIds: readonly string[],
 ): Set<string> {
 	const result = new Set<string>();
 	for (const fixture of fixtures) {

@@ -47,7 +47,7 @@ export function interpolatePickerRange(
 
 /** Resolves RGB or CMY values for each ordered selected fixture/head. */
 export function colorProgrammerAssignments(
-  selectedFixtures: string[],
+  selectedFixtures: readonly string[],
   patch: PatchedFixture[],
   colors: PickerColor[],
 ): ColorProgrammerAssignment[] {

@@ -31,7 +31,7 @@ function inferredControlSemantic(name: string): ControlActionSemantic {
 export function compatibleSpecialDialogActions(
 	fixtures: PatchedFixture[],
 	semantic: ControlActionSemantic,
-	selectedFixtureIds: string[] = [],
+	selectedFixtureIds: readonly string[] = [],
 ): CompatibleFixtureControlAction[] {
 	const selected = new Set(selectedFixtureIds);
 	return fixtures.flatMap((fixture) => {
@@ -62,18 +62,22 @@ export function compatibleSpecialDialogActions(
 	});
 }
 
-export function ControlDialog() {
+export function ControlDialog({
+	selectedFixtureIds,
+}: {
+	selectedFixtureIds: readonly string[];
+}) {
 	const server = useServer();
 
 	const fixtureControlActions = (
 		semantic: ControlActionSemantic,
 		allWhenEmpty = false,
 	) => {
-		if (!server.selectedFixtures.length && !allWhenEmpty) return [];
+		if (!selectedFixtureIds.length && !allWhenEmpty) return [];
 		return compatibleSpecialDialogActions(
 			server.patch?.fixtures ?? [],
 			semantic,
-			server.selectedFixtures,
+			selectedFixtureIds,
 		);
 	};
 

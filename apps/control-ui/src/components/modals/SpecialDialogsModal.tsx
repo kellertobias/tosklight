@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useServer } from "../../api/ServerContext";
+import { useProgrammingSelectionView } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import { useApp } from "../../state/AppContext";
 import { Button, ModalPortal } from "../common";
 import {
@@ -17,32 +18,35 @@ export {
 	compatibleSpecialDialogActions,
 } from "./specialDialogs/control";
 
+const EMPTY_FIXTURE_IDS: readonly string[] = [];
+
 export function SpecialDialogsModal() {
 	const { state, dispatch } = useApp();
 	const server = useServer();
 	const [beamPage, setBeamPage] = useState(0);
 	const [dynamicSpeed, setDynamicSpeed] = useState(30);
 	const family = state.specialDialogFamily;
-	const selectedFixtureKey = server.selectedFixtures.join("\u0000");
+	const selection = useProgrammingSelectionView(state.specialDialogsOpen);
+	const selectedFixtureIds = selection?.selected ?? EMPTY_FIXTURE_IDS;
 	const positionDialog = usePositionDialog(
 		state.specialDialogsOpen && family === "Position",
-		selectedFixtureKey,
+		selectedFixtureIds,
 	);
-	const colorDialog = useColorDialog(state.shiftArmed);
+	const colorDialog = useColorDialog(selectedFixtureIds, state.shiftArmed);
 	const available = useMemo(
 		() =>
 			availableSpecialDialogAttributes(
 				server.patch?.fixtures ?? [],
-				server.selectedFixtures,
+				selectedFixtureIds,
 			),
-		[server.patch, server.selectedFixtures],
+		[server.patch, selectedFixtureIds],
 	);
 
 	const close = () =>
 		dispatch({ type: "SET_MODAL", modal: "specialDialogsOpen", value: false });
 
 	const apply = async (attribute: string, value: number) => {
-		const actions = server.selectedFixtures.map((fixtureId) => ({
+		const actions = selectedFixtureIds.map((fixtureId) => ({
 			fixtureId,
 			attribute,
 		}));
@@ -76,7 +80,7 @@ export function SpecialDialogsModal() {
 						×
 					</Button>
 					<h2>{family} · Special Dialog</h2>
-					<p>{server.selectedFixtures.length} fixtures selected</p>
+					<p>{selectedFixtureIds.length} fixtures selected</p>
 					<div className="special-dialog-content">
 						{family === "Position" && <PositionDialog {...positionDialog} />}
 						{family === "Color" && (
@@ -91,7 +95,9 @@ export function SpecialDialogsModal() {
 								apply={apply}
 							/>
 						)}
-						{family === "Control" && <ControlDialog />}
+						{family === "Control" && (
+							<ControlDialog selectedFixtureIds={selectedFixtureIds} />
+						)}
 						{family === "Dynamics" && (
 							<DynamicsDialog
 								speed={dynamicSpeed}

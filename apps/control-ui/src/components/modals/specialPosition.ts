@@ -9,7 +9,7 @@ export type ProgrammerHomeAssignment = {
 
 /** Builds the ordered, per-head Position home gesture for the current selection. */
 export function returnHomeAssignments(
-  selectedFixtures: string[],
+  selectedFixtures: readonly string[],
   patch: PatchedFixture[],
 ): ProgrammerHomeAssignment[] {
   const assignments: ProgrammerHomeAssignment[] = [];
@@ -75,7 +75,7 @@ function parameterDefault(
 
 /** Resolves a separate physical starting position for every selected lamp. */
 export function resolveLampPositions(
-  selectedFixtures: string[],
+  selectedFixtures: readonly string[],
   patch: PatchedFixture[],
   snapshot: VisualizationSnapshot,
 ) {

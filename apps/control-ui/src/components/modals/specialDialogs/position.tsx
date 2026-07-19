@@ -35,9 +35,10 @@ function averagePosition(positions: Map<string, LampPosition>) {
 
 export function usePositionDialog(
 	active: boolean,
-	selectedFixtureKey: string,
+	selectedFixtureIds: readonly string[],
 ): PositionDialogController {
 	const server = useServer();
+	const selectedFixtureKey = selectedFixtureIds.join("\u0000");
 	const [pan, setPan] = useState(0.5);
 	const [tilt, setTilt] = useState(0.5);
 	const trackball = useRef<HTMLDivElement>(null);
@@ -46,10 +47,10 @@ export function usePositionDialog(
 	const homeAssignments = useMemo(
 		() =>
 			returnHomeAssignments(
-				server.selectedFixtures,
+				selectedFixtureIds,
 				server.patch?.fixtures ?? [],
 			),
-		[server.patch, server.selectedFixtures],
+		[server.patch, selectedFixtureIds],
 	);
 
 	const updateAverages = (positions: Map<string, LampPosition>) => {
@@ -87,7 +88,7 @@ export function usePositionDialog(
 			.then((snapshot) => {
 				if (cancelled) return;
 				const origins = resolveLampPositions(
-					server.selectedFixtures,
+					selectedFixtureIds,
 					server.patch?.fixtures ?? [],
 					snapshot,
 				);

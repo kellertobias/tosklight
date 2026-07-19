@@ -29,7 +29,10 @@ interface ColorDialogController {
 	startColor: (event: PointerEvent<HTMLDivElement>) => void;
 }
 
-export function useColorDialog(shiftArmed: boolean): ColorDialogController {
+export function useColorDialog(
+	selectedFixtureIds: readonly string[],
+	shiftArmed: boolean,
+): ColorDialogController {
 	const server = useServer();
 	const [hue, setHue] = useState(0.52);
 	const [saturation, setSaturation] = useState(0.8);
@@ -44,7 +47,7 @@ export function useColorDialog(shiftArmed: boolean): ColorDialogController {
 
 	const applyColors = async (colors: PickerColor[]) => {
 		const assignments = colorProgrammerAssignments(
-			server.selectedFixtures,
+			selectedFixtureIds,
 			server.patch?.fixtures ?? [],
 			colors,
 		);
@@ -65,7 +68,7 @@ export function useColorDialog(shiftArmed: boolean): ColorDialogController {
 			setColorRangePreview({ start: gesture.start, end: next, active: true });
 			return;
 		}
-		void applyColors(server.selectedFixtures.map(() => next));
+		void applyColors(selectedFixtureIds.map(() => next));
 	};
 
 	const startColor = (event: PointerEvent<HTMLDivElement>) => {
@@ -91,7 +94,7 @@ export function useColorDialog(shiftArmed: boolean): ColorDialogController {
 		setColorRangePreview({ start: gesture.start, end, active: false });
 		void applyColors(
 			interpolatePickerRange(
-				server.selectedFixtures.length,
+				selectedFixtureIds.length,
 				gesture.start,
 				end,
 			),
@@ -108,7 +111,7 @@ export function useColorDialog(shiftArmed: boolean): ColorDialogController {
 		const value = Math.max(0, Math.min(1, brightness + delta));
 		setBrightness(value);
 		void applyColors(
-			server.selectedFixtures.map(() => ({
+			selectedFixtureIds.map(() => ({
 				hue,
 				saturation,
 				brightness: value,
