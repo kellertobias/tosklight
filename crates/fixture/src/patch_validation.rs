@@ -33,6 +33,7 @@ impl PatchValidator {
         self.validate_stable_identities(fixture)?;
         self.validate_fixture_numbers(fixture)?;
         fixture.definition.validate()?;
+        validate_logical_head_topology(fixture)?;
         if !fixture.definition.is_dmx_patchable() {
             return validate_visual_only_fixture(fixture);
         }
@@ -189,6 +190,29 @@ impl PatchValidator {
             *slot = true;
         }
         Ok(())
+    }
+}
+
+fn validate_logical_head_topology(fixture: &PatchedFixture) -> Result<(), FixtureError> {
+    let expected = fixture
+        .definition
+        .heads
+        .iter()
+        .filter(|head| !head.shared)
+        .map(|head| head.index)
+        .collect::<HashSet<_>>();
+    let actual = fixture
+        .logical_heads
+        .iter()
+        .map(|head| head.head_index)
+        .collect::<HashSet<_>>();
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(invalid(format!(
+            "fixture {} logical-head mapping does not match its selected mode",
+            fixture.fixture_id.0
+        )))
     }
 }
 

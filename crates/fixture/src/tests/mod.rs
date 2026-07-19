@@ -52,7 +52,7 @@ fn schema_v2_two_split_fixture() -> PatchedFixture {
         master_shared: false,
     });
     let definition = profile.resolved_definition(mode_id).unwrap();
-    PatchedFixture {
+    let mut fixture = PatchedFixture {
         fixture_id: FixtureId::new(),
         fixture_number: Some(1),
         virtual_fixture_number: None,
@@ -100,7 +100,9 @@ fn schema_v2_two_split_fixture() -> PatchedFixture {
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),
-    }
+    };
+    reconcile_logical_heads(&mut fixture);
+    fixture
 }
 
 mod library;

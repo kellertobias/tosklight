@@ -112,34 +112,57 @@ fn multipatch_reserves_real_addresses_and_allows_visualizer_only_instances() {
 }
 
 #[test]
-fn stable_fixture_head_and_multipatch_identities_are_unique() {
+fn stable_fixture_identities_are_unique_across_the_complete_patch() {
     let fixture = schema_v2_two_split_fixture();
     let mut duplicate_fixture = fixture.clone();
     duplicate_fixture.fixture_number = Some(2);
     assert_identity_error(&[fixture.clone(), duplicate_fixture], "stable fixture");
 
-    let mut duplicate_head = fixture.clone();
-    duplicate_head.logical_heads = vec![
-        PatchedHead {
-            head_index: 1,
-            fixture_id: FixtureId::new(),
-        },
-        PatchedHead {
-            head_index: 1,
-            fixture_id: FixtureId::new(),
-        },
-    ];
-    assert_identity_error(&[duplicate_head], "logical head index 1");
+    let mut head_uses_parent = fixture;
+    head_uses_parent.logical_heads[0].fixture_id = head_uses_parent.fixture_id;
+    assert_identity_error(&[head_uses_parent], "stable fixture");
+}
 
-    let mut duplicate_multipatch = fixture;
+#[test]
+fn logical_head_identities_and_selected_mode_topology_are_exact() {
+    let mut fixture = schema_v2_two_split_fixture();
+    let duplicate = fixture.logical_heads[0].clone();
+    fixture.logical_heads.push(duplicate);
+    assert_identity_error(&[fixture], "logical head index 1");
+
+    let mut missing = schema_v2_two_split_fixture();
+    missing.logical_heads.clear();
+    assert_identity_error(&[missing], "selected mode");
+
+    let mut duplicate_ids = fixture_with_two_child_heads();
+    duplicate_ids.logical_heads[1].fixture_id = duplicate_ids.logical_heads[0].fixture_id;
+    assert_identity_error(&[duplicate_ids], "stable fixture");
+}
+
+#[test]
+fn multipatch_identities_are_unique_across_all_stable_entities() {
+    let mut duplicate_multipatch = schema_v2_two_split_fixture();
     duplicate_multipatch
         .multipatch
         .push(duplicate_multipatch.multipatch[0].clone());
     assert_identity_error(&[duplicate_multipatch], "multipatch identity");
 
     let mut overlapping_kinds = schema_v2_two_split_fixture();
-    overlapping_kinds.multipatch[0].id = overlapping_kinds.fixture_id.0;
+    overlapping_kinds.multipatch[0].id = overlapping_kinds.logical_heads[0].fixture_id.0;
     assert_identity_error(&[overlapping_kinds], "multipatch identity");
+}
+
+fn fixture_with_two_child_heads() -> PatchedFixture {
+    let mut fixture = schema_v2_two_split_fixture();
+    let mut profile = fixture.definition.profile_snapshot.take().unwrap();
+    profile.modes[0].heads.push(FixtureHead {
+        id: Uuid::new_v4(),
+        name: "Third".into(),
+        master_shared: false,
+    });
+    fixture.definition = profile.resolved_definition(profile.modes[0].id).unwrap();
+    reconcile_logical_heads(&mut fixture);
+    fixture
 }
 
 fn assert_identity_error(fixtures: &[PatchedFixture], expected: &str) {
@@ -210,6 +233,8 @@ fn media_server_layers_inherit_parent_direct_control_endpoint() {
     };
     let mut media_definition = definition(1);
     media_definition.direct_control_protocols = vec![DirectControlProtocol::Citp];
+    media_definition.heads[0].index = 1;
+    media_definition.heads[0].shared = false;
     let parent = PatchedFixture {
         fixture_id: FixtureId::new(),
         fixture_number: None,

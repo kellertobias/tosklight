@@ -71,7 +71,6 @@ fn schema_v2_renders_one_head_channels_to_independent_splits() {
     let mode_id = profile.modes[0].id;
     let definition = profile.resolved_definition(mode_id).unwrap();
     let physical = FixtureId::new();
-    let logical = FixtureId::new();
     let fixture = PatchedFixture {
         fixture_id: physical,
         fixture_number: Some(1),
@@ -96,10 +95,7 @@ fn schema_v2_renders_one_head_channels_to_independent_splits() {
         direct_control: None,
         location: Default::default(),
         rotation: Default::default(),
-        logical_heads: vec![PatchedHead {
-            head_index: 1,
-            fixture_id: logical,
-        }],
+        logical_heads: vec![],
         multipatch: vec![],
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,

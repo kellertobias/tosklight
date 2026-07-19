@@ -186,12 +186,20 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
                     model: "Media Server".into(),
                     mode: "2 layers".into(),
                     footprint: 1,
-                    heads: vec![light_fixture::LogicalHead {
-                        index: 0,
-                        name: "Master".into(),
-                        shared: true,
-                        parameters: vec![],
-                    }],
+                    heads: vec![
+                        light_fixture::LogicalHead {
+                            index: 0,
+                            name: "Master".into(),
+                            shared: true,
+                            parameters: vec![],
+                        },
+                        light_fixture::LogicalHead {
+                            index: 1,
+                            name: "Layer 1".into(),
+                            shared: false,
+                            parameters: vec![],
+                        },
+                    ],
                     color_calibration: None,
                     physical: Default::default(),
                     model_asset: None,
