@@ -80,8 +80,6 @@ export function ServerProvider({
 	const value = composeServerContextValue(model);
 	const fileSource = {
 		status: value.status,
-		commandLine: value.commandLine,
-		resetCommandLine: value.resetCommandLine,
 		fileRoots: value.fileRoots,
 		fileEntries: value.fileEntries,
 		fileMetadata: value.fileMetadata,
@@ -150,7 +148,9 @@ export function ServerProvider({
 						store={state.programmingInteractionStore}
 						transport={boundaries.programmingTransport}
 						loadSnapshot={boundaries.loadProgrammingInteractionSnapshot}
-						onError={boundaries.reportProgrammingError}
+						replaceCommandLine={state.client.replaceProgrammingCommandLine}
+						onSessionError={boundaries.reportProgrammingSessionError}
+						onMutationError={boundaries.reportProgrammingMutationError}
 					>
 						<SelectedGroupMembershipSync
 							playbacks={state.playbacks}

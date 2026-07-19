@@ -13,6 +13,7 @@ export function createCommandLineActions(
 	| "refresh"
 	| "setCommandLine"
 	| "resetCommandLine"
+	| "dismissCommandChoice"
 	| "cancelCommandChoice"
 	| "executeCommandLine"
 > {
@@ -34,14 +35,16 @@ export function createCommandLineActions(
 		persistCommandLine,
 		setCommandLine,
 		resetCommandLine,
+		dismissCommandChoice,
 		cancelCommandChoice,
 	} = model;
 	return {
 		refresh,
 		setCommandLine,
 		resetCommandLine,
+		dismissCommandChoice,
 		cancelCommandChoice,
-		executeCommandLine: async (value = commandLine) => {
+		executeCommandLine: async (value = commandLine, interaction) => {
 			try {
 				// Invalidate event refreshes that began while the command was being assembled. A
 				// successful execution increments this again when it installs the reset target.
@@ -49,10 +52,18 @@ export function createCommandLineActions(
 				// Key presses update the authoritative desk command line. Preserve their order so an
 				// older in-flight key cannot arrive after Enter and restore a command that already ran.
 				await commandLineWrite.current;
+				const activeTarget =
+					interaction?.target ?? commandTargetModeRef.current;
+				const activePristine =
+					interaction?.pristine ?? commandLinePristine;
+				if (interaction) {
+					commandTargetModeRef.current = activeTarget;
+					setCommandTargetMode(activeTarget);
+				}
 				const toggledTarget = commandTargetAfterEnter(
 					value,
-					commandTargetModeRef.current,
-					commandLinePristine,
+					activeTarget,
+					activePristine,
 				);
 				if (toggledTarget) {
 					const nextTarget = toggledTarget;
@@ -96,7 +107,7 @@ export function createCommandLineActions(
 				commandLineEpoch.current += 1;
 				setCommandLineState(target);
 				setCommandLinePristine(true);
-				await persistCommandLine(target);
+				if (!interaction) await persistCommandLine(target);
 				setError(null);
 				return true;
 			} catch (reason) {

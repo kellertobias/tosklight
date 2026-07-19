@@ -68,7 +68,10 @@ export class ProgrammingInteractionStore {
 		this.emit();
 	}
 
-	installSnapshot(snapshot: ProgrammingSnapshot) {
+	installSnapshot(
+		snapshot: ProgrammingSnapshot,
+		{ updateSessionState = true }: { updateSessionState?: boolean } = {},
+	) {
 		if (!this.matchesDesk(snapshot.projection.deskId)) return false;
 		const sequence = snapshot.cursor;
 		const commandDecision = this.installDecision(
@@ -87,7 +90,7 @@ export class ProgrammingInteractionStore {
 			this.authoritativeCommandLine = snapshot.projection.commandLine;
 		if (selectionDecision === "install")
 			this.authoritativeSelection = snapshot.projection.selection;
-		this.publishAuthoritative(sequence);
+		this.publishAuthoritative(sequence, updateSessionState);
 		return true;
 	}
 
@@ -132,7 +135,7 @@ export class ProgrammingInteractionStore {
 			patch: normalized,
 		};
 		this.operations.set(operation.token, operation);
-		this.publishRendered({ error: null });
+		this.publishRendered();
 		return operation.token;
 	}
 
@@ -154,19 +157,39 @@ export class ProgrammingInteractionStore {
 			expression: patch.expression ?? null,
 		};
 		this.operations.set(operation.token, operation);
-		this.publishRendered({ error: null });
+		this.publishRendered();
 		return operation.token;
 	}
 
 	commit(token: string | null) {
 		if (!this.takeOperation(token)) return false;
-		this.publishRendered({ error: null });
+		this.publishRendered();
 		return true;
 	}
 
-	rollback(token: string | null, error: Error) {
+	commitCommandLine(token: string | null, commandLine: CommandLineProjection) {
+		if (!token) return false;
+		const operation = this.operations.get(token);
+		if (operation?.capability !== "commandLine") return false;
+		const decision = this.installDecision(
+			"command line",
+			this.authoritativeCommandLine,
+			commandLine,
+			this.state.eventSequence ?? 0,
+		);
+		if (decision === "install") this.authoritativeCommandLine = commandLine;
+		this.operations.delete(token);
+		this.publishRendered();
+		return true;
+	}
+
+	authoritativeCommandLineRevision() {
+		return this.authoritativeCommandLine?.revision ?? null;
+	}
+
+	rollback(token: string | null, _error: Error) {
 		if (!this.takeOperation(token)) return false;
-		this.publishRendered({ status: "error", error });
+		this.publishRendered();
 		return true;
 	}
 
@@ -204,12 +227,18 @@ export class ProgrammingInteractionStore {
 		return operation;
 	}
 
-	private publishAuthoritative(sequence: number) {
-		this.publishRendered({
+	private publishAuthoritative(
+		sequence: number,
+		updateSessionState = true,
+	) {
+		const update: Partial<ProgrammingInteractionState> = {
 			eventSequence: Math.max(this.state.eventSequence ?? 0, sequence),
-			status: "ready",
-			error: null,
-		});
+		};
+		if (updateSessionState) {
+			update.status = "ready";
+			update.error = null;
+		}
+		this.publishRendered(update);
 	}
 
 	private publishRendered(update: Partial<ProgrammingInteractionState> = {}) {

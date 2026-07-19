@@ -16,6 +16,14 @@ import {
 	ProgrammingProtocolError,
 } from "./transport";
 
+function deferred<T>() {
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((onResolve) => {
+		resolve = onResolve;
+	});
+	return { promise, resolve };
+}
+
 function createHarness(
 	transport: ProgrammingEventTransport | null = new FakeProgrammingTransport(),
 ) {
@@ -90,6 +98,46 @@ describe("ProgrammingInteractionSession scope", () => {
 		expect(harness.loadSnapshot).toHaveBeenCalledTimes(3);
 	});
 
+	it("does not reload when capability churn settles on the active scope", async () => {
+		const harness = createHarness();
+		const transport = harness.transport as FakeProgrammingTransport;
+		const release = harness.session.activate("commandLine");
+		await settleSession();
+
+		release();
+		const releaseAgain = harness.session.activate("commandLine");
+		await settleSession();
+
+		expect(harness.loadSnapshot).toHaveBeenCalledOnce();
+		expect(transport.subscriptions).toHaveLength(1);
+		expect(transport.subscriptions[0].close).not.toHaveBeenCalled();
+		const releaseSelection = harness.session.activate("selection");
+		releaseSelection();
+		await settleSession();
+		expect(harness.loadSnapshot).toHaveBeenCalledOnce();
+		expect(transport.subscriptions).toHaveLength(1);
+		releaseAgain();
+	});
+
+	it("does not restart hydration for net-zero scope churn", async () => {
+		const harness = createHarness();
+		const transport = harness.transport as FakeProgrammingTransport;
+		const hydration = deferred<ReturnType<typeof programmingSnapshot>>();
+		harness.loadSnapshot.mockReturnValueOnce(hydration.promise);
+		const release = harness.session.activate("commandLine");
+		await Promise.resolve();
+
+		release();
+		const releaseAgain = harness.session.activate("commandLine");
+		await settleSession();
+		expect(harness.loadSnapshot).toHaveBeenCalledOnce();
+
+		hydration.resolve(programmingSnapshot());
+		await settleSession();
+		expect(transport.subscriptions).toHaveLength(1);
+		releaseAgain();
+	});
+
 	it("hydrates over REST when the WebSocket transport is unavailable", async () => {
 		const harness = createHarness(null);
 		harness.session.activate("selection");
@@ -102,6 +150,39 @@ describe("ProgrammingInteractionSession scope", () => {
 			eventSequence: 10,
 			selection: { revision: 1 },
 		});
+	});
+
+	it("recovers from a synchronous subscription failure", async () => {
+		vi.useFakeTimers();
+		const failure = new Error("WebSocket constructor failed");
+		const recovered = new FakeProgrammingTransport();
+		let attempts = 0;
+		const transport: ProgrammingEventTransport = {
+			subscribe: vi.fn((deskId, scope, after, observer) => {
+				attempts++;
+				if (attempts === 1) throw failure;
+				return recovered.subscribe(deskId, scope, after, observer);
+			}),
+		};
+		const harness = createHarness(transport);
+		try {
+			harness.session.activate("commandLine");
+			await settleSession();
+
+			expect(harness.store.getSnapshot()).toMatchObject({
+				status: "error",
+				error: failure,
+			});
+			expect(harness.onError).toHaveBeenLastCalledWith(failure);
+			await vi.advanceTimersByTimeAsync(750);
+			await settleSession();
+			expect(transport.subscribe).toHaveBeenCalledTimes(2);
+			expect(recovered.subscriptions).toHaveLength(1);
+			expect(harness.store.getSnapshot().status).toBe("ready");
+		} finally {
+			harness.session.stop();
+			vi.useRealTimers();
+		}
 	});
 });
 
@@ -117,6 +198,7 @@ describe("ProgrammingInteractionSession events", () => {
 		transport.emit({
 			type: "event",
 			sequence: 31,
+			correlationId: null,
 			change: selectionChange({ revision: 3 }),
 		});
 		expect(listener).not.toHaveBeenCalled();
@@ -125,6 +207,7 @@ describe("ProgrammingInteractionSession events", () => {
 		transport.emit({
 			type: "event",
 			sequence: 47,
+			correlationId: null,
 			change: commandChange({ revision: 2, text: "FIXTURE 47" }),
 		});
 		expect(harness.store.getSnapshot()).toMatchObject({
@@ -167,6 +250,52 @@ describe("ProgrammingInteractionSession events", () => {
 		});
 	});
 
+	it("lets a new connection repair while an obsolete repair is unresolved", async () => {
+		const harness = createHarness();
+		const transport = harness.transport as FakeProgrammingTransport;
+		harness.session.activate("commandLine");
+		await settleSession();
+		const obsoleteRepair = deferred<ReturnType<typeof programmingSnapshot>>();
+		harness.loadSnapshot.mockReturnValueOnce(obsoleteRepair.promise);
+		const first = transport.subscriptions[0];
+		first.observer.message({
+			type: "gap",
+			afterSequence: 10,
+			oldestAvailable: 12,
+			latestSequence: 14,
+		});
+		await Promise.resolve();
+
+		harness.loadSnapshot.mockResolvedValueOnce(
+			programmingSnapshot({ sequence: 20, command: commandLine(5, "GROUP 20") }),
+		);
+		first.observer.error(new ProgrammingProtocolError("reset", 14));
+		await settleSession();
+		const second = transport.subscriptions[1];
+		harness.loadSnapshot.mockResolvedValueOnce(
+			programmingSnapshot({ sequence: 25, command: commandLine(6, "GROUP 25") }),
+		);
+		second.observer.message({
+			type: "gap",
+			afterSequence: 20,
+			oldestAvailable: 22,
+			latestSequence: 24,
+		});
+		await settleSession();
+
+		expect(second.repair).toHaveBeenCalledWith(25);
+		expect(harness.store.getSnapshot()).toMatchObject({
+			eventSequence: 25,
+			commandLine: { revision: 6, text: "GROUP 25" },
+		});
+
+		obsoleteRepair.resolve(
+			programmingSnapshot({ sequence: 18, command: commandLine(4, "STALE") }),
+		);
+		await settleSession();
+		expect(harness.store.getSnapshot().commandLine?.text).toBe("GROUP 25");
+	});
+
 	it("rehydrates from REST and opens a new stream after a protocol error", async () => {
 		const harness = createHarness();
 		const transport = harness.transport as FakeProgrammingTransport;
@@ -199,5 +328,59 @@ describe("ProgrammingInteractionSession events", () => {
 		});
 		expect(harness.onError).toHaveBeenCalledWith(malformed);
 		expect(harness.onError).toHaveBeenLastCalledWith(null);
+	});
+
+	it("invalidates the old observer before scheduling protocol recovery", async () => {
+		const harness = createHarness();
+		const transport = harness.transport as FakeProgrammingTransport;
+		harness.session.activate("commandLine");
+		await settleSession();
+		harness.loadSnapshot.mockResolvedValueOnce(
+			programmingSnapshot({ sequence: 20, command: commandLine(5, "GROUP 20") }),
+		);
+		const first = transport.subscriptions[0];
+
+		first.observer.error(new ProgrammingProtocolError("malformed event", 19));
+		first.observer.message({
+			type: "event",
+			sequence: 99,
+			correlationId: null,
+			change: commandChange({ revision: 99, text: "STALE" }),
+		});
+
+		expect(harness.store.getSnapshot().commandLine?.text).toBe("FIXTURE");
+		await settleSession();
+		expect(harness.store.getSnapshot().commandLine?.text).toBe("GROUP 20");
+	});
+
+	it("invalidates the old observer when the remote stream closes", async () => {
+		vi.useFakeTimers();
+		const harness = createHarness();
+		const transport = harness.transport as FakeProgrammingTransport;
+		try {
+			harness.session.activate("commandLine");
+			await settleSession();
+			harness.loadSnapshot.mockResolvedValueOnce(
+				programmingSnapshot({ sequence: 20, command: commandLine(5, "GROUP 20") }),
+			);
+			const first = transport.subscriptions[0];
+
+			first.observer.closed();
+			first.observer.message({
+				type: "event",
+				sequence: 99,
+				correlationId: null,
+				change: commandChange({ revision: 99, text: "STALE" }),
+			});
+			expect(harness.store.getSnapshot().commandLine?.text).toBe("FIXTURE");
+
+			await vi.advanceTimersByTimeAsync(750);
+			await settleSession();
+			expect(transport.subscriptions).toHaveLength(2);
+			expect(harness.store.getSnapshot().commandLine?.text).toBe("GROUP 20");
+		} finally {
+			harness.session.stop();
+			vi.useRealTimers();
+		}
 	});
 });

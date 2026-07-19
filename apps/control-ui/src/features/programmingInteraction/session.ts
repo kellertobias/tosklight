@@ -31,7 +31,8 @@ export class ProgrammingInteractionSession {
 	private stream: ProgrammingEventStream | null = null;
 	private reconnectTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
 	private refreshScheduled = false;
-	private repairRunning = false;
+	private repairGeneration: number | null = null;
+	private hydratedScopeKey: string | null = null;
 	private lifecycle = 0;
 	private stopped = false;
 
@@ -59,6 +60,7 @@ export class ProgrammingInteractionSession {
 		this.stopped = true;
 		this.scope.clear();
 		this.lifecycle++;
+		this.hydratedScopeKey = null;
 		this.clearReconnect();
 		this.closeStream();
 	}
@@ -82,14 +84,16 @@ export class ProgrammingInteractionSession {
 	}
 
 	private async refresh() {
+		const key = this.scope.key();
+		if (this.hydratedScopeKey === key) return;
 		const generation = ++this.lifecycle;
 		this.clearReconnect();
 		this.closeStream();
+		this.hydratedScopeKey = key;
 		if (!this.scope.hasViews()) {
 			this.store.setReady();
 			return;
 		}
-		const key = this.scope.key();
 		this.store.setLoading();
 		let snapshot: ProgrammingSnapshot;
 		try {
@@ -108,31 +112,41 @@ export class ProgrammingInteractionSession {
 
 	private openStream(generation: number, key: string, cursor: number) {
 		if (!this.transport) return;
-		this.stream = this.transport.subscribe(
-			this.deskId,
-			this.scope.subscription(),
-			cursor,
-			{
-				message: (message) => {
-					if (this.isCurrent(generation, key))
-						this.handleMessage(message, generation);
+		let stream: ProgrammingEventStream;
+		try {
+			stream = this.transport.subscribe(
+				this.deskId,
+				this.scope.subscription(),
+				cursor,
+				{
+					message: (message) => {
+						if (this.isCurrent(generation, key))
+							this.handleMessage(message, generation, key);
+					},
+					error: (error) => {
+						if (!this.isCurrent(generation, key)) return;
+						if (error instanceof ProgrammingProtocolError)
+							this.protocolReset(error);
+						else this.fail(error);
+					},
+					closed: () => this.connectionClosed(generation, key),
 				},
-				error: (error) => {
-					if (!this.isCurrent(generation, key)) return;
-					if (error instanceof ProgrammingProtocolError)
-						this.protocolReset(error);
-					else this.fail(error);
-				},
-				closed: () => {
-					if (this.isCurrent(generation, key)) this.scheduleReconnect();
-				},
-			},
-		);
+			);
+		} catch (reason) {
+			if (this.isCurrent(generation, key)) this.fail(asError(reason));
+			return;
+		}
+		if (!this.isCurrent(generation, key)) {
+			stream.close();
+			return;
+		}
+		this.stream = stream;
 	}
 
 	private handleMessage(
 		message: ProgrammingInteractionEventMessage,
 		generation: number,
+		key: string,
 	) {
 		if (message.type === "ready" || message.type === "repaired") {
 			this.onError?.(null);
@@ -143,7 +157,7 @@ export class ProgrammingInteractionSession {
 			return;
 		}
 		if (message.type === "gap") {
-			void this.repair(generation);
+			void this.repair(generation, key);
 			return;
 		}
 		if (!this.scope.includesChange(message.change)) return;
@@ -154,20 +168,22 @@ export class ProgrammingInteractionSession {
 		}
 	}
 
-	private async repair(generation: number) {
-		if (this.repairRunning) return;
-		this.repairRunning = true;
+	private async repair(generation: number, key: string) {
+		if (this.repairGeneration === generation) return;
+		this.repairGeneration = generation;
 		try {
 			const snapshot = await this.loadSnapshot();
-			if (generation !== this.lifecycle || this.stopped) return;
+			if (!this.isCurrent(generation, key)) return;
 			this.assertSnapshotDesk(snapshot);
 			this.store.installSnapshot(snapshot);
 			this.stream?.repair(snapshot.cursor);
 			this.onError?.(null);
 		} catch (reason) {
-			if (generation === this.lifecycle) this.protocolReset(asError(reason));
+			if (this.isCurrent(generation, key))
+				this.protocolReset(asError(reason));
 		} finally {
-			this.repairRunning = false;
+			if (this.repairGeneration === generation)
+				this.repairGeneration = null;
 		}
 	}
 
@@ -179,6 +195,7 @@ export class ProgrammingInteractionSession {
 	}
 
 	private protocolReset(error: Error) {
+		this.invalidateConnection();
 		this.store.setError(error);
 		this.onError?.(error);
 		this.closeStream();
@@ -186,10 +203,23 @@ export class ProgrammingInteractionSession {
 	}
 
 	private fail(error: Error) {
+		this.invalidateConnection();
 		this.store.setError(error);
 		this.onError?.(error);
 		this.closeStream();
 		this.scheduleReconnect();
+	}
+
+	private connectionClosed(generation: number, key: string) {
+		if (!this.isCurrent(generation, key)) return;
+		this.invalidateConnection();
+		this.stream = null;
+		this.scheduleReconnect();
+	}
+
+	private invalidateConnection() {
+		this.lifecycle++;
+		this.hydratedScopeKey = null;
 	}
 
 	private scheduleReconnect() {

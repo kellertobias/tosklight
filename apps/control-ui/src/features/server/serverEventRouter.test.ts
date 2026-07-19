@@ -467,6 +467,61 @@ describe("show object event reconciliation", () => {
 });
 
 describe("broad state hydration boundaries", () => {
+	it("leaves categorized command-line edits to the scoped interaction store", async () => {
+		const harness = createHarness();
+		harness.route(
+			event(
+				"programmer_changed",
+				{
+					command: "programmer.command_line",
+					changes: ["interaction"],
+				},
+				1,
+			),
+		);
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(harness.client.bootstrap).not.toHaveBeenCalled();
+		expect(harness.client.programmers).not.toHaveBeenCalled();
+	});
+
+	it("retains compatibility hydration for uncategorized Programmer changes", async () => {
+		const harness = createHarness();
+		harness.route(
+			event(
+				"programmer_changed",
+				{
+					command: "programmer.execute",
+					changes: ["interaction", "values", "runtime"],
+				},
+				1,
+			),
+		);
+		await vi.waitFor(() =>
+			expect(harness.client.bootstrap).toHaveBeenCalledOnce(),
+		);
+	});
+
+	it.each([
+		["missing", undefined],
+		["malformed", "interaction"],
+		["expanded", ["interaction", "values"]],
+		["duplicated", ["interaction", "interaction"]],
+	])("retains compatibility hydration for %s change categories", async (_label, changes) => {
+		const harness = createHarness();
+		harness.route(
+			event(
+				"programmer_changed",
+				{ command: "programmer.command_line", changes },
+				1,
+			),
+		);
+
+		await vi.waitFor(() =>
+			expect(harness.client.bootstrap).toHaveBeenCalledOnce(),
+		);
+	});
+
 	it.each([
 		"programmer_changed",
 		"programmer_cleared",

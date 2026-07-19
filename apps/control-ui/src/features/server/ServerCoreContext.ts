@@ -106,8 +106,15 @@ export interface ServerCoreContext
 	refresh: () => Promise<void>;
 	setCommandLine: (value: string, pristine?: boolean) => void;
 	resetCommandLine: () => void;
+	dismissCommandChoice: () => void;
 	cancelCommandChoice: () => void;
-	executeCommandLine: (value?: string) => Promise<boolean>;
+	executeCommandLine: (
+		value?: string,
+		interaction?: {
+			target: CommandTargetMode;
+			pristine: boolean;
+		},
+	) => Promise<boolean>;
 	updateControlDesk: (
 		desk: import("../../api/types").ControlDesk,
 	) => Promise<void>;

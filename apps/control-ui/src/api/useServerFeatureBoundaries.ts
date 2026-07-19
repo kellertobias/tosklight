@@ -6,9 +6,14 @@ import { browserDeskBoundaryToken } from "./PatchTransport";
 import { WebSocketPlaybackEventTransport } from "./PlaybackEventTransport";
 import { WebSocketProgrammingEventTransport } from "./ProgrammingEventTransport";
 import { WebSocketShowObjectsEventTransport } from "./ShowObjectsEventTransport";
+import { createFeatureErrorGroup } from "./featureErrorReporting";
 import type { PlaybackRuntimeIdentity } from "./types";
 
 export function useServerFeatureBoundaries(state: ServerState) {
+	const programmingErrors = useMemo(
+		() => createFeatureErrorGroup(state.setError),
+		[state.setError],
+	);
 	const showObjectsTransport = useMemo(
 		() =>
 			state.session
@@ -81,7 +86,8 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		loadShowObject,
 		reportShowObjectError: useFeatureErrorReporter(state.setError),
 		reportPlaybackError: useFeatureErrorReporter(state.setError),
-		reportProgrammingError: useFeatureErrorReporter(state.setError),
+		reportProgrammingSessionError: programmingErrors.reportSession,
+		reportProgrammingMutationError: programmingErrors.reportMutation,
 	};
 }
 

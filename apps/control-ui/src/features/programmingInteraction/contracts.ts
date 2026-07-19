@@ -84,7 +84,12 @@ export interface SelectionPatch {
 
 export type ProgrammingInteractionEventMessage =
 	| { type: "ready"; cursor: number }
-	| { type: "event"; sequence: number; change: ProgrammingChange }
+	| {
+			type: "event";
+			sequence: number;
+			correlationId: string | null;
+			change: ProgrammingChange;
+	  }
 	| {
 			type: "gap";
 			afterSequence: number;

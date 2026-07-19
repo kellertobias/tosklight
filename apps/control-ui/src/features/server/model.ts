@@ -11,6 +11,7 @@ export type ServerController = ServerState & {
 	persistCommandLine: (value: string) => Promise<unknown>;
 	setCommandLine: (value: string, pristine?: boolean) => void;
 	resetCommandLine: () => void;
+	dismissCommandChoice: () => void;
 	cancelCommandChoice: () => void;
 	fileRoots: ServerState["client"]["fileRoots"];
 	fileEntries: ServerState["client"]["fileEntries"];

@@ -43,14 +43,19 @@ export function useCommandLineController(state: ServerState) {
 		() => setCommandLine("", true),
 		[setCommandLine],
 	);
+	const dismissCommandChoice = useCallback(
+		() => setPendingCommandChoice(null),
+		[setPendingCommandChoice],
+	);
 	const cancelCommandChoice = useCallback(() => {
-		setPendingCommandChoice(null);
+		dismissCommandChoice();
 		resetCommandLine();
-	}, [resetCommandLine, setPendingCommandChoice]);
+	}, [dismissCommandChoice, resetCommandLine]);
 	return {
 		persistCommandLine,
 		setCommandLine,
 		resetCommandLine,
+		dismissCommandChoice,
 		cancelCommandChoice,
 	};
 }

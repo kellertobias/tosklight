@@ -79,6 +79,7 @@ function refreshBootstrap(
 		"hardware_connection_changed",
 	];
 	if (!kinds.includes(event.kind)) return;
+	if (isScopedCommandLineEdit(event)) return;
 	const state = getState();
 	const previousShowId = state.bootstrap?.active_show?.id ?? null;
 	const requestedEpoch = state.commandLineEpoch.current;
@@ -111,6 +112,20 @@ function refreshBootstrap(
 				void loadShowObjects(nextShowId, session.user.id);
 		})
 		.catch(() => undefined);
+}
+
+function isScopedCommandLineEdit(event: ServerEvent) {
+	if (
+		event.kind !== "programmer_changed" ||
+		event.payload.command !== "programmer.command_line"
+	)
+		return false;
+	const changes = event.payload.changes;
+	return (
+		Array.isArray(changes) &&
+		changes.length === 1 &&
+		changes[0] === "interaction"
+	);
 }
 
 function refreshPatch(event: ServerEvent, state: ServerState) {

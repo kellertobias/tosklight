@@ -11,6 +11,7 @@ import { ProgrammingProtocolError } from "./transport";
 
 const SHOW_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const DESK_ID = "11111111-1111-4111-8111-111111111111";
+const OTHER_DESK_ID = "99999999-9999-4999-8999-999999999999";
 const FIXTURE_1 = "22222222-2222-4222-8222-222222222222";
 const FIXTURE_2 = "33333333-3333-4333-8333-333333333333";
 const FIXTURE_3 = "44444444-4444-4444-8444-444444444444";
@@ -167,6 +168,84 @@ describe("ProgrammingInteractionStore authority", () => {
 });
 
 describe("ProgrammingInteractionStore optimism", () => {
+	it("installs a command response before removing its optimistic operation", () => {
+		const store = readyStore();
+		const first = store.beginOptimisticCommandLine({ text: "FIXTURE 1" });
+		const second = store.beginOptimisticCommandLine({ text: "FIXTURE 12" });
+
+		expect(
+			store.commitCommandLine(first, commandLine(2, "FIXTURE 1")),
+		).toBe(true);
+		expect(store.getSnapshot().commandLine).toMatchObject({
+			text: "FIXTURE 12",
+			revision: 2,
+		});
+		expect(store.getSnapshot().pendingCapabilities).toEqual(
+			new Set(["commandLine"]),
+		);
+
+		expect(
+			store.commitCommandLine(second, commandLine(3, "FIXTURE 12")),
+		).toBe(true);
+		expect(store.getSnapshot().commandLine).toEqual(
+			commandLine(3, "FIXTURE 12"),
+		);
+		expect(store.getSnapshot().pendingCapabilities).toEqual(new Set());
+	});
+
+	it("accepts an authoritative event that arrives before the matching response", () => {
+		const store = readyStore();
+		const token = store.beginOptimisticCommandLine({ text: "FIXTURE 9" });
+		const authoritative = commandLine(2, "FIXTURE 9");
+		store.applyChange(
+			{ deskId: DESK_ID, commandLine: authoritative },
+			12,
+		);
+
+		expect(store.commitCommandLine(token, authoritative)).toBe(true);
+		expect(store.getSnapshot().commandLine).toEqual(authoritative);
+		expect(store.getSnapshot().eventSequence).toBe(12);
+	});
+
+	it("keeps a newer event when an older command response arrives", () => {
+		const store = readyStore();
+		const token = store.beginOptimisticCommandLine({ text: "FIXTURE 9" });
+		const newest = commandLine(3, "GROUP 3", "GROUP");
+		store.applyChange({ deskId: DESK_ID, commandLine: newest }, 13);
+
+		expect(store.commitCommandLine(token, commandLine(2, "FIXTURE 9"))).toBe(
+			true,
+		);
+		expect(store.getSnapshot().commandLine).toEqual(newest);
+	});
+
+	it("rejects a divergent response at the authoritative revision", () => {
+		const store = readyStore();
+		const token = store.beginOptimisticCommandLine({ text: "FIXTURE 9" });
+		store.applyChange(
+			{ deskId: DESK_ID, commandLine: commandLine(2, "GROUP 2", "GROUP") },
+			12,
+		);
+
+		expect(() =>
+			store.commitCommandLine(token, commandLine(2, "FIXTURE 9")),
+		).toThrow(ProgrammingProtocolError);
+		expect(store.rollback(token, new Error("conflict"))).toBe(true);
+		expect(store.getSnapshot().commandLine).toEqual(
+			commandLine(2, "GROUP 2", "GROUP"),
+		);
+	});
+
+	it("invalidates optimistic tokens when the desk identity changes", () => {
+		const store = readyStore();
+		const token = store.beginOptimisticCommandLine({ text: "FIXTURE 9" });
+		store.reset(SHOW_ID, OTHER_DESK_ID);
+
+		expect(store.commitCommandLine(token, commandLine(2, "FIXTURE 9"))).toBe(
+			false,
+		);
+	});
+
 	it("keeps a local command patch over a newer OSC authority", () => {
 		const store = readyStore();
 		const token = store.beginOptimisticCommandLine({

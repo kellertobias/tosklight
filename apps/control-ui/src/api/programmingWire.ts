@@ -168,8 +168,9 @@ function validateProgrammingEnvelope(
 			"UUID or null",
 			undefined,
 		);
-	if (event.correlation_id != null)
-		programmingUuidAt(event.correlation_id, "$.event.correlation_id");
+	return event.correlation_id == null
+		? null
+		: programmingUuidAt(event.correlation_id, "$.event.correlation_id");
 }
 
 function decodeEvent(
@@ -182,7 +183,7 @@ function decodeEvent(
 	const type = stringAt(payload.type, "$.event.payload.type");
 	if (type !== "programming_interaction_changed") return null;
 
-	validateProgrammingEnvelope(event, expectedDeskId);
+	const correlationId = validateProgrammingEnvelope(event, expectedDeskId);
 	const change = decodeProgrammingChange(
 		payload.change,
 		"$.event.payload.change",
@@ -198,7 +199,7 @@ function decodeEvent(
 		decodeRoutes(event),
 		expectedRoutes(expectedDeskId, components),
 	);
-	return { type: "event", sequence, change };
+	return { type: "event", sequence, correlationId, change };
 }
 
 /** Decode a Programming event while enforcing the requested desk and view scope. */
