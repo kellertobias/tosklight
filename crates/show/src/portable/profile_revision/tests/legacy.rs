@@ -13,7 +13,8 @@ fn inline_snapshot_discovery_is_lossless_and_canonicalizes_duplicates() {
         &json!({
             "definition":{"profile_snapshot":profile},
             "future_fixture":{"profile_snapshot":{"opaque":true}},
-            "profile_snapshot":{"opaque":true}
+            "profile_snapshot":{"opaque":true},
+            "fixtures":[{"definition":{"profile_snapshot":{"opaque":true}}}]
         }),
         0,
     )

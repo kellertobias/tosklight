@@ -72,20 +72,10 @@ pub(crate) fn visit_legacy_inline_profile_snapshots(
     visitor: &mut impl FnMut(LegacyInlineProfileSnapshot) -> Result<(), StoreError>,
 ) -> Result<(), StoreError> {
     match owner.kind() {
-        "fixture" => visit_legacy_fixture_object(owner, value, visitor),
-        "patched_fixture" => visit_fixture(owner, value, "", visitor),
+        "fixture" | "patched_fixture" => visit_fixture(owner, value, "", visitor),
         "fixture_bundle" => visit_fixture_bundle(owner, value, visitor),
         _ => Ok(()),
     }
-}
-
-fn visit_legacy_fixture_object(
-    owner: &PortableShowObjectKey,
-    value: &Value,
-    visitor: &mut impl FnMut(LegacyInlineProfileSnapshot) -> Result<(), StoreError>,
-) -> Result<(), StoreError> {
-    visit_fixture(owner, value, "", visitor)?;
-    visit_fixture_bundle(owner, value, visitor)
 }
 
 fn visit_fixture(
