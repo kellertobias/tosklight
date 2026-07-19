@@ -1,7 +1,8 @@
 use super::*;
 use light_application::{
     ActionContext, ActionSource, ActiveShowObjectChange, ActiveShowObjectKind,
-    ActiveShowObjectsChange, EventBus, EventDraft, PatchChange, SelectiveShowImportChange,
+    ActiveShowObjectsChange, EventBus, EventDraft, OutputRuntimeChange, OutputRuntimeIdentity,
+    OutputRuntimeProjection, OutputRuntimeScope, PatchChange, SelectiveShowImportChange,
     SelectiveShowObjectChange,
 };
 use light_core::ShowId;
@@ -145,6 +146,57 @@ fn selective_import_maps_exact_raw_changes_and_related_routes() {
     assert_eq!(change.objects[0].kind, "group");
     assert_eq!(change.objects[0].object_revision, 7);
     assert_eq!(change.objects[0].body["fixtures"][0], "fixture-1");
+}
+
+#[test]
+fn global_output_change_keeps_identity_source_and_correlation() {
+    let bus = EventBus::new(4);
+    let context = context(ActionSource::Midi);
+    let event = bus.publish(EventDraft::output_runtime_changed(
+        &context,
+        OutputRuntimeChange {
+            projection: OutputRuntimeProjection {
+                scope: OutputRuntimeScope {
+                    show_id: Uuid::from_u128(40),
+                    show_revision: 7,
+                },
+                identity: OutputRuntimeIdentity::GlobalMaster,
+                grand_master: 0.6,
+                blackout: true,
+            },
+        },
+    ));
+
+    let wire::EventServerMessage::Event { event } =
+        wire_delivery(application::SubscriptionDelivery::Event(event))
+    else {
+        panic!("expected an event delivery");
+    };
+    assert_eq!(event.desk_id, None);
+    assert_eq!(
+        event.object,
+        Some(wire::EventObject {
+            capability: wire::EventCapability::Output,
+            id: "runtime:global-master".into(),
+        })
+    );
+    assert_eq!(
+        event.source,
+        wire::EventSource::Action {
+            source: wire::EventActionSource::Midi
+        }
+    );
+    assert_eq!(event.correlation_id, Some(context.correlation_id));
+    let wire::EventPayload::OutputRuntimeChanged { change } = event.payload else {
+        panic!("expected an output-runtime event");
+    };
+    assert_eq!(
+        change.projection.identity,
+        wire::OutputRuntimeIdentity::GlobalMaster
+    );
+    assert_eq!(change.projection.scope.show_revision, 7);
+    assert_eq!(change.projection.grand_master, 0.6);
+    assert!(change.projection.blackout);
 }
 
 fn context(source: ActionSource) -> ActionContext {

@@ -177,6 +177,11 @@ fn wire_payload(payload: &application::ApplicationEvent, sequence: u64) -> wire:
         )) => wire::EventPayload::PlaybackViewChanged {
             projection: super::super::playback_v2::desk_projection(*projection),
         },
+        application::ApplicationEvent::Output(application::OutputEvent::RuntimeChanged(change)) => {
+            wire::EventPayload::OutputRuntimeChanged {
+                change: super::super::output_runtime_v2::wire_change(*change),
+            }
+        }
         application::ApplicationEvent::Show(application::ShowEvent::PatchChanged(change)) => {
             wire::EventPayload::ShowPatchChanged {
                 delta: super::super::show_patch_wire::wire_delta(change, Some(sequence)),

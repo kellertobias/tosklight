@@ -99,24 +99,26 @@ pub(super) async fn update_master(
     Json(input): Json<MasterInput>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let session = authenticate(&state, &headers)?;
-    let mut control = state.output_control.lock();
-    if let Some(level) = input.grand_master {
-        if !level.is_finite() || !(0.0..=1.0).contains(&level) {
-            return Err(ApiError::bad_request("grand_master must be within 0-1"));
-        }
-        control.options.grand_master = level;
-    }
-    if let Some(blackout) = input.blackout {
-        control.options.blackout = blackout;
-    }
-    let result = serde_json::json!({"grand_master":control.options.grand_master,"blackout":control.options.blackout});
-    drop(control);
-    persist_output_runtime(&state)?;
-    emit(
-        &state,
-        "master_changed",
-        serde_json::json!({"session_id":session.id,"state":result}),
+    let command = output_runtime_service::command(input.grand_master, input.blackout)?;
+    let _activation = state.activation_lock.clone().lock_owned().await;
+    let context = light_application::ActionContext::operator(
+        session.desk.id,
+        session.user.id.0,
+        session.id.0,
+        light_application::ActionSource::Http,
     );
+    let outcome = output_runtime_service::execute(&state, Some(&session), context, command)?;
+    let result = serde_json::json!({
+        "grand_master":outcome.projection.grand_master,
+        "blackout":outcome.projection.blackout
+    });
+    if outcome.outcome == light_application::OutputRuntimeOutcome::Applied {
+        emit(
+            &state,
+            "master_changed",
+            serde_json::json!({"session_id":session.id,"state":result}),
+        );
+    }
     Ok(Json(result))
 }
 pub(super) async fn ws_events(

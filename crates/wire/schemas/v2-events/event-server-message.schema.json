@@ -385,6 +385,22 @@
         {
           "type": "object",
           "properties": {
+            "change": {
+              "$ref": "#/$defs/OutputRuntimeChange"
+            },
+            "type": {
+              "type": "string",
+              "const": "output_runtime_changed"
+            }
+          },
+          "required": [
+            "type",
+            "change"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "delta": {
               "$ref": "#/$defs/PatchDelta"
             },
@@ -668,6 +684,65 @@
         "object_revision",
         "route",
         "deleted"
+      ]
+    },
+    "OutputRuntimeChange": {
+      "type": "object",
+      "properties": {
+        "projection": {
+          "$ref": "#/$defs/OutputRuntimeProjection"
+        }
+      },
+      "required": [
+        "projection"
+      ]
+    },
+    "OutputRuntimeIdentity": {
+      "type": "string",
+      "enum": [
+        "global_master"
+      ]
+    },
+    "OutputRuntimeProjection": {
+      "type": "object",
+      "properties": {
+        "blackout": {
+          "type": "boolean"
+        },
+        "grand_master": {
+          "type": "number",
+          "format": "float"
+        },
+        "identity": {
+          "$ref": "#/$defs/OutputRuntimeIdentity"
+        },
+        "scope": {
+          "$ref": "#/$defs/OutputRuntimeScope"
+        }
+      },
+      "required": [
+        "scope",
+        "identity",
+        "grand_master",
+        "blackout"
+      ]
+    },
+    "OutputRuntimeScope": {
+      "type": "object",
+      "properties": {
+        "show_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "show_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "show_id",
+        "show_revision"
       ]
     },
     "PatchDelta": {

@@ -111,6 +111,16 @@ export type OutputRoute = { protocol: OutputProtocol, logical_universe: number, 
 
 export type OutputRouteChange = { show_id: string, show_revision: number, route_id: string, object_revision: number, route: OutputRoute | null, deleted: boolean, };
 
+export type OutputRuntimeIdentity = "global_master";
+
+export type OutputRuntimeScope = { show_id: string, show_revision: number, };
+
+export type OutputRuntimeProjection = { scope: OutputRuntimeScope, identity: OutputRuntimeIdentity, grand_master: number, blackout: boolean, };
+
+export type OutputRuntimeChange = { projection: OutputRuntimeProjection, };
+
+export type OutputRuntimeSnapshot = { cursor: EventSnapshotCursor, projection: OutputRuntimeProjection, };
+
 export type ShowObjectKind = "cue_list" | "group" | "playback" | "playback_page" | "preset";
 
 export type ShowObjectChange = { kind: ShowObjectKind, object_id: string, object_revision: number, body: unknown | null, deleted: boolean, };
@@ -125,7 +135,7 @@ export type ManagedAssetReference = { asset_id: string, revision: number, };
 
 export type SelectiveImportChange = { show_id: string, show_revision: number, objects: Array<SelectiveImportObjectChange>, profile_revisions: Array<FixtureProfileIdentity>, managed_assets: Array<ManagedAssetReference>, };
 
-export type EventPayload = { "type": "playback_runtime_changed", change: PlaybackRuntimeChange, } | { "type": "playback_view_changed", projection: PlaybackDeskProjection, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, } | { "type": "selective_import_applied", change: SelectiveImportChange, };
+export type EventPayload = { "type": "playback_runtime_changed", change: PlaybackRuntimeChange, } | { "type": "playback_view_changed", projection: PlaybackDeskProjection, } | { "type": "output_runtime_changed", change: OutputRuntimeChange, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, } | { "type": "selective_import_applied", change: SelectiveImportChange, };
 
 export type EventEnvelope = { sequence: number, occurred_at: string, desk_id: string | null, class: EventClass, object: EventObject | null, related_objects?: Array<EventObject> | null, source: EventSource, correlation_id: string | null, delivery: EventDeliveryPolicy, payload: EventPayload, };
 

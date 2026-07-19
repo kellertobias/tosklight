@@ -11,6 +11,7 @@ pub(super) struct AppState {
     pub(super) programmers: ProgrammerRegistry,
     pub(super) programming: ProgrammingService,
     pub(super) playback_service: PlaybackService,
+    pub(super) output_runtime_service: OutputRuntimeService,
     pub(super) engine: Arc<Engine>,
     pub(super) highlight: Arc<HighlightRegistry>,
     pub(super) patch_preview_highlights:

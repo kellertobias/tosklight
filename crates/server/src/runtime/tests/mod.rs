@@ -12,8 +12,12 @@ mod active_show_programmer_object_tests;
 mod active_show_route_tests;
 #[path = "command_http_tests.rs"]
 mod command_http_tests;
+#[path = "control_mapping_tests.rs"]
+mod control_mapping_tests;
 #[path = "event_transport_route_tests.rs"]
 mod event_transport_route_tests;
+#[path = "output_runtime_tests.rs"]
+mod output_runtime_tests;
 #[path = "playback_v2_route_tests.rs"]
 mod playback_v2_route_tests;
 #[path = "show_patch_route_tests.rs"]

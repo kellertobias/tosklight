@@ -20,6 +20,7 @@ fn test_state() -> (AppState, PathBuf) {
             programmers: programmers.clone(),
             programming: ProgrammingService::new(programmers),
             playback_service: PlaybackService::new(application_events.clone()),
+            output_runtime_service: OutputRuntimeService::new(application_events.clone()),
             engine,
             highlight: Arc::new(HighlightRegistry::default()),
             patch_preview_highlights: Arc::default(),

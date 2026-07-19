@@ -44,8 +44,9 @@ use base64::{
 };
 use bytes::Bytes;
 use light_application::{
-    ActiveShowService, EventBus, PlaybackAddress, PlaybackExecution, PlaybackService,
-    PlaybackShowScope, ProgrammingService, ShowPatchService, publish_automatic_playback_events,
+    ActiveShowService, EventBus, OutputRuntimeService, PlaybackAction, PlaybackAddress,
+    PlaybackExecution, PlaybackService, PlaybackShowScope, ProgrammingService, ShowPatchService,
+    publish_automatic_playback_events,
 };
 use light_control::speed::{
     SoundObservation, SoundToLightConfig, SpeedGroupController, SpeedSnapshot,
@@ -122,6 +123,8 @@ mod osc_feedback_programmer;
 mod osc_highlight;
 mod osc_playback;
 mod output_api;
+mod output_runtime_service;
+mod output_runtime_v2;
 mod persistence_events;
 mod playback_api;
 mod playback_dispatch;

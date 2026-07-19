@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use crate::{
     ActionContext, ActionSource, ActiveShowObjectKind, ActiveShowObjectsChange, OutputRouteChange,
-    PatchChange, SelectiveShowImportChange,
+    OutputRuntimeChange, PatchChange, SelectiveShowImportChange,
     playback::{PlaybackDeskProjection, PlaybackRuntimeChange, PlaybackRuntimeIdentity},
 };
 use light_core::ShowId;
@@ -87,6 +87,10 @@ impl EventObject {
     pub fn playback_view(desk_id: Uuid) -> Self {
         Self::new(EventCapability::Desk, format!("playback-view:{desk_id}"))
     }
+
+    pub fn global_output() -> Self {
+        Self::new(EventCapability::Output, "runtime:global-master")
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -108,6 +112,11 @@ pub enum DeskEvent {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum OutputEvent {
+    RuntimeChanged(OutputRuntimeChange),
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum ShowEvent {
     PatchChanged(PatchChange),
     OutputRouteChanged(OutputRouteChange),
@@ -119,6 +128,7 @@ pub enum ShowEvent {
 pub enum ApplicationEvent {
     Playback(PlaybackEvent),
     Desk(DeskEvent),
+    Output(OutputEvent),
     Show(ShowEvent),
 }
 
@@ -178,6 +188,19 @@ impl EventDraft {
             correlation_id: Some(context.correlation_id),
             delivery: DeliveryPolicy::Replaceable,
             payload: ApplicationEvent::Desk(DeskEvent::PlaybackViewChanged(projection)),
+        }
+    }
+
+    pub fn output_runtime_changed(context: &ActionContext, change: OutputRuntimeChange) -> Self {
+        Self {
+            desk_id: None,
+            class: EventClass::Projection,
+            object: Some(EventObject::global_output()),
+            related_objects: Vec::new(),
+            source: EventSource::Action(context.source),
+            correlation_id: Some(context.correlation_id),
+            delivery: DeliveryPolicy::Replaceable,
+            payload: ApplicationEvent::Output(OutputEvent::RuntimeChanged(change)),
         }
     }
 

@@ -11,6 +11,7 @@ pub mod lossless_json;
 pub mod macro_runtime;
 pub mod managed_assets;
 pub mod mvr_import;
+pub mod output_runtime;
 pub mod playback;
 pub mod programming;
 pub mod scheduling;
@@ -34,8 +35,8 @@ pub use active_show::{
 pub use event::{
     ApplicationEvent, DeliveryPolicy, DeskEvent, EventBus, EventCapability, EventClass, EventDraft,
     EventEnvelope, EventFilter, EventObject, EventReplay, EventSource, EventSubscription,
-    PlaybackEvent, ReplaceableEventRateLimit, SequenceGap, ShowEvent, SubscriptionDelivery,
-    SubscriptionOptions,
+    OutputEvent, PlaybackEvent, ReplaceableEventRateLimit, SequenceGap, ShowEvent,
+    SubscriptionDelivery, SubscriptionOptions,
 };
 pub use fixture_position::{
     FixturePositionCommand, FixturePositionExecution, FixturePositionOutcome, FixturePositionPorts,
@@ -62,6 +63,11 @@ pub use managed_assets::{
 pub use mvr_import::{
     ActiveMvrImportResult, ApplyActiveMvrImportCommand, MvrImportResolution, MvrImportService,
     PreparedActiveMvrImport, resolve_mvr_definition,
+};
+pub use output_runtime::{
+    OutputLevel, OutputRuntimeChange, OutputRuntimeCommand, OutputRuntimeDurability,
+    OutputRuntimeIdentity, OutputRuntimeOutcome, OutputRuntimePorts, OutputRuntimeProjection,
+    OutputRuntimeResult, OutputRuntimeScope, OutputRuntimeService, OutputRuntimeSnapshot,
 };
 pub use playback::{
     AutomaticPlaybackProjection, CueListRuntimeProjection, CueNumber, GrandMasterRuntimeProjection,

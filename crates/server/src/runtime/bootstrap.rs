@@ -7,7 +7,8 @@ use super::{
 };
 use axum::Router;
 use light_application::{
-    ActiveShowService, EventBus, PlaybackService, ProgrammingService, ShowPatchService,
+    ActiveShowService, EventBus, OutputRuntimeService, PlaybackService, ProgrammingService,
+    ShowPatchService,
 };
 use light_control::TimecodeRouter;
 use light_media::MediaCache;
@@ -189,6 +190,7 @@ fn build_app_state(
         programmers: startup.programmers.clone(),
         programming: ProgrammingService::new(startup.programmers),
         playback_service: resources.playback_service.clone(),
+        output_runtime_service: OutputRuntimeService::new(application_events.clone()),
         engine: startup.engine,
         highlight: Arc::new(HighlightRegistry::default()),
         patch_preview_highlights: Arc::default(),

@@ -1,5 +1,8 @@
 use super::*;
 
+mod mappings;
+use mappings::{apply_control_mappings, mapped_control_origin};
+
 pub(super) fn spawn_control_inputs(
     state: &AppState,
     cancel: CancellationToken,
@@ -136,36 +139,21 @@ pub(super) fn handle_control_event(state: &AppState, event: ControlEvent) {
         return;
     }
     let mappings = state.engine.snapshot().control_mappings.clone();
-    let mut mapping_applied = false;
-    for mapping in mappings.iter().filter(|mapping| mapping.matches(&event)) {
-        mapping_applied = true;
-        match mapping.action {
-            ControlAction::CueGo { cue_list_id } => {
-                let _ = state.engine.playback().write().go(cue_list_id);
+    let origin = mapped_control_origin(state, &event);
+    if mappings.iter().any(|mapping| mapping.matches(&event)) {
+        match state.activation_lock.clone().try_lock_owned() {
+            Ok(_activation) => {
+                apply_control_mappings(
+                    state,
+                    &origin,
+                    mappings
+                        .iter()
+                        .filter(|mapping| mapping.matches(&event))
+                        .map(|mapping| &mapping.action),
+                );
             }
-            ControlAction::CueBack { cue_list_id } => {
-                let _ = state.engine.playback().write().back(cue_list_id);
-            }
-            ControlAction::CuePause { cue_list_id } => {
-                let _ = state.engine.playback().write().pause(cue_list_id);
-            }
-            ControlAction::CueRelease { cue_list_id } => {
-                state.engine.playback().write().release(cue_list_id);
-            }
-            ControlAction::Blackout { enabled } => {
-                state.output_control.lock().options.blackout = enabled
-            }
-            ControlAction::GrandMaster { level } => {
-                state.output_control.lock().options.grand_master = level.clamp(0.0, 1.0)
-            }
-            ControlAction::DeskSet => {
-                emit(state, "desk_action", serde_json::json!({"action":"set"}))
-            }
+            Err(_) => tracing::warn!("mapped control action skipped during active show transition"),
         }
-    }
-    if mapping_applied {
-        let _ = persist_active_playbacks(state);
-        let _ = persist_output_runtime(state);
     }
     emit(
         state,

@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OutputRuntimeSnapshot",
+  "type": "object",
+  "properties": {
+    "cursor": {
+      "$ref": "#/$defs/EventSnapshotCursor"
+    },
+    "projection": {
+      "$ref": "#/$defs/OutputRuntimeProjection"
+    }
+  },
+  "required": [
+    "cursor",
+    "projection"
+  ],
+  "$defs": {
+    "EventSnapshotCursor": {
+      "type": "object",
+      "properties": {
+        "sequence": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "sequence"
+      ]
+    },
+    "OutputRuntimeIdentity": {
+      "type": "string",
+      "enum": [
+        "global_master"
+      ]
+    },
+    "OutputRuntimeProjection": {
+      "type": "object",
+      "properties": {
+        "blackout": {
+          "type": "boolean"
+        },
+        "grand_master": {
+          "type": "number",
+          "format": "float"
+        },
+        "identity": {
+          "$ref": "#/$defs/OutputRuntimeIdentity"
+        },
+        "scope": {
+          "$ref": "#/$defs/OutputRuntimeScope"
+        }
+      },
+      "required": [
+        "scope",
+        "identity",
+        "grand_master",
+        "blackout"
+      ]
+    },
+    "OutputRuntimeScope": {
+      "type": "object",
+      "properties": {
+        "show_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "show_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "show_id",
+        "show_revision"
+      ]
+    }
+  }
+}

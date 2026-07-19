@@ -152,10 +152,43 @@ pub enum EventActionSource {
 pub enum EventPayload {
     PlaybackRuntimeChanged { change: PlaybackRuntimeChange },
     PlaybackViewChanged { projection: PlaybackDeskProjection },
+    OutputRuntimeChanged { change: OutputRuntimeChange },
     ShowPatchChanged { delta: super::patch::PatchDelta },
     OutputRouteChanged { change: OutputRouteChange },
     ShowObjectsChanged { change: ShowObjectsChange },
     SelectiveImportApplied { change: Box<SelectiveImportChange> },
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum OutputRuntimeIdentity {
+    GlobalMaster,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct OutputRuntimeScope {
+    pub show_id: Uuid,
+    #[ts(type = "number")]
+    pub show_revision: u64,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct OutputRuntimeProjection {
+    pub scope: OutputRuntimeScope,
+    pub identity: OutputRuntimeIdentity,
+    pub grand_master: f32,
+    pub blackout: bool,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct OutputRuntimeChange {
+    pub projection: OutputRuntimeProjection,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct OutputRuntimeSnapshot {
+    pub cursor: EventSnapshotCursor,
+    pub projection: OutputRuntimeProjection,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

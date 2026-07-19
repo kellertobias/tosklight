@@ -6,7 +6,7 @@ mod subscription;
 pub use bus::{EventBus, EventSubscription};
 pub use model::{
     ApplicationEvent, DeliveryPolicy, DeskEvent, EventCapability, EventClass, EventDraft,
-    EventEnvelope, EventObject, EventSource, PlaybackEvent, ShowEvent,
+    EventEnvelope, EventObject, EventSource, OutputEvent, PlaybackEvent, ShowEvent,
 };
 pub use subscription::{
     EventFilter, EventReplay, ReplaceableEventRateLimit, SequenceGap, SubscriptionDelivery,
