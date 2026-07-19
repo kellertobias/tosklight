@@ -5,6 +5,30 @@ use std::{cmp::Ordering, collections::BTreeMap, fmt};
 
 use super::FixtureProfileRevision;
 
+/// Monotonic revision of the portable fixture patch projection.
+#[derive(
+    Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize,
+)]
+#[serde(transparent)]
+pub struct PortablePatchRevision(Revision);
+
+impl PortablePatchRevision {
+    pub(crate) const fn new(value: Revision) -> Self {
+        Self(value)
+    }
+
+    /// Returns the revision value used for targeted patch reconciliation.
+    pub const fn value(self) -> Revision {
+        self.0
+    }
+}
+
+impl fmt::Display for PortablePatchRevision {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
+
 /// Monotonic revision of the complete portable show document.
 #[derive(
     Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize,
@@ -106,6 +130,7 @@ pub struct PortableShowDocument {
     id: ShowId,
     name: String,
     revision: PortableShowRevision,
+    patch_revision: PortablePatchRevision,
     metadata: BTreeMap<String, String>,
     objects: Vec<PortableShowObject>,
     fixture_profile_revisions: Vec<FixtureProfileRevision>,
@@ -116,16 +141,17 @@ impl PortableShowDocument {
         id: ShowId,
         name: String,
         revision: PortableShowRevision,
+        patch_revision: PortablePatchRevision,
         metadata: BTreeMap<String, String>,
         mut objects: Vec<PortableShowObject>,
         mut fixture_profile_revisions: Vec<FixtureProfileRevision>,
     ) -> Self {
-        objects.sort_by(|left, right| left.key.cmp(&right.key));
-        fixture_profile_revisions.sort_by(|left, right| left.id().cmp(right.id()));
+        sort_document_content(&mut objects, &mut fixture_profile_revisions);
         Self {
             id,
             name,
             revision,
+            patch_revision,
             metadata,
             objects,
             fixture_profile_revisions,
@@ -144,6 +170,10 @@ impl PortableShowDocument {
         self.revision
     }
 
+    pub const fn patch_revision(&self) -> PortablePatchRevision {
+        self.patch_revision
+    }
+
     /// Includes metadata keys this build does not own so callers can retain them.
     pub fn metadata(&self) -> &BTreeMap<String, String> {
         &self.metadata
@@ -151,6 +181,10 @@ impl PortableShowDocument {
 
     pub fn objects(&self) -> impl ExactSizeIterator<Item = &PortableShowObject> {
         self.objects.iter()
+    }
+
+    pub(super) fn object_slice(&self) -> &[PortableShowObject] {
+        &self.objects
     }
 
     pub fn objects_of_kind<'a>(
@@ -201,6 +235,14 @@ impl PortableShowDocument {
         self.objects
             .binary_search_by(|object| compare_key(object.key.kind(), object.key.id(), kind, id))
     }
+}
+
+fn sort_document_content(
+    objects: &mut [PortableShowObject],
+    profiles: &mut [FixtureProfileRevision],
+) {
+    objects.sort_by(|left, right| left.key.cmp(&right.key));
+    profiles.sort_by(|left, right| left.id().cmp(right.id()));
 }
 
 fn compare_key(left_kind: &str, left_id: &str, kind: &str, id: &str) -> Ordering {

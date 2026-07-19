@@ -1,11 +1,11 @@
 use super::{
-    FixtureProfileRevision, FixtureProfileRevisionId, PortableShowDocument, PortableShowObject,
-    PortableShowObjectKey, PortableShowRevision, bump_revision,
+    FixtureProfileRevision, FixtureProfileRevisionId, PortablePatchRevision, PortableShowDocument,
+    PortableShowObject, PortableShowObjectKey, PortableShowRevision, bump_revision,
     profile_revision::{
         FixtureProfileRevisionInsertStatus, insert_fixture_profile_revision_in, profile_conflict,
     },
     repository::{delete_current, immediate_transaction, write_current},
-    store::current_revision,
+    store::{bump_patch_revision, current_patch_revision, current_revision},
 };
 use crate::{ShowStore, StoreError};
 use chrono::Utc;
@@ -15,16 +15,18 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Atomic candidate mutation guarded by one whole-show revision.
 #[derive(Clone, Debug)]
 pub struct PortableShowTransaction {
-    expected: PortableShowRevision,
-    writes: BTreeMap<PortableShowObjectKey, Value>,
-    deletes: BTreeSet<PortableShowObjectKey>,
-    profile_revisions: BTreeMap<FixtureProfileRevisionId, FixtureProfileRevision>,
+    pub(super) expected: PortableShowRevision,
+    pub(super) writes: BTreeMap<PortableShowObjectKey, Value>,
+    pub(super) deletes: BTreeSet<PortableShowObjectKey>,
+    pub(super) profile_revisions: BTreeMap<FixtureProfileRevisionId, FixtureProfileRevision>,
+    pub(super) patch_changed: bool,
 }
 
 /// Targeted result of one committed portable-show transaction.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PortableShowCommit {
     revision: PortableShowRevision,
+    patch_revision: PortablePatchRevision,
     written: Vec<PortableShowObject>,
     deleted: Vec<PortableShowObjectKey>,
     profile_revisions: Vec<FixtureProfileRevision>,
@@ -33,6 +35,10 @@ pub struct PortableShowCommit {
 impl PortableShowCommit {
     pub const fn revision(&self) -> PortableShowRevision {
         self.revision
+    }
+
+    pub const fn patch_revision(&self) -> PortablePatchRevision {
+        self.patch_revision
     }
 
     pub fn written_objects(&self) -> &[PortableShowObject] {
@@ -61,11 +67,18 @@ impl PortableShowTransaction {
             writes: BTreeMap::new(),
             deletes: BTreeSet::new(),
             profile_revisions: BTreeMap::new(),
+            patch_changed: false,
         }
     }
 
     pub const fn expected_revision(&self) -> PortableShowRevision {
         self.expected
+    }
+
+    /// Marks this transaction as one patch change; repeated calls remain one change.
+    pub fn mark_patch_changed(&mut self) -> &mut Self {
+        self.patch_changed = true;
+        self
     }
 
     /// Adds or replaces a raw object while retaining every supplied JSON field.
@@ -112,11 +125,17 @@ impl PortableShowTransaction {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.writes.is_empty() && self.deletes.is_empty() && self.profile_revisions.is_empty()
+        self.writes.is_empty()
+            && self.deletes.is_empty()
+            && self.profile_revisions.is_empty()
+            && !self.patch_changed
     }
 
     pub fn change_count(&self) -> usize {
-        self.writes.len() + self.deletes.len() + self.profile_revisions.len()
+        self.writes.len()
+            + self.deletes.len()
+            + self.profile_revisions.len()
+            + usize::from(self.patch_changed)
     }
 }
 
@@ -136,9 +155,10 @@ impl ShowStore {
         let tx = immediate_transaction(&self.conn)?;
         ensure_document_revision(&tx, changes.expected)?;
         let applied = apply_changes(&tx, changes)?;
-        let revision = committed_revision(&tx, applied.changed())?;
+        let (revision, patch_revision) =
+            committed_revisions(&tx, applied.changed(), applied.patch_changed)?;
         tx.commit()?;
-        Ok(applied.into_commit(revision))
+        Ok(applied.into_commit(revision, patch_revision))
     }
 }
 
@@ -146,16 +166,25 @@ struct AppliedChanges {
     written: Vec<PortableShowObject>,
     deleted: Vec<PortableShowObjectKey>,
     profile_revisions: Vec<FixtureProfileRevision>,
+    patch_changed: bool,
 }
 
 impl AppliedChanges {
     fn changed(&self) -> bool {
-        !self.written.is_empty() || !self.deleted.is_empty() || !self.profile_revisions.is_empty()
+        self.patch_changed
+            || !self.written.is_empty()
+            || !self.deleted.is_empty()
+            || !self.profile_revisions.is_empty()
     }
 
-    fn into_commit(self, revision: PortableShowRevision) -> PortableShowCommit {
+    fn into_commit(
+        self,
+        revision: PortableShowRevision,
+        patch_revision: PortablePatchRevision,
+    ) -> PortableShowCommit {
         PortableShowCommit {
             revision,
+            patch_revision,
             written: self.written,
             deleted: self.deleted,
             profile_revisions: self.profile_revisions,
@@ -184,14 +213,13 @@ fn apply_changes(
         writes,
         deletes,
         profile_revisions,
+        patch_changed,
     } = changes;
-    let profile_revisions = apply_profile_revisions(tx, profile_revisions)?;
-    let written = apply_writes(tx, writes)?;
-    let deleted = apply_deletes(tx, deletes)?;
     Ok(AppliedChanges {
-        written,
-        deleted,
-        profile_revisions,
+        profile_revisions: apply_profile_revisions(tx, profile_revisions)?,
+        written: apply_writes(tx, writes)?,
+        deleted: apply_deletes(tx, deletes)?,
+        patch_changed,
     })
 }
 
@@ -241,13 +269,20 @@ fn apply_deletes(
     Ok(deleted)
 }
 
-fn committed_revision(
+fn committed_revisions(
     tx: &rusqlite::Transaction<'_>,
     changed: bool,
-) -> Result<PortableShowRevision, StoreError> {
-    if changed {
-        bump_revision(tx)
+    patch_changed: bool,
+) -> Result<(PortableShowRevision, PortablePatchRevision), StoreError> {
+    let patch_revision = if patch_changed {
+        bump_patch_revision(tx)?
     } else {
-        current_revision(tx)
-    }
+        current_patch_revision(tx)?
+    };
+    let show_revision = if changed {
+        bump_revision(tx)?
+    } else {
+        current_revision(tx)?
+    };
+    Ok((show_revision, patch_revision))
 }

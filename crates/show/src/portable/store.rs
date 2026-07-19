@@ -1,6 +1,6 @@
 use super::{
-    PortableShowDocument, PortableShowObject, PortableShowObjectKey, PortableShowRevision,
-    profile_revision::load_fixture_profile_revisions,
+    PortablePatchRevision, PortableShowDocument, PortableShowObject, PortableShowObjectKey,
+    PortableShowRevision, profile_revision::load_fixture_profile_revisions,
 };
 use crate::{ShowStore, StoreError};
 use light_core::ShowId;
@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use uuid::Uuid;
 
 pub(crate) const REVISION_METADATA_KEY: &str = "light.portable_show_revision";
+pub(crate) const PATCH_REVISION_METADATA_KEY: &str = "light.patch_revision";
 
 impl ShowStore {
     /// Loads every portable object as raw JSON together with unknown metadata.
@@ -23,11 +24,17 @@ impl ShowStore {
     pub fn portable_revision(&self) -> Result<PortableShowRevision, StoreError> {
         current_revision(&self.conn)
     }
+
+    /// Reads the O(1) patch revision used by targeted patch projections.
+    pub fn portable_patch_revision(&self) -> Result<PortablePatchRevision, StoreError> {
+        current_patch_revision(&self.conn)
+    }
 }
 
 pub(crate) fn load_document(conn: &Connection) -> Result<PortableShowDocument, StoreError> {
     let metadata = load_metadata(conn)?;
     let revision = revision_from_metadata(&metadata)?;
+    let patch_revision = patch_revision_from_metadata(&metadata)?;
     let id = required_metadata(&metadata, "show_id")?;
     let name = required_metadata(&metadata, "name")?;
     let objects = load_objects(conn)?;
@@ -36,6 +43,7 @@ pub(crate) fn load_document(conn: &Connection) -> Result<PortableShowDocument, S
         ShowId(Uuid::parse_str(id)?),
         name.to_owned(),
         revision,
+        patch_revision,
         metadata,
         objects,
         profile_revisions,
@@ -54,10 +62,12 @@ pub(crate) fn current_revision(conn: &Connection) -> Result<PortableShowRevision
 }
 
 pub(crate) fn initialise_revision(tx: &Transaction<'_>) -> Result<(), StoreError> {
-    tx.execute(
-        "INSERT OR IGNORE INTO metadata(key,value) VALUES (?1,'0')",
-        [REVISION_METADATA_KEY],
-    )?;
+    for key in [REVISION_METADATA_KEY, PATCH_REVISION_METADATA_KEY] {
+        tx.execute(
+            "INSERT OR IGNORE INTO metadata(key,value) VALUES (?1,'0')",
+            [key],
+        )?;
+    }
     Ok(())
 }
 
@@ -71,6 +81,33 @@ pub(crate) fn bump_revision(tx: &Transaction<'_>) -> Result<PortableShowRevision
         (REVISION_METADATA_KEY, next.to_string()),
     )?;
     Ok(PortableShowRevision::new(next))
+}
+
+pub(crate) fn current_patch_revision(
+    conn: &Connection,
+) -> Result<PortablePatchRevision, StoreError> {
+    let value = conn
+        .query_row(
+            "SELECT value FROM metadata WHERE key=?1",
+            [PATCH_REVISION_METADATA_KEY],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
+    parse_patch_revision(value.as_deref())
+}
+
+pub(crate) fn bump_patch_revision(
+    tx: &Transaction<'_>,
+) -> Result<PortablePatchRevision, StoreError> {
+    let next = current_patch_revision(tx)?
+        .value()
+        .checked_add(1)
+        .ok_or_else(|| StoreError::Invalid("portable patch revision overflow".into()))?;
+    tx.execute(
+        "INSERT INTO metadata(key,value) VALUES (?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        (PATCH_REVISION_METADATA_KEY, next.to_string()),
+    )?;
+    Ok(PortablePatchRevision::new(next))
 }
 
 fn load_metadata(conn: &Connection) -> Result<BTreeMap<String, String>, StoreError> {
@@ -124,10 +161,28 @@ fn revision_from_metadata(
     parse_revision(metadata.get(REVISION_METADATA_KEY).map(String::as_str))
 }
 
+fn patch_revision_from_metadata(
+    metadata: &BTreeMap<String, String>,
+) -> Result<PortablePatchRevision, StoreError> {
+    parse_patch_revision(
+        metadata
+            .get(PATCH_REVISION_METADATA_KEY)
+            .map(String::as_str),
+    )
+}
+
 fn parse_revision(value: Option<&str>) -> Result<PortableShowRevision, StoreError> {
     let value = value
         .unwrap_or("0")
         .parse()
         .map_err(|_| StoreError::Invalid("portable show revision metadata is invalid".into()))?;
     Ok(PortableShowRevision::new(value))
+}
+
+fn parse_patch_revision(value: Option<&str>) -> Result<PortablePatchRevision, StoreError> {
+    let value = value
+        .unwrap_or("0")
+        .parse()
+        .map_err(|_| StoreError::Invalid("portable patch revision metadata is invalid".into()))?;
+    Ok(PortablePatchRevision::new(value))
 }

@@ -1,3 +1,4 @@
+mod candidate;
 mod document;
 mod migration;
 mod profile_revision;
@@ -6,7 +7,8 @@ mod store;
 mod transaction;
 
 pub use document::{
-    PortableShowDocument, PortableShowObject, PortableShowObjectKey, PortableShowRevision,
+    PortablePatchRevision, PortableShowDocument, PortableShowObject, PortableShowObjectKey,
+    PortableShowRevision,
 };
 pub use profile_revision::{
     FixtureProfileDigest, FixtureProfileRevision, FixtureProfileRevisionId,
@@ -23,4 +25,10 @@ pub(crate) use repository::{
 pub(crate) use store::{bump_revision, initialise_revision};
 
 #[cfg(test)]
+mod candidate_tests;
+#[cfg(test)]
 mod tests;
+pub use candidate::{
+    PortableShowCandidate, PortableShowCandidateObject, PortableShowCandidateObjects,
+    PortableShowCandidateProfiles,
+};
