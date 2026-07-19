@@ -127,3 +127,21 @@ fn snapshot_with_route(revision: u64, destination_universe: u16) -> EngineSnapsh
         ..EngineSnapshot::default()
     }
 }
+
+#[test]
+fn read_only_projection_shares_the_playback_read_boundary() {
+    let engine = Arc::new(Engine::new(ProgrammerRegistry::default()));
+    let playback = engine.playback();
+    let _playback_reader = playback.read();
+    let projection_engine = Arc::clone(&engine);
+    let (sent, received) = std::sync::mpsc::channel();
+
+    std::thread::spawn(move || sent.send(projection_engine.resolved_values()).unwrap());
+
+    assert!(
+        received
+            .recv_timeout(std::time::Duration::from_secs(1))
+            .is_ok(),
+        "read-only projection unexpectedly waited for exclusive Playback access"
+    );
+}

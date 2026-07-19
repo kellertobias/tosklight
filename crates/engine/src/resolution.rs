@@ -3,7 +3,8 @@ use std::{collections::HashMap, sync::atomic::Ordering};
 use chrono::{DateTime, Utc};
 use light_core::{AttributeKey, AttributeValue, MergeMode, ProgrammerId, TimedValue};
 use light_playback::{
-    ActivePlayback, AutomaticPlaybackTransition, MoveInBlackCandidate, PlaybackTickResult,
+    ActivePlayback, AutomaticPlaybackTransition, MoveInBlackCandidate, PlaybackEngine,
+    PlaybackTickResult,
 };
 use light_programmer::{GroupDefinition, GroupProgrammerValue, ProgrammerState, resolve_group};
 
@@ -83,30 +84,40 @@ impl Engine {
         advance: bool,
     ) -> PlaybackResolution {
         let snapshot = generation.snapshot();
-        let timecode = self.timecode_frame.load(Ordering::Relaxed);
-        let mut playback = generation.playback().write();
-        let transitions = if advance {
+        if advance {
+            let timecode = self.timecode_frame.load(Ordering::Relaxed);
+            let mut playback = generation.playback().write();
             let PlaybackTickResult { transitions } =
                 playback.tick(now, (timecode != u64::MAX).then_some(timecode));
-            transitions
-        } else {
-            Vec::new()
-        };
-        let contributions = playback
-            .contributions_with_context_at(now, |fixture_id, attribute| {
-                snapshot_attribute_is_snap(snapshot, fixture_id, attribute)
-            })
-            .into_iter()
-            .map(EngineContribution::from)
-            .collect();
-        PlaybackResolution {
-            contributions,
-            move_in_black_candidates: playback.move_in_black_candidates(),
-            active_playbacks: playback.runtime(),
-            automatic_transitions: transitions,
+            return playback_resolution(snapshot, &playback, now, transitions);
         }
+        let playback = generation.playback().read();
+        playback_resolution(snapshot, &playback, now, Vec::new())
     }
+}
 
+fn playback_resolution(
+    snapshot: &EngineSnapshot,
+    playback: &PlaybackEngine,
+    now: DateTime<Utc>,
+    transitions: Vec<AutomaticPlaybackTransition>,
+) -> PlaybackResolution {
+    let contributions = playback
+        .contributions_with_context_at(now, |fixture_id, attribute| {
+            snapshot_attribute_is_snap(snapshot, fixture_id, attribute)
+        })
+        .into_iter()
+        .map(EngineContribution::from)
+        .collect();
+    PlaybackResolution {
+        contributions,
+        move_in_black_candidates: playback.move_in_black_candidates(),
+        active_playbacks: playback.runtime(),
+        automatic_transitions: transitions,
+    }
+}
+
+impl Engine {
     fn programmer_contributions(
         &self,
         snapshot: &EngineSnapshot,
