@@ -10,7 +10,11 @@ fn inline_snapshot_discovery_is_lossless_and_canonicalizes_duplicates() {
     show.put_object(
         "fixture",
         "one",
-        &json!({"definition":{"profile_snapshot":profile},"future_fixture":true}),
+        &json!({
+            "definition":{"profile_snapshot":profile},
+            "future_fixture":{"profile_snapshot":{"opaque":true}},
+            "profile_snapshot":{"opaque":true}
+        }),
         0,
     )
     .unwrap();
@@ -43,6 +47,55 @@ fn inline_snapshot_discovery_is_lossless_and_canonicalizes_duplicates() {
         document.object("fixture", "one").unwrap().body()["definition"]["profile_snapshot"]
             .is_object()
     );
+    drop(show);
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn unrelated_snapshot_names_are_not_fixture_profiles() {
+    let (path, show) = create("legacy-unrelated-snapshot");
+    show.put_object(
+        "future_object",
+        "one",
+        &json!({"profile_snapshot":{"opaque":true}}),
+        0,
+    )
+    .unwrap();
+
+    let document = show.portable_document().unwrap();
+    assert!(
+        document
+            .discover_legacy_inline_profile_snapshots()
+            .unwrap()
+            .is_empty()
+    );
+    drop(show);
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn current_patched_fixture_objects_are_discovered() {
+    let (path, show) = create("legacy-patched-fixture-snapshot");
+    let profile = profile_value(PROFILE_A, 1, "Current fixture profile");
+    show.put_object(
+        "patched_fixture",
+        "one",
+        &json!({
+            "definition":{"profile_snapshot":profile},
+            "fixtures":[{"definition":{"profile_snapshot":{"opaque":true}}}]
+        }),
+        0,
+    )
+    .unwrap();
+
+    let discovered = show
+        .portable_document()
+        .unwrap()
+        .discover_legacy_inline_profile_snapshots()
+        .unwrap();
+    assert_eq!(discovered.len(), 1);
+    assert_eq!(discovered[0].owner().kind(), "patched_fixture");
+    assert_eq!(discovered[0].json_pointer(), "/definition/profile_snapshot");
     drop(show);
     let _ = fs::remove_file(path);
 }

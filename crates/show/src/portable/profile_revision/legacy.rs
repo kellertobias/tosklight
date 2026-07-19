@@ -71,47 +71,49 @@ pub(crate) fn visit_legacy_inline_profile_snapshots(
     value: &Value,
     visitor: &mut impl FnMut(LegacyInlineProfileSnapshot) -> Result<(), StoreError>,
 ) -> Result<(), StoreError> {
-    visit_value(owner, value, "", visitor)
+    match owner.kind() {
+        "fixture" => visit_legacy_fixture_object(owner, value, visitor),
+        "patched_fixture" => visit_fixture(owner, value, "", visitor),
+        "fixture_bundle" => visit_fixture_bundle(owner, value, visitor),
+        _ => Ok(()),
+    }
 }
 
-fn visit_value(
+fn visit_legacy_fixture_object(
+    owner: &PortableShowObjectKey,
+    value: &Value,
+    visitor: &mut impl FnMut(LegacyInlineProfileSnapshot) -> Result<(), StoreError>,
+) -> Result<(), StoreError> {
+    visit_fixture(owner, value, "", visitor)?;
+    visit_fixture_bundle(owner, value, visitor)
+}
+
+fn visit_fixture(
     owner: &PortableShowObjectKey,
     value: &Value,
     pointer: &str,
     visitor: &mut impl FnMut(LegacyInlineProfileSnapshot) -> Result<(), StoreError>,
 ) -> Result<(), StoreError> {
-    match value {
-        Value::Array(values) => visit_array(owner, values, pointer, visitor),
-        Value::Object(values) => visit_object(owner, values, pointer, visitor),
-        _ => Ok(()),
+    let Some(snapshot) = value.pointer("/definition/profile_snapshot") else {
+        return Ok(());
+    };
+    if snapshot.is_null() {
+        return Ok(());
     }
+    let snapshot_pointer = format!("{pointer}/definition/profile_snapshot");
+    visitor(decode_snapshot(owner, &snapshot_pointer, snapshot)?)
 }
 
-fn visit_array(
+fn visit_fixture_bundle(
     owner: &PortableShowObjectKey,
-    values: &[Value],
-    pointer: &str,
+    value: &Value,
     visitor: &mut impl FnMut(LegacyInlineProfileSnapshot) -> Result<(), StoreError>,
 ) -> Result<(), StoreError> {
-    for (index, value) in values.iter().enumerate() {
-        visit_value(owner, value, &format!("{pointer}/{index}"), visitor)?;
-    }
-    Ok(())
-}
-
-fn visit_object(
-    owner: &PortableShowObjectKey,
-    values: &serde_json::Map<String, Value>,
-    pointer: &str,
-    visitor: &mut impl FnMut(LegacyInlineProfileSnapshot) -> Result<(), StoreError>,
-) -> Result<(), StoreError> {
-    for (key, value) in values {
-        let child = format!("{pointer}/{}", escape_pointer(key));
-        if key == "profile_snapshot" && !value.is_null() {
-            visitor(decode_snapshot(owner, &child, value)?)?;
-        } else {
-            visit_value(owner, value, &child, visitor)?;
-        }
+    let Some(fixtures) = value.get("fixtures").and_then(Value::as_array) else {
+        return Ok(());
+    };
+    for (index, fixture) in fixtures.iter().enumerate() {
+        visit_fixture(owner, fixture, &format!("/fixtures/{index}"), visitor)?;
     }
     Ok(())
 }
@@ -147,8 +149,4 @@ fn insert_canonical(
     }
     revisions.insert(candidate.id().clone(), candidate);
     Ok(())
-}
-
-fn escape_pointer(value: &str) -> String {
-    value.replace('~', "~0").replace('/', "~1")
 }

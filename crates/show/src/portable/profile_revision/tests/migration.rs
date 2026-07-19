@@ -26,6 +26,67 @@ fn schema_three_upgrade_deduplicates_nested_profiles_without_rewriting_objects()
 }
 
 #[test]
+fn schema_three_upgrade_preserves_opaque_snapshot_names() {
+    let body = r#"{"profile_snapshot":{"opaque":true}}"#;
+    let (path, show) = create("migration-opaque-snapshot");
+    insert_raw_object(&show.conn, "future_object", "one", body);
+    downgrade_to_schema_three(&show.conn);
+    drop(show);
+
+    let migrated = ShowStore::open(&path).unwrap();
+    assert_eq!(schema_version(&migrated.conn), 4);
+    assert_eq!(migrated.portable_revision().unwrap().value(), 0);
+    assert!(
+        migrated
+            .list_fixture_profile_revisions()
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(raw_body(&migrated.conn, "future_object", "one"), body);
+    drop(migrated);
+    remove_show(&path);
+}
+
+#[test]
+fn schema_three_upgrade_materializes_current_patched_fixture_profiles() {
+    let body = first_fixture_body();
+    let (path, show) = create("migration-patched-fixture-profile");
+    insert_raw_object(&show.conn, "patched_fixture", "one", &body);
+    downgrade_to_schema_three(&show.conn);
+    drop(show);
+
+    let migrated = ShowStore::open(&path).unwrap();
+    assert_eq!(migrated.list_fixture_profile_revisions().unwrap().len(), 1);
+    assert_eq!(raw_body(&migrated.conn, "patched_fixture", "one"), body);
+    drop(migrated);
+    remove_show(&path);
+}
+
+#[test]
+fn malformed_nested_fixture_snapshot_reports_its_exact_location() {
+    let body = r#"{"fixtures":[{"definition":{"profile_snapshot":{"opaque":true}}}]}"#;
+    let (path, show) = create("migration-malformed-fixture-snapshot");
+    insert_raw_object(&show.conn, "fixture_bundle", "broken", body);
+    downgrade_to_schema_three(&show.conn);
+    drop(show);
+
+    let error = match ShowStore::open(&path) {
+        Ok(_) => panic!("malformed fixture snapshot unexpectedly migrated"),
+        Err(error) => error.to_string(),
+    };
+    assert!(error.contains(
+        "invalid inline profile snapshot in fixture_bundle/broken at \
+         /fixtures/0/definition/profile_snapshot"
+    ));
+    let unchanged = Connection::open(&path).unwrap();
+    assert_eq!(schema_version(&unchanged), 3);
+    assert!(!table_exists(&unchanged, "fixture_profile_revisions"));
+    assert_eq!(raw_body(&unchanged, "fixture_bundle", "broken"), body);
+    drop(unchanged);
+    remove_show(&path);
+}
+
+#[test]
 fn conflicting_inline_profiles_roll_back_the_complete_schema_upgrade() {
     let first = first_fixture_body();
     let conflicting = nested_fixture_body().replace("Legacy profile", "Conflicting profile");
