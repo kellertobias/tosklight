@@ -3,6 +3,7 @@
 
 pub mod codec;
 pub mod delivery;
+pub mod external;
 pub mod frame;
 pub mod health;
 pub mod route;
@@ -15,6 +16,10 @@ pub use codec::{
 pub use delivery::{
     ArtNetDriver, EncodedPacket, NetworkOutput, OutputDriver, RouteDiagnostic, RouteSendError,
     SacnDriver, encode_routes, next_sequence,
+};
+pub use external::{
+    ExternalAdapterError, ExternalAdapterId, ExternalBindingId, ExternalDeviceAdapter,
+    ExternalDeviceIntent, ExternalDeviceObservation, ExternalIntentBatch, ExternalObservationBatch,
 };
 pub use frame::{DMX_SLOTS, DmxFrame};
 pub use health::OutputHealth;
