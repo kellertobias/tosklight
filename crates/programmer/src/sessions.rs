@@ -183,23 +183,27 @@ impl ProgrammerRegistry {
         state.selection_expression = selection.and_then(|selection| selection.expression.clone());
     }
 
-    pub(crate) fn close_selection_gesture(&self, session: SessionId) {
+    pub(crate) fn close_selection_gesture(&self, session: SessionId) -> bool {
         if let Some(selection) = self
             .selection_contexts
             .write()
             .get_mut(&self.command_context(session))
+            && selection.gesture_open
         {
             selection.gesture_open = false;
+            selection.revision = self.next_selection_revision();
+            return true;
         }
+        false
     }
 
     /// Finish the current desk-local sequence of ordinary selection presses without clearing its
     /// visible selection. Recording a target uses this boundary so the next fixture or Group press
     /// starts a fresh selection while the just-recorded source remains inspectable.
-    pub fn finish_selection_gesture(&self, session: SessionId) {
+    pub fn finish_selection_gesture(&self, session: SessionId) -> bool {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();
-        self.close_selection_gesture(session);
+        self.close_selection_gesture(session)
     }
 
     /// Bind a controller session to the command interaction context for its desk.

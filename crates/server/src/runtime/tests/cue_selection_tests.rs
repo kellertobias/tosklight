@@ -299,6 +299,7 @@ fn bare_multi_head_selection_expands_to_children_and_steps_without_parent_identi
         selected: expanded,
         expression: Some(light_programmer::SelectionExpression::Static),
         revision: 1,
+        gesture_open: false,
     };
     let first = registry
         .action(
@@ -320,6 +321,7 @@ fn bare_multi_head_selection_expands_to_children_and_steps_without_parent_identi
         selected: vec![first_head],
         expression: Some(light_programmer::SelectionExpression::Static),
         revision: 2,
+        gesture_open: false,
     };
     registry.acknowledge_internal_selection(desk, user, &stepped);
     let second = registry

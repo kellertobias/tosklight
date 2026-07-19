@@ -190,6 +190,7 @@ function decodeSelection(
 						`${path}.expression`,
 					),
 		revision: integerAt(selection.revision, `${path}.revision`),
+		gestureOpen: booleanAt(selection.gesture_open, `${path}.gesture_open`),
 	};
 }
 

@@ -116,22 +116,23 @@ pub fn resolve_selection_references(
 pub(crate) struct SelectionContext {
     pub(crate) selected: Vec<FixtureId>,
     pub(crate) expression: Option<SelectionExpression>,
-    /// Monotonic identity of the last authoritative selection operation. This changes even when
-    /// an operator deliberately re-selects the same members, allowing transient desk controls
-    /// such as PREV/NEXT/ALL to distinguish their own writes from an external selection reset.
+    /// Monotonic identity of the last authoritative selection or gesture-boundary operation. This
+    /// changes when an operator deliberately re-selects the same members and when a value closes
+    /// an open gesture, keeping the complete projected interaction context versioned.
     pub(crate) revision: u64,
     /// True only while consecutive ordinary surface selections are being accumulated. A value
     /// entry or an explicit selection/clear operation closes the gesture.
     pub(crate) gesture_open: bool,
 }
 
-/// Desk-local authoritative programmer selection plus the operation identity that produced it.
-/// Attribute/value mutations deliberately do not change `revision`.
+/// Desk-local authoritative programmer selection plus the interaction identity that produced it.
+/// Attribute/value mutations change `revision` only when they close an open selection gesture.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ProgrammerSelection {
     pub selected: Vec<FixtureId>,
     pub expression: Option<SelectionExpression>,
     pub revision: u64,
+    pub gesture_open: bool,
 }
 
 impl ProgrammerRegistry {

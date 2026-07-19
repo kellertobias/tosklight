@@ -21,6 +21,7 @@ pub(super) fn selection(
         selected,
         expression,
         revision,
+        gesture_open: false,
     }
 }
 

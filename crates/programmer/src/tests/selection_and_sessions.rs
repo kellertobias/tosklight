@@ -28,6 +28,42 @@ fn selection_revision_identifies_operations_but_ignores_value_changes() {
 }
 
 #[test]
+fn selection_projection_versions_the_gesture_boundary() {
+    let registry = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    let first = FixtureId::new();
+    let second = FixtureId::new();
+    registry.start(session, UserId::new());
+
+    assert!(registry.apply_selection_gesture(
+        session,
+        vec![SelectionReference::Fixture { fixture_id: first }],
+        &HashMap::new(),
+    ));
+    let open = registry.selection(session).unwrap();
+    assert!(open.gesture_open);
+
+    assert!(registry.finish_selection_gesture(session));
+    let closed = registry.selection(session).unwrap();
+    assert!(!closed.gesture_open);
+    assert!(closed.revision > open.revision);
+    assert_eq!(closed.selected, open.selected);
+    assert_eq!(closed.expression, open.expression);
+    assert!(!registry.finish_selection_gesture(session));
+    assert_eq!(
+        registry.selection(session).unwrap().revision,
+        closed.revision
+    );
+
+    assert!(registry.apply_selection_gesture(
+        session,
+        vec![SelectionReference::Fixture { fixture_id: second }],
+        &HashMap::new(),
+    ));
+    assert_eq!(registry.selection(session).unwrap().selected, vec![second]);
+}
+
+#[test]
 fn users_are_isolated() {
     let registry = ProgrammerRegistry::default();
     let first = SessionId::new();

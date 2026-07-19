@@ -39,6 +39,7 @@ pub struct ProgrammerSelectionProjection {
     pub expression: Option<ProgrammerSelectionExpression>,
     #[ts(type = "number")]
     pub revision: u64,
+    pub gesture_open: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -167,6 +168,7 @@ mod tests {
             selected: vec![Uuid::from_u128(2)],
             expression: Some(ProgrammerSelectionExpression::Static),
             revision: 3,
+            gesture_open: true,
         }
     }
 }

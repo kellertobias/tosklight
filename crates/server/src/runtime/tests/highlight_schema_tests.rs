@@ -241,6 +241,7 @@ fn highlight_participation_uses_logical_fixture_identities_independent_of_patch(
         selected: vec![head, parent, head, parent],
         expression: Some(light_programmer::SelectionExpression::Static),
         revision: 1,
+        gesture_open: false,
     };
     let stepped = registry
         .action(

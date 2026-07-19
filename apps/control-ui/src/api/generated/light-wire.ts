@@ -334,7 +334,7 @@ export type ProgrammerSelectionReference = { "type": "fixture", fixture_id: stri
 
 export type ProgrammerSelectionExpression = { "type": "static" } | { "type": "live_group", group_id: string, rule: ProgrammerSelectionRule, } | { "type": "frozen_group", group_id: string, source_revision: number, } | { "type": "playback_contents", items: Array<ProgrammerSelectionReference>, } | { "type": "sources", items: Array<ProgrammerSelectionReference>, };
 
-export type ProgrammerSelectionProjection = { selected: Array<string>, expression: ProgrammerSelectionExpression | null, revision: number, };
+export type ProgrammerSelectionProjection = { selected: Array<string>, expression: ProgrammerSelectionExpression | null, revision: number, gesture_open: boolean, };
 
 export type ProgrammingInteractionProjection = { desk_id: string, command_line: CommandLineResponse, selection: ProgrammerSelectionProjection, };
 

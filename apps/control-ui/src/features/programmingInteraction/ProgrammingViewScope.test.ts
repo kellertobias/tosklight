@@ -20,7 +20,12 @@ function commandChange(): ProgrammingChange {
 function selectionChange(): ProgrammingChange {
 	return {
 		deskId: DESK_ID,
-		selection: { selected: [], expression: null, revision: 1 },
+		selection: {
+			selected: [],
+			expression: null,
+			revision: 1,
+			gestureOpen: false,
+		},
 	};
 }
 

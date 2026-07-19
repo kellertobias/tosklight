@@ -57,6 +57,7 @@ fn selection_projection(
             .collect(),
         expression: selection.expression.as_ref().map(expression),
         revision: selection.revision,
+        gesture_open: selection.gesture_open,
     }
 }
 

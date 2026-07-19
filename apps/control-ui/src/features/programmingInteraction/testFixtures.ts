@@ -42,6 +42,7 @@ export function selection(
 		selected,
 		expression: { type: "static" },
 		revision,
+		gestureOpen: false,
 	};
 }
 

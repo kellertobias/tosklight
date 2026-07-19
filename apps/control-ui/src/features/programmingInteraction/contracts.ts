@@ -43,6 +43,7 @@ export interface SelectionProjection {
 	selected: readonly string[];
 	expression: SelectionExpression | null;
 	revision: number;
+	gestureOpen: boolean;
 }
 
 export interface ProgrammingProjection {

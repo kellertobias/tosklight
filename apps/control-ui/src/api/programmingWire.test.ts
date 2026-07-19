@@ -56,6 +56,7 @@ function decodedSelection(
 		selected: [PROGRAMMING_FIXTURE_ID],
 		expression,
 		revision: 6,
+		gestureOpen: true,
 	};
 }
 
@@ -161,6 +162,10 @@ describe("Programming projection wire validation", () => {
 		}],
 		["selection revision", (value: ReturnType<typeof programmingSnapshot>) => {
 			value.projection.selection.revision = Number.MAX_SAFE_INTEGER + 1;
+			return value;
+		}],
+		["selection gesture context", (value: ReturnType<typeof programmingSnapshot>) => {
+			record(value.projection.selection).gesture_open = "open";
 			return value;
 		}],
 		["fixture UUID", (value: ReturnType<typeof programmingSnapshot>) => {

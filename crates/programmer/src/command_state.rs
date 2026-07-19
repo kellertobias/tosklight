@@ -163,6 +163,7 @@ impl ProgrammerRegistry {
                 selected: selection.selected.clone(),
                 expression: selection.expression.clone(),
                 revision: selection.revision,
+                gesture_open: selection.gesture_open,
             })
             .unwrap_or_default()
     }

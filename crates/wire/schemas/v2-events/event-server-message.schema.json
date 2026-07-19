@@ -1812,6 +1812,9 @@
             }
           ]
         },
+        "gesture_open": {
+          "type": "boolean"
+        },
         "revision": {
           "type": "integer",
           "format": "uint64",
@@ -1828,7 +1831,8 @@
       "required": [
         "selected",
         "expression",
-        "revision"
+        "revision",
+        "gesture_open"
       ]
     },
     "ProgrammerSelectionReference": {

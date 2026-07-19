@@ -29,7 +29,7 @@ function selection(
 	selected = [FIXTURE_1, FIXTURE_2],
 	expression: SelectionProjection["expression"] = { type: "static" },
 ): SelectionProjection {
-	return { selected, expression, revision };
+	return { selected, expression, revision, gestureOpen: false };
 }
 
 function snapshot(

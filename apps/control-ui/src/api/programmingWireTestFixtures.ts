@@ -35,6 +35,7 @@ export function programmingSelection(
 			rule: { type: "every_nth", n: 2, offset: 0 },
 		},
 		revision: 6,
+		gesture_open: true,
 		...overrides,
 	};
 }
