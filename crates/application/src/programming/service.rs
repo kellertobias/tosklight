@@ -1,20 +1,22 @@
 use super::{
     ExecutionPolicy, ProgrammingAction, ProgrammingCommand, ProgrammingExecution,
-    ProgrammingInteractionChange, ProgrammingOutcome, ProgrammingPorts, ProgrammingReconciliation,
-    ProgrammingResult,
+    ProgrammingInteractionChange, ProgrammingOutcome, ProgrammingPorts, ProgrammingResult,
 };
 use crate::{ActionContext, ActionEnvelope, ActionError, EventBus, EventDraft};
 use light_core::SessionId;
 use light_programmer::command_line::{CommandKeyIntent, command_key_intent};
-use light_programmer::{CommandLineState, HighlightRegistry, ProgrammerRegistry};
+use light_programmer::{HighlightRegistry, ProgrammerRegistry};
 use parking_lot::Mutex;
 use std::sync::Arc;
 
+#[path = "service/state.rs"]
+mod state;
 #[path = "service/support.rs"]
 mod support;
 
+use state::{interaction_change, reconciliation};
 use support::{
-    ReplayCache, Snapshot, accepted, action_error, command_line, replace_error, required_session,
+    ReplayCache, Snapshot, accepted, command_line, replace_error, required_session,
     unknown_programmer, validate_command,
 };
 
@@ -270,74 +272,6 @@ impl ProgrammingService {
         Ok(())
     }
 
-    fn clear(
-        &self,
-        session: SessionId,
-        context: &crate::ActionContext,
-        ports: &dyn ProgrammingPorts,
-    ) -> Result<ProgrammingOutcome, ActionError> {
-        let command = command_line(&self.programmers, session)?;
-        let action = self
-            .programmers
-            .with_staged_transaction(session, |staged| clear_staged(staged, session, &command))
-            .map_err(action_error)?;
-        let warning = persist_clear(action, context, ports);
-        Ok(accepted(action, None, warning))
-    }
-
-    fn undo(
-        &self,
-        session: SessionId,
-        context: &crate::ActionContext,
-        ports: &dyn ProgrammingPorts,
-    ) -> Result<ProgrammingOutcome, ActionError> {
-        let changed = self
-            .programmers
-            .with_staged_transaction(session, |staged| Ok::<_, String>(staged.undo(session)))
-            .map_err(action_error)?;
-        let warning = changed
-            .then(|| ports.persist(context, "programmer.undo"))
-            .flatten();
-        Ok(accepted(
-            if changed {
-                ProgrammingAction::Undone
-            } else {
-                ProgrammingAction::NoChange
-            },
-            None,
-            warning,
-        ))
-    }
-
-    fn preload(
-        &self,
-        session: SessionId,
-        capture_programmer: bool,
-        context: &crate::ActionContext,
-        ports: &dyn ProgrammingPorts,
-    ) -> Result<ProgrammingOutcome, ActionError> {
-        let programmer = self
-            .programmers
-            .get(session)
-            .ok_or_else(unknown_programmer)?;
-        if programmer.blind {
-            return Ok(match ports.commit_preload(context) {
-                Ok(warning) => accepted(ProgrammingAction::PreloadCommitted, None, warning),
-                Err(error) => ProgrammingOutcome::Rejected { error },
-            });
-        }
-        self.programmers
-            .with_staged_transaction(session, |staged| {
-                staged
-                    .arm_preload(session, capture_programmer)
-                    .then_some(())
-                    .ok_or_else(|| "programmer does not exist".to_owned())
-            })
-            .map_err(action_error)?;
-        let warning = ports.persist(context, "preload.enter");
-        Ok(accepted(ProgrammingAction::PreloadEntered, None, warning))
-    }
-
     fn cached(
         &self,
         action: &ActionEnvelope<ProgrammingCommand>,
@@ -368,76 +302,4 @@ impl ProgrammingService {
             result.clone(),
         );
     }
-}
-
-fn reconciliation(
-    before: &Snapshot,
-    mutated: &Snapshot,
-    outcome: &ProgrammingOutcome,
-) -> Option<ProgrammingReconciliation> {
-    if matches!(
-        outcome,
-        ProgrammingOutcome::Accepted {
-            action: ProgrammingAction::PreloadEntered | ProgrammingAction::PreloadCommitted,
-            ..
-        }
-    ) {
-        return Some(ProgrammingReconciliation::CaptureModeChanged);
-    }
-    (before.selection_revision != mutated.selection_revision)
-        .then_some(ProgrammingReconciliation::SelectionChanged)
-}
-
-fn interaction_change(
-    programmers: &ProgrammerRegistry,
-    desk_id: uuid::Uuid,
-    session: SessionId,
-    before: &Snapshot,
-    after: &Snapshot,
-) -> Option<ProgrammingInteractionChange> {
-    let command_line =
-        (before.command_line != after.command_line).then(|| after.command_line.clone());
-    let selection = (before.selection_revision != after.selection_revision)
-        .then(|| programmers.selection(session).unwrap_or_default());
-    ProgrammingInteractionChange::from_components(desk_id, command_line, selection)
-}
-
-fn clear_staged(
-    staged: &ProgrammerRegistry,
-    session: SessionId,
-    command: &CommandLineState,
-) -> Result<ProgrammingAction, String> {
-    let programmer = staged.get(session).ok_or("programmer does not exist")?;
-    let action = if programmer.blind {
-        staged.clear_preload_pending(session);
-        ProgrammingAction::ClearedPreload
-    } else if !programmer.selected.is_empty() {
-        staged.select(session, []);
-        ProgrammingAction::ClearedSelection
-    } else if !programmer.values.is_empty() || !programmer.group_values.is_empty() {
-        staged.clear_values(session);
-        ProgrammingAction::ClearedValues
-    } else if command.pristine {
-        ProgrammingAction::NoChange
-    } else {
-        ProgrammingAction::ClearedCommandLine
-    };
-    staged
-        .update_command_line(session, |current| (String::new(), current.target, true))
-        .ok_or("programmer command line does not exist")?;
-    Ok(action)
-}
-
-fn persist_clear(
-    action: ProgrammingAction,
-    context: &crate::ActionContext,
-    ports: &dyn ProgrammingPorts,
-) -> Option<String> {
-    let operation = match action {
-        ProgrammingAction::ClearedPreload => "programmer.clear_preload",
-        ProgrammingAction::ClearedSelection => "programmer.clear_selection",
-        ProgrammingAction::ClearedValues => "programmer.clear_values",
-        _ => return None,
-    };
-    ports.persist(context, operation)
 }
