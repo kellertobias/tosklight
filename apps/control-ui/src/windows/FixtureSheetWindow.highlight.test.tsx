@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FixtureDefinition, HighlightState, PatchedFixture } from "../api/types";
 import { FixtureSheetWindow } from "./FixtureSheetWindow";
@@ -103,9 +103,21 @@ beforeEach(() => {
   dispatch.mockClear();
 });
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe("Fixture Sheet Highlight stepping visualization", () => {
+  it("does not poll visualization while its pane is covered", async () => {
+    vi.useFakeTimers();
+    render(<FixtureSheetWindow active={false} compact/>);
+
+    await act(() => vi.advanceTimersByTimeAsync(1_000));
+
+    expect(server.readVisualization).not.toHaveBeenCalled();
+  });
+
   it("keeps every fixture row available in a compact scrollable pane", async () => {
     server.patch.fixtures = Array.from({ length: 13 }, (_, index) => {
       const fixture = multiHeadFixture();

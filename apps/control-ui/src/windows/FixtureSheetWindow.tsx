@@ -48,6 +48,7 @@ export function FixtureSheetWindow({
 	const includedHeads = compact ? "all" : state.fixtureSheetIncludedHeads;
 	const { visualization, preloadVisualization } = useFixtureSheetVisualizations(
 		state.preload !== "idle",
+		active,
 	);
 	const rows = useFixtureSheetRows({
 		visualization,

@@ -16,6 +16,7 @@ export function StageWindow(props: StageWindowProps) {
 	const layout = useStageLayout();
 	const patchSelectionPreview = props.patchSelectionPreview ?? false;
 	const stage = useStageVisualization(
+		active,
 		options.followPreload,
 		patchSelectionPreview,
 		layout,

@@ -4,7 +4,7 @@ import { ParameterControls } from "./ParameterControls";
 
 const state = {
 	stageMode: "select",
-	builtIn: null,
+	builtIn: null as string | null,
 	desks: [],
 	activeDeskId: "programming",
 	preload: "idle",
@@ -43,6 +43,9 @@ vi.mock("../../features/server/useShowObjectsState", () => ({
 
 afterEach(() => {
 	cleanup();
+	state.stageMode = "select";
+	state.builtIn = null;
+	state.desks = [];
 	state.shiftArmed = false;
 	server.selectedFixtures = [];
 	server.selectedGroupId = null;
@@ -51,6 +54,18 @@ afterEach(() => {
 	server.bootstrap.active_programmers = [];
 	server.bootstrap.hardware_connected = false;
 	vi.clearAllMocks();
+});
+
+describe("ParameterControls projection lifecycle", () => {
+	it("does not mount the visualization projection behind Stage command controls", () => {
+		state.stageMode = "setup";
+		state.builtIn = "stage";
+		server.selectedFixtures = ["fixture-1"];
+
+		render(<ParameterControls />);
+
+		expect(server.readVisualization).not.toHaveBeenCalled();
+	});
 });
 
 function schemaV2Fixture(): any {

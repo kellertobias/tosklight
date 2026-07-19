@@ -7,21 +7,21 @@ import { fixtureValue } from "./fixtureVisualization";
 import { createPortal } from "react-dom";
 import { Button } from "../components/common";
 import { FaderView, WindowHeader } from "../components/window-kit";
+import { usePollingResource } from "../hooks/usePollingResource";
 
 const PAGE_SIZE = 20;
 
-export function ChannelsWindow({ compact }: WindowProps) {
+export function ChannelsWindow({ active = true, compact }: WindowProps) {
   const server = useServer();
   const [page, setPage] = useState(0);
   const [pagePickerOpen, setPagePickerOpen] = useState(false);
   const [visualization, setVisualization] = useState<VisualizationSnapshot | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    const refresh = () => void server.readVisualization().then((next) => { if (!cancelled) setVisualization(next); }).catch(() => undefined);
-    refresh();
-    const timer = window.setInterval(refresh, 250);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, [server.readVisualization]);
+  usePollingResource({
+    enabled: active,
+    intervalMillis: 250,
+    load: server.readVisualization,
+    onValue: setVisualization,
+  });
   useEffect(() => {
     if (!pagePickerOpen) return;
     const close = (event: KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); setPagePickerOpen(false); } };

@@ -1,31 +1,23 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useServer } from "../../api/ServerContext";
 import type { PatchedFixture, VisualizationSnapshot } from "../../api/types";
 import { fixtures as visualFixtures } from "../../data/mockData";
 import { fixtureValue } from "../fixtureVisualization";
 import { migrateStagePosition, type Stage3dFixture } from "../stage3dScene";
 import type { StageFixturePresentation, StageLayoutModel } from "./types";
+import { usePollingResource } from "../../hooks/usePollingResource";
 
-function useVisualizationSnapshot(followPreload: boolean) {
+function useVisualizationSnapshot(followPreload: boolean, active: boolean) {
 	const server = useServer();
 	const [visualization, setVisualization] =
 		useState<VisualizationSnapshot | null>(null);
-	useEffect(() => {
-		let cancelled = false;
-		const refresh = () =>
-			void server
-				.readVisualization(followPreload)
-				.then((next) => {
-					if (!cancelled) setVisualization(next);
-				})
-				.catch(() => undefined);
-		refresh();
-		const timer = window.setInterval(refresh, 200);
-		return () => {
-			cancelled = true;
-			window.clearInterval(timer);
-		};
-	}, [followPreload, server.readVisualization]);
+	usePollingResource({
+		enabled: active,
+		intervalMillis: 200,
+		refreshKey: followPreload,
+		load: () => server.readVisualization(followPreload),
+		onValue: setVisualization,
+	});
 	return visualization;
 }
 
@@ -137,13 +129,14 @@ function useFixtures3d(
 }
 
 export function useStageVisualization(
+	active: boolean,
 	followPreload: boolean,
 	patchSelectionPreview: boolean,
 	layout: StageLayoutModel,
 	patchedFixtures?: readonly PatchedFixture[],
 ) {
 	const server = useServer();
-	const visualization = useVisualizationSnapshot(followPreload);
+	const visualization = useVisualizationSnapshot(followPreload, active);
 	const stageFixtures = usePatchedFixtures(patchedFixtures);
 	const patchPreviewFixtures = useMemo(
 		() =>

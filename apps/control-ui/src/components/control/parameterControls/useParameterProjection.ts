@@ -3,6 +3,7 @@ import { useServer } from "../../../api/ServerContext";
 import type { VisualizationSnapshot } from "../../../api/types";
 import { useApp } from "../../../state/AppContext";
 import { useGroups } from "../../../features/server/useShowObjectsState";
+import { usePollingResource } from "../../../hooks/usePollingResource";
 import {
 	directProgrammerChoices,
 	type ParameterFamily,
@@ -15,25 +16,15 @@ function useVisualization() {
 	const [visualization, setVisualization] =
 		useState<VisualizationSnapshot | null>(null);
 	useEffect(() => {
-		if (!server.selectedFixtures.length) {
-			setVisualization(null);
-			return;
-		}
-		let cancelled = false;
-		const refresh = () =>
-			void server
-				.readVisualization()
-				.then((value) => {
-					if (!cancelled) setVisualization(value);
-				})
-				.catch(() => undefined);
-		refresh();
-		const timer = window.setInterval(refresh, 400);
-		return () => {
-			cancelled = true;
-			window.clearInterval(timer);
-		};
-	}, [server.selectedFixtures, server.readVisualization]);
+		if (server.selectedFixtures.length) return;
+		setVisualization(null);
+	}, [server.selectedFixtures.length]);
+	usePollingResource({
+		enabled: server.selectedFixtures.length > 0,
+		intervalMillis: 400,
+		load: server.readVisualization,
+		onValue: setVisualization,
+	});
 	return visualization;
 }
 

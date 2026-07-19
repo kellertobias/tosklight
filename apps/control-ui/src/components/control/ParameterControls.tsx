@@ -1,6 +1,7 @@
 import { ParameterControlView } from "./parameterControls/ParameterControlView";
 import { useParameterController } from "./parameterControls/useParameterController";
 import { StageCommandControls } from "./StageCommandControls";
+import { useApp } from "../../state/AppContext";
 
 export {
 	type DirectControlChoice,
@@ -9,8 +10,7 @@ export {
 } from "./parameterControls/model";
 
 export function ParameterControls() {
-	const controller = useParameterController();
-	const { state } = controller;
+	const { state } = useApp();
 	const stageVisible =
 		state.builtIn === "stage" ||
 		state.desks
@@ -18,5 +18,10 @@ export function ParameterControls() {
 			?.panes.some((pane) => pane.kind === "stage");
 	if (state.stageMode !== "select" && stageVisible)
 		return <StageCommandControls />;
+	return <ProgrammerParameterControls />;
+}
+
+function ProgrammerParameterControls() {
+	const controller = useParameterController();
 	return <ParameterControlView controller={controller} />;
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useServer } from "../api/ServerContext";
+import { usePollingResource } from "../hooks/usePollingResource";
 import type { VisualizationSnapshot } from "../api/types";
 import { fixtures } from "../data/mockData";
 import type { ShowObject } from "../features/showObjects/contracts";
@@ -253,33 +254,30 @@ export function useFixtureSheetRows({
 
 export type FixtureSheetRow = ReturnType<typeof useFixtureSheetRows>[number];
 
-export function useFixtureSheetVisualizations(preloadActive: boolean) {
+export function useFixtureSheetVisualizations(
+	preloadActive: boolean,
+	active = true,
+) {
 	const server = useServer();
 	const [visualization, setVisualization] =
 		useState<VisualizationSnapshot | null>(null);
 	const [preloadVisualization, setPreloadVisualization] =
 		useState<VisualizationSnapshot | null>(null);
 
-	useEffect(() => {
-		let cancelled = false;
-		const refresh = () =>
-			void Promise.all([
+	usePollingResource({
+		enabled: active,
+		intervalMillis: 250,
+		refreshKey: preloadActive,
+		load: () =>
+			Promise.all([
 				server.readVisualization(),
 				preloadActive ? server.readVisualization(true) : Promise.resolve(null),
-			])
-				.then(([next, preload]) => {
-					if (cancelled) return;
-					setVisualization(next);
-					setPreloadVisualization(preload);
-				})
-				.catch(() => undefined);
-		refresh();
-		const timer = window.setInterval(refresh, 250);
-		return () => {
-			cancelled = true;
-			window.clearInterval(timer);
-		};
-	}, [preloadActive, server.readVisualization]);
+			]),
+		onValue: ([next, preload]) => {
+			setVisualization(next);
+			setPreloadVisualization(preload);
+		},
+	});
 
 	return { visualization, preloadVisualization };
 }

@@ -7,6 +7,7 @@ import { useApp } from "../state/AppContext";
 import { WindowHeader, WindowScrollArea, WindowSettings } from "../components/window-kit";
 import { TouchValueButton } from "../components/control/VerticalTouchFader";
 import { channelSplit, derivePrimarySlots } from "../components/setup/fixtureProfileModel";
+import { usePollingResource } from "../hooks/usePollingResource";
 
 interface Slot { universe: number; address: number; value: number }
 export interface DmxFixtureChannel {
@@ -116,7 +117,7 @@ export function dmxChannelsPerRow(width: number, size: "small" | "large") {
   return Math.max(1, Math.min(512, Math.floor((usable + 3) / (target + 3))));
 }
 
-export function DmxWindow({ compact }: WindowProps) {
+export function DmxWindow({ active = true, compact }: WindowProps) {
   const server = useServer();
   const { state, dispatch } = useApp();
   const [slot, setSlot] = useState<Slot | null>(null);
@@ -136,14 +137,12 @@ export function DmxWindow({ compact }: WindowProps) {
   const targetDot = state.dmxDotSize === "large" ? 42 : 9;
   const channelsPerRow = dmxChannelsPerRow(valuesWidth, state.dmxDotSize);
 
-  useEffect(() => {
-    if (server.status !== "connected") return;
-    let cancelled = false;
-    const poll = () => void server.readDmx().then((next) => { if (!cancelled) setSnapshot(next); }).catch(() => undefined);
-    poll();
-    const timer = window.setInterval(poll, 250);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, [server.status]);
+  usePollingResource({
+    enabled: active && server.status === "connected",
+    intervalMillis: 250,
+    load: server.readDmx,
+    onValue: setSnapshot,
+  });
 
   const universeNumbers = useMemo(() => {
     const values = new Set(snapshot?.universes.map((frame) => frame.universe) ?? []);
