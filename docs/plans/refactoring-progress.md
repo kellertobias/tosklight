@@ -1,10 +1,15 @@
 # Major Refactoring Progress
 
+Estimated progress: **78%**
+
+Estimated ETA: **10–14 focused implementation slices, or roughly 2–3 weeks of active
+refactoring**, to repository-wide acceptance.
+
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-19 at the requested wrap-up after the backend Programmer-values boundary.
+Last updated: 2026-07-19 after the end-to-end Programmer-values client and mutation contract.
 
 ## Guardrails
 
@@ -137,6 +142,15 @@ Last updated: 2026-07-19 at the requested wrap-up after the backend Programmer-v
   limited subscriptions enforce authenticated user ownership, and v1 compatibility events report
   interaction/value categories from the transitions that actually occurred. Selection, Preload,
   modes, priority, connectivity, Highlight, and transient actions remain outside this projection.
+- [x] Completed the normal Programmer-values mutation and production client contract. Typed fixture
+  and Group set/release, batch, and clear actions cross the Programming application boundary as one
+  unit and return request/correlation identity, replay state, changed/no-change state, authoritative
+  projection/revision, and the event sequence only when emitted. The exact-user REST/WebSocket
+  adapter, view-scoped provider, FIFO optimistic writer, and committed store handle either
+  response/event order, rollback, replay, no-change results, cursor repair, authority replacement,
+  and late responses. Action-only consumers stay dormant; the first mounted values view performs
+  the narrow snapshot/subscription, and scoped events neither request bootstrap nor rerender an
+  unrelated global consumer.
 - [x] Migrated every parameter-bank family, fader, encoder, range, release, and direct action onto
   the scoped ordered selection projection. Fixture membership uses sets, streamed peer or OSC
   selection immediately retargets writes, and inactive parameter views perform no selection
@@ -186,13 +200,9 @@ Last updated: 2026-07-19 at the requested wrap-up after the backend Programmer-v
   command bar, Stage, Stage/Fixture pane chrome, Channels, Fixture Sheet, Patch, and Presets have
   moved, as have the complete parameter bank and selection-driven operator modals; Patch setup and
   a small number of keypad/miscellaneous readers still use the facade.
-- [ ] Connect the now-implemented user-scoped normal Programmer-values HTTP snapshot and v2 event
-  DTOs to the committed frontend store, mount the provider, and migrate value consumers before
-  removing value-triggered bootstrap refreshes. Add a typed values-action outcome carrying the
-  authoritative projection/revision/event sequence/correlation before enabling production
-  optimistic writers: application-internal results expose the values event sequence, but current
-  public command-line and legacy WebSocket writer responses do not expose enough information for
-  race-free optimistic reconciliation.
+- [ ] Migrate production normal Programmer-value readers and writers onto the connected scoped
+  values provider in focused cohorts, then remove only their value-triggered bootstrap refreshes.
+  This contract slice deliberately did not broadly migrate consumers.
 - [ ] Replace inferred Cue ambiguity in the command-line text projection with explicit desk-local
   pending-choice state that is set only by `ChoiceRequired` after ENT and cleared by edit, reset,
   selection, or Cancel. Until then, cross-session choice visibility remains a documented
@@ -204,8 +214,8 @@ Last updated: 2026-07-19 at the requested wrap-up after the backend Programmer-v
    Show capabilities, Patch, Screens, Files, and Configuration. Replace polling and broad bootstrap
    refreshes with narrow snapshots plus relevant event subscriptions.
 2. Publish the remaining externally observable transitions once through typed events: Programmer
-   ownership/value changes, Highlight movement, transition completion, output health/overload,
-   and any remaining automatic runtime changes.
+   ownership changes, Highlight movement, transition completion, output health/overload, and any
+   remaining automatic runtime changes.
 3. Migrate remaining layout and miscellaneous portable-show mutations, then remove generic
    frontend show-object mutation.
 4. Replace production `useServer()` callers with feature-local stores/hooks. Remove broad global
@@ -239,9 +249,9 @@ Last updated: 2026-07-19 at the requested wrap-up after the backend Programmer-v
 ## Current verification snapshot
 
 - The committed source-size baseline has no production file above 1,200 and no production function
-  above 150. The current working-tree ratchet is blocked only by the unrelated uncommitted Dynamics
-  Editor experiment at 1,382 lines. Dependency-direction checks and all 10 scanner/ratchet unit
-  tests pass.
+  above 150. Dependency-direction checks and all 10 scanner/ratchet unit tests pass. The architecture
+  command still reports the pre-existing committed Dynamics Editor experiment at 1,382 lines; this
+  Programmer-values slice did not change it.
 - The earlier full-tree design-goal report was 52 files above 400 lines and 3,479 functions above
   20. The two remaining in-scope hotspots named by that report have since been split: Programming
   service is now 380 lines and the command HTTP adapter is 304 lines. The complete source-size
@@ -266,28 +276,36 @@ Last updated: 2026-07-19 at the requested wrap-up after the backend Programmer-v
   full frontend typecheck. The parameter-bank migration passes 17 focused tests across its legacy
   behavior and streamed selection suites. The modal migration passes 13 focused tests including
   ordered streamed writes and closed-view teardown. Both slices pass the full frontend typecheck.
-- The backend Programmer-values boundary passes `cargo fmt --all`; 2 focused Programmer generation
-  tests; 4 application values projection/event/concurrency tests; 19 wire unit tests plus the
-  generated-contract test; 2 authenticated snapshot route tests; 16 event-transport/filter tests;
-  and 1 v1 compatibility-category test. `git diff --check` is clean. There were no focused
-  failures. Wire tests print the existing `ts-rs` `deny_unknown_fields` warning. The full workspace
-  suite was deliberately not run after the request for an immediate wrap-up; the previously known
-  sandbox-only CITP socket failure was not rerun.
+- The completed backend Programmer-values slice passes `cargo fmt --all -- --check`; all 56
+  `light-programmer` tests; all 194 `light-application` tests; all 21 `light-wire` unit tests plus
+  generated-contract verification; all 8 focused server Programmer-values tests; the focused v1
+  compatibility-category test; and `cargo check -p light-server --no-default-features`. Fixture and
+  Group set/release, one-action batch and clear, exact no-op/event behavior, replay, revision
+  conflict, user ownership, same-user multi-desk sharing, foreign-user rejection, and timing/order
+  preservation are covered. Wire tests print the existing non-fatal `ts-rs`
+  `deny_unknown_fields` warning.
+- The production frontend Programmer-values slice passes 59 focused tests across strict wire
+  decoding, HTTP/WebSocket transport, prediction, store, session, writer, mounted view, and normal
+  `ServerProvider` composition, plus the full frontend typecheck. The focused tests cover rollback,
+  safe exact-request replay, no-change results, both response/event orders, cursor-gap repair,
+  server/session replacement, late-response isolation, exact-user subscription, first-view
+  dormancy, absence of a broad bootstrap request, and suppression of unrelated context rerenders.
+  `git diff --check` is clean. The complete frontend/workspace suites and real desktop path were not
+  rerun for this focused slice.
 - The most recent pre-wrap complete frontend suite passed all 811 tests and its production build;
   the newer selection/value-store slices have focused coverage and typecheck evidence but did not
   rerun that complete suite. A final repository-wide suite and real desktop run remains pending.
 
 ## Wrap-up handoff
 
-- The completed wrap-up contains the scoped modal-selection checkpoint followed by the coherent
-  backend normal Programmer-values snapshot/event/security boundary.
-- No Patch/setup selection edits survived the interrupted worker, and no partial work from that
-  attempted slice should be committed. After the backend commit containing this handoff, the
-  working tree is expected to have no uncommitted refactoring files.
-- Resume with the frontend values transport/provider and a typed values mutation outcome. Only
-  after that contract is testable should production value readers/writers move off bootstrap and
-  broad `programmer_changed` hydration. The next independent selection cleanup is Patch/setup,
-  followed by the Numeric Pad clear action and other small facade readers.
+- The completed slice establishes the end-to-end normal Programmer-values contract from typed
+  application mutation through authenticated v2 transport to the dormant production provider and
+  optimistic frontend writer. It does not migrate the broad production reader/writer population.
+- No Patch/setup selection cleanup or public test-DSL refactoring was started in this slice.
+- Recommended next slice: migrate the first coherent production Programmer-values consumer cohort
+  (parameter controls, faders, and encoders) onto the scoped values actions/view, then retire only
+  those consumers' legacy value-triggered bootstrap refreshes. Keep Patch/setup selection and the
+  test-DSL refactor as separate later milestones.
 
 Test files may exceed the hard limits, but should still be split when it improves readability and
 makes operator intent more visible.
