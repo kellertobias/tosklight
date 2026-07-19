@@ -3,32 +3,37 @@ use super::*;
 pub(super) fn commit_preload_transaction(
     state: &AppState,
     session: &Session,
-) -> Result<serde_json::Value, String> {
+) -> Result<CommittedPreload, String> {
     let PreparedPreloadCommit {
         pending,
         committed_at,
         programmer_fade_millis,
-        staged_playback,
+        prepared_playback,
         staged_actions,
         identities,
         before,
         context,
     } = prepare_preload_commit(state, session)?;
-    install_preload_commit(state, session, pending, committed_at, staged_playback)?;
-    let event_sequences =
-        publish_preload_changes(state, &context, &identities, before, &staged_actions)?;
+    install_preload_commit(state, session, pending, committed_at, prepared_playback)?;
+    let events = preload_change_events(state, &context, &identities, before, &staged_actions)?;
     emit_preload_exclusions(state, session, &staged_actions);
     let executed = executed_preload_actions(staged_actions, committed_at, programmer_fade_millis);
     let warnings = persist_preload_commit(state, session, !executed.is_empty());
-    Ok(preload_commit_response(
-        state,
-        session,
+    Ok(CommittedPreload {
         committed_at,
         programmer_fade_millis,
         executed,
-        event_sequences,
         warnings,
-    ))
+        events,
+    })
+}
+
+pub(super) struct CommittedPreload {
+    pub(super) committed_at: chrono::DateTime<chrono::Utc>,
+    pub(super) programmer_fade_millis: u64,
+    pub(super) executed: Vec<serde_json::Value>,
+    pub(super) warnings: Vec<String>,
+    pub(super) events: Vec<light_application::EventDraft>,
 }
 
 type PlaybackIdentity = light_application::PlaybackRuntimeIdentity;
@@ -38,7 +43,7 @@ struct PreparedPreloadCommit {
     pending: Vec<light_programmer::PreloadPlaybackAction>,
     committed_at: chrono::DateTime<chrono::Utc>,
     programmer_fade_millis: u64,
-    staged_playback: light_playback::PlaybackEngine,
+    prepared_playback: light_engine::PreparedPlaybackBatch,
     staged_actions: Vec<StagedPreloadPlaybackAction>,
     identities: Vec<PlaybackIdentity>,
     before: Vec<(PlaybackIdentity, PlaybackProjection)>,
@@ -67,18 +72,19 @@ fn prepare_preload_commit(
         light_application::ActionSource::UserInterface,
     );
     let before = read_preload_projections(state, &context, &identities)?;
-    let (staged_playback, staged_actions) = stage_preload_playback_batch(
-        &state.engine.playback().read(),
-        &definitions,
+    let commands = preload_batch_commands(&pending)?;
+    let prepared_playback = state.engine.prepare_playback_batch(
+        &commands,
         committed_at,
         programmer_fade_millis,
         &exclusion_zones,
     )?;
+    let staged_actions = staged_preload_actions(&pending, &prepared_playback);
     Ok(PreparedPreloadCommit {
         pending,
         committed_at,
         programmer_fade_millis,
-        staged_playback,
+        prepared_playback,
         staged_actions,
         identities,
         before,
@@ -157,11 +163,8 @@ fn install_preload_commit(
     session: &Session,
     pending: Vec<light_programmer::PreloadPlaybackAction>,
     committed_at: chrono::DateTime<chrono::Utc>,
-    staged_playback: light_playback::PlaybackEngine,
+    prepared_playback: light_engine::PreparedPlaybackBatch,
 ) -> Result<(), String> {
-    let playback = state.engine.playback();
-    let mut live_playback = playback.write();
-
     state
         .programmers
         .activate_preload_at(session.id, committed_at);
@@ -170,17 +173,18 @@ fn install_preload_commit(
         return Err("the Preload queue changed while GO was being prepared".into());
     }
 
-    *live_playback = staged_playback;
-    Ok(())
+    state
+        .engine
+        .install_prepared_playback_batch(prepared_playback)
 }
 
-fn publish_preload_changes(
+fn preload_change_events(
     state: &AppState,
     context: &light_application::ActionContext,
     identities: &[PlaybackIdentity],
     before: Vec<(PlaybackIdentity, PlaybackProjection)>,
     actions: &[StagedPreloadPlaybackAction],
-) -> Result<Vec<u64>, String> {
+) -> Result<Vec<light_application::EventDraft>, String> {
     let after = read_preload_projections(state, context, identities)?
         .into_iter()
         .collect::<std::collections::HashMap<_, _>>();
@@ -188,7 +192,7 @@ fn publish_preload_changes(
         .into_iter()
         .filter_map(|(identity, before)| {
             let projection = after.get(&identity)?.clone();
-            state.playback_service.publish_committed_change(
+            light_application::committed_playback_event(
                 context,
                 preload_event_action(actions, identity),
                 None,
@@ -275,16 +279,19 @@ fn persist_preload_commit(
     warnings
 }
 
-#[allow(clippy::too_many_arguments)]
-fn preload_commit_response(
+pub(super) fn preload_commit_response(
     state: &AppState,
     session: &Session,
-    committed_at: chrono::DateTime<chrono::Utc>,
-    programmer_fade_millis: u64,
-    executed: Vec<serde_json::Value>,
+    committed: CommittedPreload,
     playback_event_sequences: Vec<u64>,
-    warnings: Vec<String>,
 ) -> serde_json::Value {
+    let CommittedPreload {
+        committed_at,
+        programmer_fade_millis,
+        executed,
+        warnings,
+        events: _,
+    } = committed;
     let mut payload = serde_json::json!({
         "session_id":session.id,
         "application_timestamp":committed_at,

@@ -73,11 +73,12 @@ pub use playback::{
     AutomaticPlaybackProjection, CueListRuntimeProjection, CueNumber, GrandMasterRuntimeProjection,
     ManualXFadeDirection, PendingPlaybackAction, PlaybackAction, PlaybackAddress, PlaybackCommand,
     PlaybackCueReference, PlaybackCueTransition, PlaybackDeskProjection, PlaybackDurability,
-    PlaybackExecution, PlaybackLevel, PlaybackOutcome, PlaybackPorts, PlaybackResult,
-    PlaybackRuntimeChange, PlaybackRuntimeIdentity, PlaybackRuntimeProjection,
-    PlaybackRuntimeSnapshot, PlaybackService, PlaybackShowScope, PlaybackSurface,
-    PlaybackTargetProjection, PlaybackTransitionCause, ResolvedPlaybackAddress, SoundLossReason,
-    SoundStatus, SpeedGroupRuntimeProjection, SpeedSource, automatic_playback_events,
+    PlaybackExecution, PlaybackLevel, PlaybackOperation, PlaybackOperationResult, PlaybackOutcome,
+    PlaybackPorts, PlaybackResult, PlaybackRuntimeChange, PlaybackRuntimeIdentity,
+    PlaybackRuntimeProjection, PlaybackRuntimeSnapshot, PlaybackService, PlaybackShowScope,
+    PlaybackSurface, PlaybackTargetProjection, PlaybackTransitionCause, PlaybackUnitOfWork,
+    ResolvedPlaybackAddress, SoundLossReason, SoundStatus, SpeedGroupRuntimeProjection,
+    SpeedSource, automatic_playback_events, committed_playback_event,
     publish_automatic_playback_events,
 };
 pub use programming::{

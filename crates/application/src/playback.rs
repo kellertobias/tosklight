@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 mod command;
 mod event;
+mod operation;
 mod ports;
 mod projection;
 mod service;
@@ -15,7 +16,10 @@ pub use command::{
     PlaybackDurability, PlaybackExecution, PlaybackLevel, PlaybackOutcome, PlaybackResult,
     PlaybackSurface, ResolvedPlaybackAddress,
 };
-pub use event::{PlaybackCueTransition, PlaybackRuntimeChange, PlaybackTransitionCause};
+pub use event::{
+    PlaybackCueTransition, PlaybackRuntimeChange, PlaybackTransitionCause, committed_playback_event,
+};
+pub use operation::{PlaybackOperation, PlaybackOperationResult, PlaybackUnitOfWork};
 pub use ports::PlaybackPorts;
 pub use projection::{
     CueListRuntimeProjection, GrandMasterRuntimeProjection, MAX_PLAYBACK_SNAPSHOT_IDENTITIES,

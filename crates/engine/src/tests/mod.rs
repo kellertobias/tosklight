@@ -20,6 +20,18 @@ use std::{
     sync::Arc,
 };
 
+fn execute_pool(engine: &Engine, number: u16, action: PoolPlaybackAction) {
+    engine
+        .execute_playback(EnginePlaybackCommand::Pool { number, action })
+        .unwrap();
+}
+
+fn execute_cue_list(engine: &Engine, id: light_core::CueListId, action: CueListPlaybackAction) {
+    engine
+        .execute_playback(EnginePlaybackCommand::CueList { id, action })
+        .unwrap();
+}
+
 fn fixture() -> (PatchedFixture, FixtureId) {
     let physical = FixtureId::new();
     let logical = FixtureId::new();
@@ -344,3 +356,5 @@ mod highlight_looks;
 mod lifecycle;
 
 mod contribution_batches;
+
+mod playback_boundary;

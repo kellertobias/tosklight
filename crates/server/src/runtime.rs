@@ -45,8 +45,7 @@ use base64::{
 use bytes::Bytes;
 use light_application::{
     ActiveShowService, EventBus, OutputRuntimeService, PlaybackAction, PlaybackAddress,
-    PlaybackExecution, PlaybackService, PlaybackShowScope, ProgrammingService, ShowPatchService,
-    publish_automatic_playback_events,
+    PlaybackExecution, PlaybackService, ProgrammingService, ShowPatchService,
 };
 use light_control::speed::{
     SoundObservation, SoundToLightConfig, SpeedGroupController, SpeedSnapshot,
@@ -57,7 +56,10 @@ use light_control::{
     UdpInputProtocol, encode_osc_message,
 };
 use light_core::{ATTRIBUTE_REGISTRY, ApplicationClock, ManualClock, SessionId};
-use light_engine::{Engine, EngineSnapshot, PreparedEngineSnapshot, RenderOptions};
+use light_engine::{
+    Engine, EnginePlaybackCommand, EnginePlaybackOutcome, EngineSnapshot, PoolPlaybackAction,
+    PreparedEngineSnapshot, RenderOptions,
+};
 use light_media::{CitpClient, LibraryId, MediaCache, PreviewKey, ThumbnailKey};
 use light_output::{NetworkOutput, OutputHealth};
 use light_programmer::ProgrammerRegistry;

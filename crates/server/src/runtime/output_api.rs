@@ -141,9 +141,7 @@ pub(super) fn matter_playback_values(
 ) -> HashMap<u16, matter::PlaybackValue> {
     let runtime = state
         .engine
-        .playback()
-        .read()
-        .runtime_status()
+        .playback_runtime_status()
         .into_iter()
         .filter_map(|status| {
             status

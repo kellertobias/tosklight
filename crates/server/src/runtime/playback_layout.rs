@@ -153,9 +153,7 @@ pub(super) async fn pool_playback_state(
         .ok_or_else(|| ApiError::not_found("playback"))?;
     let runtime = state
         .engine
-        .playback()
-        .read()
-        .active()
+        .active_playbacks()
         .into_iter()
         .find(|active| active.playback_number == Some(number));
     Ok(Json(
@@ -235,22 +233,22 @@ pub(super) async fn update_desk_page(
         .read()
         .clone()
         .ok_or_else(|| ApiError::bad_request("no show is open"))?;
-    let (page_creation_event_sequence, event_sequence) = {
-        let _ordered = state.playback_service.operation_lock();
-        let context = operator_action_context(&session, light_application::ActionSource::Http);
-        let before = playback_service::desk_projection(&state, &context)?;
-        let availability = ensure_playback_page_for_advance(&state, &show, input.page, &context)?;
-        if !availability.available() {
-            return Err(ApiError::bad_request("playback page does not exist"));
-        }
-        state
-            .desk
-            .lock()
-            .set_desk_page(id, show.id, input.page)
-            .map_err(ApiError::store)?;
-        let view_sequence = playback_service::publish_desk_change(&state, &context, before)?;
-        (availability.event_sequence(), view_sequence)
-    };
+    let context = operator_action_context(&session, light_application::ActionSource::Http);
+    let completed = state
+        .playback_service
+        .run_unit_of_work(playback_service::ChangePage {
+            state: &state,
+            show: &show,
+            context,
+            desk_id: id,
+            page: input.page,
+        });
+    let availability = completed.output?;
+    if !availability.available() {
+        return Err(ApiError::bad_request("playback page does not exist"));
+    }
+    let page_creation_event_sequence = availability.event_sequence();
+    let event_sequence = completed.event_sequences.first().copied();
     emit(
         &state,
         "playback_page_changed",

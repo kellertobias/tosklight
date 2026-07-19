@@ -39,7 +39,7 @@ pub(super) fn persist_output_runtime(state: &AppState) -> Result<(), ApiError> {
     let runtime = PersistedOutputRuntime {
         grand_master,
         blackout,
-        dynamics_paused_at: state.engine.playback().read().dynamics_paused_since(),
+        dynamics_paused_at: state.engine.playback_dynamics().paused_since,
         group_masters: state
             .engine
             .snapshot()
@@ -61,7 +61,7 @@ pub(super) fn persist_active_playbacks(state: &AppState) -> Result<(), ApiError>
     let Some(show) = state.active_show.read().clone() else {
         return Ok(());
     };
-    let runtime = state.engine.playback().read().runtime();
+    let runtime = state.engine.playback_runtime();
     let serialized =
         serde_json::to_string(&runtime).map_err(|error| ApiError::internal(error.to_string()))?;
     state

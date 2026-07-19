@@ -19,7 +19,7 @@ fn programmer_fade_starts_from_resolved_playback_underlay_and_release_reveals_it
     let engine = Engine::new(programmers.clone());
     engine.set_control_timing([120.0; 5], 1_000, 0);
     engine.replace_snapshot(snapshot).unwrap();
-    engine.playback().write().go_playback(1).unwrap();
+    execute_pool(&engine, 1, PoolPlaybackAction::Go);
 
     clock.set(started + ChronoDuration::seconds(5));
     assert!((normalized(&engine.resolved_values(), logical, "intensity") - 0.25).abs() < 0.001);

@@ -55,8 +55,8 @@ fn move_in_black_waits_for_resolved_darkness_then_prepositions_only_enabled_fixt
             &[enabled, disabled],
         ))
         .unwrap();
-    engine.playback().write().go_playback(1).unwrap();
-    engine.playback().write().go_playback(1).unwrap();
+    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_pool(&engine, 1, PoolPlaybackAction::Go);
 
     clock.set(started + ChronoDuration::milliseconds(1_999));
     let values = engine.resolved_values();
@@ -128,7 +128,7 @@ fn move_in_black_waits_for_resolved_darkness_then_prepositions_only_enabled_fixt
         MoveInBlackState::Completed
     );
 
-    engine.playback().write().go_playback(1).unwrap();
+    execute_pool(&engine, 1, PoolPlaybackAction::Go);
     let values = engine.resolved_values();
     assert!(
         (normalized(&values, enabled, "pan") - 0.8).abs() < 0.001,
@@ -150,8 +150,8 @@ fn move_in_black_is_blocked_and_restarts_its_delay_after_intensity_returns() {
     engine
         .replace_snapshot(mib_snapshot(vec![fixture], &[logical]))
         .unwrap();
-    engine.playback().write().go_playback(1).unwrap();
-    engine.playback().write().go_playback(1).unwrap();
+    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_pool(&engine, 1, PoolPlaybackAction::Go);
     programmers.set(
         session,
         logical,
@@ -247,8 +247,8 @@ fn move_in_black_obeys_same_priority_ltp_and_numeric_priority() {
     let engine = Engine::new(programmers);
     engine.replace_snapshot(snapshot.clone()).unwrap();
     for playback in [1, 2] {
-        engine.playback().write().go_playback(playback).unwrap();
-        engine.playback().write().go_playback(playback).unwrap();
+        execute_pool(&engine, playback, PoolPlaybackAction::Go);
+        execute_pool(&engine, playback, PoolPlaybackAction::Go);
     }
 
     clock.set(started + ChronoDuration::milliseconds(2_000));

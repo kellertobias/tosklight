@@ -18,14 +18,10 @@ pub(super) fn dispatch_playback_action(
     input: &PoolPlaybackInput,
     source: &str,
 ) -> Result<PlaybackDispatchOutcome, ApiError> {
-    let _serialized = state.playback_action_lock.lock();
-    let was_enabled = state
-        .engine
-        .playback()
-        .read()
-        .runtime()
-        .iter()
-        .any(|playback| playback.playback_number == Some(definition.number) && playback.enabled);
+    let was_enabled =
+        state.engine.playback_runtime().iter().any(|playback| {
+            playback.playback_number == Some(definition.number) && playback.enabled
+        });
     let changed = dispatch_playback_action_inner(
         state,
         session,
@@ -35,13 +31,10 @@ pub(super) fn dispatch_playback_action(
         input,
         source,
     )?;
-    let now_enabled = state
-        .engine
-        .playback()
-        .read()
-        .runtime()
-        .iter()
-        .any(|playback| playback.playback_number == Some(definition.number) && playback.enabled);
+    let now_enabled =
+        state.engine.playback_runtime().iter().any(|playback| {
+            playback.playback_number == Some(definition.number) && playback.enabled
+        });
     if changed
         && !was_enabled
         && now_enabled

@@ -8,6 +8,7 @@ use light_application::{
     PendingPlaybackAction, PlaybackAction, PlaybackAddress, PlaybackCommand, PlaybackDurability,
     PlaybackExecution, PlaybackPorts, PlaybackResult, PlaybackSurface, ResolvedPlaybackAddress,
 };
+use light_engine::{CueListPlaybackAction, EnginePlaybackCommand, EnginePlaybackOutcome};
 
 #[path = "playback_service/capture.rs"]
 mod capture;
@@ -24,7 +25,7 @@ mod semantics;
 #[path = "playback_service/support.rs"]
 mod support;
 
-pub(super) use desk::{projection as desk_projection, publish_change as publish_desk_change};
+pub(super) use desk::ChangePage;
 pub(super) use projection::automatic_changes as automatic_projection_changes;
 pub(super) use response::{cue_list_http_payload, pool_http_payload, websocket_payload};
 
@@ -255,23 +256,27 @@ impl ServerPlaybackPorts<'_> {
         id: light_core::CueListId,
         action: PlaybackAction,
     ) -> Result<PlaybackExecution, ActionError> {
-        let playback = self.state.engine.playback();
-        let mut playback = playback.write();
-        let execution = match action {
-            PlaybackAction::Go { pressed: true } => {
-                PlaybackExecution::Active(Box::new(playback.go(id).map_err(invalid)?.clone()))
-            }
-            PlaybackAction::Back { pressed: true } => {
-                PlaybackExecution::Active(Box::new(playback.back(id).map_err(invalid)?.clone()))
-            }
-            PlaybackAction::Pause { pressed: true } => {
-                playback.pause(id).map_err(invalid)?;
-                PlaybackExecution::ActiveList(playback.active())
-            }
-            PlaybackAction::Release => PlaybackExecution::Released(playback.release(id)),
+        let command = match action {
+            PlaybackAction::Go { pressed: true } => CueListPlaybackAction::Go,
+            PlaybackAction::Back { pressed: true } => CueListPlaybackAction::Back,
+            PlaybackAction::Pause { pressed: true } => CueListPlaybackAction::Pause,
+            PlaybackAction::Release => CueListPlaybackAction::Release,
             _ => return Err(invalid("action is incompatible with a cue list")),
         };
-        drop(playback);
+        let outcome = self
+            .state
+            .engine
+            .execute_playback(EnginePlaybackCommand::CueList {
+                id,
+                action: command,
+            })
+            .map_err(invalid)?;
+        let execution = match outcome {
+            EnginePlaybackOutcome::Active(active) => PlaybackExecution::Active(active),
+            EnginePlaybackOutcome::ActiveList(active) => PlaybackExecution::ActiveList(active),
+            EnginePlaybackOutcome::Changed(released) => PlaybackExecution::Released(released),
+            _ => return Err(invalid("unexpected cue-list Playback outcome")),
+        };
         if let Err(error) = persist_active_playbacks(self.state) {
             self.mark_persistence_pending(context, "active_playbacks", error);
         }

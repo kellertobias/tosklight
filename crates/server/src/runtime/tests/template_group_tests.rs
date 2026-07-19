@@ -55,9 +55,10 @@ impl TemplateGroupScenario {
             .unwrap();
         self.state
             .engine
-            .playback()
-            .write()
-            .go(self.cue_list_id)
+            .execute_playback(EnginePlaybackCommand::CueList {
+                id: self.cue_list_id,
+                action: light_engine::CueListPlaybackAction::Go,
+            })
             .unwrap();
         let dark = self.render();
         for fixture in &self.dimmers {
@@ -161,9 +162,10 @@ impl TemplateGroupScenario {
         self.set_preload(0.8, 0.2);
         self.state
             .engine
-            .playback()
-            .write()
-            .jump(self.cue_list_id, 2.0)
+            .execute_playback(EnginePlaybackCommand::CueList {
+                id: self.cue_list_id,
+                action: light_engine::CueListPlaybackAction::Jump(2.0),
+            })
             .unwrap();
         let address = self.profiles[0].address.unwrap();
         let recalled = self.render();
@@ -222,9 +224,10 @@ impl TemplateGroupScenario {
         self.reload_snapshot();
         self.state
             .engine
-            .playback()
-            .write()
-            .jump(self.cue_list_id, 2.0)
+            .execute_playback(EnginePlaybackCommand::CueList {
+                id: self.cue_list_id,
+                action: light_engine::CueListPlaybackAction::Jump(2.0),
+            })
             .unwrap();
         let expanded = self.render();
         for fixture in &extra_profiles {

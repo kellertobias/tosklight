@@ -48,7 +48,7 @@ fn matter_bridge_writes_and_tracking_feedback_use_explicit_global_addresses() {
         },
     )
     .unwrap();
-    let runtime = state.engine.playback().read().runtime();
+    let runtime = state.engine.playback_runtime();
     let addressed = runtime
         .iter()
         .find(|playback| playback.playback_number == Some(25))
@@ -70,7 +70,13 @@ fn matter_bridge_writes_and_tracking_feedback_use_explicit_global_addresses() {
     assert_eq!(light.level, 127);
 
     // Automatic tracking/off behavior is mirrored back to the Matter attribute snapshot.
-    state.engine.playback().write().off(25).unwrap();
+    state
+        .engine
+        .execute_playback(EnginePlaybackCommand::Pool {
+            number: 25,
+            action: PoolPlaybackAction::Off,
+        })
+        .unwrap();
     let tracked_off = refresh_matter_bridge(&state);
     let light = tracked_off
         .lights
@@ -128,7 +134,7 @@ fn matter_virtual_master_controls_and_tracks_a_faderless_assignment() {
         },
     )
     .unwrap();
-    let runtime = state.engine.playback().read().runtime();
+    let runtime = state.engine.playback_runtime();
     let active = runtime
         .iter()
         .find(|playback| playback.playback_number == Some(26))
@@ -180,9 +186,7 @@ fn matter_virtual_master_controls_and_tracks_a_faderless_assignment() {
     assert_eq!(
         state
             .engine
-            .playback()
-            .read()
-            .runtime()
+            .playback_runtime()
             .iter()
             .find(|playback| playback.playback_number == Some(26))
             .unwrap()
@@ -190,7 +194,13 @@ fn matter_virtual_master_controls_and_tracks_a_faderless_assignment() {
         1.0
     );
 
-    state.engine.playback().write().off(26).unwrap();
+    state
+        .engine
+        .execute_playback(EnginePlaybackCommand::Pool {
+            number: 26,
+            action: PoolPlaybackAction::Off,
+        })
+        .unwrap();
     let tracked_off = refresh_matter_bridge(&state);
     let light = tracked_off
         .lights

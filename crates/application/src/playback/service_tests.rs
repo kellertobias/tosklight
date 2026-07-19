@@ -92,14 +92,24 @@ fn current_page_is_resolved_inside_the_ordered_operation() {
     let service = PlaybackService::default();
     let ports = Arc::new(FakePorts::default());
     ports.set_current_page(1);
-    let ordered = service.operation_lock();
+    let (entered_tx, entered_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let operation_service = service.clone();
+    let operation = thread::spawn(move || {
+        operation_service.run_unit_of_work(BlockingOperation {
+            entered: entered_tx,
+            release: release_rx,
+        });
+    });
+    entered_rx.recv().unwrap();
     let worker = spawn_action(
         service.clone(),
         Arc::clone(&ports),
         PlaybackAddress::CurrentPage { slot: 7 },
     );
     ports.set_current_page(3);
-    drop(ordered);
+    release_tx.send(()).unwrap();
+    operation.join().unwrap();
 
     let result = worker.join().unwrap().unwrap();
     assert_eq!(
@@ -110,6 +120,58 @@ fn current_page_is_resolved_inside_the_ordered_operation() {
             slot: Some(7),
         }
     );
+}
+
+struct BlockingOperation {
+    entered: mpsc::Sender<()>,
+    release: mpsc::Receiver<()>,
+}
+
+impl PlaybackUnitOfWork for BlockingOperation {
+    type Output = ();
+
+    fn execute(self) -> PlaybackOperation<Self::Output> {
+        self.entered.send(()).unwrap();
+        self.release.recv().unwrap();
+        PlaybackOperation::new(())
+    }
+}
+
+#[test]
+fn named_unit_of_work_publishes_returned_events_in_service_order() {
+    let events = crate::EventBus::new(8);
+    let service = PlaybackService::new(events.clone());
+    let context = crate::ActionContext::system(Uuid::from_u128(9), ActionSource::System);
+
+    let completed = service.run_unit_of_work(PublishingOperation { context });
+
+    assert_eq!(completed.output, "committed");
+    assert_eq!(completed.event_sequences, vec![1]);
+    assert_eq!(events.latest_sequence(), 1);
+}
+
+struct PublishingOperation {
+    context: crate::ActionContext,
+}
+
+impl PlaybackUnitOfWork for PublishingOperation {
+    type Output = &'static str;
+
+    fn execute(self) -> PlaybackOperation<Self::Output> {
+        let projection = PlaybackDeskProjection {
+            scope: test_scope(),
+            desk_id: self.context.desk_id,
+            active_page: 2,
+            selected_playback: Some(7),
+        };
+        PlaybackOperation::with_events(
+            "committed",
+            vec![crate::EventDraft::playback_view_changed(
+                &self.context,
+                projection,
+            )],
+        )
+    }
 }
 
 #[test]

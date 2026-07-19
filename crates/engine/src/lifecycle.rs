@@ -4,7 +4,6 @@ use crate::{
 };
 use light_playback::{Cue, CueChange, CueList, GroupCueChange, PlaybackEngine};
 use light_programmer::{GroupDefinition, resolve_group};
-use parking_lot::RwLock;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, atomic::Ordering},
@@ -176,12 +175,6 @@ impl Engine {
 
     pub fn snapshot(&self) -> Arc<EngineSnapshot> {
         self.generation.load().snapshot_arc()
-    }
-
-    /// Temporary compatibility accessor while callers migrate to typed Playback commands and
-    /// projections. The returned lock belongs to one immutable engine generation.
-    pub fn playback(&self) -> Arc<RwLock<PlaybackEngine>> {
-        self.generation.load().playback_arc()
     }
 
     pub fn output_routes(&self) -> Arc<[light_output::OutputRoute]> {

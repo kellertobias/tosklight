@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use chrono::{Duration as ChronoDuration, Utc};
 use light_core::{CueListId, ManualClock};
-use light_engine::{Engine, EngineSnapshot, RenderOptions};
+use light_engine::{
+    CueListPlaybackAction, Engine, EnginePlaybackCommand, EngineSnapshot, RenderOptions,
+};
 use light_playback::{
     AutomaticPlaybackTransitionCause, Cue, CueList, CueListMode, CueTrigger, IntensityPriorityMode,
     RestartMode, WrapMode,
@@ -24,7 +26,12 @@ fn render_returns_automatic_transitions_after_releasing_playback_state() {
             ..EngineSnapshot::default()
         })
         .unwrap();
-    engine.playback().write().go_at(id, started).unwrap();
+    engine
+        .execute_playback(EnginePlaybackCommand::CueList {
+            id,
+            action: CueListPlaybackAction::GoAt(started),
+        })
+        .unwrap();
     clock.set(started + ChronoDuration::milliseconds(100));
     // Read-only projections cannot consume the transition before the output scheduler observes it.
     engine.resolved_values();
@@ -36,7 +43,7 @@ fn render_returns_automatic_transitions_after_releasing_playback_state() {
         result.automatic_playback_transitions[0].cause,
         AutomaticPlaybackTransitionCause::Follow
     );
-    assert!(engine.playback().try_write().is_some());
+    assert_eq!(engine.active_playbacks().len(), 1);
 }
 
 fn cue_list(cues: Vec<Cue>) -> CueList {

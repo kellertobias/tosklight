@@ -51,18 +51,16 @@ fn active_group_cue_survives_snapshot_swap_and_gains_new_members() {
     engine
         .replace_snapshot(snapshot(vec![first_logical]))
         .unwrap();
-    engine
-        .playback()
-        .write()
-        .go_at(
-            list_id,
-            chrono::Utc::now() - chrono::Duration::milliseconds(1),
-        )
-        .unwrap();
+    execute_cue_list(
+        &engine,
+        list_id,
+        CueListPlaybackAction::GoAt(chrono::Utc::now() - chrono::Duration::milliseconds(1)),
+    );
     let playback_values = engine
-        .playback()
-        .write()
-        .contributions_at(chrono::Utc::now());
+        .playback_contributions_at(chrono::Utc::now())
+        .into_iter()
+        .map(|contribution| contribution.value)
+        .collect::<Vec<_>>();
     assert!(
         playback_values
             .iter()
@@ -76,14 +74,14 @@ fn active_group_cue_survives_snapshot_swap_and_gains_new_members() {
     engine
         .replace_snapshot(snapshot(vec![first_logical, second_logical]))
         .unwrap();
-    assert_eq!(engine.playback().read().active().len(), 1);
+    assert_eq!(engine.active_playbacks().len(), 1);
     let after = engine.render(RenderOptions::default()).unwrap();
     assert_eq!(after.universes[&1][0], 77);
     assert_eq!(after.universes[&1][1], 77);
     engine
         .replace_snapshot_releasing_playback(snapshot(vec![first_logical, second_logical]))
         .unwrap();
-    assert!(engine.playback().read().active().is_empty());
+    assert!(engine.active_playbacks().is_empty());
 }
 
 #[test]

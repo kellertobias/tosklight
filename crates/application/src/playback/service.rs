@@ -1,13 +1,10 @@
 use super::{
-    PlaybackAction, PlaybackAddress, PlaybackCommand, PlaybackCueTransition, PlaybackExecution,
-    PlaybackOutcome, PlaybackPorts, PlaybackResult, PlaybackRuntimeChange, PlaybackRuntimeIdentity,
-    PlaybackRuntimeProjection, PlaybackRuntimeSnapshot, PlaybackTransitionCause,
-    ResolvedPlaybackAddress,
+    PlaybackAddress, PlaybackCommand, PlaybackExecution, PlaybackOperationResult, PlaybackOutcome,
+    PlaybackPorts, PlaybackResult, PlaybackRuntimeIdentity, PlaybackRuntimeProjection,
+    PlaybackRuntimeSnapshot, PlaybackUnitOfWork, ResolvedPlaybackAddress, committed_playback_event,
 };
-use crate::{
-    ActionContext, ActionEnvelope, ActionError, ActionErrorKind, EventBus, EventDraft, EventSource,
-};
-use parking_lot::{Mutex, MutexGuard};
+use crate::{ActionContext, ActionEnvelope, ActionError, ActionErrorKind, EventBus, EventDraft};
+use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -42,18 +39,12 @@ impl PlaybackService {
         &self.events
     }
 
-    /// Transitional access for page changes and deferred playback work that have not yet become
-    /// application commands. Holding this guard orders them with all migrated playback actions.
-    pub fn operation_lock(&self) -> MutexGuard<'_, ()> {
-        self.operation.lock()
-    }
-
     pub fn handle(
         &self,
         envelope: ActionEnvelope<PlaybackCommand>,
         ports: &dyn PlaybackPorts,
     ) -> Result<PlaybackResult, ActionError> {
-        let _ordered = self.operation_lock();
+        let _ordered = self.operation.lock();
         ports.authorize(&envelope.context)?;
         if let Some(result) = self.cached(&envelope)? {
             return Ok(result);
@@ -85,14 +76,15 @@ impl PlaybackService {
         let projection = ports.projection(&envelope.context, identity)?;
         let desk = ports.desk_projection(&envelope.context)?;
         let applied = outcome == PlaybackOutcome::Applied;
-        let event_sequence = if applied && projection != before {
-            Some(self.publish_change(
+        let event_sequence = if applied {
+            committed_playback_event(
                 &envelope.context,
                 envelope.command.action,
                 configured_cause,
                 before,
                 projection.clone(),
-            ))
+            )
+            .map(|draft| self.events.publish(draft).sequence)
         } else {
             None
         };
@@ -130,7 +122,7 @@ impl PlaybackService {
         ports: &dyn PlaybackPorts,
     ) -> Result<PlaybackRuntimeSnapshot, ActionError> {
         validate_snapshot_identities(identities)?;
-        let _ordered = self.operation_lock();
+        let _ordered = self.operation.lock();
         ports.authorize(context)?;
         // Capturing the cursor before reads permits duplicates on a race, but never misses an
         // event which completed while the immutable projections were being assembled.
@@ -150,41 +142,21 @@ impl PlaybackService {
         })
     }
 
-    /// Publishes a projection change produced by an adapter-owned atomic batch. The caller must
-    /// hold this service's operation guard from its before-read through the live commit and
-    /// after-read, so the event describes one indivisible state transition.
-    pub fn publish_committed_change(
-        &self,
-        context: &ActionContext,
-        action: PlaybackAction,
-        configured_cause: Option<PlaybackTransitionCause>,
-        before: PlaybackRuntimeProjection,
-        projection: PlaybackRuntimeProjection,
-    ) -> Option<u64> {
-        (before != projection)
-            .then(|| self.publish_change(context, action, configured_cause, before, projection))
-    }
-
-    fn publish_change(
-        &self,
-        context: &ActionContext,
-        action: PlaybackAction,
-        configured_cause: Option<PlaybackTransitionCause>,
-        before: PlaybackRuntimeProjection,
-        projection: PlaybackRuntimeProjection,
-    ) -> u64 {
-        let transition = manual_transition(action, configured_cause, &before, &projection);
-        self.events
-            .publish(EventDraft::playback_runtime_changed(
-                None,
-                PlaybackRuntimeChange {
-                    projection,
-                    transition,
-                },
-                EventSource::Action(context.source),
-                Some(context.correlation_id),
-            ))
-            .sequence
+    pub fn run_unit_of_work<O>(&self, operation: O) -> PlaybackOperationResult<O::Output>
+    where
+        O: PlaybackUnitOfWork,
+    {
+        let _ordered = self.operation.lock();
+        let completed = operation.execute();
+        let event_sequences = completed
+            .events
+            .into_iter()
+            .map(|draft| self.events.publish(draft).sequence)
+            .collect();
+        PlaybackOperationResult {
+            output: completed.output,
+            event_sequences,
+        }
     }
 
     fn cached(
@@ -211,42 +183,6 @@ fn runtime_identity(address: ResolvedPlaybackAddress) -> PlaybackRuntimeIdentity
     match address {
         ResolvedPlaybackAddress::CueList(id) => PlaybackRuntimeIdentity::CueList(id),
         ResolvedPlaybackAddress::Pool { number, .. } => PlaybackRuntimeIdentity::Playback(number),
-    }
-}
-
-fn manual_transition(
-    action: PlaybackAction,
-    configured_cause: Option<PlaybackTransitionCause>,
-    before: &PlaybackRuntimeProjection,
-    after: &PlaybackRuntimeProjection,
-) -> Option<PlaybackCueTransition> {
-    let cause = configured_cause.or_else(|| navigation_cause(action))?;
-    let previous = before.current_cue().cloned();
-    let current = after.current_cue().cloned();
-    if previous == current {
-        return None;
-    }
-    let cue_list_id = after.cue_list_id().or_else(|| before.cue_list_id())?;
-    Some(PlaybackCueTransition {
-        playback_number: after.playback_number.or(before.playback_number),
-        cue_list_id: cue_list_id.0,
-        previous,
-        current,
-        cause,
-        advanced_steps: 1,
-    })
-}
-
-const fn navigation_cause(action: PlaybackAction) -> Option<PlaybackTransitionCause> {
-    match action {
-        PlaybackAction::Go { pressed: true } | PlaybackAction::FastForward { pressed: true } => {
-            Some(PlaybackTransitionCause::Go)
-        }
-        PlaybackAction::Back { pressed: true } | PlaybackAction::FastRewind { pressed: true } => {
-            Some(PlaybackTransitionCause::Back)
-        }
-        PlaybackAction::GoTo(_) => Some(PlaybackTransitionCause::Jump),
-        _ => None,
     }
 }
 

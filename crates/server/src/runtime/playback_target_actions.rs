@@ -2,6 +2,14 @@ use super::*;
 
 use light_playback::{PlaybackButtonAction as Action, PlaybackTarget};
 
+fn execute_pool(state: &AppState, number: u16, action: PoolPlaybackAction) -> Result<(), ApiError> {
+    state
+        .engine
+        .execute_playback(EnginePlaybackCommand::Pool { number, action })
+        .map(|_| ())
+        .map_err(ApiError::bad_request)
+}
+
 pub(super) fn apply_playback_master(
     state: &AppState,
     definition: &light_playback::PlaybackDefinition,
@@ -20,16 +28,18 @@ pub(super) fn apply_playback_master(
     }
     match &definition.target {
         PlaybackTarget::CueList { .. } => {
-            let playback_runtime = state.engine.playback();
-            let mut playback = playback_runtime.write();
             if virtual_fader {
-                playback
-                    .set_virtual_master(definition.number, value)
-                    .map_err(ApiError::bad_request)?;
+                execute_pool(
+                    state,
+                    definition.number,
+                    PoolPlaybackAction::SetVirtualMaster(value),
+                )?;
             } else {
-                playback
-                    .set_master(definition.number, value)
-                    .map_err(ApiError::bad_request)?;
+                execute_pool(
+                    state,
+                    definition.number,
+                    PoolPlaybackAction::SetMaster(value),
+                )?;
             }
         }
         PlaybackTarget::Group { group_id } => set_group_playback_master(state, group_id, value)?,
@@ -65,40 +75,24 @@ pub(super) fn apply_direct_playback_action(
             .ok_or_else(|| ApiError::bad_request("cue_number is required"))
     };
     match action {
-        "go-to" => {
-            state
-                .engine
-                .playback()
-                .write()
-                .goto_playback(definition.number, cue()?)
-                .map_err(ApiError::bad_request)?;
-        }
-        "load" => {
-            state
-                .engine
-                .playback()
-                .write()
-                .load_playback(definition.number, cue()?)
-                .map_err(ApiError::bad_request)?;
-        }
-        "xfade-on" | "xfade-off" => state
-            .engine
-            .playback()
-            .write()
-            .xfade(definition.number, action == "xfade-on")
-            .map_err(ApiError::bad_request)?,
+        "go-to" => execute_pool(state, definition.number, PoolPlaybackAction::GoTo(cue()?))?,
+        "load" => execute_pool(state, definition.number, PoolPlaybackAction::Load(cue()?))?,
+        "xfade-on" | "xfade-off" => execute_pool(
+            state,
+            definition.number,
+            PoolPlaybackAction::XFade(action == "xfade-on"),
+        )?,
         "temp-on" | "temp-off" => {
             if !matches!(definition.target, PlaybackTarget::CueList { .. }) {
                 return Err(ApiError::bad_request(
                     "Temp is available only for a Cuelist playback",
                 ));
             }
-            state
-                .engine
-                .playback()
-                .write()
-                .set_temp_button(definition.number, action == "temp-on")
-                .map_err(ApiError::bad_request)?;
+            execute_pool(
+                state,
+                definition.number,
+                PoolPlaybackAction::SetTempButton(action == "temp-on"),
+            )?;
         }
         _ => return Ok(None),
     }
@@ -140,73 +134,24 @@ fn apply_cuelist_action(
     action: Action,
     pressed: bool,
 ) -> Result<bool, ApiError> {
-    let playback_runtime = state.engine.playback();
-    let mut playback = playback_runtime.write();
-    match action {
-        Action::On => playback
-            .on(definition.number)
-            .map_err(ApiError::bad_request)?,
-        Action::Off => {
-            playback
-                .off(definition.number)
-                .map_err(ApiError::bad_request)?;
-        }
-        Action::Toggle => {
-            playback
-                .toggle(definition.number)
-                .map_err(ApiError::bad_request)?;
-        }
-        Action::Go => {
-            playback
-                .go_playback(definition.number)
-                .map_err(ApiError::bad_request)?;
-        }
-        Action::GoMinus => {
-            playback
-                .back_playback(definition.number)
-                .map_err(ApiError::bad_request)?;
-        }
-        Action::Pause => {
-            let paused = playback.runtime().iter().any(|runtime| {
-                runtime.playback_number == Some(definition.number) && runtime.paused
-            });
-            if paused {
-                playback
-                    .go_playback(definition.number)
-                    .map_err(ApiError::bad_request)?;
-            } else {
-                playback
-                    .pause_playback(definition.number)
-                    .map_err(ApiError::bad_request)?;
-            }
-        }
-        Action::FastForward => {
-            playback
-                .fast_forward_playback(definition.number)
-                .map_err(ApiError::bad_request)?;
-        }
-        Action::FastRewind => {
-            playback
-                .fast_rewind_playback(definition.number)
-                .map_err(ApiError::bad_request)?;
-        }
-        Action::Flash => playback
-            .set_flash(definition.number, pressed)
-            .map_err(ApiError::bad_request)?,
-        Action::Temp => {
-            playback
-                .toggle_temp(definition.number)
-                .map_err(ApiError::bad_request)?;
-        }
-        Action::Swap => playback
-            .set_swap(definition.number, pressed)
-            .map_err(ApiError::bad_request)?,
-        Action::Select => {}
+    let command = match action {
+        Action::On => Some(PoolPlaybackAction::On),
+        Action::Off => Some(PoolPlaybackAction::Off),
+        Action::Toggle => Some(PoolPlaybackAction::Toggle),
+        Action::Go => Some(PoolPlaybackAction::Go),
+        Action::GoMinus => Some(PoolPlaybackAction::Back),
+        Action::Pause => Some(PoolPlaybackAction::TogglePause),
+        Action::FastForward => Some(PoolPlaybackAction::FastForward),
+        Action::FastRewind => Some(PoolPlaybackAction::FastRewind),
+        Action::Flash => Some(PoolPlaybackAction::SetFlash(pressed)),
+        Action::Temp => Some(PoolPlaybackAction::ToggleTemp),
+        Action::Swap => Some(PoolPlaybackAction::SetSwap(pressed)),
+        Action::Select => None,
         Action::SelectContents => {
-            drop(playback);
             let session =
                 session.ok_or_else(|| ApiError::bad_request("selection needs a session"))?;
             select_cuelist_contents(state, session, cue_list_id)?;
+            None
         }
         Action::None => return Ok(false),
         _ => {
@@ -214,6 +159,9 @@ fn apply_cuelist_action(
                 "action is incompatible with a Cuelist playback",
             ));
         }
+    };
+    if let Some(command) = command {
+        execute_pool(state, definition.number, command)?;
     }
     Ok(true)
 }
@@ -279,7 +227,10 @@ fn apply_grand_master_action(
         }
         Action::Flash => state.output_control.lock().grand_master_flash = pressed,
         Action::PauseDynamics => {
-            state.engine.playback().write().toggle_dynamics_paused();
+            state
+                .engine
+                .execute_playback(EnginePlaybackCommand::ToggleDynamicsPaused)
+                .map_err(ApiError::bad_request)?;
         }
         Action::None => return Ok(false),
         _ => {

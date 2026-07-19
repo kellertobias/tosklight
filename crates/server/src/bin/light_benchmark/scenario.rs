@@ -4,7 +4,8 @@ use light_core::{
     AttributeKey, AttributeValue, CueListId, FixtureId, ManualClock, SessionId, UserId,
 };
 use light_engine::{
-    ContributionBatch, ContributionSample, ContributionSourceId, Engine, EngineSnapshot,
+    ContributionBatch, ContributionSample, ContributionSourceId, Engine, EnginePlaybackCommand,
+    EngineSnapshot, PoolPlaybackAction,
 };
 use light_fixture::{
     ChannelBehavior, ChannelResolution, FixtureChannel, FixtureProfile, PatchedFixture, SplitPatch,
@@ -76,9 +77,10 @@ impl BenchmarkScenario {
             })
             .map_err(|error| error.to_string())?;
         engine
-            .playback()
-            .write()
-            .go_playback(1)
+            .execute_playback(EnginePlaybackCommand::Pool {
+                number: 1,
+                action: PoolPlaybackAction::Go,
+            })
             .map_err(|error| format!("activate benchmark playback: {error}"))?;
         programmers.set_many(session, programmer_assignments(&fixture_ids));
         Ok(Self {
@@ -118,9 +120,7 @@ fn sampled_batches(
         }
     }
     for contribution in engine
-        .playback()
-        .read()
-        .contributions_with_context_at(at, |_, _| false)
+        .playback_contributions_at(at)
         .into_iter()
         .filter(|contribution| contribution.value.attribute != slot_attribute(ANIMATED_SLOT))
         .step_by(SAMPLED_ASSIGNMENT_DIVISOR)

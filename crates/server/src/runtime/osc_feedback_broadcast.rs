@@ -22,7 +22,7 @@ pub(super) fn send_osc_feedback(state: &AppState, _full: bool) {
         return;
     };
     let snapshot = state.engine.snapshot();
-    let runtime = state.engine.playback().read().runtime_status();
+    let runtime = state.engine.playback_runtime_status();
     let speed_groups = {
         let now = application_millis(state);
         let controllers = state.speed_groups.lock();

@@ -8,7 +8,7 @@ use super::{
 };
 use light_control::speed::SpeedGroupController;
 use light_core::{ManualClock, SharedClock, SystemClock};
-use light_engine::Engine;
+use light_engine::{Engine, EnginePlaybackCommand};
 use light_fixture::FixtureLibrary;
 use light_programmer::ProgrammerRegistry;
 use light_show::{DeskStore, ShowEntry};
@@ -222,7 +222,11 @@ fn restore_active_playbacks(
         return Ok(());
     };
     match serde_json::from_str::<Vec<light_playback::ActivePlayback>>(&serialized) {
-        Ok(playbacks) => engine.playback().write().restore_active(playbacks),
+        Ok(playbacks) => {
+            engine
+                .execute_playback(EnginePlaybackCommand::RestoreActive(playbacks))
+                .expect("restoring validated Playback state is infallible");
+        }
         Err(error) => {
             tracing::warn!(show_id=?show.id, %error, "ignoring invalid persisted playback runtime")
         }
@@ -272,9 +276,10 @@ fn apply_output_runtime(engine: &Engine, runtime: &PersistedOutputRuntime) {
         apply_group_masters(engine, runtime);
     }
     engine
-        .playback()
-        .write()
-        .restore_dynamics_paused_since(runtime.dynamics_paused_at);
+        .execute_playback(EnginePlaybackCommand::RestoreDynamicsPausedSince(
+            runtime.dynamics_paused_at,
+        ))
+        .expect("restoring dynamics pause state is infallible");
 }
 
 fn apply_group_masters(engine: &Engine, runtime: &PersistedOutputRuntime) {

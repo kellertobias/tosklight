@@ -131,7 +131,7 @@ fn cue_commands_use_the_desk_selected_concrete_playback() {
     execute_programmer_command(&state, &first, "CUE 2").unwrap();
     execute_programmer_command(&state, &second, "CUE 3").unwrap();
     execute_programmer_command(&state, &first, "CUE CUE 1").unwrap();
-    let runtime = state.engine.playback().read().runtime();
+    let runtime = state.engine.playback_runtime();
     let first_runtime = runtime
         .iter()
         .find(|item| item.playback_number == Some(1))
@@ -158,9 +158,7 @@ fn cue_commands_use_the_desk_selected_concrete_playback() {
     execute_programmer_command(&state, &first, "CUE CUE SET 4 . 7 CUE 2").unwrap();
     let second_runtime = state
         .engine
-        .playback()
-        .read()
-        .runtime()
+        .playback_runtime()
         .into_iter()
         .find(|item| item.playback_number == Some(2))
         .unwrap();

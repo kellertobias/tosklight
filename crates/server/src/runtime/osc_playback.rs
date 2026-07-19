@@ -147,20 +147,22 @@ fn handle_osc_page(state: &AppState, parts: &[&str], arguments: &[OscArgument]) 
     else {
         return true;
     };
+    let context =
+        light_application::ActionContext::system(desk.id, light_application::ActionSource::Osc);
+    let completed = state
+        .playback_service
+        .run_unit_of_work(playback_service::ChangePage {
+            state,
+            show: &show,
+            context,
+            desk_id: desk.id,
+            page,
+        });
+    if !completed
+        .output
+        .is_ok_and(|availability| availability.available())
     {
-        let _ordered = state.playback_service.operation_lock();
-        let context =
-            light_application::ActionContext::system(desk.id, light_application::ActionSource::Osc);
-        let Ok(before) = playback_service::desk_projection(state, &context) else {
-            return true;
-        };
-        if !ensure_playback_page_for_advance(state, &show, page, &context)
-            .is_ok_and(|availability| availability.available())
-        {
-            return true;
-        }
-        let _ = state.desk.lock().set_desk_page(desk.id, show.id, page);
-        let _ = playback_service::publish_desk_change(state, &context, before);
+        return true;
     }
     emit(
         state,

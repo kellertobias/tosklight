@@ -122,14 +122,7 @@ pub(super) fn copy_speed_group_runtime_to_configuration(
 }
 
 pub(super) fn application_millis(state: &AppState) -> u64 {
-    state
-        .engine
-        .playback()
-        .read()
-        .clock()
-        .now()
-        .timestamp_millis()
-        .max(0) as u64
+    state.engine.application_time().timestamp_millis().max(0) as u64
 }
 
 /// Propagates the authoritative Speed Group controllers into both chaser scheduling and runtime

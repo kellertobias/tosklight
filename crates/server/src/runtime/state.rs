@@ -23,7 +23,6 @@ pub(super) struct AppState {
     pub(super) matter_transport: Option<Arc<matter::MatterTransport>>,
     pub(super) output_control: Arc<Mutex<OutputControl>>,
     pub(super) activation_lock: Arc<tokio::sync::Mutex<()>>,
-    pub(super) playback_action_lock: Arc<Mutex<()>>,
     pub(super) timecode_router: Arc<Mutex<TimecodeRouter>>,
     pub(super) active_show: Arc<RwLock<Option<ShowEntry>>>,
     pub(super) active_show_error: Arc<RwLock<Option<String>>>,

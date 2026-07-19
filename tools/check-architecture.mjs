@@ -92,6 +92,38 @@ function activeShowMutationDirections() {
       fail(`Update must route active-show writes through ActiveShowService, not ${forbidden}`);
 }
 
+function playbackOwnershipBoundaries() {
+  const engineSources = walk(path.join(repositoryRoot, "crates/engine/src"))
+    .filter((candidate) => candidate.endsWith(".rs"));
+  for (const file of engineSources) {
+    const source = fs.readFileSync(file, "utf8");
+    if (/\bpub\s+fn\s+playback\s*\(/u.test(source))
+      fail(`${relative(file)} exposes a public Playback lock instead of typed commands and projections`);
+  }
+
+  const applicationPlayback = walk(path.join(repositoryRoot, "crates/application/src/playback"))
+    .filter((candidate) => candidate.endsWith(".rs"));
+  for (const file of applicationPlayback) {
+    const source = fs.readFileSync(file, "utf8");
+    if (/\bpub\s+fn\s+operation_lock\s*\(/u.test(source))
+      fail(`${relative(file)} returns PlaybackService ordering ownership to an adapter`);
+  }
+
+  const externalRoots = [
+    path.join(repositoryRoot, "crates/application/src"),
+    path.join(repositoryRoot, "crates/server/src"),
+  ];
+  for (const file of externalRoots.flatMap(walk).filter((candidate) => candidate.endsWith(".rs"))) {
+    const name = relative(file);
+    if (name.includes("/tests/") || name.endsWith("_tests.rs")) continue;
+    const source = fs.readFileSync(file, "utf8");
+    if (/\bengine\s*\.\s*playback\s*\(\s*\)/u.test(source))
+      fail(`${name} bypasses the typed Engine Playback boundary`);
+    if (source.includes("playback_action_lock"))
+      fail(`${name} duplicates ordering which belongs to PlaybackService`);
+  }
+}
+
 function walk(directory) {
   if (!fs.existsSync(directory)) return [];
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -152,6 +184,7 @@ function typeScriptDependencyDirections() {
 rustDependencyDirections();
 serverEntrypointIsThin();
 activeShowMutationDirections();
+playbackOwnershipBoundaries();
 typeScriptDependencyDirections();
 
 if (failures.length > 0) {

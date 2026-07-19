@@ -115,7 +115,7 @@ fn highlight_scenario() -> HighlightScenario {
             ..Default::default()
         })
         .unwrap();
-    engine.playback().write().go(cue_list.id).unwrap();
+    execute_cue_list(&engine, cue_list.id, CueListPlaybackAction::Go);
     HighlightScenario {
         engine,
         programmers,

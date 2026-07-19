@@ -57,7 +57,7 @@ pub(in crate::runtime) fn pool_http_payload(
     let snapshot = state.engine.snapshot();
     Ok(serde_json::json!({
         "playback":definition,
-        "active":state.engine.playback().read().runtime_status(),
+        "active":state.engine.playback_runtime_status(),
         "groups":snapshot.groups,
         "authoritative_controls":authoritative_playback_controls(state),
         "changed":changed

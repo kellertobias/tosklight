@@ -12,6 +12,7 @@ mod model;
 mod move_in_black;
 mod move_in_black_candidate;
 mod move_in_black_runtime;
+mod playback;
 mod profile_blackout;
 mod profile_color;
 mod profile_encoding;
@@ -34,6 +35,11 @@ pub use lifecycle::PreparedEngineSnapshot;
 pub use model::{
     EngineError, EngineSnapshot, MoveInBlackDiagnostic, MoveInBlackPosition, MoveInBlackState,
     RenderOptions, RenderResult,
+};
+pub use playback::{
+    CueListPlaybackAction, EnginePlaybackCommand, EnginePlaybackOutcome, PlaybackBatchAction,
+    PlaybackBatchCommand, PlaybackBatchOutcome, PlaybackDynamicsProjection, PoolPlaybackAction,
+    PreparedPlaybackBatch,
 };
 
 pub(crate) use contribution::{

@@ -192,7 +192,13 @@ fn confirmed_update_rejects_changed_programmer_and_is_one_step_undoable() {
         .replace_snapshot(snapshot)
         .unwrap();
     for _ in 0..3 {
-        state.engine.playback().write().go_playback(7).unwrap();
+        state
+            .engine
+            .execute_playback(EnginePlaybackCommand::Pool {
+                number: 7,
+                action: PoolPlaybackAction::Go,
+            })
+            .unwrap();
     }
 
     let show_path = data_dir.join("shows/update-confirmation.show");

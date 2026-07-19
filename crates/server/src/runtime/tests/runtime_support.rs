@@ -31,7 +31,6 @@ fn test_state() -> (AppState, PathBuf) {
             matter_transport: None,
             output_control: Arc::new(Mutex::new(OutputControl::default())),
             activation_lock: Arc::new(tokio::sync::Mutex::new(())),
-            playback_action_lock: Arc::new(Mutex::new(())),
             timecode_router: Arc::new(Mutex::new(TimecodeRouter::default())),
             active_show: Arc::default(),
             active_show_error: Arc::default(),

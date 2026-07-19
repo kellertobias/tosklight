@@ -76,9 +76,7 @@ pub(super) async fn put_update_settings(
 pub(super) fn active_update_cue_contexts(state: &AppState) -> Vec<update::ActiveCueContext> {
     state
         .engine
-        .playback()
-        .read()
-        .active()
+        .active_playbacks()
         .into_iter()
         .filter_map(|playback| {
             Some(update::ActiveCueContext {

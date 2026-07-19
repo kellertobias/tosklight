@@ -209,8 +209,8 @@ fn schema_v2_snap_bypasses_move_in_black_and_signal_loss_fades() {
     engine
         .replace_snapshot(mib_snapshot(vec![fixture], &[fixture_id]))
         .unwrap();
-    engine.playback().write().go_playback(1).unwrap();
-    engine.playback().write().go_playback(1).unwrap();
+    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_pool(&engine, 1, PoolPlaybackAction::Go);
     clock.set(started + ChronoDuration::milliseconds(1_999));
     assert_eq!(
         normalized(&engine.resolved_values(), fixture_id, "pan"),
@@ -322,10 +322,10 @@ fn schema_v2_master_reactions_use_only_the_winning_sources_and_scale_once() {
             ..Default::default()
         })
         .unwrap();
-    engine.playback().write().go_playback(1).unwrap();
-    engine.playback().write().go_playback(2).unwrap();
-    engine.playback().write().set_master(1, 0.5).unwrap();
-    engine.playback().write().set_master(2, 0.1).unwrap();
+    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_pool(&engine, 2, PoolPlaybackAction::Go);
+    execute_pool(&engine, 1, PoolPlaybackAction::SetMaster(0.5));
+    execute_pool(&engine, 2, PoolPlaybackAction::SetMaster(0.1));
 
     let frame = engine
         .render(RenderOptions {

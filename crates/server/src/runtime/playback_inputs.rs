@@ -7,9 +7,7 @@ pub(super) fn predicted_preload_temp_state(
 ) -> bool {
     let mut active = state
         .engine
-        .playback()
-        .read()
-        .runtime_status()
+        .playback_runtime_status()
         .into_iter()
         .find(|status| status.playback.playback_number == Some(number))
         .is_some_and(|status| status.temporary_active);

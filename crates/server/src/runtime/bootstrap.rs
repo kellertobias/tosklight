@@ -201,7 +201,6 @@ fn build_app_state(
         matter_transport: Some(matter_transport),
         output_control,
         activation_lock: Arc::clone(&resources.activation_lock),
-        playback_action_lock: Arc::new(Mutex::new(())),
         timecode_router: Arc::clone(&resources.timecode_router),
         active_show: Arc::clone(&resources.active_show),
         active_show_error: Arc::new(RwLock::new(startup.active_show_error)),

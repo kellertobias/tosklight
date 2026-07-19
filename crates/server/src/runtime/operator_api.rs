@@ -66,7 +66,7 @@ pub(super) async fn diagnostics(
     let output_routes = NetworkOutput::route_diagnostics(&state.engine.snapshot().routes);
     let output_bind_ip = state.configuration.read().output_bind_ip;
     Ok(Json(
-        serde_json::json!({"output":state.output_health.lock().expect("output health mutex poisoned").clone(),"output_bind_ip":output_bind_ip,"output_routes":output_routes,"route_send_errors":route_send_errors,"event_queue_pressure":state.events.len(),"active_programmers":state.programmers.active(),"active_playbacks":state.engine.playback().read().active(),"move_in_black":state.engine.move_in_black_runtime(),"timecode_source":state.timecode_router.lock().active_source(),"media_servers":state.media_status.read().clone(),"snapshot_revision":state.engine.snapshot().revision}),
+        serde_json::json!({"output":state.output_health.lock().expect("output health mutex poisoned").clone(),"output_bind_ip":output_bind_ip,"output_routes":output_routes,"route_send_errors":route_send_errors,"event_queue_pressure":state.events.len(),"active_programmers":state.programmers.active(),"active_playbacks":state.engine.active_playbacks(),"move_in_black":state.engine.move_in_black_runtime(),"timecode_source":state.timecode_router.lock().active_source(),"media_servers":state.media_status.read().clone(),"snapshot_revision":state.engine.snapshot().revision}),
     ))
 }
 pub(super) async fn bootstrap(State(state): State<AppState>) -> Json<Bootstrap> {

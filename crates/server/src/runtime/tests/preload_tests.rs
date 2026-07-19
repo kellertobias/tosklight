@@ -265,7 +265,7 @@ fn preload_rejects_a_late_invalid_action_without_publishing_earlier_actions() {
     let error = commit_preload(&state, &session).unwrap_err();
 
     assert!(error.contains("group playback"), "{error}");
-    assert!(state.engine.playback().read().runtime().is_empty());
+    assert!(state.engine.playback_runtime().is_empty());
     let programmer_after = state.programmers.get(session.id).unwrap();
     assert_eq!(
         programmer_after.preload_playback_pending,
@@ -341,31 +341,30 @@ fn staged_preload_applies_exclusions_without_mutating_the_source_engine() {
         .engine
         .replace_snapshot(preload_atomicity_test_snapshot())
         .unwrap();
-    state.engine.playback().write().on(2).unwrap();
-    let snapshot = state.engine.snapshot();
-    let definition = snapshot
-        .playbacks
-        .iter()
-        .find(|definition| definition.number == 1)
-        .cloned()
+    state
+        .engine
+        .execute_playback(EnginePlaybackCommand::Pool {
+            number: 2,
+            action: PoolPlaybackAction::On,
+        })
         .unwrap();
     let pending = light_programmer::PreloadPlaybackAction {
         playback_number: 1,
         action: "on".into(),
         surface: "virtual".into(),
     };
-    let current = state.engine.playback().read().clone();
-
-    let (staged, actions) = stage_preload_playback_batch(
-        &current,
-        &[(pending, definition)],
+    let source = state.engine.playback_runtime();
+    let pending = vec![pending];
+    let commands = preload_batch_commands(&pending).unwrap();
+    let prepared = state.engine.prepare_playback_batch(
+        &commands,
         chrono::Utc::now(),
         0,
         &[vec![1, 2]],
     )
     .unwrap();
+    let actions = staged_preload_actions(&pending, &prepared);
 
-    let source = current.runtime();
     assert!(
         source
             .iter()
@@ -376,7 +375,20 @@ fn staged_preload_applies_exclusions_without_mutating_the_source_engine() {
             .iter()
             .all(|runtime| runtime.playback_number != Some(1))
     );
-    let result = staged.runtime();
+    let unchanged = state.engine.playback_runtime();
+    assert!(unchanged.iter().any(|runtime| {
+        runtime.playback_number == Some(2) && runtime.enabled
+    }));
+    assert!(
+        unchanged
+            .iter()
+            .all(|runtime| runtime.playback_number != Some(1))
+    );
+    state
+        .engine
+        .install_prepared_playback_batch(prepared)
+        .unwrap();
+    let result = state.engine.playback_runtime();
     assert!(
         result
             .iter()

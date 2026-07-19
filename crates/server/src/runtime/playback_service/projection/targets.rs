@@ -164,7 +164,7 @@ pub(super) fn grand_master_projection(ports: &ServerPlaybackPorts<'_>) -> Playba
         effective_level: if flash_active { 1.0 } else { level },
         blackout: control.options.blackout,
         flash_active,
-        dynamics_paused: ports.state.engine.playback().read().dynamics_paused(),
+        dynamics_paused: ports.state.engine.playback_dynamics().paused,
     })
 }
 

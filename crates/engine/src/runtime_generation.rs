@@ -60,10 +60,6 @@ impl RuntimeGeneration {
         &self.playback
     }
 
-    pub(crate) fn playback_arc(&self) -> Arc<RwLock<PlaybackEngine>> {
-        Arc::clone(&self.playback)
-    }
-
     pub(crate) fn groups(&self) -> &HashMap<String, GroupDefinition> {
         &self.groups
     }

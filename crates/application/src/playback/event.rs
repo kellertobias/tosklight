@@ -1,6 +1,7 @@
 use uuid::Uuid;
 
-use super::{PlaybackCueReference, PlaybackRuntimeProjection};
+use super::{PlaybackAction, PlaybackCueReference, PlaybackRuntimeProjection};
+use crate::{ActionContext, EventDraft, EventSource};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum PlaybackTransitionCause {
@@ -27,4 +28,63 @@ pub struct PlaybackCueTransition {
 pub struct PlaybackRuntimeChange {
     pub projection: PlaybackRuntimeProjection,
     pub transition: Option<PlaybackCueTransition>,
+}
+
+/// Builds the one typed event for an adapter-owned atomic Playback mutation.
+pub fn committed_playback_event(
+    context: &ActionContext,
+    action: PlaybackAction,
+    configured_cause: Option<PlaybackTransitionCause>,
+    before: PlaybackRuntimeProjection,
+    projection: PlaybackRuntimeProjection,
+) -> Option<EventDraft> {
+    if before == projection {
+        return None;
+    }
+    let transition = manual_transition(action, configured_cause, &before, &projection);
+    Some(EventDraft::playback_runtime_changed(
+        None,
+        PlaybackRuntimeChange {
+            projection,
+            transition,
+        },
+        EventSource::Action(context.source),
+        Some(context.correlation_id),
+    ))
+}
+
+fn manual_transition(
+    action: PlaybackAction,
+    configured_cause: Option<PlaybackTransitionCause>,
+    before: &PlaybackRuntimeProjection,
+    after: &PlaybackRuntimeProjection,
+) -> Option<PlaybackCueTransition> {
+    let cause = configured_cause.or_else(|| navigation_cause(action))?;
+    let previous = before.current_cue().cloned();
+    let current = after.current_cue().cloned();
+    if previous == current {
+        return None;
+    }
+    let cue_list_id = after.cue_list_id().or_else(|| before.cue_list_id())?;
+    Some(PlaybackCueTransition {
+        playback_number: after.playback_number.or(before.playback_number),
+        cue_list_id: cue_list_id.0,
+        previous,
+        current,
+        cause,
+        advanced_steps: 1,
+    })
+}
+
+const fn navigation_cause(action: PlaybackAction) -> Option<PlaybackTransitionCause> {
+    match action {
+        PlaybackAction::Go { pressed: true } | PlaybackAction::FastForward { pressed: true } => {
+            Some(PlaybackTransitionCause::Go)
+        }
+        PlaybackAction::Back { pressed: true } | PlaybackAction::FastRewind { pressed: true } => {
+            Some(PlaybackTransitionCause::Back)
+        }
+        PlaybackAction::GoTo(_) => Some(PlaybackTransitionCause::Jump),
+        _ => None,
+    }
 }

@@ -11,6 +11,7 @@ use light_application::{
     PlaybackTransitionCause, publish_automatic_playback_events,
 };
 use light_core::{CueListId, ManualClock, ShowId};
+use light_engine::EnginePlaybackCommand;
 use light_playback::{Cue, CueList, CueListMode, IntensityPriorityMode, RestartMode, WrapMode};
 use light_wire::v2::events as wire;
 
@@ -32,9 +33,10 @@ async fn running_chaser_wakes_only_its_narrow_subscriber() {
         })
         .unwrap();
     engine
-        .playback()
-        .write()
-        .go_at(cue_list_id, started)
+        .execute_playback(EnginePlaybackCommand::CueList {
+            id: cue_list_id,
+            action: light_engine::CueListPlaybackAction::GoAt(started),
+        })
         .unwrap();
     let bus = EventBus::new(8);
     let object = wire::EventObject {

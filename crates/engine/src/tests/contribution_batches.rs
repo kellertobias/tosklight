@@ -176,10 +176,10 @@ fn playback_sample_applies_its_master_to_intensity_and_non_intensity_output() {
             ..EngineSnapshot::default()
         })
         .unwrap();
-    engine.playback().write().go_playback(1).unwrap();
+    execute_pool(&engine, 1, PoolPlaybackAction::Go);
 
     for (master, expected_intensity, expected_tilt) in [(0.5, 0.1, 0.4), (0.0, 0.0, 0.0)] {
-        engine.playback().write().set_master(1, master).unwrap();
+        execute_pool(&engine, 1, PoolPlaybackAction::SetMaster(master));
         let assignments = playback_assignments(&engine, started, Some(1));
         let sampled = FakeAnimatedSource::default().sample(&assignments);
         let resolved =
@@ -242,9 +242,9 @@ fn sampled_playback_intensity_is_mastered_before_htp_arbitration() {
             ..EngineSnapshot::default()
         })
         .unwrap();
-    engine.playback().write().go_playback(1).unwrap();
-    engine.playback().write().go_playback(2).unwrap();
-    engine.playback().write().set_master(1, 0.5).unwrap();
+    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_pool(&engine, 2, PoolPlaybackAction::Go);
+    execute_pool(&engine, 1, PoolPlaybackAction::SetMaster(0.5));
     let assignments = playback_assignments(&engine, started, Some(1));
     let sampled = FakeAnimatedSource { phase: 0.6 }.sample(&assignments);
 
@@ -297,8 +297,8 @@ fn a_sample_replaces_only_its_independent_playback() {
             ..EngineSnapshot::default()
         })
         .unwrap();
-    engine.playback().write().go_playback(1).unwrap();
-    engine.playback().write().go_playback(2).unwrap();
+    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_pool(&engine, 2, PoolPlaybackAction::Go);
     let assignments = playback_assignments(&engine, started, Some(1));
     let sampled = ContributionBatch::new(assignments.into_iter().map(|assignment| {
         let mut value = assignment.value;
@@ -552,8 +552,8 @@ fn sampled_intensity_participates_in_move_in_black_darkness() {
     engine
         .replace_snapshot(mib_snapshot(vec![fixture], &[fixture_id]))
         .unwrap();
-    engine.playback().write().go_playback(1).unwrap();
-    engine.playback().write().go_playback(1).unwrap();
+    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_pool(&engine, 1, PoolPlaybackAction::Go);
     clock.set(started + ChronoDuration::milliseconds(5_000));
     let sampled = independent_batch(timed_value(fixture_id, "intensity", 0.2, 100, clock.now()));
 
@@ -626,11 +626,7 @@ fn playback_cue_projection(
             ..EngineSnapshot::default()
         })
         .unwrap();
-    engine
-        .playback()
-        .write()
-        .go_at(cue_list.id, started)
-        .unwrap();
+    execute_cue_list(&engine, cue_list.id, CueListPlaybackAction::GoAt(started));
     let assignments = playback_assignments(&engine, started, None);
     ("Playback/Cue", engine, fixture_id, assignments)
 }
@@ -641,9 +637,7 @@ fn playback_assignments(
     playback_number: Option<u16>,
 ) -> Vec<ProjectedAssignment> {
     engine
-        .playback()
-        .read()
-        .contributions_with_context_at(at, |_, _| false)
+        .playback_contributions_at(at)
         .into_iter()
         .filter(|contribution| contribution.source.playback_number == playback_number)
         .map(|contribution| ProjectedAssignment {

@@ -46,7 +46,7 @@ pub(super) async fn playbacks(
         "cue_lists":snapshot.cue_lists,
         "pool":snapshot.playbacks,
         "pages":snapshot.playback_pages,
-        "active":state.engine.playback().read().runtime_status(),
+        "active":state.engine.playback_runtime_status(),
         "desk":session.desk,
         "active_page":active_page,
         "selected_playback":selected_playback,
@@ -82,7 +82,7 @@ pub(super) fn authoritative_playback_controls(state: &AppState) -> serde_json::V
             "effective_level":if control.grand_master_flash {1.0} else {control.options.grand_master},
             "blackout":control.options.blackout,
             "flash_active":control.grand_master_flash,
-            "dynamics_paused":state.engine.playback().read().dynamics_paused()
+            "dynamics_paused":state.engine.playback_dynamics().paused
         },
         "programmer_fade_millis":timing.programmer_fade_millis,
         "cue_fade_millis":timing.sequence_master_fade_millis
@@ -250,25 +250,12 @@ pub(super) fn enforce_virtual_playback_exclusions(
     activated_number: u16,
 ) -> Vec<u16> {
     let zones = virtual_playback_zone_numbers(state, desk_id);
-    let playback_runtime = state.engine.playback();
-    let mut playback = playback_runtime.write();
-    enforce_virtual_playback_exclusions_on(&mut playback, &zones, activated_number)
-}
-
-/// Apply one desk's virtual-playback exclusion zones to an arbitrary playback engine.
-///
-/// Keeping this operation independent from [`AppState`] lets Preload validate a complete batch
-/// against an isolated engine before publishing any live playback state.
-pub(super) fn enforce_virtual_playback_exclusions_on(
-    playback: &mut light_playback::PlaybackEngine,
-    zones: &[Vec<u16>],
-    activated_number: u16,
-) -> Vec<u16> {
     if !zones.iter().any(|zone| zone.contains(&activated_number)) {
         return Vec::new();
     }
-    if !playback
-        .runtime()
+    if !state
+        .engine
+        .playback_runtime()
         .iter()
         .any(|active| active.playback_number == Some(activated_number) && active.enabled)
     {
@@ -282,7 +269,10 @@ pub(super) fn enforce_virtual_playback_exclusions_on(
         .filter(|number| *number != activated_number)
     {
         if released.insert(number) {
-            let _ = playback.off(number);
+            let _ = state.engine.execute_playback(EnginePlaybackCommand::Pool {
+                number,
+                action: PoolPlaybackAction::Off,
+            });
         }
     }
     let mut released = released.into_iter().collect::<Vec<_>>();
@@ -304,9 +294,7 @@ pub(super) fn normalize_restored_virtual_playback_exclusions(state: &AppState) {
         .collect::<Vec<_>>();
     let mut active = state
         .engine
-        .playback()
-        .read()
-        .runtime()
+        .playback_runtime()
         .into_iter()
         .filter(|playback| {
             playback.enabled
@@ -334,16 +322,19 @@ pub(super) fn normalize_restored_virtual_playback_exclusions(state: &AppState) {
         retained.insert(number);
     }
     let mut changed = false;
-    let playback_runtime = state.engine.playback();
-    let mut playback = playback_runtime.write();
     for number in active
         .into_iter()
         .filter_map(|candidate| candidate.playback_number)
         .filter(|number| !retained.contains(number))
     {
-        changed |= playback.off(number).unwrap_or(false);
+        changed |= state
+            .engine
+            .execute_playback(EnginePlaybackCommand::Pool {
+                number,
+                action: PoolPlaybackAction::Off,
+            })
+            .is_ok_and(|outcome| matches!(outcome, EnginePlaybackOutcome::Changed(true)));
     }
-    drop(playback);
     if changed {
         let _ = persist_active_playbacks(state);
     }

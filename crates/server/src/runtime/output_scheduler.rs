@@ -1,10 +1,13 @@
 //! Network-output scheduling and safe shutdown for the server runtime.
 
 use super::{OutputControl, PersistedOutputRuntime, playback_service};
-use light_application::{PlaybackService, PlaybackShowScope, publish_automatic_playback_events};
+use light_application::{
+    PlaybackOperation, PlaybackService, PlaybackShowScope, PlaybackUnitOfWork,
+    automatic_playback_events,
+};
 use light_control::{SmpteTimecode, TimecodeRouter};
 use light_core::Universe;
-use light_engine::{Engine, RenderOptions};
+use light_engine::{Engine, EngineError, RenderOptions, RenderResult};
 use light_output::{DmxFrame, NetworkOutput, OutputHealth, Protocol, run_scheduler_dynamic};
 use light_show::ShowEntry;
 use parking_lot::{Mutex, RwLock};
@@ -115,21 +118,13 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
     let options = runtime.control.lock().render_options();
     let rendered = {
         let _activation = runtime.activation_lock.clone().lock_owned().await;
-        let _ordered = runtime.playback_service.operation_lock();
-        let mut rendered = runtime.engine.render(options).map_err(io::Error::other)?;
-        let transitions = std::mem::take(&mut rendered.automatic_playback_transitions);
-        if let Some(show_id) = runtime.active_show.read().as_ref().map(|show| show.id.0) {
-            let changes = playback_service::automatic_projection_changes(
-                &runtime.engine,
-                PlaybackShowScope {
-                    show_id,
-                    show_revision: rendered.revision,
-                },
-                transitions,
-            );
-            publish_automatic_playback_events(runtime.playback_service.events(), changes);
-        }
-        rendered
+        render_with_playback_events(
+            &runtime.engine,
+            &runtime.active_show,
+            &runtime.playback_service,
+            options,
+        )
+        .map_err(io::Error::other)?
     };
     let frames = output_frames(&mut runtime.control.lock(), rendered.universes);
     runtime
@@ -141,6 +136,56 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
             &mut *runtime.sequences.lock().await,
         )
         .await
+}
+
+pub(super) fn render_with_playback_events(
+    engine: &Engine,
+    active_show: &RwLock<Option<ShowEntry>>,
+    service: &PlaybackService,
+    options: RenderOptions,
+) -> Result<RenderResult, EngineError> {
+    service
+        .run_unit_of_work(AutomaticRender {
+            engine,
+            active_show,
+            options,
+        })
+        .output
+}
+
+struct AutomaticRender<'a> {
+    engine: &'a Engine,
+    active_show: &'a RwLock<Option<ShowEntry>>,
+    options: RenderOptions,
+}
+
+impl PlaybackUnitOfWork for AutomaticRender<'_> {
+    type Output = Result<RenderResult, EngineError>;
+
+    fn execute(self) -> PlaybackOperation<Self::Output> {
+        let mut rendered = match self.engine.render(self.options) {
+            Ok(rendered) => rendered,
+            Err(error) => return PlaybackOperation::new(Err(error)),
+        };
+        let transitions = std::mem::take(&mut rendered.automatic_playback_transitions);
+        let events = self
+            .active_show
+            .read()
+            .as_ref()
+            .map(|show| {
+                playback_service::automatic_projection_changes(
+                    self.engine,
+                    PlaybackShowScope {
+                        show_id: show.id.0,
+                        show_revision: rendered.revision,
+                    },
+                    transitions,
+                )
+            })
+            .map(automatic_playback_events)
+            .unwrap_or_default();
+        PlaybackOperation::with_events(Ok(rendered), events)
+    }
 }
 
 fn update_timecode(runtime: &Runtime) {

@@ -87,14 +87,14 @@ pub(super) fn execute_cue_operation(
     {
         return Err(format!("playback {playback} does not exist"));
     }
-    let playback_runtime = state.engine.playback();
-    let mut engine = playback_runtime.write();
-    if load {
-        engine.load_playback(playback, cue_number)?;
-    } else {
-        engine.goto_playback(playback, cue_number)?;
-    }
-    drop(engine);
+    state.engine.execute_playback(EnginePlaybackCommand::Pool {
+        number: playback,
+        action: if load {
+            PoolPlaybackAction::Load(cue_number)
+        } else {
+            PoolPlaybackAction::GoTo(cue_number)
+        },
+    })?;
     emit(
         state,
         "playback_changed",

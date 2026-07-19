@@ -23,7 +23,7 @@ pub(in crate::runtime) fn automatic_changes(
     if transitions.is_empty() {
         return Vec::new();
     }
-    let runtime = engine.playback().read().runtime_status();
+    let runtime = engine.playback_runtime_status();
     transitions
         .into_iter()
         .map(|transition| {
@@ -61,7 +61,7 @@ pub(super) fn projection(
 ) -> Result<PlaybackRuntimeProjection, ActionError> {
     let snapshot = ports.state.engine.snapshot();
     let scope = show_scope(ports, &snapshot);
-    let runtime = ports.state.engine.playback().read().runtime_status();
+    let runtime = ports.state.engine.playback_runtime_status();
     match identity {
         PlaybackRuntimeIdentity::Playback(number) => {
             project_playback(ports, &snapshot, &runtime, scope, identity, number)
@@ -83,7 +83,7 @@ pub(super) fn projections(
 ) -> Result<Vec<PlaybackRuntimeProjection>, ActionError> {
     let snapshot = ports.state.engine.snapshot();
     let scope = show_scope(ports, &snapshot);
-    let runtime = ports.state.engine.playback().read().runtime_status();
+    let runtime = ports.state.engine.playback_runtime_status();
     let mut result = Vec::with_capacity(identities.len());
     for identity in identities {
         project_identity(ports, &snapshot, &runtime, scope, *identity, &mut result)?;

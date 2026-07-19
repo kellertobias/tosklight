@@ -115,9 +115,7 @@ fn matter_feedback_tracks_faderless_temp_and_manual_xfade_positions() {
     assert_eq!(
         state
             .engine
-            .playback()
-            .read()
-            .runtime()
+            .playback_runtime()
             .iter()
             .find(|playback| playback.playback_number == Some(28))
             .unwrap()
@@ -125,7 +123,13 @@ fn matter_feedback_tracks_faderless_temp_and_manual_xfade_positions() {
         1.0
     );
 
-    state.engine.playback().write().off(28).unwrap();
+    state
+        .engine
+        .execute_playback(EnginePlaybackCommand::Pool {
+            number: 28,
+            action: PoolPlaybackAction::Off,
+        })
+        .unwrap();
     let tracked_off = refresh_matter_bridge(&state);
     assert_eq!(tracked_off.lights[1].level, 0);
     assert!(!tracked_off.lights[1].on);

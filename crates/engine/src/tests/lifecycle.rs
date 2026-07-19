@@ -59,15 +59,19 @@ fn prepared_installation_preserves_compatible_playback_runtime() {
         .unwrap();
     engine.install_prepared_snapshot(prepared);
 
-    assert_eq!(engine.playback().read().active().len(), 1);
-    assert!(engine.playback().read().dynamics_paused());
+    assert_eq!(engine.active_playbacks().len(), 1);
+    assert!(engine.playback_dynamics().paused);
 }
 
 fn activate_playback(engine: &Engine, cue_list_id: light_core::CueListId) {
-    let playback_runtime = engine.playback();
-    let mut playback = playback_runtime.write();
-    playback.go_at(cue_list_id, chrono::Utc::now()).unwrap();
-    playback.set_dynamics_paused(true);
+    execute_cue_list(
+        engine,
+        cue_list_id,
+        CueListPlaybackAction::GoAt(chrono::Utc::now()),
+    );
+    engine
+        .execute_playback(EnginePlaybackCommand::SetDynamicsPaused(true))
+        .unwrap();
 }
 
 fn playback_snapshot(
@@ -129,14 +133,18 @@ fn snapshot_with_route(revision: u64, destination_universe: u16) -> EngineSnapsh
 }
 
 #[test]
-fn read_only_projection_shares_the_playback_read_boundary() {
+fn read_only_projection_does_not_block_other_read_only_projections() {
     let engine = Arc::new(Engine::new(ProgrammerRegistry::default()));
-    let playback = engine.playback();
-    let _playback_reader = playback.read();
     let projection_engine = Arc::clone(&engine);
     let (sent, received) = std::sync::mpsc::channel();
 
-    std::thread::spawn(move || sent.send(projection_engine.resolved_values()).unwrap());
+    let first = std::thread::spawn(move || {
+        for _ in 0..1_000 {
+            let _ = projection_engine.playback_runtime_status();
+        }
+    });
+    let second_engine = Arc::clone(&engine);
+    std::thread::spawn(move || sent.send(second_engine.resolved_values()).unwrap());
 
     assert!(
         received
@@ -144,4 +152,5 @@ fn read_only_projection_shares_the_playback_read_boundary() {
             .is_ok(),
         "read-only projection unexpectedly waited for exclusive Playback access"
     );
+    first.join().unwrap();
 }

@@ -22,7 +22,7 @@ fn mapped_cue_action_uses_playback_service_and_publishes_one_midi_event() {
         },
     );
 
-    let active = state.engine.playback().read().active();
+    let active = state.engine.active_playbacks();
     assert_eq!(active.len(), 1);
     assert_eq!(active[0].current_cue_number, Some(1.0));
     let light_application::EventReplay::Events(events) = state.application_events.replay(
