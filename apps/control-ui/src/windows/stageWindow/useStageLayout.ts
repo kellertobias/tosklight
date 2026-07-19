@@ -1,0 +1,67 @@
+import { useEffect, useRef, useState } from "react";
+import type { StagePosition3d } from "../../api/ServerContext";
+import { useServer } from "../../api/ServerContext";
+import type { StageLayoutModel } from "./types";
+
+type Position2d = { x: number; y: number; rotation: number };
+
+export function useStageLayout(): StageLayoutModel {
+	const server = useServer();
+	const [positions, setPositions] = useState<Record<string, Position2d>>({});
+	const [positions3d, setPositions3d] = useState<
+		Record<string, StagePosition3d>
+	>({});
+	const positionsRef = useRef(positions);
+	const positions3dRef = useRef(positions3d);
+	useEffect(() => {
+		positionsRef.current = positions;
+	}, [positions]);
+	useEffect(() => {
+		positions3dRef.current = positions3d;
+	}, [positions3d]);
+	useEffect(() => {
+		const nextPositions = server.stageLayout?.body.positions ?? {};
+		const nextPositions3d = server.stageLayout?.body.positions3d ?? {};
+		positionsRef.current = nextPositions;
+		setPositions(nextPositions);
+		positions3dRef.current = nextPositions3d;
+		setPositions3d(nextPositions3d);
+	}, [server.stageLayout]);
+	const updatePosition2d = (fixtureId: string, position: Position2d) => {
+		setPositions((current) => {
+			const next = { ...current, [fixtureId]: position };
+			positionsRef.current = next;
+			return next;
+		});
+	};
+	const updatePosition3d = (fixtureId: string, position: StagePosition3d) => {
+		setPositions3d((current) => {
+			const next = { ...current, [fixtureId]: position };
+			positions3dRef.current = next;
+			return next;
+		});
+	};
+	const save = () =>
+		server.saveStageLayout({
+			version: 2,
+			positions: positionsRef.current,
+			positions3d: positions3dRef.current,
+		});
+	const savePosition3d = (fixtureId: string, position: StagePosition3d) => {
+		const next = { ...positions3dRef.current, [fixtureId]: position };
+		positions3dRef.current = next;
+		return server.saveStageLayout({
+			version: 2,
+			positions: positionsRef.current,
+			positions3d: next,
+		});
+	};
+	return {
+		positions,
+		positions3d,
+		updatePosition2d,
+		updatePosition3d,
+		save,
+		savePosition3d,
+	};
+}
