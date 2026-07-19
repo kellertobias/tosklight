@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Button } from "../common";
+import { Button } from "../common/controls/foundation";
 
 const inputStack: string[] = [];
 
