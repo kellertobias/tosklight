@@ -2,6 +2,7 @@
 //! Deterministic bridge from fixture attributes and playbacks to immutable DMX universe frames.
 
 mod contribution;
+mod contribution_batch;
 mod controls;
 mod engine;
 mod fixture;
@@ -18,12 +19,16 @@ mod profile_projection;
 mod profile_projection_plan;
 mod profile_value_index;
 mod programmer_fade;
+mod programmer_resolution;
 mod render;
 mod resolution;
 mod runtime_generation;
 mod safety;
 mod visualization;
 
+pub use contribution_batch::{
+    ContributionBatch, ContributionSample, ContributionSequenceMaster, ContributionSourceId,
+};
 pub use engine::Engine;
 pub use lifecycle::PreparedEngineSnapshot;
 pub use model::{
@@ -35,6 +40,7 @@ pub(crate) use contribution::{
     EngineContribution, EngineContributionResolver, ResolvedAttributes, ResolvedContributionIndex,
     value_for_ordered_position,
 };
+pub(crate) use contribution_batch::{replaces_source, sampled_values};
 pub(crate) use fixture::profile_head_owner;
 pub(crate) use legacy_projection::render_fixture;
 pub(crate) use move_in_black_candidate::PreparedCandidate;

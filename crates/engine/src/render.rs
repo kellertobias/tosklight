@@ -3,23 +3,33 @@ use std::collections::HashMap;
 use light_core::Universe;
 
 use super::{
-    Engine, EngineError, GroupMasterIndex, RenderOptions, RenderResult, RuntimeGeneration,
-    encode_profile_split, render_fixture, resolve_profile_fixture,
+    ContributionBatch, Engine, EngineError, GroupMasterIndex, RenderOptions, RenderResult,
+    RuntimeGeneration, encode_profile_split, render_fixture, resolve_profile_fixture,
 };
 
 impl Engine {
     pub fn render(&self, options: RenderOptions) -> Result<RenderResult, EngineError> {
+        self.render_with_contribution_batches(options, &[])
+    }
+
+    /// Render with immutable semantic samples supplied by stateful sources outside the engine.
+    pub fn render_with_contribution_batches(
+        &self,
+        options: RenderOptions,
+        sampled: &[ContributionBatch],
+    ) -> Result<RenderResult, EngineError> {
         let generation = self.generation.load_full();
-        self.render_generation(&generation, options)
+        self.render_generation(&generation, options, sampled)
     }
 
     fn render_generation(
         &self,
         generation: &RuntimeGeneration,
         options: RenderOptions,
+        sampled: &[ContributionBatch],
     ) -> Result<RenderResult, EngineError> {
         let snapshot = generation.snapshot();
-        let resolved = self.resolved_attributes_for_render(generation, self.clock.now());
+        let resolved = self.resolved_attributes_for_render(generation, self.clock.now(), sampled);
         let profile_values = crate::ProfileValueIndex::new(&resolved);
         let group_masters = generation.group_masters();
         let group_master_flashes = self.group_master_flashes.read();
@@ -133,7 +143,7 @@ impl Engine {
     ) -> Result<RenderResult, EngineError> {
         let generation = self.generation.load_full();
         hook();
-        self.render_generation(&generation, options)
+        self.render_generation(&generation, options, &[])
     }
 }
 

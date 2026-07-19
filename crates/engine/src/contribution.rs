@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use light_core::{AttributeKey, AttributeValue, FixtureId, MergeMode, TimedValue};
-use light_playback::{AutomaticPlaybackTransition, PlaybackContribution, SequenceMasterSource};
+use light_playback::{AutomaticPlaybackTransition, PlaybackContribution};
 use std::collections::{HashMap, hash_map::Entry};
 
 pub(crate) fn value_for_ordered_position(
@@ -24,11 +24,7 @@ pub(crate) fn value_for_ordered_position(
     AttributeValue::Normalized(points[left] + (points[right] - points[left]) * progress)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct ApplicableSequenceMaster {
-    pub(crate) source: SequenceMasterSource,
-    pub(crate) scale: f32,
-}
+pub(crate) type ApplicableSequenceMaster = crate::ContributionSequenceMaster;
 
 pub(crate) struct EngineContribution {
     value: TimedValue,
@@ -40,23 +36,42 @@ pub(crate) struct EngineContribution {
 /// The index owns neither addresses nor values, so resolving the playback underlay and optional
 /// Move-in-Black base does not clone every contribution before final arbitration.
 pub(crate) struct ResolvedContributionIndex<'a> {
-    winners: HashMap<(FixtureId, &'a AttributeKey), &'a EngineContribution>,
+    winners: HashMap<(FixtureId, &'a AttributeKey), IndexedContribution<'a>>,
+}
+
+#[derive(Clone, Copy)]
+enum IndexedContribution<'a> {
+    Engine(&'a EngineContribution),
+    Sample(&'a crate::ContributionSample),
+}
+
+impl<'a> IndexedContribution<'a> {
+    fn value(self) -> &'a TimedValue {
+        match self {
+            Self::Engine(contribution) => &contribution.value,
+            Self::Sample(sample) => sample.value(),
+        }
+    }
 }
 
 impl<'a> ResolvedContributionIndex<'a> {
     pub(crate) fn new(values: &'a [EngineContribution]) -> Self {
-        let mut winners: HashMap<(FixtureId, &'a AttributeKey), &'a EngineContribution> =
-            HashMap::with_capacity(values.len());
+        let mut index = Self {
+            winners: HashMap::with_capacity(values.len()),
+        };
         for candidate in values {
-            let key = (candidate.value.fixture_id, &candidate.value.attribute);
-            let replace = winners
-                .get(&key)
-                .is_none_or(|current| contribution_wins(&candidate.value, &current.value));
-            if replace {
-                winners.insert(key, candidate);
-            }
+            index.add(IndexedContribution::Engine(candidate));
         }
-        Self { winners }
+        index
+    }
+
+    pub(crate) fn extend_sampled(
+        &mut self,
+        samples: impl IntoIterator<Item = &'a crate::ContributionSample>,
+    ) {
+        for sample in samples {
+            self.add(IndexedContribution::Sample(sample));
+        }
     }
 
     pub(crate) fn value(
@@ -66,7 +81,19 @@ impl<'a> ResolvedContributionIndex<'a> {
     ) -> Option<&AttributeValue> {
         self.winners
             .get(&(fixture_id, attribute))
-            .map(|winner| &winner.value.value)
+            .map(|winner| &winner.value().value)
+    }
+
+    fn add(&mut self, candidate: IndexedContribution<'a>) {
+        let value = candidate.value();
+        let key = (value.fixture_id, &value.attribute);
+        let replace = self
+            .winners
+            .get(&key)
+            .is_none_or(|current| contribution_wins(value, current.value()));
+        if replace {
+            self.winners.insert(key, candidate);
+        }
     }
 }
 
@@ -79,14 +106,14 @@ impl EngineContribution {
     }
 }
 
-impl From<PlaybackContribution> for EngineContribution {
-    fn from(contribution: PlaybackContribution) -> Self {
+impl EngineContribution {
+    pub(crate) fn from_playback(contribution: PlaybackContribution) -> Self {
         Self {
             value: contribution.value,
-            sequence_master: Some(ApplicableSequenceMaster {
-                source: contribution.source,
-                scale: contribution.sequence_master,
-            }),
+            sequence_master: Some(ApplicableSequenceMaster::new(
+                contribution.source,
+                contribution.sequence_master,
+            )),
         }
     }
 }
@@ -120,6 +147,24 @@ impl EngineContributionResolver {
         self.add(EngineContribution::unscaled(value));
     }
 
+    pub(crate) fn extend_borrowed_samples<'a>(
+        &mut self,
+        samples: impl IntoIterator<Item = &'a crate::ContributionSample>,
+    ) {
+        for sample in samples {
+            let value = sample.value();
+            self.add_borrowed(
+                value.fixture_id,
+                &value.attribute,
+                &value.value,
+                value.priority,
+                value.changed_at,
+                value.merge_mode,
+                sample.sequence_master(),
+            );
+        }
+    }
+
     pub(crate) fn add_borrowed_unscaled(
         &mut self,
         fixture_id: FixtureId,
@@ -128,6 +173,22 @@ impl EngineContributionResolver {
         priority: i16,
         changed_at: DateTime<Utc>,
         merge_mode: MergeMode,
+    ) {
+        self.add_borrowed(
+            fixture_id, attribute, value, priority, changed_at, merge_mode, None,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn add_borrowed(
+        &mut self,
+        fixture_id: FixtureId,
+        attribute: &AttributeKey,
+        value: &AttributeValue,
+        priority: i16,
+        changed_at: DateTime<Utc>,
+        merge_mode: MergeMode,
+        sequence_master: Option<ApplicableSequenceMaster>,
     ) {
         let winners = self.winners.entry(fixture_id).or_default();
         let replace = winners.get(attribute).is_none_or(|current| {
@@ -141,7 +202,7 @@ impl EngineContributionResolver {
                     priority,
                     changed_at,
                     merge_mode,
-                    sequence_master: None,
+                    sequence_master,
                 },
             );
         }

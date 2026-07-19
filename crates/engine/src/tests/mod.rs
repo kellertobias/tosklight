@@ -342,3 +342,5 @@ mod highlight_masters;
 mod highlight_looks;
 
 mod lifecycle;
+
+mod contribution_batches;

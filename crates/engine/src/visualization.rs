@@ -1,4 +1,4 @@
-use crate::{Engine, EngineError, RenderOptions, resolve_profile_fixture};
+use crate::{ContributionBatch, Engine, EngineError, RenderOptions, resolve_profile_fixture};
 use light_core::{AttributeKey, AttributeValue, FixtureId};
 use std::collections::HashMap;
 
@@ -6,8 +6,16 @@ impl Engine {
     /// Returns the same merged abstract attributes that feed DMX rendering. Consumers such as
     /// visualizers can use this without attempting to reverse fixture-specific DMX encoding.
     pub fn resolved_values(&self) -> HashMap<(FixtureId, AttributeKey), AttributeValue> {
+        self.resolved_values_with_contribution_batches(&[])
+    }
+
+    /// Resolve externally sampled values through ordinary semantic arbitration without rendering.
+    pub fn resolved_values_with_contribution_batches(
+        &self,
+        sampled: &[ContributionBatch],
+    ) -> HashMap<(FixtureId, AttributeKey), AttributeValue> {
         let generation = self.generation.load_full();
-        self.resolved_attributes_at(&generation, self.clock.now())
+        self.resolved_attributes_at(&generation, self.clock.now(), sampled)
             .values
     }
 
@@ -22,7 +30,7 @@ impl Engine {
     ) -> Result<HashMap<(FixtureId, AttributeKey), AttributeValue>, EngineError> {
         let generation = self.generation.load_full();
         let snapshot = generation.snapshot();
-        let mut resolved = self.resolved_attributes_at(&generation, self.clock.now());
+        let mut resolved = self.resolved_attributes_at(&generation, self.clock.now(), &[]);
         for (key, value) in values {
             if resolved.values.get(key) != Some(value) {
                 // Visualization-only overrides (notably Preload) do not inherit the sequence

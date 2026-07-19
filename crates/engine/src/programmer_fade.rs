@@ -1,6 +1,6 @@
 use crate::Engine;
 use light_core::{AttributeKey, AttributeValue, FixtureId, ProgrammerId, TimedValue};
-use std::sync::atomic::Ordering;
+use std::sync::{Arc, atomic::Ordering};
 
 #[derive(Clone)]
 pub(crate) struct ProgrammerTransition {
@@ -21,6 +21,7 @@ pub(crate) struct ProgrammerTransitionKey {
 pub(crate) enum ProgrammerTransitionSource {
     Programmer,
     Preload,
+    Transient(Arc<str>),
     Group(String),
     PreloadGroup(String),
 }
