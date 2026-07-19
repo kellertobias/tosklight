@@ -4,7 +4,7 @@ This is the living handoff for [`major-refactoring.md`](major-refactoring.md). U
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-18 at commit `4cb86cb`.
+Last updated: 2026-07-18 at commit `e6110da`.
 
 ## Guardrails
 
@@ -27,7 +27,8 @@ Last updated: 2026-07-18 at commit `4cb86cb`.
 - [x] Added `light-application` and `light-wire`, checked-in schemas, generated TypeScript DTOs,
   typed action context, command outcomes, errors, and the bounded event bus.
 - [x] Added command-line HTTP v2 and the first intent-level test helpers for Programmer steps,
-  software/command-line/OSC surfaces, and Group storage.
+  software/command-line/OSC surfaces, and Group storage. The shared operator helper now parses one
+  readable command sequence and preserves exact press/release feedback for real OSC input.
 - [x] Centralized active-show decoding, migration, validation, backup, CAS persistence, runtime
   preparation/install, adapter reconciliation, audit, and event publication.
 - [x] Migrated Groups, Presets, Cuelists, Playbacks, Preload, Update, undo, output routes, Patch,
@@ -47,6 +48,10 @@ Last updated: 2026-07-18 at commit `4cb86cb`.
   global `ServerContext` consumers do not rerender.
 - [x] Migrated manual, automatic, scheduled, OSC, preload, current-page, and explicit-page
   Playback behavior into the typed application service and v2 runtime contract.
+- [x] Closed the mutable Playback runtime boundary: Engine callers use typed commands and immutable
+  projections, Preload installs generation-bound prepared batches, and application-owned units of
+  work serialize page changes, automatic render transitions, and semantic event publication
+  without returning either the Engine or Playback-service lock to adapters.
 - [x] Converged global Grand Master and blackout changes through the typed Output runtime service,
   with one batched persistence/event publication per control action and an authoritative v2
   snapshot while retaining legacy HTTP and WebSocket response compatibility.
@@ -62,13 +67,15 @@ Last updated: 2026-07-18 at commit `4cb86cb`.
   the Stage 3D scene/model/rendering pipeline, the frontend API client, fixture-profile modeling,
   PDF manual generation, global styles, and File Manager styles. Every in-scope production file is
   now at or below the 400-line design goal.
+- [x] Modularized Hardware Controls into a dependency-injected OSC bridge and controller,
+  idempotent feedback reducer, and focused Playback, Programmer, grid, and settings surfaces while
+  preserving exact canonical and legacy OSC feedback behavior.
 
 ## In progress
 
-- [ ] Remove public mutable Playback lock exposure and external operation-lock acquisition in favor
-  of typed commands and immutable projections while preserving ordered multi-step transactions.
-- [ ] Modularize Hardware Controls into transport, feedback state, controller lifecycle, and focused
-  Playback, Programmer, grid, and settings surfaces.
+- [ ] Finish the typed selective-import v2 adapter and operator-facing Partial Show Load workflow.
+- [ ] Finish the view-scoped Playback runtime store, optimistic reconciliation, and removal of the
+  250 ms global Playback poll.
 - [ ] Continue vertical feature-store/event slices and move the remaining production callers away
   from broad `useServer()`, polling, and generic show-object mutation.
 
@@ -77,24 +84,19 @@ Last updated: 2026-07-18 at commit `4cb86cb`.
 1. Complete vertical frontend slices for Playback, Programmer, Highlight, Output health, remaining
    Show capabilities, Patch, Screens, Files, and Configuration. Replace polling and broad bootstrap
    refreshes with narrow snapshots plus relevant event subscriptions.
-2. Remove the remaining direct `Engine::playback()` mutable-lock exposure and the transitional
-   `PlaybackService::operation_lock()` adapter path. Domain services should expose commands and
-   immutable projections only.
-3. Publish the remaining externally observable transitions once through typed events: Programmer
+2. Publish the remaining externally observable transitions once through typed events: Programmer
    ownership/value changes, Highlight movement, transition completion, output health/overload,
    and any remaining automatic runtime changes.
-4. Add a typed server adapter and operator workflow for selective import. Migrate remaining layout
+3. Complete the typed server adapter and operator workflow for selective import. Migrate remaining layout
    and miscellaneous portable-show mutations, then remove generic frontend show-object mutation.
-5. Replace production `useServer()` callers with feature-local stores/hooks. Remove broad global
+4. Replace production `useServer()` callers with feature-local stores/hooks. Remove broad global
    React update ownership, DOM/custom-event SET/Store/Update routing, and polling-based refreshes.
-6. Modularize Hardware Controls into its OSC bridge, feedback reducer, controller hook, and
-   Playback, Programmer, grid, and settings surfaces.
-7. Expand the public test DSL and migrate remaining legacy command helpers. Tests must express the
+5. Expand the public test DSL and migrate remaining legacy command helpers. Tests must express the
    intended operator workflow and keep software, command-line, and OSC surfaces explicit rather
    than hiding meaningful parity behind one generic implementation shortcut.
-8. Remove REST/WebSocket v1 and `useServer()` compatibility only after every production caller and
+6. Remove REST/WebSocket v1 and `useServer()` compatibility only after every production caller and
    acceptance test has moved to a typed replacement.
-9. Add the final architecture overview, state-ownership matrix, code tour, extension recipes, test
+7. Add the final architecture overview, state-ownership matrix, code tour, extension recipes, test
    map, selective-import guide, and repaired feature-plan links under `docs/engineering`.
 
 ## Performance and acceptance still required
