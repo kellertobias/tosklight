@@ -4,10 +4,10 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { useServer } from "../../api/ServerContext";
 import { useApp } from "../../state/AppContext";
 import type { StageMode } from "../../types";
 import type { StageLayoutModel } from "./types";
+import type { StageSelectionModel } from "./useStageSelection";
 
 type Point = { x: number; y: number };
 type Marquee = { left: number; top: number; width: number; height: number };
@@ -16,8 +16,8 @@ export function useStageFixtureGestures(
 	mode: StageMode,
 	orderedFixtureIds: string[],
 	layout: StageLayoutModel,
+	selection: StageSelectionModel,
 ) {
-	const server = useServer();
 	const selectionAnchor = useRef<string | null>(null);
 	const [draggingFixture, setDraggingFixture] = useState<string | null>(null);
 	const select = (
@@ -35,16 +35,15 @@ export function useStageFixtureGestures(
 					Math.max(from, to) + 1,
 				);
 				for (const member of members)
-					void server.selectionGesture({
-						type: "fixture",
-						fixture_id: member,
-					});
+					void selection.applyFixtureGesture(member);
 			}
 		} else {
 			const toggled = event.ctrlKey || event.metaKey;
-			void server.selectionGesture(
-				{ type: "fixture", fixture_id: fixtureId },
-				toggled && server.selectedFixtures.includes(fixtureId),
+			void selection.applyFixtureGesture(
+				fixtureId,
+				toggled && selection.fixtureIdSet.has(fixtureId)
+					? "remove"
+					: "add",
 			);
 		}
 		selectionAnchor.current = fixtureId;
@@ -106,8 +105,10 @@ function marqueeHits(
 		.filter(Boolean);
 }
 
-export function useStageCanvasGestures(mode: StageMode) {
-	const server = useServer();
+export function useStageCanvasGestures(
+	mode: StageMode,
+	selection: StageSelectionModel,
+) {
 	const { state, dispatch } = useApp();
 	const navigationStart = useRef<
 		(Point & { panX: number; panY: number }) | null
@@ -180,11 +181,13 @@ export function useStageCanvasGestures(mode: StageMode) {
 				top,
 				bottom,
 			))
-				void server.selectionGesture(
-					{ type: "fixture", fixture_id: fixtureId },
-					start.additive && server.selectedFixtures.includes(fixtureId),
+				void selection.applyFixtureGesture(
+					fixtureId,
+					start.additive && selection.fixtureIdSet.has(fixtureId)
+						? "remove"
+						: "add",
 				);
-		} else if (!start.additive) void server.setSelection([]);
+		} else if (!start.additive) void selection.clear();
 		setMarquee(null);
 	};
 	const cancel = () => {

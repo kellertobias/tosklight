@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useServer } from "../api/ServerContext";
 import { GroupStrip } from "../components/shared/GroupStrip";
 import { Stage2dView } from "./stageWindow/Stage2dView";
 import { Stage3dView } from "./stageWindow/Stage3dView";
@@ -7,19 +6,21 @@ import { StageHeader } from "./stageWindow/StageHeader";
 import type { StageWindowProps } from "./stageWindow/types";
 import { useStageLayout } from "./stageWindow/useStageLayout";
 import { useStageOptions } from "./stageWindow/useStageOptions";
+import { useStageSelection } from "./stageWindow/useStageSelection";
 import { useStageVisualization } from "./stageWindow/useStageVisualization";
 
 export function StageWindow(props: StageWindowProps) {
 	const active = props.active ?? true;
-	const server = useServer();
 	const options = useStageOptions(props);
 	const layout = useStageLayout();
+	const selection = useStageSelection(active);
 	const patchSelectionPreview = props.patchSelectionPreview ?? false;
 	const stage = useStageVisualization(
 		active,
 		options.followPreload,
 		patchSelectionPreview,
 		layout,
+		selection.fixtureIdSet,
 		props.patchedFixtures,
 	);
 	const [setupFixtureId, setSetupFixtureId] = useState<string | null>(null);
@@ -28,7 +29,7 @@ export function StageWindow(props: StageWindowProps) {
 			{!props.compact && (
 				<StageHeader
 					options={options}
-					selectedCount={server.selectedFixtures.length}
+					selectedCount={selection.fixtureIds.length}
 				/>
 			)}
 			{options.view === "3d" ? (
@@ -42,6 +43,7 @@ export function StageWindow(props: StageWindowProps) {
 					camera3d={props.camera3d}
 					setupFixtureId={setupFixtureId}
 					setSetupFixtureId={setSetupFixtureId}
+					selection={selection}
 				/>
 			) : (
 				<Stage2dView
@@ -49,6 +51,7 @@ export function StageWindow(props: StageWindowProps) {
 					fixtures={stage.fixtures}
 					layout={layout}
 					options={options}
+					selection={selection}
 				/>
 			)}
 			{options.groupsVisible && <GroupStrip active={active} />}

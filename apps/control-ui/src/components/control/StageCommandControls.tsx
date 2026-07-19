@@ -7,6 +7,7 @@ import type { StagePosition3d } from "../../api/ServerContext";
 import { migrateStagePosition } from "../../windows/stage3dScene";
 import { Button } from "../common";
 import { HardwareEncoderDisplay } from "./HardwareEncoderDisplay";
+import { useStageSelection } from "../../windows/stageWindow/useStageSelection";
 
 const fields: Array<{ key: keyof StagePosition3d; label: string; scale: number; offset: number }> = [
   { key: "x", label: "X Position", scale: 20, offset: 10 }, { key: "y", label: "Y Position", scale: 20, offset: 0 }, { key: "z", label: "Z Position", scale: 20, offset: 10 },
@@ -16,8 +17,9 @@ const fields: Array<{ key: keyof StagePosition3d; label: string; scale: number; 
 export function StageCommandControls() {
   const { state, dispatch } = useApp();
   const server = useServer();
+  const selection = useStageSelection();
   const hardwareConnected = Boolean(server.bootstrap?.hardware_connected || state.midiProfile);
-  const selected = server.selectedFixtures;
+  const selected = selection.fixtureIds;
   const positions = Object.fromEntries((server.patch?.fixtures ?? []).map((fixture, index) => [fixture.fixture_id, server.stageLayout?.body.positions3d?.[fixture.fixture_id] ?? migrateStagePosition(server.stageLayout?.body.positions?.[fixture.fixture_id], index)]));
   const first = positions[selected[0]];
   const update = (key: keyof StagePosition3d, nextValue: number) => {

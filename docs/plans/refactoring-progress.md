@@ -4,7 +4,7 @@ This is the living handoff for [`major-refactoring.md`](major-refactoring.md). U
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-19 after engine-driven selection and targeted Group-master updates.
+Last updated: 2026-07-19 after the view-scoped Stage selection migration.
 
 ## Guardrails
 
@@ -114,6 +114,11 @@ Last updated: 2026-07-19 after engine-driven selection and targeted Group-master
   save cannot replay as a false success. The temporary Cue-choice modal remains tied to the
   explicit execute response so it cannot appear before ENT, and scoped Cancel performs one v2
   reset while dismissing that compatibility response locally.
+- [x] Migrated the complete Stage selection path, Stage command controls, and Stage/Fixture pane
+  counts onto the ordered Programming selection projection. Covered panes do not hydrate or
+  subscribe, peer and OSC changes update the mounted view without a legacy reload, Stage gestures
+  retain FIFO optimistic accumulation and rollback, and patch Highlight previews resolve selected
+  logical heads to their parent fixture without changing Stage visualization polling.
 - [x] Exposed Selective Show Import through authenticated v2 catalog, preview, and atomic apply
   adapters with checked-in schemas, generated TypeScript, exact source/target revisions, strict
   response validation, and focused server contracts. **Show → Load → Partial Show Load** now uses a
@@ -150,7 +155,8 @@ Last updated: 2026-07-19 after engine-driven selection and targeted Group-master
   persisted Cuelist/topology mutation, and every active compatibility pane still polling.
 - [ ] Move the remaining selection consumers onto the scoped Programming store, then remove their
   legacy bootstrap fields and broad Programmer refresh paths. Group Pool, Group Strip, and the
-  command bar have moved; Stage, channel, Patch, and miscellaneous readers still use the facade.
+  command bar, Stage, and Stage/Fixture pane chrome have moved; Channels, Fixture Sheet, Patch,
+  parameter controls, Presets, and miscellaneous modal/setup readers still use the facade.
 - [ ] Replace inferred Cue ambiguity in the command-line text projection with explicit desk-local
   pending-choice state that is set only by `ChoiceRequired` after ENT and cleared by edit, reset,
   selection, or Cancel. Until then, cross-session choice visibility remains a documented
@@ -214,7 +220,9 @@ Last updated: 2026-07-19 after engine-driven selection and targeted Group-master
   tests and 2 server integration tests covering unowned and nested actor-owned multi-desk Group
   changes. The current full server library run passes 215 tests with only the sandbox-blocked CITP
   socket test failing and one standard-port Matter test ignored. All 54 engine unit tests plus its
-  integration test pass; focused Group-master WebSocket and Matter activation tests pass.
+  integration test pass; focused Group-master WebSocket and Matter activation tests pass. The
+  Stage migration adds 6 focused frontend tests for ordered streamed updates, optimistic
+  gestures/clear/rollback, and active-only Stage/Fixture pane observation; its focused tests pass.
 - The current complete frontend suite passes all 811 tests, and the production frontend build
   passes. A final repository-wide suite and real desktop run has not yet been completed.
 

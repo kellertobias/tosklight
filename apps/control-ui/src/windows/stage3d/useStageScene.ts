@@ -41,7 +41,7 @@ function retainFixtureModels(
 	fixtures: Stage3dFixture[],
 	previousObjects: Map<string, THREE.Object3D>,
 	nextObjects: Map<string, THREE.Object3D>,
-	selected: string[],
+	selected: readonly string[],
 	showSelection: boolean,
 ) {
 	const retained = new Set<string>();
@@ -94,7 +94,7 @@ function loadFixtureModels(
 	fixtures: Stage3dFixture[],
 	fixtureObjects: Map<string, THREE.Object3D>,
 	retained: Set<string>,
-	selected: string[],
+	selected: readonly string[],
 	showSelection: boolean,
 ) {
 	let cancelled = false;
@@ -141,8 +141,8 @@ export function useStageScene({
 }: {
 	fixtures: Stage3dFixture[];
 	visualization: VisualizationSnapshot | null;
-	selected: string[];
-	virtualHighlight: string[];
+	selected: readonly string[];
+	virtualHighlight: readonly string[];
 	setup: boolean;
 	showSelection: boolean;
 	showFloorGrid: boolean;

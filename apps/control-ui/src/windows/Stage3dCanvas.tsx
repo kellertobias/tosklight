@@ -18,8 +18,8 @@ export const DEFAULT_STAGE_CAMERA_3D = {
 interface Props {
 	fixtures: Stage3dFixture[];
 	visualization: VisualizationSnapshot | null;
-	selected: string[];
-	virtualHighlight?: string[];
+	selected: readonly string[];
+	virtualHighlight?: readonly string[];
 	setup: boolean;
 	showSelection: boolean;
 	showFloorGrid: boolean;

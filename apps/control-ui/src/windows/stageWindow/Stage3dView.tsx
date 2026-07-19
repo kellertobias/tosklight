@@ -1,6 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { StagePosition3d } from "../../api/ServerContext";
-import { useServer } from "../../api/ServerContext";
 import type { VisualizationSnapshot } from "../../api/types";
 import { NumberField } from "../../components/common";
 import { Stage3dCanvas } from "../Stage3dCanvas";
@@ -10,6 +9,7 @@ import type {
 	StageOptionsModel,
 	StageWindowProps,
 } from "./types";
+import type { StageSelectionModel } from "./useStageSelection";
 
 function Stage3dInspector({
 	fixture,
@@ -55,6 +55,7 @@ export function Stage3dView({
 	camera3d,
 	setupFixtureId,
 	setSetupFixtureId,
+	selection,
 }: {
 	fixtures: Stage3dFixture[];
 	visualization: VisualizationSnapshot | null;
@@ -65,9 +66,9 @@ export function Stage3dView({
 	camera3d: StageWindowProps["camera3d"];
 	setupFixtureId: string | null;
 	setSetupFixtureId: Dispatch<SetStateAction<string | null>>;
+	selection: StageSelectionModel;
 }) {
-	const server = useServer();
-	const inspectorFixtureId = setupFixtureId ?? server.selectedFixtures[0];
+	const inspectorFixtureId = setupFixtureId ?? selection.firstFixtureId;
 	const inspectorFixture = fixtures.find(
 		(item) => item.fixture.fixture_id === inspectorFixtureId,
 	);
@@ -79,7 +80,7 @@ export function Stage3dView({
 				selected={
 					options.mode === "setup" && setupFixtureId
 						? [setupFixtureId]
-						: server.selectedFixtures
+						: selection.fixtureIds
 				}
 				virtualHighlight={patchSelectionPreview ? patchPreviewFixtures : []}
 				setup={options.mode === "setup"}
@@ -93,9 +94,11 @@ export function Stage3dView({
 						setSetupFixtureId(fixtureId);
 						return;
 					}
-					void server.selectionGesture(
-						{ type: "fixture", fixture_id: fixtureId },
-						additive && server.selectedFixtures.includes(fixtureId),
+					void selection.applyFixtureGesture(
+						fixtureId,
+						additive && selection.fixtureIdSet.has(fixtureId)
+							? "remove"
+							: "add",
 					);
 				}}
 				onMove={layout.updatePosition3d}

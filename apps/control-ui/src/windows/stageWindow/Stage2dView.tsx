@@ -1,5 +1,4 @@
 import type { CSSProperties } from "react";
-import { useServer } from "../../api/ServerContext";
 import { Button } from "../../components/common";
 import { useApp } from "../../state/AppContext";
 import type {
@@ -7,6 +6,7 @@ import type {
 	StageLayoutModel,
 	StageOptionsModel,
 } from "./types";
+import type { StageSelectionModel } from "./useStageSelection";
 import {
 	useStageCanvasGestures,
 	useStageFixtureGestures,
@@ -76,13 +76,14 @@ export function Stage2dView({
 	fixtures,
 	layout,
 	options,
+	selection,
 }: {
 	compact?: boolean;
 	fixtures: StageFixturePresentation[];
 	layout: StageLayoutModel;
 	options: StageOptionsModel;
+	selection: StageSelectionModel;
 }) {
-	const server = useServer();
 	const { state } = useApp();
 	const orderedFixtureIds = fixtures
 		.map((fixture) => fixture.fixtureId)
@@ -91,8 +92,9 @@ export function Stage2dView({
 		options.mode,
 		orderedFixtureIds,
 		layout,
+		selection,
 	);
-	const canvas = useStageCanvasGestures(options.mode);
+	const canvas = useStageCanvasGestures(options.mode, selection);
 	const columns = compact ? 6 : 8;
 	return (
 		<div
@@ -127,7 +129,7 @@ export function Stage2dView({
 						}
 						selected={
 							state.stageShowSelection &&
-							server.selectedFixtures.includes(fixture.fixtureId)
+							selection.fixtureIdSet.has(fixture.fixtureId)
 						}
 						interactions={fixtureInteractions}
 					/>

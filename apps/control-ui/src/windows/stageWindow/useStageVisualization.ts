@@ -128,28 +128,35 @@ function useFixtures3d(
 	);
 }
 
+export function patchPreviewFixtureIds(
+	stageFixtures: readonly Pick<PatchedFixture, "fixture_id" | "logical_heads">[],
+	selectedFixtureIds: ReadonlySet<string>,
+) {
+	return stageFixtures
+		.filter(
+			(fixture) =>
+				selectedFixtureIds.has(fixture.fixture_id) ||
+				fixture.logical_heads.some((head) =>
+					selectedFixtureIds.has(head.fixture_id),
+				),
+		)
+		.map((fixture) => fixture.fixture_id);
+}
+
 export function useStageVisualization(
 	active: boolean,
 	followPreload: boolean,
 	patchSelectionPreview: boolean,
 	layout: StageLayoutModel,
+	selectedFixtureIds: ReadonlySet<string>,
 	patchedFixtures?: readonly PatchedFixture[],
 ) {
 	const server = useServer();
 	const visualization = useVisualizationSnapshot(followPreload, active);
 	const stageFixtures = usePatchedFixtures(patchedFixtures);
 	const patchPreviewFixtures = useMemo(
-		() =>
-			stageFixtures
-				.filter(
-					(fixture) =>
-						server.selectedFixtures.includes(fixture.fixture_id) ||
-						fixture.logical_heads.some((head) =>
-							server.selectedFixtures.includes(head.fixture_id),
-						),
-				)
-				.map((fixture) => fixture.fixture_id),
-		[server.selectedFixtures, stageFixtures],
+		() => patchPreviewFixtureIds(stageFixtures, selectedFixtureIds),
+		[selectedFixtureIds, stageFixtures],
 	);
 	const fixtures = server.bootstrap
 		? stageFixtures.map((fixture, index) =>
