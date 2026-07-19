@@ -17,11 +17,14 @@ import {
 } from "./fixtureSheetProjection";
 import { createFixtureStepPresenter } from "./fixtureSheetStep";
 import type { WindowProps } from "./windowTypes";
+import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
 
 export function FixtureSheetWindow({
+	active = true,
 	compact,
 	showGroupShortcuts,
 }: WindowProps) {
+	useShowObjectView("group", active);
 	const server = useServer();
 	const { state } = useApp();
 	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
@@ -99,7 +102,7 @@ export function FixtureSheetWindow({
 				rows={rows}
 				selectedFixtureIds={selectedFixtureIds}
 			/>
-			{groupsVisible && <GroupStrip />}
+			{groupsVisible && <GroupStrip active={active} />}
 			{settingsAnchor && (
 				<FixtureSheetSettings
 					activeOnly={activeOnly}

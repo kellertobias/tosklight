@@ -2,9 +2,25 @@ import type { StoredPreset } from "../../api/types";
 import {
 	normalizePresetFamily,
 	presetFamilyAcceptsAttribute,
+	presetStorageKey,
 } from "../../presetFamilies";
 import type { ServerController } from "./model";
 import type { ServerContextValue } from "./ServerContextValue";
+import { runOptimisticShowObjectMutation } from "./showObjectMutations";
+
+function mergePresetValues(
+	existing: Record<string, Record<string, unknown>>,
+	incoming: Record<string, Record<string, unknown>>,
+	mode: "merge" | "overwrite" | "add_missing_fixtures",
+) {
+	if (mode === "overwrite") return incoming;
+	const values = structuredClone(existing);
+	for (const [owner, attributes] of Object.entries(incoming)) {
+		if (mode === "add_missing_fixtures" && values[owner]) continue;
+		values[owner] = { ...(values[owner] ?? {}), ...attributes };
+	}
+	return values;
+}
 
 export function createPresetActions(
 	model: ServerController,
@@ -15,7 +31,6 @@ export function createPresetActions(
 		bootstrap,
 		session,
 		presets,
-		setPresets,
 		setSelectedFixtures,
 	} = model;
 	return {
@@ -35,6 +50,7 @@ export function createPresetActions(
 			try {
 				if (!bootstrap?.active_show || !session)
 					throw new Error("Open a show before storing presets");
+				const showId = bootstrap.active_show.id;
 				const programmers = await client.programmers();
 				const programmer = programmers.find(
 					(item) => item.session_id === session.session_id,
@@ -84,20 +100,33 @@ export function createPresetActions(
 						normalizePresetFamily(item.body.family) === address.family &&
 						item.body.number === address.number,
 				);
-				await client.storePreset(
-					bootstrap.active_show.id,
-					address,
-					{ name, number: address.number, values, group_values, family },
-					mode,
-					existing?.revision ?? 0,
-				);
-				setPresets(
-					await client.objects<StoredPreset>(
-						bootstrap.active_show.id,
-						"preset",
+				const body: StoredPreset = {
+					...existing?.body,
+					name: name || existing?.body.name || "",
+					number: address.number,
+					values: mergePresetValues(existing?.body.values ?? {}, values, mode),
+					group_values: mergePresetValues(
+						existing?.body.group_values ?? {},
+						group_values,
+						mode,
 					),
+					family,
+				};
+				await runOptimisticShowObjectMutation(
+					model,
+					showId,
+					"preset",
+					existing?.id ?? presetStorageKey(address),
+					body,
+					() =>
+						client.storePreset(
+							showId,
+							address,
+							{ name, number: address.number, values, group_values, family },
+							mode,
+							existing?.revision ?? 0,
+						),
 				);
-				setError(null);
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
 			}

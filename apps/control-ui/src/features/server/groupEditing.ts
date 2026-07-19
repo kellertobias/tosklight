@@ -1,6 +1,11 @@
 import type { StoredGroup } from "../../api/types";
 import type { ServerController } from "./model";
 import type { ServerContextValue } from "./ServerContextValue";
+import {
+	reconcileShowObject,
+	runOptimisticShowObjectMutation,
+} from "./showObjectMutations";
+import { updateRuntimeGroupMaster } from "./groupRuntimeProjection";
 
 export function createGroupEditingActions(
 	model: ServerController,
@@ -8,13 +13,14 @@ export function createGroupEditingActions(
 	ServerContextValue,
 	"updateGroup" | "setGroupMaster" | "setGroupMasterFlash" | "undoGroup"
 > {
-	const { client, setError, bootstrap, groups, setGroups } = model;
+	const { client, setError, bootstrap, portableGroups, setPlaybacks } = model;
 	return {
 		updateGroup: async (id, update) => {
 			try {
 				if (!bootstrap?.active_show)
 					throw new Error("Open a show before editing a group");
-				const existing = groups.find((item) => item.id === id);
+				const showId = bootstrap.active_show.id;
+				const existing = portableGroups.find((item) => item.id === id);
 				if (!existing) throw new Error(`Group ${id} does not exist`);
 				const name = update.name?.trim();
 				if (!name) throw new Error("Group name is required");
@@ -24,18 +30,21 @@ export function createGroupEditingActions(
 					color: update.color || undefined,
 					icon: update.icon || undefined,
 				};
-				await client.putObject(
-					bootstrap.active_show.id,
+				return runOptimisticShowObjectMutation(
+					model,
+					showId,
 					"group",
 					id,
 					body,
-					existing.revision,
+					() =>
+						client.putObject(
+							showId,
+							"group",
+							id,
+							body,
+							existing.revision,
+						),
 				);
-				setGroups(
-					await client.objects<StoredGroup>(bootstrap.active_show.id, "group"),
-				);
-				setError(null);
-				return true;
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
 				return false;
@@ -44,12 +53,8 @@ export function createGroupEditingActions(
 		setGroupMaster: async (id, master) => {
 			try {
 				await client.setGroupMaster(id, master);
-				setGroups((current) =>
-					current.map((group) =>
-						group.id === id
-							? { ...group, body: { ...group.body, master } }
-							: group,
-					),
+				setPlaybacks((current) =>
+					updateRuntimeGroupMaster(current, id, master),
 				);
 				setError(null);
 			} catch (reason) {
@@ -68,18 +73,21 @@ export function createGroupEditingActions(
 			try {
 				if (!bootstrap?.active_show)
 					throw new Error("Open a show before undoing a group change");
-				const existing = groups.find((item) => item.id === id);
+				const existing = portableGroups.find((item) => item.id === id);
 				if (!existing) throw new Error("Group does not exist");
-				await client.undoObject(
+				const response = await client.undoObject(
 					bootstrap.active_show.id,
 					"group",
 					id,
 					existing.revision,
 				);
-				setGroups(
-					await client.objects<StoredGroup>(bootstrap.active_show.id, "group"),
+				await reconcileShowObject(
+					model,
+					bootstrap.active_show.id,
+					"group",
+					id,
+					response.event_sequence,
 				);
-				setError(null);
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
 			}

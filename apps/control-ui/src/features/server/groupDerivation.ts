@@ -1,6 +1,7 @@
 import type { StoredGroup } from "../../api/types";
 import type { ServerController } from "./model";
 import type { ServerContextValue } from "./ServerContextValue";
+import { runOptimisticShowObjectMutation } from "./showObjectMutations";
 
 export function createGroupDerivationActions(
 	model: ServerController,
@@ -10,7 +11,7 @@ export function createGroupDerivationActions(
 		setError,
 		bootstrap,
 		groups,
-		setGroups,
+		portableGroups,
 		setSelectedFixtures,
 	} = model;
 	return {
@@ -18,7 +19,8 @@ export function createGroupDerivationActions(
 			try {
 				if (!bootstrap?.active_show)
 					throw new Error("Open a show before refreshing a frozen group");
-				const existing = groups.find((item) => item.id === id);
+				const showId = bootstrap.active_show.id;
+				const existing = portableGroups.find((item) => item.id === id);
 				const sourceId = existing?.body.frozen_from?.source_group_id;
 				if (!existing || !sourceId)
 					throw new Error("Group is not a frozen group");
@@ -26,24 +28,31 @@ export function createGroupDerivationActions(
 					programmer?: { selected?: string[] };
 				};
 				const fixtures = result.programmer?.selected ?? [];
-				await client.putObject(
-					bootstrap.active_show.id,
+				const body: StoredGroup = {
+					...existing.body,
+					fixtures,
+					frozen_from: {
+						source_group_id: sourceId,
+						source_revision: bootstrap.active_show.revision,
+						captured_at: new Date().toISOString(),
+					},
+				};
+				const stored = await runOptimisticShowObjectMutation(
+					model,
+					showId,
 					"group",
 					id,
-					{
-						...existing.body,
-						fixtures,
-						frozen_from: {
-							source_group_id: sourceId,
-							source_revision: bootstrap.active_show.revision,
-							captured_at: new Date().toISOString(),
-						},
-					},
-					existing.revision,
+					body,
+					() =>
+						client.putObject(
+							showId,
+							"group",
+							id,
+							body,
+							existing.revision,
+						),
 				);
-				setGroups(
-					await client.objects<StoredGroup>(bootstrap.active_show.id, "group"),
-				);
+				if (!stored) return;
 				setSelectedFixtures(fixtures);
 				setError(null);
 			} catch (reason) {
@@ -54,20 +63,31 @@ export function createGroupDerivationActions(
 			try {
 				if (!bootstrap?.active_show)
 					throw new Error("Open a show before detaching a derived group");
-				const existing = groups.find((item) => item.id === id);
-				if (!existing?.body.derived_from)
+				const showId = bootstrap.active_show.id;
+				const existing = portableGroups.find((item) => item.id === id);
+				const projected = groups.find((item) => item.id === id);
+				if (!existing?.body.derived_from || !projected)
 					throw new Error("Group is not derived");
-				await client.putObject(
-					bootstrap.active_show.id,
+				const body: StoredGroup = {
+					...existing.body,
+					fixtures: projected.body.fixtures,
+					derived_from: null,
+				};
+				await runOptimisticShowObjectMutation(
+					model,
+					showId,
 					"group",
 					id,
-					{ ...existing.body, derived_from: null },
-					existing.revision,
+					body,
+					() =>
+						client.putObject(
+							showId,
+							"group",
+							id,
+							body,
+							existing.revision,
+						),
 				);
-				setGroups(
-					await client.objects<StoredGroup>(bootstrap.active_show.id, "group"),
-				);
-				setError(null);
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
 			}

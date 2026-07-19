@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   setCommandLine: vi.fn(),
   selectGroup: vi.fn(),
   refresh: vi.fn(),
+  refreshGroup: vi.fn(),
   state: { storeArmed: false, updateArmed: false },
   groups: [
     {
@@ -32,6 +33,7 @@ vi.mock("../../api/ServerContext", () => ({
     setCommandLine: mocks.setCommandLine,
     selectGroup: mocks.selectGroup,
     refresh: mocks.refresh,
+    refreshGroup: mocks.refreshGroup,
   }),
 }));
 
@@ -52,6 +54,7 @@ describe("GroupStrip command routing", () => {
     mocks.setCommandLine.mockReset();
     mocks.selectGroup.mockReset().mockResolvedValue(undefined);
     mocks.refresh.mockReset().mockResolvedValue(undefined);
+    mocks.refreshGroup.mockReset().mockResolvedValue(true);
     mocks.state.storeArmed = false;
     mocks.state.updateArmed = false;
     mocks.groups = [
@@ -98,7 +101,8 @@ describe("GroupStrip command routing", () => {
     fireEvent.click(screen.getByText("Stored Empty Shortcut").closest("button")!);
     await waitFor(() => expect(mocks.executeCommandLine).toHaveBeenCalledWith("RECORD GROUP 1"));
     expect(screen.queryByRole("dialog", { name: "Record to Stored Empty Shortcut" })).toBeNull();
-    expect(mocks.refresh).toHaveBeenCalledOnce();
+    expect(mocks.refreshGroup).toHaveBeenCalledWith("1");
+    expect(mocks.refresh).not.toHaveBeenCalled();
     expect(mocks.dispatch).toHaveBeenCalledWith({ type: "SET_STORE_ARMED", value: false });
   });
 
@@ -108,7 +112,8 @@ describe("GroupStrip command routing", () => {
     fireEvent.click(screen.getByText("Shortcut Group").closest("button")!);
     fireEvent.click(screen.getByRole("button", { name: "Merge" }));
     await waitFor(() => expect(mocks.executeCommandLine).toHaveBeenCalledWith("RECORD + GROUP 1"));
-    expect(mocks.refresh).toHaveBeenCalledOnce();
+    expect(mocks.refreshGroup).toHaveBeenCalledWith("1");
+    expect(mocks.refresh).not.toHaveBeenCalled();
     expect(mocks.dispatch).toHaveBeenCalledWith({ type: "SET_STORE_ARMED", value: false });
   });
 });

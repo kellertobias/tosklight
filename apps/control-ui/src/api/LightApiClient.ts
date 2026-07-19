@@ -31,8 +31,10 @@ import type {
 	ServerEvent,
 	SessionResponse,
 	ShowEntry,
+	StoredPreset,
 	VersionedObject,
 } from "./types";
+import type { ShowObjectMutationResponse } from "../features/showObjects/contracts";
 
 type EventListener = (event: ServerEvent) => void;
 
@@ -564,7 +566,7 @@ export class LightApiClient {
 		id: string,
 		body: T,
 		revision: number,
-	): Promise<{ revision: number }> {
+	): Promise<ShowObjectMutationResponse> {
 		return this.request(
 			`/api/v1/shows/${showId}/objects/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`,
 			{
@@ -753,7 +755,7 @@ export class LightApiClient {
 			family?: PresetFamily;
 		},
 		revision: number,
-	) {
+	): Promise<ShowObjectMutationResponse> {
 		return this.request(`/api/v1/shows/${showId}/preload/store`, {
 			method: "POST",
 			headers: {
@@ -764,7 +766,12 @@ export class LightApiClient {
 		});
 	}
 
-	undoObject(showId: string, kind: string, id: string, revision: number) {
+	undoObject(
+		showId: string,
+		kind: string,
+		id: string,
+		revision: number,
+	): Promise<ShowObjectMutationResponse> {
 		return this.request(
 			`/api/v1/shows/${showId}/objects/${encodeURIComponent(kind)}/${encodeURIComponent(id)}/undo`,
 			{ method: "POST", headers: { "if-match": String(revision) } },
@@ -1023,7 +1030,12 @@ export class LightApiClient {
 		},
 		mode: "merge" | "overwrite" | "add_missing_fixtures",
 		revision: number,
-	) {
+	): Promise<{
+		revision: number;
+		event_sequence: number | null;
+		preset: StoredPreset;
+		source_session: string;
+	}> {
 		const storageKey = presetStorageKey(address);
 		return this.request(
 			`/api/v1/shows/${showId}/presets/${encodeURIComponent(storageKey)}/store`,

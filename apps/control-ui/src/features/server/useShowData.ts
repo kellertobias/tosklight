@@ -3,8 +3,6 @@ import type {
 	CueList,
 	OutputRoute,
 	PatchLayer,
-	StoredGroup,
-	StoredPreset,
 } from "../../api/types";
 import {
 	deskLayoutScopeKey,
@@ -16,26 +14,24 @@ import type { ServerState } from "./useServerState";
 export function useShowObjects(state: ServerState) {
 	const {
 		client,
+		showObjectsStore,
 		showObjectsRequest,
 		setCueObjects,
 		setDeskLayout,
 		setDeskLayoutScope,
-		setGroups,
 		setOutputRoutes,
 		setPatchLayers,
-		setPresets,
 		setStageLayout,
 		setUnresolvedMvrFixtures,
 	} = state;
 	return useCallback(
 		async (showId: string | null, userId: string | null) => {
 			const request = ++showObjectsRequest.current;
+			showObjectsStore.reset(showId);
 			const scope = deskLayoutScopeKey(showId, userId);
 			setDeskLayoutScope((loaded) => (loaded === scope ? loaded : null));
 			if (!showId) {
 				if (request !== showObjectsRequest.current) return;
-				setGroups([]);
-				setPresets([]);
 				setCueObjects([]);
 				setOutputRoutes([]);
 				setDeskLayout(null);
@@ -45,8 +41,6 @@ export function useShowObjects(state: ServerState) {
 				return;
 			}
 			const [
-				groups,
-				presets,
 				cues,
 				routes,
 				layouts,
@@ -54,8 +48,6 @@ export function useShowObjects(state: ServerState) {
 				layers,
 				unresolved,
 			] = await Promise.all([
-				client.objects<StoredGroup>(showId, "group"),
-				client.objects<StoredPreset>(showId, "preset"),
 				client.objects<CueList>(showId, "cue_list"),
 				client.objects<OutputRoute>(showId, "route"),
 				userId
@@ -69,8 +61,6 @@ export function useShowObjects(state: ServerState) {
 				),
 			]);
 			if (request !== showObjectsRequest.current) return;
-			setGroups(groups);
-			setPresets(presets);
 			setCueObjects(cues);
 			setOutputRoutes(routes);
 			setDeskLayout(layouts.find((item) => item.id === userId) ?? null);
@@ -93,14 +83,13 @@ export function useShowObjects(state: ServerState) {
 		},
 		[
 			client,
+			showObjectsStore,
 			showObjectsRequest,
 			setCueObjects,
 			setDeskLayout,
 			setDeskLayoutScope,
-			setGroups,
 			setOutputRoutes,
 			setPatchLayers,
-			setPresets,
 			setStageLayout,
 			setUnresolvedMvrFixtures,
 		],

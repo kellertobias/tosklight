@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { LightApiClient } from "../../api/LightApiClient";
 import type {
 	BootstrapSnapshot,
@@ -7,9 +7,7 @@ import type {
 	DeskConfiguration,
 	FixtureDefinition,
 	FixtureProfile,
-	HighlightState,
 	MatterBridgeStatus,
-	MediaServerFixture,
 	OutputRoute,
 	PatchLayer,
 	PatchSnapshot,
@@ -17,8 +15,6 @@ import type {
 	ScreenSnapshot,
 	SessionResponse,
 	ShowEntry,
-	StoredGroup,
-	StoredPreset,
 	VersionedObject,
 } from "../../api/types";
 import type { CommandTargetMode } from "../../controlSurface/commandTarget";
@@ -27,6 +23,11 @@ import type {
 	StoredDeskLayout,
 	StoredStageLayout,
 } from "./contracts";
+import { useShowObjectsState } from "./useShowObjectsState";
+import { useSelectedGroupMembership } from "./useSelectedGroupMembership";
+import { useHighlightState } from "./useHighlightState";
+import { useMediaServerState } from "./useMediaServerState";
+import { projectRuntimeGroupMasters } from "./groupRuntimeProjection";
 
 export function useServerState() {
 	const client = useRef(new LightApiClient()).current;
@@ -56,13 +57,20 @@ export function useServerState() {
 	const [fixtureProfileWarnings, setFixtureProfileWarnings] = useState<
 		string[]
 	>([]);
-	const [mediaServers, setMediaServers] = useState<MediaServerFixture[]>([]);
-	const [mediaPreviewUrls, setMediaPreviewUrls] = useState<
-		Record<string, string>
-	>({});
-	const mediaPreviewUrlsRef = useRef<Record<string, string>>({});
-	const [groups, setGroups] = useState<VersionedObject<StoredGroup>[]>([]);
-	const [presets, setPresets] = useState<VersionedObject<StoredPreset>[]>([]);
+	const media = useMediaServerState();
+	const {
+		showObjectsStore,
+		groups: portableGroups,
+		presets,
+	} = useShowObjectsState();
+	const groups = useMemo(
+		() =>
+			projectRuntimeGroupMasters(
+				portableGroups,
+				playbacks?.authoritative_controls?.groups,
+			),
+		[playbacks?.authoritative_controls?.groups, portableGroups],
+	);
 	const [cueObjects, setCueObjects] = useState<
 		VersionedObject<import("../../api/types").CueList>[]
 	>([]);
@@ -89,12 +97,14 @@ export function useServerState() {
 		useState<PendingCommandChoice | null>(null);
 	const [selectedFixtures, setSelectedFixtures] = useState<string[]>([]);
 	const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
-	const [highlight, setHighlight] = useState<HighlightState | null>(null);
-	const [highlightError, setHighlightError] = useState<string | null>(null);
-	const highlightEpoch = useRef(0);
-	const highlightWrite = useRef<Promise<unknown>>(Promise.resolve());
+	useSelectedGroupMembership(
+		groups,
+		selectedGroupId,
+		setSelectedGroupId,
+		setSelectedFixtures,
+	);
+	const highlight = useHighlightState();
 	const patchPreviewWrite = useRef<Promise<unknown>>(Promise.resolve());
-	const highlightErrorSticky = useRef(false);
 
 	return {
 		client,
@@ -130,15 +140,11 @@ export function useServerState() {
 		setFixtureProfiles,
 		fixtureProfileWarnings,
 		setFixtureProfileWarnings,
-		mediaServers,
-		setMediaServers,
-		mediaPreviewUrls,
-		setMediaPreviewUrls,
-		mediaPreviewUrlsRef,
+		...media,
 		groups,
-		setGroups,
+		portableGroups,
 		presets,
-		setPresets,
+		showObjectsStore,
 		cueObjects,
 		setCueObjects,
 		deskLayout,
@@ -167,14 +173,8 @@ export function useServerState() {
 		setSelectedFixtures,
 		selectedGroupId,
 		setSelectedGroupId,
-		highlight,
-		setHighlight,
-		highlightError,
-		setHighlightError,
-		highlightEpoch,
-		highlightWrite,
+		...highlight,
 		patchPreviewWrite,
-		highlightErrorSticky,
 	};
 }
 

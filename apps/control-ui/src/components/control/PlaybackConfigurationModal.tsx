@@ -5,6 +5,7 @@ import { useServer } from "../../api/ServerContext";
 import { Button, ColorPickerField, FormField, FormLayout, MultiValueToggleField, SelectField, SwitchField, TextField } from "../common";
 import { ModalTitleBar } from "../common/ModalTitleBar";
 import { SelectionTree, WindowScrollArea, type SelectionListOption } from "../window-kit";
+import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
 
 export const PLAYBACK_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16", "#22c55e", "#20c997", "#06b6d4", "#0ea5e9", "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#ec4899", "#f43f5e", "#f8fafc"] as const;
 
@@ -63,6 +64,7 @@ export interface PlaybackConfigurationModalProps {
 }
 
 export function PlaybackConfigurationModal({ playback, page, slot, empty = false, virtual = false, onClose }: PlaybackConfigurationModalProps) {
+  useShowObjectView("group");
   const server = useServer();
   const [initialDraft] = useState(() => normalizePlaybackTopology(playback, virtual ? 1 : server.playbacks?.desk.buttons ?? 3, !virtual));
   const [draft, setDraft] = useState(initialDraft);

@@ -17,7 +17,7 @@ export function DeskGrid({ desk }: { desk: DeskModel }) {
     dispatch({ type: "OPEN_WINDOW_PICKER", rect: { x, y, width: 6, height: 6 } });
   };
   return <div className={`desk-grid ${state.paneSettingsId ? "editing" : ""}`} ref={ref} onPointerDown={(event) => { if (event.target === event.currentTarget) openAtPointer(event); }}>
-    {desk.panes.map((pane) => <Pane key={pane.id} pane={pane} maximized={state.maximizedPaneId === pane.id} editing={state.paneSettingsId === pane.id} />)}
+    {desk.panes.map((pane) => <Pane key={pane.id} pane={pane} active={state.maximizedPaneId == null || state.maximizedPaneId === pane.id} maximized={state.maximizedPaneId === pane.id} editing={state.paneSettingsId === pane.id} />)}
     {empty && <Button className="empty-desk" onPointerDown={openAtPointer}><b>24 × 18 desktop grid</b><span>Tap a grid cell to open a window</span></Button>}
     <WindowPicker />
     <PaneSettingsModal />

@@ -4,6 +4,7 @@ import type { PlaybackSurfaceLayout } from "../../../api/types";
 import { useApp } from "../../../state/AppContext";
 import { playbackRowUnits, projectPlaybackSlots } from "./projection";
 import type { PlaybackConfigurationState } from "./types";
+import { useShowObjectView } from "../../../features/showObjects/ShowObjectsView";
 
 export interface PlaybackFaderBankProps {
 	pageNumber?: number;
@@ -48,6 +49,10 @@ export function usePlaybackBankController({
 		firstSlot,
 		pageSize,
 	});
+	useShowObjectView(
+		"group",
+		slots.some((slot) => slot.playback?.target.type === "group"),
+	);
 	const rowTracks = playbackLayout
 		? playbackLayout.rows
 				.map((row) => `minmax(0, ${playbackRowUnits(row, hardware)}fr)`)

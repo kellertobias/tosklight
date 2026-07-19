@@ -6,6 +6,7 @@ import {
 } from "../components/shared/RecordModeDialog";
 import { WindowHeader } from "../components/window-kit";
 import { useApp } from "../state/AppContext";
+import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
 import { GroupContextMenu } from "./groupsWindow/GroupContextMenu";
 import { GroupPoolGrid } from "./groupsWindow/GroupPoolGrid";
 import { GroupPropertiesDialog } from "./groupsWindow/GroupPropertiesDialog";
@@ -46,7 +47,8 @@ function GroupPoolHeader() {
 	);
 }
 
-export function GroupsWindow({ compact }: WindowProps) {
+export function GroupsWindow({ active = true, compact }: WindowProps) {
+	useShowObjectView("group", active);
 	const server = useServer();
 	const { dispatch } = useApp();
 	const model = useGroupPoolModel(server);
@@ -72,16 +74,17 @@ export function GroupsWindow({ compact }: WindowProps) {
 			);
 	}, [model.groups]);
 
-	const runCommand = async (command: string, refresh = false) => {
-		const ok = await server.executeCommandLine(command);
-		if (ok && refresh) await server.refresh();
+	const runCommand = (command: string) => server.executeCommandLine(command);
+	const recordGroupCommand = async (
+		id: string,
+		mode: RecordMode = "overwrite",
+	) => {
+		const ok = await runCommand(
+			mode === "merge" ? `RECORD + GROUP ${id}` : `RECORD GROUP ${id}`,
+		);
+		if (ok) await server.refreshGroup(id);
 		return ok;
 	};
-	const recordGroupCommand = (id: string, mode: RecordMode = "overwrite") =>
-		runCommand(
-			mode === "merge" ? `RECORD + GROUP ${id}` : `RECORD GROUP ${id}`,
-			true,
-		);
 	const cancelRecording = () => {
 		setRecordGroup(null);
 		dispatch({ type: "SET_STORE_ARMED", value: false });

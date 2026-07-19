@@ -6,8 +6,10 @@ import { CuelistPool } from "./cuelistWindow/CuelistPool";
 import { CuelistSettings } from "./cuelistWindow/CuelistSettings";
 import { useCuelistPool } from "./cuelistWindow/useCuelistSelection";
 import type { WindowProps } from "./windowTypes";
+import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
 
 export function CuelistWindow({
+	active = true,
 	builtIn = false,
 	compact,
 	cueListTab,
@@ -26,6 +28,7 @@ export function CuelistWindow({
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [message, setMessage] = useState("");
 	const tab = builtIn ? state.cuelistBuiltInView : localTab;
+	useShowObjectView("group", active && tab !== "pool");
 	const firstAvailableCuelist = pool[0]?.number ?? 1;
 	const paneSelectedCuelist =
 		cueListSource === "follow-selection"

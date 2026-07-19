@@ -4,8 +4,6 @@ import type {
 	PatchLayer,
 	ServerEvent,
 	SessionResponse,
-	StoredGroup,
-	StoredPreset,
 	VersionedObject,
 } from "../../api/types";
 import type { StoredDeskLayout, StoredStageLayout } from "./contracts";
@@ -15,9 +13,7 @@ type ServerStateSource = () => ServerState;
 
 type SingleObjectKind =
 	| "cue_list"
-	| "group"
 	| "patch_layer"
-	| "preset"
 	| "stage_layout"
 	| "unresolved_mvr_fixture"
 	| "user_layout";
@@ -39,9 +35,7 @@ interface ReconciliationTask {
 
 const singleObjectKinds = new Set<SingleObjectKind>([
 	"cue_list",
-	"group",
 	"patch_layer",
-	"preset",
 	"stage_layout",
 	"unresolved_mvr_fixture",
 	"user_layout",
@@ -119,8 +113,7 @@ function preloadObjectChange(
 	const id = stringField(event.payload, "target_id");
 	const objectRevision = revisionField(event.payload);
 	const showId = activeShowId(state);
-	const kind =
-		target === "cue" ? "cue_list" : target === "preset" ? "preset" : null;
+	const kind = target === "cue" ? "cue_list" : null;
 	if (!showId || !kind || !id || objectRevision == null) return null;
 	return {
 		sequence: event.revision,
@@ -198,26 +191,6 @@ function installObject(
 ) {
 	if (!change.deleted && (!object || !validObject(change, object))) return;
 	switch (change.kind as SingleObjectKind) {
-		case "group": {
-			const group = object as VersionedObject<StoredGroup> | null;
-			state.setGroups((current) => reconcileList(current, change, group));
-			if (state.selectedGroupId === change.id) {
-				state.setSelectedFixtures(
-					change.deleted ? [] : (group?.body.fixtures ?? []),
-				);
-				if (change.deleted) state.setSelectedGroupId(null);
-			}
-			return;
-		}
-		case "preset":
-			state.setPresets((current) =>
-				reconcileList(
-					current,
-					change,
-					object as VersionedObject<StoredPreset> | null,
-				),
-			);
-			return;
 		case "cue_list":
 			state.setCueObjects((current) =>
 				reconcileList(
@@ -370,21 +343,5 @@ export function createShowObjectEventReconciler(
 		const state = getState();
 		const change = showObjectChange(event) ?? preloadObjectChange(event, state);
 		if (change) enqueueObject(change);
-		if (event.kind !== "preset_stored") return;
-		const showId = stringField(event.payload, "show_id");
-		if (!showId || activeShowId(state) !== showId) return;
-		queue.enqueue({
-			key: `show:${showId}:collection:preset`,
-			sequence: event.revision,
-			run: async (isCurrent) => {
-				const presets = await getState().client.objects<StoredPreset>(
-					showId,
-					"preset",
-				);
-				const current = getState();
-				if (isCurrent() && activeShowId(current) === showId)
-					current.setPresets(presets);
-			},
-		});
 	};
 }

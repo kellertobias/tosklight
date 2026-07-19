@@ -1,4 +1,3 @@
-import type { StoredPreset } from "../../api/types";
 import type { ServerController } from "./model";
 import type { ServerContextValue } from "./ServerContextValue";
 
@@ -21,7 +20,6 @@ export function createProgrammerValueActions(
 		setError,
 		bootstrap,
 		setBootstrap,
-		setPresets,
 		selectedGroupId,
 	} = model;
 	return {
@@ -64,12 +62,6 @@ export function createProgrammerValueActions(
 				if (!bootstrap?.active_show)
 					throw new Error("Open a show before generating presets");
 				const result = await client.generateFixturePresets(fixtureIds);
-				setPresets(
-					await client.objects<StoredPreset>(
-						bootstrap.active_show.id,
-						"preset",
-					),
-				);
 				setError(null);
 				return result;
 			} catch (reason) {

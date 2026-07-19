@@ -10,6 +10,7 @@ import { useStageOptions } from "./stageWindow/useStageOptions";
 import { useStageVisualization } from "./stageWindow/useStageVisualization";
 
 export function StageWindow(props: StageWindowProps) {
+	const active = props.active ?? true;
 	const server = useServer();
 	const options = useStageOptions(props);
 	const layout = useStageLayout();
@@ -49,7 +50,7 @@ export function StageWindow(props: StageWindowProps) {
 					options={options}
 				/>
 			)}
-			{options.groupsVisible && <GroupStrip />}
+			{options.groupsVisible && <GroupStrip active={active} />}
 		</div>
 	);
 }

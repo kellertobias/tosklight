@@ -1,5 +1,6 @@
 import type { ServerController } from "./model";
 import type { ServerContextValue } from "./ServerContextValue";
+import { reconcileShowObject } from "./showObjectMutations";
 
 export function createPreloadActions(
 	model: ServerController,
@@ -26,8 +27,21 @@ export function createPreloadActions(
 			try {
 				if (!bootstrap?.active_show)
 					throw new Error("Open a show before storing preload data");
-				await client.storePreload(bootstrap.active_show.id, input, revision);
-				await refresh();
+				const response = await client.storePreload(
+					bootstrap.active_show.id,
+					input,
+					revision,
+				);
+				if (input.target === "preset") {
+					const reconciled = await reconcileShowObject(
+						model,
+						bootstrap.active_show.id,
+						"preset",
+						input.target_id,
+						response.event_sequence,
+					);
+					if (!reconciled) return false;
+				} else await refresh();
 				setError(null);
 				return true;
 			} catch (reason) {

@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   executeCommandLine: vi.fn(),
   selectionGesture: vi.fn(),
   refresh: vi.fn(),
+  refreshGroup: vi.fn(),
   resetCommandLine: vi.fn(),
   updateGroup: vi.fn(),
   commandLine: "",
@@ -57,6 +58,7 @@ vi.mock("../api/ServerContext", () => ({
     executeCommandLine: mocks.executeCommandLine,
     selectionGesture: mocks.selectionGesture,
     refresh: mocks.refresh,
+    refreshGroup: mocks.refreshGroup,
     resetCommandLine: mocks.resetCommandLine,
     updateGroup: mocks.updateGroup,
     commandLine: mocks.commandLine,
@@ -82,6 +84,7 @@ describe("GroupsWindow command routing", () => {
     mocks.executeCommandLine.mockReset().mockResolvedValue(true);
     mocks.selectionGesture.mockReset().mockResolvedValue(undefined);
     mocks.refresh.mockReset().mockResolvedValue(undefined);
+    mocks.refreshGroup.mockReset().mockResolvedValue(true);
     mocks.resetCommandLine.mockReset();
     mocks.updateGroup.mockReset().mockResolvedValue(true);
     mocks.commandLine = "";
@@ -103,7 +106,8 @@ describe("GroupsWindow command routing", () => {
     fireEvent.click(screen.getByText("Stored Empty").closest("button")!);
     await waitFor(() => expect(mocks.executeCommandLine).toHaveBeenCalledWith("RECORD GROUP 4"));
     expect(screen.queryByRole("dialog", { name: "Record to Stored Empty" })).toBeNull();
-    expect(mocks.refresh).toHaveBeenCalledOnce();
+    expect(mocks.refreshGroup).toHaveBeenCalledWith("4");
+    expect(mocks.refresh).not.toHaveBeenCalled();
     expect(mocks.dispatch).toHaveBeenCalledWith({ type: "SET_STORE_ARMED", value: false });
   });
 
@@ -113,7 +117,8 @@ describe("GroupsWindow command routing", () => {
     fireEvent.click(screen.getAllByText("Tap to record empty group")[0].closest("button")!);
     await waitFor(() => expect(mocks.executeCommandLine).toHaveBeenCalledWith("RECORD GROUP 1"));
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(mocks.refresh).toHaveBeenCalledOnce();
+    expect(mocks.refreshGroup).toHaveBeenCalledWith("1");
+    expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
   it("uses RECORD + GROUP when Merge is chosen for a populated group", async () => {
@@ -122,7 +127,8 @@ describe("GroupsWindow command routing", () => {
     fireEvent.click(screen.getByText("Stored Populated").closest("button")!);
     fireEvent.click(screen.getByRole("button", { name: "Merge" }));
     await waitFor(() => expect(mocks.executeCommandLine).toHaveBeenCalledWith("RECORD + GROUP 5"));
-    expect(mocks.refresh).toHaveBeenCalledOnce();
+    expect(mocks.refreshGroup).toHaveBeenCalledWith("5");
+    expect(mocks.refresh).not.toHaveBeenCalled();
     expect(mocks.dispatch).toHaveBeenCalledWith({ type: "SET_STORE_ARMED", value: false });
   });
 

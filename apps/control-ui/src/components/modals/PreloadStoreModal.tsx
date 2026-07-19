@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useApp } from "../../state/AppContext";
 import { useServer } from "../../api/ServerContext";
 import { Button, FormLayout, ModalPortal, NumberField, SelectField, TextField } from "../common";
+import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
 
 export function PreloadStoreModal() {
   const { state, dispatch } = useApp();
@@ -9,6 +10,7 @@ export function PreloadStoreModal() {
   const [target, setTarget] = useState<"preset" | "cue">("preset"), [targetId, setTargetId] = useState("1");
   const [cueNumber, setCueNumber] = useState(1), [name, setName] = useState("");
   const [mode, setMode] = useState<"merge" | "overwrite" | "add_missing_fixtures">("merge");
+  useShowObjectView("preset", state.preloadStoreOpen && target === "preset");
   const targetObject = useMemo(() => target === "preset" ? server.presets.find((object) => object.id === targetId) : server.cueObjects.find((object) => object.id === targetId), [target, targetId, server.presets, server.cueObjects]);
   if (!state.preloadStoreOpen) return null;
   const close = () => dispatch({ type: "SET_MODAL", modal: "preloadStoreOpen", value: false });

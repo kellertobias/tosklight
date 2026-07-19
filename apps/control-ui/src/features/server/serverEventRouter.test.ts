@@ -234,8 +234,6 @@ describe("server event routing", () => {
 
 describe("show object event reconciliation", () => {
 	const objectCases = [
-		["group", "3", "setGroups"],
-		["preset", "1.1", "setPresets"],
 		["cue_list", "cue-list-1", "setCueObjects"],
 		["patch_layer", "layer-1", "setPatchLayers"],
 		["unresolved_mvr_fixture", "mvr-1", "setUnresolvedMvrFixtures"],
@@ -321,6 +319,25 @@ describe("show object event reconciliation", () => {
 		expect(harness.loadShowObjects).not.toHaveBeenCalled();
 	});
 
+	it("leaves migrated Group/Preset events to the view-scoped v2 store", async () => {
+		const harness = createHarness();
+		harness.route(showObjectEvent("group", "3", 2, 1));
+		harness.route(showObjectEvent("preset", "2.1", 2, 2));
+		harness.route(
+			event(
+				"preset_stored",
+				{ show_id: "show-a", revision: 2, preset_address: { family: "Color", number: 1 } },
+				3,
+			),
+		);
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(harness.client.object).not.toHaveBeenCalled();
+		expect(harness.client.objects).not.toHaveBeenCalled();
+		expect(harness.client.bootstrap).not.toHaveBeenCalled();
+		expect(harness.loadShowObjects).not.toHaveBeenCalled();
+	});
+
 	it("reconciles a route deletion from its small coupled projection", async () => {
 		const harness = createHarness();
 		const route = object<OutputRoute>("route", "route-1", 4, {
@@ -352,39 +369,38 @@ describe("show object event reconciliation", () => {
 
 	it("applies an explicit generic-object deletion without a read", async () => {
 		const harness = createHarness();
-		harness.state.groups = [
-			object("group", "3", 4, { fixtures: ["fixture-3"] }),
+		harness.state.cueObjects = [
+			object("cue_list", "cue-list-1", 4),
 		] as never;
-		harness.route(showObjectEvent("group", "3", 5, 10, { deleted: true }));
-		await vi.waitFor(() => expect(harness.state.groups).toEqual([]));
+		harness.route(
+			showObjectEvent("cue_list", "cue-list-1", 5, 10, { deleted: true }),
+		);
+		await vi.waitFor(() => expect(harness.state.cueObjects).toEqual([]));
 		expect(harness.client.object).not.toHaveBeenCalled();
 		expect(harness.client.objects).not.toHaveBeenCalled();
 	});
 
 	it("does not install an object response older than the announced revision", async () => {
 		const harness = createHarness();
-		harness.state.selectedGroupId = "3";
-		harness.state.selectedFixtures = ["current"];
 		harness.client.object.mockResolvedValueOnce(
-			object("group", "3", 4, { fixtures: ["stale"] }),
+			object("cue_list", "cue-list-1", 4),
 		);
-		harness.route(showObjectEvent("group", "3", 5, 10));
+		harness.route(showObjectEvent("cue_list", "cue-list-1", 5, 10));
 		await vi.waitFor(() =>
 			expect(harness.client.object).toHaveBeenCalledOnce(),
 		);
 		await Promise.resolve();
-		expect(harness.state.groups).toEqual([]);
-		expect(harness.state.selectedFixtures).toEqual(["current"]);
+		expect(harness.state.cueObjects).toEqual([]);
 	});
 
 	it("coalesces a same-object burst to the newest revision", async () => {
 		const harness = createHarness();
-		harness.route(showObjectEvent("group", "3", 1, 1));
-		harness.route(showObjectEvent("group", "3", 2, 2));
-		harness.route(showObjectEvent("group", "3", 3, 3));
-		await vi.waitFor(() => expect(harness.state.groups).toHaveLength(1));
+		harness.route(showObjectEvent("cue_list", "cue-list-1", 1, 1));
+		harness.route(showObjectEvent("cue_list", "cue-list-1", 2, 2));
+		harness.route(showObjectEvent("cue_list", "cue-list-1", 3, 3));
+		await vi.waitFor(() => expect(harness.state.cueObjects).toHaveLength(1));
 		expect(harness.client.object).toHaveBeenCalledOnce();
-		expect(harness.state.groups[0].revision).toBe(3);
+		expect(harness.state.cueObjects[0].revision).toBe(3);
 	});
 
 	it("does not install an older response after a newer event arrives", async () => {
@@ -399,58 +415,47 @@ describe("show object event reconciliation", () => {
 		);
 		harness.client.object
 			.mockImplementationOnce(() => first)
-			.mockResolvedValueOnce(object("group", "3", 2, { fixtures: ["new"] }));
-		harness.route(showObjectEvent("group", "3", 1, 1));
+			.mockResolvedValueOnce(object("cue_list", "cue-list-1", 2, { name: "new" }));
+		harness.route(showObjectEvent("cue_list", "cue-list-1", 1, 1));
 		await vi.waitFor(() =>
 			expect(harness.client.object).toHaveBeenCalledOnce(),
 		);
-		harness.route(showObjectEvent("group", "3", 2, 2));
-		resolveFirst(object("group", "3", 1, { fixtures: ["old"] }));
+		harness.route(showObjectEvent("cue_list", "cue-list-1", 2, 2));
+		resolveFirst(object("cue_list", "cue-list-1", 1, { name: "old" }));
 		await vi.waitFor(() =>
 			expect(harness.client.object).toHaveBeenCalledTimes(2),
 		);
-		await vi.waitFor(() => expect(harness.state.groups[0]?.revision).toBe(2));
-		expect(harness.state.groups[0].body.fixtures).toEqual(["new"]);
+		await vi.waitFor(() =>
+			expect(harness.state.cueObjects[0]?.revision).toBe(2),
+		);
+		expect((harness.state.cueObjects[0].body as { name: string }).name).toBe("new");
 	});
 
 	it("accepts a recreate whose object revision restarted after deletion", async () => {
 		const harness = createHarness();
-		harness.state.groups = [
-			object("group", "3", 9, { fixtures: ["old"] }),
+		harness.state.cueObjects = [
+			object("cue_list", "cue-list-1", 9, { name: "old" }),
 		] as never;
 		harness.client.object.mockResolvedValueOnce(
-			object("group", "3", 1, { fixtures: ["new"] }),
+			object("cue_list", "cue-list-1", 1, { name: "new" }),
 		);
-		harness.route(showObjectEvent("group", "3", 10, 10, { deleted: true }));
-		harness.route(showObjectEvent("group", "3", 1, 11));
-		await vi.waitFor(() => expect(harness.state.groups[0]?.revision).toBe(1));
+		harness.route(
+			showObjectEvent("cue_list", "cue-list-1", 10, 10, { deleted: true }),
+		);
+		harness.route(showObjectEvent("cue_list", "cue-list-1", 1, 11));
+		await vi.waitFor(() =>
+			expect(harness.state.cueObjects[0]?.revision).toBe(1),
+		);
 		expect(harness.client.object).toHaveBeenCalledOnce();
 	});
 
-	it("routes legacy stored values to one affected resource", async () => {
+	it("routes legacy stored Cue values to one affected resource", async () => {
 		const harness = createHarness();
-		harness.route(
-			event(
-				"preset_stored",
-				{
-					show_id: "show-a",
-					revision: 2,
-					preset_address: { family: "Color", number: 1 },
-				},
-				1,
-			),
-		);
-		await vi.waitFor(() =>
-			expect(harness.client.objects).toHaveBeenCalledOnce(),
-		);
-		expect(harness.client.objects).toHaveBeenCalledWith("show-a", "preset");
-		expect(harness.loadShowObjects).not.toHaveBeenCalled();
-
 		harness.route(
 			event(
 				"preload_stored",
 				{ target: "cue", target_id: "cue-list-1", revision: 3 },
-				2,
+				1,
 			),
 		);
 		await vi.waitFor(() =>

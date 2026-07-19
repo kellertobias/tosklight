@@ -1,17 +1,20 @@
 import type { StoredGroup } from "../../api/types";
 import type { ServerController } from "./model";
 import type { ServerContextValue } from "./ServerContextValue";
+import {
+	reconcileShowObject,
+	runOptimisticShowObjectMutation,
+} from "./showObjectMutations";
 
 export function createGroupStoreActions(
 	model: ServerController,
-): Pick<ServerContextValue, "storeGroup"> {
+): Pick<ServerContextValue, "storeGroup" | "refreshGroup"> {
 	const {
 		client,
 		setError,
 		bootstrap,
 		session,
-		groups,
-		setGroups,
+		portableGroups,
 		selectedFixtures,
 	} = model;
 	return {
@@ -19,7 +22,8 @@ export function createGroupStoreActions(
 			try {
 				if (!bootstrap?.active_show || !session)
 					throw new Error("Open a show before storing groups");
-				const existing = groups.find((item) => item.id === id);
+				const showId = bootstrap.active_show.id;
+				const existing = portableGroups.find((item) => item.id === id);
 				const programmers = await client.programmers();
 				const programmer = programmers.find(
 					(item) => item.session_id === session.session_id,
@@ -70,20 +74,36 @@ export function createGroupStoreActions(
 					derived_from,
 					frozen_from,
 				};
-				await client.putObject(
-					bootstrap.active_show.id,
+				await runOptimisticShowObjectMutation(
+					model,
+					showId,
 					"group",
 					id,
 					body,
-					existing?.revision ?? 0,
+					() =>
+						client.putObject(
+							showId,
+							"group",
+							id,
+							body,
+							existing?.revision ?? 0,
+						),
 				);
-				setGroups(
-					await client.objects<StoredGroup>(bootstrap.active_show.id, "group"),
-				);
-				setError(null);
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
 			}
+		},
+		refreshGroup: async (id) => {
+			if (!bootstrap?.active_show) {
+				setError("Open a show before refreshing a group");
+				return false;
+			}
+			return reconcileShowObject(
+				model,
+				bootstrap.active_show.id,
+				"group",
+				id,
+			);
 		},
 	};
 }

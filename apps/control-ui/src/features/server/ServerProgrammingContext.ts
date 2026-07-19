@@ -74,6 +74,7 @@ export interface ServerProgrammingContext {
 		name: string,
 		mode?: "merge" | "overwrite",
 	) => Promise<void>;
+	refreshGroup: (id: string) => Promise<boolean>;
 	updateGroup: (
 		id: string,
 		update: Pick<StoredGroup, "name" | "color" | "icon">,
