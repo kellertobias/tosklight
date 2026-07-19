@@ -39,12 +39,25 @@ use crate::v2::playback::{
     PlaybackTargetProjection, PlaybackTransitionCause, ResolvedPlaybackAddress, SoundLossReason,
     SoundStatus, SpeedGroupRuntimeProjection, SpeedSource,
 };
+use crate::v2::selective_import::{
+    SelectiveImportApplyRequest, SelectiveImportAssetReference, SelectiveImportBlocker,
+    SelectiveImportCatalog, SelectiveImportCatalogObject, SelectiveImportConflict,
+    SelectiveImportConflictChoice, SelectiveImportConflictResolution, SelectiveImportDependency,
+    SelectiveImportDependencyDisposition, SelectiveImportErrorResponse,
+    SelectiveImportManagedAssetAction, SelectiveImportManagedAssetPreview,
+    SelectiveImportObjectAction, SelectiveImportObjectKey, SelectiveImportObjectPreview,
+    SelectiveImportOutcome, SelectiveImportOutcomeObjectChange, SelectiveImportPreview,
+    SelectiveImportProfileAction, SelectiveImportProfileChange,
+    SelectiveImportProfileConflictChoice, SelectiveImportProfileConflictResolution,
+    SelectiveImportProfileKey, SelectiveImportProfilePreview, SelectiveImportSelection,
+};
 
 const TYPESCRIPT_PATH: &str = "apps/control-ui/src/api/generated/light-wire.ts";
 const SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-command-line";
 const EVENT_SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-events";
 const PATCH_SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-patch";
 const PLAYBACK_SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-playback";
+const SELECTIVE_IMPORT_SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-selective-import";
 
 /// One generated artifact relative to the workspace root.
 #[derive(Debug, Eq, PartialEq)]
@@ -86,6 +99,12 @@ pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
         patch_response_schema::<PatchProfileRevisionProjection>(
             "patch-profile-revision-projection",
         ),
+        selective_import_request_schema::<SelectiveImportSelection>("preview-request"),
+        selective_import_request_schema::<SelectiveImportApplyRequest>("apply-request"),
+        selective_import_response_schema::<SelectiveImportCatalog>("catalog"),
+        selective_import_response_schema::<SelectiveImportPreview>("preview"),
+        selective_import_response_schema::<SelectiveImportOutcome>("outcome"),
+        selective_import_response_schema::<SelectiveImportErrorResponse>("error-response"),
     ]
 }
 
@@ -133,6 +152,14 @@ fn playback_response_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
     playback_schema::<T>(name, SchemaSettings::draft2020_12().for_serialize())
 }
 
+fn selective_import_request_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
+    selective_import_schema::<T>(name, SchemaSettings::draft2020_12().for_deserialize())
+}
+
+fn selective_import_response_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
+    selective_import_schema::<T>(name, SchemaSettings::draft2020_12().for_serialize())
+}
+
 fn event_schema<T: JsonSchema>(name: &str, settings: SchemaSettings) -> GeneratedArtifact {
     let mut artifact = schema_artifact::<T>(name, settings);
     artifact.path = format!("{EVENT_SCHEMA_DIRECTORY}/{name}.schema.json");
@@ -148,6 +175,15 @@ fn patch_schema<T: JsonSchema>(name: &str, settings: SchemaSettings) -> Generate
 fn playback_schema<T: JsonSchema>(name: &str, settings: SchemaSettings) -> GeneratedArtifact {
     let mut artifact = schema_artifact::<T>(name, settings);
     artifact.path = format!("{PLAYBACK_SCHEMA_DIRECTORY}/{name}.schema.json");
+    artifact
+}
+
+fn selective_import_schema<T: JsonSchema>(
+    name: &str,
+    settings: SchemaSettings,
+) -> GeneratedArtifact {
+    let mut artifact = schema_artifact::<T>(name, settings);
+    artifact.path = format!("{SELECTIVE_IMPORT_SCHEMA_DIRECTORY}/{name}.schema.json");
     artifact
 }
 
@@ -263,6 +299,32 @@ fn typescript_bindings() -> String {
         PatchDelta::decl(&config),
         PatchFixturesOutcome::decl(&config),
         PatchSnapshot::decl(&config),
+        SelectiveImportObjectKey::decl(&config),
+        SelectiveImportConflictResolution::decl(&config),
+        SelectiveImportConflictChoice::decl(&config),
+        SelectiveImportProfileKey::decl(&config),
+        SelectiveImportProfileConflictResolution::decl(&config),
+        SelectiveImportProfileConflictChoice::decl(&config),
+        SelectiveImportSelection::decl(&config),
+        SelectiveImportApplyRequest::decl(&config),
+        SelectiveImportCatalogObject::decl(&config),
+        SelectiveImportCatalog::decl(&config),
+        SelectiveImportObjectAction::decl(&config),
+        SelectiveImportObjectPreview::decl(&config),
+        SelectiveImportDependencyDisposition::decl(&config),
+        SelectiveImportDependency::decl(&config),
+        SelectiveImportConflict::decl(&config),
+        SelectiveImportProfileAction::decl(&config),
+        SelectiveImportProfilePreview::decl(&config),
+        SelectiveImportManagedAssetAction::decl(&config),
+        SelectiveImportAssetReference::decl(&config),
+        SelectiveImportManagedAssetPreview::decl(&config),
+        SelectiveImportBlocker::decl(&config),
+        SelectiveImportPreview::decl(&config),
+        SelectiveImportOutcomeObjectChange::decl(&config),
+        SelectiveImportProfileChange::decl(&config),
+        SelectiveImportOutcome::decl(&config),
+        SelectiveImportErrorResponse::decl(&config),
     ];
     let declarations = declarations
         .into_iter()

@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SelectiveImportApplyRequest",
+  "type": "object",
+  "properties": {
+    "conflict_resolutions": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/SelectiveImportConflictChoice"
+      }
+    },
+    "expected_source_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "expected_target_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "profile_conflict_resolutions": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/SelectiveImportProfileConflictChoice"
+      }
+    },
+    "request_id": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1
+    },
+    "selected_objects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SelectiveImportObjectKey"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "expected_source_revision",
+    "expected_target_revision",
+    "selected_objects"
+  ],
+  "$defs": {
+    "SelectiveImportConflictChoice": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/SelectiveImportObjectKey"
+        },
+        "resolution": {
+          "$ref": "#/$defs/SelectiveImportConflictResolution"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "resolution"
+      ]
+    },
+    "SelectiveImportConflictResolution": {
+      "type": "string",
+      "enum": [
+        "keep_destination",
+        "replace_destination",
+        "duplicate"
+      ]
+    },
+    "SelectiveImportObjectKey": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "id"
+      ]
+    },
+    "SelectiveImportProfileConflictChoice": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/SelectiveImportProfileKey"
+        },
+        "resolution": {
+          "$ref": "#/$defs/SelectiveImportProfileConflictResolution"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "resolution"
+      ]
+    },
+    "SelectiveImportProfileConflictResolution": {
+      "type": "string",
+      "enum": [
+        "keep_destination",
+        "duplicate"
+      ]
+    },
+    "SelectiveImportProfileKey": {
+      "type": "object",
+      "properties": {
+        "profile_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "profile_id",
+        "revision"
+      ]
+    }
+  }
+}

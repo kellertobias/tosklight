@@ -10,6 +10,7 @@ pub(super) fn build(state: AppState) -> Router {
         .merge(output_runtime_v2::router())
         .merge(playback_v2::router())
         .merge(show_patch_http::router())
+        .merge(selective_import_http::router())
         .merge(operator_routes())
         .merge(fixture_routes())
         .merge(media_and_output_routes())

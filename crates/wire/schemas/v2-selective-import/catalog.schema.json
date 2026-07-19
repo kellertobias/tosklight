@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SelectiveImportCatalog",
+  "type": "object",
+  "properties": {
+    "objects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SelectiveImportCatalogObject"
+      }
+    },
+    "source_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "source_show_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "source_show_name": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "source_show_id",
+    "source_show_name",
+    "source_revision",
+    "objects"
+  ],
+  "$defs": {
+    "SelectiveImportCatalogObject": {
+      "type": "object",
+      "properties": {
+        "display_name": {
+          "type": "string"
+        },
+        "key": {
+          "$ref": "#/$defs/SelectiveImportObjectKey"
+        },
+        "object_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "key",
+        "object_revision",
+        "display_name"
+      ]
+    },
+    "SelectiveImportObjectKey": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "id"
+      ]
+    }
+  }
+}

@@ -1,0 +1,662 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SelectiveImportPreview",
+  "type": "object",
+  "properties": {
+    "blockers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SelectiveImportBlocker"
+      }
+    },
+    "can_apply": {
+      "type": "boolean"
+    },
+    "conflicts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SelectiveImportConflict"
+      }
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SelectiveImportDependency"
+      }
+    },
+    "managed_assets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SelectiveImportManagedAssetPreview"
+      }
+    },
+    "objects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SelectiveImportObjectPreview"
+      }
+    },
+    "profiles": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SelectiveImportProfilePreview"
+      }
+    },
+    "source_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "source_show_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "target_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "target_show_id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "source_show_id",
+    "target_show_id",
+    "source_revision",
+    "target_revision",
+    "objects",
+    "dependencies",
+    "conflicts",
+    "profiles",
+    "managed_assets",
+    "blockers",
+    "can_apply"
+  ],
+  "$defs": {
+    "SelectiveImportAssetReference": {
+      "type": "object",
+      "properties": {
+        "asset_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "asset_id",
+        "revision"
+      ]
+    },
+    "SelectiveImportBlocker": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "empty_selection"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "same_show"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "$ref": "#/$defs/SelectiveImportObjectKey"
+            },
+            "type": {
+              "type": "string",
+              "const": "unsupported_object"
+            }
+          },
+          "required": [
+            "type",
+            "key"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "$ref": "#/$defs/SelectiveImportObjectKey"
+            },
+            "required_by": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SelectiveImportObjectKey"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "missing_object"
+            }
+          },
+          "required": [
+            "type",
+            "key",
+            "required_by"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "$ref": "#/$defs/SelectiveImportObjectKey"
+            },
+            "type": {
+              "type": "string",
+              "const": "object_conflict"
+            }
+          },
+          "required": [
+            "type",
+            "key"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "$ref": "#/$defs/SelectiveImportObjectKey"
+            },
+            "message": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "invalid_resolution"
+            }
+          },
+          "required": [
+            "type",
+            "key",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "$ref": "#/$defs/SelectiveImportProfileKey"
+            },
+            "message": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "invalid_profile_resolution"
+            }
+          },
+          "required": [
+            "type",
+            "key",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "$ref": "#/$defs/SelectiveImportObjectKey"
+            },
+            "message": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "invalid_descriptor"
+            }
+          },
+          "required": [
+            "type",
+            "key",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "$ref": "#/$defs/SelectiveImportProfileKey"
+            },
+            "required_by": {
+              "$ref": "#/$defs/SelectiveImportObjectKey"
+            },
+            "type": {
+              "type": "string",
+              "const": "missing_profile"
+            }
+          },
+          "required": [
+            "type",
+            "key",
+            "required_by"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "$ref": "#/$defs/SelectiveImportProfileKey"
+            },
+            "type": {
+              "type": "string",
+              "const": "profile_conflict"
+            }
+          },
+          "required": [
+            "type",
+            "key"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "asset": {
+              "$ref": "#/$defs/SelectiveImportAssetReference"
+            },
+            "type": {
+              "type": "string",
+              "const": "missing_managed_asset"
+            }
+          },
+          "required": [
+            "type",
+            "asset"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "asset": {
+              "$ref": "#/$defs/SelectiveImportAssetReference"
+            },
+            "type": {
+              "type": "string",
+              "const": "managed_asset_conflict"
+            }
+          },
+          "required": [
+            "type",
+            "asset"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string"
+            },
+            "owner": {
+              "$ref": "#/$defs/SelectiveImportObjectKey"
+            },
+            "type": {
+              "type": "string",
+              "const": "reference_rewrite"
+            }
+          },
+          "required": [
+            "type",
+            "owner",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "candidate_invalid"
+            }
+          },
+          "required": [
+            "type",
+            "message"
+          ]
+        }
+      ]
+    },
+    "SelectiveImportConflict": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/SelectiveImportObjectKey"
+        },
+        "resolution": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SelectiveImportConflictResolution"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "key",
+        "resolution"
+      ]
+    },
+    "SelectiveImportConflictResolution": {
+      "type": "string",
+      "enum": [
+        "keep_destination",
+        "replace_destination",
+        "duplicate"
+      ]
+    },
+    "SelectiveImportDependency": {
+      "type": "object",
+      "properties": {
+        "dependency": {
+          "$ref": "#/$defs/SelectiveImportObjectKey"
+        },
+        "disposition": {
+          "$ref": "#/$defs/SelectiveImportDependencyDisposition"
+        },
+        "owner": {
+          "$ref": "#/$defs/SelectiveImportObjectKey"
+        }
+      },
+      "required": [
+        "owner",
+        "dependency",
+        "disposition"
+      ]
+    },
+    "SelectiveImportDependencyDisposition": {
+      "type": "string",
+      "enum": [
+        "selected",
+        "included",
+        "bound_to_destination",
+        "missing"
+      ]
+    },
+    "SelectiveImportManagedAssetAction": {
+      "type": "string",
+      "enum": [
+        "copy",
+        "skip_identical",
+        "missing",
+        "blocked_conflict"
+      ]
+    },
+    "SelectiveImportManagedAssetPreview": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/SelectiveImportManagedAssetAction"
+        },
+        "asset": {
+          "$ref": "#/$defs/SelectiveImportAssetReference"
+        }
+      },
+      "required": [
+        "asset",
+        "action"
+      ]
+    },
+    "SelectiveImportObjectAction": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "import_preserving_id"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "skip_identical"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "keep_destination"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "replace_destination"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "destination": {
+              "$ref": "#/$defs/SelectiveImportObjectKey"
+            },
+            "type": {
+              "type": "string",
+              "const": "duplicate"
+            }
+          },
+          "required": [
+            "type",
+            "destination"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "blocked_conflict"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "SelectiveImportObjectKey": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "id"
+      ]
+    },
+    "SelectiveImportObjectPreview": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/SelectiveImportObjectAction"
+        },
+        "destination": {
+          "$ref": "#/$defs/SelectiveImportObjectKey"
+        },
+        "source": {
+          "$ref": "#/$defs/SelectiveImportObjectKey"
+        }
+      },
+      "required": [
+        "source",
+        "destination",
+        "action"
+      ]
+    },
+    "SelectiveImportProfileAction": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "copy"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "skip_identical"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "keep_destination"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "destination": {
+              "$ref": "#/$defs/SelectiveImportProfileKey"
+            },
+            "type": {
+              "type": "string",
+              "const": "duplicate"
+            }
+          },
+          "required": [
+            "type",
+            "destination"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "blocked_conflict"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "missing"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "SelectiveImportProfileKey": {
+      "type": "object",
+      "properties": {
+        "profile_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "profile_id",
+        "revision"
+      ]
+    },
+    "SelectiveImportProfilePreview": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/SelectiveImportProfileAction"
+        },
+        "destination": {
+          "$ref": "#/$defs/SelectiveImportProfileKey"
+        },
+        "source": {
+          "$ref": "#/$defs/SelectiveImportProfileKey"
+        }
+      },
+      "required": [
+        "source",
+        "destination",
+        "action"
+      ]
+    }
+  }
+}

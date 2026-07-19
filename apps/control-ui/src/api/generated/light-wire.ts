@@ -275,3 +275,55 @@ export type PatchSnapshot = { show_id: string, show_revision: number, patch_revi
  * Exactly one entry per profile revision referenced by `fixtures`.
  */
 profile_revisions: Array<PatchProfileRevisionProjection>, };
+
+export type SelectiveImportObjectKey = { kind: string, id: string, };
+
+export type SelectiveImportConflictResolution = "keep_destination" | "replace_destination" | "duplicate";
+
+export type SelectiveImportConflictChoice = { key: SelectiveImportObjectKey, resolution: SelectiveImportConflictResolution, };
+
+export type SelectiveImportProfileKey = { profile_id: string, revision: number, };
+
+export type SelectiveImportProfileConflictResolution = "keep_destination" | "duplicate";
+
+export type SelectiveImportProfileConflictChoice = { key: SelectiveImportProfileKey, resolution: SelectiveImportProfileConflictResolution, };
+
+export type SelectiveImportSelection = { selected_objects: Array<SelectiveImportObjectKey>, conflict_resolutions: Array<SelectiveImportConflictChoice>, profile_conflict_resolutions: Array<SelectiveImportProfileConflictChoice>, };
+
+export type SelectiveImportApplyRequest = { request_id: string, expected_source_revision: number, expected_target_revision: number, selected_objects: Array<SelectiveImportObjectKey>, conflict_resolutions: Array<SelectiveImportConflictChoice>, profile_conflict_resolutions: Array<SelectiveImportProfileConflictChoice>, };
+
+export type SelectiveImportCatalogObject = { key: SelectiveImportObjectKey, object_revision: number, display_name: string, };
+
+export type SelectiveImportCatalog = { source_show_id: string, source_show_name: string, source_revision: number, objects: Array<SelectiveImportCatalogObject>, };
+
+export type SelectiveImportObjectAction = { "type": "import_preserving_id" } | { "type": "skip_identical" } | { "type": "keep_destination" } | { "type": "replace_destination" } | { "type": "duplicate", destination: SelectiveImportObjectKey, } | { "type": "blocked_conflict" };
+
+export type SelectiveImportObjectPreview = { source: SelectiveImportObjectKey, destination: SelectiveImportObjectKey, action: SelectiveImportObjectAction, };
+
+export type SelectiveImportDependencyDisposition = "selected" | "included" | "bound_to_destination" | "missing";
+
+export type SelectiveImportDependency = { owner: SelectiveImportObjectKey, dependency: SelectiveImportObjectKey, disposition: SelectiveImportDependencyDisposition, };
+
+export type SelectiveImportConflict = { key: SelectiveImportObjectKey, resolution: SelectiveImportConflictResolution | null, };
+
+export type SelectiveImportProfileAction = { "type": "copy" } | { "type": "skip_identical" } | { "type": "keep_destination" } | { "type": "duplicate", destination: SelectiveImportProfileKey, } | { "type": "blocked_conflict" } | { "type": "missing" };
+
+export type SelectiveImportProfilePreview = { source: SelectiveImportProfileKey, destination: SelectiveImportProfileKey, action: SelectiveImportProfileAction, };
+
+export type SelectiveImportManagedAssetAction = "copy" | "skip_identical" | "missing" | "blocked_conflict";
+
+export type SelectiveImportAssetReference = { asset_id: string, revision: number, };
+
+export type SelectiveImportManagedAssetPreview = { asset: SelectiveImportAssetReference, action: SelectiveImportManagedAssetAction, };
+
+export type SelectiveImportBlocker = { "type": "empty_selection" } | { "type": "same_show" } | { "type": "unsupported_object", key: SelectiveImportObjectKey, } | { "type": "missing_object", key: SelectiveImportObjectKey, required_by: SelectiveImportObjectKey | null, } | { "type": "object_conflict", key: SelectiveImportObjectKey, } | { "type": "invalid_resolution", key: SelectiveImportObjectKey, message: string, } | { "type": "invalid_profile_resolution", key: SelectiveImportProfileKey, message: string, } | { "type": "invalid_descriptor", key: SelectiveImportObjectKey, message: string, } | { "type": "missing_profile", key: SelectiveImportProfileKey, required_by: SelectiveImportObjectKey, } | { "type": "profile_conflict", key: SelectiveImportProfileKey, } | { "type": "missing_managed_asset", asset: SelectiveImportAssetReference, } | { "type": "managed_asset_conflict", asset: SelectiveImportAssetReference, } | { "type": "reference_rewrite", owner: SelectiveImportObjectKey, message: string, } | { "type": "candidate_invalid", message: string, };
+
+export type SelectiveImportPreview = { source_show_id: string, target_show_id: string, source_revision: number, target_revision: number, objects: Array<SelectiveImportObjectPreview>, dependencies: Array<SelectiveImportDependency>, conflicts: Array<SelectiveImportConflict>, profiles: Array<SelectiveImportProfilePreview>, managed_assets: Array<SelectiveImportManagedAssetPreview>, blockers: Array<SelectiveImportBlocker>, can_apply: boolean, };
+
+export type SelectiveImportOutcomeObjectChange = { key: SelectiveImportObjectKey, object_revision: number, body: unknown, };
+
+export type SelectiveImportProfileChange = { source: SelectiveImportProfileKey, destination: SelectiveImportProfileKey, digest: string, };
+
+export type SelectiveImportOutcome = { request_id: string, correlation_id: string, changed: boolean, show_id: string, show_revision: number, event_sequence?: number | null, outcomes: Array<SelectiveImportObjectPreview>, objects: Array<SelectiveImportOutcomeObjectChange>, profiles: Array<SelectiveImportProfileChange>, managed_assets: Array<SelectiveImportAssetReference>, };
+
+export type SelectiveImportErrorResponse = { error: string, current_revision?: number | null, retryable: boolean, };

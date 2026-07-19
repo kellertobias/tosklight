@@ -45,7 +45,8 @@ use base64::{
 use bytes::Bytes;
 use light_application::{
     ActiveShowService, EventBus, OutputRuntimeService, PlaybackAction, PlaybackAddress,
-    PlaybackExecution, PlaybackService, ProgrammingService, ShowPatchService,
+    PlaybackExecution, PlaybackService, ProgrammingService, SelectiveShowImportService,
+    ShowPatchService,
 };
 use light_control::speed::{
     SoundObservation, SoundToLightConfig, SpeedGroupController, SpeedSnapshot,
@@ -141,6 +142,9 @@ mod programmer_fixture_commands;
 mod programmer_group_commands;
 mod programmer_selection_values;
 mod screens_playback;
+mod selective_import_adapter;
+mod selective_import_http;
+mod selective_import_wire;
 mod sessions;
 mod set_commands;
 mod show_command_cues;
@@ -217,6 +221,7 @@ use programmer_fixture_commands::*;
 use programmer_group_commands::*;
 use programmer_selection_values::*;
 use screens_playback::*;
+use selective_import_adapter::*;
 use sessions::*;
 use set_commands::*;
 use show_command_cues::*;

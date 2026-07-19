@@ -41,6 +41,11 @@ impl PortableShowRevision {
         Self(value)
     }
 
+    /// Creates an optimistic-concurrency token received from a typed transport boundary.
+    pub const fn from_value(value: Revision) -> Self {
+        Self(value)
+    }
+
     /// Returns the revision value used for optimistic concurrency checks.
     pub const fn value(self) -> Revision {
         self.0
