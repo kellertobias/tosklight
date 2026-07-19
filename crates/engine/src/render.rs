@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use light_core::Universe;
 
 use super::{
-    Engine, EngineError, RenderOptions, RenderResult, RuntimeGeneration, render_fixture,
-    render_profile_split,
+    Engine, EngineError, GroupMasterIndex, RenderOptions, RenderResult, RuntimeGeneration,
+    render_fixture, render_profile_split,
 };
 
 impl Engine {
@@ -20,7 +20,7 @@ impl Engine {
     ) -> Result<RenderResult, EngineError> {
         let snapshot = generation.snapshot();
         let resolved = self.resolved_attributes_for_render(generation, self.clock.now());
-        let groups = generation.groups();
+        let group_masters = generation.group_masters();
         let group_master_flashes = self.group_master_flashes.read();
         let highlighted_fixtures = self.highlighted_fixtures.read();
         let mut universes = HashMap::new();
@@ -74,7 +74,7 @@ impl Engine {
                         address,
                         &resolved,
                         options,
-                        groups,
+                        group_masters,
                         &group_master_flashes,
                         &highlighted_fixtures,
                     )?;
@@ -85,7 +85,7 @@ impl Engine {
                 fixture,
                 &resolved,
                 options,
-                groups,
+                group_masters,
                 &group_master_flashes,
                 &mut universes,
                 &mut patched_slots,
@@ -116,7 +116,7 @@ fn render_legacy_fixture(
     fixture: &light_fixture::PatchedFixture,
     resolved: &super::ResolvedAttributes,
     options: RenderOptions,
-    groups: &HashMap<String, light_programmer::GroupDefinition>,
+    group_masters: &GroupMasterIndex,
     group_master_flashes: &HashMap<String, f32>,
     universes: &mut HashMap<Universe, light_output::DmxFrame>,
     patched_slots: &mut HashMap<Universe, u16>,
@@ -149,7 +149,7 @@ fn render_legacy_fixture(
             &instance,
             &resolved.values,
             options,
-            groups,
+            group_masters,
             group_master_flashes,
         )?;
     }

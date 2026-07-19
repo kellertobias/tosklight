@@ -33,7 +33,7 @@ pub(crate) use contribution::{
     value_for_ordered_position,
 };
 pub(crate) use fixture::profile_head_owner;
-pub(crate) use legacy_projection::{group_scale_for_fixture, render_fixture};
+pub(crate) use legacy_projection::render_fixture;
 pub(crate) use move_in_black_candidate::PreparedCandidate;
 pub(crate) use move_in_black_runtime::{MoveInBlackKey, MoveInBlackRuntime};
 pub(crate) use profile_blackout::blackout_raw;
@@ -42,7 +42,7 @@ pub(crate) use profile_projection::{render_profile_split, resolve_profile_head};
 pub(crate) use programmer_fade::{
     ProgrammerTransition, ProgrammerTransitionKey, ProgrammerTransitionSource,
 };
-pub(crate) use runtime_generation::RuntimeGeneration;
+pub(crate) use runtime_generation::{GroupMasterIndex, RuntimeGeneration};
 pub(crate) use safety::{apply_safe_values, apply_safe_values_with_snap};
 
 #[cfg(test)]

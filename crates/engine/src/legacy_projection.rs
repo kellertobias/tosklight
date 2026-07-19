@@ -1,8 +1,7 @@
-use crate::{EngineError, RenderOptions, apply_safe_values};
+use crate::{EngineError, GroupMasterIndex, RenderOptions, apply_safe_values};
 use light_core::{AttributeKey, AttributeValue, FixtureId};
 use light_fixture::{PatchedFixture, SignalLossPolicy, encode_parameter, mix_color};
 use light_output::DmxFrame;
-use light_programmer::{GroupDefinition, resolve_group};
 use std::collections::HashMap;
 
 pub(crate) fn render_fixture(
@@ -10,7 +9,7 @@ pub(crate) fn render_fixture(
     fixture: &PatchedFixture,
     resolved: &HashMap<(FixtureId, AttributeKey), AttributeValue>,
     options: RenderOptions,
-    groups: &HashMap<String, GroupDefinition>,
+    group_masters: &GroupMasterIndex,
     group_master_flashes: &HashMap<String, f32>,
 ) -> Result<(), EngineError> {
     let Some(address) = fixture.address else {
@@ -27,22 +26,7 @@ pub(crate) fn render_fixture(
                 .map(|patched| patched.fixture_id)
                 .unwrap_or(fixture.fixture_id)
         };
-        let group_scale = groups
-            .values()
-            .filter(|group| group.playback_fader.is_some())
-            .filter_map(|group| {
-                resolve_group(&group.id, groups)
-                    .ok()
-                    .filter(|members| members.contains(&owner))
-                    .map(|_| {
-                        group
-                            .master
-                            .max(group_master_flashes.get(&group.id).copied().unwrap_or(0.0))
-                            .clamp(0.0, 1.0)
-                    })
-            })
-            .reduce(f32::max)
-            .unwrap_or(1.0);
+        let group_scale = group_masters.scale(owner, group_master_flashes);
         let mut abstract_values: HashMap<AttributeKey, AttributeValue> = resolved
             .iter()
             .filter(|((fixture_id, _), _)| *fixture_id == owner)
@@ -134,27 +118,4 @@ pub(crate) fn render_fixture(
         }
     }
     Ok(())
-}
-
-pub(crate) fn group_scale_for_fixture(
-    fixture_id: FixtureId,
-    groups: &HashMap<String, GroupDefinition>,
-    group_master_flashes: &HashMap<String, f32>,
-) -> f32 {
-    groups
-        .values()
-        .filter(|group| group.playback_fader.is_some())
-        .filter_map(|group| {
-            resolve_group(&group.id, groups)
-                .ok()
-                .filter(|members| members.contains(&fixture_id))
-                .map(|_| {
-                    group
-                        .master
-                        .max(group_master_flashes.get(&group.id).copied().unwrap_or(0.0))
-                        .clamp(0.0, 1.0)
-                })
-        })
-        .reduce(f32::max)
-        .unwrap_or(1.0)
 }

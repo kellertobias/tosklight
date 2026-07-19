@@ -2,7 +2,7 @@ use crate::{EngineSnapshot, profile_head_owner};
 use light_core::{AttributeKey, FixtureId};
 use light_output::OutputRoute;
 use light_playback::PlaybackEngine;
-use light_programmer::GroupDefinition;
+use light_programmer::{GroupDefinition, resolve_group};
 use parking_lot::RwLock;
 use std::{
     collections::{HashMap, HashSet},
@@ -20,6 +20,7 @@ pub(crate) struct RuntimeGeneration {
     groups: HashMap<String, GroupDefinition>,
     routes: Arc<[OutputRoute]>,
     snap_attributes: HashMap<FixtureId, HashSet<AttributeKey>>,
+    group_masters: GroupMasterIndex,
 }
 
 impl RuntimeGeneration {
@@ -30,12 +31,14 @@ impl RuntimeGeneration {
     ) -> Self {
         let routes = Arc::from(snapshot.routes.clone());
         let snap_attributes = compile_snap_attributes(&snapshot);
+        let group_masters = GroupMasterIndex::compile(&groups);
         Self {
             snapshot: Arc::new(snapshot),
             playback: Arc::new(RwLock::new(playback)),
             groups,
             routes,
             snap_attributes,
+            group_masters,
         }
     }
 
@@ -71,6 +74,66 @@ impl RuntimeGeneration {
         self.snap_attributes
             .get(&fixture_id)
             .is_some_and(|attributes| attributes.contains(attribute))
+    }
+
+    pub(crate) fn group_masters(&self) -> &GroupMasterIndex {
+        &self.group_masters
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct GroupMasterIndex {
+    masters: Vec<GroupMasterBinding>,
+    fixtures: HashMap<FixtureId, Vec<usize>>,
+}
+
+struct GroupMasterBinding {
+    group_id: String,
+    master: f32,
+}
+
+impl GroupMasterIndex {
+    fn compile(groups: &HashMap<String, GroupDefinition>) -> Self {
+        let mut definitions = groups
+            .values()
+            .filter(|group| group.playback_fader.is_some())
+            .collect::<Vec<_>>();
+        definitions.sort_by(|left, right| left.id.cmp(&right.id));
+        let mut index = Self::default();
+        for definition in definitions {
+            let Ok(fixtures) = resolve_group(&definition.id, groups) else {
+                continue;
+            };
+            let master_index = index.masters.len();
+            index.masters.push(GroupMasterBinding {
+                group_id: definition.id.clone(),
+                master: definition.master,
+            });
+            for fixture_id in fixtures {
+                index
+                    .fixtures
+                    .entry(fixture_id)
+                    .or_default()
+                    .push(master_index);
+            }
+        }
+        index
+    }
+
+    pub(crate) fn scale(&self, fixture_id: FixtureId, flashes: &HashMap<String, f32>) -> f32 {
+        self.fixtures
+            .get(&fixture_id)
+            .into_iter()
+            .flatten()
+            .map(|index| &self.masters[*index])
+            .map(|binding| {
+                binding
+                    .master
+                    .max(flashes.get(&binding.group_id).copied().unwrap_or(0.0))
+                    .clamp(0.0, 1.0)
+            })
+            .reduce(f32::max)
+            .unwrap_or(1.0)
     }
 }
 

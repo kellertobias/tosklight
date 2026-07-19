@@ -31,7 +31,7 @@ impl Engine {
             }
         }
         resolved.values.clone_from(values);
-        let groups = generation.groups();
+        let group_masters = generation.group_masters();
         let group_master_flashes = self.group_master_flashes.read();
         let highlighted_fixtures = self.highlighted_fixtures.read();
         let mut projected = HashMap::new();
@@ -52,7 +52,7 @@ impl Engine {
                     head_index,
                     &resolved,
                     options,
-                    groups,
+                    group_masters,
                     &group_master_flashes,
                     &highlighted_fixtures,
                 )?;

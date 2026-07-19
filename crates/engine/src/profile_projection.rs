@@ -1,13 +1,12 @@
 use crate::contribution::ApplicableSequenceMaster;
 use crate::{
-    EngineError, RenderOptions, ResolvedAttributes, apply_safe_values, apply_safe_values_with_snap,
-    blackout_raw, channel_visual_level, group_scale_for_fixture, profile_head_owner,
+    EngineError, GroupMasterIndex, RenderOptions, ResolvedAttributes, apply_safe_values,
+    apply_safe_values_with_snap, blackout_raw, channel_visual_level, profile_head_owner,
     profile_visual_color,
 };
 use light_core::{AttributeKey, AttributeValue, FixtureId, Xyz};
 use light_fixture::{ChannelScales, FixtureChannel, FixtureMode, PatchedFixture, SignalLossPolicy};
 use light_output::DmxFrame;
-use light_programmer::GroupDefinition;
 use std::collections::{HashMap, HashSet};
 
 #[allow(clippy::too_many_arguments)]
@@ -19,7 +18,7 @@ pub(crate) fn render_profile_split(
     address: u16,
     resolved: &ResolvedAttributes,
     options: RenderOptions,
-    groups: &HashMap<String, GroupDefinition>,
+    group_masters: &GroupMasterIndex,
     group_master_flashes: &HashMap<String, f32>,
     highlighted_fixtures: &HashSet<FixtureId>,
 ) -> Result<(), EngineError> {
@@ -34,7 +33,7 @@ pub(crate) fn render_profile_split(
             head_index,
             resolved,
             options,
-            groups,
+            group_masters,
             group_master_flashes,
             highlighted_fixtures,
         )?;
@@ -66,7 +65,7 @@ pub(crate) fn resolve_profile_head(
     head_index: usize,
     resolved: &ResolvedAttributes,
     options: RenderOptions,
-    groups: &HashMap<String, GroupDefinition>,
+    group_masters: &GroupMasterIndex,
     group_master_flashes: &HashMap<String, f32>,
     highlighted_fixtures: &HashSet<FixtureId>,
 ) -> Result<ResolvedProfileHeadOutput, EngineError> {
@@ -76,7 +75,7 @@ pub(crate) fn resolve_profile_head(
         head_index,
         resolved,
         options,
-        groups,
+        group_masters,
         group_master_flashes,
         highlighted_fixtures,
     )?;
@@ -122,7 +121,7 @@ fn prepare_head_inputs(
     head_index: usize,
     resolved: &ResolvedAttributes,
     options: RenderOptions,
-    groups: &HashMap<String, GroupDefinition>,
+    group_masters: &GroupMasterIndex,
     group_master_flashes: &HashMap<String, f32>,
     highlighted_fixtures: &HashSet<FixtureId>,
 ) -> Result<ProfileHeadInputs, EngineError> {
@@ -137,7 +136,7 @@ fn prepare_head_inputs(
     let group_scale = if output_highlighted {
         1.0
     } else {
-        group_scale_for_fixture(owner, groups, group_master_flashes)
+        group_masters.scale(owner, group_master_flashes)
     };
     let mut inputs = ProfileHeadInputs {
         owner,
