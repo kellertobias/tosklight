@@ -1,0 +1,17 @@
+export const uuid = () => crypto.randomUUID();
+
+export function reorder<T>(items: T[], from: number, to: number) {
+	if (
+		from === to ||
+		from < 0 ||
+		from >= items.length ||
+		to < 0 ||
+		to >= items.length
+	) {
+		return items;
+	}
+	const next = [...items];
+	const [item] = next.splice(from, 1);
+	next.splice(to, 0, item);
+	return next;
+}
