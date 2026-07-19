@@ -1,19 +1,6 @@
-import { describe, expect, it } from "vitest";
-import type { VisualizationSnapshot } from "../api/types";
-import {
-	buildStageScene,
-	cueVisualization,
-	fallbackEmitterIsDirectional,
-	migrateStagePosition,
-	mountFixtureModel,
-} from "./stage3dScene";
-import {
-	createBuiltInFixtureModel,
-	inferBuiltInFixtureKind,
-	movingLightTiltRadians,
-} from "./builtInStageModels";
 import * as THREE from "three";
-import type { PatchedFixture } from "../api/types";
+import { describe, expect, it } from "vitest";
+import type { PatchedFixture, VisualizationSnapshot } from "../api/types";
 import {
 	blankChannel,
 	blankFixtureProfile,
@@ -21,8 +8,28 @@ import {
 	fixtureDefinitionFromProfileMode,
 	geometryTemplate,
 } from "../components/setup/fixtureProfileModel";
+import {
+	createBuiltInFixtureModel,
+	inferBuiltInFixtureKind,
+	movingLightTiltRadians,
+} from "./builtInStageModels";
+import {
+	buildStageScene,
+	cueVisualization,
+	fallbackEmitterIsDirectional,
+	migrateStagePosition,
+	mountFixtureModel,
+} from "./stage3dScene";
 
-describe("3D stage state", () => {
+const fixture = (device_type: string, name: string) =>
+	({
+		fixture_id: "fixture",
+		universe: 1,
+		address: 1,
+		definition: { device_type, name, manufacturer: "", model: name },
+	}) as PatchedFixture;
+
+describe("3D stage presentation and cue state", () => {
 	it("can omit the floor plane and grid from the scene", () => {
 		const visible = buildStageScene([], null);
 		expect(visible.scene.getObjectByName("stage-floor")).toBeTruthy();
@@ -67,7 +74,9 @@ describe("3D stage state", () => {
 		]);
 		expect(released.values).toHaveLength(0);
 	});
+});
 
+describe("schema-v2 hierarchy and logical-head rendering", () => {
 	it("consumes schema-v2 hierarchy motion, logical-head values, multiple emitters, and source layouts", () => {
 		const profile = blankFixtureProfile();
 		profile.manufacturer = "Acme";
@@ -202,7 +211,9 @@ describe("3D stage state", () => {
 		});
 		expect(cores).toHaveLength(5);
 	});
+});
 
+describe("geometry emitter source layouts", () => {
 	it("places point, ring, strip, matrix, and explicit-pixel beam sources", () => {
 		const profile = blankFixtureProfile();
 		profile.manufacturer = "Acme";
@@ -306,7 +317,9 @@ describe("3D stage state", () => {
 			scene.getObjectByName("geometry-source:pixels:1")?.position.toArray(),
 		).toEqual([0.1, 0.2, 0.3]);
 	});
+});
 
+describe("emitter direction and Patch selection", () => {
 	it("uses emitter direction metadata and keeps an inactive geometry source readable", () => {
 		const profile = blankFixtureProfile();
 		const mode = profile.modes[0];
@@ -412,7 +425,9 @@ describe("3D stage state", () => {
 			values: [],
 		});
 	});
+});
 
+describe("fixture profile model mounting", () => {
 	it("mounts named GLB parts on their profile geometry anchors", () => {
 		const profile = blankFixtureProfile();
 		profile.manufacturer = "Acme";
@@ -539,7 +554,9 @@ describe("3D stage state", () => {
 			new THREE.Box3().setFromObject(mounted).getSize(new THREE.Vector3()).x,
 		).toBeCloseTo(2);
 	});
+});
 
+describe("calibrated fixture output", () => {
 	it("uses post-profile calibrated color and mastered intensity without applying desk masters twice", () => {
 		const profile = blankFixtureProfile();
 		profile.manufacturer = "Acme";
@@ -614,15 +631,7 @@ describe("3D stage state", () => {
 	});
 });
 
-describe("built-in 3D model library", () => {
-	const fixture = (device_type: string, name: string) =>
-		({
-			fixture_id: "fixture",
-			universe: 1,
-			address: 1,
-			definition: { device_type, name, manufacturer: "", model: name },
-		}) as PatchedFixture;
-
+describe("built-in fixture family mapping and motion", () => {
 	it("recognizes the requested fixture families", () => {
 		expect(inferBuiltInFixtureKind(fixture("moving wash", "A7 LED Wash"))).toBe(
 			"wash-led",
@@ -672,7 +681,9 @@ describe("built-in 3D model library", () => {
 		expect(tiltGroup.rotation.x).toBeCloseTo(THREE.MathUtils.degToRad(80));
 		expect(tiltGroup.rotation.z).toBeCloseTo(0);
 	});
+});
 
+describe("built-in emitting surfaces and scene construction", () => {
 	it("gives every fixture family a bright unlit emitting surface", () => {
 		for (const [type, name] of [
 			["moving wash", "A7 LED Wash"],
@@ -733,7 +744,9 @@ describe("built-in 3D model library", () => {
 			),
 		).not.toThrow();
 	});
+});
 
+describe("built-in direction guides and external models", () => {
 	it("shows off-state direction guides for fixed and moving directional lamps only", () => {
 		const fresnel = fixture("dimmer fresnel", "Dimmer Fresnel");
 		const mover = fixture("moving wash", "A7 LED Wash");
@@ -806,7 +819,9 @@ describe("built-in 3D model library", () => {
 		expect(source.userData.active).toBe(false);
 		expect(source.material).toBeInstanceOf(THREE.MeshStandardMaterial);
 	});
+});
 
+describe("built-in wash and conventional housings", () => {
 	it("uses one filled central source for a wash mover instead of an LED ring", () => {
 		const beamColor = new THREE.Color(0xff0000);
 		const model = createBuiltInFixtureModel(
@@ -879,7 +894,9 @@ describe("built-in 3D model library", () => {
 			"fresnel-barn-door-top",
 		]);
 	});
+});
 
+describe("built-in off-state lenses and scanner motion", () => {
 	it("renders an off lens as visible neutral glass without making it look lit", () => {
 		const model = createBuiltInFixtureModel(
 			fixture("moving profile", "Profile"),
