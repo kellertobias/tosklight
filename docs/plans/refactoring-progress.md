@@ -4,7 +4,7 @@ This is the living handoff for [`major-refactoring.md`](major-refactoring.md). U
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-19 after the remaining primary-window selection migration.
+Last updated: 2026-07-19 after the user-scoped Programmer-values frontend core.
 
 ## Guardrails
 
@@ -124,6 +124,11 @@ Last updated: 2026-07-19 after the remaining primary-window selection migration.
   actions, Patch subscribes only while its active preview needs selected fixtures, inactive panes
   perform no snapshot or subscription work, and none of these views falls back to stale global
   selection while scoped authority is loading.
+- [x] Added the transport-neutral user-scoped Programmer-values frontend core. Its deterministic
+  immutable projection, external store, request-keyed optimistic overlays, and reference-counted
+  session isolate authority by show and user; mounted values views alone trigger hydration and a
+  stream, cursor gaps repair from snapshots, late work cannot cross a scope reset, and selectors
+  suppress unrelated rerenders. The production wire adapter and value consumers remain below.
 - [x] Exposed Selective Show Import through authenticated v2 catalog, preview, and atomic apply
   adapters with checked-in schemas, generated TypeScript, exact source/target revisions, strict
   response validation, and focused server contracts. **Show → Load → Partial Show Load** now uses a
@@ -162,6 +167,10 @@ Last updated: 2026-07-19 after the remaining primary-window selection migration.
   legacy bootstrap fields and broad Programmer refresh paths. Group Pool, Group Strip, and the
   command bar, Stage, Stage/Fixture pane chrome, Channels, Fixture Sheet, Patch, and Presets have
   moved; parameter controls and miscellaneous modal/setup readers still use the facade.
+- [ ] Connect the user-scoped normal Programmer-values snapshot/event transport, mount the provider,
+  and migrate value consumers and optimistic writers before removing value-triggered bootstrap
+  refreshes. Keep Preload, modes, priority, connectivity, Highlight, and transient state outside
+  this retained normal-values projection.
 - [ ] Replace inferred Cue ambiguity in the command-line text projection with explicit desk-local
   pending-choice state that is set only by `ChoiceRequired` after ENT and cleared by edit, reset,
   selection, or Cancel. Until then, cross-session choice visibility remains a documented
@@ -229,7 +238,9 @@ Last updated: 2026-07-19 after the remaining primary-window selection migration.
   Stage migration adds 6 focused frontend tests for ordered streamed updates, optimistic
   gestures/clear/rollback, and active-only Stage/Fixture pane observation. The following primary
   window slice adds 5 focused streamed/optimistic/dormancy scenarios; its 3 focused files pass all
-  19 tests together with the existing selection and Highlight coverage.
+  19 tests together with the existing selection and Highlight coverage. The isolated
+  Programmer-values frontend core passes all 24 focused store/session/view tests and passed the
+  full frontend typecheck before the following concurrent parameter-selection edit began.
 - The current complete frontend suite passes all 811 tests, and the production frontend build
   passes. A final repository-wide suite and real desktop run has not yet been completed.
 
