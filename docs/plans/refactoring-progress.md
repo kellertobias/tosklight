@@ -4,7 +4,7 @@ This is the living handoff for [`major-refactoring.md`](major-refactoring.md). U
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-19 at commit `dda9e8d`.
+Last updated: 2026-07-19 at commit `6151589`.
 
 ## Guardrails
 
@@ -68,6 +68,18 @@ Last updated: 2026-07-19 at commit `dda9e8d`.
   narrow snapshot repair. It remains dormant until the production consumers move below, so merely
   mounting the global provider performs no request and opens no socket. Compatibility HTTP, OSC,
   and WebSocket paths retain their source behavior.
+- [x] Migrated the production command-line editors and action consumers onto the scoped
+  Programming store. A provider-owned latest-wins writer gives immediate optimistic feedback,
+  bounds slow writes to one in flight plus the newest pending value, waits for accepted writes
+  before Enter, gates post-Enter edits until narrow snapshot reconciliation, and repairs conflicts
+  without rebasing over OSC or another desk surface. Stream and mutation errors have independent
+  ownership. Mounted views activate only the command-line and selection capabilities they use;
+  action-only consumers do not rerender for command text. Exact categorized edit events no longer
+  trigger broad bootstrap hydration, while malformed, expanded, and runtime changes retain the
+  compatibility fallback. Edit persistence now occurs inside the replay boundary, so a failed
+  save cannot replay as a false success. The temporary Cue-choice modal remains tied to the
+  explicit execute response so it cannot appear before ENT, and scoped Cancel performs one v2
+  reset while dismissing that compatibility response locally.
 - [x] Exposed Selective Show Import through authenticated v2 catalog, preview, and atomic apply
   adapters with checked-in schemas, generated TypeScript, exact source/target revisions, strict
   response validation, and focused server contracts. **Show → Load → Partial Show Load** now uses a
@@ -102,9 +114,13 @@ Last updated: 2026-07-19 at commit `dda9e8d`.
   from broad `useServer()`, polling, and generic show-object mutation.
 - [ ] Finish the Playback ownership boundary for virtual exclusion peers, startup normalization,
   persisted Cuelist/topology mutation, and every active compatibility pane still polling.
-- [ ] Move the production command-line and selection consumers onto the scoped Programming store,
-  reconcile optimistic writes with authoritative responses/events, then remove their legacy
-  bootstrap and broad Programmer refresh paths.
+- [ ] Move the remaining selection consumers onto the scoped Programming store, then remove their
+  legacy bootstrap fields and broad Programmer refresh paths. Group Pool, Group Strip, and the
+  command bar have moved; Stage, channel, Patch, and miscellaneous readers still use the facade.
+- [ ] Replace inferred Cue ambiguity in the command-line text projection with explicit desk-local
+  pending-choice state that is set only by `ChoiceRequired` after ENT and cleared by edit, reset,
+  selection, or Cancel. Until then, cross-session choice visibility remains a documented
+  compatibility exception.
 
 ## Remaining architecture work
 
@@ -133,6 +149,10 @@ Last updated: 2026-07-19 at commit `dda9e8d`.
 - Record release output benchmarks for the 32-universe/100 Hz floor, 64-universe/120 Hz target,
   and 4-to-8-universe/40 Hz low-power goal. Include p50/p95/p99, missed ticks, CPU, allocations,
   pipeline phase timings, socket delivery, and sound-to-light accounting.
+- Measure the complete command edit and execution path with artificial latency and on reference
+  hardware. Record keystroke-to-visible time, request backlog depth, edit persistence cost,
+  Enter-to-result time, snapshot reconciliation, broad bootstrap requests, and rerender counts.
+  Synchronous session persistence per accepted command edit remains an explicit benchmark risk.
 - Verify old shows, recovery from malformed/legacy active shows, Save As/export portability,
   layout data, unpatched fixtures, stored-empty Groups, ordered selections, Cue Phaser, Highlight,
   Preload, Update, Move in Black, route termination, shutdown, and first output after restart.
@@ -142,19 +162,21 @@ Last updated: 2026-07-19 at commit `dda9e8d`.
 
 ## Current verification snapshot
 
-- Source-size ratchet: 0 production files above 1,200; 0 production functions above 150. The
-  current full-tree design-goal report is 52 files above 400 lines and 3,443 functions above 20;
-  the touched Programming live-state test was split back below 400 lines.
-- In-scope production file goal: 0 files above 400 lines. The scanner still reports larger test and
-  planning sources, plus the unrelated Dynamics Editor experiment.
+- The committed source-size baseline has no production file above 1,200 and no production function
+  above 150. The current working-tree ratchet is blocked only by the unrelated uncommitted Dynamics
+  Editor experiment at 1,382 lines. Dependency-direction checks and all 10 scanner/ratchet unit
+  tests pass.
+- The current full-tree design-goal report is 52 files above 400 lines and 3,479 functions above
+  20. Remaining in-scope production files above 400 are Programming service at 443 lines and the
+  command HTTP adapter at 411; split both before declaring the file-size goal complete. Planning
+  and test sources and the unrelated Dynamics Editor experiment account for the other large files.
 - Focused application, server, wire, frontend, architecture, source-size, MVR, File Manager,
   Playback, Preload, Patch, Output, event, shared-control, Stage 3D, build, and strict Clippy checks
-  have passed for their committed slices. The latest Playback frontend run covered 109 focused
-  tests; the scoped Programming frontend run covered 60 focused tests; and the Selective Show
-  Import control migration covered 47 focused tests plus a production build.
-- The current complete frontend suite passes all 740 tests. A final repository-wide suite and real
-  desktop run has not yet been completed.
+  have passed for their committed slices. The latest command-line slice passed 18 Programming
+  application tests, 4 command HTTP scenarios, the focused OSC shortcut test, 219 combined scoped
+  frontend tests, and 114 focused consumer tests.
+- The current complete frontend suite passes all 775 tests, and the production frontend build
+  passes. A final repository-wide suite and real desktop run has not yet been completed.
 
-The remaining files above the 400-line goal are planning/test sources and the unrelated Dynamics
-Editor experiment. Test files may exceed the hard limits, but should still be split when it
-improves readability and makes operator intent more visible.
+Test files may exceed the hard limits, but should still be split when it improves readability and
+makes operator intent more visible.
