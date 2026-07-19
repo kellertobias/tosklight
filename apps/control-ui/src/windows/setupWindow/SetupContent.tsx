@@ -44,7 +44,10 @@ export function SetupContent({
 				<div className="setup-content">
 					<ActiveSetupSection controller={controller} />
 					<div hidden={controller.section !== 6}>
-						<ScreensSetup />
+						<ScreensSetup
+							undoRef={controller.screenUndo}
+							onUndoAvailabilityChange={controller.updateScreenUndoAvailability}
+						/>
 					</div>
 					{controller.server.error && (
 						<p className="modal-error">{controller.server.error}</p>

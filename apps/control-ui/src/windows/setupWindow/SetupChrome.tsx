@@ -22,6 +22,12 @@ export function SetupHeader({
 			? [
 					[
 						{
+							id: "undo",
+							label: "Undo",
+							disabled: !controller.screenCanUndo,
+							onClick: () => controller.screenUndo.current?.(),
+						},
+						{
 							id: "desk-lock",
 							label: "Desk Lock",
 							onClick: () => controller.setDeskLockSettingsOpen(true),

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { configuredServerUrl } from "../../api/LightApiClient";
 import { useServer } from "../../api/ServerContext";
 import type { DeskConfiguration, UpdateSettings } from "../../api/types";
@@ -29,6 +29,8 @@ export function useSetupWindowController() {
 	const [serverUrl, setServerUrl] = useState(configuredServerUrl());
 	const [fixtureLibraryOpen, setFixtureLibraryOpen] = useState(false);
 	const [deskLockSettingsOpen, setDeskLockSettingsOpen] = useState(false);
+	const [screenCanUndo, setScreenCanUndo] = useState(false);
+	const screenUndo = useRef<(() => void) | null>(null);
 	const draftRevision = useRef(0);
 	const draftDirty = useRef(false);
 	const pendingSave = useRef<{
@@ -96,6 +98,10 @@ export function useSetupWindowController() {
 			updateSaved ? null : "Update defaults were not saved.",
 		);
 	};
+	const updateScreenUndoAvailability = useCallback(
+		(available: boolean) => setScreenCanUndo(available),
+		[],
+	);
 
 	return {
 		deskLockSettingsOpen,
@@ -106,6 +112,8 @@ export function useSetupWindowController() {
 		recordSettings,
 		restartRequired,
 		save,
+		screenCanUndo,
+		screenUndo,
 		section,
 		server,
 		serverUrl,
@@ -116,6 +124,7 @@ export function useSetupWindowController() {
 		setServerUrl,
 		setUpdateSettings,
 		updateSettings,
+		updateScreenUndoAvailability,
 	};
 }
 

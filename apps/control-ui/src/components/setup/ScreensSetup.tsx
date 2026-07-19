@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type {
-	ControlDesk,
 	PlaybackSurfaceLayout,
 	ScreenConfiguration,
 } from "../../api/types";
@@ -11,7 +10,6 @@ import { Button } from "../common";
 import { PlaybackLayoutModal } from "./PlaybackLayoutModal";
 import {
 	createScreenConfiguration,
-	defaultDeskPlaybackLayout,
 	playbackLayoutLegacyFields,
 } from "./screenConfiguration";
 import { DefaultScreenPicker } from "./screens/DefaultScreenPicker";
@@ -19,6 +17,10 @@ import {
 	DefaultScreenSettings,
 	ScreenSettingsCard,
 } from "./screens/ScreenSettingsCards";
+import {
+	type ScreenUndoHandle,
+	useDefaultScreenDraft,
+} from "./screens/useDefaultScreenDraft";
 
 export { DefaultScreenPicker } from "./screens/DefaultScreenPicker";
 export { ScreenSettingsCard } from "./screens/ScreenSettingsCards";
@@ -48,73 +50,48 @@ function ScreensSetupHeader({
 	);
 }
 
-export function ScreensSetup() {
+export function ScreensSetup({
+	undoRef,
+	onUndoAvailabilityChange,
+}: {
+	undoRef?: ScreenUndoHandle;
+	onUndoAvailabilityChange?: (available: boolean) => void;
+} = {}) {
 	const server = useScreens();
 	const desktop = useDesktopBridge();
 	const { state, dispatch } = useApp();
 	const [displays, setDisplays] = useState<Array<{ id: string; name: string }>>(
 		[],
 	);
-	const [deskPlaybackLayout, setDeskPlaybackLayout] =
-		useState<PlaybackSurfaceLayout | null>(null);
-	const [deskName, setDeskName] = useState("");
-	const [deskAlias, setDeskAlias] = useState("");
 	const [defaultScreenPickerOpen, setDefaultScreenPickerOpen] = useState(false);
 	const [defaultPlaybackModalOpen, setDefaultPlaybackModalOpen] =
 		useState(false);
-	const deskDraft = useRef<ControlDesk | null>(null);
-	const deskSaveQueue = useRef(Promise.resolve());
-	const pendingDeskSaves = useRef(0);
 	useEffect(() => {
 		if (desktop.available) void desktop.listDisplays().then(setDisplays);
 	}, [desktop]);
-	useEffect(() => {
-		const desk = server.session?.desk;
-		if (!desk || pendingDeskSaves.current > 0) return;
-		deskDraft.current = desk;
-		setDeskName(desk.name);
-		setDeskAlias(desk.osc_alias);
-		setDeskPlaybackLayout(defaultDeskPlaybackLayout(desk));
-		dispatch({
-			type: "SET_PLAYBACK_LAYOUT",
-			columns: desk.columns,
-			rows: desk.rows,
-		});
-	}, [server.session?.desk, dispatch]);
-	const applyDesk = (next: ControlDesk) => {
-		const current = deskDraft.current ?? server.session?.desk;
-		if (!current || JSON.stringify(current) === JSON.stringify(next)) {
-			return false;
-		}
-		deskDraft.current = next;
-		setDeskName(next.name);
-		setDeskAlias(next.osc_alias);
-		const layout = defaultDeskPlaybackLayout(next);
-		setDeskPlaybackLayout(layout);
-		dispatch({
-			type: "SET_PLAYBACK_LAYOUT",
-			columns: layout.playbacks_per_row,
-			rows: layout.rows.length,
-		});
-		pendingDeskSaves.current += 1;
-		deskSaveQueue.current = deskSaveQueue.current
-			.then(() => server.updateControlDesk(next))
-			.finally(() => {
-				pendingDeskSaves.current -= 1;
-			});
-		return true;
-	};
-	const updateDesk = (changes: Partial<ControlDesk>) => {
-		const current = deskDraft.current ?? server.session?.desk;
-		return current ? applyDesk({ ...current, ...changes }) : false;
-	};
-	const updateText = (field: "name" | "osc_alias", value: string) => {
-		updateDesk({ [field]: value });
-	};
-	const updateKeyboardShortcuts = (value: boolean) => {
-		if (value === state.regularNumberShortcuts) return;
-		dispatch({ type: "SET_REGULAR_NUMBER_SHORTCUTS", value });
-	};
+	const updateKeyboardShortcuts = useCallback(
+		(value: boolean) =>
+			dispatch({ type: "SET_REGULAR_NUMBER_SHORTCUTS", value }),
+		[dispatch],
+	);
+	const updatePlaybackLayout = useCallback(
+		(layout: PlaybackSurfaceLayout) =>
+			dispatch({
+				type: "SET_PLAYBACK_LAYOUT",
+				columns: layout.playbacks_per_row,
+				rows: layout.rows.length,
+			}),
+		[dispatch],
+	);
+	const defaultScreen = useDefaultScreenDraft({
+		desk: server.session?.desk,
+		regularNumberShortcuts: state.regularNumberShortcuts,
+		onKeyboardShortcuts: updateKeyboardShortcuts,
+		onPlaybackLayout: updatePlaybackLayout,
+		onPersistDesk: server.updateControlDesk,
+		undoRef,
+		onUndoAvailabilityChange,
+	});
 	const create = () =>
 		void server.saveScreen(
 			createScreenConfiguration(server.screens?.screens ?? [], {
@@ -134,16 +111,18 @@ export function ScreensSetup() {
 			/>
 			<div className="screens-setup-list">
 				<DefaultScreenSettings
-					deskName={deskName}
-					deskAlias={deskAlias}
-					playbackLayout={deskPlaybackLayout}
+					deskName={defaultScreen.draft?.name ?? ""}
+					deskAlias={defaultScreen.draft?.osc_alias ?? ""}
+					playbackLayout={defaultScreen.playbackLayout}
 					fallbackColumns={state.playbackColumns}
 					fallbackRows={state.playbackRows}
 					playbackSlots={state.playbackColumns * state.playbackRows}
 					keyboardShortcuts={state.regularNumberShortcuts}
-					onName={(name) => updateText("name", name)}
-					onAlias={(alias) => updateText("osc_alias", alias)}
-					onKeyboardShortcuts={updateKeyboardShortcuts}
+					onName={(name) => defaultScreen.updateText("name", name)}
+					onAlias={(alias) => defaultScreen.updateText("osc_alias", alias)}
+					onTextFocus={defaultScreen.beginTextEdit}
+					onTextBlur={defaultScreen.endTextEdit}
+					onKeyboardShortcuts={defaultScreen.updateKeyboardShortcuts}
 					onConfigurePlaybacks={() => setDefaultPlaybackModalOpen(true)}
 					onChooseDefault={() => setDefaultScreenPickerOpen(true)}
 				/>
@@ -174,15 +153,15 @@ export function ScreensSetup() {
 					onClose={() => setDefaultScreenPickerOpen(false)}
 				/>
 			)}
-			{defaultPlaybackModalOpen && deskPlaybackLayout && (
+			{defaultPlaybackModalOpen && defaultScreen.playbackLayout && (
 				<PlaybackLayoutModal
-					initialLayout={deskPlaybackLayout}
+					initialLayout={defaultScreen.playbackLayout}
 					pageMode="follow_main"
 					pageModeLocked
 					onClose={() => setDefaultPlaybackModalOpen(false)}
 					onSave={(layout) => {
 						const legacy = playbackLayoutLegacyFields(layout);
-						updateDesk({
+						defaultScreen.updateDesk({
 							columns: legacy.columns,
 							rows: legacy.rows,
 							buttons: legacy.buttons,

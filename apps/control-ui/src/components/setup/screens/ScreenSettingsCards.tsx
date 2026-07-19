@@ -165,6 +165,8 @@ export function DefaultScreenSettings({
 	keyboardShortcuts,
 	onName,
 	onAlias,
+	onTextFocus,
+	onTextBlur,
 	onKeyboardShortcuts,
 	onConfigurePlaybacks,
 	onChooseDefault,
@@ -178,6 +180,8 @@ export function DefaultScreenSettings({
 	keyboardShortcuts: boolean;
 	onName: (name: string) => void;
 	onAlias: (alias: string) => void;
+	onTextFocus: (field: "name" | "osc_alias") => void;
+	onTextBlur: (field: "name" | "osc_alias") => void;
 	onKeyboardShortcuts: (enabled: boolean) => void;
 	onConfigurePlaybacks: () => void;
 	onChooseDefault: () => void;
@@ -198,11 +202,15 @@ export function DefaultScreenSettings({
 				<TextField
 					label="Name"
 					value={deskName}
+					onFocus={() => onTextFocus("name")}
+					onBlur={() => onTextBlur("name")}
 					onChange={(event) => onName(event.target.value)}
 				/>
 				<TextField
 					label="OSC alias"
 					value={deskAlias}
+					onFocus={() => onTextFocus("osc_alias")}
+					onBlur={() => onTextBlur("osc_alias")}
 					onChange={(event) => onAlias(event.target.value)}
 				/>
 				<div className="playback-layout-summary">
