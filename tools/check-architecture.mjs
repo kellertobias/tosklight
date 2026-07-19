@@ -84,6 +84,14 @@ function serverEntrypointIsThin() {
     fail("server entry point must delegate lifecycle ownership to the server library");
 }
 
+function activeShowMutationDirections() {
+  const updateAdapter = path.join(repositoryRoot, "crates/server/src/runtime/update_plans.rs");
+  const source = fs.readFileSync(updateAdapter, "utf8");
+  for (const forbidden of [".put_object(", "refresh_command_show", "load_engine_snapshot"])
+    if (source.includes(forbidden))
+      fail(`Update must route active-show writes through ActiveShowService, not ${forbidden}`);
+}
+
 function walk(directory) {
   if (!fs.existsSync(directory)) return [];
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -143,6 +151,7 @@ function typeScriptDependencyDirections() {
 
 rustDependencyDirections();
 serverEntrypointIsThin();
+activeShowMutationDirections();
 typeScriptDependencyDirections();
 
 if (failures.length > 0) {
