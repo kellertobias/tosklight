@@ -7,8 +7,6 @@ pub(super) enum RecordOperation {
     Subtract,
 }
 
-type ChangedShowObject = (&'static str, String, u64);
-
 fn merge_recorded_cue(
     cue: &mut light_playback::Cue,
     incoming: light_playback::Cue,
@@ -56,14 +54,13 @@ fn merge_recorded_cue(
 }
 
 fn update_recorded_cue_list(
-    store: &ShowStore,
-    object: light_show::VersionedObject,
+    object: &light_show::VersionedObject,
     mut list: light_playback::CueList,
     programmer: &light_programmer::ProgrammerState,
     requested: Option<f64>,
     timing: CommandTiming,
     operation: RecordOperation,
-) -> Result<ChangedShowObject, String> {
+) -> Result<light_application::ActiveShowObjectMutation, String> {
     let number =
         requested.unwrap_or_else(|| list.cues.last().map_or(1.0, |cue| cue.number.floor() + 1.0));
     if let Some(position) = list.cues.iter().position(|cue| cue.number == number) {
@@ -92,15 +89,12 @@ fn update_recorded_cue_list(
     }
     list.cues
         .sort_by(|left, right| left.number.total_cmp(&right.number));
-    let revision = store
-        .put_object(
-            "cue_list",
-            &object.id,
-            &serde_json::to_value(list).map_err(|error| error.to_string())?,
-            object.revision,
-        )
-        .map_err(|error| error.to_string())?;
-    Ok(("cue_list", object.id, revision))
+    Ok(put_active_show_object(
+        light_application::ActiveShowObjectKind::CueList,
+        object.id.clone(),
+        object.revision,
+        serde_json::to_value(list).map_err(|error| error.to_string())?,
+    ))
 }
 
 fn new_cue_list(
@@ -151,32 +145,25 @@ fn new_cue_list(
 }
 
 fn store_new_cue_list(
-    store: &ShowStore,
     playback: u16,
     cue: light_playback::Cue,
-) -> Result<Vec<ChangedShowObject>, String> {
+) -> Result<Vec<light_application::ActiveShowObjectMutation>, String> {
     let (list, definition) = new_cue_list(playback, cue);
     let list_id = list.id.0.to_string();
-    let list_revision = store
-        .put_object(
-            "cue_list",
-            &list_id,
-            &serde_json::to_value(list).map_err(|error| error.to_string())?,
-            0,
-        )
-        .map_err(|error| error.to_string())?;
     let playback_id = playback.to_string();
-    let playback_revision = store
-        .put_object(
-            "playback",
-            &playback_id,
-            &serde_json::to_value(definition).map_err(|error| error.to_string())?,
-            0,
-        )
-        .map_err(|error| error.to_string())?;
     Ok(vec![
-        ("cue_list", list_id, list_revision),
-        ("playback", playback_id, playback_revision),
+        put_active_show_object(
+            light_application::ActiveShowObjectKind::CueList,
+            list_id,
+            0,
+            serde_json::to_value(list).map_err(|error| error.to_string())?,
+        ),
+        put_active_show_object(
+            light_application::ActiveShowObjectKind::Playback,
+            playback_id,
+            0,
+            serde_json::to_value(definition).map_err(|error| error.to_string())?,
+        ),
     ])
 }
 
@@ -187,7 +174,13 @@ pub(super) fn store_cue_at(
     requested: Option<f64>,
     timing: CommandTiming,
     operation: RecordOperation,
+    context: &light_application::ActionContext,
 ) -> Result<(), String> {
+    let _activation = state
+        .activation_lock
+        .clone()
+        .try_lock_owned()
+        .map_err(|_| "the active show is changing; retry Record".to_owned())?;
     let (entry, store) = active_show_store(state)?;
     let snapshot = state.engine.snapshot();
     let programmer = state
@@ -201,15 +194,14 @@ pub(super) fn store_cue_at(
     if operation != RecordOperation::Overwrite && requested.is_none() {
         return Err("RECORD + and RECORD - require an explicit CUE target".into());
     }
-    let changed_objects = if let Some(definition) = snapshot
+    let mutations = if let Some(definition) = snapshot
         .playbacks
         .iter()
         .find(|item| item.number == playback)
     {
         let (_, object, list) = cue_list_for_playback(&store, &snapshot, definition.number)?;
         vec![update_recorded_cue_list(
-            &store,
-            object,
+            &object,
             list,
             &programmer,
             requested,
@@ -224,15 +216,18 @@ pub(super) fn store_cue_at(
             return Err("Cuelist number must be within 1-1000".into());
         }
         let number = requested.unwrap_or(1.0);
-        store_new_cue_list(
-            &store,
-            playback,
-            programmer_cue(&programmer, number, timing),
-        )?
+        store_new_cue_list(playback, programmer_cue(&programmer, number, timing))?
     };
-    refresh_command_show(state, &entry)?;
-    for (kind, id, revision) in changed_objects {
-        emit_command_object_changed(state, &entry, kind, &id, revision);
+    let action = active_show_object_action(context.clone(), entry.id, mutations);
+    let result = run_active_show_object_action(state, action).map_err(|error| error.message)?;
+    for change in result.changes {
+        emit_command_object_changed(
+            state,
+            &entry,
+            change.kind.as_str(),
+            &change.object_id,
+            change.object_revision,
+        );
     }
     Ok(())
 }

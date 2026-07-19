@@ -4,6 +4,7 @@ pub(super) fn execute_set_command(
     state: &AppState,
     session: &Session,
     tokens: &[String],
+    context: &light_application::ActionContext,
 ) -> Result<usize, String> {
     if tokens.first().is_some_and(|token| token == "GROUP") {
         if tokens.len() != 2 {
@@ -28,7 +29,6 @@ pub(super) fn execute_set_command(
     }
     let at = tokens.iter().position(|token| token == "AT");
     if let Some(at) = at {
-        let (entry, store) = active_show_store(state)?;
         if tokens.first().is_some_and(|token| token == "GROUP") {
             return Err(
                 "playback pages accept Cuelists only; store the group in a Cuelist first".into(),
@@ -39,27 +39,9 @@ pub(super) fn execute_set_command(
                 .ok_or("playback number is required")?
                 .parse::<u16>()
                 .map_err(|_| "playback number is invalid")?;
-            if !state
-                .engine
-                .snapshot()
-                .playbacks
-                .iter()
-                .any(|item| item.number == playback)
-            {
-                return Err(format!("Cuelist {playback} does not exist"));
-            }
-            if !state.engine.snapshot().playbacks.iter().any(|item| {
-                item.number == playback
-                    && matches!(item.target, light_playback::PlaybackTarget::CueList { .. })
-            }) {
-                return Err(format!(
-                    "Cuelist {playback} cannot be assigned to a playback"
-                ));
-            }
             let (page, slot) = parse_page_slot(&tokens[at + 1..])?;
-            assign_page_slot(&store, &state.engine.snapshot(), page, slot, playback)?;
+            assign_page_slot(state, context, page, slot, playback)?;
         }
-        refresh_command_show(state, &entry)?;
         return Ok(1);
     }
     let snapshot = state.engine.snapshot();
@@ -88,12 +70,20 @@ pub(super) fn parse_page_slot(tokens: &[String]) -> Result<(u8, u8), String> {
 }
 
 pub(super) fn assign_page_slot(
-    store: &ShowStore,
-    snapshot: &EngineSnapshot,
+    state: &AppState,
+    context: &light_application::ActionContext,
     page: u8,
     slot: u8,
     playback: u16,
 ) -> Result<(), String> {
+    let _activation = state
+        .activation_lock
+        .clone()
+        .try_lock_owned()
+        .map_err(|_| "the active show is changing; retry Set".to_owned())?;
+    let (entry, store) = active_show_store(state)?;
+    let snapshot = state.engine.snapshot();
+    validate_cuelist_assignment(&snapshot, playback)?;
     let object = store
         .objects("playback_page")
         .map_err(|error| error.to_string())?
@@ -115,13 +105,43 @@ pub(super) fn assign_page_slot(
             })
     };
     definition.slots.insert(slot, playback);
-    store
-        .put_object(
-            "playback_page",
-            &page.to_string(),
-            &serde_json::to_value(definition).map_err(|error| error.to_string())?,
-            object.map_or(0, |object| object.revision),
-        )
-        .map_err(|error| error.to_string())?;
+    let mutation = playback_layout_mutations::put_page(
+        definition,
+        object.as_ref().map_or(0, |stored| stored.revision),
+    )
+    .map_err(|error| error.message)?;
+    let action = active_show_object_action(context.clone(), entry.id, vec![mutation]);
+    let result = run_active_show_object_action(state, action).map_err(|error| error.message)?;
+    let change = result
+        .changes
+        .first()
+        .expect("the committed page assignment returns its page change");
+    emit_command_object_changed(
+        state,
+        &entry,
+        change.kind.as_str(),
+        &change.object_id,
+        change.object_revision,
+    );
     Ok(())
+}
+
+fn validate_cuelist_assignment(snapshot: &EngineSnapshot, playback: u16) -> Result<(), String> {
+    let Some(definition) = snapshot
+        .playbacks
+        .iter()
+        .find(|item| item.number == playback)
+    else {
+        return Err(format!("Cuelist {playback} does not exist"));
+    };
+    if matches!(
+        definition.target,
+        light_playback::PlaybackTarget::CueList { .. }
+    ) {
+        Ok(())
+    } else {
+        Err(format!(
+            "Cuelist {playback} cannot be assigned to a playback"
+        ))
+    }
 }

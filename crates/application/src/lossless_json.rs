@@ -102,10 +102,18 @@ fn apply_array_delta(stored: &mut Vec<Value>, before: &[Value], after: &[Value])
         *stored = after.to_vec();
         return;
     };
+    let mut occurrences = HashMap::new();
     *stored = after
         .iter()
         .map(|after_item| {
-            merge_array_item(stored, before, &stored_indexes, &before_indexes, after_item)
+            merge_array_item(
+                stored,
+                before,
+                &stored_indexes,
+                &before_indexes,
+                after_item,
+                &mut occurrences,
+            )
         })
         .collect();
 }
@@ -113,15 +121,21 @@ fn apply_array_delta(stored: &mut Vec<Value>, before: &[Value], after: &[Value])
 fn merge_array_item(
     stored: &[Value],
     before: &[Value],
-    stored_indexes: &HashMap<String, usize>,
-    before_indexes: &HashMap<String, usize>,
+    stored_indexes: &HashMap<String, Vec<usize>>,
+    before_indexes: &HashMap<String, Vec<usize>>,
     after: &Value,
+    occurrences: &mut HashMap<String, usize>,
 ) -> Value {
-    let Some(key) = item_key(after) else {
+    let Some((key, occurrence)) = item_occurrence(after, occurrences) else {
         return after.clone();
     };
     let (Some(stored_index), Some(before_index)) =
         (stored_indexes.get(&key), before_indexes.get(&key))
+    else {
+        return after.clone();
+    };
+    let (Some(stored_index), Some(before_index)) =
+        (stored_index.get(occurrence), before_index.get(occurrence))
     else {
         return after.clone();
     };
@@ -154,13 +168,20 @@ fn overlay_array_extensions(target: &mut [Value], supplied: &[Value], canonical:
     if let (Some(target_indexes), Some(canonical_indexes)) =
         (keyed_indexes(target), keyed_indexes(canonical))
     {
+        let mut occurrences = HashMap::new();
         for supplied_item in supplied {
-            let Some(key) = item_key(supplied_item) else {
+            let Some((key, occurrence)) = item_occurrence(supplied_item, &mut occurrences) else {
                 continue;
             };
             let (Some(target_index), Some(canonical_index)) =
                 (target_indexes.get(&key), canonical_indexes.get(&key))
             else {
+                continue;
+            };
+            let (Some(target_index), Some(canonical_index)) = (
+                target_index.get(occurrence),
+                canonical_index.get(occurrence),
+            ) else {
                 continue;
             };
             overlay_extensions(
@@ -201,10 +222,13 @@ fn write_canonical_fields(target: &mut Value, canonical: &Value) {
 fn write_canonical_array(target: &mut Vec<Value>, canonical: &[Value]) {
     if let (Some(target_indexes), Some(_)) = (keyed_indexes(target), keyed_indexes(canonical)) {
         let mut normalized = Vec::with_capacity(canonical.len());
+        let mut occurrences = HashMap::new();
         for canonical_item in canonical {
-            let key = item_key(canonical_item).expect("keyed index guarantees item keys");
+            let (key, occurrence) = item_occurrence(canonical_item, &mut occurrences)
+                .expect("keyed index guarantees item keys");
             let mut item = target_indexes
                 .get(&key)
+                .and_then(|indexes| indexes.get(occurrence))
                 .map_or_else(|| canonical_item.clone(), |index| target[*index].clone());
             write_canonical_fields(&mut item, canonical_item);
             normalized.push(item);
@@ -219,15 +243,24 @@ fn write_canonical_array(target: &mut Vec<Value>, canonical: &[Value]) {
     }
 }
 
-fn keyed_indexes(values: &[Value]) -> Option<HashMap<String, usize>> {
+fn keyed_indexes(values: &[Value]) -> Option<HashMap<String, Vec<usize>>> {
     let mut indexes = HashMap::with_capacity(values.len());
     for (index, value) in values.iter().enumerate() {
         let key = item_key(value)?;
-        if indexes.insert(key, index).is_some() {
-            return None;
-        }
+        indexes.entry(key).or_insert_with(Vec::new).push(index);
     }
     Some(indexes)
+}
+
+fn item_occurrence(
+    value: &Value,
+    occurrences: &mut HashMap<String, usize>,
+) -> Option<(String, usize)> {
+    let key = item_key(value)?;
+    let occurrence = occurrences.entry(key.clone()).or_default();
+    let result = (key, *occurrence);
+    *occurrence += 1;
+    Some(result)
 }
 
 fn item_key(value: &Value) -> Option<String> {
@@ -299,6 +332,30 @@ mod tests {
                 {"id":"b","known":4,"future":"b"}
             ]})
         );
+    }
+
+    #[test]
+    fn duplicate_identities_are_matched_by_stable_occurrence() {
+        let before = json!({"items":[
+            {"id":"duplicate","known":1},
+            {"id":"duplicate","known":2}
+        ]});
+        let stored = json!({"items":[
+            {"id":"duplicate","known":1,"future":"first"},
+            {"id":"duplicate","known":2,"future":"second"}
+        ]});
+        let after = json!({"items":[
+            {"id":"duplicate","known":1},
+            {"id":"new","known":3},
+            {"id":"duplicate","known":2}
+        ]});
+
+        let merged =
+            merge_typed_request(Some(&stored), Some(&before), &after, &after, &after).unwrap();
+
+        assert_eq!(merged["items"][0]["future"], "first");
+        assert_eq!(merged["items"][1], json!({"id":"new","known":3}));
+        assert_eq!(merged["items"][2]["future"], "second");
     }
 
     #[test]

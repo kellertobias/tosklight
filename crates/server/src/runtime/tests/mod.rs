@@ -4,6 +4,8 @@ use super::*;
 
 #[path = "active_show_cue_preload_tests.rs"]
 mod active_show_cue_preload_tests;
+#[path = "active_show_playback_object_tests.rs"]
+mod active_show_playback_object_tests;
 #[path = "active_show_programmer_object_tests.rs"]
 mod active_show_programmer_object_tests;
 #[path = "active_show_route_tests.rs"]

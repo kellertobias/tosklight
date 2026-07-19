@@ -203,9 +203,53 @@ fn advancing_from_an_occupied_last_playback_page_creates_one_empty_page() {
         .engine
         .replace_snapshot(load_engine_snapshot(&entry).unwrap())
         .unwrap();
+    *state.active_show.write() = Some(entry.clone());
 
-    assert!(ensure_playback_page_for_advance(&state, &entry, 2).unwrap());
-    assert!(!ensure_playback_page_for_advance(&state, &entry, 3).unwrap());
+    let _activation = state.activation_lock.clone().try_lock_owned().unwrap();
+    let context = light_application::ActionContext::system(
+        Uuid::nil(),
+        light_application::ActionSource::Http,
+    );
+    let before_document = ShowStore::open(&entry.path)
+        .unwrap()
+        .portable_document()
+        .unwrap();
+    let before_runtime = state.engine.snapshot();
+    let before_events = state.application_events.latest_sequence();
+    let before_backups = startup_show_object_backup_count(&data_dir);
+    let created = ensure_playback_page_for_advance(&state, &entry, 2, &context).unwrap();
+    assert!(created.available());
+    assert_eq!(created.event_sequence(), Some(before_events + 1));
+    let after_create = ShowStore::open(&entry.path)
+        .unwrap()
+        .portable_document()
+        .unwrap();
+    assert_eq!(
+        after_create.revision().value(),
+        before_document.revision().value() + 1
+    );
+    assert_eq!(state.application_events.latest_sequence(), before_events + 1);
+    assert_eq!(
+        startup_show_object_backup_count(&data_dir),
+        before_backups + 1
+    );
+    assert_eq!(state.engine.snapshot().revision, after_create.revision().value());
+    assert!(!Arc::ptr_eq(&state.engine.snapshot(), &before_runtime));
+    let missing = ensure_playback_page_for_advance(&state, &entry, 3, &context).unwrap();
+    assert!(!missing.available());
+    assert_eq!(missing.event_sequence(), None);
+    assert_eq!(
+        ShowStore::open(&entry.path)
+            .unwrap()
+            .portable_revision()
+            .unwrap(),
+        after_create.revision()
+    );
+    assert_eq!(state.application_events.latest_sequence(), before_events + 1);
+    assert_eq!(
+        startup_show_object_backup_count(&data_dir),
+        before_backups + 1
+    );
     let pages = ShowStore::open(&entry.path)
         .unwrap()
         .objects("playback_page")
@@ -219,6 +263,15 @@ fn advancing_from_an_occupied_last_playback_page_creates_one_empty_page() {
     );
     assert_eq!(pages.len(), 2);
     let _ = std::fs::remove_dir_all(data_dir);
+}
+
+fn startup_show_object_backup_count(data_dir: &std::path::Path) -> usize {
+    std::fs::read_dir(data_dir.join("backups"))
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_name().to_string_lossy().contains("show-object"))
+        .count()
 }
 
 #[tokio::test]

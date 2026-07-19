@@ -128,6 +128,60 @@ fn preset_update_does_not_resurrect_a_removed_known_map_entry() {
     assert_eq!(normalized["values"][FIXTURE_ID]["dimmer"]["future"], "keep");
 }
 
+#[test]
+fn playback_update_forces_storage_number_and_preserves_target_extensions() {
+    let existing = playback(4);
+    let mut existing = serde_json::to_value(existing).unwrap();
+    existing["target"]["future_target"] = json!({"kept": true});
+    existing["future_surface"] = json!("wing");
+    let mut request = canonical_playback(&existing);
+    request["number"] = json!(99);
+    request["name"] = json!("Updated");
+
+    let normalized = normalize(&existing, ActiveShowObjectKind::Playback, "4", request);
+
+    assert_eq!(normalized["number"], 4);
+    assert_eq!(normalized["name"], "Updated");
+    assert_eq!(normalized["target"]["future_target"]["kept"], true);
+    assert_eq!(normalized["future_surface"], "wing");
+}
+
+#[test]
+fn playback_page_update_forces_storage_number_and_preserves_extensions() {
+    let existing = json!({
+        "number": 2,
+        "name": "Page 2",
+        "slots": {"1": 4},
+        "future_layout": {"columns": 10}
+    });
+    let mut request = canonical_playback_page(&existing);
+    request["number"] = json!(7);
+    request["slots"]["2"] = json!(5);
+
+    let normalized = normalize(&existing, ActiveShowObjectKind::PlaybackPage, "2", request);
+
+    assert_eq!(normalized["number"], 2);
+    assert_eq!(normalized["slots"], json!({"1": 4, "2": 5}));
+    assert_eq!(normalized["future_layout"]["columns"], 10);
+}
+
+#[test]
+fn numbered_objects_reject_non_numeric_storage_identity() {
+    for (kind, body) in [
+        (
+            ActiveShowObjectKind::Playback,
+            serde_json::to_value(playback(1)).unwrap(),
+        ),
+        (
+            ActiveShowObjectKind::PlaybackPage,
+            json!({"number": 1, "name": "Main", "slots": {}}),
+        ),
+    ] {
+        let mutation = mutation(kind, "not-a-number", body.clone());
+        assert!(normalize_body(None, &mutation, &body).is_err());
+    }
+}
+
 fn normalize(existing: &Value, kind: ActiveShowObjectKind, id: &str, request: Value) -> Value {
     let mutation = mutation(kind, id, request.clone());
     normalize_body(Some(existing), &mutation, &request).unwrap()
@@ -157,6 +211,46 @@ fn canonical_preset(raw: &Value) -> Value {
 fn canonical_cue_list(raw: &Value) -> Value {
     serde_json::to_value(serde_json::from_value::<light_playback::CueList>(raw.clone()).unwrap())
         .unwrap()
+}
+
+fn canonical_playback(raw: &Value) -> Value {
+    serde_json::to_value(
+        serde_json::from_value::<light_playback::PlaybackDefinition>(raw.clone()).unwrap(),
+    )
+    .unwrap()
+}
+
+fn canonical_playback_page(raw: &Value) -> Value {
+    serde_json::to_value(
+        serde_json::from_value::<light_playback::PlaybackPage>(raw.clone()).unwrap(),
+    )
+    .unwrap()
+}
+
+fn playback(number: u16) -> light_playback::PlaybackDefinition {
+    light_playback::PlaybackDefinition {
+        number,
+        name: format!("Playback {number}"),
+        target: light_playback::PlaybackTarget::CueList {
+            cue_list_id: light_core::CueListId::new(),
+        },
+        buttons: light_playback::PlaybackDefinition::default_buttons(
+            &light_playback::PlaybackTarget::CueList {
+                cue_list_id: light_core::CueListId::new(),
+            },
+        ),
+        button_count: 3,
+        fader: light_playback::PlaybackFaderMode::Master,
+        has_fader: true,
+        go_activates: true,
+        auto_off: true,
+        xfade_millis: 0,
+        color: "#20c997".into(),
+        flash_release: light_playback::FlashReleaseMode::default(),
+        protect_from_swap: false,
+        presentation_icon: None,
+        presentation_image: None,
+    }
 }
 
 fn cue_list(id: &str) -> Value {

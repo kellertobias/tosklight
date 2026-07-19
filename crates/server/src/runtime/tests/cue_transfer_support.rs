@@ -11,6 +11,10 @@ struct CueTransferBaseline {
     source_revision: u64,
     destination_body: serde_json::Value,
     destination_revision: u64,
+    show_revision: u64,
+    event_sequence: u64,
+    backup_count: usize,
+    runtime: Arc<EngineSnapshot>,
 }
 
 struct CueTransferScenario {
@@ -48,12 +52,18 @@ impl CueTransferScenario {
         let show_path = data_dir.join("shows/cue-transfer.show");
         let show_id = initialise_show(&show_path, "Cue transfer").unwrap();
         let store = ShowStore::open(&show_path).unwrap();
-        for list in [&source, &destination] {
+        for (index, list) in [&source, &destination].into_iter().enumerate() {
+            let mut body = serde_json::to_value(list).unwrap();
+            body["future_cuelist_metadata"] = serde_json::json!({"list": index});
+            if index == 0 {
+                body["cues"][1]["future_cue_metadata"] =
+                    serde_json::json!({"owner": "newer-desk"});
+            }
             store
                 .put_object(
                     "cue_list",
                     &list.id.0.to_string(),
-                    &serde_json::to_value(list).unwrap(),
+                    &body,
                     0,
                 )
                 .unwrap();
@@ -104,8 +114,21 @@ impl CueTransferScenario {
             source_revision: source.revision,
             destination_body: destination.body,
             destination_revision: destination.revision,
+            show_revision: store.portable_revision().unwrap().value(),
+            event_sequence: self.state.application_events.latest_sequence(),
+            backup_count: cue_transfer_backup_count(&self.data_dir),
+            runtime: self.state.engine.snapshot(),
         }
     }
+}
+
+fn cue_transfer_backup_count(data_dir: &std::path::Path) -> usize {
+    std::fs::read_dir(data_dir.join("backups"))
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_name().to_string_lossy().contains("show-object"))
+        .count()
 }
 
 fn transfer_cue_lists(

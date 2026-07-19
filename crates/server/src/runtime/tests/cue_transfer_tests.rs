@@ -16,6 +16,61 @@ fn cue_move_copy_requires_a_choice_and_preserves_plain_status_and_move_copy_axes
     }
 }
 
+#[test]
+fn cue_copy_preserves_extensions_on_duplicate_id_destination_cues() {
+    let scenario = CueTransferScenario::new();
+    let store = ShowStore::open(&scenario.show_path).unwrap();
+    let (_, destination_object, _) =
+        cue_list_for_playback(&store, &scenario.state.engine.snapshot(), 2).unwrap();
+    let mut body = destination_object.body;
+    let cues = body["cues"].as_array_mut().unwrap();
+    cues[0]["future_cue_metadata"] = serde_json::json!({"position": "first"});
+    let mut duplicate = cues[0].clone();
+    duplicate["number"] = serde_json::json!(3.0);
+    duplicate["future_cue_metadata"] = serde_json::json!({"position": "second"});
+    cues.push(duplicate);
+    store
+        .put_object(
+            "cue_list",
+            body["id"].as_str().unwrap(),
+            &body,
+            destination_object.revision,
+        )
+        .unwrap();
+    let entry = scenario.state.active_show.read().clone().unwrap();
+    scenario
+        .state
+        .engine
+        .replace_snapshot(load_engine_snapshot(&entry).unwrap())
+        .unwrap();
+
+    execute_programmer_command(
+        &scenario.state,
+        &scenario.session,
+        "COPY PLAIN SET 1 CUE 2 AT SET 2 CUE 2",
+    )
+    .unwrap();
+
+    let (_, destination_object, destination) = cue_list_for_playback(
+        &ShowStore::open(&scenario.show_path).unwrap(),
+        &scenario.state.engine.snapshot(),
+        2,
+    )
+    .unwrap();
+    assert_eq!(
+        destination
+            .cues
+            .iter()
+            .map(|cue| cue.number)
+            .collect::<Vec<_>>(),
+        vec![1.0, 2.0, 3.0]
+    );
+    let cues = destination_object.body["cues"].as_array().unwrap();
+    assert_eq!(cues[0]["future_cue_metadata"]["position"], "first");
+    assert_eq!(cues[2]["future_cue_metadata"]["position"], "second");
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
 fn verify_pending_cue_transfer_choice(
     scenario: &CueTransferScenario,
     before: &CueTransferBaseline,
@@ -68,6 +123,26 @@ fn execute_and_verify_cue_transfer(
         cue_list_for_playback(&store, &scenario.state.engine.snapshot(), 1).unwrap();
     let (_, destination_object, destination) =
         cue_list_for_playback(&store, &scenario.state.engine.snapshot(), 2).unwrap();
+    assert_eq!(
+        store.portable_revision().unwrap().value(),
+        before.show_revision + 1
+    );
+    assert_eq!(
+        scenario.state.application_events.latest_sequence(),
+        before.event_sequence + 1
+    );
+    assert_eq!(
+        cue_transfer_backup_count(&scenario.data_dir),
+        before.backup_count + 1
+    );
+    let runtime = scenario.state.engine.snapshot();
+    assert_eq!(runtime.revision, before.show_revision + 1);
+    assert!(!Arc::ptr_eq(&runtime, &before.runtime));
+    assert_eq!(source_object.body["future_cuelist_metadata"]["list"], 0);
+    assert_eq!(
+        destination_object.body["future_cuelist_metadata"]["list"],
+        1
+    );
     if case.moves {
         assert_eq!(source.cues.len(), 2);
         assert!(source.cues.iter().all(|cue| cue.number != 2.0));
@@ -104,6 +179,16 @@ fn execute_and_verify_cue_transfer(
         change.fixture_id != scenario.fixtures[2]
     }));
     assert!(transferred.group_changes.iter().all(|change| change.group_id != "3"));
+    let transferred_raw = destination_object.body["cues"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|cue| cue["id"] == transferred.id.to_string())
+        .unwrap();
+    assert_eq!(
+        transferred_raw["future_cue_metadata"]["owner"],
+        "newer-desk"
+    );
     verify_transferred_state(scenario, &destination, case.status);
 }
 

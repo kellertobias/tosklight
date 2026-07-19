@@ -31,130 +31,50 @@ pub(super) async fn upsert_playback_slot(
     Json(input): Json<PlaybackSlotUpsertInput>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let session = authenticate(&state, &headers)?;
-    if !(1..=light_playback::MAX_PLAYBACK_PAGES).contains(&page_number)
-        || !(1..=light_playback::MAX_PAGE_SLOTS).contains(&slot)
-    {
-        return Err(ApiError::bad_request(
-            "page and slot must each be within 1-127",
-        ));
-    }
+    validate_playback_slot(page_number, slot)?;
+    let activation = state.activation_lock.clone().lock_owned().await;
     let show = state
         .active_show
         .read()
         .clone()
         .ok_or_else(|| ApiError::bad_request("no show is open"))?;
     let store = ShowStore::open(&show.path).map_err(ApiError::store)?;
-    let playback_objects = store.objects("playback").map_err(ApiError::store)?;
-    let page_objects = store.objects("playback_page").map_err(ApiError::store)?;
-    let stored_page = page_objects
-        .iter()
-        .find(|object| object.id == page_number.to_string());
-    let mut page = stored_page
-        .map(|object| {
-            serde_json::from_value::<light_playback::PlaybackPage>(object.body.clone())
-                .map_err(|error| ApiError::bad_request(error.to_string()))
-        })
-        .transpose()?
-        .unwrap_or(light_playback::PlaybackPage {
-            number: page_number,
-            name: format!("Page {page_number}"),
-            slots: HashMap::new(),
-        });
-    let current_page_revision = stored_page.map_or(0, |object| object.revision);
-    if current_page_revision != input.expected_page_revision {
-        return Err(ApiError::store(light_show::StoreError::RevisionConflict {
-            expected: input.expected_page_revision,
-            current: current_page_revision,
-        }));
-    }
-    let existing_number = page.slots.get(&slot).copied();
-    let number = if let Some(number) = existing_number {
-        number
-    } else {
-        let used = playback_objects
-            .iter()
-            .filter_map(|object| object.id.parse::<u16>().ok())
-            .collect::<std::collections::HashSet<_>>();
-        (1..=light_playback::MAX_PLAYBACKS)
-            .find(|number| !used.contains(number))
-            .ok_or_else(|| ApiError::bad_request("playback pool is full"))?
-    };
-    let existing_playback = playback_objects
-        .iter()
-        .find(|object| object.id == number.to_string());
-    let current_playback_revision = existing_playback.map_or(0, |object| object.revision);
-    if current_playback_revision != input.expected_playback_revision {
-        return Err(ApiError::store(light_show::StoreError::RevisionConflict {
-            expected: input.expected_playback_revision,
-            current: current_playback_revision,
-        }));
-    }
-    let mut playback = input.playback;
-    playback.number = number;
-    playback.validate().map_err(ApiError::bad_request)?;
-    page.number = page_number;
-    page.slots.insert(slot, number);
-    page.validate().map_err(ApiError::bad_request)?;
-
-    let mut candidate = (*state.engine.snapshot()).clone();
-    candidate
-        .playbacks
-        .retain(|definition| definition.number != number);
-    candidate.playbacks.push(playback.clone());
-    if let Some(candidate_page) = candidate
-        .playback_pages
-        .iter_mut()
-        .find(|candidate| candidate.number == page_number)
-    {
-        *candidate_page = page.clone();
-    } else {
-        candidate.playback_pages.push(page.clone());
-    }
-    state
-        .engine
-        .validate_snapshot_for_runtime(&candidate)
-        .map_err(|error| ApiError::bad_request(error.to_string()))?;
-
-    let playback_body =
-        serde_json::to_value(&playback).map_err(|error| ApiError::internal(error.to_string()))?;
-    let page_body =
-        serde_json::to_value(&page).map_err(|error| ApiError::internal(error.to_string()))?;
-    let playback_id = number.to_string();
-    let page_id = page_number.to_string();
-    backup_show(&state, &show)?;
-    let revisions = store
-        .mutate_objects_atomically(
-            &[
-                AtomicObjectWrite {
-                    kind: "playback",
-                    id: &playback_id,
-                    body: &playback_body,
-                    expected: current_playback_revision,
-                },
-                AtomicObjectWrite {
-                    kind: "playback_page",
-                    id: &page_id,
-                    body: &page_body,
-                    expected: current_page_revision,
-                },
-            ],
-            &[],
-        )
-        .map_err(ApiError::store)?;
-    state
-        .engine
-        .replace_snapshot(load_engine_snapshot(&show).map_err(ApiError::internal)?)
-        .map_err(|error| ApiError::internal(error.to_string()))?;
+    let plan = playback_layout_mutations::plan_playback_slot_upsert(
+        &store,
+        page_number,
+        slot,
+        input.playback,
+        input.expected_playback_revision,
+        input.expected_page_revision,
+    )?;
+    let action = active_show_object_action(
+        operator_action_context(&session, light_application::ActionSource::Http),
+        show.id,
+        plan.mutations,
+    );
+    let (result, _activation) =
+        run_active_show_object_action_async(&state, activation, action).await?;
+    let playback_revision = playback_layout_mutations::changed_revision(
+        &result,
+        light_application::ActiveShowObjectKind::Playback,
+        &plan.number.to_string(),
+    );
+    let page_revision = playback_layout_mutations::changed_revision(
+        &result,
+        light_application::ActiveShowObjectKind::PlaybackPage,
+        &page_number.to_string(),
+    );
     emit(
         &state,
         "playback_slot_changed",
-        serde_json::json!({"session_id":session.id,"page":page_number,"slot":slot,"playback_number":number}),
+        serde_json::json!({"session_id":session.id,"page":page_number,"slot":slot,"playback_number":plan.number}),
     );
     Ok(Json(serde_json::json!({
-        "playback": playback,
-        "playback_revision": revisions[0],
-        "page": page,
-        "page_revision": revisions[1]
+        "playback": plan.playback,
+        "playback_revision": playback_revision,
+        "page": plan.page,
+        "page_revision": page_revision,
+        "event_sequence": result.event_sequence
     })))
 }
 
@@ -165,94 +85,59 @@ pub(super) async fn clear_playback_slot(
     Json(input): Json<PlaybackSlotClearInput>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let session = authenticate(&state, &headers)?;
+    validate_playback_slot(page_number, slot)?;
+    let activation = state.activation_lock.clone().lock_owned().await;
     let show = state
         .active_show
         .read()
         .clone()
         .ok_or_else(|| ApiError::bad_request("no show is open"))?;
     let store = ShowStore::open(&show.path).map_err(ApiError::store)?;
-    let playback_objects = store.objects("playback").map_err(ApiError::store)?;
-    let page_objects = store.objects("playback_page").map_err(ApiError::store)?;
-    let primary_page = page_objects
+    let plan = playback_layout_mutations::plan_playback_slot_clear(
+        &store,
+        page_number,
+        slot,
+        input.expected_playback_revision,
+        input.expected_page_revision,
+    )?;
+    let action = active_show_object_action(
+        operator_action_context(&session, light_application::ActionSource::Http),
+        show.id,
+        plan.mutations,
+    );
+    let (result, _activation) =
+        run_active_show_object_action_async(&state, activation, action).await?;
+    let page_revisions = result
+        .changes
         .iter()
-        .find(|object| object.id == page_number.to_string())
-        .ok_or_else(|| ApiError::not_found("playback page"))?;
-    if primary_page.revision != input.expected_page_revision {
-        return Err(ApiError::store(light_show::StoreError::RevisionConflict {
-            expected: input.expected_page_revision,
-            current: primary_page.revision,
-        }));
-    }
-    let primary_definition: light_playback::PlaybackPage =
-        serde_json::from_value(primary_page.body.clone())
-            .map_err(|error| ApiError::bad_request(error.to_string()))?;
-    let number = primary_definition
-        .slots
-        .get(&slot)
-        .copied()
-        .ok_or_else(|| ApiError::not_found("paged playback"))?;
-    let playback_object = playback_objects
-        .iter()
-        .find(|object| object.id == number.to_string())
-        .ok_or_else(|| ApiError::not_found("playback"))?;
-    if playback_object.revision != input.expected_playback_revision {
-        return Err(ApiError::store(light_show::StoreError::RevisionConflict {
-            expected: input.expected_playback_revision,
-            current: playback_object.revision,
-        }));
-    }
-
-    let mut page_updates = Vec::new();
-    for object in page_objects {
-        let mut definition: light_playback::PlaybackPage =
-            serde_json::from_value(object.body.clone())
-                .map_err(|error| ApiError::bad_request(error.to_string()))?;
-        let before = definition.slots.len();
-        definition.slots.retain(|_, playback| *playback != number);
-        if definition.slots.len() != before {
-            page_updates.push((
-                object.id,
-                serde_json::to_value(definition)
-                    .map_err(|error| ApiError::internal(error.to_string()))?,
-                object.revision,
-            ));
-        }
-    }
-    let writes = page_updates
-        .iter()
-        .map(|(id, body, expected)| AtomicObjectWrite {
-            kind: "playback_page",
-            id,
-            body,
-            expected: *expected,
-        })
+        .filter(|change| change.kind == light_application::ActiveShowObjectKind::PlaybackPage)
+        .map(|change| change.object_revision)
         .collect::<Vec<_>>();
-    let playback_id = number.to_string();
-    let deletes = [AtomicObjectDelete {
-        kind: "playback",
-        id: &playback_id,
-        expected: playback_object.revision,
-    }];
-    backup_show(&state, &show)?;
-    let revisions = store
-        .mutate_objects_atomically(&writes, &deletes)
-        .map_err(ApiError::store)?;
-    state
-        .engine
-        .replace_snapshot(load_engine_snapshot(&show).map_err(ApiError::internal)?)
-        .map_err(|error| ApiError::internal(error.to_string()))?;
     emit(
         &state,
         "playback_slot_cleared",
-        serde_json::json!({"session_id":session.id,"page":page_number,"slot":slot,"playback_number":number}),
+        serde_json::json!({"session_id":session.id,"page":page_number,"slot":slot,"playback_number":plan.number}),
     );
     Ok(Json(serde_json::json!({
         "cleared": true,
         "page": page_number,
         "slot": slot,
-        "playback_number": number,
-        "page_revisions": revisions
+        "playback_number": plan.number,
+        "page_revisions": page_revisions,
+        "event_sequence": result.event_sequence
     })))
+}
+
+fn validate_playback_slot(page: u8, slot: u8) -> Result<(), ApiError> {
+    if (1..=light_playback::MAX_PLAYBACK_PAGES).contains(&page)
+        && (1..=light_playback::MAX_PAGE_SLOTS).contains(&slot)
+    {
+        Ok(())
+    } else {
+        Err(ApiError::bad_request(
+            "page and slot must each be within 1-127",
+        ))
+    }
 }
 pub(super) async fn pool_playback_state(
     State(state): State<AppState>,
@@ -344,14 +229,17 @@ pub(super) async fn update_desk_page(
             "session is not attached to this desk",
         ));
     }
+    let _activation = state.activation_lock.clone().lock_owned().await;
     let show = state
         .active_show
         .read()
         .clone()
         .ok_or_else(|| ApiError::bad_request("no show is open"))?;
-    {
+    let event_sequence = {
         let _ordered = state.playback_service.operation_lock();
-        if !ensure_playback_page_for_advance(&state, &show, input.page)? {
+        let context = operator_action_context(&session, light_application::ActionSource::Http);
+        let availability = ensure_playback_page_for_advance(&state, &show, input.page, &context)?;
+        if !availability.available() {
             return Err(ApiError::bad_request("playback page does not exist"));
         }
         state
@@ -359,12 +247,17 @@ pub(super) async fn update_desk_page(
             .lock()
             .set_desk_page(id, show.id, input.page)
             .map_err(ApiError::store)?;
-    }
+        availability.event_sequence()
+    };
     emit(
         &state,
         "playback_page_changed",
         serde_json::json!({"desk_id":id,"show_id":show.id,"page":input.page}),
     );
     send_osc_feedback(&state, false);
-    Ok(Json(serde_json::json!({"desk_id":id,"page":input.page})))
+    Ok(Json(serde_json::json!({
+        "desk_id":id,
+        "page":input.page,
+        "event_sequence":event_sequence
+    })))
 }

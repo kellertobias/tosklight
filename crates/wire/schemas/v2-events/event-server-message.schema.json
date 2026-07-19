@@ -1027,6 +1027,8 @@
       "enum": [
         "cue_list",
         "group",
+        "playback",
+        "playback_page",
         "preset"
       ]
     },

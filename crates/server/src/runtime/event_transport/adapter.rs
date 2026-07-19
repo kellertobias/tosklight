@@ -201,6 +201,8 @@ fn wire_show_object_change(change: &application::ActiveShowObjectChange) -> wire
         kind: match change.kind {
             application::ActiveShowObjectKind::CueList => wire::ShowObjectKind::CueList,
             application::ActiveShowObjectKind::Group => wire::ShowObjectKind::Group,
+            application::ActiveShowObjectKind::Playback => wire::ShowObjectKind::Playback,
+            application::ActiveShowObjectKind::PlaybackPage => wire::ShowObjectKind::PlaybackPage,
             application::ActiveShowObjectKind::Preset => wire::ShowObjectKind::Preset,
         },
         object_id: change.object_id.clone(),

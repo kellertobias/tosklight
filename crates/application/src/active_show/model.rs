@@ -9,6 +9,8 @@ use serde_json::Value;
 pub enum ActiveShowObjectKind {
     CueList,
     Group,
+    Playback,
+    PlaybackPage,
     Preset,
 }
 
@@ -17,6 +19,8 @@ impl ActiveShowObjectKind {
         match kind {
             "cue_list" => Some(Self::CueList),
             "group" => Some(Self::Group),
+            "playback" => Some(Self::Playback),
+            "playback_page" => Some(Self::PlaybackPage),
             "preset" => Some(Self::Preset),
             _ => None,
         }
@@ -26,6 +30,8 @@ impl ActiveShowObjectKind {
         match self {
             Self::CueList => "cue_list",
             Self::Group => "group",
+            Self::Playback => "playback",
+            Self::PlaybackPage => "playback_page",
             Self::Preset => "preset",
         }
     }

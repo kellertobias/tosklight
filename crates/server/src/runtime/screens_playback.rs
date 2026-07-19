@@ -1,50 +1,68 @@
 use super::*;
 
+pub(super) enum PlaybackPageAvailability {
+    Missing,
+    Existing,
+    Created { event_sequence: u64 },
+}
+
+impl PlaybackPageAvailability {
+    pub(super) const fn available(&self) -> bool {
+        !matches!(self, Self::Missing)
+    }
+
+    pub(super) const fn event_sequence(&self) -> Option<u64> {
+        match self {
+            Self::Created { event_sequence } => Some(*event_sequence),
+            Self::Missing | Self::Existing => None,
+        }
+    }
+}
+
 pub(super) fn ensure_playback_page_for_advance(
     state: &AppState,
     show: &ShowEntry,
     requested: u8,
-) -> Result<bool, ApiError> {
+    context: &light_application::ActionContext,
+) -> Result<PlaybackPageAvailability, ApiError> {
     let snapshot = state.engine.snapshot();
     if snapshot
         .playback_pages
         .iter()
         .any(|page| page.number == requested)
     {
-        return Ok(true);
+        return Ok(PlaybackPageAvailability::Existing);
     }
     let Some(last) = snapshot
         .playback_pages
         .iter()
         .max_by_key(|page| page.number)
     else {
-        return Ok(false);
+        return Ok(PlaybackPageAvailability::Missing);
     };
     if last.slots.is_empty() || last.number.checked_add(1) != Some(requested) {
-        return Ok(false);
+        return Ok(PlaybackPageAvailability::Missing);
     }
     let page = light_playback::PlaybackPage {
         number: requested,
         name: format!("Page {requested}"),
         slots: HashMap::new(),
     };
-    let body =
-        serde_json::to_value(&page).map_err(|error| ApiError::internal(error.to_string()))?;
-    let store = ShowStore::open(&show.path).map_err(ApiError::store)?;
-    backup_show(state, show)?;
-    let revision = store
-        .put_object("playback_page", &requested.to_string(), &body, 0)
-        .map_err(ApiError::store)?;
-    state
-        .engine
-        .replace_snapshot(load_engine_snapshot(show).map_err(ApiError::internal)?)
-        .map_err(|error| ApiError::internal(error.to_string()))?;
+    let mutation = playback_layout_mutations::put_page(page, 0)?;
+    let action = active_show_object_action(context.clone(), show.id, vec![mutation]);
+    let result = run_active_show_object_action(state, action)?;
+    let change = result
+        .changes
+        .first()
+        .expect("page creation returns one object change");
     emit(
         state,
         "show_object_changed",
-        serde_json::json!({"show_id":show.id,"kind":"playback_page","id":requested.to_string(),"revision":revision}),
+        serde_json::json!({"show_id":show.id,"kind":"playback_page","id":requested.to_string(),"revision":change.object_revision}),
     );
-    Ok(true)
+    Ok(PlaybackPageAvailability::Created {
+        event_sequence: result.event_sequence,
+    })
 }
 
 pub(super) async fn list_screens(

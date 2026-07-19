@@ -175,6 +175,8 @@ pub struct ShowObjectChange {
 pub enum ShowObjectKind {
     CueList,
     Group,
+    Playback,
+    PlaybackPage,
     Preset,
 }
 

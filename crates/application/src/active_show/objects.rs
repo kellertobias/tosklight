@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{ActionError, ActionErrorKind, lossless_json, prepare_show_candidate};
 use light_core::Revision;
-use light_playback::CueList;
+use light_playback::{CueList, PlaybackDefinition, PlaybackPage};
 use light_programmer::{GroupDefinition, Preset};
 use light_show::{PortableShowDocument, PortableShowObject, PortableShowTransaction};
 use serde_json::Value;
@@ -133,6 +133,8 @@ fn normalize_body(
     match mutation.kind {
         ActiveShowObjectKind::CueList => normalize_cue_list(existing, mutation, request),
         ActiveShowObjectKind::Group => normalize_group(existing, mutation, request),
+        ActiveShowObjectKind::Playback => normalize_playback(existing, mutation, request),
+        ActiveShowObjectKind::PlaybackPage => normalize_playback_page(existing, mutation, request),
         ActiveShowObjectKind::Preset => normalize_preset(existing, mutation, request),
     }
 }
@@ -185,6 +187,49 @@ fn normalize_preset(
         .map_err(invalid)?;
     lossless_json::merge_typed_request(existing, stored.as_ref(), request, &requested, &normalized)
         .map_err(invalid)
+}
+
+fn normalize_playback(
+    existing: Option<&Value>,
+    mutation: &ActiveShowObjectMutation,
+    request: &Value,
+) -> Result<Value, ActionError> {
+    let requested =
+        serde_json::from_value::<PlaybackDefinition>(request.clone()).map_err(invalid)?;
+    let stored = existing
+        .map(|body| serde_json::from_value::<PlaybackDefinition>(body.clone()).map_err(invalid))
+        .transpose()?;
+    let mut normalized = requested.clone();
+    normalized.number = parse_storage_number(&mutation.object_id, "playback")?;
+    normalized.validate().map_err(invalid)?;
+    lossless_json::merge_typed_request(existing, stored.as_ref(), request, &requested, &normalized)
+        .map_err(invalid)
+}
+
+fn normalize_playback_page(
+    existing: Option<&Value>,
+    mutation: &ActiveShowObjectMutation,
+    request: &Value,
+) -> Result<Value, ActionError> {
+    let requested = serde_json::from_value::<PlaybackPage>(request.clone()).map_err(invalid)?;
+    let stored = existing
+        .map(|body| serde_json::from_value::<PlaybackPage>(body.clone()).map_err(invalid))
+        .transpose()?;
+    let mut normalized = requested.clone();
+    normalized.number = parse_storage_number(&mutation.object_id, "playback page")?;
+    normalized.validate().map_err(invalid)?;
+    lossless_json::merge_typed_request(existing, stored.as_ref(), request, &requested, &normalized)
+        .map_err(invalid)
+}
+
+fn parse_storage_number<T>(object_id: &str, label: &str) -> Result<T, ActionError>
+where
+    T: std::str::FromStr,
+    T::Err: std::fmt::Display,
+{
+    object_id
+        .parse::<T>()
+        .map_err(|error| invalid(format!("invalid {label} storage id: {error}")))
 }
 
 fn next_revision(current: Revision) -> Result<Revision, ActionError> {

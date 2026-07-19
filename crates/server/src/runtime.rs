@@ -60,9 +60,8 @@ use light_media::{CitpClient, LibraryId, MediaCache, PreviewKey, ThumbnailKey};
 use light_output::{NetworkOutput, OutputHealth};
 use light_programmer::ProgrammerRegistry;
 use light_show::{
-    AtomicObjectDelete, AtomicObjectWrite, ControlDesk, DeskStore, DeskUser, PersistedSession,
-    RevisionCopySource, ScreenConfiguration, ShowEntry, ShowRevision, ShowStore, initialise_show,
-    validate_show_file,
+    AtomicObjectDelete, ControlDesk, DeskStore, DeskUser, PersistedSession, RevisionCopySource,
+    ScreenConfiguration, ShowEntry, ShowRevision, ShowStore, initialise_show, validate_show_file,
 };
 use parking_lot::{Mutex, RwLock};
 use rust_embed::RustEmbed;
@@ -127,6 +126,7 @@ mod playback_api;
 mod playback_dispatch;
 mod playback_inputs;
 mod playback_layout;
+mod playback_layout_mutations;
 mod playback_speed_groups;
 mod playback_target_actions;
 mod preload;

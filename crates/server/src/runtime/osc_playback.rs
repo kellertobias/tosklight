@@ -133,15 +133,27 @@ fn handle_osc_page(state: &AppState, parts: &[&str], arguments: &[OscArgument]) 
         OscArgument::Float(value) if value.is_finite() => Some(*value as u8),
         _ => None,
     });
-    let Some((page, show, desk)) = page
-        .zip(state.active_show.read().clone())
-        .and_then(|(page, show)| osc_control_desk(state, parts[1]).map(|desk| (page, show, desk)))
+    let Some(page) = page else {
+        return true;
+    };
+    let Ok(_activation) = state.activation_lock.clone().try_lock_owned() else {
+        return true;
+    };
+    let Some((show, desk)) = state
+        .active_show
+        .read()
+        .clone()
+        .and_then(|show| osc_control_desk(state, parts[1]).map(|desk| (show, desk)))
     else {
         return true;
     };
     {
         let _ordered = state.playback_service.operation_lock();
-        if !ensure_playback_page_for_advance(state, &show, page).unwrap_or(false) {
+        let context =
+            light_application::ActionContext::system(desk.id, light_application::ActionSource::Osc);
+        if !ensure_playback_page_for_advance(state, &show, page, &context)
+            .is_ok_and(|availability| availability.available())
+        {
             return true;
         }
         let _ = state.desk.lock().set_desk_page(desk.id, show.id, page);

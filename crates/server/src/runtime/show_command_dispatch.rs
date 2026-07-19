@@ -47,21 +47,12 @@ pub(super) fn execute_show_command(
         "RECORD" => {
             execute_record_show_command(state, session, parsed.body, timing, &snapshot, context)
         }
-        "SET" => execute_set_command(state, session, parsed.body),
+        "SET" => execute_set_command(state, session, parsed.body, context),
         operation => {
             if operation == "DELETE" && parsed.body.first().is_some_and(|token| token == "GROUP") {
                 delete_group_command(state, parsed.body, context)
             } else if parsed.body.first().is_some_and(|token| token == "SET") {
-                let (entry, store) = active_show_store(state)?;
-                execute_cue_mutation(
-                    state,
-                    operation,
-                    parsed.transfer_mode,
-                    parsed.body,
-                    &entry,
-                    &store,
-                    &snapshot,
-                )
+                execute_cue_mutation(state, operation, parsed.transfer_mode, parsed.body, context)
             } else {
                 execute_preset_mutation(state, operation, parsed.body, context)
             }

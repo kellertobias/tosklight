@@ -198,6 +198,7 @@ fn record_cue(
     timing: CommandTiming,
     operation: RecordOperation,
     snapshot: &EngineSnapshot,
+    context: &light_application::ActionContext,
 ) -> Result<usize, String> {
     if body.first().is_some_and(|token| token == "CUE") {
         let show = state.active_show.read().clone().ok_or("no show is open")?;
@@ -214,6 +215,7 @@ fn record_cue(
             Some(parse_command_cue_number(&body[1..])?),
             timing,
             operation,
+            context,
         )?;
         return Ok(1);
     }
@@ -228,6 +230,7 @@ fn record_cue(
         address.cue,
         timing,
         operation,
+        context,
     )?;
     Ok(1)
 }
@@ -295,7 +298,7 @@ pub(super) fn execute_record_show_command(
         .first()
         .is_some_and(|token| token == "CUE" || token == "SET")
     {
-        record_cue(state, session, body, timing, operation, snapshot)
+        record_cue(state, session, body, timing, operation, snapshot, context)
     } else if operation != RecordOperation::Overwrite {
         Err("RECORD + and RECORD - currently require GROUP or SET ... CUE targets".into())
     } else {

@@ -249,6 +249,190 @@ fn command_line_contract_supports_subsets_preset_lifecycle_and_cue_list_creation
 }
 
 #[test]
+fn new_cuelist_and_playback_record_is_one_active_show_batch() {
+    let scenario = CommandContractScenario::new();
+    execute_programmer_command(&scenario.state, &scenario.session, "GROUP 1 AT 50").unwrap();
+    let before = ShowStore::open(&scenario.show_path)
+        .unwrap()
+        .portable_document()
+        .unwrap();
+    let before_runtime = scenario.state.engine.snapshot();
+    let before_events = scenario.state.application_events.latest_sequence();
+    let before_backups = command_show_object_backup_count(&scenario.data_dir);
+
+    execute_programmer_command(
+        &scenario.state,
+        &scenario.session,
+        "RECORD SET 25 CUE 1",
+    )
+    .unwrap();
+
+    let after = ShowStore::open(&scenario.show_path)
+        .unwrap()
+        .portable_document()
+        .unwrap();
+    assert_eq!(after.revision().value(), before.revision().value() + 1);
+    assert_eq!(after.objects_of_kind("cue_list").count(), 1);
+    assert!(after.object("playback", "25").is_some());
+    assert_eq!(
+        command_show_object_backup_count(&scenario.data_dir),
+        before_backups + 1
+    );
+    assert_eq!(
+        scenario.state.application_events.latest_sequence(),
+        before_events + 1
+    );
+    let runtime = scenario.state.engine.snapshot();
+    assert_eq!(runtime.revision, after.revision().value());
+    assert!(!Arc::ptr_eq(&runtime, &before_runtime));
+    let light_application::EventReplay::Events(events) = scenario.state.application_events.replay(
+        before_events,
+        &light_application::EventFilter::default(),
+    ) else {
+        panic!("expected one active-show Record event");
+    };
+    assert_eq!(events.len(), 1);
+    let light_application::ApplicationEvent::Show(
+        light_application::ShowEvent::ObjectsChanged(change),
+    ) = &events[0].payload
+    else {
+        panic!("expected one typed object batch");
+    };
+    assert_eq!(change.changes.len(), 2);
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[test]
+fn set_cuelist_page_assignment_is_one_lossless_active_show_batch() {
+    let scenario = CommandContractScenario::new();
+    execute_programmer_command(&scenario.state, &scenario.session, "GROUP 1 AT 50").unwrap();
+    execute_programmer_command(
+        &scenario.state,
+        &scenario.session,
+        "RECORD SET 25 CUE 1",
+    )
+    .unwrap();
+    let store = ShowStore::open(&scenario.show_path).unwrap();
+    store
+        .put_object(
+            "playback_page",
+            "1",
+            &serde_json::json!({
+                "number": 1,
+                "name": "Main",
+                "slots": {},
+                "future_layout": {"columns": 10}
+            }),
+            0,
+        )
+        .unwrap();
+    let before = store.portable_document().unwrap();
+    let before_runtime = scenario.state.engine.snapshot();
+    let before_events = scenario.state.application_events.latest_sequence();
+    let before_backups = command_show_object_backup_count(&scenario.data_dir);
+
+    assert_eq!(
+        execute_programmer_command(&scenario.state, &scenario.session, "SET 25 AT 1.1").unwrap(),
+        1
+    );
+
+    let after = ShowStore::open(&scenario.show_path)
+        .unwrap()
+        .portable_document()
+        .unwrap();
+    let page = after.object("playback_page", "1").unwrap();
+    assert_eq!(after.revision().value(), before.revision().value() + 1);
+    assert_eq!(page.body()["slots"]["1"], 25);
+    assert_eq!(page.body()["future_layout"]["columns"], 10);
+    assert_eq!(
+        command_show_object_backup_count(&scenario.data_dir),
+        before_backups + 1
+    );
+    assert_eq!(
+        scenario.state.application_events.latest_sequence(),
+        before_events + 1
+    );
+    assert!(!Arc::ptr_eq(
+        &scenario.state.engine.snapshot(),
+        &before_runtime
+    ));
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[test]
+fn new_cuelist_and_playback_record_conflict_cannot_leave_a_partial_cuelist() {
+    let scenario = CommandContractScenario::new();
+    execute_programmer_command(&scenario.state, &scenario.session, "GROUP 1 AT 50").unwrap();
+    let conflicting = light_playback::PlaybackDefinition {
+        number: 25,
+        name: "Concurrent playback".into(),
+        target: light_playback::PlaybackTarget::GrandMaster,
+        buttons: light_playback::PlaybackDefinition::default_buttons(
+            &light_playback::PlaybackTarget::GrandMaster,
+        ),
+        button_count: 3,
+        fader: light_playback::PlaybackFaderMode::Master,
+        has_fader: true,
+        go_activates: true,
+        auto_off: false,
+        xfade_millis: 0,
+        color: "#20c997".into(),
+        flash_release: light_playback::FlashReleaseMode::default(),
+        protect_from_swap: false,
+        presentation_icon: None,
+        presentation_image: None,
+    };
+    let store = ShowStore::open(&scenario.show_path).unwrap();
+    store
+        .put_object(
+            "playback",
+            "25",
+            &serde_json::to_value(conflicting).unwrap(),
+            0,
+        )
+        .unwrap();
+    let before = store.portable_document().unwrap();
+    let runtime = scenario.state.engine.snapshot();
+    let event_sequence = scenario.state.application_events.latest_sequence();
+    let backups = command_show_object_backup_count(&scenario.data_dir);
+
+    let error = execute_programmer_command(
+        &scenario.state,
+        &scenario.session,
+        "RECORD SET 25 CUE 1",
+    )
+    .unwrap_err();
+    assert!(error.contains("stale playback 25 revision"));
+
+    let after = ShowStore::open(&scenario.show_path)
+        .unwrap()
+        .portable_document()
+        .unwrap();
+    assert_eq!(after.revision(), before.revision());
+    assert_eq!(after.objects_of_kind("cue_list").count(), 0);
+    assert_eq!(after.object("playback", "25").unwrap().revision(), 1);
+    assert!(Arc::ptr_eq(&scenario.state.engine.snapshot(), &runtime));
+    assert_eq!(
+        scenario.state.application_events.latest_sequence(),
+        event_sequence
+    );
+    assert_eq!(
+        command_show_object_backup_count(&scenario.data_dir),
+        backups
+    );
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+fn command_show_object_backup_count(data_dir: &std::path::Path) -> usize {
+    std::fs::read_dir(data_dir.join("backups"))
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_name().to_string_lossy().contains("show-object"))
+        .count()
+}
+
+#[test]
 fn spd_grp_commands_preserve_precision_mapping_relative_changes_and_phase_links() {
     let (state, data_dir) = test_state();
     let user = state.desk.lock().users().unwrap().remove(0);

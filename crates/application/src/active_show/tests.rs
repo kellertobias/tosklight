@@ -340,6 +340,90 @@ fn cue_list_mutation_uses_one_prepared_boundary_and_keeps_action_context() {
 }
 
 #[test]
+fn playback_and_page_batch_prepares_backs_up_commits_and_installs_once() {
+    let rig = TestRig::new();
+    let cue_list_id = light_core::CueListId(Uuid::from_u128(0x701));
+    rig.seed_object(
+        "cue_list",
+        &cue_list_id.0.to_string(),
+        cue_list_body(cue_list_id, "Main"),
+    );
+    let target = light_playback::PlaybackTarget::CueList { cue_list_id };
+    let mut playback = serde_json::to_value(light_playback::PlaybackDefinition {
+        number: 99,
+        name: "Main".into(),
+        buttons: light_playback::PlaybackDefinition::default_buttons(&target),
+        target,
+        button_count: 3,
+        fader: light_playback::PlaybackFaderMode::Master,
+        has_fader: true,
+        go_activates: true,
+        auto_off: true,
+        xfade_millis: 0,
+        color: "#20c997".into(),
+        flash_release: light_playback::FlashReleaseMode::default(),
+        protect_from_swap: false,
+        presentation_icon: None,
+        presentation_image: None,
+    })
+    .unwrap();
+    playback["future_playback"] = json!({"kept": true});
+    let page = json!({
+        "number": 9,
+        "name": "Main",
+        "slots": {"1": 1},
+        "future_page": "kept"
+    });
+
+    let result = rig
+        .service
+        .mutate_objects(
+            rig.object_action(vec![
+                ActiveShowObjectMutation {
+                    kind: ActiveShowObjectKind::Playback,
+                    object_id: "1".into(),
+                    expected_object_revision: 0,
+                    mutation: ActiveShowObjectMutationKind::Put { body: playback },
+                },
+                ActiveShowObjectMutation {
+                    kind: ActiveShowObjectKind::PlaybackPage,
+                    object_id: "1".into(),
+                    expected_object_revision: 0,
+                    mutation: ActiveShowObjectMutationKind::Put { body: page },
+                },
+            ]),
+            &rig.ports,
+        )
+        .unwrap();
+
+    assert_eq!(
+        rig.steps(),
+        [
+            "begin",
+            "prepare",
+            "backup",
+            "commit",
+            "install",
+            "reconcile"
+        ]
+    );
+    assert_eq!(result.show_revision.value(), 2);
+    assert_eq!(result.event_sequence, 1);
+    assert_eq!(result.changes.len(), 2);
+    assert_eq!(rig.object_body("playback", "1")["number"], 1);
+    assert_eq!(
+        rig.object_body("playback", "1")["future_playback"]["kept"],
+        true
+    );
+    assert_eq!(rig.object_body("playback_page", "1")["number"], 1);
+    assert_eq!(rig.object_body("playback_page", "1")["future_page"], "kept");
+    let installed = rig.installed_snapshot().unwrap();
+    assert_eq!(installed.revision, 2);
+    assert_eq!(installed.playbacks.len(), 1);
+    assert_eq!(installed.playback_pages.len(), 1);
+}
+
+#[test]
 fn preset_address_is_validated_before_backup_and_commit() {
     let rig = TestRig::new();
     let body = serde_json::to_value(light_programmer::Preset {
