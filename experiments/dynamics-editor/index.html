@@ -12,211 +12,159 @@
       <section class="ui-window" aria-label="Dynamics editor dummy">
         <header class="ui-window-header">
           <div class="ui-window-title">Dynamics</div>
-          <div class="ui-window-info">
-            <b id="header-name">1 · Circle chase</b>
-            <small id="header-detail">6 independent attribute lanes · Group 1</small>
-          </div>
+          <button class="example-trigger" id="example-trigger" aria-expanded="false" aria-controls="example-menu">
+            <b id="header-name">1 · Circle around current</b>
+            <small id="header-detail">3 lanes · axial fixture order</small>
+          </button>
+          <div class="example-menu" id="example-menu" hidden></div>
           <div class="spacer"></div>
-          <button class="header-button" data-action="undo">Undo</button>
-          <button class="header-button" data-action="redo">Redo</button>
           <div class="view-switch" role="tablist" aria-label="Dynamics editor view">
             <button role="tab" aria-selected="true" data-view="curves">Curves</button>
             <button role="tab" aria-selected="false" data-view="phase">Phase spread</button>
             <button role="tab" aria-selected="false" data-view="speed">Speed</button>
           </div>
-          <button class="header-button transport" data-action="transport" aria-pressed="false">▶ Preview</button>
+          <button class="header-button transport" data-action="transport" aria-pressed="true">■ Stop</button>
         </header>
 
         <div class="window-body">
           <section class="editor-surface">
             <div class="view-stack">
-            <div class="view-panel curves-view is-active" data-view-panel="curves">
-              <div class="lane-toolbar">
-              <span><b>Attribute lanes</b><small>Tap a lane, then use the six encoders</small></span>
-              <div class="toolbar-actions">
-                <button class="compact-button" data-action="add-lane">+ Lane</button>
-              </div>
-              </div>
-
-            <div class="lane-scroller" id="lane-scroller">
-              <button class="attribute-lane is-active" data-lane="Intensity" data-unit="%" data-color="amber">
-                <span class="lane-identity"><i class="attribute-mark amber"></i><b>Intensity</b><small>Dimmer · keyframes</small></span>
-                <span class="lane-curve" aria-label="Intensity scalar curve">
-                  <svg viewBox="0 0 600 72" preserveAspectRatio="none" aria-hidden="true">
-                    <path class="curve-fill" d="M0 58 C130 58 170 13 300 13 S470 58 600 58 L600 72 L0 72 Z" />
-                    <path class="curve-line" d="M0 58 C130 58 170 13 300 13 S470 58 600 58" />
-                    <g class="keyframe-marks"><circle cx="0" cy="58" r="5"/><circle cx="300" cy="13" r="5"/><circle cx="600" cy="58" r="5"/></g>
-                    <g class="phase-marks"></g>
-                    <line class="lane-playhead" x1="0" x2="0" y1="0" y2="72" />
-                  </svg>
-                  <span class="axis-start">0%</span><span class="axis-middle">50%</span><span class="axis-end">100%</span>
-                </span>
-                <span class="lane-summary"><b>10 → 100 → 10%</b><small>Sine · 0°–330°</small></span>
-              </button>
-
-              <button class="attribute-lane" data-lane="Pan" data-unit="°" data-color="cyan">
-                <span class="lane-identity"><i class="attribute-mark cyan"></i><b>Pan</b><small>Position · keyframes</small></span>
-                <span class="lane-curve" aria-label="Pan scalar curve">
-                  <svg viewBox="0 0 600 72" preserveAspectRatio="none" aria-hidden="true">
-                    <path class="curve-fill" d="M0 36 C100 36 185 10 300 10 S500 62 600 36 L600 72 L0 72 Z" />
-                    <path class="curve-line" d="M0 36 C100 36 185 10 300 10 S500 62 600 36" />
-                    <g class="keyframe-marks"><circle cx="0" cy="36" r="5"/><circle cx="300" cy="10" r="5"/><circle cx="600" cy="36" r="5"/></g>
-                    <g class="phase-marks"></g><line class="lane-playhead" x1="0" x2="0" y1="0" y2="72" />
-                  </svg><span class="axis-start">0%</span><span class="axis-middle">50%</span><span class="axis-end">100%</span>
-                </span>
-                <span class="lane-summary"><b>−90 → 90 → −90°</b><small>Sine · ÷ 2</small></span>
-              </button>
-
-              <button class="attribute-lane" data-lane="Tilt" data-unit="°" data-color="cyan">
-                <span class="lane-identity"><i class="attribute-mark cyan"></i><b>Tilt</b><small>Position · center + size</small></span>
-                <span class="lane-curve" aria-label="Tilt scalar curve">
-                  <svg viewBox="0 0 600 72" preserveAspectRatio="none" aria-hidden="true">
-                    <path class="curve-fill" d="M0 13 C130 13 170 58 300 58 S470 13 600 13 L600 72 L0 72 Z" />
-                    <path class="curve-line" d="M0 13 C130 13 170 58 300 58 S470 13 600 13" />
-                    <g class="keyframe-marks"><circle cx="0" cy="13" r="5"/><circle cx="300" cy="58" r="5"/><circle cx="600" cy="13" r="5"/></g>
-                    <g class="phase-marks"></g><line class="lane-playhead" x1="0" x2="0" y1="0" y2="72" />
-                  </svg><span class="axis-start">0%</span><span class="axis-middle">50%</span><span class="axis-end">100%</span>
-                </span>
-                <span class="lane-summary"><b>Center 35° · Size 40°</b><small>Cosine · × 1</small></span>
-              </button>
-
-              <button class="attribute-lane" data-lane="Red" data-unit="%" data-color="red">
-                <span class="lane-identity"><i class="attribute-mark red"></i><b>Red</b><small>Color · keyframes</small></span>
-                <span class="lane-curve" aria-label="Red scalar curve">
-                  <svg viewBox="0 0 600 72" preserveAspectRatio="none" aria-hidden="true">
-                    <path class="curve-fill" d="M0 58 L140 58 L140 14 L430 14 L430 58 L600 58 L600 72 L0 72 Z" />
-                    <path class="curve-line" d="M0 58 L140 58 L140 14 L430 14 L430 58 L600 58" />
-                    <g class="keyframe-marks"><circle cx="0" cy="58" r="5"/><circle cx="140" cy="14" r="5"/><circle cx="430" cy="58" r="5"/><circle cx="600" cy="58" r="5"/></g>
-                    <g class="phase-marks"></g><line class="lane-playhead" x1="0" x2="0" y1="0" y2="72" />
-                  </svg><span class="axis-start">0%</span><span class="axis-middle">50%</span><span class="axis-end">100%</span>
-                </span>
-                <span class="lane-summary"><b>0 → 100 → 0%</b><small>PWM · independent</small></span>
-              </button>
-
-              <button class="attribute-lane" data-lane="Green" data-unit="%" data-color="green">
-                <span class="lane-identity"><i class="attribute-mark green"></i><b>Green</b><small>Color · keyframes</small></span>
-                <span class="lane-curve" aria-label="Green scalar curve">
-                  <svg viewBox="0 0 600 72" preserveAspectRatio="none" aria-hidden="true">
-                    <path class="curve-fill" d="M0 58 C130 58 170 23 300 23 S470 58 600 58 L600 72 L0 72 Z" />
-                    <path class="curve-line" d="M0 58 C130 58 170 23 300 23 S470 58 600 58" />
-                    <g class="keyframe-marks"><circle cx="0" cy="58" r="5"/><circle cx="300" cy="23" r="5"/><circle cx="600" cy="58" r="5"/></g>
-                    <g class="phase-marks"></g><line class="lane-playhead" x1="0" x2="0" y1="0" y2="72" />
-                  </svg><span class="axis-start">0%</span><span class="axis-middle">50%</span><span class="axis-end">100%</span>
-                </span>
-                <span class="lane-summary"><b>0 → 70 → 0%</b><small>Sine · independent</small></span>
-              </button>
-
-              <button class="attribute-lane" data-lane="Blue" data-unit="%" data-color="blue">
-                <span class="lane-identity"><i class="attribute-mark blue"></i><b>Blue</b><small>Color · keyframes</small></span>
-                <span class="lane-curve" aria-label="Blue scalar curve">
-                  <svg viewBox="0 0 600 72" preserveAspectRatio="none" aria-hidden="true">
-                    <path class="curve-fill" d="M0 18 C130 18 170 58 300 58 S470 18 600 18 L600 72 L0 72 Z" />
-                    <path class="curve-line" d="M0 18 C130 18 170 58 300 58 S470 18 600 18" />
-                    <g class="keyframe-marks"><circle cx="0" cy="18" r="5"/><circle cx="300" cy="58" r="5"/><circle cx="600" cy="18" r="5"/></g>
-                    <g class="phase-marks"></g><line class="lane-playhead" x1="0" x2="0" y1="0" y2="72" />
-                  </svg><span class="axis-start">0%</span><span class="axis-middle">50%</span><span class="axis-end">100%</span>
-                </span>
-                <span class="lane-summary"><b>100 → 0 → 100%</b><small>Cosine · independent</small></span>
-              </button>
-            </div>
-
-              <section class="keyframe-editor" aria-label="Selected lane keyframes">
-              <div class="keyframe-context"><b id="keyframe-lane-name">Intensity keyframes</b><small>Select a point or insert a new one</small></div>
-              <div class="keyframe-list" id="keyframe-list"></div>
-              <button class="insert-keyframe" data-action="insert-keyframe">+ Keyframe</button>
-              <div class="source-editor">
-                <span>Source</span>
-                <div class="source-options" role="group" aria-label="Keyframe source">
-                  <button data-source="Preset" aria-pressed="false">Preset</button>
-                  <button data-source="Fixed" aria-pressed="true">Fixed</button>
-                  <button data-source="Current" aria-pressed="false">Current</button>
+              <section class="view-panel curves-view is-active" data-view-panel="curves">
+                <div class="lane-toolbar">
+                  <span><b>Attribute curves</b><small id="lane-selection-summary">Click selects one lane · Shift-click adds or removes lanes</small></span>
+                  <button class="compact-button" data-action="add-lane">+ Lane</button>
                 </div>
-                <small id="source-detail">Fixed · 10%</small>
-              </div>
+                <div class="lane-scroller" id="lane-scroller"></div>
+                <div class="lane-bottom-editor">
+                  <div class="lane-mode-switch" role="group" aria-label="Selected lane generation mode">
+                    <button data-lane-mode="Keyframes">Keyframes</button>
+                    <button data-lane-mode="Function max/min">Max / min</button>
+                    <button data-lane-mode="Function amplitude">Middle / amplitude</button>
+                  </div>
+                  <section class="keyframe-editor" id="keyframe-editor" aria-label="Selected lane keyframes">
+                    <div class="keyframe-context"><b id="keyframe-lane-name">Intensity keyframes</b><small>Touch a point to select it</small></div>
+                    <div class="keyframe-list" id="keyframe-list"></div>
+                    <button class="insert-keyframe" data-action="insert-keyframe">+ Keyframe</button>
+                    <div class="source-editor"><span>Source</span><b id="source-detail">Preset · On</b></div>
+                  </section>
+                  <section class="function-editor" id="function-editor" aria-label="Selected lane function controls" hidden></section>
+                </div>
+              </section>
+
+              <section class="view-panel phase-view" data-view-panel="phase" hidden>
+                <div class="view-toolbar">
+                  <span><b>Shared fixture phase spread</b><small>The same 10×10 fixture distribution applies to every attribute</small></span>
+                  <span class="shared-phase-readout"><b id="phase-summary-title">0 THRU 360°</b><small id="phase-summary-detail">100 fixtures · axial</small></span>
+                </div>
+                <div class="phase-workspace">
+                  <section class="phase-all-lanes" id="phase-all-lanes" aria-label="All attribute curves with shared fixture phases"></section>
+                  <section class="phase-order-panel">
+                    <header><b>Fixture order</b><small>Choose how the phase moves through the grid</small></header>
+                    <div class="phase-methods" role="group" aria-label="Phase ordering method">
+                      <button data-ordering="Selection">Selection</button>
+                      <button data-ordering="Random each loop">Random / loop</button>
+                      <button data-ordering="Linear">Grid linear</button>
+                      <button data-ordering="Radial out">Radial out</button>
+                      <button data-ordering="Radial in">Radial in</button>
+                      <button data-ordering="Axial">Axial radar</button>
+                    </div>
+                    <p id="ordering-explanation">Axial sweeps clockwise around the center like radar.</p>
+                    <div class="linear-direction-control" id="linear-direction-control" hidden>
+                      <span><b>Linear direction</b><small>0° left→right · 90° top→bottom</small></span>
+                      <div>
+                        <button data-direction-step="-45" aria-label="Rotate linear direction counterclockwise">−45°</button>
+                        <strong id="linear-direction-value">90° · top → bottom</strong>
+                        <button data-direction-step="45" aria-label="Rotate linear direction clockwise">+45°</button>
+                      </div>
+                    </div>
+                    <div class="phase-span-control">
+                      <span><b>Phase span / wave width</b><small>Larger phase span makes the spatial wave narrower</small></span>
+                      <div class="phase-span-presets" role="group" aria-label="Phase span presets">
+                        <button data-phase-span="180">180° broad</button>
+                        <button data-phase-span="360">360°</button>
+                        <button data-phase-span="720">720° narrow</button>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </section>
+
+              <section class="view-panel speed-view" data-view-panel="speed" hidden>
+                <div class="view-toolbar">
+                  <span><b>Cycle speed and synchronization</b><small>Shared transport; lane multipliers stay with their curves</small></span>
+                </div>
+                <div class="speed-workspace">
+                  <section class="transport-overview">
+                    <div class="tempo-readout"><small id="speed-source-label">Fixed duration</small><b id="speed-primary-value">6.0 s</b><span id="speed-secondary-value">per complete cycle</span></div>
+                    <div class="beat-ruler" aria-label="Transport cycle"><i class="transport-position"></i><span>1</span><span>2</span><span>3</span><span>4</span><span>1</span><span>2</span><span>3</span><span>4</span></div>
+                    <div class="transport-meta"><span><small>Overall</small><b id="overall-speed-value">× 1</b></span><span><small>Quantize</small><b id="quantize-value">Beat</b></span><span><small>Start</small><b id="start-policy-value">Start now</b></span></div>
+                  </section>
+                  <section class="speed-group-panel">
+                    <header><b>Speed groups</b><small>Select a shared tempo and watch the fixture preview change speed</small></header>
+                    <button class="fixed-speed-choice is-active" id="fixed-speed-choice"><b>Fixed duration</b><span id="fixed-speed-choice-value">6.0 s</span></button>
+                    <div class="speed-group-list" id="speed-group-list"></div>
+                  </section>
+                </div>
               </section>
             </div>
 
-            <div class="view-panel phase-view" data-view-panel="phase" hidden>
-              <div class="view-toolbar">
-                <span><b>Shared fixture phase spread</b><small>The same numbered fixture positions apply to every attribute curve</small></span>
-                <span class="shared-phase-readout"><b id="phase-summary-title">0 THRU 360°</b><small id="phase-summary-detail">12 fixtures · endpoint exclusive · selection order</small></span>
-              </div>
-              <div class="phase-workspace">
-                <section class="phase-all-lanes" id="phase-all-lanes" aria-label="All attribute curves with shared fixture phases"></section>
-                <section class="fixture-order-panel">
-                  <header><b>Fixture order</b><small>Group 1 · authoritative selection order</small></header>
-                  <div class="fixture-order" id="fixture-order"></div>
-                  <div class="phase-methods" role="group" aria-label="Phase ordering method">
-                    <button class="is-active" data-ordering="Selection">Selection</button>
-                    <button data-ordering="Linear">Grid linear</button>
-                    <button data-ordering="Radial out">Radial out</button>
-                    <button data-ordering="Radial in">Radial in</button>
-                  </div>
-                </section>
-              </div>
-            </div>
-
-            <div class="view-panel speed-view" data-view-panel="speed" hidden>
-              <div class="view-toolbar">
-                <span><b>Cycle speed and synchronization</b><small>One transport, plus independent multipliers for every scalar lane</small></span>
-              </div>
-              <div class="speed-workspace">
-                <section class="transport-overview">
-                  <div class="tempo-readout"><small id="speed-source-label">Fixed duration</small><b id="speed-primary-value">4.0 s</b><span id="speed-secondary-value">per complete cycle</span></div>
-                  <div class="beat-ruler" aria-label="Transport cycle"><i class="transport-position"></i><span>1</span><span>2</span><span>3</span><span>4</span><span>1</span><span>2</span><span>3</span><span>4</span></div>
-                  <div class="transport-meta"><span><small>Overall</small><b id="overall-speed-value">× 1</b></span><span><small>Quantize</small><b id="quantize-value">Beat</b></span><span><small>Start</small><b id="start-policy-value">Start now</b></span></div>
-                </section>
-                <section class="lane-speed-panel">
-                  <header><b>Lane multipliers</b><small>Select a lane, then turn encoder 4</small></header>
-                  <div class="lane-speed-list">
-                    <button class="lane-speed is-active" data-speed-lane="Intensity"><i class="attribute-mark amber"></i><b>Intensity</b><span>× 1</span><small>4.0 s</small></button>
-                    <button class="lane-speed" data-speed-lane="Pan"><i class="attribute-mark cyan"></i><b>Pan</b><span>÷ 2</span><small>8.0 s</small></button>
-                    <button class="lane-speed" data-speed-lane="Tilt"><i class="attribute-mark cyan"></i><b>Tilt</b><span>× 1</span><small>4.0 s</small></button>
-                    <button class="lane-speed" data-speed-lane="Red"><i class="attribute-mark red"></i><b>Red</b><span>× 2</span><small>2.0 s</small></button>
-                    <button class="lane-speed" data-speed-lane="Green"><i class="attribute-mark green"></i><b>Green</b><span>× 2</span><small>2.0 s</small></button>
-                    <button class="lane-speed" data-speed-lane="Blue"><i class="attribute-mark blue"></i><b>Blue</b><span>× 2</span><small>2.0 s</small></button>
-                  </div>
-                </section>
-              </div>
-            </div>
-            </div>
-
             <section class="encoder-surface" aria-label="Six encoder controls">
-              <header><span><b>Encoder input</b><small>Turn with − / + · push the knob for the alternate action</small></span><span id="encoder-context">Intensity lane · keyframe A</span></header>
-              <div class="encoder-bank">
-                <article class="encoder-card is-active" data-encoder="1">
-                  <span class="encoder-number">1</span><span class="encoder-label">Value</span><strong class="encoder-value">10%</strong>
-                  <div class="encoder-control"><button data-encoder-turn="-1" aria-label="Turn encoder 1 left">−</button><button class="encoder-knob" data-encoder-push aria-label="Push encoder 1"><i></i><small>Push: A</small></button><button data-encoder-turn="1" aria-label="Turn encoder 1 right">+</button></div>
-                </article>
-                <article class="encoder-card" data-encoder="2">
-                  <span class="encoder-number">2</span><span class="encoder-label">Keyframe time</span><strong class="encoder-value">0%</strong>
-                  <div class="encoder-control"><button data-encoder-turn="-1" aria-label="Turn encoder 2 left">−</button><button class="encoder-knob" data-encoder-push aria-label="Push encoder 2"><i></i><small>Push: Fine</small></button><button data-encoder-turn="1" aria-label="Turn encoder 2 right">+</button></div>
-                </article>
-                <article class="encoder-card" data-encoder="3">
-                  <span class="encoder-number">3</span><span class="encoder-label">Segment</span><strong class="encoder-value">Sine</strong>
-                  <div class="encoder-control"><button data-encoder-turn="-1" aria-label="Turn encoder 3 left">−</button><button class="encoder-knob" data-encoder-push aria-label="Push encoder 3"><i></i><small>Push: Select</small></button><button data-encoder-turn="1" aria-label="Turn encoder 3 right">+</button></div>
-                </article>
-                <article class="encoder-card" data-encoder="4">
-                  <span class="encoder-number">4</span><span class="encoder-label">Fixture phase</span><strong class="encoder-value">0 → 360°</strong>
-                  <div class="encoder-control"><button data-encoder-turn="-1" aria-label="Turn encoder 4 left">−</button><button class="encoder-knob" data-encoder-push aria-label="Push encoder 4"><i></i><small>Push: Edit points</small></button><button data-encoder-turn="1" aria-label="Turn encoder 4 right">+</button></div>
-                </article>
-                <article class="encoder-card" data-encoder="5">
-                  <span class="encoder-number">5</span><span class="encoder-label">Phase block</span><strong class="encoder-value">1</strong>
-                  <div class="encoder-control"><button data-encoder-turn="-1" aria-label="Turn encoder 5 left">−</button><button class="encoder-knob" data-encoder-push aria-label="Push encoder 5"><i></i><small>Push: Wings off</small></button><button data-encoder-turn="1" aria-label="Turn encoder 5 right">+</button></div>
-                </article>
-                <article class="encoder-card" data-encoder="6">
-                  <span class="encoder-number">6</span><span class="encoder-label">Cycle</span><strong class="encoder-value">4.0 s</strong>
-                  <div class="encoder-control"><button data-encoder-turn="-1" aria-label="Turn encoder 6 left">−</button><button class="encoder-knob" data-encoder-push aria-label="Push encoder 6"><i></i><small>Push: Speed Group</small></button><button data-encoder-turn="1" aria-label="Turn encoder 6 right">+</button></div>
-                </article>
-              </div>
+              <header><span><b>Encoder input</b><small>Outer −/+ are pushed turns · inner −/+ are regular turns</small></span><span id="encoder-context">Intensity · keyframe A</span><button class="encoder-help-button" id="encoder-help-button">Help</button></header>
+              <div class="encoder-bank" id="encoder-bank"></div>
             </section>
 
-            <footer class="status-bar"><span class="status-dot"></span><span id="status-message">Intensity selected · encoder 4 push enters phase editing</span><span class="spacer"></span><span id="target-summary">12 targets · selection order</span></footer>
+            <footer class="status-bar"><span class="status-dot"></span><span id="status-message">Preview running locally</span><span class="spacer"></span><span id="target-summary">100 fixtures · axial</span></footer>
           </section>
+
+          <aside class="fixture-sidebar" aria-label="Live 10 by 10 fixture preview">
+            <header><span><b>Fixture preview</b><small id="grid-order-label">Axial radar · 10×10</small></span><strong id="grid-time">0%</strong></header>
+            <div class="fixture-grid" id="fixture-grid" aria-label="100 fixtures in row-first selection order"></div>
+            <div class="fixture-detail" id="fixture-detail"><b>Fixture 1</b><span>Intensity 100%</span><span>Color pure white</span><span>Pan 0° · Tilt 0°</span></div>
+            <div class="grid-legend"><span><i class="legend-dim"></i>Intensity</span><span><i class="legend-color"></i>RGB color</span><span><i class="legend-position"></i>Pan X · Tilt Y</span></div>
+          </aside>
         </div>
       </section>
     </main>
-    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <section class="modal-backdrop" id="value-modal" hidden aria-label="Value and source editor">
+      <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="value-modal-title">
+        <header><b id="value-modal-title">Intensity · keyframe A</b><button data-close-modal="value-modal" aria-label="Close value editor">×</button></header>
+        <div class="modal-source-tabs" role="group" aria-label="Value source">
+          <button data-modal-source="Current">Current</button><button data-modal-source="Fixed">Fixed value</button><button data-modal-source="Preset">Preset</button>
+        </div>
+        <div class="preset-picker" id="preset-picker"></div>
+        <label class="fixed-value-editor" id="fixed-value-editor" hidden>Fixed value <input id="fixed-value-input" type="number" step="1" /></label>
+        <p class="current-value-copy" id="current-value-copy" hidden>Current uses the value the fixture has at the moment the effect starts. It is captured from the upstream programmer value before this effect contributes.</p>
+      </div>
+    </section>
+
+    <section class="modal-backdrop" id="lane-modal" hidden aria-label="Add attribute lane">
+      <div class="modal-panel compact-modal" role="dialog" aria-modal="true" aria-labelledby="lane-modal-title">
+        <header><b id="lane-modal-title">Add attribute lane</b><button data-close-modal="lane-modal" aria-label="Close lane picker">×</button></header>
+        <p>Dynamics currently supports these six scalar attributes.</p>
+        <div class="lane-picker" id="lane-picker"></div>
+      </div>
+    </section>
+
+    <section class="modal-backdrop" id="mode-modal" hidden aria-label="Lane mode and selection editor">
+      <div class="modal-panel mode-modal" role="dialog" aria-modal="true" aria-labelledby="mode-modal-title">
+        <header><b id="mode-modal-title">Encoder 1 · lane mode</b><button data-close-modal="mode-modal" aria-label="Close lane mode editor">×</button></header>
+        <div class="mode-modal-tabs" role="tablist" aria-label="Lane generation mode">
+          <button role="tab" data-mode-modal-tab="Keyframes">Keyframes</button>
+          <button role="tab" data-mode-modal-tab="Function max/min">Max / min</button>
+          <button role="tab" data-mode-modal-tab="Function amplitude">Amplitude</button>
+        </div>
+        <div class="mode-modal-list" id="mode-modal-list"></div>
+      </div>
+    </section>
+
+    <section class="modal-backdrop" id="encoder-help-modal" hidden aria-label="Encoder help">
+      <div class="modal-panel encoder-help-modal" role="dialog" aria-modal="true" aria-labelledby="encoder-help-title">
+        <header><b id="encoder-help-title">Encoder help</b><button data-close-modal="encoder-help-modal" aria-label="Close encoder help">×</button></header>
+        <div class="encoder-help-content" id="encoder-help-content"></div>
+      </div>
+    </section>
+
     <script src="app.js"></script>
   </body>
 </html>
