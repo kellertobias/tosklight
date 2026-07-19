@@ -209,5 +209,8 @@ fn owned_refresh_publishes_inside_outer_interaction_without_a_duplicate() {
     assert_eq!(completed.output.events[0].event_sequence, 1);
     assert_eq!(completed.event_sequence, None);
     assert_eq!(setup.events.latest_sequence(), 1);
-    assert_eq!(registry.selection(session).unwrap().selected, vec![first, second]);
+    assert_eq!(
+        registry.selection(session).unwrap().selected,
+        vec![first, second]
+    );
 }

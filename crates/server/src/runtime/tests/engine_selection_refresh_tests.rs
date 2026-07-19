@@ -380,9 +380,7 @@ fn assert_selection_events_precede_show_event(state: &AppState, after_sequence: 
     )));
     assert!(matches!(
         &events[2].payload,
-        light_application::ApplicationEvent::Show(
-            light_application::ShowEvent::ObjectsChanged(_)
-        )
+        light_application::ApplicationEvent::Show(light_application::ShowEvent::ObjectsChanged(_))
     ));
 }
 

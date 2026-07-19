@@ -4,7 +4,7 @@ This is the living handoff for [`major-refactoring.md`](major-refactoring.md). U
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-19 after engine-driven Programmer selection publication.
+Last updated: 2026-07-19 after engine-driven selection and targeted Group-master updates.
 
 ## Guardrails
 
@@ -91,9 +91,17 @@ Last updated: 2026-07-19 after engine-driven Programmer selection publication.
   one engine-generation selection refresh. It compares resolved Group membership rather than
   unrelated Group metadata, locks changed desk projections in UUID order, and publishes one final
   correlated selection event per changed desk before the owning Show event. Nested command
-  mutations exclude their already-locked actor desk so its outer Programming boundary remains the
-  sole publisher. Focused two-desk Group PUT/undo and software `RECORD GROUP 1` tests prove exact
-  event counts, final LiveGroup rules, stable correlation, and absence of actor re-lock deadlocks.
+  mutations exclude their already-held actor gate from the peer lock set while still publishing
+  that actor in UUID event order; the outer Programming boundary suppresses the already-sent
+  selection component. Focused two-desk Group PUT/undo and software `RECORD GROUP 1` tests prove
+  exact event counts, final LiveGroup rules, stable correlation, Show-last ordering, and absence of
+  actor re-lock deadlocks.
+- [x] Replaced high-rate Group-master whole-snapshot replacement with a topology-invariant engine
+  update. It atomically swaps only the snapshot, resolved Group map, and compiled master index while
+  sharing Playback and every unrelated compiled generation component, so fader movement neither
+  rebuilds Playback nor refreshes live Programmer selections. Legacy WebSocket and Matter writes
+  now respect show activation, reject stale-show races, persist only real changes, and retain the
+  existing Playback/output compatibility responses.
 - [x] Migrated the production command-line editors and action consumers onto the scoped
   Programming store. A provider-owned latest-wins writer gives immediate optimistic feedback,
   bounds slow writes to one in flight plus the newest pending value, waits for accepted writes
@@ -202,10 +210,11 @@ Last updated: 2026-07-19 after engine-driven Programmer selection publication.
   application tests, 4 command HTTP scenarios, the focused OSC shortcut test, 219 combined scoped
   frontend tests, and 114 focused consumer tests. The external selection-adapter slice passes all
   7 Playback route tests, focused Highlight HTTP/OSC coverage, the legacy Programmer gesture test,
-  formatting, and strict server Clippy. The engine-refresh slice adds 2 application coordinator
+  formatting, and strict server Clippy. The engine-refresh slice adds 3 application coordinator
   tests and 2 server integration tests covering unowned and nested actor-owned multi-desk Group
-  changes. The most recent full server library run before that slice passed 212 tests with only the
-  sandbox-blocked CITP socket test failing and one standard-port Matter test ignored.
+  changes. The current full server library run passes 215 tests with only the sandbox-blocked CITP
+  socket test failing and one standard-port Matter test ignored. All 54 engine unit tests plus its
+  integration test pass; focused Group-master WebSocket and Matter activation tests pass.
 - The current complete frontend suite passes all 811 tests, and the production frontend build
   passes. A final repository-wide suite and real desktop run has not yet been completed.
 
