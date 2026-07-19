@@ -1,8 +1,8 @@
 use super::*;
 use crate::{ActionContext, ActionEnvelope, ActionErrorKind, ActionSource};
 use light_core::{AttributeKey, AttributeValue, FixtureId, SessionId, UserId};
-use light_programmer::ProgrammerRegistry;
 use light_programmer::command_line::{CommandKey, CommandKeyPhase};
+use light_programmer::{HighlightRegistry, ProgrammerRegistry};
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, mpsc};
@@ -67,7 +67,11 @@ impl Harness {
         registry.start(session, user);
         assert!(registry.attach_command_context(session, SessionId(desk)));
         Self {
-            service: ProgrammingService::new(registry.clone()),
+            service: ProgrammingService::new(
+                registry.clone(),
+                crate::EventBus::default(),
+                Arc::new(HighlightRegistry::default()),
+            ),
             registry,
             context: ActionContext::operator(desk, user.0, session.0, source),
             ports: TestPorts::default(),

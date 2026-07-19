@@ -180,6 +180,12 @@ fn build_app_state(
     let osc_feedback = Arc::new(UdpSocket::bind("0.0.0.0:0")?);
     let application_events = resources.events.clone();
     let active_show_service = ActiveShowService::new(application_events.clone());
+    let highlight = Arc::new(HighlightRegistry::default());
+    let programming = ProgrammingService::new(
+        startup.programmers.clone(),
+        application_events.clone(),
+        Arc::clone(&highlight),
+    );
     Ok(AppState {
         desk: Arc::new(Mutex::new(startup.persistent.desk)),
         fixture_library: Arc::new(Mutex::new(startup.persistent.fixture_library)),
@@ -188,11 +194,11 @@ fn build_app_state(
         session_clients: Arc::default(),
         ws_connections: Arc::new(Mutex::new(HashMap::new())),
         programmers: startup.programmers.clone(),
-        programming: ProgrammingService::new(startup.programmers),
+        programming,
         playback_service: resources.playback_service.clone(),
         output_runtime_service: OutputRuntimeService::new(application_events.clone()),
         engine: startup.engine,
-        highlight: Arc::new(HighlightRegistry::default()),
+        highlight,
         patch_preview_highlights: Arc::default(),
         output_health: Arc::clone(&resources.output_health),
         output_rate: Arc::clone(&resources.output_rate),

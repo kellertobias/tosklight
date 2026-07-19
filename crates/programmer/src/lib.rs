@@ -16,7 +16,9 @@ mod values;
 
 pub mod command_line;
 
-pub use command_state::{CommandLineReplaceError, CommandLineState, CommandTarget};
+pub use command_state::{
+    CommandLineReplaceError, CommandLineState, CommandTarget, ProgrammerInteractionState,
+};
 pub use groups::{
     DerivedGroup, FrozenGroup, GroupDefinition, GroupProgrammerValue,
     merge_ordered_group_membership, resolve_group,

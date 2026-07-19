@@ -9,6 +9,12 @@ fn test_state() -> (AppState, PathBuf) {
     let (events, _) = broadcast::channel(32);
     let application_events = EventBus::default();
     let active_show_service = ActiveShowService::new(application_events.clone());
+    let highlight = Arc::new(HighlightRegistry::default());
+    let programming = ProgrammingService::new(
+        programmers.clone(),
+        application_events.clone(),
+        Arc::clone(&highlight),
+    );
     (
         AppState {
             desk: Arc::new(Mutex::new(desk)),
@@ -18,11 +24,11 @@ fn test_state() -> (AppState, PathBuf) {
             session_clients: Arc::default(),
             ws_connections: Arc::new(Mutex::new(HashMap::new())),
             programmers: programmers.clone(),
-            programming: ProgrammingService::new(programmers),
+            programming,
             playback_service: PlaybackService::new(application_events.clone()),
             output_runtime_service: OutputRuntimeService::new(application_events.clone()),
             engine,
-            highlight: Arc::new(HighlightRegistry::default()),
+            highlight,
             patch_preview_highlights: Arc::default(),
             output_health: Arc::new(std::sync::Mutex::new(OutputHealth::default())),
             output_rate: Arc::new(AtomicU16::new(44)),

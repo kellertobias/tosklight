@@ -1,4 +1,4 @@
-use crate::ProgrammerRegistry;
+use crate::{ProgrammerRegistry, ProgrammerSelection};
 use light_core::SessionId;
 use serde::{Deserialize, Serialize};
 
@@ -76,6 +76,13 @@ impl CommandLineState {
     }
 }
 
+/// One coherent read of the desk-local command and ordered-selection context.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProgrammerInteractionState {
+    pub command_line: CommandLineState,
+    pub selection: ProgrammerSelection,
+}
+
 pub(crate) fn canonical_command_text(text: String, pristine: bool) -> String {
     if pristine { String::new() } else { text }
 }
@@ -87,6 +94,43 @@ pub enum CommandLineReplaceError {
 }
 
 impl ProgrammerRegistry {
+    pub fn interaction_state(&self, session: SessionId) -> Option<ProgrammerInteractionState> {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
+        self.interaction_state_while_gated(session)
+    }
+
+    fn interaction_state_while_gated(
+        &self,
+        session: SessionId,
+    ) -> Option<ProgrammerInteractionState> {
+        if !self.sessions.read().contains_key(&session) {
+            return None;
+        }
+        let context = self.command_context(session);
+        Some(ProgrammerInteractionState {
+            command_line: self
+                .command_states
+                .read()
+                .get(&context)
+                .cloned()
+                .unwrap_or_default(),
+            selection: self.interaction_selection(context),
+        })
+    }
+
+    fn interaction_selection(&self, context: SessionId) -> ProgrammerSelection {
+        self.selection_contexts
+            .read()
+            .get(&context)
+            .map(|selection| ProgrammerSelection {
+                selected: selection.selected.clone(),
+                expression: selection.expression.clone(),
+                revision: selection.revision,
+            })
+            .unwrap_or_default()
+    }
+
     pub fn set_command_line(&self, session: SessionId, command_line: String) -> bool {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();

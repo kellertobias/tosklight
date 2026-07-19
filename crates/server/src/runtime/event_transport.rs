@@ -174,7 +174,12 @@ impl EventStream {
     }
 
     pub(super) async fn next(&mut self) -> Option<wire::EventServerMessage> {
-        self.subscription.next().await.map(adapter::wire_delivery)
+        loop {
+            let delivery = self.subscription.next().await?;
+            if let Some(message) = adapter::wire_delivery(delivery) {
+                return Some(message);
+            }
+        }
     }
 
     pub(super) fn repair(&self, cursor: wire::EventSnapshotCursor) -> wire::EventServerMessage {

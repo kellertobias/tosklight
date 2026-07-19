@@ -1,4 +1,7 @@
-use super::super::{ProgrammingAction, ProgrammingCommand, ProgrammingOutcome, ProgrammingResult};
+use super::super::{
+    ProgrammingAction, ProgrammingCommand, ProgrammingInteractionProjection, ProgrammingOutcome,
+    ProgrammingResult,
+};
 use crate::{ActionEnvelope, ActionError, ActionErrorKind};
 use light_core::SessionId;
 use light_programmer::{CommandLineReplaceError, CommandLineState, ProgrammerRegistry};
@@ -74,21 +77,17 @@ pub(super) fn replace_error(error: CommandLineReplaceError) -> ActionError {
 }
 
 pub(super) struct Snapshot {
-    command_line: CommandLineState,
-    selection_revision: u64,
+    pub(super) interaction: ProgrammingInteractionProjection,
 }
 
 impl Snapshot {
     pub(super) fn read(
         programmers: &ProgrammerRegistry,
+        desk_id: Uuid,
         session: SessionId,
     ) -> Result<Self, ActionError> {
         Ok(Self {
-            command_line: command_line(programmers, session)?,
-            selection_revision: programmers
-                .selection(session)
-                .ok_or_else(unknown_programmer)?
-                .revision,
+            interaction: ProgrammingInteractionProjection::read(programmers, desk_id, session)?,
         })
     }
 
@@ -98,13 +97,18 @@ impl Snapshot {
         outcome: ProgrammingOutcome,
         after: Self,
     ) -> ProgrammingResult {
+        let command_line_before = self.interaction.command_line;
+        let selection_revision_before = self.interaction.selection.revision;
+        let command_line = after.interaction.command_line;
+        let selection_revision = after.interaction.selection.revision;
         ProgrammingResult {
             context,
             outcome,
-            command_line_before: self.command_line,
-            command_line: after.command_line,
-            selection_revision_before: self.selection_revision,
-            selection_revision: after.selection_revision,
+            command_line_before,
+            command_line,
+            selection_revision_before,
+            selection_revision,
+            interaction_event_sequence: None,
             replayed: false,
         }
     }

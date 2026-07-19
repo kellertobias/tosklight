@@ -1,15 +1,13 @@
 use super::{
     ExecutionPolicy, ProgrammingAction, ProgrammingCommand, ProgrammingExecution,
-    ProgrammingOutcome, ProgrammingPorts, ProgrammingResult,
+    ProgrammingInteractionProjection, ProgrammingOutcome, ProgrammingPorts, ProgrammingResult,
 };
-use crate::{ActionEnvelope, ActionError};
+use crate::{ActionContext, ActionEnvelope, ActionError, EventBus, EventDraft};
 use light_core::SessionId;
 use light_programmer::command_line::{CommandKeyIntent, command_key_intent};
-use light_programmer::{CommandLineState, ProgrammerRegistry};
+use light_programmer::{CommandLineState, HighlightRegistry, ProgrammerRegistry};
 use parking_lot::Mutex;
-use std::collections::HashMap;
 use std::sync::Arc;
-use uuid::Uuid;
 
 #[path = "service/support.rs"]
 mod support;
@@ -19,32 +17,39 @@ use support::{
     unknown_programmer, validate_command,
 };
 
+use super::operation::DeskOperationGates;
+
 #[derive(Clone)]
 pub struct ProgrammingService {
-    programmers: ProgrammerRegistry,
-    desk_locks: Arc<Mutex<HashMap<Uuid, Arc<Mutex<()>>>>>,
+    pub(super) programmers: ProgrammerRegistry,
+    pub(super) desk_gates: DeskOperationGates,
     replay: Arc<Mutex<ReplayCache>>,
+    pub(super) events: EventBus,
+    _highlight: Arc<HighlightRegistry>,
 }
 
 impl ProgrammingService {
-    pub fn new(programmers: ProgrammerRegistry) -> Self {
+    pub fn new(
+        programmers: ProgrammerRegistry,
+        events: EventBus,
+        highlight: Arc<HighlightRegistry>,
+    ) -> Self {
         Self {
             programmers,
-            desk_locks: Arc::default(),
+            desk_gates: DeskOperationGates::default(),
             replay: Arc::default(),
+            events,
+            _highlight: highlight,
         }
     }
 
-    /// Transitional lock access for legacy adapter operations not yet expressed as service
-    /// commands. It preserves one desk order while Stage 3 migrates those operations vertically.
-    pub fn desk_lock(&self, desk_id: Uuid) -> Arc<Mutex<()>> {
-        let mut locks = self.desk_locks.lock();
-        locks.retain(|id, lock| *id == desk_id || Arc::strong_count(lock) > 1);
-        Arc::clone(
-            locks
-                .entry(desk_id)
-                .or_insert_with(|| Arc::new(Mutex::new(()))),
-        )
+    pub const fn events(&self) -> &EventBus {
+        &self.events
+    }
+
+    #[cfg(test)]
+    pub(super) const fn highlight_registry(&self) -> &Arc<HighlightRegistry> {
+        &self._highlight
     }
 
     pub fn handle(
@@ -53,15 +58,31 @@ impl ProgrammingService {
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingResult, ActionError> {
         let session = required_session(&action)?;
-        let lock = self.desk_lock(action.context.desk_id);
-        let _ordered = lock.lock();
-        ports.authorize(&action.context)?;
-        if let Some(cached) = self.cached(&action, session)? {
-            return Ok(cached);
-        }
-        let result = self.apply(&action, session, ports)?;
-        self.remember(&action, session, &result);
-        Ok(result)
+        self.with_desk_gate(action.context.desk_id, || {
+            ports.authorize(&action.context)?;
+            if let Some(cached) = self.cached(&action, session)? {
+                return Ok(cached);
+            }
+            let (mut result, interaction) = self.apply(&action, session, ports)?;
+            result.interaction_event_sequence =
+                self.publish_interaction(&action.context, interaction);
+            self.remember(&action, session, &result);
+            Ok(result)
+        })
+    }
+
+    fn publish_interaction(
+        &self,
+        context: &ActionContext,
+        interaction: Option<ProgrammingInteractionProjection>,
+    ) -> Option<u64> {
+        interaction.map(|projection| {
+            self.events
+                .publish(EventDraft::programming_interaction_changed(
+                    context, projection,
+                ))
+                .sequence
+        })
     }
 
     fn apply(
@@ -69,8 +90,8 @@ impl ProgrammingService {
         action: &ActionEnvelope<ProgrammingCommand>,
         session: SessionId,
         ports: &dyn ProgrammingPorts,
-    ) -> Result<ProgrammingResult, ActionError> {
-        let before = Snapshot::read(&self.programmers, session)?;
+    ) -> Result<(ProgrammingResult, Option<ProgrammingInteractionProjection>), ActionError> {
+        let before = Snapshot::read(&self.programmers, action.context.desk_id, session)?;
         let outcome = match &action.command {
             ProgrammingCommand::ApplyKey {
                 key,
@@ -100,8 +121,13 @@ impl ProgrammingService {
                 self.preload(session, *capture_programmer, &action.context, ports)?
             }
         };
-        let after = Snapshot::read(&self.programmers, session)?;
-        Ok(before.result(action.context.clone(), outcome, after))
+        let after = Snapshot::read(&self.programmers, action.context.desk_id, session)?;
+        let interaction =
+            (before.interaction != after.interaction).then(|| after.interaction.clone());
+        Ok((
+            before.result(action.context.clone(), outcome, after),
+            interaction,
+        ))
     }
 
     fn apply_key(

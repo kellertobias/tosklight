@@ -35,8 +35,8 @@ pub use active_show::{
 pub use event::{
     ApplicationEvent, DeliveryPolicy, DeskEvent, EventBus, EventCapability, EventClass, EventDraft,
     EventEnvelope, EventFilter, EventObject, EventReplay, EventSource, EventSubscription,
-    OutputEvent, PlaybackEvent, ReplaceableEventRateLimit, SequenceGap, ShowEvent,
-    SubscriptionDelivery, SubscriptionOptions,
+    OutputEvent, PlaybackEvent, ProgrammingEvent, ReplaceableEventRateLimit, SequenceGap,
+    ShowEvent, SubscriptionDelivery, SubscriptionOptions,
 };
 pub use fixture_position::{
     FixturePositionCommand, FixturePositionExecution, FixturePositionOutcome, FixturePositionPorts,
@@ -84,7 +84,9 @@ pub use playback::{
 pub use programming::{
     CueMoveCopyChoice, CueTransferOperation, ExecutionPolicy, ProgrammingAction,
     ProgrammingChoiceOption, ProgrammingChoiceOptionId, ProgrammingCommand, ProgrammingExecution,
-    ProgrammingOutcome, ProgrammingPorts, ProgrammingResult, ProgrammingService,
+    ProgrammingInteractionChange, ProgrammingInteractionProjection, ProgrammingLiveSnapshot,
+    ProgrammingOperation, ProgrammingOperationResult, ProgrammingOutcome, ProgrammingPorts,
+    ProgrammingResult, ProgrammingService, ProgrammingUnitOfWork,
 };
 pub use scheduling::{
     MonotonicClock, MonotonicMoment, MonotonicScheduler, SchedulerError, SchedulerErrorKind,

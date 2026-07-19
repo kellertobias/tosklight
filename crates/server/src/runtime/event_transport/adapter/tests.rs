@@ -2,8 +2,8 @@ use super::*;
 use light_application::{
     ActionContext, ActionSource, ActiveShowObjectChange, ActiveShowObjectKind,
     ActiveShowObjectsChange, EventBus, EventDraft, OutputRuntimeChange, OutputRuntimeIdentity,
-    OutputRuntimeProjection, OutputRuntimeScope, PatchChange, SelectiveShowImportChange,
-    SelectiveShowObjectChange,
+    OutputRuntimeProjection, OutputRuntimeScope, PatchChange, ProgrammingInteractionProjection,
+    SelectiveShowImportChange, SelectiveShowObjectChange,
 };
 use light_core::ShowId;
 use light_show::PortableShowObjectKey;
@@ -25,7 +25,7 @@ fn patch_event_delta_uses_the_authoritative_envelope_sequence() {
         },
     ));
 
-    let wire::EventServerMessage::Event { event } =
+    let Some(wire::EventServerMessage::Event { event }) =
         wire_delivery(application::SubscriptionDelivery::Event(event))
     else {
         panic!("expected an event delivery");
@@ -62,7 +62,7 @@ fn show_object_batch_keeps_one_event_and_targeted_raw_deltas() {
         },
     ));
 
-    let wire::EventServerMessage::Event { event } =
+    let Some(wire::EventServerMessage::Event { event }) =
         wire_delivery(application::SubscriptionDelivery::Event(event))
     else {
         panic!("expected an event delivery");
@@ -122,7 +122,7 @@ fn selective_import_maps_exact_raw_changes_and_related_routes() {
         },
     ));
 
-    let wire::EventServerMessage::Event { event } =
+    let Some(wire::EventServerMessage::Event { event }) =
         wire_delivery(application::SubscriptionDelivery::Event(event))
     else {
         panic!("expected an event delivery");
@@ -167,7 +167,7 @@ fn global_output_change_keeps_identity_source_and_correlation() {
         },
     ));
 
-    let wire::EventServerMessage::Event { event } =
+    let Some(wire::EventServerMessage::Event { event }) =
         wire_delivery(application::SubscriptionDelivery::Event(event))
     else {
         panic!("expected an event delivery");
@@ -197,6 +197,34 @@ fn global_output_change_keeps_identity_source_and_correlation() {
     assert_eq!(change.projection.scope.show_revision, 7);
     assert_eq!(change.projection.grand_master, 0.6);
     assert!(change.projection.blackout);
+}
+
+#[test]
+fn programming_waits_for_its_wire_contract_while_gaps_still_forward() {
+    let bus = EventBus::new(4);
+    let context = context(ActionSource::UserInterface);
+    let event = bus.publish(EventDraft::programming_interaction_changed(
+        &context,
+        ProgrammingInteractionProjection {
+            desk_id: context.desk_id,
+            command_line: Default::default(),
+            selection: Default::default(),
+        },
+    ));
+    assert!(wire_delivery(application::SubscriptionDelivery::Event(event)).is_none());
+
+    let Some(wire::EventServerMessage::Gap { gap }) = wire_delivery(
+        application::SubscriptionDelivery::Gap(application::SequenceGap {
+            after_sequence: 1,
+            oldest_available: 3,
+            latest_sequence: 4,
+        }),
+    ) else {
+        panic!("sequence gaps must remain visible while a payload DTO is pending")
+    };
+    assert_eq!(gap.after_sequence, 1);
+    assert_eq!(gap.oldest_available, 3);
+    assert_eq!(gap.latest_sequence, 4);
 }
 
 fn context(source: ActionSource) -> ActionContext {

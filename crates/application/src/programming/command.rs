@@ -103,5 +103,6 @@ pub struct ProgrammingResult {
     pub command_line: CommandLineState,
     pub selection_revision_before: u64,
     pub selection_revision: u64,
+    pub interaction_event_sequence: Option<u64>,
     pub replayed: bool,
 }

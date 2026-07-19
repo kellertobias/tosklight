@@ -66,13 +66,15 @@ fn app_class(class: wire::EventClass) -> application::EventClass {
 
 pub(super) fn wire_delivery(
     delivery: application::SubscriptionDelivery,
-) -> wire::EventServerMessage {
+) -> Option<wire::EventServerMessage> {
     match delivery {
-        application::SubscriptionDelivery::Event(event) => wire::EventServerMessage::Event {
-            event: Box::new(wire_event(&event)),
-        },
+        application::SubscriptionDelivery::Event(event) => {
+            wire_event(&event).map(|event| wire::EventServerMessage::Event {
+                event: Box::new(event),
+            })
+        }
         application::SubscriptionDelivery::Gap(gap) => {
-            wire::EventServerMessage::Gap { gap: wire_gap(gap) }
+            Some(wire::EventServerMessage::Gap { gap: wire_gap(gap) })
         }
     }
 }
@@ -85,8 +87,8 @@ pub(super) fn wire_gap(gap: application::SequenceGap) -> wire::SequenceGap {
     }
 }
 
-fn wire_event(event: &application::EventEnvelope) -> wire::EventEnvelope {
-    wire::EventEnvelope {
+fn wire_event(event: &application::EventEnvelope) -> Option<wire::EventEnvelope> {
+    Some(wire::EventEnvelope {
         sequence: event.sequence,
         occurred_at: event.occurred_at.to_rfc3339(),
         desk_id: event.desk_id,
@@ -97,8 +99,8 @@ fn wire_event(event: &application::EventEnvelope) -> wire::EventEnvelope {
         source: wire_source(event.source),
         correlation_id: event.correlation_id,
         delivery: wire_delivery_policy(event.delivery),
-        payload: wire_payload(&event.payload, event.sequence),
-    }
+        payload: wire_payload(&event.payload, event.sequence)?,
+    })
 }
 
 fn wire_object(object: &application::EventObject) -> wire::EventObject {
@@ -165,8 +167,15 @@ fn wire_action_source(source: application::ActionSource) -> wire::EventActionSou
     }
 }
 
-fn wire_payload(payload: &application::ApplicationEvent, sequence: u64) -> wire::EventPayload {
-    match payload {
+fn wire_payload(
+    payload: &application::ApplicationEvent,
+    sequence: u64,
+) -> Option<wire::EventPayload> {
+    Some(match payload {
+        // Programming transport DTOs arrive in the next vertical slice. The application event is
+        // already authoritative and advances the shared cursor, but is intentionally not exposed
+        // through the v2 socket until that wire contract exists.
+        application::ApplicationEvent::Programming(_) => return None,
         application::ApplicationEvent::Playback(application::PlaybackEvent::RuntimeChanged(
             change,
         )) => wire::EventPayload::PlaybackRuntimeChanged {
@@ -202,7 +211,7 @@ fn wire_payload(payload: &application::ApplicationEvent, sequence: u64) -> wire:
         )) => wire::EventPayload::SelectiveImportApplied {
             change: Box::new(selective_import::wire_change(change)),
         },
-    }
+    })
 }
 
 fn wire_show_objects_change(
