@@ -72,12 +72,6 @@ export const specialParameterFamilies = new Set<SpecialParameterFamily>([
 	"Control",
 ]);
 
-export interface ProgrammerValueEntry {
-	fixture_id: string;
-	attribute: string;
-	value: unknown;
-}
-
 interface DirectValueAssignment {
 	fixtureId: string;
 	attribute: string;

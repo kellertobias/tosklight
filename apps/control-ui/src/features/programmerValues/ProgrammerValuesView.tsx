@@ -17,10 +17,7 @@ import {
 	ProgrammerValuesSession,
 	type ProgrammerValuesSessionOptions,
 } from "./session";
-import {
-	type ProgrammerValuesState,
-	ProgrammerValuesStore,
-} from "./store";
+import { type ProgrammerValuesState, ProgrammerValuesStore } from "./store";
 import type { ProgrammerValuesEventTransport } from "./transport";
 import {
 	ProgrammerValuesWriter,
@@ -114,10 +111,7 @@ export function ProgrammerValuesViewProvider({
 
 export function useProgrammerValuesView(enabled = true) {
 	return useProgrammerValuesSelector(
-		useCallback(
-			(state: ProgrammerValuesState) => state.projection,
-			[],
-		),
+		useCallback((state: ProgrammerValuesState) => state.projection, []),
 		Object.is,
 		enabled,
 	);
@@ -134,7 +128,8 @@ export function useProgrammerValuesSelector<T>(
 		(state: ProgrammerValuesState) => (enabled ? selector(state) : null),
 		[enabled, selector],
 	);
-	return useExternalSelection(store, scopedSelector, equalNullable(equal));
+	const scopedEqual = useMemo(() => equalNullable(equal), [equal]);
+	return useExternalSelection(store, scopedSelector, scopedEqual);
 }
 
 export function useProgrammerValuesStatus() {
@@ -166,18 +161,28 @@ function useExternalSelection<T>(
 	selector: (state: ProgrammerValuesState) => T,
 	equal: (left: T, right: T) => boolean,
 ) {
-	const cache = useRef<{ state: ProgrammerValuesState | null; value?: T }>({
-		state: null,
-	});
+	const cache = useRef<{
+		state: ProgrammerValuesState | null;
+		selector: ((state: ProgrammerValuesState) => T) | null;
+		equal: ((left: T, right: T) => boolean) | null;
+		value?: T;
+	}>({ state: null, selector: null, equal: null });
 	const getSelection = useCallback(() => {
 		const state = store.getSnapshot();
-		if (cache.current.state === state) return cache.current.value as T;
+		if (
+			cache.current.state === state &&
+			cache.current.selector === selector &&
+			cache.current.equal === equal
+		)
+			return cache.current.value as T;
 		const value = selector(state);
 		if (cache.current.state && equal(cache.current.value as T, value)) {
 			cache.current.state = state;
+			cache.current.selector = selector;
+			cache.current.equal = equal;
 			return cache.current.value as T;
 		}
-		cache.current = { state, value };
+		cache.current = { state, selector, equal, value };
 		return value;
 	}, [equal, selector, store]);
 	return useSyncExternalStore(store.subscribe, getSelection, getSelection);

@@ -24,16 +24,20 @@ function programmerEntry(
 ) {
 	return projection.programmerValues.find(
 		(candidate) =>
-			candidate.fixture_id === fixtureId && candidate.attribute === attribute,
+			candidate.fixtureId === fixtureId && candidate.attribute === attribute,
+	);
+}
+
+function groupProgrammerEntry(projection: Projection, attribute: string) {
+	return projection.groupProgrammerValues.find(
+		(candidate) => candidate.attribute === attribute,
 	);
 }
 
 function normalizedTarget(projection: Projection, attribute: string) {
 	if (projection.selectedGroupId)
 		return normalizedProgrammerTarget(
-			projection.groupProgrammerValues[projection.selectedGroupId]?.[
-				attribute
-			],
+			groupProgrammerEntry(projection, attribute)?.value,
 		);
 	for (const fixtureId of projection.selectedFixtureIds) {
 		const target = normalizedProgrammerTarget(
@@ -46,9 +50,7 @@ function normalizedTarget(projection: Projection, attribute: string) {
 function discreteTarget(projection: Projection, attribute: string) {
 	if (projection.selectedGroupId)
 		return discreteProgrammerTarget(
-			projection.groupProgrammerValues[projection.selectedGroupId]?.[
-				attribute
-			],
+			groupProgrammerEntry(projection, attribute)?.value,
 		);
 	for (const fixtureId of projection.selectedFixtureIds) {
 		const target = discreteProgrammerTarget(
@@ -76,8 +78,7 @@ function normalizedDisplay(projection: Projection, attribute: string) {
 }
 
 function discreteDisplay(projection: Projection, attribute: string) {
-	if (projection.selectedGroupId)
-		return discreteTarget(projection, attribute);
+	if (projection.selectedGroupId) return discreteTarget(projection, attribute);
 	return formatDiscreteValues(
 		projection.selectedFixtureIds.flatMap((fixtureId) => {
 			const target = discreteProgrammerTarget(
@@ -141,7 +142,7 @@ function createParameterActions(
 		const fixtureIds = new Set(
 			projection.programmerValues
 				.filter((entry) => entry.attribute === attribute)
-				.map((entry) => entry.fixture_id),
+				.map((entry) => entry.fixtureId),
 		);
 		await Promise.all(
 			projection.selectedFixtureIds
@@ -189,11 +190,19 @@ function createParameterActions(
 		choice.assignments.some((assignment) =>
 			projection.programmerValues.some(
 				(entry) =>
-					entry.fixture_id === assignment.fixtureId &&
+					entry.fixtureId === assignment.fixtureId &&
 					entry.attribute === assignment.attribute &&
 					discreteProgrammerTarget(entry.value) === choice.semanticId,
 			),
 		);
+	const hasProgrammerValue = (attribute: string) =>
+		projection.selectedGroupId
+			? projection.groupProgrammerValues.some(
+					(entry) => entry.attribute === attribute,
+				)
+			: projection.programmerValues.some(
+					(entry) => entry.attribute === attribute,
+				);
 	return {
 		programmerTarget: (attribute: string) =>
 			normalizedTarget(projection, attribute),
@@ -210,6 +219,7 @@ function createParameterActions(
 		applyControlAction,
 		generateDirectPresets,
 		directChoiceActive,
+		hasProgrammerValue,
 	};
 }
 
@@ -223,7 +233,8 @@ function useHardwareEncoders(
 	const latest = useRef({ projection, actions });
 	latest.current = { projection, actions };
 	useEffect(() => {
-		if (!projection.active || !projection.hardwareConnected || directMode) return;
+		if (!projection.active || !projection.hardwareConnected || directMode)
+			return;
 		const handleEncoder = (event: Event) => {
 			const { projection, actions } = latest.current;
 			const { control, value } = (

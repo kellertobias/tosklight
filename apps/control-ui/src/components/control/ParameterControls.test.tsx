@@ -1,5 +1,9 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type {
+	ProgrammerFixtureValue,
+	ProgrammerGroupValue,
+} from "../../features/programmerValues/contracts";
 import { ParameterControls } from "./ParameterControls";
 
 const state = {
@@ -14,12 +18,23 @@ const dispatch = vi.fn((action: { type: string; value?: boolean }) => {
 	if (action.type === "SET_SHIFT_ARMED")
 		state.shiftArmed = Boolean(action.value);
 });
+const programmerValues = vi.hoisted(() => ({
+	view: {
+		ready: true,
+		fixtureValues: [] as ProgrammerFixtureValue[],
+		groupValues: [] as ProgrammerGroupValue[],
+	},
+}));
+const legacyProgrammerValuesAccess = vi.fn();
 const server = {
 	selectedFixtures: [] as string[],
 	selectedGroupId: null as string | null,
 	groups: [] as any[],
 	patch: { fixtures: [] as any[] },
-	bootstrap: { active_programmers: [] as any[], hardware_connected: false },
+	bootstrap: { hardware_connected: false } as {
+		hardware_connected: boolean;
+		readonly active_programmers: unknown[];
+	},
 	session: { session_id: "session-1", user: { id: "operator" } },
 	readVisualization: vi.fn().mockResolvedValue({ values: [] }),
 	alignSelection: vi.fn(),
@@ -32,6 +47,12 @@ const server = {
 	releaseProgrammer: vi.fn(),
 	releaseGroupValue: vi.fn(),
 };
+Object.defineProperty(server.bootstrap, "active_programmers", {
+	get() {
+		legacyProgrammerValuesAccess();
+		return [];
+	},
+});
 
 vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state, dispatch }),
@@ -61,6 +82,13 @@ vi.mock(
 vi.mock("../../features/server/useShowObjectsState", () => ({
 	useGroups: () => server.groups,
 }));
+vi.mock("./parameterControls/useParameterProgrammerValues", () => ({
+	useParameterProgrammerValues: (
+		_fixtureIds: readonly string[],
+		_groupId: string | null,
+		enabled: boolean,
+	) => (enabled ? programmerValues.view : null),
+}));
 
 afterEach(() => {
 	cleanup();
@@ -72,8 +100,10 @@ afterEach(() => {
 	server.selectedGroupId = null;
 	server.groups = [];
 	server.patch.fixtures = [];
-	server.bootstrap.active_programmers = [];
 	server.bootstrap.hardware_connected = false;
+	programmerValues.view.ready = true;
+	programmerValues.view.fixtureValues = [];
+	programmerValues.view.groupValues = [];
 	vi.clearAllMocks();
 });
 
@@ -86,6 +116,33 @@ describe("ParameterControls projection lifecycle", () => {
 		render(<ParameterControls />);
 
 		expect(server.readVisualization).not.toHaveBeenCalled();
+	});
+
+	it("never reads legacy bootstrap Programmer values while scoped authority loads or is ready", () => {
+		server.selectedFixtures = ["fixture-1"];
+		server.patch.fixtures = [
+			{
+				fixture_id: "fixture-1",
+				logical_heads: [],
+				definition: {
+					heads: [
+						{
+							shared: true,
+							parameters: [{ attribute: "intensity", capabilities: [] }],
+						},
+					],
+				},
+			},
+		];
+		programmerValues.view.ready = false;
+		const rendered = render(<ParameterControls />);
+
+		expect(legacyProgrammerValuesAccess).not.toHaveBeenCalled();
+
+		programmerValues.view.ready = true;
+		rendered.rerender(<ParameterControls />);
+
+		expect(legacyProgrammerValuesAccess).not.toHaveBeenCalled();
 	});
 });
 
@@ -289,17 +346,15 @@ describe("ParameterControls hardware feedback values", () => {
 				},
 			},
 		];
-		server.bootstrap.active_programmers = [
+		programmerValues.view.fixtureValues = [
 			{
-				session_id: "session-1",
-				values: [
-					{
-						fixture_id: "fixture-1",
-						attribute: "control.reset",
-						value: { kind: "discrete", value: "fixture.reset.safe" },
-					},
-				],
-				group_values: {},
+				fixtureId: "fixture-1",
+				attribute: "control.reset",
+				value: { kind: "discrete", value: "fixture.reset.safe" },
+				programmerOrder: 1,
+				fade: false,
+				fadeMillis: null,
+				delayMillis: null,
 			},
 		];
 		render(<ParameterControls />);
@@ -385,12 +440,15 @@ describe("ParameterControls programmer targets and alignment", () => {
 				},
 			},
 		];
-		server.bootstrap.active_programmers = [
+		programmerValues.view.fixtureValues = [
 			{
-				session_id: "session-1",
-				user_id: "operator",
-				values: [{ fixture_id: "fixture-1", attribute: "intensity" }],
-				group_values: {},
+				fixtureId: "fixture-1",
+				attribute: "intensity",
+				value: { kind: "normalized", value: 1 },
+				programmerOrder: 1,
+				fade: false,
+				fadeMillis: null,
+				delayMillis: null,
 			},
 		];
 		render(<ParameterControls />);
@@ -418,18 +476,15 @@ describe("ParameterControls programmer targets and alignment", () => {
 				},
 			},
 		];
-		server.bootstrap.active_programmers = [
+		programmerValues.view.fixtureValues = [
 			{
-				session_id: "session-1",
-				user_id: "operator",
-				values: [
-					{
-						fixture_id: "fixture-1",
-						attribute: "intensity",
-						value: { kind: "normalized", value: 1 },
-					},
-				],
-				group_values: {},
+				fixtureId: "fixture-1",
+				attribute: "intensity",
+				value: { kind: "normalized", value: 1 },
+				programmerOrder: 1,
+				fade: false,
+				fadeMillis: null,
+				delayMillis: null,
 			},
 		];
 		server.readVisualization.mockResolvedValue({
@@ -469,18 +524,15 @@ describe("ParameterControls Group targets and alignment", () => {
 				},
 			},
 		];
-		server.bootstrap.active_programmers = [
+		programmerValues.view.groupValues = [
 			{
-				session_id: "session-1",
-				user_id: "operator",
-				values: [],
-				group_values: {
-					"3": {
-						intensity: {
-							value: { kind: "normalized", value: 0.75 },
-						},
-					},
-				},
+				groupId: "3",
+				attribute: "intensity",
+				value: { kind: "normalized", value: 0.75 },
+				programmerOrder: 1,
+				fade: false,
+				fadeMillis: null,
+				delayMillis: null,
 			},
 		];
 		server.readVisualization.mockResolvedValue({

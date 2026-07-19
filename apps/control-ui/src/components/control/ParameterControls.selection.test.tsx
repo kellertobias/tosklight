@@ -16,8 +16,8 @@ import {
 	FIXTURE_1,
 	FIXTURE_2,
 	programmingSnapshot,
-	selectionChange,
 	SHOW_ID,
+	selectionChange,
 } from "../../features/programmingInteraction/testFixtures";
 import { ParameterControls } from "./ParameterControls";
 
@@ -26,7 +26,10 @@ const mocks = vi.hoisted(() => {
 	const server = {
 		patch: { fixtures: [] as Array<Record<string, unknown>> },
 		playbacks: { cue_lists: [] },
-		bootstrap: { active_programmers: [] as unknown[], hardware_connected: false },
+		bootstrap: {
+			active_programmers: [] as unknown[],
+			hardware_connected: false,
+		},
 		session: { session_id: "session-a", user: { id: "operator" } },
 		readVisualization: vi.fn(async () => ({ values: [] })),
 		alignSelection: vi.fn(async () => undefined),
@@ -72,6 +75,13 @@ vi.mock("../../state/AppContext", () => ({
 }));
 vi.mock("../../features/server/useShowObjectsState", () => ({
 	useGroups: () => [],
+}));
+vi.mock("./parameterControls/useParameterProgrammerValues", () => ({
+	useParameterProgrammerValues: (
+		_fixtureIds: readonly string[],
+		_groupId: string | null,
+		enabled: boolean,
+	) => (enabled ? { ready: true, fixtureValues: [], groupValues: [] } : null),
 }));
 vi.mock("./VerticalTouchFader", () => ({
 	VerticalTouchFader: ({

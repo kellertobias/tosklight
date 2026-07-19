@@ -61,17 +61,7 @@ function EncoderSurface({
 	const display =
 		controller.encoderNormalizedDisplay(attribute) ??
 		formatNormalizedValue(value);
-	const hasScopedValue = controller.selectedGroupId
-		? Boolean(
-				controller.ownProgrammer?.group_values?.[
-					controller.selectedGroupId
-				]?.[attribute],
-			)
-		: controller.programmerValues.some(
-				(entry) =>
-					entry.attribute === attribute &&
-					controller.selectedFixtureIds.includes(entry.fixture_id),
-			);
+	const hasScopedValue = controller.hasProgrammerValue(attribute);
 	const label = parameterLabels[attribute] ?? attribute.replaceAll(".", " ");
 	if (controller.hardwareConnected)
 		return (
@@ -138,10 +128,7 @@ export function EncoderSurfaces({
 				))}
 			</>
 		);
-	if (
-		!controller.selectedFixtureIds.length &&
-		!controller.selectedGroupId
-	)
+	if (!controller.selectedFixtureIds.length && !controller.selectedGroupId)
 		return (
 			<div className="parameter-empty">
 				<b>No fixtures selected</b>

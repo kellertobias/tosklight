@@ -1,21 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
 import { useServer } from "../../../api/ServerContext";
 import type { VisualizationSnapshot } from "../../../api/types";
-import { useApp } from "../../../state/AppContext";
-import { useGroups } from "../../../features/server/useShowObjectsState";
 import { selectedGroupId } from "../../../features/programmingInteraction/contracts";
 import { useProgrammingSelectionView } from "../../../features/programmingInteraction/ProgrammingInteractionView";
+import { useGroups } from "../../../features/server/useShowObjectsState";
 import { usePollingResource } from "../../../hooks/usePollingResource";
+import { useApp } from "../../../state/AppContext";
 import {
 	directProgrammerChoices,
 	type ParameterFamily,
-	type ProgrammerValueEntry,
 	parameterFamilies,
 } from "./model";
+import { useParameterProgrammerValues } from "./useParameterProgrammerValues";
 
 const EMPTY_FIXTURE_IDS: readonly string[] = [];
+const EMPTY_PROGRAMMER_VALUES: readonly never[] = [];
 
-function useVisualization(active: boolean, selectedFixtureIds: readonly string[]) {
+function useVisualization(
+	active: boolean,
+	selectedFixtureIds: readonly string[],
+) {
 	const server = useServer();
 	const [visualization, setVisualization] =
 		useState<VisualizationSnapshot | null>(null);
@@ -90,33 +94,23 @@ function useResolvedValues(
 	}, [visualization, selectedFixtureIds]);
 }
 
-export function useParameterProjection(
-	family: ParameterFamily,
-	active = true,
-) {
+export function useParameterProjection(family: ParameterFamily, active = true) {
 	const server = useServer();
 	const { state } = useApp();
 	const selection = useProgrammingSelectionView(active);
 	const selectedFixtureIds = selection?.selected ?? EMPTY_FIXTURE_IDS;
 	const selectedGroup = selectedGroupId(selection);
+	const programmerValuesView = useParameterProgrammerValues(
+		selectedFixtureIds,
+		selectedGroup,
+		active,
+	);
 	const visualization = useVisualization(active, selectedFixtureIds);
 	const supported = useSupportedAttributes(selectedFixtureIds, selectedGroup);
-	const ownProgrammer = server.bootstrap?.active_programmers.find(
-		(programmer) => programmer.session_id === server.session?.session_id,
-	);
-	const programmerValues = (ownProgrammer?.values ??
-		[]) as ProgrammerValueEntry[];
-	const groupProgrammerValues = (ownProgrammer?.group_values ?? {}) as Record<
-		string,
-		Record<string, unknown>
-	>;
 	const values = useResolvedValues(visualization, selectedFixtureIds);
 	const directChoices = useMemo(
 		() =>
-			directProgrammerChoices(
-				server.patch?.fixtures ?? [],
-				selectedFixtureIds,
-			),
+			directProgrammerChoices(server.patch?.fixtures ?? [], selectedFixtureIds),
 		[server.patch, selectedFixtureIds],
 	);
 	const attributes = parameterFamilies[family].filter((attribute) =>
@@ -128,9 +122,11 @@ export function useParameterProjection(
 		active,
 		selectedFixtureIds,
 		selectedGroupId: selectedGroup,
-		ownProgrammer,
-		programmerValues,
-		groupProgrammerValues,
+		programmerValuesReady: programmerValuesView?.ready ?? false,
+		programmerValues:
+			programmerValuesView?.fixtureValues ?? EMPTY_PROGRAMMER_VALUES,
+		groupProgrammerValues:
+			programmerValuesView?.groupValues ?? EMPTY_PROGRAMMER_VALUES,
 		...values,
 		directChoices,
 		encoderSlots: Array.from(
