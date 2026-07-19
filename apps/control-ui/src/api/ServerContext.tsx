@@ -1,6 +1,7 @@
 import { createContext, type PropsWithChildren, useContext } from "react";
 import { FilesProvider } from "../features/files/FilesContext";
 import { PlaybackRuntimeViewProvider } from "../features/playbackRuntime/PlaybackRuntimeView";
+import { ProgrammingInteractionViewProvider } from "../features/programmingInteraction/ProgrammingInteractionView";
 import { SelectiveImportProvider } from "../features/selectiveImport/SelectiveImportContext";
 import { ScreensProvider } from "../features/screens/ScreensContext";
 import { composeServerContextValue } from "../features/server/composeServerContextValue";
@@ -143,21 +144,32 @@ export function ServerProvider({
 					}
 					onError={boundaries.reportPlaybackError}
 				>
-					<SelectedGroupMembershipSync
-						playbacks={state.playbacks}
-						selectedGroupId={state.selectedGroupId}
-						setSelectedGroupId={state.setSelectedGroupId}
-						setSelectedFixtures={state.setSelectedFixtures}
-					/>
-					<ShowObjectDetailSubscription
-						kind="group"
-						objectId={state.selectedGroupId}
-					/>
-					<SelectiveImportProvider source={selectiveImportSource}>
-						<FilesProvider source={fileSource}>
-							<ScreensProvider source={screenSource}>{children}</ScreensProvider>
-						</FilesProvider>
-					</SelectiveImportProvider>
+					<ProgrammingInteractionViewProvider
+						showId={state.bootstrap?.active_show?.id ?? null}
+						deskId={state.session?.desk.id ?? null}
+						store={state.programmingInteractionStore}
+						transport={boundaries.programmingTransport}
+						loadSnapshot={boundaries.loadProgrammingInteractionSnapshot}
+						onError={boundaries.reportProgrammingError}
+					>
+						<SelectedGroupMembershipSync
+							playbacks={state.playbacks}
+							selectedGroupId={state.selectedGroupId}
+							setSelectedGroupId={state.setSelectedGroupId}
+							setSelectedFixtures={state.setSelectedFixtures}
+						/>
+						<ShowObjectDetailSubscription
+							kind="group"
+							objectId={state.selectedGroupId}
+						/>
+						<SelectiveImportProvider source={selectiveImportSource}>
+							<FilesProvider source={fileSource}>
+								<ScreensProvider source={screenSource}>
+									{children}
+								</ScreensProvider>
+							</FilesProvider>
+						</SelectiveImportProvider>
+					</ProgrammingInteractionViewProvider>
 				</PlaybackRuntimeViewProvider>
 			</ShowObjectsViewProvider>
 		</ServerContext.Provider>

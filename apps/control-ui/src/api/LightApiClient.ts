@@ -202,6 +202,14 @@ export class LightApiClient extends LightClientRuntime {
 	storePreset = bindClientMethod(this.showObjectsApi, "storePreset");
 
 	programmers = bindClientMethod(this.programmingApi, "programmers");
+	programmingInteractionSnapshot = bindClientMethod(
+		this.programmingApi,
+		"programmingInteractionSnapshot",
+	);
+	replaceProgrammingCommandLine = bindClientMethod(
+		this.programmingApi,
+		"replaceProgrammingCommandLine",
+	);
 	clearProgrammer = bindClientMethod(
 		this.programmingApi,
 		"clearProgrammer",

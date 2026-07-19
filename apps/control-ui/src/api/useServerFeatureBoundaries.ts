@@ -4,6 +4,7 @@ import type { ShowObject } from "../features/showObjects/contracts";
 import { configuredServerUrl } from "./LightApiClient";
 import { browserDeskBoundaryToken } from "./PatchTransport";
 import { WebSocketPlaybackEventTransport } from "./PlaybackEventTransport";
+import { WebSocketProgrammingEventTransport } from "./ProgrammingEventTransport";
 import { WebSocketShowObjectsEventTransport } from "./ShowObjectsEventTransport";
 import type { PlaybackRuntimeIdentity } from "./types";
 
@@ -30,6 +31,17 @@ export function useServerFeatureBoundaries(state: ServerState) {
 				: null,
 		[state.session],
 	);
+	const programmingTransport = useMemo(
+		() =>
+			state.session
+				? new WebSocketProgrammingEventTransport({
+						baseUrl: configuredServerUrl(),
+						sessionToken: state.session.token,
+						deskBoundaryToken: browserDeskBoundaryToken(),
+					})
+				: null,
+		[state.session],
+	);
 	const loadPlaybackSnapshot = useCallback(
 		(identities: PlaybackRuntimeIdentity[]) => {
 			if (!state.session) throw new Error("Playback session is unavailable");
@@ -40,6 +52,11 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		},
 		[state.client, state.session],
 	);
+	const loadProgrammingInteractionSnapshot = useCallback(() => {
+		if (!state.session)
+			throw new Error("Programming interaction session is unavailable");
+		return state.client.programmingInteractionSnapshot(state.session.desk.id);
+	}, [state.client, state.session]);
 	const loadShowObjectCollection = useCallback(
 		(showId: string, kind: "group" | "preset") =>
 			state.client.objects(showId, kind) as Promise<ShowObject[]>,
@@ -57,11 +74,14 @@ export function useServerFeatureBoundaries(state: ServerState) {
 	return {
 		showObjectsTransport,
 		playbackTransport,
+		programmingTransport,
 		loadPlaybackSnapshot,
+		loadProgrammingInteractionSnapshot,
 		loadShowObjectCollection,
 		loadShowObject,
 		reportShowObjectError: useFeatureErrorReporter(state.setError),
 		reportPlaybackError: useFeatureErrorReporter(state.setError),
+		reportProgrammingError: useFeatureErrorReporter(state.setError),
 	};
 }
 

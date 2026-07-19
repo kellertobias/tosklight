@@ -1,10 +1,19 @@
 import type { PresetAddress } from "../../presetFamilies";
 import type {
+	CommandLineProjection,
+	ProgrammingSnapshot,
+} from "../../features/programmingInteraction/contracts";
+import {
+	decodeProgrammingCommandLine,
+	decodeProgrammingInteractionSnapshot,
+} from "../programmingWire";
+import type {
 	AttributeValue,
 	GeneratedFixturePresetResult,
 	ProgrammerState,
 } from "../types";
 import type { LiveClientTransport } from "./transport";
+import { jsonRequest } from "./transport";
 
 type SelectionGestureSource =
 	| { type: "fixture"; fixture_id: string }
@@ -19,6 +28,30 @@ interface ProgrammerAssignment {
 
 export class ProgrammingApiClient {
 	constructor(private readonly transport: LiveClientTransport) {}
+
+	async programmingInteractionSnapshot(
+		deskId: string,
+	): Promise<ProgrammingSnapshot> {
+		const value = await this.transport.request<unknown>(
+			`/api/v2/desks/${encodeURIComponent(deskId)}/programming-interaction/snapshot`,
+		);
+		return decodeProgrammingInteractionSnapshot(value, deskId);
+	}
+
+	async replaceProgrammingCommandLine(
+		deskId: string,
+		text: string,
+		expectedRevision: number,
+	): Promise<CommandLineProjection> {
+		const init = jsonRequest("PUT", { text });
+		const headers = new Headers(init.headers);
+		headers.set("if-match", String(expectedRevision));
+		const value = await this.transport.request<unknown>(
+			`/api/v2/desks/${encodeURIComponent(deskId)}/command-line`,
+			{ ...init, headers },
+		);
+		return decodeProgrammingCommandLine(value);
+	}
 
 	programmers(): Promise<ProgrammerState[]> {
 		return this.transport.request("/api/v1/programmers", {}, false);

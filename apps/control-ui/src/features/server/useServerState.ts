@@ -19,6 +19,7 @@ import type {
 } from "../../api/types";
 import type { CommandTargetMode } from "../../controlSurface/commandTarget";
 import { PlaybackRuntimeStore } from "../playbackRuntime/store";
+import { ProgrammingInteractionStore } from "../programmingInteraction/store";
 import type {
 	PendingCommandChoice,
 	StoredDeskLayout,
@@ -46,6 +47,9 @@ export function useServerState() {
 	);
 	const [playbacks, setPlaybacks] = useState<PlaybackSnapshot | null>(null);
 	const playbackRuntimeStore = useRef(new PlaybackRuntimeStore()).current;
+	const programmingInteractionStore = useRef(
+		new ProgrammingInteractionStore(),
+	).current;
 	const [screens, setScreens] = useState<ScreenSnapshot | null>(null);
 	const [shows, setShows] = useState<ShowEntry[]>([]);
 	const [configuration, setConfiguration] = useState<DeskConfiguration | null>(
@@ -109,6 +113,7 @@ export function useServerState() {
 		playbacks,
 		setPlaybacks,
 		playbackRuntimeStore,
+		programmingInteractionStore,
 		screens,
 		setScreens,
 		shows,
