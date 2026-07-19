@@ -69,6 +69,7 @@ export function MultiValueToggleField<T extends string>({
 
 interface SelectFieldProps<T extends string> {
   label?: ReactNode;
+  ariaLabel?: string;
   value: T;
   options: SelectOption<T>[];
   onChange: (value: T) => void;
@@ -153,7 +154,7 @@ function SelectOptions<T extends string>({
 
 export function SelectField<T extends string>({
   label, value, options, onChange, description, error, disabled, size = "default",
-  className = "", labelPlacement,
+  className = "", labelPlacement, ariaLabel,
 }: SelectFieldProps<T>) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(() => Math.max(0, options.findIndex((item) => item.value === value)));
@@ -179,6 +180,7 @@ export function SelectField<T extends string>({
   return <FormField label={label} description={description} error={error}
     className={className} labelPlacement={labelPlacement}>
     <Button ref={button} className="ui-select-trigger" size={size} disabled={disabled}
+      aria-label={ariaLabel}
       aria-haspopup="listbox" aria-expanded={open}
       onClick={() => { if (!open) place(); setOpen(!open); }}>
       <span>{chosen?.label ?? value}</span><i aria-hidden="true">▼</i>

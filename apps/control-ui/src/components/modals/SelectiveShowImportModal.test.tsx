@@ -77,6 +77,11 @@ function outcome(): SelectiveImportOutcome {
 
 afterEach(() => cleanup());
 
+function choose(label: string, option: string) {
+	fireEvent.click(screen.getByLabelText(label));
+	fireEvent.click(screen.getByRole("option", { name: option }));
+}
+
 describe("SelectiveShowImportModal", () => {
 	it("requires an explicit preview and conflict resolution before atomic apply", async () => {
 		const loadCatalog = vi.fn().mockResolvedValue(catalog);
@@ -96,9 +101,7 @@ describe("SelectiveShowImportModal", () => {
 			/>,
 		);
 
-		fireEvent.change(screen.getByLabelText("Source show"), {
-			target: { value: "source" },
-		});
+		choose("Source show", "Tour Source");
 		const object = await screen.findByLabelText(/Front Wash/);
 		fireEvent.click(object);
 		fireEvent.click(screen.getByRole("button", { name: "Preview Import" }));
@@ -108,9 +111,7 @@ describe("SelectiveShowImportModal", () => {
 		expect(details).toHaveTextContent("Object Conflict: group/front");
 		expect(screen.getByRole("button", { name: "Apply as One Show Revision" })).toBeDisabled();
 
-		fireEvent.change(screen.getByLabelText("Resolve group front"), {
-			target: { value: "replace_destination" },
-		});
+		choose("Resolve group front", "Replace Destination");
 		fireEvent.click(screen.getByRole("button", { name: "Update Preview" }));
 		await waitFor(() =>
 			expect(screen.getByText("None — ready to apply.")).toBeVisible(),
@@ -150,7 +151,7 @@ describe("SelectiveShowImportModal", () => {
 				applyImport={applyImport}
 			/>,
 		);
-		fireEvent.change(screen.getByLabelText("Source show"), { target: { value: "source" } });
+		choose("Source show", "Tour Source");
 		fireEvent.click(await screen.findByLabelText(/Front Wash/));
 		fireEvent.click(screen.getByRole("button", { name: "Preview Import" }));
 		await screen.findByText("None — ready to apply.");
@@ -181,7 +182,7 @@ describe("SelectiveShowImportModal", () => {
 				applyImport={vi.fn().mockResolvedValue(outcome())}
 			/>,
 		);
-		fireEvent.change(screen.getByLabelText("Source show"), { target: { value: "source" } });
+		choose("Source show", "Tour Source");
 		fireEvent.click(await screen.findByLabelText(/Front Wash/));
 		fireEvent.click(screen.getByRole("button", { name: "Preview Import" }));
 		await screen.findByText("None — ready to apply.");
@@ -209,15 +210,15 @@ describe("SelectiveShowImportModal", () => {
 				applyImport={vi.fn().mockResolvedValue(outcome())}
 			/>,
 		);
-		fireEvent.change(screen.getByLabelText("Source show"), { target: { value: "source" } });
+		choose("Source show", "Tour Source");
 		fireEvent.click(await screen.findByLabelText(/Front Wash/));
 		fireEvent.click(screen.getByRole("button", { name: "Preview Import" }));
-		const resolution = await screen.findByLabelText("Resolve group front");
-		fireEvent.change(resolution, { target: { value: "replace_destination" } });
+		await screen.findByLabelText("Resolve group front");
+		choose("Resolve group front", "Replace Destination");
 		fireEvent.click(screen.getByRole("button", { name: "Update Preview" }));
 		await screen.findByText("None — ready to apply.");
 
-		fireEvent.change(resolution, { target: { value: "" } });
+		choose("Resolve group front", "Choose resolution…");
 
 		expect(screen.getByRole("button", { name: "Apply as One Show Revision" })).toBeDisabled();
 		fireEvent.click(screen.getByRole("button", { name: "Update Preview" }));

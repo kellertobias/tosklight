@@ -1,6 +1,6 @@
 import { type MutableRefObject, useLayoutEffect } from "react";
 import type { SelectiveImportOutcome } from "../../api/selectiveImportModels";
-import { Button, ModalTitleBar } from "../common";
+import { Button, ModalTitleBar, SelectField } from "../common";
 import {
 	CatalogSelection,
 	PreviewDetails,
@@ -95,20 +95,20 @@ function ImportComplete({ activeShowName, outcome, onClose }: {
 }
 
 function SourceShowSelector({ workflow }: { workflow: SelectiveImportWorkflow }) {
-	return <label>
-		Source show
-		<select
-			aria-label="Source show"
+	return <SelectField
+			label="Source show"
+			ariaLabel="Source show"
 			value={workflow.sourceId}
 			disabled={workflow.phase !== "idle"}
-			onChange={(event) => void workflow.chooseSource(event.target.value)}
-		>
-			<option value="">Choose a show…</option>
-			{workflow.sources.map((show) => (
-				<option key={show.id} value={show.id}>{show.name}</option>
-			))}
-		</select>
-	</label>;
+			onChange={(value) => void workflow.chooseSource(value)}
+			options={[
+				{ value: "", label: "Choose a show…" },
+				...workflow.sources.map((show) => ({
+					value: show.id,
+					label: show.name,
+				})),
+			]}
+		/>;
 }
 
 function WorkflowStatus({ workflow }: { workflow: SelectiveImportWorkflow }) {

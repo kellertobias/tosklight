@@ -6,6 +6,7 @@ import type {
 	SelectiveImportProfileConflictResolution,
 	SelectiveImportProfileKey,
 } from "../../api/selectiveImportModels";
+import { CheckboxField, SelectField } from "../common";
 import {
 	actionLabel,
 	humanize,
@@ -24,16 +25,15 @@ export function CatalogSelection({ catalog, selected, disabled, onChange }: {
 			<h4>Source Content ({catalog.objects.length})</h4>
 			{catalog.objects.length === 0 && <p>No portable show objects are available.</p>}
 			{catalog.objects.map((object) => (
-				<label key={objectKeyId(object.key)}>
-					<input
-						type="checkbox"
+				<CheckboxField
+					key={objectKeyId(object.key)}
+					label={<>{object.displayName}{" "}
+						<small>{humanize(object.key.kind)} · {object.key.id}</small></>}
+					aria-label={object.displayName}
 						disabled={disabled}
 						checked={selected.has(objectKeyId(object.key))}
 						onChange={(event) => onChange(object.key, event.target.checked)}
-					/>
-					{object.displayName}{" "}
-					<small>{humanize(object.key.kind)} · {object.key.id}</small>
-				</label>
+				/>
 			))}
 		</div>
 	);
@@ -88,25 +88,25 @@ function ConflictChoices(props: Pick<
 	return <>
 		<h4>Conflicts ({props.preview.conflicts.length})</h4>
 		{props.preview.conflicts.length === 0 ? <p>None</p> : props.preview.conflicts.map((conflict) => (
-			<label key={objectKeyId(conflict.key)}>
-				{conflict.key.kind}/{conflict.key.id}
-				<select
-					aria-label={`Resolve ${conflict.key.kind} ${conflict.key.id}`}
+			<SelectField
+				key={objectKeyId(conflict.key)}
+				label={`Resolve ${conflict.key.kind} ${conflict.key.id}`}
+				ariaLabel={`Resolve ${conflict.key.kind} ${conflict.key.id}`}
 					disabled={props.disabled}
 					value={props.objectChoices.get(objectKeyId(conflict.key)) ?? conflict.resolution ?? ""}
-					onChange={(event) => props.onObjectChoice(
+					onChange={(value) => props.onObjectChoice(
 						conflict.key,
-						event.target.value
-							? event.target.value as SelectiveImportConflictResolution
+						value
+							? value as SelectiveImportConflictResolution
 							: null,
 					)}
-				>
-					<option value="">Choose resolution…</option>
-					<option value="keep_destination">Keep Destination</option>
-					<option value="replace_destination">Replace Destination</option>
-					<option value="duplicate">Import as Copy</option>
-				</select>
-			</label>
+				options={[
+					{ value: "", label: "Choose resolution…" },
+					{ value: "keep_destination", label: "Keep Destination" },
+					{ value: "replace_destination", label: "Replace Destination" },
+					{ value: "duplicate", label: "Import as Copy" },
+				]}
+			/>
 		))}
 	</>;
 }
@@ -121,21 +121,23 @@ function ProfileChoices(props: Pick<
 			<div key={profileKeyId(profile.source)}>
 				<p>{profile.source.profileId} Revision {profile.source.revision}: {actionLabel(profile.action)}</p>
 				{profile.action === "blocked_conflict" && (
-					<select
-						aria-label={`Resolve profile ${profile.source.profileId} revision ${profile.source.revision}`}
+					<SelectField
+						label={`Resolve profile ${profile.source.profileId} revision ${profile.source.revision}`}
+						ariaLabel={`Resolve profile ${profile.source.profileId} revision ${profile.source.revision}`}
 						disabled={props.disabled}
 						value={props.profileChoices.get(profileKeyId(profile.source)) ?? ""}
-						onChange={(event) => props.onProfileChoice(
+						onChange={(value) => props.onProfileChoice(
 							profile.source,
-							event.target.value
-								? event.target.value as SelectiveImportProfileConflictResolution
+							value
+								? value as SelectiveImportProfileConflictResolution
 								: null,
 						)}
-					>
-						<option value="">Choose resolution…</option>
-						<option value="keep_destination">Keep Destination</option>
-						<option value="duplicate">Import as Copy</option>
-					</select>
+						options={[
+							{ value: "", label: "Choose resolution…" },
+							{ value: "keep_destination", label: "Keep Destination" },
+							{ value: "duplicate", label: "Import as Copy" },
+						]}
+					/>
 				)}
 			</div>
 		))}
