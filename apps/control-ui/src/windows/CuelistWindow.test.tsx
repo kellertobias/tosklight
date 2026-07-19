@@ -633,7 +633,7 @@ describe("CuelistWindow pool recording", () => {
 		await waitFor(() =>
 			expect(mocks.executeCommandLine).toHaveBeenCalledWith("RECORD SET 1"),
 		);
-		expect(mocks.setCommandLine).toHaveBeenCalledWith("");
+		expect(mocks.setCommandLine).not.toHaveBeenCalled();
 		expect(mocks.refresh).toHaveBeenCalledOnce();
 		expect(mocks.dispatch).toHaveBeenCalledWith({
 			type: "SET_STORE_ARMED",

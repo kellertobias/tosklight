@@ -1,4 +1,4 @@
-import { useServer } from "../../../api/ServerContext";
+import type { CommandTargetMode } from "../../../controlSurface/commandTarget";
 import { useApp } from "../../../state/AppContext";
 import { Button, Input } from "../../common";
 import { CommandLineStatus } from "./CommandLineStatus";
@@ -8,6 +8,8 @@ export function CommandInput({
 	hardware,
 	completed,
 	commandError,
+	commandLine,
+	commandTarget,
 	onReplace,
 	onExecute,
 	onOpenHistory,
@@ -16,12 +18,13 @@ export function CommandInput({
 	hardware: boolean;
 	completed: boolean;
 	commandError: string | null;
+	commandLine: string;
+	commandTarget: CommandTargetMode;
 	onReplace: (value: string, pristine?: boolean) => void;
 	onExecute: () => Promise<void>;
 	onOpenHistory: () => void;
 }) {
 	const { state, dispatch } = useApp();
-	const server = useServer();
 	return (
 		<>
 			<Button
@@ -38,13 +41,13 @@ export function CommandInput({
 				<Input
 					className={`command-input ${state.preload === "blind" ? "blind" : ""} ${state.updateArmed ? "update-armed" : ""} ${completed ? "completed" : ""} ${commandError ? "error" : ""}`}
 					aria-label="Command line"
-					value={server.commandLine}
+					value={commandLine}
 					placeholder=""
 					onClick={onOpenHistory}
 					onChange={(event) =>
 						onReplace(
 							completed
-								? `${server.commandTargetMode} ${event.target.value.slice(-1)}`
+								? `${commandTarget} ${event.target.value.slice(-1)}`
 								: event.target.value,
 						)
 					}

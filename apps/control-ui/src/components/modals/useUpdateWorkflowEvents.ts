@@ -17,6 +17,7 @@ import {
 	UPDATE_TARGET_EVENT,
 	UPDATE_TARGET_MENU_EVENT,
 } from "../control/updateWorkflow";
+import type { useCommandLineSurface } from "../control/commandLine/useCommandLineSurface";
 
 export type UpdateOperation = {
 	request: UpdateTargetRequest;
@@ -24,6 +25,7 @@ export type UpdateOperation = {
 };
 
 interface UpdateWorkflowEventOptions {
+	commandLine: ReturnType<typeof useCommandLineSurface>;
 	operation: UpdateOperation | null;
 	busy: boolean;
 	disarm: () => void;
@@ -38,6 +40,7 @@ interface UpdateWorkflowEventOptions {
 }
 
 export function useUpdateWorkflowEvents({
+	commandLine,
 	operation,
 	busy,
 	disarm,
@@ -85,7 +88,7 @@ export function useUpdateWorkflowEvents({
 					return;
 				}
 				setOperation({ request, preview });
-				server.setCommandLine(
+				void commandLine.replace(
 					`UPDATE ${targetFamilyLabel(preview.target).toUpperCase()} ${preview.target.name}`,
 					false,
 				);
@@ -115,9 +118,9 @@ export function useUpdateWorkflowEvents({
 		const synchronizeArmed = (event: Event) => {
 			const armed = Boolean((event as CustomEvent<boolean>).detail);
 			dispatch({ type: "SET_UPDATE_ARMED", value: armed });
-			if (armed) server.setCommandLine("UPDATE ", false);
-			else if (/^UPDATE\b/i.test(server.commandLine.trim())) {
-				server.resetCommandLine();
+			if (armed) void commandLine.replace("UPDATE ", false);
+			else if (/^UPDATE\b/i.test(commandLine.read().text.trim())) {
+				void commandLine.reset();
 			}
 		};
 		window.addEventListener(UPDATE_TARGET_EVENT, selectTarget);
@@ -135,6 +138,7 @@ export function useUpdateWorkflowEvents({
 		operation,
 		busy,
 		server,
+		commandLine,
 		disarm,
 		loadMenu,
 		setBusy,

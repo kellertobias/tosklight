@@ -8,8 +8,6 @@ import type { FilesContextValue } from "./types";
 function filesSource(fileContent = vi.fn()): FilesContextValue {
 	return {
 		status: "connected",
-		commandLine: "FIXTURE",
-		resetCommandLine: vi.fn(),
 		systemPickerFallback: false,
 		fileRoots: vi.fn(),
 		fileEntries: vi.fn(),

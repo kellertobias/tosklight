@@ -53,7 +53,5 @@ export interface FileCapabilities {
 
 export interface FilesContextValue extends FileCapabilities {
 	status: ConnectionStatus;
-	commandLine: string;
-	resetCommandLine: () => void;
 	systemPickerFallback: boolean;
 }

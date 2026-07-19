@@ -22,6 +22,12 @@ import type {
 } from "./types";
 import type { FileManagerState } from "./useFileManagerState";
 import type { FileNavigation } from "./useFileNavigation";
+import { useCommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
+
+type CommandLineSurface = Pick<
+	ReturnType<typeof useCommandLineSurface>,
+	"read" | "reset"
+>;
 
 interface OperationExecutionContext {
 	server: FilesContextValue;
@@ -96,6 +102,7 @@ type SetOperation = (next: FileOperationState | null) => void;
 function useOperationOwnershipActions(
 	state: FileManagerState,
 	server: FilesContextValue,
+	commandLine: CommandLineSurface,
 	setOperation: SetOperation,
 	picker?: FileManagerPickerOptions,
 ) {
@@ -147,7 +154,7 @@ function useOperationOwnershipActions(
 		if (state.operationRef.current || picker) return;
 		const pending =
 			fileOperationOwnership.pending ??
-			operationFromCommandLine(server.commandLine);
+			operationFromCommandLine(commandLine.read().text);
 		if (!pending) return;
 		event.stopPropagation();
 		fileOperationOwnership.pending = null;
@@ -158,7 +165,7 @@ function useOperationOwnershipActions(
 		);
 		void server
 			.claimFileInput(state.instanceId, pending, "pending")
-			.then(() => server.resetCommandLine())
+			.then(() => commandLine.reset())
 			.catch((error) => {
 				if (fileOperationOwnership.claimed === state.instanceId)
 					fileOperationOwnership.claimed = null;
@@ -317,8 +324,10 @@ export function useFileOperationActions(
 	state: FileManagerState,
 	navigation: FileNavigation,
 	picker?: FileManagerPickerOptions,
+	enabled = true,
 ) {
 	const server = useFiles();
+	const commandLine = useCommandLineSurface({ enabled, observeCommand: false });
 	const setOperation = useCallback((next: FileOperationState | null) => {
 		state.operationRef.current = next;
 		state.setOperationState(next);
@@ -326,6 +335,7 @@ export function useFileOperationActions(
 	const ownership = useOperationOwnershipActions(
 		state,
 		server,
+		commandLine,
 		setOperation,
 		picker,
 	);

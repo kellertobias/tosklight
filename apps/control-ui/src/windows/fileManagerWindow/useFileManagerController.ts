@@ -10,6 +10,7 @@ import { useSelectionDetails } from "./useSelectionDetails";
 import { confirmDiscardEditor, useTextFileEditor } from "./useTextFileEditor";
 
 export function useFileManagerController({
+	active = true,
 	picker,
 	instanceId: suppliedInstanceId,
 	paneId,
@@ -41,12 +42,12 @@ export function useFileManagerController({
 		paneId,
 		navigation.refreshAfterMutation,
 	);
-	const operations = useFileOperationActions(state, navigation, picker);
+	const operations = useFileOperationActions(state, navigation, picker, active);
 	const conflicts = useConflictActions(state, operations);
 	const pickerValid = Boolean(
 		picker && pickerSelectionIsValid(state.selected, picker),
 	);
-	useFileOperationInput(state, operations, picker, pickerValid);
+	useFileOperationInput(state, operations, picker, pickerValid, active);
 
 	const breadcrumbs = navigation.currentPath
 		? navigation.currentPath.split("/")

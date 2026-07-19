@@ -1,5 +1,13 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ProgrammingInteractionViewProvider } from "../../features/programmingInteraction/ProgrammingInteractionView";
+import { ProgrammingInteractionStore } from "../../features/programmingInteraction/store";
+import {
+	commandLine,
+	DESK_ID,
+	programmingSnapshot,
+	SHOW_ID,
+} from "../../features/programmingInteraction/testFixtures";
 import { CommandChoiceModal } from "./CommandChoiceModal";
 
 const server = {
@@ -20,6 +28,9 @@ const server = {
     cancel_label: string;
   },
   executeCommandLine: vi.fn().mockResolvedValue(true),
+	dismissCommandChoice: vi.fn(() => {
+		server.pendingCommandChoice = null;
+	}),
   cancelCommandChoice: vi.fn(),
 };
 
@@ -66,4 +77,42 @@ describe("CommandChoiceModal", () => {
     expect(server.cancelCommandChoice).toHaveBeenCalledTimes(1);
     expect(server.executeCommandLine).toHaveBeenCalledTimes(1);
   });
+
+	it("dismisses a compatibility choice while resetting scoped command state", async () => {
+		const store = new ProgrammingInteractionStore();
+		const choiceCommand = server.pendingCommandChoice?.command ?? "";
+		const replaceCommandLine = vi.fn().mockResolvedValue(commandLine(2));
+		render(
+			<ProgrammingInteractionViewProvider
+				showId={SHOW_ID}
+				deskId={DESK_ID}
+				store={store}
+				transport={null}
+				loadSnapshot={async () =>
+					programmingSnapshot({ command: commandLine(1, choiceCommand) })
+				}
+				replaceCommandLine={replaceCommandLine}
+			>
+				<CommandChoiceModal />
+			</ProgrammingInteractionViewProvider>,
+		);
+		await waitFor(() =>
+			expect(
+				screen.getByRole("dialog", { name: "Cue Copy choice" }),
+			).toBeInTheDocument(),
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+		await waitFor(() =>
+			expect(
+				screen.queryByRole("dialog", { name: "Cue Copy choice" }),
+			).not.toBeInTheDocument(),
+		);
+		expect(server.dismissCommandChoice).toHaveBeenCalledOnce();
+		expect(server.cancelCommandChoice).not.toHaveBeenCalled();
+		await waitFor(() =>
+			expect(replaceCommandLine).toHaveBeenCalledWith(DESK_ID, "", 1),
+		);
+	});
 });

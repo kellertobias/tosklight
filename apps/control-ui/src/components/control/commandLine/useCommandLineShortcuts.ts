@@ -4,6 +4,7 @@ import type { ServerContextValue } from "../../../features/server/ServerContextV
 import { useApp } from "../../../state/AppContext";
 import type { Action } from "../../../state/appReducer";
 import type { AppState } from "../../../types";
+import type { CommandTargetMode } from "../../../controlSurface/commandTarget";
 import { canAdvancePlaybackPage } from "../PlaybackPageDialogs";
 import {
 	editTargetedCommandWithSoftwareKey,
@@ -13,9 +14,12 @@ import { openUpdateSettings } from "../updateWorkflow";
 
 interface ShortcutCallbacks {
 	completed: boolean;
+	commandLine: string;
+	commandTargetMode: CommandTargetMode;
+	commandLinePristine: boolean;
 	persistentError: string | null;
 	replaceCommand: (value: string, pristine?: boolean) => void;
-	execute: () => Promise<void>;
+	execute: (command?: string) => Promise<void>;
 	armUpdateOrMenu: () => void;
 	dismissPersistentError: () => void;
 }
@@ -157,15 +161,14 @@ function applySoftwareEdit(
 	context: ShortcutContext,
 	key: Parameters<typeof editTargetedCommandWithSoftwareKey>[1],
 ) {
-	const { server } = context;
 	const edited = editTargetedCommandWithSoftwareKey(
-		context.completed ? server.commandTargetMode : server.commandLine,
+		context.completed ? context.commandTargetMode : context.commandLine,
 		key,
-		server.commandTargetMode,
-		context.completed || server.commandLinePristine,
+		context.commandTargetMode,
+		context.completed || context.commandLinePristine,
 	);
 	context.replaceCommand(edited.command, edited.pristine);
-	if (edited.execute) void server.executeCommandLine(edited.command);
+	if (edited.execute) void context.execute(edited.command);
 }
 
 function handleSoftwareKey(context: ShortcutContext, event: KeyboardEvent) {
@@ -178,7 +181,7 @@ function handleSoftwareKey(context: ShortcutContext, event: KeyboardEvent) {
 	event.preventDefault();
 	if (
 		key === "SET" &&
-		(context.completed || context.server.commandLinePristine) &&
+		(context.completed || context.commandLinePristine) &&
 		context.state.builtIn === "patch"
 	) {
 		document

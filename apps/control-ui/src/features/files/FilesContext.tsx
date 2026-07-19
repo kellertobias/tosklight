@@ -62,20 +62,15 @@ export function FilesProvider({
 	children,
 }: PropsWithChildren<{ source: FilesContextValue }>) {
 	const capabilities = useStableFileCapabilities(source);
-	const resetCommandLine = useStableCallback(source.resetCommandLine);
 	const value = useMemo(
 		() => ({
 			...capabilities,
 			status: source.status,
-			commandLine: source.commandLine,
-			resetCommandLine,
 			systemPickerFallback: source.systemPickerFallback,
 		}),
 		[
 			capabilities,
-			resetCommandLine,
 			source.status,
-			source.commandLine,
 			source.systemPickerFallback,
 		],
 	);

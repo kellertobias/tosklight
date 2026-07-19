@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { useServer } from "../../api/ServerContext";
 import { requestUpdateTarget } from "../../components/control/updateWorkflow";
+import type { CommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
 import { ButtonGrid, WindowScrollArea } from "../../components/window-kit";
 import { useApp } from "../../state/AppContext";
 import { GroupCard } from "./GroupCard";
@@ -10,6 +11,7 @@ export function GroupPoolGrid({
 	cards,
 	capabilities,
 	knownFixtureIds,
+	command,
 	onOpenContext,
 	onOpenProperties,
 	onOpenRecord,
@@ -17,6 +19,7 @@ export function GroupPoolGrid({
 	runCommand,
 }: Pick<FixtureMetadata, "capabilities" | "knownFixtureIds"> & {
 	cards: (Group | null)[];
+	command: CommandLineSurface;
 	onOpenContext: (id: string) => void;
 	onOpenProperties: (id: string) => void;
 	onOpenRecord: (id: string) => void;
@@ -36,9 +39,9 @@ export function GroupPoolGrid({
 			requestUpdateTarget({ family: { type: "group" }, object_id: id });
 			return;
 		}
-		if (group && /^SET\b/i.test(server.commandLine.trim())) {
+		if (group && /^SET\b/i.test(command.read().text.trim())) {
 			onOpenProperties(group.id);
-			server.resetCommandLine();
+			void command.reset();
 			return;
 		}
 		if (group && !state.storeArmed) {
@@ -65,7 +68,7 @@ export function GroupPoolGrid({
 						index={index}
 						knownFixtureIds={knownFixtureIds}
 						capabilities={capabilities}
-						selected={server.selectedGroupId === group?.id}
+						selected={command.selectedGroupId === group?.id}
 						storeArmed={state.storeArmed}
 						updateArmed={state.updateArmed}
 						beginHold={() => {

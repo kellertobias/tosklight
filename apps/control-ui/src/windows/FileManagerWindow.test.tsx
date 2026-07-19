@@ -57,6 +57,11 @@ const mocks = vi.hoisted(() => ({
 	server: {
 		status: "connected",
 		commandLine: "FIXTURE",
+		commandTargetMode: "FIXTURE",
+		commandLinePristine: true,
+		selectedFixtures: [],
+		selectedGroupId: null,
+		pendingCommandChoice: null,
 		fileRoots: vi.fn(),
 		fileEntries: vi.fn(),
 		fileContent: vi.fn(),
@@ -70,8 +75,13 @@ const mocks = vi.hoisted(() => ({
 		readTextFile: vi.fn(),
 		saveTextFile: vi.fn(),
 		resetCommandLine: vi.fn(),
+		setCommandLine: vi.fn(),
+		executeCommandLine: vi.fn(),
+		cancelCommandChoice: vi.fn(),
 	},
 }));
+
+vi.mock("../api/ServerContext", () => ({ useServer: () => mocks.server }));
 
 vi.mock("../features/files/FilesContext", () => ({
 	useFiles: () => mocks.server,

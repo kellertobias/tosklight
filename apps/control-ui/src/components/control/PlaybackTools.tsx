@@ -12,10 +12,12 @@ import { editTargetedCommandWithSoftwareKey, type SoftwareKey } from "./software
 import type { SpeedGroupId } from "../../api/types";
 import { canAdvancePlaybackPage, PlaybackPageMenu, PlaybackPageRenameDialog } from "./PlaybackPageDialogs";
 import { usePlaybackDeskView } from "../../features/playbackRuntime/PlaybackRuntimeView";
+import { useCommandLineSurface } from "./commandLine/useCommandLineSurface";
 
 export function PlaybackTools() {
   const { state, dispatch } = useApp();
   const server = useServer();
+  const command = useCommandLineSurface({ observeCommand: false });
   const playbackDesk = usePlaybackDeskView();
   const speedBpms = server.configuration?.speed_groups_bpm ?? [120, 90, 60, 30, 15];
   const [pagePickerOpen, setPagePickerOpen] = useState(false);
@@ -45,6 +47,7 @@ export function PlaybackTools() {
     return () => window.removeEventListener("keydown", close, true);
   }, [pagePickerOpen]);
   const pressCommandKey = (key: SoftwareKey) => {
+    const currentCommand = command.read();
     if (key === "SHIFT") {
       dispatch({ type: "SET_SHIFT_ARMED", value: !state.shiftArmed });
       return;
@@ -60,9 +63,9 @@ export function PlaybackTools() {
         return;
       }
     }
-    const edited = editTargetedCommandWithSoftwareKey(server.commandLine, key, server.commandTargetMode, server.commandLinePristine);
-    server.setCommandLine(edited.command, edited.pristine);
-    if (edited.execute) void server.executeCommandLine(edited.command);
+    const edited = editTargetedCommandWithSoftwareKey(currentCommand.text, key, currentCommand.target, currentCommand.pristine);
+    void command.replace(edited.command, edited.pristine);
+    if (edited.execute) void command.execute(edited.command);
   };
   const pages = server.playbacks?.pages ?? [];
   const activePageNumber = playbackDesk?.active_page ?? state.playbackPage + 1;

@@ -1,6 +1,17 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Button } from "../common";
+import { ProgrammingInteractionViewProvider } from "../../features/programmingInteraction/ProgrammingInteractionView";
+import { ProgrammingInteractionStore } from "../../features/programmingInteraction/store";
+import {
+	commandChange,
+	commandLine,
+	DESK_ID,
+	FakeProgrammingTransport,
+	programmingSnapshot,
+	settleSession,
+	SHOW_ID,
+} from "../../features/programmingInteraction/testFixtures";
 import { CommandLineBar } from "./CommandLineBar";
 import { UPDATE_SETTINGS_EVENT, UPDATE_TARGET_MENU_EVENT } from "./updateWorkflow";
 
@@ -70,6 +81,96 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+});
+
+function deferred<T>() {
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((onResolve) => {
+		resolve = onResolve;
+	});
+	return { promise, resolve };
+}
+
+describe("scoped command-line integration", () => {
+	it("renders optimistic edits and waits for the revisioned write before Enter", async () => {
+		const store = new ProgrammingInteractionStore();
+		const transport = new FakeProgrammingTransport();
+		const pendingWrite = deferred<ReturnType<typeof commandLine>>();
+		const replaceCommandLine = vi.fn(() => pendingWrite.promise);
+		const loadSnapshot = vi
+			.fn()
+			.mockResolvedValueOnce(programmingSnapshot())
+			.mockResolvedValueOnce(
+				programmingSnapshot({ sequence: 12, command: commandLine(3) }),
+			);
+		render(
+			<ProgrammingInteractionViewProvider
+				showId={SHOW_ID}
+				deskId={DESK_ID}
+				store={store}
+				transport={transport}
+				loadSnapshot={loadSnapshot}
+				replaceCommandLine={replaceCommandLine}
+			>
+				<CommandLineBar />
+			</ProgrammingInteractionViewProvider>,
+		);
+		await act(settleSession);
+		const input = screen.getByRole("textbox", { name: "Command line" });
+
+		fireEvent.change(input, { target: { value: "FIXTURE 1" } });
+		expect(input).toHaveValue("FIXTURE 1");
+		expect(replaceCommandLine).toHaveBeenCalledWith(
+			DESK_ID,
+			"FIXTURE 1",
+			1,
+		);
+		expect(server.setCommandLine).not.toHaveBeenCalled();
+
+		fireEvent.keyDown(input, { key: "Enter" });
+		expect(server.executeCommandLine).not.toHaveBeenCalled();
+		await act(async () => {
+			pendingWrite.resolve(commandLine(2, "FIXTURE 1"));
+			await settleSession();
+		});
+
+		expect(server.executeCommandLine).toHaveBeenCalledWith("FIXTURE 1", {
+			target: "FIXTURE",
+			pristine: false,
+		});
+		expect(input).toHaveValue("FIXTURE");
+	});
+
+	it("renders an authoritative OSC command event without a legacy write", async () => {
+		const store = new ProgrammingInteractionStore();
+		const transport = new FakeProgrammingTransport();
+		render(
+			<ProgrammingInteractionViewProvider
+				showId={SHOW_ID}
+				deskId={DESK_ID}
+				store={store}
+				transport={transport}
+				loadSnapshot={async () => programmingSnapshot()}
+			>
+				<CommandLineBar />
+			</ProgrammingInteractionViewProvider>,
+		);
+		await act(settleSession);
+
+		act(() =>
+			transport.emit({
+				type: "event",
+				sequence: 12,
+				correlationId: null,
+				change: commandChange({ revision: 2, text: "FIXTURE 12" }),
+			}),
+		);
+
+		expect(screen.getByRole("textbox", { name: "Command line" })).toHaveValue(
+			"FIXTURE 12",
+		);
+		expect(server.setCommandLine).not.toHaveBeenCalled();
+	});
 });
 
 describe("Shift+Record Update gestures", () => {

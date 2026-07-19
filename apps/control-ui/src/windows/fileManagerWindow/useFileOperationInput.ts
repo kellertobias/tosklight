@@ -10,22 +10,24 @@ function useFileOperationRouting(
 	state: FileManagerState,
 	operations: FileOperationActions,
 	server: FilesContextValue,
+	enabled: boolean,
 ) {
 	const serverRef = useRef(server);
 	serverRef.current = server;
-	useEffect(
-		() => () => {
+	useEffect(() => {
+		if (!enabled) return;
+		return () => {
 			if (fileOperationOwnership.claimed === state.instanceId) {
 				fileOperationOwnership.claimed = null;
 				void serverRef.current
 					.releaseFileInput(state.instanceId)
 					.catch(() => undefined);
 			}
-		},
-		[state.instanceId],
-	);
+		};
+	}, [enabled, state.instanceId]);
 
 	useEffect(() => {
+		if (!enabled) return;
 		const routeDeskAction = (event: Event) => {
 			const action = String(
 				(event as CustomEvent<string>).detail ?? "",
@@ -90,9 +92,10 @@ function useFileOperationRouting(
 			window.removeEventListener("light:file-manager-input", routeFileInput);
 			document.removeEventListener("pointerdown", releaseUnclaimed, true);
 		};
-	});
+	}, [enabled, operations, state.instanceId, state.operationRef]);
 
 	useEffect(() => {
+		if (!enabled) return;
 		const operation = state.operation;
 		if (!operation || fileOperationOwnership.claimed !== state.instanceId)
 			return;
@@ -106,14 +109,15 @@ function useFileOperationRouting(
 				);
 		}, 30_000);
 		return () => window.clearInterval(timer);
-	}, [state.instanceId, state.operation?.kind]);
+	}, [enabled, operations, state.instanceId, state.operation?.kind]);
 
 	useEffect(() => {
+		if (!enabled) return;
 		if (server.status === "connected" || !state.operationRef.current) return;
 		operations.cancelOperation(
 			"The file operation was cancelled because the desk connection was lost.",
 		);
-	}, [server.status]);
+	}, [enabled, operations, server.status, state.operationRef]);
 }
 
 function useFileOperationKeys(
@@ -121,8 +125,10 @@ function useFileOperationKeys(
 	operations: FileOperationActions,
 	picker: FileManagerPickerOptions | undefined,
 	pickerValid: boolean,
+	enabled: boolean,
 ) {
 	useEffect(() => {
+		if (!enabled) return;
 		const interceptKeys = (event: KeyboardEvent) => {
 			const target = event.target;
 			const editingName =
@@ -181,7 +187,7 @@ function useFileOperationKeys(
 			window.removeEventListener("keydown", interceptKeys, true);
 			document.removeEventListener("click", interceptTouchKey, true);
 		};
-	});
+	}, [enabled, operations, picker, pickerValid, state]);
 }
 
 export function useFileOperationInput(
@@ -189,8 +195,9 @@ export function useFileOperationInput(
 	operations: FileOperationActions,
 	picker: FileManagerPickerOptions | undefined,
 	pickerValid: boolean,
+	enabled = true,
 ) {
 	const server = useFiles();
-	useFileOperationRouting(state, operations, server);
-	useFileOperationKeys(state, operations, picker, pickerValid);
+	useFileOperationRouting(state, operations, server, enabled);
+	useFileOperationKeys(state, operations, picker, pickerValid, enabled);
 }

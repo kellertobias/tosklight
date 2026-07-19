@@ -117,7 +117,6 @@ export function useCommandLineSurface({
 		reset,
 		execute,
 		cancelChoice,
-		scoped: Boolean(projection && actions),
 	};
 }
 

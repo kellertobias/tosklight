@@ -7,20 +7,23 @@ import {
 import { WindowHeader } from "../components/window-kit";
 import { useApp } from "../state/AppContext";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
+import {
+	type CommandLineSurface,
+	useCommandLineSurface,
+} from "../components/control/commandLine/useCommandLineSurface";
 import { GroupContextMenu } from "./groupsWindow/GroupContextMenu";
 import { GroupPoolGrid } from "./groupsWindow/GroupPoolGrid";
 import { GroupPropertiesDialog } from "./groupsWindow/GroupPropertiesDialog";
 import { useGroupPoolModel } from "./groupsWindow/model";
 import type { WindowProps } from "./windowTypes";
 
-function GroupPoolHeader() {
-	const server = useServer();
+function GroupPoolHeader({ command }: { command: CommandLineSurface }) {
 	const { state, dispatch } = useApp();
 	return (
 		<WindowHeader
 			title="Group Pool"
 			info={{
-				primary: `${server.selectedFixtures.length} fixtures selected`,
+				primary: `${command.selected.length} fixtures selected`,
 				secondary: "Ordered selection",
 			}}
 			actions={[
@@ -50,6 +53,11 @@ function GroupPoolHeader() {
 export function GroupsWindow({ active = true, compact }: WindowProps) {
 	useShowObjectView("group", active);
 	const server = useServer();
+	const command = useCommandLineSurface({
+		selection: true,
+		enabled: active,
+		observeCommand: false,
+	});
 	const { dispatch } = useApp();
 	const model = useGroupPoolModel(server);
 	const [contextGroup, setContextGroup] = useState<string | null>(null);
@@ -62,6 +70,7 @@ export function GroupsWindow({ active = true, compact }: WindowProps) {
 	);
 
 	useEffect(() => {
+		if (!active) return;
 		const openRequestedGroup = (event: Event) => {
 			const id = (event as CustomEvent<string>).detail;
 			if (model.groups.some((group) => group.id === id)) setPropertiesGroup(id);
@@ -72,9 +81,9 @@ export function GroupsWindow({ active = true, compact }: WindowProps) {
 				"light:group-configuration",
 				openRequestedGroup,
 			);
-	}, [model.groups]);
+	}, [active, model.groups]);
 
-	const runCommand = (command: string) => server.executeCommandLine(command);
+	const runCommand = (value: string) => command.execute(value);
 	const recordGroupCommand = async (
 		id: string,
 		mode: RecordMode = "overwrite",
@@ -97,8 +106,9 @@ export function GroupsWindow({ active = true, compact }: WindowProps) {
 
 	return (
 		<div className="pool-window group-pool-window">
-			{!compact && <GroupPoolHeader />}
+			{!compact && <GroupPoolHeader command={command} />}
 			<GroupPoolGrid
+				command={command}
 				cards={model.cards}
 				capabilities={model.capabilities}
 				knownFixtureIds={model.knownFixtureIds}

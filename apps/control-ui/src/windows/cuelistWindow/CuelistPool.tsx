@@ -18,6 +18,7 @@ import {
 import { runtimeMaster } from "../../features/playbackRuntime/legacy";
 import { usePlaybackProjectionMap } from "../../features/playbackRuntime/PlaybackRuntimeView";
 import { useApp } from "../../state/AppContext";
+import { useCommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
 
 interface CuelistPoolProps {
 	active: boolean;
@@ -87,6 +88,10 @@ function CuelistPoolSlot(props: PoolSlotProps) {
 
 function useCuelistPoolActions(props: CuelistPoolProps) {
 	const server = useServer();
+	const command = useCommandLineSurface({
+		enabled: props.active,
+		observeCommand: false,
+	});
 	const { state, dispatch } = useApp();
 	const holdTimer = useRef<number | null>(null);
 	const held = useRef(false);
@@ -116,11 +121,10 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 			return;
 		}
 		if (state.storeArmed) {
-			void server
-				.executeCommandLine(`RECORD SET ${number}`)
+			void command
+				.execute(`RECORD SET ${number}`)
 				.then(async (ok) => {
 					if (!ok) return;
-					server.setCommandLine("");
 					await server.refresh();
 					dispatch({ type: "SET_STORE_ARMED", value: false });
 				});

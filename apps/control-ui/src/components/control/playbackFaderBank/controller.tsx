@@ -7,6 +7,7 @@ import { useShowObjectView } from "../../../features/showObjects/ShowObjectsView
 import { useApp } from "../../../state/AppContext";
 import { playbackRowUnits, projectPlaybackSlots } from "./projection";
 import type { PlaybackConfigurationState } from "./types";
+import { useCommandLineSurface } from "../commandLine/useCommandLineSurface";
 
 export interface PlaybackFaderBankProps {
 	pageNumber?: number;
@@ -26,6 +27,7 @@ export function usePlaybackBankController({
 	playbackLayout,
 }: PlaybackFaderBankProps) {
 	const server = useServer();
+	const command = useCommandLineSurface();
 	const groups = useGroups(server.playbacks);
 	const { state, dispatch } = useApp();
 	const playbackDesk = usePlaybackDeskView();
@@ -47,7 +49,7 @@ export function usePlaybackBankController({
 	const [configuration, setConfiguration] =
 		useState<PlaybackConfigurationState | null>(null);
 	const assignmentPending = state.cueListSetTarget != null;
-	const selectionPending = /^SELECT\s*$/i.test(server.commandLine);
+	const selectionPending = /^SELECT\s*$/i.test(command.text);
 	const slots = projectPlaybackSlots({
 		server,
 		groups,
@@ -68,6 +70,7 @@ export function usePlaybackBankController({
 		: `repeat(${rowCount}, minmax(0, 1fr))`;
 	return {
 		server,
+		command,
 		playbackDesk,
 		state,
 		dispatch,

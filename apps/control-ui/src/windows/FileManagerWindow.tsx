@@ -21,9 +21,14 @@ export type {
 	FileManagerTarget,
 } from "./fileManagerWindow/types";
 
-export function FileManagerWindow({ builtIn, paneId }: WindowProps) {
+export function FileManagerWindow({ active = true, builtIn, paneId }: WindowProps) {
 	return (
-		<FileManager instanceId={paneId} paneId={paneId} closeable={builtIn} />
+		<FileManager
+			active={active}
+			instanceId={paneId}
+			paneId={paneId}
+			closeable={builtIn}
+		/>
 	);
 }
 

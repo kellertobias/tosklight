@@ -51,7 +51,7 @@ export async function selectPlayback(
 	playback: PlaybackDefinition,
 ) {
 	await controller.server.poolPlaybackAction(playback.number, "select");
-	if (controller.selectionPending) controller.server.resetCommandLine();
+	if (controller.selectionPending) void controller.command.reset();
 }
 
 export async function recordPlayback(
@@ -114,7 +114,7 @@ export async function assignPlayback(
 ) {
 	const target = controller.state.cueListSetTarget;
 	if (target == null) return;
-	const ok = await controller.server.executeCommandLine(
+	const ok = await controller.command.execute(
 		`SET ${target} AT ${controller.activePageNumber}.${slot}`,
 	);
 	if (!ok) return;

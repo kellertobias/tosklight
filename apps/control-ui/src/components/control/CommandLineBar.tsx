@@ -16,6 +16,7 @@ import {
 } from "./commandLine/CommandLineStatus";
 import { CommandRecordPreload } from "./commandLine/CommandRecordPreload";
 import { useCommandLineShortcuts } from "./commandLine/useCommandLineShortcuts";
+import { useCommandLineSurface } from "./commandLine/useCommandLineSurface";
 import { useRecordGesture } from "./commandLine/useRecordGesture";
 import "./CommandLineHistory.css";
 import { programmerValueCount } from "./programmerActivity";
@@ -93,10 +94,12 @@ function useHistoryDismissal(
 export function CommandLineBar() {
 	const { state, dispatch } = useApp();
 	const server = useServer();
+	const command = useCommandLineSurface({ selection: true });
 	const hardware = Boolean(
 		server.bootstrap?.hardware_connected || state.midiProfile,
 	);
 	const [completed, setCompleted] = useState(false);
+	const editGeneration = useRef(0);
 	const errors = useCommandErrors(setCompleted);
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const historyPanel = useRef<HTMLElement | null>(null);
@@ -105,7 +108,7 @@ export function CommandLineBar() {
 		(programmer) => programmer.session_id === server.session?.session_id,
 	);
 	const hasRecordableContent =
-		server.selectedFixtures.length > 0 ||
+		command.selected.length > 0 ||
 		programmerValueCount(ownProgrammer) > 0 ||
 		state.preload !== "idle" ||
 		state.preloadActive;
@@ -126,13 +129,15 @@ export function CommandLineBar() {
 		.filter(Boolean)
 		.join(" · ");
 	const replaceCommand = (value: string, pristine = false) => {
+		editGeneration.current++;
 		setCompleted(false);
 		errors.setCommandError(null);
-		server.setCommandLine(value, pristine);
+		void command.replace(value, pristine);
 	};
-	const execute = async () => {
-		const ok = await server.executeCommandLine();
-		setCompleted(ok);
+	const execute = async (value?: string) => {
+		const generation = editGeneration.current;
+		const ok = await command.execute(value);
+		setCompleted(ok && generation === editGeneration.current);
 		if (ok && state.storeArmed)
 			dispatch({ type: "SET_STORE_ARMED", value: false });
 		if (ok && state.updateArmed)
@@ -148,8 +153,8 @@ export function CommandLineBar() {
 			dispatch({ type: "SET_CUELIST_SET_ARMED", value: false });
 		dispatch({ type: "SET_STORE_ARMED", value: armed });
 		if (armed) replaceCommand("RECORD ");
-		else if (/^RECORD\b/i.test(server.commandLine))
-			replaceCommand(server.commandLine.replace(/^RECORD\s*/i, ""));
+		else if (/^RECORD\b/i.test(command.text))
+			replaceCommand(command.text.replace(/^RECORD\s*/i, ""));
 	};
 	const armUpdateOrMenu = () => {
 		if (state.updateArmed) {
@@ -176,6 +181,9 @@ export function CommandLineBar() {
 	};
 	useCommandLineShortcuts(hardware, {
 		completed,
+		commandLine: command.text,
+		commandTargetMode: command.target,
+		commandLinePristine: command.pristine,
 		persistentError: errors.persistentError,
 		replaceCommand,
 		execute,
@@ -195,6 +203,8 @@ export function CommandLineBar() {
 				hardware={hardware}
 				completed={completed}
 				commandError={errors.commandError}
+				commandLine={command.text}
+				commandTarget={command.target}
 				onReplace={replaceCommand}
 				onExecute={execute}
 				onOpenHistory={() => setHistoryOpen(true)}

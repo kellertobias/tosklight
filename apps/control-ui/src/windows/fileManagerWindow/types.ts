@@ -26,6 +26,7 @@ export interface FileManagerPickerOptions {
 }
 
 export interface FileManagerProps {
+	active?: boolean;
 	picker?: FileManagerPickerOptions;
 	instanceId?: string;
 	paneId?: string;
