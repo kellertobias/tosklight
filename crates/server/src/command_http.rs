@@ -21,6 +21,10 @@ mod selection_routes;
 mod selection_wire;
 #[path = "command_http/state_event.rs"]
 mod state_event;
+#[path = "command_http/values_environment.rs"]
+mod values_environment;
+#[path = "command_http/values_routes.rs"]
+mod values_routes;
 #[path = "command_http/values_wire.rs"]
 mod values_wire;
 #[path = "command_http/wire.rs"]

@@ -4,6 +4,7 @@ use light_core::{SessionId, UserId};
 use light_programmer::{
     ProgrammerFixtureUpdate, ProgrammerGroupUpdate, ProgrammerRegistry, ProgrammerUpdateContent,
 };
+use std::sync::Arc;
 
 #[cfg(test)]
 use std::cell::Cell;
@@ -29,7 +30,7 @@ pub struct ProgrammingValuesProjection {
 /// replaceable delivery can supersede an older queued value update safely.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProgrammingValuesChange {
-    pub projection: ProgrammingValuesProjection,
+    pub projection: Arc<ProgrammingValuesProjection>,
 }
 
 /// Authoritative gap-repair snapshot for one authenticated user's normal Programmer values.

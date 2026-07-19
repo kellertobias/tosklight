@@ -1,7 +1,6 @@
-use super::adapter::{run_service, run_snapshot, run_values_snapshot};
+use super::adapter::{run_service, run_snapshot};
 use super::events::publish_service_result;
 use super::interaction_wire::interaction_snapshot;
-use super::values_wire::values_snapshot;
 use super::wire::{
     command_key, command_key_phase, command_line_from_state, operation_response, with_etag,
 };
@@ -44,27 +43,10 @@ pub(crate) fn router() -> Router<AppState> {
             "/api/v2/desks/{desk_id}/programming-interaction/snapshot",
             get(get_programming_interaction),
         )
-        .route(
-            "/api/v2/users/{user_id}/programmer-values/snapshot",
-            get(get_programming_values),
-        )
         .layer(DefaultBodyLimit::max(32 * 1024));
-    command_line.merge(super::selection_routes::router())
-}
-
-async fn get_programming_values(
-    State(state): State<AppState>,
-    Path(user_id): Path<Uuid>,
-    headers: HeaderMap,
-) -> Result<Response, ApiError> {
-    let session = super::super::authenticate(&state, &headers)?;
-    if session.user.id.0 != user_id {
-        return Err(ApiError::forbidden(
-            "the authenticated session does not belong to this Programmer user",
-        ));
-    }
-    let snapshot = run_values_snapshot(&state, &session, http_context(&session, None))?;
-    Ok(Json(values_snapshot(snapshot)).into_response())
+    command_line
+        .merge(super::selection_routes::router())
+        .merge(super::values_routes::router())
 }
 
 async fn get_programming_interaction(

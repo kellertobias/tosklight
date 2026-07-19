@@ -4,6 +4,7 @@ use super::wire::application_choice;
 use light_application::{
     ActionContext, ActionError, ActionErrorKind, ExecutionPolicy, ProgrammingExecution,
     ProgrammingPorts, ProgrammingSelectionEnvironment, ProgrammingSelectionQuery,
+    ProgrammingValuesEnvironment,
 };
 use light_programmer::ProgrammerRegistry;
 
@@ -97,6 +98,13 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
         Ok(super::selection_environment::selection_environment(
             self.state, query,
         ))
+    }
+
+    fn values_environment(
+        &self,
+        _context: &ActionContext,
+    ) -> Result<ProgrammingValuesEnvironment, ActionError> {
+        Ok(super::values_environment::values_environment(self.state))
     }
 
     fn persist(&self, context: &ActionContext, operation: &'static str) -> Option<String> {

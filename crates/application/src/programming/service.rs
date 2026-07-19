@@ -21,12 +21,19 @@ mod selection_refresh;
 mod state;
 #[path = "service/support.rs"]
 mod support;
+#[path = "service/values.rs"]
+mod values;
+#[path = "service/values_replay.rs"]
+mod values_replay;
+#[path = "service/values_validation.rs"]
+mod values_validation;
 
 use state::{interaction_change, reconciliation};
 use support::{
     ReplayCache, Snapshot, accepted, command_line, context_session, context_user, replace_error,
     required_session, unknown_programmer, validate_command,
 };
+use values_replay::ValuesReplayCache;
 
 use super::operation::DeskOperationGates;
 
@@ -35,6 +42,7 @@ pub struct ProgrammingService {
     pub(super) programmers: ProgrammerRegistry,
     pub(super) desk_gates: DeskOperationGates,
     replay: Arc<Mutex<ReplayCache>>,
+    values_replay: Arc<Mutex<ValuesReplayCache>>,
     pub(super) events: EventBus,
     nested_selection_publications: Arc<Mutex<HashMap<uuid::Uuid, u64>>>,
     _highlight: Arc<HighlightRegistry>,
@@ -50,6 +58,7 @@ impl ProgrammingService {
             programmers,
             desk_gates: DeskOperationGates::default(),
             replay: Arc::default(),
+            values_replay: Arc::default(),
             events,
             nested_selection_publications: Arc::default(),
             _highlight: highlight,

@@ -19,6 +19,8 @@ mod routing;
 mod selection_refresh;
 #[path = "live_state_tests/values.rs"]
 mod values;
+#[path = "live_state_tests/values_actions.rs"]
+mod values_actions;
 
 #[derive(Default)]
 struct LivePorts {

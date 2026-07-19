@@ -1,6 +1,82 @@
 use light_application as application;
-use light_core::AttributeValue;
+use light_core::{AttributeKey, AttributeValue, FixtureId, Xyz};
 use light_wire::v2::{events::EventSnapshotCursor, programming as wire};
+
+pub(super) fn values_command(
+    action: wire::ProgrammingValuesAction,
+) -> application::ProgrammingValuesCommand {
+    match action {
+        wire::ProgrammingValuesAction::SetFixture {
+            fixture_id,
+            attribute,
+            value,
+            timing,
+        } => application::ProgrammingValuesCommand::SetFixture {
+            fixture_id: FixtureId(fixture_id),
+            attribute: AttributeKey(attribute),
+            value: application_value(value),
+            timing: application_timing(timing),
+        },
+        wire::ProgrammingValuesAction::ReleaseFixture {
+            fixture_id,
+            attribute,
+        } => application::ProgrammingValuesCommand::ReleaseFixture {
+            fixture_id: FixtureId(fixture_id),
+            attribute: AttributeKey(attribute),
+        },
+        wire::ProgrammingValuesAction::SetGroup {
+            group_id,
+            attribute,
+            value,
+            timing,
+        } => application::ProgrammingValuesCommand::SetGroup {
+            group_id,
+            attribute: AttributeKey(attribute),
+            value: application_value(value),
+            timing: application_timing(timing),
+        },
+        wire::ProgrammingValuesAction::ReleaseGroup {
+            group_id,
+            attribute,
+        } => application::ProgrammingValuesCommand::ReleaseGroup {
+            group_id,
+            attribute: AttributeKey(attribute),
+        },
+        wire::ProgrammingValuesAction::Batch { mutations } => {
+            application::ProgrammingValuesCommand::Batch {
+                mutations: mutations.into_iter().map(application_mutation).collect(),
+            }
+        }
+        wire::ProgrammingValuesAction::Clear => application::ProgrammingValuesCommand::Clear,
+    }
+}
+
+pub(super) fn values_outcome(
+    request_id: String,
+    result: application::ProgrammingValuesResult,
+) -> wire::ProgrammingValuesActionOutcome {
+    let revision = result.outcome.revision();
+    let outcome = match result.outcome {
+        application::ProgrammingValuesOutcome::Changed {
+            projection,
+            event_sequence,
+        } => wire::ProgrammingValuesActionState::Changed {
+            projection: values_projection(&projection),
+            event_sequence,
+        },
+        application::ProgrammingValuesOutcome::NoChange { .. } => {
+            wire::ProgrammingValuesActionState::NoChange
+        }
+    };
+    wire::ProgrammingValuesActionOutcome {
+        request_id,
+        correlation_id: result.context.correlation_id,
+        revision,
+        outcome,
+        replayed: result.replayed,
+        warning: result.warning,
+    }
+}
 
 pub(super) fn values_snapshot(
     snapshot: application::ProgrammingValuesSnapshot,
@@ -21,7 +97,7 @@ pub(in crate::runtime) fn values_change(
     }
 }
 
-fn values_projection(
+pub(super) fn values_projection(
     projection: &application::ProgrammingValuesProjection,
 ) -> wire::ProgrammingValuesProjection {
     wire::ProgrammingValuesProjection {
@@ -33,6 +109,74 @@ fn values_projection(
             .map(fixture_value)
             .collect(),
         group_values: projection.group_values.iter().map(group_value).collect(),
+    }
+}
+
+fn application_mutation(
+    mutation: wire::ProgrammingValueMutation,
+) -> application::ProgrammingValueMutation {
+    match mutation {
+        wire::ProgrammingValueMutation::SetFixture {
+            fixture_id,
+            attribute,
+            value,
+            timing,
+        } => application::ProgrammingValueMutation::SetFixture {
+            fixture_id: FixtureId(fixture_id),
+            attribute: AttributeKey(attribute),
+            value: application_value(value),
+            timing: application_timing(timing),
+        },
+        wire::ProgrammingValueMutation::ReleaseFixture {
+            fixture_id,
+            attribute,
+        } => application::ProgrammingValueMutation::ReleaseFixture {
+            fixture_id: FixtureId(fixture_id),
+            attribute: AttributeKey(attribute),
+        },
+        wire::ProgrammingValueMutation::SetGroup {
+            group_id,
+            attribute,
+            value,
+            timing,
+        } => application::ProgrammingValueMutation::SetGroup {
+            group_id,
+            attribute: AttributeKey(attribute),
+            value: application_value(value),
+            timing: application_timing(timing),
+        },
+        wire::ProgrammingValueMutation::ReleaseGroup {
+            group_id,
+            attribute,
+        } => application::ProgrammingValueMutation::ReleaseGroup {
+            group_id,
+            attribute: AttributeKey(attribute),
+        },
+    }
+}
+
+const fn application_timing(
+    timing: wire::ProgrammingValueTiming,
+) -> application::ProgrammingValueTiming {
+    application::ProgrammingValueTiming {
+        fade: timing.fade,
+        fade_millis: timing.fade_millis,
+        delay_millis: timing.delay_millis,
+    }
+}
+
+fn application_value(value: wire::ProgrammingAttributeValue) -> AttributeValue {
+    match value {
+        wire::ProgrammingAttributeValue::Normalized(value) => AttributeValue::Normalized(value),
+        wire::ProgrammingAttributeValue::Spread(values) => AttributeValue::Spread(values),
+        wire::ProgrammingAttributeValue::Discrete(value) => AttributeValue::Discrete(value),
+        wire::ProgrammingAttributeValue::ColorXyz(value) => AttributeValue::ColorXyz(Xyz {
+            x: value.x,
+            y: value.y,
+            z: value.z,
+        }),
+        wire::ProgrammingAttributeValue::RawDmx(value) => AttributeValue::RawDmx(value),
+        wire::ProgrammingAttributeValue::RawDmxExact(value) => AttributeValue::RawDmxExact(value),
     }
 }
 

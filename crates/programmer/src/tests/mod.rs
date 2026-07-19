@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 mod groups_and_preload;
+mod normal_values_actions;
 mod normal_values_generation;
 mod selection_and_sessions;
 mod transactions;

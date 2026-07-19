@@ -1,63 +1,34 @@
 //! Deterministic checked-in artifacts derived from the Rust wire DTOs.
 
+mod declarations;
+
 use std::{fs, io, path::Path};
 
 use schemars::{JsonSchema, generate::SchemaSettings};
-use ts_rs::{Config, TS};
+use ts_rs::Config;
 
 use crate::v2::command_line::{
-    CommandAcceptedAction, CommandChoiceOption, CommandChoiceOptionId, CommandErrorResponse,
-    CommandHttpSource, CommandKey, CommandKeyPhase, CommandKeyRequest, CommandLineChangedEvent,
-    CommandLineResponse, CommandOperationOutcome, CommandOperationResponse, CommandTarget,
-    CueMoveCopyChoice, CueMoveCopyChoiceType, CueTransferOperation, ExecuteCommandLineRequest,
-    ProgrammerSelectionExpression, ProgrammerSelectionProjection, ProgrammerSelectionReference,
-    ProgrammerSelectionRule, ProgrammingInteractionChange, ProgrammingInteractionProjection,
-    ProgrammingInteractionSnapshot, ProgrammingSelectionAcceptedAction, ProgrammingSelectionAction,
+    CommandErrorResponse, CommandKeyRequest, CommandLineChangedEvent, CommandLineResponse,
+    CommandOperationResponse, ExecuteCommandLineRequest, ProgrammingInteractionSnapshot,
     ProgrammingSelectionActionOutcome, ProgrammingSelectionActionRequest,
-    ProgrammingSelectionGestureSource, ReplaceCommandLineRequest,
+    ReplaceCommandLineRequest,
 };
-use crate::v2::events::{
-    EventActionSource, EventCapability, EventClass, EventClientMessage, EventDeliveryPolicy,
-    EventEnvelope, EventObject, EventPayload, EventRateLimit, EventServerMessage,
-    EventSnapshotCursor, EventSource, EventSubscriptionFilter, FixtureProfileIdentity,
-    ManagedAssetReference, OutputDeliveryMode, OutputProtocol, OutputRoute, OutputRouteChange,
-    OutputRuntimeChange, OutputRuntimeIdentity, OutputRuntimeProjection, OutputRuntimeScope,
-    OutputRuntimeSnapshot, SelectiveImportChange, SelectiveImportObjectChange, SequenceGap,
-    ShowObjectChange, ShowObjectKind, ShowObjectsChange,
-};
+use crate::v2::events::{EventClientMessage, EventServerMessage, OutputRuntimeSnapshot};
 use crate::v2::patch::{
-    PatchDelta, PatchDirectControlEndpoint, PatchDirectControlProtocol, PatchErrorResponse,
-    PatchFixtureInput, PatchFixtureLocation, PatchFixtureProjection, PatchFixtureRotation,
-    PatchFixturesOutcome, PatchFixturesRequest, PatchHighlightOverrideInput,
-    PatchHighlightOverrideProjection, PatchLogicalHeadProjection, PatchModeProjection,
-    PatchModeSplitProjection, PatchMultiPatchInput, PatchMultiPatchProjection, PatchProfilePolicy,
-    PatchProfileRevisionProjection, PatchSnapshot, PatchSplitAssignment,
+    PatchDelta, PatchErrorResponse, PatchFixtureProjection, PatchFixturesOutcome,
+    PatchFixturesRequest, PatchProfileRevisionProjection, PatchSnapshot,
 };
 use crate::v2::playback::{
-    CueListRuntimeProjection, GrandMasterRuntimeProjection, ManualXFadeDirection,
-    PendingPlaybackAction, PlaybackAction, PlaybackActionOutcome, PlaybackActionRequest,
-    PlaybackAddress, PlaybackCueReference, PlaybackCueTransition, PlaybackDeskProjection,
-    PlaybackDurability, PlaybackErrorKind, PlaybackErrorResponse, PlaybackOutcome,
-    PlaybackRuntimeChange, PlaybackRuntimeIdentity, PlaybackRuntimeProjection,
-    PlaybackRuntimeSnapshot, PlaybackRuntimeSnapshotRequest, PlaybackShowScope, PlaybackSurface,
-    PlaybackTargetProjection, PlaybackTransitionCause, ResolvedPlaybackAddress, SoundLossReason,
-    SoundStatus, SpeedGroupRuntimeProjection, SpeedSource,
+    PlaybackActionOutcome, PlaybackActionRequest, PlaybackErrorResponse, PlaybackRuntimeSnapshot,
+    PlaybackRuntimeSnapshotRequest,
 };
 use crate::v2::programming::{
-    ProgrammingAttributeValue, ProgrammingColorXyz, ProgrammingFixtureValue, ProgrammingGroupValue,
-    ProgrammingValuesChange, ProgrammingValuesProjection, ProgrammingValuesSnapshot,
+    ProgrammingValuesActionOutcome, ProgrammingValuesActionRequest, ProgrammingValuesErrorResponse,
+    ProgrammingValuesSnapshot,
 };
 use crate::v2::selective_import::{
-    SelectiveImportApplyRequest, SelectiveImportAssetReference, SelectiveImportBlocker,
-    SelectiveImportCatalog, SelectiveImportCatalogObject, SelectiveImportConflict,
-    SelectiveImportConflictChoice, SelectiveImportConflictResolution, SelectiveImportDependency,
-    SelectiveImportDependencyDisposition, SelectiveImportErrorResponse,
-    SelectiveImportManagedAssetAction, SelectiveImportManagedAssetPreview,
-    SelectiveImportObjectAction, SelectiveImportObjectKey, SelectiveImportObjectPreview,
-    SelectiveImportOutcome, SelectiveImportOutcomeObjectChange, SelectiveImportPreview,
-    SelectiveImportProfileAction, SelectiveImportProfileChange,
-    SelectiveImportProfileConflictChoice, SelectiveImportProfileConflictResolution,
-    SelectiveImportProfileKey, SelectiveImportProfilePreview, SelectiveImportSelection,
+    SelectiveImportApplyRequest, SelectiveImportCatalog, SelectiveImportErrorResponse,
+    SelectiveImportOutcome, SelectiveImportPreview, SelectiveImportSelection,
 };
 
 const TYPESCRIPT_PATH: &str = "apps/control-ui/src/api/generated/light-wire.ts";
@@ -101,6 +72,15 @@ pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
         event_request_schema::<EventClientMessage>("event-client-message"),
         event_response_schema::<EventServerMessage>("event-server-message"),
         event_response_schema::<OutputRuntimeSnapshot>("output-runtime-snapshot"),
+        programming_request_schema::<ProgrammingValuesActionRequest>(
+            "programming-values-action-request",
+        ),
+        programming_response_schema::<ProgrammingValuesActionOutcome>(
+            "programming-values-action-outcome",
+        ),
+        programming_response_schema::<ProgrammingValuesErrorResponse>(
+            "programming-values-error-response",
+        ),
         programming_response_schema::<ProgrammingValuesSnapshot>("programming-values-snapshot"),
         playback_request_schema::<PlaybackActionRequest>("playback-action-request"),
         playback_response_schema::<PlaybackActionOutcome>("playback-action-outcome"),
@@ -171,6 +151,10 @@ fn playback_response_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
     playback_schema::<T>(name, SchemaSettings::draft2020_12().for_serialize())
 }
 
+fn programming_request_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
+    programming_schema::<T>(name, SchemaSettings::draft2020_12().for_deserialize())
+}
+
 fn programming_response_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
     programming_schema::<T>(name, SchemaSettings::draft2020_12().for_serialize())
 }
@@ -184,35 +168,35 @@ fn selective_import_response_schema<T: JsonSchema>(name: &str) -> GeneratedArtif
 }
 
 fn event_schema<T: JsonSchema>(name: &str, settings: SchemaSettings) -> GeneratedArtifact {
-    let mut artifact = schema_artifact::<T>(name, settings);
-    artifact.path = format!("{EVENT_SCHEMA_DIRECTORY}/{name}.schema.json");
-    artifact
+    namespaced_schema::<T>(EVENT_SCHEMA_DIRECTORY, name, settings)
 }
 
 fn patch_schema<T: JsonSchema>(name: &str, settings: SchemaSettings) -> GeneratedArtifact {
-    let mut artifact = schema_artifact::<T>(name, settings);
-    artifact.path = format!("{PATCH_SCHEMA_DIRECTORY}/{name}.schema.json");
-    artifact
+    namespaced_schema::<T>(PATCH_SCHEMA_DIRECTORY, name, settings)
 }
 
 fn playback_schema<T: JsonSchema>(name: &str, settings: SchemaSettings) -> GeneratedArtifact {
-    let mut artifact = schema_artifact::<T>(name, settings);
-    artifact.path = format!("{PLAYBACK_SCHEMA_DIRECTORY}/{name}.schema.json");
-    artifact
+    namespaced_schema::<T>(PLAYBACK_SCHEMA_DIRECTORY, name, settings)
 }
 
 fn programming_schema<T: JsonSchema>(name: &str, settings: SchemaSettings) -> GeneratedArtifact {
-    let mut artifact = schema_artifact::<T>(name, settings);
-    artifact.path = format!("{PROGRAMMING_SCHEMA_DIRECTORY}/{name}.schema.json");
-    artifact
+    namespaced_schema::<T>(PROGRAMMING_SCHEMA_DIRECTORY, name, settings)
 }
 
 fn selective_import_schema<T: JsonSchema>(
     name: &str,
     settings: SchemaSettings,
 ) -> GeneratedArtifact {
+    namespaced_schema::<T>(SELECTIVE_IMPORT_SCHEMA_DIRECTORY, name, settings)
+}
+
+fn namespaced_schema<T: JsonSchema>(
+    directory: &str,
+    name: &str,
+    settings: SchemaSettings,
+) -> GeneratedArtifact {
     let mut artifact = schema_artifact::<T>(name, settings);
-    artifact.path = format!("{SELECTIVE_IMPORT_SCHEMA_DIRECTORY}/{name}.schema.json");
+    artifact.path = format!("{directory}/{name}.schema.json");
     artifact
 }
 
@@ -228,151 +212,9 @@ fn schema_artifact<T: JsonSchema>(name: &str, settings: SchemaSettings) -> Gener
 }
 
 fn typescript_bindings() -> String {
-    let config = Config::default();
-    let mut declarations = vec![
-        CommandTarget::decl(&config),
-        CommandKey::decl(&config),
-        CommandKeyPhase::decl(&config),
-        CommandAcceptedAction::decl(&config),
-        CommandChoiceOptionId::decl(&config),
-        CueTransferOperation::decl(&config),
-        CueMoveCopyChoiceType::decl(&config),
-        CommandHttpSource::decl(&config),
-        CommandChoiceOption::decl(&config),
-        CueMoveCopyChoice::decl(&config),
-        ReplaceCommandLineRequest::decl(&config),
-        CommandKeyRequest::decl(&config),
-        ExecuteCommandLineRequest::decl(&config),
-        CommandLineResponse::decl(&config),
-        CommandOperationOutcome::decl(&config),
-        CommandOperationResponse::decl(&config),
-        CommandErrorResponse::decl(&config),
-        CommandLineChangedEvent::decl(&config),
-        EventCapability::decl(&config),
-        EventClass::decl(&config),
-        EventDeliveryPolicy::decl(&config),
-        EventActionSource::decl(&config),
-        EventObject::decl(&config),
-        EventSubscriptionFilter::decl(&config),
-        EventRateLimit::decl(&config),
-        EventSnapshotCursor::decl(&config),
-        SequenceGap::decl(&config),
-        EventSource::decl(&config),
-        ProgrammingColorXyz::decl(&config),
-        ProgrammingAttributeValue::decl(&config),
-        ProgrammingFixtureValue::decl(&config),
-        ProgrammingGroupValue::decl(&config),
-        ProgrammingValuesProjection::decl(&config),
-        ProgrammingValuesChange::decl(&config),
-        ProgrammingValuesSnapshot::decl(&config),
-        PlaybackSurface::decl(&config),
-        PlaybackAddress::decl(&config),
-        ResolvedPlaybackAddress::decl(&config),
-        PlaybackAction::decl(&config),
-        PendingPlaybackAction::decl(&config),
-        PlaybackOutcome::decl(&config),
-        PlaybackDurability::decl(&config),
-        PlaybackRuntimeIdentity::decl(&config),
-        PlaybackShowScope::decl(&config),
-        PlaybackCueReference::decl(&config),
-        ManualXFadeDirection::decl(&config),
-        SoundLossReason::decl(&config),
-        SpeedSource::decl(&config),
-        SoundStatus::decl(&config),
-        CueListRuntimeProjection::decl(&config),
-        SpeedGroupRuntimeProjection::decl(&config),
-        GrandMasterRuntimeProjection::decl(&config),
-        PlaybackTargetProjection::decl(&config),
-        PlaybackRuntimeProjection::decl(&config),
-        PlaybackDeskProjection::decl(&config),
-        PlaybackTransitionCause::decl(&config),
-        PlaybackCueTransition::decl(&config),
-        PlaybackRuntimeChange::decl(&config),
-        OutputProtocol::decl(&config),
-        OutputDeliveryMode::decl(&config),
-        OutputRoute::decl(&config),
-        OutputRouteChange::decl(&config),
-        OutputRuntimeIdentity::decl(&config),
-        OutputRuntimeScope::decl(&config),
-        OutputRuntimeProjection::decl(&config),
-        OutputRuntimeChange::decl(&config),
-        OutputRuntimeSnapshot::decl(&config),
-        ShowObjectKind::decl(&config),
-        ShowObjectChange::decl(&config),
-        ShowObjectsChange::decl(&config),
-        SelectiveImportObjectChange::decl(&config),
-        FixtureProfileIdentity::decl(&config),
-        ManagedAssetReference::decl(&config),
-        SelectiveImportChange::decl(&config),
-        EventPayload::decl(&config),
-        EventEnvelope::decl(&config),
-        EventClientMessage::decl(&config),
-        EventServerMessage::decl(&config),
-        PlaybackActionRequest::decl(&config),
-        PlaybackActionOutcome::decl(&config),
-        PlaybackErrorKind::decl(&config),
-        PlaybackErrorResponse::decl(&config),
-        PlaybackRuntimeSnapshotRequest::decl(&config),
-        PlaybackRuntimeSnapshot::decl(&config),
-        PatchDirectControlProtocol::decl(&config),
-        PatchProfilePolicy::decl(&config),
-        PatchSplitAssignment::decl(&config),
-        PatchDirectControlEndpoint::decl(&config),
-        PatchFixtureLocation::decl(&config),
-        PatchFixtureRotation::decl(&config),
-        PatchMultiPatchInput::decl(&config),
-        PatchHighlightOverrideInput::decl(&config),
-        PatchFixtureInput::decl(&config),
-        PatchFixturesRequest::decl(&config),
-        PatchErrorResponse::decl(&config),
-        PatchLogicalHeadProjection::decl(&config),
-        PatchMultiPatchProjection::decl(&config),
-        PatchHighlightOverrideProjection::decl(&config),
-        PatchFixtureProjection::decl(&config),
-        PatchModeSplitProjection::decl(&config),
-        PatchModeProjection::decl(&config),
-        PatchProfileRevisionProjection::decl(&config),
-        PatchDelta::decl(&config),
-        PatchFixturesOutcome::decl(&config),
-        PatchSnapshot::decl(&config),
-        SelectiveImportObjectKey::decl(&config),
-        SelectiveImportConflictResolution::decl(&config),
-        SelectiveImportConflictChoice::decl(&config),
-        SelectiveImportProfileKey::decl(&config),
-        SelectiveImportProfileConflictResolution::decl(&config),
-        SelectiveImportProfileConflictChoice::decl(&config),
-        SelectiveImportSelection::decl(&config),
-        SelectiveImportApplyRequest::decl(&config),
-        SelectiveImportCatalogObject::decl(&config),
-        SelectiveImportCatalog::decl(&config),
-        SelectiveImportObjectAction::decl(&config),
-        SelectiveImportObjectPreview::decl(&config),
-        SelectiveImportDependencyDisposition::decl(&config),
-        SelectiveImportDependency::decl(&config),
-        SelectiveImportConflict::decl(&config),
-        SelectiveImportProfileAction::decl(&config),
-        SelectiveImportProfilePreview::decl(&config),
-        SelectiveImportManagedAssetAction::decl(&config),
-        SelectiveImportAssetReference::decl(&config),
-        SelectiveImportManagedAssetPreview::decl(&config),
-        SelectiveImportBlocker::decl(&config),
-        SelectiveImportPreview::decl(&config),
-        SelectiveImportOutcomeObjectChange::decl(&config),
-        SelectiveImportProfileChange::decl(&config),
-        SelectiveImportOutcome::decl(&config),
-        SelectiveImportErrorResponse::decl(&config),
-    ];
-    declarations.extend(interaction_declarations(&config));
-    let declarations = declarations
+    let declarations = declarations::all(&Config::default())
         .into_iter()
-        .map(|declaration| {
-            let declaration = declaration
-                .lines()
-                .map(str::trim_end)
-                .collect::<Vec<_>>()
-                .join("\n");
-            format!("export {declaration}")
-        })
+        .map(export_declaration)
         .collect::<Vec<_>>()
         .join("\n\n");
     format!(
@@ -381,19 +223,11 @@ fn typescript_bindings() -> String {
     )
 }
 
-fn interaction_declarations(config: &Config) -> [String; 12] {
-    [
-        ProgrammerSelectionRule::decl(config),
-        ProgrammerSelectionReference::decl(config),
-        ProgrammerSelectionExpression::decl(config),
-        ProgrammerSelectionProjection::decl(config),
-        ProgrammingInteractionProjection::decl(config),
-        ProgrammingInteractionChange::decl(config),
-        ProgrammingInteractionSnapshot::decl(config),
-        ProgrammingSelectionGestureSource::decl(config),
-        ProgrammingSelectionAction::decl(config),
-        ProgrammingSelectionActionRequest::decl(config),
-        ProgrammingSelectionAcceptedAction::decl(config),
-        ProgrammingSelectionActionOutcome::decl(config),
-    ]
+fn export_declaration(declaration: String) -> String {
+    let declaration = declaration
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!("export {declaration}")
 }

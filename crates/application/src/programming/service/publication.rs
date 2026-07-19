@@ -3,6 +3,7 @@ use crate::{
     ActionContext, ActionError, EventDraft, ProgrammingInteractionChange, ProgrammingValuesChange,
 };
 use light_core::{SessionId, UserId};
+use std::sync::Arc;
 
 use super::super::values_projection::ProgrammingValuesContent;
 
@@ -46,7 +47,7 @@ impl ProgrammingService {
         let content = ProgrammingValuesContent::read(&self.programmers, session, user_id)?;
         let revision = self.programmers.advance_normal_values_revision(user_id);
         Ok(Some(ProgrammingValuesChange {
-            projection: content.projection(user_id, revision),
+            projection: Arc::new(content.projection(user_id, revision)),
         }))
     }
 

@@ -4,6 +4,7 @@ mod operation;
 mod ports;
 mod projection;
 mod service;
+mod values_action;
 mod values_projection;
 
 pub use command::{
@@ -18,10 +19,14 @@ pub use operation::{
 };
 pub use ports::{
     ProgrammingExecution, ProgrammingPorts, ProgrammingReconciliation,
-    ProgrammingSelectionEnvironment, ProgrammingSelectionQuery,
+    ProgrammingSelectionEnvironment, ProgrammingSelectionQuery, ProgrammingValuesEnvironment,
 };
 pub use projection::{ProgrammingInteractionProjection, ProgrammingLiveSnapshot};
 pub use service::ProgrammingService;
+pub use values_action::{
+    ProgrammingValueMutation, ProgrammingValueTiming, ProgrammingValuesCommand,
+    ProgrammingValuesOutcome, ProgrammingValuesResult,
+};
 pub use values_projection::{
     ProgrammingValuesChange, ProgrammingValuesProjection, ProgrammingValuesSnapshot,
 };

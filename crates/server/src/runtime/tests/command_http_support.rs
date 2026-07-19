@@ -148,6 +148,32 @@ impl CommandHttpScenario {
             .unwrap()
     }
 
+    async fn values_action(&self, input: serde_json::Value) -> Response {
+        self.values_action_for(self.session.user.id.0, &self.token, input)
+            .await
+    }
+
+    async fn values_action_for(
+        &self,
+        user_id: Uuid,
+        token: &str,
+        input: serde_json::Value,
+    ) -> Response {
+        self.app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/api/v2/users/{user_id}/programmer-values/actions"
+                ))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(input.to_string()))
+                .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+
     async fn press_key(&self, token: &str, key: &str, request_id: &str) -> Response {
         self.app
             .clone()

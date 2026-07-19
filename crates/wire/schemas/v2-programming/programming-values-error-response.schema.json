@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProgrammingValuesErrorResponse",
+  "type": "object",
+  "properties": {
+    "current_revision": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
+    "error": {
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/ProgrammingValuesErrorKind"
+    },
+    "retryable": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "kind",
+    "error",
+    "retryable"
+  ],
+  "$defs": {
+    "ProgrammingValuesErrorKind": {
+      "type": "string",
+      "enum": [
+        "invalid",
+        "unauthorized",
+        "forbidden",
+        "not_found",
+        "conflict",
+        "unavailable",
+        "internal"
+      ]
+    }
+  }
+}

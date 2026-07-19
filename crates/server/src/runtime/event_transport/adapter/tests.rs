@@ -299,7 +299,8 @@ fn programming_values_keep_user_scope_full_projection_and_action_identity() {
                     fade_millis: Some(1_000),
                     delay_millis: Some(250),
                 }],
-            },
+            }
+            .into(),
         },
     ));
 

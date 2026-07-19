@@ -71,6 +71,22 @@ export type ProgrammingValuesChange = { projection: ProgrammingValuesProjection,
 
 export type ProgrammingValuesSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingValuesProjection, };
 
+export type ProgrammingValueTiming = { fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };
+
+export type ProgrammingValueMutation = { "type": "set_fixture", fixture_id: string, attribute: string, value: ProgrammingAttributeValue, timing: ProgrammingValueTiming, } | { "type": "release_fixture", fixture_id: string, attribute: string, } | { "type": "set_group", group_id: string, attribute: string, value: ProgrammingAttributeValue, timing: ProgrammingValueTiming, } | { "type": "release_group", group_id: string, attribute: string, };
+
+export type ProgrammingValuesAction = { "type": "set_fixture", fixture_id: string, attribute: string, value: ProgrammingAttributeValue, timing: ProgrammingValueTiming, } | { "type": "release_fixture", fixture_id: string, attribute: string, } | { "type": "set_group", group_id: string, attribute: string, value: ProgrammingAttributeValue, timing: ProgrammingValueTiming, } | { "type": "release_group", group_id: string, attribute: string, } | { "type": "batch", mutations: Array<ProgrammingValueMutation>, } | { "type": "clear" };
+
+export type ProgrammingValuesActionRequest = { request_id: string, expected_revision: number, action: ProgrammingValuesAction, };
+
+export type ProgrammingValuesActionState = { "status": "changed", projection: ProgrammingValuesProjection, event_sequence: number, } | { "status": "no_change" };
+
+export type ProgrammingValuesActionOutcome = { request_id: string, correlation_id: string, revision: number, replayed: boolean, warning?: string | null, } & ({ "status": "changed", projection: ProgrammingValuesProjection, event_sequence: number, } | { "status": "no_change" });
+
+export type ProgrammingValuesErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
+
+export type ProgrammingValuesErrorResponse = { kind: ProgrammingValuesErrorKind, error: string, current_revision?: number | null, retryable: boolean, };
+
 export type PlaybackSurface = "virtual" | "physical";
 
 export type PlaybackAddress = { "kind": "cue_list", cue_list_id: string, } | { "kind": "playback", playback_number: number, } | { "kind": "current_page", slot: number, } | { "kind": "explicit_page", page: number, slot: number, };

@@ -4,12 +4,19 @@ use light_core::FixtureId;
 use light_programmer::GroupDefinition;
 use light_programmer::ProgrammerRegistry;
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 #[derive(Clone, Debug, Default)]
 pub struct ProgrammingSelectionEnvironment {
     pub show_revision: u64,
     pub selectable_fixtures: HashMap<FixtureId, Vec<FixtureId>>,
     pub groups: HashMap<String, GroupDefinition>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct ProgrammingValuesEnvironment {
+    pub fixture_ids: HashSet<FixtureId>,
+    pub group_ids: HashSet<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -62,6 +69,16 @@ pub trait ProgrammingPorts: Send + Sync {
         Err(ActionError::new(
             crate::ActionErrorKind::Unavailable,
             "selection environment is unavailable",
+        ))
+    }
+
+    fn values_environment(
+        &self,
+        _context: &ActionContext,
+    ) -> Result<ProgrammingValuesEnvironment, ActionError> {
+        Err(ActionError::new(
+            crate::ActionErrorKind::Unavailable,
+            "Programmer values environment is unavailable",
         ))
     }
 

@@ -369,7 +369,8 @@ fn programmer_values_draft(user_id: Uuid, revision: u64) -> EventDraft {
                 revision,
                 fixture_values: Vec::new(),
                 group_values: Vec::new(),
-            },
+            }
+            .into(),
         },
     )
 }

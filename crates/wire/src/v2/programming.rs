@@ -77,6 +77,138 @@ pub struct ProgrammingValuesSnapshot {
     pub projection: ProgrammingValuesProjection,
 }
 
+/// One authenticated, idempotent mutation of normal, recordable Programmer values.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ProgrammingValuesActionRequest {
+    #[schemars(length(min = 1, max = 128))]
+    pub request_id: String,
+    #[ts(type = "number")]
+    pub expected_revision: u64,
+    pub action: ProgrammingValuesAction,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ProgrammingValuesAction {
+    SetFixture {
+        fixture_id: Uuid,
+        attribute: String,
+        value: ProgrammingAttributeValue,
+        #[serde(default)]
+        timing: ProgrammingValueTiming,
+    },
+    ReleaseFixture {
+        fixture_id: Uuid,
+        attribute: String,
+    },
+    SetGroup {
+        group_id: String,
+        attribute: String,
+        value: ProgrammingAttributeValue,
+        #[serde(default)]
+        timing: ProgrammingValueTiming,
+    },
+    ReleaseGroup {
+        group_id: String,
+        attribute: String,
+    },
+    Batch {
+        #[schemars(length(max = 10_000))]
+        mutations: Vec<ProgrammingValueMutation>,
+    },
+    Clear,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ProgrammingValueMutation {
+    SetFixture {
+        fixture_id: Uuid,
+        attribute: String,
+        value: ProgrammingAttributeValue,
+        #[serde(default)]
+        timing: ProgrammingValueTiming,
+    },
+    ReleaseFixture {
+        fixture_id: Uuid,
+        attribute: String,
+    },
+    SetGroup {
+        group_id: String,
+        attribute: String,
+        value: ProgrammingAttributeValue,
+        #[serde(default)]
+        timing: ProgrammingValueTiming,
+    },
+    ReleaseGroup {
+        group_id: String,
+        attribute: String,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ProgrammingValueTiming {
+    #[serde(default)]
+    pub fade: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable, type = "number | null")]
+    pub fade_millis: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable, type = "number | null")]
+    pub delay_millis: Option<u64>,
+}
+
+/// Typed result for one Programmer-values action. No-change results deliberately omit the full
+/// projection so interaction-only actions do not force projection materialization or transport.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ProgrammingValuesActionOutcome {
+    pub request_id: String,
+    pub correlation_id: Uuid,
+    #[ts(type = "number")]
+    pub revision: u64,
+    #[serde(flatten)]
+    pub outcome: ProgrammingValuesActionState,
+    pub replayed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub warning: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum ProgrammingValuesActionState {
+    Changed {
+        projection: ProgrammingValuesProjection,
+        #[ts(type = "number")]
+        event_sequence: u64,
+    },
+    NoChange,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ProgrammingValuesErrorResponse {
+    pub kind: ProgrammingValuesErrorKind,
+    pub error: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(as = "Option<f64>", optional = nullable)]
+    pub current_revision: Option<u64>,
+    pub retryable: bool,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ProgrammingValuesErrorKind {
+    Invalid,
+    Unauthorized,
+    Forbidden,
+    NotFound,
+    Conflict,
+    Unavailable,
+    Internal,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -99,5 +231,37 @@ mod tests {
         assert_eq!(json["fade_millis"], 1_000);
         assert_eq!(json["delay_millis"], 250);
         assert_eq!(json["value"]["kind"], "normalized");
+    }
+
+    #[test]
+    fn actions_reject_fields_outside_the_recordable_values_contract() {
+        let value = serde_json::json!({
+            "request_id": "request-1",
+            "expected_revision": 0,
+            "action": {
+                "type": "set_fixture",
+                "fixture_id": Uuid::from_u128(1),
+                "attribute": "intensity",
+                "value": {"kind": "normalized", "value": 0.5},
+                "mode": "preload"
+            }
+        });
+        assert!(serde_json::from_value::<ProgrammingValuesActionRequest>(value).is_err());
+    }
+
+    #[test]
+    fn no_change_outcome_does_not_serialize_a_projection_or_event_sequence() {
+        let outcome = ProgrammingValuesActionOutcome {
+            request_id: "request-2".into(),
+            correlation_id: Uuid::from_u128(2),
+            revision: 7,
+            outcome: ProgrammingValuesActionState::NoChange,
+            replayed: false,
+            warning: None,
+        };
+        let json = serde_json::to_value(outcome).unwrap();
+        assert_eq!(json["status"], "no_change");
+        assert!(json.get("projection").is_none());
+        assert!(json.get("event_sequence").is_none());
     }
 }

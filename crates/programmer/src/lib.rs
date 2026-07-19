@@ -5,6 +5,7 @@ mod command_state;
 mod groups;
 pub mod highlight;
 mod history;
+mod normal_values;
 mod preload;
 mod presets;
 mod registry;
@@ -29,6 +30,7 @@ pub use highlight::{
     HighlightSelectionWrite, HighlightState, HighlightTransition, OSC_REPEAT_GUARD,
     is_duplicate_osc_action,
 };
+pub use normal_values::{NormalProgrammerValueMutation, NormalProgrammerValueTiming};
 pub use preload::PreloadPlaybackAction;
 pub use presets::{Preset, PresetAddress, PresetFamily, PresetStoreMode};
 pub use registry::ProgrammerRegistry;

@@ -88,8 +88,10 @@ pub use programming::{
     ProgrammingLiveSnapshot, ProgrammingOutcome, ProgrammingPorts, ProgrammingReconciliation,
     ProgrammingResult, ProgrammingSelectionEnvironment, ProgrammingSelectionQuery,
     ProgrammingSelectionRefreshEvent, ProgrammingSelectionRefreshResult,
-    ProgrammingSelectionTarget, ProgrammingService, ProgrammingValuesChange,
-    ProgrammingValuesProjection, ProgrammingValuesSnapshot, SelectionGestureSource,
+    ProgrammingSelectionTarget, ProgrammingService, ProgrammingValueMutation,
+    ProgrammingValueTiming, ProgrammingValuesChange, ProgrammingValuesCommand,
+    ProgrammingValuesEnvironment, ProgrammingValuesOutcome, ProgrammingValuesProjection,
+    ProgrammingValuesResult, ProgrammingValuesSnapshot, SelectionGestureSource,
 };
 pub use scheduling::{
     MonotonicClock, MonotonicMoment, MonotonicScheduler, SchedulerError, SchedulerErrorKind,
