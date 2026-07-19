@@ -4,7 +4,7 @@ This is the living handoff for [`major-refactoring.md`](major-refactoring.md). U
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-18 at commit `f89912a`.
+Last updated: 2026-07-19 at commit `f8923fc`.
 
 ## Guardrails
 
@@ -46,17 +46,24 @@ Last updated: 2026-07-18 at commit `f89912a`.
   transitive dependencies, optimistic mutations reconcile against authoritative events, gaps repair
   from snapshots without cursor loss, malformed events cannot poison reconnects, and unrelated
   global `ServerContext` consumers do not rerender.
-- [x] Migrated manual, automatic, scheduled, OSC, preload, current-page, and explicit-page
-  Playback behavior into the typed application service and v2 runtime contract.
-- [x] Closed the mutable Playback runtime boundary: Engine callers use typed commands and immutable
-  projections, Preload installs generation-bound prepared batches, and application-owned units of
-  work serialize page changes, automatic render transitions, and semantic event publication
-  without returning either the Engine or Playback-service lock to adapters.
+- [x] Migrated the primary manual, automatic, scheduled, OSC, Preload, current-page, and
+  explicit-page Playback action paths into the typed application service and v2 runtime contract.
+  Virtual exclusion peers, startup normalization, and persisted topology are explicitly still in
+  progress below.
+- [x] Removed mutable Playback-service lock exposure from the migrated paths: Engine callers use
+  typed commands and immutable projections, Preload installs generation-bound prepared batches,
+  and application-owned units of work serialize page changes, automatic render transitions, and
+  semantic event publication.
 - [x] Added the view-scoped Playback runtime frontend: exact v2 snapshots and WebSocket filters are
   activated only by mounted Playback/Cuelist views, desk-only views request no runtime identities,
-  gaps and malformed messages repair from authoritative snapshots, and the 250 ms global Playback
-  poll is gone. Concurrent fader and page mutations use independent optimistic overlays with
-  request-ordered rollback and authoritative event/outcome reconciliation.
+  and gaps and malformed messages repair from authoritative snapshots. Concurrent fader and page
+  mutations use independent optimistic overlays with request-ordered rollback and authoritative
+  event/outcome reconciliation. Active compatibility panes still poll until their consumers move.
+- [x] Added a typed desk-local Programming interaction snapshot and stream. Command-line and
+  ordered-selection changes use independent exact-object routes and non-empty sparse payloads;
+  Highlight and Preload reconciliation finishes before the one authoritative event is captured.
+  Command-only input compares lightweight revisions and does not clone or serialize the complete
+  selection. Compatibility HTTP, OSC, and WebSocket paths retain their source behavior.
 - [x] Exposed Selective Show Import through authenticated v2 catalog, preview, and atomic apply
   adapters with checked-in schemas, generated TypeScript, exact source/target revisions, strict
   response validation, and focused server contracts. **Show → Load → Partial Show Load** now uses a
@@ -81,11 +88,18 @@ Last updated: 2026-07-18 at commit `f89912a`.
 - [x] Modularized Hardware Controls into a dependency-injected OSC bridge and controller,
   idempotent feedback reducer, and focused Playback, Programmer, grid, and settings surfaces while
   preserving exact canonical and legacy OSC feedback behavior.
+- [x] Added the architecture overview, state-ownership matrix, code tour, extension recipes, test
+  map, refactoring test-boundary guide, frontend performance baseline, and Selective Show Import
+  guide under `docs/engineering`.
 
 ## In progress
 
 - [ ] Continue vertical feature-store/event slices and move the remaining production callers away
   from broad `useServer()`, polling, and generic show-object mutation.
+- [ ] Finish the Playback ownership boundary for virtual exclusion peers, startup normalization,
+  persisted Cuelist/topology mutation, and every active compatibility pane still polling.
+- [ ] Adopt the sparse Programming stream in the frontend with independently reference-counted
+  command-line and selection views, authoritative snapshot repair, and optimistic overlays.
 
 ## Remaining architecture work
 
@@ -104,8 +118,8 @@ Last updated: 2026-07-18 at commit `f89912a`.
    than hiding meaningful parity behind one generic implementation shortcut.
 6. Remove REST/WebSocket v1 and `useServer()` compatibility only after every production caller and
    acceptance test has moved to a typed replacement.
-7. Add the final architecture overview, state-ownership matrix, code tour, extension recipes, test
-   map, selective-import guide, and repaired feature-plan links under `docs/engineering`.
+7. Repair the remaining stale feature-plan links and keep the committed `docs/engineering` handoff
+   synchronized as compatibility adapters are retired.
 
 ## Performance and acceptance still required
 
@@ -123,7 +137,9 @@ Last updated: 2026-07-18 at commit `f89912a`.
 
 ## Current verification snapshot
 
-- Source-size ratchet: 0 production files above 1,200; 0 production functions above 150.
+- Source-size ratchet: 0 production files above 1,200; 0 production functions above 150. The
+  current full-tree design-goal report is 52 files above 400 lines and 3,394 functions above 20;
+  the touched Programming live-state test was split back below 400 lines.
 - In-scope production file goal: 0 files above 400 lines. The scanner still reports larger test and
   planning sources, plus the unrelated Dynamics Editor experiment.
 - Focused application, server, wire, frontend, architecture, source-size, MVR, File Manager,
