@@ -2602,6 +2602,7 @@ dependencies = [
  "light-core",
  "light-engine",
  "light-fixture",
+ "light-mvr",
  "light-output",
  "light-playback",
  "light-programmer",

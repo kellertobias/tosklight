@@ -1,3 +1,4 @@
+use super::{PlaybackDeskProjection, PlaybackRuntimeProjection};
 use crate::{ActionContext, ApplicationCommand, CommandFamily};
 use light_core::CueListId;
 use light_playback::ActivePlayback;
@@ -167,12 +168,23 @@ pub enum PlaybackOutcome {
     Captured(PendingPlaybackAction),
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PlaybackDurability {
+    Durable,
+    PersistencePending,
+}
+
 #[derive(Clone, Debug)]
 pub struct PlaybackResult {
     pub context: ActionContext,
     pub requested: PlaybackAddress,
     pub resolved: ResolvedPlaybackAddress,
     pub outcome: PlaybackOutcome,
+    pub durability: PlaybackDurability,
     pub execution: PlaybackExecution,
+    pub projection: PlaybackRuntimeProjection,
+    pub desk: Option<PlaybackDeskProjection>,
+    pub event_sequence: Option<u64>,
+    pub desk_event_sequence: Option<u64>,
     pub replayed: bool,
 }

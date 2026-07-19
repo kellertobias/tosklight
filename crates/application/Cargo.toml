@@ -9,6 +9,7 @@ chrono.workspace = true
 light-core = { path = "../core" }
 light-engine = { path = "../engine", default-features = false }
 light-fixture = { path = "../fixture" }
+light-mvr = { path = "../mvr" }
 light-output = { path = "../output" }
 light-playback = { path = "../playback" }
 light-programmer = { path = "../programmer" }

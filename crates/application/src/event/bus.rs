@@ -118,6 +118,7 @@ impl EventBusState {
             desk_id: draft.desk_id,
             class: draft.class,
             object: draft.object,
+            related_objects: draft.related_objects,
             source: draft.source,
             correlation_id: draft.correlation_id,
             delivery: draft.delivery,

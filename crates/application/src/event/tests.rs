@@ -1,23 +1,50 @@
 use std::{sync::Arc, thread};
 
+use light_core::ShowId;
+use light_show::PortableShowObjectKey;
 use uuid::Uuid;
 
 use super::*;
+use crate::{
+    ActionContext, ActionSource, ActiveShowObjectChange, ActiveShowObjectKind,
+    ActiveShowObjectsChange, PlaybackCueReference, PlaybackCueTransition, PlaybackRuntimeChange,
+    PlaybackRuntimeIdentity, PlaybackRuntimeProjection, PlaybackShowScope,
+    PlaybackTargetProjection, PlaybackTransitionCause, SelectiveShowImportChange,
+    SelectiveShowObjectChange,
+};
 
 fn transition_draft(desk_id: Uuid, playback_number: u16, delivery: DeliveryPolicy) -> EventDraft {
     let transition = PlaybackCueTransition {
         playback_number: Some(playback_number),
         cue_list_id: Uuid::from_u128(20),
         previous: None,
-        current: Some(CueReference {
+        current: Some(PlaybackCueReference {
             id: Uuid::from_u128(30),
             number: 2.0,
         }),
         cause: PlaybackTransitionCause::Chaser,
         advanced_steps: 1,
     };
-    let mut draft =
-        EventDraft::playback_transition(Some(desk_id), transition, EventSource::Runtime, None);
+    let mut draft = EventDraft::playback_runtime_changed(
+        Some(desk_id),
+        PlaybackRuntimeChange {
+            projection: PlaybackRuntimeProjection {
+                scope: PlaybackShowScope {
+                    show_id: Uuid::nil(),
+                    show_revision: 0,
+                },
+                requested: PlaybackRuntimeIdentity::Playback(playback_number),
+                playback_number: Some(playback_number),
+                target: PlaybackTargetProjection::CueList {
+                    cue_list_id: light_core::CueListId(transition.cue_list_id),
+                    runtime: None,
+                },
+            },
+            transition: Some(transition),
+        },
+        EventSource::Runtime,
+        None,
+    );
     draft.delivery = delivery;
     draft
 }
@@ -66,6 +93,80 @@ fn installation_global_events_reach_desk_filters() {
     let expected = bus.publish(draft);
 
     assert_eq!(next_event(&subscription), expected);
+}
+
+#[test]
+fn active_show_batches_route_by_aggregate_kind_or_exact_object() {
+    let bus = EventBus::new(8);
+    let show_id = ShowId(Uuid::from_u128(40));
+    let group_kind = EventObject::show_object_kind(show_id, ActiveShowObjectKind::Group);
+    let exact_group = EventObject::show_object(show_id, ActiveShowObjectKind::Group, "1");
+    let subscriptions = [
+        EventObject::show_objects(show_id),
+        group_kind.clone(),
+        exact_group.clone(),
+    ]
+    .map(|object| {
+        bus.subscribe(
+            EventFilter::default().with_object(object),
+            SubscriptionOptions::default(),
+        )
+    });
+    let unrelated = bus.subscribe(
+        EventFilter::default().with_object(EventObject::show_object_kind(
+            show_id,
+            ActiveShowObjectKind::Preset,
+        )),
+        SubscriptionOptions::default(),
+    );
+
+    let expected = bus.publish(show_objects_draft(
+        show_id,
+        ActiveShowObjectKind::Group,
+        "1",
+    ));
+
+    for subscription in subscriptions {
+        assert_eq!(next_event(&subscription), expected);
+    }
+    assert!(unrelated.try_next().is_none());
+    assert_eq!(expected.related_objects, vec![group_kind, exact_group]);
+}
+
+#[test]
+fn selective_import_keeps_aggregate_identity_and_routes_changed_objects() {
+    let bus = EventBus::new(4);
+    let show_id = ShowId(Uuid::from_u128(50));
+    let exact_macro = EventObject::show_storage_object(show_id, "macro", "future");
+    let subscription = bus.subscribe(
+        EventFilter::default().with_object(exact_macro.clone()),
+        SubscriptionOptions::default(),
+    );
+    let context = ActionContext::system(Uuid::from_u128(1), ActionSource::System);
+
+    let expected = bus.publish(EventDraft::selective_import_applied(
+        &context,
+        SelectiveShowImportChange {
+            show_id,
+            show_revision: Default::default(),
+            outcomes: Vec::new(),
+            objects: vec![SelectiveShowObjectChange {
+                key: PortableShowObjectKey::new("macro", "future"),
+                object_revision: 2,
+                body: serde_json::json!({"source": "future language"}),
+            }],
+            profiles: Vec::new(),
+            managed_assets: Vec::new(),
+        },
+    ));
+
+    assert_eq!(next_event(&subscription), expected);
+    assert_eq!(expected.object, Some(EventObject::show_objects(show_id)));
+    assert!(expected.related_objects.contains(&exact_macro));
+    assert!(matches!(
+        expected.payload,
+        ApplicationEvent::Show(ShowEvent::SelectiveImportApplied(_))
+    ));
 }
 
 #[test]
@@ -228,6 +329,40 @@ async fn replaceable_topic_rate_limit_delivers_the_latest_update() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn object_rate_limit_matches_a_related_event_route() {
+    let bus = EventBus::new(8);
+    let desk = Uuid::from_u128(1);
+    let cue_list = EventObject::cue_list(Uuid::from_u128(20));
+    let mut subscription = bus.subscribe(
+        EventFilter::for_desk(desk).with_object(cue_list.clone()),
+        SubscriptionOptions {
+            capacity: 4,
+            after_sequence: None,
+            rate_limits: vec![ReplaceableEventRateLimit {
+                capability: EventCapability::Playback,
+                class: EventClass::Projection,
+                object: Some(cue_list),
+                min_interval: std::time::Duration::from_millis(100),
+            }],
+        },
+    );
+
+    let first = bus.publish(projection_draft(desk, 2));
+    assert_eq!(
+        subscription.next().await,
+        Some(SubscriptionDelivery::Event(first))
+    );
+    let latest = bus.publish(projection_draft(desk, 2));
+    assert!(subscription.try_next().is_none());
+
+    tokio::time::advance(std::time::Duration::from_millis(100)).await;
+    assert_eq!(
+        subscription.next().await,
+        Some(SubscriptionDelivery::Event(latest))
+    );
+}
+
+#[tokio::test(start_paused = true)]
 async fn unrelated_lossless_delivery_does_not_discard_a_deferred_projection() {
     let bus = EventBus::new(8);
     let desk = Uuid::from_u128(1);
@@ -315,4 +450,21 @@ fn lossless_draft(desk_id: Uuid, class: EventClass) -> EventDraft {
     let mut draft = transition_draft(desk_id, 2, DeliveryPolicy::Lossless);
     draft.class = class;
     draft
+}
+
+fn show_objects_draft(show_id: ShowId, kind: ActiveShowObjectKind, object_id: &str) -> EventDraft {
+    EventDraft::active_show_objects_changed(
+        &ActionContext::system(Uuid::from_u128(1), ActionSource::System),
+        ActiveShowObjectsChange {
+            show_id,
+            show_revision: Default::default(),
+            changes: vec![ActiveShowObjectChange {
+                kind,
+                object_id: object_id.into(),
+                object_revision: 1,
+                body: Some(serde_json::json!({})),
+                deleted: false,
+            }],
+        },
+    )
 }

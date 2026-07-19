@@ -1,12 +1,12 @@
 mod bus;
 mod model;
+mod routing;
 
 pub use bus::{EventBus, EventSubscription};
 pub use model::{
-    ApplicationEvent, CueReference, DeliveryPolicy, EventCapability, EventClass, EventDraft,
-    EventEnvelope, EventFilter, EventObject, EventReplay, EventSource, PlaybackCueTransition,
-    PlaybackEvent, PlaybackTransitionCause, ReplaceableEventRateLimit, SequenceGap, ShowEvent,
-    SubscriptionDelivery, SubscriptionOptions,
+    ApplicationEvent, DeliveryPolicy, DeskEvent, EventCapability, EventClass, EventDraft,
+    EventEnvelope, EventFilter, EventObject, EventReplay, EventSource, PlaybackEvent,
+    ReplaceableEventRateLimit, SequenceGap, ShowEvent, SubscriptionDelivery, SubscriptionOptions,
 };
 
 #[cfg(test)]
