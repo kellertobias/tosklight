@@ -49,10 +49,20 @@ const mocks = vi.hoisted(() => ({
     previewMvrExport: vi.fn(),
     downloadMvr: vi.fn(),
     downloadShow: vi.fn(),
+	selectiveImportCatalog: vi.fn(),
+	previewSelectiveImport: vi.fn(),
+	applySelectiveImport: vi.fn(),
   },
 }));
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => mocks.server }));
+vi.mock("../../features/selectiveImport/SelectiveImportContext", () => ({
+	useSelectiveImport: () => ({
+		catalog: mocks.server.selectiveImportCatalog,
+		preview: mocks.server.previewSelectiveImport,
+		apply: mocks.server.applySelectiveImport,
+	}),
+}));
 vi.mock("../../features/screens/ScreensContext", () => ({
 	useScreens: () => ({
 		screens: null,
@@ -191,6 +201,17 @@ describe("QuickSetupModal show workflows", () => {
 
     await waitFor(() => expect(mocks.server.uploadShow).toHaveBeenCalledWith(showFile));
   });
+
+	it("opens Partial Show Load from the Load Show title bar", async () => {
+		render(<QuickSetupModal />);
+		fireEvent.click(screen.getByRole("button", { name: "Load" }));
+		const load = await screen.findByRole("dialog", { name: "Load show" });
+
+		fireEvent.click(within(load).getByRole("button", { name: "Partial Show Load" }));
+
+		expect(await screen.findByRole("dialog", { name: "Partial Show Load" }))
+			.toHaveTextContent("lists every dependency, conflict, fixture profile, and managed asset");
+	});
 
   it("keeps an orphaned revision copy usable without an overwrite-original action", () => {
     mocks.server.shows = mocks.server.shows.filter((show) => show.id !== "original");

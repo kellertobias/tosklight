@@ -1,6 +1,7 @@
 import { createContext, type PropsWithChildren, useContext } from "react";
 import { FilesProvider } from "../features/files/FilesContext";
 import { PlaybackRuntimeViewProvider } from "../features/playbackRuntime/PlaybackRuntimeView";
+import { SelectiveImportProvider } from "../features/selectiveImport/SelectiveImportContext";
 import { ScreensProvider } from "../features/screens/ScreensContext";
 import { composeServerContextValue } from "../features/server/composeServerContextValue";
 import type { ServerContextValue } from "../features/server/ServerContextValue";
@@ -109,6 +110,13 @@ export function ServerProvider({
 		selectControlDesk: value.selectControlDesk,
 		removeClient: value.removeClient,
 	};
+	const selectiveImportSource = {
+		catalog: state.client.selectiveImportCatalog,
+		preview: state.client.previewSelectiveImport,
+		apply: state.client.applySelectiveImport,
+		refreshCompatibilityState: refresh,
+		reportError: state.setError,
+	};
 	return (
 		<ServerContext.Provider value={value}>
 			<ShowObjectsViewProvider
@@ -145,9 +153,11 @@ export function ServerProvider({
 						kind="group"
 						objectId={state.selectedGroupId}
 					/>
-					<FilesProvider source={fileSource}>
-						<ScreensProvider source={screenSource}>{children}</ScreensProvider>
-					</FilesProvider>
+					<SelectiveImportProvider source={selectiveImportSource}>
+						<FilesProvider source={fileSource}>
+							<ScreensProvider source={screenSource}>{children}</ScreensProvider>
+						</FilesProvider>
+					</SelectiveImportProvider>
 				</PlaybackRuntimeViewProvider>
 			</ShowObjectsViewProvider>
 		</ServerContext.Provider>

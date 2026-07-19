@@ -11,6 +11,7 @@ import { ProgrammingApiClient } from "./client/programming";
 import { LightClientRuntime } from "./client/runtime";
 import { ShowApiClient } from "./client/shows";
 import { ShowObjectsApiClient } from "./client/showObjects";
+import { SelectiveImportApiClient } from "./client/selectiveImport";
 import { UpdateApiClient } from "./client/update";
 
 export {
@@ -38,6 +39,7 @@ export class LightApiClient extends LightClientRuntime {
 	private readonly deskApi = new DeskApiClient(this.transport);
 	private readonly outputApi = new OutputApiClient(this.transport);
 	private readonly updateApi = new UpdateApiClient(this.transport);
+	private readonly selectiveImportApi = new SelectiveImportApiClient(this.transport);
 
 	helpCatalog = bindClientMethod(this.helpApi, "helpCatalog");
 	helpTopic = bindClientMethod(this.helpApi, "helpTopic");
@@ -152,6 +154,9 @@ export class LightApiClient extends LightClientRuntime {
 	applyMvr = bindClientMethod(this.showApi, "applyMvr");
 	mvrExportPreview = bindClientMethod(this.showApi, "mvrExportPreview");
 	downloadMvr = bindClientMethod(this.showApi, "downloadMvr");
+	selectiveImportCatalog = bindClientMethod(this.selectiveImportApi, "catalog");
+	previewSelectiveImport = bindClientMethod(this.selectiveImportApi, "preview");
+	applySelectiveImport = bindClientMethod(this.selectiveImportApi, "apply");
 
 	configuration = bindClientMethod(
 		this.configurationApi,
