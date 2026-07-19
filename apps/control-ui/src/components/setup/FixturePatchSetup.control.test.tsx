@@ -10,9 +10,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PatchedFixture } from "../../api/types";
 import {
 	FixturePatchSetup,
-	UniverseMap,
 	fixtureDisplayId,
 	parseVirtualFixtureNumber,
+	UniverseMap,
 } from "./FixturePatchSetup";
 import { blankFixtureProfile } from "./fixtureProfileModel";
 
@@ -96,6 +96,87 @@ function splitFixture(): PatchedFixture {
 	};
 }
 
+function openDimmerPlacement() {
+	const profile = blankFixtureProfile();
+	profile.manufacturer = "Generic";
+	profile.name = "Dimmer";
+	profile.short_name = "Dimmer";
+	server.fixtureProfiles = [profile];
+	render(<FixturePatchSetup />);
+	fireEvent.click(screen.getByRole("button", { name: "+ Add fixture" }));
+	fireEvent.click(screen.getByRole("button", { name: /^Add fixture$/ }));
+	return screen
+		.getByRole("heading", { name: "Patch Dimmer" })
+		.closest("section") as HTMLElement;
+}
+
+function fixturesWithConflict() {
+	const current = splitFixture();
+	current.multipatch = [
+		{
+			id: "current-mp",
+			name: "Current duplicate",
+			universe: 6,
+			address: 101,
+			split_patches: [
+				{ split: 1, universe: 6, address: 101 },
+				{ split: 3, universe: 7, address: 201 },
+			],
+			location: { x: 0, y: 0, z: 0 },
+			rotation: { x: 0, y: 0, z: 0 },
+		},
+	];
+	const blocked = splitFixture();
+	blocked.fixture_id = "fixture-blocked";
+	blocked.fixture_number = 18;
+	blocked.name = "Blocked Wash 18";
+	blocked.universe = 4;
+	blocked.address = 401;
+	blocked.split_patches = [
+		{ split: 1, universe: 4, address: 401 },
+		{ split: 3, universe: 5, address: 201 },
+	];
+	blocked.multipatch = [
+		{
+			id: "blocked-mp",
+			name: "Blocked duplicate",
+			universe: 8,
+			address: 301,
+			split_patches: [
+				{ split: 1, universe: 8, address: 301 },
+				{ split: 3, universe: 9, address: 401 },
+			],
+			location: { x: 0, y: 0, z: 0 },
+			rotation: { x: 0, y: 0, z: 0 },
+		},
+	];
+	return { current, blocked };
+}
+
+async function requestConflictingSplitPatch() {
+	fireEvent.click(screen.getByRole("button", { name: "Split 3 patch 2.201" }));
+	const addressScreen = await screen.findByRole("dialog", {
+		name: "Fixture Address",
+	});
+	fireEvent.click(
+		within(addressScreen).getByRole("button", {
+			name: "Clear address · Unpatch",
+		}),
+	);
+	for (const key of ["4", "Universe separator", "4", "0", "1"])
+		fireEvent.click(
+			within(addressScreen).getByRole("button", {
+				name: key === "Universe separator" ? key : `Address ${key}`,
+			}),
+		);
+	fireEvent.click(
+		within(addressScreen).getByRole("button", { name: "Set Address" }),
+	);
+	expect(
+		await screen.findByRole("heading", { name: "Patch conflict" }),
+	).toBeInTheDocument();
+}
+
 beforeEach(() => {
 	state.patchSetArmed = false;
 	server.patch.fixtures = [splitFixture()];
@@ -112,7 +193,7 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
-describe("selected split SET editing", () => {
+describe("selected split selection and SET editing", () => {
 	it("places Preview Stage before existing title actions and supports additive and range selection", () => {
 		const second = splitFixture();
 		second.fixture_id = "fixture-18";
@@ -132,7 +213,9 @@ describe("selected split SET editing", () => {
 			/>,
 		);
 
-		const actions = screen.getByText("Show Patch").closest("header")!;
+		const actions = screen
+			.getByText("Show Patch")
+			.closest("header") as HTMLElement;
 		expect(
 			within(actions)
 				.getAllByRole("button")
@@ -221,7 +304,9 @@ describe("selected split SET editing", () => {
 			value: false,
 		});
 	});
+});
 
+describe("selected split conflict validation", () => {
 	it("excludes the fixture's own slots, rejects another fixture's full range, and cancels on Escape", async () => {
 		const occupied = splitFixture();
 		occupied.fixture_id = "fixture-other";
@@ -277,21 +362,7 @@ describe("selected split SET editing", () => {
 	});
 });
 
-describe("fixture batch IDs", () => {
-	function openDimmerPlacement() {
-		const profile = blankFixtureProfile();
-		profile.manufacturer = "Generic";
-		profile.name = "Dimmer";
-		profile.short_name = "Dimmer";
-		server.fixtureProfiles = [profile];
-		render(<FixturePatchSetup />);
-		fireEvent.click(screen.getByRole("button", { name: "+ Add fixture" }));
-		fireEvent.click(screen.getByRole("button", { name: /^Add fixture$/ }));
-		return screen
-			.getByRole("heading", { name: "Patch Dimmer" })
-			.closest("section") as HTMLElement;
-	}
-
+describe("fixture batch IDs and title actions", () => {
 	it("shows a regular start-ID number field and skips occupied IDs for the complete batch", async () => {
 		const occupied = splitFixture();
 		occupied.fixture_id = "fixture-101";
@@ -361,7 +432,9 @@ describe("fixture batch IDs", () => {
 			screen.queryByRole("heading", { name: "Patch Dimmer" }),
 		).not.toBeInTheDocument();
 	});
+});
 
+describe("fixture batch DMX placement", () => {
 	it("renders 512 hittable DMX squares and marks used, proposed, and conflicting ranges", () => {
 		const placement = openDimmerPlacement();
 		const grid = within(placement).getByRole("grid", {
@@ -439,7 +512,9 @@ describe("fixture batch IDs", () => {
 			server.patchFixture.mock.calls.map(([input]) => input.address),
 		).toEqual([1, 50, 3]);
 	});
+});
 
+describe("fixture browser filtering", () => {
 	it("filters the Add Fixture browser while typing and clears the active search", () => {
 		const dimmer = blankFixtureProfile();
 		dimmer.manufacturer = "Generic";
@@ -626,76 +701,7 @@ describe("DMX address grid dragging", () => {
 	});
 });
 
-describe("schema-v2 patch conflict actions", () => {
-	function fixturesWithConflict() {
-		const current = splitFixture();
-		current.multipatch = [
-			{
-				id: "current-mp",
-				name: "Current duplicate",
-				universe: 6,
-				address: 101,
-				split_patches: [
-					{ split: 1, universe: 6, address: 101 },
-					{ split: 3, universe: 7, address: 201 },
-				],
-				location: { x: 0, y: 0, z: 0 },
-				rotation: { x: 0, y: 0, z: 0 },
-			},
-		];
-		const blocked = splitFixture();
-		blocked.fixture_id = "fixture-blocked";
-		blocked.fixture_number = 18;
-		blocked.name = "Blocked Wash 18";
-		blocked.universe = 4;
-		blocked.address = 401;
-		blocked.split_patches = [
-			{ split: 1, universe: 4, address: 401 },
-			{ split: 3, universe: 5, address: 201 },
-		];
-		blocked.multipatch = [
-			{
-				id: "blocked-mp",
-				name: "Blocked duplicate",
-				universe: 8,
-				address: 301,
-				split_patches: [
-					{ split: 1, universe: 8, address: 301 },
-					{ split: 3, universe: 9, address: 401 },
-				],
-				location: { x: 0, y: 0, z: 0 },
-				rotation: { x: 0, y: 0, z: 0 },
-			},
-		];
-		return { current, blocked };
-	}
-
-	async function requestConflictingSplitPatch() {
-		fireEvent.click(
-			screen.getByRole("button", { name: "Split 3 patch 2.201" }),
-		);
-		const addressScreen = await screen.findByRole("dialog", {
-			name: "Fixture Address",
-		});
-		fireEvent.click(
-			within(addressScreen).getByRole("button", {
-				name: "Clear address · Unpatch",
-			}),
-		);
-		for (const key of ["4", "Universe separator", "4", "0", "1"])
-			fireEvent.click(
-				within(addressScreen).getByRole("button", {
-					name: key === "Universe separator" ? key : `Address ${key}`,
-				}),
-			);
-		fireEvent.click(
-			within(addressScreen).getByRole("button", { name: "Set Address" }),
-		);
-		expect(
-			await screen.findByRole("heading", { name: "Patch conflict" }),
-		).toBeInTheDocument();
-	}
-
+describe("schema-v2 location and multi-patch editing", () => {
 	it("keeps Set and Close in the location title bar and confirms discarding changed axes", async () => {
 		const { current } = fixturesWithConflict();
 		server.patch.fixtures = [current];
@@ -787,7 +793,9 @@ describe("schema-v2 patch conflict actions", () => {
 			),
 		);
 	});
+});
 
+describe("schema-v2 delete and unpatch controls", () => {
 	it("uses toolbar Delete plus a fixture line to choose delete, unpatch, or abort", async () => {
 		const { current } = fixturesWithConflict();
 		server.patch.fixtures = [current];
@@ -804,10 +812,14 @@ describe("schema-v2 patch conflict actions", () => {
 			name: "Delete or unpatch Split Wash 17?",
 		});
 		expect(
-			within(dialog).getAllByRole("button").map((button) => button.textContent),
+			within(dialog)
+				.getAllByRole("button")
+				.map((button) => button.textContent),
 		).toEqual(["Delete fixture", "Unpatch fixture", "Abort"]);
 
-		fireEvent.click(within(dialog).getByRole("button", { name: "Unpatch fixture" }));
+		fireEvent.click(
+			within(dialog).getByRole("button", { name: "Unpatch fixture" }),
+		);
 		await waitFor(() =>
 			expect(server.updatePatchedFixture).toHaveBeenCalledWith(
 				"fixture-split",
@@ -849,7 +861,9 @@ describe("schema-v2 patch conflict actions", () => {
 		);
 		expect(server.updatePatchedFixture).not.toHaveBeenCalled();
 	});
+});
 
+describe("schema-v2 current-fixture conflict resolution", () => {
 	it("unpatches every split and multi-patch range on the current fixture", async () => {
 		const { current, blocked } = fixturesWithConflict();
 		server.patch.fixtures = [current, blocked];
@@ -888,7 +902,9 @@ describe("schema-v2 patch conflict actions", () => {
 			),
 		);
 	});
+});
 
+describe("schema-v2 all-conflict resolution", () => {
 	it("unpatches every physical range of all conflicts before applying the requested split", async () => {
 		const { current, blocked } = fixturesWithConflict();
 		server.patch.fixtures = [current, blocked];
