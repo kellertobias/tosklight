@@ -10,19 +10,29 @@ import { StageWindow } from "./StageWindow";
 import { useServer } from "../api/ServerContext";
 import { useDesktopBridge } from "../platform/desktop";
 import { usePatch } from "../features/patch/PatchContext";
+import { useProgrammingSelectionView } from "../features/programmingInteraction/ProgrammingInteractionView";
 
-export function PatchWindow(_: WindowProps) {
+export function PatchWindow({ active = true }: WindowProps) {
 	const [tab, setTab] = useState<"fixtures" | "media">("fixtures");
 	if (tab === "media")
 		return <PatchMediaWindow onFixtures={() => setTab("fixtures")} />;
 	return (
 		<PatchFeatureBoundary>
-			<PatchWindowContent onMedia={() => setTab("media")} />
+			<PatchWindowContent
+				active={active}
+				onMedia={() => setTab("media")}
+			/>
 		</PatchFeatureBoundary>
 	);
 }
 
-function PatchWindowContent({ onMedia }: { onMedia: () => void }) {
+function PatchWindowContent({
+	active,
+	onMedia,
+}: {
+	active: boolean;
+	onMedia: () => void;
+}) {
 	const server = useServer();
 	const patch = usePatch();
 	const [stagePreviewOpen, setStagePreviewOpen] = useState(false);
@@ -31,17 +41,19 @@ function PatchWindowContent({ onMedia }: { onMedia: () => void }) {
 	const [stagePreviewClearance, setStagePreviewClearance] = useState(0);
 	const previewVisible = stagePreviewOpen;
 	const dmxPreview =
+		active &&
 		previewVisible &&
 		(server.configuration?.patch_preview_highlight_dmx ?? false);
+	const selection = useProgrammingSelectionView(dmxPreview);
 	useEffect(() => {
 		setPatchPreviewHighlight.current = server.setPatchPreviewHighlight;
 	}, [server.setPatchPreviewHighlight]);
 	useEffect(() => {
 		void setPatchPreviewHighlight.current(
 			dmxPreview,
-			dmxPreview ? server.selectedFixtures : [],
+			dmxPreview ? [...(selection?.selected ?? [])] : [],
 		);
-	}, [dmxPreview, server.selectedFixtures]);
+	}, [dmxPreview, selection?.selected]);
 	useEffect(
 		() => () => {
 			void setPatchPreviewHighlight.current(false);
@@ -78,6 +90,7 @@ function PatchWindowContent({ onMedia }: { onMedia: () => void }) {
 					aria-label="Patch Stage preview"
 				>
 					<StageWindow
+						active={active}
 						compact
 						stageView={tauri ? "3d" : "2d"}
 						showGroupShortcuts={false}

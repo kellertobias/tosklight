@@ -26,7 +26,7 @@ export function useCommandLineSurface({
 	const text = projection?.text ?? server.commandLine;
 	const target = projection?.target ?? server.commandTargetMode;
 	const pristine = projection?.pristine ?? server.commandLinePristine;
-	const selected = selectionProjection?.selected ?? server.selectedFixtures;
+	const selected = selectionProjection?.selected ?? [];
 	const read = useCallback(() => {
 		const current = store.getSnapshot().commandLine;
 		return current && actions
@@ -106,9 +106,7 @@ export function useCommandLineSurface({
 		target,
 		pristine,
 		selected,
-		selectedGroupId: selectionProjection
-			? selectedGroupId(selectionProjection)
-			: server.selectedGroupId,
+		selectedGroupId: selectedGroupId(selectionProjection),
 		pendingChoice: projection
 			? projection.pendingChoice
 			: server.pendingCommandChoice,

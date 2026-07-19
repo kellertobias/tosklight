@@ -12,12 +12,14 @@ import { requestUpdateTarget } from "../components/control/updateWorkflow";
 import { normalizePresetFamily, presetAddress, presetStorageKey, PRESET_FAMILIES } from "../presetFamilies";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
 import { usePresets } from "../features/showObjects/ShowObjectsState";
+import { useProgrammingSelectionView } from "../features/programmingInteraction/ProgrammingInteractionView";
 
 type PresetCustomization = { title?: string; icon?: string; color?: string };
 
 export function PresetsWindow({ active = true, compact, paneId, showGroupShortcuts, presetFamily, presetPoolColors }: WindowProps) {
   useShowObjectView("preset", active);
   const server = useServer();
+  const selection = useProgrammingSelectionView(active);
   const storedPresets = usePresets();
   const { state, dispatch } = useApp();
   const family = compact ? (presetFamily ?? state.presetFamily) : state.presetFamily;
@@ -124,11 +126,11 @@ export function PresetsWindow({ active = true, compact, paneId, showGroupShortcu
                   <small>
                     {state.updateArmed
                       ? "Touch to check Update eligibility"
-                      : server.selectedFixtures.length
-                      ? state.storeArmed
-                        ? "Record here"
-                        : "Tap to record programmer"
-                      : "Select fixtures to record"}
+                      : selection?.selected.length
+                        ? state.storeArmed
+                          ? "Record here"
+                          : "Tap to record programmer"
+                        : "Select fixtures to record"}
                   </small>
                 </>
               )}

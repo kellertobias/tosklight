@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { VisualizationSnapshot } from "../api/types";
 import { useServer } from "../api/ServerContext";
 import { VerticalTouchFader } from "../components/control/VerticalTouchFader";
@@ -8,11 +8,21 @@ import { createPortal } from "react-dom";
 import { Button } from "../components/common";
 import { FaderView, WindowHeader } from "../components/window-kit";
 import { usePollingResource } from "../hooks/usePollingResource";
+import {
+  useProgrammingSelectionActions,
+  useProgrammingSelectionView,
+} from "../features/programmingInteraction/ProgrammingInteractionView";
 
 const PAGE_SIZE = 20;
 
 export function ChannelsWindow({ active = true, compact }: WindowProps) {
   const server = useServer();
+  const selection = useProgrammingSelectionView(active);
+  const selectionActions = useProgrammingSelectionActions(active);
+  const selectedFixtureIds = useMemo(
+    () => new Set(selection?.selected ?? []),
+    [selection?.selected],
+  );
   const [page, setPage] = useState(0);
   const [pagePickerOpen, setPagePickerOpen] = useState(false);
   const [visualization, setVisualization] = useState<VisualizationSnapshot | null>(null);
@@ -40,7 +50,7 @@ export function ChannelsWindow({ active = true, compact }: WindowProps) {
     {!compact && <WindowHeader title="Channels" info={{ primary: "Intensity", secondary: "Two-row channel bank" }} actions={[[{ id: "previous", label: "←", disabled: page === 0, ariaLabel: "Previous channel page", onClick: () => setPage(page - 1) },{ id: "page", label: `${page * PAGE_SIZE + 1}–${(page + 1) * PAGE_SIZE}`, onClick: () => setPagePickerOpen(true) },{ id: "next", label: "→", disabled: page >= pages - 1, ariaLabel: "Next channel page", onClick: () => setPage(page + 1) }]]} />}
     <FaderView rows={2} className="channel-fader-bank">{visible.map((channel, index) => {
       const number = page * PAGE_SIZE + index + 1;
-      return <article className={`channel-fader ${channel ? "" : "empty"} ${channel && server.selectedFixtures.includes(channel.fixture.fixture_id) ? "selected" : ""}`} key={channel?.fixture.fixture_id ?? `empty-${number}`} onClick={() => channel && void server.setSelection([channel.fixture.fixture_id])}>
+      return <article className={`channel-fader ${channel ? "" : "empty"} ${channel && selectedFixtureIds.has(channel.fixture.fixture_id) ? "selected" : ""}`} key={channel?.fixture.fixture_id ?? `empty-${number}`} onClick={() => channel && void selectionActions?.replace({ resolvedFixtures: [channel.fixture.fixture_id] })}>
         <VerticalTouchFader
           disabled={!channel}
           label={channel ? `CH ${number}` : `CH ${number} · Empty`}

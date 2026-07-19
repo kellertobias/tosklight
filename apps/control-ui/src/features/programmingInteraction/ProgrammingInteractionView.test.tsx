@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useLayoutEffect } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { useCommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
 import { Button } from "../../components/common/controls";
 import type {
@@ -43,6 +43,10 @@ const server = vi.hoisted(() => ({
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
 
+afterEach(() => {
+	server.selectedFixtures = [];
+});
+
 function CommandProbe({
 	visible,
 	onRender,
@@ -61,6 +65,11 @@ function SurfaceProbe({ active }: { active: boolean }) {
 		enabled: active,
 	});
 	return <span>{active ? command.text : "Inactive surface"}</span>;
+}
+
+function SelectionSurfaceProbe() {
+	const command = useCommandLineSurface({ selection: true });
+	return <span>{command.selected.join(",") || "No scoped selection"}</span>;
 }
 
 function ActionProbe({ onRender }: { onRender: () => void }) {
@@ -123,6 +132,28 @@ function deferred<T>() {
 }
 
 describe("ProgrammingInteractionViewProvider", () => {
+	it("never falls back to stale global selection while scoped authority loads", async () => {
+		const store = new ProgrammingInteractionStore();
+		const transport = new FakeProgrammingTransport();
+		const snapshot = deferred<ReturnType<typeof programmingSnapshot>>();
+		server.selectedFixtures = [FIXTURE_3];
+		render(
+			<ProgrammingInteractionViewProvider
+				showId={SHOW_ID}
+				deskId={DESK_ID}
+				store={store}
+				transport={transport}
+				loadSnapshot={() => snapshot.promise}
+			>
+				<SelectionSurfaceProbe />
+			</ProgrammingInteractionViewProvider>,
+		);
+
+		expect(screen.getByText("No scoped selection")).toBeInTheDocument();
+		snapshot.resolve(programmingSnapshot());
+		await screen.findByText(FIXTURE_1);
+	});
+
 	it("subscribes a command surface only while its view is active", async () => {
 		const store = new ProgrammingInteractionStore();
 		const transport = new FakeProgrammingTransport();

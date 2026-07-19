@@ -18,6 +18,10 @@ import {
 import { createFixtureStepPresenter } from "./fixtureSheetStep";
 import type { WindowProps } from "./windowTypes";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
+import {
+	useProgrammingSelectionActions,
+	useProgrammingSelectionView,
+} from "../features/programmingInteraction/ProgrammingInteractionView";
 
 export function FixtureSheetWindow({
 	active = true,
@@ -26,6 +30,8 @@ export function FixtureSheetWindow({
 }: WindowProps) {
 	useShowObjectView("group", active);
 	const server = useServer();
+	const selection = useProgrammingSelectionView(active);
+	const selectionActions = useProgrammingSelectionActions(active);
 	const { state } = useApp();
 	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
 	const [activeRow, setActiveRow] = useState(0);
@@ -70,8 +76,8 @@ export function FixtureSheetWindow({
 		[presentStep, showType, visibleColumnIds],
 	);
 	const selectedFixtureIds = useMemo(
-		() => new Set(server.selectedFixtures),
-		[server.selectedFixtures],
+		() => new Set(selection?.selected ?? []),
+		[selection?.selected],
 	);
 
 	return (
@@ -80,7 +86,7 @@ export function FixtureSheetWindow({
 				<WindowHeader
 					title="Fixture Sheet"
 					info={{
-						primary: `${server.selectedFixtures.length} selected`,
+						primary: `${selection?.selected.length ?? 0} selected`,
 						secondary: <SourceLegend />,
 					}}
 					settings
@@ -93,9 +99,9 @@ export function FixtureSheetWindow({
 				activeRow={activeRow}
 				columns={columns}
 				onActivate={(fixtureId) =>
-					void server.selectionGesture({
-						type: "fixture",
-						fixture_id: fixtureId,
+					void selectionActions?.gesture({
+						source: { type: "fixture", fixtureId },
+						resolvedFixtures: [fixtureId],
 					})
 				}
 				onActiveRowChange={setActiveRow}

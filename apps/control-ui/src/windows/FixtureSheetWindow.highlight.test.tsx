@@ -88,6 +88,12 @@ const state = {
 const dispatch = vi.fn();
 
 vi.mock("../api/ServerContext", () => ({ useServer: () => server }));
+vi.mock("../features/programmingInteraction/ProgrammingInteractionView", () => ({
+  useProgrammingSelectionView: (active = true) =>
+    active ? { selected: server.selectedFixtures } : null,
+  useProgrammingSelectionActions: (active = true) =>
+    active ? { gesture: server.selectionGesture } : null,
+}));
 vi.mock("../features/server/useShowObjectsState", () => ({ useGroups: () => server.groups }));
 vi.mock("../state/AppContext", () => ({ useApp: () => ({ state, dispatch }) }));
 
@@ -133,6 +139,22 @@ describe("Fixture Sheet Highlight stepping visualization", () => {
     const { container } = render(<FixtureSheetWindow compact/>);
     await waitFor(() => expect(container.querySelector('[data-fixture-id="fixture-13"]')).toBeInTheDocument());
     expect(container.querySelectorAll(".ui-data-table-row:not(.header)")).toHaveLength(13);
+  });
+
+  it("routes logical-head rows through the scoped fixture gesture", async () => {
+    const { container } = render(<FixtureSheetWindow compact/>);
+    const left = await waitFor(() => {
+      const row = container.querySelector<HTMLElement>('[data-fixture-id="left"]');
+      expect(row).toBeInTheDocument();
+      return row!;
+    });
+
+    fireEvent.click(left);
+
+    expect(server.selectionGesture).toHaveBeenCalledWith({
+      source: { type: "fixture", fixtureId: "left" },
+      resolvedFixtures: ["left"],
+    });
   });
 
   it("keeps the remembered heads subdued, marks the actual step prominently, and survives HIGH toggles", async () => {
