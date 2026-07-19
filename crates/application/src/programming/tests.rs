@@ -13,6 +13,7 @@ use uuid::Uuid;
 struct TestPorts {
     executions: AtomicUsize,
     persisted: Mutex<Vec<&'static str>>,
+    persistence_warning: Mutex<Option<String>>,
 }
 
 impl ProgrammingPorts for TestPorts {
@@ -43,7 +44,7 @@ impl ProgrammingPorts for TestPorts {
 
     fn persist(&self, _context: &ActionContext, operation: &'static str) -> Option<String> {
         self.persisted.lock().push(operation);
-        None
+        self.persistence_warning.lock().clone()
     }
 
     fn reconcile(&self, _context: &ActionContext, _reason: ProgrammingReconciliation) {}
@@ -182,7 +183,11 @@ fn clear_is_staged_and_resets_the_command_line_after_selection() {
     ));
     assert_eq!(
         harness.ports.persisted.lock().as_slice(),
-        ["programmer.clear_selection", "programmer.clear_values"]
+        [
+            "programmer.command_line",
+            "programmer.clear_selection",
+            "programmer.clear_values"
+        ]
     );
 }
 
@@ -201,6 +206,10 @@ fn request_replay_is_exactly_once_and_retains_original_context() {
     assert!(replay.replayed);
     assert_eq!(first.context, replay.context);
     assert_eq!(first.command_line.revision, replay.command_line.revision);
+    assert_eq!(
+        harness.ports.persisted.lock().as_slice(),
+        ["programmer.command_line"]
+    );
 
     let conflict = harness.service.handle(
         ActionEnvelope {
@@ -214,6 +223,36 @@ fn request_replay_is_exactly_once_and_retains_original_context() {
         &harness.ports,
     );
     assert_eq!(conflict.unwrap_err().kind, ActionErrorKind::Conflict);
+}
+
+#[test]
+fn request_replay_retains_an_edit_persistence_warning() {
+    let mut harness = Harness::new(ActionSource::Http);
+    harness.context = harness.context.clone().with_request_id("failed-save");
+    *harness.ports.persistence_warning.lock() = Some("programmer save failed".into());
+    let command = ProgrammingCommand::ApplyKey {
+        key: CommandKey::Digit(1),
+        phase: CommandKeyPhase::Press,
+        execute_policy: ExecutionPolicy::AtomicProgrammer,
+    };
+
+    let first = harness.handle(command.clone());
+    let replay = harness.handle(command);
+
+    for result in [first, replay] {
+        assert!(matches!(
+            result.outcome,
+            ProgrammingOutcome::Accepted {
+                action: ProgrammingAction::Edited,
+                warning: Some(ref warning),
+                ..
+            } if warning == "programmer save failed"
+        ));
+    }
+    assert_eq!(
+        harness.ports.persisted.lock().as_slice(),
+        ["programmer.command_line"]
+    );
 }
 
 #[test]

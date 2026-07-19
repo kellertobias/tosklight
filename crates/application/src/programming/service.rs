@@ -109,7 +109,13 @@ impl ProgrammingService {
                 expected_revision,
             } => {
                 validate_command(text)?;
-                self.replace(session, *expected_revision, text.clone())?
+                self.replace(
+                    session,
+                    *expected_revision,
+                    text.clone(),
+                    &action.context,
+                    ports,
+                )?
             }
             ProgrammingCommand::Execute { command, policy } => {
                 self.execute_command(session, command.as_deref(), *policy, &action.context, ports)?
@@ -196,7 +202,8 @@ impl ProgrammingService {
         if execute {
             self.execute_command(session, None, policy, context, ports)
         } else {
-            Ok(accepted(ProgrammingAction::Edited, None, None))
+            let warning = ports.persist(context, "programmer.command_line");
+            Ok(accepted(ProgrammingAction::Edited, None, warning))
         }
     }
 
@@ -205,11 +212,14 @@ impl ProgrammingService {
         session: SessionId,
         expected_revision: u64,
         text: String,
+        context: &crate::ActionContext,
+        ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingOutcome, ActionError> {
         self.programmers
             .replace_command_line(session, expected_revision, text)
             .map_err(replace_error)?;
-        Ok(accepted(ProgrammingAction::Edited, None, None))
+        let warning = ports.persist(context, "programmer.command_line");
+        Ok(accepted(ProgrammingAction::Edited, None, warning))
     }
 
     fn execute_command(

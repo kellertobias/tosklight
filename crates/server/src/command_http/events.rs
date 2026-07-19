@@ -59,9 +59,6 @@ fn publish_osc_accepted(
     result: &ProgrammingResult,
     action: ProgrammingAction,
 ) {
-    if action == ProgrammingAction::Edited {
-        let _ = super::super::persist_programmer(state, session);
-    }
     if action == ProgrammingAction::Executed {
         publish_osc_applied(state, session, desk_alias, result);
     }
@@ -76,6 +73,7 @@ fn publish_osc_accepted(
             "source":"osc",
             "command_line":result.command_line.visible_text(),
             "command_revision":result.command_line.revision,
+            "changes":change_categories(action),
         }),
     );
 }
@@ -109,9 +107,10 @@ pub(super) fn publish_service_result(
     source: &str,
     request_id: Option<&str>,
     supplied_command: Option<&str>,
-) {
+) -> Option<String> {
+    let persistence_warning = edited_persistence_warning(result);
     if result.replayed {
-        return;
+        return persistence_warning;
     }
     publish_command_line_change(
         state,
@@ -122,6 +121,18 @@ pub(super) fn publish_service_result(
         request_id,
     );
     publish_operation_event(state, session, result, request_id, supplied_command);
+    persistence_warning
+}
+
+fn edited_persistence_warning(result: &ProgrammingResult) -> Option<String> {
+    match &result.outcome {
+        ProgrammingOutcome::Accepted {
+            action: ProgrammingAction::Edited,
+            warning,
+            ..
+        } => warning.clone(),
+        _ => None,
+    }
 }
 
 fn publish_operation_event(
@@ -225,6 +236,7 @@ fn publish_programmer_changed(
             "request_id":request_id,
             "preload_armed":action == ProgrammingAction::PreloadEntered,
             "command_revision":result.command_line.revision,
+            "changes":change_categories(action),
         }),
     );
 }
@@ -336,5 +348,23 @@ const fn action_name(action: ProgrammingAction) -> &'static str {
         ProgrammingAction::PreloadEntered => "preload.enter",
         ProgrammingAction::PreloadCommitted => "preload.go",
         _ => "programmer.command_line",
+    }
+}
+
+const fn change_categories(action: ProgrammingAction) -> &'static [&'static str] {
+    match action {
+        ProgrammingAction::Edited
+        | ProgrammingAction::ClearedCommandLine
+        | ProgrammingAction::ClearedSelection
+        | ProgrammingAction::NoChange
+        | ProgrammingAction::ShiftPressed
+        | ProgrammingAction::ShiftReleased
+        | ProgrammingAction::IgnoredRelease => &["interaction"],
+        ProgrammingAction::Executed
+        | ProgrammingAction::ClearedPreload
+        | ProgrammingAction::ClearedValues
+        | ProgrammingAction::Undone
+        | ProgrammingAction::PreloadEntered
+        | ProgrammingAction::PreloadCommitted => &["interaction", "values", "runtime"],
     }
 }

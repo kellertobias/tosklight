@@ -85,7 +85,9 @@ async fn put_command_line(
             expected_revision,
         },
     )?;
-    publish_service_result(&state, &session, &result, "http", None, None);
+    if let Some(warning) = publish_service_result(&state, &session, &result, "http", None, None) {
+        return Err(ApiError::internal(warning));
+    }
     Ok(with_etag(command_line_from_state(result.command_line)))
 }
 
@@ -108,14 +110,16 @@ async fn apply_command_key(
             execute_policy: ExecutionPolicy::AtomicProgrammer,
         },
     )?;
-    publish_service_result(
+    if let Some(warning) = publish_service_result(
         &state,
         &session,
         &result,
         "http_key",
         Some(&input.request_id),
         None,
-    );
+    ) {
+        return Err(ApiError::internal(warning));
+    }
     respond(input.request_id, result)
 }
 
@@ -140,14 +144,16 @@ async fn execute_command_line(
             policy: ExecutionPolicy::AtomicProgrammer,
         },
     )?;
-    publish_service_result(
+    if let Some(warning) = publish_service_result(
         &state,
         &session,
         &result,
         "http",
         Some(&input.request_id),
         input.command.as_deref(),
-    );
+    ) {
+        return Err(ApiError::internal(warning));
+    }
     respond(input.request_id, result)
 }
 

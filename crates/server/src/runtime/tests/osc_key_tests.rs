@@ -62,6 +62,16 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
         &pressed,
         Some("127.0.0.1:9010"),
     );
+    let interaction_event = state
+        .audit_events
+        .lock()
+        .iter()
+        .rev()
+        .find(|event| event.kind == "programmer_changed")
+        .cloned()
+        .unwrap();
+    assert_eq!(interaction_event.payload["command"], "programmer.command_line");
+    assert_eq!(interaction_event.payload["changes"], serde_json::json!(["interaction"]));
     handle_programmer_osc(
         &state,
         "/light/main/programmer/minus",

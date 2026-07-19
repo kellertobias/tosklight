@@ -18,6 +18,18 @@ async fn verify_revisioned_command_line(scenario: &CommandHttpScenario) {
     assert_eq!(replaced.status(), StatusCode::OK);
     assert_eq!(replaced.headers()[header::ETAG], "\"1\"");
     assert_eq!(json(replaced).await["text"], "FIXTURE 1");
+    let persisted = scenario
+        .state
+        .desk
+        .lock()
+        .persisted_sessions()
+        .unwrap()
+        .into_iter()
+        .find(|session| session.id == scenario.session.id)
+        .unwrap();
+    let persisted: light_programmer::ProgrammerState =
+        serde_json::from_str(&persisted.programmer_json).unwrap();
+    assert_eq!(persisted.command_line, "FIXTURE 1");
 
     let stale = scenario.put("FIXTURE 99", 0).await;
     assert_eq!(stale.status(), StatusCode::CONFLICT);
