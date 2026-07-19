@@ -1,6 +1,6 @@
 use crate::{
     EngineSnapshot, MoveInBlackKey, MoveInBlackRuntime, ProgrammerTransition,
-    ProgrammerTransitionKey,
+    ProgrammerTransitionKey, RuntimeGeneration,
 };
 use arc_swap::ArcSwap;
 use light_core::{FixtureId, SharedClock};
@@ -16,8 +16,7 @@ use std::{
 };
 
 pub struct Engine {
-    pub(crate) snapshot: ArcSwap<EngineSnapshot>,
-    pub(crate) playback: RwLock<PlaybackEngine>,
+    pub(crate) generation: ArcSwap<RuntimeGeneration>,
     pub(crate) programmers: ProgrammerRegistry,
     pub(crate) timecode_frame: AtomicU64,
     pub(crate) programmer_fade_millis: AtomicU64,
@@ -39,9 +38,13 @@ pub struct Engine {
 impl Engine {
     pub fn new(programmers: ProgrammerRegistry) -> Self {
         let clock = programmers.clock();
+        let playback = PlaybackEngine::with_clock(Arc::clone(&clock));
         Self {
-            snapshot: ArcSwap::from_pointee(EngineSnapshot::default()),
-            playback: RwLock::new(PlaybackEngine::with_clock(Arc::clone(&clock))),
+            generation: ArcSwap::from_pointee(RuntimeGeneration::new(
+                EngineSnapshot::default(),
+                playback,
+                HashMap::new(),
+            )),
             programmers,
             timecode_frame: AtomicU64::new(u64::MAX),
             programmer_fade_millis: AtomicU64::new(0),
@@ -82,7 +85,9 @@ impl Engine {
         }
         self.sequence_master_fade_millis
             .store(sequence_master_fade_millis.min(60_000), Ordering::Relaxed);
-        self.playback
+        self.generation
+            .load()
+            .playback()
             .write()
             .set_control_timing(speed_groups_bpm, sequence_master_fade_millis);
     }
@@ -91,7 +96,11 @@ impl Engine {
         for (target, paused) in self.speed_groups_paused.iter().zip(paused) {
             target.store(paused, Ordering::Relaxed);
         }
-        self.playback.write().set_speed_groups_paused(paused);
+        self.generation
+            .load()
+            .playback()
+            .write()
+            .set_speed_groups_paused(paused);
     }
 
     pub fn clear_programmer_transitions(&self) {

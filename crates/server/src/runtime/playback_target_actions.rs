@@ -20,7 +20,8 @@ pub(super) fn apply_playback_master(
     }
     match &definition.target {
         PlaybackTarget::CueList { .. } => {
-            let mut playback = state.engine.playback().write();
+            let playback_runtime = state.engine.playback();
+            let mut playback = playback_runtime.write();
             if virtual_fader {
                 playback
                     .set_virtual_master(definition.number, value)
@@ -139,7 +140,8 @@ fn apply_cuelist_action(
     action: Action,
     pressed: bool,
 ) -> Result<bool, ApiError> {
-    let mut playback = state.engine.playback().write();
+    let playback_runtime = state.engine.playback();
+    let mut playback = playback_runtime.write();
     match action {
         Action::On => playback
             .on(definition.number)

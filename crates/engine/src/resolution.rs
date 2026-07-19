@@ -9,7 +9,8 @@ use light_programmer::{GroupDefinition, GroupProgrammerValue, ProgrammerState, r
 
 use super::{
     Engine, EngineContribution, EngineSnapshot, ProgrammerTransitionSource, ResolvedAttributes,
-    resolve_engine_contributions, snapshot_attribute_is_snap, value_for_ordered_position,
+    RuntimeGeneration, resolve_engine_contributions, snapshot_attribute_is_snap,
+    value_for_ordered_position,
 };
 
 struct PlaybackResolution {
@@ -26,37 +27,38 @@ impl Engine {
     /// Advance scheduler-owned runtime exactly once on the authoritative output path.
     pub(super) fn resolved_attributes_for_render(
         &self,
-        snapshot: &EngineSnapshot,
+        generation: &RuntimeGeneration,
         now: DateTime<Utc>,
     ) -> ResolvedAttributes {
-        self.resolve_attributes(snapshot, now, true)
+        self.resolve_attributes(generation, now, true)
     }
 
     /// Read the current projection without consuming an automatic transition before output can
     /// return it to the application boundary.
     pub(super) fn resolved_attributes_at(
         &self,
-        snapshot: &EngineSnapshot,
+        generation: &RuntimeGeneration,
         now: DateTime<Utc>,
     ) -> ResolvedAttributes {
-        self.resolve_attributes(snapshot, now, false)
+        self.resolve_attributes(generation, now, false)
     }
 
     fn resolve_attributes(
         &self,
-        snapshot: &EngineSnapshot,
+        generation: &RuntimeGeneration,
         now: DateTime<Utc>,
         advance_playback: bool,
     ) -> ResolvedAttributes {
-        let mut playback = self.resolve_playback(snapshot, now, advance_playback);
+        let snapshot = generation.snapshot();
+        let groups = generation.groups();
+        let mut playback = self.resolve_playback(generation, now, advance_playback);
         let underlay = resolve_engine_contributions(playback.contributions.clone()).values;
-        let groups = group_index(snapshot);
         playback
             .contributions
-            .extend(self.programmer_contributions(snapshot, now, &groups, &underlay));
+            .extend(self.programmer_contributions(snapshot, now, groups, &underlay));
         playback
             .contributions
-            .extend(group_contributions(snapshot, &groups, now));
+            .extend(group_contributions(snapshot, groups, now));
         let base = resolve_engine_contributions(playback.contributions.clone());
         playback.contributions.extend(
             self.move_in_black_contributions(
@@ -76,12 +78,13 @@ impl Engine {
 
     fn resolve_playback(
         &self,
-        snapshot: &EngineSnapshot,
+        generation: &RuntimeGeneration,
         now: DateTime<Utc>,
         advance: bool,
     ) -> PlaybackResolution {
+        let snapshot = generation.snapshot();
         let timecode = self.timecode_frame.load(Ordering::Relaxed);
-        let mut playback = self.playback.write();
+        let mut playback = generation.playback().write();
         let transitions = if advance {
             let PlaybackTickResult { transitions } =
                 playback.tick(now, (timecode != u64::MAX).then_some(timecode));
@@ -274,14 +277,6 @@ impl Engine {
             })
             .collect()
     }
-}
-
-fn group_index(snapshot: &EngineSnapshot) -> HashMap<String, GroupDefinition> {
-    snapshot
-        .groups
-        .iter()
-        .map(|group| (group.id.clone(), group.clone()))
-        .collect()
 }
 
 fn programmer_winners(values: Vec<TimedValue>) -> Vec<TimedValue> {

@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::Barrier;
 
 #[test]
 fn invalid_snapshot_preparation_does_not_change_live_state() {
@@ -63,7 +64,8 @@ fn prepared_installation_preserves_compatible_playback_runtime() {
 }
 
 fn activate_playback(engine: &Engine, cue_list_id: light_core::CueListId) {
-    let mut playback = engine.playback().write();
+    let playback_runtime = engine.playback();
+    let mut playback = playback_runtime.write();
     playback.go_at(cue_list_id, chrono::Utc::now()).unwrap();
     playback.set_dynamics_paused(true);
 }
@@ -76,6 +78,51 @@ fn playback_snapshot(
     EngineSnapshot {
         cue_lists: vec![cue_list.clone()],
         playbacks: vec![playback.clone()],
+        revision,
+        ..EngineSnapshot::default()
+    }
+}
+
+#[test]
+fn render_retains_one_generation_across_concurrent_installation() {
+    let engine = Arc::new(Engine::new(ProgrammerRegistry::default()));
+    engine.replace_snapshot(snapshot_with_route(1, 1)).unwrap();
+    let loaded = Arc::new(Barrier::new(2));
+    let resume = Arc::new(Barrier::new(2));
+    let render_engine = Arc::clone(&engine);
+    let render_loaded = Arc::clone(&loaded);
+    let render_resume = Arc::clone(&resume);
+    let rendering = std::thread::spawn(move || {
+        render_engine
+            .render_with_generation_hook(RenderOptions::default(), || {
+                render_loaded.wait();
+                render_resume.wait();
+            })
+            .unwrap()
+    });
+
+    loaded.wait();
+    engine.replace_snapshot(snapshot_with_route(2, 2)).unwrap();
+    resume.wait();
+    let rendered = rendering.join().unwrap();
+
+    assert_eq!(rendered.revision, 1);
+    assert_eq!(rendered.routes[0].destination_universe, 1);
+    assert_eq!(engine.snapshot().revision, 2);
+    assert_eq!(engine.output_routes()[0].destination_universe, 2);
+}
+
+fn snapshot_with_route(revision: u64, destination_universe: u16) -> EngineSnapshot {
+    EngineSnapshot {
+        routes: vec![light_output::OutputRoute {
+            protocol: light_output::Protocol::ArtNet,
+            logical_universe: 1,
+            destination_universe,
+            delivery_mode: Some(light_output::DeliveryMode::Broadcast),
+            destination: None,
+            enabled: true,
+            minimum_slots: light_output::DMX_SLOTS as u16,
+        }],
         revision,
         ..EngineSnapshot::default()
     }

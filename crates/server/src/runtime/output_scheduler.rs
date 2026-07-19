@@ -4,7 +4,7 @@ use super::{OutputControl, PersistedOutputRuntime};
 use light_application::{EventBus, publish_automatic_playback_events};
 use light_control::{SmpteTimecode, TimecodeRouter};
 use light_core::Universe;
-use light_engine::{Engine, EngineSnapshot, RenderOptions};
+use light_engine::{Engine, RenderOptions};
 use light_output::{DmxFrame, NetworkOutput, OutputHealth, Protocol, run_scheduler_dynamic};
 use parking_lot::Mutex;
 use std::{
@@ -109,13 +109,12 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
     update_timecode(&runtime);
     let options = runtime.control.lock().render_options();
     let rendered = runtime.engine.render(options).map_err(io::Error::other)?;
-    let snapshot = runtime.engine.snapshot();
     publish_automatic_playback_events(&runtime.events, rendered.automatic_playback_transitions);
     let frames = output_frames(&mut runtime.control.lock(), rendered.universes);
     runtime
         .output
         .send_routes(
-            &snapshot.routes,
+            &rendered.routes,
             &frames,
             &rendered.patched_slots,
             &mut *runtime.sequences.lock().await,
@@ -162,27 +161,28 @@ fn apply_raw_overrides(
 }
 
 async fn shut_down_safely(runtime: &Runtime) {
-    let snapshot = runtime.engine.snapshot();
-    send_safe_frame(runtime, &snapshot).await;
+    let routes = send_safe_frame(runtime)
+        .await
+        .unwrap_or_else(|| runtime.engine.output_routes());
     let _ = runtime
         .output
-        .terminate_routes(&snapshot.routes, &mut *runtime.sequences.lock().await)
+        .terminate_routes(&routes, &mut *runtime.sequences.lock().await)
         .await;
 }
 
-async fn send_safe_frame(runtime: &Runtime, snapshot: &EngineSnapshot) {
+async fn send_safe_frame(runtime: &Runtime) -> Option<Arc<[light_output::OutputRoute]>> {
     let options = safe_shutdown_options(&runtime.control);
-    if let Ok(safe) = runtime.engine.render(options) {
-        let _ = runtime
-            .output
-            .send_routes(
-                &snapshot.routes,
-                &safe.universes,
-                &safe.patched_slots,
-                &mut *runtime.sequences.lock().await,
-            )
-            .await;
-    }
+    let safe = runtime.engine.render(options).ok()?;
+    let _ = runtime
+        .output
+        .send_routes(
+            &safe.routes,
+            &safe.universes,
+            &safe.patched_slots,
+            &mut *runtime.sequences.lock().await,
+        )
+        .await;
+    Some(safe.routes)
 }
 
 fn safe_shutdown_options(control: &Mutex<OutputControl>) -> RenderOptions {

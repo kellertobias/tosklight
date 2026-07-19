@@ -17,6 +17,7 @@ mod profile_projection;
 mod programmer_fade;
 mod render;
 mod resolution;
+mod runtime_generation;
 mod safety;
 mod visualization;
 
@@ -41,6 +42,7 @@ pub(crate) use profile_projection::{render_profile_split, resolve_profile_head};
 pub(crate) use programmer_fade::{
     ProgrammerTransition, ProgrammerTransitionKey, ProgrammerTransitionSource,
 };
+pub(crate) use runtime_generation::RuntimeGeneration;
 pub(crate) use safety::{apply_safe_values, apply_safe_values_with_snap};
 
 #[cfg(test)]

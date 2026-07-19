@@ -6,8 +6,8 @@ impl Engine {
     /// Returns the same merged abstract attributes that feed DMX rendering. Consumers such as
     /// visualizers can use this without attempting to reverse fixture-specific DMX encoding.
     pub fn resolved_values(&self) -> HashMap<(FixtureId, AttributeKey), AttributeValue> {
-        let snapshot = self.snapshot.load_full();
-        self.resolved_attributes_at(&snapshot, self.clock.now())
+        let generation = self.generation.load_full();
+        self.resolved_attributes_at(&generation, self.clock.now())
             .values
     }
 
@@ -20,8 +20,9 @@ impl Engine {
         values: &HashMap<(FixtureId, AttributeKey), AttributeValue>,
         options: RenderOptions,
     ) -> Result<HashMap<(FixtureId, AttributeKey), AttributeValue>, EngineError> {
-        let snapshot = self.snapshot.load_full();
-        let mut resolved = self.resolved_attributes_at(&snapshot, self.clock.now());
+        let generation = self.generation.load_full();
+        let snapshot = generation.snapshot();
+        let mut resolved = self.resolved_attributes_at(&generation, self.clock.now());
         for (key, value) in values {
             if resolved.values.get(key) != Some(value) {
                 // Visualization-only overrides (notably Preload) do not inherit the sequence
@@ -30,11 +31,7 @@ impl Engine {
             }
         }
         resolved.values.clone_from(values);
-        let groups = snapshot
-            .groups
-            .iter()
-            .map(|group| (group.id.clone(), group.clone()))
-            .collect::<HashMap<_, _>>();
+        let groups = generation.groups();
         let group_master_flashes = self.group_master_flashes.read();
         let highlighted_fixtures = self.highlighted_fixtures.read();
         let mut projected = HashMap::new();
@@ -55,7 +52,7 @@ impl Engine {
                     head_index,
                     &resolved,
                     options,
-                    &groups,
+                    groups,
                     &group_master_flashes,
                     &highlighted_fixtures,
                 )?;

@@ -87,7 +87,8 @@ pub(super) fn execute_cue_operation(
     {
         return Err(format!("playback {playback} does not exist"));
     }
-    let mut engine = state.engine.playback().write();
+    let playback_runtime = state.engine.playback();
+    let mut engine = playback_runtime.write();
     if load {
         engine.load_playback(playback, cue_number)?;
     } else {

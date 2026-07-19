@@ -3,18 +3,24 @@ use std::collections::HashMap;
 use light_core::Universe;
 
 use super::{
-    Engine, EngineError, RenderOptions, RenderResult, render_fixture, render_profile_split,
+    Engine, EngineError, RenderOptions, RenderResult, RuntimeGeneration, render_fixture,
+    render_profile_split,
 };
 
 impl Engine {
     pub fn render(&self, options: RenderOptions) -> Result<RenderResult, EngineError> {
-        let snapshot = self.snapshot.load_full();
-        let resolved = self.resolved_attributes_for_render(&snapshot, self.clock.now());
-        let groups = snapshot
-            .groups
-            .iter()
-            .map(|group| (group.id.clone(), group.clone()))
-            .collect::<HashMap<_, _>>();
+        let generation = self.generation.load_full();
+        self.render_generation(&generation, options)
+    }
+
+    fn render_generation(
+        &self,
+        generation: &RuntimeGeneration,
+        options: RenderOptions,
+    ) -> Result<RenderResult, EngineError> {
+        let snapshot = generation.snapshot();
+        let resolved = self.resolved_attributes_for_render(generation, self.clock.now());
+        let groups = generation.groups();
         let group_master_flashes = self.group_master_flashes.read();
         let highlighted_fixtures = self.highlighted_fixtures.read();
         let mut universes = HashMap::new();
@@ -68,7 +74,7 @@ impl Engine {
                         address,
                         &resolved,
                         options,
-                        &groups,
+                        groups,
                         &group_master_flashes,
                         &highlighted_fixtures,
                     )?;
@@ -79,7 +85,7 @@ impl Engine {
                 fixture,
                 &resolved,
                 options,
-                &groups,
+                groups,
                 &group_master_flashes,
                 &mut universes,
                 &mut patched_slots,
@@ -90,7 +96,19 @@ impl Engine {
             patched_slots,
             revision: snapshot.revision,
             automatic_playback_transitions: resolved.automatic_playback_transitions,
+            routes: generation.routes(),
         })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn render_with_generation_hook(
+        &self,
+        options: RenderOptions,
+        hook: impl FnOnce(),
+    ) -> Result<RenderResult, EngineError> {
+        let generation = self.generation.load_full();
+        hook();
+        self.render_generation(&generation, options)
     }
 }
 

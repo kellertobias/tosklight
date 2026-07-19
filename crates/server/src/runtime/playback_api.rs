@@ -250,7 +250,8 @@ pub(super) fn enforce_virtual_playback_exclusions(
     activated_number: u16,
 ) -> Vec<u16> {
     let zones = virtual_playback_zone_numbers(state, desk_id);
-    let mut playback = state.engine.playback().write();
+    let playback_runtime = state.engine.playback();
+    let mut playback = playback_runtime.write();
     enforce_virtual_playback_exclusions_on(&mut playback, &zones, activated_number)
 }
 
@@ -333,7 +334,8 @@ pub(super) fn normalize_restored_virtual_playback_exclusions(state: &AppState) {
         retained.insert(number);
     }
     let mut changed = false;
-    let mut playback = state.engine.playback().write();
+    let playback_runtime = state.engine.playback();
+    let mut playback = playback_runtime.write();
     for number in active
         .into_iter()
         .filter_map(|candidate| candidate.playback_number)

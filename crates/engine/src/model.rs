@@ -6,7 +6,7 @@ use light_playback::{
 };
 use light_programmer::{GroupDefinition, resolve_group};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -122,6 +122,8 @@ pub struct RenderResult {
     /// patched channel whose default is zero still extends the network payload.
     pub patched_slots: HashMap<Universe, u16>,
     pub revision: u64,
+    /// Output routes compiled from the same generation as `universes`.
+    pub routes: Arc<[OutputRoute]>,
     /// Scheduler transitions collected under the playback lock and returned for publication only
     /// after rendering has left the domain lock boundary.
     pub automatic_playback_transitions: Vec<AutomaticPlaybackTransition>,

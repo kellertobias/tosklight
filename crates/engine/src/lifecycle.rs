@@ -1,4 +1,4 @@
-use crate::{Engine, EngineError, EngineSnapshot, value_for_ordered_position};
+use crate::{Engine, EngineError, EngineSnapshot, RuntimeGeneration, value_for_ordered_position};
 use light_playback::{Cue, CueChange, CueList, GroupCueChange, PlaybackEngine};
 use light_programmer::{GroupDefinition, resolve_group};
 use parking_lot::RwLock;
@@ -98,8 +98,8 @@ impl Engine {
         } = prepared;
         self.preserve_playback_state(&snapshot, &mut playback, preserve_playback);
         self.programmers.refresh_live_selections(&groups);
-        *self.playback.write() = playback;
-        self.snapshot.store(Arc::new(snapshot));
+        self.generation
+            .store(Arc::new(RuntimeGeneration::new(snapshot, playback, groups)));
     }
 
     fn preserve_playback_state(
@@ -112,7 +112,8 @@ impl Engine {
             return;
         }
         let (active, dynamics_paused_at) = {
-            let current = self.playback.read();
+            let generation = self.generation.load();
+            let current = generation.playback().read();
             (
                 current.active_for_snapshot(&snapshot.cue_lists, self.clock.now()),
                 current.dynamics_paused_since(),
@@ -159,10 +160,17 @@ impl Engine {
     }
 
     pub fn snapshot(&self) -> Arc<EngineSnapshot> {
-        self.snapshot.load_full()
+        self.generation.load().snapshot_arc()
     }
-    pub fn playback(&self) -> &RwLock<PlaybackEngine> {
-        &self.playback
+
+    /// Temporary compatibility accessor while callers migrate to typed Playback commands and
+    /// projections. The returned lock belongs to one immutable engine generation.
+    pub fn playback(&self) -> Arc<RwLock<PlaybackEngine>> {
+        self.generation.load().playback_arc()
+    }
+
+    pub fn output_routes(&self) -> Arc<[light_output::OutputRoute]> {
+        self.generation.load().routes()
     }
     pub fn set_timecode_frame(&self, frame: Option<u64>) {
         self.timecode_frame
