@@ -204,7 +204,7 @@ impl SubscriberState {
         for deferred in &mut self.deferred {
             if deferred
                 .as_ref()
-                .is_some_and(|pending| pending.sequence <= event.sequence)
+                .is_some_and(|pending| superseded_by(pending, event))
             {
                 *deferred = None;
             }
@@ -223,4 +223,10 @@ impl SubscriberState {
             false,
         ));
     }
+}
+
+fn superseded_by(pending: &EventEnvelope, delivered: &EventEnvelope) -> bool {
+    pending.sequence <= delivered.sequence
+        && pending.class == delivered.class
+        && pending.object == delivered.object
 }

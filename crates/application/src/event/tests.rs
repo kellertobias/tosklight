@@ -228,6 +228,44 @@ async fn replaceable_topic_rate_limit_delivers_the_latest_update() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn unrelated_lossless_delivery_does_not_discard_a_deferred_projection() {
+    let bus = EventBus::new(8);
+    let desk = Uuid::from_u128(1);
+    let object = EventObject::new(EventCapability::Playback, "playback:2");
+    let mut subscription = bus.subscribe(
+        EventFilter::for_desk(desk),
+        SubscriptionOptions {
+            capacity: 4,
+            after_sequence: None,
+            rate_limits: vec![ReplaceableEventRateLimit {
+                capability: EventCapability::Playback,
+                class: EventClass::Projection,
+                object: Some(object),
+                min_interval: std::time::Duration::from_millis(100),
+            }],
+        },
+    );
+
+    let first = bus.publish(projection_draft(desk, 2));
+    assert_eq!(
+        subscription.next().await,
+        Some(SubscriptionDelivery::Event(first))
+    );
+    let deferred = bus.publish(projection_draft(desk, 2));
+    let transition = bus.publish(transition_draft(desk, 3, DeliveryPolicy::Lossless));
+    assert_eq!(
+        subscription.next().await,
+        Some(SubscriptionDelivery::Event(transition))
+    );
+
+    tokio::time::advance(std::time::Duration::from_millis(100)).await;
+    assert_eq!(
+        subscription.next().await,
+        Some(SubscriptionDelivery::Event(deferred))
+    );
+}
+
+#[tokio::test(start_paused = true)]
 async fn lossless_safety_error_and_transitions_bypass_rate_limits() {
     let bus = EventBus::new(8);
     let desk = Uuid::from_u128(1);
