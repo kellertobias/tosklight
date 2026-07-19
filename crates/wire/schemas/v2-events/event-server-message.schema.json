@@ -254,6 +254,22 @@
             "type",
             "delta"
           ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "change": {
+              "$ref": "#/$defs/OutputRouteChange"
+            },
+            "type": {
+              "type": "string",
+              "const": "output_route_changed"
+            }
+          },
+          "required": [
+            "type",
+            "change"
+          ]
         }
       ]
     },
@@ -300,6 +316,111 @@
             "source"
           ]
         }
+      ]
+    },
+    "OutputDeliveryMode": {
+      "type": "string",
+      "enum": [
+        "broadcast",
+        "multicast",
+        "unicast"
+      ]
+    },
+    "OutputProtocol": {
+      "type": "string",
+      "enum": [
+        "art_net",
+        "sacn"
+      ]
+    },
+    "OutputRoute": {
+      "type": "object",
+      "properties": {
+        "delivery_mode": {
+          "$ref": "#/$defs/OutputDeliveryMode"
+        },
+        "destination": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "destination_universe": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "logical_universe": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "minimum_slots": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "protocol": {
+          "$ref": "#/$defs/OutputProtocol"
+        }
+      },
+      "required": [
+        "protocol",
+        "logical_universe",
+        "destination_universe",
+        "delivery_mode",
+        "destination",
+        "enabled",
+        "minimum_slots"
+      ]
+    },
+    "OutputRouteChange": {
+      "type": "object",
+      "properties": {
+        "deleted": {
+          "type": "boolean"
+        },
+        "object_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "route": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OutputRoute"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "route_id": {
+          "type": "string"
+        },
+        "show_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "show_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "show_id",
+        "show_revision",
+        "route_id",
+        "object_revision",
+        "route",
+        "deleted"
       ]
     },
     "PatchDelta": {
