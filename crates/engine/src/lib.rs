@@ -32,7 +32,7 @@ pub(crate) use contribution::{
     EngineContribution, ResolvedAttributes, resolve_engine_contributions,
     value_for_ordered_position,
 };
-pub(crate) use fixture::{profile_head_owner, snapshot_attribute_is_snap};
+pub(crate) use fixture::profile_head_owner;
 pub(crate) use legacy_projection::{group_scale_for_fixture, render_fixture};
 pub(crate) use move_in_black_candidate::PreparedCandidate;
 pub(crate) use move_in_black_runtime::{MoveInBlackKey, MoveInBlackRuntime};

@@ -10,8 +10,7 @@ use light_programmer::{GroupDefinition, GroupProgrammerValue, ProgrammerState, r
 
 use super::{
     Engine, EngineContribution, EngineSnapshot, ProgrammerTransitionSource, ResolvedAttributes,
-    RuntimeGeneration, resolve_engine_contributions, snapshot_attribute_is_snap,
-    value_for_ordered_position,
+    RuntimeGeneration, resolve_engine_contributions, value_for_ordered_position,
 };
 
 struct PlaybackResolution {
@@ -56,14 +55,14 @@ impl Engine {
         let underlay = resolve_engine_contributions(playback.contributions.clone()).values;
         playback
             .contributions
-            .extend(self.programmer_contributions(snapshot, now, groups, &underlay));
+            .extend(self.programmer_contributions(generation, now, groups, &underlay));
         playback
             .contributions
             .extend(group_contributions(snapshot, groups, now));
         let base = resolve_engine_contributions(playback.contributions.clone());
         playback.contributions.extend(
             self.move_in_black_contributions(
-                snapshot,
+                generation,
                 playback.move_in_black_candidates,
                 &playback.active_playbacks,
                 &base.values,
@@ -83,28 +82,27 @@ impl Engine {
         now: DateTime<Utc>,
         advance: bool,
     ) -> PlaybackResolution {
-        let snapshot = generation.snapshot();
         if advance {
             let timecode = self.timecode_frame.load(Ordering::Relaxed);
             let mut playback = generation.playback().write();
             let PlaybackTickResult { transitions } =
                 playback.tick(now, (timecode != u64::MAX).then_some(timecode));
-            return playback_resolution(snapshot, &playback, now, transitions);
+            return playback_resolution(generation, &playback, now, transitions);
         }
         let playback = generation.playback().read();
-        playback_resolution(snapshot, &playback, now, Vec::new())
+        playback_resolution(generation, &playback, now, Vec::new())
     }
 }
 
 fn playback_resolution(
-    snapshot: &EngineSnapshot,
+    generation: &RuntimeGeneration,
     playback: &PlaybackEngine,
     now: DateTime<Utc>,
     transitions: Vec<AutomaticPlaybackTransition>,
 ) -> PlaybackResolution {
     let contributions = playback
         .contributions_with_context_at(now, |fixture_id, attribute| {
-            snapshot_attribute_is_snap(snapshot, fixture_id, attribute)
+            generation.attribute_is_snap(fixture_id, attribute)
         })
         .into_iter()
         .map(EngineContribution::from)
@@ -120,7 +118,7 @@ fn playback_resolution(
 impl Engine {
     fn programmer_contributions(
         &self,
-        snapshot: &EngineSnapshot,
+        generation: &RuntimeGeneration,
         now: DateTime<Utc>,
         groups: &HashMap<String, GroupDefinition>,
         underlay: &HashMap<(light_core::FixtureId, AttributeKey), AttributeValue>,
@@ -129,7 +127,7 @@ impl Engine {
             .active()
             .into_iter()
             .flat_map(|programmer| {
-                self.resolve_programmer(programmer, snapshot, now, groups, underlay)
+                self.resolve_programmer(programmer, generation, now, groups, underlay)
             })
             .map(EngineContribution::unscaled)
             .collect()
@@ -138,7 +136,7 @@ impl Engine {
     fn resolve_programmer(
         &self,
         programmer: ProgrammerState,
-        snapshot: &EngineSnapshot,
+        generation: &RuntimeGeneration,
         now: DateTime<Utc>,
         groups: &HashMap<String, GroupDefinition>,
         underlay: &HashMap<(light_core::FixtureId, AttributeKey), AttributeValue>,
@@ -168,13 +166,13 @@ impl Engine {
                     .map(|value| (value, ProgrammerTransitionSource::Preload)),
             )
             .map(|(value, source)| {
-                self.resolve_programmer_fade(value, snapshot, now, underlay, id, source)
+                self.resolve_programmer_fade(value, generation, now, underlay, id, source)
             })
             .collect::<Vec<_>>();
         contributions.extend(self.resolve_group_programming(
             group_values,
             preload_group_active,
-            snapshot,
+            generation,
             now,
             groups,
             underlay,
@@ -187,7 +185,7 @@ impl Engine {
     fn resolve_programmer_fade(
         &self,
         value: TimedValue,
-        snapshot: &EngineSnapshot,
+        generation: &RuntimeGeneration,
         now: DateTime<Utc>,
         underlay: &HashMap<(light_core::FixtureId, AttributeKey), AttributeValue>,
         programmer_id: ProgrammerId,
@@ -197,7 +195,7 @@ impl Engine {
             return value;
         }
         let underlying = underlay.get(&(value.fixture_id, value.attribute.clone()));
-        let snap = snapshot_attribute_is_snap(snapshot, value.fixture_id, &value.attribute);
+        let snap = generation.attribute_is_snap(value.fixture_id, &value.attribute);
         self.faded_programmer_value(value, now, underlying, programmer_id, source, snap)
     }
 
@@ -206,7 +204,7 @@ impl Engine {
         &self,
         group_values: GroupValues,
         preload_values: GroupValues,
-        snapshot: &EngineSnapshot,
+        generation: &RuntimeGeneration,
         now: DateTime<Utc>,
         groups: &HashMap<String, GroupDefinition>,
         underlay: &HashMap<(light_core::FixtureId, AttributeKey), AttributeValue>,
@@ -228,7 +226,7 @@ impl Engine {
                     &group_id,
                     attributes,
                     source,
-                    snapshot,
+                    generation,
                     now,
                     groups,
                     underlay,
@@ -245,7 +243,7 @@ impl Engine {
         group_id: &str,
         attributes: GroupAttributes,
         source: ProgrammerTransitionSource,
-        snapshot: &EngineSnapshot,
+        generation: &RuntimeGeneration,
         now: DateTime<Utc>,
         groups: &HashMap<String, GroupDefinition>,
         underlay: &HashMap<(light_core::FixtureId, AttributeKey), AttributeValue>,
@@ -277,7 +275,7 @@ impl Engine {
                         };
                         self.resolve_programmer_fade(
                             value,
-                            snapshot,
+                            generation,
                             now,
                             underlay,
                             programmer_id,

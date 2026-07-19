@@ -1,4 +1,4 @@
-use crate::{EngineSnapshot, MoveInBlackKey, snapshot_attribute_is_snap};
+use crate::{MoveInBlackKey, RuntimeGeneration};
 use light_core::{AttributeKey, AttributeValue, FixtureId};
 use light_playback::MoveInBlackCandidate;
 use std::collections::HashMap;
@@ -14,11 +14,12 @@ pub(crate) struct PreparedCandidate {
 
 impl PreparedCandidate {
     pub(crate) fn new(
-        snapshot: &EngineSnapshot,
+        generation: &RuntimeGeneration,
         mut candidate: MoveInBlackCandidate,
         base_resolved: &HashMap<(FixtureId, AttributeKey), AttributeValue>,
     ) -> Self {
-        apply_snap_attributes(snapshot, &mut candidate);
+        apply_snap_attributes(generation, &mut candidate);
+        let snapshot = generation.snapshot();
         let patch = snapshot.fixtures.iter().find(|fixture| {
             fixture.fixture_id == candidate.fixture_id
                 || fixture
@@ -39,9 +40,9 @@ impl PreparedCandidate {
     }
 }
 
-fn apply_snap_attributes(snapshot: &EngineSnapshot, candidate: &mut MoveInBlackCandidate) {
+fn apply_snap_attributes(generation: &RuntimeGeneration, candidate: &mut MoveInBlackCandidate) {
     for target in &mut candidate.values {
-        if snapshot_attribute_is_snap(snapshot, candidate.fixture_id, &target.attribute) {
+        if generation.attribute_is_snap(candidate.fixture_id, &target.attribute) {
             target.fade_millis = 0;
         }
     }

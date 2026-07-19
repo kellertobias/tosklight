@@ -1,9 +1,13 @@
-use crate::EngineSnapshot;
+use crate::{EngineSnapshot, profile_head_owner};
+use light_core::{AttributeKey, FixtureId};
 use light_output::OutputRoute;
 use light_playback::PlaybackEngine;
 use light_programmer::GroupDefinition;
 use parking_lot::RwLock;
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 /// One internally coherent engine generation.
 ///
@@ -15,6 +19,7 @@ pub(crate) struct RuntimeGeneration {
     playback: Arc<RwLock<PlaybackEngine>>,
     groups: HashMap<String, GroupDefinition>,
     routes: Arc<[OutputRoute]>,
+    snap_attributes: HashMap<FixtureId, HashSet<AttributeKey>>,
 }
 
 impl RuntimeGeneration {
@@ -24,11 +29,13 @@ impl RuntimeGeneration {
         groups: HashMap<String, GroupDefinition>,
     ) -> Self {
         let routes = Arc::from(snapshot.routes.clone());
+        let snap_attributes = compile_snap_attributes(&snapshot);
         Self {
             snapshot: Arc::new(snapshot),
             playback: Arc::new(RwLock::new(playback)),
             groups,
             routes,
+            snap_attributes,
         }
     }
 
@@ -55,4 +62,41 @@ impl RuntimeGeneration {
     pub(crate) fn routes(&self) -> Arc<[OutputRoute]> {
         Arc::clone(&self.routes)
     }
+
+    pub(crate) fn attribute_is_snap(
+        &self,
+        fixture_id: FixtureId,
+        attribute: &AttributeKey,
+    ) -> bool {
+        self.snap_attributes
+            .get(&fixture_id)
+            .is_some_and(|attributes| attributes.contains(attribute))
+    }
+}
+
+fn compile_snap_attributes(snapshot: &EngineSnapshot) -> HashMap<FixtureId, HashSet<AttributeKey>> {
+    let mut attributes = HashMap::<FixtureId, HashSet<AttributeKey>>::new();
+    for fixture in &snapshot.fixtures {
+        let Some(mode) = crate::fixture::profile_mode(fixture) else {
+            continue;
+        };
+        for (head_index, head) in mode.heads.iter().enumerate() {
+            let owner = profile_head_owner(fixture, head_index, head);
+            for channel in mode
+                .channels
+                .iter()
+                .filter(|channel| channel.head_id == head.id && channel.snap)
+            {
+                let head_attributes = attributes.entry(owner).or_default();
+                head_attributes.insert(channel.attribute.clone());
+                head_attributes.extend(
+                    channel
+                        .functions
+                        .iter()
+                        .map(|function| function.attribute.clone()),
+                );
+            }
+        }
+    }
+    attributes
 }

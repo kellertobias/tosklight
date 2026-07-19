@@ -118,7 +118,6 @@ fn schema_v2_renders_one_head_channels_to_independent_splits() {
             ..Default::default()
         })
         .unwrap();
-
     let rendered = engine.render(RenderOptions::default()).unwrap();
     assert_eq!(&rendered.universes[&1][9..13], &[0x12, 0x34, 0x56, 0x78]);
     assert_eq!(rendered.universes[&2][19], 0xaa);
@@ -147,6 +146,10 @@ fn schema_v2_snap_bypasses_programmer_fades_but_keeps_non_snap_timing() {
             ..Default::default()
         })
         .unwrap();
+    let generation = engine.generation.load();
+    assert!(generation.attribute_is_snap(fixture_id, &AttributeKey("pan".into())));
+    assert!(!generation.attribute_is_snap(fixture_id, &AttributeKey("tilt".into())));
+    drop(generation);
     programmers.set_faded(
         session,
         fixture_id,

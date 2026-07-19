@@ -1,4 +1,6 @@
-use crate::{Engine, EngineSnapshot, MoveInBlackDiagnostic, MoveInBlackRuntime, PreparedCandidate};
+use crate::{
+    Engine, MoveInBlackDiagnostic, MoveInBlackRuntime, PreparedCandidate, RuntimeGeneration,
+};
 use chrono::{DateTime, Utc};
 use light_core::{AttributeKey, AttributeValue, FixtureId, TimedValue};
 use light_playback::{ActivePlayback, MoveInBlackCandidate};
@@ -22,7 +24,7 @@ impl Engine {
 
     pub(crate) fn move_in_black_contributions(
         &self,
-        snapshot: &EngineSnapshot,
+        generation: &RuntimeGeneration,
         candidates: Vec<MoveInBlackCandidate>,
         active: &[ActivePlayback],
         base_resolved: &HashMap<(FixtureId, AttributeKey), AttributeValue>,
@@ -31,7 +33,7 @@ impl Engine {
         let mut runtimes = self.move_in_black.lock();
         let mut present = HashSet::new();
         for candidate in candidates {
-            let candidate = PreparedCandidate::new(snapshot, candidate, base_resolved);
+            let candidate = PreparedCandidate::new(generation, candidate, base_resolved);
             present.insert(candidate.key);
             let runtime = runtimes
                 .entry(candidate.key)

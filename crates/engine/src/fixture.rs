@@ -1,5 +1,4 @@
-use crate::EngineSnapshot;
-use light_core::{AttributeKey, FixtureId};
+use light_core::FixtureId;
 use light_fixture::{FixtureMode, PatchedFixture};
 
 pub(crate) fn profile_mode(fixture: &PatchedFixture) -> Option<&FixtureMode> {
@@ -42,20 +41,4 @@ pub(crate) fn profile_head_owner(
         })
         .map(|patched| patched.fixture_id)
         .unwrap_or(fixture.fixture_id)
-}
-
-pub(crate) fn snapshot_attribute_is_snap(
-    snapshot: &EngineSnapshot,
-    fixture_id: FixtureId,
-    attribute: &AttributeKey,
-) -> bool {
-    snapshot.fixtures.iter().any(|fixture| {
-        let Some(mode) = profile_mode(fixture) else {
-            return false;
-        };
-        mode.heads.iter().enumerate().any(|(head_index, head)| {
-            profile_head_owner(fixture, head_index, head) == fixture_id
-                && mode.head_attribute_is_snap(head.id, attribute)
-        })
-    })
 }
