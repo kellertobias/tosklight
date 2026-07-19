@@ -1,8 +1,8 @@
 use super::{
-    ObjectUpdate, candidate, invalid_object, patch_heads::ProfileHeadResolver, raw_delta,
+    ObjectUpdate, candidate, invalid_object, patch_heads::ProfileHeadResolver,
     records::decode_unique_records, stage_updates,
 };
-use crate::ActionError;
+use crate::{ActionError, lossless_json};
 use light_fixture::{
     PatchedFixture, PatchedFixtureCompiler, PatchedFixtureProfileReference,
     PortablePatchedFixtureRecord, ResolvedFixtureProfileRevision, migrate_patched_fixture_to_v2,
@@ -70,7 +70,7 @@ fn migrate_inline_record(
     migrate_patched_fixture_to_v2(&mut fixture).map_err(|error| invalid_object(object, error))?;
     let after = serde_json::to_value(&fixture).map_err(|error| invalid_object(object, error))?;
     let mut migrated = record.into_body();
-    raw_delta::merge(&mut migrated, &before, &after);
+    lossless_json::apply_delta(&mut migrated, &before, &after);
 
     let mut record = PortablePatchedFixtureRecord::decode(migrated)
         .map_err(|error| invalid_object(object, error))?;

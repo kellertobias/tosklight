@@ -1,7 +1,6 @@
 mod objects;
 mod patch;
 mod patch_heads;
-mod raw_delta;
 mod records;
 
 use super::invalid_candidate;

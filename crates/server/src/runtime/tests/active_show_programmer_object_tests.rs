@@ -90,6 +90,7 @@ async fn active_group_and_preset_puts_install_the_exact_committed_candidate() {
     .await;
     assert_eq!(preset.status(), StatusCode::OK);
 
+    let before_store_sequence = state.application_events.latest_sequence();
     let stored_preset = app
         .clone()
         .oneshot(
@@ -117,6 +118,11 @@ async fn active_group_and_preset_puts_install_the_exact_committed_candidate() {
         .unwrap();
     assert_eq!(stored_preset.status(), StatusCode::OK);
     assert_eq!(stored_preset.headers()[header::ETAG], "\"2\"");
+    let stored_preset_response = json(stored_preset).await;
+    assert_eq!(
+        stored_preset_response["event_sequence"],
+        before_store_sequence + 1
+    );
 
     let document = ShowStore::open(&entry.path)
         .unwrap()
@@ -635,6 +641,112 @@ fn generated_presets_share_one_show_commit_backup_and_runtime_install() {
             .collect::<HashSet<_>>(),
         HashSet::from(["gobo.dots", "gobo.open"])
     );
+}
+
+#[tokio::test]
+async fn active_preload_preset_uses_one_typed_show_boundary_and_returns_its_event_cursor() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let show = create_show(&app, &token, "Preload preset boundary").await;
+    let show_id = show["id"].as_str().unwrap();
+    let show_uuid = Uuid::parse_str(show_id).unwrap();
+    let entry = state
+        .desk
+        .lock()
+        .show(light_core::ShowId(show_uuid))
+        .unwrap()
+        .unwrap();
+    let store = ShowStore::open(&entry.path).unwrap();
+    store
+        .put_object(
+            "group",
+            "1",
+            &serde_json::json!({"id":"1","name":"Empty","fixtures":[]}),
+            0,
+        )
+        .unwrap();
+    store
+        .put_object(
+            "preset",
+            "1.4",
+            &serde_json::json!({
+                "name":"Before",
+                "family":"Intensity",
+                "number":4,
+                "values":{},
+                "group_values":{},
+                "future_extension":{"retained":true}
+            }),
+            0,
+        )
+        .unwrap();
+    open_show_for_test(&app, &token, show_id).await;
+    let session = authenticate_token(&state, &token).unwrap();
+    assert!(state.programmers.set_preload_group(
+        session.id,
+        "1".into(),
+        light_core::AttributeKey::intensity(),
+        light_core::AttributeValue::Normalized(0.6),
+    ));
+    let before = state.engine.snapshot();
+    let before_revision = store.portable_document().unwrap().revision().value();
+    let before_backups = show_object_backup_count(&data_dir);
+    let before_sequence = state.application_events.latest_sequence();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post(format!("/api/v1/shows/{show_id}/preload/store"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::IF_MATCH, "1")
+                .body(Body::from(
+                    serde_json::json!({
+                        "target":"preset",
+                        "target_id":"1.4",
+                        "name":"From Preload",
+                        "mode":"merge",
+                        "family":"Intensity"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = json(response).await;
+    assert_eq!(response["revision"], 2);
+    assert_eq!(response["event_sequence"], before_sequence + 1);
+
+    let document = store.portable_document().unwrap();
+    assert_eq!(document.revision().value(), before_revision + 1);
+    assert_eq!(show_object_backup_count(&data_dir), before_backups + 1);
+    let preset = document.object("preset", "1.4").unwrap();
+    assert_eq!(preset.revision(), 2);
+    assert_eq!(preset.body()["future_extension"]["retained"], true);
+    assert_eq!(preset.body()["name"], "From Preload");
+    let runtime = state.engine.snapshot();
+    assert_eq!(runtime.revision, document.revision().value());
+    assert!(!std::sync::Arc::ptr_eq(&before, &runtime));
+
+    let light_application::EventReplay::Events(events) = state
+        .application_events
+        .replay(before_sequence, &light_application::EventFilter::default())
+    else {
+        panic!("expected the authoritative Preload Preset event");
+    };
+    assert!(matches!(
+        &events[0].payload,
+        light_application::ApplicationEvent::Show(
+            light_application::ShowEvent::ObjectsChanged(change)
+        ) if change.changes.len() == 1
+            && change.changes[0].kind == light_application::ActiveShowObjectKind::Preset
+            && change.changes[0].object_id == "1.4"
+    ));
+
+    let _ = std::fs::remove_dir_all(data_dir);
 }
 
 #[test]

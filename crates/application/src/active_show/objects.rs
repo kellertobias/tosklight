@@ -2,11 +2,10 @@ use super::{
     ActiveShowObjectChange, ActiveShowObjectKind, ActiveShowObjectMutation,
     ActiveShowObjectMutationKind, MutateActiveShowObjectsCommand,
 };
-use crate::{ActionError, ActionErrorKind, prepare_show_candidate};
+use crate::{ActionError, ActionErrorKind, lossless_json, prepare_show_candidate};
 use light_core::Revision;
 use light_programmer::{GroupDefinition, Preset};
 use light_show::{PortableShowDocument, PortableShowObject, PortableShowTransaction};
-use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashSet;
 
@@ -131,51 +130,41 @@ fn normalize_body(
     request: &Value,
 ) -> Result<Value, ActionError> {
     match mutation.kind {
-        ActiveShowObjectKind::Group => {
-            let mut group =
-                serde_json::from_value::<GroupDefinition>(request.clone()).map_err(invalid)?;
-            group.id.clone_from(&mutation.object_id);
-            merge_typed_fields(existing, request, &group)
-        }
-        ActiveShowObjectKind::Preset => {
-            let mut preset = serde_json::from_value::<Preset>(request.clone()).map_err(invalid)?;
-            preset
-                .reconcile_address(&mutation.object_id)
-                .map_err(invalid)?;
-            merge_typed_fields(existing, request, &preset)
-        }
+        ActiveShowObjectKind::Group => normalize_group(existing, mutation, request),
+        ActiveShowObjectKind::Preset => normalize_preset(existing, mutation, request),
     }
 }
 
-fn merge_typed_fields<T: Serialize>(
+fn normalize_group(
     existing: Option<&Value>,
+    mutation: &ActiveShowObjectMutation,
     request: &Value,
-    typed: &T,
 ) -> Result<Value, ActionError> {
-    let request = request
-        .as_object()
-        .ok_or_else(|| invalid("show object body must be an object"))?;
-    let mut merged = existing
-        .map(|body| {
-            body.as_object()
-                .cloned()
-                .ok_or_else(|| invalid("stored show object body must be an object"))
-        })
-        .transpose()?
-        .unwrap_or_default();
-    let canonical = serde_json::to_value(typed).map_err(invalid)?;
-    let canonical = canonical
-        .as_object()
-        .ok_or_else(|| invalid("serialized show object body must be an object"))?;
-    for (key, value) in request {
-        if !canonical.contains_key(key) {
-            merged.insert(key.clone(), value.clone());
-        }
-    }
-    for (key, value) in canonical {
-        merged.insert(key.clone(), value.clone());
-    }
-    Ok(Value::Object(merged))
+    let requested = serde_json::from_value::<GroupDefinition>(request.clone()).map_err(invalid)?;
+    let stored = existing
+        .map(|body| serde_json::from_value::<GroupDefinition>(body.clone()).map_err(invalid))
+        .transpose()?;
+    let mut normalized = requested.clone();
+    normalized.id.clone_from(&mutation.object_id);
+    lossless_json::merge_typed_request(existing, stored.as_ref(), request, &requested, &normalized)
+        .map_err(invalid)
+}
+
+fn normalize_preset(
+    existing: Option<&Value>,
+    mutation: &ActiveShowObjectMutation,
+    request: &Value,
+) -> Result<Value, ActionError> {
+    let requested = serde_json::from_value::<Preset>(request.clone()).map_err(invalid)?;
+    let stored = existing
+        .map(|body| serde_json::from_value::<Preset>(body.clone()).map_err(invalid))
+        .transpose()?;
+    let mut normalized = requested.clone();
+    normalized
+        .reconcile_address(&mutation.object_id)
+        .map_err(invalid)?;
+    lossless_json::merge_typed_request(existing, stored.as_ref(), request, &requested, &normalized)
+        .map_err(invalid)
 }
 
 fn next_revision(current: Revision) -> Result<Revision, ActionError> {
@@ -195,3 +184,6 @@ fn invalid(error: impl std::fmt::Display) -> ActionError {
 fn not_found(message: impl Into<String>) -> ActionError {
     ActionError::new(ActionErrorKind::NotFound, message)
 }
+
+#[cfg(test)]
+mod tests;

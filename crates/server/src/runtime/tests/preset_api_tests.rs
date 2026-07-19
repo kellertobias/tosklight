@@ -1,3 +1,151 @@
+#[test]
+fn preset_serialization_preserves_nested_extensions_but_not_deleted_values() {
+    let fixture = light_core::FixtureId::new();
+    let fixture_key = fixture.0.to_string();
+    let original = serde_json::json!({
+        "name": "Look",
+        "family": "Intensity",
+        "number": 1,
+        "values": {
+            (fixture_key.clone()): {
+                "intensity": {
+                    "kind": "normalized",
+                    "value": 0.25,
+                    "future": "removed-with-value"
+                },
+                "dimmer": {
+                    "kind": "normalized",
+                    "value": 0.4,
+                    "future": {"kept": true}
+                }
+            }
+        },
+        "group_values": {}
+    });
+    let mut preset = serde_json::from_value::<light_programmer::Preset>(original.clone()).unwrap();
+    let attributes = preset.values.get_mut(&fixture).unwrap();
+    attributes.remove(&light_core::AttributeKey::intensity());
+    attributes.insert(
+        light_core::AttributeKey("dimmer".into()),
+        light_core::AttributeValue::Normalized(0.8),
+    );
+
+    let serialized = serialize_preset_preserving_extensions(&original, &preset).unwrap();
+
+    assert!(
+        serialized["values"][&fixture_key]
+            .get("intensity")
+            .is_none()
+    );
+    assert_eq!(
+        serialized["values"][&fixture_key]["dimmer"]["future"],
+        serde_json::json!({"kept": true})
+    );
+    let value = serialized["values"][&fixture_key]["dimmer"]["value"]
+        .as_f64()
+        .unwrap();
+    assert!((value - 0.8).abs() < 1e-6);
+}
+
+#[tokio::test]
+async fn inactive_preset_merge_preserves_stored_and_requested_nested_extensions() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let created = create_show(&app, &token, "Inactive preset extensions").await;
+    let show_id = created["id"].as_str().unwrap();
+    assert!(state.active_show.read().is_none());
+    let fixture = light_core::FixtureId::new();
+    let fixture_key = fixture.0.to_string();
+
+    let first = app
+        .clone()
+        .oneshot(
+            Request::post(format!("/api/v1/shows/{show_id}/presets/1.1/store"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::IF_MATCH, "0")
+                .body(Body::from(
+                    serde_json::json!({
+                        "mode": "overwrite",
+                        "preset": preset_request_value(
+                            &fixture_key,
+                            0.25,
+                            serde_json::json!({"future_server": {"kept": true}}),
+                        )
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(first.status(), StatusCode::OK);
+
+    let second = app
+        .clone()
+        .oneshot(
+            Request::post(format!("/api/v1/shows/{show_id}/presets/1.1/store"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::IF_MATCH, "1")
+                .body(Body::from(
+                    serde_json::json!({
+                        "mode": "merge",
+                        "preset": preset_request_value(
+                            &fixture_key,
+                            0.75,
+                            serde_json::json!({"future_client": "accepted"}),
+                        )
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(second.status(), StatusCode::OK);
+
+    let stored = app
+        .oneshot(
+            Request::get(format!(
+                "/api/v1/shows/{show_id}/objects/preset/1.1"
+            ))
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(stored.status(), StatusCode::OK);
+    let stored = json(stored).await;
+    let value = &stored["body"]["values"][&fixture_key]["intensity"];
+    assert_eq!(value["future_server"], serde_json::json!({"kept": true}));
+    assert_eq!(value["future_client"], "accepted");
+    assert!((value["value"].as_f64().unwrap() - 0.75).abs() < 1e-6);
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+fn preset_request_value(
+    fixture_key: &str,
+    value: f64,
+    extensions: serde_json::Value,
+) -> serde_json::Value {
+    let mut attribute = serde_json::json!({"kind": "normalized", "value": value});
+    attribute
+        .as_object_mut()
+        .unwrap()
+        .extend(extensions.as_object().unwrap().clone());
+    serde_json::json!({
+        "name": "Look",
+        "family": "Intensity",
+        "number": 1,
+        "values": {(fixture_key): {"intensity": attribute}},
+        "group_values": {}
+    })
+}
+
 #[tokio::test]
 async fn preset_store_endpoint_merges_with_revision_control() {
     let (state, data_dir) = test_state();

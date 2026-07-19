@@ -104,26 +104,35 @@ pub(super) async fn store_preset(
         .as_ref()
         .map(|object| object.id.clone())
         .unwrap_or(storage_key);
-    let mut preset = existing
+    let stored_preset = existing
         .as_ref()
         .map(decode_preset_object)
         .transpose()
         .map_err(ApiError::bad_request)?
-        .map(|(_, preset)| preset)
+        .map(|(_, preset)| preset);
+    let mut preset = stored_preset
+        .clone()
         .unwrap_or_else(|| light_programmer::Preset {
             family: address.family,
             number: address.number,
             ..Default::default()
         });
+    let requested = incoming.clone();
     preset.store(incoming, input.mode);
-    let body = serialize_preset_preserving_extensions(&request_body, &preset)
-        .map_err(|error| ApiError::internal(error.to_string()))?;
+    let body = serialize_preset_request_preserving_extensions(
+        existing.as_ref().map(|object| &object.body),
+        stored_preset.as_ref(),
+        &request_body,
+        &requested,
+        &preset,
+    )
+    .map_err(|error| ApiError::internal(error.to_string()))?;
     let active = state
         .active_show
         .read()
         .as_ref()
         .is_some_and(|active| active.id == show_id);
-    let revision = if active {
+    let (revision, event_sequence) = if active {
         let action = active_show_object_action(
             operator_action_context(&session, light_application::ActionSource::Http),
             show_id,
@@ -136,12 +145,18 @@ pub(super) async fn store_preset(
         );
         let (result, _activation) =
             run_active_show_object_action_async(&state, activation, action).await?;
-        result.changes[0].object_revision
+        let revision = result
+            .changes
+            .first()
+            .ok_or_else(|| ApiError::internal("Preset Store produced no object change"))?
+            .object_revision;
+        (revision, Some(result.event_sequence))
     } else {
         backup_show(&state, &entry)?;
-        store
+        let revision = store
             .put_object("preset", &persisted_key, &body, expected)
-            .map_err(ApiError::store)?
+            .map_err(ApiError::store)?;
+        (revision, None)
     };
     emit(
         &state,
@@ -150,7 +165,12 @@ pub(super) async fn store_preset(
     );
     Ok((
         [(header::ETAG, format!("\"{revision}\""))],
-        Json(serde_json::json!({"revision":revision,"preset":preset,"source_session":session.id})),
+        Json(serde_json::json!({
+            "revision":revision,
+            "event_sequence":event_sequence,
+            "preset":preset,
+            "source_session":session.id
+        })),
     )
         .into_response())
 }
@@ -163,6 +183,7 @@ pub(super) async fn store_preload(
     let session = authenticate(&state, &headers)?;
     let expected = parse_if_match(&headers)?;
     let show_id = light_core::ShowId(id);
+    let activation = state.activation_lock.clone().lock_owned().await;
     let entry = state
         .desk
         .lock()
@@ -192,17 +213,26 @@ pub(super) async fn store_preload(
         ));
     }
     let store = ShowStore::open(&entry.path).map_err(ApiError::store)?;
-    let revision = match input.target.as_str() {
-        "preset" => store_preload_preset(&store, &input, fixture_values, group_values, expected)?,
-        "cue" => store_preload_cue(&store, &input, fixture_values, group_values, expected)?,
-        _ => return Err(ApiError::bad_request("target must be preset or cue")),
-    };
-    if state
+    let active = state
         .active_show
         .read()
         .as_ref()
-        .is_some_and(|active| active.id == show_id)
-    {
+        .is_some_and(|active| active.id == show_id);
+    let stored = match input.target.as_str() {
+        "preset" => {
+            let prepared = prepare_preload_preset(&store, &input, fixture_values, group_values)?;
+            drop(store);
+            store_prepared_preload_preset(&state, &session, &entry, activation, prepared, expected)
+                .await?
+        }
+        "cue" => StoredPreloadTarget {
+            revision: store_preload_cue(&store, &input, fixture_values, group_values, expected)?,
+            event_sequence: None,
+            runtime_installed: false,
+        },
+        _ => return Err(ApiError::bad_request("target must be preset or cue")),
+    };
+    if active && !stored.runtime_installed {
         state
             .engine
             .replace_snapshot(load_engine_snapshot(&entry).map_err(ApiError::internal)?)
@@ -215,7 +245,67 @@ pub(super) async fn store_preload(
     emit(
         &state,
         "preload_stored",
-        serde_json::json!({"session_id":session.id,"target":input.target,"target_id":input.target_id,"revision":revision,"source":if use_active_preload { "active_preload" } else { "pending_preload" }}),
+        serde_json::json!({"session_id":session.id,"target":input.target,"target_id":input.target_id,"revision":stored.revision,"source":if use_active_preload { "active_preload" } else { "pending_preload" }}),
     );
-    Ok(Json(serde_json::json!({"revision":revision})))
+    Ok(Json(serde_json::json!({
+        "revision":stored.revision,
+        "event_sequence":stored.event_sequence
+    })))
+}
+
+struct StoredPreloadTarget {
+    revision: u64,
+    event_sequence: Option<u64>,
+    runtime_installed: bool,
+}
+
+async fn store_prepared_preload_preset(
+    state: &AppState,
+    session: &Session,
+    entry: &ShowEntry,
+    activation: tokio::sync::OwnedMutexGuard<()>,
+    prepared: PreparedPreloadPreset,
+    expected: u64,
+) -> Result<StoredPreloadTarget, ApiError> {
+    let active = state
+        .active_show
+        .read()
+        .as_ref()
+        .is_some_and(|active| active.id == entry.id);
+    if active {
+        let action = active_show_object_action(
+            operator_action_context(session, light_application::ActionSource::Http),
+            entry.id,
+            vec![put_active_show_object(
+                light_application::ActiveShowObjectKind::Preset,
+                prepared.object_id,
+                expected,
+                prepared.body,
+            )],
+        );
+        let (result, _activation) =
+            run_active_show_object_action_async(state, activation, action).await?;
+        Ok(StoredPreloadTarget {
+            revision: result
+                .changes
+                .first()
+                .ok_or_else(|| {
+                    ApiError::internal("Preload Preset Store produced no object change")
+                })?
+                .object_revision,
+            event_sequence: Some(result.event_sequence),
+            runtime_installed: true,
+        })
+    } else {
+        backup_show(state, entry)?;
+        let revision = ShowStore::open(&entry.path)
+            .map_err(ApiError::store)?
+            .put_object("preset", &prepared.object_id, &prepared.body, expected)
+            .map_err(ApiError::store)?;
+        Ok(StoredPreloadTarget {
+            revision,
+            event_sequence: None,
+            runtime_installed: false,
+        })
+    }
 }

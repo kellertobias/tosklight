@@ -1,5 +1,5 @@
-use super::{ObjectUpdate, invalid_object, raw_delta};
-use crate::ActionError;
+use super::{ObjectUpdate, invalid_object};
+use crate::{ActionError, lossless_json};
 use light_output::OutputRoute;
 use light_playback::{CueList, PlaybackDefinition};
 use light_programmer::{GroupDefinition, Preset};
@@ -86,7 +86,7 @@ fn migrate_group(object: PortableShowCandidateObject<'_>) -> Result<Value, Actio
     group.id = object.key().id().to_owned();
     let after = serde_json::to_value(group).map_err(|error| invalid_object(object, error))?;
     let mut migrated = object.body().clone();
-    raw_delta::merge(&mut migrated, &before, &after);
+    lossless_json::apply_delta(&mut migrated, &before, &after);
     Ok(migrated)
 }
 
@@ -99,7 +99,7 @@ fn migrate_preset(object: PortableShowCandidateObject<'_>) -> Result<Value, Acti
         .map_err(|error| invalid_object(object, error))?;
     let after = serde_json::to_value(preset).map_err(|error| invalid_object(object, error))?;
     let mut migrated = object.body().clone();
-    raw_delta::merge(&mut migrated, &before, &after);
+    lossless_json::apply_delta(&mut migrated, &before, &after);
     Ok(migrated)
 }
 

@@ -56,18 +56,20 @@ pub(super) fn serialize_preset_preserving_extensions(
     original: &serde_json::Value,
     preset: &light_programmer::Preset,
 ) -> Result<serde_json::Value, serde_json::Error> {
-    let canonical = serde_json::to_value(preset)?;
-    let mut merged = original.clone();
-    let Some(merged_fields) = merged.as_object_mut() else {
-        return Ok(canonical);
-    };
-    let Some(canonical_fields) = canonical.as_object() else {
-        return Ok(canonical);
-    };
-    for (key, value) in canonical_fields {
-        merged_fields.insert(key.clone(), value.clone());
-    }
-    Ok(merged)
+    let before = serde_json::from_value::<light_programmer::Preset>(original.clone())?;
+    light_application::lossless_json::merge_typed(original, &before, preset)
+}
+
+pub(super) fn serialize_preset_request_preserving_extensions(
+    original: Option<&serde_json::Value>,
+    before: Option<&light_programmer::Preset>,
+    request: &serde_json::Value,
+    requested: &light_programmer::Preset,
+    preset: &light_programmer::Preset,
+) -> Result<serde_json::Value, serde_json::Error> {
+    light_application::lossless_json::merge_typed_request(
+        original, before, request, requested, preset,
+    )
 }
 
 pub(super) fn apply_command_preset(

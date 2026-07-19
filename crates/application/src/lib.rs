@@ -6,6 +6,7 @@
 pub mod action;
 pub mod active_show;
 pub mod event;
+pub mod lossless_json;
 pub mod playback;
 pub mod programming;
 pub mod show_compiler;

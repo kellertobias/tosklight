@@ -3,13 +3,17 @@ use super::*;
 type PreloadGroupValues =
     HashMap<String, HashMap<light_core::AttributeKey, light_programmer::GroupProgrammerValue>>;
 
-pub(super) fn store_preload_preset(
+pub(super) struct PreparedPreloadPreset {
+    pub(super) object_id: String,
+    pub(super) body: serde_json::Value,
+}
+
+pub(super) fn prepare_preload_preset(
     store: &ShowStore,
     input: &PreloadStoreInput,
     fixtures: &[light_core::TimedValue],
     groups: &PreloadGroupValues,
-    expected: u64,
-) -> Result<u64, ApiError> {
+) -> Result<PreparedPreloadPreset, ApiError> {
     let hinted_family = input.family.unwrap_or_else(|| {
         command_preset_family(&input.target_id).unwrap_or(light_programmer::PresetFamily::Mixed)
     });
@@ -71,14 +75,17 @@ pub(super) fn store_preload_preset(
             .mode
             .unwrap_or(light_programmer::PresetStoreMode::Merge),
     );
-    store
-        .put_object(
-            "preset",
-            &storage_key,
-            &serde_json::to_value(merged).map_err(|error| ApiError::internal(error.to_string()))?,
-            expected,
+    let body = existing
+        .as_ref()
+        .map_or_else(
+            || serde_json::to_value(&merged),
+            |object| serialize_preset_preserving_extensions(&object.body, &merged),
         )
-        .map_err(ApiError::store)
+        .map_err(|error| ApiError::internal(error.to_string()))?;
+    Ok(PreparedPreloadPreset {
+        object_id: storage_key,
+        body,
+    })
 }
 
 pub(super) fn store_preload_cue(
