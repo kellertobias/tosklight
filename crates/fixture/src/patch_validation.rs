@@ -14,6 +14,8 @@ struct PatchValidator {
     used_slots: HashMap<Universe, [bool; 512]>,
     fixture_numbers: HashSet<u32>,
     virtual_fixture_numbers: HashSet<u32>,
+    selection_ids: HashSet<uuid::Uuid>,
+    multipatch_ids: HashSet<uuid::Uuid>,
 }
 
 impl PatchValidator {
@@ -22,10 +24,13 @@ impl PatchValidator {
             used_slots: HashMap::new(),
             fixture_numbers: HashSet::new(),
             virtual_fixture_numbers: HashSet::new(),
+            selection_ids: HashSet::new(),
+            multipatch_ids: HashSet::new(),
         }
     }
 
     fn validate_fixture(&mut self, fixture: &PatchedFixture) -> Result<(), FixtureError> {
+        self.validate_stable_identities(fixture)?;
         self.validate_fixture_numbers(fixture)?;
         fixture.definition.validate()?;
         if !fixture.definition.is_dmx_patchable() {
@@ -33,6 +38,44 @@ impl PatchValidator {
         }
         validate_direct_control(fixture)?;
         self.validate_instances(fixture)
+    }
+
+    fn validate_stable_identities(&mut self, fixture: &PatchedFixture) -> Result<(), FixtureError> {
+        self.reserve_selection_id(fixture.fixture_id.0)?;
+        let mut head_indices = HashSet::new();
+        for head in &fixture.logical_heads {
+            if !head_indices.insert(head.head_index) {
+                return Err(invalid(format!(
+                    "fixture {} repeats logical head index {}",
+                    fixture.fixture_id.0, head.head_index
+                )));
+            }
+            self.reserve_selection_id(head.fixture_id.0)?;
+        }
+        self.reserve_multipatch_ids(fixture)
+    }
+
+    fn reserve_selection_id(&mut self, id: uuid::Uuid) -> Result<(), FixtureError> {
+        if !self.multipatch_ids.contains(&id) && self.selection_ids.insert(id) {
+            Ok(())
+        } else {
+            Err(invalid(format!(
+                "stable fixture, logical-head, or multipatch identity {id} is already in use"
+            )))
+        }
+    }
+
+    fn reserve_multipatch_ids(&mut self, fixture: &PatchedFixture) -> Result<(), FixtureError> {
+        for instance in &fixture.multipatch {
+            if self.selection_ids.contains(&instance.id) || !self.multipatch_ids.insert(instance.id)
+            {
+                return Err(invalid(format!(
+                    "multipatch identity {} is already in use",
+                    instance.id
+                )));
+            }
+        }
+        Ok(())
     }
 
     fn validate_fixture_numbers(&mut self, fixture: &PatchedFixture) -> Result<(), FixtureError> {

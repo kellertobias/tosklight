@@ -112,6 +112,46 @@ fn multipatch_reserves_real_addresses_and_allows_visualizer_only_instances() {
 }
 
 #[test]
+fn stable_fixture_head_and_multipatch_identities_are_unique() {
+    let fixture = schema_v2_two_split_fixture();
+    let mut duplicate_fixture = fixture.clone();
+    duplicate_fixture.fixture_number = Some(2);
+    assert_identity_error(&[fixture.clone(), duplicate_fixture], "stable fixture");
+
+    let mut duplicate_head = fixture.clone();
+    duplicate_head.logical_heads = vec![
+        PatchedHead {
+            head_index: 1,
+            fixture_id: FixtureId::new(),
+        },
+        PatchedHead {
+            head_index: 1,
+            fixture_id: FixtureId::new(),
+        },
+    ];
+    assert_identity_error(&[duplicate_head], "logical head index 1");
+
+    let mut duplicate_multipatch = fixture;
+    duplicate_multipatch
+        .multipatch
+        .push(duplicate_multipatch.multipatch[0].clone());
+    assert_identity_error(&[duplicate_multipatch], "multipatch identity");
+
+    let mut overlapping_kinds = schema_v2_two_split_fixture();
+    overlapping_kinds.multipatch[0].id = overlapping_kinds.fixture_id.0;
+    assert_identity_error(&[overlapping_kinds], "multipatch identity");
+}
+
+fn assert_identity_error(fixtures: &[PatchedFixture], expected: &str) {
+    assert!(
+        validate_patch(fixtures)
+            .unwrap_err()
+            .to_string()
+            .contains(expected)
+    );
+}
+
+#[test]
 fn schema_v2_multi_split_requires_exact_optional_assignments_for_every_instance() {
     let fixture = schema_v2_two_split_fixture();
     validate_patch(std::slice::from_ref(&fixture)).unwrap();
