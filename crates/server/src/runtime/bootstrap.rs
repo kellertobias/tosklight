@@ -197,6 +197,10 @@ fn build_app_state(
         show_patch: ShowPatchService::new(active_show_service),
         #[cfg(test)]
         patch_profile_resolution: Arc::default(),
+        #[cfg(test)]
+        active_show_http_lifecycle: Arc::default(),
+        #[cfg(test)]
+        patch_lifecycle: Arc::default(),
         audit_events: Arc::new(Mutex::new(VecDeque::with_capacity(2048))),
         command_history: Arc::new(Mutex::new(HashMap::new())),
         event_revision: Arc::new(AtomicU64::new(0)),

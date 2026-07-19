@@ -32,6 +32,10 @@ pub(super) struct AppState {
     pub(super) show_patch: ShowPatchService,
     #[cfg(test)]
     pub(super) patch_profile_resolution: Arc<PatchProfileResolutionPause>,
+    #[cfg(test)]
+    pub(super) active_show_http_lifecycle: Arc<ActiveShowLifecyclePause>,
+    #[cfg(test)]
+    pub(super) patch_lifecycle: Arc<ActiveShowLifecyclePause>,
     pub(super) audit_events: Arc<Mutex<VecDeque<Event>>>,
     pub(super) command_history: Arc<Mutex<HashMap<Uuid, VecDeque<CommandHistoryEntry>>>>,
     pub(super) event_revision: Arc<AtomicU64>,

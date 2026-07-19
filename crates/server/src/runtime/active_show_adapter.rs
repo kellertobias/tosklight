@@ -13,6 +13,66 @@ use light_show::{
     ShowStore, StoreError,
 };
 
+#[cfg(test)]
+#[derive(Default)]
+pub(super) struct ActiveShowLifecyclePause {
+    state: std::sync::Mutex<ActiveShowLifecyclePauseState>,
+    changed: std::sync::Condvar,
+}
+
+#[cfg(test)]
+#[derive(Default)]
+struct ActiveShowLifecyclePauseState {
+    armed: bool,
+    started: bool,
+    released: bool,
+}
+
+#[cfg(test)]
+impl ActiveShowLifecyclePause {
+    pub(super) fn arm(&self) {
+        let mut state = self.state.lock().unwrap();
+        *state = ActiveShowLifecyclePauseState {
+            armed: true,
+            started: false,
+            released: false,
+        };
+    }
+
+    pub(super) fn wait_until_started(&self) {
+        let state = self.state.lock().unwrap();
+        let (state, _) = self
+            .changed
+            .wait_timeout_while(state, std::time::Duration::from_secs(5), |state| {
+                !state.started
+            })
+            .unwrap();
+        assert!(
+            state.started,
+            "active-show lifecycle did not reach its test pause"
+        );
+    }
+
+    pub(super) fn release(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.released = true;
+        self.changed.notify_all();
+    }
+
+    pub(super) fn pause_if_armed(&self) {
+        let mut state = self.state.lock().unwrap();
+        if !state.armed {
+            return;
+        }
+        state.started = true;
+        self.changed.notify_all();
+        while !state.released {
+            state = self.changed.wait(state).unwrap();
+        }
+        state.armed = false;
+    }
+}
+
 /// Server adapter for generic application-owned active-show mutations.
 ///
 /// The caller holds `AppState::activation_lock` across the service call and any returned targeted

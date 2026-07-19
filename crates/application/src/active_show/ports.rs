@@ -38,6 +38,18 @@ pub trait ActiveShowPorts: Send + Sync {
         Ok(())
     }
 
+    /// Runs one complete application-ordered active-show lifecycle. Adapters that need a broader
+    /// installation-level guard acquire it here, before the application ordering gate, and retain
+    /// it through persistence, runtime installation, reconciliation, and event publication.
+    fn run_active_show_lifecycle<T>(
+        &self,
+        _context: &ActionContext,
+        _show_id: ShowId,
+        operation: impl FnOnce() -> Result<T, ActionError>,
+    ) -> Result<T, ActionError> {
+        operation()
+    }
+
     fn begin_active_show(
         &self,
         context: &ActionContext,

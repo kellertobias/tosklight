@@ -16,9 +16,9 @@ use std::{collections::HashSet, sync::Arc};
 
 /// Runtime adapter for the application-owned active-show patch workflow.
 ///
-/// Each opened unit of work owns `AppState::activation_lock`. Snapshot units release it before
-/// immutable fixture-library planning begins; transaction units retain it through commit, runtime
-/// installation, reconciliation, and event publication.
+/// Each application-ordered lifecycle owns `AppState::activation_lock`. Snapshot lifecycles release
+/// it before immutable fixture-library planning begins; transaction lifecycles retain it through
+/// commit, runtime installation, reconciliation, and event publication.
 #[derive(Clone)]
 pub(super) struct ServerShowPatchPorts {
     state: AppState,
@@ -103,7 +103,6 @@ impl PatchProfileResolutionPause {
 pub(super) struct ServerShowPatchUnitOfWork {
     inner: ServerActiveShowUnitOfWork,
     patch_revision: u64,
-    _activation: tokio::sync::OwnedMutexGuard<()>,
 }
 
 impl ActiveShowUnitOfWork for ServerShowPatchUnitOfWork {
@@ -131,12 +130,23 @@ impl ActiveShowPorts for ServerShowPatchPorts {
     type UnitOfWork = ServerShowPatchUnitOfWork;
     type PreparedRuntime = PreparedEngineSnapshot;
 
+    fn run_active_show_lifecycle<T>(
+        &self,
+        _context: &ActionContext,
+        _show_id: ShowId,
+        operation: impl FnOnce() -> Result<T, ActionError>,
+    ) -> Result<T, ActionError> {
+        #[cfg(test)]
+        self.state.patch_lifecycle.pause_if_armed();
+        let _activation = self.state.activation_lock.clone().blocking_lock_owned();
+        operation()
+    }
+
     fn begin_active_show(
         &self,
         _context: &ActionContext,
         show_id: ShowId,
     ) -> Result<Self::UnitOfWork, ActionError> {
-        let activation = self.state.activation_lock.clone().blocking_lock_owned();
         let unit =
             ServerActiveShowUnitOfWork::begin(&self.state, show_id, ActiveShowBackupKind::Patch)?;
         let patch_revision = unit.document().patch_revision().value();
@@ -144,7 +154,6 @@ impl ActiveShowPorts for ServerShowPatchPorts {
         Ok(ServerShowPatchUnitOfWork {
             inner: unit,
             patch_revision,
-            _activation: activation,
         })
     }
 

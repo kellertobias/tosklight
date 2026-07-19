@@ -94,6 +94,8 @@ pub(super) async fn run_active_show_object_action_async(
 > {
     let worker_state = state.clone();
     let result = tokio::task::spawn_blocking(move || {
+        #[cfg(test)]
+        worker_state.active_show_http_lifecycle.pause_if_armed();
         (
             run_active_show_object_action(&worker_state, action),
             activation,

@@ -213,6 +213,99 @@ async fn v2_patch_revision_ignores_unrelated_group_mutations() {
 }
 
 #[tokio::test]
+async fn ordinary_http_and_patch_share_one_outer_lock_order_without_deadlock() {
+    let (state, data_dir) = test_state();
+    let (profile_id, mode_id) = install_patch_route_profile(&state);
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let show = create_show(&app, &token, "V2 Patch lifecycle ordering").await;
+    let show_id = show["id"].as_str().unwrap().to_owned();
+    open_show_for_patch_test(&app, &token, &show_id).await;
+
+    state.active_show_http_lifecycle.arm();
+    let group_app = app.clone();
+    let group_token = token.clone();
+    let group_show_id = show_id.clone();
+    let group = tokio::spawn(async move {
+        group_app
+            .oneshot(
+                Request::put(format!(
+                    "/api/v1/shows/{group_show_id}/objects/group/before-patch"
+                ))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {group_token}"))
+                .header(header::IF_MATCH, "0")
+                .body(Body::from(
+                    serde_json::json!({
+                        "name":"Stored before Patch lifecycle",
+                        "fixtures":[]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+            )
+            .await
+            .unwrap()
+    });
+    let ordinary_pause = Arc::clone(&state.active_show_http_lifecycle);
+    tokio::task::spawn_blocking(move || ordinary_pause.wait_until_started())
+        .await
+        .unwrap();
+
+    state.patch_lifecycle.arm();
+    let patch_app = app.clone();
+    let patch_token = token.clone();
+    let patch_show_id = show_id.clone();
+    let patch = tokio::spawn(async move {
+        post_patch(
+            &patch_app,
+            &patch_token,
+            &patch_show_id,
+            Some(0),
+            valid_patch_request_for(profile_id, mode_id, "ordered-lifecycle-race"),
+        )
+        .await
+    });
+    let patch_pause = Arc::clone(&state.patch_lifecycle);
+    tokio::task::spawn_blocking(move || patch_pause.wait_until_started())
+        .await
+        .unwrap();
+
+    // Patch is paused immediately before taking activation. Because that outer lifecycle precedes
+    // the application operation gate, the ordinary request must still be able to commit while
+    // Patch remains paused. The former operation-then-activation order deadlocked at this point.
+    state.active_show_http_lifecycle.release();
+    let group = tokio::time::timeout(Duration::from_secs(2), group).await;
+    state.patch_lifecycle.release();
+    let group = group
+        .expect("ordinary active-show HTTP mutation deadlocked with Patch")
+        .unwrap();
+    let patch = tokio::time::timeout(Duration::from_secs(2), patch)
+        .await
+        .expect("Patch deadlocked with an ordinary active-show HTTP mutation")
+        .unwrap();
+    assert_eq!(group.status(), StatusCode::OK);
+    assert_eq!(patch.status(), StatusCode::OK);
+
+    let document = ShowStore::open(
+        &state
+            .desk
+            .lock()
+            .show(light_core::ShowId(Uuid::parse_str(&show_id).unwrap()))
+            .unwrap()
+            .unwrap()
+            .path,
+    )
+    .unwrap()
+    .portable_document()
+    .unwrap();
+    assert_eq!(document.revision().value(), 3);
+    assert!(document.object("group", "before-patch").is_some());
+    assert_eq!(document.objects_of_kind("patched_fixture").count(), 1);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn paused_profile_resolution_releases_activation_for_an_http_show_mutation() {
     let (state, data_dir) = test_state();
     let (profile_id, mode_id) = install_patch_route_profile(&state);

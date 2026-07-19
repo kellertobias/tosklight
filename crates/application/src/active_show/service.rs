@@ -34,34 +34,36 @@ impl ActiveShowService {
         ports: &P,
     ) -> Result<MutateOutputRouteResult, ActionError> {
         ports.authorize_mutation(&envelope.context)?;
-        let _ordered = self.operation.lock();
-        let mut unit = ports.begin_active_show(&envelope.context, envelope.command.show_id)?;
-        let prepared = prepare_route_mutation(unit.document(), &envelope.command)?;
-        let runtime = ports.prepare_runtime(prepared.snapshot)?;
-        unit.backup(&backup_identity(
-            &envelope.context,
-            envelope.command.show_id,
-            "route",
-        ))?;
-        let commit = unit.commit(prepared.transaction)?;
-        let change = OutputRouteChange {
-            show_id: envelope.command.show_id,
-            show_revision: commit.revision(),
-            route_id: envelope.command.route_id,
-            object_revision: prepared.object_revision,
-            route: prepared.route,
-            deleted: prepared.deleted,
-        };
-        ports.install_runtime(runtime);
-        let event = self.events.publish(EventDraft::output_route_changed(
-            &envelope.context,
-            change.clone(),
-        ));
-        Ok(MutateOutputRouteResult {
-            context: envelope.context,
-            change,
-            route_to_terminate: prepared.route_to_terminate,
-            event_sequence: event.sequence,
+        ports.run_active_show_lifecycle(&envelope.context, envelope.command.show_id, || {
+            let _ordered = self.operation.lock();
+            let mut unit = ports.begin_active_show(&envelope.context, envelope.command.show_id)?;
+            let prepared = prepare_route_mutation(unit.document(), &envelope.command)?;
+            let runtime = ports.prepare_runtime(prepared.snapshot)?;
+            unit.backup(&backup_identity(
+                &envelope.context,
+                envelope.command.show_id,
+                "route",
+            ))?;
+            let commit = unit.commit(prepared.transaction)?;
+            let change = OutputRouteChange {
+                show_id: envelope.command.show_id,
+                show_revision: commit.revision(),
+                route_id: envelope.command.route_id,
+                object_revision: prepared.object_revision,
+                route: prepared.route,
+                deleted: prepared.deleted,
+            };
+            ports.install_runtime(runtime);
+            let event = self.events.publish(EventDraft::output_route_changed(
+                &envelope.context,
+                change.clone(),
+            ));
+            Ok(MutateOutputRouteResult {
+                context: envelope.context.clone(),
+                change,
+                route_to_terminate: prepared.route_to_terminate,
+                event_sequence: event.sequence,
+            })
         })
     }
 
@@ -71,22 +73,24 @@ impl ActiveShowService {
         ports: &P,
     ) -> Result<MutateActiveShowObjectsResult, ActionError> {
         ports.authorize_mutation(&envelope.context)?;
-        let _ordered = self.operation.lock();
-        let unit = ports.begin_active_show(&envelope.context, envelope.command.show_id)?;
-        let prepared = prepare_object_mutation(unit.document(), &envelope.command)?;
-        let committed = self.commit_object_changes(
-            &envelope.context,
-            envelope.command.show_id,
-            unit,
-            ports,
-            prepared,
-            "show-object",
-        )?;
-        Ok(MutateActiveShowObjectsResult {
-            context: envelope.context,
-            show_revision: committed.show_revision,
-            changes: committed.changes,
-            event_sequence: committed.event_sequence,
+        ports.run_active_show_lifecycle(&envelope.context, envelope.command.show_id, || {
+            let _ordered = self.operation.lock();
+            let unit = ports.begin_active_show(&envelope.context, envelope.command.show_id)?;
+            let prepared = prepare_object_mutation(unit.document(), &envelope.command)?;
+            let committed = self.commit_object_changes(
+                &envelope.context,
+                envelope.command.show_id,
+                unit,
+                ports,
+                prepared,
+                "show-object",
+            )?;
+            Ok(MutateActiveShowObjectsResult {
+                context: envelope.context.clone(),
+                show_revision: committed.show_revision,
+                changes: committed.changes,
+                event_sequence: committed.event_sequence,
+            })
         })
     }
 
@@ -96,22 +100,24 @@ impl ActiveShowService {
         ports: &P,
     ) -> Result<UndoActiveShowObjectResult, ActionError> {
         ports.authorize_mutation(&envelope.context)?;
-        let _ordered = self.operation.lock();
-        let unit = ports.begin_active_show(&envelope.context, envelope.command.show_id)?;
-        let prepared = prepare_requested_undo(ports, &unit, &envelope.command)?;
-        let committed = self.commit_object_changes(
-            &envelope.context,
-            envelope.command.show_id,
-            unit,
-            ports,
-            prepared,
-            "undo-show-object",
-        )?;
-        Ok(UndoActiveShowObjectResult {
-            context: envelope.context,
-            show_revision: committed.show_revision,
-            change: single_change(committed.changes),
-            event_sequence: committed.event_sequence,
+        ports.run_active_show_lifecycle(&envelope.context, envelope.command.show_id, || {
+            let _ordered = self.operation.lock();
+            let unit = ports.begin_active_show(&envelope.context, envelope.command.show_id)?;
+            let prepared = prepare_requested_undo(ports, &unit, &envelope.command)?;
+            let committed = self.commit_object_changes(
+                &envelope.context,
+                envelope.command.show_id,
+                unit,
+                ports,
+                prepared,
+                "undo-show-object",
+            )?;
+            Ok(UndoActiveShowObjectResult {
+                context: envelope.context.clone(),
+                show_revision: committed.show_revision,
+                change: single_change(committed.changes),
+                event_sequence: committed.event_sequence,
+            })
         })
     }
 
@@ -192,9 +198,11 @@ impl ActiveShowService {
         P: ActiveShowPorts,
     {
         ports.authorize_mutation(context)?;
-        let _ordered = self.operation.lock();
-        let unit = ports.begin_active_show(context, show_id)?;
-        Ok((unit.document().clone(), self.events.latest_sequence()))
+        ports.run_active_show_lifecycle(context, show_id, || {
+            let _ordered = self.operation.lock();
+            let unit = ports.begin_active_show(context, show_id)?;
+            Ok((unit.document().clone(), self.events.latest_sequence()))
+        })
     }
 
     /// Commits a capability-specific transaction through the same ordered backup, candidate,
@@ -218,35 +226,37 @@ impl ActiveShowService {
         P: ActiveShowPorts,
     {
         ports.authorize_mutation(context)?;
-        let _ordered = self.operation.lock();
-        let mut unit = ports.begin_active_show(context, show_id)?;
-        match prepare(unit.document())? {
-            PreparedActiveShowTransaction::NoChange(state) => Ok(complete(
-                &self.events,
-                ports,
-                context,
-                CompletedActiveShowTransaction {
-                    state,
-                    commit: None,
-                },
-            )),
-            PreparedActiveShowTransaction::PreparedCommit { prepared, state } => {
-                let (transaction, snapshot) = (*prepared).into_parts();
-                let runtime = ports.prepare_runtime(snapshot)?;
-                unit.backup(&backup_identity(context, show_id, operation))?;
-                let commit = unit.commit(transaction)?;
-                ports.install_runtime(runtime);
-                Ok(complete(
+        ports.run_active_show_lifecycle(context, show_id, || {
+            let _ordered = self.operation.lock();
+            let mut unit = ports.begin_active_show(context, show_id)?;
+            match prepare(unit.document())? {
+                PreparedActiveShowTransaction::NoChange(state) => Ok(complete(
                     &self.events,
                     ports,
                     context,
                     CompletedActiveShowTransaction {
                         state,
-                        commit: Some(commit),
+                        commit: None,
                     },
-                ))
+                )),
+                PreparedActiveShowTransaction::PreparedCommit { prepared, state } => {
+                    let (transaction, snapshot) = (*prepared).into_parts();
+                    let runtime = ports.prepare_runtime(snapshot)?;
+                    unit.backup(&backup_identity(context, show_id, operation))?;
+                    let commit = unit.commit(transaction)?;
+                    ports.install_runtime(runtime);
+                    Ok(complete(
+                        &self.events,
+                        ports,
+                        context,
+                        CompletedActiveShowTransaction {
+                            state,
+                            commit: Some(commit),
+                        },
+                    ))
+                }
             }
-        }
+        })
     }
 }
 

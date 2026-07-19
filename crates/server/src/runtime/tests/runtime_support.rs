@@ -39,6 +39,8 @@ fn test_state() -> (AppState, PathBuf) {
             active_show_service: active_show_service.clone(),
             show_patch: ShowPatchService::new(active_show_service),
             patch_profile_resolution: Arc::default(),
+            active_show_http_lifecycle: Arc::default(),
+            patch_lifecycle: Arc::default(),
             audit_events: Arc::new(Mutex::new(VecDeque::with_capacity(2048))),
             command_history: Arc::new(Mutex::new(HashMap::new())),
             event_revision: Arc::new(AtomicU64::new(0)),
