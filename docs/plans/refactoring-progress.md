@@ -4,7 +4,7 @@ This is the living handoff for [`major-refactoring.md`](major-refactoring.md). U
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-19 at commit `f8923fc`.
+Last updated: 2026-07-19 at commit `dda9e8d`.
 
 ## Guardrails
 
@@ -63,7 +63,11 @@ Last updated: 2026-07-19 at commit `f8923fc`.
   ordered-selection changes use independent exact-object routes and non-empty sparse payloads;
   Highlight and Preload reconciliation finishes before the one authoritative event is captured.
   Command-only input compares lightweight revisions and does not clone or serialize the complete
-  selection. Compatibility HTTP, OSC, and WebSocket paths retain their source behavior.
+  selection. The frontend now has strict feature-owned decoders, exact capability subscriptions,
+  independently revisioned command-line and selection state, ordered optimistic overlays, and
+  narrow snapshot repair. It remains dormant until the production consumers move below, so merely
+  mounting the global provider performs no request and opens no socket. Compatibility HTTP, OSC,
+  and WebSocket paths retain their source behavior.
 - [x] Exposed Selective Show Import through authenticated v2 catalog, preview, and atomic apply
   adapters with checked-in schemas, generated TypeScript, exact source/target revisions, strict
   response validation, and focused server contracts. **Show → Load → Partial Show Load** now uses a
@@ -98,8 +102,9 @@ Last updated: 2026-07-19 at commit `f8923fc`.
   from broad `useServer()`, polling, and generic show-object mutation.
 - [ ] Finish the Playback ownership boundary for virtual exclusion peers, startup normalization,
   persisted Cuelist/topology mutation, and every active compatibility pane still polling.
-- [ ] Adopt the sparse Programming stream in the frontend with independently reference-counted
-  command-line and selection views, authoritative snapshot repair, and optimistic overlays.
+- [ ] Move the production command-line and selection consumers onto the scoped Programming store,
+  reconcile optimistic writes with authoritative responses/events, then remove their legacy
+  bootstrap and broad Programmer refresh paths.
 
 ## Remaining architecture work
 
@@ -138,15 +143,17 @@ Last updated: 2026-07-19 at commit `f8923fc`.
 ## Current verification snapshot
 
 - Source-size ratchet: 0 production files above 1,200; 0 production functions above 150. The
-  current full-tree design-goal report is 52 files above 400 lines and 3,394 functions above 20;
+  current full-tree design-goal report is 52 files above 400 lines and 3,443 functions above 20;
   the touched Programming live-state test was split back below 400 lines.
 - In-scope production file goal: 0 files above 400 lines. The scanner still reports larger test and
   planning sources, plus the unrelated Dynamics Editor experiment.
 - Focused application, server, wire, frontend, architecture, source-size, MVR, File Manager,
   Playback, Preload, Patch, Output, event, shared-control, Stage 3D, build, and strict Clippy checks
   have passed for their committed slices. The latest Playback frontend run covered 109 focused
-  tests; the Selective Show Import frontend run covered 19 focused tests plus a production build.
-- A final full-suite and real desktop run has not yet been completed.
+  tests; the scoped Programming frontend run covered 60 focused tests; and the Selective Show
+  Import control migration covered 47 focused tests plus a production build.
+- The current complete frontend suite passes all 740 tests. A final repository-wide suite and real
+  desktop run has not yet been completed.
 
 The remaining files above the 400-line goal are planning/test sources and the unrelated Dynamics
 Editor experiment. Test files may exceed the hard limits, but should still be split when it
