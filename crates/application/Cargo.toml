@@ -7,9 +7,15 @@ license.workspace = true
 [dependencies]
 chrono.workspace = true
 light-core = { path = "../core" }
+light-engine = { path = "../engine", default-features = false }
+light-fixture = { path = "../fixture" }
+light-output = { path = "../output" }
 light-playback = { path = "../playback" }
 light-programmer = { path = "../programmer" }
+light-show = { path = "../show" }
 parking_lot.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 tokio = { workspace = true, features = ["sync", "time"] }
 uuid.workspace = true
 

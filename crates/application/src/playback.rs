@@ -105,7 +105,10 @@ mod tests {
         assert_eq!(drafts.len(), 1);
         assert_eq!(drafts[0].desk_id, None);
         assert_eq!(drafts[0].source, EventSource::Runtime);
-        let ApplicationEvent::Playback(PlaybackEvent::CueTransition(event)) = &drafts[0].payload;
+        let ApplicationEvent::Playback(PlaybackEvent::CueTransition(event)) = &drafts[0].payload
+        else {
+            panic!("expected playback transition");
+        };
         assert_eq!(event.cue_list_id, cue_list_id.0);
         assert_eq!(event.cause, PlaybackTransitionCause::Chaser);
         assert_eq!(event.advanced_steps, 7);

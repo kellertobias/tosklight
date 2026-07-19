@@ -2600,9 +2600,15 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "light-core",
+ "light-engine",
+ "light-fixture",
+ "light-output",
  "light-playback",
  "light-programmer",
+ "light-show",
  "parking_lot",
+ "serde",
+ "serde_json",
  "tokio",
  "uuid",
 ]
