@@ -2,6 +2,8 @@
 
 use super::*;
 
+#[path = "active_show_programmer_object_tests.rs"]
+mod active_show_programmer_object_tests;
 #[path = "active_show_route_tests.rs"]
 mod active_show_route_tests;
 #[path = "command_http_tests.rs"]

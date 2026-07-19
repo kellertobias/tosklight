@@ -267,6 +267,50 @@ pub(super) async fn put_object(
         )
             .into_response());
     }
+    if active {
+        let object_kind = match kind.as_str() {
+            "group" => Some(light_application::ActiveShowObjectKind::Group),
+            "preset" => Some(light_application::ActiveShowObjectKind::Preset),
+            _ => None,
+        };
+        if let Some(object_kind) = object_kind {
+            if object_kind == light_application::ActiveShowObjectKind::Preset {
+                light_programmer::PresetAddress::parse(&object_id)
+                    .map_err(ApiError::bad_request)?;
+            }
+            let action = active_show_object_action(
+                operator_action_context(&session, light_application::ActionSource::Http),
+                show_id,
+                vec![put_active_show_object(
+                    object_kind,
+                    object_id.clone(),
+                    expected,
+                    body,
+                )],
+            );
+            let (result, _activation) =
+                run_active_show_object_action_async(&state, activation, action).await?;
+            let change = result
+                .changes
+                .first()
+                .expect("one requested object mutation returns one change");
+            emit(
+                &state,
+                "show_object_changed",
+                serde_json::json!({
+                    "show_id": show_id,
+                    "kind": kind,
+                    "id": object_id,
+                    "revision": change.object_revision
+                }),
+            );
+            return Ok((
+                [(header::ETAG, format!("\"{}\"", change.object_revision))],
+                Json(serde_json::json!({"revision":change.object_revision})),
+            )
+                .into_response());
+        }
+    }
     let body = normalize_object_body(&state, &kind, &object_id, body)?;
     validate_object_candidate(&state, &entry, &kind, &object_id, &body, active)?;
     let store = ShowStore::open(&entry.path).map_err(ApiError::store)?;

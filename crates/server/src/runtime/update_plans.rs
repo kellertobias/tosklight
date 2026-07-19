@@ -121,6 +121,11 @@ pub(super) fn perform_update(
     session: &Session,
     request: &UpdateApiRequest,
 ) -> Result<update::UpdateResult, ApiError> {
+    let _activation = state
+        .activation_lock
+        .clone()
+        .try_lock_owned()
+        .map_err(|_| ApiError::conflict("the active show is changing; retry Update"))?;
     let (entry, store) = active_show_store(state).map_err(ApiError::bad_request)?;
     let plan = plan_update_request(state, session, &store, request)?;
     let kind = plan.object_kind().to_owned();
@@ -128,12 +133,34 @@ pub(super) fn perform_update(
     let body = plan
         .body()
         .map_err(|error| ApiError::internal(error.to_string()))?;
-    backup_show(state, &entry)?;
-    let revision = store
-        .put_object(&kind, &id, &body, plan.expected_revision)
-        .map_err(ApiError::store)?;
+    let object_kind = match kind.as_str() {
+        "group" => Some(light_application::ActiveShowObjectKind::Group),
+        "preset" => Some(light_application::ActiveShowObjectKind::Preset),
+        _ => None,
+    };
+    let revision = if let Some(object_kind) = object_kind {
+        let action = active_show_object_action(
+            operator_action_context(session, light_application::ActionSource::Http),
+            entry.id,
+            vec![put_active_show_object(
+                object_kind,
+                id.clone(),
+                plan.expected_revision,
+                body,
+            )],
+        );
+        let result = run_active_show_object_action(state, action)?;
+        result.changes[0].object_revision
+    } else {
+        backup_show(state, &entry)?;
+        store
+            .put_object(&kind, &id, &body, plan.expected_revision)
+            .map_err(ApiError::store)?
+    };
     let result = plan.complete(revision);
-    refresh_command_show(state, &entry).map_err(ApiError::internal)?;
+    if object_kind.is_none() {
+        refresh_command_show(state, &entry).map_err(ApiError::internal)?;
+    }
     emit(
         state,
         "show_object_changed",

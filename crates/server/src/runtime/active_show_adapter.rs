@@ -1,7 +1,10 @@
-use super::{AppState, show_mutation_backup::ShowMutationBackupPlan};
+use super::{
+    AppState, active_show_objects::reconcile_group_projections,
+    show_mutation_backup::ShowMutationBackupPlan,
+};
 use light_application::{
-    ActionContext, ActionError, ActionErrorKind, ActiveShowPorts, ActiveShowUnitOfWork,
-    BackupIdentity,
+    ActionContext, ActionError, ActionErrorKind, ActiveShowObjectChange, ActiveShowObjectKind,
+    ActiveShowPorts, ActiveShowUnitOfWork, BackupIdentity,
 };
 use light_core::ShowId;
 use light_engine::{EngineError, EngineSnapshot, PreparedEngineSnapshot};
@@ -16,11 +19,22 @@ use light_show::{
 #[derive(Clone)]
 pub(super) struct ServerActiveShowPorts {
     state: AppState,
+    backup_kind: ActiveShowBackupKind,
 }
 
 impl ServerActiveShowPorts {
     pub(super) fn new(state: AppState) -> Self {
-        Self { state }
+        Self {
+            state,
+            backup_kind: ActiveShowBackupKind::OutputRoute,
+        }
+    }
+
+    pub(super) fn show_objects(state: AppState) -> Self {
+        Self {
+            state,
+            backup_kind: ActiveShowBackupKind::ShowObjects,
+        }
     }
 }
 
@@ -28,6 +42,7 @@ impl ServerActiveShowPorts {
 pub(super) enum ActiveShowBackupKind {
     Patch,
     OutputRoute,
+    ShowObjects,
 }
 
 pub(super) struct ServerActiveShowUnitOfWork {
@@ -67,6 +82,9 @@ impl ServerActiveShowUnitOfWork {
             ActiveShowBackupKind::Patch => ShowMutationBackupPlan::patch(state, &entry),
             ActiveShowBackupKind::OutputRoute => {
                 ShowMutationBackupPlan::output_route(state, &entry)
+            }
+            ActiveShowBackupKind::ShowObjects => {
+                ShowMutationBackupPlan::show_objects(state, &entry)
             }
         };
         Ok(Self {
@@ -117,7 +135,7 @@ impl ActiveShowPorts for ServerActiveShowPorts {
         _context: &ActionContext,
         show_id: ShowId,
     ) -> Result<Self::UnitOfWork, ActionError> {
-        ServerActiveShowUnitOfWork::begin(&self.state, show_id, ActiveShowBackupKind::OutputRoute)
+        ServerActiveShowUnitOfWork::begin(&self.state, show_id, self.backup_kind)
     }
 
     fn prepare_runtime(
@@ -133,6 +151,15 @@ impl ActiveShowPorts for ServerActiveShowPorts {
 
     fn install_runtime(&self, prepared: Self::PreparedRuntime) {
         self.state.engine.install_prepared_snapshot(prepared);
+    }
+
+    fn reconcile_object_changes(&self, changes: &[ActiveShowObjectChange]) {
+        if changes
+            .iter()
+            .any(|change| change.kind == ActiveShowObjectKind::Group)
+        {
+            reconcile_group_projections(&self.state);
+        }
     }
 }
 

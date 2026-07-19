@@ -185,6 +185,157 @@ fn route_delete_uses_the_same_prepared_atomic_boundary() {
     );
 }
 
+#[test]
+fn group_batch_preserves_extensions_empty_state_and_ordered_membership() {
+    let rig = TestRig::new();
+    let first = light_core::FixtureId(Uuid::from_u128(11));
+    let second = light_core::FixtureId(Uuid::from_u128(12));
+    let mut existing = serde_json::to_value(light_programmer::GroupDefinition {
+        id: "wrong-body-id".into(),
+        name: "Existing".into(),
+        fixtures: vec![first],
+        ..Default::default()
+    })
+    .unwrap();
+    existing["future_server_field"] = json!({"retained": true});
+    rig.seed_object("group", "7", existing);
+
+    let mut ordered = serde_json::to_value(light_programmer::GroupDefinition {
+        id: "ignored".into(),
+        name: "Ordered".into(),
+        fixtures: vec![second, first],
+        ..Default::default()
+    })
+    .unwrap();
+    ordered["future_client_field"] = json!("accepted");
+    let empty = serde_json::to_value(light_programmer::GroupDefinition {
+        id: "8".into(),
+        name: "Stored empty".into(),
+        fixtures: Vec::new(),
+        ..Default::default()
+    })
+    .unwrap();
+    let result = rig
+        .service
+        .mutate_objects(
+            rig.object_action(vec![
+                ActiveShowObjectMutation {
+                    kind: ActiveShowObjectKind::Group,
+                    object_id: "7".into(),
+                    expected_object_revision: 1,
+                    mutation: ActiveShowObjectMutationKind::Put { body: ordered },
+                },
+                ActiveShowObjectMutation {
+                    kind: ActiveShowObjectKind::Group,
+                    object_id: "8".into(),
+                    expected_object_revision: 0,
+                    mutation: ActiveShowObjectMutationKind::Put { body: empty },
+                },
+            ]),
+            &rig.ports,
+        )
+        .unwrap();
+
+    assert_eq!(
+        rig.steps(),
+        [
+            "begin",
+            "prepare",
+            "backup",
+            "commit",
+            "install",
+            "reconcile"
+        ]
+    );
+    assert_eq!(result.show_revision.value(), 2);
+    assert_eq!(result.changes[0].object_revision, 2);
+    assert_eq!(result.changes[1].object_revision, 1);
+    assert_eq!(rig.installed_revision(), Some(2));
+    let stored = rig.object_body("group", "7");
+    assert_eq!(stored["id"], "7");
+    assert_eq!(stored["fixtures"], json!([second, first]));
+    assert_eq!(stored["future_server_field"], json!({"retained": true}));
+    assert_eq!(stored["future_client_field"], "accepted");
+    assert_eq!(rig.object_body("group", "8")["fixtures"], json!([]));
+}
+
+#[test]
+fn preset_address_is_validated_before_backup_and_commit() {
+    let rig = TestRig::new();
+    let body = serde_json::to_value(light_programmer::Preset {
+        name: "Wrong pool".into(),
+        family: light_programmer::PresetFamily::Position,
+        number: 1,
+        ..Default::default()
+    })
+    .unwrap();
+    let error = rig
+        .service
+        .mutate_objects(
+            rig.object_action(vec![ActiveShowObjectMutation {
+                kind: ActiveShowObjectKind::Preset,
+                object_id: "2.1".into(),
+                expected_object_revision: 0,
+                mutation: ActiveShowObjectMutationKind::Put { body },
+            }]),
+            &rig.ports,
+        )
+        .unwrap_err();
+
+    assert_eq!(error.kind, ActionErrorKind::Invalid);
+    assert_eq!(rig.steps(), ["begin"]);
+    assert!(rig.document().object("preset", "2.1").is_none());
+}
+
+#[test]
+fn stale_member_of_a_batch_leaves_every_group_and_preset_unchanged() {
+    let rig = TestRig::new();
+    let group = serde_json::to_value(light_programmer::GroupDefinition {
+        id: "1".into(),
+        name: "Before".into(),
+        ..Default::default()
+    })
+    .unwrap();
+    let preset = serde_json::to_value(light_programmer::Preset {
+        name: "Before".into(),
+        family: light_programmer::PresetFamily::Color,
+        number: 1,
+        ..Default::default()
+    })
+    .unwrap();
+    rig.seed_object("group", "1", group.clone());
+    rig.seed_object("preset", "2.1", preset.clone());
+
+    let error = rig
+        .service
+        .mutate_objects(
+            rig.object_action(vec![
+                ActiveShowObjectMutation {
+                    kind: ActiveShowObjectKind::Group,
+                    object_id: "1".into(),
+                    expected_object_revision: 1,
+                    mutation: ActiveShowObjectMutationKind::Put {
+                        body: json!({"name":"After"}),
+                    },
+                },
+                ActiveShowObjectMutation {
+                    kind: ActiveShowObjectKind::Preset,
+                    object_id: "2.1".into(),
+                    expected_object_revision: 0,
+                    mutation: ActiveShowObjectMutationKind::Delete,
+                },
+            ]),
+            &rig.ports,
+        )
+        .unwrap_err();
+
+    assert_eq!(error.kind, ActionErrorKind::Conflict);
+    assert_eq!(error.current_revision, Some(1));
+    assert_eq!(rig.steps(), ["begin"]);
+    assert_eq!(rig.object_body("group", "1"), group);
+    assert_eq!(rig.object_body("preset", "2.1"), preset);
+}
+
 struct TestRig {
     service: ActiveShowService,
     ports: TestPorts,
@@ -210,9 +361,13 @@ impl TestRig {
     }
 
     fn seed_route(&self, id: &str, body: Value) {
+        self.seed_object("route", id, body);
+    }
+
+    fn seed_object(&self, kind: &str, id: &str, body: Value) {
         ShowStore::open(&self.ports.path)
             .unwrap()
-            .put_object("route", id, &body, 0)
+            .put_object(kind, id, &body, 0)
             .unwrap();
     }
 
@@ -239,7 +394,29 @@ impl TestRig {
     }
 
     fn route_body(&self, id: &str) -> Value {
-        self.document().object("route", id).unwrap().body().clone()
+        self.object_body("route", id)
+    }
+
+    fn object_action(
+        &self,
+        mutations: Vec<ActiveShowObjectMutation>,
+    ) -> ActionEnvelope<MutateActiveShowObjectsCommand> {
+        ActionEnvelope {
+            context: ActionContext::operator(
+                Uuid::from_u128(1),
+                Uuid::from_u128(2),
+                Uuid::from_u128(3),
+                ActionSource::Http,
+            ),
+            command: MutateActiveShowObjectsCommand {
+                show_id: self.show_id,
+                mutations,
+            },
+        }
+    }
+
+    fn object_body(&self, kind: &str, id: &str) -> Value {
+        self.document().object(kind, id).unwrap().body().clone()
     }
 
     fn document(&self) -> PortableShowDocument {
@@ -259,6 +436,14 @@ impl TestRig {
             .lock()
             .as_ref()
             .map_or(0, |snapshot| snapshot.routes.len())
+    }
+
+    fn installed_revision(&self) -> Option<u64> {
+        self.ports
+            .installed
+            .lock()
+            .as_ref()
+            .map(|snapshot| snapshot.revision)
     }
 }
 
@@ -344,6 +529,10 @@ impl ActiveShowPorts for TestPorts {
     fn install_runtime(&self, prepared: Self::PreparedRuntime) {
         self.steps.lock().push("install");
         *self.installed.lock() = Some(prepared);
+    }
+
+    fn reconcile_object_changes(&self, _changes: &[ActiveShowObjectChange]) {
+        self.steps.lock().push("reconcile");
     }
 }
 

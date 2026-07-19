@@ -29,6 +29,15 @@ impl ShowMutationBackupPlan {
         )
     }
 
+    pub(in crate::runtime) fn show_objects(state: &AppState, entry: &ShowEntry) -> Self {
+        Self::new(
+            state.data_dir.join("backups"),
+            entry,
+            "show-object",
+            state.configuration.read().backup_retention,
+        )
+    }
+
     pub(in crate::runtime) fn migration(
         data_dir: &std::path::Path,
         entry: &ShowEntry,

@@ -21,22 +21,11 @@ pub(super) fn active_show_store(state: &AppState) -> Result<(ShowEntry, ShowStor
 
 pub(super) fn refresh_command_show(state: &AppState, entry: &ShowEntry) -> Result<(), String> {
     let snapshot = load_engine_snapshot(entry)?;
-    let groups = snapshot
-        .groups
-        .iter()
-        .map(|group| (group.id.clone(), group.clone()))
-        .collect::<HashMap<_, _>>();
     state
         .engine
         .replace_snapshot(snapshot)
         .map_err(|error| error.to_string())?;
-    state.programmers.refresh_live_selections(&groups);
-    let mut reconciled = HashSet::new();
-    for session in state.sessions.read().values().cloned().collect::<Vec<_>>() {
-        if reconciled.insert((session.desk.id, session.user.id)) {
-            reconcile_highlight_selection(state, &session, "show_selection_refresh");
-        }
-    }
+    reconcile_group_projections(state);
     Ok(())
 }
 

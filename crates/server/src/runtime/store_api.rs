@@ -62,6 +62,7 @@ pub(super) async fn store_preset(
     let session = authenticate(&state, &headers)?;
     let expected = parse_if_match(&headers)?;
     let show_id = light_core::ShowId(id);
+    let activation = state.activation_lock.clone().lock_owned().await;
     let entry = state
         .desk
         .lock()
@@ -70,7 +71,8 @@ pub(super) async fn store_preset(
         .ok_or_else(|| ApiError::not_found("show"))?;
     let store = ShowStore::open(&entry.path).map_err(ApiError::store)?;
     let family_supplied = input.preset.get("family").is_some();
-    let mut incoming: light_programmer::Preset = serde_json::from_value(input.preset)
+    let request_body = input.preset;
+    let mut incoming: light_programmer::Preset = serde_json::from_value(request_body.clone())
         .map_err(|error| ApiError::bad_request(format!("invalid incoming preset: {error}")))?;
     let address = light_programmer::PresetAddress::from_storage_key(&preset_id, incoming.family)
         .map_err(ApiError::bad_request)?;
@@ -114,16 +116,33 @@ pub(super) async fn store_preset(
             ..Default::default()
         });
     preset.store(incoming, input.mode);
-    backup_show(&state, &entry)?;
-    let revision = store
-        .put_object(
-            "preset",
-            &persisted_key,
-            &serde_json::to_value(&preset)
-                .map_err(|error| ApiError::internal(error.to_string()))?,
-            expected,
-        )
-        .map_err(ApiError::store)?;
+    let body = serialize_preset_preserving_extensions(&request_body, &preset)
+        .map_err(|error| ApiError::internal(error.to_string()))?;
+    let active = state
+        .active_show
+        .read()
+        .as_ref()
+        .is_some_and(|active| active.id == show_id);
+    let revision = if active {
+        let action = active_show_object_action(
+            operator_action_context(&session, light_application::ActionSource::Http),
+            show_id,
+            vec![put_active_show_object(
+                light_application::ActiveShowObjectKind::Preset,
+                persisted_key,
+                expected,
+                body,
+            )],
+        );
+        let (result, _activation) =
+            run_active_show_object_action_async(&state, activation, action).await?;
+        result.changes[0].object_revision
+    } else {
+        backup_show(&state, &entry)?;
+        store
+            .put_object("preset", &persisted_key, &body, expected)
+            .map_err(ApiError::store)?
+    };
     emit(
         &state,
         "preset_stored",

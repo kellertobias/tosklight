@@ -1,3 +1,4 @@
+use super::ActiveShowObjectChange;
 use crate::{ActionContext, ActionError};
 use light_core::ShowId;
 use light_engine::EngineSnapshot;
@@ -45,4 +46,7 @@ pub trait ActiveShowPorts: Send + Sync {
 
     /// Installation is deliberately infallible: every fallible step precedes persistence.
     fn install_runtime(&self, prepared: Self::PreparedRuntime);
+
+    /// Reconciles adapter-owned projections after the exact committed runtime is installed.
+    fn reconcile_object_changes(&self, _changes: &[ActiveShowObjectChange]) {}
 }

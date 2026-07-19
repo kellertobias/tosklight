@@ -90,6 +90,7 @@ use uuid::Uuid;
 use cue_transfer::{CueTransferMode, destination_cue};
 
 mod active_show_adapter;
+mod active_show_objects;
 mod api_error;
 mod api_types;
 mod auth_backup;
@@ -165,6 +166,7 @@ mod ws_programmer_handlers;
 mod ws_selection_handlers;
 
 use active_show_adapter::*;
+use active_show_objects::*;
 use api_error::*;
 use api_types::*;
 use auth_backup::*;

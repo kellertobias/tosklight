@@ -16,7 +16,9 @@ pub use action::{
     ApplicationCommand, CommandFamily,
 };
 pub use active_show::{
-    ActiveShowPorts, ActiveShowService, ActiveShowUnitOfWork, BackupIdentity,
+    ActiveShowObjectChange, ActiveShowObjectKind, ActiveShowObjectMutation,
+    ActiveShowObjectMutationKind, ActiveShowPorts, ActiveShowService, ActiveShowUnitOfWork,
+    BackupIdentity, MutateActiveShowObjectsCommand, MutateActiveShowObjectsResult,
     MutateOutputRouteCommand, MutateOutputRouteResult, OutputRouteChange, OutputRouteMutation,
 };
 pub use event::{

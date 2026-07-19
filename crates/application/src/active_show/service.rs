@@ -1,8 +1,9 @@
-use super::route::prepare_route_mutation;
 use super::{
-    ActiveShowPorts, ActiveShowUnitOfWork, BackupIdentity, MutateOutputRouteCommand,
-    MutateOutputRouteResult, OutputRouteChange,
+    ActiveShowPorts, ActiveShowUnitOfWork, BackupIdentity, MutateActiveShowObjectsCommand,
+    MutateActiveShowObjectsResult, MutateOutputRouteCommand, MutateOutputRouteResult,
+    OutputRouteChange,
 };
+use super::{objects::prepare_object_mutation, route::prepare_route_mutation};
 use crate::{ActionContext, ActionEnvelope, ActionError, EventBus, EventDraft};
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -35,6 +36,7 @@ impl ActiveShowService {
         unit.backup(&backup_identity(
             &envelope.context,
             envelope.command.show_id,
+            "route",
         ))?;
         let commit = unit.commit(prepared.transaction)?;
         let change = OutputRouteChange {
@@ -58,6 +60,31 @@ impl ActiveShowService {
         })
     }
 
+    pub fn mutate_objects<P: ActiveShowPorts>(
+        &self,
+        envelope: ActionEnvelope<MutateActiveShowObjectsCommand>,
+        ports: &P,
+    ) -> Result<MutateActiveShowObjectsResult, ActionError> {
+        ports.authorize_mutation(&envelope.context)?;
+        let _ordered = self.operation.lock();
+        let mut unit = ports.begin_active_show(&envelope.context, envelope.command.show_id)?;
+        let prepared = prepare_object_mutation(unit.document(), &envelope.command)?;
+        let runtime = ports.prepare_runtime(prepared.snapshot)?;
+        unit.backup(&backup_identity(
+            &envelope.context,
+            envelope.command.show_id,
+            "show-object",
+        ))?;
+        let commit = unit.commit(prepared.transaction)?;
+        ports.install_runtime(runtime);
+        ports.reconcile_object_changes(&prepared.changes);
+        Ok(MutateActiveShowObjectsResult {
+            context: envelope.context,
+            show_revision: commit.revision(),
+            changes: prepared.changes,
+        })
+    }
+
     pub fn events(&self) -> &EventBus {
         &self.events
     }
@@ -69,13 +96,17 @@ impl Default for ActiveShowService {
     }
 }
 
-fn backup_identity(context: &ActionContext, show_id: light_core::ShowId) -> BackupIdentity {
+fn backup_identity(
+    context: &ActionContext,
+    show_id: light_core::ShowId,
+    operation: &str,
+) -> BackupIdentity {
     BackupIdentity {
         show_id,
         correlation_id: context.correlation_id,
         request_id: context
             .request_id
             .clone()
-            .unwrap_or_else(|| format!("route-{}", context.correlation_id)),
+            .unwrap_or_else(|| format!("{operation}-{}", context.correlation_id)),
     }
 }

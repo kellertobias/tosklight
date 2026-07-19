@@ -1,9 +1,12 @@
 mod model;
+mod objects;
 mod ports;
 mod route;
 mod service;
 
 pub use model::{
+    ActiveShowObjectChange, ActiveShowObjectKind, ActiveShowObjectMutation,
+    ActiveShowObjectMutationKind, MutateActiveShowObjectsCommand, MutateActiveShowObjectsResult,
     MutateOutputRouteCommand, MutateOutputRouteResult, OutputRouteChange, OutputRouteMutation,
 };
 pub use ports::{ActiveShowPorts, ActiveShowUnitOfWork, BackupIdentity};

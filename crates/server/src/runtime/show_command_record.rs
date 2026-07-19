@@ -96,11 +96,10 @@ fn prevent_derived_group_cycle(
 }
 
 fn delete_empty_group(
-    store: &ShowStore,
     snapshot: &EngineSnapshot,
     id: &str,
     existing: Option<&light_show::VersionedObject>,
-) -> Result<bool, String> {
+) -> Result<light_application::ActiveShowObjectMutation, String> {
     let Some(existing) = existing else {
         return Err(format!("group {id} does not exist"));
     };
@@ -115,10 +114,11 @@ fn delete_empty_group(
             dependent.id
         ));
     }
-    store
-        .delete_object("group", &existing.id)
-        .map_err(|error| error.to_string())?;
-    Ok(true)
+    Ok(delete_active_show_object(
+        light_application::ActiveShowObjectKind::Group,
+        existing.id.clone(),
+        existing.revision,
+    ))
 }
 
 fn record_group(
@@ -126,7 +126,6 @@ fn record_group(
     session: &Session,
     body: &[String],
     operation: RecordOperation,
-    snapshot: &EngineSnapshot,
 ) -> Result<usize, String> {
     if body.len() != 2 {
         return Err("expected RECORD [ + | - ] GROUP <group-number>".into());
@@ -136,6 +135,12 @@ fn record_group(
         .programmers
         .get(session.id)
         .ok_or("programmer does not exist")?;
+    let _activation = state
+        .activation_lock
+        .clone()
+        .try_lock_owned()
+        .map_err(|_| "the active show is changing; retry Record".to_owned())?;
+    let snapshot = state.engine.snapshot();
     let (entry, store) = active_show_store(state)?;
     let existing = store
         .objects("group")
@@ -143,8 +148,13 @@ fn record_group(
         .into_iter()
         .find(|object| object.id == *id);
     if operation == RecordOperation::Subtract && programmer.selected.is_empty() {
-        delete_empty_group(&store, snapshot, id, existing.as_ref())?;
-        refresh_command_show(state, &entry)?;
+        let mutation = delete_empty_group(&snapshot, id, existing.as_ref())?;
+        let action = active_show_object_action(
+            operator_action_context(session, light_application::ActionSource::Http),
+            entry.id,
+            vec![mutation],
+        );
+        run_active_show_object_action(state, action).map_err(|error| error.message)?;
         return Ok(1);
     }
     let existing_group = existing
@@ -168,16 +178,18 @@ fn record_group(
         Vec::new()
     };
     let group = group_from_programmer(id, existing_group, membership, &programmer, operation);
-    let group = prevent_derived_group_cycle(group, id, snapshot, &programmer);
-    store
-        .put_object(
-            "group",
-            id,
-            &serde_json::to_value(group).map_err(|error| error.to_string())?,
-            existing.map_or(0, |object| object.revision),
-        )
-        .map_err(|error| error.to_string())?;
-    refresh_command_show(state, &entry)?;
+    let group = prevent_derived_group_cycle(group, id, &snapshot, &programmer);
+    let action = active_show_object_action(
+        operator_action_context(session, light_application::ActionSource::Http),
+        entry.id,
+        vec![put_active_show_object(
+            light_application::ActiveShowObjectKind::Group,
+            id.clone(),
+            existing.as_ref().map_or(0, |object| object.revision),
+            serde_json::to_value(group).map_err(|error| error.to_string())?,
+        )],
+    );
+    run_active_show_object_action(state, action).map_err(|error| error.message)?;
     state.programmers.finish_selection_gesture(session.id);
     Ok(programmer.selected.len())
 }
@@ -234,6 +246,11 @@ fn record_preset(state: &AppState, session: &Session, body: &[String]) -> Result
     if preset.values.is_empty() && preset.group_values.is_empty() {
         return Err("the programmer has no values to record".into());
     }
+    let _activation = state
+        .activation_lock
+        .clone()
+        .try_lock_owned()
+        .map_err(|_| "the active show is changing; retry Record".to_owned())?;
     let (entry, store) = active_show_store(state)?;
     let existing = store
         .objects("preset")
@@ -247,15 +264,17 @@ fn record_preset(state: &AppState, session: &Session, body: &[String]) -> Result
         .as_ref()
         .map(|object| object.id.clone())
         .unwrap_or(id);
-    store
-        .put_object(
-            "preset",
-            &storage_key,
-            &serde_json::to_value(preset).map_err(|error| error.to_string())?,
-            existing.map_or(0, |object| object.revision),
-        )
-        .map_err(|error| error.to_string())?;
-    refresh_command_show(state, &entry)?;
+    let action = active_show_object_action(
+        operator_action_context(session, light_application::ActionSource::Http),
+        entry.id,
+        vec![put_active_show_object(
+            light_application::ActiveShowObjectKind::Preset,
+            storage_key,
+            existing.as_ref().map_or(0, |object| object.revision),
+            serde_json::to_value(preset).map_err(|error| error.to_string())?,
+        )],
+    );
+    run_active_show_object_action(state, action).map_err(|error| error.message)?;
     Ok(1)
 }
 
@@ -268,7 +287,7 @@ pub(super) fn execute_record_show_command(
 ) -> Result<usize, String> {
     let operation = record_operation(&mut body);
     if body.first().is_some_and(|token| token == "GROUP") {
-        record_group(state, session, body, operation, snapshot)
+        record_group(state, session, body, operation)
     } else if body
         .first()
         .is_some_and(|token| token == "CUE" || token == "SET")

@@ -92,6 +92,11 @@ pub(super) fn generate_profile_presets(
     if fixture_ids.is_empty() {
         return Err("select at least one fixture before generating presets".into());
     }
+    let _activation = state
+        .activation_lock
+        .clone()
+        .try_lock_owned()
+        .map_err(|_| "the active show is changing; retry Preset generation".to_owned())?;
     let generated =
         generated_profile_presets(&state.engine.snapshot(), &fixture_ids.into_iter().collect())?;
     if generated.is_empty() {
@@ -141,21 +146,32 @@ pub(super) fn generate_profile_presets(
         ids.push(storage_key);
         bodies.push(body);
     }
-    let writes = ids
+    let mutations = ids
         .iter()
         .zip(&bodies)
-        .map(|(id, body)| AtomicObjectWrite {
-            kind: "preset",
-            id,
-            body,
-            expected: 0,
+        .map(|(id, body)| {
+            put_active_show_object(
+                light_application::ActiveShowObjectKind::Preset,
+                id.clone(),
+                0,
+                body.clone(),
+            )
         })
         .collect::<Vec<_>>();
-    backup_show(state, &entry).map_err(|error| error.message)?;
-    let revisions = store
-        .mutate_objects_atomically(&writes, &[])
-        .map_err(|error| error.to_string())?;
-    refresh_command_show(state, &entry)?;
+    let action = active_show_object_action(
+        light_application::ActionContext::system(
+            Uuid::nil(),
+            light_application::ActionSource::System,
+        ),
+        entry.id,
+        mutations,
+    );
+    let result = run_active_show_object_action(state, action).map_err(|error| error.message)?;
+    let revisions = result
+        .changes
+        .iter()
+        .map(|change| change.object_revision)
+        .collect::<Vec<_>>();
     for ((id, revision), item) in ids.iter().zip(revisions).zip(&created) {
         emit_command_object_changed(state, &entry, "preset", id, revision);
         emit(

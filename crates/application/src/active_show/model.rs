@@ -4,6 +4,66 @@ use light_output::OutputRoute;
 use light_show::PortableShowRevision;
 use serde_json::Value;
 
+/// Portable show-object families whose runtime semantics are owned by the programmer domain.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum ActiveShowObjectKind {
+    Group,
+    Preset,
+}
+
+impl ActiveShowObjectKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Group => "group",
+            Self::Preset => "preset",
+        }
+    }
+}
+
+/// One optimistic Group or Preset edit within a whole-show transaction.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ActiveShowObjectMutation {
+    pub kind: ActiveShowObjectKind,
+    pub object_id: String,
+    pub expected_object_revision: Revision,
+    pub mutation: ActiveShowObjectMutationKind,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ActiveShowObjectMutationKind {
+    Put { body: Value },
+    Delete,
+}
+
+/// One atomic batch of active-show Group and Preset edits.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MutateActiveShowObjectsCommand {
+    pub show_id: ShowId,
+    pub mutations: Vec<ActiveShowObjectMutation>,
+}
+
+impl ApplicationCommand for MutateActiveShowObjectsCommand {
+    type Value = MutateActiveShowObjectsResult;
+
+    const FAMILY: CommandFamily = CommandFamily::Show;
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ActiveShowObjectChange {
+    pub kind: ActiveShowObjectKind,
+    pub object_id: String,
+    pub object_revision: Revision,
+    pub body: Option<Value>,
+    pub deleted: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct MutateActiveShowObjectsResult {
+    pub context: ActionContext,
+    pub show_revision: PortableShowRevision,
+    pub changes: Vec<ActiveShowObjectChange>,
+}
+
 /// One typed output-route edit performed against the active portable show.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MutateOutputRouteCommand {
