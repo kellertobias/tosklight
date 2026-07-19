@@ -16,6 +16,12 @@ pub enum ProgrammingExecution {
     },
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProgrammingReconciliation {
+    SelectionChanged,
+    CaptureModeChanged,
+}
+
 /// Server-owned capabilities needed while the legacy parser, persistence, and Preload output
 /// transaction are moved behind application boundaries. Transport adapters implement this port;
 /// the service remains the sole owner of ordering, replay, and Programmer mutations.
@@ -37,6 +43,10 @@ pub trait ProgrammingPorts: Send + Sync {
     fn capture_programmer_on_preload(&self, _context: &ActionContext) -> bool {
         true
     }
+
+    /// Reconciles selection-derived state before the authoritative projection is captured and
+    /// published. Implementations must not re-enter the Programming desk gate.
+    fn reconcile(&self, context: &ActionContext, reason: ProgrammingReconciliation);
 
     fn commit_preload(&self, context: &ActionContext) -> Result<Option<String>, String>;
 }

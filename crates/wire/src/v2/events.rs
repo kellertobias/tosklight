@@ -1,7 +1,7 @@
 //! Stable filtered event-subscription and playback-repair DTOs.
 
 use super::{
-    command_line::ProgrammingInteractionProjection,
+    command_line::ProgrammingInteractionChange,
     playback::{PlaybackDeskProjection, PlaybackRuntimeChange},
 };
 
@@ -154,7 +154,7 @@ pub enum EventActionSource {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EventPayload {
     ProgrammingInteractionChanged {
-        projection: ProgrammingInteractionProjection,
+        change: ProgrammingInteractionChange,
     },
     PlaybackRuntimeChanged {
         change: PlaybackRuntimeChange,

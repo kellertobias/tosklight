@@ -1,7 +1,4 @@
-use super::super::{
-    ProgrammingAction, ProgrammingCommand, ProgrammingInteractionProjection, ProgrammingOutcome,
-    ProgrammingResult,
-};
+use super::super::{ProgrammingAction, ProgrammingCommand, ProgrammingOutcome, ProgrammingResult};
 use crate::{ActionEnvelope, ActionError, ActionErrorKind};
 use light_core::SessionId;
 use light_programmer::{CommandLineReplaceError, CommandLineState, ProgrammerRegistry};
@@ -77,17 +74,22 @@ pub(super) fn replace_error(error: CommandLineReplaceError) -> ActionError {
 }
 
 pub(super) struct Snapshot {
-    pub(super) interaction: ProgrammingInteractionProjection,
+    pub(super) command_line: CommandLineState,
+    pub(super) selection_revision: u64,
 }
 
 impl Snapshot {
     pub(super) fn read(
         programmers: &ProgrammerRegistry,
-        desk_id: Uuid,
+        _desk_id: Uuid,
         session: SessionId,
     ) -> Result<Self, ActionError> {
+        let version = programmers
+            .interaction_version(session)
+            .ok_or_else(unknown_programmer)?;
         Ok(Self {
-            interaction: ProgrammingInteractionProjection::read(programmers, desk_id, session)?,
+            command_line: version.command_line,
+            selection_revision: version.selection_revision,
         })
     }
 
@@ -97,17 +99,13 @@ impl Snapshot {
         outcome: ProgrammingOutcome,
         after: Self,
     ) -> ProgrammingResult {
-        let command_line_before = self.interaction.command_line;
-        let selection_revision_before = self.interaction.selection.revision;
-        let command_line = after.interaction.command_line;
-        let selection_revision = after.interaction.selection.revision;
         ProgrammingResult {
             context,
             outcome,
-            command_line_before,
-            command_line,
-            selection_revision_before,
-            selection_revision,
+            command_line_before: self.command_line,
+            command_line: after.command_line,
+            selection_revision_before: self.selection_revision,
+            selection_revision: after.selection_revision,
             interaction_event_sequence: None,
             replayed: false,
         }

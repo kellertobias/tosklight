@@ -12,7 +12,7 @@ pub use command::{
 };
 pub use event::ProgrammingInteractionChange;
 pub use operation::{ProgrammingOperation, ProgrammingOperationResult, ProgrammingUnitOfWork};
-pub use ports::{ProgrammingExecution, ProgrammingPorts};
+pub use ports::{ProgrammingExecution, ProgrammingPorts, ProgrammingReconciliation};
 pub use projection::{ProgrammingInteractionProjection, ProgrammingLiveSnapshot};
 pub use service::ProgrammingService;
 

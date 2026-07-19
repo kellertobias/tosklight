@@ -20,7 +20,6 @@ pub(super) fn ws_preload_enter(
         .programmers
         .arm_preload(session.id, capture_programmer);
     persist_programmer(state, session).map_err(|e| e.message)?;
-    reconcile_highlight_capture_mode(state, session, "preload");
     emit(
         state,
         "programmer_changed",

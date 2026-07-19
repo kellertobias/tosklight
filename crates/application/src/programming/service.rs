@@ -1,6 +1,7 @@
 use super::{
     ExecutionPolicy, ProgrammingAction, ProgrammingCommand, ProgrammingExecution,
-    ProgrammingInteractionProjection, ProgrammingOutcome, ProgrammingPorts, ProgrammingResult,
+    ProgrammingInteractionChange, ProgrammingOutcome, ProgrammingPorts, ProgrammingReconciliation,
+    ProgrammingResult,
 };
 use crate::{ActionContext, ActionEnvelope, ActionError, EventBus, EventDraft};
 use light_core::SessionId;
@@ -74,13 +75,11 @@ impl ProgrammingService {
     fn publish_interaction(
         &self,
         context: &ActionContext,
-        interaction: Option<ProgrammingInteractionProjection>,
+        interaction: Option<ProgrammingInteractionChange>,
     ) -> Option<u64> {
-        interaction.map(|projection| {
+        interaction.map(|change| {
             self.events
-                .publish(EventDraft::programming_interaction_changed(
-                    context, projection,
-                ))
+                .publish(EventDraft::programming_interaction_changed(context, change))
                 .sequence
         })
     }
@@ -90,7 +89,7 @@ impl ProgrammingService {
         action: &ActionEnvelope<ProgrammingCommand>,
         session: SessionId,
         ports: &dyn ProgrammingPorts,
-    ) -> Result<(ProgrammingResult, Option<ProgrammingInteractionProjection>), ActionError> {
+    ) -> Result<(ProgrammingResult, Option<ProgrammingInteractionChange>), ActionError> {
         let before = Snapshot::read(&self.programmers, action.context.desk_id, session)?;
         let outcome = match &action.command {
             ProgrammingCommand::ApplyKey {
@@ -121,9 +120,18 @@ impl ProgrammingService {
                 self.preload(session, *capture_programmer, &action.context, ports)?
             }
         };
+        let mutated = Snapshot::read(&self.programmers, action.context.desk_id, session)?;
+        if let Some(reason) = reconciliation(&before, &mutated, &outcome) {
+            ports.reconcile(&action.context, reason);
+        }
         let after = Snapshot::read(&self.programmers, action.context.desk_id, session)?;
-        let interaction =
-            (before.interaction != after.interaction).then(|| after.interaction.clone());
+        let interaction = interaction_change(
+            &self.programmers,
+            action.context.desk_id,
+            session,
+            &before,
+            &after,
+        );
         Ok((
             before.result(action.context.clone(), outcome, after),
             interaction,
@@ -350,6 +358,38 @@ impl ProgrammingService {
             result.clone(),
         );
     }
+}
+
+fn reconciliation(
+    before: &Snapshot,
+    mutated: &Snapshot,
+    outcome: &ProgrammingOutcome,
+) -> Option<ProgrammingReconciliation> {
+    if matches!(
+        outcome,
+        ProgrammingOutcome::Accepted {
+            action: ProgrammingAction::PreloadEntered | ProgrammingAction::PreloadCommitted,
+            ..
+        }
+    ) {
+        return Some(ProgrammingReconciliation::CaptureModeChanged);
+    }
+    (before.selection_revision != mutated.selection_revision)
+        .then_some(ProgrammingReconciliation::SelectionChanged)
+}
+
+fn interaction_change(
+    programmers: &ProgrammerRegistry,
+    desk_id: uuid::Uuid,
+    session: SessionId,
+    before: &Snapshot,
+    after: &Snapshot,
+) -> Option<ProgrammingInteractionChange> {
+    let command_line =
+        (before.command_line != after.command_line).then(|| after.command_line.clone());
+    let selection = (before.selection_revision != after.selection_revision)
+        .then(|| programmers.selection(session).unwrap_or_default());
+    ProgrammingInteractionChange::from_components(desk_id, command_line, selection)
 }
 
 fn clear_staged(

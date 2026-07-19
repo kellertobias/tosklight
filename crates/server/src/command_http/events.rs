@@ -16,9 +16,6 @@ pub(super) fn publish_osc_result(
     if result.replayed {
         return;
     }
-    if result.selection_revision_before != result.selection_revision {
-        super::super::reconcile_highlight_selection(state, session, "osc_programmer_selection");
-    }
     match &result.outcome {
         ProgrammingOutcome::Accepted { action, .. } => {
             publish_osc_accepted(state, session, desk_alias, result, *action)
@@ -64,9 +61,6 @@ fn publish_osc_accepted(
 ) {
     if action == ProgrammingAction::Edited {
         let _ = super::super::persist_programmer(state, session);
-    }
-    if action == ProgrammingAction::PreloadEntered {
-        super::super::reconcile_highlight_capture_mode(state, session, "osc_preload");
     }
     if action == ProgrammingAction::Executed {
         publish_osc_applied(state, session, desk_alias, result);
@@ -127,9 +121,6 @@ pub(super) fn publish_service_result(
         source,
         request_id,
     );
-    if result.selection_revision_before != result.selection_revision {
-        super::super::reconcile_highlight_selection(state, session, "programmer_selection");
-    }
     publish_operation_event(state, session, result, request_id, supplied_command);
 }
 
@@ -167,9 +158,6 @@ fn publish_accepted_event(
 ) {
     if publish_key_phase_if_needed(state, session, action, request_id) {
         return;
-    }
-    if action == ProgrammingAction::PreloadEntered {
-        super::super::reconcile_highlight_capture_mode(state, session, "preload");
     }
     if action == ProgrammingAction::Executed {
         super::super::emit(

@@ -468,8 +468,8 @@
         {
           "type": "object",
           "properties": {
-            "projection": {
-              "$ref": "#/$defs/ProgrammingInteractionProjection"
+            "change": {
+              "$ref": "#/$defs/ProgrammingInteractionChange"
             },
             "type": {
               "type": "string",
@@ -478,7 +478,7 @@
           },
           "required": [
             "type",
-            "projection"
+            "change"
           ]
         },
         {
@@ -1965,25 +1965,61 @@
         }
       ]
     },
-    "ProgrammingInteractionProjection": {
-      "description": "Authoritative interaction context shared by every control surface attached to one desk.",
-      "type": "object",
-      "properties": {
-        "command_line": {
-          "$ref": "#/$defs/CommandLineResponse"
+    "ProgrammingInteractionChange": {
+      "description": "Sparse authoritative components changed by one semantic Programmer interaction.",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "command_line": {
+              "$ref": "#/$defs/CommandLineResponse"
+            },
+            "desk_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "selection": {
+              "$ref": "#/$defs/ProgrammerSelectionProjection"
+            }
+          },
+          "required": [
+            "desk_id",
+            "command_line",
+            "selection"
+          ]
         },
-        "desk_id": {
-          "type": "string",
-          "format": "uuid"
+        {
+          "type": "object",
+          "properties": {
+            "command_line": {
+              "$ref": "#/$defs/CommandLineResponse"
+            },
+            "desk_id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "desk_id",
+            "command_line"
+          ]
         },
-        "selection": {
-          "$ref": "#/$defs/ProgrammerSelectionProjection"
+        {
+          "type": "object",
+          "properties": {
+            "desk_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "selection": {
+              "$ref": "#/$defs/ProgrammerSelectionProjection"
+            }
+          },
+          "required": [
+            "desk_id",
+            "selection"
+          ]
         }
-      },
-      "required": [
-        "desk_id",
-        "command_line",
-        "selection"
       ]
     },
     "SelectiveImportChange": {

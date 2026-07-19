@@ -21,16 +21,42 @@ pub(in crate::runtime) fn interaction_projection(
     wire::ProgrammingInteractionProjection {
         desk_id: projection.desk_id,
         command_line: command_line_from_state(projection.command_line.clone()),
-        selection: wire::ProgrammerSelectionProjection {
-            selected: projection
-                .selection
-                .selected
-                .iter()
-                .map(|fixture_id| fixture_id.0)
-                .collect(),
-            expression: projection.selection.expression.as_ref().map(expression),
-            revision: projection.selection.revision,
+        selection: selection_projection(&projection.selection),
+    }
+}
+
+pub(in crate::runtime) fn interaction_change(
+    change: &application::ProgrammingInteractionChange,
+) -> wire::ProgrammingInteractionChange {
+    match (change.command_line(), change.selection()) {
+        (Some(command_line), Some(selection)) => wire::ProgrammingInteractionChange::Both {
+            desk_id: change.desk_id(),
+            command_line: command_line_from_state(command_line.clone()),
+            selection: selection_projection(selection),
         },
+        (Some(command_line), None) => wire::ProgrammingInteractionChange::CommandLine {
+            desk_id: change.desk_id(),
+            command_line: command_line_from_state(command_line.clone()),
+        },
+        (None, Some(selection)) => wire::ProgrammingInteractionChange::Selection {
+            desk_id: change.desk_id(),
+            selection: selection_projection(selection),
+        },
+        (None, None) => unreachable!("application Programming changes are non-empty"),
+    }
+}
+
+fn selection_projection(
+    selection: &light_programmer::ProgrammerSelection,
+) -> wire::ProgrammerSelectionProjection {
+    wire::ProgrammerSelectionProjection {
+        selected: selection
+            .selected
+            .iter()
+            .map(|fixture_id| fixture_id.0)
+            .collect(),
+        expression: selection.expression.as_ref().map(expression),
+        revision: selection.revision,
     }
 }
 

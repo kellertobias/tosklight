@@ -19,7 +19,7 @@ mod wire;
 pub(super) use adapter::{
     ExistingCommandOutcome, ExistingCommandPolicy, execute_existing_command, route_osc_command_key,
 };
-pub(super) use interaction_wire::interaction_projection;
+pub(super) use interaction_wire::interaction_change;
 pub(super) use routes::router;
 
 #[cfg(test)]

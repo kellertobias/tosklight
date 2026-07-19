@@ -2,7 +2,7 @@ use super::*;
 use light_application::{
     ActionContext, ActionSource, ActiveShowObjectChange, ActiveShowObjectKind,
     ActiveShowObjectsChange, EventBus, EventDraft, OutputRuntimeChange, OutputRuntimeIdentity,
-    OutputRuntimeProjection, OutputRuntimeScope, PatchChange, ProgrammingInteractionProjection,
+    OutputRuntimeProjection, OutputRuntimeScope, PatchChange, ProgrammingInteractionChange,
     SelectiveShowImportChange, SelectiveShowObjectChange,
 };
 use light_core::ShowId;
@@ -200,16 +200,17 @@ fn global_output_change_keeps_identity_source_and_correlation() {
 }
 
 #[test]
-fn programming_interaction_keeps_exact_desk_scope_and_projection() {
+fn programming_interaction_keeps_exact_desk_scope_and_sparse_payload() {
     let bus = EventBus::new(4);
     let context = context(ActionSource::UserInterface);
     let event = bus.publish(EventDraft::programming_interaction_changed(
         &context,
-        ProgrammingInteractionProjection {
-            desk_id: context.desk_id,
-            command_line: Default::default(),
-            selection: Default::default(),
-        },
+        ProgrammingInteractionChange::from_components(
+            context.desk_id,
+            Some(Default::default()),
+            None,
+        )
+        .unwrap(),
     ));
     let Some(wire::EventServerMessage::Event { event }) =
         wire_delivery(application::SubscriptionDelivery::Event(event))
@@ -220,15 +221,60 @@ fn programming_interaction_keeps_exact_desk_scope_and_projection() {
         event.object,
         Some(wire::EventObject {
             capability: wire::EventCapability::Desk,
-            id: format!("programming-interaction:{}", context.desk_id),
+            id: format!("programming-command-line:{}", context.desk_id),
         })
     );
-    let wire::EventPayload::ProgrammingInteractionChanged { projection } = event.payload else {
+    let wire::EventPayload::ProgrammingInteractionChanged { change } = event.payload else {
         panic!("expected a Programming interaction payload")
     };
-    assert_eq!(projection.desk_id, context.desk_id);
-    assert_eq!(projection.command_line.text, "FIXTURE");
-    assert!(projection.selection.selected.is_empty());
+    let light_wire::v2::command_line::ProgrammingInteractionChange::CommandLine {
+        desk_id,
+        command_line,
+    } = change
+    else {
+        panic!("expected a command-line-only change")
+    };
+    assert_eq!(desk_id, context.desk_id);
+    assert_eq!(command_line.text, "FIXTURE");
+    assert_eq!(event.delivery, wire::EventDeliveryPolicy::Lossless);
+}
+
+#[test]
+fn combined_programming_change_routes_once_through_both_exact_objects() {
+    let bus = EventBus::new(4);
+    let context = context(ActionSource::Osc);
+    let event = bus.publish(EventDraft::programming_interaction_changed(
+        &context,
+        ProgrammingInteractionChange::from_components(
+            context.desk_id,
+            Some(Default::default()),
+            Some(Default::default()),
+        )
+        .unwrap(),
+    ));
+    let Some(wire::EventServerMessage::Event { event }) =
+        wire_delivery(application::SubscriptionDelivery::Event(event))
+    else {
+        panic!("expected a Programming interaction delivery")
+    };
+    assert_eq!(
+        event.object.as_ref().unwrap().id,
+        format!("programming-command-line:{}", context.desk_id)
+    );
+    assert_eq!(
+        event.related_objects.as_ref().unwrap(),
+        &[wire::EventObject {
+            capability: wire::EventCapability::Desk,
+            id: format!("programming-selection:{}", context.desk_id),
+        }]
+    );
+    let wire::EventPayload::ProgrammingInteractionChanged { change } = event.payload else {
+        panic!("expected a Programming interaction payload")
+    };
+    assert!(matches!(
+        change,
+        light_wire::v2::command_line::ProgrammingInteractionChange::Both { .. }
+    ));
 }
 
 #[test]

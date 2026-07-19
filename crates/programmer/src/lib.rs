@@ -18,6 +18,7 @@ pub mod command_line;
 
 pub use command_state::{
     CommandLineReplaceError, CommandLineState, CommandTarget, ProgrammerInteractionState,
+    ProgrammerInteractionVersion,
 };
 pub use groups::{
     DerivedGroup, FrozenGroup, GroupDefinition, GroupProgrammerValue,

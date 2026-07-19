@@ -83,6 +83,13 @@ pub struct ProgrammerInteractionState {
     pub selection: ProgrammerSelection,
 }
 
+/// Lightweight interaction metadata for change detection without cloning ordered selections.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProgrammerInteractionVersion {
+    pub command_line: CommandLineState,
+    pub selection_revision: u64,
+}
+
 pub(crate) fn canonical_command_text(text: String, pristine: bool) -> String {
     if pristine { String::new() } else { text }
 }
@@ -94,6 +101,35 @@ pub enum CommandLineReplaceError {
 }
 
 impl ProgrammerRegistry {
+    pub fn interaction_version(&self, session: SessionId) -> Option<ProgrammerInteractionVersion> {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
+        self.interaction_version_while_gated(session)
+    }
+
+    fn interaction_version_while_gated(
+        &self,
+        session: SessionId,
+    ) -> Option<ProgrammerInteractionVersion> {
+        if !self.sessions.read().contains_key(&session) {
+            return None;
+        }
+        let context = self.command_context(session);
+        Some(ProgrammerInteractionVersion {
+            command_line: self
+                .command_states
+                .read()
+                .get(&context)
+                .cloned()
+                .unwrap_or_default(),
+            selection_revision: self
+                .selection_contexts
+                .read()
+                .get(&context)
+                .map_or(0, |selection| selection.revision),
+        })
+    }
+
     pub fn interaction_state(&self, session: SessionId) -> Option<ProgrammerInteractionState> {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();

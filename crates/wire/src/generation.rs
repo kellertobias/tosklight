@@ -11,8 +11,8 @@ use crate::v2::command_line::{
     CommandLineResponse, CommandOperationOutcome, CommandOperationResponse, CommandTarget,
     CueMoveCopyChoice, CueMoveCopyChoiceType, CueTransferOperation, ExecuteCommandLineRequest,
     ProgrammerSelectionExpression, ProgrammerSelectionProjection, ProgrammerSelectionReference,
-    ProgrammerSelectionRule, ProgrammingInteractionProjection, ProgrammingInteractionSnapshot,
-    ReplaceCommandLineRequest,
+    ProgrammerSelectionRule, ProgrammingInteractionChange, ProgrammingInteractionProjection,
+    ProgrammingInteractionSnapshot, ReplaceCommandLineRequest,
 };
 use crate::v2::events::{
     EventActionSource, EventCapability, EventClass, EventClientMessage, EventDeliveryPolicy,
@@ -350,13 +350,14 @@ fn typescript_bindings() -> String {
     )
 }
 
-fn interaction_declarations(config: &Config) -> [String; 6] {
+fn interaction_declarations(config: &Config) -> [String; 7] {
     [
         ProgrammerSelectionRule::decl(config),
         ProgrammerSelectionReference::decl(config),
         ProgrammerSelectionExpression::decl(config),
         ProgrammerSelectionProjection::decl(config),
         ProgrammingInteractionProjection::decl(config),
+        ProgrammingInteractionChange::decl(config),
         ProgrammingInteractionSnapshot::decl(config),
     ]
 }

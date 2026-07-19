@@ -46,6 +46,8 @@ impl ProgrammingPorts for TestPorts {
         None
     }
 
+    fn reconcile(&self, _context: &ActionContext, _reason: ProgrammingReconciliation) {}
+
     fn commit_preload(&self, _context: &ActionContext) -> Result<Option<String>, String> {
         Ok(None)
     }
@@ -256,6 +258,8 @@ impl ProgrammingPorts for OrderingPorts {
     fn persist(&self, _context: &ActionContext, _operation: &'static str) -> Option<String> {
         None
     }
+
+    fn reconcile(&self, _context: &ActionContext, _reason: ProgrammingReconciliation) {}
 
     fn commit_preload(&self, _context: &ActionContext) -> Result<Option<String>, String> {
         Ok(None)

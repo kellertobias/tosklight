@@ -111,23 +111,12 @@ pub(super) fn dispatch_ws_command(
         Err(error) => return failed_ws_response(&command, revision, error),
     };
     let result = dispatch_validated_ws_command(state, session, &command, live_absolute);
-    reconcile_selection_if_needed(state, session, &result);
     if let Err(error) = persist_undo_redo(state, session, &command, &result.response) {
         return failed_ws_response(&command, revision, error);
     }
     match result.response {
         Ok(payload) => successful_ws_response(state, session, command, payload),
         Err(error) => failed_ws_response(&command, revision, error),
-    }
-}
-
-fn reconcile_selection_if_needed(
-    state: &AppState,
-    session: &Session,
-    result: &WsProgrammingOutput,
-) {
-    if result.response.is_ok() && result.selection_changed {
-        reconcile_highlight_selection(state, session, "programmer_selection");
     }
 }
 
@@ -270,15 +259,11 @@ struct WsProgrammingOperation<'a> {
 
 struct WsProgrammingOutput {
     response: Result<serde_json::Value, String>,
-    selection_changed: bool,
 }
 
 impl WsProgrammingOutput {
     fn untracked(response: Result<serde_json::Value, String>) -> Self {
-        Self {
-            response,
-            selection_changed: false,
-        }
+        Self { response }
     }
 }
 
@@ -290,56 +275,99 @@ impl light_application::ProgrammingUnitOfWork for WsProgrammingOperation<'_> {
     }
 
     fn execute(self) -> light_application::ProgrammingOperation<Self::Output> {
-        let before = self.state.programmers.interaction_state(self.session.id);
+        let before = interaction_version(self.state, self.session);
         let response = dispatch_ws_payload(self.state, self.session, self.command);
-        let after = self.state.programmers.interaction_state(self.session.id);
-        let selection_changed = selection_revision(&before) != selection_revision(&after);
-        let output = WsProgrammingOutput {
-            response,
-            selection_changed,
-        };
-        let events = interaction_event(self.session, self.command, &before, after, &output);
+        let mutated = interaction_version(self.state, self.session);
+        reconcile_interaction(
+            self.state,
+            self.session,
+            self.command,
+            &before,
+            &mutated,
+            &response,
+        );
+        let after = interaction_version(self.state, self.session);
+        let events = interaction_event(
+            self.state,
+            self.session,
+            self.command,
+            &before,
+            &after,
+            &response,
+        );
+        let output = WsProgrammingOutput { response };
         light_application::ProgrammingOperation::with_events(output, events)
     }
 }
 
-fn selection_revision(state: &Option<light_programmer::ProgrammerInteractionState>) -> Option<u64> {
-    state.as_ref().map(|state| state.selection.revision)
+fn reconcile_interaction(
+    state: &AppState,
+    session: &Session,
+    command: &WsCommand,
+    before: &Option<light_programmer::ProgrammerInteractionVersion>,
+    mutated: &Option<light_programmer::ProgrammerInteractionVersion>,
+    response: &Result<serde_json::Value, String>,
+) {
+    if response.is_err() {
+        return;
+    }
+    if matches!(command.command.as_str(), "preload.enter" | "preload.go") {
+        reconcile_highlight_capture_mode(state, session, "preload");
+    } else if selection_revision(before) != selection_revision(mutated) {
+        reconcile_highlight_selection(state, session, "programmer_selection");
+    }
+}
+
+fn selection_revision(
+    state: &Option<light_programmer::ProgrammerInteractionVersion>,
+) -> Option<u64> {
+    state.as_ref().map(|state| state.selection_revision)
+}
+
+fn interaction_version(
+    state: &AppState,
+    session: &Session,
+) -> Option<light_programmer::ProgrammerInteractionVersion> {
+    state.programmers.interaction_version(session.id)
 }
 
 fn interaction_event(
+    state: &AppState,
     session: &Session,
     command: &WsCommand,
-    before: &Option<light_programmer::ProgrammerInteractionState>,
-    after: Option<light_programmer::ProgrammerInteractionState>,
-    output: &WsProgrammingOutput,
+    before: &Option<light_programmer::ProgrammerInteractionVersion>,
+    after: &Option<light_programmer::ProgrammerInteractionVersion>,
+    response: &Result<serde_json::Value, String>,
 ) -> Vec<light_application::EventDraft> {
-    let Some(after) = changed_interaction(before, after, output) else {
+    let Some(change) = changed_interaction(state, session, before, after, response) else {
         return Vec::new();
     };
-    vec![interaction_draft(session, command, after)]
+    vec![
+        light_application::EventDraft::programming_interaction_changed(
+            &interaction_context(session, command),
+            change,
+        ),
+    ]
 }
 
 fn changed_interaction(
-    before: &Option<light_programmer::ProgrammerInteractionState>,
-    after: Option<light_programmer::ProgrammerInteractionState>,
-    output: &WsProgrammingOutput,
-) -> Option<light_programmer::ProgrammerInteractionState> {
-    after.filter(|after| output.response.is_ok() && Some(after) != before.as_ref())
-}
-
-fn interaction_draft(
+    state: &AppState,
     session: &Session,
-    command: &WsCommand,
-    interaction: light_programmer::ProgrammerInteractionState,
-) -> light_application::EventDraft {
-    light_application::EventDraft::programming_interaction_changed(
-        &interaction_context(session, command),
-        light_application::ProgrammingInteractionProjection {
-            desk_id: session.desk.id,
-            command_line: interaction.command_line,
-            selection: interaction.selection,
-        },
+    before: &Option<light_programmer::ProgrammerInteractionVersion>,
+    after: &Option<light_programmer::ProgrammerInteractionVersion>,
+    response: &Result<serde_json::Value, String>,
+) -> Option<light_application::ProgrammingInteractionChange> {
+    response.as_ref().ok()?;
+    let before = before.as_ref()?;
+    let after = after.as_ref()?;
+    let command_line =
+        (before.command_line != after.command_line).then(|| after.command_line.clone());
+    let selection = (before.selection_revision != after.selection_revision)
+        .then(|| state.programmers.selection(session.id).unwrap_or_default());
+    light_application::ProgrammingInteractionChange::from_components(
+        session.desk.id,
+        command_line,
+        selection,
     )
 }
 

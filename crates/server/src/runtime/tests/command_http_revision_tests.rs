@@ -160,8 +160,10 @@ async fn command_line_v2_is_revisioned_desk_scoped_and_idempotent() {
         fixture_id.0.to_string()
     );
     assert!(interaction["cursor"]["sequence"].as_u64().unwrap() > 0);
-    let mut lock = DeskLockConfiguration::default();
-    lock.locked = true;
+    let lock = DeskLockConfiguration {
+        locked: true,
+        ..DeskLockConfiguration::default()
+    };
     write_desk_lock(&scenario.state, scenario.session.desk.id, &lock).unwrap();
     assert_eq!(
         scenario.interaction_snapshot().await.status(),

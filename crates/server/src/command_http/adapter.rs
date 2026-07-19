@@ -360,6 +360,28 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
         self.state.configuration.read().preload_programmer_changes
     }
 
+    fn reconcile(
+        &self,
+        _context: &ActionContext,
+        reason: light_application::ProgrammingReconciliation,
+    ) {
+        let osc = self.source == "osc";
+        match reason {
+            light_application::ProgrammingReconciliation::SelectionChanged => {
+                let source = if osc {
+                    "osc_programmer_selection"
+                } else {
+                    "programmer_selection"
+                };
+                super::super::reconcile_highlight_selection(self.state, self.session, source);
+            }
+            light_application::ProgrammingReconciliation::CaptureModeChanged => {
+                let source = if osc { "osc_preload" } else { "preload" };
+                super::super::reconcile_highlight_capture_mode(self.state, self.session, source);
+            }
+        }
+    }
+
     fn commit_preload(&self, _context: &ActionContext) -> Result<Option<String>, String> {
         let committed = super::super::commit_preload(self.state, self.session)?;
         Ok(committed

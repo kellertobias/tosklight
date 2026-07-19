@@ -175,7 +175,7 @@ fn wire_payload(
         application::ApplicationEvent::Programming(
             application::ProgrammingEvent::InteractionChanged(change),
         ) => wire::EventPayload::ProgrammingInteractionChanged {
-            projection: super::super::command_http::interaction_projection(&change.projection),
+            change: super::super::command_http::interaction_change(change),
         },
         application::ApplicationEvent::Playback(application::PlaybackEvent::RuntimeChanged(
             change,

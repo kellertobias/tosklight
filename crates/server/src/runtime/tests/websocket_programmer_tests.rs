@@ -210,7 +210,7 @@ async fn compatibility_selection_publishes_one_typed_interaction_event() {
     assert!(response.ok, "{:?}", response.error);
 
     let filter = light_application::EventFilter::for_desk(session.desk.id).with_object(
-        light_application::EventObject::programming_interaction(session.desk.id),
+        light_application::EventObject::programming_selection(session.desk.id),
     );
     let light_application::EventReplay::Events(events) =
         state.application_events.replay(0, &filter)
@@ -224,7 +224,7 @@ async fn compatibility_selection_publishes_one_typed_interaction_event() {
     else {
         panic!("expected a typed Programming interaction event")
     };
-    assert_eq!(change.projection.selection.selected, vec![fixture]);
+    assert_eq!(change.selection().unwrap().selected, vec![fixture]);
     assert!(events[0].correlation_id.is_some());
     assert_eq!(
         events[0].source,
@@ -232,6 +232,63 @@ async fn compatibility_selection_publishes_one_typed_interaction_event() {
             light_application::ActionSource::UserInterface,
         )
     );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn compatibility_command_line_publishes_only_its_scoped_component() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = authenticate_token(&state, &token).unwrap();
+
+    let response = dispatch_ws_command(
+        &state,
+        &session,
+        WsCommand {
+            protocol_version: 1,
+            request_id: "command-event".into(),
+            session_id: session.id,
+            expected_revision: None,
+            command: "programmer.command_line".into(),
+            payload: serde_json::json!({"value":"GROUP 2"}),
+        },
+    );
+    assert!(response.ok, "{:?}", response.error);
+
+    let filter = light_application::EventFilter::for_desk(session.desk.id).with_object(
+        light_application::EventObject::programming_command_line(session.desk.id),
+    );
+    let light_application::EventReplay::Events(events) =
+        state.application_events.replay(0, &filter)
+    else {
+        panic!("the command-line event should remain replayable")
+    };
+    assert_eq!(events.len(), 1);
+    let light_application::ApplicationEvent::Programming(
+        light_application::ProgrammingEvent::InteractionChanged(change),
+    ) = &events[0].payload
+    else {
+        panic!("expected a typed Programming interaction event")
+    };
+    assert_eq!(change.command_line().unwrap().visible_text(), "GROUP 2");
+    assert!(change.selection().is_none());
+
+    let sequence = state.application_events.latest_sequence();
+    let value_only = dispatch_ws_command(
+        &state,
+        &session,
+        WsCommand {
+            protocol_version: 1,
+            request_id: "priority-only".into(),
+            session_id: session.id,
+            expected_revision: None,
+            command: "programmer.priority".into(),
+            payload: serde_json::json!({"priority":7}),
+        },
+    );
+    assert!(value_only.ok, "{:?}", value_only.error);
+    assert_eq!(state.application_events.latest_sequence(), sequence);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

@@ -12,9 +12,15 @@ use std::sync::{Arc, mpsc};
 use std::thread;
 use uuid::Uuid;
 
+#[path = "live_state_tests/routing.rs"]
+mod routing;
+
 #[derive(Default)]
 struct LivePorts {
     selection: Mutex<Vec<FixtureId>>,
+    reconciled_selection: Mutex<Option<Vec<FixtureId>>>,
+    reconciliations: Mutex<Vec<ProgrammingReconciliation>>,
+    registry: Option<ProgrammerRegistry>,
 }
 
 impl ProgrammingPorts for LivePorts {
@@ -38,6 +44,19 @@ impl ProgrammingPorts for LivePorts {
 
     fn persist(&self, _context: &ActionContext, _operation: &'static str) -> Option<String> {
         None
+    }
+
+    fn reconcile(&self, context: &ActionContext, reason: ProgrammingReconciliation) {
+        self.reconciliations.lock().push(reason);
+        let Some(selection) = self.reconciled_selection.lock().clone() else {
+            return;
+        };
+        let (Some(registry), Some(session)) =
+            (self.registry.as_ref(), context.session_id.map(SessionId))
+        else {
+            return;
+        };
+        registry.select(session, selection);
     }
 
     fn commit_preload(&self, _context: &ActionContext) -> Result<Option<String>, String> {
@@ -70,7 +89,10 @@ impl LiveSetup {
             highlight,
             service,
             context: ActionContext::operator(desk, user.0, session.0, ActionSource::UserInterface),
-            ports: LivePorts::default(),
+            ports: LivePorts {
+                registry: Some(registry),
+                ..LivePorts::default()
+            },
         }
     }
 
@@ -94,14 +116,19 @@ impl LiveSetup {
         })
     }
 
-    fn filter(&self) -> EventFilter {
+    fn command_filter(&self) -> EventFilter {
         EventFilter::for_desk(self.context.desk_id)
-            .with_object(EventObject::programming_interaction(self.context.desk_id))
+            .with_object(EventObject::programming_command_line(self.context.desk_id))
+    }
+
+    fn selection_filter(&self) -> EventFilter {
+        EventFilter::for_desk(self.context.desk_id)
+            .with_object(EventObject::programming_selection(self.context.desk_id))
     }
 }
 
 #[test]
-fn handle_publishes_one_authoritative_interaction_projection_per_change() {
+fn handle_publishes_one_sparse_authoritative_change_per_interaction() {
     let setup = LiveSetup::new(8);
     let first = setup.press(CommandKey::Digit(1));
     assert_eq!(first.interaction_event_sequence, Some(1));
@@ -114,17 +141,37 @@ fn handle_publishes_one_authoritative_interaction_projection_per_change() {
     });
     assert_eq!(selected.interaction_event_sequence, Some(2));
 
-    let EventReplay::Events(events) = setup.events.replay(0, &setup.filter()) else {
+    let EventReplay::Events(events) = setup
+        .events
+        .replay(0, &EventFilter::for_desk(setup.context.desk_id))
+    else {
         panic!("retained interaction events should be replayable")
     };
     assert_eq!(events.len(), 2);
+    let ApplicationEvent::Programming(ProgrammingEvent::InteractionChanged(command_change)) =
+        &events[0].payload
+    else {
+        panic!("expected a typed Programming interaction event")
+    };
+    assert!(command_change.command_line().is_some());
+    assert!(command_change.selection().is_none());
     let ApplicationEvent::Programming(ProgrammingEvent::InteractionChanged(change)) =
         &events[1].payload
     else {
         panic!("expected a typed Programming interaction event")
     };
-    assert_eq!(change.projection.desk_id, setup.context.desk_id);
-    assert_eq!(change.projection.selection.selected, fixtures);
+    assert_eq!(change.desk_id(), setup.context.desk_id);
+    assert_eq!(change.selection().unwrap().selected, fixtures);
+    let EventReplay::Events(selection_events) = setup.events.replay(0, &setup.selection_filter())
+    else {
+        panic!("selection changes should be independently routable")
+    };
+    assert_eq!(selection_events.len(), 1);
+    let EventReplay::Events(command_events) = setup.events.replay(0, &setup.command_filter())
+    else {
+        panic!("command-line changes should be independently routable")
+    };
+    assert_eq!(command_events.len(), 1);
     assert_eq!(
         events[1].correlation_id,
         Some(selected.context.correlation_id)
@@ -150,50 +197,12 @@ fn unchanged_command_does_not_publish_and_replay_keeps_the_original_cursor() {
 }
 
 #[test]
-fn interaction_routes_are_exactly_desk_and_object_scoped() {
-    let setup = LiveSetup::new(8);
-    setup.press(CommandKey::Digit(1));
-
-    let object = EventObject::programming_interaction(setup.context.desk_id);
-    assert_eq!(object.capability, EventCapability::Desk);
-    assert_eq!(
-        object.id,
-        format!("programming-interaction:{}", setup.context.desk_id)
-    );
-
-    let matching = setup.events.replay(0, &setup.filter());
-    assert!(matches!(matching, EventReplay::Events(events) if events.len() == 1));
-
-    let programmer_scope =
-        EventFilter::for_desk(setup.context.desk_id).with_capability(EventCapability::Programmer);
-    assert!(matches!(
-        setup.events.replay(0, &programmer_scope),
-        EventReplay::Events(events) if events.is_empty()
-    ));
-
-    let other_desk = Uuid::new_v4();
-    let wrong_desk = EventFilter::for_desk(other_desk)
-        .with_object(EventObject::programming_interaction(setup.context.desk_id));
-    assert!(matches!(
-        setup.events.replay(0, &wrong_desk),
-        EventReplay::Events(events) if events.is_empty()
-    ));
-
-    let wrong_object = EventFilter::for_desk(setup.context.desk_id)
-        .with_object(EventObject::programming_interaction(other_desk));
-    assert!(matches!(
-        setup.events.replay(0, &wrong_object),
-        EventReplay::Events(events) if events.is_empty()
-    ));
-}
-
-#[test]
 fn snapshot_cursor_repairs_a_gap_without_missing_the_next_change() {
     let setup = LiveSetup::new(1);
     setup.press(CommandKey::Digit(1));
     setup.press(CommandKey::Digit(2));
     let subscription = setup.events.subscribe(
-        setup.filter(),
+        setup.command_filter(),
         SubscriptionOptions {
             after_sequence: Some(0),
             ..SubscriptionOptions::default()
@@ -220,6 +229,64 @@ fn snapshot_cursor_repairs_a_gap_without_missing_the_next_change() {
         subscription.try_next(),
         Some(SubscriptionDelivery::Event(event)) if event.sequence == 3
     ));
+}
+
+#[test]
+fn final_change_is_captured_after_selection_reconciliation() {
+    let setup = LiveSetup::new(8);
+    let initial = [FixtureId::new(), FixtureId::new()];
+    let reconciled = vec![initial[1]];
+    setup.ports.selection.lock().extend(initial);
+    *setup.ports.reconciled_selection.lock() = Some(reconciled.clone());
+
+    let result = setup.handle(ProgrammingCommand::Execute {
+        command: Some("SELECT".into()),
+        policy: ExecutionPolicy::AtomicProgrammer,
+    });
+    let EventReplay::Events(events) = setup.events.replay(0, &setup.selection_filter()) else {
+        panic!("the final selection change should be replayable")
+    };
+    assert_eq!(events.len(), 1);
+    let ApplicationEvent::Programming(ProgrammingEvent::InteractionChanged(change)) =
+        &events[0].payload
+    else {
+        panic!("expected a typed Programming interaction event")
+    };
+    assert_eq!(change.selection().unwrap().selected, reconciled);
+    assert_eq!(
+        result.selection_revision,
+        change.selection().unwrap().revision
+    );
+    assert_eq!(
+        *setup.ports.reconciliations.lock(),
+        vec![ProgrammingReconciliation::SelectionChanged]
+    );
+}
+
+#[test]
+fn preload_capture_reconciliation_is_included_in_the_same_final_event() {
+    let setup = LiveSetup::new(8);
+    let fixture = FixtureId::new();
+    *setup.ports.reconciled_selection.lock() = Some(vec![fixture]);
+
+    let result = setup.handle(ProgrammingCommand::Preload {
+        capture_programmer: false,
+    });
+    let EventReplay::Events(events) = setup.events.replay(0, &setup.selection_filter()) else {
+        panic!("the reconciled PRELOAD selection should be replayable")
+    };
+    assert_eq!(events.len(), 1);
+    let ApplicationEvent::Programming(ProgrammingEvent::InteractionChanged(change)) =
+        &events[0].payload
+    else {
+        panic!("expected a typed Programming interaction event")
+    };
+    assert_eq!(change.selection().unwrap().selected, vec![fixture]);
+    assert_eq!(result.interaction_event_sequence, Some(events[0].sequence));
+    assert_eq!(
+        *setup.ports.reconciliations.lock(),
+        vec![ProgrammingReconciliation::CaptureModeChanged]
+    );
 }
 
 #[test]
@@ -287,16 +354,17 @@ impl ProgrammingUnitOfWork for BlockingOperation {
     fn execute(self) -> ProgrammingOperation<Self::Output> {
         self.entered.send(()).unwrap();
         self.release.recv().unwrap();
-        let projection = ProgrammingInteractionProjection {
-            desk_id: self.context.desk_id,
-            command_line: Default::default(),
-            selection: ProgrammerSelection::default(),
-        };
+        let change = ProgrammingInteractionChange::from_components(
+            self.context.desk_id,
+            Some(Default::default()),
+            None,
+        )
+        .unwrap();
         ProgrammingOperation::with_events(
             "committed",
             vec![crate::EventDraft::programming_interaction_changed(
                 &self.context,
-                projection,
+                change,
             )],
         )
     }
