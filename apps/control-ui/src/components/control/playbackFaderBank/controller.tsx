@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useServer } from "../../../api/ServerContext";
 import type { PlaybackSurfaceLayout } from "../../../api/types";
+import { usePlaybackDeskView } from "../../../features/playbackRuntime/PlaybackRuntimeView";
+import { useGroups } from "../../../features/server/useShowObjectsState";
+import { useShowObjectView } from "../../../features/showObjects/ShowObjectsView";
 import { useApp } from "../../../state/AppContext";
 import { playbackRowUnits, projectPlaybackSlots } from "./projection";
 import type { PlaybackConfigurationState } from "./types";
-import { useShowObjectView } from "../../../features/showObjects/ShowObjectsView";
-import { useGroups } from "../../../features/server/useShowObjectsState";
 
 export interface PlaybackFaderBankProps {
 	pageNumber?: number;
@@ -27,6 +28,7 @@ export function usePlaybackBankController({
 	const server = useServer();
 	const groups = useGroups(server.playbacks);
 	const { state, dispatch } = useApp();
+	const playbackDesk = usePlaybackDeskView();
 	const hardware = Boolean(
 		server.bootstrap?.hardware_connected || state.midiProfile,
 	);
@@ -35,7 +37,10 @@ export function usePlaybackBankController({
 	const columns =
 		playbackLayout?.playbacks_per_row ?? Math.ceil(pageSize / rowCount);
 	const activePageNumber =
-		pageNumber ?? server.playbacks?.active_page ?? state.playbackPage + 1;
+		pageNumber ??
+		playbackDesk?.active_page ??
+		server.playbacks?.active_page ??
+		state.playbackPage + 1;
 	const page = server.playbacks?.pages.find(
 		(candidate) => candidate.number === activePageNumber,
 	);
@@ -63,6 +68,7 @@ export function usePlaybackBankController({
 		: `repeat(${rowCount}, minmax(0, 1fr))`;
 	return {
 		server,
+		playbackDesk,
 		state,
 		dispatch,
 		hardware,

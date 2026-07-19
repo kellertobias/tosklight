@@ -1,6 +1,10 @@
 import { useMemo, useRef, useState } from "react";
 import { useServer } from "../../api/ServerContext";
-import type { PlaybackDefinition } from "../../api/types";
+import type {
+	PlaybackDefinition,
+	PlaybackPage,
+	PlaybackSnapshot,
+} from "../../api/types";
 import { Button, SearchBar } from "../../components/common";
 import {
 	cueUpdateTarget,
@@ -11,9 +15,12 @@ import {
 	WindowHeader,
 	WindowScrollArea,
 } from "../../components/window-kit";
+import { runtimeMaster } from "../../features/playbackRuntime/legacy";
+import { usePlaybackProjectionMap } from "../../features/playbackRuntime/PlaybackRuntimeView";
 import { useApp } from "../../state/AppContext";
 
 interface CuelistPoolProps {
+	active: boolean;
 	compact?: boolean;
 	builtIn: boolean;
 	selectedCuelist: number | null;
@@ -141,20 +148,22 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 function usePoolSlots(
 	pool: PlaybackDefinition[],
 	search: string,
-	playbacks: ReturnType<typeof useServer>["playbacks"],
+	pages: PlaybackPage[] | undefined,
+	runtimes: ReturnType<typeof usePlaybackProjectionMap>,
+	legacyRuntime: PlaybackSnapshot["active"] | undefined,
 ) {
 	return useMemo(() => {
 		const byNumber = new Map(
 			pool.map((playback) => [playback.number, playback]),
 		);
-		const activeByNumber = new Map(
-			(playbacks?.active ?? []).map((runtime) => [
+		const usageByNumber = new Map<number, number[]>();
+		const legacyMasters = new Map(
+			(legacyRuntime ?? []).map((runtime) => [
 				runtime.playback_number,
 				runtime.master,
 			]),
 		);
-		const usageByNumber = new Map<number, number[]>();
-		for (const page of playbacks?.pages ?? []) {
+		for (const page of pages ?? []) {
 			for (const playbackNumber of Object.values(page.slots)) {
 				const pages = usageByNumber.get(playbackNumber) ?? [];
 				if (!pages.includes(page.number)) pages.push(page.number);
@@ -165,7 +174,10 @@ function usePoolSlots(
 		return Array.from({ length: 1000 }, (_, index) => ({
 			number: index + 1,
 			playback: byNumber.get(index + 1) ?? null,
-			runtimeMaster: activeByNumber.get(index + 1) ?? null,
+			runtimeMaster:
+				runtimeMaster(runtimes.get(index + 1)) ??
+				legacyMasters.get(index + 1) ??
+				null,
 			usage: usageByNumber.get(index + 1) ?? [],
 		})).filter(
 			({ number, playback }) =>
@@ -173,7 +185,7 @@ function usePoolSlots(
 				playback?.name.toLowerCase().includes(normalizedSearch) ||
 				String(number).includes(search),
 		);
-	}, [playbacks?.active, playbacks?.pages, pool, search]);
+	}, [legacyRuntime, pages, pool, runtimes, search]);
 }
 
 export function CuelistPool(props: CuelistPoolProps) {
@@ -187,7 +199,16 @@ export function CuelistPool(props: CuelistPoolProps) {
 			),
 		[server.playbacks?.pool],
 	);
-	const filteredPool = usePoolSlots(pool, search, server.playbacks);
+	const runtimes = usePlaybackProjectionMap(
+		props.active ? pool.map((playback) => playback.number) : [],
+	);
+	const filteredPool = usePoolSlots(
+		pool,
+		search,
+		server.playbacks?.pages,
+		runtimes,
+		server.playbacks?.active,
+	);
 	const workflowMessage =
 		state.cueListSetTarget != null
 			? `Cuelist ${state.cueListSetTarget} selected · touch a playback fader to assign it.`

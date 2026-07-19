@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useServer } from "../../api/ServerContext";
+import { useCueListRuntime } from "../../features/playbackRuntime/PlaybackRuntimeView";
 
 export function useCuelistPool() {
 	const server = useServer();
@@ -12,7 +13,10 @@ export function useCuelistPool() {
 	);
 }
 
-export function useSelectedCuelist(selectedCuelist: number | null) {
+export function useSelectedCuelist(
+	selectedCuelist: number | null,
+	enabled = true,
+) {
 	const server = useServer();
 	const pool = useCuelistPool();
 	const selectedPlaybackDefinition = server.playbacks?.pool.find(
@@ -42,9 +46,14 @@ export function useSelectedCuelist(selectedCuelist: number | null) {
 			: pool.length === 0 && selectedCuelist === 1
 				? server.playbacks?.cue_lists[0]
 				: undefined);
+	const liveActive = useCueListRuntime(
+		enabled ? selectedCueListId : null,
+		selectedDefinition?.number,
+	);
 	const active =
-		cueList &&
-		server.playbacks?.active.find((item) => item.cue_list_id === cueList.id);
+		liveActive ??
+		(cueList &&
+			server.playbacks?.active.find((item) => item.cue_list_id === cueList.id));
 	return {
 		pool,
 		selectedPlaybackDefinition,

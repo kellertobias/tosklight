@@ -47,6 +47,7 @@ function emptyState(
 }
 
 interface CuelistDetailProps {
+	active: boolean;
 	compact?: boolean;
 	cueListTab: WindowProps["cueListTab"];
 	cueListSource: WindowProps["cueListSource"];
@@ -59,7 +60,7 @@ interface CuelistDetailProps {
 }
 
 export function CuelistDetail(props: CuelistDetailProps) {
-	const selection = useSelectedCuelist(props.selectedCuelist);
+	const selection = useSelectedCuelist(props.selectedCuelist, props.active);
 	const cues = selection.cueList?.cues ?? [];
 	const editor = useCueEditor({
 		cues,

@@ -7,8 +7,10 @@ import type {
 	ProgrammerState,
 	VersionedObject,
 } from "../../api/types";
+import { legacyPlaybackRuntime } from "../playbackRuntime/legacy";
 import { cueOnlyRestoration } from "./contracts";
 import type { ServerController } from "./model";
+import { poolPlaybackRequest } from "./playbackActionMapping";
 import type { ServerContextValue } from "./ServerContextValue";
 
 type CueChange = Cue["changes"][number];
@@ -204,7 +206,15 @@ async function storePlayback(
 	cueListId?: string,
 	explicitPageNumber?: number,
 ) {
-	const { bootstrap, client, playbacks, refresh, session, setError } = model;
+	const {
+		bootstrap,
+		client,
+		playbacks,
+		playbackRuntimeStore,
+		refresh,
+		session,
+		setError,
+	} = model;
 	try {
 		if (!bootstrap?.active_show || !session)
 			throw new Error("Open a show before storing a Cue");
@@ -222,7 +232,12 @@ async function storePlayback(
 			: undefined;
 		const id = existing?.id ?? crypto.randomUUID();
 		const current = existing?.body ?? initialCueList(id, slot);
-		const active = playbacks?.active.find((item) => item.cue_list_id === id);
+		const liveProjection = playbackRuntimeStore
+			.getSnapshot()
+			.projections.get(`cuelist:${id}`)?.[0];
+		const active =
+			legacyPlaybackRuntime(liveProjection) ??
+			playbacks?.active.find((item) => item.cue_list_id === id);
 		const activeCueIndex =
 			localStorage.getItem("light.store-merge-active-cue") === "true" &&
 			active &&
@@ -252,7 +267,10 @@ async function storePlayback(
 		await assignSlot(
 			model,
 			bootstrap.active_show.id,
-			explicitPageNumber ?? playbacks?.active_page ?? 1,
+			explicitPageNumber ??
+				playbackRuntimeStore.getSnapshot().desk?.active_page ??
+				playbacks?.active_page ??
+				1,
 			slot,
 			playback.body.number,
 		);
@@ -260,10 +278,13 @@ async function storePlayback(
 		const recordingBlind =
 			programmer.blind && programmer.preload_capture_programmer !== false;
 		if (!recordingBlind) {
-			await client.poolPlaybackAction(playback.body.number, "go-to", {
-				cue_number: cue.number,
-			});
-			await refresh();
+			const outcome = await client.playbackRuntimeAction(
+				session.desk.id,
+				poolPlaybackRequest(playback.body.number, "go-to", {
+					cue_number: cue.number,
+				}),
+			);
+			playbackRuntimeStore.installOutcome(outcome);
 		}
 		setError(null);
 	} catch (reason) {

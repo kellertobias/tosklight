@@ -8,16 +8,24 @@ import type { PlaybackDefinition } from "../api/types";
 import type { VirtualPlaybackExclusionZone } from "../types";
 import type { WindowProps } from "./windowTypes";
 import { cueUpdateTarget, requestUpdateTarget } from "../components/control/updateWorkflow";
+import {
+	usePlaybackDeskView,
+	usePlaybackProjectionMap,
+} from "../features/playbackRuntime/PlaybackRuntimeView";
+import { legacyPlaybackRuntime } from "../features/playbackRuntime/legacy";
 
-export function VirtualPlaybacksWindow({ paneId }: WindowProps) {
+export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
   const { state, dispatch } = useApp();
   const server = useServer();
   const surfaceId = paneId ?? "builtin-virtual-playbacks";
   const pane = state.desks.flatMap((desk) => desk.panes).find((candidate) => candidate.id === paneId);
   const rows = pane?.virtualPlaybackRows ?? 2;
   const columns = pane?.virtualPlaybackColumns ?? 2;
-  const pageNumber = server.playbacks?.active_page ?? state.playbackPage + 1;
+  const playbackDesk = usePlaybackDeskView(active);
+  const pageNumber = playbackDesk?.active_page ?? server.playbacks?.active_page ?? state.playbackPage + 1;
   const page = server.playbacks?.pages.find((candidate) => candidate.number === pageNumber);
+  const playbackNumbers = Array.from({ length: rows * columns }, (_, index) => page?.slots[String(index + 1)]).filter((number): number is number => number != null);
+  const runtimeByPlayback = usePlaybackProjectionMap(active ? playbackNumbers : []);
   const [configuration, setConfiguration] = useState<{ playback: PlaybackDefinition; slot: number; empty: boolean } | null>(null);
   const [selectedSlots, setSelectedSlots] = useState<number[]>([]);
   const [creatingZone, setCreatingZone] = useState(false);
@@ -80,7 +88,7 @@ export function VirtualPlaybacksWindow({ paneId }: WindowProps) {
         const slot = index + 1;
         const number = page?.slots[String(slot)];
         const playback = server.playbacks?.pool.find((candidate) => candidate.number === number) ?? null;
-        const runtime = playback ? server.playbacks?.active.find((candidate) => candidate.playback_number === playback.number) : undefined;
+        const runtime = legacyPlaybackRuntime(playback ? runtimeByPlayback.get(playback.number) : undefined) ?? (playback ? server.playbacks?.active.find((candidate) => candidate.playback_number === playback.number) : undefined);
         const playbackCueListId = playback?.target.type === "cue_list" ? playback.target.cue_list_id : null;
         const cueList = playbackCueListId ? server.playbacks?.cue_lists.find((candidate) => candidate.id === playbackCueListId) : null;
         const currentCue = cueList && runtime && runtime.cue_index >= 0 ? cueList.cues[runtime.cue_index] : null;

@@ -369,7 +369,7 @@ describe("PlaybackFaderBank selection and Record targets", () => {
 			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "select"),
 		);
 		expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(1);
-		expect(mocks.refresh).toHaveBeenCalledOnce();
+		expect(mocks.refresh).not.toHaveBeenCalled();
 		expect(mocks.resetCommandLine).toHaveBeenCalledOnce();
 	});
 

@@ -11,19 +11,21 @@ import { useSoundToLight, type SoundToLightController } from "./useSoundToLight"
 import { editTargetedCommandWithSoftwareKey, type SoftwareKey } from "./softwareKeypad";
 import type { SpeedGroupId } from "../../api/types";
 import { canAdvancePlaybackPage, PlaybackPageMenu, PlaybackPageRenameDialog } from "./PlaybackPageDialogs";
+import { usePlaybackDeskView } from "../../features/playbackRuntime/PlaybackRuntimeView";
 
 export function PlaybackTools() {
   const { state, dispatch } = useApp();
   const server = useServer();
+  const playbackDesk = usePlaybackDeskView();
   const speedBpms = server.configuration?.speed_groups_bpm ?? [120, 90, 60, 30, 15];
   const [pagePickerOpen, setPagePickerOpen] = useState(false);
   const [pageRenameOpen, setPageRenameOpen] = useState(false);
   const [soundGroup, setSoundGroup] = useState<SpeedGroupId | null>(null);
   const sound = useSoundToLight();
   useEffect(() => {
-    const active = server.playbacks?.active_page;
+    const active = playbackDesk?.active_page;
     if (active != null && active - 1 !== state.playbackPage) dispatch({ type: "SET_PLAYBACK_PAGE", page: active - 1 });
-  }, [server.playbacks?.active_page, state.playbackPage, dispatch]);
+  }, [playbackDesk?.active_page, state.playbackPage, dispatch]);
   useEffect(() => {
     const keyboardTap = (event: Event) => void sound.action((event as CustomEvent<SpeedGroupId>).detail, {
       action: "learn",
@@ -63,7 +65,7 @@ export function PlaybackTools() {
     if (edited.execute) void server.executeCommandLine(edited.command);
   };
   const pages = server.playbacks?.pages ?? [];
-  const activePageNumber = server.playbacks?.active_page ?? state.playbackPage + 1;
+  const activePageNumber = playbackDesk?.active_page ?? state.playbackPage + 1;
   const activePage = pages.find((page) => page.number === activePageNumber) ?? null;
   const selectCurrentPage = () => {
     if (state.playbackSetArmed && activePage) {

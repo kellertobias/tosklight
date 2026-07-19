@@ -157,7 +157,7 @@ pub enum PlaybackErrorKind {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct PlaybackRuntimeSnapshotRequest {
-    #[schemars(length(min = 1, max = 256))]
+    #[schemars(length(max = 256))]
     pub identities: Vec<PlaybackRuntimeIdentity>,
 }
 
@@ -202,10 +202,10 @@ mod tests {
     }
 
     #[test]
-    fn snapshot_requires_a_bounded_identity_list_in_schema() {
+    fn snapshot_allows_a_desk_only_or_bounded_identity_list_in_schema() {
         let schema = schemars::schema_for!(PlaybackRuntimeSnapshotRequest);
         let json = serde_json::to_value(schema).expect("serialize schema");
-        assert_eq!(json["properties"]["identities"]["minItems"], 1);
+        assert!(json["properties"]["identities"].get("minItems").is_none());
         assert_eq!(json["properties"]["identities"]["maxItems"], 256);
     }
 }

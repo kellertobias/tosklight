@@ -1,4 +1,8 @@
 import type { ServerController } from "./model";
+import {
+	cueListPlaybackRequest,
+	poolPlaybackRequest,
+} from "./playbackActionMapping";
 import type { ServerContextValue } from "./ServerContextValue";
 
 export function createPlaybackRuntimeActions(
@@ -11,24 +15,39 @@ export function createPlaybackRuntimeActions(
 	| "saveVirtualPlaybackExclusionZones"
 	| "setPlaybackPage"
 > {
-	const { client, setError, playbacks, setPlaybacks } = model;
+	const { client, setError, playbacks, session, playbackRuntimeStore } = model;
 	return {
 		playbackAction: async (cueListId, action) => {
 			try {
-				await client.playbackAction(cueListId, action);
-				setPlaybacks(await client.playbacks());
+				if (!session) return;
+				const outcome = await client.playbackRuntimeAction(
+					session.desk.id,
+					cueListPlaybackRequest(cueListId, action),
+				);
+				playbackRuntimeStore.installOutcome(outcome);
 				setError(null);
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
 			}
 		},
 		poolPlaybackAction: async (number, action, input = {}) => {
+			if (!session) return;
+			const optimistic =
+				action === "master" && input.value != null
+					? playbackRuntimeStore.beginOptimisticMaster(number, input.value)
+					: null;
 			try {
-				await client.poolPlaybackAction(number, action, input);
-				setPlaybacks(await client.playbacks());
+				const outcome = await client.playbackRuntimeAction(
+					session.desk.id,
+					poolPlaybackRequest(number, action, input),
+				);
+				playbackRuntimeStore.installOutcome(outcome, optimistic);
 				setError(null);
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				const error =
+					reason instanceof Error ? reason : new Error(String(reason));
+				playbackRuntimeStore.rollbackProjection(optimistic, error);
+				setError(error.message);
 			}
 		},
 		readVirtualPlaybackExclusionZones: () =>
@@ -44,13 +63,22 @@ export function createPlaybackRuntimeActions(
 			}
 		},
 		setPlaybackPage: async (page) => {
-			if (!playbacks?.desk) return;
+			const deskId = session?.desk.id ?? playbacks?.desk.id;
+			if (!deskId) return;
+			const optimistic = playbackRuntimeStore.beginOptimisticPage(page);
 			try {
-				await client.setPlaybackPage(playbacks.desk.id, page);
-				setPlaybacks(await client.playbacks());
+				const outcome = await client.setPlaybackPage(deskId, page);
+				playbackRuntimeStore.commitPage(
+					optimistic,
+					page,
+					outcome.event_sequence,
+				);
 				setError(null);
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				const error =
+					reason instanceof Error ? reason : new Error(String(reason));
+				playbackRuntimeStore.rollbackPage(optimistic, error);
+				setError(error.message);
 			}
 		},
 	};

@@ -1,35 +1,26 @@
-import {
-	createContext,
-	type PropsWithChildren,
-	useCallback,
-	useContext,
-	useMemo,
-	useRef,
-} from "react";
+import { createContext, type PropsWithChildren, useContext } from "react";
 import { FilesProvider } from "../features/files/FilesContext";
+import { PlaybackRuntimeViewProvider } from "../features/playbackRuntime/PlaybackRuntimeView";
 import { ScreensProvider } from "../features/screens/ScreensContext";
-import {
-	ShowObjectDetailSubscription,
-	ShowObjectsViewProvider,
-} from "../features/showObjects/ShowObjectsView";
-import type { ShowObject } from "../features/showObjects/contracts";
 import { composeServerContextValue } from "../features/server/composeServerContextValue";
 import type { ServerContextValue } from "../features/server/ServerContextValue";
 import { useCommandLineController } from "../features/server/useCommandLineController";
 import { useFileAccess } from "../features/server/useFileAccess";
+import { useSelectedGroupMembership } from "../features/server/useSelectedGroupMembership";
 import { useServerConnection } from "../features/server/useServerConnection";
 import { useServerPolling } from "../features/server/useServerPolling";
 import { useServerState } from "../features/server/useServerState";
-import { useGroups } from "../features/server/useShowObjectsState";
-import { useSelectedGroupMembership } from "../features/server/useSelectedGroupMembership";
 import {
 	useServerRefresh,
 	useShowObjects,
 } from "../features/server/useShowData";
+import { useGroups } from "../features/server/useShowObjectsState";
 import type { SessionRole } from "../features/session/ownership";
-import { configuredServerUrl } from "./LightApiClient";
-import { browserDeskBoundaryToken } from "./PatchTransport";
-import { WebSocketShowObjectsEventTransport } from "./ShowObjectsEventTransport";
+import {
+	ShowObjectDetailSubscription,
+	ShowObjectsViewProvider,
+} from "../features/showObjects/ShowObjectsView";
+import { useServerFeatureBoundaries } from "./useServerFeatureBoundaries";
 
 export type {
 	CommandChoiceOption,
@@ -52,10 +43,7 @@ function SelectedGroupMembershipSync({
 	setSelectedFixtures,
 }: Pick<
 	ReturnType<typeof useServerState>,
-	| "playbacks"
-	| "selectedGroupId"
-	| "setSelectedGroupId"
-	| "setSelectedFixtures"
+	"playbacks" | "selectedGroupId" | "setSelectedGroupId" | "setSelectedFixtures"
 >) {
 	const groups = useGroups(playbacks);
 	useSelectedGroupMembership(
@@ -78,42 +66,7 @@ export function ServerProvider({
 	useServerConnection(state, loadShowObjects, sessionRole);
 	const commandLine = useCommandLineController(state);
 	const fileAccess = useFileAccess(state);
-	const showObjectsTransport = useMemo(
-		() =>
-			state.session
-				? new WebSocketShowObjectsEventTransport({
-						baseUrl: configuredServerUrl(),
-						sessionToken: state.session.token,
-						deskBoundaryToken: browserDeskBoundaryToken(),
-					})
-				: null,
-		[state.session],
-	);
-	const loadShowObjectCollection = useCallback(
-		(showId: string, kind: "group" | "preset") =>
-			state.client.objects(showId, kind) as Promise<ShowObject[]>,
-		[state.client],
-	);
-	const loadShowObject = useCallback(
-		(showId: string, kind: "group" | "preset", objectId: string) =>
-			state.client.objectOrNull(showId, kind, objectId) as Promise<ShowObject | null>,
-		[state.client],
-	);
-	const lastShowObjectError = useRef<string | null>(null);
-	const reportShowObjectError = useCallback(
-		(error: Error | null) => {
-			if (error) {
-				lastShowObjectError.current = error.message;
-				state.setError(error.message);
-				return;
-			}
-			state.setError((current) =>
-				current === lastShowObjectError.current ? null : current,
-			);
-			lastShowObjectError.current = null;
-		},
-		[state.setError],
-	);
+	const boundaries = useServerFeatureBoundaries(state);
 	const model = {
 		...state,
 		sessionRole,
@@ -161,24 +114,41 @@ export function ServerProvider({
 			<ShowObjectsViewProvider
 				showId={state.bootstrap?.active_show?.id ?? null}
 				store={state.showObjectsStore}
-				transport={showObjectsTransport}
-				loadCollection={loadShowObjectCollection}
-				loadObject={loadShowObject}
-				onError={reportShowObjectError}
+				transport={boundaries.showObjectsTransport}
+				loadCollection={boundaries.loadShowObjectCollection}
+				loadObject={boundaries.loadShowObject}
+				onError={boundaries.reportShowObjectError}
 			>
-				<SelectedGroupMembershipSync
-					playbacks={state.playbacks}
-					selectedGroupId={state.selectedGroupId}
-					setSelectedGroupId={state.setSelectedGroupId}
-					setSelectedFixtures={state.setSelectedFixtures}
-				/>
-				<ShowObjectDetailSubscription
-					kind="group"
-					objectId={state.selectedGroupId}
-				/>
-				<FilesProvider source={fileSource}>
-					<ScreensProvider source={screenSource}>{children}</ScreensProvider>
-				</FilesProvider>
+				<PlaybackRuntimeViewProvider
+					showId={state.bootstrap?.active_show?.id ?? null}
+					deskId={state.session?.desk.id ?? null}
+					store={state.playbackRuntimeStore}
+					transport={boundaries.playbackTransport}
+					loadSnapshot={boundaries.loadPlaybackSnapshot}
+					initialDesk={
+						state.playbacks
+							? {
+									activePage: state.playbacks.active_page,
+									selectedPlayback: state.playbacks.selected_playback ?? null,
+								}
+							: null
+					}
+					onError={boundaries.reportPlaybackError}
+				>
+					<SelectedGroupMembershipSync
+						playbacks={state.playbacks}
+						selectedGroupId={state.selectedGroupId}
+						setSelectedGroupId={state.setSelectedGroupId}
+						setSelectedFixtures={state.setSelectedFixtures}
+					/>
+					<ShowObjectDetailSubscription
+						kind="group"
+						objectId={state.selectedGroupId}
+					/>
+					<FilesProvider source={fileSource}>
+						<ScreensProvider source={screenSource}>{children}</ScreensProvider>
+					</FilesProvider>
+				</PlaybackRuntimeViewProvider>
 			</ShowObjectsViewProvider>
 		</ServerContext.Provider>
 	);

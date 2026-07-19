@@ -1,4 +1,7 @@
-import type { PlaybackDefinition } from "../../../api/types";
+import type {
+	PlaybackDefinition,
+	PlaybackRuntimeProjection,
+} from "../../../api/types";
 import type {
 	AuthoritativeControls,
 	PlaybackServer,
@@ -84,20 +87,26 @@ export function playbackFaderValue(
 	configuration: PlaybackServer["configuration"],
 	controls: AuthoritativeControls | undefined,
 	grandMaster: number,
+	projection?: PlaybackRuntimeProjection,
 ) {
 	if (!playback) return 0;
 	if (playback.target.type === "group") {
 		const groupId = playback.target.group_id;
 		return Math.round(
-			(controls?.groups.find((item) => item.id === groupId)?.master ??
-				groupMaster ??
-				1) * 100,
+			(projection?.target === "group"
+				? projection.master
+				: (controls?.groups.find((item) => item.id === groupId)?.master ??
+					groupMaster ??
+					1)) * 100,
 		);
 	}
 	if (playback.target.type === "speed_group") {
 		const speed =
 			controls?.speed_groups[playback.target.group.charCodeAt(0) - 65];
+		const runtime =
+			projection?.target === "speed_group" ? projection.runtime : null;
 		const bpm =
+			runtime?.effective_bpm ??
 			speed?.effective_bpm ??
 			configuration?.speed_groups_bpm[
 				playback.target.group.charCodeAt(0) - 65
@@ -106,28 +115,39 @@ export function playbackFaderValue(
 		return playback.fader === "direct_bpm"
 			? bpm / 3
 			: playback.fader === "centered_relative"
-				? speed
-					? centeredRelativePosition(speed.speed_master_scale)
+				? (runtime ?? speed)
+					? centeredRelativePosition(
+							runtime?.speed_master_scale ?? speed?.speed_master_scale ?? 1,
+						)
 					: 50
 				: Math.round(
-						(speed?.speed_master_scale ??
+						(runtime?.speed_master_scale ??
+							speed?.speed_master_scale ??
 							Math.min(1, bpm / Math.max(1, speed?.manual_bpm ?? 120))) * 100,
 					);
 	}
 	if (playback.target.type === "programmer_fade")
 		return (
-			(controls?.programmer_fade_millis ??
-				configuration?.programmer_fade_millis ??
-				3_000) / 200
+			(projection?.target === "programmer_fade"
+				? projection.millis
+				: (controls?.programmer_fade_millis ??
+					configuration?.programmer_fade_millis ??
+					3_000)) / 200
 		);
 	if (playback.target.type === "cue_fade")
 		return (
-			(controls?.cue_fade_millis ??
-				configuration?.sequence_master_fade_millis ??
-				3_000) / 600
+			(projection?.target === "cue_fade"
+				? projection.millis
+				: (controls?.cue_fade_millis ??
+					configuration?.sequence_master_fade_millis ??
+					3_000)) / 600
 		);
 	if (playback.target.type === "grand_master")
-		return Math.round((controls?.grand_master.level ?? grandMaster) * 100);
+		return Math.round(
+			(projection?.target === "grand_master"
+				? projection.runtime.level
+				: (controls?.grand_master.level ?? grandMaster)) * 100,
+		);
 	if (playback.fader === "x_fade")
 		return Math.round((active?.manual_xfade_position ?? 0) * 100);
 	if (playback.fader === "temp")
@@ -171,25 +191,32 @@ export function playbackFaderDisplay(
 	configuration: PlaybackServer["configuration"],
 	controls: AuthoritativeControls | undefined,
 	blackout: boolean,
+	projection?: PlaybackRuntimeProjection,
 ) {
 	if (!playback) return "Empty";
 	if (playback.target.type === "speed_group") {
 		const speed =
 			controls?.speed_groups[playback.target.group.charCodeAt(0) - 65];
+		const runtime =
+			projection?.target === "speed_group" ? projection.runtime : null;
 		const bpm =
+			runtime?.effective_bpm ??
 			speed?.effective_bpm ??
 			configuration?.speed_groups_bpm[
 				playback.target.group.charCodeAt(0) - 65
 			] ??
 			120;
-		return `${Math.round(bpm)} BPM · ${speed?.paused ? "PAUSED" : (speed?.source?.replaceAll("_", " ").toUpperCase() ?? `${value.toFixed(0)}%`)}`;
+		return `${Math.round(bpm)} BPM · ${(runtime?.paused ?? speed?.paused) ? "PAUSED" : ((runtime?.source ?? speed?.source)?.replaceAll("_", " ").toUpperCase() ?? `${value.toFixed(0)}%`)}`;
 	}
 	if (playback.target.type === "programmer_fade")
-		return `${((controls?.programmer_fade_millis ?? configuration?.programmer_fade_millis ?? 3_000) / 1_000).toFixed(1)} s`;
+		return `${(((projection?.target === "programmer_fade" ? projection.millis : controls?.programmer_fade_millis) ?? configuration?.programmer_fade_millis ?? 3_000) / 1_000).toFixed(1)} s`;
 	if (playback.target.type === "cue_fade")
-		return `${((controls?.cue_fade_millis ?? configuration?.sequence_master_fade_millis ?? 3_000) / 1_000).toFixed(1)} s`;
+		return `${(((projection?.target === "cue_fade" ? projection.millis : controls?.cue_fade_millis) ?? configuration?.sequence_master_fade_millis ?? 3_000) / 1_000).toFixed(1)} s`;
 	if (playback.target.type === "grand_master") {
-		const master = controls?.grand_master;
+		const master =
+			projection?.target === "grand_master"
+				? projection.runtime
+				: controls?.grand_master;
 		return `${value}%${(master?.blackout ?? blackout) ? " · BLACKOUT" : ""}${master?.dynamics_paused ? " · DYNAMICS PAUSED" : ""}`;
 	}
 	if (playback.target.type === "group") return `${value}% master`;

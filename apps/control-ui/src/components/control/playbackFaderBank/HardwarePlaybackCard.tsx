@@ -3,6 +3,7 @@ import type {
 	MouseEvent as ReactMouseEvent,
 	PointerEvent as ReactPointerEvent,
 } from "react";
+import type { PlaybackRuntimeProjection } from "../../../api/types";
 import { Input } from "../../common";
 import type { VerticalTouchFaderAction } from "../VerticalTouchFader";
 import { activateHardwareCard } from "./actions";
@@ -21,6 +22,7 @@ type HardwarePlaybackCardProps = {
 	controller: PlaybackBankController;
 	slotData: PlaybackSlotProjection;
 	active: PlaybackSnapshotActive | undefined;
+	runtimeProjection: PlaybackRuntimeProjection | undefined;
 	selected: boolean;
 	hasFader: boolean;
 	value: number;
@@ -35,6 +37,7 @@ export function HardwarePlaybackCard({
 	controller,
 	slotData,
 	active,
+	runtimeProjection,
 	selected,
 	hasFader,
 	value,
@@ -57,6 +60,7 @@ export function HardwarePlaybackCard({
 		controller.server.configuration,
 		controller.server.playbacks?.authoritative_controls,
 		controller.state.blackout,
+		runtimeProjection,
 	);
 	return (
 		// biome-ignore lint/a11y/useKeyWithClickEvents: The hardware card is a pointer selection surface whose actionable child controls retain their own keyboard semantics.

@@ -195,12 +195,6 @@ pub struct PlaybackRuntimeSnapshot {
 pub(super) fn validate_snapshot_identities(
     identities: &[PlaybackRuntimeIdentity],
 ) -> Result<(), ActionError> {
-    if identities.is_empty() {
-        return Err(ActionError::new(
-            ActionErrorKind::Invalid,
-            "at least one playback runtime identity is required",
-        ));
-    }
     if identities.len() > MAX_PLAYBACK_SNAPSHOT_IDENTITIES {
         return Err(ActionError::new(
             ActionErrorKind::Invalid,

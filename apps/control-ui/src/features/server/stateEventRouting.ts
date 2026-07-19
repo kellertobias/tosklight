@@ -22,7 +22,7 @@ function refreshHighlight(event: ServerEvent, state: ServerState) {
 }
 
 function refreshPlaybackState(event: ServerEvent, state: ServerState) {
-	const kinds = ["playback_changed", "playback_page_changed", "show_opened"];
+	const kinds = ["show_opened"];
 	if (!kinds.includes(event.kind)) return;
 	void state.client
 		.playbacks()
@@ -43,10 +43,6 @@ function refreshConfiguration(event: ServerEvent, state: ServerState) {
 			state.setConfiguration(next.configuration);
 			state.setMatter(next.matter);
 		})
-		.catch(() => undefined);
-	void state.client
-		.playbacks()
-		.then(state.setPlaybacks)
 		.catch(() => undefined);
 }
 

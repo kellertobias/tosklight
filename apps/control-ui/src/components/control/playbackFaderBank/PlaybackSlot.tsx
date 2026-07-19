@@ -1,4 +1,6 @@
 import type { CSSProperties } from "react";
+import { legacyPlaybackRuntime } from "../../../features/playbackRuntime/legacy";
+import { usePlaybackProjection } from "../../../features/playbackRuntime/PlaybackRuntimeView";
 import type { PlaybackBankController } from "./controller";
 import { playbackFaderValue } from "./feedback";
 import { HardwarePlaybackCard } from "./HardwarePlaybackCard";
@@ -14,13 +16,18 @@ export function PlaybackSlot({
 	slotData: PlaybackSlotProjection;
 }) {
 	const { playback, cue, group, slot, row } = slotData;
-	const active = playback
-		? controller.server.playbacks?.active.find(
-				(item) => item.playback_number === playback.number,
-			)
-		: undefined;
+	const runtimeProjection = usePlaybackProjection(playback?.number);
+	const active =
+		legacyPlaybackRuntime(runtimeProjection) ??
+		(playback
+			? controller.server.playbacks?.active.find(
+					(item) => item.playback_number === playback.number,
+				)
+			: undefined);
 	const selected =
-		playback?.number === controller.server.playbacks?.selected_playback;
+		playback?.number ===
+		(controller.playbackDesk?.selected_playback ??
+			controller.server.playbacks?.selected_playback);
 	const configuredButtons =
 		row?.button_count ??
 		(controller.hardware
@@ -37,6 +44,7 @@ export function PlaybackSlot({
 		controller.server.configuration,
 		controller.server.playbacks?.authoritative_controls,
 		1,
+		runtimeProjection,
 	);
 	const currentCue =
 		cue && active && active.cue_index >= 0 ? cue.cues[active.cue_index] : null;
@@ -70,6 +78,7 @@ export function PlaybackSlot({
 				controller={controller}
 				slotData={slotData}
 				active={active}
+				runtimeProjection={runtimeProjection}
 				selected={selected}
 				hasFader={hasFader}
 				value={value}
@@ -85,6 +94,7 @@ export function PlaybackSlot({
 			controller={controller}
 			slotData={slotData}
 			active={active}
+			runtimeProjection={runtimeProjection}
 			selected={selected}
 			hasFader={hasFader}
 			value={value}

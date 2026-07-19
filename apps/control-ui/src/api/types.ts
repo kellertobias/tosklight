@@ -2,6 +2,7 @@ import type { PresetFamily } from "../presetFamilies";
 import type { ShowEntry } from "./types/desk";
 
 export * from "./types/desk";
+export type * from "./playbackRuntimeTypes";
 
 export type CueUpdateMode =
 	| "existing_only"

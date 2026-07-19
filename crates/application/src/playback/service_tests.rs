@@ -471,6 +471,20 @@ fn narrow_snapshot_captures_cursor_before_reads_and_replays_a_racing_change() {
 }
 
 #[test]
+fn desk_only_snapshot_accepts_an_empty_runtime_identity_list() {
+    let events = crate::EventBus::new(8);
+    let service = PlaybackService::new(events.clone());
+    let ports = SnapshotPorts::new(events);
+    let context = envelope(ActionSource::Http, PlaybackAddress::Pool(4), None).context;
+
+    let snapshot = service.snapshot(&context, &[], &ports).unwrap();
+
+    assert_eq!(ports.requests.lock().as_slice(), &[Vec::new()]);
+    assert!(snapshot.projections.is_empty());
+    assert_eq!(snapshot.desk.desk_id, context.desk_id);
+}
+
+#[test]
 fn request_id_cannot_be_reused_for_a_different_action() {
     let service = PlaybackService::default();
     let ports = FakePorts::default();

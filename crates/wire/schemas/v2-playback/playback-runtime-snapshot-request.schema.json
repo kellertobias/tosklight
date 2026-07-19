@@ -9,8 +9,7 @@
       "items": {
         "$ref": "#/$defs/PlaybackRuntimeIdentity"
       },
-      "maxItems": 256,
-      "minItems": 1
+      "maxItems": 256
     }
   },
   "additionalProperties": false,

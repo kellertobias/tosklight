@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useServer } from "../api/ServerContext";
+import { usePlaybackDeskView } from "../features/playbackRuntime/PlaybackRuntimeView";
+import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
 import { useApp } from "../state/AppContext";
 import { CuelistDetail } from "./cuelistWindow/CuelistDetail";
 import { CuelistPool } from "./cuelistWindow/CuelistPool";
 import { CuelistSettings } from "./cuelistWindow/CuelistSettings";
 import { useCuelistPool } from "./cuelistWindow/useCuelistSelection";
 import type { WindowProps } from "./windowTypes";
-import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
 
 export function CuelistWindow({
 	active = true,
@@ -20,6 +21,9 @@ export function CuelistWindow({
 	const server = useServer();
 	const { state, dispatch } = useApp();
 	const pool = useCuelistPool();
+	const playbackDesk = usePlaybackDeskView(
+		active && cueListSource === "follow-selection",
+	);
 	const [localTab, setLocalTab] = useState<"pool" | "cues">(
 		cueListTab ?? "pool",
 	);
@@ -32,7 +36,9 @@ export function CuelistWindow({
 	const firstAvailableCuelist = pool[0]?.number ?? 1;
 	const paneSelectedCuelist =
 		cueListSource === "follow-selection"
-			? (server.playbacks?.selected_playback ?? null)
+			? (playbackDesk?.selected_playback ??
+				server.playbacks?.selected_playback ??
+				null)
 			: (fixedCueListNumber ?? firstAvailableCuelist);
 	const selectedCuelist = builtIn
 		? (state.cuelistBuiltInNumber ?? firstAvailableCuelist)
@@ -77,6 +83,7 @@ export function CuelistWindow({
 	if (tab === "pool")
 		return (
 			<CuelistPool
+				active={active}
 				compact={compact}
 				builtIn={builtIn}
 				selectedCuelist={selectedCuelist}
@@ -90,6 +97,7 @@ export function CuelistWindow({
 		);
 	return (
 		<CuelistDetail
+			active={active}
 			compact={compact}
 			cueListTab={cueListTab}
 			cueListSource={cueListSource}

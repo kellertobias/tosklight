@@ -3,6 +3,7 @@ import type {
 	MouseEvent as ReactMouseEvent,
 	PointerEvent as ReactPointerEvent,
 } from "react";
+import type { PlaybackRuntimeProjection } from "../../../api/types";
 import { isSetContextClick } from "../../../disableContextMenu";
 import {
 	VerticalTouchFader,
@@ -29,6 +30,7 @@ type TouchPlaybackCardProps = {
 	controller: PlaybackBankController;
 	slotData: PlaybackSlotProjection;
 	active: PlaybackSnapshotActive | undefined;
+	runtimeProjection: PlaybackRuntimeProjection | undefined;
 	selected: boolean;
 	hasFader: boolean;
 	value: number;
@@ -43,6 +45,7 @@ export function TouchPlaybackCard({
 	controller,
 	slotData,
 	active,
+	runtimeProjection,
 	selected,
 	hasFader,
 	value,
@@ -62,6 +65,7 @@ export function TouchPlaybackCard({
 		controller.server.configuration,
 		controller.server.playbacks?.authoritative_controls,
 		controller.state.blackout,
+		runtimeProjection,
 	);
 	return (
 		// biome-ignore lint/a11y/useKeyWithClickEvents: The touch card delegates keyboard semantics to its real child controls and uses article clicks only for the marked SET shortcut.

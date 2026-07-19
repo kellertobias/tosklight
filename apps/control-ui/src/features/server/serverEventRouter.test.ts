@@ -214,13 +214,12 @@ describe("server event routing", () => {
 		expect(received).toEqual([target]);
 	});
 
-	it("refreshes playback state for playback events", async () => {
+	it("does not broad-reload Playback runtime for semantic playback events", async () => {
 		const harness = createHarness();
 		harness.route(event("playback_changed", {}));
-		await vi.waitFor(() =>
-			expect(harness.client.playbacks).toHaveBeenCalledOnce(),
-		);
-		expect(harness.state.setPlaybacks).toHaveBeenCalledOnce();
+		await Promise.resolve();
+		expect(harness.client.playbacks).not.toHaveBeenCalled();
+		expect(harness.state.setPlaybacks).not.toHaveBeenCalled();
 	});
 });
 
@@ -318,7 +317,11 @@ describe("show object event reconciliation", () => {
 		harness.route(
 			event(
 				"preset_stored",
-				{ show_id: "show-a", revision: 2, preset_address: { family: "Color", number: 1 } },
+				{
+					show_id: "show-a",
+					revision: 2,
+					preset_address: { family: "Color", number: 1 },
+				},
 				3,
 			),
 		);
@@ -361,9 +364,7 @@ describe("show object event reconciliation", () => {
 
 	it("applies an explicit generic-object deletion without a read", async () => {
 		const harness = createHarness();
-		harness.state.cueObjects = [
-			object("cue_list", "cue-list-1", 4),
-		] as never;
+		harness.state.cueObjects = [object("cue_list", "cue-list-1", 4)] as never;
 		harness.route(
 			showObjectEvent("cue_list", "cue-list-1", 5, 10, { deleted: true }),
 		);
@@ -407,7 +408,9 @@ describe("show object event reconciliation", () => {
 		);
 		harness.client.object
 			.mockImplementationOnce(() => first)
-			.mockResolvedValueOnce(object("cue_list", "cue-list-1", 2, { name: "new" }));
+			.mockResolvedValueOnce(
+				object("cue_list", "cue-list-1", 2, { name: "new" }),
+			);
 		harness.route(showObjectEvent("cue_list", "cue-list-1", 1, 1));
 		await vi.waitFor(() =>
 			expect(harness.client.object).toHaveBeenCalledOnce(),
@@ -420,7 +423,9 @@ describe("show object event reconciliation", () => {
 		await vi.waitFor(() =>
 			expect(harness.state.cueObjects[0]?.revision).toBe(2),
 		);
-		expect((harness.state.cueObjects[0].body as { name: string }).name).toBe("new");
+		expect((harness.state.cueObjects[0].body as { name: string }).name).toBe(
+			"new",
+		);
 	});
 
 	it("accepts a recreate whose object revision restarted after deletion", async () => {

@@ -18,14 +18,15 @@ import type {
 	VersionedObject,
 } from "../../api/types";
 import type { CommandTargetMode } from "../../controlSurface/commandTarget";
+import { PlaybackRuntimeStore } from "../playbackRuntime/store";
 import type {
 	PendingCommandChoice,
 	StoredDeskLayout,
 	StoredStageLayout,
 } from "./contracts";
-import { useShowObjectsState } from "./useShowObjectsState";
 import { useHighlightState } from "./useHighlightState";
 import { useMediaServerState } from "./useMediaServerState";
+import { useShowObjectsState } from "./useShowObjectsState";
 
 export function useServerState() {
 	const client = useRef(new LightApiClient()).current;
@@ -44,6 +45,7 @@ export function useServerState() {
 		[],
 	);
 	const [playbacks, setPlaybacks] = useState<PlaybackSnapshot | null>(null);
+	const playbackRuntimeStore = useRef(new PlaybackRuntimeStore()).current;
 	const [screens, setScreens] = useState<ScreenSnapshot | null>(null);
 	const [shows, setShows] = useState<ShowEntry[]>([]);
 	const [configuration, setConfiguration] = useState<DeskConfiguration | null>(
@@ -106,6 +108,7 @@ export function useServerState() {
 		setPatchLayers,
 		playbacks,
 		setPlaybacks,
+		playbackRuntimeStore,
 		screens,
 		setScreens,
 		shows,

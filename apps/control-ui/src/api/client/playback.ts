@@ -1,4 +1,11 @@
 import type {
+	PlaybackActionOutcome,
+	PlaybackActionRequest,
+	PlaybackRuntimeIdentity,
+	PlaybackRuntimeSnapshot,
+} from "../generated/light-wire";
+import { decodePlaybackOutcome, decodePlaybackSnapshot } from "../playbackWire";
+import type {
 	ControlDesk,
 	PlaybackDefinition,
 	PlaybackPage,
@@ -52,6 +59,36 @@ export class PlaybackApiClient {
 
 	playbacks(): Promise<PlaybackSnapshot> {
 		return this.transport.request("/api/v1/playbacks");
+	}
+
+	async playbackRuntimeSnapshot(
+		deskId: string,
+		identities: PlaybackRuntimeIdentity[],
+	): Promise<PlaybackRuntimeSnapshot> {
+		const value = await this.transport.request<unknown>(
+			`/api/v2/desks/${encodeURIComponent(deskId)}/playback-runtime/snapshot`,
+			{
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ identities }),
+			},
+		);
+		return decodePlaybackSnapshot(value);
+	}
+
+	async playbackRuntimeAction(
+		deskId: string,
+		request: PlaybackActionRequest,
+	): Promise<PlaybackActionOutcome> {
+		const value = await this.transport.request<unknown>(
+			`/api/v2/desks/${encodeURIComponent(deskId)}/playback-actions`,
+			{
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify(request),
+			},
+		);
+		return decodePlaybackOutcome(value);
 	}
 
 	screens(): Promise<ScreenSnapshot> {
@@ -166,7 +203,12 @@ export class PlaybackApiClient {
 	}
 
 	setPlaybackPage(deskId: string, page: number) {
-		return this.transport.request(`/api/v1/control-desks/${deskId}/page`, {
+		return this.transport.request<{
+			desk_id: string;
+			page: number;
+			event_sequence: number | null;
+			page_creation_event_sequence: number | null;
+		}>(`/api/v1/control-desks/${deskId}/page`, {
 			method: "PUT",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify({ page }),

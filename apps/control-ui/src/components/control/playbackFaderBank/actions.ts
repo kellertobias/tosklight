@@ -52,7 +52,6 @@ export async function selectPlayback(
 ) {
 	await controller.server.poolPlaybackAction(playback.number, "select");
 	if (controller.selectionPending) controller.server.resetCommandLine();
-	await controller.server.refresh();
 }
 
 export async function recordPlayback(

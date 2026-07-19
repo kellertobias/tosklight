@@ -37,31 +37,6 @@ function useDeskLockPolling(state: ServerState) {
 	}, [client, session, setDeskLock]);
 }
 
-function usePlaybackPolling(state: ServerState) {
-	const { client, session, setPlaybacks } = state;
-	useEffect(() => {
-		if (!session) return;
-		let cancelled = false;
-		let inFlight = false;
-		const refresh = () => {
-			if (inFlight) return;
-			inFlight = true;
-			void client
-				.playbacks()
-				.then((value) => !cancelled && setPlaybacks(value))
-				.catch(() => undefined)
-				.finally(() => {
-					inFlight = false;
-				});
-		};
-		const timer = window.setInterval(refresh, 250);
-		return () => {
-			cancelled = true;
-			window.clearInterval(timer);
-		};
-	}, [client, session, setPlaybacks]);
-}
-
 function useHighlightPolling(state: ServerState) {
 	const {
 		client,
@@ -137,7 +112,6 @@ function useMatterPolling(state: ServerState) {
 export function useServerPolling(state: ServerState) {
 	useMediaPreviewCleanup(state);
 	useDeskLockPolling(state);
-	usePlaybackPolling(state);
 	useHighlightPolling(state);
 	useMatterPolling(state);
 }

@@ -4,6 +4,7 @@ import type { PlaybackPage } from "../../api/types";
 import { useServer } from "../../api/ServerContext";
 import { useApp } from "../../state/AppContext";
 import { Button, ModalTitleBar, TextInput } from "../common";
+import { usePlaybackDeskView } from "../../features/playbackRuntime/PlaybackRuntimeView";
 
 export const MAX_PLAYBACK_PAGES = 127;
 
@@ -20,6 +21,7 @@ export function canAdvancePlaybackPage(pages: PlaybackPage[], currentPage: numbe
 
 export function PlaybackPageMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
   const server = useServer();
+  const playbackDesk = usePlaybackDeskView(open);
   const { dispatch } = useApp();
   const [renamePage, setRenamePage] = useState<PlaybackPage | null>(null);
   useEffect(() => { if (!open) setRenamePage(null); }, [open]);
@@ -39,7 +41,7 @@ export function PlaybackPageMenu({ open, onClose }: { open: boolean; onClose: ()
   return createPortal(<div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
     <section className="nested-modal playback-page-modal" role="dialog" aria-modal="true" aria-label="Playback pages">
       <ModalTitleBar title="Playback pages" actions={<Button variant="primary" disabled={nextNumber == null} onClick={() => void add()}>Add new page</Button>} closeLabel="Close Playback pages" onClose={onClose}/>
-      <div>{pages.map((item) => <div className={`playback-page-row ${item.number === (server.playbacks?.active_page ?? 1) ? "active" : ""}`} key={item.number}>
+      <div>{pages.map((item) => <div className={`playback-page-row ${item.number === (playbackDesk?.active_page ?? 1) ? "active" : ""}`} key={item.number}>
         <Button className="playback-page-select" onClick={() => select(item.number)}><strong>{item.number}</strong><span>{item.name}</span></Button>
         <Button className="playback-page-rename" iconOnly aria-label={`Rename playback page ${item.number}`} title={`Rename ${item.name}`} onClick={() => setRenamePage(item)}><span className="ui-keyboard-icon" aria-hidden="true">⌨</span></Button>
       </div>)}</div>

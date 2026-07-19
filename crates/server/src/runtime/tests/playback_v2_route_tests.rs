@@ -127,6 +127,32 @@ async fn v2_snapshot_returns_only_requested_runtime_and_a_pre_read_cursor() {
 }
 
 #[tokio::test]
+async fn v2_snapshot_allows_a_desk_only_request() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let desk_id = session_desk_id(&state, &token);
+    open_playback_test_show(&app, &token).await;
+
+    let response = app
+        .oneshot(
+            Request::post(format!("/api/v2/desks/{desk_id}/playback-runtime/snapshot"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"identities":[]}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let snapshot = json(response).await;
+    assert_eq!(snapshot["desk"]["desk_id"], desk_id.to_string());
+    assert_eq!(snapshot["projections"], serde_json::json!([]));
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn v2_playback_rejects_forged_sources_control_ids_and_no_change_emits_nothing() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
