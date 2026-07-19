@@ -93,9 +93,10 @@ fn paused_profile_resolution_releases_the_shared_gate_and_rebases_unrelated_muta
     let (group_result, patch_result) = std::thread::scope(|scope| {
         let patch = scope.spawn(|| rig.service.handle(request, &rig.ports));
         pause.wait_until_started();
-        let group_result = rig
-            .active_show
-            .mutate_objects(group_mutation(rig.ports.show_id(), "during-resolution"), &rig.ports);
+        let group_result = rig.active_show.mutate_objects(
+            group_mutation(rig.ports.show_id(), "during-resolution"),
+            &rig.ports,
+        );
         pause.release();
         (group_result, patch.join().unwrap())
     });
@@ -312,7 +313,10 @@ fn concurrent_exact_retry_waits_for_and_reuses_the_first_commit() {
         pause.wait_until_started();
         let second = scope.spawn(|| rig.service.handle(retry, &rig.ports));
         pause.release();
-        (first.join().unwrap().unwrap(), second.join().unwrap().unwrap())
+        (
+            first.join().unwrap().unwrap(),
+            second.join().unwrap().unwrap(),
+        )
     });
 
     assert!(!first.replayed);

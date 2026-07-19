@@ -2,7 +2,9 @@ use super::prepare::{PreparedPatch, plan_patch, prepare_patch};
 use super::query::build_snapshot;
 use super::replay::{ReplayCache, ReplayKey};
 use super::validation::validate_action;
-use super::{PatchChange, PatchFixturesCommand, PatchFixturesResult, PatchSnapshot, ShowPatchPorts};
+use super::{
+    PatchChange, PatchFixturesCommand, PatchFixturesResult, PatchSnapshot, ShowPatchPorts,
+};
 use crate::active_show::{CompletedActiveShowTransaction, PreparedActiveShowTransaction};
 use crate::{
     ActionEnvelope, ActionError, ActionErrorKind, ActiveShowService, EventBus, EventDraft,
@@ -77,11 +79,9 @@ impl ShowPatchService {
         envelope: ActionEnvelope<PatchFixturesCommand>,
         ports: &P,
     ) -> Result<PatchFixturesResult, ActionError> {
-        let snapshot = self.active_show.snapshot(
-            &envelope.context,
-            envelope.command.show_id,
-            ports,
-        )?;
+        let snapshot =
+            self.active_show
+                .snapshot(&envelope.context, envelope.command.show_id, ports)?;
         validate_active_document(&snapshot, &envelope)?;
         let plan = plan_patch(&snapshot, &envelope.command, ports)?;
         let transaction_context = envelope.context.clone();
@@ -160,10 +160,7 @@ fn complete_patch<P: ShowPatchPorts>(
         // observe the corresponding event sequence.
         ports.reconcile_patch_change(&change);
         events
-            .publish(EventDraft::patch_changed(
-                &envelope.context,
-                change.clone(),
-            ))
+            .publish(EventDraft::patch_changed(&envelope.context, change.clone()))
             .sequence
     });
     let result = PatchFixturesResult {

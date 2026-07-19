@@ -176,15 +176,9 @@ fn active_show_update_kind(
     plan: &update::AtomicUpdatePlan,
 ) -> light_application::ActiveShowObjectKind {
     match &plan.object {
-        update::PlannedUpdateObject::CueList(_) => {
-            light_application::ActiveShowObjectKind::CueList
-        }
-        update::PlannedUpdateObject::Preset(_) => {
-            light_application::ActiveShowObjectKind::Preset
-        }
-        update::PlannedUpdateObject::Group(_) => {
-            light_application::ActiveShowObjectKind::Group
-        }
+        update::PlannedUpdateObject::CueList(_) => light_application::ActiveShowObjectKind::CueList,
+        update::PlannedUpdateObject::Preset(_) => light_application::ActiveShowObjectKind::Preset,
+        update::PlannedUpdateObject::Group(_) => light_application::ActiveShowObjectKind::Group,
     }
 }
 
