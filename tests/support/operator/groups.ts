@@ -1,8 +1,7 @@
 import { expect } from "../../../apps/control-ui/e2e/bench/fixtures";
 import type { Page } from "../../../apps/control-ui/node_modules/@playwright/test/index.js";
-import type { SoftwareKey } from "../../../apps/shared/programmerKeypad";
 import {
-	doProgrammerStep,
+	executeProgrammerCommand,
 	type ProgrammerSurface,
 } from "./programmer";
 
@@ -35,9 +34,10 @@ export async function storeGroup(request: StoreGroupRequest): Promise<void> {
 		);
 		return;
 	}
-	await doProgrammerStep(
+	await executeProgrammerCommand(
 		request.surface,
-		groupRecordKeys(request.group, request.operation ?? "overwrite"),
+		groupRecordCommand(request.group, request.operation ?? "overwrite"),
+		{ reset: false },
 	);
 }
 
@@ -79,20 +79,6 @@ async function ensureGroupPool(page: Page): Promise<void> {
 
 function groupCard(page: Page, group: number) {
 	return page.locator(".group-pool-window .group-card").nth(group - 1);
-}
-
-function groupRecordKeys(
-	group: number,
-	operation: GroupRecordOperation,
-): SoftwareKey[] {
-	const modifier = operation === "merge" ? ["+"] : operation === "subtract" ? ["-"] : [];
-	return [
-		"REC",
-		...(modifier as SoftwareKey[]),
-		"GRP",
-		...String(group).split("").map((digit) => digit as SoftwareKey),
-		"ENT",
-	];
 }
 
 function groupRecordCommand(

@@ -3,7 +3,10 @@ import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
 import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
 import type { OscHardware } from "../apps/control-ui/e2e/bench/protocols";
 import type { Locator, Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
-import { doProgrammerStep } from "./support/operator";
+import {
+  executeProgrammerCommand,
+  withOscProgrammer,
+} from "./support/operator";
 import {
   activeShowId,
   command,
@@ -521,21 +524,18 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
 
   test("OSC-002 @osc › hardware keypad command reaches feedback and both network outputs", async ({ api, bench }) => {
     await loadCanonicalCopy(api, bench, "osc-002-wire");
-    const hardware = await bench.osc();
-    const alias = api.session!.desk.osc_alias;
-    const clientId = `osc-002-${crypto.randomUUID()}`;
-    try {
-      await hardware.subscribe(clientId, alias);
-      await doProgrammerStep(
-        { via: "osc", api, hardware },
-        ["GRP", "1", "AT", "2", "5", "ENT"],
+    await withOscProgrammer(api, bench, async (surface) => {
+      await executeProgrammerCommand(
+        surface,
+        "GROUP 1 AT 25",
+        { reset: false },
       );
-      await expectProgrammer(api, (state) => expect(state.group_values["1"]?.intensity).toBeDefined());
-      const art = bench.artnet.mark(); const sacn = bench.sacn.mark();
-      await bench.tick(3_000);
-      expect(Array.from((await bench.artnet.nextAfter(art, "artnet", 1)).slots.slice(0, 12))).toEqual(Array(12).fill(64));
-      expect(Array.from((await bench.sacn.nextAfter(sacn, "sacn", 101)).slots.slice(0, 12))).toEqual(Array(12).fill(64));
-    } finally { await unsubscribeAndClose(hardware, clientId); }
+    });
+    await expectProgrammer(api, (state) => expect(state.group_values["1"]?.intensity).toBeDefined());
+    const art = bench.artnet.mark(); const sacn = bench.sacn.mark();
+    await bench.tick(3_000);
+    expect(Array.from((await bench.artnet.nextAfter(art, "artnet", 1)).slots.slice(0, 12))).toEqual(Array(12).fill(64));
+    expect(Array.from((await bench.sacn.nextAfter(sacn, "sacn", 101)).slots.slice(0, 12))).toEqual(Array(12).fill(64));
   });
 
   test("OSC-003 @osc › subscribers on separate desk aliases stay isolated and unsubscribe is reference-counted", async ({ api, bench }) => {

@@ -1,23 +1,22 @@
 import type { ApiDriver } from "../../../apps/control-ui/e2e/bench/api";
 import { expect } from "../../../apps/control-ui/e2e/bench/fixtures";
 import type { Page } from "../../../apps/control-ui/node_modules/@playwright/test/index.js";
-import type { SoftwareKey } from "../../../apps/shared/programmerKeypad";
 import { expectSelectedNumbers } from "./apiState";
-import { doProgrammerStep, storeGroup } from "../operator";
+import { executeProgrammerCommand, storeGroup } from "../operator";
 
 export async function pressCommand(
 	page: Page,
 	value: string,
 	visibleValue = value,
 ): Promise<void> {
-	await doProgrammerStep(
+	await executeProgrammerCommand(
 		{ via: "software", page },
-		["ESC", ...commandKeys(value)],
-		{ expectedCommandLine: visibleValue },
+		value,
+		{
+			expectedCommandLine: visibleValue,
+			expectedCompletion: /^(FIXTURE|GROUP)$/,
+		},
 	);
-	await doProgrammerStep({ via: "software", page }, ["ENT"], {
-		expectedCommandLine: /^(FIXTURE|GROUP)$/,
-	});
 }
 
 export async function pressCommandAndWait(
@@ -36,30 +35,15 @@ export async function enterCommandWithoutEscape(
 	value: string,
 	visibleValue = value,
 ): Promise<void> {
-	await doProgrammerStep(
+	await executeProgrammerCommand(
 		{ via: "software", page },
-		commandKeys(value),
-		{ expectedCommandLine: visibleValue },
+		value,
+		{
+			reset: false,
+			expectedCommandLine: visibleValue,
+			expectedCompletion: "FIXTURE",
+		},
 	);
-	await doProgrammerStep({ via: "software", page }, ["ENT"], {
-		expectedCommandLine: "FIXTURE",
-	});
-}
-
-function commandKeys(value: string): SoftwareKey[] {
-	return value
-		.trim()
-		.split(/\s+/)
-		.flatMap((token) => {
-			if (token === "GROUP") return ["GRP"];
-			if (token === "DEGRP") return ["GRP", "GRP"];
-			if (token === "THRU") return ["TRU"];
-			if (token === "RECORD") return ["REC"];
-			if (token === "DELETE") return ["DEL"];
-			if (token === "DIV") return ["DIV"];
-			if (/^\d+$/.test(token)) return [...token];
-			return [token];
-		}) as SoftwareKey[];
 }
 
 export async function openBuiltIn(page: Page, name: string): Promise<void> {

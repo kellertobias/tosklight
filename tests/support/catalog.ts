@@ -5,6 +5,7 @@ import {
   commandLineRequiresLegacyCompatibility,
   type ApiDriver,
 } from "../../apps/control-ui/e2e/bench/api";
+import { executeProgrammerCommand } from "./operator";
 
 export interface VersionedObject<T = Record<string, any>> {
   kind: string;
@@ -68,28 +69,11 @@ export async function command(api: ApiDriver, value: string): Promise<void> {
 }
 
 export async function pressCommand(page: Page, value: string, visibleValue?: string): Promise<void> {
-  const commandLine = page.getByLabel("Command line");
-  await page.getByRole("button", { name: "ESC", exact: true }).click();
-  for (const key of commandKeys(value)) {
-    await page.getByRole("button", { name: key, exact: true }).click();
-  }
-  if (visibleValue !== undefined) await expect(commandLine).toHaveValue(visibleValue);
-  await page.getByRole("button", { name: "ENT", exact: true }).click();
-}
-
-export function commandKeys(value: string): string[] {
-  return value.trim().split(/\s+/).flatMap((token) => {
-    if (token === "GROUP") return ["GRP"];
-    if (token === "DEGRP") return ["GRP", "GRP"];
-    if (token === "THRU") return ["TRU"];
-    if (token === "RECORD") return ["REC"];
-    if (token === "DELETE") return ["DEL"];
-    if (token === "MOVE") return ["MOV"];
-    if (token === "COPY") return ["CPY"];
-    if (token === "GO-") return ["GO −"];
-    if (/^\d+$/.test(token)) return [...token];
-    return [token];
-  });
+  await executeProgrammerCommand(
+    { via: "software", page },
+    value,
+    { expectedCommandLine: visibleValue },
+  );
 }
 
 export async function activeShowId(api: ApiDriver): Promise<string> {
