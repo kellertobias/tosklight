@@ -9,7 +9,7 @@ use super::{
 };
 use crate::{ActionContext, ActionEnvelope, ActionError, EventBus, EventDraft};
 use light_core::ShowId;
-use light_show::PortableShowRevision;
+use light_show::{PortableShowCommit, PortableShowDocument, PortableShowRevision};
 use parking_lot::Mutex;
 use std::sync::Arc;
 
@@ -157,6 +157,113 @@ impl ActiveShowService {
     pub fn events(&self) -> &EventBus {
         &self.events
     }
+
+    /// Clones one coherent active-show document while sharing the ordering gate used by every
+    /// application-owned show mutation.
+    ///
+    /// The gate is released before this method returns. Callers may therefore perform expensive
+    /// planning or adapter reads against the immutable snapshot without blocking unrelated show
+    /// mutations. Any later transaction must still validate the snapshot revision while holding
+    /// the gate.
+    pub(crate) fn snapshot<P>(
+        &self,
+        context: &ActionContext,
+        show_id: ShowId,
+        ports: &P,
+    ) -> Result<PortableShowDocument, ActionError>
+    where
+        P: ActiveShowPorts,
+    {
+        self.snapshot_with_event_sequence(context, show_id, ports)
+            .map(|(document, _)| document)
+    }
+
+    /// Captures a coherent document and application-event cursor while the mutation gate is held.
+    /// Every application-owned show event is published before that gate is released, so callers
+    /// can safely start replay strictly after the returned cursor without missing a committed
+    /// change represented by the document.
+    pub(crate) fn snapshot_with_event_sequence<P>(
+        &self,
+        context: &ActionContext,
+        show_id: ShowId,
+        ports: &P,
+    ) -> Result<(PortableShowDocument, u64), ActionError>
+    where
+        P: ActiveShowPorts,
+    {
+        ports.authorize_mutation(context)?;
+        let _ordered = self.operation.lock();
+        let unit = ports.begin_active_show(context, show_id)?;
+        Ok((unit.document().clone(), self.events.latest_sequence()))
+    }
+
+    /// Commits a capability-specific transaction through the same ordered backup, candidate,
+    /// persistence, and runtime-install lifecycle as the built-in active-show commands.
+    ///
+    /// `complete` is deliberately infallible and executes while the ordering gate is still held,
+    /// so targeted reconciliation and event publication cannot be reordered behind a later show
+    /// mutation.
+    pub(crate) fn transact<P, T, R>(
+        &self,
+        context: &ActionContext,
+        show_id: ShowId,
+        ports: &P,
+        operation: &str,
+        prepare: impl FnOnce(
+            &PortableShowDocument,
+        ) -> Result<PreparedActiveShowTransaction<T>, ActionError>,
+        complete: impl FnOnce(&EventBus, &P, &ActionContext, CompletedActiveShowTransaction<T>) -> R,
+    ) -> Result<R, ActionError>
+    where
+        P: ActiveShowPorts,
+    {
+        ports.authorize_mutation(context)?;
+        let _ordered = self.operation.lock();
+        let mut unit = ports.begin_active_show(context, show_id)?;
+        match prepare(unit.document())? {
+            PreparedActiveShowTransaction::NoChange(state) => Ok(complete(
+                &self.events,
+                ports,
+                context,
+                CompletedActiveShowTransaction {
+                    state,
+                    commit: None,
+                },
+            )),
+            PreparedActiveShowTransaction::PreparedCommit { prepared, state } => {
+                let (transaction, snapshot) = (*prepared).into_parts();
+                let runtime = ports.prepare_runtime(snapshot)?;
+                unit.backup(&backup_identity(context, show_id, operation))?;
+                let commit = unit.commit(transaction)?;
+                ports.install_runtime(runtime);
+                Ok(complete(
+                    &self.events,
+                    ports,
+                    context,
+                    CompletedActiveShowTransaction {
+                        state,
+                        commit: Some(commit),
+                    },
+                ))
+            }
+        }
+    }
+}
+
+pub(crate) enum PreparedActiveShowTransaction<T> {
+    NoChange(T),
+    /// A capability-prepared candidate whose fully migrated transaction has already passed
+    /// capability-specific scope validation. The shared service still exclusively owns runtime
+    /// preparation, backup, persistence, installation, and completion ordering.
+    PreparedCommit {
+        prepared: Box<crate::PreparedShowCandidate>,
+        state: T,
+    },
+}
+
+pub(crate) struct CompletedActiveShowTransaction<T> {
+    pub state: T,
+    pub commit: Option<PortableShowCommit>,
 }
 
 struct CommittedObjectChanges {

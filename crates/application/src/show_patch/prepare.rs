@@ -4,29 +4,47 @@ use super::projection::build_change;
 use super::record_index::StoredFixtureRecords;
 use super::records::{build_records, stage_records, stage_removals};
 use super::{PatchChange, PatchFixturesCommand, ShowPatchPorts};
-use crate::{ActionError, ActionErrorKind, prepare_show_candidate};
-use light_show::{PortableShowCandidate, PortableShowDocument, PortableShowTransaction};
+use crate::{ActionError, ActionErrorKind, PreparedShowCandidate, prepare_show_candidate};
+use light_show::{PortableShowCandidate, PortableShowDocument};
 use std::collections::BTreeSet;
 
-pub(super) enum PreparedPatch<Runtime> {
-    Noop(PatchChange),
-    Mutation(PreparedMutation<Runtime>),
+pub(super) struct PatchPlan {
+    profiles: ResolvedProfiles,
 }
 
-pub(super) struct PreparedMutation<Runtime> {
-    pub(super) transaction: PortableShowTransaction,
-    pub(super) runtime: Runtime,
+pub(super) enum PreparedPatch {
+    Noop(PatchChange),
+    Mutation(Box<PreparedMutation>),
+}
+
+pub(super) struct PreparedMutation {
+    pub(super) candidate: PreparedShowCandidate,
     pub(super) change: PatchChange,
 }
 
-pub(super) fn prepare_patch<P: ShowPatchPorts>(
+/// Resolves immutable external profile revisions against one coherent patch snapshot.
+///
+/// The caller deliberately performs this potentially slow work after releasing the shared
+/// active-show mutation gate. `prepare_patch` must therefore rebase the resulting intent against
+/// the current document after the gate is reacquired.
+pub(super) fn plan_patch<P: ShowPatchPorts>(
     document: &PortableShowDocument,
     command: &PatchFixturesCommand,
     ports: &P,
-) -> Result<PreparedPatch<P::PreparedRuntime>, ActionError> {
+) -> Result<PatchPlan, ActionError> {
     let stored = StoredFixtureRecords::load(document)?;
     let materialized = materialize_touched_legacy_profiles(document, &stored, command)?;
     let profiles = ResolvedProfiles::resolve(document, command, materialized, ports)?;
+    Ok(PatchPlan { profiles })
+}
+
+pub(super) fn prepare_patch(
+    document: &PortableShowDocument,
+    command: &PatchFixturesCommand,
+    plan: PatchPlan,
+) -> Result<PreparedPatch, ActionError> {
+    let stored = StoredFixtureRecords::load(document)?;
+    let profiles = plan.profiles;
     let fixtures = build_records(&stored, &profiles, command)?;
     let mut transaction = document.transaction();
     let modes = profiles.stage(&mut transaction)?;
@@ -37,17 +55,16 @@ pub(super) fn prepare_patch<P: ShowPatchPorts>(
         return build_change(candidate, &fixtures, &removed, &modes).map(PreparedPatch::Noop);
     }
     transaction.mark_patch_changed();
-    let prepared = prepare_show_candidate(document, transaction)?;
-    let (transaction, snapshot) = prepared.into_parts();
-    let candidate = document.candidate(&transaction).map_err(candidate_error)?;
-    ensure_patch_scoped_candidate(document, candidate, command)?;
-    let change = build_change(candidate, &fixtures, &removed, &modes)?;
-    let runtime = ports.prepare_runtime(snapshot)?;
-    Ok(PreparedPatch::Mutation(PreparedMutation {
-        transaction,
-        runtime,
+    let candidate = prepare_show_candidate(document, transaction)?;
+    let projection = document
+        .candidate(candidate.transaction())
+        .map_err(candidate_error)?;
+    ensure_patch_scoped_candidate(document, projection, command)?;
+    let change = build_change(projection, &fixtures, &removed, &modes)?;
+    Ok(PreparedPatch::Mutation(Box::new(PreparedMutation {
+        candidate,
         change,
-    }))
+    })))
 }
 
 fn ensure_patch_scoped_candidate(

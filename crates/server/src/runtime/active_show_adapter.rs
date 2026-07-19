@@ -94,6 +94,17 @@ impl ServerActiveShowUnitOfWork {
             backup,
         })
     }
+
+    pub(super) fn prepare_object_undo(
+        &self,
+        kind: &str,
+        object_id: &str,
+        expected_object_revision: light_core::Revision,
+    ) -> Result<PortableShowObjectUndo, ActionError> {
+        self.store
+            .prepare_object_undo(kind, object_id, expected_object_revision)
+            .map_err(|error| store_error(error, None))
+    }
 }
 
 impl ActiveShowUnitOfWork for ServerActiveShowUnitOfWork {
@@ -117,7 +128,7 @@ impl ActiveShowUnitOfWork for ServerActiveShowUnitOfWork {
     }
 
     fn commit(
-        self,
+        &mut self,
         transaction: PortableShowTransaction,
     ) -> Result<PortableShowCommit, ActionError> {
         let revision = self.document.revision().value();
@@ -146,9 +157,7 @@ impl ActiveShowPorts for ServerActiveShowPorts {
         object_id: &str,
         expected_object_revision: light_core::Revision,
     ) -> Result<PortableShowObjectUndo, ActionError> {
-        unit.store
-            .prepare_object_undo(kind, object_id, expected_object_revision)
-            .map_err(|error| store_error(error, None))
+        unit.prepare_object_undo(kind, object_id, expected_object_revision)
     }
 
     fn prepare_runtime(

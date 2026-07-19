@@ -1,6 +1,7 @@
 mod support;
 
 use crate::ActionErrorKind;
+use crate::active_show::PreparedActiveShowTransaction;
 use light_show::FixtureProfileRevision;
 use serde_json::json;
 use support::{CounterSnapshot, FailurePoint, TestRig, envelope, patch_batch, profile_with_modes};
@@ -79,6 +80,117 @@ fn unrelated_show_mutation_does_not_stale_the_patch_revision() {
 }
 
 #[test]
+fn paused_profile_resolution_releases_the_shared_gate_and_rebases_unrelated_mutation() {
+    let (profile, reference) = profile_with_modes(1);
+    let rig = TestRig::new(profile, FailurePoint::None);
+    let pause = rig.pause_profile_resolution();
+    let request = envelope(
+        patch_batch(rig.ports.show_id(), reference, 1),
+        "paused-resolution",
+        0,
+    );
+
+    let (group_result, patch_result) = std::thread::scope(|scope| {
+        let patch = scope.spawn(|| rig.service.handle(request, &rig.ports));
+        pause.wait_until_started();
+        let group_result = rig
+            .active_show
+            .mutate_objects(group_mutation(rig.ports.show_id(), "during-resolution"), &rig.ports);
+        pause.release();
+        (group_result, patch.join().unwrap())
+    });
+
+    let group_result = group_result.unwrap();
+    let patch_result = patch_result.unwrap();
+    assert_eq!(group_result.show_revision.value(), 1);
+    assert_eq!(group_result.event_sequence, 1);
+    assert_eq!(patch_result.change.show_revision.value(), 2);
+    assert_eq!(patch_result.change.patch_revision.value(), 1);
+    assert_eq!(patch_result.event_sequence, Some(2));
+    let document = rig.portable_document();
+    assert!(document.object("group", "during-resolution").is_some());
+    assert_eq!(document.objects_of_kind("patched_fixture").count(), 1);
+    assert_eq!(
+        rig.counters(),
+        CounterSnapshot {
+            active_show_begins: 3,
+            library_reads: 1,
+            runtime_prepares: 2,
+            backups: 2,
+            commits: 2,
+            written_fixtures: 1,
+            written_profiles: 1,
+            runtime_installs: 2,
+            reconciliations: 1,
+            ..CounterSnapshot::default()
+        }
+    );
+}
+
+#[test]
+fn patch_revision_is_revalidated_after_slow_profile_resolution() {
+    let (profile, reference) = profile_with_modes(1);
+    let rig = TestRig::new(profile, FailurePoint::None);
+    let pause = rig.pause_profile_resolution();
+    let request = envelope(
+        patch_batch(rig.ports.show_id(), reference, 1),
+        "revalidated-resolution",
+        0,
+    );
+
+    let patch_error = std::thread::scope(|scope| {
+        let patch = scope.spawn(|| rig.service.handle(request, &rig.ports));
+        pause.wait_until_started();
+        let context = crate::ActionContext::operator(
+            Uuid::from_u128(1),
+            Uuid::from_u128(2),
+            Uuid::from_u128(4),
+            crate::ActionSource::System,
+        );
+        let competing = rig.active_show.transact(
+            &context,
+            rig.ports.show_id(),
+            &rig.ports,
+            "competing-patch",
+            |document| {
+                let mut transaction = document.transaction();
+                transaction
+                    .put("future_patch_marker", "1", json!({"changed": true}))
+                    .mark_patch_changed();
+                let prepared = crate::prepare_show_candidate(document, transaction)?;
+                Ok(PreparedActiveShowTransaction::PreparedCommit {
+                    prepared: Box::new(prepared),
+                    state: (),
+                })
+            },
+            |_events, _ports, _context, _completed| (),
+        );
+        pause.release();
+        competing.unwrap();
+        patch.join().unwrap().unwrap_err()
+    });
+
+    assert_eq!(patch_error.kind, ActionErrorKind::Conflict);
+    assert_eq!(patch_error.message, "stale patch revision");
+    assert_eq!(patch_error.current_revision, Some(1));
+    let document = rig.portable_document();
+    assert!(document.object("future_patch_marker", "1").is_some());
+    assert_eq!(document.objects_of_kind("patched_fixture").count(), 0);
+    assert_eq!(
+        rig.counters(),
+        CounterSnapshot {
+            active_show_begins: 3,
+            library_reads: 1,
+            runtime_prepares: 1,
+            backups: 1,
+            commits: 1,
+            runtime_installs: 1,
+            ..CounterSnapshot::default()
+        }
+    );
+}
+
+#[test]
 fn invalid_complete_patch_stops_before_backup_and_commit() {
     let (profile, reference) = profile_with_modes(1);
     let rig = TestRig::new(profile, FailurePoint::None);
@@ -98,7 +210,7 @@ fn invalid_complete_patch_stops_before_backup_and_commit() {
     assert_eq!(
         rig.counters(),
         CounterSnapshot {
-            active_show_begins: 1,
+            active_show_begins: 2,
             library_reads: 1,
             runtime_prepares: 1,
             ..CounterSnapshot::default()
@@ -124,7 +236,7 @@ fn backup_failure_prevents_commit_and_every_downstream_effect() {
     assert_eq!(
         rig.counters(),
         CounterSnapshot {
-            active_show_begins: 1,
+            active_show_begins: 2,
             library_reads: 1,
             runtime_prepares: 1,
             backups: 1,
@@ -151,7 +263,7 @@ fn commit_failure_prevents_install_reconcile_and_event_publication() {
     assert_eq!(
         rig.counters(),
         CounterSnapshot {
-            active_show_begins: 1,
+            active_show_begins: 2,
             library_reads: 1,
             runtime_prepares: 1,
             backups: 1,
@@ -181,6 +293,34 @@ fn exact_retry_reuses_committed_revisions_and_event_without_side_effects() {
     assert_eq!(rig.counters(), successful_counts(1));
     assert_eq!(rig.service.events().latest_sequence(), 1);
     rig.assert_portable_patch(1, 1);
+}
+
+#[test]
+fn concurrent_exact_retry_waits_for_and_reuses_the_first_commit() {
+    let (profile, reference) = profile_with_modes(1);
+    let rig = TestRig::new(profile, FailurePoint::None);
+    let pause = rig.pause_profile_resolution();
+    let request = envelope(
+        patch_batch(rig.ports.show_id(), reference, 1),
+        "concurrent-retry",
+        0,
+    );
+    let retry = request.clone();
+
+    let (first, second) = std::thread::scope(|scope| {
+        let first = scope.spawn(|| rig.service.handle(request, &rig.ports));
+        pause.wait_until_started();
+        let second = scope.spawn(|| rig.service.handle(retry, &rig.ports));
+        pause.release();
+        (first.join().unwrap().unwrap(), second.join().unwrap().unwrap())
+    });
+
+    assert!(!first.replayed);
+    let mut expected_replay = first.clone();
+    expected_replay.replayed = true;
+    assert_eq!(second, expected_replay);
+    assert_eq!(rig.counters(), successful_counts(1));
+    assert_eq!(rig.service.events().latest_sequence(), 1);
 }
 
 #[test]
@@ -235,7 +375,7 @@ fn removal_uses_the_same_atomic_compile_and_event_path() {
     assert_eq!(
         rig.counters(),
         CounterSnapshot {
-            active_show_begins: 2,
+            active_show_begins: 4,
             library_reads: 1,
             catalog_reads: 0,
             runtime_prepares: 2,
@@ -271,7 +411,7 @@ fn removing_an_already_absent_fixture_is_an_idempotent_noop() {
     assert_eq!(result.change.show_revision.value(), 0);
     assert_eq!(result.change.patch_revision.value(), 0);
     assert_eq!(result.event_sequence, None);
-    assert_eq!(rig.counters(), begun_only_counts());
+    assert_eq!(rig.counters(), planned_no_effect_counts());
     assert_eq!(rig.service.events().latest_sequence(), 0);
     rig.assert_empty_show();
 }
@@ -304,7 +444,7 @@ fn identical_desired_patch_is_a_cached_noop_without_side_effects() {
     assert_eq!(
         rig.counters(),
         CounterSnapshot {
-            active_show_begins: 2,
+            active_show_begins: 4,
             library_reads: 1,
             catalog_reads: 0,
             runtime_prepares: 1,
@@ -339,7 +479,7 @@ fn snapshot_is_authoritative_and_captures_the_patch_event_cursor() {
     assert_eq!(snapshot.fixtures.len(), 2);
     assert_eq!(snapshot.profile_revisions.len(), 1);
     assert_eq!(snapshot.profile_revisions[0].referenced_modes.len(), 1);
-    assert_eq!(rig.counters().active_show_begins, 2);
+    assert_eq!(rig.counters().active_show_begins, 3);
     assert_eq!(rig.counters().library_reads, 1);
 }
 
@@ -453,7 +593,7 @@ fn patching_cannot_silently_migrate_an_unrelated_legacy_fixture() {
 
     assert_eq!(error.kind, ActionErrorKind::Unavailable);
     assert_eq!(error.current_revision, Some(0));
-    assert_eq!(rig.counters(), begun_only_counts());
+    assert_eq!(rig.counters(), planned_no_effect_counts());
     assert_eq!(rig.service.events().latest_sequence(), 0);
     let document = rig.portable_document();
     let unrelated = document
@@ -547,7 +687,7 @@ fn profile_with_unknown_field(profile: &FixtureProfileRevision) -> FixtureProfil
 
 fn successful_counts(fixtures: usize) -> CounterSnapshot {
     CounterSnapshot {
-        active_show_begins: 1,
+        active_show_begins: 2,
         library_reads: 1,
         catalog_reads: 0,
         runtime_prepares: 1,
@@ -564,5 +704,42 @@ fn begun_only_counts() -> CounterSnapshot {
     CounterSnapshot {
         active_show_begins: 1,
         ..CounterSnapshot::default()
+    }
+}
+
+fn planned_no_effect_counts() -> CounterSnapshot {
+    CounterSnapshot {
+        active_show_begins: 2,
+        ..CounterSnapshot::default()
+    }
+}
+
+fn group_mutation(
+    show_id: light_core::ShowId,
+    id: &str,
+) -> crate::ActionEnvelope<crate::MutateActiveShowObjectsCommand> {
+    let group = light_programmer::GroupDefinition {
+        id: id.into(),
+        name: "Concurrent group".into(),
+        ..Default::default()
+    };
+    crate::ActionEnvelope {
+        context: crate::ActionContext::operator(
+            Uuid::from_u128(1),
+            Uuid::from_u128(2),
+            Uuid::from_u128(5),
+            crate::ActionSource::System,
+        ),
+        command: crate::MutateActiveShowObjectsCommand {
+            show_id,
+            mutations: vec![crate::ActiveShowObjectMutation {
+                kind: crate::ActiveShowObjectKind::Group,
+                object_id: id.into(),
+                expected_object_revision: 0,
+                mutation: crate::ActiveShowObjectMutationKind::Put {
+                    body: serde_json::to_value(group).unwrap(),
+                },
+            }],
+        },
     }
 }

@@ -3,8 +3,8 @@ mod errors;
 use self::errors::{engine_error, fixture_error, store_error};
 use super::{ActiveShowBackupKind, AppState, ServerActiveShowUnitOfWork};
 use light_application::{
-    ActionContext, ActionError, ActionErrorKind, ActiveShowUnitOfWork, BackupIdentity, PatchChange,
-    ShowPatchPorts,
+    ActionContext, ActionError, ActionErrorKind, ActiveShowPorts, ActiveShowUnitOfWork,
+    BackupIdentity, PatchChange, ShowPatchPorts,
 };
 use light_core::{FixtureId, Revision, ShowId};
 use light_engine::{EngineSnapshot, PreparedEngineSnapshot};
@@ -16,9 +16,9 @@ use std::{collections::HashSet, sync::Arc};
 
 /// Runtime adapter for the application-owned active-show patch workflow.
 ///
-/// Callers hold `AppState::activation_lock` across the complete service call. That lock prevents
-/// the active show from changing between this adapter's exact identity check, its atomic commit,
-/// and the subsequent live-engine installation.
+/// Each opened unit of work owns `AppState::activation_lock`. Snapshot units release it before
+/// immutable fixture-library planning begins; transaction units retain it through commit, runtime
+/// installation, reconciliation, and event publication.
 #[derive(Clone)]
 pub(super) struct ServerShowPatchPorts {
     state: AppState,
@@ -42,9 +42,68 @@ impl ServerShowPatchPorts {
     }
 }
 
+#[cfg(test)]
+#[derive(Default)]
+pub(super) struct PatchProfileResolutionPause {
+    state: std::sync::Mutex<PatchProfileResolutionPauseState>,
+    changed: std::sync::Condvar,
+}
+
+#[cfg(test)]
+#[derive(Default)]
+struct PatchProfileResolutionPauseState {
+    armed: bool,
+    started: bool,
+    released: bool,
+}
+
+#[cfg(test)]
+impl PatchProfileResolutionPause {
+    pub(super) fn arm(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.armed = true;
+        state.started = false;
+        state.released = false;
+    }
+
+    pub(super) fn wait_until_started(&self) {
+        let state = self.state.lock().unwrap();
+        let (state, _) = self
+            .changed
+            .wait_timeout_while(state, std::time::Duration::from_secs(5), |state| {
+                !state.started
+            })
+            .unwrap();
+        assert!(
+            state.started,
+            "server patch profile resolution did not start"
+        );
+    }
+
+    pub(super) fn release(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.released = true;
+        self.changed.notify_all();
+    }
+
+    fn pause_if_armed(&self) {
+        let mut state = self.state.lock().unwrap();
+        if !state.armed {
+            return;
+        }
+        state.started = true;
+        self.changed.notify_all();
+        while !state.released {
+            state = self.changed.wait(state).unwrap();
+        }
+        state.armed = false;
+    }
+}
+
 pub(super) struct ServerShowPatchUnitOfWork {
     inner: ServerActiveShowUnitOfWork,
     patch_revision: u64,
+    _activation: tokio::sync::OwnedMutexGuard<()>,
 }
 
 impl ActiveShowUnitOfWork for ServerShowPatchUnitOfWork {
@@ -59,7 +118,7 @@ impl ActiveShowUnitOfWork for ServerShowPatchUnitOfWork {
     }
 
     fn commit(
-        self,
+        &mut self,
         transaction: PortableShowTransaction,
     ) -> Result<PortableShowCommit, ActionError> {
         self.inner
@@ -68,7 +127,7 @@ impl ActiveShowUnitOfWork for ServerShowPatchUnitOfWork {
     }
 }
 
-impl ShowPatchPorts for ServerShowPatchPorts {
+impl ActiveShowPorts for ServerShowPatchPorts {
     type UnitOfWork = ServerShowPatchUnitOfWork;
     type PreparedRuntime = PreparedEngineSnapshot;
 
@@ -77,6 +136,7 @@ impl ShowPatchPorts for ServerShowPatchPorts {
         _context: &ActionContext,
         show_id: ShowId,
     ) -> Result<Self::UnitOfWork, ActionError> {
+        let activation = self.state.activation_lock.clone().blocking_lock_owned();
         let unit =
             ServerActiveShowUnitOfWork::begin(&self.state, show_id, ActiveShowBackupKind::Patch)?;
         let patch_revision = unit.document().patch_revision().value();
@@ -84,14 +144,45 @@ impl ShowPatchPorts for ServerShowPatchPorts {
         Ok(ServerShowPatchUnitOfWork {
             inner: unit,
             patch_revision,
+            _activation: activation,
         })
     }
 
+    fn prepare_object_undo(
+        &self,
+        unit: &Self::UnitOfWork,
+        kind: &str,
+        object_id: &str,
+        expected_object_revision: Revision,
+    ) -> Result<light_show::PortableShowObjectUndo, ActionError> {
+        unit.inner
+            .prepare_object_undo(kind, object_id, expected_object_revision)
+            .map_err(|error| at_current_patch_revision(error, self.current_patch_revision()))
+    }
+
+    fn prepare_runtime(
+        &self,
+        snapshot: EngineSnapshot,
+    ) -> Result<Self::PreparedRuntime, ActionError> {
+        self.state
+            .engine
+            .prepare_snapshot(snapshot)
+            .map_err(|error| engine_error(error, self.current_patch_revision()))
+    }
+
+    fn install_runtime(&self, prepared: Self::PreparedRuntime) {
+        self.state.engine.install_prepared_snapshot(prepared);
+    }
+}
+
+impl ShowPatchPorts for ServerShowPatchPorts {
     fn resolve_profile_revision(
         &self,
         profile_id: FixtureId,
         revision: Revision,
     ) -> Result<FixtureProfileRevision, ActionError> {
+        #[cfg(test)]
+        self.state.patch_profile_resolution.pause_if_armed();
         let library_revision = u32::try_from(revision).map_err(|_| {
             at_current_patch_revision(
                 ActionError::new(
@@ -118,20 +209,6 @@ impl ShowPatchPorts for ServerShowPatchPorts {
             })?;
         FixtureProfileRevision::new(profile_id, revision, profile)
             .map_err(|error| store_error(error, self.current_patch_revision()))
-    }
-
-    fn prepare_runtime(
-        &self,
-        snapshot: EngineSnapshot,
-    ) -> Result<Self::PreparedRuntime, ActionError> {
-        self.state
-            .engine
-            .prepare_snapshot(snapshot)
-            .map_err(|error| engine_error(error, self.current_patch_revision()))
-    }
-
-    fn install_runtime(&self, prepared: Self::PreparedRuntime) {
-        self.state.engine.install_prepared_snapshot(prepared);
     }
 
     fn reconcile_patch_change(&self, change: &PatchChange) {

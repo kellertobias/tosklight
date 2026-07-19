@@ -61,10 +61,8 @@ where
     T: Send + 'static,
     F: FnOnce(&ShowPatchService, &ServerShowPatchPorts) -> Result<T, ActionError> + Send + 'static,
 {
-    let activation = state.activation_lock.clone().lock_owned().await;
     let service = state.show_patch.clone();
     tokio::task::spawn_blocking(move || {
-        let _activation = activation;
         let ports = ServerShowPatchPorts::new(state);
         operation(&service, &ports)
     })

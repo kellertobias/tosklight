@@ -1,7 +1,7 @@
 use crate::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionSource,
-    ActiveShowUnitOfWork, BackupIdentity, EventBus, PatchChange, PatchFixtureCandidate,
-    PatchFixturesCommand, ShowPatchPorts, ShowPatchService,
+    ActiveShowPorts, ActiveShowService, ActiveShowUnitOfWork, BackupIdentity, EventBus, PatchChange,
+    PatchFixtureCandidate, PatchFixturesCommand, ShowPatchPorts, ShowPatchService,
 };
 use light_core::{FixtureId, Revision, ShowId};
 use light_engine::EngineSnapshot;
@@ -10,17 +10,18 @@ use light_fixture::{
     PatchedFixtureProfileReference, SplitPatch,
 };
 use light_show::{
-    FixtureProfileRevision, PortableShowCommit, PortableShowDocument, PortableShowTransaction,
-    ShowStore, StoreError,
+    FixtureProfileRevision, PortableShowCommit, PortableShowDocument, PortableShowObjectUndo,
+    PortableShowTransaction, ShowStore, StoreError,
 };
 use std::{
     collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
     sync::{
-        Arc,
+        Arc, Condvar, Mutex,
         atomic::{AtomicUsize, Ordering},
     },
+    time::Duration,
 };
 use uuid::Uuid;
 
@@ -78,14 +79,18 @@ impl Counters {
 }
 
 pub struct TestRig {
+    pub active_show: ActiveShowService,
     pub service: ShowPatchService,
     pub ports: CounterPorts,
 }
 
 impl TestRig {
     pub fn new(profile: FixtureProfileRevision, failure: FailurePoint) -> Self {
+        let events = EventBus::new(32);
+        let active_show = ActiveShowService::new(events);
         Self {
-            service: ShowPatchService::new(EventBus::new(32)),
+            service: ShowPatchService::new(active_show.clone()),
+            active_show,
             ports: CounterPorts::new(profile, failure),
         }
     }
@@ -171,6 +176,10 @@ impl TestRig {
             )
             .unwrap();
     }
+
+    pub fn pause_profile_resolution(&self) -> Arc<ProfileResolutionPause> {
+        self.ports.profile_resolution.enable()
+    }
 }
 
 pub struct CounterPorts {
@@ -179,6 +188,7 @@ pub struct CounterPorts {
     profile: FixtureProfileRevision,
     failure: FailurePoint,
     counters: Arc<Counters>,
+    profile_resolution: Arc<ProfileResolutionControl>,
 }
 
 impl CounterPorts {
@@ -192,11 +202,73 @@ impl CounterPorts {
             profile,
             failure,
             counters: Arc::new(Counters::default()),
+            profile_resolution: Arc::new(ProfileResolutionControl::default()),
         }
     }
 
     pub const fn show_id(&self) -> ShowId {
         self.show_id
+    }
+}
+
+#[derive(Default)]
+struct ProfileResolutionState {
+    enabled: bool,
+    started: bool,
+    released: bool,
+}
+
+#[derive(Default)]
+struct ProfileResolutionControl {
+    state: Mutex<ProfileResolutionState>,
+    changed: Condvar,
+}
+
+impl ProfileResolutionControl {
+    fn enable(self: &Arc<Self>) -> Arc<ProfileResolutionPause> {
+        let mut state = self.state.lock().unwrap();
+        state.enabled = true;
+        state.started = false;
+        state.released = false;
+        drop(state);
+        Arc::new(ProfileResolutionPause {
+            control: Arc::clone(self),
+        })
+    }
+
+    fn pause_if_enabled(&self) {
+        let mut state = self.state.lock().unwrap();
+        if !state.enabled {
+            return;
+        }
+        state.started = true;
+        self.changed.notify_all();
+        while !state.released {
+            state = self.changed.wait(state).unwrap();
+        }
+    }
+}
+
+pub struct ProfileResolutionPause {
+    control: Arc<ProfileResolutionControl>,
+}
+
+impl ProfileResolutionPause {
+    pub fn wait_until_started(&self) {
+        let state = self.control.state.lock().unwrap();
+        let (state, wait) = self
+            .control
+            .changed
+            .wait_timeout_while(state, Duration::from_secs(5), |state| !state.started)
+            .unwrap();
+        assert!(state.started, "profile resolution did not start in time");
+        assert!(!wait.timed_out(), "profile resolution start timed out");
+    }
+
+    pub fn release(&self) {
+        let mut state = self.control.state.lock().unwrap();
+        state.released = true;
+        self.control.changed.notify_all();
     }
 }
 
@@ -231,7 +303,7 @@ impl ActiveShowUnitOfWork for CounterUnitOfWork {
     }
 
     fn commit(
-        self,
+        &mut self,
         transaction: PortableShowTransaction,
     ) -> Result<PortableShowCommit, ActionError> {
         self.counters.commits.fetch_add(1, Ordering::SeqCst);
@@ -260,7 +332,7 @@ impl ActiveShowUnitOfWork for CounterUnitOfWork {
     }
 }
 
-impl ShowPatchPorts for CounterPorts {
+impl ActiveShowPorts for CounterPorts {
     type UnitOfWork = CounterUnitOfWork;
     type PreparedRuntime = EngineSnapshot;
 
@@ -288,13 +360,16 @@ impl ShowPatchPorts for CounterPorts {
         })
     }
 
-    fn resolve_profile_revision(
+    fn prepare_object_undo(
         &self,
-        _profile_id: FixtureId,
-        _revision: Revision,
-    ) -> Result<FixtureProfileRevision, ActionError> {
-        self.counters.library_reads.fetch_add(1, Ordering::SeqCst);
-        Ok(self.profile.clone())
+        unit: &Self::UnitOfWork,
+        kind: &str,
+        object_id: &str,
+        expected_object_revision: Revision,
+    ) -> Result<PortableShowObjectUndo, ActionError> {
+        unit.show
+            .prepare_object_undo(kind, object_id, expected_object_revision)
+            .map_err(store_error)
     }
 
     fn prepare_runtime(
@@ -314,6 +389,18 @@ impl ShowPatchPorts for CounterPorts {
         self.counters
             .runtime_installs
             .fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+impl ShowPatchPorts for CounterPorts {
+    fn resolve_profile_revision(
+        &self,
+        _profile_id: FixtureId,
+        _revision: Revision,
+    ) -> Result<FixtureProfileRevision, ActionError> {
+        self.counters.library_reads.fetch_add(1, Ordering::SeqCst);
+        self.profile_resolution.pause_if_enabled();
+        Ok(self.profile.clone())
     }
 
     fn reconcile_patch_change(&self, _change: &PatchChange) {

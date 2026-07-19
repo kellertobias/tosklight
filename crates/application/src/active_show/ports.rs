@@ -12,8 +12,11 @@ pub trait ActiveShowUnitOfWork {
 
     fn backup(&mut self, identity: &BackupIdentity) -> Result<(), ActionError>;
 
+    /// Persists the prepared transaction while retaining the open unit until runtime installation,
+    /// adapter reconciliation, and event publication finish. Adapters may keep lifecycle guards
+    /// in the unit to prevent the active-show identity changing during that post-commit sequence.
     fn commit(
-        self,
+        &mut self,
         transaction: PortableShowTransaction,
     ) -> Result<PortableShowCommit, ActionError>;
 }

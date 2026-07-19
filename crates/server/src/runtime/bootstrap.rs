@@ -166,6 +166,7 @@ fn build_app_state(
     let matter_transport = Arc::new(matter::MatterTransport::new(&startup.persistent.data_dir));
     let osc_feedback = Arc::new(UdpSocket::bind("0.0.0.0:0")?);
     let application_events = resources.events.clone();
+    let active_show_service = ActiveShowService::new(application_events.clone());
     Ok(AppState {
         desk: Arc::new(Mutex::new(startup.persistent.desk)),
         fixture_library: Arc::new(Mutex::new(startup.persistent.fixture_library)),
@@ -192,8 +193,10 @@ fn build_app_state(
         active_show_error: Arc::new(RwLock::new(startup.active_show_error)),
         events: startup.events,
         application_events: application_events.clone(),
-        active_show_service: ActiveShowService::new(application_events.clone()),
-        show_patch: ShowPatchService::new(application_events),
+        active_show_service: active_show_service.clone(),
+        show_patch: ShowPatchService::new(active_show_service),
+        #[cfg(test)]
+        patch_profile_resolution: Arc::default(),
         audit_events: Arc::new(Mutex::new(VecDeque::with_capacity(2048))),
         command_history: Arc::new(Mutex::new(HashMap::new())),
         event_revision: Arc::new(AtomicU64::new(0)),

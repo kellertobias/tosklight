@@ -1,33 +1,38 @@
-use super::prepare::{PreparedMutation, PreparedPatch, prepare_patch};
+use super::prepare::{PreparedPatch, plan_patch, prepare_patch};
 use super::query::build_snapshot;
 use super::replay::{ReplayCache, ReplayKey};
 use super::validation::validate_action;
-use super::{PatchFixturesCommand, PatchFixturesResult, PatchSnapshot, ShowPatchPorts};
+use super::{PatchChange, PatchFixturesCommand, PatchFixturesResult, PatchSnapshot, ShowPatchPorts};
+use crate::active_show::{CompletedActiveShowTransaction, PreparedActiveShowTransaction};
 use crate::{
-    ActionEnvelope, ActionError, ActionErrorKind, ActiveShowUnitOfWork, BackupIdentity, EventBus,
-    EventDraft,
+    ActionEnvelope, ActionError, ActionErrorKind, ActiveShowService, EventBus, EventDraft,
 };
 use parking_lot::Mutex;
 use std::sync::Arc;
 
+/// Capability boundary for active-show patching.
+///
+/// Replay coordination remains patch-specific, while every document mutation is ordered by the
+/// injected [`ActiveShowService`]. Slow immutable fixture-library reads therefore never hold the
+/// shared mutation gate.
 #[derive(Clone)]
 pub struct ShowPatchService {
-    operation: Arc<Mutex<()>>,
+    active_show: ActiveShowService,
+    replay_order: Arc<Mutex<()>>,
     replay: Arc<Mutex<ReplayCache>>,
-    events: EventBus,
 }
 
 impl ShowPatchService {
-    pub fn new(events: EventBus) -> Self {
+    pub fn new(active_show: ActiveShowService) -> Self {
         Self {
-            operation: Arc::new(Mutex::new(())),
+            active_show,
+            replay_order: Arc::new(Mutex::new(())),
             replay: Arc::new(Mutex::new(ReplayCache::default())),
-            events,
         }
     }
 
     pub fn events(&self) -> &EventBus {
-        &self.events
+        self.active_show.events()
     }
 
     pub fn snapshot<P: ShowPatchPorts>(
@@ -37,11 +42,12 @@ impl ShowPatchService {
         ports: &P,
     ) -> Result<PatchSnapshot, ActionError> {
         ports.authorize_patch_read(context)?;
-        let _ordered = self.operation.lock();
-        let unit = ports.begin_active_show(context, show_id)?;
-        validate_active_show_id(unit.document(), show_id)?;
-        let mut snapshot = build_snapshot(unit.document())?;
-        snapshot.event_sequence = self.events.latest_sequence();
+        let (document, event_sequence) = self
+            .active_show
+            .snapshot_with_event_sequence(context, show_id, ports)?;
+        validate_active_show_id(&document, show_id)?;
+        let mut snapshot = build_snapshot(&document)?;
+        snapshot.event_sequence = event_sequence;
         Ok(snapshot)
     }
 
@@ -56,7 +62,9 @@ impl ShowPatchService {
         if let Some(result) = self.cached(&key, &envelope)? {
             return Ok(result);
         }
-        let _ordered = self.operation.lock();
+        // This lock provides exact-once request replay, not show-mutation ordering. It may be held
+        // during library reads because ordinary active-show mutations use only `active_show`.
+        let _replay_order = self.replay_order.lock();
         if let Some(result) = self.cached(&key, &envelope)? {
             return Ok(result);
         }
@@ -69,56 +77,46 @@ impl ShowPatchService {
         envelope: ActionEnvelope<PatchFixturesCommand>,
         ports: &P,
     ) -> Result<PatchFixturesResult, ActionError> {
-        let mut unit = ports.begin_active_show(&envelope.context, envelope.command.show_id)?;
-        validate_active_document(unit.document(), &envelope)?;
-        let prepared = prepare_patch(unit.document(), &envelope.command, ports)?;
-        match prepared {
-            PreparedPatch::Noop(change) => Ok(self.finish_noop(key, envelope, change)),
-            PreparedPatch::Mutation(prepared) => {
-                unit.backup(&backup_identity(&envelope, &key))?;
-                self.commit_install_publish(key, envelope, unit, prepared, ports)
-            }
-        }
-    }
-
-    fn commit_install_publish<P: ShowPatchPorts>(
-        &self,
-        key: ReplayKey,
-        envelope: ActionEnvelope<PatchFixturesCommand>,
-        unit: P::UnitOfWork,
-        prepared: PreparedMutation<P::PreparedRuntime>,
-        ports: &P,
-    ) -> Result<PatchFixturesResult, ActionError> {
-        let commit = unit.commit(prepared.transaction)?;
-        let mut change = prepared.change;
-        change.show_revision = commit.revision();
-        change.patch_revision = commit.patch_revision();
-        ports.install_runtime(prepared.runtime);
-        ports.reconcile_patch_change(&change);
-        let event = self
-            .events
-            .publish(EventDraft::patch_changed(&envelope.context, change.clone()));
-        let result = committed_result(&envelope, key.request_id(), change, event.sequence);
-        self.remember(key, &envelope.context, envelope.command, &result);
-        Ok(result)
-    }
-
-    fn finish_noop(
-        &self,
-        key: ReplayKey,
-        envelope: ActionEnvelope<PatchFixturesCommand>,
-        change: super::PatchChange,
-    ) -> PatchFixturesResult {
-        let result = PatchFixturesResult {
-            context: envelope.context.clone(),
-            request_id: key.request_id().to_owned(),
-            replayed: false,
-            changed: false,
-            change,
-            event_sequence: None,
-        };
-        self.remember(key, &envelope.context, envelope.command, &result);
-        result
+        let snapshot = self.active_show.snapshot(
+            &envelope.context,
+            envelope.command.show_id,
+            ports,
+        )?;
+        validate_active_document(&snapshot, &envelope)?;
+        let plan = plan_patch(&snapshot, &envelope.command, ports)?;
+        let transaction_context = envelope.context.clone();
+        let replay = Arc::clone(&self.replay);
+        self.active_show.transact(
+            &transaction_context,
+            envelope.command.show_id,
+            ports,
+            "patch",
+            move |document| {
+                validate_active_document(document, &envelope)?;
+                match prepare_patch(document, &envelope.command, plan)? {
+                    PreparedPatch::Noop(change) => {
+                        Ok(PreparedActiveShowTransaction::NoChange(PatchCompletion {
+                            key,
+                            envelope,
+                            change,
+                        }))
+                    }
+                    PreparedPatch::Mutation(prepared) => {
+                        Ok(PreparedActiveShowTransaction::PreparedCommit {
+                            prepared: Box::new(prepared.candidate),
+                            state: PatchCompletion {
+                                key,
+                                envelope,
+                                change: prepared.change,
+                            },
+                        })
+                    }
+                }
+            },
+            move |events, ports, _context, completed| {
+                complete_patch(events, ports, completed, &replay)
+            },
+        )
     }
 
     fn cached(
@@ -130,24 +128,56 @@ impl ShowPatchService {
             .lock()
             .get(key, &envelope.context, &envelope.command)
     }
-
-    fn remember(
-        &self,
-        key: ReplayKey,
-        context: &crate::ActionContext,
-        command: PatchFixturesCommand,
-        result: &PatchFixturesResult,
-    ) {
-        self.replay
-            .lock()
-            .insert(key, context, command, result.clone());
-    }
 }
 
 impl Default for ShowPatchService {
     fn default() -> Self {
-        Self::new(EventBus::default())
+        Self::new(ActiveShowService::default())
     }
+}
+
+struct PatchCompletion {
+    key: ReplayKey,
+    envelope: ActionEnvelope<PatchFixturesCommand>,
+    change: PatchChange,
+}
+
+fn complete_patch<P: ShowPatchPorts>(
+    events: &EventBus,
+    ports: &P,
+    completed: CompletedActiveShowTransaction<PatchCompletion>,
+    replay: &Mutex<ReplayCache>,
+) -> PatchFixturesResult {
+    let PatchCompletion {
+        key,
+        envelope,
+        mut change,
+    } = completed.state;
+    let event_sequence = completed.commit.map(|commit| {
+        change.show_revision = commit.revision();
+        change.patch_revision = commit.patch_revision();
+        // Adapter projections and caches must match the installed runtime before subscribers can
+        // observe the corresponding event sequence.
+        ports.reconcile_patch_change(&change);
+        events
+            .publish(EventDraft::patch_changed(
+                &envelope.context,
+                change.clone(),
+            ))
+            .sequence
+    });
+    let result = PatchFixturesResult {
+        context: envelope.context.clone(),
+        request_id: key.request_id().to_owned(),
+        replayed: false,
+        changed: event_sequence.is_some(),
+        change,
+        event_sequence,
+    };
+    replay
+        .lock()
+        .insert(key, &envelope.context, envelope.command, result.clone());
+    result
 }
 
 fn required_replay_key(
@@ -189,32 +219,5 @@ fn validate_active_show_id(
             ActionErrorKind::NotFound,
             "requested show is not active",
         ))
-    }
-}
-
-fn backup_identity(
-    envelope: &ActionEnvelope<PatchFixturesCommand>,
-    key: &ReplayKey,
-) -> BackupIdentity {
-    BackupIdentity {
-        show_id: envelope.command.show_id,
-        correlation_id: envelope.context.correlation_id,
-        request_id: key.request_id().to_owned(),
-    }
-}
-
-fn committed_result(
-    envelope: &ActionEnvelope<PatchFixturesCommand>,
-    request_id: &str,
-    change: super::PatchChange,
-    event_sequence: u64,
-) -> PatchFixturesResult {
-    PatchFixturesResult {
-        context: envelope.context.clone(),
-        request_id: request_id.to_owned(),
-        replayed: false,
-        changed: true,
-        change,
-        event_sequence: Some(event_sequence),
     }
 }

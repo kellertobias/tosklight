@@ -911,7 +911,7 @@ impl ActiveShowUnitOfWork for TestUnitOfWork {
     }
 
     fn commit(
-        self,
+        &mut self,
         transaction: PortableShowTransaction,
     ) -> Result<PortableShowCommit, ActionError> {
         self.steps.lock().push("commit");

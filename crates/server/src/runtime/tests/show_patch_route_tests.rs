@@ -212,6 +212,81 @@ async fn v2_patch_revision_ignores_unrelated_group_mutations() {
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
+#[tokio::test]
+async fn paused_profile_resolution_releases_activation_for_an_http_show_mutation() {
+    let (state, data_dir) = test_state();
+    let (profile_id, mode_id) = install_patch_route_profile(&state);
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let show = create_show(&app, &token, "V2 Patch planning concurrency").await;
+    let show_id = show["id"].as_str().unwrap().to_owned();
+    open_show_for_patch_test(&app, &token, &show_id).await;
+    state.patch_profile_resolution.arm();
+
+    let patch_app = app.clone();
+    let patch_token = token.clone();
+    let patch_show_id = show_id.clone();
+    let patch = tokio::spawn(async move {
+        post_patch(
+            &patch_app,
+            &patch_token,
+            &patch_show_id,
+            Some(0),
+            valid_patch_request_for(profile_id, mode_id, "paused-server-resolution"),
+        )
+        .await
+    });
+    let pause = Arc::clone(&state.patch_profile_resolution);
+    let started = tokio::task::spawn_blocking(move || pause.wait_until_started()).await;
+    if started.is_err() {
+        state.patch_profile_resolution.release();
+    }
+    started.unwrap();
+
+    let group = tokio::time::timeout(
+        Duration::from_secs(2),
+        app.clone().oneshot(
+            Request::put(format!(
+                "/api/v1/shows/{show_id}/objects/group/during-resolution"
+            ))
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .header(header::IF_MATCH, "0")
+            .body(Body::from(
+                serde_json::json!({
+                    "name":"Stored during Patch planning",
+                    "fixtures":[]
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+        ),
+    )
+    .await;
+    state.patch_profile_resolution.release();
+    let patch = patch.await.unwrap();
+    let group = group
+        .expect("ordinary active-show HTTP mutation was blocked by Patch profile resolution")
+        .unwrap();
+
+    assert_eq!(group.status(), StatusCode::OK);
+    assert_eq!(patch.status(), StatusCode::OK);
+    let patch = json(patch).await;
+    assert_eq!(patch["show_revision"], 3);
+    assert_eq!(patch["patch_revision"], 1);
+    let show_id = light_core::ShowId(Uuid::parse_str(&show_id).unwrap());
+    let entry = state.desk.lock().show(show_id).unwrap().unwrap();
+    let document = ShowStore::open(&entry.path)
+        .unwrap()
+        .portable_document()
+        .unwrap();
+    assert!(document.object("group", "during-resolution").is_some());
+    assert_eq!(document.objects_of_kind("patched_fixture").count(), 1);
+    assert_eq!(state.engine.snapshot().revision, 3);
+    assert_eq!(state.engine.snapshot().fixtures.len(), 1);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
 fn patch_backup_count(data_dir: &FsPath) -> usize {
     std::fs::read_dir(data_dir.join("backups"))
         .into_iter()

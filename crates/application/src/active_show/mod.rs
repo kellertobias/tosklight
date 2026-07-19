@@ -14,6 +14,7 @@ pub use model::{
 };
 pub use ports::{ActiveShowPorts, ActiveShowUnitOfWork, BackupIdentity};
 pub use service::ActiveShowService;
+pub(crate) use service::{CompletedActiveShowTransaction, PreparedActiveShowTransaction};
 
 #[cfg(test)]
 mod tests;

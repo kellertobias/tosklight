@@ -15,6 +15,10 @@ pub struct PreparedShowCandidate {
 }
 
 impl PreparedShowCandidate {
+    pub(crate) const fn transaction(&self) -> &PortableShowTransaction {
+        &self.transaction
+    }
+
     pub fn into_parts(self) -> (PortableShowTransaction, EngineSnapshot) {
         (self.transaction, self.snapshot)
     }
