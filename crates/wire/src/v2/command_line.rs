@@ -1,5 +1,10 @@
 //! Stable request, response, outcome, error, and event DTOs for the v2 command-line API.
 
+#[path = "command_line/interaction.rs"]
+mod interaction;
+
+pub use interaction::*;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;

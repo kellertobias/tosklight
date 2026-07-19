@@ -7,6 +7,8 @@
 mod adapter;
 #[path = "command_http/events.rs"]
 mod events;
+#[path = "command_http/interaction_wire.rs"]
+mod interaction_wire;
 #[path = "command_http/routes.rs"]
 mod routes;
 #[path = "command_http/state_event.rs"]
@@ -17,6 +19,7 @@ mod wire;
 pub(super) use adapter::{
     ExistingCommandOutcome, ExistingCommandPolicy, execute_existing_command, route_osc_command_key,
 };
+pub(super) use interaction_wire::interaction_projection;
 pub(super) use routes::router;
 
 #[cfg(test)]

@@ -106,6 +106,29 @@ impl CommandHttpScenario {
             .unwrap()
     }
 
+    async fn interaction_snapshot(&self) -> Response {
+        self.interaction_snapshot_for(self.session.desk.id).await
+    }
+
+    async fn interaction_snapshot_for(&self, desk_id: Uuid) -> Response {
+        self.app
+            .clone()
+            .oneshot(
+                Request::get(format!(
+                    "/api/v2/desks/{}/programming-interaction/snapshot",
+                    desk_id
+                ))
+                .header(
+                    header::AUTHORIZATION,
+                    format!("Bearer {}", self.token),
+                )
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+
     async fn press_key(&self, token: &str, key: &str, request_id: &str) -> Response {
         self.app
             .clone()

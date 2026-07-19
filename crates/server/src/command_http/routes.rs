@@ -1,5 +1,6 @@
-use super::adapter::run_service;
+use super::adapter::{run_service, run_snapshot};
 use super::events::publish_service_result;
+use super::interaction_wire::interaction_snapshot;
 use super::wire::{
     command_key, command_key_phase, command_line_from_state, operation_response, with_etag,
 };
@@ -7,7 +8,7 @@ use axum::{
     Json, Router,
     extract::{DefaultBodyLimit, Path, State},
     http::HeaderMap,
-    response::Response,
+    response::{IntoResponse, Response},
     routing::{get, post},
 };
 use light_application::{
@@ -38,7 +39,21 @@ pub(crate) fn router() -> Router<AppState> {
             "/api/v2/desks/{desk_id}/command-line/execute",
             post(execute_command_line),
         )
+        .route(
+            "/api/v2/desks/{desk_id}/programming-interaction/snapshot",
+            get(get_programming_interaction),
+        )
         .layer(DefaultBodyLimit::max(32 * 1024))
+}
+
+async fn get_programming_interaction(
+    State(state): State<AppState>,
+    Path(desk_id): Path<Uuid>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    let session = authenticate_desk(&state, &headers, desk_id)?;
+    let snapshot = run_snapshot(&state, &session, http_context(&session, None))?;
+    Ok(Json(interaction_snapshot(snapshot)).into_response())
 }
 
 async fn get_command_line(

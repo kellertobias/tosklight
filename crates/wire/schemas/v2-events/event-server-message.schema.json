@@ -84,6 +84,77 @@
     }
   ],
   "$defs": {
+    "CommandChoiceOption": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "id": {
+          "$ref": "#/$defs/CommandChoiceOptionId"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "command"
+      ]
+    },
+    "CommandChoiceOptionId": {
+      "type": "string",
+      "enum": [
+        "plain",
+        "status"
+      ]
+    },
+    "CommandLineResponse": {
+      "description": "One authoritative command-line projection and its optimistic-concurrency revision.",
+      "type": "object",
+      "properties": {
+        "pending_choice": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CueMoveCopyChoice"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pristine": {
+          "type": "boolean"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "target": {
+          "$ref": "#/$defs/CommandTarget"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "target",
+        "pristine",
+        "revision",
+        "pending_choice"
+      ]
+    },
+    "CommandTarget": {
+      "description": "The desk-local default scope used when an operator starts a command.",
+      "type": "string",
+      "enum": [
+        "FIXTURE",
+        "GROUP"
+      ]
+    },
     "CueListRuntimeProjection": {
       "type": "object",
       "properties": {
@@ -219,6 +290,50 @@
         "manual_xfade_progress"
       ]
     },
+    "CueMoveCopyChoice": {
+      "description": "Choice presented when Cue copy or move semantics would otherwise be ambiguous.",
+      "type": "object",
+      "properties": {
+        "cancel_label": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "operation": {
+          "$ref": "#/$defs/CueTransferOperation"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CommandChoiceOption"
+          }
+        },
+        "type": {
+          "$ref": "#/$defs/CueMoveCopyChoiceType"
+        }
+      },
+      "required": [
+        "type",
+        "operation",
+        "command",
+        "options",
+        "cancel_label"
+      ]
+    },
+    "CueMoveCopyChoiceType": {
+      "type": "string",
+      "enum": [
+        "cue_move_copy"
+      ]
+    },
+    "CueTransferOperation": {
+      "type": "string",
+      "enum": [
+        "copy",
+        "move"
+      ]
+    },
     "EventActionSource": {
       "type": "string",
       "enum": [
@@ -350,6 +465,22 @@
     },
     "EventPayload": {
       "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "projection": {
+              "$ref": "#/$defs/ProgrammingInteractionProjection"
+            },
+            "type": {
+              "type": "string",
+              "const": "programming_interaction_changed"
+            }
+          },
+          "required": [
+            "type",
+            "projection"
+          ]
+        },
         {
           "type": "object",
           "properties": {
@@ -1569,6 +1700,290 @@
         "follow",
         "wait",
         "timecode"
+      ]
+    },
+    "ProgrammerSelectionExpression": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "static"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group_id": {
+              "type": "string"
+            },
+            "rule": {
+              "$ref": "#/$defs/ProgrammerSelectionRule"
+            },
+            "type": {
+              "type": "string",
+              "const": "live_group"
+            }
+          },
+          "required": [
+            "type",
+            "group_id",
+            "rule"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group_id": {
+              "type": "string"
+            },
+            "source_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "frozen_group"
+            }
+          },
+          "required": [
+            "type",
+            "group_id",
+            "source_revision"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ProgrammerSelectionReference"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "playback_contents"
+            }
+          },
+          "required": [
+            "type",
+            "items"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ProgrammerSelectionReference"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "sources"
+            }
+          },
+          "required": [
+            "type",
+            "items"
+          ]
+        }
+      ]
+    },
+    "ProgrammerSelectionProjection": {
+      "description": "Ordered desk-local selection and the operation revision which produced it.",
+      "type": "object",
+      "properties": {
+        "expression": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProgrammerSelectionExpression"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "selected": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "required": [
+        "selected",
+        "expression",
+        "revision"
+      ]
+    },
+    "ProgrammerSelectionReference": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "fixture_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": {
+              "type": "string",
+              "const": "fixture"
+            }
+          },
+          "required": [
+            "type",
+            "fixture_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "live_group"
+            }
+          },
+          "required": [
+            "type",
+            "group_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "fixture_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": {
+              "type": "string",
+              "const": "remove_fixture"
+            }
+          },
+          "required": [
+            "type",
+            "fixture_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "remove_live_group"
+            }
+          },
+          "required": [
+            "type",
+            "group_id"
+          ]
+        }
+      ]
+    },
+    "ProgrammerSelectionRule": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "all"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "odd"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "even"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "n": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "offset": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "every_nth"
+            }
+          },
+          "required": [
+            "type",
+            "n",
+            "offset"
+          ]
+        }
+      ]
+    },
+    "ProgrammingInteractionProjection": {
+      "description": "Authoritative interaction context shared by every control surface attached to one desk.",
+      "type": "object",
+      "properties": {
+        "command_line": {
+          "$ref": "#/$defs/CommandLineResponse"
+        },
+        "desk_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "selection": {
+          "$ref": "#/$defs/ProgrammerSelectionProjection"
+        }
+      },
+      "required": [
+        "desk_id",
+        "command_line",
+        "selection"
       ]
     },
     "SelectiveImportChange": {

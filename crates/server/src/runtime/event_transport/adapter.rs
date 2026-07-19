@@ -172,10 +172,11 @@ fn wire_payload(
     sequence: u64,
 ) -> Option<wire::EventPayload> {
     Some(match payload {
-        // Programming transport DTOs arrive in the next vertical slice. The application event is
-        // already authoritative and advances the shared cursor, but is intentionally not exposed
-        // through the v2 socket until that wire contract exists.
-        application::ApplicationEvent::Programming(_) => return None,
+        application::ApplicationEvent::Programming(
+            application::ProgrammingEvent::InteractionChanged(change),
+        ) => wire::EventPayload::ProgrammingInteractionChanged {
+            projection: super::super::command_http::interaction_projection(&change.projection),
+        },
         application::ApplicationEvent::Playback(application::PlaybackEvent::RuntimeChanged(
             change,
         )) => wire::EventPayload::PlaybackRuntimeChanged {

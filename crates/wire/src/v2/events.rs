@@ -1,6 +1,9 @@
 //! Stable filtered event-subscription and playback-repair DTOs.
 
-use super::playback::{PlaybackDeskProjection, PlaybackRuntimeChange};
+use super::{
+    command_line::ProgrammingInteractionProjection,
+    playback::{PlaybackDeskProjection, PlaybackRuntimeChange},
+};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -150,13 +153,30 @@ pub enum EventActionSource {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EventPayload {
-    PlaybackRuntimeChanged { change: PlaybackRuntimeChange },
-    PlaybackViewChanged { projection: PlaybackDeskProjection },
-    OutputRuntimeChanged { change: OutputRuntimeChange },
-    ShowPatchChanged { delta: super::patch::PatchDelta },
-    OutputRouteChanged { change: OutputRouteChange },
-    ShowObjectsChanged { change: ShowObjectsChange },
-    SelectiveImportApplied { change: Box<SelectiveImportChange> },
+    ProgrammingInteractionChanged {
+        projection: ProgrammingInteractionProjection,
+    },
+    PlaybackRuntimeChanged {
+        change: PlaybackRuntimeChange,
+    },
+    PlaybackViewChanged {
+        projection: PlaybackDeskProjection,
+    },
+    OutputRuntimeChanged {
+        change: OutputRuntimeChange,
+    },
+    ShowPatchChanged {
+        delta: super::patch::PatchDelta,
+    },
+    OutputRouteChanged {
+        change: OutputRouteChange,
+    },
+    ShowObjectsChanged {
+        change: ShowObjectsChange,
+    },
+    SelectiveImportApplied {
+        change: Box<SelectiveImportChange>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, JsonSchema, PartialEq, Serialize, TS)]

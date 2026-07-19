@@ -148,6 +148,33 @@ async fn command_line_v2_is_revisioned_desk_scoped_and_idempotent() {
     verify_revisioned_command_line(&scenario).await;
     verify_idempotent_execution(&scenario, fixture_id).await;
     verify_choice_and_rejection_replay(&scenario).await;
+    let interaction = scenario.interaction_snapshot().await;
+    assert_eq!(interaction.status(), StatusCode::OK);
+    let interaction = json(interaction).await;
+    assert_eq!(
+        interaction["projection"]["desk_id"],
+        scenario.session.desk.id.to_string()
+    );
+    assert_eq!(
+        interaction["projection"]["selection"]["selected"][0],
+        fixture_id.0.to_string()
+    );
+    assert!(interaction["cursor"]["sequence"].as_u64().unwrap() > 0);
+    let mut lock = DeskLockConfiguration::default();
+    lock.locked = true;
+    write_desk_lock(&scenario.state, scenario.session.desk.id, &lock).unwrap();
+    assert_eq!(
+        scenario.interaction_snapshot().await.status(),
+        StatusCode::OK,
+        "read-only repair remains available while the desk is locked"
+    );
+    assert_eq!(
+        scenario
+            .interaction_snapshot_for(Uuid::new_v4())
+            .await
+            .status(),
+        StatusCode::FORBIDDEN
+    );
     let wrong_desk = scenario
         .app
         .clone()

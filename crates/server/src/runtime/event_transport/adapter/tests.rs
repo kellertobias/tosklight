@@ -200,7 +200,7 @@ fn global_output_change_keeps_identity_source_and_correlation() {
 }
 
 #[test]
-fn programming_waits_for_its_wire_contract_while_gaps_still_forward() {
+fn programming_interaction_keeps_exact_desk_scope_and_projection() {
     let bus = EventBus::new(4);
     let context = context(ActionSource::UserInterface);
     let event = bus.publish(EventDraft::programming_interaction_changed(
@@ -211,8 +211,28 @@ fn programming_waits_for_its_wire_contract_while_gaps_still_forward() {
             selection: Default::default(),
         },
     ));
-    assert!(wire_delivery(application::SubscriptionDelivery::Event(event)).is_none());
+    let Some(wire::EventServerMessage::Event { event }) =
+        wire_delivery(application::SubscriptionDelivery::Event(event))
+    else {
+        panic!("expected a Programming interaction delivery")
+    };
+    assert_eq!(
+        event.object,
+        Some(wire::EventObject {
+            capability: wire::EventCapability::Desk,
+            id: format!("programming-interaction:{}", context.desk_id),
+        })
+    );
+    let wire::EventPayload::ProgrammingInteractionChanged { projection } = event.payload else {
+        panic!("expected a Programming interaction payload")
+    };
+    assert_eq!(projection.desk_id, context.desk_id);
+    assert_eq!(projection.command_line.text, "FIXTURE");
+    assert!(projection.selection.selected.is_empty());
+}
 
+#[test]
+fn sequence_gaps_always_forward() {
     let Some(wire::EventServerMessage::Gap { gap }) = wire_delivery(
         application::SubscriptionDelivery::Gap(application::SequenceGap {
             after_sequence: 1,
@@ -220,7 +240,7 @@ fn programming_waits_for_its_wire_contract_while_gaps_still_forward() {
             latest_sequence: 4,
         }),
     ) else {
-        panic!("sequence gaps must remain visible while a payload DTO is pending")
+        panic!("sequence gaps must remain visible")
     };
     assert_eq!(gap.after_sequence, 1);
     assert_eq!(gap.oldest_available, 3);

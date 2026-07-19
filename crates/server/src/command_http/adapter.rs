@@ -2,7 +2,8 @@ use super::events::{persist_with_warning, publish_osc_result};
 use super::wire::application_choice;
 use light_application::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionSource, ExecutionPolicy,
-    ProgrammingCommand, ProgrammingExecution, ProgrammingPorts, ProgrammingResult,
+    ProgrammingCommand, ProgrammingExecution, ProgrammingLiveSnapshot, ProgrammingPorts,
+    ProgrammingResult,
 };
 use light_programmer::ProgrammerRegistry;
 use light_programmer::command_line::{CommandKey, CommandKeyPhase};
@@ -183,10 +184,28 @@ fn run_service_with_source(
         state,
         session,
         source,
+        require_unlocked: true,
     };
     state
         .programming
         .handle(ActionEnvelope { context, command }, &ports)
+}
+
+pub(super) fn run_snapshot(
+    state: &AppState,
+    session: &Session,
+    context: ActionContext,
+) -> Result<ProgrammingLiveSnapshot, ApiError> {
+    let ports = ServerProgrammingPorts {
+        state,
+        session,
+        source: "http",
+        require_unlocked: false,
+    };
+    state
+        .programming
+        .snapshot(&context, &ports)
+        .map_err(action_error)
 }
 
 pub(crate) fn route_osc_command_key(
@@ -267,6 +286,7 @@ struct ServerProgrammingPorts<'a> {
     state: &'a AppState,
     session: &'a Session,
     source: &'static str,
+    require_unlocked: bool,
 }
 
 impl ProgrammingPorts for ServerProgrammingPorts<'_> {
@@ -280,7 +300,8 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
                 "the action context does not match the authenticated operator session",
             ));
         }
-        if super::super::read_desk_lock(self.state, context.desk_id).locked {
+        if self.require_unlocked && super::super::read_desk_lock(self.state, context.desk_id).locked
+        {
             return Err(ActionError::new(
                 ActionErrorKind::Conflict,
                 "desk is locked",

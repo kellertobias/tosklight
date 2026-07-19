@@ -135,7 +135,7 @@ export type ManagedAssetReference = { asset_id: string, revision: number, };
 
 export type SelectiveImportChange = { show_id: string, show_revision: number, objects: Array<SelectiveImportObjectChange>, profile_revisions: Array<FixtureProfileIdentity>, managed_assets: Array<ManagedAssetReference>, };
 
-export type EventPayload = { "type": "playback_runtime_changed", change: PlaybackRuntimeChange, } | { "type": "playback_view_changed", projection: PlaybackDeskProjection, } | { "type": "output_runtime_changed", change: OutputRuntimeChange, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, } | { "type": "selective_import_applied", change: SelectiveImportChange, };
+export type EventPayload = { "type": "programming_interaction_changed", projection: ProgrammingInteractionProjection, } | { "type": "playback_runtime_changed", change: PlaybackRuntimeChange, } | { "type": "playback_view_changed", projection: PlaybackDeskProjection, } | { "type": "output_runtime_changed", change: OutputRuntimeChange, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, } | { "type": "selective_import_applied", change: SelectiveImportChange, };
 
 export type EventEnvelope = { sequence: number, occurred_at: string, desk_id: string | null, class: EventClass, object: EventObject | null, related_objects?: Array<EventObject> | null, source: EventSource, correlation_id: string | null, delivery: EventDeliveryPolicy, payload: EventPayload, };
 
@@ -327,3 +327,15 @@ export type SelectiveImportProfileChange = { source: SelectiveImportProfileKey, 
 export type SelectiveImportOutcome = { request_id: string, correlation_id: string, changed: boolean, show_id: string, show_revision: number, event_sequence?: number | null, outcomes: Array<SelectiveImportObjectPreview>, objects: Array<SelectiveImportOutcomeObjectChange>, profiles: Array<SelectiveImportProfileChange>, managed_assets: Array<SelectiveImportAssetReference>, };
 
 export type SelectiveImportErrorResponse = { error: string, current_revision?: number | null, retryable: boolean, };
+
+export type ProgrammerSelectionRule = { "type": "all" } | { "type": "odd" } | { "type": "even" } | { "type": "every_nth", n: number, offset: number, };
+
+export type ProgrammerSelectionReference = { "type": "fixture", fixture_id: string, } | { "type": "live_group", group_id: string, } | { "type": "remove_fixture", fixture_id: string, } | { "type": "remove_live_group", group_id: string, };
+
+export type ProgrammerSelectionExpression = { "type": "static" } | { "type": "live_group", group_id: string, rule: ProgrammerSelectionRule, } | { "type": "frozen_group", group_id: string, source_revision: number, } | { "type": "playback_contents", items: Array<ProgrammerSelectionReference>, } | { "type": "sources", items: Array<ProgrammerSelectionReference>, };
+
+export type ProgrammerSelectionProjection = { selected: Array<string>, expression: ProgrammerSelectionExpression | null, revision: number, };
+
+export type ProgrammingInteractionProjection = { desk_id: string, command_line: CommandLineResponse, selection: ProgrammerSelectionProjection, };
+
+export type ProgrammingInteractionSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingInteractionProjection, };

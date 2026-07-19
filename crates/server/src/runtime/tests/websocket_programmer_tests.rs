@@ -188,6 +188,54 @@ async fn websocket_commands_are_typed_owned_and_revision_checked() {
 }
 
 #[tokio::test]
+async fn compatibility_selection_publishes_one_typed_interaction_event() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = authenticate_token(&state, &token).unwrap();
+    let fixture = light_core::FixtureId::new();
+
+    let response = dispatch_ws_command(
+        &state,
+        &session,
+        WsCommand {
+            protocol_version: 1,
+            request_id: "selection-event".into(),
+            session_id: session.id,
+            expected_revision: None,
+            command: "selection.set".into(),
+            payload: serde_json::json!({"fixtures":[fixture]}),
+        },
+    );
+    assert!(response.ok, "{:?}", response.error);
+
+    let filter = light_application::EventFilter::for_desk(session.desk.id).with_object(
+        light_application::EventObject::programming_interaction(session.desk.id),
+    );
+    let light_application::EventReplay::Events(events) =
+        state.application_events.replay(0, &filter)
+    else {
+        panic!("the interaction event should remain replayable")
+    };
+    assert_eq!(events.len(), 1);
+    let light_application::ApplicationEvent::Programming(
+        light_application::ProgrammingEvent::InteractionChanged(change),
+    ) = &events[0].payload
+    else {
+        panic!("expected a typed Programming interaction event")
+    };
+    assert_eq!(change.projection.selection.selected, vec![fixture]);
+    assert!(events[0].correlation_id.is_some());
+    assert_eq!(
+        events[0].source,
+        light_application::EventSource::Action(
+            light_application::ActionSource::UserInterface,
+        )
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn direct_programmer_writes_resolve_configured_fade_for_recording() {
     let (state, data_dir) = test_state();
     state
