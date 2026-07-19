@@ -2,7 +2,7 @@ use super::events::{persist_with_warning, publish_osc_result};
 use super::programming_ports::ServerProgrammingPorts;
 use light_application::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionSource, ExecutionPolicy,
-    ProgrammingCommand, ProgrammingLiveSnapshot, ProgrammingResult,
+    ProgrammingCommand, ProgrammingLiveSnapshot, ProgrammingResult, ProgrammingValuesSnapshot,
 };
 use light_programmer::ProgrammerRegistry;
 use light_programmer::command_line::{CommandKey, CommandKeyPhase};
@@ -194,6 +194,18 @@ pub(super) fn run_snapshot(
     state
         .programming
         .snapshot(&context, &ports)
+        .map_err(action_error)
+}
+
+pub(super) fn run_values_snapshot(
+    state: &AppState,
+    session: &Session,
+    context: ActionContext,
+) -> Result<ProgrammingValuesSnapshot, ApiError> {
+    let ports = ServerProgrammingPorts::new(state, session, "http", false);
+    state
+        .programming
+        .values_snapshot(&context, &ports)
         .map_err(action_error)
 }
 

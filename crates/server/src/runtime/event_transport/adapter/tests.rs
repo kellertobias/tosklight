@@ -3,9 +3,10 @@ use light_application::{
     ActionContext, ActionSource, ActiveShowObjectChange, ActiveShowObjectKind,
     ActiveShowObjectsChange, EventBus, EventDraft, OutputRuntimeChange, OutputRuntimeIdentity,
     OutputRuntimeProjection, OutputRuntimeScope, PatchChange, ProgrammingInteractionChange,
-    SelectiveShowImportChange, SelectiveShowObjectChange,
+    ProgrammingValuesChange, ProgrammingValuesProjection, SelectiveShowImportChange,
+    SelectiveShowObjectChange,
 };
-use light_core::ShowId;
+use light_core::{AttributeKey, AttributeValue, ShowId, UserId};
 use light_show::PortableShowObjectKey;
 
 #[test]
@@ -275,6 +276,60 @@ fn combined_programming_change_routes_once_through_both_exact_objects() {
         change,
         light_wire::v2::command_line::ProgrammingInteractionChange::Both { .. }
     ));
+}
+
+#[test]
+fn programming_values_keep_user_scope_full_projection_and_action_identity() {
+    let bus = EventBus::new(4);
+    let context = context(ActionSource::Osc);
+    let user_id = UserId(Uuid::from_u128(3));
+    let event = bus.publish(EventDraft::programming_values_changed(
+        &context,
+        ProgrammingValuesChange {
+            projection: ProgrammingValuesProjection {
+                user_id,
+                revision: 7,
+                fixture_values: Vec::new(),
+                group_values: vec![light_programmer::ProgrammerGroupUpdate {
+                    group_id: "2.1".into(),
+                    attribute: AttributeKey::intensity(),
+                    value: AttributeValue::Normalized(0.75),
+                    programmer_order: 9,
+                    fade: true,
+                    fade_millis: Some(1_000),
+                    delay_millis: Some(250),
+                }],
+            },
+        },
+    ));
+
+    let Some(wire::EventServerMessage::Event { event }) =
+        wire_delivery(application::SubscriptionDelivery::Event(event))
+    else {
+        panic!("expected a Programmer values delivery")
+    };
+    assert_eq!(event.desk_id, None);
+    assert_eq!(event.class, wire::EventClass::Projection);
+    assert_eq!(event.delivery, wire::EventDeliveryPolicy::Replaceable);
+    assert_eq!(event.correlation_id, Some(context.correlation_id));
+    assert_eq!(
+        event.object,
+        Some(wire::EventObject {
+            capability: wire::EventCapability::Programmer,
+            id: format!("programming-values:{}", user_id.0),
+        })
+    );
+    let wire::EventPayload::ProgrammingValuesChanged { change } = event.payload else {
+        panic!("expected a Programmer values payload")
+    };
+    assert_eq!(change.projection.user_id, user_id.0);
+    assert_eq!(change.projection.revision, 7);
+    let value = &change.projection.group_values[0];
+    assert_eq!(value.group_id, "2.1");
+    assert_eq!(value.programmer_order, 9);
+    assert!(value.fade);
+    assert_eq!(value.fade_millis, Some(1_000));
+    assert_eq!(value.delay_millis, Some(250));
 }
 
 #[test]

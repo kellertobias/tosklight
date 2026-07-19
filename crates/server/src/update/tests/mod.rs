@@ -40,6 +40,7 @@ pub(super) fn fixture_update(
         attribute: attribute(name),
         value: normalized(value),
         programmer_order,
+        fade: false,
         fade_millis: None,
         delay_millis: None,
     }

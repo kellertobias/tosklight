@@ -146,5 +146,6 @@ pub struct ProgrammingResult {
     pub selection_revision: u64,
     pub selection: Option<ProgrammerSelection>,
     pub interaction_event_sequence: Option<u64>,
+    pub values_event_sequence: Option<u64>,
     pub replayed: bool,
 }

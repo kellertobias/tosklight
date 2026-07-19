@@ -58,7 +58,7 @@ impl ProgrammerRegistry {
     pub fn undo(&self, session: SessionId) -> bool {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();
-        let (selected, expression) = {
+        let (selected, expression, user_id, values_changed) = {
             let mut states = self.states.write();
             let Some(state) = states.get_mut(&self.key(session)) else {
                 return false;
@@ -66,9 +66,16 @@ impl ProgrammerRegistry {
             let Some(previous) = state.undo.pop() else {
                 return false;
             };
+            let values_changed =
+                state.values != previous.values || state.group_values != previous.group_values;
             state.redo.push(Arc::new(state.snapshot()));
             state.restore_snapshot(Arc::unwrap_or_clone(previous), self.clock.now());
-            (state.selected.clone(), state.selection_expression.clone())
+            (
+                state.selected.clone(),
+                state.selection_expression.clone(),
+                state.user_id,
+                values_changed,
+            )
         };
         self.selection_contexts.write().insert(
             self.command_context(session),
@@ -79,12 +86,15 @@ impl ProgrammerRegistry {
                 gesture_open: false,
             },
         );
+        if values_changed {
+            self.mark_normal_values_changed(user_id);
+        }
         true
     }
     pub fn redo(&self, session: SessionId) -> bool {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();
-        let (selected, expression) = {
+        let (selected, expression, user_id, values_changed) = {
             let mut states = self.states.write();
             let Some(state) = states.get_mut(&self.key(session)) else {
                 return false;
@@ -92,9 +102,16 @@ impl ProgrammerRegistry {
             let Some(next) = state.redo.pop() else {
                 return false;
             };
+            let values_changed =
+                state.values != next.values || state.group_values != next.group_values;
             state.undo.push(Arc::new(state.snapshot()));
             state.restore_snapshot(Arc::unwrap_or_clone(next), self.clock.now());
-            (state.selected.clone(), state.selection_expression.clone())
+            (
+                state.selected.clone(),
+                state.selection_expression.clone(),
+                state.user_id,
+                values_changed,
+            )
         };
         self.selection_contexts.write().insert(
             self.command_context(session),
@@ -105,6 +122,9 @@ impl ProgrammerRegistry {
                 gesture_open: false,
             },
         );
+        if values_changed {
+            self.mark_normal_values_changed(user_id);
+        }
         true
     }
 }

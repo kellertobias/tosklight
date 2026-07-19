@@ -107,11 +107,17 @@ impl ProgrammerState {
                 attribute: value.attribute.clone(),
                 value: value.value.clone(),
                 programmer_order: value.programmer_order,
+                fade: value.fade,
                 fade_millis: value.fade_millis,
                 delay_millis: value.delay_millis,
             })
             .collect::<Vec<_>>();
-        fixture_values.sort_by_key(|value| value.programmer_order);
+        fixture_values.sort_by(|left, right| {
+            left.programmer_order
+                .cmp(&right.programmer_order)
+                .then_with(|| left.fixture_id.0.cmp(&right.fixture_id.0))
+                .then_with(|| left.attribute.cmp(&right.attribute))
+        });
 
         let mut group_values = self
             .group_values
@@ -124,6 +130,7 @@ impl ProgrammerState {
                         attribute: attribute.clone(),
                         value: value.value.clone(),
                         programmer_order: value.programmer_order,
+                        fade: value.fade,
                         fade_millis: value.fade_millis,
                         delay_millis: value.delay_millis,
                     })
@@ -151,6 +158,8 @@ pub struct ProgrammerFixtureUpdate {
     pub attribute: AttributeKey,
     pub value: AttributeValue,
     pub programmer_order: u64,
+    #[serde(default)]
+    pub fade: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fade_millis: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -164,6 +173,8 @@ pub struct ProgrammerGroupUpdate {
     pub attribute: AttributeKey,
     pub value: AttributeValue,
     pub programmer_order: u64,
+    #[serde(default)]
+    pub fade: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fade_millis: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

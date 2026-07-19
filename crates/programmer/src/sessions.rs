@@ -9,6 +9,14 @@ impl ProgrammerRegistry {
     pub fn start(&self, session_id: SessionId, user_id: UserId) -> ProgrammerState {
         let mutation_gate = self.mutation_gate_for_user(user_id);
         let _mutation_guard = mutation_gate.lock();
+        self.normal_values_generations
+            .write()
+            .entry(user_id)
+            .or_default();
+        self.normal_values_revisions
+            .write()
+            .entry(user_id)
+            .or_default();
         let existing = self
             .states
             .read()
@@ -90,6 +98,14 @@ impl ProgrammerRegistry {
     pub fn restore(&self, state: ProgrammerState) {
         let mutation_gate = self.mutation_gate_for_user(state.user_id);
         let _mutation_guard = mutation_gate.lock();
+        self.normal_values_generations
+            .write()
+            .entry(state.user_id)
+            .or_default();
+        self.normal_values_revisions
+            .write()
+            .entry(state.user_id)
+            .or_default();
         let restored_order = state
             .values
             .iter()

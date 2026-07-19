@@ -337,6 +337,98 @@ async fn compatibility_command_line_publishes_only_its_scoped_component() {
 }
 
 #[tokio::test]
+async fn compatibility_programmer_changed_reports_only_authoritative_changed_projections() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = authenticate_token(&state, &token).unwrap();
+    let fixture = light_core::FixtureId::new();
+    let command = |request_id: &str, command: &str, payload: serde_json::Value| WsCommand {
+        protocol_version: 1,
+        request_id: request_id.into(),
+        session_id: session.id,
+        expected_revision: None,
+        command: command.into(),
+        payload,
+    };
+    let changed_count = || {
+        state
+            .audit_events
+            .lock()
+            .iter()
+            .filter(|event| event.kind == "programmer_changed")
+            .count()
+    };
+
+    let before = changed_count();
+    let no_op = dispatch_ws_command(
+        &state,
+        &session,
+        command("no-op-undo", "programmer.undo", serde_json::Value::Null),
+    );
+    assert!(no_op.ok, "{:?}", no_op.error);
+    assert_eq!(changed_count(), before);
+
+    let selection = dispatch_ws_command(
+        &state,
+        &session,
+        command(
+            "selection-change",
+            "selection.set",
+            serde_json::json!({"fixtures":[fixture]}),
+        ),
+    );
+    assert!(selection.ok, "{:?}", selection.error);
+    let selection_event = state
+        .audit_events
+        .lock()
+        .iter()
+        .rev()
+        .find(|event| event.kind == "programmer_changed")
+        .cloned()
+        .unwrap();
+    assert_eq!(selection_event.payload["changes"], serde_json::json!(["interaction"]));
+
+    let values = dispatch_ws_command(
+        &state,
+        &session,
+        command(
+            "values-change",
+            "programmer.set",
+            serde_json::json!({
+                "fixture_id": fixture,
+                "attribute": "intensity",
+                "value": 0.75
+            }),
+        ),
+    );
+    assert!(values.ok, "{:?}", values.error);
+    let values_event = state
+        .audit_events
+        .lock()
+        .iter()
+        .rev()
+        .find(|event| event.kind == "programmer_changed")
+        .cloned()
+        .unwrap();
+    assert_eq!(values_event.payload["changes"], serde_json::json!(["values"]));
+
+    let before_priority = changed_count();
+    let priority = dispatch_ws_command(
+        &state,
+        &session,
+        command(
+            "priority-only",
+            "programmer.priority",
+            serde_json::json!({"priority":7}),
+        ),
+    );
+    assert!(priority.ok, "{:?}", priority.error);
+    assert_eq!(changed_count(), before_priority);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn direct_programmer_writes_resolve_configured_fade_for_recording() {
     let (state, data_dir) = test_state();
     state

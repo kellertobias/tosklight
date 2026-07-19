@@ -129,6 +129,25 @@ impl CommandHttpScenario {
             .unwrap()
     }
 
+    async fn values_snapshot(&self) -> Response {
+        self.values_snapshot_for(self.session.user.id.0, Some(&self.token))
+            .await
+    }
+
+    async fn values_snapshot_for(&self, user_id: Uuid, token: Option<&str>) -> Response {
+        let mut request = Request::get(format!(
+            "/api/v2/users/{user_id}/programmer-values/snapshot"
+        ));
+        if let Some(token) = token {
+            request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
+        }
+        self.app
+            .clone()
+            .oneshot(request.body(Body::empty()).unwrap())
+            .await
+            .unwrap()
+    }
+
     async fn press_key(&self, token: &str, key: &str, request_id: &str) -> Response {
         self.app
             .clone()

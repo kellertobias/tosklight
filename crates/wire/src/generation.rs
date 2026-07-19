@@ -43,6 +43,10 @@ use crate::v2::playback::{
     PlaybackTargetProjection, PlaybackTransitionCause, ResolvedPlaybackAddress, SoundLossReason,
     SoundStatus, SpeedGroupRuntimeProjection, SpeedSource,
 };
+use crate::v2::programming::{
+    ProgrammingAttributeValue, ProgrammingColorXyz, ProgrammingFixtureValue, ProgrammingGroupValue,
+    ProgrammingValuesChange, ProgrammingValuesProjection, ProgrammingValuesSnapshot,
+};
 use crate::v2::selective_import::{
     SelectiveImportApplyRequest, SelectiveImportAssetReference, SelectiveImportBlocker,
     SelectiveImportCatalog, SelectiveImportCatalogObject, SelectiveImportConflict,
@@ -61,6 +65,7 @@ const SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-command-line";
 const EVENT_SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-events";
 const PATCH_SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-patch";
 const PLAYBACK_SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-playback";
+const PROGRAMMING_SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-programming";
 const SELECTIVE_IMPORT_SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-selective-import";
 
 /// One generated artifact relative to the workspace root.
@@ -96,6 +101,7 @@ pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
         event_request_schema::<EventClientMessage>("event-client-message"),
         event_response_schema::<EventServerMessage>("event-server-message"),
         event_response_schema::<OutputRuntimeSnapshot>("output-runtime-snapshot"),
+        programming_response_schema::<ProgrammingValuesSnapshot>("programming-values-snapshot"),
         playback_request_schema::<PlaybackActionRequest>("playback-action-request"),
         playback_response_schema::<PlaybackActionOutcome>("playback-action-outcome"),
         playback_response_schema::<PlaybackErrorResponse>("playback-error-response"),
@@ -165,6 +171,10 @@ fn playback_response_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
     playback_schema::<T>(name, SchemaSettings::draft2020_12().for_serialize())
 }
 
+fn programming_response_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
+    programming_schema::<T>(name, SchemaSettings::draft2020_12().for_serialize())
+}
+
 fn selective_import_request_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
     selective_import_schema::<T>(name, SchemaSettings::draft2020_12().for_deserialize())
 }
@@ -188,6 +198,12 @@ fn patch_schema<T: JsonSchema>(name: &str, settings: SchemaSettings) -> Generate
 fn playback_schema<T: JsonSchema>(name: &str, settings: SchemaSettings) -> GeneratedArtifact {
     let mut artifact = schema_artifact::<T>(name, settings);
     artifact.path = format!("{PLAYBACK_SCHEMA_DIRECTORY}/{name}.schema.json");
+    artifact
+}
+
+fn programming_schema<T: JsonSchema>(name: &str, settings: SchemaSettings) -> GeneratedArtifact {
+    let mut artifact = schema_artifact::<T>(name, settings);
+    artifact.path = format!("{PROGRAMMING_SCHEMA_DIRECTORY}/{name}.schema.json");
     artifact
 }
 
@@ -242,6 +258,13 @@ fn typescript_bindings() -> String {
         EventSnapshotCursor::decl(&config),
         SequenceGap::decl(&config),
         EventSource::decl(&config),
+        ProgrammingColorXyz::decl(&config),
+        ProgrammingAttributeValue::decl(&config),
+        ProgrammingFixtureValue::decl(&config),
+        ProgrammingGroupValue::decl(&config),
+        ProgrammingValuesProjection::decl(&config),
+        ProgrammingValuesChange::decl(&config),
+        ProgrammingValuesSnapshot::decl(&config),
         PlaybackSurface::decl(&config),
         PlaybackAddress::decl(&config),
         ResolvedPlaybackAddress::decl(&config),

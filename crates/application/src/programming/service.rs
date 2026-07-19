@@ -1,10 +1,10 @@
 use super::{
     ExecutionPolicy, ProgrammingAction, ProgrammingCommand, ProgrammingExecution,
     ProgrammingInteractionChange, ProgrammingInteractionResult, ProgrammingOutcome,
-    ProgrammingPorts, ProgrammingResult,
+    ProgrammingPorts, ProgrammingResult, ProgrammingValuesChange,
 };
 use crate::{ActionContext, ActionEnvelope, ActionError, EventBus};
-use light_core::SessionId;
+use light_core::{SessionId, UserId};
 use light_programmer::command_line::{CommandKeyIntent, command_key_intent};
 use light_programmer::{HighlightRegistry, ProgrammerRegistry};
 use parking_lot::Mutex;
@@ -24,7 +24,7 @@ mod support;
 
 use state::{interaction_change, reconciliation};
 use support::{
-    ReplayCache, Snapshot, accepted, command_line, context_session, replace_error,
+    ReplayCache, Snapshot, accepted, command_line, context_session, context_user, replace_error,
     required_session, unknown_programmer, validate_command,
 };
 
@@ -71,14 +71,16 @@ impl ProgrammingService {
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingResult, ActionError> {
         let session = required_session(&action)?;
-        self.with_desk_gate(action.context.desk_id, || {
+        let user_id = context_user(&action.context)?;
+        self.with_user_and_desk_gate(action.context.desk_id, user_id, || {
             ports.authorize(&action.context)?;
             if let Some(cached) = self.cached(&action, session)? {
                 return Ok(cached);
             }
-            let (mut result, interaction) = self.apply(&action, session, ports)?;
+            let (mut result, interaction, values) = self.apply(&action, session, user_id, ports)?;
             result.interaction_event_sequence =
                 self.publish_interaction(&action.context, interaction);
+            result.values_event_sequence = self.publish_values(&action.context, values);
             self.remember(&action, session, &result);
             Ok(result)
         })
@@ -97,9 +99,10 @@ impl ProgrammingService {
         operation: impl FnOnce() -> T,
     ) -> Result<ProgrammingInteractionResult<T>, ActionError> {
         let session = context_session(context)?;
-        self.with_desk_gate(context.desk_id, || {
+        let user_id = context_user(context)?;
+        self.with_user_and_desk_gate(context.desk_id, user_id, || {
             ports.authorize(context)?;
-            self.capture_external_interaction(context, session, operation)
+            self.capture_external_interaction(context, session, user_id, operation)
         })
     }
 
@@ -107,16 +110,24 @@ impl ProgrammingService {
         &self,
         context: &ActionContext,
         session: SessionId,
+        user_id: UserId,
         operation: impl FnOnce() -> T,
     ) -> Result<ProgrammingInteractionResult<T>, ActionError> {
-        let before = Snapshot::read(&self.programmers, context.desk_id, session)?;
+        let before = Snapshot::read(&self.programmers, context.desk_id, session, user_id)?;
         let output = operation();
-        let after = Snapshot::read(&self.programmers, context.desk_id, session)?;
+        let after = Snapshot::read(&self.programmers, context.desk_id, session, user_id)?;
         let change =
             interaction_change(&self.programmers, context.desk_id, session, &before, &after);
+        let values = self.values_change(
+            user_id,
+            session,
+            before.values_generation,
+            after.values_generation,
+        )?;
         Ok(ProgrammingInteractionResult {
             output,
             event_sequence: self.publish_interaction(context, change),
+            values_event_sequence: self.publish_values(context, values),
         })
     }
 
@@ -124,9 +135,17 @@ impl ProgrammingService {
         &self,
         action: &ActionEnvelope<ProgrammingCommand>,
         session: SessionId,
+        user_id: UserId,
         ports: &dyn ProgrammingPorts,
-    ) -> Result<(ProgrammingResult, Option<ProgrammingInteractionChange>), ActionError> {
-        let before = Snapshot::read(&self.programmers, action.context.desk_id, session)?;
+    ) -> Result<
+        (
+            ProgrammingResult,
+            Option<ProgrammingInteractionChange>,
+            Option<ProgrammingValuesChange>,
+        ),
+        ActionError,
+    > {
+        let before = Snapshot::read(&self.programmers, action.context.desk_id, session, user_id)?;
         let outcome = match &action.command {
             ProgrammingCommand::ApplyKey {
                 key,
@@ -168,11 +187,11 @@ impl ProgrammingService {
                 self.apply_selection(session, command, &action.context, ports)?
             }
         };
-        let mutated = Snapshot::read(&self.programmers, action.context.desk_id, session)?;
+        let mutated = Snapshot::read(&self.programmers, action.context.desk_id, session, user_id)?;
         if let Some(reason) = reconciliation(&before, &mutated, &outcome) {
             ports.reconcile(&action.context, reason);
         }
-        let after = Snapshot::read(&self.programmers, action.context.desk_id, session)?;
+        let after = Snapshot::read(&self.programmers, action.context.desk_id, session, user_id)?;
         let interaction = interaction_change(
             &self.programmers,
             action.context.desk_id,
@@ -189,9 +208,16 @@ impl ProgrammingService {
         } else {
             None
         };
+        let values = self.values_change(
+            user_id,
+            session,
+            before.values_generation,
+            after.values_generation,
+        )?;
         Ok((
             before.result(action.context.clone(), outcome, after, selection),
             interaction,
+            values,
         ))
     }
 

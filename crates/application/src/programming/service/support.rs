@@ -1,6 +1,6 @@
 use super::super::{ProgrammingAction, ProgrammingCommand, ProgrammingOutcome, ProgrammingResult};
 use crate::{ActionContext, ActionEnvelope, ActionError, ActionErrorKind};
-use light_core::SessionId;
+use light_core::{SessionId, UserId};
 use light_programmer::{
     CommandLineReplaceError, CommandLineState, ProgrammerRegistry, ProgrammerSelection,
     SelectionReplaceError,
@@ -52,6 +52,15 @@ pub(super) fn context_session(context: &ActionContext) -> Result<SessionId, Acti
     })
 }
 
+pub(super) fn context_user(context: &ActionContext) -> Result<UserId, ActionError> {
+    context.user_id.map(UserId).ok_or_else(|| {
+        ActionError::new(
+            ActionErrorKind::Unauthorized,
+            "programming interactions require an authenticated user",
+        )
+    })
+}
+
 pub(super) fn validate_command(command: &str) -> Result<(), ActionError> {
     (command.len() <= COMMAND_LINE_LIMIT)
         .then_some(())
@@ -99,6 +108,7 @@ pub(super) fn selection_replace_error(error: SelectionReplaceError) -> ActionErr
 pub(super) struct Snapshot {
     pub(super) command_line: CommandLineState,
     pub(super) selection_revision: u64,
+    pub(super) values_generation: u64,
 }
 
 impl Snapshot {
@@ -106,13 +116,23 @@ impl Snapshot {
         programmers: &ProgrammerRegistry,
         _desk_id: Uuid,
         session: SessionId,
+        user_id: UserId,
     ) -> Result<Self, ActionError> {
         let version = programmers
             .interaction_version(session)
             .ok_or_else(unknown_programmer)?;
+        if programmers.user_id(session) != Some(user_id) {
+            return Err(ActionError::new(
+                ActionErrorKind::Forbidden,
+                "the Programmer session does not belong to the authenticated user",
+            ));
+        }
         Ok(Self {
             command_line: version.command_line,
             selection_revision: version.selection_revision,
+            values_generation: programmers
+                .normal_values_generation(session)
+                .ok_or_else(unknown_programmer)?,
         })
     }
 
@@ -132,6 +152,7 @@ impl Snapshot {
             selection_revision: after.selection_revision,
             selection,
             interaction_event_sequence: None,
+            values_event_sequence: None,
             replayed: false,
         }
     }

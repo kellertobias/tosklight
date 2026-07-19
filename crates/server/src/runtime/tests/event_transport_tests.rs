@@ -8,9 +8,10 @@ use light_application::{
     ActiveShowObjectsChange, EventBus, EventDraft, EventSource, PlaybackCueReference as AppCue,
     PlaybackCueTransition as AppTransition, PlaybackRuntimeChange, PlaybackRuntimeIdentity,
     PlaybackRuntimeProjection, PlaybackShowScope, PlaybackTargetProjection,
-    PlaybackTransitionCause, publish_automatic_playback_events,
+    PlaybackTransitionCause, ProgrammingValuesChange, ProgrammingValuesProjection,
+    publish_automatic_playback_events,
 };
-use light_core::{CueListId, ManualClock, ShowId};
+use light_core::{CueListId, ManualClock, ShowId, UserId};
 use light_engine::EnginePlaybackCommand;
 use light_playback::{Cue, CueList, CueListMode, IntensityPriorityMode, RestartMode, WrapMode};
 use light_wire::v2::events as wire;
@@ -43,12 +44,10 @@ async fn running_chaser_wakes_only_its_narrow_subscriber() {
         capability: wire::EventCapability::Playback,
         id: format!("cuelist:{}", cue_list_id.0),
     };
-    let mut stream = EventStream::subscribe(
-        &bus,
-        Uuid::from_u128(1),
-        subscription(Some(object.clone()), Some(0)),
-    )
-    .unwrap();
+    let session = event_session(Uuid::from_u128(1), Uuid::from_u128(11));
+    let mut stream =
+        EventStream::subscribe(&bus, &session, subscription(Some(object.clone()), Some(0)))
+            .unwrap();
     let waiting = tokio::spawn(async move { stream.next().await });
     tokio::task::yield_now().await;
 
@@ -88,10 +87,11 @@ async fn running_chaser_wakes_only_its_narrow_subscriber() {
 async fn reconnect_gap_repairs_from_an_authoritative_snapshot_cursor() {
     let bus = EventBus::new(2);
     let desk_id = Uuid::from_u128(1);
+    let session = event_session(desk_id, Uuid::from_u128(11));
     for sequence in 1..=3_u16 {
         bus.publish(transition_draft(Some(sequence), Uuid::from_u128(20)));
     }
-    let mut stream = EventStream::subscribe(&bus, desk_id, subscription(None, Some(0))).unwrap();
+    let mut stream = EventStream::subscribe(&bus, &session, subscription(None, Some(0))).unwrap();
 
     let Some(wire::EventServerMessage::Gap { gap }) = stream.next().await else {
         panic!("stale reconnect cursor should report a gap");
@@ -122,9 +122,10 @@ async fn exact_show_object_subscription_keeps_the_aggregate_event_identity() {
         capability: wire::EventCapability::Show,
         id: format!("objects:{}:kind:group:object:1", show_id.0),
     };
+    let session = event_session(desk_id, Uuid::from_u128(11));
     let mut stream = EventStream::subscribe(
         &bus,
-        desk_id,
+        &session,
         show_subscription(group_route.clone(), Some(0)),
     )
     .unwrap();
@@ -208,6 +209,103 @@ fn wire_rate_limits_map_only_replaceable_topics() {
     assert!(subscription_options(None, None, vec![invalid]).is_err());
 }
 
+#[test]
+fn programmer_values_objects_are_limited_to_the_authenticated_user() {
+    let bus = EventBus::new(8);
+    let session = event_session(Uuid::from_u128(1), Uuid::from_u128(11));
+    let foreign = wire::EventObject {
+        capability: wire::EventCapability::Programmer,
+        id: format!("programming-values:{}", Uuid::from_u128(12)),
+    };
+    let filter_request = Ok(wire::EventClientMessage::Subscribe {
+        filter: wire::EventSubscriptionFilter {
+            objects: vec![foreign.clone()],
+            ..Default::default()
+        },
+        after_sequence: None,
+        capacity: None,
+        rate_limits: Vec::new(),
+    });
+    assert!(EventStream::subscribe(&bus, &session, filter_request).is_err());
+
+    let rate_request = Ok(wire::EventClientMessage::Subscribe {
+        filter: wire::EventSubscriptionFilter::default(),
+        after_sequence: None,
+        capacity: None,
+        rate_limits: vec![wire::EventRateLimit {
+            capability: wire::EventCapability::Programmer,
+            class: wire::EventClass::Projection,
+            object: Some(foreign),
+            min_interval_millis: 16,
+        }],
+    });
+    assert!(EventStream::subscribe(&bus, &session, rate_request).is_err());
+
+    let malformed_request = Ok(wire::EventClientMessage::Subscribe {
+        filter: wire::EventSubscriptionFilter {
+            objects: vec![wire::EventObject {
+                capability: wire::EventCapability::Programmer,
+                id: "programming-values:not-a-uuid".into(),
+            }],
+            ..Default::default()
+        },
+        after_sequence: None,
+        capacity: None,
+        rate_limits: Vec::new(),
+    });
+    assert!(EventStream::subscribe(&bus, &session, malformed_request).is_err());
+}
+
+#[tokio::test]
+async fn broad_subscription_delivers_only_authenticated_user_programmer_values() {
+    let bus = EventBus::new(8);
+    let user_id = Uuid::from_u128(11);
+    let session = event_session(Uuid::from_u128(1), user_id);
+    let request = Ok(wire::EventClientMessage::Subscribe {
+        filter: wire::EventSubscriptionFilter::default(),
+        after_sequence: Some(0),
+        capacity: None,
+        rate_limits: Vec::new(),
+    });
+    let mut stream = EventStream::subscribe(&bus, &session, request).unwrap();
+
+    bus.publish(programmer_values_draft(Uuid::from_u128(12), 1));
+    assert!(stream.subscription.try_next().is_none());
+    let expected = bus.publish(programmer_values_draft(user_id, 2));
+
+    let Some(wire::EventServerMessage::Event { event }) = stream.next().await else {
+        panic!("expected the authenticated user's Programmer values")
+    };
+    assert_eq!(event.sequence, expected.sequence);
+    let wire::EventPayload::ProgrammingValuesChanged { change } = event.payload else {
+        panic!("expected a Programmer values payload")
+    };
+    assert_eq!(change.projection.user_id, user_id);
+    assert_eq!(change.projection.revision, 2);
+}
+
+fn event_session(desk_id: Uuid, user_id: Uuid) -> Session {
+    Session {
+        id: light_core::SessionId(Uuid::new_v4()),
+        user: light_show::DeskUser {
+            id: light_core::UserId(user_id),
+            name: "Event operator".into(),
+            enabled: true,
+        },
+        token: "event-token".into(),
+        connected: true,
+        desk: light_show::ControlDesk {
+            id: desk_id,
+            name: "Event desk".into(),
+            osc_alias: "events".into(),
+            columns: 1,
+            rows: 1,
+            buttons: 1,
+            playback_layout: None,
+        },
+    }
+}
+
 fn subscription(
     object: Option<wire::EventObject>,
     after_sequence: Option<u64>,
@@ -253,6 +351,25 @@ fn show_objects_draft(show_id: ShowId, kind: ActiveShowObjectKind, object_id: &s
                 body: Some(serde_json::json!({})),
                 deleted: false,
             }],
+        },
+    )
+}
+
+fn programmer_values_draft(user_id: Uuid, revision: u64) -> EventDraft {
+    EventDraft::programming_values_changed(
+        &ActionContext::operator(
+            Uuid::from_u128(1),
+            user_id,
+            Uuid::new_v4(),
+            ActionSource::UserInterface,
+        ),
+        ProgrammingValuesChange {
+            projection: ProgrammingValuesProjection {
+                user_id: UserId(user_id),
+                revision,
+                fixture_values: Vec::new(),
+                group_values: Vec::new(),
+            },
         },
     )
 }

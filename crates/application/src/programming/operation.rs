@@ -1,5 +1,5 @@
 use super::ProgrammingService;
-use light_core::SessionId;
+use light_core::{SessionId, UserId};
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -13,6 +13,7 @@ use uuid::Uuid;
 pub struct ProgrammingInteractionResult<T> {
     pub output: T,
     pub event_sequence: Option<u64>,
+    pub values_event_sequence: Option<u64>,
 }
 
 /// One desk-local selection projection that may change during a shared runtime installation.
@@ -74,6 +75,23 @@ impl ProgrammingService {
 
     pub(super) fn with_desk_gates<T>(&self, desk_ids: &[Uuid], operation: impl FnOnce() -> T) -> T {
         self.desk_gates.with_gates(desk_ids, operation)
+    }
+
+    /// Serializes a complete user-owned Programmer transition while preserving the global lock
+    /// order: user Programmer first, then desk interaction. A same-user peer therefore cannot
+    /// retain its desk gate while waiting for the user boundary, which keeps nested multi-desk
+    /// selection reconciliation deadlock-free.
+    pub(super) fn with_user_and_desk_gate<T>(
+        &self,
+        desk_id: Uuid,
+        user_id: UserId,
+        operation: impl FnOnce() -> T,
+    ) -> T {
+        self.programmers.with_user_serialized(user_id, || {
+            let desk_gate = self.desk_gates.gate(desk_id);
+            let _desk = desk_gate.lock();
+            operation()
+        })
     }
 
     /// Compatibility-only raw gate access for server adapters not yet expressed through the

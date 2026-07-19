@@ -36,25 +36,6 @@ const LIVE_ABSOLUTE_COMMANDS: &[&str] = &[
     "preset.apply",
 ];
 
-const PROGRAMMER_CHANGED_COMMANDS: &[&str] = &[
-    "programmer.set",
-    "programmer.set_many",
-    "programmer.set_value",
-    "programmer.control_action",
-    "programmer.release",
-    "programmer.group.set",
-    "programmer.group.release",
-    "selection.set",
-    "selection.gesture",
-    "selection.macro",
-    "group.select",
-    "programmer.execute",
-    "programmer.undo",
-    "programmer.redo",
-    "preload.group.set",
-    "preload.clear",
-];
-
 const PROGRAMMING_INTERACTION_COMMANDS: &[&str] = &[
     "selection.set",
     "selection.gesture",
@@ -142,7 +123,7 @@ pub(super) fn dispatch_ws_command(
     };
     let result = dispatch_validated_ws_command(state, session, &command, live_absolute);
     match result.response {
-        Ok(payload) => successful_ws_response(state, session, command, payload),
+        Ok(payload) => successful_ws_response(state, session, command, payload, result.changes),
         Err(error) => failed_ws_response(&command, revision, error),
     }
 }
@@ -205,7 +186,10 @@ fn dispatch_validated_ws_command(
         .run_external_interaction(&context, &ports, || {
             dispatch_live_interaction(state, session, command, &context)
         }) {
-        Ok(completed) => completed.output,
+        Ok(completed) => completed.output.with_changes(
+            completed.event_sequence.is_some(),
+            completed.values_event_sequence.is_some(),
+        ),
         Err(error) => WsProgrammingOutput::untracked(Err(error.message)),
     }
 }
@@ -231,7 +215,10 @@ fn dispatch_live_interaction(
     }
     let mutated = tracked_state(state, session);
     reconcile_interaction(state, session, command, &before, &mutated, response.is_ok());
-    WsProgrammingOutput { response }
+    WsProgrammingOutput {
+        response,
+        changes: Vec::new(),
+    }
 }
 
 fn persist_undo_redo(
@@ -256,8 +243,9 @@ fn successful_ws_response(
     session: &Session,
     command: WsCommand,
     payload: serde_json::Value,
+    changes: Vec<&'static str>,
 ) -> WsResponse {
-    publish_compatibility_events(state, session, &command, &payload);
+    publish_compatibility_events(state, session, &command, &payload, &changes);
     WsResponse {
         protocol_version: 1,
         request_id: command.request_id,
@@ -284,14 +272,15 @@ fn publish_compatibility_events(
     session: &Session,
     command: &WsCommand,
     payload: &serde_json::Value,
+    changes: &[&str],
 ) {
     let no_op_release = command.command == "preload.release"
         && payload.get("released").and_then(serde_json::Value::as_bool) == Some(false);
     if !no_op_release {
         emit_command_applied(state, session, command);
     }
-    if PROGRAMMER_CHANGED_COMMANDS.contains(&command.command.as_str()) {
-        emit_programmer_changed(state, session, command);
+    if !changes.is_empty() {
+        emit_programmer_changed(state, session, command, changes);
     }
 }
 
@@ -303,21 +292,40 @@ fn emit_command_applied(state: &AppState, session: &Session, command: &WsCommand
     );
 }
 
-fn emit_programmer_changed(state: &AppState, session: &Session, command: &WsCommand) {
+fn emit_programmer_changed(
+    state: &AppState,
+    session: &Session,
+    command: &WsCommand,
+    changes: &[&str],
+) {
     emit(
         state,
         "programmer_changed",
-        serde_json::json!({"session_id":session.id,"command":command.command}),
+        serde_json::json!({"session_id":session.id,"command":command.command,"changes":changes}),
     );
 }
 
 struct WsProgrammingOutput {
     response: Result<serde_json::Value, String>,
+    changes: Vec<&'static str>,
 }
 
 impl WsProgrammingOutput {
     fn untracked(response: Result<serde_json::Value, String>) -> Self {
-        Self { response }
+        Self {
+            response,
+            changes: Vec::new(),
+        }
+    }
+
+    fn with_changes(mut self, interaction: bool, values: bool) -> Self {
+        if interaction {
+            self.changes.push("interaction");
+        }
+        if values {
+            self.changes.push("values");
+        }
+        self
     }
 }
 

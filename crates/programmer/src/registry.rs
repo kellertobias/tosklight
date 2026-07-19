@@ -16,6 +16,13 @@ pub struct ProgrammerRegistry {
     pub(crate) selection_contexts: Arc<RwLock<HashMap<SessionId, SelectionContext>>>,
     pub(crate) selection_revision: Arc<AtomicU64>,
     pub(crate) programmer_order: Arc<AtomicU64>,
+    /// Cheap write stamp for normal recordable values. Low-level helpers may advance this more
+    /// than once while composing one application action; the application boundary uses it only
+    /// to detect whether a full value projection must be materialized.
+    pub(crate) normal_values_generations: Arc<RwLock<HashMap<UserId, u64>>>,
+    /// Monotonic public projection revision, advanced exactly once by the application service for
+    /// each completed semantic normal-value transition.
+    pub(crate) normal_values_revisions: Arc<RwLock<HashMap<UserId, u64>>>,
     /// Serializes compound mutations per user without preventing unrelated programmers from
     /// progressing concurrently. The mutex is reentrant because public mutation helpers compose
     /// other public helpers (for example, `activate_preload` calls `activate_preload_at`).
@@ -40,6 +47,8 @@ impl ProgrammerRegistry {
             selection_contexts: Arc::default(),
             selection_revision: Arc::default(),
             programmer_order: Arc::default(),
+            normal_values_generations: Arc::default(),
+            normal_values_revisions: Arc::default(),
             mutation_gates: Arc::default(),
             unknown_mutation_gate: Arc::new(ReentrantMutex::new(())),
             clock,
@@ -60,6 +69,18 @@ impl ProgrammerRegistry {
                 .entry(user_id)
                 .or_insert_with(|| Arc::new(ReentrantMutex::new(()))),
         )
+    }
+
+    /// Serialize a complete application-level transition for one user's shared Programmer.
+    ///
+    /// The gate is the same reentrant boundary used by every registry mutator, so callers may
+    /// capture state, compose existing mutation helpers, and publish the final projection without
+    /// another session for that user interleaving a write. Application services must acquire this
+    /// user gate before any desk-interaction gate.
+    pub fn with_user_serialized<R>(&self, user_id: UserId, operation: impl FnOnce() -> R) -> R {
+        let gate = self.mutation_gate_for_user(user_id);
+        let _guard = gate.lock();
+        operation()
     }
 
     pub(crate) fn mutation_gate(&self, session: SessionId) -> Arc<ReentrantMutex<()>> {
@@ -145,7 +166,48 @@ impl ProgrammerRegistry {
             self.selection_contexts.write().clear();
             self.selection_revision.store(0, Ordering::Relaxed);
             self.programmer_order.store(0, Ordering::Relaxed);
+            self.normal_values_generations.write().clear();
+            self.normal_values_revisions.write().clear();
         });
+    }
+
+    pub fn normal_values_generation(&self, session: SessionId) -> Option<u64> {
+        let user_id = self.states.read().get(&self.key(session))?.user_id;
+        Some(
+            self.normal_values_generations
+                .read()
+                .get(&user_id)
+                .copied()
+                .unwrap_or(0),
+        )
+    }
+
+    pub fn user_id(&self, session: SessionId) -> Option<UserId> {
+        self.states
+            .read()
+            .get(&self.key(session))
+            .map(|state| state.user_id)
+    }
+
+    pub fn normal_values_revision(&self, user_id: UserId) -> u64 {
+        self.normal_values_revisions
+            .read()
+            .get(&user_id)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    pub fn advance_normal_values_revision(&self, user_id: UserId) -> u64 {
+        let mut revisions = self.normal_values_revisions.write();
+        let revision = revisions.entry(user_id).or_default();
+        *revision = revision.saturating_add(1);
+        *revision
+    }
+
+    pub(crate) fn mark_normal_values_changed(&self, user_id: UserId) {
+        let mut generations = self.normal_values_generations.write();
+        let generation = generations.entry(user_id).or_default();
+        *generation = generation.saturating_add(1);
     }
 
     pub(crate) fn next_programmer_order(&self) -> u64 {
@@ -194,11 +256,17 @@ impl ProgrammerRegistry {
         let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
         };
+        let normal_values_changed = !state.values.is_empty() || !state.group_values.is_empty();
         state.checkpoint();
         state.values.clear();
         state.transient_values.clear();
         state.group_values.clear();
         state.last_activity = self.clock.now();
+        let user_id = state.user_id;
+        drop(states);
+        if normal_values_changed {
+            self.mark_normal_values_changed(user_id);
+        }
         true
     }
 

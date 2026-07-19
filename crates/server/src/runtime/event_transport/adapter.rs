@@ -4,7 +4,11 @@ mod selective_import;
 
 use light_application as application;
 use light_wire::v2::events as wire;
+
+#[cfg(test)]
 use uuid::Uuid;
+
+use super::super::Session;
 
 pub(super) fn application_rate_limits(
     limits: Vec<wire::EventRateLimit>,
@@ -21,11 +25,12 @@ pub(super) fn application_rate_limits(
 }
 
 pub(super) fn application_filter(
-    desk_id: Uuid,
+    session: &Session,
     filter: wire::EventSubscriptionFilter,
 ) -> application::EventFilter {
     application::EventFilter {
-        desk_id: Some(desk_id),
+        desk_id: Some(session.desk.id),
+        programmer_user_id: Some(session.user.id.0),
         capabilities: filter
             .capabilities
             .into_iter()
@@ -176,6 +181,11 @@ fn wire_payload(
             application::ProgrammingEvent::InteractionChanged(change),
         ) => wire::EventPayload::ProgrammingInteractionChanged {
             change: super::super::command_http::interaction_change(change),
+        },
+        application::ApplicationEvent::Programming(
+            application::ProgrammingEvent::ValuesChanged(change),
+        ) => wire::EventPayload::ProgrammingValuesChanged {
+            change: super::super::command_http::values_change(change),
         },
         application::ApplicationEvent::Playback(application::PlaybackEvent::RuntimeChanged(
             change,

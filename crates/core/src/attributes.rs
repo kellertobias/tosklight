@@ -300,7 +300,7 @@ pub enum MergeMode {
     Ltp,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TimedValue {
     pub fixture_id: FixtureId,
     pub attribute: AttributeKey,

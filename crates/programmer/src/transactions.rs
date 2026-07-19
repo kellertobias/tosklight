@@ -13,6 +13,7 @@ use std::sync::Arc;
 pub struct ProgrammerTransactionSnapshot {
     state_key: SessionId,
     state: ProgrammerState,
+    normal_values_generation: u64,
     interaction_context: SessionId,
     selection: Option<SelectionContext>,
     command_line: Option<CommandLineState>,
@@ -124,6 +125,19 @@ impl ProgrammerRegistry {
         let state_key = self.key(session);
         let context = self.command_context(session);
         let state = self.states.read().get(&state_key)?.clone();
+        let user_id = state.user_id;
+        let normal_values_generation = self
+            .normal_values_generations
+            .read()
+            .get(&user_id)
+            .copied()
+            .unwrap_or(0);
+        let normal_values_revision = self
+            .normal_values_revisions
+            .read()
+            .get(&user_id)
+            .copied()
+            .unwrap_or(0);
         let selection = self.selection_contexts.read().get(&context).cloned();
         let command = self.command_states.read().get(&context).cloned();
         Some(ProgrammerRegistry {
@@ -142,6 +156,14 @@ impl ProgrammerRegistry {
             )),
             selection_revision: Arc::clone(&self.selection_revision),
             programmer_order: Arc::clone(&self.programmer_order),
+            normal_values_generations: Arc::new(RwLock::new(HashMap::from([(
+                user_id,
+                normal_values_generation,
+            )]))),
+            normal_values_revisions: Arc::new(RwLock::new(HashMap::from([(
+                user_id,
+                normal_values_revision,
+            )]))),
             mutation_gates: Arc::default(),
             unknown_mutation_gate: Arc::new(ReentrantMutex::new(())),
             clock: Arc::clone(&self.clock),
@@ -162,6 +184,13 @@ impl ProgrammerRegistry {
         let Some(state) = staged.states.read().get(&staged_state_key).cloned() else {
             return false;
         };
+        let user_id = state.user_id;
+        let staged_values_generation = staged
+            .normal_values_generations
+            .read()
+            .get(&user_id)
+            .copied()
+            .unwrap_or(0);
         let selection = staged.selection_contexts.read().get(&context).cloned();
         let command = staged.command_states.read().get(&context).cloned();
 
@@ -188,6 +217,12 @@ impl ProgrammerRegistry {
                 selections.remove(&context);
             }
         }
+        drop(selections);
+        drop(commands);
+        drop(states);
+        self.normal_values_generations
+            .write()
+            .insert(user_id, staged_values_generation);
         true
     }
 
@@ -204,6 +239,12 @@ impl ProgrammerRegistry {
         let state_key = self.key(session);
         let interaction_context = self.command_context(session);
         let state = self.states.read().get(&state_key)?.clone();
+        let normal_values_generation = self
+            .normal_values_generations
+            .read()
+            .get(&state.user_id)
+            .copied()
+            .unwrap_or(0);
         let selection = self
             .selection_contexts
             .read()
@@ -217,6 +258,7 @@ impl ProgrammerRegistry {
         Some(ProgrammerTransactionSnapshot {
             state_key,
             state,
+            normal_values_generation,
             interaction_context,
             selection,
             command_line,
@@ -227,9 +269,13 @@ impl ProgrammerRegistry {
     pub fn restore_transaction_snapshot(&self, snapshot: ProgrammerTransactionSnapshot) {
         let mutation_gate = self.mutation_gate_for_user(snapshot.state.user_id);
         let _mutation_guard = mutation_gate.lock();
+        let user_id = snapshot.state.user_id;
         self.states
             .write()
             .insert(snapshot.state_key, snapshot.state);
+        self.normal_values_generations
+            .write()
+            .insert(user_id, snapshot.normal_values_generation);
         let mut selections = self.selection_contexts.write();
         match snapshot.selection {
             Some(selection) => {

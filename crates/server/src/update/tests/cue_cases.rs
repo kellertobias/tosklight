@@ -220,6 +220,7 @@ fn cue_fixture_and_group_addresses_track_independently() {
             attribute: attribute("intensity"),
             value: normalized(0.9),
             programmer_order: 2,
+            fade: false,
             fade_millis: None,
             delay_millis: None,
         }],

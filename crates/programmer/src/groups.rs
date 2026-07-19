@@ -6,7 +6,7 @@ use light_core::{AttributeKey, AttributeValue, FixtureId, SessionId};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct GroupProgrammerValue {
     pub value: AttributeValue,
     pub changed_at: DateTime<Utc>,
@@ -240,7 +240,8 @@ impl ProgrammerRegistry {
         };
         state.checkpoint();
         let programmer_order = self.next_programmer_order();
-        let target = if state.blind && state.preload_capture_programmer {
+        let preload = state.blind && state.preload_capture_programmer;
+        let target = if preload {
             &mut state.preload_group_pending
         } else {
             &mut state.group_values
@@ -257,6 +258,11 @@ impl ProgrammerRegistry {
             },
         );
         state.last_activity = self.clock.now();
+        let user_id = state.user_id;
+        drop(states);
+        if !preload {
+            self.mark_normal_values_changed(user_id);
+        }
         true
     }
 
@@ -275,7 +281,8 @@ impl ProgrammerRegistry {
         let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
         };
-        let values = if state.blind && state.preload_capture_programmer {
+        let preload = state.blind && state.preload_capture_programmer;
+        let values = if preload {
             &mut state.preload_pending
         } else {
             &mut state.values
@@ -288,7 +295,7 @@ impl ProgrammerRegistry {
             return false;
         }
         state.checkpoint();
-        let values = if state.blind && state.preload_capture_programmer {
+        let values = if preload {
             &mut state.preload_pending
         } else {
             &mut state.values
@@ -296,6 +303,11 @@ impl ProgrammerRegistry {
         values.retain(|value| value.fixture_id != fixture_id || value.attribute != *attribute);
         debug_assert!(values.len() < before);
         state.last_activity = self.clock.now();
+        let user_id = state.user_id;
+        drop(states);
+        if !preload {
+            self.mark_normal_values_changed(user_id);
+        }
         true
     }
 
@@ -314,7 +326,8 @@ impl ProgrammerRegistry {
         let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
         };
-        let target = if state.blind && state.preload_capture_programmer {
+        let preload = state.blind && state.preload_capture_programmer;
+        let target = if preload {
             &mut state.preload_group_pending
         } else {
             &mut state.group_values
@@ -326,7 +339,7 @@ impl ProgrammerRegistry {
             return false;
         }
         state.checkpoint();
-        let target = if state.blind && state.preload_capture_programmer {
+        let target = if preload {
             &mut state.preload_group_pending
         } else {
             &mut state.group_values
@@ -338,6 +351,11 @@ impl ProgrammerRegistry {
             }
         }
         state.last_activity = self.clock.now();
+        let user_id = state.user_id;
+        drop(states);
+        if !preload {
+            self.mark_normal_values_changed(user_id);
+        }
         true
     }
 }

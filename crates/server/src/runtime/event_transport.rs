@@ -57,14 +57,13 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
     let Some(request) = next_client_message(&mut socket).await else {
         return;
     };
-    let mut stream =
-        match EventStream::subscribe(&state.application_events, session.desk.id, request) {
-            Ok(stream) => stream,
-            Err(error) => {
-                send_wire(&mut socket, wire::EventServerMessage::Error { error }).await;
-                return;
-            }
-        };
+    let mut stream = match EventStream::subscribe(&state.application_events, &session, request) {
+        Ok(stream) => stream,
+        Err(error) => {
+            send_wire(&mut socket, wire::EventServerMessage::Error { error }).await;
+            return;
+        }
+    };
     if !send_wire(&mut socket, stream.ready()).await {
         return;
     }
@@ -145,7 +144,7 @@ pub(super) struct EventStream {
 impl EventStream {
     pub(super) fn subscribe(
         bus: &application::EventBus,
-        desk_id: Uuid,
+        session: &Session,
         request: Result<wire::EventClientMessage, String>,
     ) -> Result<Self, String> {
         let message = request?;
@@ -159,8 +158,9 @@ impl EventStream {
             return Err("the first event message must subscribe".into());
         };
         validate_cursor(bus, after_sequence)?;
+        validate_programming_scope(session, &filter, &rate_limits)?;
         let options = subscription_options(capacity, after_sequence, rate_limits)?;
-        let subscription = bus.subscribe(adapter::application_filter(desk_id, filter), options);
+        let subscription = bus.subscribe(adapter::application_filter(session, filter), options);
         Ok(Self {
             bus: bus.clone(),
             subscription,
@@ -201,6 +201,41 @@ impl EventStream {
             sequence: self.bus.latest_sequence(),
         }
     }
+}
+
+fn validate_programming_scope(
+    session: &Session,
+    filter: &wire::EventSubscriptionFilter,
+    rate_limits: &[wire::EventRateLimit],
+) -> Result<(), String> {
+    for object in filter
+        .objects
+        .iter()
+        .chain(rate_limits.iter().filter_map(|limit| limit.object.as_ref()))
+    {
+        validate_programming_object(session, object)?;
+    }
+    Ok(())
+}
+
+fn validate_programming_object(
+    session: &Session,
+    object: &wire::EventObject,
+) -> Result<(), String> {
+    if object.capability != wire::EventCapability::Programmer {
+        return Ok(());
+    }
+    let Some(user) = object.id.strip_prefix("programming-values:") else {
+        return Ok(());
+    };
+    let user = Uuid::parse_str(user)
+        .map_err(|_| "Programmer values event objects require a valid user UUID".to_owned())?;
+    if user != session.user.id.0 {
+        return Err(
+            "Programmer values subscriptions may only address the authenticated user".into(),
+        );
+    }
+    Ok(())
 }
 
 fn validate_cursor(bus: &application::EventBus, cursor: Option<u64>) -> Result<(), String> {

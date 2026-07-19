@@ -1,4 +1,4 @@
-use super::ProgrammingInteractionProjection;
+use super::{ProgrammingInteractionProjection, ProgrammingValuesChange};
 use crate::{
     ActionContext, ApplicationEvent, DeliveryPolicy, EventCapability, EventClass, EventDraft,
     EventObject, EventSource, ProgrammingEvent,
@@ -70,6 +70,20 @@ impl EventObject {
             format!("programming-selection:{desk_id}"),
         )
     }
+
+    pub fn programming_values(user_id: Uuid) -> Self {
+        Self::new(
+            EventCapability::Programmer,
+            format!("programming-values:{user_id}"),
+        )
+    }
+
+    pub fn programming_values_user_id(&self) -> Option<Uuid> {
+        (self.capability == EventCapability::Programmer)
+            .then(|| self.id.strip_prefix("programming-values:"))
+            .flatten()
+            .and_then(|value| Uuid::parse_str(value).ok())
+    }
 }
 
 impl EventDraft {
@@ -90,6 +104,23 @@ impl EventDraft {
             // selection transition. Bounded subscribers repair overload through the snapshot.
             delivery: DeliveryPolicy::Lossless,
             payload: ApplicationEvent::Programming(ProgrammingEvent::InteractionChanged(change)),
+        }
+    }
+
+    pub fn programming_values_changed(
+        context: &ActionContext,
+        change: ProgrammingValuesChange,
+    ) -> Self {
+        let object = EventObject::programming_values(change.projection.user_id.0);
+        Self {
+            desk_id: None,
+            class: EventClass::Projection,
+            object: Some(object),
+            related_objects: Vec::new(),
+            source: EventSource::Action(context.source),
+            correlation_id: Some(context.correlation_id),
+            delivery: DeliveryPolicy::Replaceable,
+            payload: ApplicationEvent::Programming(ProgrammingEvent::ValuesChanged(change)),
         }
     }
 }

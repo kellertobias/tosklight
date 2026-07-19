@@ -4,6 +4,7 @@ mod operation;
 mod ports;
 mod projection;
 mod service;
+mod values_projection;
 
 pub use command::{
     CueMoveCopyChoice, CueTransferOperation, ExecutionPolicy, ProgrammingAction,
@@ -21,6 +22,9 @@ pub use ports::{
 };
 pub use projection::{ProgrammingInteractionProjection, ProgrammingLiveSnapshot};
 pub use service::ProgrammingService;
+pub use values_projection::{
+    ProgrammingValuesChange, ProgrammingValuesProjection, ProgrammingValuesSnapshot,
+};
 
 #[cfg(test)]
 mod live_state_tests;

@@ -152,7 +152,11 @@ impl ProgrammerRegistry {
             return;
         }
         self.close_selection_gesture(session);
-        if let Some(state) = self.states.write().get_mut(&self.key(session)) {
+        let changed_user = {
+            let mut states = self.states.write();
+            let Some(state) = states.get_mut(&self.key(session)) else {
+                return;
+            };
             if checkpoint {
                 state.checkpoint();
             }
@@ -162,7 +166,8 @@ impl ProgrammerRegistry {
                 .map(|(fixture_id, attribute, _)| (*fixture_id, attribute.clone()))
                 .collect::<HashSet<_>>();
             {
-                let values = if state.blind && state.preload_capture_programmer {
+                let preload = state.blind && state.preload_capture_programmer;
+                let values = if preload {
                     &mut state.preload_pending
                 } else {
                     &mut state.values
@@ -198,6 +203,10 @@ impl ProgrammerRegistry {
                 value.programmer_order = self.next_programmer_order();
             }
             state.last_activity = changed_at;
+            (!state.blind || !state.preload_capture_programmer).then_some(state.user_id)
+        };
+        if let Some(user_id) = changed_user {
+            self.mark_normal_values_changed(user_id);
         }
     }
     pub fn set_faded(
@@ -263,10 +272,15 @@ impl ProgrammerRegistry {
         timing: ProgrammerValueTiming,
     ) {
         self.close_selection_gesture(session);
-        if let Some(state) = self.states.write().get_mut(&self.key(session)) {
+        let changed_user = {
+            let mut states = self.states.write();
+            let Some(state) = states.get_mut(&self.key(session)) else {
+                return;
+            };
             state.checkpoint();
             let merge_mode = light_core::MergeMode::Ltp;
-            let values = if state.blind && state.preload_capture_programmer {
+            let preload = state.blind && state.preload_capture_programmer;
+            let values = if preload {
                 &mut state.preload_pending
             } else {
                 &mut state.values
@@ -285,6 +299,10 @@ impl ProgrammerRegistry {
                 delay_millis: timing.delay_millis,
             });
             state.last_activity = self.clock.now();
+            (!preload).then_some(state.user_id)
+        };
+        if let Some(user_id) = changed_user {
+            self.mark_normal_values_changed(user_id);
         }
     }
 }

@@ -3,6 +3,7 @@
 use super::{
     command_line::ProgrammingInteractionChange,
     playback::{PlaybackDeskProjection, PlaybackRuntimeChange},
+    programming::ProgrammingValuesChange,
 };
 
 use schemars::JsonSchema;
@@ -155,6 +156,9 @@ pub enum EventActionSource {
 pub enum EventPayload {
     ProgrammingInteractionChanged {
         change: ProgrammingInteractionChange,
+    },
+    ProgrammingValuesChanged {
+        change: ProgrammingValuesChange,
     },
     PlaybackRuntimeChanged {
         change: PlaybackRuntimeChange,

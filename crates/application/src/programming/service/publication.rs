@@ -1,5 +1,10 @@
 use super::ProgrammingService;
-use crate::{ActionContext, EventDraft, ProgrammingInteractionChange};
+use crate::{
+    ActionContext, ActionError, EventDraft, ProgrammingInteractionChange, ProgrammingValuesChange,
+};
+use light_core::{SessionId, UserId};
+
+use super::super::values_projection::ProgrammingValuesContent;
 
 impl ProgrammingService {
     pub(super) fn publish_interaction(
@@ -14,6 +19,35 @@ impl ProgrammingService {
                     .publish(EventDraft::programming_interaction_changed(context, change))
                     .sequence
             })
+    }
+
+    pub(super) fn publish_values(
+        &self,
+        context: &ActionContext,
+        values: Option<ProgrammingValuesChange>,
+    ) -> Option<u64> {
+        values.map(|change| {
+            self.events
+                .publish(EventDraft::programming_values_changed(context, change))
+                .sequence
+        })
+    }
+
+    pub(super) fn values_change(
+        &self,
+        user_id: UserId,
+        session: SessionId,
+        before_generation: u64,
+        after_generation: u64,
+    ) -> Result<Option<ProgrammingValuesChange>, ActionError> {
+        if before_generation == after_generation {
+            return Ok(None);
+        }
+        let content = ProgrammingValuesContent::read(&self.programmers, session, user_id)?;
+        let revision = self.programmers.advance_normal_values_revision(user_id);
+        Ok(Some(ProgrammingValuesChange {
+            projection: content.projection(user_id, revision),
+        }))
     }
 
     fn suppress_nested_selection(

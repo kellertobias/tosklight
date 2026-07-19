@@ -4,7 +4,7 @@ This is the living handoff for [`major-refactoring.md`](major-refactoring.md). U
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-19 after the modal selection migration.
+Last updated: 2026-07-19 at the requested wrap-up after the backend Programmer-values boundary.
 
 ## Guardrails
 
@@ -129,6 +129,14 @@ Last updated: 2026-07-19 after the modal selection migration.
   session isolate authority by show and user; mounted values views alone trigger hydration and a
   stream, cursor gaps repair from snapshots, late work cannot cross a scope reset, and selectors
   suppress unrelated rerenders. The production wire adapter and value consumers remain below.
+- [x] Added the authoritative user-scoped normal Programmer-values backend boundary. A cheap
+  per-user mutation generation avoids cloning values for command-only or no-op actions; one
+  completed semantic mutation advances one public revision, materializes one deterministic full
+  retained projection, and publishes one replaceable event shared by every desk for that user.
+  Same-user mutations serialize before desk interaction locks, snapshots and explicit/broad/rate-
+  limited subscriptions enforce authenticated user ownership, and v1 compatibility events report
+  interaction/value categories from the transitions that actually occurred. Selection, Preload,
+  modes, priority, connectivity, Highlight, and transient actions remain outside this projection.
 - [x] Migrated every parameter-bank family, fader, encoder, range, release, and direct action onto
   the scoped ordered selection projection. Fixture membership uses sets, streamed peer or OSC
   selection immediately retargets writes, and inactive parameter views perform no selection
@@ -178,10 +186,13 @@ Last updated: 2026-07-19 after the modal selection migration.
   command bar, Stage, Stage/Fixture pane chrome, Channels, Fixture Sheet, Patch, and Presets have
   moved, as have the complete parameter bank and selection-driven operator modals; Patch setup and
   a small number of keypad/miscellaneous readers still use the facade.
-- [ ] Connect the user-scoped normal Programmer-values snapshot/event transport, mount the provider,
-  and migrate value consumers and optimistic writers before removing value-triggered bootstrap
-  refreshes. Keep Preload, modes, priority, connectivity, Highlight, and transient state outside
-  this retained normal-values projection.
+- [ ] Connect the now-implemented user-scoped normal Programmer-values HTTP snapshot and v2 event
+  DTOs to the committed frontend store, mount the provider, and migrate value consumers before
+  removing value-triggered bootstrap refreshes. Add a typed values-action outcome carrying the
+  authoritative projection/revision/event sequence/correlation before enabling production
+  optimistic writers: application-internal results expose the values event sequence, but current
+  public command-line and legacy WebSocket writer responses do not expose enough information for
+  race-free optimistic reconciliation.
 - [ ] Replace inferred Cue ambiguity in the command-line text projection with explicit desk-local
   pending-choice state that is set only by `ChoiceRequired` after ENT and cleared by edit, reset,
   selection, or Cancel. Until then, cross-session choice visibility remains a documented
@@ -231,10 +242,11 @@ Last updated: 2026-07-19 after the modal selection migration.
   above 150. The current working-tree ratchet is blocked only by the unrelated uncommitted Dynamics
   Editor experiment at 1,382 lines. Dependency-direction checks and all 10 scanner/ratchet unit
   tests pass.
-- The current full-tree design-goal report is 52 files above 400 lines and 3,479 functions above
-  20. Remaining in-scope production files above 400 are Programming service at 443 lines and the
-  command HTTP adapter at 411; split both before declaring the file-size goal complete. Planning
-  and test sources and the unrelated Dynamics Editor experiment account for the other large files.
+- The earlier full-tree design-goal report was 52 files above 400 lines and 3,479 functions above
+  20. The two remaining in-scope hotspots named by that report have since been split: Programming
+  service is now 380 lines and the command HTTP adapter is 304 lines. The complete source-size
+  ratchet was not rerun during this immediate wrap-up; planning/test sources and the unrelated
+  Dynamics Editor experiment accounted for the other large files in the earlier report.
 - Focused application, server, wire, frontend, architecture, source-size, MVR, File Manager,
   Playback, Preload, Patch, Output, event, shared-control, Stage 3D, build, and strict Clippy checks
   have passed for their committed slices. The latest command-line slice passed 18 Programming
@@ -254,8 +266,28 @@ Last updated: 2026-07-19 after the modal selection migration.
   full frontend typecheck. The parameter-bank migration passes 17 focused tests across its legacy
   behavior and streamed selection suites. The modal migration passes 13 focused tests including
   ordered streamed writes and closed-view teardown. Both slices pass the full frontend typecheck.
-- The current complete frontend suite passes all 811 tests, and the production frontend build
-  passes. A final repository-wide suite and real desktop run has not yet been completed.
+- The backend Programmer-values boundary passes `cargo fmt --all`; 2 focused Programmer generation
+  tests; 4 application values projection/event/concurrency tests; 19 wire unit tests plus the
+  generated-contract test; 2 authenticated snapshot route tests; 16 event-transport/filter tests;
+  and 1 v1 compatibility-category test. `git diff --check` is clean. There were no focused
+  failures. Wire tests print the existing `ts-rs` `deny_unknown_fields` warning. The full workspace
+  suite was deliberately not run after the request for an immediate wrap-up; the previously known
+  sandbox-only CITP socket failure was not rerun.
+- The most recent pre-wrap complete frontend suite passed all 811 tests and its production build;
+  the newer selection/value-store slices have focused coverage and typecheck evidence but did not
+  rerun that complete suite. A final repository-wide suite and real desktop run remains pending.
+
+## Wrap-up handoff
+
+- The completed wrap-up contains the scoped modal-selection checkpoint followed by the coherent
+  backend normal Programmer-values snapshot/event/security boundary.
+- No Patch/setup selection edits survived the interrupted worker, and no partial work from that
+  attempted slice should be committed. After the backend commit containing this handoff, the
+  working tree is expected to have no uncommitted refactoring files.
+- Resume with the frontend values transport/provider and a typed values mutation outcome. Only
+  after that contract is testable should production value readers/writers move off bootstrap and
+  broad `programmer_changed` hydration. The next independent selection cleanup is Patch/setup,
+  followed by the Numeric Pad clear action and other small facade readers.
 
 Test files may exceed the hard limits, but should still be split when it improves readability and
 makes operator intent more visible.
