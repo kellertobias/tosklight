@@ -83,11 +83,24 @@ All persisted-data changes are also governed by the [backward-compatibility acce
 ```sh
 cargo test --workspace --no-fail-fast
 cargo clippy --workspace --all-targets -- -D warnings
-cargo run -p light-server --bin light-benchmark -- --universes 64 --seconds 5
+cargo run --release -p light-server --bin light-benchmark --no-default-features -- \
+  --profile all --protocol artnet --transport encode-only --seconds 5 \
+  --hardware-label "machine model, CPU, RAM and power mode"
 cd apps/control-ui && npm run typecheck && npm test -- --run && npm run build && npm run test:e2e
 ```
 
-The benchmark measures Art-Net and sACN frame encoding throughput for the selected universe count. Run it on each target, including Raspberry Pi 5, before choosing that desk's configured universe ceiling.
+The release-only benchmark emits JSON for the 32-universe/100 Hz hard floor, the
+64-universe/120 Hz target, and both 4- and 8-universe/40 Hz low-power profiles. Each universe is
+filled through the real Engine render, contribution arbitration, schema-v2 fixture projection, and
+selected production protocol encoder. The scenario overlaps Playback, Programmer, static Group,
+and phaser values; the phaser owns one mapped slot that has no static or Programmer value, and a
+focused test proves consecutive logical ticks change that slot. Use `--protocol sacn` for the other
+production codec and `--transport loopback` for separately reported, safe local UDP `send_to`
+timing. Loopback is benchmark-owned and is not presented as production `NetworkOutput` socket
+delivery. The JSON explicitly identifies unavailable CPU, allocation, sub-render phase, production
+socket, and sound-to-light measurements; do not infer those values from total latency. Run it on
+each target, including Raspberry Pi-class hardware, before choosing that desk's configured universe
+ceiling, and retain the JSON with the exact hardware label.
 
 ## Implementation status
 
