@@ -1,4 +1,7 @@
-use crate::{RevisionCopySource, StoreError, VersionedObject, connection::configure, portable};
+use crate::{
+    PortableShowObjectUndo, RevisionCopySource, StoreError, VersionedObject, connection::configure,
+    portable,
+};
 use light_core::{Revision, ShowId, UserId};
 use rusqlite::{Connection, MAIN_DB, OpenFlags, OptionalExtension, params};
 use std::path::Path;
@@ -163,6 +166,16 @@ impl ShowStore {
         expected: Revision,
     ) -> Result<Revision, StoreError> {
         portable::undo_legacy_object(&self.conn, kind, id, expected)
+    }
+
+    /// Reads the exact previous raw body and its compare-and-pop history condition.
+    pub fn prepare_object_undo(
+        &self,
+        kind: &str,
+        id: &str,
+        expected: Revision,
+    ) -> Result<PortableShowObjectUndo, StoreError> {
+        portable::prepare_undo(&self.conn, kind, id, expected)
     }
 
     pub fn objects(&self, kind: &str) -> Result<Vec<VersionedObject>, StoreError> {

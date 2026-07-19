@@ -1,4 +1,4 @@
-use super::{PortableShowObjectKey, bump_revision};
+use super::{PortableShowObjectKey, PortableShowObjectUndo, bump_revision};
 use crate::{AtomicObjectDelete, AtomicObjectWrite, StoreError};
 use chrono::Utc;
 use light_core::Revision;
@@ -7,6 +7,11 @@ use serde_json::Value;
 
 struct StoredObject {
     revision: Revision,
+    body_json: String,
+}
+
+struct HistoryEntry {
+    row_id: i64,
     body_json: String,
 }
 
@@ -56,9 +61,55 @@ pub(crate) fn undo_legacy_object(
     ensure_expected(Some(&current), expected)?;
     let previous = previous_history(&tx, kind, id)?;
     let revision = next_revision(expected)?;
-    restore_previous(&tx, kind, id, &previous, revision)?;
+    restore_previous(
+        &tx,
+        &PortableShowObjectKey::new(kind, id),
+        &previous,
+        revision,
+        &timestamp(),
+    )?;
     bump_revision(&tx)?;
     tx.commit()?;
+    Ok(revision)
+}
+
+pub(crate) fn prepare_undo(
+    conn: &Connection,
+    kind: &str,
+    id: &str,
+    expected: Revision,
+) -> Result<PortableShowObjectUndo, StoreError> {
+    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Deferred)?;
+    let current = current_object(&tx, kind, id)?
+        .ok_or_else(|| StoreError::Sql(rusqlite::Error::QueryReturnedNoRows))?;
+    ensure_expected(Some(&current), expected)?;
+    let previous = previous_history(&tx, kind, id)?;
+    let undo = PortableShowObjectUndo::new(
+        PortableShowObjectKey::new(kind, id),
+        serde_json::from_str(&previous.body_json)?,
+        expected,
+        previous.row_id,
+    );
+    tx.commit()?;
+    Ok(undo)
+}
+
+pub(crate) fn restore_staged_undo(
+    tx: &Transaction<'_>,
+    key: &PortableShowObjectKey,
+    expected_object_revision: Revision,
+    history_row_id: i64,
+    updated_at: &str,
+) -> Result<Revision, StoreError> {
+    let current = current_object(tx, key.kind(), key.id())?
+        .ok_or_else(|| StoreError::Sql(rusqlite::Error::QueryReturnedNoRows))?;
+    ensure_expected(Some(&current), expected_object_revision)?;
+    let previous = previous_history(tx, key.kind(), key.id())?;
+    if previous.row_id != history_row_id {
+        return Err(StoreError::Invalid("object undo history changed".into()));
+    }
+    let revision = next_revision(expected_object_revision)?;
+    restore_previous(tx, key, &previous, revision, updated_at)?;
     Ok(revision)
 }
 
@@ -240,15 +291,16 @@ fn delete_checked(
     delete_current(tx, &PortableShowObjectKey::new(kind, id))
 }
 
-fn previous_history(
-    tx: &Transaction<'_>,
-    kind: &str,
-    id: &str,
-) -> Result<(i64, String), StoreError> {
-    tx.query_row(
+fn previous_history(conn: &Connection, kind: &str, id: &str) -> Result<HistoryEntry, StoreError> {
+    conn.query_row(
         "SELECT rowid,body_json FROM object_history WHERE kind=?1 AND id=?2 ORDER BY rowid DESC LIMIT 1",
         params![kind, id],
-        |row| Ok((row.get(0)?, row.get(1)?)),
+        |row| {
+            Ok(HistoryEntry {
+                row_id: row.get(0)?,
+                body_json: row.get(1)?,
+            })
+        },
     )
     .optional()?
     .ok_or_else(|| StoreError::Invalid("object has no undo history".into()))
@@ -256,19 +308,28 @@ fn previous_history(
 
 fn restore_previous(
     tx: &Transaction<'_>,
-    kind: &str,
-    id: &str,
-    previous: &(i64, String),
+    key: &PortableShowObjectKey,
+    previous: &HistoryEntry,
     revision: Revision,
+    updated_at: &str,
 ) -> Result<(), StoreError> {
     let updated = tx.execute(
         "UPDATE objects SET body_json=?3,revision=?4,updated_at=?5 WHERE kind=?1 AND id=?2",
-        params![kind, id, previous.1, revision as i64, timestamp()],
+        params![
+            key.kind(),
+            key.id(),
+            previous.body_json,
+            revision as i64,
+            updated_at
+        ],
     )?;
     if updated != 1 {
         return Err(StoreError::Invalid("object disappeared during undo".into()));
     }
-    tx.execute("DELETE FROM object_history WHERE rowid=?1", [previous.0])?;
+    tx.execute(
+        "DELETE FROM object_history WHERE rowid=?1",
+        [previous.row_id],
+    )?;
     Ok(())
 }
 

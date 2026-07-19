@@ -87,6 +87,52 @@ pub struct PortableShowObject {
     updated_at: String,
 }
 
+/// Prepared history restoration that can be compiled before its atomic commit.
+#[derive(Clone, Debug)]
+pub struct PortableShowObjectUndo {
+    key: PortableShowObjectKey,
+    body: Value,
+    expected_object_revision: Revision,
+    history_row_id: i64,
+}
+
+impl PortableShowObjectUndo {
+    pub(crate) fn new(
+        key: PortableShowObjectKey,
+        body: Value,
+        expected_object_revision: Revision,
+        history_row_id: i64,
+    ) -> Self {
+        Self {
+            key,
+            body,
+            expected_object_revision,
+            history_row_id,
+        }
+    }
+
+    pub fn key(&self) -> &PortableShowObjectKey {
+        &self.key
+    }
+
+    pub fn body(&self) -> &Value {
+        &self.body
+    }
+
+    pub const fn expected_object_revision(&self) -> Revision {
+        self.expected_object_revision
+    }
+
+    pub(super) fn into_parts(self) -> (PortableShowObjectKey, Value, Revision, i64) {
+        (
+            self.key,
+            self.body,
+            self.expected_object_revision,
+            self.history_row_id,
+        )
+    }
+}
+
 impl PortableShowObject {
     pub(crate) fn new(
         key: PortableShowObjectKey,

@@ -20,8 +20,9 @@ pub use portable::{
     LegacyInlineProfileSnapshot, PortablePatchRevision, PortableShowCandidate,
     PortableShowCandidateObject, PortableShowCandidateObjects, PortableShowCandidateProfiles,
     PortableShowCommit, PortableShowDocument, PortableShowObject, PortableShowObjectKey,
-    PortableShowRevision, PortableShowTransaction, canonical_fixture_profile_json,
-    canonicalize_legacy_inline_profile_snapshots, discover_legacy_inline_profile_snapshots,
+    PortableShowObjectUndo, PortableShowRevision, PortableShowTransaction,
+    canonical_fixture_profile_json, canonicalize_legacy_inline_profile_snapshots,
+    discover_legacy_inline_profile_snapshots,
 };
 pub use show_store::{
     AtomicObjectDelete, AtomicObjectWrite, ShowStore, initialise_show, validate_show_file,

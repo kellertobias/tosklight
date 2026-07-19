@@ -1,10 +1,11 @@
 use super::{
     FixtureProfileRevision, FixtureProfileRevisionId, PortablePatchRevision, PortableShowDocument,
-    PortableShowObject, PortableShowObjectKey, PortableShowRevision, bump_revision,
+    PortableShowObject, PortableShowObjectKey, PortableShowObjectUndo, PortableShowRevision,
+    bump_revision,
     profile_revision::{
         FixtureProfileRevisionInsertStatus, insert_fixture_profile_revision_in, profile_conflict,
     },
-    repository::{delete_current, immediate_transaction, write_current},
+    repository::{delete_current, immediate_transaction, restore_staged_undo, write_current},
     store::{bump_patch_revision, current_patch_revision, current_revision},
 };
 use crate::{ShowStore, StoreError};
@@ -17,9 +18,16 @@ use std::collections::{BTreeMap, BTreeSet};
 pub struct PortableShowTransaction {
     pub(super) expected: PortableShowRevision,
     pub(super) writes: BTreeMap<PortableShowObjectKey, Value>,
+    pub(super) undoes: BTreeMap<PortableShowObjectKey, PortableShowUndoCondition>,
     pub(super) deletes: BTreeSet<PortableShowObjectKey>,
     pub(super) profile_revisions: BTreeMap<FixtureProfileRevisionId, FixtureProfileRevision>,
     pub(super) patch_changed: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(super) struct PortableShowUndoCondition {
+    expected_object_revision: light_core::Revision,
+    history_row_id: i64,
 }
 
 /// Targeted result of one committed portable-show transaction.
@@ -65,6 +73,7 @@ impl PortableShowTransaction {
         Self {
             expected,
             writes: BTreeMap::new(),
+            undoes: BTreeMap::new(),
             deletes: BTreeSet::new(),
             profile_revisions: BTreeMap::new(),
             patch_changed: false,
@@ -90,6 +99,7 @@ impl PortableShowTransaction {
     ) -> &mut Self {
         let key = PortableShowObjectKey::new(kind, id);
         self.deletes.remove(&key);
+        self.undoes.remove(&key);
         self.writes.insert(key, body);
         self
     }
@@ -98,13 +108,30 @@ impl PortableShowTransaction {
     pub fn put_object(&mut self, object: &PortableShowObject) -> &mut Self {
         let key = object.key().clone();
         self.deletes.remove(&key);
+        self.undoes.remove(&key);
         self.writes.insert(key, object.body().clone());
+        self
+    }
+
+    /// Stages the exact previous raw body while retaining its atomic history-pop condition.
+    pub fn undo_object(&mut self, undo: PortableShowObjectUndo) -> &mut Self {
+        let (key, body, expected_object_revision, history_row_id) = undo.into_parts();
+        self.deletes.remove(&key);
+        self.writes.insert(key.clone(), body);
+        self.undoes.insert(
+            key,
+            PortableShowUndoCondition {
+                expected_object_revision,
+                history_row_id,
+            },
+        );
         self
     }
 
     pub fn delete(&mut self, kind: impl Into<String>, id: impl Into<String>) -> &mut Self {
         let key = PortableShowObjectKey::new(kind, id);
         self.writes.remove(&key);
+        self.undoes.remove(&key);
         self.deletes.insert(key);
         self
     }
@@ -211,13 +238,14 @@ fn apply_changes(
     let PortableShowTransaction {
         expected: _,
         writes,
+        undoes,
         deletes,
         profile_revisions,
         patch_changed,
     } = changes;
     Ok(AppliedChanges {
         profile_revisions: apply_profile_revisions(tx, profile_revisions)?,
-        written: apply_writes(tx, writes)?,
+        written: apply_writes(tx, writes, undoes)?,
         deleted: apply_deletes(tx, deletes)?,
         patch_changed,
     })
@@ -241,11 +269,21 @@ fn apply_profile_revisions(
 fn apply_writes(
     tx: &rusqlite::Transaction<'_>,
     writes: BTreeMap<PortableShowObjectKey, Value>,
+    mut undoes: BTreeMap<PortableShowObjectKey, PortableShowUndoCondition>,
 ) -> Result<Vec<PortableShowObject>, StoreError> {
     let updated_at = Utc::now().to_rfc3339();
     let mut written = Vec::with_capacity(writes.len());
     for (key, body) in writes {
-        let revision = write_current(tx, &key, &body, &updated_at)?;
+        let revision = match undoes.remove(&key) {
+            Some(undo) => restore_staged_undo(
+                tx,
+                &key,
+                undo.expected_object_revision,
+                undo.history_row_id,
+                &updated_at,
+            )?,
+            None => write_current(tx, &key, &body, &updated_at)?,
+        };
         written.push(PortableShowObject::new(
             key,
             body,
@@ -253,6 +291,7 @@ fn apply_writes(
             updated_at.clone(),
         ));
     }
+    debug_assert!(undoes.is_empty(), "every staged undo also owns a write");
     Ok(written)
 }
 

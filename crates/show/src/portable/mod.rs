@@ -8,7 +8,7 @@ mod transaction;
 
 pub use document::{
     PortablePatchRevision, PortableShowDocument, PortableShowObject, PortableShowObjectKey,
-    PortableShowRevision,
+    PortableShowObjectUndo, PortableShowRevision,
 };
 pub use profile_revision::{
     FixtureProfileDigest, FixtureProfileRevision, FixtureProfileRevisionId,
@@ -20,7 +20,8 @@ pub use transaction::{PortableShowCommit, PortableShowTransaction};
 
 pub(crate) use migration::{SHOW_SCHEMA_VERSION, migrate_show, validate_show_connection};
 pub(crate) use repository::{
-    delete_legacy_object, mutate_legacy_objects, put_legacy_object, undo_legacy_object,
+    delete_legacy_object, mutate_legacy_objects, prepare_undo, put_legacy_object,
+    undo_legacy_object,
 };
 pub(crate) use store::{bump_revision, initialise_revision};
 

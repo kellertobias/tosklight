@@ -185,6 +185,107 @@ fn legacy_mutations_keep_the_document_revision_current() {
     let _ = fs::remove_file(path);
 }
 
+#[test]
+fn prepared_undo_is_visible_to_compilation_and_pops_history_atomically() {
+    let (path, show) = create("portable-undo");
+    let original = json!({
+        "name":"Original",
+        "future":{"nested":[3, 1, 2]}
+    });
+    show.put_object("group", "one", &original, 0).unwrap();
+    show.put_object(
+        "group",
+        "one",
+        &json!({"name":"Changed","future":{"nested":[9]}}),
+        1,
+    )
+    .unwrap();
+    let document = show.portable_document().unwrap();
+    let undo = show.prepare_object_undo("group", "one", 2).unwrap();
+    assert_eq!(undo.body(), &original);
+    let mut transaction = document.transaction();
+    transaction.undo_object(undo);
+    let candidate = document.candidate(&transaction).unwrap();
+    assert_eq!(candidate.object("group", "one").unwrap().body(), &original);
+    assert_eq!(candidate.object_revision("group", "one"), Some(3));
+
+    let committed = show.apply_portable_transaction(transaction).unwrap();
+
+    assert_eq!(
+        committed.revision().value(),
+        document.revision().value() + 1
+    );
+    let restored = committed.written_object("group", "one").unwrap();
+    assert_eq!(restored.revision(), 3);
+    assert_eq!(restored.body(), &original);
+    assert!(matches!(
+        show.prepare_object_undo("group", "one", 3),
+        Err(StoreError::Invalid(message)) if message == "object has no undo history"
+    ));
+    drop(show);
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn stale_prepared_undo_preserves_current_body_and_history() {
+    let (path, show) = create("stale-portable-undo");
+    show.put_object("group", "one", &json!({"name":"Original"}), 0)
+        .unwrap();
+    show.put_object("group", "one", &json!({"name":"Changed"}), 1)
+        .unwrap();
+    let document = show.portable_document().unwrap();
+    let mut transaction = document.transaction();
+    transaction.undo_object(show.prepare_object_undo("group", "one", 2).unwrap());
+    show.put_object("group", "one", &json!({"name":"Concurrent"}), 2)
+        .unwrap();
+
+    assert!(matches!(
+        show.apply_portable_transaction(transaction),
+        Err(StoreError::DocumentRevisionConflict { expected, current })
+            if expected.value() == 2 && current.value() == 3
+    ));
+    assert_eq!(show.objects("group").unwrap()[0].body["name"], "Concurrent");
+    show.undo_object("group", "one", 3).unwrap();
+    assert_eq!(show.objects("group").unwrap()[0].body["name"], "Changed");
+    drop(show);
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn undo_and_related_write_share_one_portable_transaction() {
+    let (path, show) = create("batched-portable-undo");
+    show.put_object("group", "one", &json!({"name":"Original"}), 0)
+        .unwrap();
+    show.put_object("group", "one", &json!({"name":"Changed"}), 1)
+        .unwrap();
+    let document = show.portable_document().unwrap();
+    let mut transaction = document.transaction();
+    transaction
+        .undo_object(show.prepare_object_undo("group", "one", 2).unwrap())
+        .put("future_extension", "linked", json!({"opaque":true}));
+
+    let committed = show.apply_portable_transaction(transaction).unwrap();
+
+    assert_eq!(
+        committed.revision().value(),
+        document.revision().value() + 1
+    );
+    assert_eq!(committed.written_objects().len(), 2);
+    assert_eq!(
+        committed.written_object("group", "one").unwrap().body()["name"],
+        "Original"
+    );
+    assert_eq!(
+        committed
+            .written_object("future_extension", "linked")
+            .unwrap()
+            .body()["opaque"],
+        true
+    );
+    drop(show);
+    let _ = fs::remove_file(path);
+}
+
 fn seed_unknown_backup(show: &ShowStore) -> Value {
     let body = json!({"format":99,"opaque":{"bytes":[1,2,3]}});
     show.put_object("future_extension", "opaque", &body, 0)
