@@ -7,6 +7,7 @@ import { ProgrammingViewScope } from "./scope";
 import type { ProgrammingInteractionStore } from "./store";
 import {
 	type ProgrammingEventStream,
+	type ProgrammingEventScope,
 	type ProgrammingEventTransport,
 	ProgrammingProtocolError,
 } from "./transport";
@@ -33,6 +34,8 @@ export class ProgrammingInteractionSession {
 	private refreshScheduled = false;
 	private repairGeneration: number | null = null;
 	private hydratedScopeKey: string | null = null;
+	private hydratedScope: ProgrammingEventScope | null = null;
+	private storeScope: number | null = null;
 	private lifecycle = 0;
 	private stopped = false;
 
@@ -43,10 +46,10 @@ export class ProgrammingInteractionSession {
 		this.transport = options.transport;
 		this.loadSnapshot = options.loadSnapshot;
 		this.onError = options.onError;
-		this.store.reset(this.showId, this.deskId);
 	}
 
 	activate(capability: ProgrammingCapability) {
+		if (!this.ensureStoreScope()) return () => {};
 		if (this.scope.activate(capability)) this.scheduleRefresh();
 		let active = true;
 		return () => {
@@ -61,8 +64,10 @@ export class ProgrammingInteractionSession {
 		this.scope.clear();
 		this.lifecycle++;
 		this.hydratedScopeKey = null;
+		this.hydratedScope = null;
 		this.clearReconnect();
 		this.closeStream();
+		this.storeScope = null;
 	}
 
 	private scheduleRefresh(delay = 0) {
@@ -86,21 +91,42 @@ export class ProgrammingInteractionSession {
 	private async refresh() {
 		const key = this.scope.key();
 		if (this.hydratedScopeKey === key) return;
+		const requestedScope = this.scope.subscription();
+		const needsHydration = this.needsHydration(requestedScope);
 		const generation = ++this.lifecycle;
 		this.clearReconnect();
 		this.closeStream();
 		this.hydratedScopeKey = key;
+		this.hydratedScope = requestedScope;
 		if (!this.scope.hasViews()) {
-			this.store.setReady();
+			this.hydratedScope = null;
+			this.store.setReady(this.expectedStoreScope());
 			return;
 		}
-		this.store.setLoading();
+		if (!needsHydration) {
+			this.onError?.(null);
+			if (this.transport)
+				this.openStream(
+					generation,
+					key,
+					this.store.getSnapshot().eventSequence,
+				);
+			return;
+		}
+		this.store.setLoading(this.expectedStoreScope());
 		let snapshot: ProgrammingSnapshot;
 		try {
 			snapshot = await this.loadSnapshot();
 			if (!this.isCurrent(generation, key)) return;
 			this.assertSnapshotDesk(snapshot);
-			this.store.installSnapshot(snapshot);
+			if (
+				!this.store.installSnapshot(snapshot, {
+					expectedScope: this.expectedStoreScope(),
+				})
+			)
+				throw new ProgrammingProtocolError(
+					"Programming interaction snapshot no longer matches the active view",
+				);
 			this.onError?.(null);
 		} catch (reason) {
 			if (this.isCurrent(generation, key)) this.fail(asError(reason));
@@ -110,7 +136,11 @@ export class ProgrammingInteractionSession {
 		this.openStream(generation, key, snapshot.cursor);
 	}
 
-	private openStream(generation: number, key: string, cursor: number) {
+	private openStream(
+		generation: number,
+		key: string,
+		cursor: number | null,
+	) {
 		if (!this.transport) return;
 		let stream: ProgrammingEventStream;
 		try {
@@ -162,7 +192,11 @@ export class ProgrammingInteractionSession {
 		}
 		if (!this.scope.includesChange(message.change)) return;
 		try {
-			this.store.applyChange(message.change, message.sequence);
+			this.store.applyChange(
+				message.change,
+				message.sequence,
+				this.expectedStoreScope(),
+			);
 		} catch (reason) {
 			this.protocolReset(asError(reason));
 		}
@@ -175,7 +209,14 @@ export class ProgrammingInteractionSession {
 			const snapshot = await this.loadSnapshot();
 			if (!this.isCurrent(generation, key)) return;
 			this.assertSnapshotDesk(snapshot);
-			this.store.installSnapshot(snapshot);
+			if (
+				!this.store.installSnapshot(snapshot, {
+					expectedScope: this.expectedStoreScope(),
+				})
+			)
+				throw new ProgrammingProtocolError(
+					"Programming interaction repair no longer matches the active view",
+				);
 			this.stream?.repair(snapshot.cursor);
 			this.onError?.(null);
 		} catch (reason) {
@@ -196,7 +237,7 @@ export class ProgrammingInteractionSession {
 
 	private protocolReset(error: Error) {
 		this.invalidateConnection();
-		this.store.setError(error);
+		this.store.setError(error, this.expectedStoreScope());
 		this.onError?.(error);
 		this.closeStream();
 		this.scheduleRefresh();
@@ -204,7 +245,7 @@ export class ProgrammingInteractionSession {
 
 	private fail(error: Error) {
 		this.invalidateConnection();
-		this.store.setError(error);
+		this.store.setError(error, this.expectedStoreScope());
 		this.onError?.(error);
 		this.closeStream();
 		this.scheduleReconnect();
@@ -220,6 +261,19 @@ export class ProgrammingInteractionSession {
 	private invalidateConnection() {
 		this.lifecycle++;
 		this.hydratedScopeKey = null;
+		this.hydratedScope = null;
+	}
+
+	private needsHydration(scope: ProgrammingEventScope) {
+		const previous = this.hydratedScope;
+		const state = this.store.getSnapshot();
+		return (
+			!previous ||
+			(scope.commandLine && !state.commandLine) ||
+			(scope.selection && !state.selection) ||
+			(scope.commandLine && !previous.commandLine) ||
+			(scope.selection && !previous.selection)
+		);
 	}
 
 	private scheduleReconnect() {
@@ -231,8 +285,30 @@ export class ProgrammingInteractionSession {
 		return (
 			!this.stopped &&
 			generation === this.lifecycle &&
-			key === this.scope.key()
+			key === this.scope.key() &&
+			this.store.isScopeCurrent(this.expectedStoreScope())
 		);
+	}
+
+	private ensureStoreScope() {
+		if (this.stopped) return false;
+		const state = this.store.getSnapshot();
+		if (state.showId === null && state.deskId === null)
+			this.store.reset(this.showId, this.deskId);
+		const scoped = this.store.getSnapshot();
+		if (scoped.showId !== this.showId || scoped.deskId !== this.deskId) {
+			const error = new ProgrammingProtocolError(
+				"Programming interaction session does not match the active view",
+			);
+			this.onError?.(error);
+			return false;
+		}
+		this.storeScope = this.store.captureScope();
+		return true;
+	}
+
+	private expectedStoreScope() {
+		return this.storeScope ?? -1;
 	}
 
 	private closeStream() {

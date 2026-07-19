@@ -18,6 +18,8 @@ export type CommandLineExecutionResult =
 	| "execution_failed";
 
 export interface ProgrammingCommandLineWriterOptions {
+	/** View-owned writers pass this explicitly; standalone writers may use an already-scoped store. */
+	showId?: string;
 	deskId: string;
 	store: ProgrammingInteractionStore;
 	replace(
@@ -36,16 +38,18 @@ export interface ProgrammingCommandLineWriterOptions {
  * value, so slow transports cannot build an obsolete request backlog.
  */
 export class ProgrammingCommandLineWriter {
+	private readonly showId: string;
 	private readonly deskId: string;
 	private readonly store: ProgrammingInteractionStore;
 	private readonly replaceRequest: ProgrammingCommandLineWriterOptions["replace"];
 	private readonly loadSnapshot: ProgrammingCommandLineWriterOptions["loadSnapshot"];
 	private readonly onError?: ProgrammingCommandLineWriterOptions["onError"];
+	private scope: number | null = null;
 	private readonly idleResolvers = new Set<(succeeded: boolean) => void>();
 	private readonly drainResolvers = new Set<(succeeded: boolean) => void>();
 	private queued: QueuedCommandLineWrite | null = null;
 	private deferred: QueuedCommandLineWrite | null = null;
-	private activeToken: string | null = null;
+	private active: QueuedCommandLineWrite | null = null;
 	private executionResetToken: string | null = null;
 	private running = false;
 	private executionRunning = false;
@@ -54,6 +58,9 @@ export class ProgrammingCommandLineWriter {
 	private stopped = false;
 
 	constructor(options: ProgrammingCommandLineWriterOptions) {
+		const showId = options.showId ?? options.store.getSnapshot().showId;
+		if (!showId) throw new Error("A command-line writer requires an active show");
+		this.showId = showId;
 		this.deskId = options.deskId;
 		this.store = options.store;
 		this.replaceRequest = options.replace;
@@ -62,11 +69,11 @@ export class ProgrammingCommandLineWriter {
 	}
 
 	replace(text: string): Promise<boolean> {
-		if (this.stopped) return Promise.resolve(false);
+		if (this.stopped || !this.scopeIsCurrent()) return Promise.resolve(false);
 		const current = this.store.getSnapshot().commandLine;
 		if (!current) return Promise.resolve(false);
 		const normalized = normalizeCommandLine(text, current);
-		const token = this.store.beginOptimisticCommandLine({
+		const token = this.beginOptimisticCommandLine({
 			text: normalized.text,
 			pristine: normalized.pristine,
 			pendingChoice: null,
@@ -85,6 +92,7 @@ export class ProgrammingCommandLineWriter {
 	}
 
 	flush(): Promise<boolean> {
+		if (this.stopped) return Promise.resolve(false);
 		if (!this.running && !this.queued && !this.executionRunning)
 			return Promise.resolve(true);
 		return new Promise((resolve) => this.idleResolvers.add(resolve));
@@ -95,7 +103,8 @@ export class ProgrammingCommandLineWriter {
 		optimisticReset: CommandLinePatch,
 	): Promise<CommandLineExecutionResult> {
 		if (this.executionPromise) return this.executionPromise;
-		if (this.stopped) return Promise.resolve("write_failed");
+		if (this.stopped || !this.scopeIsCurrent())
+			return Promise.resolve("write_failed");
 		const execution = this.runExecution(execute, optimisticReset);
 		this.executionPromise = execution;
 		const clear = () => {
@@ -110,26 +119,31 @@ export class ProgrammingCommandLineWriter {
 		optimisticReset: CommandLinePatch,
 	): Promise<CommandLineExecutionResult> {
 		this.executionRunning = true;
-		this.executionResetToken =
-			this.store.beginOptimisticCommandLine(optimisticReset);
+		this.executionResetToken = this.beginOptimisticCommandLine(optimisticReset);
 		const barrier = this.queued;
 		this.queued = null;
 		const drained = await this.waitForDrain();
-		const flushed = barrier ? await this.sendBarrier(barrier) : drained;
+		const flushed = this.stopped
+			? this.discardBarrier(barrier)
+			: barrier
+				? await this.sendBarrier(barrier)
+				: drained;
 		if (!flushed || this.stopped) {
-			await this.reconcileAfterExecution();
+			if (!this.stopped) await this.reconcileAfterExecution();
 			this.discardDeferredWrite(
 				new Error("The command line could not be synchronized"),
 			);
 			return this.finishExecution("write_failed");
 		}
 		let executed = false;
+		let executionError: Error | null = null;
 		try {
 			executed = await execute();
 		} catch (reason) {
-			this.onError?.(asError(reason));
+			executionError = asError(reason);
+			this.onError?.(executionError);
 		}
-		const reconciled = await this.reconcileAfterExecution();
+		const reconciled = await this.reconcileAfterExecution(!executionError);
 		if (!reconciled) {
 			this.discardDeferredWrite();
 			return this.finishExecution("execution_unknown");
@@ -140,34 +154,38 @@ export class ProgrammingCommandLineWriter {
 	stop() {
 		if (this.stopped) return;
 		this.stopped = true;
-		if (this.activeToken) this.store.commit(this.activeToken);
-		this.activeToken = null;
+		if (this.active) {
+			this.commit(this.active.token);
+			this.active.resolve(false);
+			this.active = null;
+		}
 		if (this.executionResetToken)
-			this.store.commit(this.executionResetToken);
+			this.commit(this.executionResetToken);
 		this.executionResetToken = null;
 		if (this.queued) {
-			this.store.commit(this.queued.token);
+			this.commit(this.queued.token);
 			this.queued.resolve(false);
 			this.queued = null;
 		}
 		if (this.deferred) {
-			this.store.commit(this.deferred.token);
+			this.commit(this.deferred.token);
 			this.deferred.resolve(false);
 			this.deferred = null;
 		}
-		if (!this.running && !this.executionRunning) this.resolveIdle();
+		this.resolveDrain(false);
+		this.resolveIdle(false, true);
 	}
 
 	private supersedeQueuedWrite() {
 		if (!this.queued) return;
-		this.store.commit(this.queued.token);
+		this.commit(this.queued.token);
 		this.queued.resolve(true);
 		this.queued = null;
 	}
 
 	private supersedeDeferredWrite() {
 		if (!this.deferred) return;
-		this.store.commit(this.deferred.token);
+		this.commit(this.deferred.token);
 		this.deferred.resolve(true);
 		this.deferred = null;
 	}
@@ -183,11 +201,11 @@ export class ProgrammingCommandLineWriter {
 		while (!this.stopped && this.queued) {
 			const write = this.queued;
 			this.queued = null;
-			this.activeToken = write.token;
+			this.active = write;
 			const succeeded = await this.send(write);
 			this.drainSucceeded = succeeded;
 			write.resolve(succeeded);
-			this.activeToken = null;
+			if (this.active === write) this.active = null;
 		}
 		this.running = false;
 		this.resolveDrain();
@@ -201,39 +219,64 @@ export class ProgrammingCommandLineWriter {
 
 	private async sendBarrier(write: QueuedCommandLineWrite | null) {
 		if (!write) return true;
-		this.activeToken = write.token;
+		this.active = write;
 		const succeeded = await this.send(write);
 		write.resolve(succeeded);
-		this.activeToken = null;
+		if (this.active === write) this.active = null;
 		return succeeded;
 	}
 
+	private discardBarrier(write: QueuedCommandLineWrite | null) {
+		if (write) {
+			this.commit(write.token);
+			write.resolve(false);
+		}
+		return false;
+	}
+
 	private async send(write: QueuedCommandLineWrite) {
+		if (this.stopped || !this.scopeIsCurrent()) return false;
 		try {
 			const response = await this.replaceAtCurrentRevision(write.text);
-			if (this.stopped) return false;
-			if (!this.store.commitCommandLine(write.token, response)) return false;
+			if (this.stopped || !this.scopeIsCurrent()) return false;
+			if (
+				!this.store.commitCommandLine(
+					write.token,
+					response,
+					this.expectedScope(),
+				)
+			)
+				return false;
 			this.onError?.(null);
 			return true;
 		} catch (reason) {
-			if (this.stopped) return false;
+			if (this.stopped || !this.scopeIsCurrent()) return false;
 			const error = asError(reason);
-			this.store.rollback(write.token, error);
+			this.rollback(write.token, error);
 			this.onError?.(error);
 			return false;
 		}
 	}
 
 	private async replaceAtCurrentRevision(text: string) {
-		const revision = this.store.authoritativeCommandLineRevision();
+		const revision = this.store.authoritativeCommandLineRevision(
+			this.expectedScope(),
+		);
 		if (revision == null)
 			throw new Error("The authoritative command line is unavailable");
 		try {
 			return await this.replaceRequest(this.deskId, text, revision);
 		} catch (reason) {
 			if (!isRevisionConflict(reason)) throw reason;
+			if (this.stopped || !this.scopeIsCurrent()) throw reason;
 			const snapshot = await this.loadSnapshot();
-			if (!this.store.installSnapshot(snapshot, { updateSessionState: false }))
+			if (this.stopped || !this.scopeIsCurrent()) throw reason;
+			if (
+				!this.store.installSnapshot(snapshot, {
+					updateSessionState: false,
+					expectedScope: this.expectedScope(),
+				})
+			)
 				throw new Error("The repaired command line belongs to another desk");
 			// A whole-line replacement cannot be safely rebased over a concurrent OSC
 			// or desk edit. The repaired authority wins; a later explicit local edit may
@@ -242,19 +285,25 @@ export class ProgrammingCommandLineWriter {
 		}
 	}
 
-	private async reconcileAfterExecution() {
+	private async reconcileAfterExecution(clearError = true) {
 		try {
 			const snapshot = await this.loadSnapshot();
-			if (this.stopped) return false;
-			if (!this.store.installSnapshot(snapshot, { updateSessionState: false }))
+			if (this.stopped || !this.scopeIsCurrent()) return false;
+			if (
+				!this.store.installSnapshot(snapshot, {
+					updateSessionState: false,
+					expectedScope: this.expectedScope(),
+				})
+			)
 				throw new Error("The executed command belongs to another desk");
-			this.store.commit(this.executionResetToken);
+			this.commit(this.executionResetToken);
 			this.executionResetToken = null;
-			this.onError?.(null);
+			if (clearError) this.onError?.(null);
 			return true;
 		} catch (reason) {
+			if (this.stopped || !this.scopeIsCurrent()) return false;
 			const error = asError(reason);
-			this.store.rollback(this.executionResetToken, error);
+			this.rollback(this.executionResetToken, error);
 			this.executionResetToken = null;
 			this.onError?.(error);
 			return false;
@@ -263,7 +312,7 @@ export class ProgrammingCommandLineWriter {
 
 	private discardDeferredWrite(error = new Error("Command synchronization failed")) {
 		if (!this.deferred) return;
-		this.store.rollback(this.deferred.token, error);
+		this.rollback(this.deferred.token, error);
 		this.deferred.resolve(false);
 		this.deferred = null;
 	}
@@ -282,14 +331,42 @@ export class ProgrammingCommandLineWriter {
 		return result;
 	}
 
-	private resolveDrain() {
-		for (const resolve of this.drainResolvers) resolve(this.drainSucceeded);
+	private beginOptimisticCommandLine(patch: CommandLinePatch) {
+		return this.store.beginOptimisticCommandLine(patch, this.expectedScope());
+	}
+
+	private commit(token: string | null) {
+		return this.store.commit(token, this.expectedScope());
+	}
+
+	private rollback(token: string | null, error: Error) {
+		return this.store.rollback(token, error, this.expectedScope());
+	}
+
+	private scopeIsCurrent() {
+		return this.claimScope() && this.store.isScopeCurrent(this.expectedScope());
+	}
+
+	private claimScope() {
+		const state = this.store.getSnapshot();
+		if (state.showId !== this.showId || state.deskId !== this.deskId)
+			return false;
+		this.scope ??= this.store.captureScope();
+		return true;
+	}
+
+	private expectedScope() {
+		return this.scope ?? -1;
+	}
+
+	private resolveDrain(succeeded = this.drainSucceeded) {
+		for (const resolve of this.drainResolvers) resolve(succeeded);
 		this.drainResolvers.clear();
 	}
 
-	private resolveIdle() {
-		if (this.running || this.queued || this.executionRunning) return;
-		for (const resolve of this.idleResolvers) resolve(this.drainSucceeded);
+	private resolveIdle(succeeded = this.drainSucceeded, force = false) {
+		if (!force && (this.running || this.queued || this.executionRunning)) return;
+		for (const resolve of this.idleResolvers) resolve(succeeded);
 		this.idleResolvers.clear();
 	}
 }

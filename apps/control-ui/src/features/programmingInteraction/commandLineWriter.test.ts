@@ -345,4 +345,86 @@ describe("ProgrammingCommandLineWriter", () => {
 		await expect(first).resolves.toBe("executed");
 		await expect(repeated).resolves.toBe("executed");
 	});
+
+	it("settles writes and barriers promptly when stopped during an active request", async () => {
+		const store = readyStore();
+		const request = deferred<CommandLineProjection>();
+		const replace = vi.fn().mockReturnValue(request.promise);
+		const loadSnapshot = vi.fn();
+		const execute = vi.fn().mockResolvedValue(true);
+		const writer = new ProgrammingCommandLineWriter({
+			deskId: DESK_ID,
+			store,
+			replace,
+			loadSnapshot,
+		});
+
+		const write = writer.replace("FIXTURE 7");
+		await vi.waitFor(() => expect(replace).toHaveBeenCalledOnce());
+		const queued = writer.replace("FIXTURE 78");
+		const flush = writer.flush();
+		const execution = writer.executeAfterPendingWrites(
+			execute,
+			OPTIMISTIC_RESET,
+		);
+		writer.stop();
+
+		await expect(write).resolves.toBe(false);
+		await expect(queued).resolves.toBe(false);
+		await expect(flush).resolves.toBe(false);
+		await expect(execution).resolves.toBe("write_failed");
+		expect(execute).not.toHaveBeenCalled();
+		expect(loadSnapshot).not.toHaveBeenCalled();
+		expect(store.getSnapshot().pendingCapabilities).toEqual(new Set());
+	});
+
+	it("retains an execution error after successful authority reconciliation", async () => {
+		const store = readyStore(commandLine(2, "FIXTURE 1"));
+		const executionError = new Error("execution transport failed");
+		const onError = vi.fn();
+		const writer = new ProgrammingCommandLineWriter({
+			deskId: DESK_ID,
+			store,
+			replace: vi.fn(),
+			loadSnapshot: vi.fn().mockResolvedValue(
+				programmingSnapshot({ sequence: 12, command: commandLine(3) }),
+			),
+			onError,
+		});
+
+		await expect(
+			writer.executeAfterPendingWrites(
+				vi.fn().mockRejectedValue(executionError),
+				OPTIMISTIC_RESET,
+			),
+		).resolves.toBe("execution_failed");
+
+		expect(onError).toHaveBeenLastCalledWith(executionError);
+		expect(onError).not.toHaveBeenCalledWith(null);
+	});
+
+	it("does not repair or report a conflict after the writer is stopped", async () => {
+		const store = readyStore();
+		const request = deferred<CommandLineProjection>();
+		const loadSnapshot = vi.fn();
+		const onError = vi.fn();
+		const writer = new ProgrammingCommandLineWriter({
+			deskId: DESK_ID,
+			store,
+			replace: vi.fn().mockReturnValue(request.promise),
+			loadSnapshot,
+			onError,
+		});
+		const write = writer.replace("FIXTURE 8");
+		await Promise.resolve();
+
+		writer.stop();
+		request.reject(Object.assign(new Error("revision conflict"), { status: 409 }));
+
+		await expect(write).resolves.toBe(false);
+		await Promise.resolve();
+		expect(loadSnapshot).not.toHaveBeenCalled();
+		expect(onError).not.toHaveBeenCalled();
+		expect(store.getSnapshot().commandLine).toEqual(commandLine());
+	});
 });

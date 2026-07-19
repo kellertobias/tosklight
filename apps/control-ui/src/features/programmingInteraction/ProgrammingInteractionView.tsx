@@ -4,6 +4,7 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useSyncExternalStore,
@@ -13,7 +14,19 @@ import {
 	ProgrammingCommandLineWriter,
 	type ProgrammingCommandLineWriterOptions,
 } from "./commandLineWriter";
-import type { CommandLinePatch, ProgrammingCapability } from "./contracts";
+import type {
+	CommandLinePatch,
+	ProgrammingCapability,
+	SelectionActionOutcome,
+	SelectionRule,
+} from "./contracts";
+import {
+	type ProgrammingGroupSelectionIntent,
+	type ProgrammingSelectionGestureIntent,
+	type ProgrammingSelectionReplacementIntent,
+	ProgrammingSelectionWriter,
+	type ProgrammingSelectionWriterOptions,
+} from "./selectionWriter";
 import {
 	ProgrammingInteractionSession,
 	type ProgrammingInteractionSessionOptions,
@@ -31,6 +44,7 @@ interface ProgrammingInteractionViewProviderProps {
 	transport: ProgrammingEventTransport | null;
 	loadSnapshot: ProgrammingInteractionSessionOptions["loadSnapshot"];
 	replaceCommandLine?: ProgrammingCommandLineWriterOptions["replace"];
+	applySelection?: ProgrammingSelectionWriterOptions["apply"];
 	onSessionError?: (error: Error | null) => void;
 	onMutationError?: (error: Error | null) => void;
 }
@@ -45,10 +59,19 @@ export interface ProgrammingCommandLineActions {
 	): Promise<CommandLineExecutionResult>;
 }
 
+export interface ProgrammingSelectionActions {
+	replace(intent: ProgrammingSelectionReplacementIntent): Promise<SelectionActionOutcome | null>;
+	gesture(intent: ProgrammingSelectionGestureIntent): Promise<SelectionActionOutcome | null>;
+	selectGroup(intent: ProgrammingGroupSelectionIntent): Promise<SelectionActionOutcome | null>;
+	applyRule(rule: SelectionRule): Promise<SelectionActionOutcome | null>;
+}
+
 const StoreContext = createContext<ProgrammingInteractionStore | null>(null);
 const SessionContext = createContext<ProgrammingInteractionSession | null>(null);
 const CommandLineActionsContext =
 	createContext<ProgrammingCommandLineActions | null>(null);
+const SelectionActionsContext =
+	createContext<ProgrammingSelectionActions | null>(null);
 const fallbackStore = new ProgrammingInteractionStore();
 
 export function ProgrammingInteractionViewProvider({
@@ -59,6 +82,7 @@ export function ProgrammingInteractionViewProvider({
 	transport,
 	loadSnapshot,
 	replaceCommandLine,
+	applySelection,
 	onSessionError,
 	onMutationError,
 }: PropsWithChildren<ProgrammingInteractionViewProviderProps>) {
@@ -80,6 +104,7 @@ export function ProgrammingInteractionViewProvider({
 		() =>
 			showId && deskId && replaceCommandLine
 				? new ProgrammingCommandLineWriter({
+						showId,
 						deskId,
 						store,
 						replace: replaceCommandLine,
@@ -96,6 +121,27 @@ export function ProgrammingInteractionViewProvider({
 			store,
 		],
 	);
+	const selectionWriter = useMemo(
+		() =>
+			showId && deskId && applySelection
+				? new ProgrammingSelectionWriter({
+						showId,
+						deskId,
+						store,
+						apply: applySelection,
+						loadSnapshot,
+						onError: onMutationError,
+					})
+				: null,
+		[
+			applySelection,
+			deskId,
+			loadSnapshot,
+			onMutationError,
+			showId,
+			store,
+		],
+	);
 	const commandLineActions = useMemo<ProgrammingCommandLineActions | null>(
 		() =>
 			commandLineWriter
@@ -103,25 +149,45 @@ export function ProgrammingInteractionViewProvider({
 						replace: (text) => commandLineWriter.replace(text),
 						reset: () => commandLineWriter.replace(""),
 						flush: () => commandLineWriter.flush(),
-						executeAfterPendingWrites: (execute, optimisticReset) =>
-							commandLineWriter.executeAfterPendingWrites(
-								execute,
-								optimisticReset,
-							),
+						executeAfterPendingWrites: (execute, optimisticReset) => {
+							const run = () =>
+								commandLineWriter.executeAfterPendingWrites(
+									execute,
+									optimisticReset,
+								);
+							return selectionWriter
+								? selectionWriter.runAfterPendingWrites(run, "write_failed")
+								: run();
+						},
 					}
 				: null,
-		[commandLineWriter],
+		[commandLineWriter, selectionWriter],
 	);
-	useEffect(() => {
-		if (!session) store.reset(showId, deskId);
+	const selectionActions = useMemo<ProgrammingSelectionActions | null>(
+		() =>
+			selectionWriter
+				? {
+						replace: (intent) => selectionWriter.replace(intent),
+						gesture: (intent) => selectionWriter.gesture(intent),
+						selectGroup: (intent) => selectionWriter.selectGroup(intent),
+						applyRule: (rule) => selectionWriter.applyRule(rule),
+					}
+				: null,
+		[selectionWriter],
+	);
+	useLayoutEffect(() => {
+		store.reset(showId, deskId);
 		return () => session?.stop();
 	}, [deskId, session, showId, store]);
 	useEffect(() => () => commandLineWriter?.stop(), [commandLineWriter]);
+	useEffect(() => () => selectionWriter?.stop(), [selectionWriter]);
 	return (
 		<StoreContext.Provider value={store}>
 			<SessionContext.Provider value={session}>
 				<CommandLineActionsContext.Provider value={commandLineActions}>
-					{children}
+					<SelectionActionsContext.Provider value={selectionActions}>
+						{children}
+					</SelectionActionsContext.Provider>
 				</CommandLineActionsContext.Provider>
 			</SessionContext.Provider>
 		</StoreContext.Provider>
@@ -165,6 +231,12 @@ export function useProgrammingInteractionStore() {
 
 export function useProgrammingCommandLineActions() {
 	return useContext(CommandLineActionsContext);
+}
+
+export function useProgrammingSelectionActions(enabled = true) {
+	const actions = useContext(SelectionActionsContext);
+	useProgrammingCapabilityView("selection", enabled && actions !== null);
+	return enabled ? actions : null;
 }
 
 function useProgrammingCapabilityView(

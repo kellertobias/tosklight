@@ -149,6 +149,7 @@ export function ServerProvider({
 						transport={boundaries.programmingTransport}
 						loadSnapshot={boundaries.loadProgrammingInteractionSnapshot}
 						replaceCommandLine={state.client.replaceProgrammingCommandLine}
+						applySelection={state.client.applyProgrammingSelection}
 						onSessionError={boundaries.reportProgrammingSessionError}
 						onMutationError={boundaries.reportProgrammingMutationError}
 					>

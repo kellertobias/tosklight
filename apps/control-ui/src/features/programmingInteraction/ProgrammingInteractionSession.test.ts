@@ -95,7 +95,7 @@ describe("ProgrammingInteractionSession scope", () => {
 		await settleSession();
 		expect(transport.subscriptions[2].close).toHaveBeenCalledOnce();
 		expect(transport.subscriptions).toHaveLength(3);
-		expect(harness.loadSnapshot).toHaveBeenCalledTimes(3);
+		expect(harness.loadSnapshot).toHaveBeenCalledTimes(2);
 	});
 
 	it("does not reload when capability churn settles on the active scope", async () => {

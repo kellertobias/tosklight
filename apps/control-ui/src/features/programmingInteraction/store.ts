@@ -4,9 +4,9 @@ import type {
 	ProgrammingCapability,
 	ProgrammingChange,
 	ProgrammingSnapshot,
-	SelectionPatch,
 	SelectionProjection,
 } from "./contracts";
+import { sameValue } from "./projectionValue";
 import { ProgrammingProtocolError } from "./transport";
 
 export interface ProgrammingInteractionState {
@@ -32,9 +32,7 @@ interface CommandLineOperation extends OperationBase {
 
 interface SelectionOperation extends OperationBase {
 	capability: "selection";
-	selected: readonly string[];
-	hasExpression: boolean;
-	expression: SelectionProjection["expression"];
+	apply(current: SelectionProjection): SelectionProjection;
 }
 
 type OptimisticOperation = CommandLineOperation | SelectionOperation;
@@ -45,6 +43,7 @@ export class ProgrammingInteractionStore {
 	private readonly operations = new Map<string, OptimisticOperation>();
 	private authoritativeCommandLine: CommandLineProjection | null = null;
 	private authoritativeSelection: SelectionProjection | null = null;
+	private scope = 0;
 	private state: ProgrammingInteractionState = emptyState();
 
 	readonly subscribe = (listener: () => void) => {
@@ -56,6 +55,7 @@ export class ProgrammingInteractionStore {
 
 	reset(showId: string | null, deskId: string | null) {
 		if (showId === this.state.showId && deskId === this.state.deskId) return;
+		this.scope++;
 		this.authoritativeCommandLine = null;
 		this.authoritativeSelection = null;
 		this.operations.clear();
@@ -70,8 +70,12 @@ export class ProgrammingInteractionStore {
 
 	installSnapshot(
 		snapshot: ProgrammingSnapshot,
-		{ updateSessionState = true }: { updateSessionState?: boolean } = {},
+		{
+			updateSessionState = true,
+			expectedScope = this.scope,
+		}: { updateSessionState?: boolean; expectedScope?: number } = {},
 	) {
+		if (!this.isScopeCurrent(expectedScope)) return false;
 		if (!this.matchesDesk(snapshot.projection.deskId)) return false;
 		const sequence = snapshot.cursor;
 		const commandDecision = this.installDecision(
@@ -94,7 +98,12 @@ export class ProgrammingInteractionStore {
 		return true;
 	}
 
-	applyChange(change: ProgrammingChange, sequence: number) {
+	applyChange(
+		change: ProgrammingChange,
+		sequence: number,
+		expectedScope = this.scope,
+	) {
+		if (!this.isScopeCurrent(expectedScope)) return false;
 		if (!this.matchesDesk(change.deskId)) return false;
 		const commandDecision =
 			"commandLine" in change
@@ -122,7 +131,11 @@ export class ProgrammingInteractionStore {
 		return true;
 	}
 
-	beginOptimisticCommandLine(patch: CommandLinePatch) {
+	beginOptimisticCommandLine(
+		patch: CommandLinePatch,
+		expectedScope = this.scope,
+	) {
+		if (!this.isScopeCurrent(expectedScope)) return null;
 		const current = this.renderCommandLine();
 		if (!current) return null;
 		const normalized = definedCommandLinePatch(patch);
@@ -139,36 +152,42 @@ export class ProgrammingInteractionStore {
 		return operation.token;
 	}
 
-	beginOptimisticSelection(patch: SelectionPatch) {
+	beginOptimisticSelectionUpdate(
+		update: (current: SelectionProjection) => SelectionProjection,
+		expectedScope = this.scope,
+	) {
+		if (!this.isScopeCurrent(expectedScope)) return null;
 		const current = this.renderSelection();
 		if (!current) return null;
-		const hasExpression = Object.hasOwn(patch, "expression");
-		const optimistic: SelectionProjection = {
-			...current,
-			selected: [...patch.selected],
-			...(hasExpression ? { expression: patch.expression ?? null } : {}),
-		};
-		if (sameValue(current, optimistic)) return null;
+		const apply = (selection: SelectionProjection) => ({
+			...update(selection),
+			revision: selection.revision,
+		});
+		// Validate the reducer before registering it. A malformed optimistic
+		// operation must never poison every later render or stream event.
+		apply(current);
 		const operation: SelectionOperation = {
 			token: crypto.randomUUID(),
 			capability: "selection",
-			selected: [...patch.selected],
-			hasExpression,
-			expression: patch.expression ?? null,
+			apply,
 		};
 		this.operations.set(operation.token, operation);
 		this.publishRendered();
 		return operation.token;
 	}
 
-	commit(token: string | null) {
-		if (!this.takeOperation(token)) return false;
+	commit(token: string | null, expectedScope = this.scope) {
+		if (!this.takeOperation(token, expectedScope)) return false;
 		this.publishRendered();
 		return true;
 	}
 
-	commitCommandLine(token: string | null, commandLine: CommandLineProjection) {
-		if (!token) return false;
+	commitCommandLine(
+		token: string | null,
+		commandLine: CommandLineProjection,
+		expectedScope = this.scope,
+	) {
+		if (!token || !this.isScopeCurrent(expectedScope)) return false;
 		const operation = this.operations.get(token);
 		if (operation?.capability !== "commandLine") return false;
 		const decision = this.installDecision(
@@ -183,26 +202,77 @@ export class ProgrammingInteractionStore {
 		return true;
 	}
 
-	authoritativeCommandLineRevision() {
-		return this.authoritativeCommandLine?.revision ?? null;
-	}
-
-	rollback(token: string | null, _error: Error) {
-		if (!this.takeOperation(token)) return false;
+	commitSelection(
+		token: string | null,
+		selection: SelectionProjection,
+		expectedScope = this.scope,
+	) {
+		if (!token || !this.isScopeCurrent(expectedScope)) return false;
+		const operation = this.operations.get(token);
+		if (operation?.capability !== "selection") return false;
+		const decision = this.installDecision(
+			"selection",
+			this.authoritativeSelection,
+			selection,
+			this.state.eventSequence ?? 0,
+		);
+		if (decision === "install") this.authoritativeSelection = selection;
+		this.operations.delete(token);
 		this.publishRendered();
 		return true;
 	}
 
-	setLoading() {
+	authoritativeCommandLineRevision(expectedScope = this.scope) {
+		if (!this.isScopeCurrent(expectedScope)) return null;
+		return this.authoritativeCommandLine?.revision ?? null;
+	}
+
+	authoritativeSelectionRevision(expectedScope = this.scope) {
+		if (!this.isScopeCurrent(expectedScope)) return null;
+		return this.authoritativeSelection?.revision ?? null;
+	}
+
+	captureScope() {
+		return this.scope;
+	}
+
+	isScopeCurrent(scope: number) {
+		return scope === this.scope;
+	}
+
+	installSelectionRepair(
+		token: string,
+		scope: number,
+		snapshot: ProgrammingSnapshot,
+	) {
+		if (!this.hasOperation(token, "selection", scope)) return false;
+		if (!this.installSnapshot(snapshot, { updateSessionState: false, expectedScope: scope }))
+			return false;
+		return this.commit(token, scope);
+	}
+
+	rollback(token: string | null, _error: Error, expectedScope = this.scope) {
+		if (!this.takeOperation(token, expectedScope)) return false;
+		this.publishRendered();
+		return true;
+	}
+
+	setLoading(expectedScope = this.scope) {
+		if (!this.isScopeCurrent(expectedScope)) return false;
 		if (this.state.status !== "loading") this.publishRendered({ status: "loading" });
+		return true;
 	}
 
-	setReady() {
+	setReady(expectedScope = this.scope) {
+		if (!this.isScopeCurrent(expectedScope)) return false;
 		this.publishRendered({ status: "ready", error: null });
+		return true;
 	}
 
-	setError(error: Error) {
+	setError(error: Error, expectedScope = this.scope) {
+		if (!this.isScopeCurrent(expectedScope)) return false;
 		this.publishRendered({ status: "error", error });
+		return true;
 	}
 
 	private installDecision<T extends { revision: number }>(
@@ -220,11 +290,22 @@ export class ProgrammingInteractionStore {
 		);
 	}
 
-	private takeOperation(token: string | null) {
-		if (!token) return null;
+	private takeOperation(token: string | null, expectedScope = this.scope) {
+		if (!token || !this.isScopeCurrent(expectedScope)) return null;
 		const operation = this.operations.get(token) ?? null;
 		if (operation) this.operations.delete(token);
 		return operation;
+	}
+
+	private hasOperation(
+		token: string,
+		capability: ProgrammingCapability,
+		expectedScope: number,
+	) {
+		return (
+			this.isScopeCurrent(expectedScope) &&
+			this.operations.get(token)?.capability === capability
+		);
 	}
 
 	private publishAuthoritative(
@@ -268,13 +349,7 @@ export class ProgrammingInteractionStore {
 		if (!projection) return null;
 		for (const operation of this.operations.values())
 			if (operation.capability === "selection")
-				projection = {
-					...projection,
-					selected: [...operation.selected],
-					...(operation.hasExpression
-						? { expression: operation.expression }
-						: {}),
-				};
+				projection = operation.apply(projection);
 		return projection;
 	}
 
@@ -304,29 +379,4 @@ function definedCommandLinePatch(patch: CommandLinePatch): CommandLinePatch {
 	return Object.fromEntries(
 		Object.entries(patch).filter(([, value]) => value !== undefined),
 	) as CommandLinePatch;
-}
-
-function sameValue(left: unknown, right: unknown): boolean {
-	if (Object.is(left, right)) return true;
-	if (Array.isArray(left) || Array.isArray(right))
-		return (
-			Array.isArray(left) &&
-			Array.isArray(right) &&
-			left.length === right.length &&
-			left.every((value, index) => sameValue(value, right[index]))
-		);
-	if (!isRecord(left) || !isRecord(right)) return false;
-	const leftKeys = Object.keys(left).sort();
-	const rightKeys = Object.keys(right).sort();
-	return (
-		leftKeys.length === rightKeys.length &&
-		leftKeys.every(
-			(key, index) =>
-				key === rightKeys[index] && sameValue(left[key], right[key]),
-		)
-	);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
 }

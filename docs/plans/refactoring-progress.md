@@ -4,7 +4,7 @@ This is the living handoff for [`major-refactoring.md`](major-refactoring.md). U
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-19 at commit `6151589`.
+Last updated: 2026-07-19 after the typed Programmer selection mutation slice.
 
 ## Guardrails
 
@@ -68,6 +68,13 @@ Last updated: 2026-07-19 at commit `6151589`.
   narrow snapshot repair. It remains dormant until the production consumers move below, so merely
   mounting the global provider performs no request and opens no socket. Compatibility HTTP, OSC,
   and WebSocket paths retain their source behavior.
+- [x] Added strict, revisioned Programmer selection actions for replacement, accumulated gestures,
+  live or frozen Group selection, and selection rules. The service expands logical heads, validates
+  exact fixture/Group dependencies, retains idempotent warnings, publishes complete authority, and
+  serializes environment resolution with active-show installation. The frontend uses a strict FIFO
+  optimistic writer with one safe network retry, rollback or narrow repair by failure class,
+  show/desk generation guards, and an execution barrier shared with command-line Enter. Capability
+  narrowing now reopens its scoped stream from the existing cursor without another REST snapshot.
 - [x] Migrated the production command-line editors and action consumers onto the scoped
   Programming store. A provider-owned latest-wins writer gives immediate optimistic feedback,
   bounds slow writes to one in flight plus the newest pending value, waits for accepted writes
@@ -175,7 +182,7 @@ Last updated: 2026-07-19 at commit `6151589`.
   have passed for their committed slices. The latest command-line slice passed 18 Programming
   application tests, 4 command HTTP scenarios, the focused OSC shortcut test, 219 combined scoped
   frontend tests, and 114 focused consumer tests.
-- The current complete frontend suite passes all 775 tests, and the production frontend build
+- The current complete frontend suite passes all 811 tests, and the production frontend build
   passes. A final repository-wide suite and real desktop run has not yet been completed.
 
 Test files may exceed the hard limits, but should still be split when it improves readability and

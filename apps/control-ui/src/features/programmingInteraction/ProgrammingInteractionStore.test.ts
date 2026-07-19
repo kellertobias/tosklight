@@ -289,14 +289,18 @@ describe("ProgrammingInteractionStore optimism", () => {
 
 	it("replays remaining ordered selection intent over latest authority", () => {
 		const store = readyStore();
-		const first = store.beginOptimisticSelection({
+		const first = store.beginOptimisticSelectionUpdate((current) => ({
+			...current,
 			selected: [FIXTURE_2, FIXTURE_1],
 			expression: {
 				type: "sources",
 				items: [{ type: "live_group", groupId: "7" }],
 			},
-		});
-		const second = store.beginOptimisticSelection({ selected: [FIXTURE_3] });
+		}));
+		const second = store.beginOptimisticSelectionUpdate((current) => ({
+			...current,
+			selected: [FIXTURE_3],
+		}));
 		store.applyChange(
 			{
 				deskId: DESK_ID,
@@ -323,5 +327,60 @@ describe("ProgrammingInteractionStore optimism", () => {
 		);
 		expect(store.commit(second)).toBe(true);
 		expect(store.getSnapshot().selection?.selected).toEqual([FIXTURE_1]);
+	});
+
+	it("recomputes dependent selection reducers after an earlier rollback", () => {
+		const store = readyStore();
+		const append = (fixture: string) =>
+			store.beginOptimisticSelectionUpdate((current) => ({
+				...current,
+				selected: [...current.selected, fixture],
+			}));
+		const first = append(FIXTURE_3);
+		const second = append("55555555-5555-4555-8555-555555555555");
+		store.applyChange(
+			{
+				deskId: DESK_ID,
+				selection: selection(2, [FIXTURE_2]),
+			},
+			23,
+		);
+
+		store.rollback(first, new Error("first intent failed"));
+		expect(store.getSnapshot().selection?.selected).toEqual([
+			FIXTURE_2,
+			"55555555-5555-4555-8555-555555555555",
+		]);
+		expect(store.commit(second)).toBe(true);
+	});
+
+	it("lets newer event authority beat an older selection response", () => {
+		const store = readyStore();
+		const token = store.beginOptimisticSelectionUpdate((current) => ({
+			...current,
+			selected: [FIXTURE_2],
+		}));
+		store.applyChange(
+			{
+				deskId: DESK_ID,
+				selection: selection(3, [FIXTURE_3]),
+			},
+			24,
+		);
+
+		expect(store.commitSelection(token, selection(2, [FIXTURE_2]))).toBe(
+			true,
+		);
+		expect(store.getSnapshot().selection?.selected).toEqual([FIXTURE_3]);
+		expect(store.authoritativeSelectionRevision()).toBe(3);
+	});
+
+	it("tracks a semantic reselection even when its projection is unchanged", () => {
+		const store = readyStore();
+		const token = store.beginOptimisticSelectionUpdate((current) => current);
+		expect(token).not.toBeNull();
+		expect(store.getSnapshot().pendingCapabilities).toEqual(
+			new Set(["selection"]),
+		);
 	});
 });
