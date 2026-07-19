@@ -155,7 +155,7 @@ impl ActiveShowPorts for TestPorts {
         Ok(snapshot)
     }
 
-    fn install_runtime(&self, prepared: Self::PreparedRuntime) {
+    fn install_runtime(&self, _context: &ActionContext, prepared: Self::PreparedRuntime) {
         self.counters
             .runtime_installs
             .fetch_add(1, Ordering::Relaxed);

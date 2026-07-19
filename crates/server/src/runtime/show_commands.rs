@@ -176,11 +176,6 @@ pub(super) fn store_cue_at(
     operation: RecordOperation,
     context: &light_application::ActionContext,
 ) -> Result<(), String> {
-    let _activation = state
-        .activation_lock
-        .clone()
-        .try_lock_owned()
-        .map_err(|_| "the active show is changing; retry Record".to_owned())?;
     let (entry, store) = active_show_store(state)?;
     let snapshot = state.engine.snapshot();
     let programmer = state
@@ -219,7 +214,8 @@ pub(super) fn store_cue_at(
         store_new_cue_list(playback, programmer_cue(&programmer, number, timing))?
     };
     let action = active_show_object_action(context.clone(), entry.id, mutations);
-    let result = run_active_show_object_action(state, action).map_err(|error| error.message)?;
+    let result = run_active_show_object_action_in_programming_interaction(state, action)
+        .map_err(|error| error.message)?;
     for change in result.changes {
         emit_command_object_changed(
             state,

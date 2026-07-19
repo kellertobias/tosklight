@@ -14,6 +14,8 @@ mod active_show_route_tests;
 mod command_http_tests;
 #[path = "control_mapping_tests.rs"]
 mod control_mapping_tests;
+#[path = "engine_selection_refresh_tests.rs"]
+mod engine_selection_refresh_tests;
 #[path = "event_transport_route_tests.rs"]
 mod event_transport_route_tests;
 #[path = "output_runtime_tests.rs"]

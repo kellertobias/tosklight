@@ -88,6 +88,7 @@ fn dispatch_ws_payload(
     state: &AppState,
     session: &Session,
     command: &WsCommand,
+    context: Option<&light_application::ActionContext>,
 ) -> Result<serde_json::Value, String> {
     match command.command.as_str() {
         "selection.set" => ws_selection_set(state, session, command),
@@ -116,7 +117,7 @@ fn dispatch_ws_payload(
         "programmer.redo" => Ok(serde_json::json!({"changed":state.programmers.redo(session.id)})),
         "programmer.command_line" => ws_programmer_command_line(state, session, command),
         "programmer.command_target" => ws_programmer_command_target(state, session, command),
-        "programmer.execute" => ws_programmer_execute(state, session, command),
+        "programmer.execute" => ws_programmer_execute(state, session, command, context),
         "preset.apply" => ws_preset_apply(state, session, command),
         "programmer.mode" => ws_programmer_mode(state, session, command),
         "master.set" => ws_master_set(state, session, command),
@@ -188,12 +189,12 @@ fn dispatch_validated_ws_command(
     live_absolute: bool,
 ) -> WsProgrammingOutput {
     if !live_absolute {
-        return WsProgrammingOutput::untracked(dispatch_ws_payload(state, session, command));
+        return WsProgrammingOutput::untracked(dispatch_ws_payload(state, session, command, None));
     }
     if !PROGRAMMING_INTERACTION_COMMANDS.contains(&command.command.as_str()) {
-        return WsProgrammingOutput::untracked(dispatch_ws_payload(state, session, command));
+        return WsProgrammingOutput::untracked(dispatch_ws_payload(state, session, command, None));
     }
-    let _activation = match programming_activation(state, command) {
+    let _activation = match programming_activation(state) {
         Ok(activation) => activation,
         Err(error) => return WsProgrammingOutput::untracked(Err(error)),
     };
@@ -202,35 +203,29 @@ fn dispatch_validated_ws_command(
     match state
         .programming
         .run_external_interaction(&context, &ports, || {
-            dispatch_live_interaction(state, session, command)
+            dispatch_live_interaction(state, session, command, &context)
         }) {
         Ok(completed) => completed.output,
         Err(error) => WsProgrammingOutput::untracked(Err(error.message)),
     }
 }
 
-fn programming_activation(
-    state: &AppState,
-    command: &WsCommand,
-) -> Result<Option<tokio::sync::OwnedMutexGuard<()>>, String> {
-    if command.command != "preload.go" {
-        return Ok(None);
-    }
+fn programming_activation(state: &AppState) -> Result<tokio::sync::OwnedMutexGuard<()>, String> {
     state
         .activation_lock
         .clone()
         .try_lock_owned()
-        .map(Some)
-        .map_err(|_| "the active show is changing; retry Preload GO".to_owned())
+        .map_err(|_| "the active show is changing; retry the Programmer action".to_owned())
 }
 
 fn dispatch_live_interaction(
     state: &AppState,
     session: &Session,
     command: &WsCommand,
+    context: &light_application::ActionContext,
 ) -> WsProgrammingOutput {
     let before = tracked_state(state, session);
-    let mut response = dispatch_ws_payload(state, session, command);
+    let mut response = dispatch_ws_payload(state, session, command, Some(context));
     if let Err(error) = persist_undo_redo(state, session, command, &response) {
         response = Err(error);
     }

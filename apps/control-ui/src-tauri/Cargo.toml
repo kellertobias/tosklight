@@ -2,7 +2,7 @@
 name = "light-control-ui"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+license-file.workspace = true
 authors.workspace = true
 
 [build-dependencies]

@@ -69,6 +69,7 @@ pub(super) fn backup_show(state: &AppState, entry: &ShowEntry) -> Result<PathBuf
 pub(super) async fn activate_snapshot(
     state: &AppState,
     snapshot: EngineSnapshot,
+    context: &light_application::ActionContext,
     transition: &Transition,
     duration: Option<u64>,
 ) -> Result<(), ApiError> {
@@ -76,16 +77,16 @@ pub(super) async fn activate_snapshot(
         .engine
         .prepare_snapshot(snapshot)
         .map_err(|error| ApiError::internal(error.to_string()))?;
-    activate_prepared_snapshot(state, prepared, transition, duration).await;
-    Ok(())
+    activate_prepared_snapshot(state, prepared, context, transition, duration).await
 }
 
 pub(super) async fn activate_prepared_snapshot(
     state: &AppState,
     prepared: PreparedEngineSnapshot,
+    context: &light_application::ActionContext,
     transition: &Transition,
     duration: Option<u64>,
-) {
+) -> Result<(), ApiError> {
     // A remembered Highlight selection belongs only to the current live show context. Clear the
     // transient overlay before any transition so it cannot reappear in the newly loaded show.
     state.highlight.clear_all();
@@ -112,18 +113,14 @@ pub(super) async fn activate_prepared_snapshot(
     match transition {
         Transition::HoldCurrent => {
             state.output_control.lock().hold = true;
-            state
-                .engine
-                .install_prepared_snapshot_releasing_playback(prepared);
+            install_activated_snapshot(state, context, prepared).await?;
             tokio::time::sleep(frame).await;
             state.output_control.lock().hold = false;
         }
         Transition::SafeBlackout => {
             state.output_control.lock().options.blackout = true;
             tokio::time::sleep(frame * 2).await;
-            state
-                .engine
-                .install_prepared_snapshot_releasing_playback(prepared);
+            install_activated_snapshot(state, context, prepared).await?;
             tokio::time::sleep(frame).await;
             state.output_control.lock().options.blackout = false;
         }
@@ -135,13 +132,33 @@ pub(super) async fn activate_prepared_snapshot(
                 state.output_control.lock().options.grand_master = 1.0 - step as f32 / steps as f32;
                 tokio::time::sleep(sleep).await;
             }
-            state
-                .engine
-                .install_prepared_snapshot_releasing_playback(prepared);
+            install_activated_snapshot(state, context, prepared).await?;
             for step in 1..=steps {
                 state.output_control.lock().options.grand_master = step as f32 / steps as f32;
                 tokio::time::sleep(sleep).await;
             }
         }
     }
+    Ok(())
+}
+
+async fn install_activated_snapshot(
+    state: &AppState,
+    context: &light_application::ActionContext,
+    prepared: PreparedEngineSnapshot,
+) -> Result<(), ApiError> {
+    let worker_state = state.clone();
+    let worker_context = context.clone();
+    tokio::task::spawn_blocking(move || {
+        install_prepared_snapshot_with_selection_refresh(
+            &worker_state,
+            &worker_context,
+            prepared,
+            None,
+            PlaybackInstallPolicy::Release,
+            HighlightInstallPolicy::Clear,
+        );
+    })
+    .await
+    .map_err(|error| ApiError::internal(format!("show activation task failed: {error}")))
 }

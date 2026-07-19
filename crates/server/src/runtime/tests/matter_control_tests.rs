@@ -280,6 +280,20 @@ fn matter_writes_reach_every_assignable_faderless_target_family() {
         })
         .unwrap();
 
+    let activation = state.activation_lock.clone().try_lock_owned().unwrap();
+    let rejected = apply_matter_playback_write(
+        &state,
+        matter::endpoint_id(1, 1).unwrap(),
+        matter::MatterPlaybackWrite {
+            on: None,
+            level: Some(127),
+        },
+    )
+    .unwrap_err();
+    assert_eq!(rejected.status, StatusCode::CONFLICT);
+    assert_eq!(state.engine.snapshot().groups[0].master, 1.0);
+    drop(activation);
+
     for playback in 1..=5 {
         apply_matter_playback_write(
             &state,

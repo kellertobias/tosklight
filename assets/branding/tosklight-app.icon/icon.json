@@ -1,0 +1,41 @@
+{
+  "fill" : {
+    "linear-gradient" : [
+      "display-p3:0.01986,0.06687,0.17564,1.00000",
+      "display-p3:0.00000,0.00000,0.00000,1.00000"
+    ]
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "blend-mode" : "normal",
+          "glass" : false,
+          "image-name" : "ArtBoard1-icon.png",
+          "name" : "ArtBoard1-icon",
+          "position" : {
+            "scale" : 1.05,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.6
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.2
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}

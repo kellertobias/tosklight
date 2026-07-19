@@ -188,6 +188,50 @@ async fn websocket_commands_are_typed_owned_and_revision_checked() {
 }
 
 #[tokio::test]
+async fn group_master_set_never_replaces_a_snapshot_during_show_activation() {
+    let (state, data_dir) = test_state();
+    state
+        .engine
+        .replace_snapshot(EngineSnapshot {
+            groups: vec![light_programmer::GroupDefinition {
+                id: "front".into(),
+                master: 1.0,
+                ..Default::default()
+            }],
+            ..Default::default()
+        })
+        .unwrap();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = authenticate_token(&state, &token).unwrap();
+    let command = || WsCommand {
+        protocol_version: 1,
+        request_id: "group-master".into(),
+        session_id: session.id,
+        expected_revision: None,
+        command: "group.master.set".into(),
+        payload: serde_json::json!({"group_id":"front","value":0.5}),
+    };
+
+    let activation = state.activation_lock.clone().lock_owned().await;
+    let rejected = dispatch_ws_command(&state, &session, command());
+    assert!(!rejected.ok);
+    assert!(
+        rejected
+            .error
+            .as_deref()
+            .is_some_and(|error| error.contains("active show is changing"))
+    );
+    assert_eq!(state.engine.snapshot().groups[0].master, 1.0);
+
+    drop(activation);
+    let applied = dispatch_ws_command(&state, &session, command());
+    assert!(applied.ok, "{:?}", applied.error);
+    assert_eq!(state.engine.snapshot().groups[0].master, 0.5);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn compatibility_selection_publishes_one_typed_interaction_event() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());

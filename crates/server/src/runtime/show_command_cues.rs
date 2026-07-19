@@ -186,11 +186,6 @@ pub(super) fn execute_cue_mutation(
     body: &[String],
     context: &light_application::ActionContext,
 ) -> Result<usize, String> {
-    let _activation = state
-        .activation_lock
-        .clone()
-        .try_lock_owned()
-        .map_err(|_| "the active show is changing; retry Cue mutation".to_owned())?;
     let (entry, store) = active_show_store(state)?;
     let snapshot = state.engine.snapshot();
     let at = body.iter().position(|token| token == "AT");
@@ -233,7 +228,8 @@ pub(super) fn execute_cue_mutation(
         )?
     };
     let action = active_show_object_action(context.clone(), entry.id, mutations);
-    let result = run_active_show_object_action(state, action).map_err(|error| error.message)?;
+    let result = run_active_show_object_action_in_programming_interaction(state, action)
+        .map_err(|error| error.message)?;
     for change in result.changes {
         emit_command_object_changed(
             state,

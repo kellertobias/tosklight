@@ -2,7 +2,7 @@
 name = "light-mvr"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+license-file.workspace = true
 
 [dependencies]
 quick-xml.workspace = true

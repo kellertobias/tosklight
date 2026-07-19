@@ -82,7 +82,7 @@ pub(super) async fn open_show_revision(
     headers: HeaderMap,
     Json(input): Json<OpenShow>,
 ) -> Result<Json<ShowEntry>, ApiError> {
-    let _session = authenticate(&state, &headers)?;
+    let session = authenticate(&state, &headers)?;
     let id = light_core::ShowId(id);
     let entry = state
         .desk
@@ -144,7 +144,15 @@ pub(super) async fn open_show_revision(
     };
     let previous = state.active_show.read().clone();
     let transition = input.transition.unwrap_or(Transition::SafeBlackout);
-    activate_prepared_snapshot(&state, prepared, &transition, input.transition_millis).await;
+    let context = operator_action_context(&session, light_application::ActionSource::Http);
+    activate_prepared_snapshot(
+        &state,
+        prepared,
+        &context,
+        &transition,
+        input.transition_millis,
+    )
+    .await?;
     state
         .desk
         .lock()

@@ -136,11 +136,6 @@ fn record_group(
         .programmers
         .get(session.id)
         .ok_or("programmer does not exist")?;
-    let _activation = state
-        .activation_lock
-        .clone()
-        .try_lock_owned()
-        .map_err(|_| "the active show is changing; retry Record".to_owned())?;
     let snapshot = state.engine.snapshot();
     let (entry, store) = active_show_store(state)?;
     let existing = store
@@ -151,7 +146,8 @@ fn record_group(
     if operation == RecordOperation::Subtract && programmer.selected.is_empty() {
         let mutation = delete_empty_group(&snapshot, id, existing.as_ref())?;
         let action = active_show_object_action(context.clone(), entry.id, vec![mutation]);
-        run_active_show_object_action(state, action).map_err(|error| error.message)?;
+        run_active_show_object_action_in_programming_interaction(state, action)
+            .map_err(|error| error.message)?;
         return Ok(1);
     }
     let existing_group = existing
@@ -186,7 +182,8 @@ fn record_group(
             serde_json::to_value(group).map_err(|error| error.to_string())?,
         )],
     );
-    run_active_show_object_action(state, action).map_err(|error| error.message)?;
+    run_active_show_object_action_in_programming_interaction(state, action)
+        .map_err(|error| error.message)?;
     state.programmers.finish_selection_gesture(session.id);
     Ok(programmer.selected.len())
 }
@@ -251,11 +248,6 @@ fn record_preset(
     if preset.values.is_empty() && preset.group_values.is_empty() {
         return Err("the programmer has no values to record".into());
     }
-    let _activation = state
-        .activation_lock
-        .clone()
-        .try_lock_owned()
-        .map_err(|_| "the active show is changing; retry Record".to_owned())?;
     let (entry, store) = active_show_store(state)?;
     let existing = store
         .objects("preset")
@@ -279,7 +271,8 @@ fn record_preset(
             serde_json::to_value(preset).map_err(|error| error.to_string())?,
         )],
     );
-    run_active_show_object_action(state, action).map_err(|error| error.message)?;
+    run_active_show_object_action_in_programming_interaction(state, action)
+        .map_err(|error| error.message)?;
     Ok(1)
 }
 

@@ -42,7 +42,9 @@ pub(super) fn apply_playback_master(
                 )?;
             }
         }
-        PlaybackTarget::Group { group_id } => set_group_playback_master(state, group_id, value)?,
+        PlaybackTarget::Group { group_id } => {
+            return set_group_playback_master(state, group_id, value);
+        }
         PlaybackTarget::SpeedGroup { group } => {
             apply_speed_group_playback_action(state, group, "master", input, definition.fader)?
         }

@@ -1,7 +1,10 @@
 mod errors;
 
 use self::errors::{engine_error, fixture_error, store_error};
-use super::{ActiveShowBackupKind, AppState, ServerActiveShowUnitOfWork};
+use super::{
+    ActiveShowBackupKind, AppState, HighlightInstallPolicy, PlaybackInstallPolicy,
+    ServerActiveShowUnitOfWork, install_prepared_snapshot_with_selection_refresh,
+};
 use light_application::{
     ActionContext, ActionError, ActionErrorKind, ActiveShowPorts, ActiveShowUnitOfWork,
     BackupIdentity, PatchChange, ShowPatchPorts,
@@ -179,8 +182,15 @@ impl ActiveShowPorts for ServerShowPatchPorts {
             .map_err(|error| engine_error(error, self.current_patch_revision()))
     }
 
-    fn install_runtime(&self, prepared: Self::PreparedRuntime) {
-        self.state.engine.install_prepared_snapshot(prepared);
+    fn install_runtime(&self, context: &ActionContext, prepared: Self::PreparedRuntime) {
+        install_prepared_snapshot_with_selection_refresh(
+            &self.state,
+            context,
+            prepared,
+            None,
+            PlaybackInstallPolicy::Preserve,
+            HighlightInstallPolicy::Reconcile,
+        );
     }
 }
 

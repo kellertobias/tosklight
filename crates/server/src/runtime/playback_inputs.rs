@@ -199,19 +199,12 @@ pub(super) fn set_group_playback_master(
     state: &AppState,
     group_id: &str,
     value: f32,
-) -> Result<(), ApiError> {
+) -> Result<bool, ApiError> {
     if !value.is_finite() || !(0.0..=1.0).contains(&value) {
         return Err(ApiError::bad_request("playback master must be within 0-1"));
     }
-    let mut next = (*state.engine.snapshot()).clone();
-    let group = next
-        .groups
-        .iter_mut()
-        .find(|group| group.id == group_id)
-        .ok_or_else(|| ApiError::bad_request("group does not exist"))?;
-    group.master = value;
     state
         .engine
-        .replace_snapshot(next)
+        .set_group_master(group_id, value)
         .map_err(|error| ApiError::bad_request(error.to_string()))
 }

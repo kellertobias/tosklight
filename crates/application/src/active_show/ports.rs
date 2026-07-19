@@ -72,7 +72,7 @@ pub trait ActiveShowPorts: Send + Sync {
     ) -> Result<Self::PreparedRuntime, ActionError>;
 
     /// Installation is deliberately infallible: every fallible step precedes persistence.
-    fn install_runtime(&self, prepared: Self::PreparedRuntime);
+    fn install_runtime(&self, context: &ActionContext, prepared: Self::PreparedRuntime);
 
     /// Reconciles adapter-owned projections after the exact committed runtime is installed.
     fn reconcile_object_changes(&self, _changes: &[ActiveShowObjectChange]) {}

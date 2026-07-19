@@ -41,19 +41,19 @@ pub(super) fn ws_group_master_set(
     if !input.value.is_finite() || !(0.0..=1.0).contains(&input.value) {
         return Err("group master must be within 0-1".into());
     }
+    let _activation = state
+        .activation_lock
+        .clone()
+        .try_lock_owned()
+        .map_err(|_| "the active show is changing; retry the Group master action")?;
     lock_live_input(state, session, format!("group-master:{}", input.group_id))?;
-    let mut snapshot = (*state.engine.snapshot()).clone();
-    let group = snapshot
-        .groups
-        .iter_mut()
-        .find(|group| group.id == input.group_id)
-        .ok_or("group does not exist")?;
-    group.master = input.value;
-    state
+    let changed = state
         .engine
-        .replace_snapshot(snapshot)
+        .set_group_master(&input.group_id, input.value)
         .map_err(|error| error.to_string())?;
-    persist_output_runtime(state).map_err(|error| error.message)?;
+    if changed {
+        persist_output_runtime(state).map_err(|error| error.message)?;
+    }
     Ok(serde_json::json!({"group_id":input.group_id,"master":input.value}))
 }
 

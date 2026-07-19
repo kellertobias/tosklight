@@ -2,7 +2,7 @@
 name = "light-fixture"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+license-file.workspace = true
 
 [dependencies]
 base64.workspace = true

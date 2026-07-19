@@ -87,7 +87,8 @@ pub use programming::{
     ProgrammingInteractionChange, ProgrammingInteractionProjection, ProgrammingInteractionResult,
     ProgrammingLiveSnapshot, ProgrammingOutcome, ProgrammingPorts, ProgrammingReconciliation,
     ProgrammingResult, ProgrammingSelectionEnvironment, ProgrammingSelectionQuery,
-    ProgrammingService, SelectionGestureSource,
+    ProgrammingSelectionRefreshEvent, ProgrammingSelectionRefreshResult,
+    ProgrammingSelectionTarget, ProgrammingService, SelectionGestureSource,
 };
 pub use scheduling::{
     MonotonicClock, MonotonicMoment, MonotonicScheduler, SchedulerError, SchedulerErrorKind,

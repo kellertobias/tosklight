@@ -76,11 +76,6 @@ pub(super) fn assign_page_slot(
     slot: u8,
     playback: u16,
 ) -> Result<(), String> {
-    let _activation = state
-        .activation_lock
-        .clone()
-        .try_lock_owned()
-        .map_err(|_| "the active show is changing; retry Set".to_owned())?;
     let (entry, store) = active_show_store(state)?;
     let snapshot = state.engine.snapshot();
     validate_cuelist_assignment(&snapshot, playback)?;
@@ -111,7 +106,8 @@ pub(super) fn assign_page_slot(
     )
     .map_err(|error| error.message)?;
     let action = active_show_object_action(context.clone(), entry.id, vec![mutation]);
-    let result = run_active_show_object_action(state, action).map_err(|error| error.message)?;
+    let result = run_active_show_object_action_in_programming_interaction(state, action)
+        .map_err(|error| error.message)?;
     let change = result
         .changes
         .first()

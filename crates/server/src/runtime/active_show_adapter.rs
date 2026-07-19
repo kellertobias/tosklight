@@ -1,10 +1,10 @@
 use super::{
-    AppState, active_show_objects::reconcile_group_projections,
-    show_mutation_backup::ShowMutationBackupPlan,
+    AppState, HighlightInstallPolicy, PlaybackInstallPolicy, ProgrammingInstallOwner,
+    install_prepared_snapshot_with_selection_refresh, show_mutation_backup::ShowMutationBackupPlan,
 };
 use light_application::{
-    ActionContext, ActionError, ActionErrorKind, ActiveShowObjectChange, ActiveShowObjectKind,
-    ActiveShowPorts, ActiveShowUnitOfWork, BackupIdentity,
+    ActionContext, ActionError, ActionErrorKind, ActiveShowPorts, ActiveShowUnitOfWork,
+    BackupIdentity,
 };
 use light_core::ShowId;
 use light_engine::{EngineError, EngineSnapshot, PreparedEngineSnapshot};
@@ -81,6 +81,7 @@ impl ActiveShowLifecyclePause {
 pub(super) struct ServerActiveShowPorts {
     state: AppState,
     backup_kind: ActiveShowBackupKind,
+    programming_owner: Option<ProgrammingInstallOwner>,
 }
 
 impl ServerActiveShowPorts {
@@ -88,6 +89,7 @@ impl ServerActiveShowPorts {
         Self {
             state,
             backup_kind: ActiveShowBackupKind::OutputRoute,
+            programming_owner: None,
         }
     }
 
@@ -95,6 +97,18 @@ impl ServerActiveShowPorts {
         Self {
             state,
             backup_kind: ActiveShowBackupKind::ShowObjects,
+            programming_owner: None,
+        }
+    }
+
+    pub(super) fn show_objects_with_programming_owner(
+        state: AppState,
+        owner: ProgrammingInstallOwner,
+    ) -> Self {
+        Self {
+            state,
+            backup_kind: ActiveShowBackupKind::ShowObjects,
+            programming_owner: Some(owner),
         }
     }
 }
@@ -231,17 +245,15 @@ impl ActiveShowPorts for ServerActiveShowPorts {
             .map_err(|error| engine_error(error, Some(revision)))
     }
 
-    fn install_runtime(&self, prepared: Self::PreparedRuntime) {
-        self.state.engine.install_prepared_snapshot(prepared);
-    }
-
-    fn reconcile_object_changes(&self, changes: &[ActiveShowObjectChange]) {
-        if changes
-            .iter()
-            .any(|change| change.kind == ActiveShowObjectKind::Group)
-        {
-            reconcile_group_projections(&self.state);
-        }
+    fn install_runtime(&self, context: &ActionContext, prepared: Self::PreparedRuntime) {
+        install_prepared_snapshot_with_selection_refresh(
+            &self.state,
+            context,
+            prepared,
+            self.programming_owner,
+            PlaybackInstallPolicy::Preserve,
+            HighlightInstallPolicy::Reconcile,
+        );
     }
 }
 

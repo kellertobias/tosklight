@@ -206,6 +206,14 @@ pub(crate) fn route_osc_command_key(
     let Some(key) = osc_command_key(action) else {
         return false;
     };
+    let Ok(_activation) = state.activation_lock.clone().try_lock_owned() else {
+        publish_osc_rejection(
+            state,
+            session,
+            "the active show is changing; retry the Programmer action".into(),
+        );
+        return true;
+    };
     let context = ActionContext::operator(
         session.desk.id,
         session.user.id.0,

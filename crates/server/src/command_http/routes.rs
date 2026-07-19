@@ -100,6 +100,7 @@ async fn apply_command_key(
 ) -> Result<Response, ApiError> {
     validate_request_id(&input.request_id)?;
     let session = authenticate_desk_mutation(&state, &headers, desk_id)?;
+    let _activation = state.activation_lock.clone().lock_owned().await;
     let context = http_context(&session, Some(&input.request_id));
     let result = run_service(
         &state,
@@ -135,6 +136,7 @@ async fn execute_command_line(
         validate_command(command)?;
     }
     let session = authenticate_desk_mutation(&state, &headers, desk_id)?;
+    let _activation = state.activation_lock.clone().lock_owned().await;
     let context = http_context(&session, Some(&input.request_id));
     let result = run_service(
         &state,

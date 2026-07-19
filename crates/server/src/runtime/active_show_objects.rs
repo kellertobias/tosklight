@@ -75,9 +75,35 @@ pub(super) fn run_active_show_object_action(
     action: light_application::ActionEnvelope<light_application::MutateActiveShowObjectsCommand>,
 ) -> Result<light_application::MutateActiveShowObjectsResult, ApiError> {
     let ports = ServerActiveShowPorts::show_objects(state.clone());
+    run_active_show_object_action_with_ports(state, action, &ports)
+}
+
+/// Runs a show mutation from inside the actor desk's existing Programming interaction. Runtime
+/// selection refresh excludes that desk so the outer boundary remains its sole publisher.
+pub(super) fn run_active_show_object_action_in_programming_interaction(
+    state: &AppState,
+    action: light_application::ActionEnvelope<light_application::MutateActiveShowObjectsCommand>,
+) -> Result<light_application::MutateActiveShowObjectsResult, ApiError> {
+    let owner = ProgrammingInstallOwner {
+        desk_id: action.context.desk_id,
+        user_id: action
+            .context
+            .user_id
+            .map(light_core::UserId)
+            .ok_or_else(|| ApiError::internal("Programming-owned show mutation has no user"))?,
+    };
+    let ports = ServerActiveShowPorts::show_objects_with_programming_owner(state.clone(), owner);
+    run_active_show_object_action_with_ports(state, action, &ports)
+}
+
+fn run_active_show_object_action_with_ports(
+    state: &AppState,
+    action: light_application::ActionEnvelope<light_application::MutateActiveShowObjectsCommand>,
+    ports: &ServerActiveShowPorts,
+) -> Result<light_application::MutateActiveShowObjectsResult, ApiError> {
     state
         .active_show_service
-        .mutate_objects(action, &ports)
+        .mutate_objects(action, ports)
         .map_err(active_show_object_api_error)
 }
 
@@ -133,23 +159,6 @@ pub(super) async fn run_active_show_object_undo_async(
     .await
     .map_err(|error| ApiError::internal(format!("active-show service task failed: {error}")))?;
     Ok((result.0?, result.1))
-}
-
-pub(super) fn reconcile_group_projections(state: &AppState) {
-    let groups = state
-        .engine
-        .snapshot()
-        .groups
-        .iter()
-        .map(|group| (group.id.clone(), group.clone()))
-        .collect::<HashMap<_, _>>();
-    state.programmers.refresh_live_selections(&groups);
-    let mut reconciled = HashSet::new();
-    for session in state.sessions.read().values().cloned().collect::<Vec<_>>() {
-        if reconciled.insert((session.desk.id, session.user.id)) {
-            reconcile_highlight_selection(state, &session, "show_selection_refresh");
-        }
-    }
 }
 
 fn active_show_object_api_error(error: light_application::ActionError) -> ApiError {

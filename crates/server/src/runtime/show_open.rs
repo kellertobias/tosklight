@@ -6,7 +6,7 @@ pub(super) async fn open_show(
     headers: HeaderMap,
     Json(input): Json<OpenShow>,
 ) -> Result<Json<ShowEntry>, ApiError> {
-    let _session = authenticate(&state, &headers)?;
+    let session = authenticate(&state, &headers)?;
     let entry = state
         .desk
         .lock()
@@ -30,7 +30,15 @@ pub(super) async fn open_show(
     }
     let prepared = prepare_show_for_runtime(&state, &entry)?;
     let transition = input.transition.unwrap_or(Transition::SafeBlackout);
-    activate_prepared_snapshot(&state, prepared, &transition, input.transition_millis).await;
+    let context = operator_action_context(&session, light_application::ActionSource::Http);
+    activate_prepared_snapshot(
+        &state,
+        prepared,
+        &context,
+        &transition,
+        input.transition_millis,
+    )
+    .await?;
     state
         .desk
         .lock()
@@ -50,7 +58,7 @@ pub(super) async fn open_clean_default_show(
     headers: HeaderMap,
     Json(input): Json<OpenShow>,
 ) -> Result<Json<ShowEntry>, ApiError> {
-    let _session = authenticate(&state, &headers)?;
+    let session = authenticate(&state, &headers)?;
     let name = available_show_name(&state, "Default Stage Show Clean Copy")?;
     let path = state.data_dir.join("shows").join(format!("{name}.show"));
     default_show::initialise(&path).map_err(ApiError::store)?;
@@ -83,7 +91,15 @@ pub(super) async fn open_clean_default_show(
     };
     let previous = state.active_show.read().clone();
     let transition = input.transition.unwrap_or(Transition::SafeBlackout);
-    activate_prepared_snapshot(&state, prepared, &transition, input.transition_millis).await;
+    let context = operator_action_context(&session, light_application::ActionSource::Http);
+    activate_prepared_snapshot(
+        &state,
+        prepared,
+        &context,
+        &transition,
+        input.transition_millis,
+    )
+    .await?;
     state
         .desk
         .lock()
@@ -110,7 +126,7 @@ pub(super) async fn rollback_show(
     headers: HeaderMap,
     Json(input): Json<OpenShow>,
 ) -> Result<Json<ShowEntry>, ApiError> {
-    let _session = authenticate(&state, &headers)?;
+    let session = authenticate(&state, &headers)?;
     let previous_id = state
         .desk
         .lock()
@@ -131,7 +147,15 @@ pub(super) async fn rollback_show(
     let prepared = prepare_show_for_runtime(&state, &entry)?;
     let current = state.active_show.read().clone();
     let transition = input.transition.unwrap_or(Transition::SafeBlackout);
-    activate_prepared_snapshot(&state, prepared, &transition, input.transition_millis).await;
+    let context = operator_action_context(&session, light_application::ActionSource::Http);
+    activate_prepared_snapshot(
+        &state,
+        prepared,
+        &context,
+        &transition,
+        input.transition_millis,
+    )
+    .await?;
     state
         .desk
         .lock()

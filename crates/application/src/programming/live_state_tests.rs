@@ -15,6 +15,8 @@ use uuid::Uuid;
 
 #[path = "live_state_tests/routing.rs"]
 mod routing;
+#[path = "live_state_tests/selection_refresh.rs"]
+mod selection_refresh;
 
 #[derive(Default)]
 struct LivePorts {

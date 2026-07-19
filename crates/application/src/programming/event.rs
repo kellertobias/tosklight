@@ -50,6 +50,10 @@ impl ProgrammingInteractionChange {
     pub const fn selection(&self) -> Option<&ProgrammerSelection> {
         self.selection.as_ref()
     }
+
+    pub(super) fn without_selection(self) -> Option<Self> {
+        Self::from_components(self.desk_id, self.command_line, None)
+    }
 }
 
 impl EventObject {

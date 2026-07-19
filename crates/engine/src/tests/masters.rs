@@ -106,6 +106,46 @@ fn group_masters_scale_before_encoding_and_use_highest_master() {
 }
 
 #[test]
+fn group_master_runtime_update_is_targeted_idempotent_and_revision_neutral() {
+    let programmers = ProgrammerRegistry::default();
+    let session = light_core::SessionId::new();
+    programmers.start(session, light_core::UserId::new());
+    let (fixture, logical) = fixture();
+    programmers.set(
+        session,
+        logical,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.8),
+    );
+    let engine = Engine::new(programmers);
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture],
+            groups: vec![GroupDefinition {
+                id: "front".into(),
+                fixtures: vec![logical],
+                master: 0.25,
+                playback_fader: Some(1),
+                ..Default::default()
+            }],
+            revision: 7,
+            ..Default::default()
+        })
+        .unwrap();
+
+    assert!(engine.set_group_master("front", 0.75).unwrap());
+    assert_eq!(engine.snapshot().revision, 7);
+    assert_eq!(engine.snapshot().groups[0].master, 0.75);
+    assert_eq!(
+        engine.render(RenderOptions::default()).unwrap().universes[&1][0],
+        153
+    );
+    assert!(!engine.set_group_master("front", 0.75).unwrap());
+    assert!(engine.set_group_master("missing", 0.5).is_err());
+    assert!(engine.set_group_master("front", f32::NAN).is_err());
+}
+
+#[test]
 fn group_master_flash_is_temporary_and_does_not_move_the_fader() {
     let programmers = ProgrammerRegistry::default();
     let session = light_core::SessionId::new();

@@ -122,7 +122,13 @@ pub(super) fn perform_update(
     request: &UpdateApiRequest,
 ) -> Result<update::UpdateResult, ApiError> {
     let context = operator_action_context(session, light_application::ActionSource::Http);
-    perform_update_from(state, session, request, &context)
+    perform_update_with_boundary(
+        state,
+        session,
+        request,
+        &context,
+        UpdateProgrammingBoundary::Unowned,
+    )
 }
 
 pub(super) fn perform_update_from(
@@ -131,11 +137,38 @@ pub(super) fn perform_update_from(
     request: &UpdateApiRequest,
     context: &light_application::ActionContext,
 ) -> Result<update::UpdateResult, ApiError> {
-    let _activation = state
-        .activation_lock
-        .clone()
-        .try_lock_owned()
-        .map_err(|_| ApiError::conflict("the active show is changing; retry Update"))?;
+    perform_update_with_boundary(
+        state,
+        session,
+        request,
+        context,
+        UpdateProgrammingBoundary::HeldByCaller,
+    )
+}
+
+#[derive(Clone, Copy)]
+enum UpdateProgrammingBoundary {
+    Unowned,
+    HeldByCaller,
+}
+
+fn perform_update_with_boundary(
+    state: &AppState,
+    session: &Session,
+    request: &UpdateApiRequest,
+    context: &light_application::ActionContext,
+    programming: UpdateProgrammingBoundary,
+) -> Result<update::UpdateResult, ApiError> {
+    let _activation = match programming {
+        UpdateProgrammingBoundary::Unowned => Some(
+            state
+                .activation_lock
+                .clone()
+                .try_lock_owned()
+                .map_err(|_| ApiError::conflict("the active show is changing; retry Update"))?,
+        ),
+        UpdateProgrammingBoundary::HeldByCaller => None,
+    };
     let (entry, store) = active_show_store(state).map_err(ApiError::bad_request)?;
     let plan = plan_update_request(state, session, &store, request)?;
     let kind = plan.object_kind().to_owned();
@@ -154,7 +187,14 @@ pub(super) fn perform_update_from(
             body,
         )],
     );
-    let revision = run_active_show_object_action(state, action)?.changes[0].object_revision;
+    let revision = match programming {
+        UpdateProgrammingBoundary::Unowned => run_active_show_object_action(state, action),
+        UpdateProgrammingBoundary::HeldByCaller => {
+            run_active_show_object_action_in_programming_interaction(state, action)
+        }
+    }?
+    .changes[0]
+        .object_revision;
     let result = plan.complete(revision);
     emit(
         state,

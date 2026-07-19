@@ -1,4 +1,5 @@
 use super::ProgrammingService;
+use light_core::SessionId;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -12,6 +13,30 @@ use uuid::Uuid;
 pub struct ProgrammingInteractionResult<T> {
     pub output: T,
     pub event_sequence: Option<u64>,
+}
+
+/// One desk-local selection projection that may change during a shared runtime installation.
+///
+/// A server adapter supplies the stable interaction-context identity for each desk. Programmer
+/// values remain user-owned, while command lines and selections are desk-local projections.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProgrammingSelectionTarget {
+    pub desk_id: Uuid,
+    pub interaction_id: SessionId,
+}
+
+/// The authoritative Programming event published for one changed desk during a shared refresh.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProgrammingSelectionRefreshEvent {
+    pub desk_id: Uuid,
+    pub event_sequence: u64,
+}
+
+/// Output from a shared selection refresh and its deterministically ordered desk events.
+#[derive(Debug)]
+pub struct ProgrammingSelectionRefreshResult<T> {
+    pub output: T,
+    pub events: Vec<ProgrammingSelectionRefreshEvent>,
 }
 
 #[derive(Clone, Default)]
@@ -29,6 +54,15 @@ impl DeskOperationGates {
                 .or_insert_with(|| Arc::new(Mutex::new(()))),
         )
     }
+
+    fn with_gates<T>(&self, desk_ids: &[Uuid], operation: impl FnOnce() -> T) -> T {
+        let gates = desk_ids
+            .iter()
+            .map(|desk_id| self.gate(*desk_id))
+            .collect::<Vec<_>>();
+        let _ordered = gates.iter().map(|gate| gate.lock()).collect::<Vec<_>>();
+        operation()
+    }
 }
 
 impl ProgrammingService {
@@ -36,6 +70,10 @@ impl ProgrammingService {
         let gate = self.desk_gates.gate(desk_id);
         let _ordered = gate.lock();
         operation()
+    }
+
+    pub(super) fn with_desk_gates<T>(&self, desk_ids: &[Uuid], operation: impl FnOnce() -> T) -> T {
+        self.desk_gates.with_gates(desk_ids, operation)
     }
 
     /// Compatibility-only raw gate access for server adapters not yet expressed through the

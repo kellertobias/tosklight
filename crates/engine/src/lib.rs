@@ -60,7 +60,9 @@ pub(crate) use profile_value_index::ProfileValueIndex;
 pub(crate) use programmer_fade::{
     ProgrammerTransition, ProgrammerTransitionKey, ProgrammerTransitionSource,
 };
-pub(crate) use runtime_generation::{GroupMasterIndex, RuntimeGeneration};
+pub(crate) use runtime_generation::{
+    GroupMasterGenerationUpdate, GroupMasterIndex, RuntimeGeneration,
+};
 pub(crate) use safety::{apply_safe_values, apply_safe_values_with_snap};
 
 #[cfg(test)]

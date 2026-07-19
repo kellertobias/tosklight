@@ -50,11 +50,6 @@ pub(super) fn execute_preset_mutation(
     body: &[String],
     context: &light_application::ActionContext,
 ) -> Result<usize, String> {
-    let _activation = state
-        .activation_lock
-        .clone()
-        .try_lock_owned()
-        .map_err(|_| "the active show is changing; retry the Preset command".to_owned())?;
     let (entry, store) = active_show_store(state)?;
     let at = body.iter().position(|token| token == "AT");
     let source_address = command_preset_address(at.map_or(body, |index| &body[..index]))?;
@@ -90,7 +85,8 @@ pub(super) fn execute_preset_mutation(
         mutations
     };
     let action = active_show_object_action(context.clone(), entry.id, mutations);
-    run_active_show_object_action(state, action).map_err(|error| error.message)?;
+    run_active_show_object_action_in_programming_interaction(state, action)
+        .map_err(|error| error.message)?;
     Ok(1)
 }
 
@@ -102,11 +98,6 @@ pub(super) fn delete_group_command(
     if body.len() != 2 {
         return Err("expected DELETE GROUP <group-number>".into());
     }
-    let _activation = state
-        .activation_lock
-        .clone()
-        .try_lock_owned()
-        .map_err(|_| "the active show is changing; retry Delete".to_owned())?;
     let snapshot = state.engine.snapshot();
     let (entry, store) = active_show_store(state)?;
     let id = &body[1];
@@ -139,6 +130,7 @@ pub(super) fn delete_group_command(
             object.revision,
         )],
     );
-    run_active_show_object_action(state, action).map_err(|error| error.message)?;
+    run_active_show_object_action_in_programming_interaction(state, action)
+        .map_err(|error| error.message)?;
     Ok(1)
 }

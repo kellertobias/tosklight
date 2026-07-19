@@ -973,7 +973,7 @@ impl ActiveShowPorts for TestPorts {
         Ok(snapshot)
     }
 
-    fn install_runtime(&self, prepared: Self::PreparedRuntime) {
+    fn install_runtime(&self, _context: &ActionContext, prepared: Self::PreparedRuntime) {
         self.steps.lock().push("install");
         *self.installed.lock() = Some(prepared);
     }

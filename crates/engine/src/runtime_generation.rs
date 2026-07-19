@@ -17,12 +17,19 @@ use std::{
 pub(crate) struct RuntimeGeneration {
     snapshot: Arc<EngineSnapshot>,
     playback: Arc<RwLock<PlaybackEngine>>,
-    groups: HashMap<String, GroupDefinition>,
+    groups: Arc<HashMap<String, GroupDefinition>>,
     routes: Arc<[OutputRoute]>,
-    snap_attributes: HashMap<FixtureId, HashSet<AttributeKey>>,
-    group_masters: GroupMasterIndex,
-    profile_encodings: ProfileEncodingIndex,
-    profile_projections: ProfileProjectionIndex,
+    snap_attributes: Arc<HashMap<FixtureId, HashSet<AttributeKey>>>,
+    group_masters: Arc<GroupMasterIndex>,
+    profile_encodings: Arc<ProfileEncodingIndex>,
+    profile_projections: Arc<ProfileProjectionIndex>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum GroupMasterGenerationUpdate {
+    Missing,
+    Unchanged,
+    Changed,
 }
 
 impl RuntimeGeneration {
@@ -39,13 +46,53 @@ impl RuntimeGeneration {
         Self {
             snapshot: Arc::new(snapshot),
             playback: Arc::new(RwLock::new(playback)),
-            groups,
+            groups: Arc::new(groups),
             routes,
-            snap_attributes,
-            group_masters,
-            profile_encodings,
-            profile_projections,
+            snap_attributes: Arc::new(snap_attributes),
+            group_masters: Arc::new(group_masters),
+            profile_encodings: Arc::new(profile_encodings),
+            profile_projections: Arc::new(profile_projections),
         }
+    }
+
+    pub(crate) fn with_group_master(
+        current: &Arc<Self>,
+        group_id: &str,
+        value: f32,
+    ) -> (Arc<Self>, GroupMasterGenerationUpdate) {
+        let Some(group) = current.groups.get(group_id) else {
+            return (Arc::clone(current), GroupMasterGenerationUpdate::Missing);
+        };
+        if group.master == value {
+            return (Arc::clone(current), GroupMasterGenerationUpdate::Unchanged);
+        }
+
+        let mut snapshot = (*current.snapshot).clone();
+        snapshot
+            .groups
+            .iter_mut()
+            .find(|group| group.id == group_id)
+            .expect("runtime groups and snapshot groups must stay aligned")
+            .master = value;
+        let mut groups = (*current.groups).clone();
+        groups
+            .get_mut(group_id)
+            .expect("runtime groups and snapshot groups must stay aligned")
+            .master = value;
+        let group_masters = GroupMasterIndex::compile(&groups);
+        (
+            Arc::new(Self {
+                snapshot: Arc::new(snapshot),
+                playback: Arc::clone(&current.playback),
+                groups: Arc::new(groups),
+                routes: Arc::clone(&current.routes),
+                snap_attributes: Arc::clone(&current.snap_attributes),
+                group_masters: Arc::new(group_masters),
+                profile_encodings: Arc::clone(&current.profile_encodings),
+                profile_projections: Arc::clone(&current.profile_projections),
+            }),
+            GroupMasterGenerationUpdate::Changed,
+        )
     }
 
     pub(crate) fn snapshot(&self) -> &EngineSnapshot {

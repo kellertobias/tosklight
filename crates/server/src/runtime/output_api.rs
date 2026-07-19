@@ -245,6 +245,11 @@ pub(super) fn apply_matter_playback_write(
     endpoint_id: u16,
     write: matter::MatterPlaybackWrite,
 ) -> Result<matter::MatterBridgeStatus, ApiError> {
+    let _activation = state
+        .activation_lock
+        .clone()
+        .try_lock_owned()
+        .map_err(|_| ApiError::conflict("active show transition is in progress"))?;
     refresh_matter_bridge(state);
     let resolved = state
         .matter_bridge

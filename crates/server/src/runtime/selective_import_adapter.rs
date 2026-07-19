@@ -1,8 +1,6 @@
 //! Server-owned storage and runtime ports for selective show import.
 
-use super::{
-    AppState, ServerActiveShowPorts, ServerActiveShowUnitOfWork, reconcile_group_projections,
-};
+use super::{AppState, ServerActiveShowPorts, ServerActiveShowUnitOfWork};
 use light_application::{
     ActionContext, ActionError, ActionErrorKind, ActiveShowObjectChange, ActiveShowPorts,
     ActiveShowUnitOfWork, AssetReference, ImportManagedAssetAction, SelectiveShowImportChange,
@@ -89,8 +87,8 @@ impl ActiveShowPorts for ServerSelectiveImportPorts {
         self.active.prepare_runtime(snapshot)
     }
 
-    fn install_runtime(&self, prepared: Self::PreparedRuntime) {
-        self.active.install_runtime(prepared);
+    fn install_runtime(&self, context: &ActionContext, prepared: Self::PreparedRuntime) {
+        self.active.install_runtime(context, prepared);
     }
 
     fn reconcile_object_changes(&self, changes: &[ActiveShowObjectChange]) {
@@ -174,13 +172,6 @@ impl SelectiveShowImportPorts for ServerSelectiveImportPorts {
     }
 
     fn reconcile_selective_import(&self, change: &SelectiveShowImportChange) {
-        if change
-            .objects
-            .iter()
-            .any(|object| object.key.kind() == "group")
-        {
-            reconcile_group_projections(&self.state);
-        }
         self.reconcile_fixture_media(change);
         self.terminate_replaced_routes(change);
     }

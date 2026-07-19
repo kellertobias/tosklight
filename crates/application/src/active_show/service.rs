@@ -53,7 +53,7 @@ impl ActiveShowService {
                 route: prepared.route,
                 deleted: prepared.deleted,
             };
-            ports.install_runtime(runtime);
+            ports.install_runtime(&envelope.context, runtime);
             let event = self.events.publish(EventDraft::output_route_changed(
                 &envelope.context,
                 change.clone(),
@@ -133,7 +133,7 @@ impl ActiveShowService {
         let runtime = ports.prepare_runtime(prepared.snapshot)?;
         unit.backup(&backup_identity(context, show_id, operation))?;
         let show_revision = unit.commit(prepared.transaction)?.revision();
-        ports.install_runtime(runtime);
+        ports.install_runtime(context, runtime);
         ports.reconcile_object_changes(&prepared.changes);
         Ok(self.publish_object_changes(context, show_id, show_revision, prepared.changes))
     }
@@ -244,7 +244,7 @@ impl ActiveShowService {
                     let runtime = ports.prepare_runtime(snapshot)?;
                     unit.backup(&backup_identity(context, show_id, operation))?;
                     let commit = unit.commit(transaction)?;
-                    ports.install_runtime(runtime);
+                    ports.install_runtime(context, runtime);
                     Ok(complete(
                         &self.events,
                         ports,

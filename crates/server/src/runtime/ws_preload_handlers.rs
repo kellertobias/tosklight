@@ -131,6 +131,7 @@ pub(super) fn ws_programmer_execute(
     state: &AppState,
     session: &Session,
     command: &WsCommand,
+    context: Option<&light_application::ActionContext>,
 ) -> Result<serde_json::Value, String> {
     #[derive(Deserialize)]
     struct Input {
@@ -138,13 +139,15 @@ pub(super) fn ws_programmer_execute(
     }
     let input: Input =
         serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
-    let context = light_application::ActionContext::operator(
-        session.desk.id,
-        session.user.id.0,
-        session.id.0,
-        light_application::ActionSource::UserInterface,
-    )
-    .with_request_id(&command.request_id);
+    let context = context.cloned().unwrap_or_else(|| {
+        light_application::ActionContext::operator(
+            session.desk.id,
+            session.user.id.0,
+            session.id.0,
+            light_application::ActionSource::UserInterface,
+        )
+        .with_request_id(&command.request_id)
+    });
     match command_http::execute_existing_command(
         state,
         session,

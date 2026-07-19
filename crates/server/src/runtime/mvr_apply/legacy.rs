@@ -69,7 +69,8 @@ pub(super) async fn apply_legacy_mvr_import(
     publish_mvr_definitions(state, new_definitions, &mut warnings);
     if open_after {
         let compiled = load_engine_snapshot(&entry).map_err(ApiError::bad_request)?;
-        activate_snapshot(state, compiled, &Transition::HoldCurrent, None).await?;
+        let context = operator_action_context(&session, light_application::ActionSource::Http);
+        activate_snapshot(state, compiled, &context, &Transition::HoldCurrent, None).await?;
         state
             .desk
             .lock()

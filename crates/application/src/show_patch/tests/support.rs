@@ -385,7 +385,7 @@ impl ActiveShowPorts for CounterPorts {
         Ok(snapshot)
     }
 
-    fn install_runtime(&self, _prepared: Self::PreparedRuntime) {
+    fn install_runtime(&self, _context: &ActionContext, _prepared: Self::PreparedRuntime) {
         self.counters
             .runtime_installs
             .fetch_add(1, Ordering::SeqCst);

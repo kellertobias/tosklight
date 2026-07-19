@@ -8,10 +8,13 @@ use light_core::SessionId;
 use light_programmer::command_line::{CommandKeyIntent, command_key_intent};
 use light_programmer::{HighlightRegistry, ProgrammerRegistry};
 use parking_lot::Mutex;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 #[path = "service/selection.rs"]
 mod selection;
+#[path = "service/selection_refresh.rs"]
+mod selection_refresh;
 #[path = "service/state.rs"]
 mod state;
 #[path = "service/support.rs"]
@@ -31,6 +34,7 @@ pub struct ProgrammingService {
     pub(super) desk_gates: DeskOperationGates,
     replay: Arc<Mutex<ReplayCache>>,
     pub(super) events: EventBus,
+    nested_selection_publications: Arc<Mutex<HashMap<uuid::Uuid, u64>>>,
     _highlight: Arc<HighlightRegistry>,
 }
 
@@ -45,6 +49,7 @@ impl ProgrammingService {
             desk_gates: DeskOperationGates::default(),
             replay: Arc::default(),
             events,
+            nested_selection_publications: Arc::default(),
             _highlight: highlight,
         }
     }
@@ -118,11 +123,47 @@ impl ProgrammingService {
         context: &ActionContext,
         interaction: Option<ProgrammingInteractionChange>,
     ) -> Option<u64> {
-        interaction.map(|change| {
-            self.events
-                .publish(EventDraft::programming_interaction_changed(context, change))
-                .sequence
-        })
+        interaction
+            .and_then(|change| self.suppress_nested_selection(change))
+            .map(|change| {
+                self.events
+                    .publish(EventDraft::programming_interaction_changed(context, change))
+                    .sequence
+            })
+    }
+
+    fn suppress_nested_selection(
+        &self,
+        change: ProgrammingInteractionChange,
+    ) -> Option<ProgrammingInteractionChange> {
+        let Some(revision) = change.selection().map(|selection| selection.revision) else {
+            return Some(change);
+        };
+        let desk_id = change.desk_id();
+        if self.nested_selection_publications.lock().remove(&desk_id) == Some(revision) {
+            return change.without_selection();
+        }
+        Some(change)
+    }
+
+    fn publish_selection_refresh(
+        &self,
+        context: &ActionContext,
+        change: ProgrammingInteractionChange,
+        suppress_outer: bool,
+    ) -> u64 {
+        let desk_id = change.desk_id();
+        let selection_revision = change.selection().map(|selection| selection.revision);
+        let sequence = self
+            .events
+            .publish(EventDraft::programming_interaction_changed(context, change))
+            .sequence;
+        if suppress_outer && let Some(revision) = selection_revision {
+            self.nested_selection_publications
+                .lock()
+                .insert(desk_id, revision);
+        }
+        sequence
     }
 
     fn apply(
