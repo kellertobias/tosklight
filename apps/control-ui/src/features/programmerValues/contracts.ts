@@ -55,6 +55,65 @@ export interface ProgrammerValuesScope {
 	userId: string;
 }
 
+export type ProgrammerValuesMutation =
+	| {
+			action: "set_fixture";
+			fixtureId: string;
+			attribute: string;
+			value: AttributeValue;
+			timing: ProgrammerValueTiming;
+	  }
+	| {
+			action: "release_fixture";
+			fixtureId: string;
+			attribute: string;
+	  }
+	| {
+			action: "set_group";
+			groupId: string;
+			attribute: string;
+			value: AttributeValue;
+			timing: ProgrammerValueTiming;
+	  }
+	| {
+			action: "release_group";
+			groupId: string;
+			attribute: string;
+	  };
+
+export type ProgrammerValuesCommand =
+	| ProgrammerValuesMutation
+	| { action: "batch"; mutations: readonly ProgrammerValuesMutation[] }
+	| { action: "clear" };
+
+export interface ProgrammerValuesActionRequest {
+	requestId: string;
+	expectedRevision: number;
+	action: ProgrammerValuesCommand;
+}
+
+interface ProgrammerValuesOutcomeBase {
+	requestId: string;
+	correlationId: string;
+	revision: number;
+	replayed: boolean;
+	warning: string | null;
+}
+
+export type ProgrammerValuesActionOutcome = ProgrammerValuesOutcomeBase &
+	(
+		| {
+				status: "changed";
+				projection: ProgrammerValuesProjection;
+				eventSequence: number;
+		  }
+		| {
+				status: "no_change";
+				projection?: never;
+				eventSequence?: never;
+		  }
+	);
+
 export interface SetProgrammerFixtureValueInput extends ProgrammerValueTiming {
 	requestId: string;
 	fixtureId: string;
@@ -81,11 +140,27 @@ export interface ReleaseProgrammerGroupValueInput {
 	attribute: string;
 }
 
-/** Mutation boundary supplied by the eventual API adapter. */
+export interface BatchProgrammerValuesInput {
+	requestId: string;
+	mutations: readonly ProgrammerValuesMutation[];
+}
+
+/** View-owned mutation boundary. It stays dormant until authority has been mounted. */
 export interface ProgrammerValuesActions {
-	setFixtureValue(input: SetProgrammerFixtureValueInput): Promise<boolean>;
-	releaseFixtureValue(input: ReleaseProgrammerFixtureValueInput): Promise<boolean>;
-	setGroupValue(input: SetProgrammerGroupValueInput): Promise<boolean>;
-	releaseGroupValue(input: ReleaseProgrammerGroupValueInput): Promise<boolean>;
-	clear(requestId: string): Promise<boolean>;
+	setFixtureValue(
+		input: SetProgrammerFixtureValueInput,
+	): Promise<ProgrammerValuesActionOutcome | null>;
+	releaseFixtureValue(
+		input: ReleaseProgrammerFixtureValueInput,
+	): Promise<ProgrammerValuesActionOutcome | null>;
+	setGroupValue(
+		input: SetProgrammerGroupValueInput,
+	): Promise<ProgrammerValuesActionOutcome | null>;
+	releaseGroupValue(
+		input: ReleaseProgrammerGroupValueInput,
+	): Promise<ProgrammerValuesActionOutcome | null>;
+	batch(
+		input: BatchProgrammerValuesInput,
+	): Promise<ProgrammerValuesActionOutcome | null>;
+	clear(requestId: string): Promise<ProgrammerValuesActionOutcome | null>;
 }

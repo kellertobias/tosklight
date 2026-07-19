@@ -22,15 +22,22 @@ import {
 	ProgrammerValuesStore,
 } from "./store";
 import type { ProgrammerValuesEventTransport } from "./transport";
+import {
+	ProgrammerValuesWriter,
+	type ProgrammerValuesWriterOptions,
+} from "./writer";
 
 export interface ProgrammerValuesViewProviderProps {
 	showId: string | null;
 	userId: string | null;
+	authorityKey?: string;
 	store: ProgrammerValuesStore;
 	transport: ProgrammerValuesEventTransport | null;
 	loadSnapshot: ProgrammerValuesSessionOptions["loadSnapshot"];
+	applyAction?: ProgrammerValuesWriterOptions["applyAction"] | null;
 	actions?: ProgrammerValuesActions | null;
 	onSessionError?: (error: Error | null) => void;
+	onMutationError?: (error: Error | null) => void;
 }
 
 const StoreContext = createContext<ProgrammerValuesStore | null>(null);
@@ -42,11 +49,14 @@ export function ProgrammerValuesViewProvider({
 	children,
 	showId,
 	userId,
+	authorityKey = "",
 	store,
 	transport,
 	loadSnapshot,
+	applyAction = null,
 	actions = null,
 	onSessionError,
+	onMutationError,
 }: PropsWithChildren<ProgrammerValuesViewProviderProps>) {
 	const session = useMemo(
 		() =>
@@ -54,22 +64,47 @@ export function ProgrammerValuesViewProvider({
 				? new ProgrammerValuesSession({
 						showId,
 						userId,
+						authorityKey,
 						store,
 						transport,
 						loadSnapshot,
 						onError: onSessionError,
 					})
 				: null,
-		[loadSnapshot, onSessionError, showId, store, transport, userId],
+		[
+			authorityKey,
+			loadSnapshot,
+			onSessionError,
+			showId,
+			store,
+			transport,
+			userId,
+		],
+	);
+	const writer = useMemo(
+		() =>
+			showId && userId && session && applyAction
+				? new ProgrammerValuesWriter({
+						scope: { showId, userId },
+						store,
+						applyAction,
+						repair: (error) => session.repairAuthority(error),
+						onError: onMutationError,
+					})
+				: null,
+		[applyAction, onMutationError, session, showId, store, userId],
 	);
 	useLayoutEffect(() => {
-		store.reset(showId, userId);
-		return () => session?.stop();
-	}, [session, showId, store, userId]);
+		store.reset(showId, userId, authorityKey);
+		return () => {
+			writer?.stop();
+			session?.stop();
+		};
+	}, [authorityKey, session, showId, store, userId, writer]);
 	return (
 		<StoreContext.Provider value={store}>
 			<SessionContext.Provider value={session}>
-				<ActionsContext.Provider value={actions}>
+				<ActionsContext.Provider value={actions ?? writer}>
 					{children}
 				</ActionsContext.Provider>
 			</SessionContext.Provider>

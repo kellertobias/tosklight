@@ -120,13 +120,14 @@ describe("ProgrammerValuesSession activation", () => {
 });
 
 describe("ProgrammerValuesSession authority and repair", () => {
-	it("accepts only events for the scoped user", async () => {
+	it("repairs a foreign-user event instead of silently accepting the stream", async () => {
 		const harness = createHarness();
 		const transport = harness.transport as FakeProgrammerValuesTransport;
 		harness.session.activate();
 		await settleProgrammerValuesSession();
-		const listener = vi.fn();
-		harness.store.subscribe(listener);
+		harness.loadSnapshot.mockResolvedValueOnce(
+			valuesSnapshot({ cursor: 20, revision: 1 }),
+		);
 
 		transport.emit({
 			type: "event",
@@ -138,8 +139,14 @@ describe("ProgrammerValuesSession authority and repair", () => {
 			}),
 		});
 
-		expect(listener).not.toHaveBeenCalled();
-		expect(harness.store.getSnapshot().eventSequence).toBe(10);
+		await settleProgrammerValuesSession();
+		expect(harness.loadSnapshot).toHaveBeenCalledTimes(2);
+		expect(transport.subscriptions[0].repair).toHaveBeenCalledWith(20);
+		expect(harness.onError).toHaveBeenCalledWith(
+			expect.objectContaining({
+				message: expect.stringContaining("event user"),
+			}),
+		);
 
 		transport.emit({
 			type: "event",

@@ -20,6 +20,7 @@ import type {
 import type { CommandTargetMode } from "../../controlSurface/commandTarget";
 import { PlaybackRuntimeStore } from "../playbackRuntime/store";
 import { ProgrammingInteractionStore } from "../programmingInteraction/store";
+import { ProgrammerValuesStore } from "../programmerValues/store";
 import type {
 	PendingCommandChoice,
 	StoredDeskLayout,
@@ -35,6 +36,7 @@ export function useServerState() {
 	const [error, setError] = useState<string | null>(null);
 	const [bootstrap, setBootstrap] = useState<BootstrapSnapshot | null>(null);
 	const [session, setSession] = useState<SessionResponse | null>(null);
+	const [connectionGeneration, setConnectionGeneration] = useState(0);
 	const [deskLock, setDeskLock] = useState<
 		import("../../api/types").DeskLockState | null
 	>(null);
@@ -50,6 +52,7 @@ export function useServerState() {
 	const programmingInteractionStore = useRef(
 		new ProgrammingInteractionStore(),
 	).current;
+	const programmerValuesStore = useRef(new ProgrammerValuesStore()).current;
 	const [screens, setScreens] = useState<ScreenSnapshot | null>(null);
 	const [shows, setShows] = useState<ShowEntry[]>([]);
 	const [configuration, setConfiguration] = useState<DeskConfiguration | null>(
@@ -102,6 +105,8 @@ export function useServerState() {
 		setBootstrap,
 		session,
 		setSession,
+		connectionGeneration,
+		setConnectionGeneration,
 		deskLock,
 		setDeskLock,
 		patch,
@@ -114,6 +119,7 @@ export function useServerState() {
 		setPlaybacks,
 		playbackRuntimeStore,
 		programmingInteractionStore,
+		programmerValuesStore,
 		screens,
 		setScreens,
 		shows,

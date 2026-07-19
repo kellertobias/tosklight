@@ -218,6 +218,23 @@ describe("ProgrammerValuesStore optimism", () => {
 			),
 		).toBe(false);
 	});
+
+	it("invalidates authority when the server session changes in-place", () => {
+		const store = new ProgrammerValuesStore();
+		store.reset(SHOW_ID, USER_ID, "session-a");
+		store.installSnapshot(valuesSnapshot());
+		const oldScope = store.captureScope();
+
+		store.reset(SHOW_ID, USER_ID, "session-b");
+
+		expect(store.getSnapshot()).toMatchObject({
+			showId: SHOW_ID,
+			userId: USER_ID,
+			projection: null,
+			status: "idle",
+		});
+		expect(store.isScopeCurrent(oldScope)).toBe(false);
+	});
 });
 
 describe("ProgrammerValuesStore revision and cursor ordering", () => {

@@ -13,6 +13,7 @@ import {
 export interface ProgrammerValuesSessionOptions {
 	showId: string;
 	userId: string;
+	authorityKey?: string;
 	store: ProgrammerValuesStore;
 	transport: ProgrammerValuesEventTransport | null;
 	loadSnapshot(): Promise<ProgrammerValuesSnapshot>;
@@ -21,6 +22,7 @@ export interface ProgrammerValuesSessionOptions {
 
 export class ProgrammerValuesSession {
 	private readonly eventScope: ProgrammerValuesScope;
+	private readonly authorityKey: string;
 	private readonly store: ProgrammerValuesStore;
 	private readonly transport: ProgrammerValuesEventTransport | null;
 	private readonly loadSnapshot: ProgrammerValuesSessionOptions["loadSnapshot"];
@@ -33,11 +35,13 @@ export class ProgrammerValuesSession {
 	private storeScope: number | null = null;
 	private hydrationGeneration: number | null = null;
 	private repairGeneration: number | null = null;
+	private repairPromise: Promise<void> | null = null;
 	private refreshQueued = false;
 	private reconnectTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
 
 	constructor(options: ProgrammerValuesSessionOptions) {
 		this.eventScope = { showId: options.showId, userId: options.userId };
+		this.authorityKey = options.authorityKey ?? "";
 		this.store = options.store;
 		this.transport = options.transport;
 		this.loadSnapshot = options.loadSnapshot;
@@ -66,6 +70,16 @@ export class ProgrammerValuesSession {
 		this.clearReconnect();
 		this.closeStream();
 		this.storeScope = null;
+	}
+
+	async repairAuthority(error: Error) {
+		if (this.stopped || this.storeScope === null)
+			throw new Error("The Programmer values session is unavailable");
+		if (this.references > 0) await this.repair(this.lifecycle, error);
+		else await this.repairWithoutStream(error);
+		const state = this.store.getSnapshot();
+		if (state.repairRequired)
+			throw state.error ?? new Error("Programmer values repair failed");
 	}
 
 	private scheduleRefresh(delay = 0) {
@@ -182,7 +196,10 @@ export class ProgrammerValuesSession {
 			);
 			return;
 		}
-		if (message.projection.userId !== this.eventScope.userId) return;
+		if (message.projection.userId !== this.eventScope.userId) {
+			void this.repair(generation, this.scopeError("event user"));
+			return;
+		}
 		try {
 			this.store.applyProjection(
 				message.projection,
@@ -194,10 +211,20 @@ export class ProgrammerValuesSession {
 		}
 	}
 
-	private async repair(generation: number, error: Error) {
-		if (this.repairGeneration === generation || !this.isCurrent(generation))
-			return;
+	private repair(generation: number, error: Error): Promise<void> {
+		if (this.repairGeneration === generation)
+			return this.repairPromise ?? Promise.resolve();
+		if (!this.isCurrent(generation)) return Promise.resolve();
 		this.repairGeneration = generation;
+		const repair = this.performRepair(generation, error).finally(() => {
+			if (this.repairGeneration === generation) this.repairGeneration = null;
+			if (this.repairPromise === repair) this.repairPromise = null;
+		});
+		this.repairPromise = repair;
+		return repair;
+	}
+
+	private async performRepair(generation: number, error: Error) {
 		this.store.setRepairRequired(error, this.expectedStoreScope());
 		this.onError?.(error);
 		try {
@@ -216,10 +243,25 @@ export class ProgrammerValuesSession {
 			this.onError?.(null);
 		} catch (reason) {
 			if (this.isCurrent(generation)) this.fail(asError(reason), true);
-		} finally {
-			if (this.repairGeneration === generation)
-				this.repairGeneration = null;
 		}
+	}
+
+	private async repairWithoutStream(error: Error) {
+		const lifecycle = this.lifecycle;
+		const expectedScope = this.expectedStoreScope();
+		this.store.setRepairRequired(error, expectedScope);
+		const snapshot = await this.loadSnapshot();
+		if (
+			this.stopped ||
+			lifecycle !== this.lifecycle ||
+			!this.store.isScopeCurrent(expectedScope)
+		)
+			return;
+		this.assertSnapshotUser(snapshot);
+		if (!this.store.installRepairSnapshot(snapshot, expectedScope))
+			throw this.scopeError("repair snapshot");
+		this.hydrated = true;
+		this.onError?.(null);
 	}
 
 	private fail(error: Error, invalidateHydration: boolean) {
@@ -243,7 +285,11 @@ export class ProgrammerValuesSession {
 		if (this.stopped) return false;
 		const state = this.store.getSnapshot();
 		if (state.showId === null && state.userId === null)
-			this.store.reset(this.eventScope.showId, this.eventScope.userId);
+			this.store.reset(
+				this.eventScope.showId,
+				this.eventScope.userId,
+				this.authorityKey,
+			);
 		const scoped = this.store.getSnapshot();
 		if (
 			scoped.showId !== this.eventScope.showId ||

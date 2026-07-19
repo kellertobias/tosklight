@@ -3,48 +3,37 @@ import type {
 	ProgrammerValuesSnapshot,
 } from "./contracts";
 import {
-	assertCursor,
-	canonicalProjection,
-	sameProjection,
-} from "./projectionValue";
+	chooseProgrammerValuesAuthority,
+	chooseProgrammerValuesRevision,
+} from "./authority";
+import { assertCursor, canonicalProjection } from "./projectionValue";
+import {
+	emptyProgrammerValuesState,
+	type ProgrammerValuesOptimisticReducer,
+	type ProgrammerValuesSettlement,
+	type ProgrammerValuesState,
+} from "./storeState";
 import { ProgrammerValuesProtocolError } from "./transport";
 
-export type ProgrammerValuesStatus = "idle" | "loading" | "ready" | "error";
-
-export interface ProgrammerValuesState {
-	showId: string | null;
-	userId: string | null;
-	eventSequence: number | null;
-	projection: ProgrammerValuesProjection | null;
-	pendingRequestIds: readonly string[];
-	status: ProgrammerValuesStatus;
-	error: Error | null;
-	repairRequired: boolean;
-}
-
-export type ProgrammerValuesOptimisticReducer = (
-	current: ProgrammerValuesProjection,
-) => ProgrammerValuesProjection;
+export type {
+	ProgrammerValuesOptimisticReducer,
+	ProgrammerValuesSettlement,
+	ProgrammerValuesState,
+	ProgrammerValuesStatus,
+} from "./storeState";
 
 interface OptimisticOperation {
 	requestId: string;
 	apply: ProgrammerValuesOptimisticReducer;
 }
 
-type AuthorityDecision = {
-	projection: ProgrammerValuesProjection;
-	sequence: number | null;
-	publish: boolean;
-};
-
-const EMPTY_REQUEST_IDS = Object.freeze([]) as readonly string[];
-
 export class ProgrammerValuesStore {
 	private readonly listeners = new Set<() => void>();
 	private readonly operations = new Map<string, OptimisticOperation>();
 	private authoritative: ProgrammerValuesProjection | null = null;
+	private authorityKey: string | null = null;
 	private scope = 0;
-	private state: ProgrammerValuesState = emptyState();
+	private state: ProgrammerValuesState = emptyProgrammerValuesState();
 
 	readonly subscribe = (listener: () => void) => {
 		this.listeners.add(listener);
@@ -53,12 +42,18 @@ export class ProgrammerValuesStore {
 
 	readonly getSnapshot = () => this.state;
 
-	reset(showId: string | null, userId: string | null) {
-		if (showId === this.state.showId && userId === this.state.userId) return;
+	reset(showId: string | null, userId: string | null, authorityKey = "") {
+		if (
+			showId === this.state.showId &&
+			userId === this.state.userId &&
+			authorityKey === this.authorityKey
+		)
+			return;
 		this.scope++;
 		this.authoritative = null;
+		this.authorityKey = authorityKey;
 		this.operations.clear();
-		this.state = { ...emptyState(), showId, userId };
+		this.state = { ...emptyProgrammerValuesState(), showId, userId };
 		this.emit();
 	}
 
@@ -121,10 +116,51 @@ export class ProgrammerValuesStore {
 		const apply = this.scopedReducer(reducer);
 		const current = this.renderProjection();
 		const rendered = apply(current);
-		if (sameProjection(rendered, current)) return false;
 		this.operations.set(requestId, { requestId, apply });
 		this.publishRendered(rendered);
 		return true;
+	}
+
+	settleChanged(
+		requestId: string,
+		projection: ProgrammerValuesProjection,
+		sequence: number,
+		expectedScope = this.scope,
+	): ProgrammerValuesSettlement {
+		if (!this.hasOperation(requestId, expectedScope)) return "ignored";
+		try {
+			if (!this.matchesUser(projection.userId)) return "ignored";
+			assertCursor(sequence);
+			const incoming = canonicalProjection(projection);
+			const decision = this.chooseAuthority(incoming, sequence);
+			this.settleOperation(requestId, decision.projection, {
+				eventSequence: decision.sequence,
+				error: null,
+			});
+			return "settled";
+		} catch (reason) {
+			this.markProtocolRepair(reason, sequence);
+			return "repair";
+		}
+	}
+
+	settleNoChange(
+		requestId: string,
+		revision: number,
+		expectedScope = this.scope,
+	): ProgrammerValuesSettlement {
+		if (!this.hasOperation(requestId, expectedScope) || !this.authoritative)
+			return "ignored";
+		if (!Number.isSafeInteger(revision) || revision < 0) {
+			this.markProtocolRepair(
+				new Error("Programmer values outcome has an invalid revision"),
+				this.state.eventSequence,
+			);
+			return "repair";
+		}
+		if (revision > this.authoritative.revision) return "repair";
+		this.settleOperation(requestId, this.authoritative, { error: null });
+		return "settled";
 	}
 
 	commit(
@@ -138,7 +174,11 @@ export class ProgrammerValuesStore {
 			if (projection) {
 				if (!this.matchesUser(projection.userId)) return false;
 				const incoming = canonicalProjection(projection);
-				nextAuthority = this.chooseRevision(incoming).projection;
+				nextAuthority = chooseProgrammerValuesRevision(
+					this.authoritative,
+					incoming,
+					this.state.eventSequence,
+				).projection;
 			}
 			if (!nextAuthority) return false;
 			const rendered = this.renderWithout(requestId, nextAuthority);
@@ -197,6 +237,12 @@ export class ProgrammerValuesStore {
 		return scope === this.scope;
 	}
 
+	authoritativeRevision(expectedScope = this.scope) {
+		return this.isScopeCurrent(expectedScope)
+			? (this.authoritative?.revision ?? null)
+			: null;
+	}
+
 	private install(
 		projection: ProgrammerValuesProjection,
 		sequence: number,
@@ -222,36 +268,12 @@ export class ProgrammerValuesStore {
 	private chooseAuthority(
 		incoming: ProgrammerValuesProjection,
 		sequence: number,
-	): AuthorityDecision {
-		const currentSequence = this.state.eventSequence;
-		if (currentSequence !== null && sequence < currentSequence)
-			return {
-				projection: this.authoritative ?? incoming,
-				sequence: currentSequence,
-				publish: false,
-			};
-		if (currentSequence === sequence && this.authoritative) {
-			if (sameProjection(this.authoritative, incoming))
-				return { projection: this.authoritative, sequence, publish: false };
-			throw new ProgrammerValuesProtocolError(
-				`Conflicting Programmer values events at sequence ${sequence}`,
-				sequence,
-			);
-		}
-		const revision = this.chooseRevision(incoming);
-		return { ...revision, sequence, publish: true };
-	}
-
-	private chooseRevision(incoming: ProgrammerValuesProjection) {
-		if (!this.authoritative || incoming.revision > this.authoritative.revision)
-			return { projection: incoming };
-		if (incoming.revision < this.authoritative.revision)
-			return { projection: this.authoritative };
-		if (sameProjection(this.authoritative, incoming))
-			return { projection: this.authoritative };
-		throw new ProgrammerValuesProtocolError(
-			`Conflicting Programmer values projections at revision ${incoming.revision}`,
+	) {
+		return chooseProgrammerValuesAuthority(
+			this.authoritative,
 			this.state.eventSequence,
+			incoming,
+			sequence,
 		);
 	}
 
@@ -266,12 +288,26 @@ export class ProgrammerValuesStore {
 	}
 
 	private scopedReducer(reducer: ProgrammerValuesOptimisticReducer) {
-		return (current: ProgrammerValuesProjection) =>
-			canonicalProjection({
-				...reducer(current),
+		return (current: ProgrammerValuesProjection) => {
+			const reduced = reducer(current);
+			if (Object.is(reduced, current)) return current;
+			return canonicalProjection({
+				...reduced,
 				userId: current.userId,
 				revision: current.revision,
 			});
+		};
+	}
+
+	private settleOperation(
+		requestId: string,
+		authoritative: ProgrammerValuesProjection,
+		update: Partial<ProgrammerValuesState>,
+	) {
+		const rendered = this.renderWithout(requestId, authoritative);
+		this.operations.delete(requestId);
+		this.authoritative = authoritative;
+		this.publishRendered(rendered, update);
 	}
 
 	private renderProjection() {
@@ -336,6 +372,10 @@ export class ProgrammerValuesStore {
 	}
 
 	private rejectProtocol(reason: unknown, sequence: number | null): never {
+		throw this.markProtocolRepair(reason, sequence);
+	}
+
+	private markProtocolRepair(reason: unknown, sequence: number | null) {
 		const error =
 			reason instanceof ProgrammerValuesProtocolError
 				? reason
@@ -347,23 +387,10 @@ export class ProgrammerValuesStore {
 			repairRequired: true,
 		};
 		this.emit();
-		throw error;
+		return error;
 	}
 
 	private emit() {
 		for (const listener of this.listeners) listener();
 	}
-}
-
-function emptyState(): ProgrammerValuesState {
-	return {
-		showId: null,
-		userId: null,
-		eventSequence: null,
-		projection: null,
-		pendingRequestIds: EMPTY_REQUEST_IDS,
-		status: "idle",
-		error: null,
-		repairRequired: false,
-	};
 }

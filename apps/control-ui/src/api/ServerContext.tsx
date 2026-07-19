@@ -2,6 +2,7 @@ import { createContext, type PropsWithChildren, useContext } from "react";
 import { FilesProvider } from "../features/files/FilesContext";
 import { PlaybackRuntimeViewProvider } from "../features/playbackRuntime/PlaybackRuntimeView";
 import { ProgrammingInteractionViewProvider } from "../features/programmingInteraction/ProgrammingInteractionView";
+import { ProgrammerValuesViewProvider } from "../features/programmerValues/ProgrammerValuesView";
 import { SelectiveImportProvider } from "../features/selectiveImport/SelectiveImportContext";
 import { ScreensProvider } from "../features/screens/ScreensContext";
 import { composeServerContextValue } from "../features/server/composeServerContextValue";
@@ -142,35 +143,47 @@ export function ServerProvider({
 					}
 					onError={boundaries.reportPlaybackError}
 				>
-					<ProgrammingInteractionViewProvider
+					<ProgrammerValuesViewProvider
 						showId={state.bootstrap?.active_show?.id ?? null}
-						deskId={state.session?.desk.id ?? null}
-						store={state.programmingInteractionStore}
-						transport={boundaries.programmingTransport}
-						loadSnapshot={boundaries.loadProgrammingInteractionSnapshot}
-						replaceCommandLine={state.client.replaceProgrammingCommandLine}
-						applySelection={state.client.applyProgrammingSelection}
-						onSessionError={boundaries.reportProgrammingSessionError}
-						onMutationError={boundaries.reportProgrammingMutationError}
+						userId={state.session?.user.id ?? null}
+						authorityKey={boundaries.programmerValuesAuthorityKey}
+						store={state.programmerValuesStore}
+						transport={boundaries.programmerValuesTransport}
+						loadSnapshot={boundaries.loadProgrammerValuesSnapshot}
+						applyAction={boundaries.applyProgrammerValuesAction}
+						onSessionError={boundaries.reportProgrammerValuesSessionError}
+						onMutationError={boundaries.reportProgrammerValuesMutationError}
 					>
-						<SelectedGroupMembershipSync
-							playbacks={state.playbacks}
-							selectedGroupId={state.selectedGroupId}
-							setSelectedGroupId={state.setSelectedGroupId}
-							setSelectedFixtures={state.setSelectedFixtures}
-						/>
-						<ShowObjectDetailSubscription
-							kind="group"
-							objectId={state.selectedGroupId}
-						/>
-						<SelectiveImportProvider source={selectiveImportSource}>
-							<FilesProvider source={fileSource}>
-								<ScreensProvider source={screenSource}>
-									{children}
-								</ScreensProvider>
-							</FilesProvider>
-						</SelectiveImportProvider>
-					</ProgrammingInteractionViewProvider>
+						<ProgrammingInteractionViewProvider
+							showId={state.bootstrap?.active_show?.id ?? null}
+							deskId={state.session?.desk.id ?? null}
+							store={state.programmingInteractionStore}
+							transport={boundaries.programmingTransport}
+							loadSnapshot={boundaries.loadProgrammingInteractionSnapshot}
+							replaceCommandLine={state.client.replaceProgrammingCommandLine}
+							applySelection={state.client.applyProgrammingSelection}
+							onSessionError={boundaries.reportProgrammingSessionError}
+							onMutationError={boundaries.reportProgrammingMutationError}
+						>
+							<SelectedGroupMembershipSync
+								playbacks={state.playbacks}
+								selectedGroupId={state.selectedGroupId}
+								setSelectedGroupId={state.setSelectedGroupId}
+								setSelectedFixtures={state.setSelectedFixtures}
+							/>
+							<ShowObjectDetailSubscription
+								kind="group"
+								objectId={state.selectedGroupId}
+							/>
+							<SelectiveImportProvider source={selectiveImportSource}>
+								<FilesProvider source={fileSource}>
+									<ScreensProvider source={screenSource}>
+										{children}
+									</ScreensProvider>
+								</FilesProvider>
+							</SelectiveImportProvider>
+						</ProgrammingInteractionViewProvider>
+					</ProgrammerValuesViewProvider>
 				</PlaybackRuntimeViewProvider>
 			</ShowObjectsViewProvider>
 		</ServerContext.Provider>

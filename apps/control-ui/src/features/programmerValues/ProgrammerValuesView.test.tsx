@@ -49,11 +49,12 @@ function ActionProbe({ onRender }: { onRender: () => void }) {
 
 function actions(): ProgrammerValuesActions {
 	return {
-		setFixtureValue: vi.fn(async () => true),
-		releaseFixtureValue: vi.fn(async () => true),
-		setGroupValue: vi.fn(async () => true),
-		releaseGroupValue: vi.fn(async () => true),
-		clear: vi.fn(async () => true),
+		setFixtureValue: vi.fn(async () => null),
+		releaseFixtureValue: vi.fn(async () => null),
+		setGroupValue: vi.fn(async () => null),
+		releaseGroupValue: vi.fn(async () => null),
+		batch: vi.fn(async () => null),
+		clear: vi.fn(async () => null),
 	};
 }
 
@@ -155,5 +156,36 @@ describe("ProgrammerValuesViewProvider", () => {
 
 		expect(levelRenders).toHaveBeenCalledTimes(levelCount);
 		expect(actionRenders).toHaveBeenCalledTimes(actionCount);
+	});
+
+	it("replaces authority when the server session key changes", async () => {
+		const store = new ProgrammerValuesStore();
+		const transport = new FakeProgrammerValuesTransport();
+		const loadSnapshot = vi
+			.fn()
+			.mockResolvedValueOnce(valuesSnapshot())
+			.mockResolvedValueOnce(valuesSnapshot({ cursor: 1, revision: 7 }));
+		const view = (authorityKey: string) => (
+			<ProgrammerValuesViewProvider
+				showId={SHOW_ID}
+				userId={USER_ID}
+				authorityKey={authorityKey}
+				store={store}
+				transport={transport}
+				loadSnapshot={loadSnapshot}
+			>
+				<ProjectionProbe enabled onRender={vi.fn()} />
+			</ProgrammerValuesViewProvider>
+		);
+		const rendered = render(view("session-a"));
+		await waitFor(() => expect(screen.getByText("1")).toBeInTheDocument());
+
+		rendered.rerender(view("session-b"));
+		await waitFor(() => expect(screen.getByText("7")).toBeInTheDocument());
+
+		expect(loadSnapshot).toHaveBeenCalledTimes(2);
+		expect(transport.subscriptions).toHaveLength(2);
+		expect(transport.subscriptions[0].close).toHaveBeenCalledOnce();
+		expect(transport.subscriptions[1].after).toBe(1);
 	});
 });

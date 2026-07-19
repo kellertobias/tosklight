@@ -149,6 +149,7 @@ export async function bootstrapConnection(
 	const resources = await loadInitialResources(state.client);
 	if (isCancelled()) return null;
 	state.setSession(session);
+	state.setConnectionGeneration((current) => current + 1);
 	state.setCommandHistory(await state.client.commandHistory());
 	state.setDeskLock(deskLock);
 	installInitialResources(state, resources);
