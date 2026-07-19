@@ -1,4 +1,14 @@
 import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
+import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
+
+interface ProgrammerProjection {
+	session_id: string;
+	command_line: string;
+}
+
+interface DeskSessionProjection {
+	desk: { osc_alias: string };
+}
 
 test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 	test("LOCK-001 @ui @api @osc › PIN lock covers every screen and drops every desk input without changing output", async ({ api, bench, desk, page }) => {
@@ -113,13 +123,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 		const changedAlias = `${originalAlias}-undo`;
 		await defaultScreen.getByLabel("OSC alias").fill(changedAlias);
 		await expect(undo).toBeEnabled();
-		await expect.poll(async () => {
-			const session = await api.request<any>("POST", "/api/v1/sessions", {
-				username: "Operator",
-				desk_id: api.session!.desk.id,
-			}, false);
-			return session.desk.osc_alias;
-		}).toBe(changedAlias);
+		await expect.poll(() => currentDeskAlias(api)).toBe(changedAlias);
 
 		await page.locator(".setup-window nav").getByRole("button", { name: "Network & Inputs", exact: true }).click();
 		await page.locator(".setup-window nav").getByRole("button", { name: "Screens & playback", exact: true }).click();
@@ -127,13 +131,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 		await undo.click();
 		await expect(defaultScreen.getByLabel("OSC alias")).toHaveValue(originalAlias);
 		await expect(undo).toBeDisabled();
-		await expect.poll(async () => {
-			const session = await api.request<any>("POST", "/api/v1/sessions", {
-				username: "Operator",
-				desk_id: api.session!.desk.id,
-			}, false);
-			return session.desk.osc_alias;
-		}).toBe(originalAlias);
+		await expect.poll(() => currentDeskAlias(api)).toBe(originalAlias);
 
 		const shortcuts = defaultScreen.getByRole("switch", { name: "Enable software keyboard shortcuts" });
 		await expect(shortcuts).toBeChecked();
@@ -152,7 +150,17 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 	});
 });
 
-async function commandLine(api: any): Promise<string> {
-	const programmers = await api.request<any[]>("GET", "/api/v1/programmers", undefined, false);
+async function commandLine(api: ApiDriver): Promise<string> {
+	const programmers = await api.request<ProgrammerProjection[]>("GET", "/api/v1/programmers", undefined, false);
 	return programmers.find((programmer) => programmer.session_id === api.session?.session_id)?.command_line ?? "";
+}
+
+async function currentDeskAlias(api: ApiDriver): Promise<string> {
+	const deskId = api.session?.desk.id;
+	if (!deskId) throw new Error("Expected an authenticated desk session");
+	const session = await api.request<DeskSessionProjection>("POST", "/api/v1/sessions", {
+		username: "Operator",
+		desk_id: deskId,
+	}, false);
+	return session.desk.osc_alias;
 }
