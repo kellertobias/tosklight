@@ -210,6 +210,10 @@ export class LightApiClient extends LightClientRuntime {
 		this.programmingApi,
 		"replaceProgrammingCommandLine",
 	);
+	applyProgrammingSelection = bindClientMethod(
+		this.programmingApi,
+		"applyProgrammingSelection",
+	);
 	clearProgrammer = bindClientMethod(
 		this.programmingApi,
 		"clearProgrammer",

@@ -167,7 +167,7 @@ function decodeSelectionExpression(
 	};
 }
 
-function decodeSelection(
+export function decodeProgrammingSelection(
 	value: unknown,
 	path: string,
 ): SelectionProjection {
@@ -205,7 +205,10 @@ export function decodeProgrammingProjection(
 			projection.command_line,
 			`${path}.command_line`,
 		),
-		selection: decodeSelection(projection.selection, `${path}.selection`),
+		selection: decodeProgrammingSelection(
+			projection.selection,
+			`${path}.selection`,
+		),
 	};
 }
 
@@ -230,7 +233,7 @@ export function decodeProgrammingChange(
 			)
 		: null;
 	const selection = hasSelection
-		? decodeSelection(change.selection, `${path}.selection`)
+		? decodeProgrammingSelection(change.selection, `${path}.selection`)
 		: null;
 	if (commandLine && selection)
 		return { deskId, commandLine, selection };

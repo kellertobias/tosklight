@@ -12,7 +12,9 @@ use crate::v2::command_line::{
     CueMoveCopyChoice, CueMoveCopyChoiceType, CueTransferOperation, ExecuteCommandLineRequest,
     ProgrammerSelectionExpression, ProgrammerSelectionProjection, ProgrammerSelectionReference,
     ProgrammerSelectionRule, ProgrammingInteractionChange, ProgrammingInteractionProjection,
-    ProgrammingInteractionSnapshot, ReplaceCommandLineRequest,
+    ProgrammingInteractionSnapshot, ProgrammingSelectionAcceptedAction, ProgrammingSelectionAction,
+    ProgrammingSelectionActionOutcome, ProgrammingSelectionActionRequest,
+    ProgrammingSelectionGestureSource, ReplaceCommandLineRequest,
 };
 use crate::v2::events::{
     EventActionSource, EventCapability, EventClass, EventClientMessage, EventDeliveryPolicy,
@@ -78,12 +80,18 @@ pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
         request_schema_artifact::<ReplaceCommandLineRequest>("replace-command-line-request"),
         request_schema_artifact::<CommandKeyRequest>("command-key-request"),
         request_schema_artifact::<ExecuteCommandLineRequest>("execute-command-line-request"),
+        request_schema_artifact::<ProgrammingSelectionActionRequest>(
+            "programming-selection-action-request",
+        ),
         response_schema_artifact::<CommandLineResponse>("command-line-response"),
         response_schema_artifact::<CommandOperationResponse>("command-operation-response"),
         response_schema_artifact::<CommandErrorResponse>("command-error-response"),
         response_schema_artifact::<CommandLineChangedEvent>("command-line-changed-event"),
         response_schema_artifact::<ProgrammingInteractionSnapshot>(
             "programming-interaction-snapshot",
+        ),
+        response_schema_artifact::<ProgrammingSelectionActionOutcome>(
+            "programming-selection-action-outcome",
         ),
         event_request_schema::<EventClientMessage>("event-client-message"),
         event_response_schema::<EventServerMessage>("event-server-message"),
@@ -350,7 +358,7 @@ fn typescript_bindings() -> String {
     )
 }
 
-fn interaction_declarations(config: &Config) -> [String; 7] {
+fn interaction_declarations(config: &Config) -> [String; 12] {
     [
         ProgrammerSelectionRule::decl(config),
         ProgrammerSelectionReference::decl(config),
@@ -359,5 +367,10 @@ fn interaction_declarations(config: &Config) -> [String; 7] {
         ProgrammingInteractionProjection::decl(config),
         ProgrammingInteractionChange::decl(config),
         ProgrammingInteractionSnapshot::decl(config),
+        ProgrammingSelectionGestureSource::decl(config),
+        ProgrammingSelectionAction::decl(config),
+        ProgrammingSelectionActionRequest::decl(config),
+        ProgrammingSelectionAcceptedAction::decl(config),
+        ProgrammingSelectionActionOutcome::decl(config),
     ]
 }

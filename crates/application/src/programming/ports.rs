@@ -1,6 +1,22 @@
 use super::{CueMoveCopyChoice, ExecutionPolicy};
 use crate::{ActionContext, ActionError};
+use light_core::FixtureId;
+use light_programmer::GroupDefinition;
 use light_programmer::ProgrammerRegistry;
+use std::collections::HashMap;
+
+#[derive(Clone, Debug, Default)]
+pub struct ProgrammingSelectionEnvironment {
+    pub show_revision: u64,
+    pub selectable_fixtures: HashMap<FixtureId, Vec<FixtureId>>,
+    pub groups: HashMap<String, GroupDefinition>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ProgrammingSelectionQuery {
+    Fixtures(Vec<FixtureId>),
+    Groups(Vec<String>),
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProgrammingExecution {
@@ -37,6 +53,17 @@ pub trait ProgrammingPorts: Send + Sync {
         command: &str,
         policy: ExecutionPolicy,
     ) -> ProgrammingExecution;
+
+    fn selection_environment(
+        &self,
+        _context: &ActionContext,
+        _query: &ProgrammingSelectionQuery,
+    ) -> Result<ProgrammingSelectionEnvironment, ActionError> {
+        Err(ActionError::new(
+            crate::ActionErrorKind::Unavailable,
+            "selection environment is unavailable",
+        ))
+    }
 
     fn persist(&self, context: &ActionContext, operation: &'static str) -> Option<String>;
 

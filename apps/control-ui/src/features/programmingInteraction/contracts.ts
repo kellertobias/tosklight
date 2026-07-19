@@ -46,6 +46,46 @@ export interface SelectionProjection {
 	gestureOpen: boolean;
 }
 
+export type SelectionGestureSource =
+	| { type: "fixture"; fixtureId: string }
+	| { type: "live_group" | "dereferenced_group"; groupId: string };
+
+export type SelectionAction =
+	| {
+			type: "replace";
+			fixtures: readonly string[];
+			expectedRevision: number;
+	  }
+	| {
+			type: "gesture";
+			source: SelectionGestureSource;
+			remove: boolean;
+	  }
+	| {
+			type: "select_group";
+			groupId: string;
+			frozen: boolean;
+			rule: SelectionRule;
+			expectedRevision: number;
+	  }
+	| { type: "apply_rule"; rule: SelectionRule };
+
+export interface SelectionActionRequest {
+	requestId: string;
+	action: SelectionAction;
+}
+
+export interface SelectionActionOutcome {
+	requestId: string;
+	correlationId: string;
+	action: "replaced" | "gesture_applied" | "group_selected" | "rule_applied";
+	applied: number;
+	selection: SelectionProjection;
+	eventSequence: number;
+	replayed: boolean;
+	warning: string | null;
+}
+
 export interface ProgrammingProjection {
 	deskId: string;
 	commandLine: CommandLineProjection;

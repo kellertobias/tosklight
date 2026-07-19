@@ -9,8 +9,16 @@ mod adapter;
 mod events;
 #[path = "command_http/interaction_wire.rs"]
 mod interaction_wire;
+#[path = "command_http/programming_ports.rs"]
+mod programming_ports;
 #[path = "command_http/routes.rs"]
 mod routes;
+#[path = "command_http/selection_environment.rs"]
+mod selection_environment;
+#[path = "command_http/selection_routes.rs"]
+mod selection_routes;
+#[path = "command_http/selection_wire.rs"]
+mod selection_wire;
 #[path = "command_http/state_event.rs"]
 mod state_event;
 #[path = "command_http/wire.rs"]

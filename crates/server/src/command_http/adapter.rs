@@ -1,9 +1,8 @@
 use super::events::{persist_with_warning, publish_osc_result};
-use super::wire::application_choice;
+use super::programming_ports::ServerProgrammingPorts;
 use light_application::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionSource, ExecutionPolicy,
-    ProgrammingCommand, ProgrammingExecution, ProgrammingLiveSnapshot, ProgrammingPorts,
-    ProgrammingResult,
+    ProgrammingCommand, ProgrammingLiveSnapshot, ProgrammingResult,
 };
 use light_programmer::ProgrammerRegistry;
 use light_programmer::command_line::{CommandKey, CommandKeyPhase};
@@ -180,12 +179,7 @@ fn run_service_with_source(
     command: ProgrammingCommand,
     source: &'static str,
 ) -> Result<ProgrammingResult, ActionError> {
-    let ports = ServerProgrammingPorts {
-        state,
-        session,
-        source,
-        require_unlocked: true,
-    };
+    let ports = ServerProgrammingPorts::new(state, session, source, true);
     state
         .programming
         .handle(ActionEnvelope { context, command }, &ports)
@@ -196,12 +190,7 @@ pub(super) fn run_snapshot(
     session: &Session,
     context: ActionContext,
 ) -> Result<ProgrammingLiveSnapshot, ApiError> {
-    let ports = ServerProgrammingPorts {
-        state,
-        session,
-        source: "http",
-        require_unlocked: false,
-    };
+    let ports = ServerProgrammingPorts::new(state, session, "http", false);
     state
         .programming
         .snapshot(&context, &ports)
@@ -280,122 +269,6 @@ pub(crate) fn osc_command_key(action: &str) -> Option<CommandKey> {
         "dot" => CommandKey::Dot,
         _ => return None,
     })
-}
-
-struct ServerProgrammingPorts<'a> {
-    state: &'a AppState,
-    session: &'a Session,
-    source: &'static str,
-    require_unlocked: bool,
-}
-
-impl ProgrammingPorts for ServerProgrammingPorts<'_> {
-    fn authorize(&self, context: &ActionContext) -> Result<(), ActionError> {
-        let identity_matches = context.desk_id == self.session.desk.id
-            && context.session_id == Some(self.session.id.0)
-            && context.user_id == Some(self.session.user.id.0);
-        if !identity_matches {
-            return Err(ActionError::new(
-                ActionErrorKind::Forbidden,
-                "the action context does not match the authenticated operator session",
-            ));
-        }
-        if self.require_unlocked && super::super::read_desk_lock(self.state, context.desk_id).locked
-        {
-            return Err(ActionError::new(
-                ActionErrorKind::Conflict,
-                "desk is locked",
-            ));
-        }
-        Ok(())
-    }
-
-    fn execute(
-        &self,
-        _programmers: &ProgrammerRegistry,
-        context: &ActionContext,
-        command: &str,
-        policy: ExecutionPolicy,
-    ) -> ProgrammingExecution {
-        let policy = match policy {
-            ExecutionPolicy::AtomicProgrammer => ExistingCommandPolicy::AtomicProgrammer,
-            ExecutionPolicy::Compatibility => ExistingCommandPolicy::Compatibility,
-        };
-        match execute_existing_command(
-            self.state,
-            self.session,
-            command,
-            self.source,
-            context,
-            policy,
-        ) {
-            ExistingCommandOutcome::Accepted {
-                applied,
-                persistence_warning,
-            } => ProgrammingExecution::Accepted {
-                applied,
-                warning: persistence_warning,
-            },
-            ExistingCommandOutcome::ChoiceRequired { pending_choice } => {
-                match application_choice(pending_choice) {
-                    Ok(pending_choice) => ProgrammingExecution::ChoiceRequired { pending_choice },
-                    Err(error) => ProgrammingExecution::Rejected { error },
-                }
-            }
-            ExistingCommandOutcome::Rejected { error } => ProgrammingExecution::Rejected { error },
-        }
-    }
-
-    fn persist(&self, context: &ActionContext, operation: &'static str) -> Option<String> {
-        persist_with_warning(
-            self.state,
-            self.session,
-            self.source,
-            context.request_id.as_deref(),
-            operation,
-        )
-    }
-
-    fn capture_programmer_on_preload(&self, _context: &ActionContext) -> bool {
-        self.state.configuration.read().preload_programmer_changes
-    }
-
-    fn reconcile(
-        &self,
-        _context: &ActionContext,
-        reason: light_application::ProgrammingReconciliation,
-    ) {
-        let osc = self.source == "osc";
-        match reason {
-            light_application::ProgrammingReconciliation::SelectionChanged => {
-                let source = if osc {
-                    "osc_programmer_selection"
-                } else {
-                    "programmer_selection"
-                };
-                super::super::reconcile_highlight_selection(self.state, self.session, source);
-            }
-            light_application::ProgrammingReconciliation::CaptureModeChanged => {
-                let source = if osc { "osc_preload" } else { "preload" };
-                super::super::reconcile_highlight_capture_mode(self.state, self.session, source);
-            }
-        }
-    }
-
-    fn commit_preload(&self, _context: &ActionContext) -> Result<Option<String>, String> {
-        let committed = super::super::commit_preload(self.state, self.session)?;
-        Ok(committed
-            .get("warnings")
-            .and_then(serde_json::Value::as_array)
-            .map(|warnings| {
-                warnings
-                    .iter()
-                    .filter_map(serde_json::Value::as_str)
-                    .collect::<Vec<_>>()
-                    .join("; ")
-            })
-            .filter(|warning| !warning.is_empty()))
-    }
 }
 
 fn action_error(error: ActionError) -> ApiError {

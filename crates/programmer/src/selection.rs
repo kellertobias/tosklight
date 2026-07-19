@@ -4,7 +4,7 @@ use light_core::{FixtureId, SessionId};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SelectionRule {
     All,
@@ -135,7 +135,66 @@ pub struct ProgrammerSelection {
     pub gesture_open: bool,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SelectionReplaceError {
+    UnknownSession,
+    RevisionConflict { expected: u64, actual: u64 },
+}
+
 impl ProgrammerRegistry {
+    pub fn replace_selection_if_revision(
+        &self,
+        session: SessionId,
+        expected_revision: u64,
+        fixtures: impl IntoIterator<Item = FixtureId>,
+        expression: SelectionExpression,
+    ) -> Result<ProgrammerSelection, SelectionReplaceError> {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
+        if !self.sessions.read().contains_key(&session) {
+            return Err(SelectionReplaceError::UnknownSession);
+        }
+        let context = self.command_context(session);
+        let actual_revision = self
+            .selection_contexts
+            .read()
+            .get(&context)
+            .map_or(0, |selection| selection.revision);
+        if actual_revision != expected_revision {
+            return Err(SelectionReplaceError::RevisionConflict {
+                expected: expected_revision,
+                actual: actual_revision,
+            });
+        }
+        let mut seen = HashSet::new();
+        let selected = fixtures
+            .into_iter()
+            .filter(|fixture| seen.insert(*fixture))
+            .collect::<Vec<_>>();
+        if let Some(state) = self.states.write().get_mut(&self.key(session)) {
+            state.checkpoint();
+            state.selected = selected.clone();
+            state.selection_expression = Some(expression.clone());
+            state.last_activity = self.clock.now();
+        }
+        let selection = ProgrammerSelection {
+            selected,
+            expression: Some(expression),
+            revision: self.next_selection_revision(),
+            gesture_open: false,
+        };
+        self.selection_contexts.write().insert(
+            context,
+            SelectionContext {
+                selected: selection.selected.clone(),
+                expression: selection.expression.clone(),
+                revision: selection.revision,
+                gesture_open: false,
+            },
+        );
+        Ok(selection)
+    }
+
     pub fn select(&self, session: SessionId, fixtures: impl IntoIterator<Item = FixtureId>) -> u64 {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();

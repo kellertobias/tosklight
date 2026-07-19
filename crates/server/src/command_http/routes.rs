@@ -26,7 +26,7 @@ const REQUEST_ID_LIMIT: usize = 128;
 const COMMAND_LINE_LIMIT: usize = 16 * 1024;
 
 pub(crate) fn router() -> Router<AppState> {
-    Router::new()
+    let command_line = Router::new()
         .route(
             "/api/v2/desks/{desk_id}/command-line",
             get(get_command_line).put(put_command_line),
@@ -43,7 +43,8 @@ pub(crate) fn router() -> Router<AppState> {
             "/api/v2/desks/{desk_id}/programming-interaction/snapshot",
             get(get_programming_interaction),
         )
-        .layer(DefaultBodyLimit::max(32 * 1024))
+        .layer(DefaultBodyLimit::max(32 * 1024));
+    command_line.merge(super::selection_routes::router())
 }
 
 async fn get_programming_interaction(
@@ -162,7 +163,7 @@ fn respond(request_id: String, result: ProgrammingResult) -> Result<Response, Ap
     Ok(with_etag(response))
 }
 
-fn http_context(session: &Session, request_id: Option<&str>) -> ActionContext {
+pub(super) fn http_context(session: &Session, request_id: Option<&str>) -> ActionContext {
     let context = ActionContext::operator(
         session.desk.id,
         session.user.id.0,
@@ -186,7 +187,7 @@ fn authenticate_desk(
     Ok(session)
 }
 
-fn authenticate_desk_mutation(
+pub(super) fn authenticate_desk_mutation(
     state: &AppState,
     headers: &HeaderMap,
     desk_id: Uuid,
@@ -218,7 +219,7 @@ fn command_line_response(
     command_state(state, session).map(command_line_from_state)
 }
 
-fn validate_request_id(request_id: &str) -> Result<(), ApiError> {
+pub(super) fn validate_request_id(request_id: &str) -> Result<(), ApiError> {
     if request_id.trim().is_empty()
         || request_id.len() > REQUEST_ID_LIMIT
         || request_id.chars().any(char::is_control)

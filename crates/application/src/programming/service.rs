@@ -9,6 +9,8 @@ use light_programmer::{HighlightRegistry, ProgrammerRegistry};
 use parking_lot::Mutex;
 use std::sync::Arc;
 
+#[path = "service/selection.rs"]
+mod selection;
 #[path = "service/state.rs"]
 mod state;
 #[path = "service/support.rs"]
@@ -127,6 +129,12 @@ impl ProgrammingService {
             ProgrammingCommand::Preload { capture_programmer } => {
                 self.preload(session, *capture_programmer, &action.context, ports)?
             }
+            command @ (ProgrammingCommand::ReplaceSelection { .. }
+            | ProgrammingCommand::ApplySelectionGesture { .. }
+            | ProgrammingCommand::SelectGroup { .. }
+            | ProgrammingCommand::ApplySelectionRule { .. }) => {
+                self.apply_selection(session, command, &action.context, ports)?
+            }
         };
         let mutated = Snapshot::read(&self.programmers, action.context.desk_id, session)?;
         if let Some(reason) = reconciliation(&before, &mutated, &outcome) {
@@ -140,8 +148,17 @@ impl ProgrammingService {
             &before,
             &after,
         );
+        let selection = if action.command.returns_selection() {
+            Some(
+                self.programmers
+                    .selection(session)
+                    .ok_or_else(unknown_programmer)?,
+            )
+        } else {
+            None
+        };
         Ok((
-            before.result(action.context.clone(), outcome, after),
+            before.result(action.context.clone(), outcome, after, selection),
             interaction,
         ))
     }

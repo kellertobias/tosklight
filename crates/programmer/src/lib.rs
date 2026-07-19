@@ -33,8 +33,8 @@ pub use preload::PreloadPlaybackAction;
 pub use presets::{Preset, PresetAddress, PresetFamily, PresetStoreMode};
 pub use registry::ProgrammerRegistry;
 pub use selection::{
-    ProgrammerSelection, SelectionExpression, SelectionReference, SelectionRule,
-    apply_selection_rule, resolve_selection_references,
+    ProgrammerSelection, SelectionExpression, SelectionReference, SelectionReplaceError,
+    SelectionRule, apply_selection_rule, resolve_selection_references,
 };
 pub use state::{
     ProgrammerFixtureUpdate, ProgrammerGroupUpdate, ProgrammerSnapshot, ProgrammerState,

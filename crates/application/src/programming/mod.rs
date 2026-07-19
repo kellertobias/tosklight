@@ -8,11 +8,14 @@ mod service;
 pub use command::{
     CueMoveCopyChoice, CueTransferOperation, ExecutionPolicy, ProgrammingAction,
     ProgrammingChoiceOption, ProgrammingChoiceOptionId, ProgrammingCommand, ProgrammingOutcome,
-    ProgrammingResult,
+    ProgrammingResult, SelectionGestureSource,
 };
 pub use event::ProgrammingInteractionChange;
 pub use operation::{ProgrammingOperation, ProgrammingOperationResult, ProgrammingUnitOfWork};
-pub use ports::{ProgrammingExecution, ProgrammingPorts, ProgrammingReconciliation};
+pub use ports::{
+    ProgrammingExecution, ProgrammingPorts, ProgrammingReconciliation,
+    ProgrammingSelectionEnvironment, ProgrammingSelectionQuery,
+};
 pub use projection::{ProgrammingInteractionProjection, ProgrammingLiveSnapshot};
 pub use service::ProgrammingService;
 

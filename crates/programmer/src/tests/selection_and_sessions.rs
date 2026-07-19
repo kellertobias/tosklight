@@ -28,6 +28,36 @@ fn selection_revision_identifies_operations_but_ignores_value_changes() {
 }
 
 #[test]
+fn revisioned_selection_replacement_cannot_overwrite_a_concurrent_change() {
+    let registry = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    let first = FixtureId::new();
+    let second = FixtureId::new();
+    registry.start(session, UserId::new());
+    let expected = registry.selection(session).unwrap().revision;
+
+    let accepted = registry
+        .replace_selection_if_revision(session, expected, [first], SelectionExpression::Static)
+        .unwrap();
+    let rejected = registry.replace_selection_if_revision(
+        session,
+        expected,
+        [second],
+        SelectionExpression::Static,
+    );
+
+    assert_eq!(accepted.selected, vec![first]);
+    assert_eq!(
+        rejected,
+        Err(SelectionReplaceError::RevisionConflict {
+            expected,
+            actual: accepted.revision,
+        })
+    );
+    assert_eq!(registry.selection(session).unwrap(), accepted);
+}
+
+#[test]
 fn selection_projection_versions_the_gesture_boundary() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();

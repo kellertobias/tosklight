@@ -1,6 +1,7 @@
 use crate::{ActionContext, ApplicationCommand, CommandFamily};
-use light_programmer::CommandLineState;
+use light_core::FixtureId;
 use light_programmer::command_line::{CommandKey, CommandKeyPhase};
+use light_programmer::{CommandLineState, ProgrammerSelection, SelectionRule};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ExecutionPolicy {
@@ -28,6 +29,42 @@ pub enum ProgrammingCommand {
     Preload {
         capture_programmer: bool,
     },
+    ReplaceSelection {
+        fixtures: Vec<FixtureId>,
+        expected_revision: u64,
+    },
+    ApplySelectionGesture {
+        source: SelectionGestureSource,
+        remove: bool,
+    },
+    SelectGroup {
+        group_id: String,
+        frozen: bool,
+        rule: SelectionRule,
+        expected_revision: u64,
+    },
+    ApplySelectionRule {
+        rule: SelectionRule,
+    },
+}
+
+impl ProgrammingCommand {
+    pub const fn returns_selection(&self) -> bool {
+        matches!(
+            self,
+            Self::ReplaceSelection { .. }
+                | Self::ApplySelectionGesture { .. }
+                | Self::SelectGroup { .. }
+                | Self::ApplySelectionRule { .. }
+        )
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum SelectionGestureSource {
+    Fixture { fixture_id: FixtureId },
+    LiveGroup { group_id: String },
+    DereferencedGroup { group_id: String },
 }
 
 impl ApplicationCommand for ProgrammingCommand {
@@ -51,6 +88,10 @@ pub enum ProgrammingAction {
     ShiftPressed,
     ShiftReleased,
     IgnoredRelease,
+    SelectionReplaced,
+    SelectionGestureApplied,
+    GroupSelected,
+    SelectionRuleApplied,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -103,6 +144,7 @@ pub struct ProgrammingResult {
     pub command_line: CommandLineState,
     pub selection_revision_before: u64,
     pub selection_revision: u64,
+    pub selection: Option<ProgrammerSelection>,
     pub interaction_event_sequence: Option<u64>,
     pub replayed: bool,
 }

@@ -335,6 +335,10 @@ const fn changes_programmer(action: ProgrammingAction) -> bool {
             | ProgrammingAction::Undone
             | ProgrammingAction::PreloadEntered
             | ProgrammingAction::PreloadCommitted
+            | ProgrammingAction::SelectionReplaced
+            | ProgrammingAction::SelectionGestureApplied
+            | ProgrammingAction::GroupSelected
+            | ProgrammingAction::SelectionRuleApplied
     )
 }
 
@@ -347,6 +351,10 @@ const fn action_name(action: ProgrammingAction) -> &'static str {
         ProgrammingAction::Undone => "programmer.undo",
         ProgrammingAction::PreloadEntered => "preload.enter",
         ProgrammingAction::PreloadCommitted => "preload.go",
+        ProgrammingAction::SelectionReplaced => "programmer.selection.replace",
+        ProgrammingAction::SelectionGestureApplied => "programmer.selection.gesture",
+        ProgrammingAction::GroupSelected => "programmer.selection.group",
+        ProgrammingAction::SelectionRuleApplied => "programmer.selection.rule",
         _ => "programmer.command_line",
     }
 }
@@ -360,6 +368,10 @@ const fn change_categories(action: ProgrammingAction) -> &'static [&'static str]
         | ProgrammingAction::ShiftPressed
         | ProgrammingAction::ShiftReleased
         | ProgrammingAction::IgnoredRelease => &["interaction"],
+        ProgrammingAction::SelectionReplaced
+        | ProgrammingAction::SelectionGestureApplied
+        | ProgrammingAction::GroupSelected
+        | ProgrammingAction::SelectionRuleApplied => &["interaction"],
         ProgrammingAction::Executed
         | ProgrammingAction::ClearedPreload
         | ProgrammingAction::ClearedValues

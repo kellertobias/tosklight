@@ -150,6 +150,84 @@ impl CommandHttpScenario {
             .unwrap()
     }
 
+    async fn selection_action(&self, input: serde_json::Value) -> Response {
+        self.selection_action_for(self.session.desk.id, input).await
+    }
+
+    async fn selection_action_for(&self, desk_id: Uuid, input: serde_json::Value) -> Response {
+        self.raw_selection_action(desk_id, Body::from(input.to_string()))
+            .await
+    }
+
+    async fn raw_selection_action(&self, desk_id: Uuid, body: Body) -> Response {
+        self.app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/api/v2/desks/{}/programming-selection/actions",
+                    desk_id
+                ))
+                .header(
+                    header::AUTHORIZATION,
+                    format!("Bearer {}", self.token),
+                )
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(body)
+                .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+
+    async fn create_and_open_show(&self, name: &str) -> String {
+        let show = create_show(&self.app, &self.token, name).await;
+        let show_id = show["id"].as_str().unwrap().to_owned();
+        let response = self
+            .app
+            .clone()
+            .oneshot(
+                Request::post(format!("/api/v1/shows/{show_id}/open"))
+                    .header(
+                        header::AUTHORIZATION,
+                        format!("Bearer {}", self.token),
+                    )
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(r#"{"transition":"hold_current"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        show_id
+    }
+
+    async fn put_active_object(
+        &self,
+        show_id: &str,
+        kind: &str,
+        object_id: &str,
+        expected_revision: u64,
+        body: serde_json::Value,
+    ) -> Response {
+        self.app
+            .clone()
+            .oneshot(
+                Request::put(format!(
+                    "/api/v1/shows/{show_id}/objects/{kind}/{object_id}"
+                ))
+                .header(
+                    header::AUTHORIZATION,
+                    format!("Bearer {}", self.token),
+                )
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::IF_MATCH, expected_revision.to_string())
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+
     fn history_len(&self) -> usize {
         self.state
             .command_history

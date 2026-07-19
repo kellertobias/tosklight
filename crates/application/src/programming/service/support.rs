@@ -1,7 +1,10 @@
 use super::super::{ProgrammingAction, ProgrammingCommand, ProgrammingOutcome, ProgrammingResult};
 use crate::{ActionEnvelope, ActionError, ActionErrorKind};
 use light_core::SessionId;
-use light_programmer::{CommandLineReplaceError, CommandLineState, ProgrammerRegistry};
+use light_programmer::{
+    CommandLineReplaceError, CommandLineState, ProgrammerRegistry, ProgrammerSelection,
+    SelectionReplaceError,
+};
 use std::collections::{HashMap, VecDeque};
 use uuid::Uuid;
 
@@ -73,6 +76,17 @@ pub(super) fn replace_error(error: CommandLineReplaceError) -> ActionError {
     }
 }
 
+pub(super) fn selection_replace_error(error: SelectionReplaceError) -> ActionError {
+    match error {
+        SelectionReplaceError::UnknownSession => unknown_programmer(),
+        SelectionReplaceError::RevisionConflict { expected, actual } => ActionError::new(
+            ActionErrorKind::Conflict,
+            format!("selection revision conflict: expected {expected}, actual {actual}"),
+        )
+        .at_revision(actual),
+    }
+}
+
 pub(super) struct Snapshot {
     pub(super) command_line: CommandLineState,
     pub(super) selection_revision: u64,
@@ -98,6 +112,7 @@ impl Snapshot {
         context: crate::ActionContext,
         outcome: ProgrammingOutcome,
         after: Self,
+        selection: Option<ProgrammerSelection>,
     ) -> ProgrammingResult {
         ProgrammingResult {
             context,
@@ -106,6 +121,7 @@ impl Snapshot {
             command_line: after.command_line,
             selection_revision_before: self.selection_revision,
             selection_revision: after.selection_revision,
+            selection,
             interaction_event_sequence: None,
             replayed: false,
         }

@@ -65,13 +65,16 @@ pub enum ProgrammerSelectionExpression {
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub enum ProgrammerSelectionRule {
     All,
     Odd,
     Even,
     EveryNth {
+        #[schemars(range(min = 1, max = 9007199254740991_u64))]
         #[ts(type = "number")]
         n: u64,
+        #[schemars(range(max = 9007199254740991_u64))]
         #[ts(type = "number")]
         offset: u64,
     },

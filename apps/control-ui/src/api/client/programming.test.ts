@@ -25,6 +25,7 @@ function interactionSnapshot() {
 				selected: [FIXTURE_ID],
 				expression: { type: "static" },
 				revision: 3,
+				gesture_open: false,
 			},
 		},
 	};
@@ -50,6 +51,7 @@ function decodedInteractionSnapshot() {
 				selected: [FIXTURE_ID],
 				expression: { type: "static" },
 				revision: 3,
+				gestureOpen: false,
 			},
 		},
 	};
@@ -101,5 +103,45 @@ describe("ProgrammingApiClient v2 interaction boundary", () => {
 		expect(init.method).toBe("PUT");
 		expect(new Headers(init.headers).get("if-match")).toBe("4");
 		expect(JSON.parse(String(init.body))).toEqual({ text: "FIXTURE 8" });
+	});
+
+	it("posts a typed selection action and validates its authority", async () => {
+		const response = {
+			request_id: "selection-1",
+			correlation_id: "33333333-3333-4333-8333-333333333333",
+			action: "replaced",
+			applied: 1,
+			selection: interactionSnapshot().projection.selection,
+			event_sequence: 13,
+			replayed: false,
+		};
+		const { client, request } = clientReturning(response);
+
+		await expect(
+			client.applyProgrammingSelection(DESK_ID, {
+				requestId: "selection-1",
+				action: {
+					type: "replace",
+					fixtures: [FIXTURE_ID],
+					expectedRevision: 2,
+				},
+			}),
+		).resolves.toMatchObject({
+			requestId: "selection-1",
+			action: "replaced",
+			selection: { selected: [FIXTURE_ID], gestureOpen: false },
+			eventSequence: 13,
+			warning: null,
+		});
+		const [path, init] = request.mock.calls[0];
+		expect(path).toBe(
+			`/api/v2/desks/${DESK_ID}/programming-selection/actions`,
+		);
+		expect(JSON.parse(String(init?.body))).toEqual({
+			request_id: "selection-1",
+			action: "replace",
+			fixtures: [FIXTURE_ID],
+			expected_revision: 2,
+		});
 	});
 });

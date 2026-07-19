@@ -1915,6 +1915,7 @@
               "const": "all"
             }
           },
+          "additionalProperties": false,
           "required": [
             "type"
           ]
@@ -1927,6 +1928,7 @@
               "const": "odd"
             }
           },
+          "additionalProperties": false,
           "required": [
             "type"
           ]
@@ -1939,6 +1941,7 @@
               "const": "even"
             }
           },
+          "additionalProperties": false,
           "required": [
             "type"
           ]
@@ -1949,11 +1952,13 @@
             "n": {
               "type": "integer",
               "format": "uint64",
-              "minimum": 0
+              "maximum": 9007199254740991,
+              "minimum": 1
             },
             "offset": {
               "type": "integer",
               "format": "uint64",
+              "maximum": 9007199254740991,
               "minimum": 0
             },
             "type": {
@@ -1961,6 +1966,7 @@
               "const": "every_nth"
             }
           },
+          "additionalProperties": false,
           "required": [
             "type",
             "n",

@@ -46,7 +46,7 @@ pub(in crate::runtime) fn interaction_change(
     }
 }
 
-fn selection_projection(
+pub(super) fn selection_projection(
     selection: &light_programmer::ProgrammerSelection,
 ) -> wire::ProgrammerSelectionProjection {
     wire::ProgrammerSelectionProjection {

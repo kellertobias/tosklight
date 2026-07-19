@@ -341,3 +341,13 @@ export type ProgrammingInteractionProjection = { desk_id: string, command_line: 
 export type ProgrammingInteractionChange = { desk_id: string, command_line: CommandLineResponse, selection: ProgrammerSelectionProjection, } | { desk_id: string, command_line: CommandLineResponse, } | { desk_id: string, selection: ProgrammerSelectionProjection, };
 
 export type ProgrammingInteractionSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingInteractionProjection, };
+
+export type ProgrammingSelectionGestureSource = { "type": "fixture", fixture_id: string, } | { "type": "live_group", group_id: string, } | { "type": "dereferenced_group", group_id: string, };
+
+export type ProgrammingSelectionAction = { "action": "replace", fixtures: Array<string>, expected_revision: number, } | { "action": "gesture", source: ProgrammingSelectionGestureSource, remove: boolean, } | { "action": "select_group", group_id: string, frozen: boolean, rule: ProgrammerSelectionRule, expected_revision: number, } | { "action": "apply_rule", rule: ProgrammerSelectionRule, };
+
+export type ProgrammingSelectionActionRequest = { request_id: string, } & ({ "action": "replace", fixtures: Array<string>, expected_revision: number, } | { "action": "gesture", source: ProgrammingSelectionGestureSource, remove: boolean, } | { "action": "select_group", group_id: string, frozen: boolean, rule: ProgrammerSelectionRule, expected_revision: number, } | { "action": "apply_rule", rule: ProgrammerSelectionRule, });
+
+export type ProgrammingSelectionAcceptedAction = "replaced" | "gesture_applied" | "group_selected" | "rule_applied";
+
+export type ProgrammingSelectionActionOutcome = { request_id: string, correlation_id: string, action: ProgrammingSelectionAcceptedAction, applied: number, selection: ProgrammerSelectionProjection, event_sequence: number, replayed: boolean, warning?: string | null, };

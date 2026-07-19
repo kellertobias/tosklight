@@ -1,149 +1,51 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "ProgrammingInteractionSnapshot",
-  "description": "Narrow repair snapshot for one desk's interaction stream.",
+  "title": "ProgrammingSelectionActionOutcome",
   "type": "object",
   "properties": {
-    "cursor": {
-      "$ref": "#/$defs/EventSnapshotCursor"
+    "action": {
+      "$ref": "#/$defs/ProgrammingSelectionAcceptedAction"
     },
-    "projection": {
-      "$ref": "#/$defs/ProgrammingInteractionProjection"
+    "applied": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "event_sequence": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "replayed": {
+      "type": "boolean"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "selection": {
+      "$ref": "#/$defs/ProgrammerSelectionProjection"
+    },
+    "warning": {
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
   "required": [
-    "cursor",
-    "projection"
+    "request_id",
+    "correlation_id",
+    "action",
+    "applied",
+    "selection",
+    "event_sequence",
+    "replayed"
   ],
   "$defs": {
-    "CommandChoiceOption": {
-      "type": "object",
-      "properties": {
-        "command": {
-          "type": "string"
-        },
-        "id": {
-          "$ref": "#/$defs/CommandChoiceOptionId"
-        },
-        "label": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "label",
-        "command"
-      ]
-    },
-    "CommandChoiceOptionId": {
-      "type": "string",
-      "enum": [
-        "plain",
-        "status"
-      ]
-    },
-    "CommandLineResponse": {
-      "description": "One authoritative command-line projection and its optimistic-concurrency revision.",
-      "type": "object",
-      "properties": {
-        "pending_choice": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/CueMoveCopyChoice"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "pristine": {
-          "type": "boolean"
-        },
-        "revision": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "target": {
-          "$ref": "#/$defs/CommandTarget"
-        },
-        "text": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "text",
-        "target",
-        "pristine",
-        "revision",
-        "pending_choice"
-      ]
-    },
-    "CommandTarget": {
-      "description": "The desk-local default scope used when an operator starts a command.",
-      "type": "string",
-      "enum": [
-        "FIXTURE",
-        "GROUP"
-      ]
-    },
-    "CueMoveCopyChoice": {
-      "description": "Choice presented when Cue copy or move semantics would otherwise be ambiguous.",
-      "type": "object",
-      "properties": {
-        "cancel_label": {
-          "type": "string"
-        },
-        "command": {
-          "type": "string"
-        },
-        "operation": {
-          "$ref": "#/$defs/CueTransferOperation"
-        },
-        "options": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/CommandChoiceOption"
-          }
-        },
-        "type": {
-          "$ref": "#/$defs/CueMoveCopyChoiceType"
-        }
-      },
-      "required": [
-        "type",
-        "operation",
-        "command",
-        "options",
-        "cancel_label"
-      ]
-    },
-    "CueMoveCopyChoiceType": {
-      "type": "string",
-      "enum": [
-        "cue_move_copy"
-      ]
-    },
-    "CueTransferOperation": {
-      "type": "string",
-      "enum": [
-        "copy",
-        "move"
-      ]
-    },
-    "EventSnapshotCursor": {
-      "type": "object",
-      "properties": {
-        "sequence": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        }
-      },
-      "required": [
-        "sequence"
-      ]
-    },
     "ProgrammerSelectionExpression": {
       "oneOf": [
         {
@@ -417,25 +319,13 @@
         }
       ]
     },
-    "ProgrammingInteractionProjection": {
-      "description": "Authoritative interaction context shared by every control surface attached to one desk.",
-      "type": "object",
-      "properties": {
-        "command_line": {
-          "$ref": "#/$defs/CommandLineResponse"
-        },
-        "desk_id": {
-          "type": "string",
-          "format": "uuid"
-        },
-        "selection": {
-          "$ref": "#/$defs/ProgrammerSelectionProjection"
-        }
-      },
-      "required": [
-        "desk_id",
-        "command_line",
-        "selection"
+    "ProgrammingSelectionAcceptedAction": {
+      "type": "string",
+      "enum": [
+        "replaced",
+        "gesture_applied",
+        "group_selected",
+        "rule_applied"
       ]
     }
   }

@@ -49,7 +49,7 @@ pub(super) fn operation_response(
     })
 }
 
-const fn wire_action(action: ProgrammingAction) -> CommandAcceptedAction {
+fn wire_action(action: ProgrammingAction) -> CommandAcceptedAction {
     match action {
         ProgrammingAction::Edited => CommandAcceptedAction::Edited,
         ProgrammingAction::Executed => CommandAcceptedAction::Executed,
@@ -64,6 +64,12 @@ const fn wire_action(action: ProgrammingAction) -> CommandAcceptedAction {
         ProgrammingAction::ShiftPressed => CommandAcceptedAction::ShiftPressed,
         ProgrammingAction::ShiftReleased => CommandAcceptedAction::ShiftReleased,
         ProgrammingAction::IgnoredRelease => CommandAcceptedAction::IgnoredRelease,
+        ProgrammingAction::SelectionReplaced
+        | ProgrammingAction::SelectionGestureApplied
+        | ProgrammingAction::GroupSelected
+        | ProgrammingAction::SelectionRuleApplied => {
+            unreachable!("selection actions use the selection response contract")
+        }
     }
 }
 

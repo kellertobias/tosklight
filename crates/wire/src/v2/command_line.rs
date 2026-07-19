@@ -2,8 +2,11 @@
 
 #[path = "command_line/interaction.rs"]
 mod interaction;
+#[path = "command_line/selection.rs"]
+mod selection;
 
 pub use interaction::*;
+pub use selection::*;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

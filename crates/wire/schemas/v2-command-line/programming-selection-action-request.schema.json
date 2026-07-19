@@ -1,0 +1,235 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProgrammingSelectionActionRequest",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string"
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "replace"
+        },
+        "expected_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "fixtures": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "required": [
+        "action",
+        "fixtures",
+        "expected_revision"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "gesture"
+        },
+        "remove": {
+          "type": "boolean"
+        },
+        "source": {
+          "$ref": "#/$defs/ProgrammingSelectionGestureSource"
+        }
+      },
+      "required": [
+        "action",
+        "source",
+        "remove"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "select_group"
+        },
+        "expected_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "frozen": {
+          "type": "boolean"
+        },
+        "group_id": {
+          "type": "string"
+        },
+        "rule": {
+          "$ref": "#/$defs/ProgrammerSelectionRule"
+        }
+      },
+      "required": [
+        "action",
+        "group_id",
+        "frozen",
+        "rule",
+        "expected_revision"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "apply_rule"
+        },
+        "rule": {
+          "$ref": "#/$defs/ProgrammerSelectionRule"
+        }
+      },
+      "required": [
+        "action",
+        "rule"
+      ]
+    }
+  ],
+  "required": [
+    "request_id"
+  ],
+  "$defs": {
+    "ProgrammerSelectionRule": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "all"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "odd"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "even"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "n": {
+              "type": "integer",
+              "format": "uint64",
+              "maximum": 9007199254740991,
+              "minimum": 1
+            },
+            "offset": {
+              "type": "integer",
+              "format": "uint64",
+              "maximum": 9007199254740991,
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "every_nth"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "n",
+            "offset"
+          ]
+        }
+      ]
+    },
+    "ProgrammingSelectionGestureSource": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "fixture_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": {
+              "type": "string",
+              "const": "fixture"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "fixture_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "live_group"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "group_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "dereferenced_group"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "group_id"
+          ]
+        }
+      ]
+    }
+  }
+}

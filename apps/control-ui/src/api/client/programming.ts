@@ -2,11 +2,17 @@ import type { PresetAddress } from "../../presetFamilies";
 import type {
 	CommandLineProjection,
 	ProgrammingSnapshot,
+	SelectionActionOutcome,
+	SelectionActionRequest,
 } from "../../features/programmingInteraction/contracts";
 import {
 	decodeProgrammingCommandLine,
 	decodeProgrammingInteractionSnapshot,
 } from "../programmingWire";
+import {
+	decodeSelectionActionOutcome,
+	encodeSelectionActionRequest,
+} from "../programmingSelectionWire";
 import type {
 	AttributeValue,
 	GeneratedFixturePresetResult,
@@ -51,6 +57,17 @@ export class ProgrammingApiClient {
 			{ ...init, headers },
 		);
 		return decodeProgrammingCommandLine(value);
+	}
+
+	async applyProgrammingSelection(
+		deskId: string,
+		request: SelectionActionRequest,
+	): Promise<SelectionActionOutcome> {
+		const value = await this.transport.request<unknown>(
+			`/api/v2/desks/${encodeURIComponent(deskId)}/programming-selection/actions`,
+			jsonRequest("POST", encodeSelectionActionRequest(request)),
+		);
+		return decodeSelectionActionOutcome(value, request.requestId);
 	}
 
 	programmers(): Promise<ProgrammerState[]> {

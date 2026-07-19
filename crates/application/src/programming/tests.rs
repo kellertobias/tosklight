@@ -14,6 +14,7 @@ struct TestPorts {
     executions: AtomicUsize,
     persisted: Mutex<Vec<&'static str>>,
     persistence_warning: Mutex<Option<String>>,
+    selection_environment: Mutex<ProgrammingSelectionEnvironment>,
 }
 
 impl ProgrammingPorts for TestPorts {
@@ -45,6 +46,14 @@ impl ProgrammingPorts for TestPorts {
     fn persist(&self, _context: &ActionContext, operation: &'static str) -> Option<String> {
         self.persisted.lock().push(operation);
         self.persistence_warning.lock().clone()
+    }
+
+    fn selection_environment(
+        &self,
+        _context: &ActionContext,
+        _query: &ProgrammingSelectionQuery,
+    ) -> Result<ProgrammingSelectionEnvironment, crate::ActionError> {
+        Ok(self.selection_environment.lock().clone())
     }
 
     fn reconcile(&self, _context: &ActionContext, _reason: ProgrammingReconciliation) {}
@@ -371,4 +380,195 @@ fn rejected_supplied_execution_retains_the_command() {
         ProgrammingOutcome::Rejected { .. }
     ));
     assert_eq!(result.command_line.visible_text(), "REJECT");
+}
+
+#[test]
+fn selection_replacement_is_revisioned_expands_heads_and_returns_authority() {
+    let harness = Harness::new(ActionSource::UserInterface);
+    let session = SessionId(harness.context.session_id.unwrap());
+    let parent = FixtureId::new();
+    let first_head = FixtureId::new();
+    let second_head = FixtureId::new();
+    let mut environment = harness.ports.selection_environment.lock();
+    environment
+        .selectable_fixtures
+        .insert(parent, vec![first_head, second_head]);
+    environment
+        .selectable_fixtures
+        .insert(first_head, vec![first_head]);
+    drop(environment);
+    let expected_revision = harness.registry.selection(session).unwrap().revision;
+
+    let result = harness.handle(ProgrammingCommand::ReplaceSelection {
+        fixtures: vec![parent, first_head],
+        expected_revision,
+    });
+
+    assert!(matches!(
+        result.outcome,
+        ProgrammingOutcome::Accepted {
+            action: ProgrammingAction::SelectionReplaced,
+            applied: Some(2),
+            ..
+        }
+    ));
+    let selection = result.selection.unwrap();
+    assert_eq!(selection.selected, vec![first_head, second_head]);
+    assert_eq!(
+        selection.expression,
+        Some(light_programmer::SelectionExpression::Static)
+    );
+    assert!(!selection.gesture_open);
+    assert_eq!(result.interaction_event_sequence, Some(1));
+    assert_eq!(
+        harness.ports.persisted.lock().as_slice(),
+        ["programmer.selection.replace"]
+    );
+}
+
+#[test]
+fn stale_selection_replacement_does_not_mutate_persist_or_publish() {
+    let harness = Harness::new(ActionSource::UserInterface);
+    let session = SessionId(harness.context.session_id.unwrap());
+    let fixture = FixtureId::new();
+    harness
+        .ports
+        .selection_environment
+        .lock()
+        .selectable_fixtures
+        .insert(fixture, vec![fixture]);
+    let expected_revision = harness.registry.selection(session).unwrap().revision;
+    harness.handle(ProgrammingCommand::ReplaceSelection {
+        fixtures: vec![fixture],
+        expected_revision,
+    });
+
+    let rejected = harness.service.handle(
+        ActionEnvelope {
+            context: harness.context.clone(),
+            command: ProgrammingCommand::ReplaceSelection {
+                fixtures: Vec::new(),
+                expected_revision,
+            },
+        },
+        &harness.ports,
+    );
+
+    let error = rejected.unwrap_err();
+    assert_eq!(error.kind, ActionErrorKind::Conflict);
+    assert_eq!(
+        error.current_revision,
+        harness.registry.selection(session).map(|s| s.revision)
+    );
+    assert_eq!(
+        harness.registry.selection(session).unwrap().selected,
+        vec![fixture]
+    );
+    assert_eq!(
+        harness.ports.persisted.lock().as_slice(),
+        ["programmer.selection.replace"]
+    );
+    assert_eq!(harness.service.events().latest_sequence(), 1);
+}
+
+#[test]
+fn selection_gestures_and_rules_preserve_ordered_group_semantics() {
+    let harness = Harness::new(ActionSource::UserInterface);
+    let first = FixtureId::new();
+    let second = FixtureId::new();
+    let third = FixtureId::new();
+    let mut environment = harness.ports.selection_environment.lock();
+    for fixture in [first, second, third] {
+        environment
+            .selectable_fixtures
+            .insert(fixture, vec![fixture]);
+    }
+    environment.groups.insert(
+        "1".into(),
+        light_programmer::GroupDefinition {
+            id: "1".into(),
+            fixtures: vec![second, first, third],
+            ..Default::default()
+        },
+    );
+    drop(environment);
+
+    harness.handle(ProgrammingCommand::ApplySelectionGesture {
+        source: SelectionGestureSource::Fixture { fixture_id: first },
+        remove: false,
+    });
+    let group = harness.handle(ProgrammingCommand::ApplySelectionGesture {
+        source: SelectionGestureSource::LiveGroup {
+            group_id: "1".into(),
+        },
+        remove: false,
+    });
+    let selected = group.selection.unwrap();
+    assert_eq!(selected.selected, vec![first, second, third]);
+    assert!(selected.gesture_open);
+    assert!(matches!(
+        selected.expression,
+        Some(light_programmer::SelectionExpression::Sources { .. })
+    ));
+
+    let ruled = harness.handle(ProgrammingCommand::ApplySelectionRule {
+        rule: light_programmer::SelectionRule::Even,
+    });
+    let selection = ruled.selection.unwrap();
+    assert_eq!(selection.selected, vec![second]);
+    assert_eq!(
+        selection.expression,
+        Some(light_programmer::SelectionExpression::Static)
+    );
+    assert!(!selection.gesture_open);
+}
+
+#[test]
+fn live_and_frozen_group_selection_use_the_compiled_show_revision() {
+    let harness = Harness::new(ActionSource::Http);
+    let session = SessionId(harness.context.session_id.unwrap());
+    let fixtures = vec![FixtureId::new(), FixtureId::new(), FixtureId::new()];
+    let mut environment = harness.ports.selection_environment.lock();
+    environment.show_revision = 42;
+    environment.groups.insert(
+        "7".into(),
+        light_programmer::GroupDefinition {
+            id: "7".into(),
+            fixtures: fixtures.clone(),
+            ..Default::default()
+        },
+    );
+    drop(environment);
+
+    let live_revision = harness.registry.selection(session).unwrap().revision;
+    let live = harness.handle(ProgrammingCommand::SelectGroup {
+        group_id: "7".into(),
+        frozen: false,
+        rule: light_programmer::SelectionRule::Odd,
+        expected_revision: live_revision,
+    });
+    assert_eq!(
+        live.selection.as_ref().unwrap().selected,
+        vec![fixtures[0], fixtures[2]]
+    );
+    assert!(matches!(
+        live.selection.unwrap().expression,
+        Some(light_programmer::SelectionExpression::LiveGroup { .. })
+    ));
+
+    let frozen_revision = harness.registry.selection(session).unwrap().revision;
+    let frozen = harness.handle(ProgrammingCommand::SelectGroup {
+        group_id: "7".into(),
+        frozen: true,
+        rule: light_programmer::SelectionRule::All,
+        expected_revision: frozen_revision,
+    });
+    assert_eq!(frozen.selection.as_ref().unwrap().selected, fixtures);
+    assert_eq!(
+        frozen.selection.unwrap().expression,
+        Some(light_programmer::SelectionExpression::FrozenGroup {
+            group_id: "7".into(),
+            source_revision: 42,
+        })
+    );
 }
