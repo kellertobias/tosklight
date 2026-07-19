@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LightApiClient, defaultServerUrl } from "./LightApiClient";
+import { defaultServerUrl, LightApiClient } from "./LightApiClient";
 
 beforeEach(() => {
 	const values = new Map<string, string>();
@@ -19,7 +19,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-describe("LightApiClient", () => {
+describe("LightApiClient server selection and sessions", () => {
 	it("uses same-origin in a browser and the loopback daemon in Tauri", () => {
 		expect(
 			defaultServerUrl(new URL("http://desk.local/") as unknown as Location),
@@ -44,19 +44,17 @@ describe("LightApiClient", () => {
 		sessionStorage.setItem("light.test-server-url", "http://127.0.0.1:64649");
 		vi.stubGlobal(
 			"fetch",
-			vi
-				.fn()
-				.mockResolvedValue(
-					new Response(
-						JSON.stringify({
-							session_id: "session-a",
-							token: "token-a",
-							user: { id: "user-a", name: "Operator", enabled: true },
-							desk: { id: "desk-a" },
-						}),
-						{ status: 200, headers: { "content-type": "application/json" } },
-					),
+			vi.fn().mockResolvedValue(
+				new Response(
+					JSON.stringify({
+						session_id: "session-a",
+						token: "token-a",
+						user: { id: "user-a", name: "Operator", enabled: true },
+						desk: { id: "desk-a" },
+					}),
+					{ status: 200, headers: { "content-type": "application/json" } },
 				),
+			),
 		);
 		await new LightApiClient().login("Operator");
 		expect(sessionStorage.getItem("light.client-id")).toEqual(
@@ -134,6 +132,9 @@ describe("LightApiClient", () => {
 		expect(headers.get("if-match")).toBe("7");
 		expect(headers.get("authorization")).toBe("Bearer token-a");
 	});
+});
+
+describe("LightApiClient programmer and preset contracts", () => {
 	it("uses typed programmer, fixture-action, and opt-in preset-generation commands", async () => {
 		const client = new LightApiClient("http://desk.local");
 		const command = vi
@@ -217,6 +218,9 @@ describe("LightApiClient", () => {
 			preset: { family: "Position", number: 1 },
 		});
 	});
+});
+
+describe("LightApiClient show lifecycle contracts", () => {
 	it("creates named revisions, loads them as copies, and overwrites by stable IDs", async () => {
 		const fetchMock = vi
 			.fn()
@@ -308,6 +312,9 @@ describe("LightApiClient", () => {
 			name: "Opening Night",
 		});
 	});
+});
+
+describe("LightApiClient Update contracts", () => {
 	it("uses the desk-scoped Update settings, preview, apply, and eligible-target contracts", async () => {
 		const settings = {
 			cue_mode: "add_to_current_cue" as const,
@@ -400,19 +407,20 @@ describe("LightApiClient", () => {
 			expected_programmer_revision: "programmer-a",
 		});
 	});
+});
+
+describe("LightApiClient authenticated desk services", () => {
 	it("sends the optional desk boundary token before login", async () => {
-		const fetchMock = vi
-			.fn()
-			.mockResolvedValue(
-				new Response(
-					JSON.stringify({
-						session_id: "session-a",
-						token: "token-a",
-						user: { id: "user-a", name: "Operator", enabled: true },
-					}),
-					{ status: 200, headers: { "content-type": "application/json" } },
-				),
-			);
+		const fetchMock = vi.fn().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					session_id: "session-a",
+					token: "token-a",
+					user: { id: "user-a", name: "Operator", enabled: true },
+				}),
+				{ status: 200, headers: { "content-type": "application/json" } },
+			),
+		);
 		vi.stubGlobal("fetch", fetchMock);
 		const client = new LightApiClient("http://desk.local");
 		client.setDeskToken("desk secret");
@@ -513,7 +521,9 @@ describe("LightApiClient", () => {
 			captured_at_millis: 101,
 		});
 	});
+});
 
+describe("LightApiClient Highlight contracts", () => {
 	it("reads and changes server-authoritative Highlight state", async () => {
 		const state = {
 			active: true,
@@ -577,7 +587,9 @@ describe("LightApiClient", () => {
 			fixture_ids: ["fixture-a", "fixture-b"],
 		});
 	});
+});
 
+describe("LightApiClient fixture-profile contracts", () => {
 	it("uses the desk-wide fixture-profile revision contract", async () => {
 		const profile = {
 			schema_version: 2 as const,
