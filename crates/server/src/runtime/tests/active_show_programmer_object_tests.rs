@@ -260,3 +260,422 @@ async fn put_active_object(
         .await
         .unwrap()
 }
+
+struct ActiveObjectScenario {
+    state: AppState,
+    data_dir: PathBuf,
+    show_path: PathBuf,
+    session: Session,
+}
+
+impl ActiveObjectScenario {
+    fn new(name: &str, seed: impl FnOnce(&ShowStore)) -> Self {
+        let (state, data_dir) = test_state();
+        let user = state.desk.lock().users().unwrap().remove(0);
+        let session = Session {
+            id: SessionId::new(),
+            user: user.clone(),
+            token: format!("{}-operator", name.replace(' ', "-")),
+            connected: true,
+            desk: test_control_desk(),
+        };
+        state.programmers.start(session.id, user.id);
+        attach_session_command_context(&state, &session);
+        state.sessions.write().insert(session.id, session.clone());
+
+        let show_path = data_dir.join("shows").join(format!(
+            "{}-{}.show",
+            name.replace(' ', "-"),
+            Uuid::new_v4()
+        ));
+        let show_id = initialise_show(&show_path, name).unwrap();
+        let store = ShowStore::open(&show_path).unwrap();
+        seed(&store);
+        let entry = ShowEntry {
+            id: show_id,
+            name: name.into(),
+            path: show_path.display().to_string(),
+            revision: 0,
+            updated_at: String::new(),
+            revision_copy: None,
+        };
+        *state.active_show.write() = Some(entry.clone());
+        state
+            .engine
+            .replace_snapshot(load_engine_snapshot(&entry).unwrap())
+            .unwrap();
+
+        Self {
+            state,
+            data_dir,
+            show_path,
+            session,
+        }
+    }
+
+    fn store(&self) -> ShowStore {
+        ShowStore::open(&self.show_path).unwrap()
+    }
+
+    fn boundary(&self) -> MutationBoundary {
+        MutationBoundary {
+            show_revision: self.store().portable_document().unwrap().revision().value(),
+            backup_count: show_object_backup_count(&self.data_dir),
+            runtime: self.state.engine.snapshot(),
+        }
+    }
+
+    fn assert_one_commit(&self, before: &MutationBoundary) {
+        let document = self.store().portable_document().unwrap();
+        assert_eq!(document.revision().value(), before.show_revision + 1);
+        assert_eq!(
+            show_object_backup_count(&self.data_dir),
+            before.backup_count + 1
+        );
+        let runtime = self.state.engine.snapshot();
+        assert_eq!(runtime.revision, document.revision().value());
+        assert!(!std::sync::Arc::ptr_eq(&runtime, &before.runtime));
+    }
+
+    fn assert_unchanged(&self, before: &MutationBoundary) {
+        assert_eq!(
+            self.store().portable_document().unwrap().revision().value(),
+            before.show_revision
+        );
+        assert_eq!(
+            show_object_backup_count(&self.data_dir),
+            before.backup_count
+        );
+        assert!(std::sync::Arc::ptr_eq(
+            &self.state.engine.snapshot(),
+            &before.runtime
+        ));
+    }
+}
+
+impl Drop for ActiveObjectScenario {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.data_dir);
+    }
+}
+
+struct MutationBoundary {
+    show_revision: u64,
+    backup_count: usize,
+    runtime: std::sync::Arc<EngineSnapshot>,
+}
+
+fn show_object_backup_count(data_dir: &std::path::Path) -> usize {
+    std::fs::read_dir(data_dir.join("backups"))
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_str()
+                .is_some_and(|name| name.contains("-show-object-"))
+        })
+        .count()
+}
+
+fn stored_object(store: &ShowStore, kind: &str, id: &str) -> Option<light_show::VersionedObject> {
+    store
+        .objects(kind)
+        .unwrap()
+        .into_iter()
+        .find(|object| object.id == id)
+}
+
+fn preset_body(
+    name: &str,
+    family: light_programmer::PresetFamily,
+    number: u32,
+) -> serde_json::Value {
+    serde_json::to_value(light_programmer::Preset {
+        name: name.into(),
+        family,
+        number,
+        ..Default::default()
+    })
+    .unwrap()
+}
+
+#[test]
+fn record_and_delete_commands_each_cross_one_active_show_boundary() {
+    let scenario = ActiveObjectScenario::new("Record delete boundary", |_| {});
+    let fixtures = [light_core::FixtureId::new(), light_core::FixtureId::new()];
+    scenario
+        .state
+        .programmers
+        .select(scenario.session.id, fixtures);
+
+    let before_group_record = scenario.boundary();
+    assert_eq!(
+        execute_programmer_command(&scenario.state, &scenario.session, "RECORD GROUP 71").unwrap(),
+        2
+    );
+    scenario.assert_one_commit(&before_group_record);
+    assert_eq!(
+        stored_object(&scenario.store(), "group", "71")
+            .unwrap()
+            .body["fixtures"],
+        serde_json::json!(fixtures)
+    );
+    assert!(
+        scenario
+            .state
+            .engine
+            .snapshot()
+            .groups
+            .iter()
+            .any(|group| group.id == "71" && group.fixtures == fixtures)
+    );
+
+    let before_group_delete = scenario.boundary();
+    assert_eq!(
+        execute_programmer_command(&scenario.state, &scenario.session, "DELETE GROUP 71").unwrap(),
+        1
+    );
+    scenario.assert_one_commit(&before_group_delete);
+    assert!(stored_object(&scenario.store(), "group", "71").is_none());
+    assert!(
+        scenario
+            .state
+            .engine
+            .snapshot()
+            .groups
+            .iter()
+            .all(|group| group.id != "71")
+    );
+
+    scenario.state.programmers.set(
+        scenario.session.id,
+        fixtures[0],
+        light_core::AttributeKey("pan".into()),
+        light_core::AttributeValue::Normalized(0.4),
+    );
+    let before_preset_record = scenario.boundary();
+    assert_eq!(
+        execute_programmer_command(&scenario.state, &scenario.session, "RECORD 0.7").unwrap(),
+        1
+    );
+    scenario.assert_one_commit(&before_preset_record);
+    assert!(stored_object(&scenario.store(), "preset", "0.7").is_some());
+
+    let before_preset_delete = scenario.boundary();
+    assert_eq!(
+        execute_programmer_command(&scenario.state, &scenario.session, "DELETE 0.7").unwrap(),
+        1
+    );
+    scenario.assert_one_commit(&before_preset_delete);
+    assert!(stored_object(&scenario.store(), "preset", "0.7").is_none());
+}
+
+#[test]
+fn preset_move_commits_destination_and_source_delete_atomically() {
+    let scenario = ActiveObjectScenario::new("Preset move boundary", |store| {
+        for (id, number, name) in [("2.1", 1, "Source"), ("2.2", 2, "Blocked source")] {
+            store
+                .put_object(
+                    "preset",
+                    id,
+                    &preset_body(name, light_programmer::PresetFamily::Color, number),
+                    0,
+                )
+                .unwrap();
+        }
+        store
+            .put_object(
+                "preset",
+                "2.6",
+                &preset_body("Occupied", light_programmer::PresetFamily::Color, 6),
+                0,
+            )
+            .unwrap();
+    });
+
+    let before_move = scenario.boundary();
+    assert_eq!(
+        execute_programmer_command(&scenario.state, &scenario.session, "MOVE 2.1 AT 5").unwrap(),
+        1
+    );
+    scenario.assert_one_commit(&before_move);
+    let store = scenario.store();
+    assert!(stored_object(&store, "preset", "2.1").is_none());
+    let destination = stored_object(&store, "preset", "2.5").unwrap();
+    assert_eq!(destination.body["name"], "Source");
+    assert_eq!(destination.body["number"], 5);
+
+    let before_conflict = scenario.boundary();
+    let error = execute_programmer_command(&scenario.state, &scenario.session, "MOVE 2.2 AT 6")
+        .unwrap_err();
+    assert!(error.contains("already exists"));
+    scenario.assert_unchanged(&before_conflict);
+    let store = scenario.store();
+    assert_eq!(
+        stored_object(&store, "preset", "2.2").unwrap().body["name"],
+        "Blocked source"
+    );
+    assert_eq!(
+        stored_object(&store, "preset", "2.6").unwrap().body["name"],
+        "Occupied"
+    );
+
+    let before_stale_batch = scenario.boundary();
+    let show_id = scenario.state.active_show.read().as_ref().unwrap().id;
+    let _activation = scenario
+        .state
+        .activation_lock
+        .clone()
+        .try_lock_owned()
+        .unwrap();
+    let stale_move = active_show_object_action(
+        operator_action_context(&scenario.session, light_application::ActionSource::Http),
+        show_id,
+        vec![
+            put_active_show_object(
+                light_application::ActiveShowObjectKind::Preset,
+                "2.8",
+                0,
+                preset_body("Must not survive", light_programmer::PresetFamily::Color, 8),
+            ),
+            delete_active_show_object(light_application::ActiveShowObjectKind::Preset, "2.2", 99),
+        ],
+    );
+    let error = run_active_show_object_action(&scenario.state, stale_move).unwrap_err();
+    assert_eq!(error.status, StatusCode::CONFLICT);
+    scenario.assert_unchanged(&before_stale_batch);
+    assert!(stored_object(&scenario.store(), "preset", "2.8").is_none());
+    assert!(stored_object(&scenario.store(), "preset", "2.2").is_some());
+}
+
+#[test]
+fn generated_presets_share_one_show_commit_backup_and_runtime_install() {
+    let mut fixture = schema_v2_direct_fixture().0;
+    let mode_id = fixture.definition.mode_id.unwrap();
+    let mut profile = fixture.definition.profile_snapshot.take().unwrap();
+    let channel = &mut profile.modes[0].channels[0];
+    channel.functions.push(light_fixture::ChannelFunction {
+        id: Uuid::new_v4(),
+        name: "Open".into(),
+        dmx_from: 128,
+        dmx_to: 255,
+        attribute: light_core::AttributeKey("gobo.1".into()),
+        priority: 100,
+        behavior: light_fixture::ChannelFunctionBehavior::Indexed {
+            semantic_id: "gobo.open".into(),
+            label: "Open".into(),
+            raw_value: 200,
+        },
+    });
+    fixture.definition = profile.resolved_definition(mode_id).unwrap();
+    let fixture_id = fixture.fixture_id;
+    let scenario = ActiveObjectScenario::new("Generated preset boundary", |store| {
+        store
+            .put_object(
+                "patched_fixture",
+                &fixture_id.0.to_string(),
+                &serde_json::to_value(fixture).unwrap(),
+                0,
+            )
+            .unwrap();
+    });
+
+    let before = scenario.boundary();
+    let response = generate_profile_presets(&scenario.state, vec![fixture_id]).unwrap();
+    assert_eq!(response["created"].as_array().unwrap().len(), 2);
+    scenario.assert_one_commit(&before);
+    let presets = scenario.store().objects("preset").unwrap();
+    assert_eq!(presets.len(), 2);
+    assert!(presets.iter().all(|preset| preset.revision == 1));
+    assert_eq!(
+        presets
+            .iter()
+            .map(
+                |preset| preset.body["generated_from_fixture_profile"]["semantic_id"]
+                    .as_str()
+                    .unwrap()
+            )
+            .collect::<HashSet<_>>(),
+        HashSet::from(["gobo.dots", "gobo.open"])
+    );
+}
+
+#[test]
+fn group_and_preset_updates_each_install_the_exact_committed_revision() {
+    let first = light_core::FixtureId::new();
+    let added = light_core::FixtureId::new();
+    let scenario = ActiveObjectScenario::new("Update boundary", |store| {
+        store
+            .put_object(
+                "group",
+                "81",
+                &serde_json::json!({
+                    "id":"81",
+                    "name":"Update group",
+                    "fixtures":[first],
+                    "future_group_field":"retained"
+                }),
+                0,
+            )
+            .unwrap();
+        let mut preset = preset_body("Update color", light_programmer::PresetFamily::Color, 9);
+        preset["values"] = serde_json::json!({
+            first.0.to_string(): {"color.red":{"kind":"normalized","value":0.2}}
+        });
+        preset["future_preset_field"] = serde_json::json!("retained");
+        store.put_object("preset", "2.9", &preset, 0).unwrap();
+    });
+    scenario
+        .state
+        .configuration
+        .write()
+        .update_settings_by_desk
+        .insert(
+            scenario.session.desk.id,
+            update::UpdateSettings {
+                group_mode: update::ExistingContentMode::AddNew,
+                preset_mode: update::ExistingContentMode::AddNew,
+                ..Default::default()
+            },
+        );
+    scenario
+        .state
+        .programmers
+        .select(scenario.session.id, [first, added]);
+
+    let before_group = scenario.boundary();
+    assert_eq!(
+        execute_programmer_command(&scenario.state, &scenario.session, "UPDATE GROUP 81").unwrap(),
+        1
+    );
+    scenario.assert_one_commit(&before_group);
+    let group = stored_object(&scenario.store(), "group", "81").unwrap();
+    assert_eq!(group.body["fixtures"], serde_json::json!([first, added]));
+    assert_eq!(group.body["future_group_field"], "retained");
+
+    scenario.state.programmers.set(
+        scenario.session.id,
+        first,
+        light_core::AttributeKey("color.blue".into()),
+        light_core::AttributeValue::Normalized(0.8),
+    );
+    let before_preset = scenario.boundary();
+    assert_eq!(
+        execute_programmer_command(&scenario.state, &scenario.session, "UPDATE 2.9").unwrap(),
+        1
+    );
+    scenario.assert_one_commit(&before_preset);
+    let preset = stored_object(&scenario.store(), "preset", "2.9").unwrap();
+    assert_eq!(preset.body["future_preset_field"], "retained");
+    let preset: light_programmer::Preset = serde_json::from_value(preset.body).unwrap();
+    assert_eq!(
+        preset.values[&first][&light_core::AttributeKey("color.red".into())],
+        light_core::AttributeValue::Normalized(0.2)
+    );
+    assert_eq!(
+        preset.values[&first][&light_core::AttributeKey("color.blue".into())],
+        light_core::AttributeValue::Normalized(0.8)
+    );
+}
