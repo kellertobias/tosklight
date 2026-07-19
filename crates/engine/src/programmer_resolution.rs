@@ -6,15 +6,35 @@ use crate::{
 use chrono::{DateTime, Utc};
 use light_core::{AttributeKey, MergeMode, ProgrammerId, TimedValue};
 use light_programmer::{GroupDefinition, GroupProgrammerValue, ProgrammerState, resolve_group};
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 type GroupValues = HashMap<String, HashMap<AttributeKey, GroupProgrammerValue>>;
 type GroupAttributes = HashMap<AttributeKey, GroupProgrammerValue>;
 
-struct SourcedProgrammerValue {
-    value: TimedValue,
-    source: ProgrammerTransitionSource,
+#[derive(Clone, Copy)]
+enum ProgrammerValueSource<'a> {
+    Live,
+    Preload,
+    Transient(&'a str),
+    Group(&'a str),
+    PreloadGroup(&'a str),
+}
+
+struct SourceContext {
+    transition: Option<ProgrammerTransitionSource>,
+    replacement: Option<ContributionSourceId>,
+}
+
+struct ProgrammerValueResolver<'a> {
+    engine: &'a Engine,
+    generation: &'a RuntimeGeneration,
+    now: DateTime<Utc>,
+    groups: &'a HashMap<String, GroupDefinition>,
+    underlay: Option<&'a ResolvedContributionIndex<'a>>,
+    sampled: &'a [ContributionBatch],
+    programmer_id: ProgrammerId,
+    priority: i16,
+    has_replacements: bool,
 }
 
 pub(crate) fn programmers_need_underlay(programmers: &[ProgrammerState]) -> bool {
@@ -49,14 +69,25 @@ impl Engine {
         underlay: Option<&ResolvedContributionIndex<'_>>,
         sampled: &[ContributionBatch],
     ) -> Vec<EngineContribution> {
+        let has_replacements = sampled.iter().any(ContributionBatch::has_replacements);
         programmers
             .into_iter()
             .flat_map(|programmer| {
-                self.resolve_programmer(programmer, generation, now, groups, underlay, sampled)
+                self.resolve_programmer(
+                    programmer,
+                    generation,
+                    now,
+                    groups,
+                    underlay,
+                    sampled,
+                    has_replacements,
+                )
             })
+            .map(EngineContribution::unscaled)
             .collect()
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn resolve_programmer(
         &self,
         programmer: ProgrammerState,
@@ -65,7 +96,8 @@ impl Engine {
         groups: &HashMap<String, GroupDefinition>,
         underlay: Option<&ResolvedContributionIndex<'_>>,
         sampled: &[ContributionBatch],
-    ) -> Vec<EngineContribution> {
+        has_replacements: bool,
+    ) -> Vec<TimedValue> {
         let ProgrammerState {
             id,
             priority,
@@ -76,55 +108,28 @@ impl Engine {
             preload_group_active,
             ..
         } = programmer;
-        let mut contributions = values
-            .into_iter()
-            .map(|value| (value, ProgrammerTransitionSource::Programmer))
-            .chain(transient_values.into_iter().flat_map(|action| {
-                let source: Arc<str> = action.source.into();
-                action.values.into_iter().map(move |value| {
-                    (
-                        value,
-                        ProgrammerTransitionSource::Transient(Arc::clone(&source)),
-                    )
-                })
-            }))
-            .chain(
-                preload_active
-                    .into_iter()
-                    .map(|value| (value, ProgrammerTransitionSource::Preload)),
-            )
-            .map(|(value, source)| SourcedProgrammerValue {
-                value: self.resolve_programmer_fade(
-                    value,
-                    generation,
-                    now,
-                    underlay,
-                    id,
-                    source.clone(),
-                ),
-                source,
-            })
-            .collect::<Vec<_>>();
-        contributions.extend(self.resolve_group_programming(
-            group_values,
-            preload_group_active,
+        let resolver = ProgrammerValueResolver {
+            engine: self,
             generation,
             now,
             groups,
             underlay,
-            id,
+            sampled,
+            programmer_id: id,
             priority,
-        ));
-        if sampled.iter().any(ContributionBatch::has_replacements) {
-            contributions.retain(|contribution| {
-                let source = contribution_source(id, &contribution.source);
-                !replaces_source(sampled, &source, &contribution.value)
-            });
+            has_replacements,
+        };
+        let mut contributions = resolver.fixture_values(values, ProgrammerValueSource::Live);
+        for action in transient_values {
+            contributions.extend(resolver.fixture_values(
+                action.values,
+                ProgrammerValueSource::Transient(&action.source),
+            ));
         }
+        contributions
+            .extend(resolver.fixture_values(preload_active, ProgrammerValueSource::Preload));
+        contributions.extend(resolver.group_values(group_values, preload_group_active));
         programmer_winners(contributions)
-            .into_iter()
-            .map(|winner| EngineContribution::unscaled(winner.value))
-            .collect()
     }
 
     fn resolve_programmer_fade(
@@ -136,82 +141,73 @@ impl Engine {
         programmer_id: ProgrammerId,
         source: ProgrammerTransitionSource,
     ) -> TimedValue {
-        if !value.fade {
-            return value;
-        }
         let underlying =
             underlay.and_then(|values| values.value(value.fixture_id, &value.attribute));
         let snap = generation.attribute_is_snap(value.fixture_id, &value.attribute);
         self.faded_programmer_value(value, now, underlying, programmer_id, source, snap)
     }
+}
 
-    #[allow(clippy::too_many_arguments)]
-    fn resolve_group_programming(
+impl ProgrammerValueResolver<'_> {
+    fn fixture_values(
         &self,
-        group_values: GroupValues,
-        preload_values: GroupValues,
-        generation: &RuntimeGeneration,
-        now: DateTime<Utc>,
-        groups: &HashMap<String, GroupDefinition>,
-        underlay: Option<&ResolvedContributionIndex<'_>>,
-        programmer_id: ProgrammerId,
-        priority: i16,
-    ) -> Vec<SourcedProgrammerValue> {
-        group_values
+        values: Vec<TimedValue>,
+        source: ProgrammerValueSource<'_>,
+    ) -> Vec<TimedValue> {
+        let context = self.source_context(source, values.iter().any(|value| value.fade));
+        values
             .into_iter()
-            .map(|(id, values)| (id.clone(), values, ProgrammerTransitionSource::Group(id)))
-            .chain(preload_values.into_iter().map(|(id, values)| {
-                (
-                    id.clone(),
-                    values,
-                    ProgrammerTransitionSource::PreloadGroup(id),
-                )
-            }))
-            .flat_map(|(group_id, attributes, source)| {
-                self.resolve_one_group(
-                    &group_id,
-                    attributes,
-                    source,
-                    generation,
-                    now,
-                    groups,
-                    underlay,
-                    programmer_id,
-                    priority,
-                )
-            })
+            .filter_map(|value| self.resolve_value(value, &context))
             .collect()
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn resolve_one_group(
+    fn group_values(
+        &self,
+        group_values: GroupValues,
+        preload_values: GroupValues,
+    ) -> Vec<TimedValue> {
+        let mut resolved = Vec::new();
+        for (group_id, attributes) in group_values {
+            resolved.extend(self.one_group(
+                &group_id,
+                attributes,
+                ProgrammerValueSource::Group(&group_id),
+            ));
+        }
+        for (group_id, attributes) in preload_values {
+            resolved.extend(self.one_group(
+                &group_id,
+                attributes,
+                ProgrammerValueSource::PreloadGroup(&group_id),
+            ));
+        }
+        resolved
+    }
+
+    fn one_group(
         &self,
         group_id: &str,
         attributes: GroupAttributes,
-        source: ProgrammerTransitionSource,
-        generation: &RuntimeGeneration,
-        now: DateTime<Utc>,
-        groups: &HashMap<String, GroupDefinition>,
-        underlay: Option<&ResolvedContributionIndex<'_>>,
-        programmer_id: ProgrammerId,
-        priority: i16,
-    ) -> Vec<SourcedProgrammerValue> {
-        let Ok(fixtures) = resolve_group(group_id, groups) else {
+        source: ProgrammerValueSource<'_>,
+    ) -> Vec<TimedValue> {
+        let Ok(fixtures) = resolve_group(group_id, self.groups) else {
             return Vec::new();
         };
+        let context =
+            self.source_context(source, attributes.values().any(|attribute| attribute.fade));
         let count = fixtures.len();
         fixtures
             .into_iter()
             .enumerate()
             .flat_map(|(index, fixture_id)| {
-                attributes.iter().map({
-                    let source = source.clone();
+                attributes.iter().filter_map({
+                    let context = &context;
                     move |(attribute, scoped)| {
                         let value = TimedValue {
                             fixture_id,
                             attribute: attribute.clone(),
                             value: value_for_ordered_position(&scoped.value, index, count),
-                            priority,
+                            priority: self.priority,
                             changed_at: scoped.changed_at,
                             programmer_order: scoped.programmer_order,
                             merge_mode: MergeMode::Ltp,
@@ -219,34 +215,84 @@ impl Engine {
                             fade_millis: scoped.fade_millis,
                             delay_millis: scoped.delay_millis,
                         };
-                        SourcedProgrammerValue {
-                            value: self.resolve_programmer_fade(
-                                value,
-                                generation,
-                                now,
-                                underlay,
-                                programmer_id,
-                                source.clone(),
-                            ),
-                            source: source.clone(),
-                        }
+                        self.resolve_value(value, context)
                     }
                 })
             })
             .collect()
     }
+
+    fn source_context(&self, source: ProgrammerValueSource<'_>, fades: bool) -> SourceContext {
+        SourceContext {
+            transition: fades.then(|| source.transition()),
+            replacement: self
+                .has_replacements
+                .then(|| source.replacement(self.programmer_id)),
+        }
+    }
+
+    fn resolve_value(&self, value: TimedValue, source: &SourceContext) -> Option<TimedValue> {
+        let value = if value.fade {
+            self.engine.resolve_programmer_fade(
+                value,
+                self.generation,
+                self.now,
+                self.underlay,
+                self.programmer_id,
+                source
+                    .transition
+                    .clone()
+                    .expect("faded sources have transition identity"),
+            )
+        } else {
+            value
+        };
+        let replaced = source
+            .replacement
+            .as_ref()
+            .is_some_and(|source| replaces_source(self.sampled, source, &value));
+        (!replaced).then_some(value)
+    }
 }
 
-fn programmer_winners(values: Vec<SourcedProgrammerValue>) -> Vec<SourcedProgrammerValue> {
+impl ProgrammerValueSource<'_> {
+    fn transition(self) -> ProgrammerTransitionSource {
+        match self {
+            Self::Live => ProgrammerTransitionSource::Programmer,
+            Self::Preload => ProgrammerTransitionSource::Preload,
+            Self::Transient(source) => ProgrammerTransitionSource::Transient(Arc::from(source)),
+            Self::Group(group_id) => ProgrammerTransitionSource::Group(Arc::from(group_id)),
+            Self::PreloadGroup(group_id) => {
+                ProgrammerTransitionSource::PreloadGroup(Arc::from(group_id))
+            }
+        }
+    }
+
+    fn replacement(self, programmer_id: ProgrammerId) -> ContributionSourceId {
+        match self {
+            Self::Live => ContributionSourceId::programmer(programmer_id),
+            Self::Preload => ContributionSourceId::preload(programmer_id),
+            Self::Transient(source) => {
+                ContributionSourceId::programmer_transient(programmer_id, source)
+            }
+            Self::Group(group_id) => {
+                ContributionSourceId::programmer_group(programmer_id, group_id)
+            }
+            Self::PreloadGroup(group_id) => {
+                ContributionSourceId::preload_group(programmer_id, group_id)
+            }
+        }
+    }
+}
+
+fn programmer_winners(values: Vec<TimedValue>) -> Vec<TimedValue> {
     let mut winners = HashMap::new();
     for value in values {
-        let key = (value.value.fixture_id, value.value.attribute.clone());
-        let replace = winners
-            .get(&key)
-            .is_none_or(|current: &SourcedProgrammerValue| {
-                (value.value.changed_at, value.value.programmer_order)
-                    > (current.value.changed_at, current.value.programmer_order)
-            });
+        let key = (value.fixture_id, value.attribute.clone());
+        let replace = winners.get(&key).is_none_or(|current: &TimedValue| {
+            (value.changed_at, value.programmer_order)
+                > (current.changed_at, current.programmer_order)
+        });
         if replace {
             winners.insert(key, value);
         }
@@ -254,7 +300,7 @@ fn programmer_winners(values: Vec<SourcedProgrammerValue>) -> Vec<SourcedProgram
     winners
         .into_values()
         .map(|mut value| {
-            value.value.merge_mode = if value.value.attribute.is_intensity() {
+            value.merge_mode = if value.attribute.is_intensity() {
                 MergeMode::Htp
             } else {
                 MergeMode::Ltp
@@ -262,23 +308,4 @@ fn programmer_winners(values: Vec<SourcedProgrammerValue>) -> Vec<SourcedProgram
             value
         })
         .collect()
-}
-
-fn contribution_source(
-    programmer_id: ProgrammerId,
-    source: &ProgrammerTransitionSource,
-) -> ContributionSourceId {
-    match source {
-        ProgrammerTransitionSource::Programmer => ContributionSourceId::programmer(programmer_id),
-        ProgrammerTransitionSource::Preload => ContributionSourceId::preload(programmer_id),
-        ProgrammerTransitionSource::Transient(source) => {
-            ContributionSourceId::programmer_transient(programmer_id, Arc::clone(source))
-        }
-        ProgrammerTransitionSource::Group(group_id) => {
-            ContributionSourceId::programmer_group(programmer_id, group_id.as_str())
-        }
-        ProgrammerTransitionSource::PreloadGroup(group_id) => {
-            ContributionSourceId::preload_group(programmer_id, group_id.as_str())
-        }
-    }
 }

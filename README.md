@@ -97,10 +97,14 @@ and phaser values; the phaser owns one mapped slot that has no static or Program
 focused test proves consecutive logical ticks change that slot. Use `--protocol sacn` for the other
 production codec and `--transport loopback` for separately reported, safe local UDP `send_to`
 timing. Loopback is benchmark-owned and is not presented as production `NetworkOutput` socket
-delivery. The JSON explicitly identifies unavailable CPU, allocation, sub-render phase, production
-socket, and sound-to-light measurements; do not infer those values from total latency. Run it on
-each target, including Raspberry Pi-class hardware, before choosing that desk's configured universe
-ceiling, and retain the JSON with the exact hardware label.
+delivery. Each scenario preserves that ordinary scheduled pipeline as its floor measurement, then
+reports an unpaced render-only diagnostic with four prebuilt sampled batches replacing a realistic
+slice of Programmer and Playback assignments. Batch construction is deliberately outside the timed
+path, so this comparison measures replacement-index lookup, arbitration, and projection rather than
+an unspecified future sampler. The JSON explicitly identifies unavailable CPU, allocation,
+sub-render phase, production socket, and sound-to-light measurements; do not infer those values from
+total latency. Run it on each target, including Raspberry Pi-class hardware, before choosing that
+desk's configured universe ceiling, and retain the JSON with the exact hardware label.
 
 ## Implementation status
 

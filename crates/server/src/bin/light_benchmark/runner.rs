@@ -35,7 +35,7 @@ pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
     }
     let required_floor_met = required_floor_result(&scenarios);
     Ok(BenchmarkReport {
-        schema_version: 1,
+        schema_version: 2,
         benchmark: "tosklight_render_to_protocol_encoding_pipeline",
         reference: metadata::capture(arguments.hardware_label.as_deref()),
         configuration: RunConfiguration {
@@ -134,6 +134,12 @@ fn run_scenario(arguments: &Arguments, config: ProfileConfig) -> Result<Scenario
         tick += 1;
     }
     let elapsed = measured_at.elapsed();
+    let sampled_contributions = crate::light_benchmark::sampled::measure(
+        &scenario,
+        warmup_ticks + expected_ticks,
+        config.rate_hz,
+        expected_ticks,
+    )?;
     let loopback_summary = loopback.map(LoopbackDelivery::finish);
     let achieved = state.completed_ticks as f64 / elapsed.as_secs_f64();
     let met_configured_rate = state.dropped_ticks == 0 && state.deadline_misses == 0;
@@ -185,6 +191,7 @@ fn run_scenario(arguments: &Arguments, config: ProfileConfig) -> Result<Scenario
                 _ => "configured divisor",
             },
         },
+        sampled_contributions,
         loopback: loopback_summary,
     })
 }

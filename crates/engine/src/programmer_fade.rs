@@ -22,8 +22,8 @@ pub(crate) enum ProgrammerTransitionSource {
     Programmer,
     Preload,
     Transient(Arc<str>),
-    Group(String),
-    PreloadGroup(String),
+    Group(Arc<str>),
+    PreloadGroup(Arc<str>),
 }
 
 impl Engine {

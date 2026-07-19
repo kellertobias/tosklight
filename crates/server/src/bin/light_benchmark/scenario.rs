@@ -3,7 +3,9 @@ use chrono::{TimeZone, Utc};
 use light_core::{
     AttributeKey, AttributeValue, CueListId, FixtureId, ManualClock, SessionId, UserId,
 };
-use light_engine::{Engine, EngineSnapshot};
+use light_engine::{
+    ContributionBatch, ContributionSample, ContributionSourceId, Engine, EngineSnapshot,
+};
 use light_fixture::{
     ChannelBehavior, ChannelResolution, FixtureChannel, FixtureProfile, PatchedFixture, SplitPatch,
 };
@@ -19,6 +21,8 @@ use uuid::Uuid;
 
 pub const SLOTS_PER_UNIVERSE: u16 = 512;
 pub const PROGRAMMER_ASSIGNMENT_DIVISOR: usize = 4;
+pub const SAMPLED_ASSIGNMENT_DIVISOR: usize = 8;
+pub const SAMPLED_BATCH_COUNT: usize = 4;
 pub const ANIMATED_SLOT: u16 = SLOTS_PER_UNIVERSE - 1;
 pub const GROUP_ID: &str = "benchmark.static-group";
 
@@ -28,6 +32,7 @@ pub struct BenchmarkScenario {
     pub logical_start: chrono::DateTime<Utc>,
     pub universes: u16,
     pub packet_count: usize,
+    programmers: ProgrammerRegistry,
 }
 
 impl BenchmarkScenario {
@@ -82,8 +87,52 @@ impl BenchmarkScenario {
             logical_start,
             universes: config.universes,
             packet_count,
+            programmers,
         })
     }
+
+    pub fn sampled_batches(&self, at: chrono::DateTime<Utc>) -> Vec<ContributionBatch> {
+        sampled_batches(&self.engine, &self.programmers, at)
+    }
+}
+
+fn sampled_batches(
+    engine: &Engine,
+    programmers: &ProgrammerRegistry,
+    at: chrono::DateTime<Utc>,
+) -> Vec<ContributionBatch> {
+    let mut buckets = (0..SAMPLED_BATCH_COUNT)
+        .map(|_| Vec::new())
+        .collect::<Vec<_>>();
+    let mut index = 0_usize;
+    for programmer in programmers.active() {
+        let source = ContributionSourceId::programmer(programmer.id);
+        for value in programmer
+            .values
+            .into_iter()
+            .step_by(SAMPLED_ASSIGNMENT_DIVISOR)
+        {
+            buckets[index % SAMPLED_BATCH_COUNT]
+                .push(ContributionSample::replacing(value, source.clone()));
+            index += 1;
+        }
+    }
+    for contribution in engine
+        .playback()
+        .read()
+        .contributions_with_context_at(at, |_, _| false)
+        .into_iter()
+        .filter(|contribution| contribution.value.attribute != slot_attribute(ANIMATED_SLOT))
+        .step_by(SAMPLED_ASSIGNMENT_DIVISOR)
+    {
+        buckets[index % SAMPLED_BATCH_COUNT].push(ContributionSample::replacing_playback(
+            contribution.value,
+            contribution.source,
+            contribution.sequence_master,
+        ));
+        index += 1;
+    }
+    buckets.into_iter().map(ContributionBatch::new).collect()
 }
 
 fn packed_definition() -> Result<light_fixture::FixtureDefinition, String> {

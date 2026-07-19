@@ -46,6 +46,7 @@ pub struct ScenarioReport {
     pub phases: PhaseReport,
     pub output: OutputReport,
     pub contribution_sources: ContributionSources,
+    pub sampled_contributions: SampledContributionReport,
     pub loopback: Option<LoopbackSummary>,
 }
 
@@ -88,6 +89,20 @@ pub struct ContributionSources {
 }
 
 #[derive(Debug, Serialize)]
+pub struct SampledContributionReport {
+    pub batches_per_render: usize,
+    pub samples_per_render: usize,
+    pub replacements_per_render: usize,
+    pub source_selection: &'static str,
+    pub measured_renders: u64,
+    pub elapsed_seconds: f64,
+    pub achieved_renders_per_second: f64,
+    pub engine_render_combined: Option<Distribution>,
+    pub measurement_mode: &'static str,
+    pub included_in_required_floor: bool,
+}
+
+#[derive(Debug, Serialize)]
 pub struct MeasurementCoverage {
     pub contribution_sampling: CoverageItem,
     pub arbitration: CoverageItem,
@@ -119,12 +134,12 @@ pub fn coverage(transport: Transport) -> MeasurementCoverage {
     };
     MeasurementCoverage {
         contribution_sampling: CoverageItem {
-            status: "included_not_separately_instrumented",
-            note: "included in engine_render_combined",
+            status: "partially_measured",
+            note: "built-in Playback phaser sampling is included in the ordinary render; external batches are prepared before timing so only their replacement lookup, arbitration, and projection cost is measured",
         },
         arbitration: CoverageItem {
-            status: "included_not_separately_instrumented",
-            note: "included in engine_render_combined",
+            status: "measured_combined",
+            note: "ordinary arbitration is included in engine_render_combined; multiple prebuilt sampled replacement batches are reported separately per scenario",
         },
         fixture_projection: CoverageItem {
             status: "included_not_separately_instrumented",

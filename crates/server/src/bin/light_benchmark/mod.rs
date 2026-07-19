@@ -3,6 +3,7 @@ mod loopback;
 mod metadata;
 mod report;
 mod runner;
+mod sampled;
 mod scenario;
 mod statistics;
 

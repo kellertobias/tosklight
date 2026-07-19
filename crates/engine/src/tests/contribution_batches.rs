@@ -263,43 +263,52 @@ fn sampled_playback_intensity_is_mastered_before_htp_arbitration() {
 #[test]
 fn a_sample_replaces_only_its_independent_playback() {
     let started = test_time();
-    let clock = Arc::new(ManualClock::new(started));
-    let shared_clock: SharedClock = clock.clone();
-    let programmers = ProgrammerRegistry::with_clock(shared_clock);
+    let clock: SharedClock = Arc::new(ManualClock::new(started));
+    let programmers = ProgrammerRegistry::with_clock(clock);
     let (fixture, fixture_id) = schema_v2_fixture(&[("tilt", false, false, false, false, false)]);
-    let mut cue_list = test_cue_list(
-        "Animated",
+    let mut sampled_list = test_cue_list(
+        "Sampled",
         vec![CueChange::set(
             fixture_id,
             AttributeKey("tilt".into()),
-            AttributeValue::Normalized(0.0),
+            AttributeValue::Normalized(0.9),
         )],
     );
-    let mut independent = Cue::new(2.0);
-    independent.changes = vec![CueChange::set(
-        fixture_id,
-        AttributeKey("tilt".into()),
-        AttributeValue::Normalized(0.4),
-    )];
-    cue_list.cues.push(independent);
+    sampled_list.priority = 20;
+    let independent_list = test_cue_list(
+        "Independent",
+        vec![CueChange::set(
+            fixture_id,
+            AttributeKey("tilt".into()),
+            AttributeValue::Normalized(0.4),
+        )],
+    );
+    let mut sampled_playback = test_playback(1, sampled_list.id);
+    sampled_playback.auto_off = false;
+    let mut independent_playback = test_playback(2, independent_list.id);
+    independent_playback.auto_off = false;
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture],
-            cue_lists: vec![cue_list.clone()],
-            playbacks: vec![test_playback(1, cue_list.id), test_playback(2, cue_list.id)],
+            cue_lists: vec![sampled_list, independent_list],
+            playbacks: vec![sampled_playback, independent_playback],
             revision: 1,
             ..EngineSnapshot::default()
         })
         .unwrap();
     engine.playback().write().go_playback(1).unwrap();
     engine.playback().write().go_playback(2).unwrap();
-    clock.advance_millis(1);
-    engine.playback().write().go_playback(2).unwrap();
     let assignments = playback_assignments(&engine, started, Some(1));
-    let mut animated = FakeAnimatedSource { phase: 0.1 };
-    let sampled = animated.sample(&assignments);
+    let sampled = ContributionBatch::new(assignments.into_iter().map(|assignment| {
+        let mut value = assignment.value;
+        value.value = AttributeValue::Normalized(0.1);
+        value.priority = 0;
+        let master = assignment.sequence_master.unwrap();
+        ContributionSample::replacing_playback(value, master.source(), master.scale())
+    }));
 
+    assert_normalized(&engine.resolved_values(), fixture_id, "tilt", 0.9);
     let resolved = engine.resolved_values_with_contribution_batches(std::slice::from_ref(&sampled));
     assert_normalized(&resolved, fixture_id, "tilt", 0.4);
 }
@@ -392,6 +401,120 @@ fn replacing_newer_live_programmer_keeps_older_preload_as_an_htp_competitor() {
 
     let resolved = engine.resolved_values_with_contribution_batches(std::slice::from_ref(&sampled));
     assert_normalized(&resolved, fixture_id, "intensity", 0.9);
+}
+
+#[test]
+fn transient_sample_replaces_only_the_named_transient_action() {
+    let started = test_time();
+    let clock = Arc::new(ManualClock::new(started));
+    let shared_clock: SharedClock = clock.clone();
+    let programmers = ProgrammerRegistry::with_clock(shared_clock);
+    let session = SessionId::new();
+    programmers.start(session, UserId::new());
+    let (fixture, fixture_id) = animated_fixture();
+    programmers
+        .set_transient_action(
+            session,
+            "background".into(),
+            [(fixture_id, AttributeKey("tilt".into()), normalized(0.4))],
+        )
+        .unwrap();
+    clock.advance_millis(1);
+    programmers
+        .set_transient_action(
+            session,
+            "sampled".into(),
+            [(fixture_id, AttributeKey("tilt".into()), normalized(0.9))],
+        )
+        .unwrap();
+    let state = programmers.active().remove(0);
+    let original = state
+        .transient_values
+        .iter()
+        .find(|action| action.source == "sampled")
+        .unwrap()
+        .values[0]
+        .clone();
+    let sampled = lower_priority_replacement(
+        original,
+        ContributionSourceId::programmer_transient(state.id, "sampled"),
+    );
+    let engine = Engine::new(programmers);
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture],
+            revision: 1,
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+
+    assert_normalized(&engine.resolved_values(), fixture_id, "tilt", 0.9);
+    let resolved = engine.resolved_values_with_contribution_batches(&[sampled]);
+    assert_normalized(&resolved, fixture_id, "tilt", 0.4);
+}
+
+#[test]
+fn live_group_sample_replaces_only_the_assigned_group() {
+    let started = test_time();
+    let clock = Arc::new(ManualClock::new(started));
+    let shared_clock: SharedClock = clock.clone();
+    let (engine, programmers, session, fixture_id) =
+        grouped_source_engine(shared_clock, &["background", "sampled"]);
+    assert!(programmers.set_group(
+        session,
+        "background".into(),
+        AttributeKey("tilt".into()),
+        normalized(0.4),
+    ));
+    clock.advance_millis(1);
+    assert!(programmers.set_group(
+        session,
+        "sampled".into(),
+        AttributeKey("tilt".into()),
+        normalized(0.9),
+    ));
+    let state = programmers.active().remove(0);
+    let original = group_programmer_value(&state, "sampled", fixture_id, false);
+    let sampled = lower_priority_replacement(
+        original,
+        ContributionSourceId::programmer_group(state.id, "sampled"),
+    );
+
+    assert_normalized(&engine.resolved_values(), fixture_id, "tilt", 0.9);
+    let resolved = engine.resolved_values_with_contribution_batches(&[sampled]);
+    assert_normalized(&resolved, fixture_id, "tilt", 0.4);
+}
+
+#[test]
+fn preload_group_sample_keeps_the_live_group_lane_independent() {
+    let started = test_time();
+    let clock = Arc::new(ManualClock::new(started));
+    let shared_clock: SharedClock = clock.clone();
+    let (engine, programmers, session, fixture_id) = grouped_source_engine(shared_clock, &["wash"]);
+    assert!(programmers.set_group(
+        session,
+        "wash".into(),
+        AttributeKey("tilt".into()),
+        normalized(0.4),
+    ));
+    clock.advance_millis(1);
+    assert!(programmers.set_preload_group(
+        session,
+        "wash".into(),
+        AttributeKey("tilt".into()),
+        normalized(0.9),
+    ));
+    assert!(programmers.activate_preload_at(session, clock.now()));
+    let state = programmers.active().remove(0);
+    let original = group_programmer_value(&state, "wash", fixture_id, true);
+    let sampled = lower_priority_replacement(
+        original,
+        ContributionSourceId::preload_group(state.id, "wash"),
+    );
+
+    assert_normalized(&engine.resolved_values(), fixture_id, "tilt", 0.9);
+    let resolved = engine.resolved_values_with_contribution_batches(&[sampled]);
+    assert_normalized(&resolved, fixture_id, "tilt", 0.4);
 }
 
 #[test]
@@ -549,6 +672,74 @@ fn source_engine(started: DateTime<Utc>) -> (Engine, ProgrammerRegistry, Session
         })
         .unwrap();
     (engine, programmers, session, fixture_id)
+}
+
+fn grouped_source_engine(
+    clock: SharedClock,
+    group_ids: &[&str],
+) -> (Engine, ProgrammerRegistry, SessionId, FixtureId) {
+    let programmers = ProgrammerRegistry::with_clock(clock);
+    let session = SessionId::new();
+    programmers.start(session, UserId::new());
+    let (fixture, fixture_id) = animated_fixture();
+    let groups = group_ids
+        .iter()
+        .map(|id| GroupDefinition {
+            id: (*id).into(),
+            name: (*id).into(),
+            fixtures: vec![fixture_id],
+            ..Default::default()
+        })
+        .collect();
+    let engine = Engine::new(programmers.clone());
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture],
+            groups,
+            revision: 1,
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+    (engine, programmers, session, fixture_id)
+}
+
+fn group_programmer_value(
+    state: &light_programmer::ProgrammerState,
+    group_id: &str,
+    fixture_id: FixtureId,
+    preload: bool,
+) -> TimedValue {
+    let groups = if preload {
+        &state.preload_group_active
+    } else {
+        &state.group_values
+    };
+    let scoped = &groups[group_id][&AttributeKey("tilt".into())];
+    TimedValue {
+        fixture_id,
+        attribute: AttributeKey("tilt".into()),
+        value: scoped.value.clone(),
+        priority: state.priority,
+        changed_at: scoped.changed_at,
+        programmer_order: scoped.programmer_order,
+        merge_mode: MergeMode::Ltp,
+        fade: false,
+        fade_millis: None,
+        delay_millis: None,
+    }
+}
+
+fn lower_priority_replacement(
+    mut value: TimedValue,
+    source: ContributionSourceId,
+) -> ContributionBatch {
+    value.priority -= 1;
+    value.value = normalized(0.1);
+    ContributionBatch::new([ContributionSample::replacing(value, source)])
+}
+
+fn normalized(value: f32) -> AttributeValue {
+    AttributeValue::Normalized(value)
 }
 
 fn animated_fixture() -> (PatchedFixture, FixtureId) {

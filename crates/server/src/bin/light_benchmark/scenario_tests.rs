@@ -41,6 +41,34 @@ fn animated_slot_is_reserved_exclusively_for_the_phaser() {
 }
 
 #[test]
+fn sampled_workload_uses_multiple_replacement_batches_without_changing_output() {
+    let config = ProfileConfig {
+        profile: crate::light_benchmark::arguments::BenchmarkProfile::LowPower4,
+        expectation: crate::light_benchmark::arguments::Expectation::LowPowerGoal,
+        universes: 1,
+        rate_hz: 40,
+    };
+    let scenario = BenchmarkScenario::build(config, ProtocolSelection::ArtNet, None).unwrap();
+    let sampled_batches = scenario.sampled_batches(scenario.logical_start);
+    assert_eq!(sampled_batches.len(), SAMPLED_BATCH_COUNT);
+    assert!(sampled_batches.iter().all(|batch| !batch.is_empty()));
+    assert!(
+        sampled_batches
+            .iter()
+            .flat_map(ContributionBatch::samples)
+            .all(|sample| sample.replacement_source().is_some())
+    );
+
+    let ordinary = scenario.engine.render(Default::default()).unwrap();
+    let sampled = scenario
+        .engine
+        .render_with_contribution_batches(Default::default(), &sampled_batches)
+        .unwrap();
+    assert_eq!(sampled.universes, ordinary.universes);
+    assert_eq!(sampled.patched_slots, ordinary.patched_slots);
+}
+
+#[test]
 fn consecutive_logical_ticks_move_the_exclusive_phaser_slot() {
     let config = ProfileConfig {
         profile: crate::light_benchmark::arguments::BenchmarkProfile::LowPower4,
