@@ -4,7 +4,7 @@ This is the living handoff for [`major-refactoring.md`](major-refactoring.md). U
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-18 at commit `54e7182`.
+Last updated: 2026-07-18 at commit `3c599fd`.
 
 ## Guardrails
 
@@ -42,6 +42,9 @@ Last updated: 2026-07-18 at commit `54e7182`.
   coalescing, rate limits, monotonic sequences, explicit gaps, and snapshot repair.
 - [x] Migrated manual, automatic, scheduled, OSC, preload, current-page, and explicit-page
   Playback behavior into the typed application service and v2 runtime contract.
+- [x] Converged global Grand Master and blackout changes through the typed Output runtime service,
+  with one batched persistence/event publication per control action and an authoritative v2
+  snapshot while retaining legacy HTTP and WebSocket response compatibility.
 - [x] Added future-extension proofs for stateful/two-attribute/fixed contributions, external
   device intents, Macro runtime and audited HTTP, daily/one-time scheduling, monotonic clocks,
   managed assets, fixture-position commands, and timeline operations.
@@ -50,7 +53,8 @@ Last updated: 2026-07-18 at commit `54e7182`.
   adapter seam without putting transport work in the render loop.
 - [x] Split major responsibility hotspots including server runtime/composition, command transport,
   Core, Media/CITP, Highlight, MVR writer/import, Playback projections/adapters, Preload, event
-  subscriptions, lossless JSON tests, and File Manager platform adapters.
+  subscriptions, lossless JSON tests, File Manager platform adapters, shared frontend controls,
+  and the Stage 3D scene/model/rendering pipeline.
 
 ## In progress
 
@@ -59,9 +63,9 @@ Last updated: 2026-07-18 at commit `54e7182`.
   prove no cursor loss during replay/scope churn, recover from malformed events, keep derived
   Groups authoritative with partial caches, hydrate without WebSocket readiness, and isolate React
   publications from the global `ServerContext`.
-- [ ] Converge global Grand Master and blackout mutations through a typed Output runtime service,
-  event, and authoritative v2 snapshot while preserving legacy HTTP/WebSocket response shapes.
-- [ ] Continue responsibility-based splits for remaining production files above the 400-line goal.
+- [ ] Split the frontend API client into capability adapters while keeping its stable public facade,
+  then continue responsibility-based splits for the fixture-profile model, manual builder, and
+  remaining style ownership above the 400-line goal.
 
 ## Remaining architecture work
 
@@ -106,9 +110,11 @@ Last updated: 2026-07-18 at commit `54e7182`.
 
 - Source-size ratchet: 0 production files above 1,200; 0 production functions above 150.
 - Focused application, server, wire, frontend, architecture, source-size, MVR, File Manager,
-  Playback, Preload, Patch, event, and strict Clippy checks have passed for their committed slices.
+  Playback, Preload, Patch, Output, event, shared-control, Stage 3D, build, and strict Clippy checks
+  have passed for their committed slices.
 - A final full-suite and real desktop run has not yet been completed.
 
-The remaining files above the 400-line goal currently include frontend transport/3D/setup/control
-hotspots, Matter, the manual builder, large style sheets, and several test modules. Test files may
-exceed the hard limits, but should still be split when it improves readability.
+The remaining files above the 400-line goal currently include the frontend API transport, manual
+builder, large style sheets, planning documentation, and several test modules. The unrelated
+Dynamics Editor experiment is outside this refactoring's scope. Test files may exceed the hard
+limits, but should still be split when it improves readability.
