@@ -1,17 +1,13 @@
 mod errors;
 
 use self::errors::{engine_error, fixture_error, store_error};
-use super::{AppState, show_mutation_backup::ShowMutationBackupPlan};
+use super::{ActiveShowBackupKind, AppState, ServerActiveShowUnitOfWork};
 use light_application::{
-    ActionContext, ActionError, ActionErrorKind, ActiveShowUnitOfWork, BackupIdentity, PatchChange,
-    ShowPatchPorts,
+    ActionContext, ActionError, ActionErrorKind, ActiveShowUnitOfWork, PatchChange, ShowPatchPorts,
 };
 use light_core::{FixtureId, Revision, ShowId};
 use light_engine::{EngineSnapshot, PreparedEngineSnapshot};
-use light_show::{
-    FixtureProfileRevision, PortableShowCommit, PortableShowDocument, PortableShowTransaction,
-    ShowStore,
-};
+use light_show::FixtureProfileRevision;
 use parking_lot::RwLock;
 use std::{collections::HashSet, sync::Arc};
 
@@ -43,45 +39,8 @@ impl ServerShowPatchPorts {
     }
 }
 
-pub(super) struct ServerShowPatchUnitOfWork {
-    store: ShowStore,
-    document: PortableShowDocument,
-    backup: ShowMutationBackupPlan,
-}
-
-impl ActiveShowUnitOfWork for ServerShowPatchUnitOfWork {
-    fn document(&self) -> &PortableShowDocument {
-        &self.document
-    }
-
-    fn backup(&mut self, identity: &BackupIdentity) -> Result<(), ActionError> {
-        if identity.show_id != self.document.id() {
-            return Err(ActionError::new(
-                ActionErrorKind::Invalid,
-                "patch backup identity does not match the active show",
-            )
-            .at_revision(self.document.revision().value()));
-        }
-        self.backup.create_patch(
-            &self.store,
-            identity,
-            Some(self.document.revision().value()),
-        )
-    }
-
-    fn commit(
-        self,
-        transaction: PortableShowTransaction,
-    ) -> Result<PortableShowCommit, ActionError> {
-        let revision = self.document.revision().value();
-        self.store
-            .apply_portable_transaction(transaction)
-            .map_err(|error| store_error(error, Some(revision)))
-    }
-}
-
 impl ShowPatchPorts for ServerShowPatchPorts {
-    type UnitOfWork = ServerShowPatchUnitOfWork;
+    type UnitOfWork = ServerActiveShowUnitOfWork;
     type PreparedRuntime = PreparedEngineSnapshot;
 
     fn begin_active_show(
@@ -89,33 +48,10 @@ impl ShowPatchPorts for ServerShowPatchPorts {
         _context: &ActionContext,
         show_id: ShowId,
     ) -> Result<Self::UnitOfWork, ActionError> {
-        let entry = self.state.active_show.read().clone().ok_or_else(|| {
-            ActionError::new(ActionErrorKind::NotFound, "no active show is loaded")
-        })?;
-        if entry.id != show_id {
-            return Err(ActionError::new(
-                ActionErrorKind::NotFound,
-                "requested show is not active",
-            ));
-        }
-        let store = ShowStore::open(&entry.path).map_err(|error| store_error(error, None))?;
-        let document = store.portable_document().map_err(|error| {
-            let revision = store.portable_revision().ok().map(|value| value.value());
-            store_error(error, revision)
-        })?;
-        self.remember_revision(document.revision().value());
-        if document.id() != show_id {
-            return Err(ActionError::new(
-                ActionErrorKind::Internal,
-                "active-show index and show document identities differ",
-            )
-            .at_revision(document.revision().value()));
-        }
-        Ok(ServerShowPatchUnitOfWork {
-            store,
-            document,
-            backup: ShowMutationBackupPlan::patch(&self.state, &entry),
-        })
+        let unit =
+            ServerActiveShowUnitOfWork::begin(&self.state, show_id, ActiveShowBackupKind::Patch)?;
+        self.remember_revision(unit.document().revision().value());
+        Ok(unit)
     }
 
     fn resolve_profile_revision(

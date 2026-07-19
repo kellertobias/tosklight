@@ -15,7 +15,7 @@ pub use model::{
     PatchChange, PatchFixtureCandidate, PatchFixtureProjection, PatchFixturesCommand,
     PatchFixturesResult, PatchModeProjection, PatchProfileRevisionProjection, PatchSnapshot,
 };
-pub use ports::{ActiveShowUnitOfWork, BackupIdentity, ShowPatchPorts};
+pub use ports::ShowPatchPorts;
 pub use service::ShowPatchService;
 
 #[cfg(test)]

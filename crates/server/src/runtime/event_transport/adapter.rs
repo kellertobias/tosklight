@@ -173,6 +173,41 @@ fn wire_payload(payload: &application::ApplicationEvent, sequence: u64) -> wire:
                 delta: super::super::show_patch_wire::wire_delta(change, Some(sequence)),
             }
         }
+        application::ApplicationEvent::Show(application::ShowEvent::OutputRouteChanged(change)) => {
+            wire::EventPayload::OutputRouteChanged {
+                change: wire_output_route_change(change),
+            }
+        }
+    }
+}
+
+fn wire_output_route_change(change: &application::OutputRouteChange) -> wire::OutputRouteChange {
+    wire::OutputRouteChange {
+        show_id: change.show_id.0,
+        show_revision: change.show_revision.value(),
+        route_id: change.route_id.clone(),
+        object_revision: change.object_revision,
+        route: change.route.as_ref().map(wire_output_route),
+        deleted: change.deleted,
+    }
+}
+
+fn wire_output_route(route: &light_output::OutputRoute) -> wire::OutputRoute {
+    wire::OutputRoute {
+        protocol: match route.protocol {
+            light_output::Protocol::ArtNet => wire::OutputProtocol::ArtNet,
+            light_output::Protocol::Sacn => wire::OutputProtocol::Sacn,
+        },
+        logical_universe: route.logical_universe,
+        destination_universe: route.destination_universe,
+        delivery_mode: match route.resolved_delivery_mode() {
+            light_output::DeliveryMode::Broadcast => wire::OutputDeliveryMode::Broadcast,
+            light_output::DeliveryMode::Multicast => wire::OutputDeliveryMode::Multicast,
+            light_output::DeliveryMode::Unicast => wire::OutputDeliveryMode::Unicast,
+        },
+        destination: route.destination.map(|destination| destination.to_string()),
+        enabled: route.enabled,
+        minimum_slots: route.minimum_slots,
     }
 }
 

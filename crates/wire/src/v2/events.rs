@@ -147,6 +147,45 @@ pub enum EventActionSource {
 pub enum EventPayload {
     PlaybackCueTransition { transition: PlaybackCueTransition },
     ShowPatchChanged { delta: super::patch::PatchDelta },
+    OutputRouteChanged { change: OutputRouteChange },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct OutputRouteChange {
+    pub show_id: Uuid,
+    #[ts(type = "number")]
+    pub show_revision: u64,
+    pub route_id: String,
+    #[ts(type = "number")]
+    pub object_revision: u64,
+    pub route: Option<OutputRoute>,
+    pub deleted: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct OutputRoute {
+    pub protocol: OutputProtocol,
+    pub logical_universe: u16,
+    pub destination_universe: u16,
+    pub delivery_mode: OutputDeliveryMode,
+    pub destination: Option<String>,
+    pub enabled: bool,
+    pub minimum_slots: u16,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum OutputProtocol {
+    ArtNet,
+    Sacn,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum OutputDeliveryMode {
+    Broadcast,
+    Multicast,
+    Unicast,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

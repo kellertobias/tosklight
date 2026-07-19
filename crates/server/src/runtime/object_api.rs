@@ -1,5 +1,9 @@
 use super::*;
 
+mod output_routes;
+
+use output_routes::*;
+
 pub(super) async fn list_objects(
     State(state): State<AppState>,
     Path((id, kind)): Path<(Uuid, String)>,
@@ -175,36 +179,6 @@ fn normalize_object_body(
     normalized.map_err(|error| ApiError::internal(error.to_string()))
 }
 
-fn changed_active_route(
-    entry: &ShowEntry,
-    kind: &str,
-    object_id: &str,
-    body: &serde_json::Value,
-    active: bool,
-) -> Result<Option<light_output::OutputRoute>, ApiError> {
-    if !active || kind != "route" {
-        return Ok(None);
-    }
-    let previous = ShowStore::open(&entry.path)
-        .map_err(ApiError::store)?
-        .objects("route")
-        .map_err(ApiError::store)?
-        .into_iter()
-        .find(|object| object.id == object_id)
-        .and_then(|object| serde_json::from_value(object.body).ok());
-    let next = serde_json::from_value::<light_output::OutputRoute>(body.clone()).ok();
-    Ok(previous.filter(|old: &light_output::OutputRoute| {
-        old.enabled
-            && next.as_ref().is_none_or(|new| {
-                !new.enabled
-                    || old.protocol != new.protocol
-                    || old.destination_universe != new.destination_universe
-                    || old.resolved_delivery_mode() != new.resolved_delivery_mode()
-                    || old.destination != new.destination
-            })
-    }))
-}
-
 fn validate_object_candidate(
     state: &AppState,
     entry: &ShowEntry,
@@ -231,13 +205,7 @@ async fn activate_object_change(
     entry: &ShowEntry,
     kind: &str,
     body: &serde_json::Value,
-    route: Option<light_output::OutputRoute>,
 ) -> Result<(), ApiError> {
-    if let (Some(output), Some(route)) = (&state.network_output, route) {
-        let _ = output
-            .terminate_routes(&[route], &mut *state.output_sequences.lock().await)
-            .await;
-    }
     let prepared = prepare_show_for_runtime(state, entry)?;
     state.engine.install_prepared_snapshot(prepared);
     if kind == "patched_fixture"
@@ -257,7 +225,7 @@ pub(super) async fn put_object(
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Response, ApiError> {
-    let _session = authenticate(&state, &headers)?;
+    let session = authenticate(&state, &headers)?;
     let expected = parse_if_match(&headers)?;
     let show_id = light_core::ShowId(id);
     let entry = state
@@ -266,14 +234,40 @@ pub(super) async fn put_object(
         .show(show_id)
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("show"))?;
-    let _activation = state.activation_lock.lock().await;
-    let body = normalize_object_body(&state, &kind, &object_id, body)?;
+    let activation = state.activation_lock.clone().lock_owned().await;
     let active = state
         .active_show
         .read()
         .as_ref()
         .is_some_and(|active| active.id == show_id);
-    let route_to_terminate = changed_active_route(&entry, &kind, &object_id, &body, active)?;
+    if active && kind == "route" {
+        let action = output_route_action(
+            &session,
+            show_id,
+            object_id,
+            expected,
+            light_application::OutputRouteMutation::Put { body },
+        );
+        let (result, _activation) = run_output_route_action(&state, activation, action).await?;
+        terminate_changed_route(&state, result.route_to_terminate.as_ref()).await;
+        let change = result.change;
+        emit(
+            &state,
+            "show_object_changed",
+            serde_json::json!({
+                "show_id": change.show_id,
+                "kind": "route",
+                "id": change.route_id,
+                "revision": change.object_revision
+            }),
+        );
+        return Ok((
+            [(header::ETAG, format!("\"{}\"", change.object_revision))],
+            Json(serde_json::json!({"revision":change.object_revision})),
+        )
+            .into_response());
+    }
+    let body = normalize_object_body(&state, &kind, &object_id, body)?;
     validate_object_candidate(&state, &entry, &kind, &object_id, &body, active)?;
     let store = ShowStore::open(&entry.path).map_err(ApiError::store)?;
     backup_show(&state, &entry)?;
@@ -281,7 +275,7 @@ pub(super) async fn put_object(
         .put_object(&kind, &object_id, &body, expected)
         .map_err(ApiError::store)?;
     if active {
-        activate_object_change(&state, &entry, &kind, &body, route_to_terminate).await?;
+        activate_object_change(&state, &entry, &kind, &body).await?;
     }
     emit(
         &state,
@@ -300,7 +294,7 @@ pub(super) async fn delete_object(
     Path((id, kind, object_id)): Path<(Uuid, String, String)>,
     headers: HeaderMap,
 ) -> Result<StatusCode, ApiError> {
-    let _session = authenticate(&state, &headers)?;
+    let session = authenticate(&state, &headers)?;
     if kind != "route" {
         return Err(ApiError::bad_request(
             "generic object deletion is currently limited to output routes",
@@ -314,23 +308,43 @@ pub(super) async fn delete_object(
         .show(show_id)
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("show"))?;
-    let _activation = state.activation_lock.lock().await;
-    let store = ShowStore::open(&entry.path).map_err(ApiError::store)?;
-    let object = store
-        .objects(&kind)
-        .map_err(ApiError::store)?
-        .into_iter()
-        .find(|object| object.id == object_id)
-        .ok_or_else(|| ApiError::not_found("show object"))?;
+    let activation = state.activation_lock.clone().lock_owned().await;
     let active = state
         .active_show
         .read()
         .as_ref()
         .is_some_and(|active| active.id == show_id);
-    let route = active
-        .then(|| serde_json::from_value::<light_output::OutputRoute>(object.body.clone()))
-        .transpose()
-        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    if active {
+        let action = output_route_action(
+            &session,
+            show_id,
+            object_id,
+            expected,
+            light_application::OutputRouteMutation::Delete,
+        );
+        let (result, _activation) = run_output_route_action(&state, activation, action).await?;
+        terminate_changed_route(&state, result.route_to_terminate.as_ref()).await;
+        let change = result.change;
+        emit(
+            &state,
+            "show_object_changed",
+            serde_json::json!({
+                "show_id": change.show_id,
+                "kind": "route",
+                "id": change.route_id,
+                "revision": change.object_revision,
+                "deleted": true
+            }),
+        );
+        return Ok(StatusCode::NO_CONTENT);
+    }
+    let store = ShowStore::open(&entry.path).map_err(ApiError::store)?;
+    let _object = store
+        .objects(&kind)
+        .map_err(ApiError::store)?
+        .into_iter()
+        .find(|object| object.id == object_id)
+        .ok_or_else(|| ApiError::not_found("show object"))?;
     backup_show(&state, &entry)?;
     store
         .mutate_objects_atomically(
@@ -342,15 +356,6 @@ pub(super) async fn delete_object(
             }],
         )
         .map_err(ApiError::store)?;
-    if active {
-        if let (Some(output), Some(route)) = (&state.network_output, route) {
-            let _ = output
-                .terminate_routes(&[route], &mut *state.output_sequences.lock().await)
-                .await;
-        }
-        let prepared = prepare_show_for_runtime(&state, &entry)?;
-        state.engine.install_prepared_snapshot(prepared);
-    }
     emit(
         &state,
         "show_object_changed",

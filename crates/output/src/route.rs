@@ -20,7 +20,7 @@ pub enum DeliveryMode {
     Unicast,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct OutputRoute {
     pub protocol: Protocol,
     pub logical_universe: Universe,

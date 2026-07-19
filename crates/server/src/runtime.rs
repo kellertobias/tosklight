@@ -43,8 +43,8 @@ use base64::{
 };
 use bytes::Bytes;
 use light_application::{
-    EventBus, PlaybackAddress, PlaybackExecution, PlaybackService, ProgrammingService,
-    ShowPatchService, publish_automatic_playback_events,
+    ActiveShowService, EventBus, PlaybackAddress, PlaybackExecution, PlaybackService,
+    ProgrammingService, ShowPatchService, publish_automatic_playback_events,
 };
 use light_control::speed::{
     SoundObservation, SoundToLightConfig, SpeedGroupController, SpeedSnapshot,
@@ -89,6 +89,7 @@ use uuid::Uuid;
 
 use cue_transfer::{CueTransferMode, destination_cue};
 
+mod active_show_adapter;
 mod api_error;
 mod api_types;
 mod auth_backup;
@@ -163,6 +164,7 @@ mod ws_preset_handlers;
 mod ws_programmer_handlers;
 mod ws_selection_handlers;
 
+use active_show_adapter::*;
 use api_error::*;
 use api_types::*;
 use auth_backup::*;

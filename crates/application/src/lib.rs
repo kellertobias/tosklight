@@ -4,6 +4,7 @@
 //! here, while server and desktop adapters translate them into their public wire contracts.
 
 pub mod action;
+pub mod active_show;
 pub mod event;
 pub mod playback;
 pub mod programming;
@@ -13,6 +14,10 @@ pub mod show_patch;
 pub use action::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionOutcome, ActionSource,
     ApplicationCommand, CommandFamily,
+};
+pub use active_show::{
+    ActiveShowPorts, ActiveShowService, ActiveShowUnitOfWork, BackupIdentity,
+    MutateOutputRouteCommand, MutateOutputRouteResult, OutputRouteChange, OutputRouteMutation,
 };
 pub use event::{
     ApplicationEvent, CueReference, DeliveryPolicy, EventBus, EventCapability, EventClass,
@@ -33,7 +38,7 @@ pub use programming::{
 };
 pub use show_compiler::{PreparedShowCandidate, prepare_show_candidate};
 pub use show_patch::{
-    ActiveShowUnitOfWork, BackupIdentity, PatchChange, PatchFixtureCandidate,
-    PatchFixtureProjection, PatchFixturesCommand, PatchFixturesResult, PatchModeProjection,
-    PatchProfileRevisionProjection, PatchSnapshot, ShowPatchPorts, ShowPatchService,
+    PatchChange, PatchFixtureCandidate, PatchFixtureProjection, PatchFixturesCommand,
+    PatchFixturesResult, PatchModeProjection, PatchProfileRevisionProjection, PatchSnapshot,
+    ShowPatchPorts, ShowPatchService,
 };

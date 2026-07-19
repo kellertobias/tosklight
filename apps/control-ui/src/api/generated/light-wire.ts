@@ -63,7 +63,15 @@ export type CueReference = { id: string, number: number, };
 
 export type PlaybackCueTransition = { playback_number: number | null, cue_list_id: string, previous: CueReference | null, current: CueReference | null, cause: PlaybackTransitionCause, advanced_steps: number, };
 
-export type EventPayload = { "type": "playback_cue_transition", transition: PlaybackCueTransition, } | { "type": "show_patch_changed", delta: PatchDelta, };
+export type OutputProtocol = "art_net" | "sacn";
+
+export type OutputDeliveryMode = "broadcast" | "multicast" | "unicast";
+
+export type OutputRoute = { protocol: OutputProtocol, logical_universe: number, destination_universe: number, delivery_mode: OutputDeliveryMode, destination: string | null, enabled: boolean, minimum_slots: number, };
+
+export type OutputRouteChange = { show_id: string, show_revision: number, route_id: string, object_revision: number, route: OutputRoute | null, deleted: boolean, };
+
+export type EventPayload = { "type": "playback_cue_transition", transition: PlaybackCueTransition, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, };
 
 export type EventEnvelope = { sequence: number, occurred_at: string, desk_id: string | null, class: EventClass, object: EventObject | null, source: EventSource, correlation_id: string | null, delivery: EventDeliveryPolicy, payload: EventPayload, };
 

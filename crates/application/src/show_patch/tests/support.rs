@@ -1,6 +1,7 @@
 use crate::{
-    ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionSource, EventBus,
-    PatchChange, PatchFixtureCandidate, PatchFixturesCommand, ShowPatchPorts, ShowPatchService,
+    ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionSource,
+    ActiveShowUnitOfWork, BackupIdentity, EventBus, PatchChange, PatchFixtureCandidate,
+    PatchFixturesCommand, ShowPatchPorts, ShowPatchService,
 };
 use light_core::{FixtureId, Revision, ShowId};
 use light_engine::EngineSnapshot;
@@ -195,12 +196,12 @@ pub struct CounterUnitOfWork {
     counters: Arc<Counters>,
 }
 
-impl super::super::ActiveShowUnitOfWork for CounterUnitOfWork {
+impl ActiveShowUnitOfWork for CounterUnitOfWork {
     fn document(&self) -> &PortableShowDocument {
         &self.document
     }
 
-    fn backup(&mut self, _identity: &super::super::BackupIdentity) -> Result<(), ActionError> {
+    fn backup(&mut self, _identity: &BackupIdentity) -> Result<(), ActionError> {
         self.counters.backups.fetch_add(1, Ordering::SeqCst);
         if self.failure == FailurePoint::Backup {
             Err(ActionError::new(

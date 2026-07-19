@@ -2,11 +2,11 @@ use super::prepare::{PreparedMutation, PreparedPatch, prepare_patch};
 use super::query::build_snapshot;
 use super::replay::{ReplayCache, ReplayKey};
 use super::validation::validate_action;
-use super::{
-    ActiveShowUnitOfWork, BackupIdentity, PatchFixturesCommand, PatchFixturesResult, PatchSnapshot,
-    ShowPatchPorts,
+use super::{PatchFixturesCommand, PatchFixturesResult, PatchSnapshot, ShowPatchPorts};
+use crate::{
+    ActionEnvelope, ActionError, ActionErrorKind, ActiveShowUnitOfWork, BackupIdentity, EventBus,
+    EventDraft,
 };
-use crate::{ActionEnvelope, ActionError, ActionErrorKind, EventBus, EventDraft};
 use parking_lot::Mutex;
 use std::sync::Arc;
 

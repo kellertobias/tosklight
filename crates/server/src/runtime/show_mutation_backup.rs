@@ -20,6 +20,15 @@ impl ShowMutationBackupPlan {
         )
     }
 
+    pub(in crate::runtime) fn output_route(state: &AppState, entry: &ShowEntry) -> Self {
+        Self::new(
+            state.data_dir.join("backups"),
+            entry,
+            "output-route",
+            state.configuration.read().backup_retention,
+        )
+    }
+
     pub(in crate::runtime) fn migration(
         data_dir: &std::path::Path,
         entry: &ShowEntry,
@@ -41,7 +50,7 @@ impl ShowMutationBackupPlan {
         }
     }
 
-    pub(in crate::runtime) fn create_patch(
+    pub(in crate::runtime) fn create_mutation(
         &self,
         store: &ShowStore,
         identity: &BackupIdentity,

@@ -16,8 +16,8 @@ use crate::v2::events::{
     CueReference, EventActionSource, EventCapability, EventClass, EventClientMessage,
     EventDeliveryPolicy, EventEnvelope, EventObject, EventPayload, EventRateLimit,
     EventServerMessage, EventSnapshotCursor, EventSource, EventSubscriptionFilter,
-    PlaybackCueTransition, PlaybackEventSnapshot, PlaybackStateSnapshot, PlaybackTransitionCause,
-    SequenceGap,
+    OutputDeliveryMode, OutputProtocol, OutputRoute, OutputRouteChange, PlaybackCueTransition,
+    PlaybackEventSnapshot, PlaybackStateSnapshot, PlaybackTransitionCause, SequenceGap,
 };
 use crate::v2::patch::{
     PatchDelta, PatchDirectControlEndpoint, PatchDirectControlProtocol, PatchErrorResponse,
@@ -162,6 +162,10 @@ fn typescript_bindings() -> String {
         EventSource::decl(&config),
         CueReference::decl(&config),
         PlaybackCueTransition::decl(&config),
+        OutputProtocol::decl(&config),
+        OutputDeliveryMode::decl(&config),
+        OutputRoute::decl(&config),
+        OutputRouteChange::decl(&config),
         EventPayload::decl(&config),
         EventEnvelope::decl(&config),
         EventClientMessage::decl(&config),

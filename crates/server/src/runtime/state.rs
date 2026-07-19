@@ -28,6 +28,7 @@ pub(super) struct AppState {
     pub(super) active_show_error: Arc<RwLock<Option<String>>>,
     pub(super) events: broadcast::Sender<Event>,
     pub(super) application_events: EventBus,
+    pub(super) active_show_service: ActiveShowService,
     pub(super) show_patch: ShowPatchService,
     pub(super) audit_events: Arc<Mutex<VecDeque<Event>>>,
     pub(super) command_history: Arc<Mutex<HashMap<Uuid, VecDeque<CommandHistoryEntry>>>>,

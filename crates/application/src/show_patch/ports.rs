@@ -1,30 +1,8 @@
 use super::PatchChange;
-use crate::{ActionContext, ActionError};
+use crate::{ActionContext, ActionError, ActiveShowUnitOfWork};
 use light_core::{FixtureId, Revision, ShowId};
 use light_engine::EngineSnapshot;
-use light_show::{
-    FixtureProfileRevision, PortableShowCommit, PortableShowDocument, PortableShowTransaction,
-};
-
-/// One already-open active-show mutation boundary.
-pub trait ActiveShowUnitOfWork {
-    fn document(&self) -> &PortableShowDocument;
-
-    fn backup(&mut self, identity: &BackupIdentity) -> Result<(), ActionError>;
-
-    fn commit(
-        self,
-        transaction: PortableShowTransaction,
-    ) -> Result<PortableShowCommit, ActionError>;
-}
-
-/// Unique operator-visible identity for the one pre-mutation safety backup.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct BackupIdentity {
-    pub show_id: ShowId,
-    pub correlation_id: uuid::Uuid,
-    pub request_id: String,
-}
+use light_show::FixtureProfileRevision;
 
 /// Adapters for active-show ownership, exact library reads, and live runtime installation.
 pub trait ShowPatchPorts: Send + Sync {

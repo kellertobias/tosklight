@@ -6,7 +6,9 @@ use super::{
     spawn_control_inputs, spawn_matter_bridge_sync, startup_options, startup_state::StartupState,
 };
 use axum::Router;
-use light_application::{EventBus, PlaybackService, ProgrammingService, ShowPatchService};
+use light_application::{
+    ActiveShowService, EventBus, PlaybackService, ProgrammingService, ShowPatchService,
+};
 use light_control::TimecodeRouter;
 use light_media::MediaCache;
 use light_output::OutputHealth;
@@ -190,6 +192,7 @@ fn build_app_state(
         active_show_error: Arc::new(RwLock::new(startup.active_show_error)),
         events: startup.events,
         application_events: application_events.clone(),
+        active_show_service: ActiveShowService::new(application_events.clone()),
         show_patch: ShowPatchService::new(application_events),
         audit_events: Arc::new(Mutex::new(VecDeque::with_capacity(2048))),
         command_history: Arc::new(Mutex::new(HashMap::new())),
