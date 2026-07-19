@@ -37,6 +37,27 @@ vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state, dispatch }),
 }));
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
+vi.mock(
+	"../../features/programmingInteraction/ProgrammingInteractionView",
+	() => ({
+		useProgrammingSelectionView: (active = true) =>
+			active
+				? {
+						selected: server.selectedFixtures,
+						expression: server.selectedGroupId
+							? {
+									type: "live_group",
+									groupId: server.selectedGroupId,
+									rule: { type: "all" },
+								}
+							: { type: "static" },
+						revision: 1,
+						gestureOpen: false,
+					}
+				: null,
+		useProgrammingSelectionActions: () => null,
+	}),
+);
 vi.mock("../../features/server/useShowObjectsState", () => ({
 	useGroups: () => server.groups,
 }));

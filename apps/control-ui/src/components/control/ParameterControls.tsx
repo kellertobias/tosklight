@@ -9,7 +9,7 @@ export {
 	directProgrammerChoices,
 } from "./parameterControls/model";
 
-export function ParameterControls() {
+export function ParameterControls({ active = true }: { active?: boolean } = {}) {
 	const { state } = useApp();
 	const stageVisible =
 		state.builtIn === "stage" ||
@@ -18,10 +18,10 @@ export function ParameterControls() {
 			?.panes.some((pane) => pane.kind === "stage");
 	if (state.stageMode !== "select" && stageVisible)
 		return <StageCommandControls />;
-	return <ProgrammerParameterControls />;
+	return <ProgrammerParameterControls active={active} />;
 }
 
-function ProgrammerParameterControls() {
-	const controller = useParameterController();
+function ProgrammerParameterControls({ active }: { active: boolean }) {
+	const controller = useParameterController(active);
 	return <ParameterControlView controller={controller} />;
 }

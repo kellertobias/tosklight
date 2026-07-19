@@ -4,7 +4,7 @@ This is the living handoff for [`major-refactoring.md`](major-refactoring.md). U
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-19 after the user-scoped Programmer-values frontend core.
+Last updated: 2026-07-19 after the parameter-bank selection migration.
 
 ## Guardrails
 
@@ -129,6 +129,11 @@ Last updated: 2026-07-19 after the user-scoped Programmer-values frontend core.
   session isolate authority by show and user; mounted values views alone trigger hydration and a
   stream, cursor gaps repair from snapshots, late work cannot cross a scope reset, and selectors
   suppress unrelated rerenders. The production wire adapter and value consumers remain below.
+- [x] Migrated every parameter-bank family, fader, encoder, range, release, and direct action onto
+  the scoped ordered selection projection. Fixture membership uses sets, streamed peer or OSC
+  selection immediately retargets writes, and inactive parameter views perform no selection
+  hydration, visualization polling, or hardware-listener work. Normal Programmer values remain on
+  the compatibility projection until the values store is connected.
 - [x] Exposed Selective Show Import through authenticated v2 catalog, preview, and atomic apply
   adapters with checked-in schemas, generated TypeScript, exact source/target revisions, strict
   response validation, and focused server contracts. **Show → Load → Partial Show Load** now uses a
@@ -166,7 +171,8 @@ Last updated: 2026-07-19 after the user-scoped Programmer-values frontend core.
 - [ ] Move the remaining selection consumers onto the scoped Programming store, then remove their
   legacy bootstrap fields and broad Programmer refresh paths. Group Pool, Group Strip, and the
   command bar, Stage, Stage/Fixture pane chrome, Channels, Fixture Sheet, Patch, and Presets have
-  moved; parameter controls and miscellaneous modal/setup readers still use the facade.
+  moved, as has the complete parameter bank; miscellaneous modal/setup readers still use the
+  facade.
 - [ ] Connect the user-scoped normal Programmer-values snapshot/event transport, mount the provider,
   and migrate value consumers and optimistic writers before removing value-triggered bootstrap
   refreshes. Keep Preload, modes, priority, connectivity, Highlight, and transient state outside
@@ -240,7 +246,8 @@ Last updated: 2026-07-19 after the user-scoped Programmer-values frontend core.
   window slice adds 5 focused streamed/optimistic/dormancy scenarios; its 3 focused files pass all
   19 tests together with the existing selection and Highlight coverage. The isolated
   Programmer-values frontend core passes all 24 focused store/session/view tests and passed the
-  full frontend typecheck before the following concurrent parameter-selection edit began.
+  full frontend typecheck. The parameter-bank migration passes 17 focused tests across its legacy
+  behavior and streamed selection suites, plus the full frontend typecheck.
 - The current complete frontend suite passes all 811 tests, and the production frontend build
   passes. A final repository-wide suite and real desktop run has not yet been completed.
 

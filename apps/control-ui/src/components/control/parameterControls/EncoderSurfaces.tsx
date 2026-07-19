@@ -61,16 +61,16 @@ function EncoderSurface({
 	const display =
 		controller.encoderNormalizedDisplay(attribute) ??
 		formatNormalizedValue(value);
-	const hasScopedValue = controller.server.selectedGroupId
+	const hasScopedValue = controller.selectedGroupId
 		? Boolean(
 				controller.ownProgrammer?.group_values?.[
-					controller.server.selectedGroupId
+					controller.selectedGroupId
 				]?.[attribute],
 			)
 		: controller.programmerValues.some(
 				(entry) =>
 					entry.attribute === attribute &&
-					controller.server.selectedFixtures.includes(entry.fixture_id),
+					controller.selectedFixtureIds.includes(entry.fixture_id),
 			);
 	const label = parameterLabels[attribute] ?? attribute.replaceAll(".", " ");
 	if (controller.hardwareConnected)
@@ -139,8 +139,8 @@ export function EncoderSurfaces({
 			</>
 		);
 	if (
-		!controller.server.selectedFixtures.length &&
-		!controller.server.selectedGroupId
+		!controller.selectedFixtureIds.length &&
+		!controller.selectedGroupId
 	)
 		return (
 			<div className="parameter-empty">

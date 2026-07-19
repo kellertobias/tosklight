@@ -227,7 +227,7 @@ function collectControlActions(
 
 export function directProgrammerChoices(
 	fixtures: PatchedFixture[],
-	selectedFixtures: string[],
+	selectedFixtures: readonly string[],
 ) {
 	const selected = new Set(selectedFixtures);
 	const values = new Map<string, DirectValueChoice>();

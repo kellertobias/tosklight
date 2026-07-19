@@ -29,13 +29,13 @@ function programmerEntry(
 }
 
 function normalizedTarget(projection: Projection, attribute: string) {
-	if (projection.server.selectedGroupId)
+	if (projection.selectedGroupId)
 		return normalizedProgrammerTarget(
-			projection.groupProgrammerValues[projection.server.selectedGroupId]?.[
+			projection.groupProgrammerValues[projection.selectedGroupId]?.[
 				attribute
 			],
 		);
-	for (const fixtureId of projection.server.selectedFixtures) {
+	for (const fixtureId of projection.selectedFixtureIds) {
 		const target = normalizedProgrammerTarget(
 			programmerEntry(projection, fixtureId, attribute)?.value,
 		);
@@ -44,13 +44,13 @@ function normalizedTarget(projection: Projection, attribute: string) {
 }
 
 function discreteTarget(projection: Projection, attribute: string) {
-	if (projection.server.selectedGroupId)
+	if (projection.selectedGroupId)
 		return discreteProgrammerTarget(
-			projection.groupProgrammerValues[projection.server.selectedGroupId]?.[
+			projection.groupProgrammerValues[projection.selectedGroupId]?.[
 				attribute
 			],
 		);
-	for (const fixtureId of projection.server.selectedFixtures) {
+	for (const fixtureId of projection.selectedFixtureIds) {
 		const target = discreteProgrammerTarget(
 			programmerEntry(projection, fixtureId, attribute)?.value,
 		);
@@ -59,12 +59,12 @@ function discreteTarget(projection: Projection, attribute: string) {
 }
 
 function normalizedDisplay(projection: Projection, attribute: string) {
-	if (projection.server.selectedGroupId) {
+	if (projection.selectedGroupId) {
 		const target = normalizedTarget(projection, attribute);
 		return target == null ? undefined : formatNormalizedValue(target);
 	}
 	return formatNormalizedRange(
-		projection.server.selectedFixtures.flatMap((fixtureId) => {
+		projection.selectedFixtureIds.flatMap((fixtureId) => {
 			const target = normalizedProgrammerTarget(
 				programmerEntry(projection, fixtureId, attribute)?.value,
 			);
@@ -76,10 +76,10 @@ function normalizedDisplay(projection: Projection, attribute: string) {
 }
 
 function discreteDisplay(projection: Projection, attribute: string) {
-	if (projection.server.selectedGroupId)
+	if (projection.selectedGroupId)
 		return discreteTarget(projection, attribute);
 	return formatDiscreteValues(
-		projection.server.selectedFixtures.flatMap((fixtureId) => {
+		projection.selectedFixtureIds.flatMap((fixtureId) => {
 			const target = discreteProgrammerTarget(
 				programmerEntry(projection, fixtureId, attribute)?.value,
 			);
@@ -104,12 +104,12 @@ function createParameterActions(
 ) {
 	const { server } = projection;
 	const applyParameter = async (attribute: string, level: number) => {
-		if (server.selectedGroupId) {
+		if (projection.selectedGroupId) {
 			await server.setGroupValue(attribute, level);
 			return;
 		}
 		await Promise.all(
-			server.selectedFixtures.map((fixtureId) =>
+			projection.selectedFixtureIds.map((fixtureId) =>
 				server.setProgrammer(fixtureId, attribute, level),
 			),
 		);
@@ -121,20 +121,20 @@ function createParameterActions(
 		const points = percentages.map(
 			(value) => Math.max(0, Math.min(100, value)) / 100,
 		);
-		if (server.selectedGroupId) {
+		if (projection.selectedGroupId) {
 			await server.setGroupValue(attribute, { kind: "spread", value: points });
 			return;
 		}
 		await server.setProgrammerMany(
-			server.selectedFixtures.map((fixtureId, index) => ({
+			projection.selectedFixtureIds.map((fixtureId, index) => ({
 				fixtureId,
 				attribute,
-				value: spreadValue(points, index, server.selectedFixtures.length),
+				value: spreadValue(points, index, projection.selectedFixtureIds.length),
 			})),
 		);
 	};
 	const releaseParameter = async (attribute: string) => {
-		if (server.selectedGroupId) {
+		if (projection.selectedGroupId) {
 			await server.releaseGroupValue(attribute);
 			return;
 		}
@@ -144,7 +144,7 @@ function createParameterActions(
 				.map((entry) => entry.fixture_id),
 		);
 		await Promise.all(
-			server.selectedFixtures
+			projection.selectedFixtureIds
 				.filter((fixtureId) => fixtureIds.has(fixtureId))
 				.map((fixtureId) => server.releaseProgrammer(fixtureId, attribute)),
 		);
@@ -223,7 +223,7 @@ function useHardwareEncoders(
 	const latest = useRef({ projection, actions });
 	latest.current = { projection, actions };
 	useEffect(() => {
-		if (!projection.hardwareConnected || directMode) return;
+		if (!projection.active || !projection.hardwareConnected || directMode) return;
 		const handleEncoder = (event: Event) => {
 			const { projection, actions } = latest.current;
 			const { control, value } = (
@@ -261,10 +261,10 @@ function useHardwareEncoders(
 		window.addEventListener("light:encoder-action", handleEncoder);
 		return () =>
 			window.removeEventListener("light:encoder-action", handleEncoder);
-	}, [projection.hardwareConnected, directMode]);
+	}, [projection.active, projection.hardwareConnected, directMode]);
 }
 
-export function useParameterController() {
+export function useParameterController(active = true) {
 	const { dispatch } = useApp();
 	const [family, setFamily] = useState<ParameterFamily>("Intensity");
 	const [directMode, setDirectMode] = useState(false);
@@ -274,7 +274,7 @@ export function useParameterController() {
 	const [generationStatus, setGenerationStatus] = useState<string | null>(null);
 	const [alignMode, setAlignMode] = useState<AlignMode | null>(null);
 	const [dynamicsMode, setDynamicsMode] = useState(false);
-	const projection = useParameterProjection(family);
+	const projection = useParameterProjection(family, active);
 	const actions = createParameterActions(projection, setGenerationStatus);
 	useHardwareEncoders(projection, actions, directMode);
 	return {

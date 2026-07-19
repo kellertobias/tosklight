@@ -3,6 +3,8 @@ import { useServer } from "../../../api/ServerContext";
 import type { VisualizationSnapshot } from "../../../api/types";
 import { useApp } from "../../../state/AppContext";
 import { useGroups } from "../../../features/server/useShowObjectsState";
+import { selectedGroupId } from "../../../features/programmingInteraction/contracts";
+import { useProgrammingSelectionView } from "../../../features/programmingInteraction/ProgrammingInteractionView";
 import { usePollingResource } from "../../../hooks/usePollingResource";
 import {
 	directProgrammerChoices,
@@ -11,16 +13,18 @@ import {
 	parameterFamilies,
 } from "./model";
 
-function useVisualization() {
+const EMPTY_FIXTURE_IDS: readonly string[] = [];
+
+function useVisualization(active: boolean, selectedFixtureIds: readonly string[]) {
 	const server = useServer();
 	const [visualization, setVisualization] =
 		useState<VisualizationSnapshot | null>(null);
 	useEffect(() => {
-		if (server.selectedFixtures.length) return;
+		if (active && selectedFixtureIds.length) return;
 		setVisualization(null);
-	}, [server.selectedFixtures.length]);
+	}, [active, selectedFixtureIds.length]);
 	usePollingResource({
-		enabled: server.selectedFixtures.length > 0,
+		enabled: active && selectedFixtureIds.length > 0,
 		intervalMillis: 400,
 		load: server.readVisualization,
 		onValue: setVisualization,
@@ -28,50 +32,46 @@ function useVisualization() {
 	return visualization;
 }
 
-function useSupportedAttributes() {
+function useSupportedAttributes(
+	selectedFixtureIds: readonly string[],
+	groupId: string | null,
+) {
 	const server = useServer();
 	const groups = useGroups(server.playbacks);
 	return useMemo(() => {
 		const result = new Set<string>();
+		const selected = new Set(selectedFixtureIds);
 		for (const fixture of server.patch?.fixtures ?? []) {
-			const selected =
-				server.selectedFixtures.includes(fixture.fixture_id) ||
-				fixture.logical_heads.some((head) =>
-					server.selectedFixtures.includes(head.fixture_id),
-				);
-			if (!selected) continue;
+			const fixtureSelected =
+				selected.has(fixture.fixture_id) ||
+				fixture.logical_heads.some((head) => selected.has(head.fixture_id));
+			if (!fixtureSelected) continue;
 			for (const head of fixture.definition.heads ?? [])
 				for (const parameter of head.parameters)
 					result.add(parameter.attribute);
 		}
-		if (server.selectedGroupId) {
+		if (groupId) {
 			result.add("intensity");
-			const group = groups.find(
-				(candidate) => candidate.id === server.selectedGroupId,
-			);
+			const group = groups.find((candidate) => candidate.id === groupId);
 			for (const attribute of Object.keys(group?.body.programming ?? {}))
 				result.add(attribute);
 		}
 		return result;
-	}, [
-		server.patch,
-		server.selectedFixtures,
-		server.selectedGroupId,
-		groups,
-	]);
+	}, [server.patch, selectedFixtureIds, groupId, groups]);
 }
 
 function useResolvedValues(
 	visualization: VisualizationSnapshot | null,
-	selectedFixtures: string[],
+	selectedFixtureIds: readonly string[],
 ) {
 	return useMemo(() => {
+		const selected = new Set(selectedFixtureIds);
 		const normalized = new Map<string, number>();
 		const normalizedByFixture = new Map<string, Map<string, number>>();
 		const discrete = new Map<string, string>();
 		const discreteByFixture = new Map<string, Map<string, string>>();
 		for (const entry of visualization?.values ?? []) {
-			if (!selectedFixtures.includes(entry.fixture_id)) continue;
+			if (!selected.has(entry.fixture_id)) continue;
 			if (entry.value.kind === "normalized") {
 				if (!normalized.has(entry.attribute))
 					normalized.set(entry.attribute, entry.value.value);
@@ -87,14 +87,20 @@ function useResolvedValues(
 			}
 		}
 		return { normalized, normalizedByFixture, discrete, discreteByFixture };
-	}, [visualization, selectedFixtures]);
+	}, [visualization, selectedFixtureIds]);
 }
 
-export function useParameterProjection(family: ParameterFamily) {
+export function useParameterProjection(
+	family: ParameterFamily,
+	active = true,
+) {
 	const server = useServer();
 	const { state } = useApp();
-	const visualization = useVisualization();
-	const supported = useSupportedAttributes();
+	const selection = useProgrammingSelectionView(active);
+	const selectedFixtureIds = selection?.selected ?? EMPTY_FIXTURE_IDS;
+	const selectedGroup = selectedGroupId(selection);
+	const visualization = useVisualization(active, selectedFixtureIds);
+	const supported = useSupportedAttributes(selectedFixtureIds, selectedGroup);
 	const ownProgrammer = server.bootstrap?.active_programmers.find(
 		(programmer) => programmer.session_id === server.session?.session_id,
 	);
@@ -104,14 +110,14 @@ export function useParameterProjection(family: ParameterFamily) {
 		string,
 		Record<string, unknown>
 	>;
-	const values = useResolvedValues(visualization, server.selectedFixtures);
+	const values = useResolvedValues(visualization, selectedFixtureIds);
 	const directChoices = useMemo(
 		() =>
 			directProgrammerChoices(
 				server.patch?.fixtures ?? [],
-				server.selectedFixtures,
+				selectedFixtureIds,
 			),
-		[server.patch, server.selectedFixtures],
+		[server.patch, selectedFixtureIds],
 	);
 	const attributes = parameterFamilies[family].filter((attribute) =>
 		supported.has(attribute),
@@ -119,6 +125,9 @@ export function useParameterProjection(family: ParameterFamily) {
 	return {
 		server,
 		state,
+		active,
+		selectedFixtureIds,
+		selectedGroupId: selectedGroup,
 		ownProgrammer,
 		programmerValues,
 		groupProgrammerValues,

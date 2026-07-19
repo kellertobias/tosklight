@@ -23,7 +23,7 @@ function MomentaryActionButton({
 }) {
 	return (
 		<Button
-			disabled={Boolean(controller.server.selectedGroupId)}
+			disabled={Boolean(controller.selectedGroupId)}
 			className={controller.latchedActions[choice.key] ? "active" : ""}
 			aria-label={`${choice.label} ${choice.kind} control action`}
 			onPointerDown={(event) => {
@@ -63,7 +63,7 @@ function PersistentActionButton({
 	const active = Boolean(controller.latchedActions[choice.key]);
 	return (
 		<Button
-			disabled={Boolean(controller.server.selectedGroupId)}
+			disabled={Boolean(controller.selectedGroupId)}
 			className={active ? "active" : ""}
 			aria-label={`${choice.label} ${choice.kind} control action`}
 			onClick={() => {
@@ -86,7 +86,7 @@ function DirectChoiceColumns({
 }: {
 	controller: ParameterController;
 }) {
-	const { directChoices, server } = controller;
+	const { directChoices } = controller;
 	return (
 		<div className="direct-programmer-columns">
 			<section>
@@ -95,7 +95,7 @@ function DirectChoiceColumns({
 					{directChoices.values.map((choice) => (
 						<Button
 							key={choice.key}
-							disabled={Boolean(server.selectedGroupId)}
+							disabled={Boolean(controller.selectedGroupId)}
 							className={controller.directChoiceActive(choice) ? "active" : ""}
 							aria-label={`${choice.label} ${choice.kind} value`}
 							onClick={() => void controller.applyDirectValue(choice)}
@@ -137,9 +137,9 @@ export function DirectProgrammerPicker({
 }: {
 	controller: ParameterController;
 }) {
-	const { directChoices, server } = controller;
+	const { directChoices } = controller;
 	const empty =
-		!server.selectedGroupId &&
+		!controller.selectedGroupId &&
 		!directChoices.values.length &&
 		!directChoices.actions.length;
 	return (
@@ -156,14 +156,15 @@ export function DirectProgrammerPicker({
 				</div>
 				<Button
 					disabled={
-						!directChoices.values.length || Boolean(server.selectedGroupId)
+						!directChoices.values.length ||
+						Boolean(controller.selectedGroupId)
 					}
 					onClick={() => void controller.generateDirectPresets()}
 				>
 					Generate portable presets
 				</Button>
 			</header>
-			{server.selectedGroupId && (
+			{controller.selectedGroupId && (
 				<p role="note">
 					Select concrete fixtures to use typed direct values or generate
 					presets.
