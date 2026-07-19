@@ -1,20 +1,23 @@
 import type { ApiDriver } from "../../../apps/control-ui/e2e/bench/api";
 import { expect } from "../../../apps/control-ui/e2e/bench/fixtures";
 import type { Page } from "../../../apps/control-ui/node_modules/@playwright/test/index.js";
+import type { SoftwareKey } from "../../../apps/shared/programmerKeypad";
 import { expectSelectedNumbers } from "./apiState";
+import { doProgrammerStep, storeGroup } from "../operator";
 
 export async function pressCommand(
 	page: Page,
 	value: string,
 	visibleValue = value,
 ): Promise<void> {
-	const commandLine = page.getByLabel("Command line");
-	await page.getByRole("button", { name: "ESC", exact: true }).click();
-	for (const key of commandKeys(value)) {
-		await page.getByRole("button", { name: key, exact: true }).click();
-	}
-	await expect(commandLine).toHaveValue(visibleValue);
-	await page.getByRole("button", { name: "ENT", exact: true }).click();
+	await doProgrammerStep(
+		{ via: "software", page },
+		["ESC", ...commandKeys(value)],
+		{ expectedCommandLine: visibleValue },
+	);
+	await doProgrammerStep({ via: "software", page }, ["ENT"], {
+		expectedCommandLine: /^(FIXTURE|GROUP)$/,
+	});
 }
 
 export async function pressCommandAndWait(
@@ -33,15 +36,17 @@ export async function enterCommandWithoutEscape(
 	value: string,
 	visibleValue = value,
 ): Promise<void> {
-	const commandLine = page.getByLabel("Command line");
-	for (const key of commandKeys(value))
-		await page.getByRole("button", { name: key, exact: true }).click();
-	await expect(commandLine).toHaveValue(visibleValue);
-	await page.getByRole("button", { name: "ENT", exact: true }).click();
-	await expect(commandLine).toHaveValue("FIXTURE");
+	await doProgrammerStep(
+		{ via: "software", page },
+		commandKeys(value),
+		{ expectedCommandLine: visibleValue },
+	);
+	await doProgrammerStep({ via: "software", page }, ["ENT"], {
+		expectedCommandLine: "FIXTURE",
+	});
 }
 
-function commandKeys(value: string): string[] {
+function commandKeys(value: string): SoftwareKey[] {
 	return value
 		.trim()
 		.split(/\s+/)
@@ -54,7 +59,7 @@ function commandKeys(value: string): string[] {
 			if (token === "DIV") return ["DIV"];
 			if (/^\d+$/.test(token)) return [...token];
 			return [token];
-		});
+		}) as SoftwareKey[];
 }
 
 export async function openBuiltIn(page: Page, name: string): Promise<void> {
@@ -105,14 +110,7 @@ export async function recordExistingGroup(
 	number: number,
 	mode: "Merge" | "Overwrite",
 ): Promise<void> {
-	await openGroups(page);
-	await page.locator(".global-store-button").click();
-	await expect(page.locator(".global-store-button")).toHaveText("REC ARMED");
-	await groupCard(page, number).click();
-	const dialog = page.locator(".record-mode-dialog");
-	await expect(dialog).toBeVisible();
-	await dialog.getByRole("button", { name: mode, exact: true }).click();
-	await expect(dialog).toBeHidden();
+	await storeGroup({ via: "pool", page, group: number, mode });
 }
 
 export async function expectVisibleGroupOrder(

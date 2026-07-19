@@ -1,5 +1,6 @@
 import { expect } from "../../../apps/control-ui/e2e/bench/fixtures";
 import { pairedScenario } from "../../../apps/control-ui/e2e/bench/pairedScenario";
+import { storeGroup } from "../operator";
 import {
 	command,
 	expectGroup,
@@ -41,7 +42,11 @@ export function registerFrozenAndEmptyGroupPairedScenarios() {
 		},
 		api: async ({ api }, state) => {
 			await command(api, "GROUP GROUP 1");
-			await command(api, "RECORD GROUP 5");
+			await storeGroup({
+				via: "programmer",
+				surface: { via: "command-line", api },
+				group: 5,
+			});
 			await overwriteGroupByNumbers(api, "1", state.sourceOrder);
 			await unpatchFixture(api, state.fixtures[3]);
 			await command(api, "GROUP 5 AT 50");
@@ -50,7 +55,11 @@ export function registerFrozenAndEmptyGroupPairedScenarios() {
 			await desk.open(api.baseUrl);
 			await openGroups(page);
 			await groupCard(page, 1).dblclick();
-			await pressCommandAndWait(page, "RECORD GROUP 5", "RECORD GROUP 5");
+			await storeGroup({
+				via: "programmer",
+				surface: { via: "software", page },
+				group: 5,
+			});
 			await selectFixtureRows(api, page, state.sourceOrder);
 			await recordExistingGroup(page, 1, "Overwrite");
 			await openPatch(page);

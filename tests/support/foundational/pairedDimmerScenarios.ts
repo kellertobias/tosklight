@@ -1,5 +1,6 @@
 import { expect } from "../../../apps/control-ui/e2e/bench/fixtures";
 import { pairedScenario } from "../../../apps/control-ui/e2e/bench/pairedScenario";
+import { storeGroup } from "../operator";
 import {
 	command,
 	expectGroup,
@@ -129,13 +130,21 @@ export function registerDimmerAndDerivedGroupPairedScenarios() {
 		},
 		api: async ({ api }, state) => {
 			await command(api, "GROUP 1 DIV 2");
-			await command(api, "RECORD GROUP 5");
+			await storeGroup({
+				via: "programmer",
+				surface: { via: "command-line", api },
+				group: 5,
+			});
 			await overwriteGroupByNumbers(api, "1", state.sourceOrder);
 		},
 		ui: async ({ api, desk, page }, state) => {
 			await desk.open(api.baseUrl);
 			await pressCommandAndWait(page, "GROUP 1 DIV 2", "G1 DIV 2");
-			await pressCommandAndWait(page, "RECORD GROUP 5", "RECORD GROUP 5");
+			await storeGroup({
+				via: "programmer",
+				surface: { via: "software", page },
+				group: 5,
+			});
 			await selectFixtureRows(api, page, state.sourceOrder);
 			await recordExistingGroup(page, 1, "Overwrite");
 		},

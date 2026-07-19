@@ -3,6 +3,7 @@ import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
 import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
 import type { OscHardware } from "../apps/control-ui/e2e/bench/protocols";
 import type { Locator, Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
+import { doProgrammerStep } from "./support/operator";
 import {
   activeShowId,
   command,
@@ -525,7 +526,10 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     const clientId = `osc-002-${crypto.randomUUID()}`;
     try {
       await hardware.subscribe(clientId, alias);
-      for (const action of ["grp", "digit-1", "at", "digit-2", "digit-5", "enter"]) await hardware.send(`/light/${alias}/programmer/${action}`, [true]);
+      await doProgrammerStep(
+        { via: "osc", api, hardware },
+        ["GRP", "1", "AT", "2", "5", "ENT"],
+      );
       await expectProgrammer(api, (state) => expect(state.group_values["1"]?.intensity).toBeDefined());
       const art = bench.artnet.mark(); const sacn = bench.sacn.mark();
       await bench.tick(3_000);
