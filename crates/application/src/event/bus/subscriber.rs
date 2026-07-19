@@ -5,9 +5,12 @@ use std::{collections::VecDeque, sync::Arc};
 use tokio::time::Instant;
 
 use super::{EventBusState, replay_from};
-use crate::event::model::{
-    DeliveryPolicy, EventEnvelope, EventFilter, EventReplay, ReplaceableEventRateLimit,
-    SequenceGap, SubscriptionDelivery, SubscriptionOptions,
+use crate::event::{
+    model::{DeliveryPolicy, EventEnvelope},
+    subscription::{
+        EventFilter, EventReplay, ReplaceableEventRateLimit, SequenceGap, SubscriptionDelivery,
+        SubscriptionOptions,
+    },
 };
 
 pub(super) struct SubscriberState {

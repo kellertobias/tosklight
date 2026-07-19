@@ -11,9 +11,11 @@ use tokio::time::Instant;
 mod subscriber;
 use subscriber::SubscriberState;
 
-use super::model::{
-    EventDraft, EventEnvelope, EventFilter, EventReplay, SequenceGap, SubscriptionDelivery,
-    SubscriptionOptions,
+use super::{
+    model::{EventDraft, EventEnvelope},
+    subscription::{
+        EventFilter, EventReplay, SequenceGap, SubscriptionDelivery, SubscriptionOptions,
+    },
 };
 
 #[derive(Clone)]
