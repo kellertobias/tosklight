@@ -4,7 +4,7 @@ This is the living handoff for [`major-refactoring.md`](major-refactoring.md). U
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-18 at commit `3c599fd`.
+Last updated: 2026-07-18 at commit `4cb86cb`.
 
 ## Guardrails
 
@@ -40,6 +40,11 @@ Last updated: 2026-07-18 at commit `3c599fd`.
   compensation, and concurrent target/source revision checks.
 - [x] Added scoped Show and Playback events with related-object routing, bounded queues,
   coalescing, rate limits, monotonic sequences, explicit gaps, and snapshot repair.
+- [x] Completed the first scoped Show Objects frontend store: mounted views own kind or exact-object
+  subscriptions, REST hydration is independent of WebSocket readiness, derived Groups track their
+  transitive dependencies, optimistic mutations reconcile against authoritative events, gaps repair
+  from snapshots without cursor loss, malformed events cannot poison reconnects, and unrelated
+  global `ServerContext` consumers do not rerender.
 - [x] Migrated manual, automatic, scheduled, OSC, preload, current-page, and explicit-page
   Playback behavior into the typed application service and v2 runtime contract.
 - [x] Converged global Grand Master and blackout changes through the typed Output runtime service,
@@ -54,18 +59,18 @@ Last updated: 2026-07-18 at commit `3c599fd`.
 - [x] Split major responsibility hotspots including server runtime/composition, command transport,
   Core, Media/CITP, Highlight, MVR writer/import, Playback projections/adapters, Preload, event
   subscriptions, lossless JSON tests, File Manager platform adapters, shared frontend controls,
-  and the Stage 3D scene/model/rendering pipeline.
+  the Stage 3D scene/model/rendering pipeline, the frontend API client, fixture-profile modeling,
+  PDF manual generation, global styles, and File Manager styles. Every in-scope production file is
+  now at or below the 400-line design goal.
 
 ## In progress
 
-- [ ] Finish the scoped Show Objects frontend store. Current work covers active-view subscriptions,
-  exact-object hydration, optimistic overlays, and selective-import reconciliation, but must also
-  prove no cursor loss during replay/scope churn, recover from malformed events, keep derived
-  Groups authoritative with partial caches, hydrate without WebSocket readiness, and isolate React
-  publications from the global `ServerContext`.
-- [ ] Split the frontend API client into capability adapters while keeping its stable public facade,
-  then continue responsibility-based splits for the fixture-profile model, manual builder, and
-  remaining style ownership above the 400-line goal.
+- [ ] Remove public mutable Playback lock exposure and external operation-lock acquisition in favor
+  of typed commands and immutable projections while preserving ordered multi-step transactions.
+- [ ] Modularize Hardware Controls into transport, feedback state, controller lifecycle, and focused
+  Playback, Programmer, grid, and settings surfaces.
+- [ ] Continue vertical feature-store/event slices and move the remaining production callers away
+  from broad `useServer()`, polling, and generic show-object mutation.
 
 ## Remaining architecture work
 
@@ -109,12 +114,13 @@ Last updated: 2026-07-18 at commit `3c599fd`.
 ## Current verification snapshot
 
 - Source-size ratchet: 0 production files above 1,200; 0 production functions above 150.
+- In-scope production file goal: 0 files above 400 lines. The scanner still reports larger test and
+  planning sources, plus the unrelated Dynamics Editor experiment.
 - Focused application, server, wire, frontend, architecture, source-size, MVR, File Manager,
   Playback, Preload, Patch, Output, event, shared-control, Stage 3D, build, and strict Clippy checks
   have passed for their committed slices.
 - A final full-suite and real desktop run has not yet been completed.
 
-The remaining files above the 400-line goal currently include the frontend API transport, manual
-builder, large style sheets, planning documentation, and several test modules. The unrelated
-Dynamics Editor experiment is outside this refactoring's scope. Test files may exceed the hard
-limits, but should still be split when it improves readability.
+The remaining files above the 400-line goal are planning/test sources and the unrelated Dynamics
+Editor experiment. Test files may exceed the hard limits, but should still be split when it
+improves readability and makes operator intent more visible.
