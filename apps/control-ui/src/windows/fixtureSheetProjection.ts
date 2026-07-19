@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useServer } from "../api/ServerContext";
 import type { VisualizationSnapshot } from "../api/types";
 import { fixtures } from "../data/mockData";
+import type { ShowObject } from "../features/showObjects/contracts";
+import { useGroups } from "../features/server/useShowObjectsState";
 import type { FixtureSheetIncludedHeads, FixtureSheetOrder } from "../types";
 import {
 	activeProgrammerFixtureIds,
@@ -15,7 +17,7 @@ import {
 } from "./fixtureSheetTargets";
 
 type FixtureSheetTarget = ReturnType<typeof fixtureSheetTargets>[number];
-type FixtureGroup = ReturnType<typeof useServer>["groups"][number];
+type FixtureGroup = ShowObject<"group">;
 
 function targetFamilyActive(
 	target: FixtureSheetTarget,
@@ -33,21 +35,23 @@ function orderedFixtureTargets({
 	activeOnly,
 	cueListId,
 	includedHeads,
+	groups,
 }: {
 	server: ReturnType<typeof useServer>;
 	fixtureOrder: FixtureSheetOrder;
 	activeOnly: boolean;
 	cueListId: string;
 	includedHeads: FixtureSheetIncludedHeads;
+	groups: readonly FixtureGroup[];
 }) {
 	const ownProgrammer = server.bootstrap?.active_programmers.find(
 		(programmer) => programmer.session_id === server.session?.session_id,
 	);
-	const activeIds = activeProgrammerFixtureIds(ownProgrammer, server.groups);
+	const activeIds = activeProgrammerFixtureIds(ownProgrammer, groups);
 	const selectedCueList = server.playbacks?.cue_lists.find(
 		(cueList) => cueList.id === cueListId,
 	);
-	const cueIds = cueListFixtureIds(selectedCueList, server.groups);
+	const cueIds = cueListFixtureIds(selectedCueList, groups);
 	return [...(server.patch?.fixtures ?? [])]
 		.sort(compareFixtureIds)
 		.flatMap((fixture) => fixtureSheetTargets(fixture, includedHeads))
@@ -78,7 +82,7 @@ function fixtureSheetRow({
 	index: number;
 	visualization: VisualizationSnapshot | null;
 	preloadVisualization: VisualizationSnapshot | null;
-	groups: FixtureGroup[];
+	groups: readonly FixtureGroup[];
 }) {
 	const patched = target.fixture;
 	const intensity = targetValue(visualization, target, "intensity");
@@ -210,6 +214,7 @@ export function useFixtureSheetRows({
 	includedHeads: FixtureSheetIncludedHeads;
 }) {
 	const server = useServer();
+	const groups = useGroups(server.playbacks);
 	if (!server.bootstrap) {
 		return fixtures.map((fixture) => ({
 			...fixture,
@@ -234,13 +239,14 @@ export function useFixtureSheetRows({
 		activeOnly,
 		cueListId,
 		includedHeads,
+		groups,
 	}).map((target, index) =>
 		fixtureSheetRow({
 			target,
 			index,
 			visualization,
 			preloadVisualization,
-			groups: server.groups,
+			groups,
 		}),
 	);
 }

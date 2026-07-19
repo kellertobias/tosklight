@@ -7,6 +7,7 @@ import {
 import type { ServerController } from "./model";
 import type { ServerContextValue } from "./ServerContextValue";
 import { runOptimisticShowObjectMutation } from "./showObjectMutations";
+import { currentPresets } from "./showObjectSelectors";
 
 function mergePresetValues(
 	existing: Record<string, Record<string, unknown>>,
@@ -30,7 +31,6 @@ export function createPresetActions(
 		setError,
 		bootstrap,
 		session,
-		presets,
 		setSelectedFixtures,
 	} = model;
 	return {
@@ -95,7 +95,7 @@ export function createPresetActions(
 				for (const attributes of Object.values(group_values))
 					for (const attribute of Object.keys(attributes))
 						if (!includesAttribute(attribute)) delete attributes[attribute];
-				const existing = presets.find(
+				const existing = currentPresets(model).find(
 					(item) =>
 						normalizePresetFamily(item.body.family) === address.family &&
 						item.body.number === address.number,

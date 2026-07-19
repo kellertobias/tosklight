@@ -35,6 +35,9 @@ vi.mock("../../api/ServerContext", () => ({
 		groups: mocks.groups,
 	}),
 }));
+vi.mock("../../features/server/useShowObjectsState", () => ({
+	useGroups: () => mocks.groups,
+}));
 
 const base: PlaybackDefinition = {
 	number: 7,

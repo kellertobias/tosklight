@@ -32,9 +32,9 @@ export class MediaApiClient {
 
 	refreshMediaPreview(
 		fixtureId: string,
-		source: number,
-		width: number,
-		height: number,
+		source = 0,
+		width = 320,
+		height = 180,
 	): Promise<MediaPreviewRefresh> {
 		return this.transport.request(
 			`/api/v1/media/${fixtureId}/preview/refresh`,
@@ -42,15 +42,15 @@ export class MediaApiClient {
 		);
 	}
 
-	mediaPreview(fixtureId: string, source: number): Promise<Blob> {
+	mediaPreview(fixtureId: string, source = 0): Promise<Blob> {
 		return this.transport.blob(`/api/v1/media/${fixtureId}/preview/${source}`);
 	}
 
 	refreshMediaThumbnails(
 		fixtureId: string,
 		elements: number[],
-		width: number,
-		height: number,
+		width = 128,
+		height = 72,
 	): Promise<{ fixture_id: string; count: number }> {
 		return this.transport.request(
 			`/api/v1/media/${fixtureId}/thumbnails/refresh`,

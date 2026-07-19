@@ -5,6 +5,7 @@ import { useApp } from "../../../state/AppContext";
 import { playbackRowUnits, projectPlaybackSlots } from "./projection";
 import type { PlaybackConfigurationState } from "./types";
 import { useShowObjectView } from "../../../features/showObjects/ShowObjectsView";
+import { useGroups } from "../../../features/server/useShowObjectsState";
 
 export interface PlaybackFaderBankProps {
 	pageNumber?: number;
@@ -24,6 +25,7 @@ export function usePlaybackBankController({
 	playbackLayout,
 }: PlaybackFaderBankProps) {
 	const server = useServer();
+	const groups = useGroups(server.playbacks);
 	const { state, dispatch } = useApp();
 	const hardware = Boolean(
 		server.bootstrap?.hardware_connected || state.midiProfile,
@@ -43,6 +45,7 @@ export function usePlaybackBankController({
 	const selectionPending = /^SELECT\s*$/i.test(server.commandLine);
 	const slots = projectPlaybackSlots({
 		server,
+		groups,
 		page,
 		playbackLayout,
 		columns,

@@ -37,6 +37,9 @@ vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state, dispatch }),
 }));
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
+vi.mock("../../features/server/useShowObjectsState", () => ({
+	useGroups: () => server.groups,
+}));
 
 afterEach(() => {
 	cleanup();

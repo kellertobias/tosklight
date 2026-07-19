@@ -11,9 +11,9 @@ type RuntimeGroupControl = NonNullable<
 
 /** Overlays desk/runtime master feedback without mutating portable Group objects. */
 export function projectRuntimeGroupMasters(
-	groups: GroupObject[],
+	groups: readonly GroupObject[],
 	controls: readonly RuntimeGroupControl[] | undefined,
-): GroupObject[] {
+): readonly GroupObject[] {
 	if (!controls?.length) return groups;
 	const masters = new Map(controls.map((control) => [control.id, control.master]));
 	let changed = false;

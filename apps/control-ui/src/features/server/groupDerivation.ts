@@ -2,6 +2,10 @@ import type { StoredGroup } from "../../api/types";
 import type { ServerController } from "./model";
 import type { ServerContextValue } from "./ServerContextValue";
 import { runOptimisticShowObjectMutation } from "./showObjectMutations";
+import {
+	currentGroups,
+	currentPortableGroups,
+} from "./showObjectSelectors";
 
 export function createGroupDerivationActions(
 	model: ServerController,
@@ -10,8 +14,6 @@ export function createGroupDerivationActions(
 		client,
 		setError,
 		bootstrap,
-		groups,
-		portableGroups,
 		setSelectedFixtures,
 	} = model;
 	return {
@@ -20,7 +22,9 @@ export function createGroupDerivationActions(
 				if (!bootstrap?.active_show)
 					throw new Error("Open a show before refreshing a frozen group");
 				const showId = bootstrap.active_show.id;
-				const existing = portableGroups.find((item) => item.id === id);
+				const existing = currentPortableGroups(model).find(
+					(item) => item.id === id,
+				);
 				const sourceId = existing?.body.frozen_from?.source_group_id;
 				if (!existing || !sourceId)
 					throw new Error("Group is not a frozen group");
@@ -64,8 +68,10 @@ export function createGroupDerivationActions(
 				if (!bootstrap?.active_show)
 					throw new Error("Open a show before detaching a derived group");
 				const showId = bootstrap.active_show.id;
-				const existing = portableGroups.find((item) => item.id === id);
-				const projected = groups.find((item) => item.id === id);
+				const existing = currentPortableGroups(model).find(
+					(item) => item.id === id,
+				);
+				const projected = currentGroups(model).find((item) => item.id === id);
 				if (!existing?.body.derived_from || !projected)
 					throw new Error("Group is not derived");
 				const body: StoredGroup = {

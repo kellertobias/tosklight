@@ -88,6 +88,7 @@ const state = {
 const dispatch = vi.fn();
 
 vi.mock("../api/ServerContext", () => ({ useServer: () => server }));
+vi.mock("../features/server/useShowObjectsState", () => ({ useGroups: () => server.groups }));
 vi.mock("../state/AppContext", () => ({ useApp: () => ({ state, dispatch }) }));
 
 beforeEach(() => {

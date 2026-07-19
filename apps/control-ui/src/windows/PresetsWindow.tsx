@@ -11,12 +11,14 @@ import { RecordModeDialog, type RecordMode } from "../components/shared/RecordMo
 import { requestUpdateTarget } from "../components/control/updateWorkflow";
 import { normalizePresetFamily, presetAddress, presetStorageKey, PRESET_FAMILIES } from "../presetFamilies";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
+import { usePresets } from "../features/showObjects/ShowObjectsState";
 
 type PresetCustomization = { title?: string; icon?: string; color?: string };
 
 export function PresetsWindow({ active = true, compact, paneId, showGroupShortcuts, presetFamily, presetPoolColors }: WindowProps) {
   useShowObjectView("preset", active);
   const server = useServer();
+  const storedPresets = usePresets();
   const { state, dispatch } = useApp();
   const family = compact ? (presetFamily ?? state.presetFamily) : state.presetFamily;
   const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
@@ -42,7 +44,7 @@ export function PresetsWindow({ active = true, compact, paneId, showGroupShortcu
             icon: preset.icon,
           },
         }));
-  const stored = server.bootstrap?.active_show ? server.presets : fallback;
+  const stored = server.bootstrap?.active_show ? storedPresets : fallback;
   const cards = Array.from({ length: 200 }, (_, index) =>
     stored.find((preset) =>
       normalizePresetFamily(preset.body.family) === family

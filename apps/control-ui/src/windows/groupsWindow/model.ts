@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import type { useServer } from "../../api/ServerContext";
 import type { StoredGroup, VersionedObject } from "../../api/types";
 import { groups as fallbackGroups } from "../../data/mockData";
+import { useGroups } from "../../features/server/useShowObjectsState";
 
 export type GroupsServer = ReturnType<typeof useServer>;
 export type Group = VersionedObject<StoredGroup>;
@@ -12,7 +13,7 @@ export interface FixtureMetadata {
 	knownFixtureIds: Set<string>;
 }
 
-function fallbackGroupPool(): GroupsServer["groups"] {
+function fallbackGroupPool(): Group[] {
 	return fallbackGroups.map((group) => ({
 		kind: "group",
 		id: String(group.id),
@@ -29,10 +30,10 @@ function fallbackGroupPool(): GroupsServer["groups"] {
 			derived_from: null,
 			frozen_from: null,
 		},
-	})) as GroupsServer["groups"];
+	}));
 }
 
-function groupCards(groups: GroupsServer["groups"]) {
+function groupCards(groups: readonly Group[]) {
 	return Array.from(
 		{ length: 40 },
 		(_, index) =>
@@ -81,10 +82,11 @@ function fixtureMetadata(
 }
 
 export function useGroupPoolModel(server: GroupsServer) {
+	const storedGroups = useGroups(server.playbacks);
 	const groups = useMemo(() => {
 		if (!server.bootstrap) return fallbackGroupPool();
-		return server.bootstrap.active_show ? server.groups : [];
-	}, [server.bootstrap, server.groups]);
+		return server.bootstrap.active_show ? storedGroups : [];
+	}, [server.bootstrap, storedGroups]);
 	const cards = useMemo(() => groupCards(groups), [groups]);
 	const fixtures = server.patch?.fixtures ?? [];
 	const metadata = useMemo(() => fixtureMetadata(fixtures), [fixtures]);

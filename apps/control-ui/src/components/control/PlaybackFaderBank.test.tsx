@@ -105,6 +105,9 @@ vi.mock("../../api/ServerContext", () => ({
 		storePlayback: mocks.storePlayback,
 	}),
 }));
+vi.mock("../../features/server/useShowObjectsState", () => ({
+	useGroups: () => [],
+}));
 vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state: mocks.state, dispatch: mocks.dispatch }),
 }));

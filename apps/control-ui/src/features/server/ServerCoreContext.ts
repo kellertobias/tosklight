@@ -15,8 +15,6 @@ import type {
 	PlaybackSnapshot,
 	SessionResponse,
 	ShowEntry,
-	StoredGroup,
-	StoredPreset,
 	UpdateMenuEntry,
 	UpdateMode,
 	UpdatePreview,
@@ -70,8 +68,6 @@ export interface ServerCoreContext
 	fixtureProfileWarnings: string[];
 	mediaServers: MediaServerFixture[];
 	mediaPreviewUrls: Record<string, string>;
-	groups: VersionedObject<StoredGroup>[];
-	presets: VersionedObject<StoredPreset>[];
 	cueObjects: VersionedObject<import("../../api/types").CueList>[];
 	deskLayout: VersionedObject<StoredDeskLayout> | null;
 	deskLayoutScope: string | null;

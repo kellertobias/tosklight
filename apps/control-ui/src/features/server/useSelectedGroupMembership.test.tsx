@@ -30,7 +30,7 @@ describe("useSelectedGroupMembership", () => {
 		);
 		expect(setSelectedFixtures).toHaveBeenCalledOnce();
 
-		rerender({ groups: [group(0.7, fixtures)] });
+		rerender({ groups: [group(0.7, [...fixtures])] });
 
 		expect(setSelectedFixtures).toHaveBeenCalledOnce();
 		expect(setSelectedGroupId).not.toHaveBeenCalled();

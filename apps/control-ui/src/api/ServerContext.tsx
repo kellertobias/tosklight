@@ -9,8 +9,8 @@ import {
 import { FilesProvider } from "../features/files/FilesContext";
 import { ScreensProvider } from "../features/screens/ScreensContext";
 import {
+	ShowObjectDetailSubscription,
 	ShowObjectsViewProvider,
-	useShowObjectView,
 } from "../features/showObjects/ShowObjectsView";
 import type { ShowObject } from "../features/showObjects/contracts";
 import { composeServerContextValue } from "../features/server/composeServerContextValue";
@@ -20,6 +20,8 @@ import { useFileAccess } from "../features/server/useFileAccess";
 import { useServerConnection } from "../features/server/useServerConnection";
 import { useServerPolling } from "../features/server/useServerPolling";
 import { useServerState } from "../features/server/useServerState";
+import { useGroups } from "../features/server/useShowObjectsState";
+import { useSelectedGroupMembership } from "../features/server/useSelectedGroupMembership";
 import {
 	useServerRefresh,
 	useShowObjects,
@@ -43,8 +45,25 @@ export {
 
 const ServerContext = createContext<ServerContextValue | null>(null);
 
-function LiveGroupView({ selectedGroupId }: { selectedGroupId: string | null }) {
-	useShowObjectView("group", selectedGroupId != null);
+function SelectedGroupMembershipSync({
+	playbacks,
+	selectedGroupId,
+	setSelectedGroupId,
+	setSelectedFixtures,
+}: Pick<
+	ReturnType<typeof useServerState>,
+	| "playbacks"
+	| "selectedGroupId"
+	| "setSelectedGroupId"
+	| "setSelectedFixtures"
+>) {
+	const groups = useGroups(playbacks);
+	useSelectedGroupMembership(
+		groups,
+		selectedGroupId,
+		setSelectedGroupId,
+		setSelectedFixtures,
+	);
 	return null;
 }
 
@@ -73,6 +92,11 @@ export function ServerProvider({
 	const loadShowObjectCollection = useCallback(
 		(showId: string, kind: "group" | "preset") =>
 			state.client.objects(showId, kind) as Promise<ShowObject[]>,
+		[state.client],
+	);
+	const loadShowObject = useCallback(
+		(showId: string, kind: "group" | "preset", objectId: string) =>
+			state.client.objectOrNull(showId, kind, objectId) as Promise<ShowObject | null>,
 		[state.client],
 	);
 	const lastShowObjectError = useRef<string | null>(null);
@@ -139,9 +163,19 @@ export function ServerProvider({
 				store={state.showObjectsStore}
 				transport={showObjectsTransport}
 				loadCollection={loadShowObjectCollection}
+				loadObject={loadShowObject}
 				onError={reportShowObjectError}
 			>
-				<LiveGroupView selectedGroupId={state.selectedGroupId} />
+				<SelectedGroupMembershipSync
+					playbacks={state.playbacks}
+					selectedGroupId={state.selectedGroupId}
+					setSelectedGroupId={state.setSelectedGroupId}
+					setSelectedFixtures={state.setSelectedFixtures}
+				/>
+				<ShowObjectDetailSubscription
+					kind="group"
+					objectId={state.selectedGroupId}
+				/>
 				<FilesProvider source={fileSource}>
 					<ScreensProvider source={screenSource}>{children}</ScreensProvider>
 				</FilesProvider>

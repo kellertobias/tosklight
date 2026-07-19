@@ -6,6 +6,7 @@ import {
 	runOptimisticShowObjectMutation,
 } from "./showObjectMutations";
 import { updateRuntimeGroupMaster } from "./groupRuntimeProjection";
+import { currentPortableGroups } from "./showObjectSelectors";
 
 export function createGroupEditingActions(
 	model: ServerController,
@@ -13,14 +14,16 @@ export function createGroupEditingActions(
 	ServerContextValue,
 	"updateGroup" | "setGroupMaster" | "setGroupMasterFlash" | "undoGroup"
 > {
-	const { client, setError, bootstrap, portableGroups, setPlaybacks } = model;
+	const { client, setError, bootstrap, setPlaybacks } = model;
 	return {
 		updateGroup: async (id, update) => {
 			try {
 				if (!bootstrap?.active_show)
 					throw new Error("Open a show before editing a group");
 				const showId = bootstrap.active_show.id;
-				const existing = portableGroups.find((item) => item.id === id);
+				const existing = currentPortableGroups(model).find(
+					(item) => item.id === id,
+				);
 				if (!existing) throw new Error(`Group ${id} does not exist`);
 				const name = update.name?.trim();
 				if (!name) throw new Error("Group name is required");
@@ -73,7 +76,9 @@ export function createGroupEditingActions(
 			try {
 				if (!bootstrap?.active_show)
 					throw new Error("Open a show before undoing a group change");
-				const existing = portableGroups.find((item) => item.id === id);
+				const existing = currentPortableGroups(model).find(
+					(item) => item.id === id,
+				);
 				if (!existing) throw new Error("Group does not exist");
 				const response = await client.undoObject(
 					bootstrap.active_show.id,

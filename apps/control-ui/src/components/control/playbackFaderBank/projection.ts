@@ -4,7 +4,11 @@ import type {
 	PlaybackSurfaceRow,
 } from "../../../api/types";
 import { playbackSlotNumbers } from "../playbackProjection";
-import type { PlaybackServer, PlaybackSlotProjection } from "./types";
+import type {
+	PlaybackGroup,
+	PlaybackServer,
+	PlaybackSlotProjection,
+} from "./types";
 
 export function playbackRowUnits(row: PlaybackSurfaceRow, hardware: boolean) {
 	if (hardware) return row.has_fader ? 2 : 1;
@@ -13,6 +17,7 @@ export function playbackRowUnits(row: PlaybackSurfaceRow, hardware: boolean) {
 
 export function projectPlaybackSlots({
 	server,
+	groups,
 	page,
 	playbackLayout,
 	columns,
@@ -20,6 +25,7 @@ export function projectPlaybackSlots({
 	pageSize,
 }: {
 	server: PlaybackServer;
+	groups: readonly PlaybackGroup[];
 	page: PlaybackPage | undefined;
 	playbackLayout: PlaybackSurfaceLayout | null | undefined;
 	columns: number;
@@ -54,7 +60,7 @@ export function projectPlaybackSlots({
 		const groupId =
 			playback?.target.type === "group" ? playback.target.group_id : null;
 		const group = groupId
-			? (server.groups.find((candidate) => candidate.id === groupId) ?? null)
+			? (groups.find((candidate) => candidate.id === groupId) ?? null)
 			: null;
 		return { playback, cue, group, slot, row, rowIndex };
 	});

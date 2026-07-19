@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { LightApiClient } from "../../api/LightApiClient";
 import type {
 	BootstrapSnapshot,
@@ -24,10 +24,8 @@ import type {
 	StoredStageLayout,
 } from "./contracts";
 import { useShowObjectsState } from "./useShowObjectsState";
-import { useSelectedGroupMembership } from "./useSelectedGroupMembership";
 import { useHighlightState } from "./useHighlightState";
 import { useMediaServerState } from "./useMediaServerState";
-import { projectRuntimeGroupMasters } from "./groupRuntimeProjection";
 
 export function useServerState() {
 	const client = useRef(new LightApiClient()).current;
@@ -58,19 +56,7 @@ export function useServerState() {
 		string[]
 	>([]);
 	const media = useMediaServerState();
-	const {
-		showObjectsStore,
-		groups: portableGroups,
-		presets,
-	} = useShowObjectsState();
-	const groups = useMemo(
-		() =>
-			projectRuntimeGroupMasters(
-				portableGroups,
-				playbacks?.authoritative_controls?.groups,
-			),
-		[playbacks?.authoritative_controls?.groups, portableGroups],
-	);
+	const { showObjectsStore } = useShowObjectsState();
 	const [cueObjects, setCueObjects] = useState<
 		VersionedObject<import("../../api/types").CueList>[]
 	>([]);
@@ -97,12 +83,6 @@ export function useServerState() {
 		useState<PendingCommandChoice | null>(null);
 	const [selectedFixtures, setSelectedFixtures] = useState<string[]>([]);
 	const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
-	useSelectedGroupMembership(
-		groups,
-		selectedGroupId,
-		setSelectedGroupId,
-		setSelectedFixtures,
-	);
 	const highlight = useHighlightState();
 	const patchPreviewWrite = useRef<Promise<unknown>>(Promise.resolve());
 
@@ -141,9 +121,6 @@ export function useServerState() {
 		fixtureProfileWarnings,
 		setFixtureProfileWarnings,
 		...media,
-		groups,
-		portableGroups,
-		presets,
 		showObjectsStore,
 		cueObjects,
 		setCueObjects,

@@ -5,41 +5,20 @@ import type {
 	ShowObjectKind,
 	ShowObjectsChange,
 } from "./contracts";
-import { projectLiveGroupMembership } from "./groupProjection";
+import {
+	objectKey,
+	projectCollection,
+	sortObjects,
+	upsertCollection,
+} from "./storeProjection";
+import type {
+	CollectionUpdate,
+	PendingMutation,
+	ShowObjectInstall,
+	ShowObjectsSnapshot,
+} from "./storeTypes";
 
-export interface ShowObjectsSnapshot {
-	showId: string | null;
-	showRevision: number | null;
-	eventSequence: number | null;
-	groups: readonly ShowObject<"group">[];
-	presets: readonly ShowObject<"preset">[];
-	pendingObjectKeys: ReadonlySet<string>;
-	status: "idle" | "loading" | "ready" | "error";
-	error: Error | null;
-}
-
-type CollectionUpdate<K extends ShowObjectKind> =
-	| ShowObjectCollections[K]
-	| ((current: ShowObjectCollections[K]) => ShowObjectCollections[K]);
-
-interface PendingMutation<K extends ShowObjectKind = ShowObjectKind> {
-	token: string;
-	showId: string;
-	kind: K;
-	objectId: string;
-	body: ShowObjectBodies[K];
-	baseEventSequence: number;
-}
-
-function objectKey(kind: ShowObjectKind, objectId: string) {
-	return `${kind}:${objectId}`;
-}
-
-function sortObjects<T extends ShowObject>(objects: T[]): T[] {
-	return objects.sort((left, right) =>
-		left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
-	);
-}
+export type { ShowObjectInstall, ShowObjectsSnapshot } from "./storeTypes";
 
 export class ShowObjectsStore {
 	private authoritative: ShowObjectCollections = { group: [], preset: [] };
@@ -126,23 +105,48 @@ export class ShowObjectsStore {
 	installObject<K extends ShowObjectKind>(
 		showId: string,
 		kind: K,
-		object: ShowObject<K>,
+		object: ShowObject<K> | null,
+		minimumEventSequence?: number | null,
+		absentObjectId?: string,
+	) {
+		const objectId = object?.id ?? absentObjectId;
+		if (!objectId) return;
+		this.installObjects(
+			showId,
+			[{ kind, objectId, object: object as ShowObject | null }],
+			minimumEventSequence,
+		);
+	}
+
+	/** Installs one authoritative exact-object projection (and its dependencies) atomically. */
+	installObjects(
+		showId: string,
+		installs: readonly ShowObjectInstall[],
 		minimumEventSequence?: number | null,
 	) {
 		if (this.snapshot.showId !== showId) return;
-		const key = objectKey(kind, object.id);
-		const eventSequence = this.appliedSequence(kind, key);
-		this.raiseObjectSequenceFloor(kind, object.id, minimumEventSequence);
-		const existing = this.authoritative[kind].find(
-			(candidate) => candidate.id === object.id,
-		);
-		const responseEventObserved =
-			minimumEventSequence != null && eventSequence >= minimumEventSequence;
-		if (
-			!responseEventObserved &&
-			(!existing || existing.revision <= object.revision)
-		)
-			this.upsertAuthoritative(kind, object);
+		for (const { kind, objectId, object } of installs) {
+			const key = objectKey(kind, objectId);
+			const responseEventObserved = this.hasAppliedAtOrAfter(
+				kind,
+				key,
+				minimumEventSequence,
+			);
+			this.raiseObjectSequenceFloor(kind, objectId, minimumEventSequence);
+			const existing = this.authoritative[kind].find(
+				(candidate) => candidate.id === objectId,
+			);
+			if (!responseEventObserved && !object)
+				this.removeAuthoritative(kind, objectId);
+			else if (
+				!responseEventObserved &&
+				object &&
+				(minimumEventSequence != null ||
+					!existing ||
+					existing.revision <= object.revision)
+			)
+				this.upsertAuthoritative(kind, object);
+		}
 		this.publish({ status: "ready", error: null });
 	}
 
@@ -268,31 +272,13 @@ export class ShowObjectsStore {
 		this.publish({ status: "error", error });
 	}
 
+	setReady() {
+		this.publish({ status: "ready", error: null });
+	}
+
 	beginEventResync() {
 		this.clearEventWatermarks();
 		this.publish({ showRevision: null, eventSequence: null });
-	}
-
-	private project<K extends ShowObjectKind>(kind: K): ShowObjectCollections[K] {
-		const projected = new Map(
-			this.authoritative[kind].map((object) => [object.id, object]),
-		);
-		for (const operations of this.pending.values()) {
-			const latest = operations.at(-1);
-			if (!latest || latest.kind !== kind) continue;
-			const existing = projected.get(latest.objectId);
-			projected.set(latest.objectId, {
-				kind,
-				id: latest.objectId,
-				revision: existing?.revision ?? 0,
-				updated_at: existing?.updated_at ?? "",
-				body: latest.body,
-			} as ShowObjectCollections[K][number]);
-		}
-		const objects = sortObjects([...projected.values()]);
-		return (kind === "group"
-			? projectLiveGroupMembership(objects as ShowObject<"group">[])
-			: objects) as ShowObjectCollections[K];
 	}
 
 	private upsertAuthoritative(kind: ShowObjectKind, object: ShowObject) {
@@ -324,6 +310,18 @@ export class ShowObjectsStore {
 		return Math.max(
 			this.kindSequenceFloors.get(kind) ?? 0,
 			this.objectSequences.get(key) ?? 0,
+		);
+	}
+
+	private hasAppliedAtOrAfter(
+		kind: ShowObjectKind,
+		key: string,
+		minimumEventSequence?: number | null,
+	) {
+		if (minimumEventSequence == null) return false;
+		return (
+			(this.kindSequenceFloors.get(kind) ?? -1) >= minimumEventSequence ||
+			(this.objectSequences.get(key) ?? -1) >= minimumEventSequence
 		);
 	}
 
@@ -369,8 +367,16 @@ export class ShowObjectsStore {
 	): ShowObjectsSnapshot {
 		return {
 			...this.snapshot,
-			groups: this.project("group") as ShowObject<"group">[],
-			presets: this.project("preset") as ShowObject<"preset">[],
+			groups: projectCollection(
+				"group",
+				this.authoritative.group,
+				this.pending.values(),
+			) as ShowObject<"group">[],
+			presets: projectCollection(
+				"preset",
+				this.authoritative.preset,
+				this.pending.values(),
+			) as ShowObject<"preset">[],
 			pendingObjectKeys: new Set(this.pending.keys()),
 			...changes,
 		};
@@ -380,10 +386,4 @@ export class ShowObjectsStore {
 		this.snapshot = this.createSnapshot(changes);
 		for (const listener of this.listeners) listener();
 	}
-}
-
-function upsertCollection<T extends ShowObject>(objects: T[], object: T) {
-	const index = objects.findIndex((candidate) => candidate.id === object.id);
-	if (index < 0) objects.push(object);
-	else objects[index] = object;
 }

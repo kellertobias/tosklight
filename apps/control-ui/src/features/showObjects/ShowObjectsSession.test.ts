@@ -4,8 +4,10 @@ import { ShowObjectsSession } from "./session";
 import { ShowObjectsStore } from "./store";
 import type {
 	ShowObjectsEventObserver,
+	ShowObjectsEventScope,
 	ShowObjectsEventTransport,
 } from "./transport";
+import { ShowObjectsProtocolError } from "./transport";
 
 const SHOW_ID = "11111111-1111-4111-8111-111111111111";
 
@@ -29,22 +31,35 @@ function preset(revision: number, name: string): ShowObject<"preset"> {
 	};
 }
 
+function loadExactObject(
+	_showId: string,
+	kind: "group" | "preset",
+): Promise<ShowObject> {
+	return Promise.resolve(
+		kind === "group" ? group(1, "Group") : preset(1, "Blue"),
+	);
+}
+
 class FakeTransport implements ShowObjectsEventTransport {
 	readonly subscriptions: Array<{
 		showId: string;
+		scope: ShowObjectsEventScope;
 		afterSequence: number | null;
 		observer: ShowObjectsEventObserver;
 		close: ReturnType<typeof vi.fn>;
+		repair: ReturnType<typeof vi.fn>;
 	}> = [];
 
 	subscribe(
 		showId: string,
+		scope: ShowObjectsEventScope,
 		afterSequence: number | null,
 		observer: ShowObjectsEventObserver,
 	) {
 		const close = vi.fn();
-		this.subscriptions.push({ showId, afterSequence, observer, close });
-		return { close };
+		const repair = vi.fn();
+		this.subscriptions.push({ showId, scope, afterSequence, observer, close, repair });
+		return { close, repair };
 	}
 
 	emit(message: ShowObjectsEventMessage, index = this.subscriptions.length - 1) {
@@ -66,6 +81,7 @@ describe("ShowObjectsSession", () => {
 			store,
 			transport,
 			loadCollection,
+			loadObject: loadExactObject,
 		});
 		session.activate("group");
 		transport.emit({ type: "ready", cursor: 10 });
@@ -106,6 +122,7 @@ describe("ShowObjectsSession", () => {
 				Promise.resolve(
 					kind === "group" ? [group(1, "Group")] : [preset(1, "Blue")],
 				),
+			loadObject: loadExactObject,
 		});
 		session.activate("group");
 		session.activate("preset");
@@ -162,11 +179,15 @@ describe("ShowObjectsSession", () => {
 				kind === "preset"
 					? Promise.resolve([preset(1, "Blue")])
 					: new Promise((resolve) => (resolveGroups = resolve)),
+			loadObject: loadExactObject,
 		});
 		session.activate("preset");
 		transport.emit({ type: "ready", cursor: 20 });
 		await vi.waitFor(() => expect(store.getSnapshot().presets).toHaveLength(1));
 		session.activate("group");
+		await Promise.resolve();
+		expect(transport.subscriptions[0].close).toHaveBeenCalledOnce();
+		transport.emit({ type: "ready", cursor: 20 });
 		const publications: Array<{ group: string; preset: string }> = [];
 		store.subscribe(() => {
 			const snapshot = store.getSnapshot();
@@ -219,13 +240,14 @@ describe("ShowObjectsSession", () => {
 			const loadCollection = vi
 				.fn()
 				.mockResolvedValueOnce([group(9, "Before restart")])
-				.mockResolvedValueOnce([group(1, "After restart")]);
+				.mockResolvedValue([group(1, "After restart")]);
 			const onError = vi.fn();
 			const session = new ShowObjectsSession({
 				showId: SHOW_ID,
 				store,
 				transport,
 				loadCollection,
+				loadObject: loadExactObject,
 				onError,
 			});
 			session.activate("group");
@@ -289,6 +311,7 @@ describe("ShowObjectsSession", () => {
 			store,
 			transport,
 			loadCollection: (showId, kind) => network.objects(showId, kind),
+			loadObject: loadExactObject,
 		});
 
 		const deactivate = session.activate("group");
@@ -353,6 +376,7 @@ describe("ShowObjectsSession", () => {
 			store,
 			transport,
 			loadCollection,
+			loadObject: loadExactObject,
 		});
 
 		const deactivateFirst = session.activate("group");
@@ -368,10 +392,219 @@ describe("ShowObjectsSession", () => {
 		expect(transport.subscriptions).toHaveLength(2);
 		expect(transport.subscriptions[1]).toMatchObject({
 			showId: SHOW_ID,
-			afterSequence: 12,
+			afterSequence: 0,
 		});
 		deactivatePreset();
 		expect(transport.subscriptions[1].close).toHaveBeenCalledOnce();
+	});
+
+	it("resubscribes to exact identities without reloading unchanged kind scopes", async () => {
+		const store = new ShowObjectsStore();
+		store.reset(SHOW_ID);
+		const transport = new FakeTransport();
+		const loadCollection = vi.fn().mockResolvedValue([group(1, "Group")]);
+		const loadObject = vi.fn().mockResolvedValue(preset(1, "Blue"));
+		const session = new ShowObjectsSession({
+			showId: SHOW_ID,
+			store,
+			transport,
+			loadCollection,
+			loadObject,
+		});
+
+		const deactivateGroup = session.activate("group");
+		expect(transport.subscriptions[0].scope).toEqual({
+			kinds: ["group"],
+			objects: [],
+		});
+		transport.emit({ type: "ready", cursor: 20 });
+		await vi.waitFor(() => expect(loadCollection).toHaveBeenCalledOnce());
+
+		const deactivatePreset = session.activate("preset", "2.1");
+		await Promise.resolve();
+		expect(transport.subscriptions[0].close).toHaveBeenCalledOnce();
+		expect(transport.subscriptions[1].scope).toEqual({
+			kinds: ["group"],
+			objects: [{ kind: "preset", objectId: "2.1" }],
+		});
+		transport.emit({ type: "ready", cursor: 20 });
+		await vi.waitFor(() => expect(loadObject).toHaveBeenCalledOnce());
+		expect(loadObject).toHaveBeenCalledWith(SHOW_ID, "preset", "2.1");
+		expect(loadCollection).toHaveBeenCalledOnce();
+
+		deactivateGroup();
+		await Promise.resolve();
+		expect(transport.subscriptions[1].close).toHaveBeenCalledOnce();
+		expect(transport.subscriptions[2]).toMatchObject({
+			afterSequence: 0,
+			scope: {
+				kinds: [],
+				objects: [{ kind: "preset", objectId: "2.1" }],
+			},
+		});
+		transport.emit({ type: "ready", cursor: 20 });
+		await Promise.resolve();
+		expect(loadObject).toHaveBeenCalledOnce();
+		expect(loadCollection).toHaveBeenCalledOnce();
+
+		deactivatePreset();
+		expect(transport.subscriptions[2].close).toHaveBeenCalledOnce();
+	});
+
+	it("rehydrates an exact object after its inactive scope falls behind", async () => {
+		const store = new ShowObjectsStore();
+		store.reset(SHOW_ID);
+		const transport = new FakeTransport();
+		const loadCollection = vi.fn().mockResolvedValue([preset(1, "Blue")]);
+		const loadObject = vi
+			.fn()
+			.mockResolvedValueOnce(group(1, "Before deactivation"))
+			.mockResolvedValueOnce(group(2, "While inactive"));
+		const session = new ShowObjectsSession({
+			showId: SHOW_ID,
+			store,
+			transport,
+			loadCollection,
+			loadObject,
+		});
+		session.activate("preset");
+		const deactivateGroup = session.activate("group", "1");
+		transport.emit({ type: "ready", cursor: 10 });
+		await vi.waitFor(() => expect(loadObject).toHaveBeenCalledOnce());
+
+		deactivateGroup();
+		await Promise.resolve();
+		transport.emit({ type: "ready", cursor: 10 });
+		transport.emit({
+			type: "event",
+			change: {
+				showId: SHOW_ID,
+				showRevision: 2,
+				eventSequence: 20,
+				changes: [
+					{
+						kind: "preset",
+						objectId: "2.1",
+						objectRevision: 2,
+						body: preset(2, "Cyan").body,
+						deleted: false,
+					},
+				],
+			},
+		});
+
+		session.activate("group", "1");
+		await Promise.resolve();
+		expect(transport.subscriptions.at(-1)?.afterSequence).toBe(20);
+		transport.emit({ type: "ready", cursor: 20 });
+		await vi.waitFor(() => expect(loadObject).toHaveBeenCalledTimes(2));
+		await vi.waitFor(() =>
+			expect(store.getSnapshot().groups[0]?.body.name).toBe("While inactive"),
+		);
+	});
+
+	it("installs a missing exact-object snapshot as authoritative absence", async () => {
+		const store = new ShowObjectsStore();
+		store.reset(SHOW_ID);
+		store.setCollection(SHOW_ID, "group", [group(1, "Deleted elsewhere")]);
+		const transport = new FakeTransport();
+		const loadCollection = vi.fn();
+		const loadObject = vi.fn().mockResolvedValue(null);
+		const onError = vi.fn();
+		const session = new ShowObjectsSession({
+			showId: SHOW_ID,
+			store,
+			transport,
+			loadCollection,
+			loadObject,
+			onError,
+		});
+
+		session.activate("group", "1");
+		transport.emit({ type: "ready", cursor: 30 });
+		await vi.waitFor(() => expect(loadObject).toHaveBeenCalledOnce());
+		await vi.waitFor(() => expect(store.getSnapshot().groups).toEqual([]));
+
+		expect(loadCollection).not.toHaveBeenCalled();
+		expect(onError).toHaveBeenLastCalledWith(null);
+		expect(transport.subscriptions).toHaveLength(1);
+	});
+
+	it("rejects a mismatched exact-object snapshot and retries the requested identity", async () => {
+		vi.useFakeTimers();
+		try {
+			const store = new ShowObjectsStore();
+			store.reset(SHOW_ID);
+			const transport = new FakeTransport();
+			const loadObject = vi
+				.fn()
+				.mockResolvedValueOnce(preset(1, "Wrong object"))
+				.mockResolvedValueOnce(group(1, "Requested object"));
+			const onError = vi.fn();
+			const session = new ShowObjectsSession({
+				showId: SHOW_ID,
+				store,
+				transport,
+				loadCollection: vi.fn(),
+				loadObject,
+				onError,
+			});
+			session.activate("group", "1");
+			transport.emit({ type: "ready", cursor: 10 });
+			await vi.advanceTimersByTimeAsync(0);
+
+			expect(onError).toHaveBeenCalledWith(
+				expect.objectContaining({
+					message: "Expected group 1, received preset 2.1",
+				}),
+			);
+			expect(store.getSnapshot().groups).toEqual([]);
+			await vi.advanceTimersByTimeAsync(750);
+			transport.emit({ type: "ready", cursor: 10 });
+			await vi.advanceTimersByTimeAsync(0);
+
+			expect(loadObject).toHaveBeenCalledTimes(2);
+			expect(store.getSnapshot().groups[0]?.body.name).toBe("Requested object");
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("repairs a gap with the same narrow scope and an authoritative reload", async () => {
+		vi.useFakeTimers();
+		try {
+			const store = new ShowObjectsStore();
+			store.reset(SHOW_ID);
+			const transport = new FakeTransport();
+			const loadCollection = vi
+				.fn()
+				.mockResolvedValueOnce([group(1, "Before gap")])
+				.mockResolvedValueOnce([group(2, "After gap")]);
+			const session = new ShowObjectsSession({
+				showId: SHOW_ID,
+				store,
+				transport,
+				loadCollection,
+				loadObject: loadExactObject,
+			});
+			session.activate("group");
+			transport.emit({ type: "ready", cursor: 10 });
+			await vi.advanceTimersByTimeAsync(0);
+
+			transport.emit({
+				type: "gap",
+				afterSequence: 10,
+				oldestAvailable: 15,
+				latestSequence: 20,
+			});
+			await vi.advanceTimersByTimeAsync(0);
+			expect(transport.subscriptions).toHaveLength(1);
+			expect(transport.subscriptions[0].repair).toHaveBeenCalledWith(20);
+			expect(loadCollection).toHaveBeenCalledTimes(2);
+			expect(store.getSnapshot().groups[0]?.body.name).toBe("After gap");
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("discards a hydration invalidated by view deactivation", async () => {
@@ -387,15 +620,18 @@ describe("ShowObjectsSession", () => {
 				kind === "preset"
 					? Promise.resolve([preset(1, "Blue")])
 					: new Promise((resolve) => groupLoads.push(resolve)),
+			loadObject: loadExactObject,
 		});
 		session.activate("preset");
 		transport.emit({ type: "ready", cursor: 30 });
 		await vi.waitFor(() => expect(store.getSnapshot().presets).toHaveLength(1));
 
 		const deactivate = session.activate("group");
+		transport.emit({ type: "ready", cursor: 30 });
 		expect(groupLoads).toHaveLength(1);
 		deactivate();
 		session.activate("group");
+		transport.emit({ type: "ready", cursor: 30 });
 		expect(groupLoads).toHaveLength(2);
 		groupLoads[0]([group(1, "Stale hydration")]);
 		await Promise.resolve();
@@ -418,6 +654,7 @@ describe("ShowObjectsSession", () => {
 			store,
 			transport,
 			loadCollection,
+			loadObject: loadExactObject,
 		});
 
 		const deactivate = session.activate("preset");
@@ -430,4 +667,253 @@ describe("ShowObjectsSession", () => {
 		deactivate();
 		expect(transport.subscriptions[0].close).toHaveBeenCalledOnce();
 	});
+
+	it("resumes from the last installed delta rather than the ready replay boundary", async () => {
+		vi.useFakeTimers();
+		try {
+			const store = new ShowObjectsStore();
+			store.reset(SHOW_ID);
+			const transport = new FakeTransport();
+			const session = new ShowObjectsSession({
+				showId: SHOW_ID,
+				store,
+				transport,
+				loadCollection: (_showId, kind) =>
+					Promise.resolve(kind === "group" ? [group(1, "Initial")] : []),
+				loadObject: loadExactObject,
+			});
+			session.activate("group");
+			await vi.advanceTimersByTimeAsync(0);
+			transport.emit(groupChange(5, "Installed"));
+
+			transport.subscriptions[0].observer.closed();
+			await vi.advanceTimersByTimeAsync(750);
+			expect(transport.subscriptions[1].afterSequence).toBe(5);
+			transport.emit({ type: "ready", cursor: 10 }, 1);
+			session.activate("preset");
+			await vi.advanceTimersByTimeAsync(0);
+
+			expect(transport.subscriptions[2].afterSequence).toBe(5);
+			transport.emit(groupChange(6, "Replayed after Ready"), 2);
+			expect(store.getSnapshot().groups[0]?.body.name).toBe(
+				"Replayed after Ready",
+			);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("keeps queued deltas across a scope change and resumes after installation", async () => {
+		let resolvePreset!: (object: ShowObject | null) => void;
+		const store = new ShowObjectsStore();
+		store.reset(SHOW_ID);
+		const transport = new FakeTransport();
+		const session = new ShowObjectsSession({
+			showId: SHOW_ID,
+			store,
+			transport,
+			loadCollection: () => Promise.resolve([group(1, "Initial")]),
+			loadObject: (_showId, kind) =>
+				kind === "preset"
+					? new Promise((resolve) => (resolvePreset = resolve))
+					: Promise.resolve(group(1, "Initial")),
+		});
+		session.activate("group");
+		await vi.waitFor(() => expect(store.getSnapshot().groups).toHaveLength(1));
+		transport.emit(groupChange(10, "Baseline"));
+		const deactivatePreset = session.activate("preset", "2.1");
+		await Promise.resolve();
+		transport.emit(presetChange(11, "Queued Preset"));
+		transport.emit(groupChange(12, "Queued Group"));
+
+		deactivatePreset();
+		await Promise.resolve();
+		expect(store.getSnapshot().groups[0]?.body.name).toBe("Queued Group");
+		expect(transport.subscriptions.at(-1)?.afterSequence).toBe(12);
+		resolvePreset(preset(2, "Stale"));
+		await Promise.resolve();
+		expect(store.getSnapshot().presets).toEqual([]);
+	});
+
+	it("escapes a malformed replay with an authoritative latest-boundary reset", async () => {
+		vi.useFakeTimers();
+		try {
+			const store = new ShowObjectsStore();
+			store.reset(SHOW_ID);
+			const transport = new FakeTransport();
+			const loadCollection = vi
+				.fn()
+				.mockResolvedValueOnce([group(1, "Before poison")])
+				.mockResolvedValue([group(2, "Recovered snapshot")]);
+			const session = new ShowObjectsSession({
+				showId: SHOW_ID,
+				store,
+				transport,
+				loadCollection,
+				loadObject: loadExactObject,
+			});
+			session.activate("group");
+			await vi.advanceTimersByTimeAsync(0);
+			transport.emit(groupChange(5, "Before poison event"));
+
+			transport.subscriptions[0].observer.error(
+				new ShowObjectsProtocolError("malformed event", 6),
+			);
+			await vi.advanceTimersByTimeAsync(0);
+			expect(transport.subscriptions[1].afterSequence).toBeNull();
+			transport.emit({ type: "ready", cursor: 6 }, 1);
+			await vi.advanceTimersByTimeAsync(0);
+			await vi.waitFor(() =>
+				expect(store.getSnapshot().groups[0]?.body.name).toBe(
+					"Recovered snapshot",
+				),
+			);
+			transport.emit(groupChange(7, "After recovery"), 1);
+			expect(store.getSnapshot().groups[0]?.body.name).toBe("After recovery");
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("hydrates and subscribes to the transitive dependencies of an exact live Group", async () => {
+		const source = group(1, "Source");
+		source.body.fixtures = ["a", "b", "c", "d"];
+		const derived: ShowObject<"group"> = {
+			...group(1, "Derived"),
+			id: "2",
+			body: {
+				name: "Derived",
+				fixtures: ["a", "c"],
+				derived_from: {
+					source_group_id: "1",
+					rule: { type: "odd" },
+				},
+			},
+		};
+		const store = new ShowObjectsStore();
+		store.reset(SHOW_ID);
+		const transport = new FakeTransport();
+		const loadObject = vi.fn((_showId, _kind, id: string) =>
+			Promise.resolve(id === "2" ? derived : source),
+		);
+		const session = new ShowObjectsSession({
+			showId: SHOW_ID,
+			store,
+			transport,
+			loadCollection: vi.fn(),
+			loadObject,
+		});
+		session.activate("group", "2");
+		await vi.waitFor(() => expect(loadObject).toHaveBeenCalledTimes(2));
+		await vi.waitFor(() =>
+			expect(store.getSnapshot().groups.find((item) => item.id === "2")?.body.fixtures).toEqual([
+				"a",
+				"c",
+			]),
+		);
+		await Promise.resolve();
+		expect(transport.subscriptions.at(-1)?.scope).toEqual({
+			kinds: [],
+			objects: [
+				{ kind: "group", objectId: "1" },
+				{ kind: "group", objectId: "2" },
+			],
+		});
+
+		source.revision = 2;
+		source.body.fixtures = ["b", "c", "d"];
+		transport.emit({
+			type: "event",
+			change: {
+				showId: SHOW_ID,
+				showRevision: 2,
+				eventSequence: 1,
+				changes: [
+					{
+						kind: "group",
+						objectId: "1",
+						objectRevision: 2,
+						body: source.body,
+						deleted: false,
+					},
+				],
+			},
+		});
+		await vi.waitFor(() =>
+			expect(store.getSnapshot().groups.find((item) => item.id === "2")?.body.fixtures).toEqual([
+				"b",
+				"d",
+			]),
+		);
+	});
+
+	it("batches an exact identity replacement into one WebSocket reconfiguration", async () => {
+		const store = new ShowObjectsStore();
+		store.reset(SHOW_ID);
+		const transport = new FakeTransport();
+		const session = new ShowObjectsSession({
+			showId: SHOW_ID,
+			store,
+			transport,
+			loadCollection: () => Promise.resolve([preset(1, "Blue")]),
+			loadObject: (_showId, kind, id) =>
+				Promise.resolve(
+					kind === "group" ? { ...group(1, `Group ${id}`), id } : preset(1, "Blue"),
+				),
+		});
+		session.activate("preset");
+		const deactivateFirst = session.activate("group", "1");
+		await Promise.resolve();
+		const beforeReplacement = transport.subscriptions.length;
+
+		deactivateFirst();
+		session.activate("group", "2");
+		await Promise.resolve();
+
+		expect(transport.subscriptions).toHaveLength(beforeReplacement + 1);
+		expect(transport.subscriptions.at(-1)?.scope.objects).toContainEqual({
+			kind: "group",
+			objectId: "2",
+		});
+	});
 });
+
+function groupChange(sequence: number, name: string): ShowObjectsEventMessage {
+	return {
+		type: "event",
+		change: {
+			showId: SHOW_ID,
+			showRevision: sequence,
+			eventSequence: sequence,
+			changes: [
+				{
+					kind: "group",
+					objectId: "1",
+					objectRevision: sequence,
+					body: group(sequence, name).body,
+					deleted: false,
+				},
+			],
+		},
+	};
+}
+
+function presetChange(sequence: number, name: string): ShowObjectsEventMessage {
+	return {
+		type: "event",
+		change: {
+			showId: SHOW_ID,
+			showRevision: sequence,
+			eventSequence: sequence,
+			changes: [
+				{
+					kind: "preset",
+					objectId: "2.1",
+					objectRevision: sequence,
+					body: preset(sequence, name).body,
+					deleted: false,
+				},
+			],
+		},
+	};
+}

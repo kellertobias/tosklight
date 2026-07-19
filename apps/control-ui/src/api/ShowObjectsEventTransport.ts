@@ -1,6 +1,8 @@
 import type { EventClientMessage } from "./generated/light-wire";
+import { ShowObjectsProtocolError } from "../features/showObjects/transport";
 import type {
 	ShowObjectsEventObserver,
+	ShowObjectsEventScope,
 	ShowObjectsEventStream,
 	ShowObjectsEventTransport,
 } from "../features/showObjects/transport";
@@ -27,6 +29,7 @@ export class WebSocketShowObjectsEventTransport
 
 	subscribe(
 		showId: string,
+		scope: ShowObjectsEventScope,
 		afterSequence: number | null,
 		observer: ShowObjectsEventObserver,
 	): ShowObjectsEventStream {
@@ -48,7 +51,7 @@ export class WebSocketShowObjectsEventTransport
 				filter: {
 					capabilities: ["show"],
 					classes: ["projection"],
-					objects: [{ capability: "show", id: `objects:${showId}` }],
+					objects: subscriptionObjects(showId, scope),
 				},
 				after_sequence: afterSequence,
 				capacity: 128,
@@ -57,13 +60,19 @@ export class WebSocketShowObjectsEventTransport
 			socket.send(JSON.stringify(request));
 		});
 		socket.addEventListener("message", (event) => {
+			let value: unknown;
 			try {
-				const message = decodeShowObjectsEventMessage(
-					JSON.parse(String(event.data)),
-				);
+				value = JSON.parse(String(event.data));
+				const message = decodeShowObjectsEventMessage(value);
 				if (message) observer.message(message);
 			} catch (reason) {
-				observer.error(asError(reason));
+				const error = asError(reason);
+				observer.error(
+					new ShowObjectsProtocolError(
+						`Invalid show-object event: ${error.message}`,
+						eventSequence(value),
+					),
+				);
 			}
 		});
 		socket.addEventListener("error", () => {
@@ -73,12 +82,43 @@ export class WebSocketShowObjectsEventTransport
 			if (!explicitlyClosed) observer.closed();
 		});
 		return {
+			repair: (cursor) => {
+				if (socket.readyState !== this.WebSocketImplementation.OPEN) return;
+				const request: EventClientMessage = {
+					type: "repair",
+					cursor: { sequence: cursor },
+				};
+				socket.send(JSON.stringify(request));
+			},
 			close: () => {
 				explicitlyClosed = true;
 				socket.close();
 			},
 		};
 	}
+}
+
+function eventSequence(value: unknown): number | null {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+	const event = (value as Record<string, unknown>).event;
+	if (!event || typeof event !== "object" || Array.isArray(event)) return null;
+	const sequence = (event as Record<string, unknown>).sequence;
+	return Number.isSafeInteger(sequence) && (sequence as number) >= 0
+		? (sequence as number)
+		: null;
+}
+
+function subscriptionObjects(showId: string, scope: ShowObjectsEventScope) {
+	return [
+		...scope.kinds.map((kind) => ({
+			capability: "show" as const,
+			id: `objects:${showId}:kind:${kind}`,
+		})),
+		...scope.objects.map(({ kind, objectId }) => ({
+			capability: "show" as const,
+			id: `objects:${showId}:kind:${kind}:object:${objectId}`,
+		})),
+	];
 }
 
 function base64Url(value: string): string {

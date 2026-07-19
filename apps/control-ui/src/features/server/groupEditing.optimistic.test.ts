@@ -77,11 +77,7 @@ function harness(
 		client,
 		setError,
 		bootstrap: { active_show: { id: SHOW_ID } },
-		groups: showObjectsStore.getSnapshot().groups.map((group) => ({
-			...group,
-			body: { ...group.body, master: 0.7 },
-		})),
-		portableGroups: showObjectsStore.getSnapshot().groups,
+		playbacks,
 		showObjectsStore,
 		setPlaybacks,
 	} as unknown as ServerController;
@@ -146,6 +142,37 @@ describe("Group optimistic object mutation", () => {
 		expect(test.showObjectsStore.getSnapshot().groups[0].body.name).toBe("Front");
 		expect(test.showObjectsStore.getSnapshot().pendingObjectKeys.size).toBe(0);
 		expect(test.setError).toHaveBeenLastCalledWith("revision conflict");
+	});
+
+	it("reads the latest Group snapshot when an action is invoked", async () => {
+		const test = harness(Promise.resolve({ revision: 9, event_sequence: 12 }));
+		test.showObjectsStore.setCollection(SHOW_ID, "group", [
+			{
+				kind: "group",
+				id: "1",
+				revision: 8,
+				updated_at: "",
+				body: {
+					name: "Newer snapshot",
+					fixtures: ["fixture-1", "fixture-2"],
+					master: 0.4,
+				},
+			},
+		]);
+
+		await test.actions.updateGroup("1", { name: "Renamed" });
+
+		expect(test.client.putObject).toHaveBeenCalledWith(
+			SHOW_ID,
+			"group",
+			"1",
+			expect.objectContaining({
+				name: "Renamed",
+				fixtures: ["fixture-1", "fixture-2"],
+				master: 0.4,
+			}),
+			8,
+		);
 	});
 
 	it("keeps runtime Group master feedback out of portable Group state", async () => {

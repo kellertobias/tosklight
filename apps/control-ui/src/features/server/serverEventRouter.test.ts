@@ -81,8 +81,6 @@ function createHarness(showId = "show-a") {
 	const state = {
 		client,
 		bootstrap: bootstrap(showId),
-		groups: [],
-		presets: [],
 		cueObjects: [],
 		outputRoutes: [],
 		patchLayers: [],
@@ -101,12 +99,6 @@ function createHarness(showId = "show-a") {
 		highlightErrorSticky: { current: false },
 		setBootstrap: vi.fn((next) => {
 			state.bootstrap = apply(state.bootstrap, next) as BootstrapSnapshot;
-		}),
-		setGroups: vi.fn((next) => {
-			state.groups = apply(state.groups, next);
-		}),
-		setPresets: vi.fn((next) => {
-			state.presets = apply(state.presets, next);
 		}),
 		setCueObjects: vi.fn((next) => {
 			state.cueObjects = apply(state.cueObjects, next);

@@ -71,6 +71,9 @@ vi.mock("../api/ServerContext", () => ({
 		saveCueList: mocks.saveCueList,
 	}),
 }));
+vi.mock("../features/server/useShowObjectsState", () => ({
+	useGroups: () => [],
+}));
 
 vi.mock("../state/AppContext", () => ({
 	useApp: () => ({

@@ -3,15 +3,17 @@ import { useApp } from "../../state/AppContext";
 import { useServer } from "../../api/ServerContext";
 import { Button, FormLayout, ModalPortal, NumberField, SelectField, TextField } from "../common";
 import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
+import { usePresets } from "../../features/showObjects/ShowObjectsState";
 
 export function PreloadStoreModal() {
   const { state, dispatch } = useApp();
   const server = useServer();
+  const presets = usePresets();
   const [target, setTarget] = useState<"preset" | "cue">("preset"), [targetId, setTargetId] = useState("1");
   const [cueNumber, setCueNumber] = useState(1), [name, setName] = useState("");
   const [mode, setMode] = useState<"merge" | "overwrite" | "add_missing_fixtures">("merge");
   useShowObjectView("preset", state.preloadStoreOpen && target === "preset");
-  const targetObject = useMemo(() => target === "preset" ? server.presets.find((object) => object.id === targetId) : server.cueObjects.find((object) => object.id === targetId), [target, targetId, server.presets, server.cueObjects]);
+  const targetObject = useMemo(() => target === "preset" ? presets.find((object) => object.id === targetId) : server.cueObjects.find((object) => object.id === targetId), [target, targetId, presets, server.cueObjects]);
   if (!state.preloadStoreOpen) return null;
   const close = () => dispatch({ type: "SET_MODAL", modal: "preloadStoreOpen", value: false });
   const submit = async () => { if (await server.storePreload({ target, target_id: targetId, cue_number: target === "cue" ? cueNumber : undefined, name: name || undefined, mode: target === "preset" ? mode : undefined }, targetObject?.revision ?? 0)) close(); };

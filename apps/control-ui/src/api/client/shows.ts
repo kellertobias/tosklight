@@ -29,7 +29,11 @@ export class ShowApiClient {
 		return this.transport.request("/api/v1/shows", {}, false);
 	}
 
-	createShow(name: string, dataBase64: string | null, overwrite: boolean) {
+	createShow(
+		name: string,
+		dataBase64: string | null = null,
+		overwrite = false,
+	) {
 		return this.transport.request<ShowEntry>(
 			"/api/v1/shows",
 			jsonRequest("POST", { name, data_base64: dataBase64, overwrite }),
@@ -38,7 +42,7 @@ export class ShowApiClient {
 
 	openShow(
 		id: string,
-		transition: ShowOpenTransition,
+		transition: ShowOpenTransition = "safe_blackout",
 		transitionMillis?: number,
 	) {
 		return this.transport.request<ShowEntry>(

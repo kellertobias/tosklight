@@ -1,233 +1,399 @@
 import type {
-	ShowObject,
-	ShowObjectKind,
 	ShowObjectsChange,
 	ShowObjectsEventMessage,
 } from "./contracts";
-import { ShowObjectsStore } from "./store";
+import { ShowObjectsChangeQueue } from "./changeQueue";
+import { ShowObjectsCursors } from "./cursors";
+import {
+	loadHydration,
+	type ShowObjectCollectionLoader,
+	type ShowObjectLoader,
+} from "./hydration";
+import {
+	hydrationKey,
+	type HydrationTarget,
+	ShowObjectsViewScope,
+} from "./scope";
+import {
+	isChangeHydrating,
+	isHydratedTarget,
+	isNeededTarget,
+} from "./sessionPredicates";
 import type {
-	ShowObjectsEventStream,
-	ShowObjectsEventTransport,
+	HydrationRun,
+	ShowObjectsSessionOptions,
+	SnapshotBoundary,
+} from "./sessionTypes";
+import { asError, clearSessionTimers } from "./sessionUtils";
+import { ShowObjectsStore } from "./store";
+import {
+	ShowObjectsProtocolError,
+	type ShowObjectsEventStream,
+	type ShowObjectsEventTransport,
 } from "./transport";
 
-export type ShowObjectCollectionLoader = (
-	showId: string,
-	kind: ShowObjectKind,
-) => Promise<ShowObject[]>;
-
-export interface ShowObjectsSessionOptions {
-	showId: string;
-	store: ShowObjectsStore;
-	transport: ShowObjectsEventTransport;
-	loadCollection: ShowObjectCollectionLoader;
-	onError?: (error: Error | null) => void;
-}
+export type { ShowObjectCollectionLoader, ShowObjectLoader } from "./hydration";
+export type { ShowObjectsSessionOptions } from "./sessionTypes";
 
 export class ShowObjectsSession {
 	private readonly showId: string;
 	private readonly store: ShowObjectsStore;
-	private readonly transport: ShowObjectsEventTransport;
+	private readonly transport: ShowObjectsEventTransport | null;
 	private readonly loadCollection: ShowObjectCollectionLoader;
+	private readonly loadObject: ShowObjectLoader;
 	private readonly onError?: (error: Error | null) => void;
-	private readonly active = new Map<ShowObjectKind, number>();
-	private readonly hydrating = new Set<ShowObjectKind>();
-	private readonly hydrationEpochs = new Map<ShowObjectKind, number>();
-	private readonly queued: ShowObjectsChange[] = [];
+	private readonly scope = new ShowObjectsViewScope();
+	private readonly hydrated = new Set<string>();
+	private readonly hydrationCoverage = new Map<string, number>();
+	private readonly runs = new Map<string, HydrationRun>();
+	private readonly forcedFloors = new Map<string, number>();
+	private readonly queued = new ShowObjectsChangeQueue();
+	private readonly cursors = new ShowObjectsCursors();
 	private stream: ShowObjectsEventStream | null = null;
+	private streamScopeKey: string | null = null;
 	private reconnectTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
-	private cursor: number | null = null;
-	private ready = false;
-	private generation = 0;
+	private hydrationRetryTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+	private streamRefreshScheduled = false;
+	private socketGeneration = 0;
+	private lifecycleGeneration = 0;
+	private pendingBoundary: SnapshotBoundary | null = null;
+	private subscribeFromLatest = false;
 
 	constructor(options: ShowObjectsSessionOptions) {
 		this.showId = options.showId;
 		this.store = options.store;
 		this.transport = options.transport;
 		this.loadCollection = options.loadCollection;
+		this.loadObject = options.loadObject;
 		this.onError = options.onError;
 	}
 
-	activate(kind: ShowObjectKind) {
-		const previous = this.active.get(kind) ?? 0;
-		this.active.set(kind, previous + 1);
-		if (!this.stream) this.openStream();
-		else if (!previous && this.ready) void this.hydrate(kind);
+	activate(kind: HydrationTarget["kind"], objectId?: string) {
+		this.scope.activate(kind, objectId);
+		this.ensureHydrations();
+		this.reconcileStream();
 		let active = true;
 		return () => {
 			if (!active) return;
 			active = false;
-			this.deactivate(kind);
+			this.deactivate(kind, objectId);
 		};
 	}
 
 	stop() {
-		this.active.clear();
-		this.closeStream();
+		this.scope.clear();
+		this.lifecycleGeneration++;
+		this.clearHydrations();
+		this.clearTimers();
+		this.queued.clear();
+		this.closeSocket();
 	}
 
-	private deactivate(kind: ShowObjectKind) {
-		const count = this.active.get(kind) ?? 0;
-		if (count > 1) this.active.set(kind, count - 1);
-		else {
-			this.active.delete(kind);
-			this.hydrationEpochs.set(kind, (this.hydrationEpochs.get(kind) ?? 0) + 1);
-			this.hydrating.delete(kind);
+	private deactivate(kind: HydrationTarget["kind"], objectId?: string) {
+		const removed = this.scope.deactivate(kind, objectId);
+		if (removed) this.invalidateHydration({ kind, objectId });
+		if (!this.scope.hasViews()) {
+			this.queued.clear();
+			this.clearHydrations();
+			this.clearTimers();
+			this.closeSocket();
+			this.store.setReady();
+			return;
+		}
+		this.ensureHydrations();
+		this.reconcileStream();
+		this.flushQueued();
+	}
+
+	private ensureHydrations(floor = this.cursors.resume() ?? 0, force = false) {
+		for (const target of this.scope.targets())
+			this.requestHydration(target, floor, force);
+	}
+
+	private requestHydration(
+		target: HydrationTarget,
+		floor: number,
+		force = false,
+	) {
+		if (!isNeededTarget(this.scope, target)) return;
+		const key = hydrationKey(target);
+		if (force && (this.hydrationCoverage.get(key) ?? -1) >= floor) return;
+		if (!force && isHydratedTarget(this.hydrated, target)) return;
+		if (this.runs.has(key)) {
+			if (force)
+				this.forcedFloors.set(key, Math.max(this.forcedFloors.get(key) ?? 0, floor));
+			return;
+		}
+		const run = { token: Symbol(key), target, floor };
+		this.runs.set(key, run);
+		this.store.setLoading();
+		void this.runHydration(run);
+	}
+
+	private async runHydration(run: HydrationRun) {
+		const lifecycle = this.lifecycleGeneration;
+		try {
+			const loaded = await loadHydration(
+				run.target,
+				this.showId,
+				this.loadCollection,
+				this.loadObject,
+			);
+			if (!this.isCurrentRun(run, lifecycle)) return;
+			const previousScope = this.scope.key();
+			if (run.target.objectId === undefined)
+				this.store.setCollection(
+					this.showId,
+					run.target.kind,
+					loaded.collection as never,
+					run.floor,
+				);
+			else
+				this.store.installObjects(this.showId, loaded.installs, run.floor);
+			if (run.target.kind === "group" && run.target.objectId)
+				this.scope.setGroupDependencies(
+					run.target.objectId,
+					loaded.groupDependencies ?? [],
+				);
+			this.hydrated.add(hydrationKey(run.target));
+			this.hydrationCoverage.set(
+				hydrationKey(run.target),
+				Math.max(this.hydrationCoverage.get(hydrationKey(run.target)) ?? 0, run.floor),
+			);
+			this.onError?.(null);
+			if (previousScope !== this.scope.key()) this.reconcileStream();
+		} catch (reason) {
+			if (this.isCurrentRun(run, lifecycle)) {
+				const error = asError(reason);
+				this.store.setError(error);
+				this.onError?.(error);
+				this.scheduleHydrationRetry();
+			}
+		} finally {
+			if (this.runs.get(hydrationKey(run.target))?.token === run.token) {
+				this.runs.delete(hydrationKey(run.target));
+				const forced = this.forcedFloors.get(hydrationKey(run.target));
+				this.forcedFloors.delete(hydrationKey(run.target));
+				if (forced != null) this.requestHydration(run.target, forced, true);
+			}
+			this.completeBoundary();
 			this.flushQueued();
 		}
-		if (!this.active.size) this.closeStream();
 	}
 
-	private openStream(afterSequence: number | null = this.cursor) {
-		if (!this.active.size || this.stream) return;
-		const generation = ++this.generation;
-		this.ready = false;
-		this.stream = this.transport.subscribe(this.showId, afterSequence, {
+	private isCurrentRun(run: HydrationRun, lifecycle: number) {
+		return (
+			lifecycle === this.lifecycleGeneration &&
+			this.runs.get(hydrationKey(run.target))?.token === run.token &&
+			isNeededTarget(this.scope, run.target)
+		);
+	}
+
+	private openStream() {
+		if (!this.transport || !this.scope.hasViews() || this.stream) return;
+		const generation = ++this.socketGeneration;
+		const scope = this.scope.subscription();
+		const afterSequence = this.subscribeFromLatest
+			? null
+			: (this.cursors.resume() ?? 0);
+		this.subscribeFromLatest = false;
+		this.streamScopeKey = JSON.stringify(scope);
+		this.stream = this.transport.subscribe(this.showId, scope, afterSequence, {
 			message: (message) => {
-				if (generation === this.generation) this.handleMessage(message);
+				if (generation === this.socketGeneration)
+					this.handleMessage(message, generation, afterSequence);
 			},
 			error: (error) => {
-				if (generation === this.generation) this.fail(error, true);
+				if (generation !== this.socketGeneration) return;
+				if (error instanceof ShowObjectsProtocolError) this.protocolReset(error);
+				else this.failTransport(error);
 			},
 			closed: () => {
-				if (generation === this.generation) this.reconnect(false);
+				if (generation === this.socketGeneration) this.scheduleReconnect();
 			},
 		});
 	}
 
-	private handleMessage(message: ShowObjectsEventMessage) {
+	private handleMessage(
+		message: ShowObjectsEventMessage,
+		generation: number,
+		afterSequence: number | null,
+	) {
 		switch (message.type) {
 			case "ready":
+				if (afterSequence === null)
+					this.beginSnapshotBoundary(generation, message.cursor, false);
+				return;
 			case "repaired":
-				this.cursor = message.cursor;
-				this.ready = true;
-				for (const kind of this.active.keys())
-					void this.hydrate(kind, message.cursor);
+				this.onError?.(null);
 				return;
 			case "event":
-				this.cursor = Math.max(this.cursor ?? 0, message.change.eventSequence);
 				this.routeChange(message.change);
 				return;
 			case "gap":
-				this.fullResync();
+				this.beginSnapshotBoundary(generation, message.latestSequence, true);
 				return;
-			case "error": {
-				const error = new Error(message.error);
-				this.store.setError(error);
-				this.onError?.(error);
-				this.fullResync();
-				return;
-			}
+			case "error":
+				this.protocolReset(new Error(message.error));
 		}
 	}
 
 	private routeChange(change: ShowObjectsChange) {
-		const changes = change.changes.filter((item) => this.active.has(item.kind));
-		if (!changes.length) return;
-		const scoped = { ...change, changes };
+		const relevant = change.changes.filter((item) => this.scope.includesChange(item));
+		if (!relevant.length) return;
 		if (
-			this.queued.length ||
-			changes.some((item) => this.hydrating.has(item.kind))
+			this.queued.size ||
+			relevant.some((item) =>
+				isChangeHydrating(
+					this.scope,
+					(key) => this.runs.has(key),
+					item.kind,
+					item.objectId,
+				),
+			)
 		) {
-			this.queued.push(scoped);
+			this.queued.push(change);
 			return;
 		}
-		this.store.applyChange(scoped);
+		this.installChange(change, relevant);
 	}
 
-	private async hydrate(
-		kind: ShowObjectKind,
-		eventFloor = this.cursor ?? 0,
+	private installChange(
+		change: ShowObjectsChange,
+		relevant = change.changes.filter((item) => this.scope.includesChange(item)),
 	) {
-		if (!this.active.has(kind) || this.hydrating.has(kind)) return;
-		const generation = this.generation;
-		const hydrationEpoch = (this.hydrationEpochs.get(kind) ?? 0) + 1;
-		this.hydrationEpochs.set(kind, hydrationEpoch);
-		this.hydrating.add(kind);
-		this.store.setLoading();
-		try {
-			const objects = await this.loadCollection(this.showId, kind);
-			if (
-				generation !== this.generation ||
-				this.hydrationEpochs.get(kind) !== hydrationEpoch ||
-				!this.active.has(kind)
-			)
-				return;
-			this.store.setCollection(
-				this.showId,
-				kind,
-				objects as never,
-				eventFloor,
+		if (!relevant.length) return;
+		this.store.applyChange({ ...change, changes: relevant });
+		this.cursors.installEvent(change.eventSequence);
+		const changedGroups = new Set(
+			relevant.filter((item) => item.kind === "group").map((item) => item.objectId),
+		);
+		for (const targetId of this.scope.affectedExactGroups(changedGroups))
+			this.requestHydration(
+				{ kind: "group", objectId: targetId },
+				change.eventSequence,
+				true,
 			);
-			this.onError?.(null);
-		} catch (reason) {
-			if (
-				generation === this.generation &&
-				this.hydrationEpochs.get(kind) === hydrationEpoch
-			)
-				this.fail(asError(reason), true);
-		} finally {
-			if (
-				generation === this.generation &&
-				this.hydrationEpochs.get(kind) === hydrationEpoch
-			) {
-				this.hydrating.delete(kind);
-				this.flushQueued();
-			}
-		}
 	}
 
 	private flushQueued() {
-		if (this.hydrating.size || !this.queued.length) return;
-		const queued = this.queued.splice(0).sort(
-			(left, right) => left.eventSequence - right.eventSequence,
-		);
-		for (const change of queued) {
-			const changes = change.changes.filter((item) => this.active.has(item.kind));
-			if (changes.length) this.store.applyChange({ ...change, changes });
+		while (!this.runs.size && this.queued.size) {
+			const change = this.queued.shift();
+			if (change) this.installChange(change);
 		}
 	}
 
-	private fail(error: Error, reconnect: boolean) {
-		this.store.setError(error);
-		this.onError?.(error);
-		if (reconnect) this.reconnect(false);
+	private beginSnapshotBoundary(generation: number, cursor: number, repair: boolean) {
+		this.clearHydrations();
+		this.queued.clear();
+		this.store.beginEventResync();
+		this.pendingBoundary = {
+			generation,
+			cursor,
+			repair,
+			targets: new Set(this.scope.targets().map(hydrationKey)),
+		};
+		this.ensureHydrations(cursor, true);
+		this.completeBoundary();
 	}
 
-	private reconnect(rehydrate: boolean) {
-		if (!this.active.size) return;
+	private completeBoundary() {
+		const boundary = this.pendingBoundary;
+		if (!boundary || boundary.generation !== this.socketGeneration) return;
+		for (const key of boundary.targets)
+			if (
+				this.scope.targets().some((target) => hydrationKey(target) === key) &&
+				(this.hydrationCoverage.get(key) ?? -1) < boundary.cursor
+			)
+				return;
+		this.pendingBoundary = null;
+		this.cursors.installSnapshot(boundary.cursor);
+		this.store.setReady();
+		this.onError?.(null);
+		if (boundary.repair) this.stream?.repair(boundary.cursor);
+	}
+
+	private protocolReset(error: Error) {
+		this.store.setError(error);
+		this.onError?.(error);
+		this.cursors.reset();
+		this.pendingBoundary = null;
+		this.subscribeFromLatest = true;
+		this.queued.clear();
+		this.clearHydrations();
+		this.store.beginEventResync();
 		this.closeSocket();
-		if (rehydrate) this.cursor = null;
+		this.ensureHydrations(0, true);
+		this.scheduleReconnect(0);
+	}
+
+	private failTransport(error: Error) {
+		this.store.setError(error);
+		this.onError?.(error);
+		this.scheduleReconnect();
+	}
+
+	private reconcileStream() {
+		if (!this.transport || !this.scope.hasViews()) return;
+		if (!this.stream) {
+			if (this.reconnectTimer == null) this.openStream();
+			return;
+		}
+		if (this.streamScopeKey === this.scope.key() || this.streamRefreshScheduled)
+			return;
+		this.streamRefreshScheduled = true;
+		globalThis.queueMicrotask(() => {
+			this.streamRefreshScheduled = false;
+			if (!this.scope.hasViews() || this.streamScopeKey === this.scope.key()) return;
+			this.closeSocket();
+			this.openStream();
+		});
+	}
+
+	private scheduleReconnect(delay = 750) {
+		if (!this.scope.hasViews()) return;
+		this.closeSocket();
 		if (this.reconnectTimer != null) return;
 		this.reconnectTimer = globalThis.setTimeout(() => {
 			this.reconnectTimer = null;
 			this.openStream();
+		}, delay);
+	}
+
+	private scheduleHydrationRetry() {
+		if (this.hydrationRetryTimer != null || !this.scope.hasViews()) return;
+		this.hydrationRetryTimer = globalThis.setTimeout(() => {
+			this.hydrationRetryTimer = null;
+			this.ensureHydrations();
 		}, 750);
 	}
 
-	private fullResync() {
-		this.cursor = null;
-		this.store.beginEventResync();
-		this.reconnect(true);
+	private invalidateHydration(target: HydrationTarget) {
+		const key = hydrationKey(target);
+		this.hydrated.delete(key);
+		this.hydrationCoverage.delete(key);
+		this.runs.delete(key);
+		this.forcedFloors.delete(key);
+	}
+
+	private clearHydrations() {
+		this.runs.clear();
+		this.forcedFloors.clear();
+		this.hydrated.clear();
+		this.hydrationCoverage.clear();
 	}
 
 	private closeSocket() {
-		this.generation++;
-		this.ready = false;
-		this.hydrating.clear();
-		this.hydrationEpochs.clear();
-		this.queued.length = 0;
+		this.socketGeneration++;
+		this.pendingBoundary = null;
 		this.stream?.close();
 		this.stream = null;
+		this.streamScopeKey = null;
 	}
 
-	private closeStream() {
-		if (this.reconnectTimer != null)
-			globalThis.clearTimeout(this.reconnectTimer);
+	private clearTimers() {
+		clearSessionTimers(this.reconnectTimer, this.hydrationRetryTimer);
 		this.reconnectTimer = null;
-		this.closeSocket();
+		this.hydrationRetryTimer = null;
 	}
-}
-
-function asError(reason: unknown): Error {
-	return reason instanceof Error ? reason : new Error(String(reason));
 }

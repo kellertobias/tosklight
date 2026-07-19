@@ -8,6 +8,14 @@ export interface ClientTransport {
 	absoluteUrl(path: string): string;
 }
 
+export interface LiveClientTransport extends ClientTransport {
+	command(
+		command: string,
+		payload: unknown,
+		expectedRevision?: number,
+	): Promise<unknown>;
+}
+
 export function jsonRequest(
 	method: "POST" | "PUT",
 	body: unknown,

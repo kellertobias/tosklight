@@ -5,6 +5,7 @@ import {
 	reconcileShowObject,
 	runOptimisticShowObjectMutation,
 } from "./showObjectMutations";
+import { currentPortableGroups } from "./showObjectSelectors";
 
 export function createGroupStoreActions(
 	model: ServerController,
@@ -14,7 +15,6 @@ export function createGroupStoreActions(
 		setError,
 		bootstrap,
 		session,
-		portableGroups,
 		selectedFixtures,
 	} = model;
 	return {
@@ -23,7 +23,9 @@ export function createGroupStoreActions(
 				if (!bootstrap?.active_show || !session)
 					throw new Error("Open a show before storing groups");
 				const showId = bootstrap.active_show.id;
-				const existing = portableGroups.find((item) => item.id === id);
+				const existing = currentPortableGroups(model).find(
+					(item) => item.id === id,
+				);
 				const programmers = await client.programmers();
 				const programmer = programmers.find(
 					(item) => item.session_id === session.session_id,

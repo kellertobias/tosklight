@@ -36,6 +36,9 @@ vi.mock("../../api/ServerContext", () => ({
     refreshGroup: mocks.refreshGroup,
   }),
 }));
+vi.mock("../../features/server/useShowObjectsState", () => ({
+  useGroups: () => mocks.groups,
+}));
 
 vi.mock("../../state/AppContext", () => ({
   useApp: () => ({

@@ -7,6 +7,7 @@ import { ButtonGrid } from "../window-kit";
 import { RecordModeDialog, type RecordMode } from "./RecordModeDialog";
 import { requestUpdateTarget } from "../control/updateWorkflow";
 import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
+import { useGroups } from "../../features/server/useShowObjectsState";
 
 const MIN_SHORTCUT_SIZE = 88;
 const SHORTCUT_GAP = 2;
@@ -18,6 +19,7 @@ export function groupShortcutCount(width: number) {
 export function GroupStrip({ active = true }: { active?: boolean }) {
 	useShowObjectView("group", active);
   const server = useServer();
+  const storedGroups = useGroups(server.playbacks);
   const { state, dispatch } = useApp();
   const gridRef = useRef<HTMLDivElement>(null);
   const [slotCount, setSlotCount] = useState(10);
@@ -32,7 +34,7 @@ export function GroupStrip({ active = true }: { active?: boolean }) {
     observer.observe(grid);
     return () => observer.disconnect();
   }, []);
-  const stored = server.bootstrap ? server.groups : groups.map((group) => ({ id: String(group.id), body: { name: group.name, fixtures: Array.from({ length: group.fixtures }, (_, index) => String(index)) } }));
+  const stored = server.bootstrap ? storedGroups : groups.map((group) => ({ id: String(group.id), body: { name: group.name, fixtures: Array.from({ length: group.fixtures }, (_, index) => String(index)) } }));
   const visible = Array.from({ length: slotCount }, (_, index) => stored.find((group) => group.id === String(index + 1)) ?? null);
   const recordTarget = stored.find((group) => group.id === recordGroup);
   const cancelRecording = () => { setRecordGroup(null); dispatch({ type: "SET_STORE_ARMED", value: false }); };

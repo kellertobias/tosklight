@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useServer } from "../../../api/ServerContext";
 import type { VisualizationSnapshot } from "../../../api/types";
 import { useApp } from "../../../state/AppContext";
+import { useGroups } from "../../../features/server/useShowObjectsState";
 import {
 	directProgrammerChoices,
 	type ParameterFamily,
@@ -38,6 +39,7 @@ function useVisualization() {
 
 function useSupportedAttributes() {
 	const server = useServer();
+	const groups = useGroups(server.playbacks);
 	return useMemo(() => {
 		const result = new Set<string>();
 		for (const fixture of server.patch?.fixtures ?? []) {
@@ -53,7 +55,7 @@ function useSupportedAttributes() {
 		}
 		if (server.selectedGroupId) {
 			result.add("intensity");
-			const group = server.groups.find(
+			const group = groups.find(
 				(candidate) => candidate.id === server.selectedGroupId,
 			);
 			for (const attribute of Object.keys(group?.body.programming ?? {}))
@@ -64,7 +66,7 @@ function useSupportedAttributes() {
 		server.patch,
 		server.selectedFixtures,
 		server.selectedGroupId,
-		server.groups,
+		groups,
 	]);
 }
 

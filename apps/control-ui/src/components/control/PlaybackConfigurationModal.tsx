@@ -6,6 +6,7 @@ import { Button, ColorPickerField, FormField, FormLayout, MultiValueToggleField,
 import { ModalTitleBar } from "../common/ModalTitleBar";
 import { SelectionTree, WindowScrollArea, type SelectionListOption } from "../window-kit";
 import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
+import { useGroups } from "../../features/server/useShowObjectsState";
 
 export const PLAYBACK_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16", "#22c55e", "#20c997", "#06b6d4", "#0ea5e9", "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#ec4899", "#f43f5e", "#f8fafc"] as const;
 
@@ -66,6 +67,7 @@ export interface PlaybackConfigurationModalProps {
 export function PlaybackConfigurationModal({ playback, page, slot, empty = false, virtual = false, onClose }: PlaybackConfigurationModalProps) {
   useShowObjectView("group");
   const server = useServer();
+  const groups = useGroups(server.playbacks);
   const [initialDraft] = useState(() => normalizePlaybackTopology(playback, virtual ? 1 : server.playbacks?.desk.buttons ?? 3, !virtual));
   const [draft, setDraft] = useState(initialDraft);
   const initialFamily = familyFromTarget(initialDraft.target.type);
@@ -94,10 +96,10 @@ export function PlaybackConfigurationModal({ playback, page, slot, empty = false
     setFamily(next);
     if (next === "none") return;
     const type = next === "special" ? (isSpecial(draft.target.type) ? draft.target.type : "programmer_fade") : next;
-    if (type !== draft.target.type) setDraft(withFunctionDefaults(draft, type, server.playbacks?.cue_lists[0]?.id ?? "", server.groups[0]?.id ?? ""));
+    if (type !== draft.target.type) setDraft(withFunctionDefaults(draft, type, server.playbacks?.cue_lists[0]?.id ?? "", groups[0]?.id ?? ""));
   };
   const chooseSpecial = (type: "programmer_fade" | "cue_fade" | "grand_master") => {
-    if (type !== draft.target.type) setDraft(withFunctionDefaults(draft, type, server.playbacks?.cue_lists[0]?.id ?? "", server.groups[0]?.id ?? ""));
+    if (type !== draft.target.type) setDraft(withFunctionDefaults(draft, type, server.playbacks?.cue_lists[0]?.id ?? "", groups[0]?.id ?? ""));
   };
 
   return createPortal(<div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
@@ -114,7 +116,7 @@ export function PlaybackConfigurationModal({ playback, page, slot, empty = false
         <Button className={tab === "layout" ? "active" : ""} onClick={() => setTab("layout")}>Layout</Button>
       </nav>
       <div className="playback-configuration-body">
-        {tab === "function" && <PlaybackFunctionTab family={family} draft={draft} virtual={virtual} presentation={presentation} cueLists={server.playbacks?.cue_lists ?? []} groups={server.groups} onFamilyChange={chooseFamily} onSpecialChange={chooseSpecial} onDraftChange={setDraft}/>}
+        {tab === "function" && <PlaybackFunctionTab family={family} draft={draft} virtual={virtual} presentation={presentation} cueLists={server.playbacks?.cue_lists ?? []} groups={groups} onFamilyChange={chooseFamily} onSpecialChange={chooseSpecial} onDraftChange={setDraft}/>}
         {tab === "behavior" && <WindowScrollArea className="playback-tab-scroll"><div className="playback-tab-scroll-content">{family === "none" ? <InactivePlaybackDetail/> : <PlaybackBehaviorTab draft={draft} onDraftChange={setDraft}/>}</div></WindowScrollArea>}
         {tab === "layout" && <WindowScrollArea className="playback-tab-scroll"><div className="playback-tab-scroll-content">{family === "none" ? <InactivePlaybackDetail/> : <PlaybackLayoutTab draft={draft} options={options} onDraftChange={setDraft}/>}</div></WindowScrollArea>}
         {failure && <p role="alert" className="modal-error">{failure}</p>}
@@ -129,7 +131,7 @@ function PlaybackFunctionTab({ family, draft, virtual, presentation, cueLists, g
   virtual: boolean;
   presentation: string;
   cueLists: Array<{ id: string; name: string }>;
-  groups: Array<{ id: string; body: { name?: string } }>;
+  groups: ReadonlyArray<{ id: string; body: { name?: string } }>;
   onFamilyChange: (family: PlaybackFamily) => void;
   onSpecialChange: (type: "programmer_fade" | "cue_fade" | "grand_master") => void;
   onDraftChange: (playback: PlaybackDefinition) => void;

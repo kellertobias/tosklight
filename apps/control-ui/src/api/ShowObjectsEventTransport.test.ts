@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { ShowObjectsProtocolError } from "../features/showObjects/transport";
 import { WebSocketShowObjectsEventTransport } from "./ShowObjectsEventTransport";
 
 const SHOW_ID = "11111111-1111-4111-8111-111111111111";
@@ -7,6 +8,7 @@ class FakeWebSocket {
 	static readonly OPEN = 1;
 	readonly sent: string[] = [];
 	readonly close = vi.fn();
+	readonly readyState = FakeWebSocket.OPEN;
 	private readonly listeners = new Map<string, Array<(event: Event) => void>>();
 
 	constructor(
@@ -56,7 +58,15 @@ describe("WebSocketShowObjectsEventTransport", () => {
 			webSocket: FakeWebSocket as unknown as typeof WebSocket,
 		});
 
-		const stream = transport.subscribe(SHOW_ID, 41, observer);
+		const stream = transport.subscribe(
+			SHOW_ID,
+			{
+				kinds: ["group"],
+				objects: [{ kind: "preset", objectId: "2.1" }],
+			},
+			41,
+			observer,
+		);
 		const socket = FakeWebSocket.instances[0];
 		expect(String(socket.url)).toBe("ws://127.0.0.1:5000/api/v2/events");
 		expect(socket.protocols.slice(0, 2)).toEqual([
@@ -69,11 +79,25 @@ describe("WebSocketShowObjectsEventTransport", () => {
 			filter: {
 				capabilities: ["show"],
 				classes: ["projection"],
-				objects: [{ capability: "show", id: `objects:${SHOW_ID}` }],
+				objects: [
+					{
+						capability: "show",
+						id: `objects:${SHOW_ID}:kind:group`,
+					},
+					{
+						capability: "show",
+						id: `objects:${SHOW_ID}:kind:preset:object:2.1`,
+					},
+				],
 			},
 			after_sequence: 41,
 			capacity: 128,
 			rate_limits: [],
+		});
+		stream.repair(47);
+		expect(JSON.parse(socket.sent[1])).toEqual({
+			type: "repair",
+			cursor: { sequence: 47 },
 		});
 
 		stream.close();
@@ -94,7 +118,12 @@ describe("WebSocketShowObjectsEventTransport", () => {
 			sessionToken: "token",
 			webSocket: FakeWebSocket as unknown as typeof WebSocket,
 		});
-		transport.subscribe(SHOW_ID, null, observer);
+		transport.subscribe(
+			SHOW_ID,
+			{ kinds: ["group"], objects: [] },
+			null,
+			observer,
+		);
 		const socket = FakeWebSocket.instances[0];
 		socket.emit(
 			"message",
@@ -102,6 +131,12 @@ describe("WebSocketShowObjectsEventTransport", () => {
 				type: "event",
 				event: {
 					sequence: 52,
+					related_objects: [
+						{
+							capability: "show",
+							id: `objects:${SHOW_ID}:kind:group`,
+						},
+					],
 					payload: {
 						type: "show_objects_changed",
 						change: {
@@ -142,6 +177,116 @@ describe("WebSocketShowObjectsEventTransport", () => {
 						objectId: "1",
 						objectRevision: 3,
 						body: { name: "Front", fixtures: ["fixture-1"] },
+						deleted: false,
+					},
+				],
+			},
+		});
+	});
+
+	it("rejects malformed typed related-object routes", () => {
+		FakeWebSocket.instances = [];
+		const observer = {
+			message: vi.fn(),
+			error: vi.fn(),
+			closed: vi.fn(),
+		};
+		const transport = new WebSocketShowObjectsEventTransport({
+			baseUrl: "https://desk.example.test",
+			sessionToken: "token",
+			webSocket: FakeWebSocket as unknown as typeof WebSocket,
+		});
+		transport.subscribe(
+			SHOW_ID,
+			{ kinds: ["group"], objects: [] },
+			null,
+			observer,
+		);
+
+		FakeWebSocket.instances[0].emit(
+			"message",
+			eventMessage({
+				type: "event",
+				event: {
+					sequence: 1,
+					related_objects: [{ capability: "invalid", id: "group:1" }],
+					payload: { type: "show_objects_changed", change: {} },
+				},
+			}),
+		);
+
+		expect(observer.message).not.toHaveBeenCalled();
+		expect(observer.error).toHaveBeenCalledWith(
+			expect.objectContaining<Partial<ShowObjectsProtocolError>>({
+				name: "ShowObjectsProtocolError",
+				eventSequence: 1,
+			}),
+		);
+	});
+
+	it("maps selective-import object deltas through the same narrow store contract", () => {
+		FakeWebSocket.instances = [];
+		const observer = {
+			message: vi.fn(),
+			error: vi.fn(),
+			closed: vi.fn(),
+		};
+		const transport = new WebSocketShowObjectsEventTransport({
+			baseUrl: "https://desk.example.test",
+			sessionToken: "token",
+			webSocket: FakeWebSocket as unknown as typeof WebSocket,
+		});
+		transport.subscribe(
+			SHOW_ID,
+			{ kinds: [], objects: [{ kind: "group", objectId: "1" }] },
+			null,
+			observer,
+		);
+
+		FakeWebSocket.instances[0].emit(
+			"message",
+			eventMessage({
+				type: "event",
+				event: {
+					sequence: 61,
+					related_objects: [
+						{
+							capability: "show",
+							id: `objects:${SHOW_ID}:kind:group:object:1`,
+						},
+					],
+					payload: {
+						type: "selective_import_applied",
+						change: {
+							show_id: SHOW_ID,
+							show_revision: 22,
+							objects: [
+								{
+									kind: "group",
+									object_id: "1",
+									object_revision: 4,
+									body: { name: "Imported", fixtures: ["fixture-1"] },
+								},
+							],
+						},
+					},
+				},
+			}),
+		);
+
+		expect(observer.error).not.toHaveBeenCalled();
+		expect(observer.message).toHaveBeenCalledWith({
+			type: "event",
+			change: {
+				showId: SHOW_ID,
+				showRevision: 22,
+				eventSequence: 61,
+				changes: [
+					{
+						kind: "group",
+						objectId: "1",
+						objectRevision: 4,
+						body: { name: "Imported", fixtures: ["fixture-1"] },
 						deleted: false,
 					},
 				],

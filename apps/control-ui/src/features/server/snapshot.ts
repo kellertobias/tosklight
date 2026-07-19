@@ -26,8 +26,6 @@ export function createServerSnapshotValue(
 	| "fixtureProfileWarnings"
 	| "mediaServers"
 	| "mediaPreviewUrls"
-	| "groups"
-	| "presets"
 	| "cueObjects"
 	| "deskLayout"
 	| "deskLayoutScope"
@@ -65,8 +63,6 @@ export function createServerSnapshotValue(
 		fixtureProfileWarnings,
 		mediaServers,
 		mediaPreviewUrls,
-		groups,
-		presets,
 		cueObjects,
 		deskLayout,
 		deskLayoutScope,
@@ -106,8 +102,6 @@ export function createServerSnapshotValue(
 		fixtureProfileWarnings,
 		mediaServers,
 		mediaPreviewUrls,
-		groups,
-		presets,
 		cueObjects,
 		deskLayout,
 		deskLayoutScope,

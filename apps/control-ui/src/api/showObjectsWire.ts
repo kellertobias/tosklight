@@ -36,6 +36,29 @@ function booleanAt(value: unknown, path: string): boolean {
 	return value;
 }
 
+function validateRelatedObjects(event: Record<string, unknown>) {
+	const value = event.related_objects;
+	if (value == null) return;
+	if (!Array.isArray(value))
+		throw new WireValidationError("$.event.related_objects", "array", value);
+	for (const [index, item] of value.entries()) {
+		const path = `$.event.related_objects[${index}]`;
+		const object = recordAt(item, path);
+		const capability = stringAt(object.capability, `${path}.capability`);
+		if (
+			!["programmer", "playback", "show", "desk", "output", "system"].includes(
+				capability,
+			)
+		)
+			throw new WireValidationError(
+				`${path}.capability`,
+				"event capability",
+				capability,
+			);
+		stringAt(object.id, `${path}.id`);
+	}
+}
+
 function supportedKindAt(value: unknown, path: string): ShowObjectKind | null {
 	const kind = stringAt(value, path);
 	return kind === "group" || kind === "preset" ? kind : null;
@@ -115,14 +138,22 @@ export function decodeShowObjectsEventMessage(
 			return { type: "error", error: stringAt(message.error, "$.error") };
 		case "event": {
 			const event = recordAt(message.event, "$.event");
+			validateRelatedObjects(event);
 			const payload = recordAt(event.payload, "$.event.payload");
-			if (payload.type !== "show_objects_changed") return null;
+			const payloadType = stringAt(payload.type, "$.event.payload.type");
+			if (
+				payloadType !== "show_objects_changed" &&
+				payloadType !== "selective_import_applied"
+			)
+				return null;
 			const change = recordAt(payload.change, "$.event.payload.change");
-			if (!Array.isArray(change.changes))
+			const rawChanges =
+				payloadType === "show_objects_changed" ? change.changes : change.objects;
+			if (!Array.isArray(rawChanges))
 				throw new WireValidationError(
-					"$.event.payload.change.changes",
+					`$.event.payload.change.${payloadType === "show_objects_changed" ? "changes" : "objects"}`,
 					"array",
-					change.changes,
+					rawChanges,
 				);
 			return {
 				type: "event",
@@ -133,10 +164,14 @@ export function decodeShowObjectsEventMessage(
 						"$.event.payload.change.show_revision",
 					),
 					eventSequence: integerAt(event.sequence, "$.event.sequence"),
-					changes: change.changes.flatMap((item, index) => {
+					changes: rawChanges.flatMap((item, index) => {
+						const candidate =
+							payloadType === "selective_import_applied"
+								? { ...recordAt(item, "$.event.payload.change.objects"), deleted: false }
+								: item;
 						const decoded = decodeChange(
-							item,
-							`$.event.payload.change.changes[${index}]`,
+							candidate,
+							`$.event.payload.change.${payloadType === "show_objects_changed" ? "changes" : "objects"}[${index}]`,
 						);
 						return decoded ? [decoded] : [];
 					}),

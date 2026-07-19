@@ -6,6 +6,8 @@ import type {
 	VisualizationSnapshot,
 } from "../../api/types";
 import { useDesktopBridge } from "../../platform/desktop";
+import type { ShowObject } from "../../features/showObjects/contracts";
+import { useGroups } from "../../features/server/useShowObjectsState";
 import {
 	cueVisualization,
 	migrateStagePosition,
@@ -58,7 +60,7 @@ function useStageFixtures() {
 	);
 }
 
-function cueChanges(cue: Cue, groups: ReturnType<typeof useServer>["groups"]) {
+function cueChanges(cue: Cue, groups: readonly ShowObject<"group">[]) {
 	const changes = [...(cue.changes ?? [])] as Array<{
 		fixture_id: string;
 		attribute: string;
@@ -81,6 +83,7 @@ function cueChanges(cue: Cue, groups: ReturnType<typeof useServer>["groups"]) {
 
 export function useCueThumbnails(cues: Cue[]) {
 	const server = useServer();
+	const groups = useGroups(server.playbacks);
 	const tauri = useDesktopBridge().available;
 	const stageFixtures = useStageFixtures();
 	const [thumbnails, setThumbnails] = useState<Record<number, string>>({});
@@ -96,7 +99,7 @@ export function useCueThumbnails(cues: Cue[]) {
 				for (let index = 0; index < cues.length; index++) {
 					state = cueVisualization(
 						state,
-						cueChanges(cues[index], server.groups),
+						cueChanges(cues[index], groups),
 					);
 					next[index] = renderStageThumbnail(stageFixtures, state);
 				}
@@ -106,6 +109,6 @@ export function useCueThumbnails(cues: Cue[]) {
 		return () => {
 			cancelled = true;
 		};
-	}, [tauri, cues, stageFixtures, server.groups, server.readVisualization]);
+	}, [tauri, cues, stageFixtures, groups, server.readVisualization]);
 	return thumbnails;
 }

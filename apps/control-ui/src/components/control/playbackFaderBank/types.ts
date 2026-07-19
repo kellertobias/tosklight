@@ -4,6 +4,7 @@ import type {
 	PlaybackDefinition,
 	PlaybackSurfaceRow,
 } from "../../../api/types";
+import type { ShowObject } from "../../../features/showObjects/contracts";
 
 export type PlaybackServer = ReturnType<typeof useServer>;
 export type PlaybackSnapshotActive = NonNullable<
@@ -12,7 +13,7 @@ export type PlaybackSnapshotActive = NonNullable<
 export type AuthoritativeControls = NonNullable<
 	NonNullable<PlaybackServer["playbacks"]>["authoritative_controls"]
 >;
-export type PlaybackGroup = PlaybackServer["groups"][number];
+export type PlaybackGroup = ShowObject<"group">;
 
 export type PlaybackSlotProjection = {
 	playback: PlaybackDefinition | null;

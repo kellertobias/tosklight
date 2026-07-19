@@ -16,14 +16,30 @@ export function useSelectedGroupMembership(
 		id: null,
 		seen: false,
 	});
-	if (observed.current.id !== selectedGroupId)
+	const applied = useRef<{
+		id: string | null;
+		fixtures: readonly string[] | null;
+	}>({
+		id: null,
+		fixtures: null,
+	});
+	if (observed.current.id !== selectedGroupId) {
 		observed.current = { id: selectedGroupId, seen: false };
+		applied.current = { id: selectedGroupId, fixtures: null };
+	}
 	useEffect(() => {
 		if (!selectedGroupId) return;
 		if (selectedFixtures) {
 			observed.current.seen = true;
-			setSelectedFixtures(selectedFixtures);
+			if (
+				!applied.current.fixtures ||
+				!sameMembership(applied.current.fixtures, selectedFixtures)
+			) {
+				applied.current = { id: selectedGroupId, fixtures: [...selectedFixtures] };
+				setSelectedFixtures(selectedFixtures);
+			}
 		} else if (observed.current.seen) {
+			applied.current = { id: null, fixtures: null };
 			setSelectedFixtures([]);
 			setSelectedGroupId(null);
 		}
@@ -33,4 +49,11 @@ export function useSelectedGroupMembership(
 		setSelectedFixtures,
 		setSelectedGroupId,
 	]);
+}
+
+function sameMembership(left: readonly string[], right: readonly string[]) {
+	return (
+		left.length === right.length &&
+		left.every((fixtureId, index) => fixtureId === right[index])
+	);
 }

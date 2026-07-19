@@ -173,6 +173,55 @@ describe("LightApiClient server selection and sessions", () => {
 		const headers = fetchMock.mock.calls[1][1].headers as Headers;
 		expect(headers.get("authorization")).toBe("Bearer token-a");
 	});
+
+	it("returns authoritative absence only for a missing optional object", async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						session_id: "session-a",
+						token: "token-a",
+						user: { id: "user-a", name: "Operator", enabled: true },
+					}),
+					{ status: 200, headers: { "content-type": "application/json" } },
+				),
+			)
+			.mockResolvedValueOnce(new Response("missing", { status: 404 }));
+		vi.stubGlobal("fetch", fetchMock);
+		const client = new LightApiClient("http://desk.local");
+		await client.login("Operator");
+
+		await expect(client.objectOrNull("show-a", "group", "1")).resolves.toBeNull();
+	});
+
+	it("does not hide failures while loading an optional object", async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						session_id: "session-a",
+						token: "token-a",
+						user: { id: "user-a", name: "Operator", enabled: true },
+					}),
+					{ status: 200, headers: { "content-type": "application/json" } },
+				),
+			)
+			.mockResolvedValueOnce(
+				new Response("object service unavailable", { status: 503 }),
+			);
+		vi.stubGlobal("fetch", fetchMock);
+		const client = new LightApiClient("http://desk.local");
+		await client.login("Operator");
+
+		await expect(client.objectOrNull("show-a", "group", "1")).rejects.toMatchObject(
+			{
+				message: "object service unavailable",
+				status: 503,
+			},
+		);
+	});
 });
 
 describe("LightApiClient programmer and preset contracts", () => {

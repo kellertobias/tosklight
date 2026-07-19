@@ -2,7 +2,7 @@ import type { CueList, PatchedFixture, ProgrammerState, StoredGroup } from "../a
 
 type Group = { id: string; body: StoredGroup };
 
-function fixtureIdsForGroups(groupIds: Iterable<string>, groups: Group[]) {
+function fixtureIdsForGroups(groupIds: Iterable<string>, groups: readonly Group[]) {
   const wanted = new Set(groupIds);
   return new Set(
     groups
@@ -13,7 +13,7 @@ function fixtureIdsForGroups(groupIds: Iterable<string>, groups: Group[]) {
 
 export function activeProgrammerFixtureIds(
   programmer: ProgrammerState | undefined,
-  groups: Group[],
+  groups: readonly Group[],
 ) {
   const active = fixtureIdsForGroups(
     Object.keys(programmer?.group_values ?? {}),
@@ -26,7 +26,7 @@ export function activeProgrammerFixtureIds(
   return active;
 }
 
-export function cueListFixtureIds(cueList: CueList | undefined, groups: Group[]) {
+export function cueListFixtureIds(cueList: CueList | undefined, groups: readonly Group[]) {
   if (!cueList) return null;
   const fixtureIds = new Set(
     cueList.cues.flatMap((cue) => cue.changes.map((change) => change.fixture_id)),
