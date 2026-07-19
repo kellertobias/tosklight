@@ -2,17 +2,20 @@
 //! Bounded, transport-neutral MVR archive reader and writer.
 
 use quick_xml::{
-    Reader, Writer,
-    events::{BytesDecl, BytesEnd, BytesStart, Event},
+    Reader,
+    events::{BytesStart, Event},
 };
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
-    io::{Cursor, Read, Write},
+    io::{Cursor, Read},
 };
 use thiserror::Error;
 use uuid::Uuid;
-use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
+use zip::ZipArchive;
+
+mod writer;
+pub use writer::write;
 
 pub const MAX_ARCHIVE_BYTES: usize = 256 * 1024 * 1024;
 pub const MAX_EXPANDED_BYTES: u64 = 512 * 1024 * 1024;
@@ -308,141 +311,5 @@ pub fn read(bytes: &[u8]) -> Result<MvrDocument, MvrError> {
     Ok(doc)
 }
 
-fn element(writer: &mut Writer<Cursor<Vec<u8>>>, name: &str, value: &str) -> Result<(), MvrError> {
-    writer
-        .create_element(name)
-        .write_text_content(quick_xml::events::BytesText::new(value))?;
-    Ok(())
-}
-
-pub fn write(document: &MvrDocument) -> Result<Vec<u8>, MvrError> {
-    let mut xml = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
-    xml.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))?;
-    let mut root = BytesStart::new("GeneralSceneDescription");
-    root.push_attribute(("verMajor", "1"));
-    root.push_attribute(("verMinor", "6"));
-    xml.write_event(Event::Start(root))?;
-    xml.write_event(Event::Start(BytesStart::new("Scene")))?;
-    xml.write_event(Event::Start(BytesStart::new("Layers")))?;
-    xml.write_event(Event::Start(BytesStart::new("Layer")))?;
-    xml.write_event(Event::Start(BytesStart::new("ChildList")))?;
-    for fixture in &document.fixtures {
-        let mut node = BytesStart::new("Fixture");
-        let uuid = fixture.uuid.to_string();
-        node.push_attribute(("uuid", uuid.as_str()));
-        node.push_attribute(("name", fixture.name.as_str()));
-        xml.write_event(Event::Start(node))?;
-        element(
-            &mut xml,
-            "Matrix",
-            &fixture
-                .matrix
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(" "),
-        )?;
-        element(
-            &mut xml,
-            "FixtureID",
-            fixture.fixture_id.as_deref().unwrap_or(""),
-        )?;
-        element(&mut xml, "GDTFSpec", &fixture.gdtf_spec)?;
-        element(&mut xml, "GDTFMode", &fixture.gdtf_mode)?;
-        if let (Some(u), Some(a)) = (fixture.universe, fixture.address) {
-            xml.write_event(Event::Start(BytesStart::new("Addresses")))?;
-            element(&mut xml, "Address", &format!("{u}.{a}"))?;
-            xml.write_event(Event::End(BytesEnd::new("Addresses")))?;
-        }
-        xml.write_event(Event::End(BytesEnd::new("Fixture")))?;
-    }
-    for geometry in &document.geometry {
-        let mut node = BytesStart::new("Geometry3D");
-        let uuid = geometry.uuid.to_string();
-        node.push_attribute(("uuid", uuid.as_str()));
-        node.push_attribute(("name", geometry.name.as_str()));
-        node.push_attribute(("fileName", geometry.file_name.as_str()));
-        xml.write_event(Event::Start(node))?;
-        element(
-            &mut xml,
-            "Matrix",
-            &geometry
-                .matrix
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(" "),
-        )?;
-        xml.write_event(Event::End(BytesEnd::new("Geometry3D")))?;
-    }
-    for tag in [
-        "ChildList",
-        "Layer",
-        "Layers",
-        "Scene",
-        "GeneralSceneDescription",
-    ] {
-        xml.write_event(Event::End(BytesEnd::new(tag)))?;
-    }
-    let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
-    let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
-    zip.start_file("GeneralSceneDescription.xml", options)?;
-    zip.write_all(&xml.into_inner().into_inner())?;
-    for (name, data) in &document.files {
-        if name
-            .to_ascii_lowercase()
-            .ends_with("generalscenedescription.xml")
-        {
-            continue;
-        }
-        if std::path::Path::new(name)
-            .components()
-            .any(|c| matches!(c, std::path::Component::ParentDir))
-        {
-            continue;
-        }
-        zip.start_file(name, options)?;
-        zip.write_all(data)?;
-    }
-    Ok(zip.finish()?.into_inner())
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn round_trip() {
-        let id = Uuid::new_v4();
-        let doc = MvrDocument {
-            fixtures: vec![MvrFixture {
-                uuid: id,
-                name: "Spot 1".into(),
-                fixture_id: Some("1".into()),
-                gdtf_spec: "spot.gdtf".into(),
-                gdtf_mode: "Standard".into(),
-                universe: Some(1),
-                address: Some(101),
-                matrix: matrix("1 0 0 0 1 0 0 0 1 1000 2000 3000"),
-                layer: None,
-                class: None,
-            }],
-            ..Default::default()
-        };
-        let parsed = read(&write(&doc).unwrap()).unwrap();
-        assert_eq!(parsed.fixtures[0].uuid, id);
-        assert_eq!(parsed.fixtures[0].address, Some(101));
-        assert_eq!(parsed.fixtures[0].matrix[9], 1000.0);
-    }
-    #[test]
-    fn rejects_unsafe_paths() {
-        let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
-        zip.start_file(
-            "../GeneralSceneDescription.xml",
-            SimpleFileOptions::default(),
-        )
-        .unwrap();
-        zip.write_all(b"<GeneralSceneDescription/>").unwrap();
-        let bytes = zip.finish().unwrap().into_inner();
-        assert!(read(&bytes).is_err());
-    }
-}
+mod tests;
