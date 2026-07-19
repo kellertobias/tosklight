@@ -4,6 +4,13 @@ use super::*;
 pub(super) struct CommandPlaybackAddress {
     pub(super) playback: u16,
     pub(super) cue: Option<f64>,
+    application: light_application::PlaybackAddress,
+}
+
+impl CommandPlaybackAddress {
+    pub(super) fn application_address(self) -> light_application::PlaybackAddress {
+        self.application
+    }
 }
 
 pub(super) fn page_playback(snapshot: &EngineSnapshot, page: u8, slot: u8) -> Result<u16, String> {
@@ -34,7 +41,7 @@ pub(super) fn parse_playback_address(
         .parse::<u16>()
         .map_err(|_| "playback number is invalid")?;
     index += 1;
-    let playback = if tokens.get(index).is_some_and(|token| token == ".") {
+    let (playback, application) = if tokens.get(index).is_some_and(|token| token == ".") {
         index += 1;
         let slot = tokens
             .get(index)
@@ -42,13 +49,13 @@ pub(super) fn parse_playback_address(
             .parse::<u8>()
             .map_err(|_| "page playback number is invalid")?;
         index += 1;
-        page_playback(
-            snapshot,
-            first.try_into().map_err(|_| "page number is invalid")?,
-            slot,
-        )?
+        let page = first.try_into().map_err(|_| "page number is invalid")?;
+        (
+            page_playback(snapshot, page, slot)?,
+            light_application::PlaybackAddress::ExplicitPage { page, slot },
+        )
     } else {
-        first
+        (first, light_application::PlaybackAddress::Pool(first))
     };
     let cue = if tokens.get(index).is_some_and(|token| token == "CUE") {
         index += 1;
@@ -71,7 +78,14 @@ pub(super) fn parse_playback_address(
     } else {
         None
     };
-    Ok((CommandPlaybackAddress { playback, cue }, index))
+    Ok((
+        CommandPlaybackAddress {
+            playback,
+            cue,
+            application,
+        },
+        index,
+    ))
 }
 
 pub(super) fn parse_update_playback_address(
@@ -86,8 +100,8 @@ pub(super) fn parse_update_playback_address(
     // Update follows the control-surface playback model: SET <slot> addresses
     // that slot on this desk's current page, while SET <page> . <slot> keeps an
     // explicit page stable when the operator changes pages.
-    let explicit = if tokens.get(2).is_some_and(|token| token == ".") {
-        tokens.to_vec()
+    let (explicit, current_slot) = if tokens.get(2).is_some_and(|token| token == ".") {
+        (tokens.to_vec(), None)
     } else {
         let slot = tokens
             .get(1)
@@ -104,11 +118,14 @@ pub(super) fn parse_update_playback_address(
             slot.to_string(),
         ];
         explicit.extend(tokens.iter().skip(2).cloned());
-        explicit
+        (explicit, Some(slot))
     };
-    let (address, used) = parse_playback_address(&explicit, true, snapshot)?;
+    let (mut address, used) = parse_playback_address(&explicit, true, snapshot)?;
     if used != explicit.len() {
         return Err("unexpected tokens after Update playback target".into());
+    }
+    if let Some(slot) = current_slot {
+        address.application = light_application::PlaybackAddress::CurrentPage { slot };
     }
     Ok(address)
 }

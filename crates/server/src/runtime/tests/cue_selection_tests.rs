@@ -128,9 +128,25 @@ fn cue_commands_use_the_desk_selected_concrete_playback() {
         connected: true,
         desk: second_desk,
     };
-    execute_programmer_command(&state, &first, "CUE 2").unwrap();
+    execute_cue_and_assert_typed_event(
+        &state,
+        &first,
+        "CUE 2",
+        light_application::ActionSource::Keyboard,
+        1,
+        Some(2.0),
+        None,
+    );
     execute_programmer_command(&state, &second, "CUE 3").unwrap();
-    execute_programmer_command(&state, &first, "CUE CUE 1").unwrap();
+    execute_cue_and_assert_typed_event(
+        &state,
+        &first,
+        "CUE CUE 1",
+        light_application::ActionSource::Osc,
+        1,
+        Some(2.0),
+        Some(1.0),
+    );
     let runtime = state.engine.playback_runtime();
     let first_runtime = runtime
         .iter()
@@ -178,6 +194,42 @@ fn cue_commands_use_the_desk_selected_concrete_playback() {
         Some(1)
     );
     let _ = std::fs::remove_dir_all(data_dir);
+}
+
+fn execute_cue_and_assert_typed_event(
+    state: &AppState,
+    session: &Session,
+    command: &str,
+    source: light_application::ActionSource,
+    playback: u16,
+    current: Option<f64>,
+    loaded: Option<f64>,
+) {
+    let context = operator_action_context(session, source);
+    let before = state.application_events.latest_sequence();
+    execute_programmer_command_from(state, session, command, &context).unwrap();
+    assert_eq!(state.application_events.latest_sequence(), before + 1);
+
+    let light_application::EventReplay::Events(events) = state
+        .application_events
+        .replay(before, &light_application::EventFilter::default())
+    else {
+        panic!("expected retained Playback event");
+    };
+    assert_eq!(events.len(), 1);
+    let event = &events[0];
+    assert_eq!(event.source, light_application::EventSource::Action(source));
+    assert_eq!(event.correlation_id, Some(context.correlation_id));
+    let light_application::ApplicationEvent::Playback(
+        light_application::PlaybackEvent::RuntimeChanged(change),
+    ) = &event.payload
+    else {
+        panic!("expected typed Playback runtime event");
+    };
+    assert_eq!(change.projection.playback_number, Some(playback));
+    let runtime = change.projection.cue_list_runtime().unwrap();
+    assert_eq!(runtime.current.as_ref().map(|cue| cue.number), current);
+    assert_eq!(runtime.loaded.as_ref().map(|cue| cue.number), loaded);
 }
 
 #[test]

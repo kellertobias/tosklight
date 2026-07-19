@@ -1,4 +1,5 @@
 use super::*;
+use light_application::{CueNumber, PlaybackCommand, PlaybackSurface};
 
 pub(super) fn parse_spread_points(tokens: &[String]) -> Result<Vec<f32>, String> {
     if tokens.len() < 3 || tokens.len().is_multiple_of(2) {
@@ -53,54 +54,149 @@ pub(super) fn execute_cue_operation(
     state: &AppState,
     session: &Session,
     tokens: &[String],
+    context: &light_application::ActionContext,
 ) -> Result<usize, String> {
-    let load = tokens.get(1).is_some_and(|token| token == "CUE");
-    let start = if load { 2 } else { 1 };
-    let snapshot = state.engine.snapshot();
-    let (playback, cue_number) = if tokens.get(start).is_some_and(|token| token == "SET") {
-        let (address, consumed) = parse_playback_address(&tokens[start..], true, &snapshot)?;
-        if start + consumed != tokens.len() {
-            return Err("unexpected tokens after Cue address".into());
-        }
-        (
-            address.playback,
-            address
-                .cue
-                .ok_or("explicit Cue address requires CUE and a Cue number")?,
-        )
-    } else {
-        let show = state.active_show.read().clone().ok_or("no show is open")?;
-        let selected = state
-            .desk
-            .lock()
-            .selected_playback(session.desk.id, show.id)
-            .map_err(|error| error.to_string())?
-            .ok_or(
-                "no playback is selected; select a playback or use CUE SET <playback> CUE <cue>",
-            )?;
-        (selected, parse_command_cue_number(&tokens[start..])?)
-    };
-    if !snapshot
-        .playbacks
-        .iter()
-        .any(|definition| definition.number == playback)
-    {
-        return Err(format!("playback {playback} does not exist"));
-    }
-    state.engine.execute_playback(EnginePlaybackCommand::Pool {
-        number: playback,
-        action: if load {
-            PoolPlaybackAction::Load(cue_number)
-        } else {
-            PoolPlaybackAction::GoTo(cue_number)
-        },
-    })?;
+    let operation = cue_operation(state, session, tokens)?;
+    let playback = execute_typed_cue_operation(state, session, context, operation)?;
     emit(
         state,
         "playback_changed",
-        serde_json::json!({"playback_number":playback,"action":if load {"load"} else {"go-to"},"cue_number":cue_number,"session_id":session.id}),
+        serde_json::json!({
+            "playback_number":playback,
+            "action":operation.name(),
+            "cue_number":operation.cue_number,
+            "session_id":session.id,
+        }),
     );
     Ok(1)
+}
+
+#[derive(Clone, Copy)]
+struct CueOperation {
+    address: light_application::PlaybackAddress,
+    cue_number: f64,
+    load: bool,
+}
+
+impl CueOperation {
+    fn action(self) -> PlaybackAction {
+        let cue = CueNumber::new(self.cue_number);
+        if self.load {
+            PlaybackAction::Load(cue)
+        } else {
+            PlaybackAction::GoTo(cue)
+        }
+    }
+
+    fn name(self) -> &'static str {
+        if self.load { "load" } else { "go-to" }
+    }
+}
+
+fn cue_operation(
+    state: &AppState,
+    session: &Session,
+    tokens: &[String],
+) -> Result<CueOperation, String> {
+    let load = tokens.get(1).is_some_and(|token| token == "CUE");
+    let start = if load { 2 } else { 1 };
+    let snapshot = state.engine.snapshot();
+    let (address, playback, cue_number) = if tokens.get(start).is_some_and(|token| token == "SET") {
+        explicit_cue_target(tokens, start, &snapshot)?
+    } else {
+        selected_cue_target(state, session, &tokens[start..])?
+    };
+    ensure_playback_exists(&snapshot, playback)?;
+    Ok(CueOperation {
+        address,
+        cue_number,
+        load,
+    })
+}
+
+fn ensure_playback_exists(snapshot: &EngineSnapshot, playback: u16) -> Result<(), String> {
+    snapshot
+        .playbacks
+        .iter()
+        .any(|item| item.number == playback)
+        .then_some(())
+        .ok_or_else(|| format!("playback {playback} does not exist"))
+}
+
+fn explicit_cue_target(
+    tokens: &[String],
+    start: usize,
+    snapshot: &EngineSnapshot,
+) -> Result<(light_application::PlaybackAddress, u16, f64), String> {
+    let (address, consumed) = parse_playback_address(&tokens[start..], true, snapshot)?;
+    if start + consumed != tokens.len() {
+        return Err("unexpected tokens after Cue address".into());
+    }
+    let cue = address
+        .cue
+        .ok_or("explicit Cue address requires CUE and a Cue number")?;
+    Ok((address.application_address(), address.playback, cue))
+}
+
+fn selected_cue_target(
+    state: &AppState,
+    session: &Session,
+    cue_tokens: &[String],
+) -> Result<(light_application::PlaybackAddress, u16, f64), String> {
+    let show = state.active_show.read().clone().ok_or("no show is open")?;
+    let selected = state
+        .desk
+        .lock()
+        .selected_playback(session.desk.id, show.id)
+        .map_err(|error| error.to_string())?
+        .ok_or("no playback is selected; select a playback or use CUE SET <playback> CUE <cue>")?;
+    Ok((
+        light_application::PlaybackAddress::Pool(selected),
+        selected,
+        parse_command_cue_number(cue_tokens)?,
+    ))
+}
+
+fn execute_typed_cue_operation(
+    state: &AppState,
+    session: &Session,
+    context: &light_application::ActionContext,
+    operation: CueOperation,
+) -> Result<u16, String> {
+    let result = playback_service::execute(
+        state,
+        Some(session),
+        Some(&session.desk),
+        context.clone(),
+        cue_playback_command(operation, context.source),
+    )
+    .map_err(|error| error.message)?;
+    result
+        .resolved
+        .playback_number()
+        .ok_or_else(|| "Cue command resolved to a Cuelist without a playback".to_owned())
+}
+
+fn cue_playback_command(
+    operation: CueOperation,
+    source: light_application::ActionSource,
+) -> PlaybackCommand {
+    PlaybackCommand {
+        address: operation.address,
+        action: operation.action(),
+        surface: command_playback_surface(source),
+    }
+}
+
+fn command_playback_surface(source: light_application::ActionSource) -> PlaybackSurface {
+    match source {
+        light_application::ActionSource::Osc => PlaybackSurface::Osc,
+        light_application::ActionSource::Matter => PlaybackSurface::Matter,
+        light_application::ActionSource::UserInterface | light_application::ActionSource::Http => {
+            PlaybackSurface::Virtual
+        }
+        _ => PlaybackSurface::Physical,
+    }
 }
 
 pub(super) fn pending_cue_transfer_choice(command_line: &str) -> Option<serde_json::Value> {

@@ -26,7 +26,7 @@ pub(super) fn execute_programmer_command_from(
     let (tokens, timing) = tokenize_programmer_command(command_line)?;
     let first = tokens.first().ok_or("the command line is empty")?;
     match first.as_str() {
-        "CUE" => execute_cue_operation(state, session, &tokens),
+        "CUE" => execute_cue_operation(state, session, &tokens, context),
         "AT" => apply_current_selection_value(
             state,
             session,
