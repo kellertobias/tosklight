@@ -1,3 +1,4 @@
+use super::object_normalization::normalize_object_body;
 use super::*;
 
 mod output_routes;
@@ -98,87 +99,6 @@ pub(super) fn materialize_preset_addresses(
     Ok(())
 }
 
-fn normalize_object_body(
-    state: &AppState,
-    kind: &str,
-    object_id: &str,
-    body: serde_json::Value,
-) -> Result<serde_json::Value, ApiError> {
-    let normalized = match kind {
-        "patched_fixture" => {
-            let mut fixture = serde_json::from_value::<light_fixture::PatchedFixture>(body)
-                .map_err(|error| ApiError::bad_request(error.to_string()))?;
-            light_fixture::migrate_patched_fixture_to_v2(&mut fixture)
-                .map_err(ApiError::fixture)?;
-            serde_json::to_value(fixture)
-        }
-        "cue_list" => {
-            let mut cue_list = serde_json::from_value::<light_playback::CueList>(body)
-                .map_err(|error| ApiError::bad_request(error.to_string()))?;
-            cue_list.migrate_legacy_chaser_xfade(&state.configuration.read().speed_groups_bpm);
-            cue_list.validate().map_err(ApiError::bad_request)?;
-            serde_json::to_value(cue_list)
-        }
-        "group" => {
-            let mut group = serde_json::from_value::<light_programmer::GroupDefinition>(body)
-                .map_err(|error| ApiError::bad_request(error.to_string()))?;
-            group.id = object_id.to_owned();
-            serde_json::to_value(group)
-        }
-        "preset" => {
-            let address =
-                light_programmer::PresetAddress::parse(object_id).map_err(ApiError::bad_request)?;
-            let mut preset = serde_json::from_value::<light_programmer::Preset>(body)
-                .map_err(|error| ApiError::bad_request(error.to_string()))?;
-            if preset.family != address.family {
-                return Err(ApiError::bad_request(
-                    "preset family must match its pool address",
-                ));
-            }
-            if preset.number != 0 && preset.number != address.number {
-                return Err(ApiError::bad_request(
-                    "preset number must match its pool-local address",
-                ));
-            }
-            preset.number = address.number;
-            serde_json::to_value(preset)
-        }
-        "playback" => {
-            let playback = serde_json::from_value::<light_playback::PlaybackDefinition>(body)
-                .map_err(|error| ApiError::bad_request(error.to_string()))?;
-            if object_id != playback.number.to_string() {
-                return Err(ApiError::bad_request(
-                    "playback object id must match its playback number",
-                ));
-            }
-            playback.validate().map_err(ApiError::bad_request)?;
-            serde_json::to_value(playback)
-        }
-        "playback_page" => {
-            let page = serde_json::from_value::<light_playback::PlaybackPage>(body)
-                .map_err(|error| ApiError::bad_request(error.to_string()))?;
-            if object_id != page.number.to_string() {
-                return Err(ApiError::bad_request(
-                    "playback page object id must match its page number",
-                ));
-            }
-            page.validate().map_err(ApiError::bad_request)?;
-            serde_json::to_value(page)
-        }
-        "route" => {
-            let mut route = serde_json::from_value::<light_output::OutputRoute>(body)
-                .map_err(|error| ApiError::bad_request(error.to_string()))?;
-            if route.delivery_mode.is_none() {
-                route.delivery_mode = Some(route.resolved_delivery_mode());
-            }
-            route.validate().map_err(ApiError::bad_request)?;
-            serde_json::to_value(route)
-        }
-        _ => return Ok(body),
-    };
-    normalized.map_err(|error| ApiError::internal(error.to_string()))
-}
-
 fn validate_object_candidate(
     state: &AppState,
     entry: &ShowEntry,
@@ -268,11 +188,7 @@ pub(super) async fn put_object(
             .into_response());
     }
     if active {
-        let object_kind = match kind.as_str() {
-            "group" => Some(light_application::ActiveShowObjectKind::Group),
-            "preset" => Some(light_application::ActiveShowObjectKind::Preset),
-            _ => None,
-        };
+        let object_kind = light_application::ActiveShowObjectKind::from_storage_kind(&kind);
         if let Some(object_kind) = object_kind {
             if object_kind == light_application::ActiveShowObjectKind::Preset {
                 light_programmer::PresetAddress::parse(&object_id)

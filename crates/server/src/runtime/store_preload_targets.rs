@@ -3,7 +3,8 @@ use super::*;
 type PreloadGroupValues =
     HashMap<String, HashMap<light_core::AttributeKey, light_programmer::GroupProgrammerValue>>;
 
-pub(super) struct PreparedPreloadPreset {
+pub(super) struct PreparedPreloadTarget {
+    pub(super) kind: light_application::ActiveShowObjectKind,
     pub(super) object_id: String,
     pub(super) body: serde_json::Value,
 }
@@ -13,7 +14,7 @@ pub(super) fn prepare_preload_preset(
     input: &PreloadStoreInput,
     fixtures: &[light_core::TimedValue],
     groups: &PreloadGroupValues,
-) -> Result<PreparedPreloadPreset, ApiError> {
+) -> Result<PreparedPreloadTarget, ApiError> {
     let hinted_family = input.family.unwrap_or_else(|| {
         command_preset_family(&input.target_id).unwrap_or(light_programmer::PresetFamily::Mixed)
     });
@@ -82,45 +83,35 @@ pub(super) fn prepare_preload_preset(
             |object| serialize_preset_preserving_extensions(&object.body, &merged),
         )
         .map_err(|error| ApiError::internal(error.to_string()))?;
-    Ok(PreparedPreloadPreset {
+    Ok(PreparedPreloadTarget {
+        kind: light_application::ActiveShowObjectKind::Preset,
         object_id: storage_key,
         body,
     })
 }
 
-pub(super) fn store_preload_cue(
+pub(super) fn prepare_preload_cue(
     store: &ShowStore,
     input: &PreloadStoreInput,
     fixtures: &[light_core::TimedValue],
     groups: &PreloadGroupValues,
-    expected: u64,
-) -> Result<u64, ApiError> {
+) -> Result<PreparedPreloadTarget, ApiError> {
     let object = store
         .objects("cue_list")
         .map_err(ApiError::store)?
         .into_iter()
         .find(|object| object.id == input.target_id)
         .ok_or_else(|| ApiError::not_found("Cuelist"))?;
-    let mut cue_list: light_playback::CueList = serde_json::from_value(object.body)
+    let before: light_playback::CueList = serde_json::from_value(object.body.clone())
         .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    let mut cue_list = before.clone();
     let number = input
         .cue_number
         .ok_or_else(|| ApiError::bad_request("cue_number is required for cue storage"))?;
-    let index = cue_list
-        .cues
-        .iter()
-        .position(|cue| cue.number == number)
-        .unwrap_or_else(|| {
-            cue_list.cues.push(light_playback::Cue::new(number));
-            cue_list
-                .cues
-                .sort_by(|left, right| left.number.total_cmp(&right.number));
-            cue_list
-                .cues
-                .iter()
-                .position(|cue| cue.number == number)
-                .expect("inserted cue exists")
-        });
+    if !number.is_finite() {
+        return Err(ApiError::bad_request("cue_number must be finite"));
+    }
+    let index = cue_index(&mut cue_list, number);
     let cue = &mut cue_list.cues[index];
     if let Some(name) = &input.name {
         cue.name.clone_from(name);
@@ -149,13 +140,30 @@ pub(super) fn store_preload_cue(
             });
         }
     }
-    store
-        .put_object(
-            "cue_list",
-            &input.target_id,
-            &serde_json::to_value(cue_list)
-                .map_err(|error| ApiError::internal(error.to_string()))?,
-            expected,
-        )
-        .map_err(ApiError::store)
+    cue_list.validate().map_err(ApiError::bad_request)?;
+    let body = light_application::lossless_json::merge_typed(&object.body, &before, &cue_list)
+        .map_err(|error| ApiError::internal(error.to_string()))?;
+    Ok(PreparedPreloadTarget {
+        kind: light_application::ActiveShowObjectKind::CueList,
+        object_id: input.target_id.clone(),
+        body,
+    })
+}
+
+fn cue_index(cue_list: &mut light_playback::CueList, number: f64) -> usize {
+    cue_list
+        .cues
+        .iter()
+        .position(|cue| cue.number == number)
+        .unwrap_or_else(|| {
+            cue_list.cues.push(light_playback::Cue::new(number));
+            cue_list
+                .cues
+                .sort_by(|left, right| left.number.total_cmp(&right.number));
+            cue_list
+                .cues
+                .iter()
+                .position(|cue| cue.number == number)
+                .expect("inserted cue exists")
+        })
 }

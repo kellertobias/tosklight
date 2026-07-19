@@ -113,6 +113,7 @@ mod mvr_apply;
 mod mvr_apply_store;
 mod mvr_import;
 mod object_api;
+mod object_normalization;
 mod operator_api;
 mod osc_feedback;
 mod osc_feedback_broadcast;

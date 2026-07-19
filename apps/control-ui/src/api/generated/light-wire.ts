@@ -71,7 +71,7 @@ export type OutputRoute = { protocol: OutputProtocol, logical_universe: number, 
 
 export type OutputRouteChange = { show_id: string, show_revision: number, route_id: string, object_revision: number, route: OutputRoute | null, deleted: boolean, };
 
-export type ShowObjectKind = "group" | "preset";
+export type ShowObjectKind = "cue_list" | "group" | "preset";
 
 export type ShowObjectChange = { kind: ShowObjectKind, object_id: string, object_revision: number, body: unknown | null, deleted: boolean, };
 

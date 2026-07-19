@@ -143,11 +143,7 @@ pub(super) fn perform_update_from(
     let body = plan
         .body()
         .map_err(|error| ApiError::internal(error.to_string()))?;
-    let object_kind = match kind.as_str() {
-        "group" => Some(light_application::ActiveShowObjectKind::Group),
-        "preset" => Some(light_application::ActiveShowObjectKind::Preset),
-        _ => None,
-    };
+    let object_kind = light_application::ActiveShowObjectKind::from_storage_kind(&kind);
     let revision = if let Some(object_kind) = object_kind {
         let action = active_show_object_action(
             context.clone(),

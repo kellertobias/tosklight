@@ -1025,6 +1025,7 @@
     "ShowObjectKind": {
       "type": "string",
       "enum": [
+        "cue_list",
         "group",
         "preset"
       ]

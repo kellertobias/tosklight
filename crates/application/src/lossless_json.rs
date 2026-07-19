@@ -232,9 +232,27 @@ fn keyed_indexes(values: &[Value]) -> Option<HashMap<String, usize>> {
 
 fn item_key(value: &Value) -> Option<String> {
     let object = value.as_object()?;
-    ["id", "fixture_id", "channel_id", "split", "head_index"]
+    if let Some(key) = object.get("id").and_then(|value| scalar_key("id", value)) {
+        return Some(key);
+    }
+    for fields in [["fixture_id", "attribute"], ["group_id", "attribute"]] {
+        if let Some(key) = composite_key(&fields, object) {
+            return Some(key);
+        }
+    }
+    ["fixture_id", "channel_id", "split", "head_index"]
         .into_iter()
         .find_map(|field| scalar_key(field, object.get(field)?))
+}
+
+fn composite_key(fields: &[&str], object: &Map<String, Value>) -> Option<String> {
+    let parts = fields
+        .iter()
+        .map(|field| scalar_key(field, object.get(*field)?))
+        .collect::<Option<Vec<_>>>()?;
+    serde_json::to_string(&parts)
+        .ok()
+        .map(|encoded| format!("composite:{encoded}"))
 }
 
 fn scalar_key(field: &str, value: &Value) -> Option<String> {
@@ -312,6 +330,31 @@ mod tests {
                 "client_future":{"accepted":true}
             }]})
         );
+    }
+
+    #[test]
+    fn composite_address_keeps_extensions_on_nested_cue_changes() {
+        let before = json!({"items":[{
+            "group_id":"front",
+            "attribute":"intensity",
+            "known":1
+        }]});
+        let after = json!({"items":[{
+            "group_id":"front",
+            "attribute":"intensity",
+            "known":2
+        }]});
+        let mut stored = json!({"items":[{
+            "group_id":"front",
+            "attribute":"intensity",
+            "known":1,
+            "future_curve":"soft"
+        }]});
+
+        apply_delta(&mut stored, &before, &after);
+
+        assert_eq!(stored["items"][0]["known"], 2);
+        assert_eq!(stored["items"][0]["future_curve"], "soft");
     }
 
     #[test]

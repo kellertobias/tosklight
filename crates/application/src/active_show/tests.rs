@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionSource, ApplicationEvent,
-    EventBus, EventFilter, EventReplay, ShowEvent,
+    EventBus, EventFilter, EventReplay, EventSource, ShowEvent,
 };
 use light_core::ShowId;
 use light_engine::EngineSnapshot;
@@ -273,6 +273,67 @@ fn group_batch_preserves_extensions_empty_state_and_ordered_membership() {
         ApplicationEvent::Show(ShowEvent::ObjectsChanged(change))
             if change.show_revision.value() == 2 && change.changes.len() == 2
     ));
+}
+
+#[test]
+fn cue_list_mutation_uses_one_prepared_boundary_and_keeps_action_context() {
+    let rig = TestRig::new();
+    let cue_list_id = light_core::CueListId(Uuid::from_u128(0x601));
+    let mut cue = light_playback::Cue::new(1.0);
+    cue.id = Uuid::from_u128(0x602);
+    let body = serde_json::to_value(light_playback::CueList {
+        id: light_core::CueListId::new(),
+        name: "Main".into(),
+        priority: 0,
+        mode: light_playback::CueListMode::Sequence,
+        looped: false,
+        chaser_step_millis: 1_000,
+        speed_group: None,
+        intensity_priority_mode: light_playback::IntensityPriorityMode::Htp,
+        wrap_mode: Some(light_playback::WrapMode::Off),
+        restart_mode: light_playback::RestartMode::FirstCue,
+        force_cue_timing: false,
+        disable_cue_timing: false,
+        chaser_xfade_millis: 0,
+        chaser_xfade_percent: Some(0),
+        speed_multiplier: 1.0,
+        cues: vec![cue],
+    })
+    .unwrap();
+    let action = rig.object_action(vec![ActiveShowObjectMutation {
+        kind: ActiveShowObjectKind::CueList,
+        object_id: cue_list_id.0.to_string(),
+        expected_object_revision: 0,
+        mutation: ActiveShowObjectMutationKind::Put { body },
+    }]);
+    let correlation_id = action.context.correlation_id;
+
+    let result = rig.service.mutate_objects(action, &rig.ports).unwrap();
+
+    assert_eq!(
+        rig.steps(),
+        [
+            "begin",
+            "prepare",
+            "backup",
+            "commit",
+            "install",
+            "reconcile"
+        ]
+    );
+    assert_eq!(result.event_sequence, 1);
+    assert_eq!(result.changes[0].kind, ActiveShowObjectKind::CueList);
+    assert_eq!(
+        rig.object_body("cue_list", &cue_list_id.0.to_string())["id"],
+        cue_list_id.0.to_string()
+    );
+    let EventReplay::Events(events) = rig.service.events().replay(0, &EventFilter::default())
+    else {
+        panic!("expected retained CueList event");
+    };
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].correlation_id, Some(correlation_id));
+    assert_eq!(events[0].source, EventSource::Action(ActionSource::Http));
 }
 
 #[test]

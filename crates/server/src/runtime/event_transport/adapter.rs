@@ -199,6 +199,7 @@ fn wire_show_objects_change(
 fn wire_show_object_change(change: &application::ActiveShowObjectChange) -> wire::ShowObjectChange {
     wire::ShowObjectChange {
         kind: match change.kind {
+            application::ActiveShowObjectKind::CueList => wire::ShowObjectKind::CueList,
             application::ActiveShowObjectKind::Group => wire::ShowObjectKind::Group,
             application::ActiveShowObjectKind::Preset => wire::ShowObjectKind::Preset,
         },
@@ -330,10 +331,13 @@ mod tests {
                 show_id,
                 show_revision: Default::default(),
                 changes: vec![ActiveShowObjectChange {
-                    kind: ActiveShowObjectKind::Group,
-                    object_id: "7".into(),
+                    kind: ActiveShowObjectKind::CueList,
+                    object_id: Uuid::from_u128(7).to_string(),
                     object_revision: 3,
-                    body: Some(serde_json::json!({"id":"7","fixtures":[]})),
+                    body: Some(serde_json::json!({
+                        "id":Uuid::from_u128(7),
+                        "cues":[{"id":Uuid::from_u128(8),"future":true}]
+                    })),
                     deleted: false,
                 }],
             },
@@ -354,12 +358,14 @@ mod tests {
                 source: wire::EventActionSource::Osc
             }
         );
+        assert_eq!(event.correlation_id, Some(context.correlation_id));
         assert_eq!(change.show_id, show_id.0);
         assert_eq!(change.show_revision, 0);
-        assert_eq!(change.changes[0].object_id, "7");
+        assert_eq!(change.changes[0].kind, wire::ShowObjectKind::CueList);
+        assert_eq!(change.changes[0].object_id, Uuid::from_u128(7).to_string());
         assert_eq!(
-            change.changes[0].body.as_ref().unwrap()["fixtures"],
-            serde_json::json!([])
+            change.changes[0].body.as_ref().unwrap()["cues"][0]["future"],
+            true
         );
     }
 }

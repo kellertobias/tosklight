@@ -4,6 +4,7 @@ use super::{
 };
 use crate::{ActionError, ActionErrorKind, lossless_json, prepare_show_candidate};
 use light_core::Revision;
+use light_playback::CueList;
 use light_programmer::{GroupDefinition, Preset};
 use light_show::{PortableShowDocument, PortableShowObject, PortableShowTransaction};
 use serde_json::Value;
@@ -44,7 +45,7 @@ fn validate_command(
         return Err(not_found("requested show is not active"));
     }
     if command.mutations.is_empty() {
-        return Err(invalid("at least one Group or Preset mutation is required"));
+        return Err(invalid("at least one show-object mutation is required"));
     }
     let mut targets = HashSet::with_capacity(command.mutations.len());
     for mutation in &command.mutations {
@@ -130,9 +131,28 @@ fn normalize_body(
     request: &Value,
 ) -> Result<Value, ActionError> {
     match mutation.kind {
+        ActiveShowObjectKind::CueList => normalize_cue_list(existing, mutation, request),
         ActiveShowObjectKind::Group => normalize_group(existing, mutation, request),
         ActiveShowObjectKind::Preset => normalize_preset(existing, mutation, request),
     }
+}
+
+fn normalize_cue_list(
+    existing: Option<&Value>,
+    mutation: &ActiveShowObjectMutation,
+    request: &Value,
+) -> Result<Value, ActionError> {
+    let requested = serde_json::from_value::<CueList>(request.clone()).map_err(invalid)?;
+    let stored = existing
+        .map(|body| serde_json::from_value::<CueList>(body.clone()).map_err(invalid))
+        .transpose()?;
+    let mut normalized = requested.clone();
+    if let Ok(id) = uuid::Uuid::parse_str(&mutation.object_id) {
+        normalized.id = light_core::CueListId(id);
+    }
+    normalized.validate().map_err(invalid)?;
+    lossless_json::merge_typed_request(existing, stored.as_ref(), request, &requested, &normalized)
+        .map_err(invalid)
 }
 
 fn normalize_group(

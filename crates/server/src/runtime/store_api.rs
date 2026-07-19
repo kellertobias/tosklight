@@ -213,31 +213,15 @@ pub(super) async fn store_preload(
         ));
     }
     let store = ShowStore::open(&entry.path).map_err(ApiError::store)?;
-    let active = state
-        .active_show
-        .read()
-        .as_ref()
-        .is_some_and(|active| active.id == show_id);
-    let stored = match input.target.as_str() {
-        "preset" => {
-            let prepared = prepare_preload_preset(&store, &input, fixture_values, group_values)?;
-            drop(store);
-            store_prepared_preload_preset(&state, &session, &entry, activation, prepared, expected)
-                .await?
-        }
-        "cue" => StoredPreloadTarget {
-            revision: store_preload_cue(&store, &input, fixture_values, group_values, expected)?,
-            event_sequence: None,
-            runtime_installed: false,
-        },
+    let prepared = match input.target.as_str() {
+        "preset" => prepare_preload_preset(&store, &input, fixture_values, group_values)?,
+        "cue" => prepare_preload_cue(&store, &input, fixture_values, group_values)?,
         _ => return Err(ApiError::bad_request("target must be preset or cue")),
     };
-    if active && !stored.runtime_installed {
-        state
-            .engine
-            .replace_snapshot(load_engine_snapshot(&entry).map_err(ApiError::internal)?)
-            .map_err(|error| ApiError::internal(error.to_string()))?;
-    }
+    drop(store);
+    let stored =
+        store_prepared_preload_target(&state, &session, &entry, activation, prepared, expected)
+            .await?;
     if use_active_preload {
         state.programmers.release_preload(session.id);
         persist_programmer(&state, &session)?;
@@ -256,15 +240,14 @@ pub(super) async fn store_preload(
 struct StoredPreloadTarget {
     revision: u64,
     event_sequence: Option<u64>,
-    runtime_installed: bool,
 }
 
-async fn store_prepared_preload_preset(
+async fn store_prepared_preload_target(
     state: &AppState,
     session: &Session,
     entry: &ShowEntry,
     activation: tokio::sync::OwnedMutexGuard<()>,
-    prepared: PreparedPreloadPreset,
+    prepared: PreparedPreloadTarget,
     expected: u64,
 ) -> Result<StoredPreloadTarget, ApiError> {
     let active = state
@@ -277,7 +260,7 @@ async fn store_prepared_preload_preset(
             operator_action_context(session, light_application::ActionSource::Http),
             entry.id,
             vec![put_active_show_object(
-                light_application::ActiveShowObjectKind::Preset,
+                prepared.kind,
                 prepared.object_id,
                 expected,
                 prepared.body,
@@ -289,23 +272,24 @@ async fn store_prepared_preload_preset(
             revision: result
                 .changes
                 .first()
-                .ok_or_else(|| {
-                    ApiError::internal("Preload Preset Store produced no object change")
-                })?
+                .ok_or_else(|| ApiError::internal("Preload Store produced no object change"))?
                 .object_revision,
             event_sequence: Some(result.event_sequence),
-            runtime_installed: true,
         })
     } else {
         backup_show(state, entry)?;
         let revision = ShowStore::open(&entry.path)
             .map_err(ApiError::store)?
-            .put_object("preset", &prepared.object_id, &prepared.body, expected)
+            .put_object(
+                prepared.kind.as_str(),
+                &prepared.object_id,
+                &prepared.body,
+                expected,
+            )
             .map_err(ApiError::store)?;
         Ok(StoredPreloadTarget {
             revision,
             event_sequence: None,
-            runtime_installed: false,
         })
     }
 }

@@ -4,23 +4,34 @@ use light_output::OutputRoute;
 use light_show::PortableShowRevision;
 use serde_json::Value;
 
-/// Portable show-object families whose runtime semantics are owned by the programmer domain.
+/// Portable show-object families whose runtime semantics are owned by the active-show boundary.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ActiveShowObjectKind {
+    CueList,
     Group,
     Preset,
 }
 
 impl ActiveShowObjectKind {
+    pub fn from_storage_kind(kind: &str) -> Option<Self> {
+        match kind {
+            "cue_list" => Some(Self::CueList),
+            "group" => Some(Self::Group),
+            "preset" => Some(Self::Preset),
+            _ => None,
+        }
+    }
+
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::CueList => "cue_list",
             Self::Group => "group",
             Self::Preset => "preset",
         }
     }
 }
 
-/// One optimistic Group or Preset edit within a whole-show transaction.
+/// One optimistic show-object edit within a whole-show transaction.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ActiveShowObjectMutation {
     pub kind: ActiveShowObjectKind,
@@ -35,7 +46,7 @@ pub enum ActiveShowObjectMutationKind {
     Delete,
 }
 
-/// One atomic batch of active-show Group and Preset edits.
+/// One atomic batch of active-show object edits.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MutateActiveShowObjectsCommand {
     pub show_id: ShowId,
@@ -57,7 +68,7 @@ pub struct ActiveShowObjectChange {
     pub deleted: bool,
 }
 
-/// One committed semantic batch of active-show Group and Preset changes.
+/// One committed semantic batch of active-show object changes.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ActiveShowObjectsChange {
     pub show_id: ShowId,

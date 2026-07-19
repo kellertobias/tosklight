@@ -5,6 +5,39 @@ use crate::active_show::{
 use serde_json::{Value, json};
 
 const FIXTURE_ID: &str = "00000000-0000-0000-0000-000000000123";
+const CUE_LIST_ID: &str = "00000000-0000-0000-0000-000000000456";
+
+#[test]
+fn cue_list_update_normalizes_its_id_and_preserves_nested_cue_extensions() {
+    let mut existing = cue_list("00000000-0000-0000-0000-000000000111");
+    existing["cues"][0]["future_cue_metadata"] = json!({"owner": "newer-desk"});
+    let mut request = canonical_cue_list(&existing);
+    request["name"] = json!("After");
+
+    let normalized = normalize(
+        &existing,
+        ActiveShowObjectKind::CueList,
+        CUE_LIST_ID,
+        request,
+    );
+
+    assert_eq!(normalized["id"], CUE_LIST_ID);
+    assert_eq!(normalized["name"], "After");
+    assert_eq!(
+        normalized["cues"][0]["future_cue_metadata"],
+        json!({"owner": "newer-desk"})
+    );
+}
+
+#[test]
+fn cue_list_update_keeps_the_typed_id_for_a_legacy_non_uuid_storage_key() {
+    let existing = cue_list("00000000-0000-0000-0000-000000000111");
+    let request = canonical_cue_list(&existing);
+
+    let normalized = normalize(&existing, ActiveShowObjectKind::CueList, "main", request);
+
+    assert_eq!(normalized["id"], existing["id"]);
+}
 
 #[test]
 fn group_update_preserves_extensions_inside_derived_and_frozen_sources() {
@@ -119,6 +152,35 @@ fn canonical_group(raw: &Value) -> Value {
 fn canonical_preset(raw: &Value) -> Value {
     serde_json::to_value(serde_json::from_value::<light_programmer::Preset>(raw.clone()).unwrap())
         .unwrap()
+}
+
+fn canonical_cue_list(raw: &Value) -> Value {
+    serde_json::to_value(serde_json::from_value::<light_playback::CueList>(raw.clone()).unwrap())
+        .unwrap()
+}
+
+fn cue_list(id: &str) -> Value {
+    let mut cue = light_playback::Cue::new(1.0);
+    cue.id = uuid::Uuid::from_u128(0x700);
+    serde_json::to_value(light_playback::CueList {
+        id: light_core::CueListId(uuid::Uuid::parse_str(id).unwrap()),
+        name: "Before".into(),
+        priority: 0,
+        mode: light_playback::CueListMode::Sequence,
+        looped: false,
+        chaser_step_millis: 1_000,
+        speed_group: None,
+        intensity_priority_mode: light_playback::IntensityPriorityMode::Htp,
+        wrap_mode: Some(light_playback::WrapMode::Off),
+        restart_mode: light_playback::RestartMode::FirstCue,
+        force_cue_timing: false,
+        disable_cue_timing: false,
+        chaser_xfade_millis: 0,
+        chaser_xfade_percent: Some(0),
+        speed_multiplier: 1.0,
+        cues: vec![cue],
+    })
+    .unwrap()
 }
 
 fn preset(attributes: Value) -> Value {
