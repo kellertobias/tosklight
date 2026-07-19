@@ -99,3 +99,21 @@ The migration is complete only when automated tests enforce these properties:
 - Release-build p95 remains below 250 ms server-side and 500 ms from Patch action to visible UI for one fixture; a 100-fixture batch remains below 500 ms server-side.
 
 Runtime benchmarks must record request count, payload bytes, mutation response time, event time, visible-paint time, persistence, compilation, runtime replacement, and projection reconciliation separately. This keeps a fast server response from hiding a slow operator-visible frontend path.
+
+## First reconciliation checkpoint
+
+The first event-routing migration keeps v1 compatibility while replacing broad discovery with affected-resource reconciliation:
+
+| Event | Before | After |
+| --- | ---: | ---: |
+| `programmer_changed` or `programmer_cleared` | 9 GETs | 1 bootstrap GET |
+| Supported generic `show_object_changed` | 12 GETs | 1 single-object GET |
+| Patched-fixture object change | 12 GETs | 1 Patch projection GET |
+| Playback or page object change | 12 GETs | 1 Playback projection GET |
+| Route object change | 12 GETs | 1 route-collection GET |
+| Explicit generic-object deletion | 12 GETs | 0 GETs |
+| Irrelevant, malformed, unknown, or inactive-show object change | 12 GETs | 0 GETs |
+
+Same-resource bursts coalesce to the latest event revision, and late responses cannot replace newer state. Route events intentionally read their small coupled collection because the current Patch projection omits route object identity; this keeps Output and Patch projections consistent without a broad refresh. Show open and rollback continue to perform full authoritative hydration.
+
+This checkpoint does not make v1 events the final authority. The remaining bootstrap read for Programmer events, unconditional provider polling, view-local visualization polling, broad mutation-call refreshes, and eager connection bootstrap remain migration targets for typed v2 events and narrow feature stores.

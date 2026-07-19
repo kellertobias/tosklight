@@ -35,7 +35,11 @@ export function useServerConnection(
 				);
 				if (!session || cancelled) return;
 				unsubscribe = client.onEvent(
-					createServerEventRouter(stateRef.current, session, loadShowObjects),
+					createServerEventRouter(
+						() => stateRef.current,
+						session,
+						loadShowObjects,
+					),
 				);
 				await client.connectEvents(retry);
 				if (!cancelled) setStatus("connected");

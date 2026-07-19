@@ -548,6 +548,16 @@ export class LightApiClient {
 		);
 	}
 
+	object<T>(
+		showId: string,
+		kind: string,
+		id: string,
+	): Promise<VersionedObject<T>> {
+		return this.request(
+			`/api/v1/shows/${encodeURIComponent(showId)}/objects/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`,
+		);
+	}
+
 	putObject<T>(
 		showId: string,
 		kind: string,

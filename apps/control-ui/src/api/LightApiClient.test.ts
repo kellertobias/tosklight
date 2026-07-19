@@ -132,6 +132,47 @@ describe("LightApiClient server selection and sessions", () => {
 		expect(headers.get("if-match")).toBe("7");
 		expect(headers.get("authorization")).toBe("Bearer token-a");
 	});
+
+	it("reads one authenticated portable show object by its encoded identity", async () => {
+		const stored = {
+			kind: "user/layout",
+			id: "operator one",
+			revision: 8,
+			updated_at: "2026-07-19T00:00:00Z",
+			body: { desks: [] },
+		};
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						session_id: "session-a",
+						token: "token-a",
+						user: { id: "user-a", name: "Operator", enabled: true },
+					}),
+					{ status: 200, headers: { "content-type": "application/json" } },
+				),
+			)
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify(stored), {
+					status: 200,
+					headers: { "content-type": "application/json" },
+				}),
+			);
+		vi.stubGlobal("fetch", fetchMock);
+		const client = new LightApiClient("http://desk.local");
+		await client.login("Operator");
+
+		await expect(
+			client.object("show one", "user/layout", "operator one"),
+		).resolves.toEqual(stored);
+
+		expect(fetchMock.mock.calls[1][0]).toBe(
+			"http://desk.local/api/v1/shows/show%20one/objects/user%2Flayout/operator%20one",
+		);
+		const headers = fetchMock.mock.calls[1][1].headers as Headers;
+		expect(headers.get("authorization")).toBe("Bearer token-a");
+	});
 });
 
 describe("LightApiClient programmer and preset contracts", () => {

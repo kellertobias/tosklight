@@ -1,7 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ServerEvent, SessionResponse } from "../../api/types";
+import type {
+	BootstrapSnapshot,
+	OutputRoute,
+	PatchSnapshot,
+	ServerEvent,
+	SessionResponse,
+	VersionedObject,
+} from "../../api/types";
 import { routeOperatorEvent } from "./operatorEventRouting";
-import { routeStateEvent } from "./stateEventRouting";
+import { createServerEventRouter } from "./serverEventRouter";
 import type { ServerState } from "./useServerState";
 
 const session = {
@@ -10,8 +17,166 @@ const session = {
 	desk: { id: "desk-1", osc_alias: "main" },
 } as SessionResponse;
 
-function event(kind: string, payload: Record<string, unknown>): ServerEvent {
-	return { revision: 1, kind, payload };
+function event(
+	kind: string,
+	payload: Record<string, unknown>,
+	revision = 1,
+): ServerEvent {
+	return { revision, kind, payload };
+}
+
+function bootstrap(showId = "show-a"): BootstrapSnapshot {
+	return {
+		active_show: { id: showId, name: "Show" },
+		active_programmers: [],
+	} as unknown as BootstrapSnapshot;
+}
+
+function object<T = Record<string, unknown>>(
+	kind: string,
+	id: string,
+	revision: number,
+	body: T = {} as T,
+): VersionedObject<T> {
+	return { kind, id, revision, updated_at: "2026-07-19T00:00:00Z", body };
+}
+
+function apply<T>(current: T, next: T | ((value: T) => T)) {
+	return typeof next === "function" ? (next as (value: T) => T)(current) : next;
+}
+
+function createHarness(showId = "show-a") {
+	const loadShowObjects = vi.fn().mockResolvedValue(undefined);
+	const client = {
+		object: vi
+			.fn<
+				(
+					showId: string,
+					kind: string,
+					id: string,
+				) => Promise<VersionedObject<unknown>>
+			>()
+			.mockImplementation(async (_showId: string, kind: string, id: string) =>
+				object(
+					kind,
+					id,
+					3,
+					kind === "group" ? { fixtures: ["fixture-3"] } : {},
+				),
+			),
+		objects: vi.fn().mockResolvedValue([]),
+		patch: vi.fn().mockResolvedValue({ revision: 3, fixtures: [], routes: [] }),
+		playbacks: vi.fn().mockResolvedValue({ cue_lists: [], active: [] }),
+		bootstrap: vi.fn().mockResolvedValue(bootstrap(showId)),
+		configuration: vi.fn().mockResolvedValue({ configuration: {}, matter: {} }),
+		screens: vi.fn().mockResolvedValue({ screens: [], active_pages: {} }),
+		shows: vi.fn().mockResolvedValue([]),
+		mediaServers: vi.fn().mockResolvedValue({ fixtures: [] }),
+		programmers: vi.fn().mockResolvedValue([]),
+		fixtureLibrary: vi.fn().mockResolvedValue([]),
+		fixtureProfiles: vi.fn().mockResolvedValue([]),
+		fixtureProfileWarnings: vi.fn().mockResolvedValue([]),
+		highlight: vi.fn().mockResolvedValue(null),
+	};
+	const state = {
+		client,
+		bootstrap: bootstrap(showId),
+		groups: [],
+		presets: [],
+		cueObjects: [],
+		outputRoutes: [],
+		patchLayers: [],
+		unresolvedMvrFixtures: [],
+		deskLayout: null,
+		stageLayout: null,
+		patch: { revision: 1, fixtures: [], routes: [] },
+		playbacks: null,
+		selectedFixtures: [],
+		selectedGroupId: null,
+		commandLineWrite: { current: Promise.resolve() },
+		commandLineEpoch: { current: 0 },
+		commandTargetModeRef: { current: "FIXTURE" },
+		highlightEpoch: { current: 0 },
+		highlightWrite: { current: Promise.resolve() },
+		highlightErrorSticky: { current: false },
+		setBootstrap: vi.fn((next) => {
+			state.bootstrap = apply(state.bootstrap, next) as BootstrapSnapshot;
+		}),
+		setGroups: vi.fn((next) => {
+			state.groups = apply(state.groups, next);
+		}),
+		setPresets: vi.fn((next) => {
+			state.presets = apply(state.presets, next);
+		}),
+		setCueObjects: vi.fn((next) => {
+			state.cueObjects = apply(state.cueObjects, next);
+		}),
+		setOutputRoutes: vi.fn((next) => {
+			state.outputRoutes = apply(state.outputRoutes, next);
+		}),
+		setPatchLayers: vi.fn((next) => {
+			state.patchLayers = apply(state.patchLayers, next);
+		}),
+		setUnresolvedMvrFixtures: vi.fn((next) => {
+			state.unresolvedMvrFixtures = apply(state.unresolvedMvrFixtures, next);
+		}),
+		setDeskLayout: vi.fn((next) => {
+			state.deskLayout = apply(state.deskLayout, next);
+		}),
+		setStageLayout: vi.fn((next) => {
+			state.stageLayout = apply(state.stageLayout, next);
+		}),
+		setPatch: vi.fn((next) => {
+			state.patch = apply(state.patch, next);
+		}),
+		setPlaybacks: vi.fn((next) => {
+			state.playbacks = apply(state.playbacks, next);
+		}),
+		setSelectedFixtures: vi.fn((next) => {
+			state.selectedFixtures = apply(state.selectedFixtures, next);
+		}),
+		setSelectedGroupId: vi.fn((next) => {
+			state.selectedGroupId = apply(state.selectedGroupId, next);
+		}),
+		setCommandLineState: vi.fn(),
+		setCommandLinePristine: vi.fn(),
+		setConfiguration: vi.fn(),
+		setMatter: vi.fn(),
+		setScreens: vi.fn(),
+		setShows: vi.fn(),
+		setMediaServers: vi.fn(),
+		setFixtureLibrary: vi.fn(),
+		setFixtureProfiles: vi.fn(),
+		setFixtureProfileWarnings: vi.fn(),
+		setHighlight: vi.fn(),
+		setHighlightError: vi.fn(),
+	} as unknown as ServerState;
+	return {
+		client,
+		loadShowObjects,
+		state,
+		route: createServerEventRouter(() => state, session, loadShowObjects),
+	};
+}
+
+function showObjectEvent(
+	kind: string,
+	id: string,
+	objectRevision = 3,
+	eventRevision = 1,
+	extra: Record<string, unknown> = {},
+) {
+	return event(
+		"show_object_changed",
+		{
+			show_id: "show-a",
+			kind,
+			id,
+			revision: objectRevision,
+			...extra,
+		},
+		eventRevision,
+	);
 }
 
 afterEach(() => vi.restoreAllMocks());
@@ -58,15 +223,268 @@ describe("server event routing", () => {
 	});
 
 	it("refreshes playback state for playback events", async () => {
-		const playbacks = { active: [] };
-		const setPlaybacks = vi.fn();
-		const state = {
-			client: { playbacks: vi.fn().mockResolvedValue(playbacks) },
-			setPlaybacks,
-		} as unknown as ServerState;
-		routeStateEvent(event("playback_changed", {}), session, state, vi.fn());
+		const harness = createHarness();
+		harness.route(event("playback_changed", {}));
 		await vi.waitFor(() =>
-			expect(setPlaybacks).toHaveBeenCalledWith(playbacks),
+			expect(harness.client.playbacks).toHaveBeenCalledOnce(),
 		);
+		expect(harness.state.setPlaybacks).toHaveBeenCalledOnce();
+	});
+});
+
+describe("show object event reconciliation", () => {
+	const objectCases = [
+		["group", "3", "setGroups"],
+		["preset", "1.1", "setPresets"],
+		["cue_list", "cue-list-1", "setCueObjects"],
+		["patch_layer", "layer-1", "setPatchLayers"],
+		["unresolved_mvr_fixture", "mvr-1", "setUnresolvedMvrFixtures"],
+		["user_layout", "user-1", "setDeskLayout"],
+		["stage_layout", "main", "setStageLayout"],
+	] as const;
+
+	it.each(
+		objectCases,
+	)("reads only the changed %s object", async (kind, id, setter) => {
+		const harness = createHarness();
+		harness.route(showObjectEvent(kind, id));
+		await vi.waitFor(() =>
+			expect(harness.client.object).toHaveBeenCalledOnce(),
+		);
+		expect(harness.client.object).toHaveBeenCalledWith("show-a", kind, id);
+		expect(harness.state[setter]).toHaveBeenCalledOnce();
+		expect(harness.client.patch).not.toHaveBeenCalled();
+		expect(harness.client.playbacks).not.toHaveBeenCalled();
+		expect(harness.client.bootstrap).not.toHaveBeenCalled();
+		expect(harness.loadShowObjects).not.toHaveBeenCalled();
+	});
+
+	it("reloads only the coupled route projection for a route object event", async () => {
+		const harness = createHarness();
+		const route = object<OutputRoute>("route", "route-1", 3, {
+			protocol: "art_net",
+			logical_universe: 1,
+			destination_universe: 1,
+			delivery_mode: "broadcast",
+			destination: null,
+			enabled: true,
+			minimum_slots: 0,
+		});
+		harness.client.objects.mockResolvedValueOnce([route]);
+		harness.route(showObjectEvent("route", "route-1"));
+		await vi.waitFor(() =>
+			expect(harness.client.objects).toHaveBeenCalledOnce(),
+		);
+		expect(harness.client.objects).toHaveBeenCalledWith("show-a", "route");
+		expect(harness.state.outputRoutes).toEqual([route]);
+		expect((harness.state.patch as PatchSnapshot | null)?.routes).toEqual([
+			route.body,
+		]);
+		expect(harness.client.object).not.toHaveBeenCalled();
+		expect(harness.client.patch).not.toHaveBeenCalled();
+		expect(harness.loadShowObjects).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		["patched_fixture", "fixture-1", "patch", "setPatch"],
+		["playback", "1", "playbacks", "setPlaybacks"],
+		["playback_page", "1", "playbacks", "setPlaybacks"],
+	] as const)("reads only the affected %s projection", async (kind, id, request, setter) => {
+		const harness = createHarness();
+		harness.route(showObjectEvent(kind, id));
+		await vi.waitFor(() =>
+			expect(harness.client[request]).toHaveBeenCalledOnce(),
+		);
+		expect(harness.state[setter]).toHaveBeenCalledOnce();
+		expect(harness.client.object).not.toHaveBeenCalled();
+		expect(harness.client.bootstrap).not.toHaveBeenCalled();
+		expect(harness.loadShowObjects).not.toHaveBeenCalled();
+	});
+
+	it("ignores malformed, unknown, other-show, and other-user object events", async () => {
+		const harness = createHarness();
+		harness.route(event("show_object_changed", { kind: "group" }, 1));
+		harness.route(showObjectEvent("future_kind", "future-1", 1, 2));
+		harness.route(
+			event(
+				"show_object_changed",
+				{ show_id: "show-b", kind: "group", id: "1", revision: 1 },
+				3,
+			),
+		);
+		harness.route(showObjectEvent("user_layout", "user-2", 1, 4));
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(harness.client.object).not.toHaveBeenCalled();
+		expect(harness.client.patch).not.toHaveBeenCalled();
+		expect(harness.client.playbacks).not.toHaveBeenCalled();
+		expect(harness.loadShowObjects).not.toHaveBeenCalled();
+	});
+
+	it("reconciles a route deletion from its small coupled projection", async () => {
+		const harness = createHarness();
+		const route = object<OutputRoute>("route", "route-1", 4, {
+			protocol: "art_net",
+			logical_universe: 1,
+			destination_universe: 1,
+			delivery_mode: "broadcast",
+			destination: null,
+			enabled: true,
+			minimum_slots: 0,
+		});
+		harness.state.outputRoutes = [route];
+		harness.state.patch = {
+			revision: 1,
+			fixtures: [],
+			routes: [route.body],
+		} as PatchSnapshot;
+		harness.route(
+			showObjectEvent("route", "route-1", 5, 10, { deleted: true }),
+		);
+		await vi.waitFor(() =>
+			expect(harness.state.setOutputRoutes).toHaveBeenCalledOnce(),
+		);
+		expect(harness.client.object).not.toHaveBeenCalled();
+		expect(harness.client.objects).toHaveBeenCalledWith("show-a", "route");
+		expect(harness.state.outputRoutes).toEqual([]);
+		expect((harness.state.patch as PatchSnapshot | null)?.routes).toEqual([]);
+	});
+
+	it("applies an explicit generic-object deletion without a read", async () => {
+		const harness = createHarness();
+		harness.state.groups = [
+			object("group", "3", 4, { fixtures: ["fixture-3"] }),
+		] as never;
+		harness.route(showObjectEvent("group", "3", 5, 10, { deleted: true }));
+		await vi.waitFor(() => expect(harness.state.groups).toEqual([]));
+		expect(harness.client.object).not.toHaveBeenCalled();
+		expect(harness.client.objects).not.toHaveBeenCalled();
+	});
+
+	it("does not install an object response older than the announced revision", async () => {
+		const harness = createHarness();
+		harness.state.selectedGroupId = "3";
+		harness.state.selectedFixtures = ["current"];
+		harness.client.object.mockResolvedValueOnce(
+			object("group", "3", 4, { fixtures: ["stale"] }),
+		);
+		harness.route(showObjectEvent("group", "3", 5, 10));
+		await vi.waitFor(() =>
+			expect(harness.client.object).toHaveBeenCalledOnce(),
+		);
+		await Promise.resolve();
+		expect(harness.state.groups).toEqual([]);
+		expect(harness.state.selectedFixtures).toEqual(["current"]);
+	});
+
+	it("coalesces a same-object burst to the newest revision", async () => {
+		const harness = createHarness();
+		harness.route(showObjectEvent("group", "3", 1, 1));
+		harness.route(showObjectEvent("group", "3", 2, 2));
+		harness.route(showObjectEvent("group", "3", 3, 3));
+		await vi.waitFor(() => expect(harness.state.groups).toHaveLength(1));
+		expect(harness.client.object).toHaveBeenCalledOnce();
+		expect(harness.state.groups[0].revision).toBe(3);
+	});
+
+	it("does not install an older response after a newer event arrives", async () => {
+		const harness = createHarness();
+		let resolveFirst!: (
+			value: VersionedObject<Record<string, unknown>>,
+		) => void;
+		const first = new Promise<VersionedObject<Record<string, unknown>>>(
+			(resolve) => {
+				resolveFirst = resolve;
+			},
+		);
+		harness.client.object
+			.mockImplementationOnce(() => first)
+			.mockResolvedValueOnce(object("group", "3", 2, { fixtures: ["new"] }));
+		harness.route(showObjectEvent("group", "3", 1, 1));
+		await vi.waitFor(() =>
+			expect(harness.client.object).toHaveBeenCalledOnce(),
+		);
+		harness.route(showObjectEvent("group", "3", 2, 2));
+		resolveFirst(object("group", "3", 1, { fixtures: ["old"] }));
+		await vi.waitFor(() =>
+			expect(harness.client.object).toHaveBeenCalledTimes(2),
+		);
+		await vi.waitFor(() => expect(harness.state.groups[0]?.revision).toBe(2));
+		expect(harness.state.groups[0].body.fixtures).toEqual(["new"]);
+	});
+
+	it("accepts a recreate whose object revision restarted after deletion", async () => {
+		const harness = createHarness();
+		harness.state.groups = [
+			object("group", "3", 9, { fixtures: ["old"] }),
+		] as never;
+		harness.client.object.mockResolvedValueOnce(
+			object("group", "3", 1, { fixtures: ["new"] }),
+		);
+		harness.route(showObjectEvent("group", "3", 10, 10, { deleted: true }));
+		harness.route(showObjectEvent("group", "3", 1, 11));
+		await vi.waitFor(() => expect(harness.state.groups[0]?.revision).toBe(1));
+		expect(harness.client.object).toHaveBeenCalledOnce();
+	});
+
+	it("routes legacy stored values to one affected resource", async () => {
+		const harness = createHarness();
+		harness.route(
+			event(
+				"preset_stored",
+				{
+					show_id: "show-a",
+					revision: 2,
+					preset_address: { family: "Color", number: 1 },
+				},
+				1,
+			),
+		);
+		await vi.waitFor(() =>
+			expect(harness.client.objects).toHaveBeenCalledOnce(),
+		);
+		expect(harness.client.objects).toHaveBeenCalledWith("show-a", "preset");
+		expect(harness.loadShowObjects).not.toHaveBeenCalled();
+
+		harness.route(
+			event(
+				"preload_stored",
+				{ target: "cue", target_id: "cue-list-1", revision: 3 },
+				2,
+			),
+		);
+		await vi.waitFor(() =>
+			expect(harness.client.object).toHaveBeenCalledOnce(),
+		);
+		expect(harness.client.object).toHaveBeenCalledWith(
+			"show-a",
+			"cue_list",
+			"cue-list-1",
+		);
+	});
+});
+
+describe("broad state hydration boundaries", () => {
+	it.each([
+		"programmer_changed",
+		"programmer_cleared",
+	])("does not reload all show objects for %s", async (kind) => {
+		const harness = createHarness();
+		harness.route(event(kind, {}, 1));
+		await vi.waitFor(() =>
+			expect(harness.client.bootstrap).toHaveBeenCalledOnce(),
+		);
+		expect(harness.loadShowObjects).not.toHaveBeenCalled();
+		expect(harness.client.objects).not.toHaveBeenCalled();
+	});
+
+	it("retains a full show-object load when a show opens", async () => {
+		const harness = createHarness("show-a");
+		harness.client.bootstrap.mockResolvedValueOnce(bootstrap("show-b"));
+		harness.route(event("show_opened", { show_id: "show-b" }, 1));
+		await vi.waitFor(() =>
+			expect(harness.loadShowObjects).toHaveBeenCalledWith("show-b", "user-1"),
+		);
+		expect(harness.loadShowObjects).toHaveBeenCalledOnce();
 	});
 });

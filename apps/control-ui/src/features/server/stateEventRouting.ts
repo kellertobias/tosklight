@@ -1,4 +1,5 @@
 import type { ServerEvent, SessionResponse } from "../../api/types";
+import { createShowObjectEventReconciler } from "./showObjectEventReconciliation";
 import type { ServerState } from "./useServerState";
 
 export type LoadShowObjects = (
@@ -21,13 +22,7 @@ function refreshHighlight(event: ServerEvent, state: ServerState) {
 }
 
 function refreshPlaybackState(event: ServerEvent, state: ServerState) {
-	const kinds = [
-		"playback_changed",
-		"playback_page_changed",
-		"show_opened",
-		"show_object_changed",
-		"preload_stored",
-	];
+	const kinds = ["playback_changed", "playback_page_changed", "show_opened"];
 	if (!kinds.includes(event.kind)) return;
 	void state.client
 		.playbacks()
@@ -72,7 +67,7 @@ function refreshScreens(event: ServerEvent, state: ServerState) {
 function refreshBootstrap(
 	event: ServerEvent,
 	session: SessionResponse,
-	state: ServerState,
+	getState: () => ServerState,
 	loadShowObjects: LoadShowObjects,
 ) {
 	const kinds = [
@@ -88,33 +83,42 @@ function refreshBootstrap(
 		"hardware_connection_changed",
 	];
 	if (!kinds.includes(event.kind)) return;
+	const state = getState();
+	const previousShowId = state.bootstrap?.active_show?.id ?? null;
 	const requestedEpoch = state.commandLineEpoch.current;
 	void state.commandLineWrite.current
 		.catch(() => undefined)
 		.then(() => state.client.bootstrap())
 		.then((next) => {
-			state.setBootstrap(next);
+			const current = getState();
+			current.setBootstrap(next);
 			const own = next.active_programmers.find(
 				(programmer) => programmer.session_id === session.session_id,
 			);
 			if (own) {
-				if (requestedEpoch === state.commandLineEpoch.current) {
+				if (requestedEpoch === current.commandLineEpoch.current) {
 					const command =
-						own.command_line?.trim() || state.commandTargetModeRef.current;
-					state.setCommandLineState(command);
-					state.setCommandLinePristine(
-						command === state.commandTargetModeRef.current,
+						own.command_line?.trim() || current.commandTargetModeRef.current;
+					current.setCommandLineState(command);
+					current.setCommandLinePristine(
+						command === current.commandTargetModeRef.current,
 					);
 				}
-				state.setSelectedFixtures(own.selected ?? []);
+				current.setSelectedFixtures(own.selected ?? []);
 			}
-			void loadShowObjects(next.active_show?.id ?? null, session.user.id);
+			const nextShowId = next.active_show?.id ?? null;
+			if (
+				event.kind === "show_opened" ||
+				event.kind === "show_rolled_back" ||
+				previousShowId !== nextShowId
+			)
+				void loadShowObjects(nextShowId, session.user.id);
 		})
 		.catch(() => undefined);
 }
 
 function refreshPatch(event: ServerEvent, state: ServerState) {
-	if (!["show_opened", "show_object_changed"].includes(event.kind)) return;
+	if (event.kind !== "show_opened") return;
 	void state.client
 		.patch()
 		.then(state.setPatch)
@@ -169,32 +173,12 @@ function refreshMedia(event: ServerEvent, state: ServerState) {
 		.catch(() => undefined);
 }
 
-function refreshShowObjects(
-	event: ServerEvent,
-	session: SessionResponse,
-	state: ServerState,
-	loadShowObjects: LoadShowObjects,
-) {
-	if (
-		!["show_object_changed", "preset_stored", "preload_stored"].includes(
-			event.kind,
-		)
-	)
-		return;
-	void state.client
-		.bootstrap()
-		.then((next) =>
-			loadShowObjects(next.active_show?.id ?? null, session.user.id),
-		)
-		.catch(() => undefined);
-}
-
 function refreshSelection(
 	event: ServerEvent,
 	session: SessionResponse,
 	state: ServerState,
 ) {
-	if (!["show_opened", "show_object_changed"].includes(event.kind)) return;
+	if (event.kind !== "show_opened") return;
 	void state.client
 		.programmers()
 		.then((programmers) => {
@@ -206,21 +190,27 @@ function refreshSelection(
 		.catch(() => undefined);
 }
 
-export function routeStateEvent(
-	event: ServerEvent,
+export function createStateEventRouter(
+	getState: () => ServerState,
 	session: SessionResponse,
-	state: ServerState,
 	loadShowObjects: LoadShowObjects,
 ) {
-	refreshHighlight(event, state);
-	refreshPlaybackState(event, state);
-	refreshConfiguration(event, state);
-	refreshScreens(event, state);
-	refreshBootstrap(event, session, state, loadShowObjects);
-	refreshPatch(event, state);
-	refreshFixtureLibrary(event, state);
-	refreshShows(event, state);
-	refreshMedia(event, state);
-	refreshShowObjects(event, session, state, loadShowObjects);
-	refreshSelection(event, session, state);
+	const reconcileShowObjectEvent = createShowObjectEventReconciler(
+		getState,
+		session,
+	);
+	return (event: ServerEvent) => {
+		const state = getState();
+		refreshHighlight(event, state);
+		refreshPlaybackState(event, state);
+		refreshConfiguration(event, state);
+		refreshScreens(event, state);
+		refreshBootstrap(event, session, getState, loadShowObjects);
+		refreshPatch(event, state);
+		refreshFixtureLibrary(event, state);
+		refreshShows(event, state);
+		refreshMedia(event, state);
+		reconcileShowObjectEvent(event);
+		refreshSelection(event, session, state);
+	};
 }
