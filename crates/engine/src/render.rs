@@ -4,7 +4,7 @@ use light_core::Universe;
 
 use super::{
     Engine, EngineError, GroupMasterIndex, RenderOptions, RenderResult, RuntimeGeneration,
-    render_fixture, render_profile_split,
+    encode_profile_split, render_fixture, resolve_profile_fixture,
 };
 
 impl Engine {
@@ -20,6 +20,7 @@ impl Engine {
     ) -> Result<RenderResult, EngineError> {
         let snapshot = generation.snapshot();
         let resolved = self.resolved_attributes_for_render(generation, self.clock.now());
+        let profile_values = crate::ProfileValueIndex::new(&resolved);
         let group_masters = generation.group_masters();
         let group_master_flashes = self.group_master_flashes.read();
         let highlighted_fixtures = self.highlighted_fixtures.read();
@@ -50,12 +51,18 @@ impl Engine {
                                 "schema-v2 fixture encoding plan is missing".into(),
                             )
                         })?;
+                let projection = generation
+                    .profile_projection(fixture.fixture_id)
+                    .ok_or_else(|| {
+                        EngineError::Invalid("schema-v2 fixture projection plan is missing".into())
+                    })?;
                 let footprints = fixture.definition.split_footprints();
                 let mut patches = fixture.effective_split_patches();
                 for instance in &fixture.multipatch {
                     patches.extend(instance.effective_split_patches());
                 }
-                for patch in patches {
+                let mut destinations = Vec::with_capacity(patches.len());
+                for patch in &patches {
                     let (Some(universe), Some(address)) = (patch.universe, patch.address) else {
                         continue;
                     };
@@ -65,6 +72,27 @@ impl Engine {
                             patch.split
                         ))
                     })?;
+                    destinations.push((patch.split, universe, address, footprint));
+                }
+                let included_splits = destinations
+                    .iter()
+                    .map(|(split, _, _, _)| *split)
+                    .collect::<Vec<_>>();
+                if included_splits.is_empty() {
+                    continue;
+                }
+                let output = resolve_profile_fixture(
+                    fixture,
+                    mode,
+                    projection,
+                    Some(&included_splits),
+                    &profile_values,
+                    options,
+                    group_masters,
+                    &group_master_flashes,
+                    &highlighted_fixtures,
+                )?;
+                for (split, universe, address, footprint) in destinations {
                     let frame = universes.entry(universe).or_insert([0; 512]);
                     let last_slot = address
                         .saturating_sub(1)
@@ -74,19 +102,7 @@ impl Engine {
                         .entry(universe)
                         .and_modify(|current| *current = (*current).max(last_slot))
                         .or_insert(last_slot);
-                    render_profile_split(
-                        frame,
-                        fixture,
-                        mode,
-                        encoding,
-                        patch.split,
-                        address,
-                        &resolved,
-                        options,
-                        group_masters,
-                        &group_master_flashes,
-                        &highlighted_fixtures,
-                    )?;
+                    encode_profile_split(frame, encoding, split, address, &output)?;
                 }
                 continue;
             }

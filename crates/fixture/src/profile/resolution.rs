@@ -102,50 +102,7 @@ impl FixtureMode {
                 })
                 .unwrap_or(ResolvedChannelRaw::Exact(channel.default_raw))
         };
-        let mut scale = 1.0_f64;
-        if !highlighted {
-            if channel.reacts_to_virtual_intensity {
-                scale *= f64::from(scales.virtual_intensity.clamp(0.0, 1.0));
-            }
-            if channel.reacts_to_sequence_master {
-                scale *= f64::from(scales.sequence_master.clamp(0.0, 1.0));
-            }
-            if channel.reacts_to_group_master {
-                scale *= f64::from(scales.group_master.clamp(0.0, 1.0));
-            }
-        }
-        // Grand Master is the only ordinary master above transient Highlight. Blackout and
-        // hazardous safe values are enforced by the engine after this channel resolution.
-        if channel.reacts_to_grand_master {
-            scale *= f64::from(scales.grand_master.clamp(0.0, 1.0));
-        }
-        match resolved {
-            ResolvedChannelRaw::Semantic { raw, from, to } => {
-                let from = from.min(max);
-                let to = to.min(max).max(from);
-                let raw = raw.clamp(from, to);
-                let scaled = (f64::from(raw - from) * scale)
-                    .round()
-                    .clamp(0.0, f64::from(to - from)) as u32;
-                if channel.invert {
-                    to.saturating_sub(scaled)
-                } else {
-                    from.saturating_add(scaled)
-                }
-            }
-            ResolvedChannelRaw::Exact(raw) => {
-                let raw = raw.min(max);
-                if channel.invert {
-                    max.saturating_sub(
-                        (f64::from(max - raw) * scale)
-                            .round()
-                            .clamp(0.0, f64::from(max)) as u32,
-                    )
-                } else {
-                    (f64::from(raw) * scale).round().clamp(0.0, f64::from(max)) as u32
-                }
-            }
-        }
+        scale_channel_raw(channel, highlighted, resolved, scales)
     }
 
     /// Returns the semantic attribute that currently owns a physical channel. Defaults and Static
@@ -248,8 +205,61 @@ impl FixtureMode {
     }
 }
 
+pub(super) fn scale_channel_raw(
+    channel: &FixtureChannel,
+    highlighted: bool,
+    resolved: ResolvedChannelRaw,
+    scales: ChannelScales,
+) -> u32 {
+    let max = channel.resolution.max_raw();
+    let mut scale = 1.0_f64;
+    if !highlighted {
+        if channel.reacts_to_virtual_intensity {
+            scale *= f64::from(scales.virtual_intensity.clamp(0.0, 1.0));
+        }
+        if channel.reacts_to_sequence_master {
+            scale *= f64::from(scales.sequence_master.clamp(0.0, 1.0));
+        }
+        if channel.reacts_to_group_master {
+            scale *= f64::from(scales.group_master.clamp(0.0, 1.0));
+        }
+    }
+    // Grand Master is the only ordinary master above transient Highlight. Blackout and hazardous
+    // safe values are enforced by the engine after this channel resolution.
+    if channel.reacts_to_grand_master {
+        scale *= f64::from(scales.grand_master.clamp(0.0, 1.0));
+    }
+    match resolved {
+        ResolvedChannelRaw::Semantic { raw, from, to } => {
+            let from = from.min(max);
+            let to = to.min(max).max(from);
+            let raw = raw.clamp(from, to);
+            let scaled = (f64::from(raw - from) * scale)
+                .round()
+                .clamp(0.0, f64::from(to - from)) as u32;
+            if channel.invert {
+                to.saturating_sub(scaled)
+            } else {
+                from.saturating_add(scaled)
+            }
+        }
+        ResolvedChannelRaw::Exact(raw) => {
+            let raw = raw.min(max);
+            if channel.invert {
+                max.saturating_sub(
+                    (f64::from(max - raw) * scale)
+                        .round()
+                        .clamp(0.0, f64::from(max)) as u32,
+                )
+            } else {
+                (f64::from(raw) * scale).round().clamp(0.0, f64::from(max)) as u32
+            }
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum ResolvedChannelRaw {
+pub(super) enum ResolvedChannelRaw {
     /// A semantic continuous value. Masters scale its distance from the function's zero endpoint,
     /// then inversion is applied inside that function range.
     Semantic { raw: u32, from: u32, to: u32 },
@@ -258,7 +268,7 @@ enum ResolvedChannelRaw {
     Exact(u32),
 }
 
-fn function_value(
+pub(super) fn function_value(
     function: &ChannelFunction,
     values: &HashMap<AttributeKey, AttributeValue>,
 ) -> Option<ResolvedChannelRaw> {
@@ -292,7 +302,7 @@ fn function_value(
     }
 }
 
-fn mapped_raw(value: &AttributeValue, from: u32, to: u32) -> Option<ResolvedChannelRaw> {
+pub(super) fn mapped_raw(value: &AttributeValue, from: u32, to: u32) -> Option<ResolvedChannelRaw> {
     match value {
         AttributeValue::Normalized(value) => Some(ResolvedChannelRaw::Semantic {
             raw: (f64::from(from) + f64::from(to - from) * f64::from(value.clamp(0.0, 1.0))).round()

@@ -1,6 +1,6 @@
 use crate::{
-    Engine, EngineError, EngineSnapshot, ProfileEncodingIndex, RuntimeGeneration,
-    value_for_ordered_position,
+    Engine, EngineError, EngineSnapshot, ProfileEncodingIndex, ProfileProjectionIndex,
+    RuntimeGeneration, value_for_ordered_position,
 };
 use light_playback::{Cue, CueChange, CueList, GroupCueChange, PlaybackEngine};
 use light_programmer::{GroupDefinition, resolve_group};
@@ -26,6 +26,7 @@ struct PreparedRuntime {
     playback: PlaybackEngine,
     groups: HashMap<String, GroupDefinition>,
     profile_encodings: ProfileEncodingIndex,
+    profile_projections: ProfileProjectionIndex,
 }
 
 impl PreparedEngineSnapshot {
@@ -86,11 +87,13 @@ impl Engine {
     fn prepare_runtime(&self, snapshot: &EngineSnapshot) -> Result<PreparedRuntime, EngineError> {
         snapshot.validate()?;
         let profile_encodings = ProfileEncodingIndex::compile(snapshot)?;
+        let profile_projections = ProfileProjectionIndex::compile(snapshot)?;
         let (playback, groups) = self.compile_playback(snapshot)?;
         Ok(PreparedRuntime {
             playback,
             groups,
             profile_encodings,
+            profile_projections,
         })
     }
 
@@ -110,6 +113,7 @@ impl Engine {
             runtime.playback,
             runtime.groups,
             runtime.profile_encodings,
+            runtime.profile_projections,
         )));
     }
 

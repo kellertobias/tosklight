@@ -132,4 +132,5 @@ mod definition_projection;
 mod encoding_plan;
 mod inversion;
 mod resolution;
+mod resolution_plan;
 mod validation;

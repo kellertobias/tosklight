@@ -1,4 +1,4 @@
-use crate::{EngineSnapshot, ProfileEncodingIndex, profile_head_owner};
+use crate::{EngineSnapshot, ProfileEncodingIndex, ProfileProjectionIndex, profile_head_owner};
 use light_core::{AttributeKey, FixtureId};
 use light_output::OutputRoute;
 use light_playback::PlaybackEngine;
@@ -22,6 +22,7 @@ pub(crate) struct RuntimeGeneration {
     snap_attributes: HashMap<FixtureId, HashSet<AttributeKey>>,
     group_masters: GroupMasterIndex,
     profile_encodings: ProfileEncodingIndex,
+    profile_projections: ProfileProjectionIndex,
 }
 
 impl RuntimeGeneration {
@@ -30,6 +31,7 @@ impl RuntimeGeneration {
         playback: PlaybackEngine,
         groups: HashMap<String, GroupDefinition>,
         profile_encodings: ProfileEncodingIndex,
+        profile_projections: ProfileProjectionIndex,
     ) -> Self {
         let routes = Arc::from(snapshot.routes.clone());
         let snap_attributes = compile_snap_attributes(&snapshot);
@@ -42,6 +44,7 @@ impl RuntimeGeneration {
             snap_attributes,
             group_masters,
             profile_encodings,
+            profile_projections,
         }
     }
 
@@ -88,6 +91,13 @@ impl RuntimeGeneration {
         fixture_id: FixtureId,
     ) -> Option<&light_fixture::FixtureModeEncodingPlan> {
         self.profile_encodings.fixture(fixture_id)
+    }
+
+    pub(crate) fn profile_projection(
+        &self,
+        fixture_id: FixtureId,
+    ) -> Option<&crate::FixtureProjectionPlan> {
+        self.profile_projections.fixture(fixture_id)
     }
 }
 

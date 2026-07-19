@@ -1,6 +1,6 @@
 use crate::{
-    EngineSnapshot, MoveInBlackKey, MoveInBlackRuntime, ProfileEncodingIndex, ProgrammerTransition,
-    ProgrammerTransitionKey, RuntimeGeneration,
+    EngineSnapshot, MoveInBlackKey, MoveInBlackRuntime, ProfileEncodingIndex,
+    ProfileProjectionIndex, ProgrammerTransition, ProgrammerTransitionKey, RuntimeGeneration,
 };
 use arc_swap::ArcSwap;
 use light_core::{FixtureId, SharedClock};
@@ -45,6 +45,7 @@ impl Engine {
                 playback,
                 HashMap::new(),
                 ProfileEncodingIndex::default(),
+                ProfileProjectionIndex::default(),
             )),
             programmers,
             timecode_frame: AtomicU64::new(u64::MAX),

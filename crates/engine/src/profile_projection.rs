@@ -1,49 +1,62 @@
 use crate::contribution::ApplicableSequenceMaster;
+use crate::profile_projection_plan::{FixtureProjectionPlan, ProfileHeadPlan};
 use crate::{
-    EngineError, GroupMasterIndex, RenderOptions, ResolvedAttributes, apply_safe_values,
-    apply_safe_values_with_snap, blackout_raw, channel_visual_level, profile_head_owner,
-    profile_visual_color,
+    EngineError, GroupMasterIndex, ProfileValueIndex, RenderOptions, apply_safe_values,
+    apply_safe_values_with_snap, blackout_raw, channel_visual_level, profile_visual_color,
 };
 use light_core::{AttributeKey, AttributeValue, FixtureId, Xyz};
 use light_fixture::{
-    ChannelScales, FixtureChannel, FixtureMode, FixtureModeEncodingPlan, PatchedFixture,
-    SignalLossPolicy,
+    BoundFixtureModeResolution, ChannelScales, FixtureChannel, FixtureMode,
+    FixtureModeEncodingPlan, PatchedFixture, SignalLossPolicy,
 };
 use light_output::DmxFrame;
 use std::collections::{HashMap, HashSet};
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn render_profile_split(
-    frame: &mut DmxFrame,
+pub(crate) fn resolve_profile_fixture(
     fixture: &PatchedFixture,
     mode: &FixtureMode,
-    encoding: &FixtureModeEncodingPlan,
-    split: u16,
-    address: u16,
-    resolved: &ResolvedAttributes,
+    projection: &FixtureProjectionPlan,
+    included_splits: Option<&[u16]>,
+    values: &ProfileValueIndex<'_>,
     options: RenderOptions,
     group_masters: &GroupMasterIndex,
     group_master_flashes: &HashMap<String, f32>,
     highlighted_fixtures: &HashSet<FixtureId>,
-) -> Result<(), EngineError> {
-    for (head_index, _) in mode.heads.iter().enumerate().filter(|(_, head)| {
-        mode.channels
-            .iter()
-            .any(|channel| channel.head_id == head.id && channel.split == split)
-    }) {
-        let output = resolve_profile_head(
+) -> Result<ResolvedProfileFixtureOutput, EngineError> {
+    let resolution = projection
+        .resolution()
+        .bind(mode)
+        .map_err(|error| EngineError::Invalid(error.to_string()))?;
+    let mut fixture_output = ResolvedProfileFixtureOutput::default();
+    for head in projection
+        .heads()
+        .iter()
+        .filter(|head| included_splits.is_none_or(|splits| head.appears_in_any_split(splits)))
+    {
+        let head_output = resolve_profile_head(
             fixture,
             mode,
-            head_index,
-            resolved,
+            head,
+            &resolution,
+            values,
             options,
             group_masters,
             group_master_flashes,
             highlighted_fixtures,
         )?;
-        encode_split_channels(frame, encoding, split, address, &output.channels)?;
+        fixture_output
+            .channels
+            .extend(head_output.channels.iter().copied());
+        fixture_output.heads.push(head_output);
     }
-    Ok(())
+    Ok(fixture_output)
+}
+
+#[derive(Default)]
+pub(crate) struct ResolvedProfileFixtureOutput {
+    pub(crate) heads: Vec<ResolvedProfileHeadOutput>,
+    channels: Vec<(uuid::Uuid, u32)>,
 }
 
 pub(crate) struct ResolvedProfileHeadOutput {
@@ -66,8 +79,9 @@ struct ProfileHeadInputs {
 pub(crate) fn resolve_profile_head(
     fixture: &PatchedFixture,
     mode: &FixtureMode,
-    head_index: usize,
-    resolved: &ResolvedAttributes,
+    head: &ProfileHeadPlan,
+    resolution: &BoundFixtureModeResolution<'_>,
+    values: &ProfileValueIndex<'_>,
     options: RenderOptions,
     group_masters: &GroupMasterIndex,
     group_master_flashes: &HashMap<String, f32>,
@@ -76,8 +90,8 @@ pub(crate) fn resolve_profile_head(
     let mut inputs = prepare_head_inputs(
         fixture,
         mode,
-        head_index,
-        resolved,
+        head,
+        values,
         options,
         group_masters,
         group_master_flashes,
@@ -86,9 +100,18 @@ pub(crate) fn resolve_profile_head(
     let virtual_intensity = virtual_intensity(&inputs);
     let requested_color = requested_color(&inputs.values);
     resolve_requested_color(mode, &mut inputs, requested_color)?;
-    let channels = resolve_channels(fixture, mode, &inputs, virtual_intensity, options);
+    let channels = resolve_channels(
+        fixture,
+        mode,
+        head,
+        resolution,
+        &inputs,
+        virtual_intensity,
+        options,
+    );
     Ok(finalize_output(
         mode,
+        head,
         inputs,
         channels,
         virtual_intensity,
@@ -97,15 +120,15 @@ pub(crate) fn resolve_profile_head(
     ))
 }
 
-fn encode_split_channels(
+pub(crate) fn encode_profile_split(
     frame: &mut DmxFrame,
     encoding: &FixtureModeEncodingPlan,
     split: u16,
     address: u16,
-    channels: &[(uuid::Uuid, u32)],
+    output: &ResolvedProfileFixtureOutput,
 ) -> Result<(), EngineError> {
     encoding
-        .encode_split(frame, address, split, channels)
+        .encode_split(frame, address, split, &output.channels)
         .map_err(|error| EngineError::Invalid(error.to_string()))
 }
 
@@ -113,18 +136,14 @@ fn encode_split_channels(
 fn prepare_head_inputs(
     fixture: &PatchedFixture,
     mode: &FixtureMode,
-    head_index: usize,
-    resolved: &ResolvedAttributes,
+    head: &ProfileHeadPlan,
+    values: &ProfileValueIndex<'_>,
     options: RenderOptions,
     group_masters: &GroupMasterIndex,
     group_master_flashes: &HashMap<String, f32>,
     highlighted_fixtures: &HashSet<FixtureId>,
 ) -> Result<ProfileHeadInputs, EngineError> {
-    let head = mode
-        .heads
-        .get(head_index)
-        .ok_or_else(|| EngineError::Invalid("fixture profile head is missing".into()))?;
-    let owner = profile_head_owner(fixture, head_index, head);
+    let owner = head.owner;
     let highlighted =
         highlighted_fixtures.contains(&fixture.fixture_id) || highlighted_fixtures.contains(&owner);
     let output_highlighted = highlighted && !(fixture.definition.hazardous && options.blackout);
@@ -135,26 +154,15 @@ fn prepare_head_inputs(
     };
     let mut inputs = ProfileHeadInputs {
         owner,
-        head_id: head.id,
+        head_id: head.head_id,
         output_highlighted,
         group_scale,
-        values: fixture_values(&resolved.values, owner),
-        sequence_masters: fixture_values(&resolved.sequence_masters, owner),
+        values: values.values(owner),
+        sequence_masters: values.sequence_masters(owner),
     };
     apply_control_loss(fixture, mode, options, &mut inputs);
     apply_hazardous_blackout(fixture, options, &mut inputs.values);
     Ok(inputs)
-}
-
-fn fixture_values<T: Clone>(
-    values: &HashMap<(FixtureId, AttributeKey), T>,
-    owner: FixtureId,
-) -> HashMap<AttributeKey, T> {
-    values
-        .iter()
-        .filter(|((fixture_id, _), _)| *fixture_id == owner)
-        .map(|((_, attribute), value)| (attribute.clone(), value.clone()))
-        .collect()
 }
 
 fn apply_control_loss(
@@ -252,6 +260,8 @@ fn resolve_requested_color(
 fn resolve_channels(
     fixture: &PatchedFixture,
     mode: &FixtureMode,
+    head: &ProfileHeadPlan,
+    resolution: &BoundFixtureModeResolution<'_>,
     inputs: &ProfileHeadInputs,
     virtual_intensity: f32,
     options: RenderOptions,
@@ -260,29 +270,32 @@ fn resolve_channels(
         .sequence_masters
         .get(&AttributeKey::intensity())
         .copied();
-    mode.channels
+    head.channel_indices
         .iter()
-        .filter(|channel| channel.head_id == inputs.head_id)
-        .map(|channel| {
-            let active = mode.active_attribute_for_channel(channel, &inputs.values);
-            let sequence_master = sequence_master_scale(channel, active, inputs, intensity_master);
-            let channel_intensity = if active.is_some_and(AttributeKey::is_intensity) {
-                1.0
-            } else {
-                virtual_intensity
-            };
-            let mut raw = mode.resolve_channel_raw(
-                channel,
+        .map(|channel_index| {
+            let channel = &mode.channels[*channel_index];
+            let resolved = resolution.resolve_channel(
+                *channel_index,
                 &inputs.values,
                 inputs.output_highlighted,
                 fixture.highlight_overrides.get(&channel.id).copied(),
-                ChannelScales {
-                    virtual_intensity: channel_intensity,
-                    sequence_master,
-                    group_master: inputs.group_scale,
-                    grand_master: grand_master(options),
+                |active| {
+                    let sequence_master =
+                        sequence_master_scale(channel, active, inputs, intensity_master);
+                    let channel_intensity = if active.is_some_and(AttributeKey::is_intensity) {
+                        1.0
+                    } else {
+                        virtual_intensity
+                    };
+                    ChannelScales {
+                        virtual_intensity: channel_intensity,
+                        sequence_master,
+                        group_master: inputs.group_scale,
+                        grand_master: grand_master(options),
+                    }
                 },
             );
+            let mut raw = resolved.raw;
             if options.blackout {
                 raw = blackout_raw(mode, channel, raw);
             }
@@ -318,6 +331,7 @@ fn grand_master(options: RenderOptions) -> f32 {
 
 fn finalize_output(
     mode: &FixtureMode,
+    head: &ProfileHeadPlan,
     inputs: ProfileHeadInputs,
     channels: Vec<(uuid::Uuid, u32)>,
     virtual_intensity: f32,
@@ -325,11 +339,10 @@ fn finalize_output(
     options: RenderOptions,
 ) -> ResolvedProfileHeadOutput {
     let channel_map = channels.iter().copied().collect::<HashMap<_, _>>();
-    let physical_intensity = mode
-        .channels
+    let physical_intensity = head
+        .intensity_channel_indices
         .iter()
-        .filter(|channel| channel.head_id == inputs.head_id && channel.attribute.is_intensity())
-        .filter_map(|channel| channel_visual_level(mode, &channel_map, channel.id))
+        .filter_map(|index| channel_visual_level(mode, &channel_map, mode.channels[*index].id))
         .reduce(f32::max);
     let mut color = profile_visual_color(mode, inputs.head_id, &channel_map, requested_color);
     let intensity = physical_intensity.unwrap_or_else(|| {

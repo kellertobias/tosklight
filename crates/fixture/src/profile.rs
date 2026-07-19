@@ -10,6 +10,7 @@ mod migration;
 mod model;
 mod profile_ops;
 mod resolution;
+mod resolution_plan;
 mod validation;
 
 pub use channel_model::*;
@@ -18,6 +19,7 @@ pub use encoding_plan::*;
 pub use error::*;
 pub use geometry_model::*;
 pub use model::*;
+pub use resolution_plan::*;
 
 #[cfg(test)]
 mod tests;

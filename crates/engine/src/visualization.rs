@@ -1,4 +1,4 @@
-use crate::{Engine, EngineError, RenderOptions, resolve_profile_head};
+use crate::{Engine, EngineError, RenderOptions, resolve_profile_fixture};
 use light_core::{AttributeKey, AttributeValue, FixtureId};
 use std::collections::HashMap;
 
@@ -31,6 +31,7 @@ impl Engine {
             }
         }
         resolved.values.clone_from(values);
+        let profile_values = crate::ProfileValueIndex::new(&resolved);
         let group_masters = generation.group_masters();
         let group_master_flashes = self.group_master_flashes.read();
         let highlighted_fixtures = self.highlighted_fixtures.read();
@@ -45,17 +46,23 @@ impl Engine {
             let mode = profile
                 .mode(mode_id)
                 .ok_or_else(|| EngineError::Invalid("schema-v2 fixture mode is missing".into()))?;
-            for head_index in 0..mode.heads.len() {
-                let output = resolve_profile_head(
-                    fixture,
-                    mode,
-                    head_index,
-                    &resolved,
-                    options,
-                    group_masters,
-                    &group_master_flashes,
-                    &highlighted_fixtures,
-                )?;
+            let projection = generation
+                .profile_projection(fixture.fixture_id)
+                .ok_or_else(|| {
+                    EngineError::Invalid("schema-v2 fixture projection plan is missing".into())
+                })?;
+            let output = resolve_profile_fixture(
+                fixture,
+                mode,
+                projection,
+                None,
+                &profile_values,
+                options,
+                group_masters,
+                &group_master_flashes,
+                &highlighted_fixtures,
+            )?;
+            for output in output.heads {
                 projected.insert(
                     (output.owner, AttributeKey::intensity()),
                     AttributeValue::Normalized(output.intensity),
