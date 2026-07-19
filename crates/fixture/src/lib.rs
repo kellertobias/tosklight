@@ -10,6 +10,7 @@ mod package;
 mod patch;
 mod patch_model;
 mod patch_validation;
+mod portable_patch;
 mod profile;
 
 pub use definition::*;
@@ -21,6 +22,7 @@ pub use package::*;
 pub use patch::*;
 pub use patch_model::*;
 pub use patch_validation::*;
+pub use portable_patch::*;
 pub use profile::*;
 
 #[cfg(test)]

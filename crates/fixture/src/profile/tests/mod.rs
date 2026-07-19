@@ -128,6 +128,7 @@ fn wheel_slots(mode: &mut FixtureMode) -> &mut Vec<ColorWheelSlot> {
 }
 
 mod color_geometry;
+mod definition_projection;
 mod inversion;
 mod resolution;
 mod validation;
