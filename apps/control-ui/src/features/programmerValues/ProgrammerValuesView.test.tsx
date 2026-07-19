@@ -1,6 +1,13 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { useCallback } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { ProgrammerCaptureModeViewProvider } from "../programmerCaptureMode/ProgrammerCaptureModeView";
+import { ProgrammerCaptureModeStore } from "../programmerCaptureMode/store";
+import {
+	captureModeProjection,
+	captureModeSnapshot,
+	FakeProgrammerCaptureModeTransport,
+} from "../programmerCaptureMode/testFixtures";
 import type { ProgrammerValuesActions } from "./contracts";
 import {
 	ProgrammerValuesViewProvider,
@@ -28,15 +35,20 @@ function ProjectionProbe({
 }) {
 	onRender();
 	const projection = useProgrammerValuesView(enabled);
-	return <span>{enabled ? projection?.revision ?? "Loading" : "Hidden"}</span>;
+	return (
+		<span>{enabled ? (projection?.revision ?? "Loading") : "Hidden"}</span>
+	);
 }
 
 function FixtureLevelProbe({ onRender }: { onRender: () => void }) {
 	onRender();
-	const selector = useCallback((state: ReturnType<ProgrammerValuesStore["getSnapshot"]>) => {
-		const value = state.projection?.fixtureValues[0]?.value;
-		return value?.kind === "normalized" ? value.value : null;
-	}, []);
+	const selector = useCallback(
+		(state: ReturnType<ProgrammerValuesStore["getSnapshot"]>) => {
+			const value = state.projection?.fixtureValues[0]?.value;
+			return value?.kind === "normalized" ? value.value : null;
+		},
+		[],
+	);
 	const level = useProgrammerValuesSelector(selector);
 	return <span>{level ?? "Loading level"}</span>;
 }
@@ -45,6 +57,17 @@ function ActionProbe({ onRender }: { onRender: () => void }) {
 	onRender();
 	const actions = useProgrammerValuesActions();
 	return <span>{actions ? "Actions ready" : "No actions"}</span>;
+}
+
+function WriterIdentityProbe({
+	onWriter,
+}: {
+	onWriter: (actions: ProgrammerValuesActions | null) => void;
+}) {
+	useProgrammerValuesView();
+	const actions = useProgrammerValuesActions();
+	onWriter(actions);
+	return <span>{actions ? "Writer ready" : "No writer"}</span>;
 }
 
 function actions(): ProgrammerValuesActions {
@@ -86,25 +109,40 @@ describe("ProgrammerValuesViewProvider", () => {
 		const store = new ProgrammerValuesStore();
 		const transport = new FakeProgrammerValuesTransport();
 		const loadSnapshot = vi.fn(async () => valuesSnapshot());
+		const captureModeStore = new ProgrammerCaptureModeStore();
+		const captureModeTransport = new FakeProgrammerCaptureModeTransport();
+		const loadCaptureModeSnapshot = vi.fn(async () => captureModeSnapshot());
 		const onRender = vi.fn();
 		const view = (enabled: boolean) => (
-			<ProgrammerValuesViewProvider
+			<ProgrammerCaptureModeViewProvider
 				showId={SHOW_ID}
 				userId={USER_ID}
-				store={store}
-				transport={transport}
-				loadSnapshot={loadSnapshot}
+				store={captureModeStore}
+				transport={captureModeTransport}
+				loadSnapshot={loadCaptureModeSnapshot}
 			>
-				<ProjectionProbe enabled={enabled} onRender={onRender} />
-			</ProgrammerValuesViewProvider>
+				<ProgrammerValuesViewProvider
+					showId={SHOW_ID}
+					userId={USER_ID}
+					store={store}
+					transport={transport}
+					loadSnapshot={loadSnapshot}
+				>
+					<ProjectionProbe enabled={enabled} onRender={onRender} />
+				</ProgrammerValuesViewProvider>
+			</ProgrammerCaptureModeViewProvider>
 		);
 		const rendered = render(view(false));
 
 		expect(screen.getByText("Hidden")).toBeInTheDocument();
 		expect(loadSnapshot).not.toHaveBeenCalled();
+		expect(loadCaptureModeSnapshot).not.toHaveBeenCalled();
 
 		rendered.rerender(view(true));
 		await waitFor(() => expect(transport.subscriptions).toHaveLength(1));
+		await waitFor(() =>
+			expect(captureModeTransport.subscriptions).toHaveLength(1),
+		);
 		await waitFor(() => expect(screen.getByText("1")).toBeInTheDocument());
 		expect(transport.subscriptions[0].scope).toEqual({
 			showId: SHOW_ID,
@@ -115,6 +153,7 @@ describe("ProgrammerValuesViewProvider", () => {
 		await waitFor(() =>
 			expect(transport.subscriptions[0].close).toHaveBeenCalledOnce(),
 		);
+		expect(captureModeTransport.subscriptions[0].close).toHaveBeenCalledOnce();
 		expect(screen.getByText("Hidden")).toBeInTheDocument();
 	});
 
@@ -156,6 +195,57 @@ describe("ProgrammerValuesViewProvider", () => {
 
 		expect(levelRenders).toHaveBeenCalledTimes(levelCount);
 		expect(actionRenders).toHaveBeenCalledTimes(actionCount);
+	});
+
+	it("keeps the writer and values subscription stable across capture events", async () => {
+		const store = new ProgrammerValuesStore();
+		const transport = new FakeProgrammerValuesTransport();
+		const captureModeStore = new ProgrammerCaptureModeStore();
+		const captureModeTransport = new FakeProgrammerCaptureModeTransport();
+		const onWriter = vi.fn();
+		const applyAction = vi.fn();
+		const loadSnapshot = vi.fn(async () => valuesSnapshot());
+		const loadCaptureModeSnapshot = vi.fn(async () => captureModeSnapshot());
+		const tree = () => (
+			<ProgrammerCaptureModeViewProvider
+				showId={SHOW_ID}
+				userId={USER_ID}
+				store={captureModeStore}
+				transport={captureModeTransport}
+				loadSnapshot={loadCaptureModeSnapshot}
+			>
+				<ProgrammerValuesViewProvider
+					showId={SHOW_ID}
+					userId={USER_ID}
+					store={store}
+					transport={transport}
+					loadSnapshot={loadSnapshot}
+					applyAction={applyAction}
+				>
+					<WriterIdentityProbe onWriter={onWriter} />
+				</ProgrammerValuesViewProvider>
+			</ProgrammerCaptureModeViewProvider>
+		);
+		const rendered = render(tree());
+		await waitFor(() =>
+			expect(screen.getByText("Writer ready")).toBeInTheDocument(),
+		);
+		await waitFor(() => expect(transport.subscriptions).toHaveLength(1));
+		const writer = onWriter.mock.calls.at(-1)?.[0];
+
+		act(() =>
+			captureModeTransport.emit({
+				type: "event",
+				sequence: 11,
+				correlationId: "preview-on",
+				projection: captureModeProjection({ revision: 2, preview: true }),
+			}),
+		);
+		rendered.rerender(tree());
+
+		expect(onWriter.mock.calls.at(-1)?.[0]).toBe(writer);
+		expect(transport.subscriptions).toHaveLength(1);
+		expect(transport.subscriptions[0].close).not.toHaveBeenCalled();
 	});
 
 	it("replaces authority when the server session key changes", async () => {

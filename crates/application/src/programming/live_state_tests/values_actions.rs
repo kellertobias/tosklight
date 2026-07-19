@@ -3,6 +3,7 @@ use crate::{ActionErrorKind, EventObject};
 use light_core::{AttributeKey, AttributeValue};
 use light_programmer::SelectionReference;
 use std::collections::{HashMap, HashSet};
+use std::sync::Barrier;
 
 #[derive(Default)]
 struct ValuesPorts {
@@ -89,14 +90,27 @@ impl ValuesSetup {
         request_id: &str,
         expected_revision: u64,
         command: ProgrammingValuesCommand,
-    ) -> ActionEnvelope<ProgrammingValuesCommand> {
+    ) -> ActionEnvelope<ProgrammingValuesRequest> {
+        self.action_with_capture(request_id, expected_revision, 0, command)
+    }
+
+    fn action_with_capture(
+        &self,
+        request_id: &str,
+        expected_revision: u64,
+        expected_capture_mode_revision: u64,
+        command: ProgrammingValuesCommand,
+    ) -> ActionEnvelope<ProgrammingValuesRequest> {
         ActionEnvelope {
             context: self
                 .context
                 .clone()
                 .with_request_id(request_id)
                 .with_expected_revision(expected_revision),
-            command,
+            command: ProgrammingValuesRequest {
+                expected_capture_mode_revision,
+                command,
+            },
         }
     }
 
@@ -121,6 +135,173 @@ impl ValuesSetup {
             panic!("values events should remain replayable")
         };
         events
+    }
+}
+
+#[test]
+fn capture_precondition_is_atomic_and_successful_replay_survives_mode_changes() {
+    let setup = ValuesSetup::new();
+    let command = ProgrammingValuesCommand::SetFixture {
+        fixture_id: setup.fixtures[0],
+        attribute: AttributeKey::intensity(),
+        value: AttributeValue::Normalized(0.4),
+        timing: Default::default(),
+    };
+    let original = setup.action_with_capture("capture-replay", 0, 0, command.clone());
+    let first = setup
+        .service
+        .handle_values(original.clone(), &setup.ports)
+        .unwrap();
+    assert_eq!(first.capture_mode_revision, 0);
+
+    let mode_change = setup
+        .service
+        .run_external_interaction(&setup.context, &setup.ports, || {
+            setup.registry.arm_preload(setup.session, true)
+        })
+        .unwrap();
+    assert_eq!(mode_change.capture_mode_event_sequence, Some(2));
+    assert_eq!(setup.registry.capture_mode_revision(setup.user), 1);
+    super::super::values_projection::reset_projection_read_count();
+
+    let replay = setup.service.handle_values(original, &setup.ports).unwrap();
+    assert!(replay.replayed);
+    assert_eq!(replay.capture_mode_revision, 0);
+    assert_eq!(replay.outcome, first.outcome);
+    assert_eq!(super::super::values_projection::projection_read_count(), 0);
+
+    let reused = setup.service.handle_values(
+        setup.action_with_capture("capture-replay", 0, 1, command.clone()),
+        &setup.ports,
+    );
+    assert_eq!(reused.unwrap_err().kind, ActionErrorKind::Conflict);
+
+    let stale_values = setup.service.handle_values(
+        setup.action_with_capture("stale-values-first", 0, 0, command.clone()),
+        &setup.ports,
+    );
+    let stale_values = stale_values.unwrap_err();
+    assert_eq!(stale_values.current_revision, Some(1));
+    assert_eq!(stale_values.current_related_revision, None);
+
+    let stale_capture = setup.service.handle_values(
+        setup.action_with_capture("stale-capture", 1, 0, command.clone()),
+        &setup.ports,
+    );
+    let stale_capture = stale_capture.unwrap_err();
+    assert_eq!(stale_capture.kind, ActionErrorKind::Conflict);
+    assert_eq!(stale_capture.current_revision, Some(1));
+    assert_eq!(stale_capture.current_related_revision, Some(1));
+
+    let redirected = setup.service.handle_values(
+        setup.action_with_capture(
+            "redirected",
+            1,
+            1,
+            ProgrammingValuesCommand::SetFixture {
+                fixture_id: FixtureId::new(),
+                attribute: AttributeKey::intensity(),
+                value: AttributeValue::Normalized(0.6),
+                timing: Default::default(),
+            },
+        ),
+        &setup.ports,
+    );
+    let redirected = redirected.unwrap_err();
+    assert_eq!(redirected.kind, ActionErrorKind::Conflict);
+    assert_eq!(redirected.current_revision, Some(1));
+    assert_eq!(redirected.current_related_revision, Some(1));
+    assert_eq!(super::super::values_projection::projection_read_count(), 0);
+    assert_eq!(setup.registry.normal_values_revision(setup.user), 1);
+
+    setup
+        .service
+        .run_external_interaction(&setup.context, &setup.ports, || {
+            setup.registry.arm_preload(setup.session, false)
+        })
+        .unwrap();
+    let accepted = setup
+        .service
+        .handle_values(
+            setup.action_with_capture("capture-allowed", 1, 2, command),
+            &setup.ports,
+        )
+        .unwrap();
+    assert_eq!(accepted.capture_mode_revision, 2);
+    assert_eq!(
+        accepted.outcome,
+        ProgrammingValuesOutcome::NoChange { revision: 1 }
+    );
+    assert_eq!(super::super::values_projection::projection_read_count(), 0);
+}
+
+#[test]
+fn concurrent_capture_transition_and_normal_write_have_one_serial_order() {
+    let setup = ValuesSetup::new();
+    let action = setup.action_with_capture(
+        "capture-race",
+        0,
+        0,
+        ProgrammingValuesCommand::SetFixture {
+            fixture_id: setup.fixtures[0],
+            attribute: AttributeKey::intensity(),
+            value: AttributeValue::Normalized(0.4),
+            timing: Default::default(),
+        },
+    );
+    let barrier = Arc::new(Barrier::new(3));
+    let (capture, values) = std::thread::scope(|scope| {
+        let capture_barrier = Arc::clone(&barrier);
+        let capture_service = &setup.service;
+        let capture_context = &setup.context;
+        let capture_ports = &setup.ports;
+        let capture_registry = &setup.registry;
+        let capture_session = setup.session;
+        let capture = scope.spawn(move || {
+            capture_barrier.wait();
+            capture_service.run_external_interaction(capture_context, capture_ports, || {
+                capture_registry.arm_preload(capture_session, true)
+            })
+        });
+        let values_barrier = Arc::clone(&barrier);
+        let values_service = &setup.service;
+        let values_ports = &setup.ports;
+        let values = scope.spawn(move || {
+            values_barrier.wait();
+            values_service.handle_values(action, values_ports)
+        });
+        barrier.wait();
+        (capture.join().unwrap().unwrap(), values.join().unwrap())
+    });
+
+    assert!(capture.capture_mode_event_sequence.is_some());
+    assert_eq!(setup.registry.capture_mode_revision(setup.user), 1);
+    let capture_filter =
+        EventFilter::default().with_object(EventObject::programming_capture_mode(setup.user.0));
+    let EventReplay::Events(capture_events) = setup.events.replay(0, &capture_filter) else {
+        panic!("capture events should remain replayable")
+    };
+    assert_eq!(capture_events.len(), 1);
+
+    let value_events = setup.values_events(setup.context.desk_id, setup.user);
+    match values {
+        Ok(result) => {
+            assert!(matches!(
+                result.outcome,
+                ProgrammingValuesOutcome::Changed { .. }
+            ));
+            assert_eq!(setup.registry.normal_values_revision(setup.user), 1);
+            assert_eq!(setup.registry.get(setup.session).unwrap().values.len(), 1);
+            assert_eq!(value_events.len(), 1);
+        }
+        Err(error) => {
+            assert_eq!(error.kind, ActionErrorKind::Conflict);
+            assert_eq!(error.current_revision, Some(0));
+            assert_eq!(error.current_related_revision, Some(1));
+            assert_eq!(setup.registry.normal_values_revision(setup.user), 0);
+            assert!(setup.registry.get(setup.session).unwrap().values.is_empty());
+            assert!(value_events.is_empty());
+        }
     }
 }
 
@@ -379,10 +560,11 @@ fn release_and_clear_preserve_preload_transient_selection_and_modes() {
         },
     );
     setup.registry.select(setup.session, [setup.fixtures[2]]);
+    assert!(setup.registry.arm_preload(setup.session, false));
     assert!(
         setup
             .registry
-            .set_modes(setup.session, Some(true), Some(true), Some(false), None,)
+            .set_modes(setup.session, None, Some(true), Some(false), None,)
     );
     assert!(setup.registry.set_preload_group(
         setup.session,
@@ -453,11 +635,14 @@ fn same_user_desks_share_values_while_other_users_and_forged_contexts_are_isolat
                     .clone()
                     .with_request_id("peer-set")
                     .with_expected_revision(1),
-                command: ProgrammingValuesCommand::SetGroup {
-                    group_id: "front".into(),
-                    attribute: AttributeKey("pan".into()),
-                    value: AttributeValue::Normalized(0.5),
-                    timing: Default::default(),
+                command: ProgrammingValuesRequest {
+                    expected_capture_mode_revision: 0,
+                    command: ProgrammingValuesCommand::SetGroup {
+                        group_id: "front".into(),
+                        attribute: AttributeKey("pan".into()),
+                        value: AttributeValue::Normalized(0.5),
+                        timing: Default::default(),
+                    },
                 },
             },
             &setup.ports,
@@ -497,11 +682,14 @@ fn same_user_desks_share_values_while_other_users_and_forged_contexts_are_isolat
                     .clone()
                     .with_request_id("other-set")
                     .with_expected_revision(0),
-                command: ProgrammingValuesCommand::SetFixture {
-                    fixture_id: setup.fixtures[1],
-                    attribute: AttributeKey::intensity(),
-                    value: AttributeValue::Normalized(0.9),
-                    timing: Default::default(),
+                command: ProgrammingValuesRequest {
+                    expected_capture_mode_revision: 0,
+                    command: ProgrammingValuesCommand::SetFixture {
+                        fixture_id: setup.fixtures[1],
+                        attribute: AttributeKey::intensity(),
+                        value: AttributeValue::Normalized(0.9),
+                        timing: Default::default(),
+                    },
                 },
             },
             &setup.ports,
@@ -535,7 +723,10 @@ fn same_user_desks_share_values_while_other_users_and_forged_contexts_are_isolat
         .handle_values(
             ActionEnvelope {
                 context: forged.with_request_id("forged").with_expected_revision(1),
-                command: ProgrammingValuesCommand::Clear,
+                command: ProgrammingValuesRequest {
+                    expected_capture_mode_revision: 0,
+                    command: ProgrammingValuesCommand::Clear,
+                },
             },
             &setup.ports,
         )

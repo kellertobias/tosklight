@@ -17,6 +17,10 @@ impl ProgrammerRegistry {
             .write()
             .entry(user_id)
             .or_default();
+        self.capture_mode_revisions
+            .write()
+            .entry(user_id)
+            .or_default();
         let existing = self
             .states
             .read()
@@ -95,6 +99,11 @@ impl ProgrammerRegistry {
             .or_default();
         state
     }
+    /// Hydrate one persisted session while constructing a fresh runtime.
+    ///
+    /// Multiple persisted sessions for the same user intentionally collapse into one shared
+    /// Programmer. Existing public authority revisions are retained so an incidental repeated
+    /// restore cannot make a live client revision current again.
     pub fn restore(&self, state: ProgrammerState) {
         let mutation_gate = self.mutation_gate_for_user(state.user_id);
         let _mutation_guard = mutation_gate.lock();
@@ -103,6 +112,10 @@ impl ProgrammerRegistry {
             .entry(state.user_id)
             .or_default();
         self.normal_values_revisions
+            .write()
+            .entry(state.user_id)
+            .or_default();
+        self.capture_mode_revisions
             .write()
             .entry(state.user_id)
             .or_default();

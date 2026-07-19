@@ -3,7 +3,7 @@
 use super::{
     command_line::ProgrammingInteractionChange,
     playback::{PlaybackDeskProjection, PlaybackRuntimeChange},
-    programming::ProgrammingValuesChange,
+    programming::{ProgrammingCaptureModeChange, ProgrammingValuesChange},
 };
 
 use schemars::JsonSchema;
@@ -160,6 +160,9 @@ pub enum EventPayload {
     ProgrammingValuesChanged {
         change: ProgrammingValuesChange,
     },
+    ProgrammingCaptureModeChanged {
+        change: ProgrammingCaptureModeChange,
+    },
     PlaybackRuntimeChanged {
         change: PlaybackRuntimeChange,
     },
@@ -181,6 +184,46 @@ pub enum EventPayload {
     SelectiveImportApplied {
         change: Box<SelectiveImportChange>,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::v2::programming::{ProgrammingCaptureModeChange, ProgrammingCaptureModeProjection};
+
+    #[test]
+    fn capture_mode_event_has_the_committed_wire_shape() {
+        let payload = EventPayload::ProgrammingCaptureModeChanged {
+            change: ProgrammingCaptureModeChange {
+                projection: ProgrammingCaptureModeProjection {
+                    user_id: Uuid::from_u128(1),
+                    revision: 4,
+                    blind: true,
+                    preview: false,
+                    preload_capture_programmer: true,
+                },
+            },
+        };
+
+        let expected = serde_json::json!({
+            "type": "programming_capture_mode_changed",
+            "change": {
+                "projection": {
+                    "user_id": Uuid::from_u128(1),
+                    "revision": 4,
+                    "blind": true,
+                    "preview": false,
+                    "preload_capture_programmer": true
+                }
+            }
+        });
+
+        assert_eq!(serde_json::to_value(&payload).unwrap(), expected);
+        assert_eq!(
+            serde_json::from_value::<EventPayload>(expected).unwrap(),
+            payload
+        );
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, JsonSchema, PartialEq, Serialize, TS)]

@@ -72,9 +72,41 @@ pub(super) fn values_outcome(
         request_id,
         correlation_id: result.context.correlation_id,
         revision,
+        capture_mode_revision: result.capture_mode_revision,
         outcome,
         replayed: result.replayed,
         warning: result.warning,
+    }
+}
+
+pub(super) fn capture_mode_snapshot(
+    snapshot: application::ProgrammingCaptureModeSnapshot,
+) -> wire::ProgrammingCaptureModeSnapshot {
+    wire::ProgrammingCaptureModeSnapshot {
+        cursor: EventSnapshotCursor {
+            sequence: snapshot.event_sequence,
+        },
+        projection: capture_mode_projection(&snapshot.projection),
+    }
+}
+
+pub(in crate::runtime) fn capture_mode_change(
+    change: &application::ProgrammingCaptureModeChange,
+) -> wire::ProgrammingCaptureModeChange {
+    wire::ProgrammingCaptureModeChange {
+        projection: capture_mode_projection(&change.projection),
+    }
+}
+
+fn capture_mode_projection(
+    projection: &application::ProgrammingCaptureModeProjection,
+) -> wire::ProgrammingCaptureModeProjection {
+    wire::ProgrammingCaptureModeProjection {
+        user_id: projection.user_id.0,
+        revision: projection.revision,
+        blind: projection.blind,
+        preview: projection.preview,
+        preload_capture_programmer: projection.preload_capture_programmer,
     }
 }
 

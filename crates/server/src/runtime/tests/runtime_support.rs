@@ -47,6 +47,7 @@ fn test_state() -> (AppState, PathBuf) {
             selective_show_import: SelectiveShowImportService::new(active_show_service),
             patch_profile_resolution: Arc::default(),
             active_show_http_lifecycle: Arc::default(),
+            preload_store_release_lifecycle: Arc::default(),
             patch_lifecycle: Arc::default(),
             audit_events: Arc::new(Mutex::new(VecDeque::with_capacity(2048))),
             command_history: Arc::new(Mutex::new(HashMap::new())),

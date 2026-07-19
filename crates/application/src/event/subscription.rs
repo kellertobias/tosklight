@@ -7,7 +7,7 @@ use super::model::{DeliveryPolicy, EventCapability, EventClass, EventEnvelope, E
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct EventFilter {
     pub desk_id: Option<Uuid>,
-    /// Authenticated owner allowed to observe user-scoped Programmer value objects. This does not
+    /// Authenticated owner allowed to observe user-scoped Programmer objects. This does not
     /// constrain desk-local Programmer interaction routes or future non-user Programmer topics.
     pub programmer_user_id: Option<Uuid>,
     pub capabilities: HashSet<EventCapability>,
@@ -54,7 +54,7 @@ impl EventFilter {
                 .object
                 .iter()
                 .chain(&event.related_objects)
-                .filter_map(EventObject::programming_values_user_id)
+                .filter_map(EventObject::programming_user_id)
                 .any(|actual| actual != allowed)
         }) {
             return false;

@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { WireValidationError } from "./wireValidation";
 import {
 	decodeProgrammerValuesActionOutcome,
 	decodeProgrammerValuesErrorResponse,
@@ -7,6 +6,7 @@ import {
 	decodeProgrammerValuesSnapshot,
 	encodeProgrammerValuesActionRequest,
 } from "./programmerValuesWire";
+import { WireValidationError } from "./wireValidation";
 
 const USER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const OTHER_USER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -37,6 +37,7 @@ function changedOutcome() {
 		request_id: "request-1",
 		correlation_id: CORRELATION_ID,
 		revision: 7,
+		capture_mode_revision: 4,
 		status: "changed",
 		projection: projection(),
 		event_sequence: 19,
@@ -147,6 +148,7 @@ describe("Programmer values mutation wire boundary", () => {
 			status: "changed",
 			requestId: "request-1",
 			revision: 7,
+			captureModeRevision: 4,
 			eventSequence: 19,
 			projection: { userId: USER_ID, revision: 7 },
 		});
@@ -164,6 +166,7 @@ describe("Programmer values mutation wire boundary", () => {
 			requestId: "request-1",
 			correlationId: CORRELATION_ID,
 			revision: 7,
+			captureModeRevision: 4,
 			replayed: false,
 			warning: null,
 		});
@@ -198,6 +201,7 @@ describe("Programmer values mutation wire boundary", () => {
 			encodeProgrammerValuesActionRequest({
 				requestId: "batch-1",
 				expectedRevision: 6,
+				expectedCaptureModeRevision: 4,
 				action: {
 					action: "batch",
 					mutations: [
@@ -223,6 +227,7 @@ describe("Programmer values mutation wire boundary", () => {
 		).toEqual({
 			request_id: "batch-1",
 			expected_revision: 6,
+			expected_capture_mode_revision: 4,
 			action: {
 				type: "batch",
 				mutations: [
@@ -253,12 +258,14 @@ describe("Programmer values mutation wire boundary", () => {
 				kind: "conflict",
 				error: "revision conflict",
 				current_revision: 8,
+				current_capture_mode_revision: 5,
 				retryable: false,
 			}),
 		).toEqual({
 			kind: "conflict",
 			error: "revision conflict",
 			currentRevision: 8,
+			currentCaptureModeRevision: 5,
 			retryable: false,
 		});
 	});

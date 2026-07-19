@@ -23,8 +23,8 @@ use crate::v2::playback::{
     PlaybackRuntimeSnapshotRequest,
 };
 use crate::v2::programming::{
-    ProgrammingValuesActionOutcome, ProgrammingValuesActionRequest, ProgrammingValuesErrorResponse,
-    ProgrammingValuesSnapshot,
+    ProgrammingCaptureModeSnapshot, ProgrammingValuesActionOutcome, ProgrammingValuesActionRequest,
+    ProgrammingValuesErrorResponse, ProgrammingValuesSnapshot,
 };
 use crate::v2::selective_import::{
     SelectiveImportApplyRequest, SelectiveImportCatalog, SelectiveImportErrorResponse,
@@ -82,6 +82,9 @@ pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
             "programming-values-error-response",
         ),
         programming_response_schema::<ProgrammingValuesSnapshot>("programming-values-snapshot"),
+        programming_response_schema::<ProgrammingCaptureModeSnapshot>(
+            "programming-capture-mode-snapshot",
+        ),
         playback_request_schema::<PlaybackActionRequest>("playback-action-request"),
         playback_response_schema::<PlaybackActionOutcome>("playback-action-outcome"),
         playback_response_schema::<PlaybackErrorResponse>("playback-error-response"),

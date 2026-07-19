@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { ProgrammerValuesProtocolError } from "../features/programmerValues/transport";
+import type { ProgrammerValuesProtocolError } from "../features/programmerValues/transport";
 import {
 	HttpProgrammerValuesTransport,
-	ProgrammerValuesActionError,
+	type ProgrammerValuesActionError,
 } from "./ProgrammerValuesTransport";
 
 const SHOW_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -66,6 +66,7 @@ function changedOutcome() {
 		request_id: "request-1",
 		correlation_id: CORRELATION_ID,
 		revision: 3,
+		capture_mode_revision: 4,
 		status: "changed",
 		projection: projection(),
 		event_sequence: 12,
@@ -150,6 +151,7 @@ describe("HttpProgrammerValuesTransport HTTP", () => {
 		const request = {
 			requestId: "request-1",
 			expectedRevision: 2,
+			expectedCaptureModeRevision: 4,
 			action: {
 				action: "batch" as const,
 				mutations: [
@@ -168,6 +170,7 @@ describe("HttpProgrammerValuesTransport HTTP", () => {
 			status: "changed",
 			requestId: "request-1",
 			revision: 3,
+			captureModeRevision: 4,
 			eventSequence: 12,
 		});
 		const [url, init] = fetchImplementation.mock.calls[0];
@@ -178,6 +181,7 @@ describe("HttpProgrammerValuesTransport HTTP", () => {
 		expect(JSON.parse(String(init?.body))).toEqual({
 			request_id: "request-1",
 			expected_revision: 2,
+			expected_capture_mode_revision: 4,
 			action: {
 				type: "batch",
 				mutations: [
@@ -205,6 +209,7 @@ describe("HttpProgrammerValuesTransport HTTP", () => {
 					kind: "conflict",
 					error: "revision conflict",
 					current_revision: 4,
+					current_capture_mode_revision: 6,
 					retryable: false,
 				},
 				409,
@@ -214,6 +219,7 @@ describe("HttpProgrammerValuesTransport HTTP", () => {
 			transport.applyAction(scope, {
 				requestId: "request-1",
 				expectedRevision: 2,
+				expectedCaptureModeRevision: 5,
 				action: { action: "clear" },
 			}),
 		).rejects.toEqual(
@@ -221,6 +227,7 @@ describe("HttpProgrammerValuesTransport HTTP", () => {
 				kind: "conflict",
 				status: 409,
 				currentRevision: 4,
+				currentCaptureModeRevision: 6,
 				retryable: false,
 			}),
 		);

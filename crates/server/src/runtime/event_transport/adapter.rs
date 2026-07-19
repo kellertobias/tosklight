@@ -187,6 +187,11 @@ fn wire_payload(
         ) => wire::EventPayload::ProgrammingValuesChanged {
             change: super::super::command_http::values_change(change),
         },
+        application::ApplicationEvent::Programming(
+            application::ProgrammingEvent::CaptureModeChanged(change),
+        ) => wire::EventPayload::ProgrammingCaptureModeChanged {
+            change: super::super::command_http::capture_mode_change(change),
+        },
         application::ApplicationEvent::Playback(application::PlaybackEvent::RuntimeChanged(
             change,
         )) => wire::EventPayload::PlaybackRuntimeChanged {

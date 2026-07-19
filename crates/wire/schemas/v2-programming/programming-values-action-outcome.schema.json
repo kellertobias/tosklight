@@ -4,6 +4,11 @@
   "description": "Typed result for one Programmer-values action. No-change results deliberately omit the full\nprojection so interaction-only actions do not force projection materialization or transport.",
   "type": "object",
   "properties": {
+    "capture_mode_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
     "correlation_id": {
       "type": "string",
       "format": "uuid"
@@ -66,6 +71,7 @@
     "request_id",
     "correlation_id",
     "revision",
+    "capture_mode_revision",
     "replayed"
   ],
   "$defs": {

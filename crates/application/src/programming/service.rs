@@ -1,7 +1,7 @@
 use super::{
-    ExecutionPolicy, ProgrammingAction, ProgrammingCommand, ProgrammingExecution,
-    ProgrammingInteractionChange, ProgrammingInteractionResult, ProgrammingOutcome,
-    ProgrammingPorts, ProgrammingResult, ProgrammingValuesChange,
+    ExecutionPolicy, ProgrammingAction, ProgrammingCaptureModeChange, ProgrammingCommand,
+    ProgrammingExecution, ProgrammingInteractionChange, ProgrammingInteractionResult,
+    ProgrammingOutcome, ProgrammingPorts, ProgrammingResult, ProgrammingValuesChange,
 };
 use crate::{ActionContext, ActionEnvelope, ActionError, EventBus};
 use light_core::{SessionId, UserId};
@@ -86,9 +86,12 @@ impl ProgrammingService {
             if let Some(cached) = self.cached(&action, session)? {
                 return Ok(cached);
             }
-            let (mut result, interaction, values) = self.apply(&action, session, user_id, ports)?;
+            let (mut result, interaction, capture_mode, values) =
+                self.apply(&action, session, user_id, ports)?;
             result.interaction_event_sequence =
                 self.publish_interaction(&action.context, interaction);
+            result.capture_mode_event_sequence =
+                self.publish_capture_mode(&action.context, capture_mode);
             result.values_event_sequence = self.publish_values(&action.context, values);
             self.remember(&action, session, &result);
             Ok(result)
@@ -133,9 +136,12 @@ impl ProgrammingService {
             before.values_generation,
             after.values_generation,
         )?;
+        let capture_mode =
+            self.capture_mode_change(user_id, before.capture_mode, after.capture_mode);
         Ok(ProgrammingInteractionResult {
             output,
             event_sequence: self.publish_interaction(context, change),
+            capture_mode_event_sequence: self.publish_capture_mode(context, capture_mode),
             values_event_sequence: self.publish_values(context, values),
         })
     }
@@ -150,6 +156,7 @@ impl ProgrammingService {
         (
             ProgrammingResult,
             Option<ProgrammingInteractionChange>,
+            Option<ProgrammingCaptureModeChange>,
             Option<ProgrammingValuesChange>,
         ),
         ActionError,
@@ -223,9 +230,12 @@ impl ProgrammingService {
             before.values_generation,
             after.values_generation,
         )?;
+        let capture_mode =
+            self.capture_mode_change(user_id, before.capture_mode, after.capture_mode);
         Ok((
             before.result(action.context.clone(), outcome, after, selection),
             interaction,
+            capture_mode,
             values,
         ))
     }

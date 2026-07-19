@@ -23,6 +23,10 @@ pub struct ProgrammerRegistry {
     /// Monotonic public projection revision, advanced exactly once by the application service for
     /// each completed semantic normal-value transition.
     pub(crate) normal_values_revisions: Arc<RwLock<HashMap<UserId, u64>>>,
+    /// Runtime-only public revision for the exact capture-mode tuple. Domain helpers never
+    /// advance it; the Programming application boundary advances it once per semantic tuple
+    /// transition after all nested mutations and reconciliation have completed.
+    pub(crate) capture_mode_revisions: Arc<RwLock<HashMap<UserId, u64>>>,
     /// Serializes compound mutations per user without preventing unrelated programmers from
     /// progressing concurrently. The mutex is reentrant because public mutation helpers compose
     /// other public helpers (for example, `activate_preload` calls `activate_preload_at`).
@@ -49,6 +53,7 @@ impl ProgrammerRegistry {
             programmer_order: Arc::default(),
             normal_values_generations: Arc::default(),
             normal_values_revisions: Arc::default(),
+            capture_mode_revisions: Arc::default(),
             mutation_gates: Arc::default(),
             unknown_mutation_gate: Arc::new(ReentrantMutex::new(())),
             clock,
@@ -157,6 +162,10 @@ impl ProgrammerRegistry {
         true
     }
 
+    /// Reset a fresh runtime during startup or a test-bench rebuild.
+    ///
+    /// Live Programmer deletion must use [`Self::clear`], which preserves public projection
+    /// revisions so an old client cursor can never become current again.
     pub fn reset_all(&self) {
         self.with_all_mutation_gates(|| {
             self.states.write().clear();
@@ -168,18 +177,21 @@ impl ProgrammerRegistry {
             self.programmer_order.store(0, Ordering::Relaxed);
             self.normal_values_generations.write().clear();
             self.normal_values_revisions.write().clear();
+            self.capture_mode_revisions.write().clear();
         });
     }
 
     pub fn normal_values_generation(&self, session: SessionId) -> Option<u64> {
         let user_id = self.states.read().get(&self.key(session))?.user_id;
-        Some(
-            self.normal_values_generations
-                .read()
-                .get(&user_id)
-                .copied()
-                .unwrap_or(0),
-        )
+        Some(self.normal_values_generation_for_user(user_id))
+    }
+
+    pub(crate) fn normal_values_generation_for_user(&self, user_id: UserId) -> u64 {
+        self.normal_values_generations
+            .read()
+            .get(&user_id)
+            .copied()
+            .unwrap_or(0)
     }
 
     pub fn user_id(&self, session: SessionId) -> Option<UserId> {
@@ -199,6 +211,21 @@ impl ProgrammerRegistry {
 
     pub fn advance_normal_values_revision(&self, user_id: UserId) -> u64 {
         let mut revisions = self.normal_values_revisions.write();
+        let revision = revisions.entry(user_id).or_default();
+        *revision = revision.saturating_add(1);
+        *revision
+    }
+
+    pub fn capture_mode_revision(&self, user_id: UserId) -> u64 {
+        self.capture_mode_revisions
+            .read()
+            .get(&user_id)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    pub fn advance_capture_mode_revision(&self, user_id: UserId) -> u64 {
+        let mut revisions = self.capture_mode_revisions.write();
         let revision = revisions.entry(user_id).or_default();
         *revision = revision.saturating_add(1);
         *revision
@@ -293,7 +320,13 @@ impl ProgrammerRegistry {
         let _mutation_guard = mutation_gate.lock();
         let key = self.key(session);
         self.sessions.write().retain(|_, bound| *bound != key);
-        self.states.write().remove(&key).is_some()
+        let Some(state) = self.states.write().remove(&key) else {
+            return false;
+        };
+        if !state.values.is_empty() || !state.group_values.is_empty() {
+            self.mark_normal_values_changed(state.user_id);
+        }
+        true
     }
     pub fn active(&self) -> Vec<ProgrammerState> {
         self.states.read().values().cloned().collect()

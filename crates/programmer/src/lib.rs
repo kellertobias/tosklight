@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 //! User-scoped selection and programmer state, shared by all of a user's sessions.
 
+mod capture_mode;
 mod command_state;
 mod groups;
 pub mod highlight;
@@ -17,6 +18,7 @@ mod values;
 
 pub mod command_line;
 
+pub use capture_mode::ProgrammerCaptureMode;
 pub use command_state::{
     CommandLineReplaceError, CommandLineState, CommandTarget, ProgrammerInteractionState,
     ProgrammerInteractionVersion,

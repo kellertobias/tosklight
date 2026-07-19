@@ -36,6 +36,8 @@ pub(super) struct AppState {
     #[cfg(test)]
     pub(super) active_show_http_lifecycle: Arc<ActiveShowLifecyclePause>,
     #[cfg(test)]
+    pub(super) preload_store_release_lifecycle: Arc<ActiveShowLifecyclePause>,
+    #[cfg(test)]
     pub(super) patch_lifecycle: Arc<ActiveShowLifecyclePause>,
     pub(super) audit_events: Arc<Mutex<VecDeque<Event>>>,
     pub(super) command_history: Arc<Mutex<HashMap<Uuid, VecDeque<CommandHistoryEntry>>>>,

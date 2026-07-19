@@ -134,6 +134,8 @@ pub struct ActionError {
     pub kind: ActionErrorKind,
     pub message: String,
     pub current_revision: Option<u64>,
+    /// Current revision of an auxiliary authority participating in the same atomic precondition.
+    pub current_related_revision: Option<u64>,
     pub retryable: bool,
 }
 
@@ -143,12 +145,18 @@ impl ActionError {
             kind,
             message: message.into(),
             current_revision: None,
+            current_related_revision: None,
             retryable: matches!(kind, ActionErrorKind::Busy | ActionErrorKind::Unavailable),
         }
     }
 
     pub const fn at_revision(mut self, revision: u64) -> Self {
         self.current_revision = Some(revision);
+        self
+    }
+
+    pub const fn at_related_revision(mut self, revision: u64) -> Self {
+        self.current_related_revision = Some(revision);
         self
     }
 }

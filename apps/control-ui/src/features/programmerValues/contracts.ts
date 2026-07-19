@@ -89,6 +89,7 @@ export type ProgrammerValuesCommand =
 export interface ProgrammerValuesActionRequest {
 	requestId: string;
 	expectedRevision: number;
+	expectedCaptureModeRevision: number;
 	action: ProgrammerValuesCommand;
 }
 
@@ -96,6 +97,7 @@ interface ProgrammerValuesOutcomeBase {
 	requestId: string;
 	correlationId: string;
 	revision: number;
+	captureModeRevision: number;
 	replayed: boolean;
 	warning: string | null;
 }

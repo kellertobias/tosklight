@@ -111,6 +111,7 @@ pub(super) async fn create_session(
         connected: true,
         desk: desk.clone(),
     };
+    let _activation = state.activation_lock.clone().lock_owned().await;
     state.session_clients.write().insert(session.id, client_id);
     state.programmers.start(session.id, user.id);
     attach_session_command_context(&state, &session);
@@ -207,6 +208,7 @@ pub(super) async fn close_session(
     if caller.id != id {
         return Err(ApiError::conflict("a session may only disconnect itself"));
     }
+    let _activation = state.activation_lock.clone().lock_owned().await;
     let Some(session) = state.sessions.write().remove(&id) else {
         return Err(ApiError::not_found("session"));
     };

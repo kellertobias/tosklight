@@ -13,6 +13,10 @@ use std::sync::{Arc, mpsc};
 use std::thread;
 use uuid::Uuid;
 
+#[path = "live_state_tests/capture_mode.rs"]
+mod capture_mode;
+#[path = "live_state_tests/lifecycle.rs"]
+mod lifecycle;
 #[path = "live_state_tests/routing.rs"]
 mod routing;
 #[path = "live_state_tests/selection_refresh.rs"]

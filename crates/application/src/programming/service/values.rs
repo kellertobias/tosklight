@@ -2,7 +2,7 @@ use super::{ProgrammingService, state::interaction_change, support::Snapshot};
 use crate::{
     ActionEnvelope, ActionError, ActionErrorKind, ProgrammingPorts, ProgrammingValueMutation,
     ProgrammingValueTiming, ProgrammingValuesCommand, ProgrammingValuesOutcome,
-    ProgrammingValuesResult,
+    ProgrammingValuesRequest, ProgrammingValuesResult,
 };
 use light_core::{SessionId, UserId};
 use light_programmer::{NormalProgrammerValueMutation, NormalProgrammerValueTiming};
@@ -13,7 +13,7 @@ use super::values_validation::{validate_request_id, validate_value_mutations};
 impl ProgrammingService {
     pub fn handle_values(
         &self,
-        action: ActionEnvelope<ProgrammingValuesCommand>,
+        action: ActionEnvelope<ProgrammingValuesRequest>,
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingValuesResult, ActionError> {
         let (session, user_id, request_id, expected_revision) = values_context(&action)?;
@@ -31,8 +31,19 @@ impl ProgrammingService {
                 return Ok(cached);
             }
             self.assert_values_revision(user_id, expected_revision)?;
-            let result =
-                self.apply_values_action(&action, ports, session, user_id, expected_revision)?;
+            let capture_mode_revision = self.assert_capture_mode_precondition(
+                session,
+                user_id,
+                action.command.expected_capture_mode_revision,
+            )?;
+            let result = self.apply_values_action(
+                &action,
+                ports,
+                session,
+                user_id,
+                expected_revision,
+                capture_mode_revision,
+            )?;
             self.remember_values(
                 user_id,
                 action.context.desk_id,
@@ -48,19 +59,20 @@ impl ProgrammingService {
 
     fn apply_values_action(
         &self,
-        action: &ActionEnvelope<ProgrammingValuesCommand>,
+        action: &ActionEnvelope<ProgrammingValuesRequest>,
         ports: &dyn ProgrammingPorts,
         session: SessionId,
         user_id: UserId,
         revision_before: u64,
+        capture_mode_revision: u64,
     ) -> Result<ProgrammingValuesResult, ActionError> {
         let before = Snapshot::read(&self.programmers, action.context.desk_id, session, user_id)?;
-        let mutations = action.command.mutations();
+        let mutations = action.command.command.mutations();
         if !mutations.is_empty() {
             let environment = ports.values_environment(&action.context)?;
             validate_value_mutations(&mutations, &environment)?;
         }
-        let changed = self.mutate_normal_values(session, &action.command, &mutations);
+        let changed = self.mutate_normal_values(session, &action.command.command, &mutations);
         let warning = changed
             .then(|| ports.persist(&action.context, "programmer.values"))
             .flatten();
@@ -83,6 +95,7 @@ impl ProgrammingService {
         Ok(ProgrammingValuesResult {
             context: action.context.clone(),
             outcome,
+            capture_mode_revision,
             interaction_event_sequence,
             replayed: false,
             warning,
@@ -153,6 +166,41 @@ impl ProgrammingService {
         }
     }
 
+    fn assert_capture_mode_precondition(
+        &self,
+        session: SessionId,
+        user_id: UserId,
+        expected: u64,
+    ) -> Result<u64, ActionError> {
+        let actual = self.programmers.capture_mode_revision(user_id);
+        let values_revision = self.programmers.normal_values_revision(user_id);
+        if expected != actual {
+            return Err(ActionError::new(
+                ActionErrorKind::Conflict,
+                format!(
+                    "Programmer capture-mode revision conflict: expected {expected}, actual {actual}"
+                ),
+            )
+            .at_revision(values_revision)
+            .at_related_revision(actual));
+        }
+        let mode = self.programmers.capture_mode(session).ok_or_else(|| {
+            ActionError::new(
+                ActionErrorKind::NotFound,
+                "Programmer values are unavailable",
+            )
+        })?;
+        if mode.redirects_normal_values_to_preload() {
+            return Err(ActionError::new(
+                ActionErrorKind::Conflict,
+                "normal Programmer values cannot be changed while Programmer capture is redirected to Preload",
+            )
+            .at_revision(values_revision)
+            .at_related_revision(actual));
+        }
+        Ok(actual)
+    }
+
     fn cached_values(
         &self,
         user_id: UserId,
@@ -160,7 +208,7 @@ impl ProgrammingService {
         session_id: SessionId,
         request_id: &str,
         expected_revision: u64,
-        command: &ProgrammingValuesCommand,
+        request: &ProgrammingValuesRequest,
     ) -> Result<Option<ProgrammingValuesResult>, ActionError> {
         self.values_replay.lock().get(
             user_id,
@@ -168,7 +216,7 @@ impl ProgrammingService {
             session_id,
             request_id,
             expected_revision,
-            command,
+            request,
         )
     }
 
@@ -179,7 +227,7 @@ impl ProgrammingService {
         session_id: SessionId,
         request_id: String,
         expected_revision: u64,
-        command: ProgrammingValuesCommand,
+        request: ProgrammingValuesRequest,
         result: ProgrammingValuesResult,
     ) {
         self.values_replay.lock().insert(
@@ -188,14 +236,14 @@ impl ProgrammingService {
             session_id,
             request_id,
             expected_revision,
-            command,
+            request,
             result,
         );
     }
 }
 
 fn values_context(
-    action: &ActionEnvelope<ProgrammingValuesCommand>,
+    action: &ActionEnvelope<ProgrammingValuesRequest>,
 ) -> Result<(SessionId, UserId, String, u64), ActionError> {
     let session = action.context.session_id.map(SessionId).ok_or_else(|| {
         ActionError::new(

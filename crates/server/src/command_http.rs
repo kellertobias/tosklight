@@ -36,7 +36,7 @@ pub(super) use adapter::{
 pub(super) use interaction_wire::interaction_change;
 pub(crate) use programming_ports::ServerProgrammingPorts;
 pub(super) use routes::router;
-pub(super) use values_wire::values_change;
+pub(super) use values_wire::{capture_mode_change, values_change};
 
 #[cfg(test)]
 use adapter::compatibility_only_family;

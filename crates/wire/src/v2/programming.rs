@@ -66,6 +66,31 @@ pub struct ProgrammingValuesProjection {
     pub group_values: Vec<ProgrammingGroupValue>,
 }
 
+/// Authoritative capture routing for one user's Programmer.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ProgrammingCaptureModeProjection {
+    pub user_id: Uuid,
+    #[ts(type = "number")]
+    pub revision: u64,
+    pub blind: bool,
+    pub preview: bool,
+    pub preload_capture_programmer: bool,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ProgrammingCaptureModeChange {
+    pub projection: ProgrammingCaptureModeProjection,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ProgrammingCaptureModeSnapshot {
+    pub cursor: EventSnapshotCursor,
+    pub projection: ProgrammingCaptureModeProjection,
+}
+
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ProgrammingValuesChange {
     pub projection: ProgrammingValuesProjection,
@@ -85,6 +110,8 @@ pub struct ProgrammingValuesActionRequest {
     pub request_id: String,
     #[ts(type = "number")]
     pub expected_revision: u64,
+    #[ts(type = "number")]
+    pub expected_capture_mode_revision: u64,
     pub action: ProgrammingValuesAction,
 }
 
@@ -168,6 +195,8 @@ pub struct ProgrammingValuesActionOutcome {
     pub correlation_id: Uuid,
     #[ts(type = "number")]
     pub revision: u64,
+    #[ts(type = "number")]
+    pub capture_mode_revision: u64,
     #[serde(flatten)]
     pub outcome: ProgrammingValuesActionState,
     pub replayed: bool,
@@ -194,6 +223,9 @@ pub struct ProgrammingValuesErrorResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(as = "Option<f64>", optional = nullable)]
     pub current_revision: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(as = "Option<f64>", optional = nullable)]
+    pub current_capture_mode_revision: Option<u64>,
     pub retryable: bool,
 }
 
@@ -238,6 +270,7 @@ mod tests {
         let value = serde_json::json!({
             "request_id": "request-1",
             "expected_revision": 0,
+            "expected_capture_mode_revision": 0,
             "action": {
                 "type": "set_fixture",
                 "fixture_id": Uuid::from_u128(1),
@@ -250,11 +283,35 @@ mod tests {
     }
 
     #[test]
+    fn action_requires_the_capture_mode_revision() {
+        let value = serde_json::json!({
+            "request_id": "request-1",
+            "expected_revision": 0,
+            "action": {"type": "clear"}
+        });
+        assert!(serde_json::from_value::<ProgrammingValuesActionRequest>(value).is_err());
+    }
+
+    #[test]
+    fn capture_mode_projection_rejects_unknown_fields() {
+        let value = serde_json::json!({
+            "user_id": Uuid::from_u128(1),
+            "revision": 2,
+            "blind": false,
+            "preview": false,
+            "preload_capture_programmer": true,
+            "selection": []
+        });
+        assert!(serde_json::from_value::<ProgrammingCaptureModeProjection>(value).is_err());
+    }
+
+    #[test]
     fn no_change_outcome_does_not_serialize_a_projection_or_event_sequence() {
         let outcome = ProgrammingValuesActionOutcome {
             request_id: "request-2".into(),
             correlation_id: Uuid::from_u128(2),
             revision: 7,
+            capture_mode_revision: 3,
             outcome: ProgrammingValuesActionState::NoChange,
             replayed: false,
             warning: None,

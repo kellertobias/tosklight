@@ -1,18 +1,17 @@
 import type {
-	ProgrammerValueTiming,
 	ProgrammerValuesActionOutcome,
 	ProgrammerValuesActionRequest,
 	ProgrammerValuesEventMessage,
 	ProgrammerValuesMutation,
-	ProgrammerValuesProjection,
 	ProgrammerValuesSnapshot,
+	ProgrammerValueTiming,
 } from "../features/programmerValues/contracts";
 import type {
 	ProgrammingValueMutation as WireProgrammingValueMutation,
-	ProgrammingValueTiming as WireProgrammingValueTiming,
 	ProgrammingValuesAction as WireProgrammingValuesAction,
 	ProgrammingValuesActionRequest as WireProgrammingValuesActionRequest,
 	ProgrammingValuesErrorKind as WireProgrammingValuesErrorKind,
+	ProgrammingValueTiming as WireProgrammingValueTiming,
 } from "./generated/light-wire";
 import {
 	arrayAt,
@@ -44,6 +43,7 @@ export interface ProgrammerValuesErrorResponse {
 	kind: ProgrammerValuesErrorKind;
 	error: string;
 	currentRevision: number | null;
+	currentCaptureModeRevision: number | null;
 	retryable: boolean;
 }
 
@@ -82,6 +82,10 @@ export function decodeProgrammerValuesActionOutcome(
 			"$.correlation_id",
 		),
 		revision: integerAt(response.revision, "$.revision"),
+		captureModeRevision: integerAt(
+			response.capture_mode_revision,
+			"$.capture_mode_revision",
+		),
 		replayed: booleanAt(response.replayed, "$.replayed"),
 		warning: optionalString(response, "warning", "$"),
 	};
@@ -120,6 +124,13 @@ export function decodeProgrammerValuesErrorResponse(
 			response.current_revision == null
 				? null
 				: integerAt(response.current_revision, "$.current_revision"),
+		currentCaptureModeRevision:
+			response.current_capture_mode_revision == null
+				? null
+				: integerAt(
+						response.current_capture_mode_revision,
+						"$.current_capture_mode_revision",
+					),
 		retryable: booleanAt(response.retryable, "$.retryable"),
 	};
 }
@@ -152,6 +163,7 @@ export function encodeProgrammerValuesActionRequest(
 	return {
 		request_id: request.requestId,
 		expected_revision: request.expectedRevision,
+		expected_capture_mode_revision: request.expectedCaptureModeRevision,
 		action: encodeAction(request.action),
 	};
 }
@@ -285,6 +297,10 @@ function validateRequest(request: ProgrammerValuesActionRequest) {
 			request.requestId,
 		);
 	integerAt(request.expectedRevision, "$.expectedRevision");
+	integerAt(
+		request.expectedCaptureModeRevision,
+		"$.expectedCaptureModeRevision",
+	);
 }
 
 function encodeAction(

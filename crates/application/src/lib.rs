@@ -83,15 +83,18 @@ pub use playback::{
 };
 pub use programming::{
     CueMoveCopyChoice, CueTransferOperation, ExecutionPolicy, ProgrammingAction,
+    ProgrammingCaptureModeChange, ProgrammingCaptureModeProjection, ProgrammingCaptureModeSnapshot,
     ProgrammingChoiceOption, ProgrammingChoiceOptionId, ProgrammingCommand, ProgrammingExecution,
     ProgrammingInteractionChange, ProgrammingInteractionProjection, ProgrammingInteractionResult,
+    ProgrammingLifecycleCompletion, ProgrammingLifecycleResult, ProgrammingLifecycleTarget,
     ProgrammingLiveSnapshot, ProgrammingOutcome, ProgrammingPorts, ProgrammingReconciliation,
     ProgrammingResult, ProgrammingSelectionEnvironment, ProgrammingSelectionQuery,
     ProgrammingSelectionRefreshEvent, ProgrammingSelectionRefreshResult,
     ProgrammingSelectionTarget, ProgrammingService, ProgrammingValueMutation,
     ProgrammingValueTiming, ProgrammingValuesChange, ProgrammingValuesCommand,
     ProgrammingValuesEnvironment, ProgrammingValuesOutcome, ProgrammingValuesProjection,
-    ProgrammingValuesResult, ProgrammingValuesSnapshot, SelectionGestureSource,
+    ProgrammingValuesRequest, ProgrammingValuesResult, ProgrammingValuesSnapshot,
+    SelectionGestureSource,
 };
 pub use scheduling::{
     MonotonicClock, MonotonicMoment, MonotonicScheduler, SchedulerError, SchedulerErrorKind,

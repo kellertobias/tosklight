@@ -83,15 +83,9 @@ impl ProgrammingService {
 pub(super) fn reconciliation(
     before: &Snapshot,
     mutated: &Snapshot,
-    outcome: &ProgrammingOutcome,
+    _outcome: &ProgrammingOutcome,
 ) -> Option<ProgrammingReconciliation> {
-    if matches!(
-        outcome,
-        ProgrammingOutcome::Accepted {
-            action: ProgrammingAction::PreloadEntered | ProgrammingAction::PreloadCommitted,
-            ..
-        }
-    ) {
+    if before.capture_mode != mutated.capture_mode {
         return Some(ProgrammingReconciliation::CaptureModeChanged);
     }
     (before.selection_revision != mutated.selection_revision)

@@ -2,8 +2,8 @@ use super::super::{ProgrammingAction, ProgrammingCommand, ProgrammingOutcome, Pr
 use crate::{ActionContext, ActionEnvelope, ActionError, ActionErrorKind};
 use light_core::{SessionId, UserId};
 use light_programmer::{
-    CommandLineReplaceError, CommandLineState, ProgrammerRegistry, ProgrammerSelection,
-    SelectionReplaceError,
+    CommandLineReplaceError, CommandLineState, ProgrammerCaptureMode, ProgrammerRegistry,
+    ProgrammerSelection, SelectionReplaceError,
 };
 use std::collections::{HashMap, VecDeque};
 use uuid::Uuid;
@@ -108,6 +108,7 @@ pub(super) fn selection_replace_error(error: SelectionReplaceError) -> ActionErr
 pub(super) struct Snapshot {
     pub(super) command_line: CommandLineState,
     pub(super) selection_revision: u64,
+    pub(super) capture_mode: ProgrammerCaptureMode,
     pub(super) values_generation: u64,
 }
 
@@ -130,6 +131,7 @@ impl Snapshot {
         Ok(Self {
             command_line: version.command_line,
             selection_revision: version.selection_revision,
+            capture_mode: version.capture_mode,
             values_generation: programmers
                 .normal_values_generation(session)
                 .ok_or_else(unknown_programmer)?,
@@ -152,6 +154,7 @@ impl Snapshot {
             selection_revision: after.selection_revision,
             selection,
             interaction_event_sequence: None,
+            capture_mode_event_sequence: None,
             values_event_sequence: None,
             replayed: false,
         }

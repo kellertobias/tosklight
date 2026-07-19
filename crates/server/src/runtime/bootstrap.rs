@@ -220,6 +220,8 @@ fn build_app_state(
         #[cfg(test)]
         active_show_http_lifecycle: Arc::default(),
         #[cfg(test)]
+        preload_store_release_lifecycle: Arc::default(),
+        #[cfg(test)]
         patch_lifecycle: Arc::default(),
         audit_events: Arc::new(Mutex::new(VecDeque::with_capacity(2048))),
         command_history: Arc::new(Mutex::new(HashMap::new())),

@@ -4,8 +4,8 @@ import {
 	useProgrammerValuesActions,
 	useProgrammerValuesView,
 } from "../features/programmerValues/ProgrammerValuesView";
-import { ServerProvider, useServer } from "./ServerContext";
 import { LightApiClient } from "./LightApiClient";
+import { ServerProvider, useServer } from "./ServerContext";
 
 const SHOW_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const USER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -15,6 +15,8 @@ const boundaries = vi.hoisted(() => ({
 	loadValues: vi.fn(),
 	applyValues: vi.fn(),
 	subscribeValues: vi.fn(),
+	loadCaptureMode: vi.fn(),
+	subscribeCaptureMode: vi.fn(),
 }));
 
 vi.mock("../features/server/useServerPolling", () => ({
@@ -91,10 +93,15 @@ vi.mock("./useServerFeatureBoundaries", () => ({
 		playbackTransport: null,
 		programmingTransport: null,
 		programmerValuesTransport: { subscribe: boundaries.subscribeValues },
+		programmerCaptureModeTransport: {
+			subscribe: boundaries.subscribeCaptureMode,
+		},
 		programmerValuesAuthorityKey: "server-session-a",
+		programmerCaptureModeAuthorityKey: "server-session-a",
 		loadPlaybackSnapshot: vi.fn(),
 		loadProgrammingInteractionSnapshot: vi.fn(),
 		loadProgrammerValuesSnapshot: boundaries.loadValues,
+		loadProgrammerCaptureModeSnapshot: boundaries.loadCaptureMode,
 		applyProgrammerValuesAction: boundaries.applyValues,
 		loadShowObjectCollection: vi.fn(),
 		loadShowObject: vi.fn(),
@@ -104,6 +111,7 @@ vi.mock("./useServerFeatureBoundaries", () => ({
 		reportProgrammingMutationError: vi.fn(),
 		reportProgrammerValuesSessionError: vi.fn(),
 		reportProgrammerValuesMutationError: vi.fn(),
+		reportProgrammerCaptureModeSessionError: vi.fn(),
 	}),
 }));
 
@@ -145,16 +153,32 @@ function projection(revision: number) {
 	};
 }
 
+function captureModeProjection(revision: number) {
+	return {
+		userId: USER_ID,
+		revision,
+		blind: false,
+		preview: false,
+		preloadCaptureProgrammer: false,
+	};
+}
+
 describe("ServerProvider Programmer values boundary", () => {
 	it("is dormant until a values view mounts and isolates unrelated renders", async () => {
 		boundaries.loadValues.mockReset();
 		boundaries.applyValues.mockReset();
 		boundaries.subscribeValues.mockReset();
+		boundaries.loadCaptureMode.mockReset();
+		boundaries.subscribeCaptureMode.mockReset();
 		const broadBootstrap = vi.spyOn(LightApiClient.prototype, "bootstrap");
 		let observer: { message(value: unknown): void } | null = null;
 		boundaries.loadValues.mockResolvedValue({
 			cursor: 10,
 			projection: projection(1),
+		});
+		boundaries.loadCaptureMode.mockResolvedValue({
+			cursor: 9,
+			projection: captureModeProjection(1),
 		});
 		boundaries.subscribeValues.mockImplementation(
 			(_scope, _cursor, nextObserver) => {
@@ -162,6 +186,10 @@ describe("ServerProvider Programmer values boundary", () => {
 				return { close: vi.fn(), repair: vi.fn() };
 			},
 		);
+		boundaries.subscribeCaptureMode.mockReturnValue({
+			close: vi.fn(),
+			repair: vi.fn(),
+		});
 		unrelatedRenders = 0;
 		const rendered = render(<Harness showValues={false} />);
 		await waitFor(() =>
@@ -170,12 +198,16 @@ describe("ServerProvider Programmer values boundary", () => {
 
 		expect(boundaries.loadValues).not.toHaveBeenCalled();
 		expect(boundaries.subscribeValues).not.toHaveBeenCalled();
+		expect(boundaries.loadCaptureMode).not.toHaveBeenCalled();
+		expect(boundaries.subscribeCaptureMode).not.toHaveBeenCalled();
 		expect(broadBootstrap).not.toHaveBeenCalled();
 
 		rendered.rerender(<Harness showValues />);
 		await waitFor(() => expect(screen.getByText("1")).toBeInTheDocument());
 		expect(boundaries.loadValues).toHaveBeenCalledOnce();
 		expect(boundaries.subscribeValues).toHaveBeenCalledOnce();
+		expect(boundaries.loadCaptureMode).toHaveBeenCalledOnce();
+		expect(boundaries.subscribeCaptureMode).toHaveBeenCalledOnce();
 		const rendersBeforeEvent = unrelatedRenders;
 
 		act(() =>

@@ -54,12 +54,166 @@ async fn programmer_values_snapshot_rejects_foreign_user_and_missing_authenticat
 }
 
 #[tokio::test]
+async fn capture_mode_snapshot_is_user_owned_and_shared_between_the_users_desks() {
+    let scenario = CommandHttpScenario::new().await;
+    assert_eq!(
+        scenario
+            .press_key(&scenario.token, "PRE", "capture-mode-enter")
+            .await
+            .status(),
+        StatusCode::OK
+    );
+
+    let response = scenario.capture_mode_snapshot().await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()[header::ETAG], "\"1\"");
+    let snapshot: light_wire::v2::programming::ProgrammingCaptureModeSnapshot =
+        serde_json::from_value(json(response).await).unwrap();
+    assert_eq!(snapshot.cursor.sequence, 1);
+    assert_eq!(snapshot.projection.user_id, scenario.session.user.id.0);
+    assert_eq!(snapshot.projection.revision, 1);
+    assert!(snapshot.projection.blind);
+    assert!(!snapshot.projection.preview);
+    assert!(snapshot.projection.preload_capture_programmer);
+
+    let second_desk = scenario
+        .state
+        .desk
+        .lock()
+        .add_desk("Second capture desk", "second-capture")
+        .unwrap();
+    let (second_token, second_user) =
+        login_on_desk(&scenario, "Operator", second_desk.id).await;
+    let second = scenario
+        .capture_mode_snapshot_for(second_user, Some(&second_token))
+        .await;
+    assert_eq!(second.status(), StatusCode::OK);
+    let second: light_wire::v2::programming::ProgrammingCaptureModeSnapshot =
+        serde_json::from_value(json(second).await).unwrap();
+    assert_eq!(second.projection, snapshot.projection);
+
+    assert_eq!(
+        scenario
+            .capture_mode_snapshot_for(Uuid::new_v4(), Some(&scenario.token))
+            .await
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        scenario
+            .capture_mode_snapshot_for(scenario.session.user.id.0, None)
+            .await
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
+async fn capture_mode_event_is_user_scoped_replaceable_and_has_no_desk_scope() {
+    let scenario = CommandHttpScenario::new().await;
+    assert_eq!(
+        scenario
+            .press_key(&scenario.token, "PRE", "capture-event")
+            .await
+            .status(),
+        StatusCode::OK
+    );
+
+    let light_application::EventReplay::Events(events) = scenario
+        .state
+        .application_events
+        .replay(0, &light_application::EventFilter::default())
+    else {
+        panic!("the focused capture-mode event should remain replayable")
+    };
+    assert_eq!(events.len(), 1);
+    let event = &events[0];
+    assert_eq!(event.desk_id, None);
+    assert_eq!(event.delivery, light_application::DeliveryPolicy::Replaceable);
+    assert_eq!(
+        event.source,
+        light_application::EventSource::Action(light_application::ActionSource::Http)
+    );
+    assert_eq!(
+        event.object.as_ref().unwrap(),
+        &light_application::EventObject::programming_capture_mode(scenario.session.user.id.0)
+    );
+    let light_application::ApplicationEvent::Programming(
+        light_application::ProgrammingEvent::CaptureModeChanged(change),
+    ) = &event.payload
+    else {
+        panic!("expected one capture-mode projection event")
+    };
+    assert_eq!(change.projection.revision, 1);
+    assert!(change.projection.blind);
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
+async fn active_preload_rejects_normal_values_without_mutation_or_values_event() {
+    let scenario = CommandHttpScenario::new().await;
+    let fixture = scenario.install_direct_fixture();
+    assert_eq!(
+        scenario
+            .press_key(&scenario.token, "PRE", "preload-before-values")
+            .await
+            .status(),
+        StatusCode::OK
+    );
+
+    let stale_capture = serde_json::json!({
+        "request_id": "values-stale-preload-mode",
+        "expected_revision": 0,
+        "expected_capture_mode_revision": 0,
+        "action": {
+            "type": "set_fixture",
+            "fixture_id": fixture.0,
+            "attribute": "intensity",
+            "value": {"kind": "normalized", "value": 0.5}
+        }
+    });
+    let response = scenario.values_action(stale_capture).await;
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let error = json(response).await;
+    assert_eq!(error["current_revision"], 0);
+    assert_eq!(error["current_capture_mode_revision"], 1);
+
+    let matching_capture = serde_json::json!({
+        "request_id": "values-during-preload",
+        "expected_revision": 0,
+        "expected_capture_mode_revision": 1,
+        "action": {
+            "type": "set_fixture",
+            "fixture_id": fixture.0,
+            "attribute": "intensity",
+            "value": {"kind": "normalized", "value": 0.5}
+        }
+    });
+    let response = scenario.values_action(matching_capture).await;
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let error = json(response).await;
+    assert_eq!(error["current_revision"], 0);
+    assert_eq!(error["current_capture_mode_revision"], 1);
+
+    let snapshot = json(scenario.values_snapshot().await).await;
+    assert_eq!(snapshot["projection"]["revision"], 0);
+    assert!(snapshot["projection"]["fixture_values"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    assert_eq!(scenario.state.application_events.latest_sequence(), 1);
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
 async fn programmer_values_actions_are_atomic_revisioned_replay_safe_and_sparse_on_no_op() {
     let scenario = CommandHttpScenario::new().await;
     let fixture = scenario.install_direct_fixture();
     let set = serde_json::json!({
         "request_id": "values-set",
         "expected_revision": 0,
+        "expected_capture_mode_revision": 0,
         "action": {
             "type": "set_fixture",
             "fixture_id": fixture.0,
@@ -85,6 +239,7 @@ async fn programmer_values_actions_are_atomic_revisioned_replay_safe_and_sparse_
     let batch = serde_json::json!({
         "request_id": "values-batch",
         "expected_revision": 1,
+        "expected_capture_mode_revision": 0,
         "action": {
             "type": "batch",
             "mutations": [
@@ -106,6 +261,7 @@ async fn programmer_values_actions_are_atomic_revisioned_replay_safe_and_sparse_
     let clear = serde_json::json!({
         "request_id": "values-clear",
         "expected_revision": 2,
+        "expected_capture_mode_revision": 0,
         "action": {"type": "clear"}
     });
     let clear = json(scenario.values_action(clear).await).await;
@@ -114,6 +270,7 @@ async fn programmer_values_actions_are_atomic_revisioned_replay_safe_and_sparse_
     let no_op = serde_json::json!({
         "request_id": "values-clear-no-op",
         "expected_revision": 3,
+        "expected_capture_mode_revision": 0,
         "action": {"type": "clear"}
     });
     let no_op = json(scenario.values_action(no_op).await).await;
@@ -127,6 +284,7 @@ async fn programmer_values_actions_are_atomic_revisioned_replay_safe_and_sparse_
         .values_action(serde_json::json!({
             "request_id": "values-stale",
             "expected_revision": 2,
+            "expected_capture_mode_revision": 0,
             "action": {"type": "clear"}
         }))
         .await;
@@ -163,6 +321,7 @@ async fn programmer_values_http_shares_one_user_between_desks_and_isolates_other
     let second = serde_json::json!({
         "request_id": "desk-two",
         "expected_revision": 1,
+        "expected_capture_mode_revision": 0,
         "action": {
             "type": "set_group",
             "group_id": "1",
@@ -203,12 +362,141 @@ async fn programmer_values_http_shares_one_user_between_desks_and_isolates_other
             serde_json::json!({
                 "request_id": "forged-user",
                 "expected_revision": 1,
+                "expected_capture_mode_revision": 0,
                 "action": {"type": "clear"}
             }),
         )
         .await;
     assert_eq!(foreign.status(), StatusCode::FORBIDDEN);
     assert_eq!(json(foreign).await["kind"], "forbidden");
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
+async fn programmer_delete_recreates_same_user_desks_with_monotonic_exact_user_authority() {
+    let scenario = CommandHttpScenario::new().await;
+    let fixture = scenario.install_direct_fixture();
+    let second_desk = scenario
+        .state
+        .desk
+        .lock()
+        .add_desk("Lifecycle peer", "lifecycle-peer")
+        .unwrap();
+    let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
+    assert_eq!(second_user, scenario.session.user.id.0);
+    let second_session = scenario
+        .state
+        .sessions
+        .read()
+        .values()
+        .find(|session| session.token == second_token)
+        .unwrap()
+        .id;
+    let old_request = fixture_set_request("before-delete", 0, fixture.0, 0.4);
+    assert_eq!(
+        scenario.values_action(old_request.clone()).await.status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        scenario
+            .press_key(&scenario.token, "PRE", "before-delete-preload")
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    let cursor = scenario.state.application_events.latest_sequence();
+
+    let response = scenario
+        .app
+        .clone()
+        .oneshot(
+            Request::post(format!(
+                "/api/v1/programmers/{}/clear",
+                scenario.session.id.0
+            ))
+            .header(
+                header::AUTHORIZATION,
+                format!("Bearer {second_token}"),
+            )
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    let user_id = scenario.session.user.id;
+    assert_eq!(scenario.state.programmers.normal_values_revision(user_id), 2);
+    assert_eq!(scenario.state.programmers.capture_mode_revision(user_id), 2);
+    for session_id in [scenario.session.id, second_session] {
+        let programmer = scenario.state.programmers.get(session_id).unwrap();
+        assert!(programmer.values.is_empty());
+        assert!(programmer.group_values.is_empty());
+        assert_eq!(
+            scenario.state.programmers.capture_mode(session_id),
+            Some(Default::default())
+        );
+    }
+    let light_application::EventReplay::Events(events) = scenario
+        .state
+        .application_events
+        .replay(cursor, &light_application::EventFilter::default())
+    else {
+        panic!("the lifecycle events should remain replayable")
+    };
+    assert_eq!(events.len(), 2);
+    assert!(events.iter().all(|event| {
+        event.desk_id.is_none()
+            && event
+                .object
+                .as_ref()
+                .and_then(light_application::EventObject::programming_user_id)
+                == Some(user_id.0)
+    }));
+    let mut values_events = 0;
+    let mut capture_events = 0;
+    for event in &events {
+        match &event.payload {
+            light_application::ApplicationEvent::Programming(
+                light_application::ProgrammingEvent::ValuesChanged(change),
+            ) => {
+                values_events += 1;
+                assert_eq!(change.projection.revision, 2);
+                assert!(change.projection.fixture_values.is_empty());
+                assert!(change.projection.group_values.is_empty());
+            }
+            light_application::ApplicationEvent::Programming(
+                light_application::ProgrammingEvent::CaptureModeChanged(change),
+            ) => {
+                capture_events += 1;
+                assert_eq!(change.projection.revision, 2);
+                assert_eq!(change.projection.mode(), Default::default());
+            }
+            _ => panic!("unexpected Programmer lifecycle event"),
+        }
+    }
+    assert_eq!((values_events, capture_events), (1, 1));
+    assert_eq!(
+        scenario
+            .state
+            .audit_events
+            .lock()
+            .iter()
+            .filter(|event| event.kind == "programmer_cleared")
+            .count(),
+        1
+    );
+
+    let lifecycle_cursor = scenario.state.application_events.latest_sequence();
+    let stale = scenario.values_action(old_request).await;
+    assert_eq!(stale.status(), StatusCode::CONFLICT);
+    let stale = json(stale).await;
+    assert_eq!(stale["current_revision"], 2);
+    assert_eq!(stale["retryable"], false);
+    assert_eq!(
+        scenario.state.application_events.latest_sequence(),
+        lifecycle_cursor
+    );
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 
@@ -220,6 +508,7 @@ async fn programmer_values_wire_rejects_transient_or_mode_fields() {
         .values_action(serde_json::json!({
             "request_id": "forged-preload",
             "expected_revision": 0,
+            "expected_capture_mode_revision": 0,
             "action": {
                 "type": "set_fixture",
                 "fixture_id": fixture.0,
@@ -240,6 +529,7 @@ fn assert_values_changed(value: &serde_json::Value, request_id: &str, revision: 
     assert_eq!(value["request_id"], request_id);
     assert_eq!(value["status"], "changed");
     assert_eq!(value["revision"], revision);
+    assert_eq!(value["capture_mode_revision"], 0);
     assert_eq!(value["projection"]["revision"], revision);
     assert_eq!(value["event_sequence"], sequence);
 }
@@ -253,6 +543,7 @@ fn fixture_set_request(
     serde_json::json!({
         "request_id": request_id,
         "expected_revision": expected_revision,
+        "expected_capture_mode_revision": 0,
         "action": {
             "type": "set_fixture",
             "fixture_id": fixture_id,

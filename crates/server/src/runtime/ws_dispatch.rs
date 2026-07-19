@@ -83,7 +83,6 @@ fn dispatch_ws_payload(
         "programmer.set" => ws_programmer_set(state, session, command),
         "programmer.set_many" => ws_programmer_set_many(state, session, command),
         "programmer.set_value" => ws_programmer_set_value(state, session, command),
-        "programmer.control_action" => ws_programmer_control_action(state, session, command),
         "preset.generate_fixture_values" => {
             ws_preset_generate_fixture_values(state, session, command)
         }
@@ -175,7 +174,7 @@ fn dispatch_validated_ws_command(
     if !PROGRAMMING_INTERACTION_COMMANDS.contains(&command.command.as_str()) {
         return WsProgrammingOutput::untracked(dispatch_ws_payload(state, session, command, None));
     }
-    let _activation = match programming_activation(state) {
+    let _activation = match try_programming_activation(state) {
         Ok(activation) => activation,
         Err(error) => return WsProgrammingOutput::untracked(Err(error)),
     };
@@ -194,14 +193,6 @@ fn dispatch_validated_ws_command(
     }
 }
 
-fn programming_activation(state: &AppState) -> Result<tokio::sync::OwnedMutexGuard<()>, String> {
-    state
-        .activation_lock
-        .clone()
-        .try_lock_owned()
-        .map_err(|_| "the active show is changing; retry the Programmer action".to_owned())
-}
-
 fn dispatch_live_interaction(
     state: &AppState,
     session: &Session,
@@ -209,7 +200,7 @@ fn dispatch_live_interaction(
     context: &light_application::ActionContext,
 ) -> WsProgrammingOutput {
     let before = tracked_state(state, session);
-    let mut response = dispatch_ws_payload(state, session, command, Some(context));
+    let (mut response, transient_changed) = dispatch_live_payload(state, session, command, context);
     if let Err(error) = persist_undo_redo(state, session, command, &response) {
         response = Err(error);
     }
@@ -217,7 +208,28 @@ fn dispatch_live_interaction(
     reconcile_interaction(state, session, command, &before, &mutated, response.is_ok());
     WsProgrammingOutput {
         response,
-        changes: Vec::new(),
+        changes: transient_changed
+            .then_some("transient_control")
+            .into_iter()
+            .collect(),
+    }
+}
+
+fn dispatch_live_payload(
+    state: &AppState,
+    session: &Session,
+    command: &WsCommand,
+    context: &light_application::ActionContext,
+) -> (Result<serde_json::Value, String>, bool) {
+    if command.command != "programmer.control_action" {
+        return (
+            dispatch_ws_payload(state, session, command, Some(context)),
+            false,
+        );
+    }
+    match ws_programmer_control_action(state, session, command) {
+        Ok(result) => (Ok(result.payload), result.transient_changed),
+        Err(error) => (Err(error), false),
     }
 }
 
@@ -364,10 +376,8 @@ impl WsTrackedState {
             .map(|state| state.selection_revision)
     }
 
-    fn capture_mode(&self) -> Option<bool> {
-        self.interaction
-            .as_ref()
-            .map(|state| state.capture_mode_active)
+    fn capture_mode(&self) -> Option<light_programmer::ProgrammerCaptureMode> {
+        self.interaction.as_ref().map(|state| state.capture_mode)
     }
 }
 

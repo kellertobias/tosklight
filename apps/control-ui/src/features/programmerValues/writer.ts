@@ -1,3 +1,4 @@
+import type { ProgrammerCaptureModeStore } from "../programmerCaptureMode/store";
 import type {
 	BatchProgrammerValuesInput,
 	ProgrammerValuesActionOutcome,
@@ -13,32 +14,51 @@ import type {
 import { predictProgrammerValues } from "./prediction";
 import type { ProgrammerValuesStore } from "./store";
 import { ProgrammerValuesProtocolError } from "./transport";
+import {
+	awaitProgrammerAuthorityRepairs,
+	ProgrammerValuesCaptureAuthority,
+} from "./writerCaptureAuthority";
+import {
+	isReplayableValuesError,
+	programmerValuesError,
+	programmerValuesReadinessError,
+	requiresValuesAuthorityRepair,
+} from "./writerPolicy";
 
 interface QueuedValuesWrite {
 	requestId: string;
 	action: ProgrammerValuesCommand;
+	expectedCaptureModeRevision: number;
 	resolve(outcome: ProgrammerValuesActionOutcome | null): void;
 }
 
 export interface ProgrammerValuesWriterOptions {
 	scope: ProgrammerValuesScope;
 	store: ProgrammerValuesStore;
+	captureModeStore: ProgrammerCaptureModeStore;
 	applyAction(
 		scope: ProgrammerValuesScope,
 		request: ProgrammerValuesActionRequest,
 	): Promise<ProgrammerValuesActionOutcome>;
 	repair(error: Error): Promise<void>;
+	repairCaptureMode(error: Error): Promise<void>;
 	onError?: (error: Error | null) => void;
 }
 
 /** One replay-safe FIFO for every normal Programmer values mutation surface. */
 export class ProgrammerValuesWriter implements ProgrammerValuesActions {
 	private readonly queue: QueuedValuesWrite[] = [];
+	private readonly captureAuthority: ProgrammerValuesCaptureAuthority;
 	private storeScope: number | null = null;
 	private running = false;
 	private stopped = false;
-
-	constructor(private readonly options: ProgrammerValuesWriterOptions) {}
+	constructor(private readonly options: ProgrammerValuesWriterOptions) {
+		this.captureAuthority = new ProgrammerValuesCaptureAuthority({
+			scope: options.scope,
+			store: options.captureModeStore,
+			repair: options.repairCaptureMode,
+		});
+	}
 
 	setFixtureValue(input: SetProgrammerFixtureValueInput) {
 		return this.enqueue(input.requestId, {
@@ -89,31 +109,52 @@ export class ProgrammerValuesWriter implements ProgrammerValuesActions {
 
 	stop() {
 		this.stopped = true;
-		for (const write of this.queue) write.resolve(null);
+		for (const write of this.queue) {
+			this.abandon(write.requestId);
+			write.resolve(null);
+		}
 		this.queue.length = 0;
 	}
 
 	private enqueue(requestId: string, action: ProgrammerValuesCommand) {
-		if (this.stopped || !this.claimScope()) return Promise.resolve(null);
+		if (this.stopped || !this.claimScopes()) return Promise.resolve(null);
 		if (!requestId) {
-			this.options.onError?.(new Error("A Programmer values request ID is required"));
+			this.options.onError?.(
+				new Error("A Programmer values request ID is required"),
+			);
 			return Promise.resolve(null);
 		}
+		const valuesError = this.valuesReadinessError();
+		if (valuesError) return this.refuse(valuesError.message);
+		const captureMode = this.captureAuthority.readyProjection();
+		if (!captureMode)
+			return this.refuse(
+				"Authoritative Programmer capture mode is unavailable",
+			);
+		const captureError = this.captureAuthority.preconditionError(
+			captureMode.revision,
+		);
+		if (captureError) return this.refuse(captureError.message);
 		try {
 			if (
 				!this.options.store.beginOptimistic(
 					requestId,
 					predictProgrammerValues(action),
-					this.expectedScope(),
+					this.expectedStoreScope(),
 				)
 			)
 				return Promise.resolve(null);
 		} catch (reason) {
-			this.options.onError?.(asError(reason));
+			this.options.onError?.(programmerValuesError(reason));
 			return Promise.resolve(null);
 		}
 		return new Promise<ProgrammerValuesActionOutcome | null>((resolve) => {
-			this.queue.push({ requestId, action, resolve });
+			this.queue.push({
+				requestId,
+				action,
+				expectedCaptureModeRevision: captureMode.revision,
+				resolve,
+			});
 			this.start();
 		});
 	}
@@ -126,36 +167,53 @@ export class ProgrammerValuesWriter implements ProgrammerValuesActions {
 
 	private async drain() {
 		while (!this.stopped && this.queue.length) {
-			const write = this.queue.shift();
+			const write = this.queue[0];
 			if (!write) break;
-			write.resolve(await this.send(write));
+			const outcome = await this.send(write);
+			if (this.queue[0] === write) this.queue.shift();
+			write.resolve(outcome);
 		}
 		this.running = false;
 	}
 
 	private async send(write: QueuedValuesWrite) {
-		if (!this.scopeIsCurrent()) return null;
+		if (!this.scopesAreCurrent()) return this.abandon(write.requestId);
+		const precondition =
+			this.valuesReadinessError() ??
+			this.captureAuthority.preconditionError(
+				write.expectedCaptureModeRevision,
+			);
+		if (precondition) {
+			this.options.store.rollback(
+				write.requestId,
+				precondition,
+				this.expectedStoreScope(),
+			);
+			this.options.onError?.(precondition);
+			return null;
+		}
 		try {
 			const request = this.requestAtCurrentRevision(write);
 			const outcome = await this.requestWithOneReplay(request);
-			if (!this.scopeIsCurrent()) return null;
-			this.assertResponse(write.requestId, outcome);
+			if (!this.scopesAreCurrent()) return this.abandon(write.requestId);
+			this.assertResponse(request, outcome);
 			await this.settle(write.requestId, outcome);
-			if (!this.scopeIsCurrent()) return null;
+			if (!this.scopesAreCurrent()) return null;
 			this.options.onError?.(
 				outcome.warning ? new Error(outcome.warning) : null,
 			);
 			return outcome;
 		} catch (reason) {
-			if (!this.scopeIsCurrent()) return null;
-			const error = asError(reason);
-			const reported = requiresRepair(reason)
+			if (!this.scopesAreCurrent()) return this.abandon(write.requestId);
+			const error = programmerValuesError(reason);
+			const reported = requiresValuesAuthorityRepair(reason)
 				? await this.repairError(error)
 				: error;
+			if (!this.scopesAreCurrent()) return this.abandon(write.requestId);
 			this.options.store.rollback(
 				write.requestId,
 				reported,
-				this.expectedScope(),
+				this.expectedStoreScope(),
 			);
 			this.options.onError?.(reported);
 			return null;
@@ -166,22 +224,23 @@ export class ProgrammerValuesWriter implements ProgrammerValuesActions {
 		write: QueuedValuesWrite,
 	): ProgrammerValuesActionRequest {
 		const expectedRevision = this.options.store.authoritativeRevision(
-			this.expectedScope(),
+			this.expectedStoreScope(),
 		);
 		if (expectedRevision == null)
 			throw new Error("Authoritative Programmer values are unavailable");
 		return {
 			requestId: write.requestId,
 			expectedRevision,
+			expectedCaptureModeRevision: write.expectedCaptureModeRevision,
 			action: write.action,
 		};
 	}
-
 	private async requestWithOneReplay(request: ProgrammerValuesActionRequest) {
 		try {
 			return await this.options.applyAction(this.options.scope, request);
 		} catch (reason) {
-			if (!isReplayable(reason) || !this.scopeIsCurrent()) throw reason;
+			if (!isReplayableValuesError(reason) || !this.scopesAreCurrent())
+				throw reason;
 			return this.options.applyAction(this.options.scope, request);
 		}
 	}
@@ -196,22 +255,25 @@ export class ProgrammerValuesWriter implements ProgrammerValuesActions {
 						requestId,
 						outcome.projection,
 						outcome.eventSequence,
-						this.expectedScope(),
+						this.expectedStoreScope(),
 					)
 				: this.options.store.settleNoChange(
 						requestId,
 						outcome.revision,
-						this.expectedScope(),
+						this.expectedStoreScope(),
 					);
 		if (settlement !== "repair") return;
-		await this.repair(new ProgrammerValuesProtocolError("Programmer values outcome requires repair"));
+		await this.repairAuthorities(
+			new ProgrammerValuesProtocolError(
+				"Programmer values outcome requires repair",
+			),
+		);
 		settlement = this.settleAfterRepair(requestId, outcome);
 		if (settlement === "repair")
 			throw new ProgrammerValuesProtocolError(
 				"Programmer values outcome still conflicts after repair",
 			);
 	}
-
 	private settleAfterRepair(
 		requestId: string,
 		outcome: ProgrammerValuesActionOutcome,
@@ -221,70 +283,97 @@ export class ProgrammerValuesWriter implements ProgrammerValuesActions {
 					requestId,
 					outcome.projection,
 					outcome.eventSequence,
-					this.expectedScope(),
+					this.expectedStoreScope(),
 				)
 			: this.options.store.settleNoChange(
 					requestId,
 					outcome.revision,
-					this.expectedScope(),
+					this.expectedStoreScope(),
 				);
 	}
 
 	private assertResponse(
-		requestId: string,
+		request: ProgrammerValuesActionRequest,
 		outcome: ProgrammerValuesActionOutcome,
 	) {
-		if (outcome.requestId !== requestId)
+		if (outcome.requestId !== request.requestId)
 			throw new ProgrammerValuesProtocolError(
 				"Programmer values response request identity does not match",
 			);
-		if (outcome.status === "changed" && outcome.projection.revision !== outcome.revision)
+		if (outcome.captureModeRevision !== request.expectedCaptureModeRevision)
+			throw new ProgrammerValuesProtocolError(
+				"Programmer values response capture-mode revision does not match",
+			);
+		if (
+			outcome.status === "changed" &&
+			outcome.projection.revision !== outcome.revision
+		)
 			throw new ProgrammerValuesProtocolError(
 				"Programmer values response revisions do not match",
 			);
 	}
 
-	private async repair(error: Error) {
-		try {
-			await this.options.repair(error);
-		} catch (reason) {
-			throw new Error(
-				`Programmer values repair failed: ${asError(reason).message}`,
-			);
-		}
+	private async repairAuthorities(error: Error) {
+		await awaitProgrammerAuthorityRepairs([
+			this.options.repair(error),
+			this.captureAuthority.repair(error),
+		]);
 	}
-
 	private async repairError(error: Error) {
 		try {
-			await this.options.repair(error);
+			await this.repairAuthorities(error);
 			return error;
 		} catch (reason) {
 			return new Error(
-				`Programmer values repair failed: ${asError(reason).message}`,
+				`Programmer authority repair failed: ${programmerValuesError(reason).message}`,
 			);
 		}
 	}
 
-	private claimScope() {
+	private claimScopes() {
 		const state = this.options.store.getSnapshot();
+		const captureModeState = this.options.captureModeStore.getSnapshot();
 		if (
 			state.showId !== this.options.scope.showId ||
-			state.userId !== this.options.scope.userId
+			state.userId !== this.options.scope.userId ||
+			captureModeState.showId !== this.options.scope.showId ||
+			captureModeState.userId !== this.options.scope.userId
 		)
 			return false;
 		this.storeScope ??= this.options.store.captureScope();
-		return true;
+		return this.captureAuthority.claimScope();
+	}
+	private refuse(message: string) {
+		const error = new Error(message);
+		this.options.onError?.(error);
+		return Promise.resolve(null);
 	}
 
-	private scopeIsCurrent() {
+	private abandon(requestId: string) {
+		if (this.options.store.isScopeCurrent(this.expectedStoreScope()))
+			this.options.store.commit(
+				requestId,
+				undefined,
+				this.expectedStoreScope(),
+			);
+		return null;
+	}
+	private scopesAreCurrent() {
 		return (
 			!this.stopped &&
-			this.claimScope() &&
-			this.options.store.isScopeCurrent(this.expectedScope())
+			this.claimScopes() &&
+			this.options.store.isScopeCurrent(this.expectedStoreScope()) &&
+			this.captureAuthority.isScopeCurrent()
+		);
+	}
+	private valuesReadinessError() {
+		return programmerValuesReadinessError(
+			this.options.store,
+			this.expectedStoreScope(),
 		);
 	}
 
-	private expectedScope() {
+	private expectedStoreScope() {
 		return this.storeScope ?? -1;
 	}
 }
@@ -299,20 +388,4 @@ function timing(input: {
 		fadeMillis: input.fadeMillis,
 		delayMillis: input.delayMillis,
 	};
-}
-
-function isReplayable(reason: unknown) {
-	if (!reason || typeof reason !== "object") return true;
-	if ("retryable" in reason) return (reason as { retryable?: unknown }).retryable === true;
-	return !("status" in reason);
-}
-
-function requiresRepair(reason: unknown) {
-	if (!reason || typeof reason !== "object") return true;
-	const status = "status" in reason ? (reason as { status?: unknown }).status : null;
-	return status === null || status === 408 || status === 409 || (typeof status === "number" && status >= 500);
-}
-
-function asError(reason: unknown) {
-	return reason instanceof Error ? reason : new Error(String(reason));
 }

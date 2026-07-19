@@ -3,6 +3,14 @@
   "title": "ProgrammingValuesErrorResponse",
   "type": "object",
   "properties": {
+    "current_capture_mode_revision": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
     "current_revision": {
       "type": [
         "integer",

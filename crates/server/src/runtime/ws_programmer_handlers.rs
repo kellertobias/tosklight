@@ -215,11 +215,16 @@ pub(super) fn ws_programmer_set_value(
     Ok(serde_json::json!({"programmer":state.programmers.get(session.id)}))
 }
 
+pub(super) struct WsControlActionResult {
+    pub(super) payload: serde_json::Value,
+    pub(super) transient_changed: bool,
+}
+
 pub(super) fn ws_programmer_control_action(
     state: &AppState,
     session: &Session,
     command: &WsCommand,
-) -> Result<serde_json::Value, String> {
+) -> Result<WsControlActionResult, String> {
     #[derive(Deserialize)]
     struct Input {
         fixture_id: light_core::FixtureId,
@@ -236,22 +241,26 @@ pub(super) fn ws_programmer_control_action(
         input.active,
     )?;
     let transient_source = format!("fixture-control:{}:{}", input.fixture_id.0, input.action_id);
-    let transient_generation = match (kind, input.active) {
+    let (transient_generation, transient_changed) = match (kind, input.active) {
         (light_fixture::ControlActionKind::Latched, _) => {
             state.programmers.set_many(session.id, assignments);
             persist_programmer(state, session).map_err(|e| e.message)?;
-            None
+            (None, false)
         }
-        (_, true) => state.programmers.set_transient_action(
-            session.id,
-            transient_source.clone(),
-            assignments,
-        ),
+        (_, true) => {
+            let generation = state.programmers.set_transient_action(
+                session.id,
+                transient_source.clone(),
+                assignments,
+            );
+            (generation, generation.is_some())
+        }
         (_, false) => {
-            state
-                .programmers
-                .release_transient_action(session.id, &transient_source, None);
-            None
+            let changed =
+                state
+                    .programmers
+                    .release_transient_action(session.id, &transient_source, None);
+            (None, changed)
         }
     };
     if let (Some(duration_millis), Some(generation)) = (pulse_duration, transient_generation) {
@@ -279,13 +288,16 @@ pub(super) fn ws_programmer_control_action(
             );
         });
     }
-    Ok(serde_json::json!({
-        "action_id":input.action_id,
-        "active":input.active,
-        "kind":kind,
-        "pulse_duration_millis":pulse_duration,
-        "programmer":state.programmers.get(session.id),
-    }))
+    Ok(WsControlActionResult {
+        payload: serde_json::json!({
+            "action_id":input.action_id,
+            "active":input.active,
+            "kind":kind,
+            "pulse_duration_millis":pulse_duration,
+            "programmer":state.programmers.get(session.id),
+        }),
+        transient_changed,
+    })
 }
 
 pub(super) fn ws_preset_generate_fixture_values(

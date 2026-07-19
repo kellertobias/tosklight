@@ -2,9 +2,9 @@ use super::*;
 use light_application::{
     ActionContext, ActionSource, ActiveShowObjectChange, ActiveShowObjectKind,
     ActiveShowObjectsChange, EventBus, EventDraft, OutputRuntimeChange, OutputRuntimeIdentity,
-    OutputRuntimeProjection, OutputRuntimeScope, PatchChange, ProgrammingInteractionChange,
-    ProgrammingValuesChange, ProgrammingValuesProjection, SelectiveShowImportChange,
-    SelectiveShowObjectChange,
+    OutputRuntimeProjection, OutputRuntimeScope, PatchChange, ProgrammingCaptureModeChange,
+    ProgrammingCaptureModeProjection, ProgrammingInteractionChange, ProgrammingValuesChange,
+    ProgrammingValuesProjection, SelectiveShowImportChange, SelectiveShowObjectChange,
 };
 use light_core::{AttributeKey, AttributeValue, ShowId, UserId};
 use light_show::PortableShowObjectKey;
@@ -331,6 +331,51 @@ fn programming_values_keep_user_scope_full_projection_and_action_identity() {
     assert!(value.fade);
     assert_eq!(value.fade_millis, Some(1_000));
     assert_eq!(value.delay_millis, Some(250));
+}
+
+#[test]
+fn programming_capture_mode_keeps_user_scope_projection_and_action_identity() {
+    let bus = EventBus::new(4);
+    let context = context(ActionSource::Http);
+    let user_id = UserId(Uuid::from_u128(3));
+    let event = bus.publish(EventDraft::programming_capture_mode_changed(
+        &context,
+        ProgrammingCaptureModeChange {
+            projection: ProgrammingCaptureModeProjection {
+                user_id,
+                revision: 4,
+                blind: true,
+                preview: false,
+                preload_capture_programmer: true,
+            }
+            .into(),
+        },
+    ));
+
+    let Some(wire::EventServerMessage::Event { event }) =
+        wire_delivery(application::SubscriptionDelivery::Event(event))
+    else {
+        panic!("expected a Programmer capture-mode delivery")
+    };
+    assert_eq!(event.desk_id, None);
+    assert_eq!(event.class, wire::EventClass::Projection);
+    assert_eq!(event.delivery, wire::EventDeliveryPolicy::Replaceable);
+    assert_eq!(event.correlation_id, Some(context.correlation_id));
+    assert_eq!(
+        event.object,
+        Some(wire::EventObject {
+            capability: wire::EventCapability::Programmer,
+            id: format!("programming-capture-mode:{}", user_id.0),
+        })
+    );
+    let wire::EventPayload::ProgrammingCaptureModeChanged { change } = event.payload else {
+        panic!("expected a Programmer capture-mode payload")
+    };
+    assert_eq!(change.projection.user_id, user_id.0);
+    assert_eq!(change.projection.revision, 4);
+    assert!(change.projection.blind);
+    assert!(!change.projection.preview);
+    assert!(change.projection.preload_capture_programmer);
 }
 
 #[test]

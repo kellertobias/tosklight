@@ -429,6 +429,67 @@ async fn compatibility_programmer_changed_reports_only_authoritative_changed_pro
 }
 
 #[tokio::test]
+async fn transient_control_retriggers_emit_compatibility_only_and_repeated_release_is_quiet() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = authenticate_token(&state, &token).unwrap();
+    let (fixture, action_id, _) = schema_v2_direct_fixture();
+    let fixture_id = fixture.fixture_id;
+    state
+        .engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture],
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+    let changed_count = || {
+        state
+            .audit_events
+            .lock()
+            .iter()
+            .filter(|event| event.kind == "programmer_changed")
+            .count()
+    };
+    let command = |request_id: &str, active: bool| WsCommand {
+        protocol_version: 1,
+        request_id: request_id.into(),
+        session_id: session.id,
+        expected_revision: None,
+        command: "programmer.control_action".into(),
+        payload: serde_json::json!({
+            "fixture_id": fixture_id,
+            "action_id": action_id,
+            "active": active,
+        }),
+    };
+
+    for (request_id, active, expected_changes) in [
+        ("momentary-on", true, 1),
+        ("momentary-retrigger", true, 2),
+        ("momentary-off", false, 3),
+        ("momentary-off-again", false, 3),
+    ] {
+        let response = dispatch_ws_command(&state, &session, command(request_id, active));
+        assert!(response.ok, "{:?}", response.error);
+        assert_eq!(changed_count(), expected_changes);
+    }
+    assert_eq!(state.application_events.latest_sequence(), 0);
+    let changes = state
+        .audit_events
+        .lock()
+        .iter()
+        .filter(|event| event.kind == "programmer_changed")
+        .map(|event| event.payload["changes"].clone())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        changes,
+        vec![serde_json::json!(["transient_control"]); 3]
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn direct_programmer_writes_resolve_configured_fade_for_recording() {
     let (state, data_dir) = test_state();
     state

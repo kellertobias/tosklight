@@ -1,4 +1,5 @@
-use super::super::{ProgrammingValuesCommand, ProgrammingValuesResult};
+use super::super::{ProgrammingValuesRequest, ProgrammingValuesResult};
+use super::ProgrammingService;
 use crate::{ActionError, ActionErrorKind};
 use light_core::{SessionId, UserId};
 use std::collections::{HashMap, VecDeque};
@@ -15,7 +16,7 @@ struct ReplayKey {
 
 struct ReplayEntry {
     expected_revision: u64,
-    command: ProgrammingValuesCommand,
+    request: ProgrammingValuesRequest,
     result: ProgrammingValuesResult,
 }
 
@@ -26,6 +27,11 @@ pub(super) struct ValuesReplayCache {
 }
 
 impl ValuesReplayCache {
+    pub(super) fn invalidate_user(&mut self, user_id: UserId) {
+        self.entries.retain(|key, _| key.user_id != user_id);
+        self.order.retain(|key| key.user_id != user_id);
+    }
+
     pub(super) fn get(
         &self,
         user_id: UserId,
@@ -33,7 +39,7 @@ impl ValuesReplayCache {
         session_id: SessionId,
         request_id: &str,
         expected_revision: u64,
-        command: &ProgrammingValuesCommand,
+        request: &ProgrammingValuesRequest,
     ) -> Result<Option<ProgrammingValuesResult>, ActionError> {
         let key = ReplayKey {
             user_id,
@@ -44,7 +50,7 @@ impl ValuesReplayCache {
         let Some(entry) = self.entries.get(&key) else {
             return Ok(None);
         };
-        if entry.expected_revision != expected_revision || entry.command != *command {
+        if entry.expected_revision != expected_revision || entry.request != *request {
             return Err(ActionError::new(
                 ActionErrorKind::Conflict,
                 "request_id was already used for a different Programmer values action",
@@ -62,7 +68,7 @@ impl ValuesReplayCache {
         session_id: SessionId,
         request_id: String,
         expected_revision: u64,
-        command: ProgrammingValuesCommand,
+        request: ProgrammingValuesRequest,
         result: ProgrammingValuesResult,
     ) {
         let key = ReplayKey {
@@ -78,7 +84,7 @@ impl ValuesReplayCache {
             key,
             ReplayEntry {
                 expected_revision,
-                command,
+                request,
                 result,
             },
         );
@@ -87,5 +93,11 @@ impl ValuesReplayCache {
                 self.entries.remove(&oldest);
             }
         }
+    }
+}
+
+impl ProgrammingService {
+    pub(super) fn invalidate_values_replay(&self, user_id: UserId) {
+        self.values_replay.lock().invalidate_user(user_id);
     }
 }

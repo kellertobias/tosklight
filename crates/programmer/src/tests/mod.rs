@@ -7,6 +7,7 @@ use light_core::{
 use std::collections::HashMap;
 use std::sync::Arc;
 
+mod capture_mode;
 mod groups_and_preload;
 mod normal_values_actions;
 mod normal_values_generation;

@@ -44,6 +44,7 @@ export class ProgrammerValuesActionError extends Error {
 		readonly kind: ProgrammerValuesErrorKind,
 		readonly status: number,
 		readonly currentRevision: number | null,
+		readonly currentCaptureModeRevision: number | null,
 		readonly retryable: boolean,
 	) {
 		super(message);
@@ -212,6 +213,7 @@ export class HttpProgrammerValuesTransport
 				error.kind,
 				response.status,
 				error.currentRevision,
+				error.currentCaptureModeRevision,
 				error.retryable,
 			);
 		} catch (reason) {
@@ -258,6 +260,7 @@ function fallbackError(response: Response, text: string) {
 		text || `${response.status} ${response.statusText}`,
 		kindForStatus(response.status),
 		response.status,
+		null,
 		null,
 		response.status >= 500,
 	);

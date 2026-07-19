@@ -251,12 +251,33 @@ pub(super) async fn store_preload(
         _ => return Err(ApiError::bad_request("target must be preset or cue")),
     };
     drop(store);
-    let stored =
+    let (stored, activation) =
         store_prepared_preload_target(&state, &session, &entry, activation, prepared, expected)
             .await?;
     if use_active_preload {
-        state.programmers.release_preload(session.id);
-        persist_programmer(&state, &session)?;
+        let _activation = activation;
+        #[cfg(test)]
+        {
+            let pause = Arc::clone(&state.preload_store_release_lifecycle);
+            tokio::task::spawn_blocking(move || pause.pause_if_armed())
+                .await
+                .expect("Preload Store release pause task failed");
+        }
+        let context = programming_context(&session, light_application::ActionSource::Http, None);
+        run_programming_interaction(
+            &state,
+            &session,
+            &context,
+            "http_preload_store",
+            ProgrammingLockPolicy::AllowLockedReconciliation,
+            || {
+                state.programmers.release_preload(session.id);
+                persist_programmer(&state, &session)
+            },
+        )?
+        .output?;
+    } else {
+        drop(activation);
     }
     emit(
         &state,
@@ -281,7 +302,7 @@ async fn store_prepared_preload_target(
     activation: tokio::sync::OwnedMutexGuard<()>,
     prepared: PreparedPreloadTarget,
     expected: u64,
-) -> Result<StoredPreloadTarget, ApiError> {
+) -> Result<(StoredPreloadTarget, tokio::sync::OwnedMutexGuard<()>), ApiError> {
     let active = state
         .active_show
         .read()
@@ -298,16 +319,19 @@ async fn store_prepared_preload_target(
                 prepared.body,
             )],
         );
-        let (result, _activation) =
+        let (result, activation) =
             run_active_show_object_action_async(state, activation, action).await?;
-        Ok(StoredPreloadTarget {
-            revision: result
-                .changes
-                .first()
-                .ok_or_else(|| ApiError::internal("Preload Store produced no object change"))?
-                .object_revision,
-            event_sequence: Some(result.event_sequence),
-        })
+        Ok((
+            StoredPreloadTarget {
+                revision: result
+                    .changes
+                    .first()
+                    .ok_or_else(|| ApiError::internal("Preload Store produced no object change"))?
+                    .object_revision,
+                event_sequence: Some(result.event_sequence),
+            },
+            activation,
+        ))
     } else {
         backup_show(state, entry)?;
         let revision = ShowStore::open(&entry.path)
@@ -319,9 +343,12 @@ async fn store_prepared_preload_target(
                 expected,
             )
             .map_err(ApiError::store)?;
-        Ok(StoredPreloadTarget {
-            revision,
-            event_sequence: None,
-        })
+        Ok((
+            StoredPreloadTarget {
+                revision,
+                event_sequence: None,
+            },
+            activation,
+        ))
     }
 }

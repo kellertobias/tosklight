@@ -9,6 +9,7 @@ import {
 	useRef,
 	useSyncExternalStore,
 } from "react";
+import { useProgrammerCaptureModeAuthority } from "../programmerCaptureMode/ProgrammerCaptureModeView";
 import type {
 	ProgrammerValuesActions,
 	ProgrammerValuesProjection,
@@ -55,6 +56,7 @@ export function ProgrammerValuesViewProvider({
 	onSessionError,
 	onMutationError,
 }: PropsWithChildren<ProgrammerValuesViewProviderProps>) {
+	const captureModeAuthority = useProgrammerCaptureModeAuthority();
 	const session = useMemo(
 		() =>
 			showId && userId
@@ -80,16 +82,27 @@ export function ProgrammerValuesViewProvider({
 	);
 	const writer = useMemo(
 		() =>
-			showId && userId && session && applyAction
+			showId && userId && session && applyAction && captureModeAuthority
 				? new ProgrammerValuesWriter({
 						scope: { showId, userId },
 						store,
+						captureModeStore: captureModeAuthority.store,
 						applyAction,
 						repair: (error) => session.repairAuthority(error),
+						repairCaptureMode: (error) =>
+							captureModeAuthority.repairAuthority(error),
 						onError: onMutationError,
 					})
 				: null,
-		[applyAction, onMutationError, session, showId, store, userId],
+		[
+			applyAction,
+			captureModeAuthority,
+			onMutationError,
+			session,
+			showId,
+			store,
+			userId,
+		],
 	);
 	useLayoutEffect(() => {
 		store.reset(showId, userId, authorityKey);
@@ -150,10 +163,16 @@ export function useProgrammerValuesStore() {
 
 function useValuesViewActivation(enabled: boolean) {
 	const session = useContext(SessionContext);
+	const captureModeAuthority = useProgrammerCaptureModeAuthority();
 	useEffect(() => {
-		if (!enabled || !session) return;
-		return session.activate();
-	}, [enabled, session]);
+		if (!enabled) return;
+		const releaseValues = session?.activate();
+		const releaseCaptureMode = captureModeAuthority?.activate();
+		return () => {
+			releaseValues?.();
+			releaseCaptureMode?.();
+		};
+	}, [captureModeAuthority, enabled, session]);
 }
 
 function useExternalSelection<T>(

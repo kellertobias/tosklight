@@ -13,6 +13,7 @@ use uuid::Uuid;
 pub struct ProgrammingInteractionResult<T> {
     pub output: T,
     pub event_sequence: Option<u64>,
+    pub capture_mode_event_sequence: Option<u64>,
     pub values_event_sequence: Option<u64>,
 }
 

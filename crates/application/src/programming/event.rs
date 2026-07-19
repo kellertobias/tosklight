@@ -1,4 +1,6 @@
-use super::{ProgrammingInteractionProjection, ProgrammingValuesChange};
+use super::{
+    ProgrammingCaptureModeChange, ProgrammingInteractionProjection, ProgrammingValuesChange,
+};
 use crate::{
     ActionContext, ApplicationEvent, DeliveryPolicy, EventCapability, EventClass, EventDraft,
     EventObject, EventSource, ProgrammingEvent,
@@ -78,11 +80,30 @@ impl EventObject {
         )
     }
 
+    pub fn programming_capture_mode(user_id: Uuid) -> Self {
+        Self::new(
+            EventCapability::Programmer,
+            format!("programming-capture-mode:{user_id}"),
+        )
+    }
+
     pub fn programming_values_user_id(&self) -> Option<Uuid> {
         (self.capability == EventCapability::Programmer)
             .then(|| self.id.strip_prefix("programming-values:"))
             .flatten()
             .and_then(|value| Uuid::parse_str(value).ok())
+    }
+
+    pub fn programming_capture_mode_user_id(&self) -> Option<Uuid> {
+        (self.capability == EventCapability::Programmer)
+            .then(|| self.id.strip_prefix("programming-capture-mode:"))
+            .flatten()
+            .and_then(|value| Uuid::parse_str(value).ok())
+    }
+
+    pub fn programming_user_id(&self) -> Option<Uuid> {
+        self.programming_values_user_id()
+            .or_else(|| self.programming_capture_mode_user_id())
     }
 }
 
@@ -121,6 +142,23 @@ impl EventDraft {
             correlation_id: Some(context.correlation_id),
             delivery: DeliveryPolicy::Replaceable,
             payload: ApplicationEvent::Programming(ProgrammingEvent::ValuesChanged(change)),
+        }
+    }
+
+    pub fn programming_capture_mode_changed(
+        context: &ActionContext,
+        change: ProgrammingCaptureModeChange,
+    ) -> Self {
+        let object = EventObject::programming_capture_mode(change.projection.user_id.0);
+        Self {
+            desk_id: None,
+            class: EventClass::Projection,
+            object: Some(object),
+            related_objects: Vec::new(),
+            source: EventSource::Action(context.source),
+            correlation_id: Some(context.correlation_id),
+            delivery: DeliveryPolicy::Replaceable,
+            payload: ApplicationEvent::Programming(ProgrammingEvent::CaptureModeChanged(change)),
         }
     }
 }

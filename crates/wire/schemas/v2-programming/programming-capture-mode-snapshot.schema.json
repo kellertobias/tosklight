@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProgrammingCaptureModeSnapshot",
+  "type": "object",
+  "properties": {
+    "cursor": {
+      "$ref": "#/$defs/EventSnapshotCursor"
+    },
+    "projection": {
+      "$ref": "#/$defs/ProgrammingCaptureModeProjection"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "cursor",
+    "projection"
+  ],
+  "$defs": {
+    "EventSnapshotCursor": {
+      "type": "object",
+      "properties": {
+        "sequence": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "sequence"
+      ]
+    },
+    "ProgrammingCaptureModeProjection": {
+      "description": "Authoritative capture routing for one user's Programmer.",
+      "type": "object",
+      "properties": {
+        "blind": {
+          "type": "boolean"
+        },
+        "preload_capture_programmer": {
+          "type": "boolean"
+        },
+        "preview": {
+          "type": "boolean"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "user_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "user_id",
+        "revision",
+        "blind",
+        "preview",
+        "preload_capture_programmer"
+      ]
+    }
+  }
+}

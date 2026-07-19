@@ -225,15 +225,17 @@ fn validate_programming_object(
     if object.capability != wire::EventCapability::Programmer {
         return Ok(());
     }
-    let Some(user) = object.id.strip_prefix("programming-values:") else {
+    let user = object
+        .id
+        .strip_prefix("programming-values:")
+        .or_else(|| object.id.strip_prefix("programming-capture-mode:"));
+    let Some(user) = user else {
         return Ok(());
     };
     let user = Uuid::parse_str(user)
-        .map_err(|_| "Programmer values event objects require a valid user UUID".to_owned())?;
+        .map_err(|_| "user-scoped Programmer event objects require a valid user UUID".to_owned())?;
     if user != session.user.id.0 {
-        return Err(
-            "Programmer values subscriptions may only address the authenticated user".into(),
-        );
+        return Err("Programmer subscriptions may only address the authenticated user".into());
     }
     Ok(())
 }

@@ -110,6 +110,67 @@ async fn inactive_preload_cue_keeps_the_compatibility_path_and_raw_extensions() 
     );
 }
 
+#[tokio::test]
+async fn storing_active_preload_publishes_the_capture_mode_release() {
+    let scenario = CuePreloadScenario::new("Capture-mode Preload Cue", true).await;
+    scenario.activate_preload();
+    assert_eq!(scenario.enter_preload().await.status(), StatusCode::OK);
+    let before = scenario.boundary();
+
+    let response = scenario.store_preload(1).await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = json(response).await;
+    assert_eq!(response["event_sequence"], before.event_sequence + 1);
+    assert!(!scenario.has_active_preload());
+    let events = scenario.events_after(before.event_sequence);
+    assert_eq!(events.len(), 2);
+    assert!(matches!(
+        events[0].payload,
+        light_application::ApplicationEvent::Show(light_application::ShowEvent::ObjectsChanged(_))
+    ));
+    let capture = &events[1];
+    assert_eq!(capture.desk_id, None);
+    assert_eq!(
+        capture.delivery,
+        light_application::DeliveryPolicy::Replaceable
+    );
+    let light_application::ApplicationEvent::Programming(
+        light_application::ProgrammingEvent::CaptureModeChanged(change),
+    ) = &capture.payload
+    else {
+        panic!("active Preload Store must publish the capture-mode release")
+    };
+    assert_eq!(change.projection.revision, 2);
+    assert!(!change.projection.blind);
+}
+
+#[tokio::test]
+async fn active_preload_store_holds_one_activation_guard_through_release() {
+    let scenario = CuePreloadScenario::new("Atomic Preload Store release", true).await;
+    scenario.activate_preload();
+    scenario.state.preload_store_release_lifecycle.arm();
+    let request = scenario.store_preload(1);
+    let pause = Arc::clone(&scenario.state.preload_store_release_lifecycle);
+    let wait = tokio::task::spawn_blocking(move || pause.wait_until_started());
+    let verify_guard = async {
+        wait.await.unwrap();
+        assert!(
+            scenario
+                .state
+                .activation_lock
+                .clone()
+                .try_lock_owned()
+                .is_err(),
+            "the persisted target and active Preload release must share one activation guard"
+        );
+        scenario.state.preload_store_release_lifecycle.release();
+    };
+    let ((), response) = tokio::join!(verify_guard, request);
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(!scenario.has_active_preload());
+}
+
 struct CuePreloadScenario {
     state: AppState,
     app: Router,
@@ -173,6 +234,31 @@ impl CuePreloadScenario {
                         .to_string(),
                     ))
                     .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+
+    async fn enter_preload(&self) -> Response {
+        let session = self.state.sessions.read()[&self.session_id].clone();
+        self.app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/api/v2/desks/{}/command-line/keys",
+                    session.desk.id
+                ))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {}", self.token))
+                .body(Body::from(
+                    serde_json::json!({
+                        "key":"PRE",
+                        "phase":"press",
+                        "request_id":"preload-store-capture-mode"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
             )
             .await
             .unwrap()

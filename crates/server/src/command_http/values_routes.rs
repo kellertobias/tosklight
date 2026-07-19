@@ -26,7 +26,27 @@ pub(super) fn router() -> Router<AppState> {
             "/api/v2/users/{user_id}/programmer-values/actions",
             post(apply_action),
         )
+        .route(
+            "/api/v2/users/{user_id}/programmer-capture-mode/snapshot",
+            get(get_capture_mode),
+        )
         .layer(DefaultBodyLimit::max(BODY_LIMIT))
+}
+
+async fn get_capture_mode(
+    State(state): State<AppState>,
+    Path(user_id): Path<String>,
+    headers: HeaderMap,
+) -> Result<Response, ValuesHttpError> {
+    let session = authenticated_user(&state, &headers, &user_id)?;
+    let context = http_context(&session, None);
+    let ports = ServerProgrammingPorts::new(&state, &session, "http", false);
+    let snapshot = state
+        .programming
+        .capture_mode_snapshot(&context, &ports)
+        .map_err(ValuesHttpError::application)?;
+    let response = super::values_wire::capture_mode_snapshot(snapshot);
+    Ok(json_with_etag(response.projection.revision, response))
 }
 
 async fn get_values(
@@ -57,6 +77,10 @@ async fn apply_action(
     let context =
         http_context(&session, Some(&request_id)).with_expected_revision(request.expected_revision);
     let command = super::values_wire::values_command(request.action);
+    let command = light_application::ProgrammingValuesRequest {
+        expected_capture_mode_revision: request.expected_capture_mode_revision,
+        command,
+    };
     let result = run_action(state, session, ActionEnvelope { context, command }).await?;
     let response = super::values_wire::values_outcome(request_id, result);
     Ok(json_with_etag(response.revision, response))
@@ -65,7 +89,7 @@ async fn apply_action(
 async fn run_action(
     state: AppState,
     session: Session,
-    action: ActionEnvelope<light_application::ProgrammingValuesCommand>,
+    action: ActionEnvelope<light_application::ProgrammingValuesRequest>,
 ) -> Result<light_application::ProgrammingValuesResult, ValuesHttpError> {
     let activation = state.activation_lock.clone().lock_owned().await;
     tokio::task::spawn_blocking(move || {
@@ -120,6 +144,7 @@ impl ValuesHttpError {
             wire_error_kind(error.kind),
             error.message,
             error.current_revision,
+            error.current_related_revision,
             error.retryable,
         )
     }
@@ -130,6 +155,7 @@ impl ValuesHttpError {
             error.status,
             status_error_kind(error.status),
             error.message,
+            None,
             None,
             retryable,
         )
@@ -145,6 +171,7 @@ impl ValuesHttpError {
             ProgrammingValuesErrorKind::Invalid,
             message,
             None,
+            None,
             false,
         )
     }
@@ -154,6 +181,7 @@ impl ValuesHttpError {
             StatusCode::FORBIDDEN,
             ProgrammingValuesErrorKind::Forbidden,
             message,
+            None,
             None,
             false,
         )
@@ -165,6 +193,7 @@ impl ValuesHttpError {
             ProgrammingValuesErrorKind::Internal,
             format!("Programmer values service task failed: {error}"),
             None,
+            None,
             false,
         )
     }
@@ -174,6 +203,7 @@ impl ValuesHttpError {
         kind: ProgrammingValuesErrorKind,
         error: impl Into<String>,
         current_revision: Option<u64>,
+        current_capture_mode_revision: Option<u64>,
         retryable: bool,
     ) -> Self {
         Self {
@@ -182,6 +212,7 @@ impl ValuesHttpError {
                 kind,
                 error: error.into(),
                 current_revision,
+                current_capture_mode_revision,
                 retryable,
             },
         }

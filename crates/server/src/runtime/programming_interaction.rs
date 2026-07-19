@@ -1,6 +1,7 @@
 use super::{ApiError, AppState, Session, command_http::ServerProgrammingPorts};
 use light_application::{
     ActionContext, ActionError, ActionErrorKind, ActionSource, ProgrammingInteractionResult,
+    ProgrammingLifecycleCompletion, ProgrammingLifecycleResult, ProgrammingLifecycleTarget,
 };
 
 #[derive(Clone, Copy)]
@@ -34,6 +35,30 @@ pub(super) fn run_programming_interaction<T>(
     state
         .programming
         .run_external_interaction(context, &ports, operation)
+        .map_err(programming_action_error)
+}
+
+pub(super) fn try_programming_activation(
+    state: &AppState,
+) -> Result<tokio::sync::OwnedMutexGuard<()>, String> {
+    state
+        .activation_lock
+        .clone()
+        .try_lock_owned()
+        .map_err(|_| "the active show is changing; retry the Programmer action".to_owned())
+}
+
+pub(super) fn run_programmer_lifecycle<T>(
+    state: &AppState,
+    actor: &Session,
+    context: &ActionContext,
+    target: ProgrammingLifecycleTarget,
+    operation: impl FnOnce() -> ProgrammingLifecycleCompletion<T>,
+) -> Result<ProgrammingLifecycleResult<T>, ApiError> {
+    let ports = ServerProgrammingPorts::new(state, actor, "http_programmer_lifecycle", false);
+    state
+        .programming
+        .replace_user_programmer(context, &ports, target, operation)
         .map_err(programming_action_error)
 }
 

@@ -1,6 +1,7 @@
 use super::ProgrammingService;
 use crate::{
-    ActionContext, ActionError, EventDraft, ProgrammingInteractionChange, ProgrammingValuesChange,
+    ActionContext, ActionError, EventDraft, ProgrammingCaptureModeChange,
+    ProgrammingCaptureModeProjection, ProgrammingInteractionChange, ProgrammingValuesChange,
 };
 use light_core::{SessionId, UserId};
 use std::sync::Arc;
@@ -22,7 +23,7 @@ impl ProgrammingService {
             })
     }
 
-    pub(super) fn publish_values(
+    pub(in crate::programming) fn publish_values(
         &self,
         context: &ActionContext,
         values: Option<ProgrammingValuesChange>,
@@ -31,6 +32,37 @@ impl ProgrammingService {
             self.events
                 .publish(EventDraft::programming_values_changed(context, change))
                 .sequence
+        })
+    }
+
+    pub(in crate::programming) fn publish_capture_mode(
+        &self,
+        context: &ActionContext,
+        change: Option<ProgrammingCaptureModeChange>,
+    ) -> Option<u64> {
+        change.map(|change| {
+            self.events
+                .publish(EventDraft::programming_capture_mode_changed(
+                    context, change,
+                ))
+                .sequence
+        })
+    }
+
+    pub(in crate::programming) fn capture_mode_change(
+        &self,
+        user_id: UserId,
+        before: light_programmer::ProgrammerCaptureMode,
+        after: light_programmer::ProgrammerCaptureMode,
+    ) -> Option<ProgrammingCaptureModeChange> {
+        if before == after {
+            return None;
+        }
+        let revision = self.programmers.advance_capture_mode_revision(user_id);
+        Some(ProgrammingCaptureModeChange {
+            projection: Arc::new(ProgrammingCaptureModeProjection::from_mode(
+                user_id, revision, after,
+            )),
         })
     }
 

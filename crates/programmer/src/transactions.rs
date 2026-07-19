@@ -138,6 +138,12 @@ impl ProgrammerRegistry {
             .get(&user_id)
             .copied()
             .unwrap_or(0);
+        let capture_mode_revision = self
+            .capture_mode_revisions
+            .read()
+            .get(&user_id)
+            .copied()
+            .unwrap_or(0);
         let selection = self.selection_contexts.read().get(&context).cloned();
         let command = self.command_states.read().get(&context).cloned();
         Some(ProgrammerRegistry {
@@ -163,6 +169,10 @@ impl ProgrammerRegistry {
             normal_values_revisions: Arc::new(RwLock::new(HashMap::from([(
                 user_id,
                 normal_values_revision,
+            )]))),
+            capture_mode_revisions: Arc::new(RwLock::new(HashMap::from([(
+                user_id,
+                capture_mode_revision,
             )]))),
             mutation_gates: Arc::default(),
             unknown_mutation_gate: Arc::new(ReentrantMutex::new(())),

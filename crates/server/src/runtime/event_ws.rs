@@ -37,41 +37,65 @@ pub(super) async fn clear_programmer(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> Result<StatusCode, ApiError> {
-    let _session = authenticate(&state, &headers)?;
+    let actor = authenticate(&state, &headers)?;
+    let _activation = state.activation_lock.clone().lock_owned().await;
     let session_id = SessionId(id);
-    let user_id = state
-        .programmers
-        .get(session_id)
-        .map(|programmer| programmer.user_id);
-    if !state.programmers.clear(session_id) {
+    let Some(programmer) = state.programmers.get(session_id) else {
         return Ok(StatusCode::NOT_FOUND);
-    }
-    if let Err(error) = state.desk.lock().delete_session(session_id) {
-        tracing::error!(%error, "failed to remove persisted programmer");
-        return Ok(StatusCode::INTERNAL_SERVER_ERROR);
-    }
-    // Values belong to the user's shared programmer. Recreate that value layer
-    // while keeping a desk-local command projection for every live session.
-    if let Some(user_id) = user_id {
-        let connected = state
-            .sessions
-            .read()
-            .values()
-            .filter(|candidate| candidate.user.id == user_id)
-            .cloned()
-            .collect::<Vec<_>>();
-        for connected_session in connected {
-            state.programmers.start(connected_session.id, user_id);
-            attach_session_command_context(&state, &connected_session);
-            persist_programmer(&state, &connected_session)?;
-        }
+    };
+    let user_id = programmer.user_id;
+    let connected = state
+        .sessions
+        .read()
+        .values()
+        .filter(|candidate| candidate.user.id == user_id)
+        .cloned()
+        .collect::<Vec<_>>();
+    let target = light_application::ProgrammingLifecycleTarget::new(
+        user_id,
+        session_id,
+        connected.iter().map(|session| session.desk.id).collect(),
+    );
+    let context = programming_context(&actor, light_application::ActionSource::Http, None);
+    let lifecycle = run_programmer_lifecycle(&state, &actor, &context, target, || {
+        replace_programmer_authority(&state, session_id, user_id, &connected)
+    })?;
+    let status = lifecycle.output?;
+    if status != StatusCode::NO_CONTENT {
+        return Ok(status);
     }
     emit(
         &state,
         "programmer_cleared",
         serde_json::json!({"session_id":id}),
     );
-    Ok(StatusCode::NO_CONTENT)
+    Ok(status)
+}
+
+fn replace_programmer_authority(
+    state: &AppState,
+    session_id: SessionId,
+    user_id: light_core::UserId,
+    connected: &[Session],
+) -> light_application::ProgrammingLifecycleCompletion<Result<StatusCode, ApiError>> {
+    let mut replacement_session_id = None;
+    let output = (|| {
+        if !state.programmers.clear(session_id) {
+            return Ok(StatusCode::NOT_FOUND);
+        }
+        if let Err(error) = state.desk.lock().delete_session(session_id) {
+            tracing::error!(%error, "failed to remove persisted programmer");
+            return Ok(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+        for session in connected {
+            state.programmers.start(session.id, user_id);
+            replacement_session_id.get_or_insert(session.id);
+            attach_session_command_context(state, session);
+            persist_programmer(state, session)?;
+        }
+        Ok(StatusCode::NO_CONTENT)
+    })();
+    light_application::ProgrammingLifecycleCompletion::new(output, replacement_session_id)
 }
 pub(super) async fn set_programmer(
     State(state): State<AppState>,

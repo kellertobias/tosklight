@@ -111,7 +111,17 @@ impl ProgrammingValuesCommand {
     }
 }
 
-impl ApplicationCommand for ProgrammingValuesCommand {
+/// One normal-values action plus its atomic capture-mode precondition.
+///
+/// The normal-values revision remains in `ActionContext.expected_revision`; keeping the related
+/// capture revision here avoids making generic action metadata feature-specific.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProgrammingValuesRequest {
+    pub expected_capture_mode_revision: u64,
+    pub command: ProgrammingValuesCommand,
+}
+
+impl ApplicationCommand for ProgrammingValuesRequest {
     type Value = ProgrammingValuesResult;
 
     const FAMILY: CommandFamily = CommandFamily::Programmer;
@@ -141,6 +151,7 @@ impl ProgrammingValuesOutcome {
 pub struct ProgrammingValuesResult {
     pub context: ActionContext,
     pub outcome: ProgrammingValuesOutcome,
+    pub capture_mode_revision: u64,
     pub interaction_event_sequence: Option<u64>,
     pub replayed: bool,
     pub warning: Option<String>,

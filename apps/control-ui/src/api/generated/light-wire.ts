@@ -65,6 +65,12 @@ export type ProgrammingFixtureValue = { fixture_id: string, attribute: string, v
 
 export type ProgrammingGroupValue = { group_id: string, attribute: string, value: ProgrammingAttributeValue, programmer_order: number, fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };
 
+export type ProgrammingCaptureModeProjection = { user_id: string, revision: number, blind: boolean, preview: boolean, preload_capture_programmer: boolean, };
+
+export type ProgrammingCaptureModeChange = { projection: ProgrammingCaptureModeProjection, };
+
+export type ProgrammingCaptureModeSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingCaptureModeProjection, };
+
 export type ProgrammingValuesProjection = { user_id: string, revision: number, fixture_values: Array<ProgrammingFixtureValue>, group_values: Array<ProgrammingGroupValue>, };
 
 export type ProgrammingValuesChange = { projection: ProgrammingValuesProjection, };
@@ -77,15 +83,15 @@ export type ProgrammingValueMutation = { "type": "set_fixture", fixture_id: stri
 
 export type ProgrammingValuesAction = { "type": "set_fixture", fixture_id: string, attribute: string, value: ProgrammingAttributeValue, timing: ProgrammingValueTiming, } | { "type": "release_fixture", fixture_id: string, attribute: string, } | { "type": "set_group", group_id: string, attribute: string, value: ProgrammingAttributeValue, timing: ProgrammingValueTiming, } | { "type": "release_group", group_id: string, attribute: string, } | { "type": "batch", mutations: Array<ProgrammingValueMutation>, } | { "type": "clear" };
 
-export type ProgrammingValuesActionRequest = { request_id: string, expected_revision: number, action: ProgrammingValuesAction, };
+export type ProgrammingValuesActionRequest = { request_id: string, expected_revision: number, expected_capture_mode_revision: number, action: ProgrammingValuesAction, };
 
 export type ProgrammingValuesActionState = { "status": "changed", projection: ProgrammingValuesProjection, event_sequence: number, } | { "status": "no_change" };
 
-export type ProgrammingValuesActionOutcome = { request_id: string, correlation_id: string, revision: number, replayed: boolean, warning?: string | null, } & ({ "status": "changed", projection: ProgrammingValuesProjection, event_sequence: number, } | { "status": "no_change" });
+export type ProgrammingValuesActionOutcome = { request_id: string, correlation_id: string, revision: number, capture_mode_revision: number, replayed: boolean, warning?: string | null, } & ({ "status": "changed", projection: ProgrammingValuesProjection, event_sequence: number, } | { "status": "no_change" });
 
 export type ProgrammingValuesErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
 
-export type ProgrammingValuesErrorResponse = { kind: ProgrammingValuesErrorKind, error: string, current_revision?: number | null, retryable: boolean, };
+export type ProgrammingValuesErrorResponse = { kind: ProgrammingValuesErrorKind, error: string, current_revision?: number | null, current_capture_mode_revision?: number | null, retryable: boolean, };
 
 export type PlaybackSurface = "virtual" | "physical";
 
@@ -165,7 +171,7 @@ export type ManagedAssetReference = { asset_id: string, revision: number, };
 
 export type SelectiveImportChange = { show_id: string, show_revision: number, objects: Array<SelectiveImportObjectChange>, profile_revisions: Array<FixtureProfileIdentity>, managed_assets: Array<ManagedAssetReference>, };
 
-export type EventPayload = { "type": "programming_interaction_changed", change: ProgrammingInteractionChange, } | { "type": "programming_values_changed", change: ProgrammingValuesChange, } | { "type": "playback_runtime_changed", change: PlaybackRuntimeChange, } | { "type": "playback_view_changed", projection: PlaybackDeskProjection, } | { "type": "output_runtime_changed", change: OutputRuntimeChange, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, } | { "type": "selective_import_applied", change: SelectiveImportChange, };
+export type EventPayload = { "type": "programming_interaction_changed", change: ProgrammingInteractionChange, } | { "type": "programming_values_changed", change: ProgrammingValuesChange, } | { "type": "programming_capture_mode_changed", change: ProgrammingCaptureModeChange, } | { "type": "playback_runtime_changed", change: PlaybackRuntimeChange, } | { "type": "playback_view_changed", projection: PlaybackDeskProjection, } | { "type": "output_runtime_changed", change: OutputRuntimeChange, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, } | { "type": "selective_import_applied", change: SelectiveImportChange, };
 
 export type EventEnvelope = { sequence: number, occurred_at: string, desk_id: string | null, class: EventClass, object: EventObject | null, related_objects?: Array<EventObject> | null, source: EventSource, correlation_id: string | null, delivery: EventDeliveryPolicy, payload: EventPayload, };
 
