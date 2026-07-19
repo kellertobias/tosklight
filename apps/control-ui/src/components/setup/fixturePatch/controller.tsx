@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useServer } from "../../../api/ServerContext";
 import type { PatchedFixture } from "../../../api/types";
+import { usePatch } from "../../../features/patch/PatchContext";
 import { useApp } from "../../../state/AppContext";
 import { parsePatchAddress } from "../../input/ConsoleFields";
 import {
@@ -170,12 +171,13 @@ function usePatchUiState() {
 
 function usePatchDerivedState(
 	server: ReturnType<typeof useServer>,
+	patch: ReturnType<typeof usePatch>,
 	ui: ReturnType<typeof usePatchUiState>,
 ) {
 	const layers = [...server.patchLayers]
 		.sort((a, b) => a.body.order - b.body.order)
 		.map((item) => item.body);
-	const all = server.patch?.fixtures ?? [];
+	const all = [...patch.fixtures];
 	const visible = all
 		.filter(
 			(fixture) =>
@@ -284,9 +286,10 @@ function filterDefinitions(
 
 function useFixturePatchController(props: FixturePatchSetupProps) {
 	const server = useServer();
+	const patch = usePatch();
 	const app = useApp();
 	const ui = usePatchUiState();
-	const data = usePatchDerivedState(server, ui);
+	const data = usePatchDerivedState(server, patch, ui);
 	useEffect(() => {
 		if (!data.family) return;
 		if (
@@ -298,6 +301,7 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 	}, [data.family, ui.definitionKey]);
 	return {
 		server,
+		patch,
 		appState: app.state,
 		dispatch: app.dispatch,
 		ui,

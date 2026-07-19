@@ -12,7 +12,12 @@ export interface PatchedFixture {
 		port: number;
 	} | null;
 	definition: FixtureDefinition;
-	logical_heads: Array<{ fixture_id: string; head_index: number }>;
+	logical_heads: Array<{
+		/** Stable profile identity; absent only on legacy v1 projections. */
+		profile_head_id?: string | null;
+		fixture_id: string;
+		head_index: number;
+	}>;
 	location?: { x: number; y: number; z: number };
 	rotation?: { x: number; y: number; z: number };
 	multipatch?: MultiPatchInstance[];

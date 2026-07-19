@@ -1,7 +1,8 @@
 import type { PatchedFixture } from "../../../api/types";
+import { changedPatchFixtureCandidate } from "../../../features/patch/PatchContext";
 import { isDmxPatchable } from "../patchUtils";
 import type { PatchController, PatchRowMouseEvent } from "./controller";
-import { cancelEdit, finishEdit } from "./editSession";
+import { cancelEdit, completeEdit } from "./editSession";
 import {
 	fixtureDisplayId,
 	parseFixtureNumber,
@@ -36,7 +37,7 @@ export async function selectLayer(
 	const selected = controller.data.selected;
 	if (
 		selected &&
-		(await controller.server.updatePatchedFixture(selected.fixture_id, {
+		(await controller.patch.updateFixture(selected.fixture_id, {
 			layer_id: layerId,
 		}))
 	) {
@@ -49,7 +50,7 @@ export async function unpatchCurrentFixture(controller: PatchController) {
 	const selected = controller.data.selected;
 	if (!selected) return;
 	if (
-		await controller.server.updatePatchedFixture(
+		await controller.patch.updateFixture(
 			selected.fixture_id,
 			unpatchFixtureChanges(selected),
 		)
@@ -69,7 +70,7 @@ export function requestFixtureDelete(
 export async function deleteFixture(controller: PatchController) {
 	const fixture = controller.ui.deleteConfirm;
 	if (!fixture) return;
-	if (await controller.server.deletePatchedFixture(fixture.fixture_id)) {
+	if (await controller.patch.deleteFixture(fixture.fixture_id)) {
 		controller.ui.setDeleteConfirm(null);
 		controller.ui.setDeleteArmed(false);
 		if (controller.ui.selectedFixture === fixture.fixture_id)
@@ -84,7 +85,7 @@ export async function unpatchFixtureFromDeleteConfirm(
 	const fixture = controller.ui.deleteConfirm;
 	if (!fixture) return;
 	if (
-		await controller.server.updatePatchedFixture(
+		await controller.patch.updateFixture(
 			fixture.fixture_id,
 			unpatchFixtureChanges(fixture),
 		)
@@ -104,21 +105,22 @@ export async function unpatchConflictsAndApply(controller: PatchController) {
 		!window.confirm("Unpatch the conflicting fixtures and apply this change?")
 	)
 		return;
-	const cleared = await Promise.all(
-		blockedBy.map((fixture) =>
-			controller.server.updatePatchedFixture(
-				fixture.fixture_id,
+	const candidates = [
+		...blockedBy.map((fixture) =>
+			changedPatchFixtureCandidate(
+				fixture,
 				unpatchFixtureChanges(fixture),
 			),
 		),
-	);
-	if (cleared.some((result) => !result)) {
+		changedPatchFixtureCandidate(selected, pending),
+	];
+	if (!(await controller.patch.patchFixtures(candidates))) {
 		controller.ui.setEditError(
-			"One or more conflicting fixtures could not be unpatched. No new patch was applied.",
+			"The conflicting fixtures could not be unpatched. No patch changes were applied.",
 		);
 		return;
 	}
-	await finishEdit(controller, pending);
+	completeEdit(controller);
 }
 
 export async function setFixtureNumber(
@@ -148,7 +150,7 @@ export async function setFixtureNumber(
 		return;
 	}
 	if (
-		await controller.server.updatePatchedFixture(fixture.fixture_id, {
+		await controller.patch.updateFixture(fixture.fixture_id, {
 			fixture_number: number,
 			virtual_fixture_number: null,
 		})
@@ -177,7 +179,7 @@ async function setVirtualFixtureNumber(
 		return;
 	}
 	if (
-		await controller.server.updatePatchedFixture(fixture.fixture_id, {
+		await controller.patch.updateFixture(fixture.fixture_id, {
 			fixture_number: null,
 			virtual_fixture_number: number,
 		})

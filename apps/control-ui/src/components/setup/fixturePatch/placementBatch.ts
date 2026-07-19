@@ -1,4 +1,8 @@
 import type { SplitPatch } from "../../../api/types";
+import {
+	newPatchFixtureCandidate,
+	type PatchFixtureCandidate,
+} from "../../../features/patch/PatchContext";
 import { parsePatchAddress } from "../../input/ConsoleFields";
 import { conflicts, incrementFixtureName, isDmxPatchable } from "../patchUtils";
 import type { PatchController } from "./controller";
@@ -27,59 +31,59 @@ export async function addPlacementBatch(controller: PatchController) {
 
 async function addVirtualBatch(controller: PatchController) {
 	const { definition, all } = controller.data;
-	const { ui, server } = controller;
+	const { ui } = controller;
 	if (!definition) return;
 	const fixtureNumber = parseVirtualFixtureNumber(ui.draft.fixtureNumber);
 	if (fixtureNumber == null) {
 		ui.setStatus("Enter a virtual fixture ID starting at 0.1.");
 		return;
 	}
-	let remaining = placementBatchCount(ui.draft.count);
-	let added = 0;
-	let lastId: string | null = null;
+	const requested = placementBatchCount(ui.draft.count);
+	const candidates: PatchFixtureCandidate[] = [];
 	let fixtureNumberCursor = fixtureNumber;
 	const usedFixtureNumbers = new Set(
 		all.flatMap((fixture) =>
 			fixture.virtual_fixture_number == null
 				? []
 				: [fixture.virtual_fixture_number],
-		),
+			),
 	);
-	ui.setBusy(true);
-	while (remaining > 0) {
+	while (candidates.length < requested) {
 		const nextFixtureNumber = nextAvailableFixtureNumber(
 			fixtureNumberCursor,
 			usedFixtureNumbers,
 		);
 		if (nextFixtureNumber == null) break;
-		lastId = await server.patchFixture({
-			name: incrementFixtureName(ui.draft.name, added),
-			fixture_number: null,
-			virtual_fixture_number: nextFixtureNumber,
-			definition,
-			universe: null,
-			address: null,
-			split_patches: definitionSplits(definition).map((split) => ({
-				split: split.number,
+		candidates.push(
+			newPatchFixtureCandidate({
+				name: incrementFixtureName(ui.draft.name, candidates.length),
+				fixture_number: null,
+				virtual_fixture_number: nextFixtureNumber,
+				definition,
 				universe: null,
 				address: null,
-			})),
-			layer_id: ui.activeLayer === "all" ? "default" : ui.activeLayer,
-		});
-		if (!lastId) break;
+				split_patches: definitionSplits(definition).map((split) => ({
+					split: split.number,
+					universe: null,
+					address: null,
+				})),
+				layer_id: ui.activeLayer === "all" ? "default" : ui.activeLayer,
+			}),
+		);
 		usedFixtureNumbers.add(nextFixtureNumber);
 		fixtureNumberCursor = nextFixtureNumber + 1;
-		added++;
-		remaining--;
 	}
-	ui.setBusy(false);
+	const ids = await commitPlacementBatch(controller, candidates);
+	if (!ids) return;
+	const remaining = requested - candidates.length;
+	const lastId = ids.at(-1) ?? null;
 	if (lastId) ui.setSelectedFixture(lastId);
 	if (!remaining) closeCompletedBatch(controller);
 }
 
 async function addSingleSplitBatch(controller: PatchController) {
 	const { definition, all } = controller.data;
-	const { ui, server } = controller;
+	const { ui } = controller;
 	if (!definition) return;
 	const fixtureNumber = parseFixtureNumber(ui.draft.fixtureNumber);
 	if (fixtureNumber == null) {
@@ -94,12 +98,9 @@ async function addSingleSplitBatch(controller: PatchController) {
 		ui.setStatus(plannedError);
 		return;
 	}
-	let remaining = planned.length;
-	let added = 0;
-	let lastId: string | null = null;
+	const candidates: PatchFixtureCandidate[] = [];
 	let fixtureNumberCursor = fixtureNumber;
 	const usedFixtureNumbers = physicalFixtureNumbers(all);
-	ui.setBusy(true);
 	for (const patch of planned) {
 		if (!patch) break;
 		const nextFixtureNumber = nextAvailableFixtureNumber(
@@ -107,21 +108,24 @@ async function addSingleSplitBatch(controller: PatchController) {
 			usedFixtureNumbers,
 		);
 		if (nextFixtureNumber == null) break;
-		lastId = await server.patchFixture({
-			name: incrementFixtureName(ui.draft.name, added),
-			fixture_number: nextFixtureNumber,
-			definition,
-			universe: patch.universe,
-			address: patch.address,
-			layer_id: ui.activeLayer === "all" ? "default" : ui.activeLayer,
-		});
-		if (!lastId) break;
+		candidates.push(
+			newPatchFixtureCandidate({
+				name: incrementFixtureName(ui.draft.name, candidates.length),
+				fixture_number: nextFixtureNumber,
+				definition,
+				universe: patch.universe,
+				address: patch.address,
+				layer_id: ui.activeLayer === "all" ? "default" : ui.activeLayer,
+			}),
+		);
 		usedFixtureNumbers.add(nextFixtureNumber);
 		fixtureNumberCursor = nextFixtureNumber + 1;
-		added++;
-		remaining--;
 	}
-	ui.setBusy(false);
+	const ids = await commitPlacementBatch(controller, candidates);
+	if (!ids) return;
+	const added = candidates.length;
+	const remaining = planned.length - added;
+	const lastId = ids.at(-1) ?? null;
 	selectLastAdded(controller, lastId);
 	if (!remaining) {
 		closeCompletedBatch(controller);
@@ -138,7 +142,7 @@ async function addSingleSplitBatch(controller: PatchController) {
 
 async function addSplitBatch(controller: PatchController) {
 	const { definition, all } = controller.data;
-	const { ui, server } = controller;
+	const { ui } = controller;
 	if (!definition) return;
 	const fixtureNumber = parseFixtureNumber(ui.draft.fixtureNumber);
 	if (fixtureNumber == null) {
@@ -154,9 +158,8 @@ async function addSplitBatch(controller: PatchController) {
 		ui.setStatus("Enter split patches as universe.address, for example 1.101.");
 		return;
 	}
-	let remaining = placementBatchCount(ui.draft.count);
-	let added = 0;
-	let lastId: string | null = null;
+	const requested = placementBatchCount(ui.draft.count);
+	const candidates: PatchFixtureCandidate[] = [];
 	let fixtureNumberCursor = fixtureNumber;
 	const usedFixtureNumbers = physicalFixtureNumbers(all);
 	const addresses = parsed.map((item) => ({
@@ -169,9 +172,10 @@ async function addSplitBatch(controller: PatchController) {
 		ui.setStatus(initialError);
 		return;
 	}
-	ui.setBusy(true);
-	while (remaining > 0) {
-		const plannedPrimary = parsePatchAddress(ui.batchPatches[added] ?? "");
+	while (candidates.length < requested) {
+		const plannedPrimary = parsePatchAddress(
+			ui.batchPatches[candidates.length] ?? "",
+		);
 		if (plannedPrimary) {
 			addresses[0].universe = plannedPrimary.universe;
 			addresses[0].address = plannedPrimary.address;
@@ -194,26 +198,29 @@ async function addSplitBatch(controller: PatchController) {
 		if (nextFixtureNumber == null) break;
 		const patches = splitPatches(addresses);
 		const primary = patches.find((item) => item.split === 1) ?? patches[0];
-		lastId = await server.patchFixture({
-			name: incrementFixtureName(ui.draft.name, added),
-			fixture_number: nextFixtureNumber,
-			definition,
-			universe: primary?.universe ?? null,
-			address: primary?.address ?? null,
-			split_patches: patches,
-			layer_id: ui.activeLayer === "all" ? "default" : ui.activeLayer,
-		});
-		if (!lastId) break;
+		candidates.push(
+			newPatchFixtureCandidate({
+				name: incrementFixtureName(ui.draft.name, candidates.length),
+				fixture_number: nextFixtureNumber,
+				definition,
+				universe: primary?.universe ?? null,
+				address: primary?.address ?? null,
+				split_patches: patches,
+				layer_id: ui.activeLayer === "all" ? "default" : ui.activeLayer,
+			}),
+		);
 		usedFixtureNumbers.add(nextFixtureNumber);
 		fixtureNumberCursor = nextFixtureNumber + 1;
-		added++;
-		remaining--;
 		addresses.forEach((item, index) => {
 			if (index > 0 && item.address != null)
 				item.address += item.split.footprint;
 		});
 	}
-	ui.setBusy(false);
+	const ids = await commitPlacementBatch(controller, candidates);
+	if (!ids) return;
+	const added = candidates.length;
+	const remaining = requested - added;
+	const lastId = ids.at(-1) ?? null;
 	selectLastAdded(controller, lastId);
 	if (!remaining) {
 		closeCompletedBatch(controller);
@@ -303,6 +310,32 @@ function physicalFixtureNumbers(fixtures: PatchController["data"]["all"]) {
 			fixture.fixture_number == null ? [] : [fixture.fixture_number],
 		),
 	);
+}
+
+async function commitPlacementBatch(
+	controller: PatchController,
+	candidates: readonly PatchFixtureCandidate[],
+): Promise<string[] | null> {
+	if (!candidates.length) {
+		controller.ui.setStatus("No available fixture IDs could be added.");
+		return null;
+	}
+	controller.ui.setBusy(true);
+	try {
+		const ids = await controller.patch.patchFixtures(candidates);
+		if (!ids)
+			controller.ui.setStatus(
+				"Fixtures could not be added. Review the Patch status and try again.",
+			);
+		return ids;
+	} catch {
+		controller.ui.setStatus(
+			"Fixtures could not be added. Review the Patch status and try again.",
+		);
+		return null;
+	} finally {
+		controller.ui.setBusy(false);
+	}
 }
 
 function selectLastAdded(controller: PatchController, lastId: string | null) {

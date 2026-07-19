@@ -66,18 +66,22 @@ export async function finishEdit(
 	const selected = controller.data.selected;
 	if (!selected) return false;
 	if (
-		!(await controller.server.updatePatchedFixture(
+		!(await controller.patch.updateFixture(
 			selected.fixture_id,
 			changes,
 		))
 	)
 		return false;
+	completeEdit(controller);
+	return true;
+}
+
+export function completeEdit(controller: PatchController) {
 	controller.ui.setEdit(null);
 	controller.ui.setEditingSplit(null);
 	controller.ui.setPending(null);
 	controller.ui.setBlockedBy([]);
 	controller.dispatch({ type: "SET_PATCH_ARMED", value: false });
-	return true;
 }
 
 export async function applyEdit(

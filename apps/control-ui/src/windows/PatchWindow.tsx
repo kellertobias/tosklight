@@ -1,20 +1,35 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { WindowProps } from "./windowTypes";
-import { FixturePatchSetup } from "../components/setup/FixturePatchSetup";
+import {
+	FixturePatchSetupContent,
+	PatchFeatureBoundary,
+} from "../components/setup/FixturePatchSetup";
 import { MediaServerSetup } from "../components/setup/MediaServerSetup";
 import { WindowHeader, WindowScrollArea } from "../components/window-kit";
 import { StageWindow } from "./StageWindow";
 import { useServer } from "../api/ServerContext";
 import { useDesktopBridge } from "../platform/desktop";
+import { usePatch } from "../features/patch/PatchContext";
 
 export function PatchWindow(_: WindowProps) {
-	const server = useServer();
 	const [tab, setTab] = useState<"fixtures" | "media">("fixtures");
+	if (tab === "media")
+		return <PatchMediaWindow onFixtures={() => setTab("fixtures")} />;
+	return (
+		<PatchFeatureBoundary>
+			<PatchWindowContent onMedia={() => setTab("media")} />
+		</PatchFeatureBoundary>
+	);
+}
+
+function PatchWindowContent({ onMedia }: { onMedia: () => void }) {
+	const server = useServer();
+	const patch = usePatch();
 	const [stagePreviewOpen, setStagePreviewOpen] = useState(false);
 	const stagePreview = useRef<HTMLElement>(null);
 	const setPatchPreviewHighlight = useRef(server.setPatchPreviewHighlight);
 	const [stagePreviewClearance, setStagePreviewClearance] = useState(0);
-	const previewVisible = stagePreviewOpen && tab === "fixtures";
+	const previewVisible = stagePreviewOpen;
 	const dmxPreview =
 		previewVisible &&
 		(server.configuration?.patch_preview_highlight_dmx ?? false);
@@ -50,41 +65,12 @@ export function PatchWindow(_: WindowProps) {
 		<div
 			className={`patch-window ${previewVisible ? "stage-preview-open" : ""}`}
 		>
-			{tab === "fixtures" ? (
-				<FixturePatchSetup
-					onMedia={() => setTab("media")}
-					stagePreviewOpen={stagePreviewOpen}
-					stagePreviewClearance={stagePreviewClearance}
-					onStagePreview={() => setStagePreviewOpen((open) => !open)}
-				/>
-			) : (
-				<>
-					<WindowHeader
-						title="Show Patch"
-						info={{ primary: "Media Servers" }}
-						actions={[
-							[
-								{
-									id: "fixtures",
-									label: "Fixtures",
-									onClick: () => setTab("fixtures"),
-								},
-								{
-									id: "media",
-									label: "Media Servers",
-									active: true,
-									onClick: () => undefined,
-								},
-							],
-						]}
-					/>
-					<WindowScrollArea>
-						<main>
-							<MediaServerSetup />
-						</main>
-					</WindowScrollArea>
-				</>
-			)}
+			<FixturePatchSetupContent
+				onMedia={onMedia}
+				stagePreviewOpen={stagePreviewOpen}
+				stagePreviewClearance={stagePreviewClearance}
+				onStagePreview={() => setStagePreviewOpen((open) => !open)}
+			/>
 			{previewVisible && (
 				<aside
 					ref={stagePreview}
@@ -101,9 +87,37 @@ export function PatchWindow(_: WindowProps) {
 						showBeamGuides
 						environmentBrightness={1}
 						patchSelectionPreview
+						patchedFixtures={patch.fixtures}
 					/>
 				</aside>
 			)}
 		</div>
+	);
+}
+
+function PatchMediaWindow({ onFixtures }: { onFixtures: () => void }) {
+	return (
+		<>
+			<WindowHeader
+				title="Show Patch"
+				info={{ primary: "Media Servers" }}
+				actions={[
+					[
+						{ id: "fixtures", label: "Fixtures", onClick: onFixtures },
+						{
+							id: "media",
+							label: "Media Servers",
+							active: true,
+							onClick: () => undefined,
+						},
+					],
+				]}
+			/>
+			<WindowScrollArea>
+				<main>
+					<MediaServerSetup />
+				</main>
+			</WindowScrollArea>
+		</>
 	);
 }

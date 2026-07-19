@@ -13,9 +13,11 @@ export function PatchHeader() {
 			title="Show Patch"
 			info={{
 				primary: `${data.all.length} fixtures · ${data.layers.length} layers`,
-				secondary: server.unresolvedMvrFixtures.length
-					? `${server.unresolvedMvrFixtures.length} unresolved MVR fixtures excluded from output`
-					: undefined,
+				secondary:
+					controller.patch.error ??
+					(server.unresolvedMvrFixtures.length
+						? `${server.unresolvedMvrFixtures.length} unresolved MVR fixtures excluded from output`
+						: undefined),
 			}}
 			actions={[
 				[

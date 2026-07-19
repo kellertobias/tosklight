@@ -1,4 +1,8 @@
-import type { PatchedFixture } from "../../api/types";
+import type {
+	PatchLayer,
+	PatchedFixture,
+	VersionedObject,
+} from "../../api/types";
 import type { ServerController } from "./model";
 import type { ServerContextValue } from "./ServerContextValue";
 
@@ -15,9 +19,8 @@ export function createPatchActions(
 		client,
 		setError,
 		bootstrap,
-		session,
 		patchLayers,
-		loadShowObjects,
+		setPatchLayers,
 		refresh,
 	} = model;
 	return {
@@ -126,16 +129,15 @@ export function createPatchActions(
 				if (!bootstrap?.active_show)
 					throw new Error("No active show is available");
 				const existing = patchLayers.find((item) => item.id === layer.id);
-				await client.putObject(
+				const outcome = await client.putObject(
 					bootstrap.active_show.id,
 					"patch_layer",
 					layer.id,
 					layer,
 					existing?.revision ?? 0,
 				);
-				await loadShowObjects(
-					bootstrap.active_show.id,
-					session?.user.id ?? null,
+				setPatchLayers((current) =>
+					reconcileSavedLayer(current, layer, outcome.revision),
 				);
 				setError(null);
 				return true;
@@ -145,4 +147,23 @@ export function createPatchActions(
 			}
 		},
 	};
+}
+
+export function reconcileSavedLayer(
+	current: VersionedObject<PatchLayer>[],
+	layer: PatchLayer,
+	revision: number,
+): VersionedObject<PatchLayer>[] {
+	const existing = current.find((item) => item.id === layer.id);
+	if (existing && existing.revision > revision) return current;
+	return [
+		...current.filter((item) => item.id !== layer.id),
+		{
+			kind: "patch_layer",
+			id: layer.id,
+			revision,
+			updated_at: existing?.updated_at ?? "",
+			body: layer,
+		},
+	];
 }

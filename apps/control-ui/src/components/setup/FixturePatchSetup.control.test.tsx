@@ -6,6 +6,7 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PatchedFixture } from "../../api/types";
 import {
@@ -31,10 +32,35 @@ const server = {
 	updatePatchedFixture: vi.fn().mockResolvedValue(true),
 	deletePatchedFixture: vi.fn().mockResolvedValue(true),
 	patchFixture: vi.fn(),
+	refresh: vi.fn(),
 	savePatchLayer: vi.fn(),
+};
+const patchFeature = {
+	patchFixtures: vi.fn(),
 };
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
+vi.mock("../../features/patch/PatchContext", async (importOriginal) => {
+	const actual =
+		await importOriginal<typeof import("../../features/patch/PatchContext")>();
+	return {
+		...actual,
+		PatchViewProvider: ({ children }: { children: ReactNode }) => children,
+		usePatch: () => ({
+			status: "ready",
+			showId: "show",
+			showRevision: 1,
+			patchRevision: 1,
+			cursor: 1,
+			fixtures: server.patch.fixtures,
+			pendingFixtureIds: new Set<string>(),
+			error: null,
+			patchFixtures: patchFeature.patchFixtures,
+			updateFixture: server.updatePatchedFixture,
+			deleteFixture: server.deletePatchedFixture,
+		}),
+	};
+});
 vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state, dispatch }),
 }));
@@ -186,6 +212,10 @@ beforeEach(() => {
 	server.updatePatchedFixture.mockResolvedValue(true);
 	server.deletePatchedFixture.mockResolvedValue(true);
 	server.patchFixture.mockResolvedValue("new-fixture");
+	patchFeature.patchFixtures.mockImplementation(
+		async (candidates: Array<{ fixture: PatchedFixture }>) =>
+			candidates.map((candidate) => candidate.fixture.fixture_id),
+	);
 });
 
 afterEach(() => {
@@ -385,10 +415,15 @@ describe("fixture batch IDs and title actions", () => {
 		});
 		fireEvent.click(screen.getByRole("button", { name: "Add 4 fixtures" }));
 
-		await waitFor(() => expect(server.patchFixture).toHaveBeenCalledTimes(4));
+		await waitFor(() => expect(patchFeature.patchFixtures).toHaveBeenCalledOnce());
 		expect(
-			server.patchFixture.mock.calls.map(([input]) => input.fixture_number),
+			patchFeature.patchFixtures.mock.calls[0][0].map(
+				(candidate: { fixture: PatchedFixture }) =>
+					candidate.fixture.fixture_number,
+			),
 		).toEqual([100, 102, 103, 104]);
+		expect(server.patchFixture).not.toHaveBeenCalled();
+		expect(server.refresh).not.toHaveBeenCalled();
 	});
 
 	it("keeps Cancel and Add in the title bar and confirms closing changed placement data", () => {
@@ -507,9 +542,12 @@ describe("fixture batch DMX placement", () => {
 		fireEvent.click(
 			within(placement).getByRole("button", { name: "Add 3 fixtures" }),
 		);
-		await waitFor(() => expect(server.patchFixture).toHaveBeenCalledTimes(3));
+		await waitFor(() => expect(patchFeature.patchFixtures).toHaveBeenCalledOnce());
 		expect(
-			server.patchFixture.mock.calls.map(([input]) => input.address),
+			patchFeature.patchFixtures.mock.calls[0][0].map(
+				(candidate: { fixture: PatchedFixture }) =>
+					candidate.fixture.address,
+			),
 		).toEqual([1, 50, 3]);
 	});
 });
@@ -586,16 +624,17 @@ describe("visual-only Venue placement", () => {
 			within(placement).getByRole("button", { name: "Add 1 fixtures" }),
 		);
 
-		await waitFor(() =>
-			expect(server.patchFixture).toHaveBeenCalledWith(
-				expect.objectContaining({
-					fixture_number: null,
-					virtual_fixture_number: 1,
-					universe: null,
-					address: null,
-					split_patches: [{ split: 1, universe: null, address: null }],
-				}),
-			),
+		await waitFor(() => expect(patchFeature.patchFixtures).toHaveBeenCalledOnce());
+		expect(
+			patchFeature.patchFixtures.mock.calls[0][0][0].fixture,
+		).toEqual(
+			expect.objectContaining({
+				fixture_number: null,
+				virtual_fixture_number: 1,
+				universe: null,
+				address: null,
+				split_patches: [{ split: 1, universe: null, address: null }],
+			}),
 		);
 		expect(server.setSelection).not.toHaveBeenCalled();
 	});
@@ -905,7 +944,7 @@ describe("schema-v2 current-fixture conflict resolution", () => {
 });
 
 describe("schema-v2 all-conflict resolution", () => {
-	it("unpatches every physical range of all conflicts before applying the requested split", async () => {
+	it("unpatches every conflict and applies the requested split atomically", async () => {
 		const { current, blocked } = fixturesWithConflict();
 		server.patch.fixtures = [current, blocked];
 		state.patchSetArmed = true;
@@ -917,45 +956,45 @@ describe("schema-v2 all-conflict resolution", () => {
 			screen.getByRole("button", { name: "Unpatch conflicts and apply" }),
 		);
 		await waitFor(() =>
-			expect(server.updatePatchedFixture).toHaveBeenCalledWith(
-				"fixture-blocked",
+			expect(patchFeature.patchFixtures).toHaveBeenCalledOnce(),
+		);
+		const candidates = patchFeature.patchFixtures.mock.calls[0][0] as Array<{
+			fixture: PatchedFixture;
+		}>;
+		expect(candidates).toHaveLength(2);
+		expect(candidates[0].fixture).toMatchObject({
+			fixture_id: "fixture-blocked",
+			universe: null,
+			address: null,
+			split_patches: [
+				{ split: 1, universe: null, address: null },
+				{ split: 3, universe: null, address: null },
+			],
+			multipatch: [
 				{
+					id: "blocked-mp",
+					name: "Blocked duplicate",
 					universe: null,
 					address: null,
 					split_patches: [
 						{ split: 1, universe: null, address: null },
 						{ split: 3, universe: null, address: null },
 					],
-					multipatch: [
-						{
-							id: "blocked-mp",
-							name: "Blocked duplicate",
-							universe: null,
-							address: null,
-							split_patches: [
-								{ split: 1, universe: null, address: null },
-								{ split: 3, universe: null, address: null },
-							],
-							location: { x: 0, y: 0, z: 0 },
-							rotation: { x: 0, y: 0, z: 0 },
-						},
-					],
+					location: { x: 0, y: 0, z: 0 },
+					rotation: { x: 0, y: 0, z: 0 },
 				},
-			),
-		);
-		await waitFor(() =>
-			expect(server.updatePatchedFixture).toHaveBeenCalledWith(
-				"fixture-split",
-				{
-					split_patches: [
-						{ split: 1, universe: 1, address: 101 },
-						{ split: 3, universe: 4, address: 401 },
-					],
-					universe: 1,
-					address: 101,
-				},
-			),
-		);
+			],
+		});
+		expect(candidates[1].fixture).toMatchObject({
+			fixture_id: "fixture-split",
+			split_patches: [
+				{ split: 1, universe: 1, address: 101 },
+				{ split: 3, universe: 4, address: 401 },
+			],
+			universe: 1,
+			address: 101,
+		});
+		expect(server.updatePatchedFixture).not.toHaveBeenCalled();
 		expect(confirm).toHaveBeenCalledOnce();
 	});
 });

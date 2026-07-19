@@ -1,3 +1,12 @@
+import { type PropsWithChildren, useMemo } from "react";
+import { configuredServerUrl } from "../../api/LightApiClient";
+import {
+	browserDeskBoundaryToken,
+	HttpPatchTransport,
+} from "../../api/PatchTransport";
+import { useServer } from "../../api/ServerContext";
+import { PatchViewProvider } from "../../features/patch/PatchContext";
+import { mergeFixtureDefinitions } from "./fixtureProfileModel";
 import type { FixturePatchSetupProps } from "./fixturePatch/controller";
 import {
 	PatchControllerProvider,
@@ -23,6 +32,50 @@ import { PatchEffects } from "./fixturePatch/PatchEffects";
 import { PatchTable } from "./fixturePatch/PatchTable";
 
 export function FixturePatchSetup(props: FixturePatchSetupProps = {}) {
+	return (
+		<PatchFeatureBoundary>
+			<FixturePatchSetupContent {...props} />
+		</PatchFeatureBoundary>
+	);
+}
+
+export function PatchFeatureBoundary({ children }: PropsWithChildren) {
+	const server = useServer();
+	const sessionToken = server.session?.token ?? null;
+	const transport = useMemo(
+		() =>
+			sessionToken
+				? new HttpPatchTransport({
+						baseUrl: configuredServerUrl(),
+						sessionToken,
+						deskBoundaryToken: browserDeskBoundaryToken(),
+					})
+				: null,
+		[sessionToken],
+	);
+	const definitions = useMemo(
+		() =>
+			mergeFixtureDefinitions(
+				server.fixtureProfiles,
+				server.fixtureLibrary,
+			),
+		[server.fixtureLibrary, server.fixtureProfiles],
+	);
+	return (
+		<PatchViewProvider
+			showId={server.bootstrap?.active_show?.id ?? null}
+			initialFixtures={server.patch?.fixtures ?? []}
+			definitions={definitions}
+			transport={transport}
+		>
+			{children}
+		</PatchViewProvider>
+	);
+}
+
+export function FixturePatchSetupContent(
+	props: FixturePatchSetupProps = {},
+) {
 	return (
 		<PatchControllerProvider {...props}>
 			<FixturePatchLayout />

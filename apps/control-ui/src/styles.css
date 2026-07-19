@@ -674,3 +674,4 @@ html,body,#root{user-select:none}input,textarea,[contenteditable=true]{user-sele
 .fixture-sheet-icon{width:34px;height:34px;display:grid;place-items:center;margin:auto;color:var(--muted)}
 .fixture-sheet-icon img{display:block;max-width:32px;max-height:32px;object-fit:contain}
 .fixture-sheet-patch{font-family:ui-monospace,monospace;color:var(--muted);white-space:nowrap}
+.patch-table tr.pending td{opacity:.62}

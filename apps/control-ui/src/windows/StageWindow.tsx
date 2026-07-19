@@ -18,6 +18,7 @@ export function StageWindow(props: StageWindowProps) {
 		options.followPreload,
 		patchSelectionPreview,
 		layout,
+		props.patchedFixtures,
 	);
 	const [setupFixtureId, setSetupFixtureId] = useState<string | null>(null);
 	return (

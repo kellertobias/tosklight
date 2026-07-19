@@ -1,4 +1,5 @@
 import type { StagePosition3d } from "../../api/ServerContext";
+import type { PatchedFixture } from "../../api/types";
 import type { StageMode, StageView } from "../../types";
 import type { WindowProps } from "../windowTypes";
 
@@ -11,6 +12,7 @@ export interface StageWindowProps extends WindowProps {
 		target: readonly [number, number, number];
 	};
 	patchSelectionPreview?: boolean;
+	patchedFixtures?: readonly PatchedFixture[];
 }
 
 export interface StageOptionsModel {

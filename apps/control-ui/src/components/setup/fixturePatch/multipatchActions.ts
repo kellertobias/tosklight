@@ -24,7 +24,7 @@ export async function addMultipatch(controller: PatchController) {
 		location: { x: 0, y: 0, z: 0 },
 		rotation: { x: 0, y: 0, z: 0 },
 	};
-	await controller.server.updatePatchedFixture(selected.fixture_id, {
+	await controller.patch.updateFixture(selected.fixture_id, {
 		multipatch: [...(selected.multipatch ?? []), instance],
 	});
 }
@@ -87,7 +87,7 @@ export async function saveMultipatchEdit(
 		item.id === instance.id ? { ...item, ...changes } : item,
 	);
 	if (
-		await controller.server.updatePatchedFixture(fixture.fixture_id, {
+		await controller.patch.updateFixture(fixture.fixture_id, {
 			multipatch,
 		})
 	)

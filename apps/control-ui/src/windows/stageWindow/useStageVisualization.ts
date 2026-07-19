@@ -29,11 +29,11 @@ function useVisualizationSnapshot(followPreload: boolean) {
 	return visualization;
 }
 
-function usePatchedFixtures() {
+function usePatchedFixtures(override?: readonly PatchedFixture[]) {
 	const server = useServer();
 	return useMemo(
 		() =>
-			[...(server.patch?.fixtures ?? [])].sort(
+			[...(override ?? server.patch?.fixtures ?? [])].sort(
 				(left, right) =>
 					(left.virtual_fixture_number ?? Number.MAX_SAFE_INTEGER) -
 						(right.virtual_fixture_number ?? Number.MAX_SAFE_INTEGER) ||
@@ -41,7 +41,7 @@ function usePatchedFixtures() {
 						(right.fixture_number ?? Number.MAX_SAFE_INTEGER) ||
 					left.fixture_id.localeCompare(right.fixture_id),
 			),
-		[server.patch],
+		[override, server.patch],
 	);
 }
 
@@ -140,10 +140,11 @@ export function useStageVisualization(
 	followPreload: boolean,
 	patchSelectionPreview: boolean,
 	layout: StageLayoutModel,
+	patchedFixtures?: readonly PatchedFixture[],
 ) {
 	const server = useServer();
 	const visualization = useVisualizationSnapshot(followPreload);
-	const stageFixtures = usePatchedFixtures();
+	const stageFixtures = usePatchedFixtures(patchedFixtures);
 	const patchPreviewFixtures = useMemo(
 		() =>
 			stageFixtures
