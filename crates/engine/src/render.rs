@@ -42,6 +42,14 @@ impl Engine {
                 let mode = profile.mode(mode_id).ok_or_else(|| {
                     EngineError::Invalid("schema-v2 fixture mode is missing".into())
                 })?;
+                let encoding =
+                    generation
+                        .profile_encoding(fixture.fixture_id)
+                        .ok_or_else(|| {
+                            EngineError::Invalid(
+                                "schema-v2 fixture encoding plan is missing".into(),
+                            )
+                        })?;
                 let footprints = fixture.definition.split_footprints();
                 let mut patches = fixture.effective_split_patches();
                 for instance in &fixture.multipatch {
@@ -70,6 +78,7 @@ impl Engine {
                         frame,
                         fixture,
                         mode,
+                        encoding,
                         patch.split,
                         address,
                         &resolved,

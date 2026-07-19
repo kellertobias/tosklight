@@ -13,6 +13,7 @@ mod move_in_black_candidate;
 mod move_in_black_runtime;
 mod profile_blackout;
 mod profile_color;
+mod profile_encoding;
 mod profile_projection;
 mod programmer_fade;
 mod render;
@@ -38,6 +39,7 @@ pub(crate) use move_in_black_candidate::PreparedCandidate;
 pub(crate) use move_in_black_runtime::{MoveInBlackKey, MoveInBlackRuntime};
 pub(crate) use profile_blackout::blackout_raw;
 pub(crate) use profile_color::{channel_visual_level, profile_visual_color};
+pub(crate) use profile_encoding::ProfileEncodingIndex;
 pub(crate) use profile_projection::{render_profile_split, resolve_profile_head};
 pub(crate) use programmer_fade::{
     ProgrammerTransition, ProgrammerTransitionKey, ProgrammerTransitionSource,

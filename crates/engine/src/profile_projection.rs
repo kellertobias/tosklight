@@ -5,7 +5,10 @@ use crate::{
     profile_visual_color,
 };
 use light_core::{AttributeKey, AttributeValue, FixtureId, Xyz};
-use light_fixture::{ChannelScales, FixtureChannel, FixtureMode, PatchedFixture, SignalLossPolicy};
+use light_fixture::{
+    ChannelScales, FixtureChannel, FixtureMode, FixtureModeEncodingPlan, PatchedFixture,
+    SignalLossPolicy,
+};
 use light_output::DmxFrame;
 use std::collections::{HashMap, HashSet};
 
@@ -14,6 +17,7 @@ pub(crate) fn render_profile_split(
     frame: &mut DmxFrame,
     fixture: &PatchedFixture,
     mode: &FixtureMode,
+    encoding: &FixtureModeEncodingPlan,
     split: u16,
     address: u16,
     resolved: &ResolvedAttributes,
@@ -37,7 +41,7 @@ pub(crate) fn render_profile_split(
             group_master_flashes,
             highlighted_fixtures,
         )?;
-        encode_split_channels(frame, mode, split, address, output.channels)?;
+        encode_split_channels(frame, encoding, split, address, &output.channels)?;
     }
     Ok(())
 }
@@ -95,23 +99,14 @@ pub(crate) fn resolve_profile_head(
 
 fn encode_split_channels(
     frame: &mut DmxFrame,
-    mode: &FixtureMode,
+    encoding: &FixtureModeEncodingPlan,
     split: u16,
     address: u16,
-    channels: Vec<(uuid::Uuid, u32)>,
+    channels: &[(uuid::Uuid, u32)],
 ) -> Result<(), EngineError> {
-    for (channel_id, raw) in channels {
-        let channel = mode
-            .channels
-            .iter()
-            .find(|channel| channel.id == channel_id)
-            .ok_or_else(|| EngineError::Invalid("resolved profile channel is missing".into()))?;
-        if channel.split == split {
-            mode.encode_channel(frame, address, channel, raw)
-                .map_err(|error| EngineError::Invalid(error.to_string()))?;
-        }
-    }
-    Ok(())
+    encoding
+        .encode_split(frame, address, split, channels)
+        .map_err(|error| EngineError::Invalid(error.to_string()))
 }
 
 #[allow(clippy::too_many_arguments)]

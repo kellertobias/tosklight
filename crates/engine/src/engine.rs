@@ -1,5 +1,5 @@
 use crate::{
-    EngineSnapshot, MoveInBlackKey, MoveInBlackRuntime, ProgrammerTransition,
+    EngineSnapshot, MoveInBlackKey, MoveInBlackRuntime, ProfileEncodingIndex, ProgrammerTransition,
     ProgrammerTransitionKey, RuntimeGeneration,
 };
 use arc_swap::ArcSwap;
@@ -44,6 +44,7 @@ impl Engine {
                 EngineSnapshot::default(),
                 playback,
                 HashMap::new(),
+                ProfileEncodingIndex::default(),
             )),
             programmers,
             timecode_frame: AtomicU64::new(u64::MAX),

@@ -96,7 +96,26 @@ fn schema_v2_renders_one_head_channels_to_independent_splits() {
         location: Default::default(),
         rotation: Default::default(),
         logical_heads: vec![],
-        multipatch: vec![],
+        multipatch: vec![MultiPatchInstance {
+            id: uuid::Uuid::new_v4(),
+            name: "Mirror".into(),
+            universe: None,
+            address: None,
+            split_patches: vec![
+                SplitPatch {
+                    split: 1,
+                    universe: Some(3),
+                    address: Some(30),
+                },
+                SplitPatch {
+                    split: 2,
+                    universe: Some(4),
+                    address: Some(40),
+                },
+            ],
+            location: Default::default(),
+            rotation: Default::default(),
+        }],
         move_in_black_enabled: true,
         move_in_black_delay_millis: 0,
         highlight_overrides: BTreeMap::new(),
@@ -121,8 +140,12 @@ fn schema_v2_renders_one_head_channels_to_independent_splits() {
     let rendered = engine.render(RenderOptions::default()).unwrap();
     assert_eq!(&rendered.universes[&1][9..13], &[0x12, 0x34, 0x56, 0x78]);
     assert_eq!(rendered.universes[&2][19], 0xaa);
+    assert_eq!(&rendered.universes[&3][29..33], &[0x12, 0x34, 0x56, 0x78]);
+    assert_eq!(rendered.universes[&4][39], 0xaa);
     assert_eq!(rendered.patched_slots[&1], 13);
     assert_eq!(rendered.patched_slots[&2], 20);
+    assert_eq!(rendered.patched_slots[&3], 33);
+    assert_eq!(rendered.patched_slots[&4], 40);
 }
 
 #[test]

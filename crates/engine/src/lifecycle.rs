@@ -1,4 +1,7 @@
-use crate::{Engine, EngineError, EngineSnapshot, RuntimeGeneration, value_for_ordered_position};
+use crate::{
+    Engine, EngineError, EngineSnapshot, ProfileEncodingIndex, RuntimeGeneration,
+    value_for_ordered_position,
+};
 use light_playback::{Cue, CueChange, CueList, GroupCueChange, PlaybackEngine};
 use light_programmer::{GroupDefinition, resolve_group};
 use parking_lot::RwLock;
@@ -15,8 +18,14 @@ use std::{
 #[must_use = "a prepared snapshot must be installed to affect the live engine"]
 pub struct PreparedEngineSnapshot {
     snapshot: EngineSnapshot,
+    runtime: PreparedRuntime,
+}
+
+#[derive(Debug)]
+struct PreparedRuntime {
     playback: PlaybackEngine,
     groups: HashMap<String, GroupDefinition>,
+    profile_encodings: ProfileEncodingIndex,
 }
 
 impl PreparedEngineSnapshot {
@@ -38,12 +47,8 @@ impl Engine {
         &self,
         snapshot: EngineSnapshot,
     ) -> Result<PreparedEngineSnapshot, EngineError> {
-        let (playback, groups) = self.prepare_runtime(&snapshot)?;
-        Ok(PreparedEngineSnapshot {
-            snapshot,
-            playback,
-            groups,
-        })
+        let runtime = self.prepare_runtime(&snapshot)?;
+        Ok(PreparedEngineSnapshot { snapshot, runtime })
     }
 
     /// Installs a previously prepared snapshot while preserving compatible playback state.
@@ -78,12 +83,15 @@ impl Engine {
         Ok(())
     }
 
-    fn prepare_runtime(
-        &self,
-        snapshot: &EngineSnapshot,
-    ) -> Result<(PlaybackEngine, HashMap<String, GroupDefinition>), EngineError> {
+    fn prepare_runtime(&self, snapshot: &EngineSnapshot) -> Result<PreparedRuntime, EngineError> {
         snapshot.validate()?;
-        self.compile_playback(snapshot)
+        let profile_encodings = ProfileEncodingIndex::compile(snapshot)?;
+        let (playback, groups) = self.compile_playback(snapshot)?;
+        Ok(PreparedRuntime {
+            playback,
+            groups,
+            profile_encodings,
+        })
     }
 
     fn install_prepared_snapshot_with_playback_policy(
@@ -93,13 +101,16 @@ impl Engine {
     ) {
         let PreparedEngineSnapshot {
             snapshot,
-            mut playback,
-            groups,
+            mut runtime,
         } = prepared;
-        self.preserve_playback_state(&snapshot, &mut playback, preserve_playback);
-        self.programmers.refresh_live_selections(&groups);
-        self.generation
-            .store(Arc::new(RuntimeGeneration::new(snapshot, playback, groups)));
+        self.preserve_playback_state(&snapshot, &mut runtime.playback, preserve_playback);
+        self.programmers.refresh_live_selections(&runtime.groups);
+        self.generation.store(Arc::new(RuntimeGeneration::new(
+            snapshot,
+            runtime.playback,
+            runtime.groups,
+            runtime.profile_encodings,
+        )));
     }
 
     fn preserve_playback_state(
