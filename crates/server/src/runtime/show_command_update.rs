@@ -92,7 +92,7 @@ pub(super) fn execute_update_show_command(
     session: &Session,
     body: &[String],
     snapshot: &EngineSnapshot,
-    source: light_application::ActionSource,
+    context: &light_application::ActionContext,
 ) -> Result<usize, String> {
     let settings = update_settings_for(state, session.desk.id);
     let request = if body.first().is_some_and(|token| token == "SET") {
@@ -100,7 +100,7 @@ pub(super) fn execute_update_show_command(
     } else {
         object_update_request(body, settings)?
     };
-    perform_update_from(state, session, &request, source)
+    perform_update_from(state, session, &request, context)
         .map(|result| result.changed_count)
         .map_err(|error| error.message)
 }

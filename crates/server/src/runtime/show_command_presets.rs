@@ -46,10 +46,9 @@ fn preset_destination(
 
 pub(super) fn execute_preset_mutation(
     state: &AppState,
-    session: &Session,
     operation: &str,
     body: &[String],
-    source: light_application::ActionSource,
+    context: &light_application::ActionContext,
 ) -> Result<usize, String> {
     let _activation = state
         .activation_lock
@@ -90,20 +89,15 @@ pub(super) fn execute_preset_mutation(
         }
         mutations
     };
-    let action = active_show_object_action(
-        operator_action_context(session, source),
-        entry.id,
-        mutations,
-    );
+    let action = active_show_object_action(context.clone(), entry.id, mutations);
     run_active_show_object_action(state, action).map_err(|error| error.message)?;
     Ok(1)
 }
 
 pub(super) fn delete_group_command(
     state: &AppState,
-    session: &Session,
     body: &[String],
-    source: light_application::ActionSource,
+    context: &light_application::ActionContext,
 ) -> Result<usize, String> {
     if body.len() != 2 {
         return Err("expected DELETE GROUP <group-number>".into());
@@ -137,7 +131,7 @@ pub(super) fn delete_group_command(
         .find(|object| object.id == *id)
         .ok_or_else(|| format!("group {id} does not exist"))?;
     let action = active_show_object_action(
-        operator_action_context(session, source),
+        context.clone(),
         entry.id,
         vec![delete_active_show_object(
             light_application::ActiveShowObjectKind::Group,

@@ -139,13 +139,19 @@ pub(super) fn ws_programmer_execute(
     }
     let input: Input =
         serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
+    let context = light_application::ActionContext::operator(
+        session.desk.id,
+        session.user.id.0,
+        session.id.0,
+        light_application::ActionSource::UserInterface,
+    )
+    .with_request_id(&command.request_id);
     match command_http::execute_existing_command(
         state,
         session,
         &input.value,
         "software",
-        light_application::ActionSource::UserInterface,
-        Some(&command.request_id),
+        &context,
         command_http::ExistingCommandPolicy::Compatibility,
     ) {
         command_http::ExistingCommandOutcome::ChoiceRequired { pending_choice } => {

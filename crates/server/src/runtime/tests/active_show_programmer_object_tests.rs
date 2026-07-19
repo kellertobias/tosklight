@@ -411,12 +411,15 @@ fn record_and_delete_commands_each_cross_one_active_show_boundary() {
         .select(scenario.session.id, fixtures);
 
     let before_group_record = scenario.boundary();
+    let record_context =
+        operator_action_context(&scenario.session, light_application::ActionSource::Osc)
+            .with_request_id("record-group-71");
     assert_eq!(
         execute_programmer_command_from(
             &scenario.state,
             &scenario.session,
             "RECORD GROUP 71",
-            light_application::ActionSource::Osc,
+            &record_context,
         )
         .unwrap(),
         2
@@ -447,6 +450,21 @@ fn record_and_delete_commands_each_cross_one_active_show_boundary() {
     assert_eq!(
         events.last().unwrap().source,
         light_application::EventSource::Action(light_application::ActionSource::Osc)
+    );
+    assert_eq!(
+        events.last().unwrap().correlation_id,
+        Some(record_context.correlation_id)
+    );
+    let backup_identity = format!("{}-record-group-71", record_context.correlation_id);
+    assert!(
+        std::fs::read_dir(scenario.data_dir.join("backups"))
+            .unwrap()
+            .filter_map(Result::ok)
+            .any(|entry| entry
+                .file_name()
+                .to_string_lossy()
+                .contains(&backup_identity)),
+        "the show-object backup should retain the command correlation and request identity"
     );
 
     let before_group_delete = scenario.boundary();

@@ -75,10 +75,10 @@ pub(super) fn execute_existing_command(
     session: &Session,
     command: &str,
     source: &str,
-    action_source: ActionSource,
-    request_id: Option<&str>,
+    context: &ActionContext,
     policy: ExistingCommandPolicy,
 ) -> ExistingCommandOutcome {
+    let request_id = context.request_id.as_deref();
     if matches!(policy, ExistingCommandPolicy::AtomicProgrammer) {
         let family = match compatibility_only_family(command) {
             Ok(family) => family,
@@ -107,7 +107,7 @@ pub(super) fn execute_existing_command(
             // Compatibility families may refresh the shared Engine and all live selections. They
             // must not hold one user's mutation gate while that cross-user reconciliation acquires
             // every user gate, or concurrent show commands can deadlock in opposite directions.
-            super::execute_programmer_command_from(state, session, command, action_source)
+            super::execute_programmer_command_from(state, session, command, context)
         }
         ExistingCommandPolicy::AtomicProgrammer => {
             state
@@ -119,7 +119,7 @@ pub(super) fn execute_existing_command(
                         &staged_state,
                         session,
                         command,
-                        action_source,
+                        context,
                     )?;
                     staged_programmers
                         .update_command_line(session.id, |current| {
@@ -629,8 +629,7 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
             self.session,
             command,
             self.source,
-            context.source,
-            context.request_id.as_deref(),
+            context,
             policy,
         ) {
             ExistingCommandOutcome::Accepted {
