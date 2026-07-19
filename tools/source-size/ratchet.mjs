@@ -1,9 +1,17 @@
-import { LIMITS } from "./config.mjs";
+import { isTestSource, LIMITS } from "./config.mjs";
+
+function functionPath(candidate) {
+  return candidate.id.split("::", 1)[0];
+}
 
 function hardViolations(scan) {
   return {
-    files: scan.files.filter((candidate) => candidate.lines > LIMITS.file),
-    functions: scan.functions.filter((candidate) => candidate.lines > LIMITS.function),
+    files: scan.files.filter(
+      (candidate) => !isTestSource(candidate.path) && candidate.lines > LIMITS.file,
+    ),
+    functions: scan.functions.filter(
+      (candidate) => !isTestSource(functionPath(candidate)) && candidate.lines > LIMITS.function,
+    ),
   };
 }
 

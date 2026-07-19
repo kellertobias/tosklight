@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { exemptionReason } from "./config.mjs";
+import { exemptionReason, isTestSource } from "./config.mjs";
 import { scanJavaScriptFunctions } from "./javascript.mjs";
 import { scanPythonFunctions } from "./python.mjs";
 import { baselineFor, evaluateRatcheting, serializeBaseline } from "./ratchet.mjs";
@@ -23,6 +23,16 @@ test("only package-manager locks and Tauri schemas are exempt", () => {
   );
   assert.equal(exemptionReason("fixtures/schema.json"), undefined);
   assert.equal(exemptionReason("docs/generated.md"), undefined);
+});
+
+test("test sources are identified without exempting them from goal reporting", () => {
+  assert.equal(isTestSource("tests/large.spec.ts"), true);
+  assert.equal(isTestSource("crates/server/tests/runtime.rs"), true);
+  assert.equal(isTestSource("apps/control-ui/e2e/bench/fixture.ts"), true);
+  assert.equal(isTestSource("apps/control-ui/src/Panel.test.tsx"), true);
+  assert.equal(isTestSource("apps/control-ui/src/__tests__/Panel.tsx"), true);
+  assert.equal(isTestSource("apps/control-ui/src/Panel.tsx"), false);
+  assert.equal(isTestSource("crates/server/src/runtime.rs"), false);
 });
 
 test("Rust scanner ignores literals and nested comments", () => {
@@ -118,6 +128,25 @@ test("ratchet rejects new and growing hard-limit violations", () => {
   assert.match(evaluateRatcheting(sampleScan(1_202), baseline).failures[0], /grew/u);
   assert.match(evaluateRatcheting(sampleScan(1_201, 152), baseline).failures[0], /grew/u);
   assert.match(evaluateRatcheting(sampleScan(), { ...baseline, functions: {} }).failures[0], /new function/u);
+});
+
+test("ratchet ignores test hard limits while retaining their design goals", () => {
+  const testScan = {
+    exemptions: [],
+    files: [{ id: "tests/large.spec.ts", lines: 1_500, path: "tests/large.spec.ts" }],
+    functions: [{
+      id: "tests/large.spec.ts::javascript:function:large:hash:1",
+      display: "large (function)",
+      lines: 200,
+      startLine: 1,
+    }],
+  };
+  const baseline = baselineFor(testScan);
+  const result = evaluateRatcheting(testScan, baseline);
+  assert.deepEqual(baseline.files, {});
+  assert.deepEqual(baseline.functions, {});
+  assert.deepEqual(result.failures, []);
+  assert.deepEqual(result.goals, { files: 1, functions: 1 });
 });
 
 test("ratchet makes resolved allowances stale and serializes deterministically", () => {

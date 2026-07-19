@@ -15,12 +15,19 @@ const MACHINE_MANAGED_LOCKFILES = new Set([
   "yarn.lock",
 ]);
 const TAURI_SCHEMA = /^apps\/[^/]+\/src-tauri\/gen\/schemas\/[^/]+\.json$/u;
+const TEST_DIRECTORY = /(^|\/)(?:__tests__|e2e|tests)(?:\/|$)/u;
+const TEST_FILENAME = /(?:^|\.)\b(?:spec|test)\.[^.]+$/u;
 
 export function exemptionReason(repositoryPath) {
   const basename = repositoryPath.split("/").at(-1);
   if (MACHINE_MANAGED_LOCKFILES.has(basename)) return "machine-managed lockfile";
   if (TAURI_SCHEMA.test(repositoryPath)) return "Tauri-generated schema JSON";
   return undefined;
+}
+
+export function isTestSource(repositoryPath) {
+  const basename = repositoryPath.split("/").at(-1) ?? "";
+  return TEST_DIRECTORY.test(repositoryPath) || TEST_FILENAME.test(basename);
 }
 
 export function functionLanguage(repositoryPath, source) {
