@@ -15,6 +15,9 @@ pub struct PatchFixtureCandidate {
 }
 
 /// Atomic, non-empty candidate batch for one active show.
+///
+/// Optimistic concurrency is scoped to the portable Patch revision in the action context. The
+/// result still reports both the whole-show and Patch revisions after a successful mutation.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PatchFixturesCommand {
     pub show_id: ShowId,

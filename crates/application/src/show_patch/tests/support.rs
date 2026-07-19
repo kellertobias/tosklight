@@ -154,6 +154,23 @@ impl TestRig {
             .portable_document()
             .unwrap()
     }
+
+    pub fn seed_unrelated_group(&self) {
+        let group = light_programmer::GroupDefinition {
+            id: "unrelated".into(),
+            name: "Unrelated Group".into(),
+            ..Default::default()
+        };
+        ShowStore::open(&self.ports.path)
+            .unwrap()
+            .put_object(
+                "group",
+                &group.id,
+                &serde_json::to_value(&group).unwrap(),
+                0,
+            )
+            .unwrap();
+    }
 }
 
 pub struct CounterPorts {
@@ -353,7 +370,7 @@ pub fn patch_batch(
 pub fn envelope(
     command: PatchFixturesCommand,
     request_id: &str,
-    expected_revision: u64,
+    expected_patch_revision: u64,
 ) -> ActionEnvelope<PatchFixturesCommand> {
     ActionEnvelope {
         context: ActionContext::operator(
@@ -363,7 +380,7 @@ pub fn envelope(
             ActionSource::Http,
         )
         .with_request_id(request_id)
-        .with_expected_revision(expected_revision),
+        .with_expected_revision(expected_patch_revision),
         command,
     }
 }

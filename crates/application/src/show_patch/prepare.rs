@@ -73,7 +73,7 @@ fn ensure_patch_scoped_candidate(
             ActionErrorKind::Unavailable,
             "active show requires canonical migration before patching",
         )
-        .at_revision(document.revision().value()));
+        .at_revision(document.patch_revision().value()));
     }
     Ok(())
 }

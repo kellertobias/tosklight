@@ -31,7 +31,7 @@ fn large_shared_profile_batch_reads_and_mutates_each_boundary_once() {
 }
 
 #[test]
-fn stale_show_revision_stops_before_profile_resolution_or_side_effects() {
+fn stale_patch_revision_stops_before_profile_resolution_or_side_effects() {
     let (profile, reference) = profile_with_modes(1);
     let rig = TestRig::new(profile, FailurePoint::None);
     let request = envelope(patch_batch(rig.ports.show_id(), reference, 1), "stale", 1);
@@ -39,10 +39,43 @@ fn stale_show_revision_stops_before_profile_resolution_or_side_effects() {
     let error = rig.service.handle(request, &rig.ports).unwrap_err();
 
     assert_eq!(error.kind, ActionErrorKind::Conflict);
+    assert_eq!(error.message, "stale patch revision");
     assert_eq!(error.current_revision, Some(0));
     assert_eq!(rig.counters(), begun_only_counts());
     assert_eq!(rig.service.events().latest_sequence(), 0);
     rig.assert_empty_show();
+}
+
+#[test]
+fn unrelated_show_mutation_does_not_stale_the_patch_revision() {
+    let (profile, reference) = profile_with_modes(1);
+    let rig = TestRig::new(profile, FailurePoint::None);
+    rig.seed_unrelated_group();
+    let before = rig.portable_document();
+    assert_eq!(before.revision().value(), 1);
+    assert_eq!(before.patch_revision().value(), 0);
+
+    let result = rig
+        .service
+        .handle(
+            envelope(
+                patch_batch(rig.ports.show_id(), reference, 1),
+                "patch-after-group",
+                0,
+            ),
+            &rig.ports,
+        )
+        .unwrap();
+
+    assert_eq!(result.change.show_revision.value(), 2);
+    assert_eq!(result.change.patch_revision.value(), 1);
+    assert_eq!(rig.counters(), successful_counts(1));
+    rig.assert_portable_patch(1, 1);
+    assert!(
+        rig.portable_document()
+            .object("group", "unrelated")
+            .is_some()
+    );
 }
 
 #[test]
@@ -364,7 +397,7 @@ fn same_reference_legacy_edit_materializes_inline_profile_without_library_read()
 
     let result = rig
         .service
-        .handle(envelope(command, "legacy-same-ref", 1), &rig.ports)
+        .handle(envelope(command, "legacy-same-ref", 0), &rig.ports)
         .unwrap();
 
     assert_eq!(result.change.show_revision.value(), 2);
@@ -380,7 +413,7 @@ fn legacy_object_keys_remain_readable_and_are_canonicalized_when_touched() {
     let mut command = patch_batch(rig.ports.show_id(), reference, 1);
     let fixture_id = command.fixtures[0].patch.fixture_id;
     rig.seed_legacy_fixture_as(&profile, reference, &command.fixtures[0].patch, "dimmer");
-    let context = envelope(command.clone(), "legacy-key-snapshot", 1).context;
+    let context = envelope(command.clone(), "legacy-key-snapshot", 0).context;
 
     let snapshot = rig
         .service
@@ -390,7 +423,7 @@ fn legacy_object_keys_remain_readable_and_are_canonicalized_when_touched() {
 
     command.fixtures[0].patch.name = "Touched legacy fixture".into();
     rig.service
-        .handle(envelope(command, "legacy-key-update", 1), &rig.ports)
+        .handle(envelope(command, "legacy-key-update", 0), &rig.ports)
         .unwrap();
 
     let document = rig.portable_document();
@@ -415,11 +448,11 @@ fn patching_cannot_silently_migrate_an_unrelated_legacy_fixture() {
 
     let error = rig
         .service
-        .handle(envelope(command, "scoped-migration", 2), &rig.ports)
+        .handle(envelope(command, "scoped-migration", 0), &rig.ports)
         .unwrap_err();
 
     assert_eq!(error.kind, ActionErrorKind::Unavailable);
-    assert_eq!(error.current_revision, Some(2));
+    assert_eq!(error.current_revision, Some(0));
     assert_eq!(rig.counters(), begun_only_counts());
     assert_eq!(rig.service.events().latest_sequence(), 0);
     let document = rig.portable_document();
@@ -439,7 +472,7 @@ fn materialized_inline_profile_retains_unknown_raw_fields() {
     rig.seed_legacy_fixture(&profile, reference, &command.fixtures[0].patch);
 
     rig.service
-        .handle(envelope(command, "legacy-unknown", 1), &rig.ports)
+        .handle(envelope(command, "legacy-unknown", 0), &rig.ports)
         .unwrap();
 
     let document = rig.portable_document();
@@ -464,7 +497,7 @@ fn profile_upgrade_stages_exact_old_inline_revision_with_new_revision() {
     let command = patch_batch(rig.ports.show_id(), new_reference, 1);
 
     rig.service
-        .handle(envelope(command, "legacy-upgrade", 1), &rig.ports)
+        .handle(envelope(command, "legacy-upgrade", 0), &rig.ports)
         .unwrap();
 
     let document = rig.portable_document();
@@ -492,7 +525,7 @@ fn conflicting_inline_content_for_one_revision_is_rejected_before_library_or_bac
 
     let error = rig
         .service
-        .handle(envelope(command, "legacy-conflict", 2), &rig.ports)
+        .handle(envelope(command, "legacy-conflict", 0), &rig.ports)
         .unwrap_err();
 
     assert_eq!(error.kind, ActionErrorKind::Invalid);

@@ -36,7 +36,7 @@ async fn patch_snapshot(
     })
     .await?;
     let response = super::show_patch_wire::wire_snapshot(snapshot);
-    Ok(json_with_etag(response.show_revision, response))
+    Ok(json_with_etag(response.patch_revision, response))
 }
 
 async fn patch_fixtures(
@@ -47,13 +47,13 @@ async fn patch_fixtures(
 ) -> Result<Response, PatchHttpError> {
     let session = authenticate(&state, &headers).map_err(PatchHttpError::api)?;
     let show_id = parse_show_id(&show_id)?;
-    let expected_revision = parse_if_match(&headers).map_err(PatchHttpError::api)?;
+    let expected_patch_revision = parse_if_match(&headers).map_err(PatchHttpError::api)?;
     let Json(request) = request.map_err(|error| PatchHttpError::bad_request(error.body_text()))?;
-    let action = patch_action(show_id, &session, expected_revision, request)?;
+    let action = patch_action(show_id, &session, expected_patch_revision, request)?;
     let result =
         run_patch_service(state, move |service, ports| service.handle(action, ports)).await?;
     let response = super::show_patch_wire::wire_outcome(result);
-    Ok(json_with_etag(response.delta.show_revision, response))
+    Ok(json_with_etag(response.delta.patch_revision, response))
 }
 
 async fn run_patch_service<T, F>(state: AppState, operation: F) -> Result<T, PatchHttpError>
@@ -76,7 +76,7 @@ where
 fn patch_action(
     show_id: Uuid,
     session: &Session,
-    expected_revision: u64,
+    expected_patch_revision: u64,
     request: PatchFixturesRequest,
 ) -> Result<ActionEnvelope<PatchFixturesCommand>, PatchHttpError> {
     let request_id = request.request_id.clone();
@@ -84,7 +84,7 @@ fn patch_action(
         .map_err(PatchHttpError::bad_request)?;
     let context = http_context(session)
         .with_request_id(request_id)
-        .with_expected_revision(expected_revision);
+        .with_expected_revision(expected_patch_revision);
     Ok(ActionEnvelope { context, command })
 }
 
@@ -111,7 +111,7 @@ fn json_with_etag<T: serde::Serialize>(revision: u64, body: T) -> Response {
 
 fn revision_etag(revision: u64) -> HeaderValue {
     HeaderValue::from_str(&format!("\"{revision}\""))
-        .expect("a numeric show revision always forms a valid ETag")
+        .expect("a numeric patch revision always forms a valid ETag")
 }
 
 struct PatchHttpError {

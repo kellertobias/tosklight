@@ -165,15 +165,15 @@ fn validate_active_document(
     let Some(expected) = envelope.context.expected_revision else {
         return Err(ActionError::new(
             ActionErrorKind::Invalid,
-            "patch operation requires a whole-show expected revision",
+            "patch operation requires an expected patch revision",
         ));
     };
-    if document.revision().value() == expected {
+    if document.patch_revision().value() == expected {
         Ok(())
     } else {
         Err(
-            ActionError::new(ActionErrorKind::Conflict, "stale show revision")
-                .at_revision(document.revision().value()),
+            ActionError::new(ActionErrorKind::Conflict, "stale patch revision")
+                .at_revision(document.patch_revision().value()),
         )
     }
 }

@@ -3,11 +3,14 @@ mod errors;
 use self::errors::{engine_error, fixture_error, store_error};
 use super::{ActiveShowBackupKind, AppState, ServerActiveShowUnitOfWork};
 use light_application::{
-    ActionContext, ActionError, ActionErrorKind, ActiveShowUnitOfWork, PatchChange, ShowPatchPorts,
+    ActionContext, ActionError, ActionErrorKind, ActiveShowUnitOfWork, BackupIdentity, PatchChange,
+    ShowPatchPorts,
 };
 use light_core::{FixtureId, Revision, ShowId};
 use light_engine::{EngineSnapshot, PreparedEngineSnapshot};
-use light_show::FixtureProfileRevision;
+use light_show::{
+    FixtureProfileRevision, PortableShowCommit, PortableShowDocument, PortableShowTransaction,
+};
 use parking_lot::RwLock;
 use std::{collections::HashSet, sync::Arc};
 
@@ -19,28 +22,54 @@ use std::{collections::HashSet, sync::Arc};
 #[derive(Clone)]
 pub(super) struct ServerShowPatchPorts {
     state: AppState,
-    current_revision: Arc<RwLock<Option<u64>>>,
+    current_patch_revision: Arc<RwLock<Option<u64>>>,
 }
 
 impl ServerShowPatchPorts {
     pub(super) fn new(state: AppState) -> Self {
         Self {
             state,
-            current_revision: Arc::new(RwLock::new(None)),
+            current_patch_revision: Arc::new(RwLock::new(None)),
         }
     }
 
-    fn current_revision(&self) -> Option<u64> {
-        *self.current_revision.read()
+    fn current_patch_revision(&self) -> Option<u64> {
+        *self.current_patch_revision.read()
     }
 
-    fn remember_revision(&self, revision: u64) {
-        *self.current_revision.write() = Some(revision);
+    fn remember_patch_revision(&self, revision: u64) {
+        *self.current_patch_revision.write() = Some(revision);
+    }
+}
+
+pub(super) struct ServerShowPatchUnitOfWork {
+    inner: ServerActiveShowUnitOfWork,
+    patch_revision: u64,
+}
+
+impl ActiveShowUnitOfWork for ServerShowPatchUnitOfWork {
+    fn document(&self) -> &PortableShowDocument {
+        self.inner.document()
+    }
+
+    fn backup(&mut self, identity: &BackupIdentity) -> Result<(), ActionError> {
+        self.inner
+            .backup(identity)
+            .map_err(|error| at_patch_revision(error, self.patch_revision))
+    }
+
+    fn commit(
+        self,
+        transaction: PortableShowTransaction,
+    ) -> Result<PortableShowCommit, ActionError> {
+        self.inner
+            .commit(transaction)
+            .map_err(|error| at_patch_revision(error, self.patch_revision))
     }
 }
 
 impl ShowPatchPorts for ServerShowPatchPorts {
-    type UnitOfWork = ServerActiveShowUnitOfWork;
+    type UnitOfWork = ServerShowPatchUnitOfWork;
     type PreparedRuntime = PreparedEngineSnapshot;
 
     fn begin_active_show(
@@ -50,8 +79,12 @@ impl ShowPatchPorts for ServerShowPatchPorts {
     ) -> Result<Self::UnitOfWork, ActionError> {
         let unit =
             ServerActiveShowUnitOfWork::begin(&self.state, show_id, ActiveShowBackupKind::Patch)?;
-        self.remember_revision(unit.document().revision().value());
-        Ok(unit)
+        let patch_revision = unit.document().patch_revision().value();
+        self.remember_patch_revision(patch_revision);
+        Ok(ServerShowPatchUnitOfWork {
+            inner: unit,
+            patch_revision,
+        })
     }
 
     fn resolve_profile_revision(
@@ -60,12 +93,12 @@ impl ShowPatchPorts for ServerShowPatchPorts {
         revision: Revision,
     ) -> Result<FixtureProfileRevision, ActionError> {
         let library_revision = u32::try_from(revision).map_err(|_| {
-            at_current_revision(
+            at_current_patch_revision(
                 ActionError::new(
                     ActionErrorKind::Invalid,
                     "fixture profile revision exceeds the library revision range",
                 ),
-                self.current_revision(),
+                self.current_patch_revision(),
             )
         })?;
         let profile = self
@@ -73,18 +106,18 @@ impl ShowPatchPorts for ServerShowPatchPorts {
             .fixture_library
             .lock()
             .profile_revision_document(profile_id, library_revision)
-            .map_err(|error| fixture_error(error, self.current_revision()))?
+            .map_err(|error| fixture_error(error, self.current_patch_revision()))?
             .ok_or_else(|| {
-                at_current_revision(
+                at_current_patch_revision(
                     ActionError::new(
                         ActionErrorKind::NotFound,
                         "fixture profile revision is not available",
                     ),
-                    self.current_revision(),
+                    self.current_patch_revision(),
                 )
             })?;
         FixtureProfileRevision::new(profile_id, revision, profile)
-            .map_err(|error| store_error(error, self.current_revision()))
+            .map_err(|error| store_error(error, self.current_patch_revision()))
     }
 
     fn prepare_runtime(
@@ -94,7 +127,7 @@ impl ShowPatchPorts for ServerShowPatchPorts {
         self.state
             .engine
             .prepare_snapshot(snapshot)
-            .map_err(|error| engine_error(error, self.current_revision()))
+            .map_err(|error| engine_error(error, self.current_patch_revision()))
     }
 
     fn install_runtime(&self, prepared: Self::PreparedRuntime) {
@@ -125,9 +158,14 @@ fn affected_fixture_ids(change: &PatchChange) -> HashSet<FixtureId> {
         .collect()
 }
 
-fn at_current_revision(mut error: ActionError, revision: Option<u64>) -> ActionError {
+fn at_current_patch_revision(mut error: ActionError, revision: Option<u64>) -> ActionError {
     if let Some(revision) = revision {
         error = error.at_revision(revision);
     }
+    error
+}
+
+fn at_patch_revision(mut error: ActionError, patch_revision: u64) -> ActionError {
+    error.current_revision = Some(patch_revision);
     error
 }

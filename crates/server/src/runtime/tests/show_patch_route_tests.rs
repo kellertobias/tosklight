@@ -1,7 +1,7 @@
 use super::*;
 
 #[tokio::test]
-async fn v2_patch_snapshot_authenticates_and_returns_the_show_revision_etag() {
+async fn v2_patch_snapshot_authenticates_and_returns_the_patch_revision_etag() {
     let (state, data_dir) = test_state();
     let app = router(state);
     let denied = app
@@ -34,7 +34,7 @@ async fn v2_patch_snapshot_authenticates_and_returns_the_show_revision_etag() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(response.headers()[header::ETAG], "\"1\"");
+    assert_eq!(response.headers()[header::ETAG], "\"0\"");
     let snapshot = json(response).await;
     assert_eq!(snapshot["show_id"], show_id);
     assert_eq!(snapshot["show_revision"], 1);
@@ -58,7 +58,7 @@ async fn v2_patch_mutation_returns_typed_revision_conflicts() {
             Request::post(format!("/api/v2/shows/{show_id}/patch/fixtures"))
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
-                .header(header::IF_MATCH, "2")
+                .header(header::IF_MATCH, "1")
                 .body(Body::from(valid_patch_request().to_string()))
                 .unwrap(),
         )
@@ -66,10 +66,10 @@ async fn v2_patch_mutation_returns_typed_revision_conflicts() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::CONFLICT);
-    assert_eq!(response.headers()[header::ETAG], "\"1\"");
+    assert_eq!(response.headers()[header::ETAG], "\"0\"");
     let error = json(response).await;
-    assert_eq!(error["error"], "stale show revision");
-    assert_eq!(error["current_revision"], 1);
+    assert_eq!(error["error"], "stale patch revision");
+    assert_eq!(error["current_revision"], 0);
     assert_eq!(error["retryable"], false);
     let _ = std::fs::remove_dir_all(data_dir);
 }
@@ -102,7 +102,7 @@ async fn v2_patch_requires_if_match_and_rejects_invalid_batches_without_side_eff
         &app,
         &token,
         show_id,
-        Some(1),
+        Some(0),
         serde_json::json!({"request_id":"empty-batch"}),
     )
     .await;
@@ -110,16 +110,16 @@ async fn v2_patch_requires_if_match_and_rejects_invalid_batches_without_side_eff
     assert_eq!(json(invalid).await["retryable"], false);
 
     let unchanged = get_patch(&app, &token, show_id).await;
-    assert_eq!(unchanged.headers()[header::ETAG], "\"1\"");
+    assert_eq!(unchanged.headers()[header::ETAG], "\"0\"");
     let unchanged = json(unchanged).await;
     assert_eq!(unchanged["show_revision"], 1);
     assert_eq!(unchanged["patch_revision"], 0);
     assert_eq!(unchanged["cursor"]["sequence"], 0);
 
     let successful_request = valid_patch_request_for(profile_id, mode_id, "successful-route-test");
-    let success = post_patch(&app, &token, show_id, Some(1), successful_request.clone()).await;
+    let success = post_patch(&app, &token, show_id, Some(0), successful_request.clone()).await;
     assert_eq!(success.status(), StatusCode::OK);
-    assert_eq!(success.headers()[header::ETAG], "\"2\"");
+    assert_eq!(success.headers()[header::ETAG], "\"1\"");
     let success = json(success).await;
     assert_eq!(success["changed"], true);
     assert_eq!(success["show_revision"], 2);
@@ -127,15 +127,17 @@ async fn v2_patch_requires_if_match_and_rejects_invalid_batches_without_side_eff
     assert_eq!(success["event_sequence"], 1);
     assert_eq!(success["fixtures"].as_array().unwrap().len(), 1);
 
-    let replay = post_patch(&app, &token, show_id, Some(1), successful_request).await;
+    let replay = post_patch(&app, &token, show_id, Some(0), successful_request).await;
     assert_eq!(replay.status(), StatusCode::OK);
-    assert_eq!(replay.headers()[header::ETAG], "\"2\"");
+    assert_eq!(replay.headers()[header::ETAG], "\"1\"");
     let replay = json(replay).await;
     assert_eq!(replay["replayed"], true);
     assert_eq!(replay["event_sequence"], 1);
     assert_eq!(patch_backup_count(&data_dir), 1);
 
-    let committed = json(get_patch(&app, &token, show_id).await).await;
+    let committed_response = get_patch(&app, &token, show_id).await;
+    assert_eq!(committed_response.headers()[header::ETAG], "\"1\"");
+    let committed = json(committed_response).await;
     assert_eq!(committed["show_revision"], 2);
     assert_eq!(committed["patch_revision"], 1);
     assert_eq!(committed["cursor"]["sequence"], 1);
@@ -147,6 +149,66 @@ async fn v2_patch_requires_if_match_and_rejects_invalid_batches_without_side_eff
     assert_eq!(reopened["show_revision"], 2);
     assert_eq!(reopened["patch_revision"], 1);
     assert_eq!(reopened["fixtures"].as_array().unwrap().len(), 1);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn v2_patch_revision_ignores_unrelated_group_mutations() {
+    let (state, data_dir) = test_state();
+    let (profile_id, mode_id) = install_patch_route_profile(&state);
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let show = create_show(&app, &token, "V2 Patch independent revision").await;
+    let show_id = show["id"].as_str().unwrap();
+    open_show_for_patch_test(&app, &token, show_id).await;
+
+    let show_uuid = Uuid::parse_str(show_id).unwrap();
+    let entry = state
+        .desk
+        .lock()
+        .show(light_core::ShowId(show_uuid))
+        .unwrap()
+        .unwrap();
+    let group = light_programmer::GroupDefinition {
+        id: "unrelated".into(),
+        name: "Unrelated Group".into(),
+        ..Default::default()
+    };
+    ShowStore::open(&entry.path)
+        .unwrap()
+        .put_object(
+            "group",
+            &group.id,
+            &serde_json::to_value(&group).unwrap(),
+            0,
+        )
+        .unwrap();
+    let after_group = ShowStore::open(&entry.path)
+        .unwrap()
+        .portable_document()
+        .unwrap();
+    assert_eq!(after_group.revision().value(), 2);
+    assert_eq!(after_group.patch_revision().value(), 0);
+    let patch_after_group = get_patch(&app, &token, show_id).await;
+    assert_eq!(patch_after_group.headers()[header::ETAG], "\"0\"");
+    let patch_after_group = json(patch_after_group).await;
+    assert_eq!(patch_after_group["show_revision"], 2);
+    assert_eq!(patch_after_group["patch_revision"], 0);
+
+    let response = post_patch(
+        &app,
+        &token,
+        show_id,
+        Some(0),
+        valid_patch_request_for(profile_id, mode_id, "patch-after-group"),
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()[header::ETAG], "\"1\"");
+    let outcome = json(response).await;
+    assert_eq!(outcome["show_revision"], 3);
+    assert_eq!(outcome["patch_revision"], 1);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -231,14 +293,14 @@ async fn post_patch(
     app: &Router,
     token: &str,
     show_id: &str,
-    revision: Option<u64>,
+    patch_revision: Option<u64>,
     body: serde_json::Value,
 ) -> Response {
     let mut request = Request::post(format!("/api/v2/shows/{show_id}/patch/fixtures"))
         .header(header::AUTHORIZATION, format!("Bearer {token}"))
         .header(header::CONTENT_TYPE, "application/json");
-    if let Some(revision) = revision {
-        request = request.header(header::IF_MATCH, revision.to_string());
+    if let Some(patch_revision) = patch_revision {
+        request = request.header(header::IF_MATCH, patch_revision.to_string());
     }
     app.clone()
         .oneshot(request.body(Body::from(body.to_string())).unwrap())

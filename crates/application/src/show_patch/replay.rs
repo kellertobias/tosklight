@@ -34,7 +34,7 @@ impl ReplayKey {
 
 #[derive(Clone)]
 struct ReplayEntry {
-    expected_revision: Option<u64>,
+    expected_patch_revision: Option<u64>,
     command: Arc<PatchFixturesCommand>,
     result: Arc<PatchFixturesResult>,
     retained_bytes: usize,
@@ -57,7 +57,8 @@ impl ReplayCache {
         let Some(entry) = self.entries.get(key) else {
             return Ok(None);
         };
-        if entry.expected_revision != context.expected_revision || entry.command.as_ref() != command
+        if entry.expected_patch_revision != context.expected_revision
+            || entry.command.as_ref() != command
         {
             return Err(request_collision());
         }
@@ -83,7 +84,7 @@ impl ReplayCache {
         if let Some(previous) = self.entries.insert(
             key,
             ReplayEntry {
-                expected_revision: context.expected_revision,
+                expected_patch_revision: context.expected_revision,
                 command: Arc::new(command),
                 result: Arc::new(result),
                 retained_bytes,

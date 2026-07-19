@@ -63,7 +63,7 @@ fn validate_request_identity(context: &ActionContext) -> Result<(), ActionError>
     }
     if context.expected_revision.is_none() {
         return Err(invalid(
-            "patch operation requires a whole-show expected revision",
+            "patch operation requires an expected patch revision",
         ));
     }
     Ok(())
