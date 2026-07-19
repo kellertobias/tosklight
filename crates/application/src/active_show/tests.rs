@@ -5,7 +5,10 @@ use crate::{
 };
 use light_core::ShowId;
 use light_engine::EngineSnapshot;
-use light_show::{PortableShowCommit, PortableShowDocument, PortableShowTransaction, ShowStore};
+use light_show::{
+    PortableShowCommit, PortableShowDocument, PortableShowObjectUndo, PortableShowTransaction,
+    ShowStore, StoreError,
+};
 use parking_lot::Mutex;
 use serde_json::{Value, json};
 use std::{fs, path::PathBuf, sync::Arc};
@@ -413,6 +416,246 @@ fn stale_member_of_a_batch_leaves_every_group_and_preset_unchanged() {
     assert_eq!(rig.object_body("preset", "2.1"), preset);
 }
 
+#[test]
+fn object_undo_commits_exact_history_through_one_prepared_boundary() {
+    let rig = TestRig::new();
+    let original = json!({
+        "id":"historic-id",
+        "name":"Original",
+        "fixtures":[],
+        "future_extension":{"nested":[3, 1, 2]}
+    });
+    rig.seed_object("group", "7", original.clone());
+    rig.write_object(
+        "group",
+        "7",
+        json!({"id":"7","name":"Changed","fixtures":[]}),
+        1,
+    );
+    let action = rig.undo_action(ActiveShowObjectKind::Group, "7", 2);
+    let correlation_id = action.context.correlation_id;
+
+    let result = rig.service.undo_object(action, &rig.ports).unwrap();
+
+    assert_eq!(
+        rig.steps(),
+        [
+            "begin",
+            "history",
+            "prepare",
+            "backup",
+            "commit",
+            "install",
+            "reconcile"
+        ]
+    );
+    assert_eq!(result.show_revision.value(), 3);
+    assert_eq!(result.change.object_revision, 3);
+    assert_eq!(result.change.body, Some(original.clone()));
+    assert_eq!(result.event_sequence, 1);
+    assert_eq!(rig.object_body("group", "7"), original);
+    assert_eq!(rig.installed_revision(), Some(3));
+    assert!(matches!(
+        ShowStore::open(&rig.ports.path)
+            .unwrap()
+            .prepare_object_undo("group", "7", 3),
+        Err(StoreError::Invalid(message)) if message == "object has no undo history"
+    ));
+
+    let EventReplay::Events(events) = rig.service.events().replay(0, &EventFilter::default())
+    else {
+        panic!("expected retained object Undo event");
+    };
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].correlation_id, Some(correlation_id));
+    assert_eq!(events[0].source, EventSource::Action(ActionSource::Http));
+    assert!(matches!(
+        &events[0].payload,
+        ApplicationEvent::Show(ShowEvent::ObjectsChanged(change))
+            if change.show_revision.value() == 3
+                && change.changes == vec![result.change]
+    ));
+}
+
+#[test]
+fn object_undo_commits_pending_migrations_in_the_same_compiled_candidate() {
+    let rig = TestRig::new();
+    let original = json!({
+        "id":"7",
+        "name":"Original",
+        "fixtures":[],
+        "future_extension":{"kept":true}
+    });
+    rig.seed_object("group", "7", original.clone());
+    rig.write_object(
+        "group",
+        "7",
+        json!({"id":"7","name":"Changed","fixtures":[]}),
+        1,
+    );
+    rig.seed_object(
+        "group",
+        "8",
+        json!({"id":"legacy-wrong-id","name":"Pending migration","fixtures":[]}),
+    );
+
+    let result = rig
+        .service
+        .undo_object(
+            rig.undo_action(ActiveShowObjectKind::Group, "7", 2),
+            &rig.ports,
+        )
+        .unwrap();
+
+    assert_eq!(result.show_revision.value(), 4);
+    let document = rig.document();
+    assert_eq!(document.revision().value(), 4);
+    assert_eq!(document.object("group", "7").unwrap().body(), &original);
+    assert_eq!(document.object("group", "8").unwrap().body()["id"], "8");
+    assert_eq!(document.object("group", "8").unwrap().revision(), 2);
+
+    let prepared = crate::prepare_show_candidate(&document, document.transaction()).unwrap();
+    let (transaction, recompiled) = prepared.into_parts();
+    assert!(transaction.is_empty());
+    let installed = rig.installed_snapshot().unwrap();
+    assert_eq!(installed.revision, recompiled.revision);
+    assert_eq!(
+        serde_json::to_value(&installed.groups).unwrap(),
+        serde_json::to_value(&recompiled.groups).unwrap()
+    );
+}
+
+#[test]
+fn object_undo_accepts_cue_list_and_preset_families() {
+    let cue_list = TestRig::new();
+    let cue_list_id = light_core::CueListId(Uuid::from_u128(0x701));
+    let mut original_cues = cue_list_body(cue_list_id, "Original CueList");
+    original_cues["future_extension"] = json!({"nested":{"kept":true}});
+    let changed_cues = cue_list_body(cue_list_id, "Changed CueList");
+    let storage_id = cue_list_id.0.to_string();
+    cue_list.seed_object("cue_list", &storage_id, original_cues.clone());
+    cue_list.write_object("cue_list", &storage_id, changed_cues, 1);
+
+    let result = cue_list
+        .service
+        .undo_object(
+            cue_list.undo_action(ActiveShowObjectKind::CueList, &storage_id, 2),
+            &cue_list.ports,
+        )
+        .unwrap();
+
+    assert_eq!(result.change.kind, ActiveShowObjectKind::CueList);
+    assert_eq!(cue_list.object_body("cue_list", &storage_id), original_cues);
+
+    let preset = TestRig::new();
+    let original_preset = json!({
+        "name":"Original Preset",
+        "family":"Color",
+        "number":3,
+        "future_extension":{"kept":true}
+    });
+    let changed_preset = json!({"name":"Changed Preset","family":"Color","number":3});
+    preset.seed_object("preset", "2.3", original_preset.clone());
+    preset.write_object("preset", "2.3", changed_preset, 1);
+
+    let result = preset
+        .service
+        .undo_object(
+            preset.undo_action(ActiveShowObjectKind::Preset, "2.3", 2),
+            &preset.ports,
+        )
+        .unwrap();
+
+    assert_eq!(result.change.kind, ActiveShowObjectKind::Preset);
+    assert_eq!(preset.object_body("preset", "2.3"), original_preset);
+}
+
+#[test]
+fn stale_or_missing_history_undo_has_no_side_effects_and_preserves_history() {
+    let stale = TestRig::new();
+    let original = json!({"id":"1","name":"Original","fixtures":[]});
+    let changed = json!({"id":"1","name":"Changed","fixtures":[]});
+    stale.seed_object("group", "1", original.clone());
+    stale.write_object("group", "1", changed.clone(), 1);
+
+    let error = stale
+        .service
+        .undo_object(
+            stale.undo_action(ActiveShowObjectKind::Group, "1", 1),
+            &stale.ports,
+        )
+        .unwrap_err();
+
+    assert_eq!(error.kind, ActionErrorKind::Conflict);
+    assert_eq!(error.current_revision, Some(2));
+    assert_eq!(stale.steps(), ["begin"]);
+    assert_eq!(stale.object_body("group", "1"), changed);
+    assert_eq!(stale.installed_revision(), None);
+    assert_eq!(stale.service.events().latest_sequence(), 0);
+    assert_eq!(
+        ShowStore::open(&stale.ports.path)
+            .unwrap()
+            .prepare_object_undo("group", "1", 2)
+            .unwrap()
+            .body(),
+        &original
+    );
+
+    let no_history = TestRig::new();
+    let only = json!({"name":"Only version","family":"Color","number":1});
+    no_history.seed_object("preset", "2.1", only.clone());
+    let error = no_history
+        .service
+        .undo_object(
+            no_history.undo_action(ActiveShowObjectKind::Preset, "2.1", 1),
+            &no_history.ports,
+        )
+        .unwrap_err();
+
+    assert_eq!(error.kind, ActionErrorKind::Invalid);
+    assert!(error.message.contains("no undo history"));
+    assert_eq!(no_history.steps(), ["begin", "history"]);
+    assert_eq!(no_history.object_body("preset", "2.1"), only);
+    assert_eq!(no_history.installed_revision(), None);
+    assert_eq!(no_history.service.events().latest_sequence(), 0);
+}
+
+#[test]
+fn invalid_historical_candidate_stops_before_backup_and_keeps_history() {
+    let rig = TestRig::new();
+    let invalid = json!({
+        "id":"9",
+        "name":"Invalid historic Group",
+        "fixtures":"not-an-array",
+        "future_extension":{"must":"survive rejection"}
+    });
+    let current = json!({"id":"9","name":"Current","fixtures":[]});
+    rig.seed_object("group", "9", invalid.clone());
+    rig.write_object("group", "9", current.clone(), 1);
+
+    let error = rig
+        .service
+        .undo_object(
+            rig.undo_action(ActiveShowObjectKind::Group, "9", 2),
+            &rig.ports,
+        )
+        .unwrap_err();
+
+    assert_eq!(error.kind, ActionErrorKind::Invalid);
+    assert_eq!(rig.steps(), ["begin", "history"]);
+    assert_eq!(rig.object_body("group", "9"), current);
+    assert_eq!(rig.installed_revision(), None);
+    assert_eq!(rig.service.events().latest_sequence(), 0);
+    assert_eq!(
+        ShowStore::open(&rig.ports.path)
+            .unwrap()
+            .prepare_object_undo("group", "9", 2)
+            .unwrap()
+            .body(),
+        &invalid
+    );
+}
+
 struct TestRig {
     service: ActiveShowService,
     ports: TestPorts,
@@ -442,9 +685,13 @@ impl TestRig {
     }
 
     fn seed_object(&self, kind: &str, id: &str, body: Value) {
+        self.write_object(kind, id, body, 0);
+    }
+
+    fn write_object(&self, kind: &str, id: &str, body: Value, expected: u64) {
         ShowStore::open(&self.ports.path)
             .unwrap()
-            .put_object(kind, id, &body, 0)
+            .put_object(kind, id, &body, expected)
             .unwrap();
     }
 
@@ -492,6 +739,28 @@ impl TestRig {
         }
     }
 
+    fn undo_action(
+        &self,
+        kind: ActiveShowObjectKind,
+        object_id: &str,
+        expected_object_revision: u64,
+    ) -> ActionEnvelope<UndoActiveShowObjectCommand> {
+        ActionEnvelope {
+            context: ActionContext::operator(
+                Uuid::from_u128(1),
+                Uuid::from_u128(2),
+                Uuid::from_u128(3),
+                ActionSource::Http,
+            ),
+            command: UndoActiveShowObjectCommand {
+                show_id: self.show_id,
+                kind,
+                object_id: object_id.into(),
+                expected_object_revision,
+            },
+        }
+    }
+
     fn object_body(&self, kind: &str, id: &str) -> Value {
         self.document().object(kind, id).unwrap().body().clone()
     }
@@ -521,6 +790,10 @@ impl TestRig {
             .lock()
             .as_ref()
             .map(|snapshot| snapshot.revision)
+    }
+
+    fn installed_snapshot(&self) -> Option<EngineSnapshot> {
+        self.ports.installed.lock().clone()
     }
 }
 
@@ -592,6 +865,19 @@ impl ActiveShowPorts for TestPorts {
         })
     }
 
+    fn prepare_object_undo(
+        &self,
+        unit: &Self::UnitOfWork,
+        kind: &str,
+        object_id: &str,
+        expected_object_revision: u64,
+    ) -> Result<PortableShowObjectUndo, ActionError> {
+        self.steps.lock().push("history");
+        unit.store
+            .prepare_object_undo(kind, object_id, expected_object_revision)
+            .map_err(test_store_error)
+    }
+
     fn prepare_runtime(
         &self,
         snapshot: EngineSnapshot,
@@ -611,6 +897,40 @@ impl ActiveShowPorts for TestPorts {
     fn reconcile_object_changes(&self, _changes: &[ActiveShowObjectChange]) {
         self.steps.lock().push("reconcile");
     }
+}
+
+fn test_store_error(error: StoreError) -> ActionError {
+    match error {
+        StoreError::RevisionConflict { current, .. } => {
+            ActionError::new(ActionErrorKind::Conflict, error.to_string()).at_revision(current)
+        }
+        StoreError::Invalid(_) | StoreError::Uuid(_) | StoreError::Json(_) => {
+            ActionError::new(ActionErrorKind::Invalid, error.to_string())
+        }
+        _ => ActionError::new(ActionErrorKind::Internal, error.to_string()),
+    }
+}
+
+fn cue_list_body(id: light_core::CueListId, name: &str) -> Value {
+    serde_json::to_value(light_playback::CueList {
+        id,
+        name: name.into(),
+        priority: 0,
+        mode: light_playback::CueListMode::Sequence,
+        looped: false,
+        chaser_step_millis: 1_000,
+        speed_group: None,
+        intensity_priority_mode: light_playback::IntensityPriorityMode::Htp,
+        wrap_mode: Some(light_playback::WrapMode::Off),
+        restart_mode: light_playback::RestartMode::FirstCue,
+        force_cue_timing: false,
+        disable_cue_timing: false,
+        chaser_xfade_millis: 0,
+        chaser_xfade_percent: Some(0),
+        speed_multiplier: 1.0,
+        cues: vec![light_playback::Cue::new(1.0)],
+    })
+    .unwrap()
 }
 
 fn temporary_show_path() -> PathBuf {

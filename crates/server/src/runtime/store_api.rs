@@ -5,7 +5,7 @@ pub(super) async fn undo_object(
     Path((id, kind, object_id)): Path<(Uuid, String, String)>,
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let _session = authenticate(&state, &headers)?;
+    let session = authenticate(&state, &headers)?;
     let expected = parse_if_match(&headers)?;
     let show_id = light_core::ShowId(id);
     let entry = state
@@ -14,44 +14,76 @@ pub(super) async fn undo_object(
         .show(show_id)
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("show"))?;
-    let revision = ShowStore::open(&entry.path)
-        .map_err(ApiError::store)?
-        .undo_object(&kind, &object_id, expected)
-        .map_err(ApiError::store)?;
-    if state
+    let activation = state.activation_lock.clone().lock_owned().await;
+    let active = state
         .active_show
         .read()
         .as_ref()
-        .is_some_and(|active| active.id == show_id)
-    {
-        state
-            .engine
-            .replace_snapshot(load_engine_snapshot(&entry).map_err(ApiError::internal)?)
-            .map_err(|error| ApiError::internal(error.to_string()))?;
-        if kind == "patched_fixture" {
-            state.media_cache.lock().retain_fixtures(
-                &state
-                    .engine
-                    .snapshot()
-                    .fixtures
-                    .iter()
-                    .filter(|fixture| fixture.direct_control.is_some())
-                    .map(|fixture| fixture.fixture_id.0.to_string())
-                    .collect(),
-            );
-            state.media_status.write().retain(|fixture, _| {
-                state.engine.snapshot().fixtures.iter().any(|patched| {
-                    patched.fixture_id == *fixture && patched.direct_control.is_some()
-                })
-            });
+        .is_some_and(|active| active.id == show_id);
+    let object_kind = light_application::ActiveShowObjectKind::from_storage_kind(&kind);
+    let (revision, event_sequence) = if active && let Some(object_kind) = object_kind {
+        let action = undo_active_show_object_action(
+            operator_action_context(&session, light_application::ActionSource::Http),
+            show_id,
+            object_kind,
+            object_id.clone(),
+            expected,
+        );
+        let (result, _activation) =
+            run_active_show_object_undo_async(&state, activation, action).await?;
+        (result.change.object_revision, Some(result.event_sequence))
+    } else {
+        let revision = ShowStore::open(&entry.path)
+            .map_err(ApiError::store)?
+            .undo_object(&kind, &object_id, expected)
+            .map_err(ApiError::store)?;
+        if active {
+            install_legacy_undo_runtime(&state, &entry, &kind)?;
         }
-    }
+        drop(activation);
+        (revision, None)
+    };
     emit(
         &state,
         "show_object_undone",
         serde_json::json!({"show_id":show_id,"kind":kind,"id":object_id,"revision":revision}),
     );
-    Ok(Json(serde_json::json!({"revision":revision})))
+    Ok(Json(serde_json::json!({
+        "revision":revision,
+        "event_sequence":event_sequence
+    })))
+}
+
+fn install_legacy_undo_runtime(
+    state: &AppState,
+    entry: &ShowEntry,
+    kind: &str,
+) -> Result<(), ApiError> {
+    state
+        .engine
+        .replace_snapshot(load_engine_snapshot(entry).map_err(ApiError::internal)?)
+        .map_err(|error| ApiError::internal(error.to_string()))?;
+    if kind == "patched_fixture" {
+        state.media_cache.lock().retain_fixtures(
+            &state
+                .engine
+                .snapshot()
+                .fixtures
+                .iter()
+                .filter(|fixture| fixture.direct_control.is_some())
+                .map(|fixture| fixture.fixture_id.0.to_string())
+                .collect(),
+        );
+        state.media_status.write().retain(|fixture, _| {
+            state
+                .engine
+                .snapshot()
+                .fixtures
+                .iter()
+                .any(|patched| patched.fixture_id == *fixture && patched.direct_control.is_some())
+        });
+    }
+    Ok(())
 }
 pub(super) async fn store_preset(
     State(state): State<AppState>,

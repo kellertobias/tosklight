@@ -9,7 +9,8 @@ use light_application::{
 use light_core::ShowId;
 use light_engine::{EngineError, EngineSnapshot, PreparedEngineSnapshot};
 use light_show::{
-    PortableShowCommit, PortableShowDocument, PortableShowTransaction, ShowStore, StoreError,
+    PortableShowCommit, PortableShowDocument, PortableShowObjectUndo, PortableShowTransaction,
+    ShowStore, StoreError,
 };
 
 /// Server adapter for generic application-owned active-show mutations.
@@ -136,6 +137,18 @@ impl ActiveShowPorts for ServerActiveShowPorts {
         show_id: ShowId,
     ) -> Result<Self::UnitOfWork, ActionError> {
         ServerActiveShowUnitOfWork::begin(&self.state, show_id, self.backup_kind)
+    }
+
+    fn prepare_object_undo(
+        &self,
+        unit: &Self::UnitOfWork,
+        kind: &str,
+        object_id: &str,
+        expected_object_revision: light_core::Revision,
+    ) -> Result<PortableShowObjectUndo, ActionError> {
+        unit.store
+            .prepare_object_undo(kind, object_id, expected_object_revision)
+            .map_err(|error| store_error(error, None))
     }
 
     fn prepare_runtime(

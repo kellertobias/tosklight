@@ -9,13 +9,15 @@ use light_fixture::{
 };
 use light_show::{
     FixtureProfileRevision, FixtureProfileRevisionId, PortableShowCandidate,
-    PortableShowCandidateObject, PortableShowDocument, PortableShowTransaction,
+    PortableShowCandidateObject, PortableShowDocument, PortableShowObjectKey,
+    PortableShowTransaction,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(super) fn stage_inline_migrations(
     document: &PortableShowDocument,
     transaction: &mut PortableShowTransaction,
+    preserved: Option<&PortableShowObjectKey>,
 ) -> Result<(), ActionError> {
     let (profiles, updates) = {
         let candidate = candidate(document, transaction)?;
@@ -27,7 +29,7 @@ pub(super) fn stage_inline_migrations(
             .put_fixture_profile_revision(profile)
             .map_err(|error| super::invalid_candidate(error.to_string()))?;
     }
-    stage_updates(transaction, updates);
+    stage_updates(transaction, updates, preserved);
     if patch_changed {
         transaction.mark_patch_changed();
     }
@@ -128,13 +130,14 @@ fn ensure_matching_profile(
 pub(super) fn stage_lean_migrations(
     document: &PortableShowDocument,
     transaction: &mut PortableShowTransaction,
+    preserved: Option<&PortableShowObjectKey>,
 ) -> Result<(), ActionError> {
     let updates = {
         let candidate = candidate(document, transaction)?;
         collect_lean(candidate)?
     };
     let patch_changed = !updates.is_empty();
-    stage_updates(transaction, updates);
+    stage_updates(transaction, updates, preserved);
     if patch_changed {
         transaction.mark_patch_changed();
     }

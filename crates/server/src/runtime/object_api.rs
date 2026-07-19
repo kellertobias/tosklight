@@ -183,7 +183,10 @@ pub(super) async fn put_object(
         );
         return Ok((
             [(header::ETAG, format!("\"{}\"", change.object_revision))],
-            Json(serde_json::json!({"revision":change.object_revision})),
+            Json(serde_json::json!({
+                "revision":change.object_revision,
+                "event_sequence":result.event_sequence
+            })),
         )
             .into_response());
     }
@@ -222,7 +225,10 @@ pub(super) async fn put_object(
             );
             return Ok((
                 [(header::ETAG, format!("\"{}\"", change.object_revision))],
-                Json(serde_json::json!({"revision":change.object_revision})),
+                Json(serde_json::json!({
+                    "revision":change.object_revision,
+                    "event_sequence":result.event_sequence
+                })),
             )
                 .into_response());
         }
@@ -244,7 +250,10 @@ pub(super) async fn put_object(
     );
     Ok((
         [(header::ETAG, format!("\"{revision}\""))],
-        Json(serde_json::json!({"revision":revision})),
+        Json(serde_json::json!({
+            "revision":revision,
+            "event_sequence":null
+        })),
     )
         .into_response())
 }

@@ -228,6 +228,311 @@ async fn active_group_and_preset_puts_install_the_exact_committed_candidate() {
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
+#[tokio::test]
+async fn active_object_undo_is_lossless_atomic_contextual_and_failure_safe() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let show = create_show(&app, &token, "Active object Undo boundary").await;
+    let show_id = show["id"].as_str().unwrap();
+    let show_uuid = Uuid::parse_str(show_id).unwrap();
+    let entry = state
+        .desk
+        .lock()
+        .show(light_core::ShowId(show_uuid))
+        .unwrap()
+        .unwrap();
+    let original = serde_json::json!({
+        "id":"7",
+        "name":"Original",
+        "fixtures":[],
+        "future_extension":{"nested":[3, 1, 2]}
+    });
+    let invalid_history = serde_json::json!({
+        "id":"9",
+        "name":"Invalid history",
+        "fixtures":"not-an-array",
+        "future_extension":{"preserved":true}
+    });
+    let store = ShowStore::open(&entry.path).unwrap();
+    store.put_object("group", "7", &original, 0).unwrap();
+    store
+        .put_object(
+            "preset",
+            "2.1",
+            &preset_body("Only version", light_programmer::PresetFamily::Color, 1),
+            0,
+        )
+        .unwrap();
+    store.put_object("group", "9", &invalid_history, 0).unwrap();
+    store
+        .put_object(
+            "group",
+            "9",
+            &serde_json::json!({"id":"9","name":"Current","fixtures":[]}),
+            1,
+        )
+        .unwrap();
+    open_show_for_test(&app, &token, show_id).await;
+
+    let before_put_sequence = state.application_events.latest_sequence();
+    let changed = put_active_object(
+        &app,
+        &token,
+        show_id,
+        "group",
+        "7",
+        1,
+        serde_json::json!({"id":"7","name":"Changed","fixtures":[]}),
+    )
+    .await;
+    assert_eq!(changed.status(), StatusCode::OK);
+    let changed = json(changed).await;
+    assert_eq!(changed["revision"], 2);
+    assert_eq!(changed["event_sequence"], before_put_sequence + 1);
+
+    let before = ActiveUndoBoundary::capture(&state, &entry, &data_dir);
+    let stale = undo_show_object(&app, &token, show_id, "group", "7", 1).await;
+    assert_eq!(stale.status(), StatusCode::CONFLICT);
+    before.assert_unchanged(&state, &entry, &data_dir);
+    assert_eq!(
+        ShowStore::open(&entry.path)
+            .unwrap()
+            .prepare_object_undo("group", "7", 2)
+            .unwrap()
+            .body(),
+        &original
+    );
+
+    let no_history = undo_show_object(&app, &token, show_id, "preset", "2.1", 1).await;
+    assert_eq!(no_history.status(), StatusCode::BAD_REQUEST);
+    before.assert_unchanged(&state, &entry, &data_dir);
+
+    let invalid = undo_show_object(&app, &token, show_id, "group", "9", 2).await;
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    before.assert_unchanged(&state, &entry, &data_dir);
+    assert_eq!(
+        ShowStore::open(&entry.path)
+            .unwrap()
+            .prepare_object_undo("group", "9", 2)
+            .unwrap()
+            .body(),
+        &invalid_history
+    );
+
+    let response = undo_show_object(&app, &token, show_id, "group", "7", 2).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = json(response).await;
+    assert_eq!(response["revision"], 3);
+    assert_eq!(response["event_sequence"], before.event_sequence + 1);
+
+    let document = ShowStore::open(&entry.path)
+        .unwrap()
+        .portable_document()
+        .unwrap();
+    assert_eq!(document.revision().value(), before.show_revision + 1);
+    assert_eq!(document.object("group", "7").unwrap().body(), &original);
+    assert_eq!(show_object_backup_count(&data_dir), before.backup_count + 1);
+    let runtime = state.engine.snapshot();
+    assert_eq!(runtime.revision, document.revision().value());
+    assert!(!std::sync::Arc::ptr_eq(&runtime, &before.runtime));
+    assert_eq!(
+        runtime
+            .groups
+            .iter()
+            .find(|group| group.id == "7")
+            .unwrap()
+            .name,
+        "Original"
+    );
+
+    let light_application::EventReplay::Events(events) = state.application_events.replay(
+        before.event_sequence,
+        &light_application::EventFilter::default(),
+    ) else {
+        panic!("expected authoritative object Undo event");
+    };
+    assert_eq!(events.len(), 1);
+    let event = &events[0];
+    assert_eq!(
+        event.source,
+        light_application::EventSource::Action(light_application::ActionSource::Http)
+    );
+    let correlation_id = event.correlation_id.expect("Undo correlation id");
+    assert!(matches!(
+        &event.payload,
+        light_application::ApplicationEvent::Show(
+            light_application::ShowEvent::ObjectsChanged(change)
+        ) if change.show_revision == document.revision()
+            && change.changes.len() == 1
+            && change.changes[0].kind == light_application::ActiveShowObjectKind::Group
+            && change.changes[0].object_id == "7"
+            && change.changes[0].object_revision == 3
+            && change.changes[0].body.as_ref() == Some(&original)
+    ));
+    assert!(
+        std::fs::read_dir(data_dir.join("backups"))
+            .unwrap()
+            .filter_map(Result::ok)
+            .any(|entry| entry
+                .file_name()
+                .to_string_lossy()
+                .contains(&correlation_id.to_string()))
+    );
+    let compatibility_events = state
+        .audit_events
+        .lock()
+        .iter()
+        .filter(|event| event.kind == "show_object_undone")
+        .cloned()
+        .collect::<Vec<_>>();
+    assert_eq!(compatibility_events.len(), 1);
+    assert_eq!(compatibility_events[0].payload["revision"], 3);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn inactive_object_put_and_undo_keep_legacy_runtime_and_return_null_cursor() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let show = create_show(&app, &token, "Inactive object Undo").await;
+    let show_id = show["id"].as_str().unwrap();
+    let show_uuid = Uuid::parse_str(show_id).unwrap();
+    let entry = state
+        .desk
+        .lock()
+        .show(light_core::ShowId(show_uuid))
+        .unwrap()
+        .unwrap();
+    let original = serde_json::json!({
+        "id":"4",
+        "name":"Original",
+        "fixtures":[],
+        "future_extension":{"preserved":true}
+    });
+    let store = ShowStore::open(&entry.path).unwrap();
+    store.put_object("group", "4", &original, 0).unwrap();
+    store
+        .put_object(
+            "group",
+            "4",
+            &serde_json::json!({"id":"4","name":"Changed","fixtures":[]}),
+            1,
+        )
+        .unwrap();
+
+    let put = put_active_object(
+        &app,
+        &token,
+        show_id,
+        "group",
+        "5",
+        0,
+        serde_json::json!({"id":"5","name":"Inactive Put","fixtures":[]}),
+    )
+    .await;
+    assert_eq!(put.status(), StatusCode::OK);
+    let put = json(put).await;
+    assert_eq!(put["revision"], 1);
+    assert!(put["event_sequence"].is_null());
+
+    let before_runtime = state.engine.snapshot();
+    let before_sequence = state.application_events.latest_sequence();
+    let before_revision = ShowStore::open(&entry.path)
+        .unwrap()
+        .portable_document()
+        .unwrap()
+        .revision();
+    let response = undo_show_object(&app, &token, show_id, "group", "4", 2).await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = json(response).await;
+    assert_eq!(response["revision"], 3);
+    assert!(response["event_sequence"].is_null());
+    let document = ShowStore::open(&entry.path)
+        .unwrap()
+        .portable_document()
+        .unwrap();
+    assert_eq!(document.revision().value(), before_revision.value() + 1);
+    assert_eq!(document.object("group", "4").unwrap().body(), &original);
+    assert!(std::sync::Arc::ptr_eq(
+        &state.engine.snapshot(),
+        &before_runtime
+    ));
+    assert_eq!(state.application_events.latest_sequence(), before_sequence);
+    assert_eq!(
+        state
+            .audit_events
+            .lock()
+            .iter()
+            .filter(|event| event.kind == "show_object_undone")
+            .count(),
+        1
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+struct ActiveUndoBoundary {
+    show_revision: u64,
+    backup_count: usize,
+    runtime: std::sync::Arc<EngineSnapshot>,
+    event_sequence: u64,
+    compatibility_event_count: usize,
+}
+
+impl ActiveUndoBoundary {
+    fn capture(state: &AppState, entry: &ShowEntry, data_dir: &std::path::Path) -> Self {
+        Self {
+            show_revision: ShowStore::open(&entry.path)
+                .unwrap()
+                .portable_document()
+                .unwrap()
+                .revision()
+                .value(),
+            backup_count: show_object_backup_count(data_dir),
+            runtime: state.engine.snapshot(),
+            event_sequence: state.application_events.latest_sequence(),
+            compatibility_event_count: state
+                .audit_events
+                .lock()
+                .iter()
+                .filter(|event| event.kind == "show_object_undone")
+                .count(),
+        }
+    }
+
+    fn assert_unchanged(&self, state: &AppState, entry: &ShowEntry, data_dir: &std::path::Path) {
+        assert_eq!(
+            ShowStore::open(&entry.path)
+                .unwrap()
+                .portable_document()
+                .unwrap()
+                .revision()
+                .value(),
+            self.show_revision
+        );
+        assert_eq!(show_object_backup_count(data_dir), self.backup_count);
+        assert!(std::sync::Arc::ptr_eq(
+            &state.engine.snapshot(),
+            &self.runtime
+        ));
+        assert_eq!(
+            state.application_events.latest_sequence(),
+            self.event_sequence
+        );
+        assert_eq!(
+            state
+                .audit_events
+                .lock()
+                .iter()
+                .filter(|event| event.kind == "show_object_undone")
+                .count(),
+            self.compatibility_event_count
+        );
+    }
+}
+
 async fn open_show_for_test(app: &Router, token: &str, show_id: &str) {
     let response = app
         .clone()
@@ -261,6 +566,28 @@ async fn put_active_object(
             .header(header::AUTHORIZATION, format!("Bearer {token}"))
             .header(header::IF_MATCH, revision.to_string())
             .body(Body::from(body.to_string()))
+            .unwrap(),
+        )
+        .await
+        .unwrap()
+}
+
+async fn undo_show_object(
+    app: &Router,
+    token: &str,
+    show_id: &str,
+    kind: &str,
+    object_id: &str,
+    revision: u64,
+) -> Response {
+    app.clone()
+        .oneshot(
+            Request::post(format!(
+                "/api/v1/shows/{show_id}/objects/{kind}/{object_id}/undo"
+            ))
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .header(header::IF_MATCH, revision.to_string())
+            .body(Body::empty())
             .unwrap(),
         )
         .await

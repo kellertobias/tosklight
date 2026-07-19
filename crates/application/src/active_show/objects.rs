@@ -10,7 +10,7 @@ use light_show::{PortableShowDocument, PortableShowObject, PortableShowTransacti
 use serde_json::Value;
 use std::collections::HashSet;
 
-pub(super) struct PreparedObjectMutation {
+pub(super) struct PreparedObjectChanges {
     pub(super) transaction: PortableShowTransaction,
     pub(super) snapshot: light_engine::EngineSnapshot,
     pub(super) changes: Vec<ActiveShowObjectChange>,
@@ -19,7 +19,7 @@ pub(super) struct PreparedObjectMutation {
 pub(super) fn prepare_object_mutation(
     document: &PortableShowDocument,
     command: &MutateActiveShowObjectsCommand,
-) -> Result<PreparedObjectMutation, ActionError> {
+) -> Result<PreparedObjectChanges, ActionError> {
     validate_command(document, command)?;
     let mut transaction = document.transaction();
     let mut changes = Vec::with_capacity(command.mutations.len());
@@ -30,7 +30,7 @@ pub(super) fn prepare_object_mutation(
     }
     let prepared = prepare_show_candidate(document, transaction)?;
     let (transaction, snapshot) = prepared.into_parts();
-    Ok(PreparedObjectMutation {
+    Ok(PreparedObjectChanges {
         transaction,
         snapshot,
         changes,

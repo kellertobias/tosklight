@@ -21,7 +21,8 @@ pub use active_show::{
     ActiveShowObjectMutationKind, ActiveShowObjectsChange, ActiveShowPorts, ActiveShowService,
     ActiveShowUnitOfWork, BackupIdentity, MutateActiveShowObjectsCommand,
     MutateActiveShowObjectsResult, MutateOutputRouteCommand, MutateOutputRouteResult,
-    OutputRouteChange, OutputRouteMutation,
+    OutputRouteChange, OutputRouteMutation, UndoActiveShowObjectCommand,
+    UndoActiveShowObjectResult,
 };
 pub use event::{
     ApplicationEvent, CueReference, DeliveryPolicy, EventBus, EventCapability, EventClass,

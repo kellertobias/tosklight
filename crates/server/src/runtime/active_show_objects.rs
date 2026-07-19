@@ -50,6 +50,24 @@ pub(super) fn delete_active_show_object(
     }
 }
 
+pub(super) fn undo_active_show_object_action(
+    context: light_application::ActionContext,
+    show_id: light_core::ShowId,
+    kind: light_application::ActiveShowObjectKind,
+    object_id: impl Into<String>,
+    expected_object_revision: u64,
+) -> light_application::ActionEnvelope<light_application::UndoActiveShowObjectCommand> {
+    light_application::ActionEnvelope {
+        context,
+        command: light_application::UndoActiveShowObjectCommand {
+            show_id,
+            kind,
+            object_id: object_id.into(),
+            expected_object_revision,
+        },
+    }
+}
+
 /// Runs while the caller holds `activation_lock`, keeping the active identity stable through the
 /// infallible runtime installation.
 pub(super) fn run_active_show_object_action(
@@ -78,6 +96,35 @@ pub(super) async fn run_active_show_object_action_async(
     let result = tokio::task::spawn_blocking(move || {
         (
             run_active_show_object_action(&worker_state, action),
+            activation,
+        )
+    })
+    .await
+    .map_err(|error| ApiError::internal(format!("active-show service task failed: {error}")))?;
+    Ok((result.0?, result.1))
+}
+
+/// Runs while the caller holds `activation_lock`, keeping the active identity stable through the
+/// infallible runtime installation.
+pub(super) async fn run_active_show_object_undo_async(
+    state: &AppState,
+    activation: tokio::sync::OwnedMutexGuard<()>,
+    action: light_application::ActionEnvelope<light_application::UndoActiveShowObjectCommand>,
+) -> Result<
+    (
+        light_application::UndoActiveShowObjectResult,
+        tokio::sync::OwnedMutexGuard<()>,
+    ),
+    ApiError,
+> {
+    let worker_state = state.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let ports = ServerActiveShowPorts::show_objects(worker_state.clone());
+        (
+            worker_state
+                .active_show_service
+                .undo_object(action, &ports)
+                .map_err(active_show_object_api_error),
             activation,
         )
     })

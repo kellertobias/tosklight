@@ -84,6 +84,29 @@ pub struct MutateActiveShowObjectsResult {
     pub event_sequence: u64,
 }
 
+/// Restores the latest retained version of one object in the active portable show.
+#[derive(Clone, Debug, PartialEq)]
+pub struct UndoActiveShowObjectCommand {
+    pub show_id: ShowId,
+    pub kind: ActiveShowObjectKind,
+    pub object_id: String,
+    pub expected_object_revision: Revision,
+}
+
+impl ApplicationCommand for UndoActiveShowObjectCommand {
+    type Value = UndoActiveShowObjectResult;
+
+    const FAMILY: CommandFamily = CommandFamily::Show;
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct UndoActiveShowObjectResult {
+    pub context: ActionContext,
+    pub show_revision: PortableShowRevision,
+    pub change: ActiveShowObjectChange,
+    pub event_sequence: u64,
+}
+
 /// One typed output-route edit performed against the active portable show.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MutateOutputRouteCommand {

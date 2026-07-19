@@ -2,7 +2,9 @@ use super::ActiveShowObjectChange;
 use crate::{ActionContext, ActionError};
 use light_core::ShowId;
 use light_engine::EngineSnapshot;
-use light_show::{PortableShowCommit, PortableShowDocument, PortableShowTransaction};
+use light_show::{
+    PortableShowCommit, PortableShowDocument, PortableShowObjectUndo, PortableShowTransaction,
+};
 
 /// One already-open active-show mutation boundary.
 pub trait ActiveShowUnitOfWork {
@@ -38,6 +40,16 @@ pub trait ActiveShowPorts: Send + Sync {
         context: &ActionContext,
         show_id: ShowId,
     ) -> Result<Self::UnitOfWork, ActionError>;
+
+    /// Reads the exact previous raw body from the already-open active-show boundary without
+    /// changing current state or consuming history.
+    fn prepare_object_undo(
+        &self,
+        unit: &Self::UnitOfWork,
+        kind: &str,
+        object_id: &str,
+        expected_object_revision: light_core::Revision,
+    ) -> Result<PortableShowObjectUndo, ActionError>;
 
     fn prepare_runtime(
         &self,

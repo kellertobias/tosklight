@@ -1,10 +1,15 @@
 use super::{
     ActiveShowObjectsChange, ActiveShowPorts, ActiveShowUnitOfWork, BackupIdentity,
     MutateActiveShowObjectsCommand, MutateActiveShowObjectsResult, MutateOutputRouteCommand,
-    MutateOutputRouteResult, OutputRouteChange,
+    MutateOutputRouteResult, OutputRouteChange, UndoActiveShowObjectCommand,
+    UndoActiveShowObjectResult,
+    objects::{PreparedObjectChanges, prepare_object_mutation},
+    route::prepare_route_mutation,
+    undo::{prepare_object_undo, validate_object_undo},
 };
-use super::{objects::prepare_object_mutation, route::prepare_route_mutation};
 use crate::{ActionContext, ActionEnvelope, ActionError, EventBus, EventDraft};
+use light_core::ShowId;
+use light_show::PortableShowRevision;
 use parking_lot::Mutex;
 use std::sync::Arc;
 
@@ -67,37 +72,117 @@ impl ActiveShowService {
     ) -> Result<MutateActiveShowObjectsResult, ActionError> {
         ports.authorize_mutation(&envelope.context)?;
         let _ordered = self.operation.lock();
-        let mut unit = ports.begin_active_show(&envelope.context, envelope.command.show_id)?;
+        let unit = ports.begin_active_show(&envelope.context, envelope.command.show_id)?;
         let prepared = prepare_object_mutation(unit.document(), &envelope.command)?;
-        let runtime = ports.prepare_runtime(prepared.snapshot)?;
-        unit.backup(&backup_identity(
+        let committed = self.commit_object_changes(
             &envelope.context,
             envelope.command.show_id,
+            unit,
+            ports,
+            prepared,
             "show-object",
-        ))?;
-        let commit = unit.commit(prepared.transaction)?;
-        ports.install_runtime(runtime);
-        ports.reconcile_object_changes(&prepared.changes);
-        let show_revision = commit.revision();
-        let event = self.events.publish(EventDraft::active_show_objects_changed(
-            &envelope.context,
-            ActiveShowObjectsChange {
-                show_id: envelope.command.show_id,
-                show_revision,
-                changes: prepared.changes.clone(),
-            },
-        ));
+        )?;
         Ok(MutateActiveShowObjectsResult {
             context: envelope.context,
-            show_revision,
-            changes: prepared.changes,
-            event_sequence: event.sequence,
+            show_revision: committed.show_revision,
+            changes: committed.changes,
+            event_sequence: committed.event_sequence,
         })
+    }
+
+    pub fn undo_object<P: ActiveShowPorts>(
+        &self,
+        envelope: ActionEnvelope<UndoActiveShowObjectCommand>,
+        ports: &P,
+    ) -> Result<UndoActiveShowObjectResult, ActionError> {
+        ports.authorize_mutation(&envelope.context)?;
+        let _ordered = self.operation.lock();
+        let unit = ports.begin_active_show(&envelope.context, envelope.command.show_id)?;
+        let prepared = prepare_requested_undo(ports, &unit, &envelope.command)?;
+        let committed = self.commit_object_changes(
+            &envelope.context,
+            envelope.command.show_id,
+            unit,
+            ports,
+            prepared,
+            "undo-show-object",
+        )?;
+        Ok(UndoActiveShowObjectResult {
+            context: envelope.context,
+            show_revision: committed.show_revision,
+            change: single_change(committed.changes),
+            event_sequence: committed.event_sequence,
+        })
+    }
+
+    fn commit_object_changes<P: ActiveShowPorts>(
+        &self,
+        context: &ActionContext,
+        show_id: ShowId,
+        mut unit: P::UnitOfWork,
+        ports: &P,
+        prepared: PreparedObjectChanges,
+        operation: &str,
+    ) -> Result<CommittedObjectChanges, ActionError> {
+        let runtime = ports.prepare_runtime(prepared.snapshot)?;
+        unit.backup(&backup_identity(context, show_id, operation))?;
+        let show_revision = unit.commit(prepared.transaction)?.revision();
+        ports.install_runtime(runtime);
+        ports.reconcile_object_changes(&prepared.changes);
+        Ok(self.publish_object_changes(context, show_id, show_revision, prepared.changes))
+    }
+
+    fn publish_object_changes(
+        &self,
+        context: &ActionContext,
+        show_id: ShowId,
+        show_revision: PortableShowRevision,
+        changes: Vec<super::ActiveShowObjectChange>,
+    ) -> CommittedObjectChanges {
+        let event = self.events.publish(EventDraft::active_show_objects_changed(
+            context,
+            ActiveShowObjectsChange {
+                show_id,
+                show_revision,
+                changes: changes.clone(),
+            },
+        ));
+        CommittedObjectChanges {
+            show_revision,
+            changes,
+            event_sequence: event.sequence,
+        }
     }
 
     pub fn events(&self) -> &EventBus {
         &self.events
     }
+}
+
+struct CommittedObjectChanges {
+    show_revision: PortableShowRevision,
+    changes: Vec<super::ActiveShowObjectChange>,
+    event_sequence: u64,
+}
+
+fn prepare_requested_undo<P: ActiveShowPorts>(
+    ports: &P,
+    unit: &P::UnitOfWork,
+    command: &UndoActiveShowObjectCommand,
+) -> Result<PreparedObjectChanges, ActionError> {
+    validate_object_undo(unit.document(), command)?;
+    let undo = ports.prepare_object_undo(
+        unit,
+        command.kind.as_str(),
+        &command.object_id,
+        command.expected_object_revision,
+    )?;
+    prepare_object_undo(unit.document(), command, undo)
+}
+
+fn single_change(mut changes: Vec<super::ActiveShowObjectChange>) -> super::ActiveShowObjectChange {
+    debug_assert_eq!(changes.len(), 1, "one Undo returns one object change");
+    changes.pop().expect("one Undo returns one object change")
 }
 
 impl Default for ActiveShowService {
