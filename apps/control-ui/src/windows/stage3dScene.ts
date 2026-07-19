@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import type { StagePosition3d } from "../api/ServerContext";
 import type {
 	AttributeValue,
 	FixtureMode,
@@ -7,7 +8,6 @@ import type {
 	Vector3Value,
 	VisualizationSnapshot,
 } from "../api/types";
-import type { StagePosition3d } from "../api/ServerContext";
 import {
 	createBuiltInFixtureModel,
 	movingLightTiltRadians,
@@ -82,7 +82,7 @@ function xyzToColor(
 		const gamma = (channel: number) =>
 			channel <= 0.0031308
 				? 12.92 * channel
-				: 1.055 * Math.pow(channel, 1 / 2.4) - 0.055;
+				: 1.055 * channel ** (1 / 2.4) - 0.055;
 		return new THREE.Color(
 			gamma(linear[0]),
 			gamma(linear[1]),
@@ -543,7 +543,8 @@ function schemaV2Geometry(
 		nodes.set(node.id, { group, anchor });
 	});
 	for (const node of graph.nodes) {
-		const current = nodes.get(node.id)!;
+		const current = nodes.get(node.id);
+		if (!current) continue;
 		const parent = node.parent_id ? nodes.get(node.parent_id)?.anchor : null;
 		(parent ?? result).add(current.group);
 	}
@@ -694,14 +695,274 @@ export function mountFixtureModel(
 	return 1;
 }
 
-export function buildStageScene(
-	fixtures: Stage3dFixture[],
+type FallbackRenderState = {
+	intensity: number;
+	pan: number;
+	tilt: number;
+	focus: number;
+	color: THREE.Color;
+	distance: number;
+	radius: number;
+};
+
+function fallbackRenderState(
+	item: Stage3dFixture,
+	attributes: Map<string, AttributeValue>,
 	snapshot: VisualizationSnapshot | null,
-	selected: Set<string> = new Set(),
-	environmentBrightness = 1,
-	showFloorGrid = true,
-	showBeamGuides = true,
-	virtualHighlight: Set<string> = new Set(),
+	virtualHighlight: boolean,
+): FallbackRenderState {
+	const intensity = virtualHighlight
+		? 1
+		: (snapshot?.blackout
+				? 0
+				: normalized(
+						attributes.get("intensity"),
+						parameterDefault(item.fixture, "intensity", 0),
+					)) * (snapshot?.grand_master ?? 1);
+	const pan =
+		(normalized(
+			attributes.get("pan"),
+			parameterDefault(item.fixture, "pan", 0.5),
+		) -
+			0.5) *
+		Math.PI *
+		2;
+	const tilt = movingLightTiltRadians(
+		normalized(
+			attributes.get("tilt"),
+			parameterDefault(item.fixture, "tilt", 0.5),
+		),
+	);
+	const zoom = normalized(
+		attributes.get("zoom"),
+		parameterDefault(item.fixture, "zoom", 0.35),
+	);
+	const focus = normalized(
+		attributes.get("focus"),
+		parameterDefault(item.fixture, "focus", 0.65),
+	);
+	const color = xyzToColor(attributes.get("color"), attributes);
+	const distance = 7;
+	const radius = Math.tan(THREE.MathUtils.degToRad(4 + zoom * 23)) * distance;
+	return { intensity, pan, tilt, focus, color, distance, radius };
+}
+
+function createFixtureRoot(item: Stage3dFixture, selected: boolean) {
+	const id = item.fixture.fixture_id;
+	const instanceId = item.instanceId ?? id;
+	const root = new THREE.Group();
+	root.name = `fixture:${id}:${instanceId}`;
+	root.userData.fixtureId = id;
+	root.userData.instanceId = instanceId;
+	root.userData.stageSelected = selected;
+	root.position.set(item.position.x, item.position.z, -item.position.y);
+	root.rotation.set(
+		THREE.MathUtils.degToRad(item.position.rotationX),
+		THREE.MathUtils.degToRad(item.position.rotationZ),
+		THREE.MathUtils.degToRad(item.position.rotationY),
+	);
+	return { root, instanceId };
+}
+
+function addFallbackBeamVisuals(
+	beam: THREE.Group,
+	fixture: PatchedFixture,
+	attributes: Map<string, AttributeValue>,
+	state: FallbackRenderState,
+	showBeamGuides: boolean,
+	beamAtRoot: boolean,
+) {
+	const { intensity, focus, color, distance, radius } = state;
+	const coneGeometry = new THREE.ConeGeometry(radius, distance, 32, 1, true);
+	coneGeometry.translate(0, -distance / 2, 0);
+	const volume = new THREE.Mesh(
+		coneGeometry,
+		new THREE.MeshBasicMaterial({
+			color,
+			transparent: true,
+			opacity: intensity * (0.035 + focus * 0.055),
+			side: THREE.DoubleSide,
+			depthWrite: false,
+			blending: THREE.AdditiveBlending,
+		}),
+	);
+	const activeBeam = intensity > 0.001;
+	if (beamAtRoot) {
+		const source = new THREE.Mesh(
+			new THREE.CircleGeometry(Math.max(0.04, Math.min(0.11, radius / 16)), 24),
+			emitterSurfaceMaterial(color, intensity),
+		);
+		source.name = "light-emitting-surface";
+		source.userData.active = activeBeam;
+		source.rotation.x = -Math.PI / 2;
+		beam.add(source);
+	}
+	const directional = fallbackEmitterIsDirectional(fixture);
+	const guideColor = activeBeam ? color : new THREE.Color(0x7b858d);
+	const guideMaterial = activeBeam
+		? new THREE.LineBasicMaterial({
+				color: guideColor,
+				transparent: true,
+				opacity: 0.28 + intensity * 0.55,
+			})
+		: new THREE.LineDashedMaterial({
+				color: guideColor,
+				transparent: true,
+				opacity: 0.3,
+				dashSize: 0.18,
+				gapSize: 0.14,
+			});
+	const outline = new THREE.LineSegments(
+		new THREE.EdgesGeometry(coneGeometry, 28),
+		guideMaterial,
+	);
+	if (!activeBeam) outline.computeLineDistances();
+	const centerGeometry = new THREE.BufferGeometry().setFromPoints([
+		new THREE.Vector3(),
+		new THREE.Vector3(0, -distance, 0),
+	]);
+	const center = new THREE.Line(
+		centerGeometry,
+		activeBeam
+			? new THREE.LineBasicMaterial({
+					color,
+					transparent: true,
+					opacity: 0.45 + intensity * 0.4,
+				})
+			: new THREE.LineDashedMaterial({
+					color: 0x7b858d,
+					transparent: true,
+					opacity: 0.35,
+					dashSize: 0.18,
+					gapSize: 0.14,
+				}),
+	);
+	center.name = activeBeam ? "beam-centerline" : "beam-direction-guide";
+	if (!activeBeam) center.computeLineDistances();
+	beam.add(volume);
+	if (activeBeam || (directional && showBeamGuides)) beam.add(outline);
+	if (activeBeam || (directional && showBeamGuides)) beam.add(center);
+	const gobo = capabilityName(fixture, "gobo", attributes.get("gobo"));
+	if (gobo && gobo.toLowerCase() !== "open")
+		for (let spoke = 0; spoke < 6; spoke++) {
+			const angle = (spoke / 6) * Math.PI * 2;
+			const line = new THREE.BufferGeometry().setFromPoints([
+				new THREE.Vector3(),
+				new THREE.Vector3(
+					Math.cos(angle) * radius,
+					-distance,
+					Math.sin(angle) * radius,
+				),
+			]);
+			beam.add(
+				new THREE.Line(
+					line,
+					new THREE.LineBasicMaterial({
+						color,
+						transparent: true,
+						opacity: intensity * 0.45,
+					}),
+				),
+			);
+		}
+}
+
+function mountFallbackFixture(
+	root: THREE.Group,
+	item: Stage3dFixture,
+	attributes: Map<string, AttributeValue>,
+	state: FallbackRenderState,
+	selected: boolean,
+	showBeamGuides: boolean,
+) {
+	let beamParent: THREE.Object3D;
+	if (item.fixture.definition.model_asset) {
+		root.add(fixtureBody(selected));
+		beamParent = root;
+	} else {
+		const model = createBuiltInFixtureModel(
+			item.fixture,
+			state.color,
+			state.intensity,
+			state.pan,
+			state.tilt,
+		);
+		model.object.name = "fixture-placeholder";
+		if (selected) addSelectionOutline(model.object);
+		root.add(model.object);
+		beamParent = model.beamMount;
+	}
+	const beam = new THREE.Group();
+	const beamAtRoot = beamParent === root;
+	if (beamAtRoot) {
+		beam.position.y = -0.62;
+		const direction = new THREE.Vector3(
+			-Math.sin(state.pan) * Math.sin(state.tilt),
+			-Math.cos(state.tilt),
+			-Math.cos(state.pan) * Math.sin(state.tilt),
+		).normalize();
+		beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), direction);
+	}
+	addFallbackBeamVisuals(
+		beam,
+		item.fixture,
+		attributes,
+		state,
+		showBeamGuides,
+		beamAtRoot,
+	);
+	beamParent.add(beam);
+}
+
+type StageSceneContext = {
+	snapshot: VisualizationSnapshot | null;
+	selected: Set<string>;
+	byFixture: Map<string, Map<string, AttributeValue>>;
+	projectedOwners: Set<string>;
+	showBeamGuides: boolean;
+	virtualHighlight: Set<string>;
+};
+
+function buildStageFixture(item: Stage3dFixture, context: StageSceneContext) {
+	const id = item.fixture.fixture_id;
+	const selected = context.selected.has(id);
+	const attributes =
+		context.byFixture.get(id) ?? new Map<string, AttributeValue>();
+	const { root, instanceId } = createFixtureRoot(item, selected);
+	const mode = profileMode(item.fixture);
+	const profileGeometry = mode
+		? schemaV2Geometry(
+				item.fixture,
+				mode,
+				context.byFixture,
+				selected,
+				context.snapshot,
+				context.projectedOwners,
+				context.showBeamGuides,
+				context.virtualHighlight.has(id),
+			)
+		: null;
+	if (profileGeometry) root.add(profileGeometry);
+	else
+		mountFallbackFixture(
+			root,
+			item,
+			attributes,
+			fallbackRenderState(
+				item,
+				attributes,
+				context.snapshot,
+				context.virtualHighlight.has(id),
+			),
+			selected,
+			context.showBeamGuides,
+		);
+	return { root, instanceId };
+}
+
+function createStageEnvironment(
+	environmentBrightness: number,
+	showFloorGrid: boolean,
 ) {
 	const scene = new THREE.Scene();
 	scene.background = new THREE.Color(0x080b0f).lerp(
@@ -711,222 +972,45 @@ export function buildStageScene(
 	scene.add(
 		new THREE.HemisphereLight(0xa9c8dc, 0x11151a, environmentBrightness * 1.5),
 	);
-	if (showFloorGrid) {
-		const floor = new THREE.Mesh(
-			new THREE.PlaneGeometry(12, 8),
-			new THREE.MeshStandardMaterial({ color: 0x151b20, roughness: 0.9 }),
-		);
-		floor.name = "stage-floor";
-		floor.rotation.x = -Math.PI / 2;
-		floor.position.set(0, 0, -4);
-		scene.add(floor);
-		const grid = new THREE.GridHelper(12, 24, 0x24798a, 0x263039);
-		grid.name = "stage-floor-grid";
-		grid.position.z = -4;
-		scene.add(grid);
-	}
-	const byFixture = valuesByFixture(snapshot);
-	const projectedOwners = new Set(
-		(snapshot?.profile_output_values ?? []).map((entry) => entry.fixture_id),
+	if (!showFloorGrid) return scene;
+	const floor = new THREE.Mesh(
+		new THREE.PlaneGeometry(12, 8),
+		new THREE.MeshStandardMaterial({ color: 0x151b20, roughness: 0.9 }),
 	);
-	const fixtureObjects = new Map<string, THREE.Object3D>();
+	floor.name = "stage-floor";
+	floor.rotation.x = -Math.PI / 2;
+	floor.position.set(0, 0, -4);
+	scene.add(floor);
+	const grid = new THREE.GridHelper(12, 24, 0x24798a, 0x263039);
+	grid.name = "stage-floor-grid";
+	grid.position.z = -4;
+	scene.add(grid);
+	return scene;
+}
 
+export function buildStageScene(
+	fixtures: Stage3dFixture[],
+	snapshot: VisualizationSnapshot | null,
+	selected: Set<string> = new Set(),
+	environmentBrightness = 1,
+	showFloorGrid = true,
+	showBeamGuides = true,
+	virtualHighlight: Set<string> = new Set(),
+) {
+	const scene = createStageEnvironment(environmentBrightness, showFloorGrid);
+	const context: StageSceneContext = {
+		snapshot,
+		selected,
+		byFixture: valuesByFixture(snapshot),
+		projectedOwners: new Set(
+			(snapshot?.profile_output_values ?? []).map((entry) => entry.fixture_id),
+		),
+		showBeamGuides,
+		virtualHighlight,
+	};
+	const fixtureObjects = new Map<string, THREE.Object3D>();
 	for (const item of fixtures) {
-		const id = item.fixture.fixture_id;
-		const attributes = byFixture.get(id) ?? new Map<string, AttributeValue>();
-		const root = new THREE.Group();
-		const instanceId = item.instanceId ?? id;
-		root.name = `fixture:${id}:${instanceId}`;
-		root.userData.fixtureId = id;
-		root.userData.instanceId = instanceId;
-		root.userData.stageSelected = selected.has(id);
-		root.position.set(item.position.x, item.position.z, -item.position.y);
-		root.rotation.set(
-			THREE.MathUtils.degToRad(item.position.rotationX),
-			THREE.MathUtils.degToRad(item.position.rotationZ),
-			THREE.MathUtils.degToRad(item.position.rotationY),
-		);
-		const mode = profileMode(item.fixture);
-		const profileGeometry = mode
-			? schemaV2Geometry(
-					item.fixture,
-					mode,
-					byFixture,
-					selected.has(id),
-					snapshot,
-					projectedOwners,
-					showBeamGuides,
-					virtualHighlight.has(id),
-				)
-			: null;
-		if (profileGeometry) {
-			root.add(profileGeometry);
-			scene.add(root);
-			fixtureObjects.set(instanceId, root);
-			continue;
-		}
-		const intensity = virtualHighlight.has(id)
-			? 1
-			: (snapshot?.blackout
-					? 0
-					: normalized(
-							attributes.get("intensity"),
-							parameterDefault(item.fixture, "intensity", 0),
-						)) * (snapshot?.grand_master ?? 1);
-		const pan =
-			(normalized(
-				attributes.get("pan"),
-				parameterDefault(item.fixture, "pan", 0.5),
-			) -
-				0.5) *
-			Math.PI *
-			2;
-		const tilt = movingLightTiltRadians(
-			normalized(
-				attributes.get("tilt"),
-				parameterDefault(item.fixture, "tilt", 0.5),
-			),
-		);
-		const zoom = normalized(
-			attributes.get("zoom"),
-			parameterDefault(item.fixture, "zoom", 0.35),
-		);
-		const focus = normalized(
-			attributes.get("focus"),
-			parameterDefault(item.fixture, "focus", 0.65),
-		);
-		const color = xyzToColor(attributes.get("color"), attributes);
-		const distance = 7;
-		const radius = Math.tan(THREE.MathUtils.degToRad(4 + zoom * 23)) * distance;
-		let beamParent: THREE.Object3D;
-		if (item.fixture.definition.model_asset) {
-			const placeholder = fixtureBody(selected.has(id));
-			root.add(placeholder);
-			beamParent = root;
-		} else {
-			const model = createBuiltInFixtureModel(
-				item.fixture,
-				color,
-				intensity,
-				pan,
-				tilt,
-			);
-			model.object.name = "fixture-placeholder";
-			if (selected.has(id)) addSelectionOutline(model.object);
-			root.add(model.object);
-			beamParent = model.beamMount;
-		}
-		const beam = new THREE.Group();
-		if (beamParent === root) {
-			beam.position.y = -0.62;
-			// Match the built-in yoke: local tilt is around X, followed by pan around Y.
-			const direction = new THREE.Vector3(
-				-Math.sin(pan) * Math.sin(tilt),
-				-Math.cos(tilt),
-				-Math.cos(pan) * Math.sin(tilt),
-			).normalize();
-			beam.quaternion.setFromUnitVectors(
-				new THREE.Vector3(0, -1, 0),
-				direction,
-			);
-		}
-		const coneGeometry = new THREE.ConeGeometry(radius, distance, 32, 1, true);
-		coneGeometry.translate(0, -distance / 2, 0);
-		const volume = new THREE.Mesh(
-			coneGeometry,
-			new THREE.MeshBasicMaterial({
-				color,
-				transparent: true,
-				opacity: intensity * (0.035 + focus * 0.055),
-				side: THREE.DoubleSide,
-				depthWrite: false,
-				blending: THREE.AdditiveBlending,
-			}),
-		);
-		const activeBeam = intensity > 0.001;
-		if (beamParent === root) {
-			const source = new THREE.Mesh(
-				new THREE.CircleGeometry(
-					Math.max(0.04, Math.min(0.11, radius / 16)),
-					24,
-				),
-				emitterSurfaceMaterial(color, intensity),
-			);
-			source.name = "light-emitting-surface";
-			source.userData.active = activeBeam;
-			source.rotation.x = -Math.PI / 2;
-			beam.add(source);
-		}
-		const directional = fallbackEmitterIsDirectional(item.fixture);
-		const guideColor = activeBeam ? color : new THREE.Color(0x7b858d);
-		const guideMaterial = activeBeam
-			? new THREE.LineBasicMaterial({
-					color: guideColor,
-					transparent: true,
-					opacity: 0.28 + intensity * 0.55,
-				})
-			: new THREE.LineDashedMaterial({
-					color: guideColor,
-					transparent: true,
-					opacity: 0.3,
-					dashSize: 0.18,
-					gapSize: 0.14,
-				});
-		const outline = new THREE.LineSegments(
-			new THREE.EdgesGeometry(coneGeometry, 28),
-			guideMaterial,
-		);
-		if (!activeBeam) outline.computeLineDistances();
-		const centerGeometry = new THREE.BufferGeometry().setFromPoints([
-			new THREE.Vector3(),
-			new THREE.Vector3(0, -distance, 0),
-		]);
-		const center = new THREE.Line(
-			centerGeometry,
-			activeBeam
-				? new THREE.LineBasicMaterial({
-						color,
-						transparent: true,
-						opacity: 0.45 + intensity * 0.4,
-					})
-				: new THREE.LineDashedMaterial({
-						color: 0x7b858d,
-						transparent: true,
-						opacity: 0.35,
-						dashSize: 0.18,
-						gapSize: 0.14,
-					}),
-		);
-		center.name = activeBeam ? "beam-centerline" : "beam-direction-guide";
-		if (!activeBeam) center.computeLineDistances();
-		beam.add(volume);
-		if (activeBeam || (directional && showBeamGuides)) beam.add(outline);
-		if (activeBeam || (directional && showBeamGuides)) beam.add(center);
-		const gobo = capabilityName(item.fixture, "gobo", attributes.get("gobo"));
-		if (gobo && gobo.toLowerCase() !== "open") {
-			for (let spoke = 0; spoke < 6; spoke++) {
-				const angle = (spoke / 6) * Math.PI * 2;
-				const line = new THREE.BufferGeometry().setFromPoints([
-					new THREE.Vector3(),
-					new THREE.Vector3(
-						Math.cos(angle) * radius,
-						-distance,
-						Math.sin(angle) * radius,
-					),
-				]);
-				beam.add(
-					new THREE.Line(
-						line,
-						new THREE.LineBasicMaterial({
-							color,
-							transparent: true,
-							opacity: intensity * 0.45,
-						}),
-					),
-				);
-			}
-		}
-		beamParent.add(beam);
+		const { root, instanceId } = buildStageFixture(item, context);
 		scene.add(root);
 		fixtureObjects.set(instanceId, root);
 	}
