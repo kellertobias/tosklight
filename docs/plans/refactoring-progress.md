@@ -4,7 +4,7 @@ This is the living handoff for [`major-refactoring.md`](major-refactoring.md). U
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-18 at commit `e6110da`.
+Last updated: 2026-07-18 at commit `f89912a`.
 
 ## Guardrails
 
@@ -52,6 +52,17 @@ Last updated: 2026-07-18 at commit `e6110da`.
   projections, Preload installs generation-bound prepared batches, and application-owned units of
   work serialize page changes, automatic render transitions, and semantic event publication
   without returning either the Engine or Playback-service lock to adapters.
+- [x] Added the view-scoped Playback runtime frontend: exact v2 snapshots and WebSocket filters are
+  activated only by mounted Playback/Cuelist views, desk-only views request no runtime identities,
+  gaps and malformed messages repair from authoritative snapshots, and the 250 ms global Playback
+  poll is gone. Concurrent fader and page mutations use independent optimistic overlays with
+  request-ordered rollback and authoritative event/outcome reconciliation.
+- [x] Exposed Selective Show Import through authenticated v2 catalog, preview, and atomic apply
+  adapters with checked-in schemas, generated TypeScript, exact source/target revisions, strict
+  response validation, and focused server contracts. **Show → Load → Partial Show Load** now uses a
+  feature-owned capability provider to present dependencies, conflicts, profiles, managed assets,
+  blockers, retryable preview work, and a non-cancellable one-revision apply without expanding the
+  global server context.
 - [x] Converged global Grand Master and blackout changes through the typed Output runtime service,
   with one batched persistence/event publication per control action and an authoritative v2
   snapshot while retaining legacy HTTP and WebSocket response compatibility.
@@ -73,9 +84,6 @@ Last updated: 2026-07-18 at commit `e6110da`.
 
 ## In progress
 
-- [ ] Finish the typed selective-import v2 adapter and operator-facing Partial Show Load workflow.
-- [ ] Finish the view-scoped Playback runtime store, optimistic reconciliation, and removal of the
-  250 ms global Playback poll.
 - [ ] Continue vertical feature-store/event slices and move the remaining production callers away
   from broad `useServer()`, polling, and generic show-object mutation.
 
@@ -87,8 +95,8 @@ Last updated: 2026-07-18 at commit `e6110da`.
 2. Publish the remaining externally observable transitions once through typed events: Programmer
    ownership/value changes, Highlight movement, transition completion, output health/overload,
    and any remaining automatic runtime changes.
-3. Complete the typed server adapter and operator workflow for selective import. Migrate remaining layout
-   and miscellaneous portable-show mutations, then remove generic frontend show-object mutation.
+3. Migrate remaining layout and miscellaneous portable-show mutations, then remove generic
+   frontend show-object mutation.
 4. Replace production `useServer()` callers with feature-local stores/hooks. Remove broad global
    React update ownership, DOM/custom-event SET/Store/Update routing, and polling-based refreshes.
 5. Expand the public test DSL and migrate remaining legacy command helpers. Tests must express the
@@ -120,7 +128,8 @@ Last updated: 2026-07-18 at commit `e6110da`.
   planning sources, plus the unrelated Dynamics Editor experiment.
 - Focused application, server, wire, frontend, architecture, source-size, MVR, File Manager,
   Playback, Preload, Patch, Output, event, shared-control, Stage 3D, build, and strict Clippy checks
-  have passed for their committed slices.
+  have passed for their committed slices. The latest Playback frontend run covered 109 focused
+  tests; the Selective Show Import frontend run covered 19 focused tests plus a production build.
 - A final full-suite and real desktop run has not yet been completed.
 
 The remaining files above the 400-line goal are planning/test sources and the unrelated Dynamics

@@ -2,6 +2,9 @@
 
 This document is the dependency and state-ownership contract for the [major architecture refactor](../plans/major-refactoring.md). It describes rules that new modules must satisfy while the compatibility adapters are still being removed.
 
+Start with the [architecture overview](architecture-overview.md) for the end-to-end system shape,
+then use this document as the enforceable boundary contract.
+
 ## Dependency direction
 
 Dependencies point inward from transports to use cases and domains:
@@ -35,18 +38,14 @@ One semantic action has one authoritative outcome and publishes each semantic ev
 
 ## State lifetimes
 
-Every new state field must name exactly one lifetime and document its persistence, migration, reconnect, restart, Save As, and deletion behavior. The defaults below apply unless a more specific accepted contract says otherwise.
+The complete six-lifetime matrix is in [State ownership](state-ownership.md). Every new field must
+name one lifetime and document persistence, migration, reconnect, restart, Save As, and deletion.
+Storage proximity does not merge lifetimes: for example, desk-interaction command text may be
+checkpointed beside a user Programmer while retaining separate ownership and reset rules.
 
-| Lifetime | Owner and examples | Persistence and migration | Reconnect and restart | Save As and deletion |
-| --- | --- | --- | --- | --- |
-| Portable show | `light-show`; fixtures, profile snapshots, Groups, Presets, Cuelists, Playbacks, routes, layouts, future Dynamics, Macros, and Timecodes | Versioned inside the show file; decoded, migrated, validated, compiled, and committed atomically | Re-queried from the active show projection after reconnect; restored and recompiled at restart | Save As copies all referenced portable objects and assets; deleting the show removes only that show's portable data |
-| Desk installation | Desk services; users, control-desk definitions, screens, fixture library, output and input configuration, managed local paths | Versioned in desk storage, never embedded into a portable show | Survives reconnect and restart | Not copied by Save As; removed only by the owning installation-level delete or reset operation |
-| Desk interaction | Desk service; shared unfinished command line, target, Shift or gesture context, selected page, and current interaction locks | Stored only when its field explicitly promises restart recovery; otherwise revisioned in memory | Shared by all surfaces attached to the same desk and repaired from the desk snapshot after a gap; non-persistent interaction fields reset at restart | Never copied by Save As; removed when the owning desk is deleted or the documented interaction reset runs |
-| User Programmer | Programming service; ordered selection, semantic values, timing, modes, Preload, and mutation-only undo/redo | Checkpointed in desk storage for recovery, with explicit schema migration; not part of the show | Reattached to the same user/session policy after reconnect and restored disconnected after restart | Never copied by Save As; removed only by an explicit Programmer clear or owning-user/session retention policy |
-| Connection or session | Session service; authentication token, connected client identity, transport subscriptions, negotiated capabilities, and delivery cursor | Connection-only data is not portable and is not written into a show; persisted login policy, if any, is owned and migrated by the desk store | Reconnect creates or resumes according to the authentication policy and repairs event gaps from authoritative snapshots; live connections end at restart | Never copied by Save As; removed on logout, expiry, client removal, or desk/user deletion as documented |
-| Transient runtime | Playback, Control, Output, media, and scheduler services; active transitions, Chaser/FOLLOW position, output health, delivery queues, and in-flight work | Not portable. A narrowly defined desk checkpoint may recover operator runtime, but queues, locks, sockets, and timing samples are never persisted | Reconnect reads an immutable projection; restart either restores the documented checkpoint or starts from a deterministic safe state | Never copied by Save As unless a separate portable definition exists; released on stop, show replacement, or owning-object deletion |
-
-Unknown portable show objects and fields survive load, Save As, revision creation, export, and selective import. A migration may canonicalize a known representation, but it may not silently erase data it does not own.
+Unknown portable show objects and fields survive load, Save As, revision creation, export, and
+selective import. A migration may canonicalize a known representation, but it may not silently
+erase data it does not own.
 
 ## Concurrency and performance
 

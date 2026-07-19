@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-This is the remaining larger review block formerly recorded as “Check Cuelists + Fade times.” It belongs in Later because it spans the complete Cue/Cuelist timing model rather than one small corrective layout change. It complements, but does not replace, the focused [Cuelist and Cue Settings Layout](../Next/36-cuelist-and-cue-settings-layout.md) and [Chaser Crossfade Percentage](../Next/37-chaser-crossfade-percentage.md) plans.
+This is the remaining larger review block formerly recorded as “Check Cuelists + Fade times.” It belongs in Later because it spans the complete Cue/Cuelist timing model rather than one small corrective layout change. It complements, but does not replace, the focused [Cuelist and Cue Settings Layout](../Done/36-cuelist-and-cue-settings-layout.DONE.md) and [Chaser Crossfade Percentage](../Done/37-chaser-crossfade-percentage.DONE.md) plans.
 
 ## Review contract
 
