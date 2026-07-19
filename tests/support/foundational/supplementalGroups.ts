@@ -1,6 +1,11 @@
 import { expect, test } from "../../../apps/control-ui/e2e/bench/fixtures";
 import type { FoundationalCase } from "./case";
 import {
+	expectFixtureUnpatched,
+	setFixtureAddressThroughSoftware,
+	unpatchFixture,
+} from "../operator";
+import {
 	command,
 	commandError,
 	expectGroup,
@@ -27,7 +32,6 @@ import {
 	selectFixtureRows,
 	setDimmerByTouch,
 	stageFixture,
-	unpatchFixture,
 } from "./helpers";
 
 export const derivedGroupApi: FoundationalCase = {
@@ -206,22 +210,13 @@ export const frozenGroupUi: FoundationalCase = {
 		await openPatch(page);
 		const fixture3Row = patchFixtureRow(page, 3);
 		const address = fixture3Row.locator(".patch-address");
-		await page.getByRole("button", { name: "SET", exact: true }).click();
-		await address.click();
-		const editor = page.locator(".patch-edit-modal");
-		await expect(
-			editor.getByRole("heading", { name: "Set fixture address" }),
-		).toBeVisible();
-		await editor.getByLabel("Fixture address").fill("");
-		await editor.getByRole("button", { name: "Set", exact: true }).click();
+		await setFixtureAddressThroughSoftware({
+			page,
+			addressCell: address,
+			address: null,
+		});
 		await expect(address).toHaveText("Unpatched");
-		await expect
-			.poll(
-				async () =>
-					(await object<any>(api, "patched_fixture", fixtures[3])).body
-						.universe,
-			)
-			.toBeNull();
+		await expectFixtureUnpatched(api, fixtures[3]);
 
 		await openGroups(page);
 		await expect(groupCard(page, 5)).toHaveClass(/frozen/);

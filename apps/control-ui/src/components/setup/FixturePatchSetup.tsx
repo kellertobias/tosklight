@@ -102,8 +102,8 @@ function FixturePatchLayout() {
 			<MultipatchAddressDialog />
 			<AddLayerDialog />
 			<FixtureEditDialog />
-			<PatchConflictDialog />
 			<FixtureAddressDialog />
+			<PatchConflictDialog />
 		</div>
 	);
 }

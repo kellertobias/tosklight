@@ -37,7 +37,8 @@ export class HttpPatchTransport implements PatchTransport {
 
 	constructor(private readonly options: HttpPatchTransportOptions) {
 		this.baseUrl = options.baseUrl.replace(/\/$/, "");
-		this.fetchImplementation = options.fetch ?? globalThis.fetch;
+		this.fetchImplementation =
+			options.fetch ?? globalThis.fetch.bind(globalThis);
 		this.WebSocketImplementation = options.webSocket ?? globalThis.WebSocket;
 	}
 

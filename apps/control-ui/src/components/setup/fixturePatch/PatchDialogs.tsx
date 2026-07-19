@@ -156,7 +156,12 @@ export function PatchConflictDialog() {
 	if (!pending || !controller.data.selected) return null;
 	return (
 		<div className="stacked-modal-layer">
-			<section className="nested-modal conflict-modal">
+			<section
+				className="nested-modal conflict-modal"
+				role="dialog"
+				aria-modal="true"
+				aria-label="Patch conflict"
+			>
 				<h3>Patch conflict</h3>
 				{editError && (
 					<p className="patch-status" role="alert">

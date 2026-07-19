@@ -1,6 +1,11 @@
 import { expect } from "../../../apps/control-ui/e2e/bench/fixtures";
 import { pairedScenario } from "../../../apps/control-ui/e2e/bench/pairedScenario";
-import { storeGroup } from "../operator";
+import {
+	expectFixtureUnpatched,
+	setFixtureAddressThroughSoftware,
+	storeGroup,
+	unpatchFixture,
+} from "../operator";
 import {
 	command,
 	expectGroup,
@@ -25,7 +30,6 @@ import {
 	selectFixtureRows,
 	setDimmerByTouch,
 	slotsFromFrame,
-	unpatchFixture,
 } from "./helpers";
 
 export function registerFrozenAndEmptyGroupPairedScenarios() {
@@ -65,11 +69,11 @@ export function registerFrozenAndEmptyGroupPairedScenarios() {
 			await openPatch(page);
 			const row = patchFixtureRow(page, 3);
 			const address = row.locator(".patch-address");
-			await page.getByRole("button", { name: "SET", exact: true }).click();
-			await address.click();
-			const editor = page.locator(".patch-edit-modal");
-			await editor.getByLabel("Fixture address").fill("");
-			await editor.getByRole("button", { name: "Set", exact: true }).click();
+			await setFixtureAddressThroughSoftware({
+				page,
+				addressCell: address,
+				address: null,
+			});
 			await expect(address).toHaveText("Unpatched");
 			await openGroups(page);
 			await groupCard(page, 5).click();
@@ -85,13 +89,7 @@ export function registerFrozenAndEmptyGroupPairedScenarios() {
 				"5",
 				[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
 			);
-			const fixture3 = await object<any>(
-				api,
-				"patched_fixture",
-				state.fixtures[3],
-			);
-			expect(fixture3.body.universe).toBeNull();
-			expect(fixture3.body.address).toBeNull();
+			await expectFixtureUnpatched(api, state.fixtures[3]);
 			await expectProgrammer(api, (programmerState) =>
 				expect(programmerState.group_values["5"]?.[INTENSITY]).toBeDefined(),
 			);

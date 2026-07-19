@@ -240,7 +240,8 @@ function ModeField() {
 export function FixtureAddressDialog() {
 	const controller = usePatchController();
 	const selected = controller.data.selected;
-	if (controller.ui.edit !== "address" || !selected) return null;
+	if (controller.ui.edit !== "address" || controller.ui.pending || !selected)
+		return null;
 	return (
 		<div className="stacked-modal-layer fixture-address-layer">
 			<FixtureAddressScreen

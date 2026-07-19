@@ -103,20 +103,3 @@ export async function overwriteGroupByNumbers(
 		existing.revision,
 	);
 }
-
-export async function unpatchFixture(
-	api: ApiDriver,
-	fixtureId: string,
-): Promise<void> {
-	const fixture = (await objects(api, "patched_fixture")).find(
-		(item) => item.body.fixture_id === fixtureId,
-	);
-	expect(fixture).toBeDefined();
-	await putObject(
-		api,
-		"patched_fixture",
-		fixture!.id,
-		{ ...fixture!.body, universe: null, address: null },
-		fixture!.revision,
-	);
-}

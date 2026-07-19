@@ -321,6 +321,29 @@ describe("Patch v2 wire boundary", () => {
 });
 
 describe("Patch v2 network boundary", () => {
+	it("calls the browser fetch implementation with its required global receiver", async () => {
+		const originalFetch = globalThis.fetch;
+		let receiver: unknown;
+		globalThis.fetch = async function (this: unknown) {
+			receiver = this;
+			return new Response(JSON.stringify(wireSnapshot()), {
+				status: 200,
+				headers: { "content-type": "application/json" },
+			});
+		} as typeof fetch;
+
+		try {
+			const transport = new HttpPatchTransport({
+				baseUrl: "http://desk.local",
+				sessionToken: "session-token",
+			});
+			await transport.snapshot(SHOW_ID);
+			expect(receiver).toBe(globalThis);
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
+	});
+
 	it.each([1, 4])(
 		"sends one atomic request for a batch of %i fixture(s) and no unrelated reads",
 		async (count) => {

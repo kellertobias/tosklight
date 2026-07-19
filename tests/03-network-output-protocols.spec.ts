@@ -1,4 +1,10 @@
 import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
+import {
+  duplicatePatchedFixtures,
+  readPatchSnapshot,
+  setFixtureAddressThroughApi,
+  setFixtureAddressThroughSoftware,
+} from "./support/operator";
 import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
 import { DmxReceiver } from "../apps/control-ui/e2e/bench/protocols";
 import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
@@ -221,9 +227,8 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
       return installPatchConflict(api);
     },
     api: async ({ api }, state) => {
-      const second = await object<any>(api, "patched_fixture", state.secondId);
       try {
-        await putObject(api, "patched_fixture", state.secondId, { ...second.body, universe: 2, address: 1 }, second.revision);
+        await setFixtureAddressThroughApi(api, state.secondId, "2.1");
       } catch (error) {
         expect(String(error)).toContain("returned 400");
         state.rejected = true;
@@ -234,12 +239,12 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
       await page.getByRole("button", { name: /Open show menu/ }).click();
       await page.getByRole("button", { name: "Show Patch", exact: true }).click();
       const candidate = page.locator(".patch-table tbody tr").filter({ hasText: "Atomic Candidate" });
-      await page.getByRole("button", { name: "SET", exact: true }).click();
-      await candidate.locator(".patch-address").click();
-      const editor = page.locator(".patch-edit-modal");
-      await editor.getByLabel("Fixture address").fill("2.1");
-      await editor.getByRole("button", { name: "Set", exact: true }).click();
-      const conflict = page.locator(".conflict-modal");
+      await setFixtureAddressThroughSoftware({
+        page,
+        addressCell: candidate.locator(".patch-address"),
+        address: "2.1",
+      });
+      const conflict = page.getByRole("dialog", { name: "Patch conflict" });
       await expect(conflict).toContainText("Atomic Anchor");
       await conflict.getByRole("button", { name: "Keep old patch / mode", exact: true }).click();
       await expect(candidate.locator(".patch-address")).toHaveText("2.2");
@@ -247,10 +252,19 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
     },
     assert: async ({ api }, state) => {
       expect(state.rejected).toBe(true);
-      const first = await object<any>(api, "patched_fixture", state.firstId);
-      const second = await object<any>(api, "patched_fixture", state.secondId);
-      expect(first).toMatchObject({ revision: state.firstRevision, body: { fixture_number: 901, universe: 2, address: 1 } });
-      expect(second).toMatchObject({ revision: state.secondRevision, body: { fixture_number: 902, universe: 2, address: 2 } });
+      const snapshot = await readPatchSnapshot(api);
+      const first = snapshot.fixtures.find((fixture) => fixture.fixture_id === state.firstId);
+      const second = snapshot.fixtures.find((fixture) => fixture.fixture_id === state.secondId);
+      expect(first).toMatchObject({
+        fixture_revision: state.firstRevision,
+        fixture_number: 901,
+        split_patches: [{ universe: 2, address: 1 }],
+      });
+      expect(second).toMatchObject({
+        fixture_revision: state.secondRevision,
+        fixture_number: 902,
+        split_patches: [{ universe: 2, address: 2 }],
+      });
     },
   });
 
@@ -610,29 +624,27 @@ async function exerciseMinimumRoute(api: ApiDriver, bench: any, state: MinimumRo
   state.artDisabled = !state.receiver.packets.slice(mark).some((packet) => packet.protocol === "artnet" && packet.universe === 32);
 }
 
-async function installPatchConflict(api: any): Promise<PatchConflictState> {
-  const source = (await objects<any>(api, "patched_fixture")).find((entry) => entry.body.fixture_number === 1)!;
-  const firstId = "dmx-005-anchor";
-  const secondId = "dmx-005-candidate";
-  await putObject(api, "patched_fixture", firstId, {
-    ...source.body,
-    fixture_id: crypto.randomUUID(),
-    fixture_number: 901,
-    name: "Atomic Anchor",
-    universe: 2,
-    address: 1,
-  });
-  await putObject(api, "patched_fixture", secondId, {
-    ...source.body,
-    fixture_id: crypto.randomUUID(),
-    fixture_number: 902,
-    name: "Atomic Candidate",
-    universe: 2,
-    address: 2,
-  });
-  const first = await object<any>(api, "patched_fixture", firstId);
-  const second = await object<any>(api, "patched_fixture", secondId);
-  return { firstId, secondId, firstRevision: first.revision, secondRevision: second.revision, rejected: false };
+async function installPatchConflict(api: ApiDriver): Promise<PatchConflictState> {
+  const source = (await readPatchSnapshot(api)).fixtures.find(
+    (fixture) => fixture.fixture_number === 1,
+  );
+  if (!source) throw new Error("Canonical show is missing Fixture 1");
+  const firstId = crypto.randomUUID();
+  const secondId = crypto.randomUUID();
+  const outcome = await duplicatePatchedFixtures(api, source.fixture_id, [
+    { fixtureId: firstId, fixtureNumber: 901, name: "Atomic Anchor", address: "2.1" },
+    { fixtureId: secondId, fixtureNumber: 902, name: "Atomic Candidate", address: "2.2" },
+  ]);
+  const first = outcome.fixtures.find((fixture) => fixture.fixture_id === firstId);
+  const second = outcome.fixtures.find((fixture) => fixture.fixture_id === secondId);
+  if (!first || !second) throw new Error("Patch did not return both conflict fixtures");
+  return {
+    firstId,
+    secondId,
+    firstRevision: first.fixture_revision,
+    secondRevision: second.fixture_revision,
+    rejected: false,
+  };
 }
 
 async function installSixteenBitMatrix(api: any, bench: any): Promise<SixteenBitState> {
