@@ -58,7 +58,7 @@ fn default_true() -> bool {
     true
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MultiPatchInstance {
     pub id: Uuid,
     #[serde(default)]
@@ -176,8 +176,14 @@ const fn default_citp_port() -> u16 {
     4811
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PatchedHead {
+    /// Stable identity of the selected immutable profile head.
+    ///
+    /// Legacy patch records do not have this value. The next profile-aware patch mutation fills it
+    /// after matching that legacy head by `head_index` once.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_head_id: Option<Uuid>,
     pub head_index: u16,
     pub fixture_id: FixtureId,
 }

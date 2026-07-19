@@ -249,6 +249,7 @@ fn media_server_layers_inherit_parent_direct_control_endpoint() {
         location: Default::default(),
         rotation: Default::default(),
         logical_heads: vec![PatchedHead {
+            profile_head_id: None,
             head_index: 1,
             fixture_id: FixtureId::new(),
         }],
@@ -272,6 +273,7 @@ fn media_server_layers_inherit_parent_direct_control_endpoint() {
 #[test]
 fn logical_head_reconciliation_preserves_matching_ids_and_repairs_shape() {
     let kept = FixtureId::new();
+    let profile_head_id = uuid::Uuid::new_v4();
     let stale = FixtureId::new();
     let mut fixture = PatchedFixture {
         fixture_id: FixtureId::new(),
@@ -288,10 +290,12 @@ fn logical_head_reconciliation_preserves_matching_ids_and_repairs_shape() {
         rotation: Default::default(),
         logical_heads: vec![
             PatchedHead {
+                profile_head_id: Some(profile_head_id),
                 head_index: 0,
                 fixture_id: kept,
             },
             PatchedHead {
+                profile_head_id: None,
                 head_index: 99,
                 fixture_id: stale,
             },
@@ -325,6 +329,10 @@ fn logical_head_reconciliation_preserves_matching_ids_and_repairs_shape() {
     assert_eq!(fixture.logical_heads.len(), 2);
     assert_eq!(fixture.logical_heads[0].head_index, 0);
     assert_eq!(fixture.logical_heads[0].fixture_id, kept);
+    assert_eq!(
+        fixture.logical_heads[0].profile_head_id,
+        Some(profile_head_id)
+    );
     assert_eq!(fixture.logical_heads[1].head_index, 4);
     assert_ne!(fixture.logical_heads[1].fixture_id, stale);
     assert!(!reconcile_logical_heads(&mut fixture));

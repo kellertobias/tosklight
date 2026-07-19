@@ -87,6 +87,7 @@ pub(super) fn fixture(profile: &FixtureProfile) -> PatchedFixture {
             z: 30.0,
         },
         logical_heads: vec![PatchedHead {
+            profile_head_id: None,
             head_index: 1,
             fixture_id: child_id,
         }],

@@ -7,32 +7,29 @@ use std::collections::HashMap;
 /// Rebuild the persisted logical-head mapping from the active fixture definition.
 /// Existing IDs are retained by definition head index so programming remains stable.
 pub fn reconcile_logical_heads(fixture: &mut PatchedFixture) -> bool {
-    let before = fixture
-        .logical_heads
-        .iter()
-        .map(|head| (head.head_index, head.fixture_id))
-        .collect::<Vec<_>>();
+    let before = fixture.logical_heads.clone();
     let mut existing = fixture
         .logical_heads
         .drain(..)
-        .map(|head| (head.head_index, head.fixture_id))
+        .map(|head| (head.head_index, (head.fixture_id, head.profile_head_id)))
         .collect::<HashMap<_, _>>();
     fixture.logical_heads = fixture
         .definition
         .heads
         .iter()
         .filter(|head| !head.shared)
-        .map(|head| PatchedHead {
-            head_index: head.index,
-            fixture_id: existing.remove(&head.index).unwrap_or_else(FixtureId::new),
+        .map(|head| {
+            let (fixture_id, profile_head_id) = existing
+                .remove(&head.index)
+                .unwrap_or_else(|| (FixtureId::new(), None));
+            PatchedHead {
+                profile_head_id,
+                head_index: head.index,
+                fixture_id,
+            }
         })
         .collect();
-    before
-        != fixture
-            .logical_heads
-            .iter()
-            .map(|head| (head.head_index, head.fixture_id))
-            .collect::<Vec<_>>()
+    before != fixture.logical_heads
 }
 
 impl PatchedFixture {

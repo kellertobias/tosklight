@@ -91,6 +91,20 @@ impl PortablePatchedFixtureRecord {
         self.body
     }
 
+    /// Reads the stable fixture identity without decoding or cloning the complete patch body.
+    pub fn fixture_id(&self) -> Result<light_core::FixtureId, PortablePatchError> {
+        let value = self
+            .body
+            .get("fixture_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                PortablePatchError::InvalidRecord("fixture_id must be a UUID string".into())
+            })?;
+        uuid::Uuid::parse_str(value)
+            .map(light_core::FixtureId)
+            .map_err(|error| PortablePatchError::InvalidRecord(error.to_string()))
+    }
+
     pub fn profile_reference(
         &self,
     ) -> Result<Option<PatchedFixtureProfileReference>, PortablePatchError> {

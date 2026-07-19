@@ -145,6 +145,7 @@ pub(super) fn patched(
             .iter()
             .filter(|head| !head.shared)
             .map(|head| PatchedHead {
+                profile_head_id: None,
                 head_index: head.index,
                 fixture_id: FixtureId::new(),
             })

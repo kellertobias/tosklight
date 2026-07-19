@@ -59,6 +59,50 @@ fn profile_revisions_are_atomic_and_server_assigned() {
 }
 
 #[test]
+fn raw_profile_revision_read_preserves_unknown_fields() {
+    let path = std::env::temp_dir().join(format!("fixture-profile-raw-{}.sqlite", Uuid::new_v4()));
+    let library = FixtureLibrary::open(&path).unwrap();
+    let mut draft = FixtureProfile::blank();
+    draft.manufacturer = "Acme".into();
+    draft.name = "Future-safe profile".into();
+    draft.short_name = "Future-safe".into();
+    let profile = library.save_profile(draft, 0).unwrap();
+    drop(library);
+
+    let connection = Connection::open(&path).unwrap();
+    let stored: String = connection
+        .query_row(
+            "SELECT profile_json FROM fixture_profiles WHERE id=?1 AND revision=1",
+            [profile.id.0.to_string()],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let mut stored = serde_json::from_str::<serde_json::Value>(&stored).unwrap();
+    stored["future_asset_manifest"] = serde_json::json!({"model": "asset://future.glb"});
+    connection
+        .execute(
+            "UPDATE fixture_profiles SET profile_json=?1 WHERE id=?2 AND revision=1",
+            params![
+                serde_json::to_string(&stored).unwrap(),
+                profile.id.0.to_string()
+            ],
+        )
+        .unwrap();
+    drop(connection);
+
+    let library = FixtureLibrary::open(&path).unwrap();
+    let raw = library
+        .profile_revision_document(profile.id, 1)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        raw["future_asset_manifest"],
+        stored["future_asset_manifest"]
+    );
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
 fn failed_or_conflicting_legacy_migration_keeps_startup_available() {
     let path = std::env::temp_dir().join(format!(
         "fixture-profile-recovery-{}.sqlite",

@@ -223,6 +223,7 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
                 location: Default::default(),
                 rotation: Default::default(),
                 logical_heads: vec![light_fixture::PatchedHead {
+                    profile_head_id: None,
                     head_index: 1,
                     fixture_id: light_core::FixtureId::new(),
                 }],

@@ -167,6 +167,7 @@ fn patched_mvr_fixture(
             .iter()
             .filter(|head| !head.shared)
             .map(|head| light_fixture::PatchedHead {
+                profile_head_id: None,
                 head_index: head.index,
                 fixture_id: light_core::FixtureId::new(),
             })

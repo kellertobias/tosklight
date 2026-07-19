@@ -218,10 +218,12 @@ fn logical_head_master_does_not_limit_sibling_heads() {
         rotation: Default::default(),
         logical_heads: vec![
             PatchedHead {
+                profile_head_id: None,
                 head_index: 1,
                 fixture_id: first,
             },
             PatchedHead {
+                profile_head_id: None,
                 head_index: 2,
                 fixture_id: second,
             },

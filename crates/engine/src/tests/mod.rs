@@ -76,6 +76,7 @@ fn fixture() -> (PatchedFixture, FixtureId) {
             location: Default::default(),
             rotation: Default::default(),
             logical_heads: vec![PatchedHead {
+                profile_head_id: None,
                 head_index: 1,
                 fixture_id: logical,
             }],

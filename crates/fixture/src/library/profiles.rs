@@ -81,6 +81,26 @@ impl FixtureLibrary {
             .transpose()
     }
 
+    /// Reads one immutable profile revision exactly as stored.
+    ///
+    /// Portable-show snapshots use this boundary instead of decoding through [`FixtureProfile`],
+    /// so fields introduced by a newer fixture editor and inline asset data are not discarded.
+    pub fn profile_revision_document(
+        &self,
+        id: FixtureId,
+        revision: u32,
+    ) -> Result<Option<serde_json::Value>, FixtureError> {
+        self.conn
+            .query_row(
+                "SELECT profile_json FROM fixture_profiles WHERE id=?1 AND revision=?2",
+                params![id.0.to_string(), revision],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?
+            .map(|json| serde_json::from_str(&json).map_err(FixtureError::from))
+            .transpose()
+    }
+
     pub fn profile_revisions(&self, id: FixtureId) -> Result<Vec<u32>, FixtureError> {
         let mut statement = self
             .conn

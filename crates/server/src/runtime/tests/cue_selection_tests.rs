@@ -222,10 +222,12 @@ fn bare_multi_head_selection_expands_to_children_and_steps_without_parent_identi
     ];
     fixture.logical_heads = vec![
         light_fixture::PatchedHead {
+            profile_head_id: None,
             head_index: 1,
             fixture_id: first_head,
         },
         light_fixture::PatchedHead {
+            profile_head_id: None,
             head_index: 2,
             fixture_id: second_head,
         },

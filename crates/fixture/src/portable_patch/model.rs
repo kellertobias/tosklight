@@ -24,7 +24,7 @@ pub struct PatchedFixtureProfileReference {
 ///
 /// Keeping these fields separate from [`crate::FixtureDefinition`] lets portable shows store one
 /// profile revision once, regardless of how many fixtures use it.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct PatchedFixturePatch {
     pub fixture_id: FixtureId,
     /// Operator-facing fixture number. This is distinct from the stable internal UUID.

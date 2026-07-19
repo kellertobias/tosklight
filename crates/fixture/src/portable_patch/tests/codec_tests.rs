@@ -23,6 +23,35 @@ fn new_write_contains_only_profile_reference_and_patch_owned_fields() {
 }
 
 #[test]
+fn profile_head_identity_is_optional_for_legacy_records_and_persisted_when_known() {
+    let profile = profile();
+    let mut fixture = fixture(&profile);
+    let legacy = PortablePatchedFixtureRecord::from_runtime_fixture(&fixture).unwrap();
+    assert!(
+        legacy.body()["logical_heads"][0]
+            .get("profile_head_id")
+            .is_none()
+    );
+    assert_eq!(
+        legacy.patch().unwrap().logical_heads[0].profile_head_id,
+        None
+    );
+
+    let profile_head_id = profile.modes[0].heads[1].id;
+    fixture.logical_heads[0].profile_head_id = Some(profile_head_id);
+    let identified = PortablePatchedFixtureRecord::from_runtime_fixture(&fixture).unwrap();
+
+    assert_eq!(
+        identified.body()["logical_heads"][0]["profile_head_id"],
+        json!(profile_head_id)
+    );
+    assert_eq!(
+        identified.patch().unwrap().logical_heads[0].profile_head_id,
+        Some(profile_head_id)
+    );
+}
+
+#[test]
 fn ambiguous_unversioned_record_cannot_bypass_profile_resolution() {
     let profile = profile();
     let fixture = fixture(&profile);

@@ -228,10 +228,12 @@ fn selected_logical_head_highlights_independently_while_parent_identifies_all_he
         rotation: Default::default(),
         logical_heads: vec![
             PatchedHead {
+                profile_head_id: None,
                 head_index: 0,
                 fixture_id: first,
             },
             PatchedHead {
+                profile_head_id: None,
                 head_index: 1,
                 fixture_id: second,
             },

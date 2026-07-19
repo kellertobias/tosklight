@@ -201,6 +201,7 @@ fn highlight_participation_uses_logical_fixture_identities_independent_of_patch(
     fixture.universe = None;
     fixture.address = None;
     fixture.logical_heads = vec![light_fixture::PatchedHead {
+        profile_head_id: None,
         head_index: 1,
         fixture_id: head,
     }];
