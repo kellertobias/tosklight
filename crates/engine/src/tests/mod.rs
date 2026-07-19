@@ -339,3 +339,5 @@ mod schema_v2;
 mod highlight_masters;
 
 mod highlight_looks;
+
+mod lifecycle;

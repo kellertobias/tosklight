@@ -21,6 +21,7 @@ mod safety;
 mod visualization;
 
 pub use engine::Engine;
+pub use lifecycle::PreparedEngineSnapshot;
 pub use model::{
     EngineError, EngineSnapshot, MoveInBlackDiagnostic, MoveInBlackPosition, MoveInBlackState,
     RenderOptions, RenderResult,
