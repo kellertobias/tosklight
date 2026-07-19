@@ -150,18 +150,20 @@ fn sampled_value_is_the_underlay_for_an_ordinary_programmer_fade() {
 }
 
 #[test]
-fn playback_sample_retains_non_intensity_sequence_master_at_half_and_zero() {
+fn playback_sample_applies_its_master_to_intensity_and_non_intensity_output() {
     let started = test_time();
     let clock: SharedClock = Arc::new(ManualClock::new(started));
     let programmers = ProgrammerRegistry::with_clock(clock);
-    let (fixture, fixture_id) = schema_v2_fixture(&[("tilt", false, false, true, false, false)]);
+    let (fixture, fixture_id) = schema_v2_fixture(&[
+        ("intensity", false, false, false, false, false),
+        ("tilt", false, false, true, false, false),
+    ]);
     let cue_list = test_cue_list(
         "Mastered animation",
-        vec![CueChange::set(
-            fixture_id,
-            AttributeKey("tilt".into()),
-            AttributeValue::Normalized(0.0),
-        )],
+        [AttributeKey::intensity(), AttributeKey("tilt".into())]
+            .into_iter()
+            .map(|attribute| CueChange::set(fixture_id, attribute, AttributeValue::Normalized(0.0)))
+            .collect(),
     );
     let playback = test_playback(1, cue_list.id);
     let engine = Engine::new(programmers);
@@ -176,24 +178,86 @@ fn playback_sample_retains_non_intensity_sequence_master_at_half_and_zero() {
         .unwrap();
     engine.playback().write().go_playback(1).unwrap();
 
-    for (master, expected_dmx) in [(0.5, 0.4), (0.0, 0.0)] {
+    for (master, expected_intensity, expected_tilt) in [(0.5, 0.1, 0.4), (0.0, 0.0, 0.0)] {
         engine.playback().write().set_master(1, master).unwrap();
         let assignments = playback_assignments(&engine, started, Some(1));
         let sampled = FakeAnimatedSource::default().sample(&assignments);
-        assert_normalized(
-            &engine.resolved_values_with_contribution_batches(std::slice::from_ref(&sampled)),
-            fixture_id,
-            "tilt",
-            0.8,
-        );
+        let resolved =
+            engine.resolved_values_with_contribution_batches(std::slice::from_ref(&sampled));
+        assert_normalized(&resolved, fixture_id, "intensity", expected_intensity);
+        assert_normalized(&resolved, fixture_id, "tilt", 0.8);
         let frame = engine
             .render_with_contribution_batches(
                 RenderOptions::default(),
                 std::slice::from_ref(&sampled),
             )
             .unwrap();
-        assert_dmx(frame.universes[&1][0], expected_dmx, "Playback master");
+        assert_dmx(
+            frame.universes[&1][0],
+            expected_intensity,
+            "Playback Intensity master",
+        );
+        assert_dmx(
+            frame.universes[&1][1],
+            expected_tilt,
+            "Playback non-Intensity master",
+        );
     }
+}
+
+#[test]
+fn sampled_playback_intensity_is_mastered_before_htp_arbitration() {
+    let started = test_time();
+    let clock: SharedClock = Arc::new(ManualClock::new(started));
+    let programmers = ProgrammerRegistry::with_clock(clock);
+    let (fixture, fixture_id) =
+        schema_v2_fixture(&[("intensity", false, false, false, false, false)]);
+    let sampled_list = test_cue_list(
+        "Sampled",
+        vec![CueChange::set(
+            fixture_id,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.0),
+        )],
+    );
+    let competing_list = test_cue_list(
+        "Competing",
+        vec![CueChange::set(
+            fixture_id,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.6),
+        )],
+    );
+    let mut sampled_playback = test_playback(1, sampled_list.id);
+    sampled_playback.auto_off = false;
+    let mut competing_playback = test_playback(2, competing_list.id);
+    competing_playback.auto_off = false;
+    let engine = Engine::new(programmers);
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture],
+            cue_lists: vec![sampled_list, competing_list],
+            playbacks: vec![sampled_playback, competing_playback],
+            revision: 1,
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+    engine.playback().write().go_playback(1).unwrap();
+    engine.playback().write().go_playback(2).unwrap();
+    engine.playback().write().set_master(1, 0.5).unwrap();
+    let assignments = playback_assignments(&engine, started, Some(1));
+    let sampled = FakeAnimatedSource { phase: 0.6 }.sample(&assignments);
+
+    let resolved = engine.resolved_values_with_contribution_batches(std::slice::from_ref(&sampled));
+    assert_normalized(&resolved, fixture_id, "intensity", 0.6);
+    let frame = engine
+        .render_with_contribution_batches(RenderOptions::default(), std::slice::from_ref(&sampled))
+        .unwrap();
+    assert_dmx(
+        frame.universes[&1][0],
+        0.6,
+        "HTP after sampled Playback master",
+    );
 }
 
 #[test]

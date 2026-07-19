@@ -1,4 +1,4 @@
-use light_core::{AttributeKey, FixtureId, ProgrammerId, TimedValue};
+use light_core::{AttributeKey, AttributeValue, FixtureId, ProgrammerId, TimedValue};
 use light_playback::SequenceMasterSource;
 use std::{
     collections::{HashMap, HashSet},
@@ -71,7 +71,10 @@ impl ContributionSourceId {
     }
 }
 
-/// Playback master metadata retained by a sampled non-Intensity contribution.
+/// Playback master metadata retained after sampled Intensity has been scaled for arbitration.
+///
+/// Profile projection uses this context for non-Intensity channels which react to the same
+/// Playback master. Intensity is scaled before HTP arbitration, matching ordinary Playback values.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ContributionSequenceMaster {
     pub(crate) source: SequenceMasterSource,
@@ -119,12 +122,20 @@ impl ContributionSample {
         }
     }
 
-    /// Replace one Playback assignment while retaining its sequence-master context.
+    /// Replace one Playback assignment with an unmastered semantic sample.
+    ///
+    /// Intensity is scaled here so ordinary HTP arbitration compares effective levels. Other
+    /// attributes retain the master context for fixture-profile projection after arbitration.
     pub fn replacing_playback(
-        value: TimedValue,
+        mut value: TimedValue,
         source: SequenceMasterSource,
         sequence_master: f32,
     ) -> Self {
+        if value.attribute.is_intensity()
+            && let Some(level) = value.value.normalized()
+        {
+            value.value = AttributeValue::Normalized(level * sequence_master);
+        }
         Self {
             value,
             replacement_source: Some(ContributionSourceId::playback(source)),
