@@ -178,6 +178,34 @@ fn wire_payload(payload: &application::ApplicationEvent, sequence: u64) -> wire:
                 change: wire_output_route_change(change),
             }
         }
+        application::ApplicationEvent::Show(application::ShowEvent::ObjectsChanged(change)) => {
+            wire::EventPayload::ShowObjectsChanged {
+                change: wire_show_objects_change(change),
+            }
+        }
+    }
+}
+
+fn wire_show_objects_change(
+    change: &application::ActiveShowObjectsChange,
+) -> wire::ShowObjectsChange {
+    wire::ShowObjectsChange {
+        show_id: change.show_id.0,
+        show_revision: change.show_revision.value(),
+        changes: change.changes.iter().map(wire_show_object_change).collect(),
+    }
+}
+
+fn wire_show_object_change(change: &application::ActiveShowObjectChange) -> wire::ShowObjectChange {
+    wire::ShowObjectChange {
+        kind: match change.kind {
+            application::ActiveShowObjectKind::Group => wire::ShowObjectKind::Group,
+            application::ActiveShowObjectKind::Preset => wire::ShowObjectKind::Preset,
+        },
+        object_id: change.object_id.clone(),
+        object_revision: change.object_revision,
+        body: change.body.clone(),
+        deleted: change.deleted,
     }
 }
 
@@ -245,7 +273,10 @@ fn wire_cause(cause: application::PlaybackTransitionCause) -> wire::PlaybackTran
 #[cfg(test)]
 mod tests {
     use super::*;
-    use light_application::{ActionContext, ActionSource, EventBus, EventDraft, PatchChange};
+    use light_application::{
+        ActionContext, ActionSource, ActiveShowObjectChange, ActiveShowObjectKind,
+        ActiveShowObjectsChange, EventBus, EventDraft, PatchChange,
+    };
     use light_core::ShowId;
 
     #[test]
@@ -281,5 +312,54 @@ mod tests {
         assert_eq!(event.sequence, 1);
         assert_eq!(delta.show_id, show_id.0);
         assert_eq!(delta.event_sequence, Some(event.sequence));
+    }
+
+    #[test]
+    fn show_object_batch_keeps_one_event_and_targeted_raw_deltas() {
+        let bus = EventBus::new(4);
+        let context = ActionContext::operator(
+            Uuid::from_u128(1),
+            Uuid::from_u128(2),
+            Uuid::from_u128(3),
+            ActionSource::Osc,
+        );
+        let show_id = ShowId(Uuid::from_u128(4));
+        let event = bus.publish(EventDraft::active_show_objects_changed(
+            &context,
+            ActiveShowObjectsChange {
+                show_id,
+                show_revision: Default::default(),
+                changes: vec![ActiveShowObjectChange {
+                    kind: ActiveShowObjectKind::Group,
+                    object_id: "7".into(),
+                    object_revision: 3,
+                    body: Some(serde_json::json!({"id":"7","fixtures":[]})),
+                    deleted: false,
+                }],
+            },
+        ));
+
+        let wire::EventServerMessage::Event { event } =
+            wire_delivery(application::SubscriptionDelivery::Event(event))
+        else {
+            panic!("expected an event delivery");
+        };
+        let wire::EventPayload::ShowObjectsChanged { change } = event.payload else {
+            panic!("expected a show-object event");
+        };
+        assert_eq!(event.sequence, 1);
+        assert_eq!(
+            event.source,
+            wire::EventSource::Action {
+                source: wire::EventActionSource::Osc
+            }
+        );
+        assert_eq!(change.show_id, show_id.0);
+        assert_eq!(change.show_revision, 0);
+        assert_eq!(change.changes[0].object_id, "7");
+        assert_eq!(
+            change.changes[0].body.as_ref().unwrap()["fixtures"],
+            serde_json::json!([])
+        );
     }
 }

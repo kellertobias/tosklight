@@ -38,16 +38,19 @@ pub(super) fn execute_show_command(
     session: &Session,
     tokens: &[String],
     timing: CommandTiming,
+    source: light_application::ActionSource,
 ) -> Result<usize, String> {
     let parsed = parse_show_operation(tokens);
     let snapshot = state.engine.snapshot();
     match parsed.operation {
-        "UPDATE" => execute_update_show_command(state, session, parsed.body, &snapshot),
-        "RECORD" => execute_record_show_command(state, session, parsed.body, timing, &snapshot),
+        "UPDATE" => execute_update_show_command(state, session, parsed.body, &snapshot, source),
+        "RECORD" => {
+            execute_record_show_command(state, session, parsed.body, timing, &snapshot, source)
+        }
         "SET" => execute_set_command(state, session, parsed.body),
         operation => {
             if operation == "DELETE" && parsed.body.first().is_some_and(|token| token == "GROUP") {
-                delete_group_command(state, session, parsed.body)
+                delete_group_command(state, session, parsed.body, source)
             } else if parsed.body.first().is_some_and(|token| token == "SET") {
                 let (entry, store) = active_show_store(state)?;
                 execute_cue_mutation(
@@ -60,7 +63,7 @@ pub(super) fn execute_show_command(
                     &snapshot,
                 )
             } else {
-                execute_preset_mutation(state, session, operation, parsed.body)
+                execute_preset_mutation(state, session, operation, parsed.body, source)
             }
         }
     }

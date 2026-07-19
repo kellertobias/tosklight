@@ -57,11 +57,20 @@ pub struct ActiveShowObjectChange {
     pub deleted: bool,
 }
 
+/// One committed semantic batch of active-show Group and Preset changes.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ActiveShowObjectsChange {
+    pub show_id: ShowId,
+    pub show_revision: PortableShowRevision,
+    pub changes: Vec<ActiveShowObjectChange>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct MutateActiveShowObjectsResult {
     pub context: ActionContext,
     pub show_revision: PortableShowRevision,
     pub changes: Vec<ActiveShowObjectChange>,
+    pub event_sequence: u64,
 }
 
 /// One typed output-route edit performed against the active portable show.

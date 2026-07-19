@@ -1,7 +1,7 @@
 use super::{
-    ActiveShowPorts, ActiveShowUnitOfWork, BackupIdentity, MutateActiveShowObjectsCommand,
-    MutateActiveShowObjectsResult, MutateOutputRouteCommand, MutateOutputRouteResult,
-    OutputRouteChange,
+    ActiveShowObjectsChange, ActiveShowPorts, ActiveShowUnitOfWork, BackupIdentity,
+    MutateActiveShowObjectsCommand, MutateActiveShowObjectsResult, MutateOutputRouteCommand,
+    MutateOutputRouteResult, OutputRouteChange,
 };
 use super::{objects::prepare_object_mutation, route::prepare_route_mutation};
 use crate::{ActionContext, ActionEnvelope, ActionError, EventBus, EventDraft};
@@ -78,10 +78,20 @@ impl ActiveShowService {
         let commit = unit.commit(prepared.transaction)?;
         ports.install_runtime(runtime);
         ports.reconcile_object_changes(&prepared.changes);
+        let show_revision = commit.revision();
+        let event = self.events.publish(EventDraft::active_show_objects_changed(
+            &envelope.context,
+            ActiveShowObjectsChange {
+                show_id: envelope.command.show_id,
+                show_revision,
+                changes: prepared.changes.clone(),
+            },
+        ));
         Ok(MutateActiveShowObjectsResult {
             context: envelope.context,
-            show_revision: commit.revision(),
+            show_revision,
             changes: prepared.changes,
+            event_sequence: event.sequence,
         })
     }
 

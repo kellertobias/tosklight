@@ -6,8 +6,9 @@ mod service;
 
 pub use model::{
     ActiveShowObjectChange, ActiveShowObjectKind, ActiveShowObjectMutation,
-    ActiveShowObjectMutationKind, MutateActiveShowObjectsCommand, MutateActiveShowObjectsResult,
-    MutateOutputRouteCommand, MutateOutputRouteResult, OutputRouteChange, OutputRouteMutation,
+    ActiveShowObjectMutationKind, ActiveShowObjectsChange, MutateActiveShowObjectsCommand,
+    MutateActiveShowObjectsResult, MutateOutputRouteCommand, MutateOutputRouteResult,
+    OutputRouteChange, OutputRouteMutation,
 };
 pub use ports::{ActiveShowPorts, ActiveShowUnitOfWork, BackupIdentity};
 pub use service::ActiveShowService;

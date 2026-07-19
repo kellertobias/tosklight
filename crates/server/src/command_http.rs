@@ -75,6 +75,7 @@ pub(super) fn execute_existing_command(
     session: &Session,
     command: &str,
     source: &str,
+    action_source: ActionSource,
     request_id: Option<&str>,
     policy: ExistingCommandPolicy,
 ) -> ExistingCommandOutcome {
@@ -106,7 +107,7 @@ pub(super) fn execute_existing_command(
             // Compatibility families may refresh the shared Engine and all live selections. They
             // must not hold one user's mutation gate while that cross-user reconciliation acquires
             // every user gate, or concurrent show commands can deadlock in opposite directions.
-            super::execute_programmer_command(state, session, command)
+            super::execute_programmer_command_from(state, session, command, action_source)
         }
         ExistingCommandPolicy::AtomicProgrammer => {
             state
@@ -114,8 +115,12 @@ pub(super) fn execute_existing_command(
                 .with_staged_command(session.id, |staged_programmers| {
                     let mut staged_state = state.clone();
                     staged_state.programmers = staged_programmers.clone();
-                    let applied =
-                        super::execute_programmer_command(&staged_state, session, command)?;
+                    let applied = super::execute_programmer_command_from(
+                        &staged_state,
+                        session,
+                        command,
+                        action_source,
+                    )?;
                     staged_programmers
                         .update_command_line(session.id, |current| {
                             (String::new(), current.target, true)
@@ -624,6 +629,7 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
             self.session,
             command,
             self.source,
+            context.source,
             context.request_id.as_deref(),
             policy,
         ) {

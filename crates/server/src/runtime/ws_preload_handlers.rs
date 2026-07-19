@@ -144,6 +144,7 @@ pub(super) fn ws_programmer_execute(
         session,
         &input.value,
         "software",
+        light_application::ActionSource::UserInterface,
         Some(&command.request_id),
         command_http::ExistingCommandPolicy::Compatibility,
     ) {

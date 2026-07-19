@@ -121,6 +121,20 @@ pub(super) fn perform_update(
     session: &Session,
     request: &UpdateApiRequest,
 ) -> Result<update::UpdateResult, ApiError> {
+    perform_update_from(
+        state,
+        session,
+        request,
+        light_application::ActionSource::Http,
+    )
+}
+
+pub(super) fn perform_update_from(
+    state: &AppState,
+    session: &Session,
+    request: &UpdateApiRequest,
+    source: light_application::ActionSource,
+) -> Result<update::UpdateResult, ApiError> {
     let _activation = state
         .activation_lock
         .clone()
@@ -140,7 +154,7 @@ pub(super) fn perform_update(
     };
     let revision = if let Some(object_kind) = object_kind {
         let action = active_show_object_action(
-            operator_action_context(session, light_application::ActionSource::Http),
+            operator_action_context(session, source),
             entry.id,
             vec![put_active_show_object(
                 object_kind,

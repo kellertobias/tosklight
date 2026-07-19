@@ -49,6 +49,7 @@ pub(super) fn execute_preset_mutation(
     session: &Session,
     operation: &str,
     body: &[String],
+    source: light_application::ActionSource,
 ) -> Result<usize, String> {
     let _activation = state
         .activation_lock
@@ -58,12 +59,12 @@ pub(super) fn execute_preset_mutation(
     let (entry, store) = active_show_store(state)?;
     let at = body.iter().position(|token| token == "AT");
     let source_address = command_preset_address(at.map_or(body, |index| &body[..index]))?;
-    let source = preset_object(&store, source_address)?;
+    let source_object = preset_object(&store, source_address)?;
     let mutations = if operation == "DELETE" {
         vec![delete_active_show_object(
             light_application::ActiveShowObjectKind::Preset,
-            source.id,
-            source.revision,
+            source_object.id,
+            source_object.revision,
         )]
     } else {
         let at = at.ok_or("MOVE and COPY require AT and a destination number")?;
@@ -72,7 +73,7 @@ pub(super) fn execute_preset_mutation(
         }
         let destination = preset_destination(&store, source_address, &body[at + 1])?;
         let destination_id = destination.storage_key();
-        let mut destination_body = source.body.clone();
+        let mut destination_body = source_object.body.clone();
         destination_body["number"] = serde_json::json!(destination.number);
         let mut mutations = vec![put_active_show_object(
             light_application::ActiveShowObjectKind::Preset,
@@ -83,14 +84,14 @@ pub(super) fn execute_preset_mutation(
         if operation == "MOVE" {
             mutations.push(delete_active_show_object(
                 light_application::ActiveShowObjectKind::Preset,
-                source.id,
-                source.revision,
+                source_object.id,
+                source_object.revision,
             ));
         }
         mutations
     };
     let action = active_show_object_action(
-        operator_action_context(session, light_application::ActionSource::Http),
+        operator_action_context(session, source),
         entry.id,
         mutations,
     );
@@ -102,6 +103,7 @@ pub(super) fn delete_group_command(
     state: &AppState,
     session: &Session,
     body: &[String],
+    source: light_application::ActionSource,
 ) -> Result<usize, String> {
     if body.len() != 2 {
         return Err("expected DELETE GROUP <group-number>".into());
@@ -135,7 +137,7 @@ pub(super) fn delete_group_command(
         .find(|object| object.id == *id)
         .ok_or_else(|| format!("group {id} does not exist"))?;
     let action = active_show_object_action(
-        operator_action_context(session, light_application::ActionSource::Http),
+        operator_action_context(session, source),
         entry.id,
         vec![delete_active_show_object(
             light_application::ActiveShowObjectKind::Group,

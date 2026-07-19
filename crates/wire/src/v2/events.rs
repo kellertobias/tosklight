@@ -148,6 +148,33 @@ pub enum EventPayload {
     PlaybackCueTransition { transition: PlaybackCueTransition },
     ShowPatchChanged { delta: super::patch::PatchDelta },
     OutputRouteChanged { change: OutputRouteChange },
+    ShowObjectsChanged { change: ShowObjectsChange },
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ShowObjectsChange {
+    pub show_id: Uuid,
+    #[ts(type = "number")]
+    pub show_revision: u64,
+    pub changes: Vec<ShowObjectChange>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ShowObjectChange {
+    pub kind: ShowObjectKind,
+    pub object_id: String,
+    #[ts(type = "number")]
+    pub object_revision: u64,
+    #[ts(type = "unknown | null")]
+    pub body: Option<serde_json::Value>,
+    pub deleted: bool,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ShowObjectKind {
+    Group,
+    Preset,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

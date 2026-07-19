@@ -72,6 +72,7 @@ async fn verify_choice_and_rejection_replay(scenario: &CommandHttpScenario) {
         &scenario.session,
         "COPY SET 1 CUE 1 AT SET 2 CUE 2",
         "test",
+        light_application::ActionSource::Http,
         Some("compatibility-choice"),
         command_http::ExistingCommandPolicy::Compatibility,
     );

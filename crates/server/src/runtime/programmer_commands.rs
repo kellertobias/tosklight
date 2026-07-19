@@ -7,10 +7,25 @@ fn show_command(token: &str) -> bool {
     )
 }
 
+#[cfg(test)]
 pub(super) fn execute_programmer_command(
     state: &AppState,
     session: &Session,
     command_line: &str,
+) -> Result<usize, String> {
+    execute_programmer_command_from(
+        state,
+        session,
+        command_line,
+        light_application::ActionSource::Http,
+    )
+}
+
+pub(super) fn execute_programmer_command_from(
+    state: &AppState,
+    session: &Session,
+    command_line: &str,
+    source: light_application::ActionSource,
 ) -> Result<usize, String> {
     let (tokens, timing) = tokenize_programmer_command(command_line)?;
     let first = tokens.first().ok_or("the command line is empty")?;
@@ -23,7 +38,9 @@ pub(super) fn execute_programmer_command(
             programmer_value_timing(state, timing),
         ),
         "SPD" => execute_speed_group_command(state, &tokens),
-        command if show_command(command) => execute_show_command(state, session, &tokens, timing),
+        command if show_command(command) => {
+            execute_show_command(state, session, &tokens, timing, source)
+        }
         "GROUP" => execute_group_programmer_command(
             state,
             session,

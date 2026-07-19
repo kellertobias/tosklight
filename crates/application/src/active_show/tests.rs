@@ -250,6 +250,7 @@ fn group_batch_preserves_extensions_empty_state_and_ordered_membership() {
     assert_eq!(result.show_revision.value(), 2);
     assert_eq!(result.changes[0].object_revision, 2);
     assert_eq!(result.changes[1].object_revision, 1);
+    assert_eq!(result.event_sequence, 1);
     assert_eq!(rig.installed_revision(), Some(2));
     let stored = rig.object_body("group", "7");
     assert_eq!(stored["id"], "7");
@@ -257,6 +258,21 @@ fn group_batch_preserves_extensions_empty_state_and_ordered_membership() {
     assert_eq!(stored["future_server_field"], json!({"retained": true}));
     assert_eq!(stored["future_client_field"], "accepted");
     assert_eq!(rig.object_body("group", "8")["fixtures"], json!([]));
+
+    let EventReplay::Events(events) = rig.service.events().replay(0, &EventFilter::default())
+    else {
+        panic!("expected retained show-object event");
+    };
+    let event = events.first().unwrap();
+    assert_eq!(
+        event.object.as_ref().unwrap().id,
+        format!("objects:{}", rig.show_id.0)
+    );
+    assert!(matches!(
+        &event.payload,
+        ApplicationEvent::Show(ShowEvent::ObjectsChanged(change))
+            if change.show_revision.value() == 2 && change.changes.len() == 2
+    ));
 }
 
 #[test]

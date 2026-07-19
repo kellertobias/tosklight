@@ -71,7 +71,13 @@ export type OutputRoute = { protocol: OutputProtocol, logical_universe: number, 
 
 export type OutputRouteChange = { show_id: string, show_revision: number, route_id: string, object_revision: number, route: OutputRoute | null, deleted: boolean, };
 
-export type EventPayload = { "type": "playback_cue_transition", transition: PlaybackCueTransition, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, };
+export type ShowObjectKind = "group" | "preset";
+
+export type ShowObjectChange = { kind: ShowObjectKind, object_id: string, object_revision: number, body: unknown | null, deleted: boolean, };
+
+export type ShowObjectsChange = { show_id: string, show_revision: number, changes: Array<ShowObjectChange>, };
+
+export type EventPayload = { "type": "playback_cue_transition", transition: PlaybackCueTransition, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, };
 
 export type EventEnvelope = { sequence: number, occurred_at: string, desk_id: string | null, class: EventClass, object: EventObject | null, source: EventSource, correlation_id: string | null, delivery: EventDeliveryPolicy, payload: EventPayload, };
 

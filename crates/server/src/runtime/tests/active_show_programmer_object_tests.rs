@@ -412,7 +412,13 @@ fn record_and_delete_commands_each_cross_one_active_show_boundary() {
 
     let before_group_record = scenario.boundary();
     assert_eq!(
-        execute_programmer_command(&scenario.state, &scenario.session, "RECORD GROUP 71").unwrap(),
+        execute_programmer_command_from(
+            &scenario.state,
+            &scenario.session,
+            "RECORD GROUP 71",
+            light_application::ActionSource::Osc,
+        )
+        .unwrap(),
         2
     );
     scenario.assert_one_commit(&before_group_record);
@@ -430,6 +436,17 @@ fn record_and_delete_commands_each_cross_one_active_show_boundary() {
             .groups
             .iter()
             .any(|group| group.id == "71" && group.fixtures == fixtures)
+    );
+    let light_application::EventReplay::Events(events) = scenario
+        .state
+        .application_events
+        .replay(0, &light_application::EventFilter::default())
+    else {
+        panic!("expected a retained Group event");
+    };
+    assert_eq!(
+        events.last().unwrap().source,
+        light_application::EventSource::Action(light_application::ActionSource::Osc)
     );
 
     let before_group_delete = scenario.boundary();

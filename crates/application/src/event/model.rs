@@ -3,7 +3,7 @@ use std::{collections::HashSet, sync::Arc, time::Duration};
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use crate::{ActionContext, ActionSource, OutputRouteChange, PatchChange};
+use crate::{ActionContext, ActionSource, ActiveShowObjectsChange, OutputRouteChange, PatchChange};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum EventSource {
@@ -99,6 +99,7 @@ pub enum PlaybackEvent {
 pub enum ShowEvent {
     PatchChanged(PatchChange),
     OutputRouteChanged(OutputRouteChange),
+    ObjectsChanged(ActiveShowObjectsChange),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -164,6 +165,25 @@ impl EventDraft {
             correlation_id: Some(context.correlation_id),
             delivery: DeliveryPolicy::Lossless,
             payload: ApplicationEvent::Show(ShowEvent::OutputRouteChanged(change)),
+        }
+    }
+
+    pub fn active_show_objects_changed(
+        context: &ActionContext,
+        change: ActiveShowObjectsChange,
+    ) -> Self {
+        let object = EventObject::new(
+            EventCapability::Show,
+            format!("objects:{}", change.show_id.0),
+        );
+        Self {
+            desk_id: None,
+            class: EventClass::Projection,
+            object: Some(object),
+            source: EventSource::Action(context.source),
+            correlation_id: Some(context.correlation_id),
+            delivery: DeliveryPolicy::Lossless,
+            payload: ApplicationEvent::Show(ShowEvent::ObjectsChanged(change)),
         }
     }
 }

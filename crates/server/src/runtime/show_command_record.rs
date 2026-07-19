@@ -126,6 +126,7 @@ fn record_group(
     session: &Session,
     body: &[String],
     operation: RecordOperation,
+    source: light_application::ActionSource,
 ) -> Result<usize, String> {
     if body.len() != 2 {
         return Err("expected RECORD [ + | - ] GROUP <group-number>".into());
@@ -150,7 +151,7 @@ fn record_group(
     if operation == RecordOperation::Subtract && programmer.selected.is_empty() {
         let mutation = delete_empty_group(&snapshot, id, existing.as_ref())?;
         let action = active_show_object_action(
-            operator_action_context(session, light_application::ActionSource::Http),
+            operator_action_context(session, source),
             entry.id,
             vec![mutation],
         );
@@ -180,7 +181,7 @@ fn record_group(
     let group = group_from_programmer(id, existing_group, membership, &programmer, operation);
     let group = prevent_derived_group_cycle(group, id, &snapshot, &programmer);
     let action = active_show_object_action(
-        operator_action_context(session, light_application::ActionSource::Http),
+        operator_action_context(session, source),
         entry.id,
         vec![put_active_show_object(
             light_application::ActiveShowObjectKind::Group,
@@ -235,7 +236,12 @@ fn record_cue(
     Ok(1)
 }
 
-fn record_preset(state: &AppState, session: &Session, body: &[String]) -> Result<usize, String> {
+fn record_preset(
+    state: &AppState,
+    session: &Session,
+    body: &[String],
+    source: light_application::ActionSource,
+) -> Result<usize, String> {
     let address = command_preset_address(body)?;
     let id = address.storage_key();
     let programmer = state
@@ -265,7 +271,7 @@ fn record_preset(state: &AppState, session: &Session, body: &[String]) -> Result
         .map(|object| object.id.clone())
         .unwrap_or(id);
     let action = active_show_object_action(
-        operator_action_context(session, light_application::ActionSource::Http),
+        operator_action_context(session, source),
         entry.id,
         vec![put_active_show_object(
             light_application::ActiveShowObjectKind::Preset,
@@ -284,10 +290,11 @@ pub(super) fn execute_record_show_command(
     mut body: &[String],
     timing: CommandTiming,
     snapshot: &EngineSnapshot,
+    source: light_application::ActionSource,
 ) -> Result<usize, String> {
     let operation = record_operation(&mut body);
     if body.first().is_some_and(|token| token == "GROUP") {
-        record_group(state, session, body, operation)
+        record_group(state, session, body, operation, source)
     } else if body
         .first()
         .is_some_and(|token| token == "CUE" || token == "SET")
@@ -296,6 +303,6 @@ pub(super) fn execute_record_show_command(
     } else if operation != RecordOperation::Overwrite {
         Err("RECORD + and RECORD - currently require GROUP or SET ... CUE targets".into())
     } else {
-        record_preset(state, session, body)
+        record_preset(state, session, body, source)
     }
 }
