@@ -19,16 +19,6 @@ pub(super) fn active_show_store(state: &AppState) -> Result<(ShowEntry, ShowStor
     Ok((entry, store))
 }
 
-pub(super) fn refresh_command_show(state: &AppState, entry: &ShowEntry) -> Result<(), String> {
-    let snapshot = load_engine_snapshot(entry)?;
-    state
-        .engine
-        .replace_snapshot(snapshot)
-        .map_err(|error| error.to_string())?;
-    reconcile_group_projections(state);
-    Ok(())
-}
-
 pub(super) fn emit_command_object_changed(
     state: &AppState,
     entry: &ShowEntry,

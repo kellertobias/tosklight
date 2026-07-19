@@ -143,30 +143,19 @@ pub(super) fn perform_update_from(
     let body = plan
         .body()
         .map_err(|error| ApiError::internal(error.to_string()))?;
-    let object_kind = light_application::ActiveShowObjectKind::from_storage_kind(&kind);
-    let revision = if let Some(object_kind) = object_kind {
-        let action = active_show_object_action(
-            context.clone(),
-            entry.id,
-            vec![put_active_show_object(
-                object_kind,
-                id.clone(),
-                plan.expected_revision,
-                body,
-            )],
-        );
-        let result = run_active_show_object_action(state, action)?;
-        result.changes[0].object_revision
-    } else {
-        backup_show(state, &entry)?;
-        store
-            .put_object(&kind, &id, &body, plan.expected_revision)
-            .map_err(ApiError::store)?
-    };
+    let object_kind = active_show_update_kind(&plan);
+    let action = active_show_object_action(
+        context.clone(),
+        entry.id,
+        vec![put_active_show_object(
+            object_kind,
+            id.clone(),
+            plan.expected_revision,
+            body,
+        )],
+    );
+    let revision = run_active_show_object_action(state, action)?.changes[0].object_revision;
     let result = plan.complete(revision);
-    if object_kind.is_none() {
-        refresh_command_show(state, &entry).map_err(ApiError::internal)?;
-    }
     emit(
         state,
         "show_object_changed",
@@ -181,6 +170,22 @@ pub(super) fn perform_update_from(
         }),
     );
     Ok(result)
+}
+
+fn active_show_update_kind(
+    plan: &update::AtomicUpdatePlan,
+) -> light_application::ActiveShowObjectKind {
+    match &plan.object {
+        update::PlannedUpdateObject::CueList(_) => {
+            light_application::ActiveShowObjectKind::CueList
+        }
+        update::PlannedUpdateObject::Preset(_) => {
+            light_application::ActiveShowObjectKind::Preset
+        }
+        update::PlannedUpdateObject::Group(_) => {
+            light_application::ActiveShowObjectKind::Group
+        }
+    }
 }
 
 pub(super) async fn apply_update(
