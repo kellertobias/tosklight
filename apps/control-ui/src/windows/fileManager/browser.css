@@ -1,0 +1,141 @@
+
+.file-manager .file-toolbar {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.file-manager .file-toolbar nav {
+  min-width: 8rem;
+}
+
+.file-manager .file-toolbar nav button {
+  flex: none;
+}
+
+.file-manager .file-navigation-toggle,
+.file-manager .file-info-toggle {
+  display: none;
+}
+
+.file-manager .file-operation-actions,
+.file-manager .file-picker-actions {
+  display: flex;
+  flex: none;
+  gap: 0.35rem;
+}
+
+.file-manager .file-message {
+  background: #31445a;
+  color: #eef6ff;
+}
+
+.file-manager .file-message.is-busy {
+  background: #604c20;
+}
+
+.file-manager .file-roots h3,
+.file-manager .file-properties h3 {
+  margin-block: 0 0.6rem;
+}
+
+.file-manager .file-tree-root,
+.file-manager .file-tree-branch {
+  display: block;
+}
+
+.file-manager .file-tree-loading {
+  display: block;
+  padding: 0.35rem 0.75rem;
+  opacity: 0.7;
+}
+
+.file-manager .file-list-head {
+  position: sticky;
+  z-index: 1;
+  top: -0.4rem;
+  background: #101318;
+  border-bottom: 1px solid #39404a;
+}
+
+.file-manager .file-list,
+.file-manager .file-grid {
+  background: #101318;
+}
+
+.file-manager.fm-properties-hidden .file-columns {
+  grid-template-columns: minmax(9rem, 22%) minmax(0, 1fr);
+}
+
+.file-manager.fm-properties-hidden .file-properties {
+  display: none;
+}
+
+.file-manager .file-list > button,
+.file-manager .file-grid > button {
+  min-height: 2.75rem;
+  touch-action: manipulation;
+}
+
+.file-manager .file-grid > button {
+  padding: 0.5rem;
+}
+
+.file-manager .file-item-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.file-manager .file-item-name > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-manager.fm-grid .file-item-name {
+  min-height: 5.5rem;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+}
+
+.file-manager .file-item-icon {
+  font-size: 1.35rem;
+}
+
+.file-manager .file-thumbnail {
+  width: 100%;
+  height: 4.5rem;
+  border-radius: 0.2rem;
+  object-fit: cover;
+}
+
+.file-manager .picker-invalid {
+  opacity: 0.55;
+}
+
+.file-manager .file-empty-directory {
+  padding: 1rem;
+  opacity: 0.75;
+}
+
+.file-manager .file-properties dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.file-manager .file-notes {
+  display: grid;
+  gap: 0.3rem;
+  margin-block: 0.75rem;
+}
+
+.file-manager .file-notes textarea {
+  min-height: 4.5rem;
+}
+
+.file-manager .file-preview {
+  display: block;
+  margin-top: 0.75rem;
+}

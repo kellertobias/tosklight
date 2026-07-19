@@ -1,0 +1,244 @@
+.file-manager {
+  container: file-manager / inline-size;
+  position: relative;
+}
+
+.pane-chrome-info-target,
+.pane-chrome-toolbar-target {
+  min-width: 0;
+}
+
+.pane-chrome-toolbar-target,
+.file-manager-header-actions,
+.text-editor-header-actions {
+  display: flex;
+  height: 100%;
+  align-items: stretch;
+}
+
+.ui-window-header:has(.pane-chrome-toolbar-target) .ui-window-info {
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.pane-chrome-toolbar-target {
+  flex: none;
+}
+
+.file-manager-header-actions,
+.text-editor-header-actions {
+  border-left: 1px solid var(--line2);
+}
+
+.file-manager-header-actions > .ui-button,
+.text-editor-header-actions > .ui-button {
+  height: 38px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  background: #171d23;
+  white-space: nowrap;
+}
+
+.file-manager-header-actions > .ui-button {
+  gap: 5px;
+}
+
+.file-manager-header-actions > .ui-button .file-menu-icon {
+  width: 12px;
+  height: 12px;
+  color: var(--muted);
+}
+
+.ui-modal-title-actions .file-manager-header-actions > .ui-button {
+  height: 53px;
+  min-height: 53px;
+  background: #151d24;
+}
+
+.file-manager > .ui-window-header .ui-button[aria-label="Close File Manager"] {
+  width: 48px;
+  min-width: 48px;
+  padding: 0;
+  font-size: 24px;
+}
+
+.file-manager > .ui-window-header .ui-button[aria-label="Close File Manager"]:hover {
+  background: #7d2328;
+  color: #fff;
+}
+
+@container (max-width: 620px) {
+  .ui-window-header:has(.pane-chrome-toolbar-target) .ui-window-title {
+    max-width: 72px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 13px;
+  }
+
+  .ui-window-header:has(.pane-chrome-toolbar-target) .ui-window-info {
+    flex: 0 1 64px;
+    margin-left: 4px;
+  }
+
+  .pane-chrome-toolbar-target {
+    flex: 1 1 auto;
+    overflow: hidden;
+  }
+
+  .file-manager-header-actions,
+  .text-editor-header-actions {
+    width: 100%;
+  }
+
+  .file-manager-header-actions > .ui-button,
+  .text-editor-header-actions > .ui-button {
+    flex: 1 1 auto;
+    min-width: 32px;
+    padding-inline: 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 10px;
+  }
+
+  .ui-window-header:has(.pane-chrome-toolbar-target) .ui-window-settings-action > .ui-button {
+    min-width: 36px;
+    padding-inline: 6px;
+  }
+
+  .ui-window-header:has(.pane-chrome-toolbar-target) .ui-window-settings-action > .ui-button > span:last-child {
+    display: none;
+  }
+}
+
+@container (max-width: 380px) {
+  .ui-window-header:has(.pane-chrome-toolbar-target) .ui-window-title {
+    max-width: 54px;
+    font-size: 11px;
+  }
+
+  .ui-window-header:has(.pane-chrome-toolbar-target) .ui-window-info {
+    flex-basis: 40px;
+    margin-left: 2px;
+  }
+}
+
+.file-manager-header-path,
+.text-editor-header-state {
+  display: block;
+  max-width: min(28vw, 24rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-manager-header-path.ui-button {
+  display: inline-flex;
+  width: fit-content;
+  max-width: min(28vw, 24rem);
+  min-height: 18px;
+  justify-content: flex-start;
+  gap: 4px;
+  padding: 0 4px;
+  border: 0;
+  color: var(--muted);
+  font: inherit;
+}
+
+.file-manager-header-path.ui-button > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-manager-header-path .file-menu-icon {
+  width: 10px;
+  height: 10px;
+  flex: none;
+}
+
+.file-header-menu-layer {
+  position: fixed;
+  z-index: 980;
+  inset: 0;
+}
+
+.file-header-menu {
+  position: fixed;
+  display: grid;
+  width: 224px;
+  padding: 5px;
+  border: 1px solid var(--line2);
+  border-radius: 0 0 7px 7px;
+  background: #151b21;
+  box-shadow: 0 18px 45px #000c;
+}
+
+.file-header-menu > .ui-button {
+  justify-content: flex-start;
+  gap: 10px;
+  min-height: 40px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+}
+
+.file-header-menu .file-menu-icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.file-header-menu .file-menu-check {
+  width: 15px;
+  flex: none;
+  color: var(--cyan);
+  text-align: center;
+  font-weight: 800;
+}
+
+.file-header-menu .file-menu-checkbox {
+  display: grid;
+  width: 17px;
+  height: 17px;
+  flex: none;
+  place-items: center;
+  border: 1px solid #60717e;
+  border-radius: 3px;
+  color: #071016;
+  background: #0e151a;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.file-header-menu [role="menuitemcheckbox"][aria-checked="true"] .file-menu-checkbox {
+  border-color: var(--cyan);
+  background: var(--cyan);
+}
+
+.file-menu-divider {
+  height: 1px;
+  margin: 5px 3px;
+  background: var(--line2);
+}
+
+.file-header-menu .file-menu-rename { color: var(--cyan); }
+.file-header-menu .file-menu-copy { color: #70b7ff; }
+.file-header-menu .file-menu-move { color: var(--amber); }
+.file-header-menu .file-menu-delete { color: #ff6f76; }
+.file-header-menu .file-menu-new-file { color: #70b7ff; }
+.file-header-menu .file-menu-new-folder { color: var(--amber); }
+.file-header-menu .file-menu-location { color: var(--text); }
+
+.file-header-menu > .ui-button:disabled {
+  color: var(--muted);
+  opacity: .45;
+}
+
+.file-header-menu > .ui-button:hover,
+.file-header-menu > .ui-button.active {
+  background: #223843;
+  color: var(--cyan);
+}

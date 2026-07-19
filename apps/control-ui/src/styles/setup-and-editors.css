@@ -1,0 +1,119 @@
+
+/* Settings surfaces use desk-native title controls, full-width content, and touch scrolling. */
+.setup-window>div{background:#0b1014}
+.setup-window nav{background:#0b0e12}
+.setup-window main{padding:0;overflow:hidden;background:#10161b}
+.setup-content-scroll{height:100%;min-height:0}
+.setup-content{min-height:0}
+.setup-content{min-height:100%;padding:12px}
+.programmer-setup-list{max-width:980px;gap:12px}.programmer-setup-list>article{display:block;padding:14px}.programmer-setup-list>article>header{display:flex;align-items:baseline;justify-content:space-between;gap:14px;margin-bottom:10px}.programmer-setup-list>article>header b{font-size:16px}.programmer-setup-list>article>header small{color:var(--muted)}.programmer-setup-list .ui-form-layout{max-width:850px}.setup-subsection-title{margin:10px 0 0;padding:12px 2px 0;border-top:1px solid var(--line);font-size:18px}
+.fixture-library-section .setup-content{height:100%;padding:0}
+.setup-section-actions{min-width:560px;max-width:min(980px,70vw);height:39px;display:flex;align-items:stretch;flex:1 1 720px}
+.setup-window>.ui-window-header>.ui-window-action-groups{flex:none}
+.setup-section-actions .console-search{width:auto;min-width:360px;display:grid;flex:1 1 620px;align-self:stretch}
+.setup-section-action-group{display:flex;align-items:stretch;border-left:1px solid var(--line2)}
+.setup-section-action-group>.ui-button{height:38px;min-height:38px;margin:0;padding:0 14px;border:0;border-right:1px solid var(--line);border-radius:0;background:#171d23;white-space:nowrap}
+.fixture-library-setup{width:100%;height:100%;grid-template-columns:minmax(0,1fr)!important;grid-template-rows:auto minmax(0,1fr)}
+.fixture-library-columns{width:100%;height:100%;grid-template-columns:repeat(3,minmax(0,1fr))!important}
+.fixture-library-columns>section{min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr);overflow:hidden}
+.fixture-library-detail{grid-template-rows:minmax(0,1fr)!important}
+.fixture-library-column-scroll{min-width:0;min-height:0}
+.fixture-library-column-scroll .ui-window-scroller{display:block}
+.fixture-library-column-scroll .ui-window-scroller>.ui-button{width:100%;min-height:42px;margin-bottom:4px;padding:7px 9px;border:1px solid transparent;border-radius:6px;background:transparent;text-align:left}
+.fixture-library-column-scroll .ui-window-scroller>.ui-button.active{border-color:var(--cyan);background:#0a252b;color:var(--cyan)}
+.fixture-library-column-scroll .ui-window-scroller>.ui-button small{display:block;color:var(--muted)}
+.fixture-library-columns>section:not(.fixture-library-detail) .fixture-library-column-scroll .ui-window-scroller>.ui-button{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px}
+.fixture-library-columns>section:not(.fixture-library-detail) .fixture-library-column-scroll .ui-window-scroller>.ui-button>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fixture-profile-editor-modal>.ui-modal-titlebar,.fixture-mode-editor-modal>.ui-modal-titlebar{margin:0;border-radius:11px 11px 0 0}
+.ui-modal-title-heading{min-width:0;max-width:min(360px,32vw);align-self:stretch;display:grid;align-content:center;flex:none;box-sizing:border-box;margin:0;padding:0 16px;overflow:hidden;color:var(--text);font-size:18px;line-height:1.2;text-overflow:ellipsis;white-space:nowrap}
+.ui-modal-title-tabs{border-left:1px solid var(--line2)}
+.default-screen-settings>header{align-items:center;justify-content:space-between}
+.playback-layout-summary{min-width:0;display:grid;gap:4px;margin:0;color:var(--muted)}
+.playback-layout-modal{width:min(920px,100%)!important;display:flex;flex-direction:column;overflow:hidden!important}
+.playback-layout-modal>.ui-form-layout{flex:none}
+.playback-page-mode-note{display:block;margin:6px 0 0;color:var(--muted)}
+.playback-row-list{min-height:160px;margin:14px 0 10px;padding-right:4px}
+.playback-row-configuration{display:grid;grid-template-columns:50px repeat(3,minmax(0,1fr)) 50px;align-items:end;gap:8px;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--panel2)}
+.playback-row-configuration+.playback-row-configuration{margin-top:7px}
+.playback-row-drag{width:50px!important;min-width:50px!important;height:50px!important;min-height:50px!important;margin-bottom:4px;align-self:end;display:flex!important;padding:0!important;border-color:transparent!important;background:transparent!important;color:var(--cyan)!important;cursor:grab;touch-action:none}.playback-row-drag:active{cursor:grabbing}.playback-row-drag>span{font-size:22px}
+.playback-row-configuration>.ui-form-field{width:100%;align-self:stretch;grid-template-rows:minmax(28px,auto) auto}.playback-row-configuration>.ui-form-field>.ui-form-control{align-self:end}.playback-row-remove{width:50px!important;min-width:50px!important;height:50px!important;min-height:50px!important;margin-bottom:4px;align-self:end;padding:0!important}.playback-row-remove svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.playback-layout-modal .playback-layout-save{color:var(--cyan);box-shadow:inset 0 -3px 0 var(--cyan)}
+@media(max-width:760px){.playback-row-configuration{grid-template-columns:1fr 1fr}.playback-row-configuration>b{grid-column:1/-1}.playback-row-remove{justify-self:end}}
+.default-screen-picker{width:min(980px,calc(100vw - 30px))!important}
+.default-screen-picker>p{color:var(--muted)}
+.default-screen-client-list{height:min(520px,60vh);min-height:0}
+.default-screen-client-list .ui-window-scroller{display:grid;align-content:start;gap:12px}
+.default-screen-client-group{display:grid;gap:6px}.default-screen-client-group>h3{position:sticky;top:0;z-index:1;margin:0;padding:6px 2px;background:var(--panel);color:var(--muted);font-size:13px;text-transform:uppercase;letter-spacing:.04em}
+.default-screen-client-list .ui-window-scroller>article{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;padding:9px;border:1px solid var(--line);border-radius:7px;background:var(--panel2)}
+.default-screen-client-group>article{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;padding:10px;border:1px solid var(--line);border-radius:7px;background:var(--panel2)}
+.default-screen-client-list span,.default-screen-client-list small{min-width:0;display:block}
+.default-screen-client-list small{margin-top:3px;color:var(--muted)}
+.default-screen-client-title{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.default-screen-client-title>strong{padding:2px 6px;border:1px solid var(--cyan);border-radius:999px;color:var(--cyan);font-size:11px}.default-screen-client-details code{user-select:text}.default-screen-client-actions{display:grid;grid-template-columns:auto auto;gap:6px}.default-screen-remove-confirm{width:min(680px,calc(100vw - 30px))!important}.default-screen-remove-confirm>.modal-actions{display:flex;justify-content:flex-end;gap:8px}.default-screen-remove-error{color:var(--red)!important}
+@media(max-width:1050px){.setup-section-actions{min-width:0;max-width:none;flex-basis:auto}.setup-section-actions .console-search{min-width:260px}.setup-section-action-group>.ui-button{padding:0 9px}.ui-modal-title-heading{max-width:240px}}
+.manufacturer-lookup{grid-template-rows:auto minmax(90px,1fr)}
+.ui-modal-title-search:has(>.setup-section-search){min-width:360px;max-width:min(760px,50vw);flex:1}.setup-section-search{width:100%;display:flex;align-items:stretch}.setup-section-search>.console-search{width:100%}.ui-modal-title-actions>.setup-section-actions{min-width:0;max-width:none;height:100%;flex:none}
+
+/* Search is title-bar chrome: full-height, square, and internally highlighted. */
+.ui-modal-title-search .console-search-input,.ui-window-header-search .console-search-input{height:100%;display:flex!important;align-items:stretch}
+.ui-modal-title-search .console-search-input>.ui-text-control,.ui-window-header-search .console-search-input>.ui-text-control{height:100%;border-top:0;border-bottom:0;border-radius:0;background:#151d24}
+.ui-modal-title-search .console-search-input>.ui-text-control,.ui-window-header-search .console-search-input>.ui-text-control{grid-template-columns:minmax(0,1fr) 52px}
+.ui-modal-title-search .console-search-input>.ui-text-control:has(.ui-input-clear),.ui-window-header-search .console-search-input>.ui-text-control:has(.ui-input-clear){grid-template-columns:minmax(0,1fr) 42px 52px}
+.ui-modal-title-search .console-search-input>.ui-text-control:focus-within,.ui-window-header-search .console-search-input>.ui-text-control:focus-within{outline:0;background:#12303a;box-shadow:inset 0 -3px 0 var(--cyan)}
+.ui-modal-title-search .console-search-input>.ui-text-control>.ui-input,.ui-window-header-search .console-search-input>.ui-text-control>.ui-input{height:100%;box-sizing:border-box;padding-top:0;padding-bottom:0;background:transparent;line-height:normal}
+.ui-modal-title-search .console-search-input>.ui-text-control>.ui-button,.ui-window-header-search .console-search-input>.ui-text-control>.ui-button{width:42px;min-width:42px;height:100%;min-height:0;border-radius:0}
+.ui-modal-title-search .console-search-input>.ui-text-control>.ui-input-keyboard,.ui-window-header-search .console-search-input>.ui-text-control>.ui-input-keyboard{width:52px;min-width:52px}
+
+/* Buttons use gray separators; title-bar group boundaries are gray-blue-gray. */
+.ui-modal-title-actions{border-left:3px solid transparent;border-image:linear-gradient(to right,var(--line2) 0 33%,#8deff7 33% 67%,var(--line2) 67% 100%) 1}
+.ui-modal-title-actions>button:first-child,.ui-modal-title-actions>.ui-button:first-child{border-left:0}
+.ui-modal-titlebar>.ui-modal-title-close{border-left:3px solid transparent!important;border-image:linear-gradient(to right,var(--line2) 0 33%,#8deff7 33% 67%,var(--line2) 67% 100%) 1!important}
+
+/* Keep setup overlays out of the navigation/body grid, and give portaled
+   Fixture Library actions the same full-height chrome as direct title actions. */
+.setup-window>.stacked-modal-layer{grid-template-columns:none;flex:none;min-height:auto;background:#0009}
+.ui-modal-title-actions .setup-section-action-group{height:100%;align-self:stretch}
+.ui-modal-title-actions .setup-section-action-group>.ui-button{height:53px;min-height:53px;border-right:0;border-left:1px solid var(--line2);background:#151d24}
+.ui-modal-title-actions .setup-section-action-group{border-left:0}.ui-modal-title-actions .setup-section-action-group>.ui-button:first-child{border-left:0}
+
+/* Fine-tune native input and glyph metrics in the 39px regular-window title bar. */
+.ui-window-header-search .console-search-input>span.console-search-icon{transform:translateY(calc(-50% + 2px))}
+.ui-window-header-search .console-search-input>.ui-text-control>.ui-input{padding-bottom:8px}
+.ui-window-header-search .console-search-input>.ui-text-control>.ui-input-keyboard .ui-keyboard-icon{transform:translateY(-4px) scale(1.18)}
+.ui-window-header-search .console-search-input>.ui-text-control>.ui-input-clear{padding-bottom:4px}
+.ui-window-header-search .console-search-input>button.console-search-options svg{transform:translateY(2px)}
+.ui-window-header-search .console-search-input>button.console-search-options .console-search-chevron{transform:translateY(-3px)}
+
+/* Three-input-high multiline control with explicit touch scrolling and keyboard entry. */
+.ui-large-text-control{width:100%;min-width:0;height:144px;display:grid;grid-template-columns:minmax(0,1fr) 48px;grid-template-rows:repeat(3,48px);overflow:hidden;border:1px solid var(--line2);border-radius:8px;background:#11171c}
+.ui-large-text-control:focus-within{outline:2px solid #70e8f7;outline-offset:2px}
+.ui-large-text-control>.ui-textarea{grid-column:1;grid-row:1/-1;min-width:0;height:144px;min-height:144px;padding:10px 12px;resize:none;overscroll-behavior:contain;touch-action:pan-y;border:0;border-radius:0;background:transparent;font-size:17px;line-height:22px;outline:0!important}
+.ui-large-text-control>.ui-button{grid-column:2;width:48px;min-width:48px;height:48px;min-height:48px;margin:0;padding:0;border:0;border-left:1px solid var(--line2);border-bottom:1px solid var(--line2);border-radius:0;background:#182028;color:var(--cyan)}
+.ui-large-text-control>.ui-large-text-down{grid-row:2}
+.ui-large-text-control>.ui-large-text-keyboard{grid-row:3;border-bottom:0}
+.ui-large-text-control svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.modal-multiline-value{height:132px;min-height:132px;margin-bottom:8px;resize:none;white-space:pre-wrap}
+.keyboard-modal:has(.modal-multiline-value){width:min(980px,calc(100vw - 36px))!important}
+.keyboard-modal:has(.modal-multiline-value) .modal-keyboard-actions{grid-template-rows:repeat(3,minmax(0,1fr))}
+
+/* Mode cards reorder only by their drag handle; actions and notes stay in a literal two-row layout. */
+.fixture-mode-list>article{grid-template-columns:24px minmax(180px,1fr) auto 50px;align-items:end}
+.fixture-mode-list>article>.drag-handle{grid-column:1;grid-row:1;align-self:end;height:50px;display:grid;place-items:center}
+.fixture-mode-list>article>.fixture-mode-edit{grid-column:3;grid-row:1;min-width:92px}
+.fixture-mode-list>article>.fixture-mode-delete{grid-column:4;grid-row:1;width:50px;min-width:50px;height:50px;padding:0}
+.fixture-mode-delete svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.fixture-mode-list>article>.ui-form-field:has(.fixture-mode-notes){grid-column:1/-1;grid-row:2}
+.dmx-range-overlay.proposed.selected{box-shadow:inset 0 0 0 2px #d9fbff,0 0 10px #36dfff99}.dmx-range-overlay.proposed>span{max-width:calc(100% - 6px);box-sizing:border-box}
+
+/* Show Patch Stage preview: a read-only 16:9 overlay with matching scroll clearance. */
+.patch-window{position:relative;container-type:size}
+.patch-stage-overlay{position:absolute;z-index:4;right:10px;bottom:10px;width:min(calc(50cqw - 10px),calc((50cqh - 10px)*16/9));max-width:50%;max-height:50%;aspect-ratio:16/9;overflow:hidden;border:1px solid var(--cyan);border-radius:8px;background:#080b0f;box-shadow:0 10px 36px #000b;pointer-events:none}
+.patch-stage-overlay>.stage-window{height:100%}
+.patch-stage-scroll-clearance{width:100%;pointer-events:none}
+
+/* Subheads align as top-level rows when their master rows are excluded. */
+.fixture-head-row:not(.fixture-head-indented-row) .fixture-sheet-id,
+.fixture-head-row:not(.fixture-head-indented-row) .fixture-name{padding-left:0}
+.fixture-table .fixture-name small{margin-left:0}
+.fixture-sheet-icon{width:34px;height:34px;display:grid;place-items:center;margin:auto;color:var(--muted)}
+.fixture-sheet-icon img{display:block;max-width:32px;max-height:32px;object-fit:contain}
+.fixture-sheet-patch{font-family:ui-monospace,monospace;color:var(--muted);white-space:nowrap}
+.patch-table tr.pending td{opacity:.62}

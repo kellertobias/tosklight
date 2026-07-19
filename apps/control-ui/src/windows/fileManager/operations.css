@@ -1,0 +1,90 @@
+
+.file-manager .file-operation-panel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem;
+  border-top: 1px solid #56616e;
+  background: #20252c;
+}
+
+.file-manager .file-operation-panel strong {
+  flex: none;
+}
+
+.file-manager .file-operation-panel .ui-text-control {
+  flex: 1;
+}
+
+.file-manager .file-confirmation {
+  position: absolute;
+  z-index: 8;
+  inset: 50% auto auto 50%;
+  width: min(30rem, calc(100% - 2rem));
+  padding: 1rem;
+  transform: translate(-50%, -50%);
+  border: 1px solid #73808f;
+  border-radius: 0.35rem;
+  background: #20252c;
+  box-shadow: 0 1rem 3rem #000c;
+}
+
+.file-manager .file-confirmation h3 {
+  margin-top: 0;
+}
+
+.file-manager .file-confirmation > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+@container file-manager (max-width: 52rem) {
+  .file-manager .file-navigation-toggle,
+  .file-manager .file-info-toggle {
+    display: inline-flex;
+  }
+
+  .file-manager .file-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .file-manager .file-roots,
+  .file-manager .file-properties {
+    display: none;
+    border: 0;
+  }
+
+  .file-manager.fm-navigation-open .file-roots,
+  .file-manager.fm-info-open.fm-properties-visible .file-properties {
+    display: block;
+    grid-row: 1;
+  }
+
+  .file-manager.fm-navigation-open main,
+  .file-manager.fm-info-open main {
+    display: none;
+  }
+}
+
+@container file-manager (max-width: 38rem) {
+  .file-manager .file-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .file-manager .file-toolbar nav {
+    order: 10;
+    width: 100%;
+  }
+
+  .file-manager .file-list-head,
+  .file-manager .file-list > button {
+    grid-template-columns: minmax(9rem, 1fr) 4.5rem;
+  }
+
+  .file-manager .file-list-head > :nth-child(n + 3),
+  .file-manager .file-list > button > :nth-child(n + 3) {
+    display: none;
+  }
+}
