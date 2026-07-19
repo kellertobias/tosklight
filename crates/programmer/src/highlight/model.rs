@@ -1,5 +1,5 @@
+use crate::SelectionExpression;
 use light_core::{FixtureId, UserId};
-use light_programmer::SelectionExpression;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 

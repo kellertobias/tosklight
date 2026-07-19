@@ -1,10 +1,10 @@
 use super::model::{HighlightFixture, HighlightSelectionWrite};
 use super::state::OperatorState;
-use light_core::FixtureId;
-use light_programmer::{
+use crate::{
     GroupDefinition, ProgrammerSelection, SelectionExpression, apply_selection_rule, resolve_group,
     resolve_selection_references,
 };
+use light_core::FixtureId;
 use std::collections::{HashMap, HashSet};
 
 fn valid_selection(selection: &[FixtureId], valid_fixtures: &[HighlightFixture]) -> Vec<FixtureId> {

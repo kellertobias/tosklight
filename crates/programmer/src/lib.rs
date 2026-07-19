@@ -3,6 +3,7 @@
 
 mod command_state;
 mod groups;
+pub mod highlight;
 mod history;
 mod preload;
 mod presets;
@@ -19,6 +20,11 @@ pub use command_state::{CommandLineReplaceError, CommandLineState, CommandTarget
 pub use groups::{
     DerivedGroup, FrozenGroup, GroupDefinition, GroupProgrammerValue,
     merge_ordered_group_membership, resolve_group,
+};
+pub use highlight::{
+    HighlightAction, HighlightError, HighlightFixture, HighlightMode, HighlightRegistry,
+    HighlightSelectionWrite, HighlightState, HighlightTransition, OSC_REPEAT_GUARD,
+    is_duplicate_osc_action,
 };
 pub use preload::PreloadPlaybackAction;
 pub use presets::{Preset, PresetAddress, PresetFamily, PresetStoreMode};

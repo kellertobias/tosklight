@@ -1,6 +1,6 @@
 use crate::highlight::{HighlightFixture, HighlightRegistry, HighlightTransition};
+use crate::{GroupDefinition, ProgrammerSelection, SelectionExpression};
 use light_core::{FixtureId, UserId};
-use light_programmer::{GroupDefinition, ProgrammerSelection, SelectionExpression};
 use std::collections::HashMap;
 use uuid::Uuid;
 

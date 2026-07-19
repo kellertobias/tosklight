@@ -23,10 +23,6 @@ mod playback_v2;
 mod startup_options;
 mod startup_state;
 
-use crate::highlight::{
-    HighlightAction, HighlightError, HighlightFixture, HighlightMode, HighlightRegistry,
-    HighlightSelectionWrite, HighlightState, HighlightTransition, is_duplicate_osc_action,
-};
 use crate::update;
 use axum::extract::ws::{Message, WebSocket};
 use axum::{
@@ -63,7 +59,11 @@ use light_engine::{
 };
 use light_media::{CitpClient, LibraryId, MediaCache, PreviewKey, ThumbnailKey};
 use light_output::{NetworkOutput, OutputHealth};
-use light_programmer::ProgrammerRegistry;
+use light_programmer::{
+    HighlightAction, HighlightError, HighlightFixture, HighlightMode, HighlightRegistry,
+    HighlightSelectionWrite, HighlightState, HighlightTransition, ProgrammerRegistry,
+    is_duplicate_osc_action,
+};
 use light_show::{
     AtomicObjectDelete, ControlDesk, DeskStore, DeskUser, PersistedSession, RevisionCopySource,
     ScreenConfiguration, ShowEntry, ShowRevision, ShowStore, initialise_show, validate_show_file,

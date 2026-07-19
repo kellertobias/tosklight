@@ -7,8 +7,8 @@ use super::operations::{
 };
 use super::selection::synchronize_actual_selection;
 use super::state::{HighlightRuntime, RecentHighlightActions};
+use crate::{GroupDefinition, ProgrammerSelection};
 use light_core::{FixtureId, UserId};
-use light_programmer::{GroupDefinition, ProgrammerSelection};
 use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;

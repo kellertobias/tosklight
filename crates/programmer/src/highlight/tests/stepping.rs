@@ -1,7 +1,7 @@
 use super::support::{apply_write, fixture, no_groups, selection};
 use crate::highlight::{HighlightAction, HighlightMode, HighlightRegistry};
+use crate::{GroupDefinition, SelectionExpression};
 use light_core::UserId;
-use light_programmer::{GroupDefinition, SelectionExpression};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -162,7 +162,7 @@ fn all_reresolves_the_live_group_source_after_membership_changes() {
         ids[..3].to_vec(),
         Some(SelectionExpression::LiveGroup {
             group_id: "1".into(),
-            rule: light_programmer::SelectionRule::All,
+            rule: crate::SelectionRule::All,
         }),
         1,
     );

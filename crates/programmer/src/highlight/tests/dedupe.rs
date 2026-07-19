@@ -1,7 +1,7 @@
 use super::support::{fixture, no_groups, selection};
+use crate::SelectionExpression;
 use crate::highlight::{HighlightAction, HighlightRegistry, is_duplicate_osc_action};
 use light_core::UserId;
-use light_programmer::SelectionExpression;
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 

@@ -4,8 +4,8 @@ use super::model::{
 };
 use super::selection::resolve_remembered;
 use super::state::{HighlightRuntime, OperatorState};
+use crate::{GroupDefinition, SelectionExpression};
 use light_core::{FixtureId, UserId};
-use light_programmer::{GroupDefinition, SelectionExpression};
 use std::collections::HashMap;
 use uuid::Uuid;
 

@@ -1,7 +1,7 @@
 use super::support::{fixture, no_groups, selection};
+use crate::SelectionExpression;
 use crate::highlight::{HighlightAction, HighlightMode, HighlightRegistry};
 use light_core::UserId;
-use light_programmer::SelectionExpression;
 use uuid::Uuid;
 
 #[test]

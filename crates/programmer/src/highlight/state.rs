@@ -1,5 +1,5 @@
+use crate::SelectionExpression;
 use light_core::{FixtureId, UserId};
-use light_programmer::SelectionExpression;
 use std::collections::HashMap;
 use std::time::Instant;
 use uuid::Uuid;
