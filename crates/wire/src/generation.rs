@@ -13,12 +13,12 @@ use crate::v2::command_line::{
     ReplaceCommandLineRequest,
 };
 use crate::v2::events::{
-    CueReference, EventActionSource, EventCapability, EventClass, EventClientMessage,
-    EventDeliveryPolicy, EventEnvelope, EventObject, EventPayload, EventRateLimit,
-    EventServerMessage, EventSnapshotCursor, EventSource, EventSubscriptionFilter,
-    OutputDeliveryMode, OutputProtocol, OutputRoute, OutputRouteChange, PlaybackCueTransition,
-    PlaybackEventSnapshot, PlaybackStateSnapshot, PlaybackTransitionCause, SequenceGap,
-    ShowObjectChange, ShowObjectKind, ShowObjectsChange,
+    EventActionSource, EventCapability, EventClass, EventClientMessage, EventDeliveryPolicy,
+    EventEnvelope, EventObject, EventPayload, EventRateLimit, EventServerMessage,
+    EventSnapshotCursor, EventSource, EventSubscriptionFilter, FixtureProfileIdentity,
+    ManagedAssetReference, OutputDeliveryMode, OutputProtocol, OutputRoute, OutputRouteChange,
+    SelectiveImportChange, SelectiveImportObjectChange, SequenceGap, ShowObjectChange,
+    ShowObjectKind, ShowObjectsChange,
 };
 use crate::v2::patch::{
     PatchDelta, PatchDirectControlEndpoint, PatchDirectControlProtocol, PatchErrorResponse,
@@ -28,11 +28,22 @@ use crate::v2::patch::{
     PatchModeSplitProjection, PatchMultiPatchInput, PatchMultiPatchProjection, PatchProfilePolicy,
     PatchProfileRevisionProjection, PatchSnapshot, PatchSplitAssignment,
 };
+use crate::v2::playback::{
+    CueListRuntimeProjection, GrandMasterRuntimeProjection, ManualXFadeDirection,
+    PendingPlaybackAction, PlaybackAction, PlaybackActionOutcome, PlaybackActionRequest,
+    PlaybackAddress, PlaybackCueReference, PlaybackCueTransition, PlaybackDeskProjection,
+    PlaybackDurability, PlaybackErrorKind, PlaybackErrorResponse, PlaybackOutcome,
+    PlaybackRuntimeChange, PlaybackRuntimeIdentity, PlaybackRuntimeProjection,
+    PlaybackRuntimeSnapshot, PlaybackRuntimeSnapshotRequest, PlaybackShowScope, PlaybackSurface,
+    PlaybackTargetProjection, PlaybackTransitionCause, ResolvedPlaybackAddress, SoundLossReason,
+    SoundStatus, SpeedGroupRuntimeProjection, SpeedSource,
+};
 
 const TYPESCRIPT_PATH: &str = "apps/control-ui/src/api/generated/light-wire.ts";
 const SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-command-line";
 const EVENT_SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-events";
 const PATCH_SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-patch";
+const PLAYBACK_SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-playback";
 
 /// One generated artifact relative to the workspace root.
 #[derive(Debug, Eq, PartialEq)]
@@ -57,7 +68,13 @@ pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
         response_schema_artifact::<CommandLineChangedEvent>("command-line-changed-event"),
         event_request_schema::<EventClientMessage>("event-client-message"),
         event_response_schema::<EventServerMessage>("event-server-message"),
-        event_response_schema::<PlaybackEventSnapshot>("playback-event-snapshot"),
+        playback_request_schema::<PlaybackActionRequest>("playback-action-request"),
+        playback_response_schema::<PlaybackActionOutcome>("playback-action-outcome"),
+        playback_response_schema::<PlaybackErrorResponse>("playback-error-response"),
+        playback_request_schema::<PlaybackRuntimeSnapshotRequest>(
+            "playback-runtime-snapshot-request",
+        ),
+        playback_response_schema::<PlaybackRuntimeSnapshot>("playback-runtime-snapshot"),
         patch_request_schema::<PatchFixturesRequest>("patch-fixtures-request"),
         patch_response_schema::<PatchFixturesOutcome>("patch-fixtures-outcome"),
         patch_response_schema::<PatchErrorResponse>("patch-error-response"),
@@ -106,6 +123,14 @@ fn patch_response_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
     patch_schema::<T>(name, SchemaSettings::draft2020_12().for_serialize())
 }
 
+fn playback_request_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
+    playback_schema::<T>(name, SchemaSettings::draft2020_12().for_deserialize())
+}
+
+fn playback_response_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
+    playback_schema::<T>(name, SchemaSettings::draft2020_12().for_serialize())
+}
+
 fn event_schema<T: JsonSchema>(name: &str, settings: SchemaSettings) -> GeneratedArtifact {
     let mut artifact = schema_artifact::<T>(name, settings);
     artifact.path = format!("{EVENT_SCHEMA_DIRECTORY}/{name}.schema.json");
@@ -115,6 +140,12 @@ fn event_schema<T: JsonSchema>(name: &str, settings: SchemaSettings) -> Generate
 fn patch_schema<T: JsonSchema>(name: &str, settings: SchemaSettings) -> GeneratedArtifact {
     let mut artifact = schema_artifact::<T>(name, settings);
     artifact.path = format!("{PATCH_SCHEMA_DIRECTORY}/{name}.schema.json");
+    artifact
+}
+
+fn playback_schema<T: JsonSchema>(name: &str, settings: SchemaSettings) -> GeneratedArtifact {
+    let mut artifact = schema_artifact::<T>(name, settings);
+    artifact.path = format!("{PLAYBACK_SCHEMA_DIRECTORY}/{name}.schema.json");
     artifact
 }
 
@@ -154,15 +185,35 @@ fn typescript_bindings() -> String {
         EventClass::decl(&config),
         EventDeliveryPolicy::decl(&config),
         EventActionSource::decl(&config),
-        PlaybackTransitionCause::decl(&config),
         EventObject::decl(&config),
         EventSubscriptionFilter::decl(&config),
         EventRateLimit::decl(&config),
         EventSnapshotCursor::decl(&config),
         SequenceGap::decl(&config),
         EventSource::decl(&config),
-        CueReference::decl(&config),
+        PlaybackSurface::decl(&config),
+        PlaybackAddress::decl(&config),
+        ResolvedPlaybackAddress::decl(&config),
+        PlaybackAction::decl(&config),
+        PendingPlaybackAction::decl(&config),
+        PlaybackOutcome::decl(&config),
+        PlaybackDurability::decl(&config),
+        PlaybackRuntimeIdentity::decl(&config),
+        PlaybackShowScope::decl(&config),
+        PlaybackCueReference::decl(&config),
+        ManualXFadeDirection::decl(&config),
+        SoundLossReason::decl(&config),
+        SpeedSource::decl(&config),
+        SoundStatus::decl(&config),
+        CueListRuntimeProjection::decl(&config),
+        SpeedGroupRuntimeProjection::decl(&config),
+        GrandMasterRuntimeProjection::decl(&config),
+        PlaybackTargetProjection::decl(&config),
+        PlaybackRuntimeProjection::decl(&config),
+        PlaybackDeskProjection::decl(&config),
+        PlaybackTransitionCause::decl(&config),
         PlaybackCueTransition::decl(&config),
+        PlaybackRuntimeChange::decl(&config),
         OutputProtocol::decl(&config),
         OutputDeliveryMode::decl(&config),
         OutputRoute::decl(&config),
@@ -170,12 +221,20 @@ fn typescript_bindings() -> String {
         ShowObjectKind::decl(&config),
         ShowObjectChange::decl(&config),
         ShowObjectsChange::decl(&config),
+        SelectiveImportObjectChange::decl(&config),
+        FixtureProfileIdentity::decl(&config),
+        ManagedAssetReference::decl(&config),
+        SelectiveImportChange::decl(&config),
         EventPayload::decl(&config),
         EventEnvelope::decl(&config),
         EventClientMessage::decl(&config),
         EventServerMessage::decl(&config),
-        PlaybackStateSnapshot::decl(&config),
-        PlaybackEventSnapshot::decl(&config),
+        PlaybackActionRequest::decl(&config),
+        PlaybackActionOutcome::decl(&config),
+        PlaybackErrorKind::decl(&config),
+        PlaybackErrorResponse::decl(&config),
+        PlaybackRuntimeSnapshotRequest::decl(&config),
+        PlaybackRuntimeSnapshot::decl(&config),
         PatchDirectControlProtocol::decl(&config),
         PatchProfilePolicy::decl(&config),
         PatchSplitAssignment::decl(&config),

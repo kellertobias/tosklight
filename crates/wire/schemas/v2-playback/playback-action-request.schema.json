@@ -1,0 +1,572 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PlaybackActionRequest",
+  "description": "One authenticated, idempotent Playback mutation.",
+  "type": "object",
+  "properties": {
+    "action": {
+      "$ref": "#/$defs/PlaybackAction"
+    },
+    "address": {
+      "$ref": "#/$defs/PlaybackAddress"
+    },
+    "request_id": {
+      "description": "Idempotency is retained for the 4096 most-recent IDs in the live server process. After\neviction or restart, clients repair from a narrow runtime snapshot before retrying.",
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1
+    },
+    "surface": {
+      "description": "Selects virtual or physical preload-capture semantics. The HTTP source itself is always\nrecorded by the server and cannot be supplied by a caller.",
+      "$ref": "#/$defs/PlaybackSurface"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "address",
+    "action",
+    "surface"
+  ],
+  "$defs": {
+    "PlaybackAction": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "go"
+            }
+          },
+          "required": [
+            "type",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "back"
+            }
+          },
+          "required": [
+            "type",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "pause"
+            }
+          },
+          "required": [
+            "type",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "release"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "on"
+            }
+          },
+          "required": [
+            "type",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "off"
+            }
+          },
+          "required": [
+            "type",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "toggle"
+            }
+          },
+          "required": [
+            "type",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "fast_forward"
+            }
+          },
+          "required": [
+            "type",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "fast_rewind"
+            }
+          },
+          "required": [
+            "type",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "flash"
+            }
+          },
+          "required": [
+            "type",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "temp"
+            }
+          },
+          "required": [
+            "type",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "swap"
+            }
+          },
+          "required": [
+            "type",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "select"
+            }
+          },
+          "required": [
+            "type",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "select_contents"
+            }
+          },
+          "required": [
+            "type",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "select_dereferenced"
+            }
+          },
+          "required": [
+            "type",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "learn"
+            }
+          },
+          "required": [
+            "type",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "double"
+            }
+          },
+          "required": [
+            "type",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "half"
+            }
+          },
+          "required": [
+            "type",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "blackout"
+            }
+          },
+          "required": [
+            "type",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "pause_dynamics"
+            }
+          },
+          "required": [
+            "type",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "none"
+            }
+          },
+          "required": [
+            "type",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "master"
+            },
+            "value": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "cue_number": {
+              "type": "number",
+              "format": "double"
+            },
+            "type": {
+              "type": "string",
+              "const": "go_to"
+            }
+          },
+          "required": [
+            "type",
+            "cue_number"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "cue_number": {
+              "type": "number",
+              "format": "double"
+            },
+            "type": {
+              "type": "string",
+              "const": "load"
+            }
+          },
+          "required": [
+            "type",
+            "cue_number"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "crossfade"
+            }
+          },
+          "required": [
+            "type",
+            "enabled"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "temporary"
+            }
+          },
+          "required": [
+            "type",
+            "enabled",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "number": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0
+            },
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "configured_button"
+            }
+          },
+          "required": [
+            "type",
+            "number",
+            "pressed"
+          ]
+        }
+      ]
+    },
+    "PlaybackAddress": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "cue_list_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "kind": {
+              "type": "string",
+              "const": "cue_list"
+            }
+          },
+          "required": [
+            "kind",
+            "cue_list_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "playback"
+            },
+            "playback_number": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "playback_number"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "current_page"
+            },
+            "slot": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "slot"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "explicit_page"
+            },
+            "page": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0
+            },
+            "slot": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "page",
+            "slot"
+          ]
+        }
+      ]
+    },
+    "PlaybackSurface": {
+      "description": "Deliberate interaction semantics accepted at the HTTP boundary.",
+      "type": "string",
+      "enum": [
+        "virtual",
+        "physical"
+      ]
+    }
+  }
+}

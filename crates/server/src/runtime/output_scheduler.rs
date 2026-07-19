@@ -1,12 +1,13 @@
 //! Network-output scheduling and safe shutdown for the server runtime.
 
-use super::{OutputControl, PersistedOutputRuntime};
-use light_application::{EventBus, publish_automatic_playback_events};
+use super::{OutputControl, PersistedOutputRuntime, playback_service};
+use light_application::{PlaybackService, PlaybackShowScope, publish_automatic_playback_events};
 use light_control::{SmpteTimecode, TimecodeRouter};
 use light_core::Universe;
 use light_engine::{Engine, RenderOptions};
 use light_output::{DmxFrame, NetworkOutput, OutputHealth, Protocol, run_scheduler_dynamic};
-use parking_lot::Mutex;
+use light_show::ShowEntry;
+use parking_lot::{Mutex, RwLock};
 use std::{
     collections::HashMap,
     io,
@@ -28,7 +29,9 @@ pub(super) struct Config {
     pub timecode: Arc<Mutex<TimecodeRouter>>,
     pub cancellation: CancellationToken,
     pub persisted_runtime: PersistedOutputRuntime,
-    pub events: EventBus,
+    pub playback_service: PlaybackService,
+    pub active_show: Arc<RwLock<Option<ShowEntry>>>,
+    pub activation_lock: Arc<tokio::sync::Mutex<()>>,
     pub test_bench: bool,
 }
 
@@ -52,7 +55,9 @@ struct Runtime {
     pub(super) sequences: SharedSequences,
     pub(super) control: Arc<Mutex<OutputControl>>,
     pub(super) timecode: Arc<Mutex<TimecodeRouter>>,
-    pub(super) events: EventBus,
+    pub(super) playback_service: PlaybackService,
+    pub(super) active_show: Arc<RwLock<Option<ShowEntry>>>,
+    pub(super) activation_lock: Arc<tokio::sync::Mutex<()>>,
     pub(super) cancellation: CancellationToken,
 }
 
@@ -108,8 +113,24 @@ async fn run(
 async fn render_tick(runtime: Runtime) -> io::Result<u64> {
     update_timecode(&runtime);
     let options = runtime.control.lock().render_options();
-    let rendered = runtime.engine.render(options).map_err(io::Error::other)?;
-    publish_automatic_playback_events(&runtime.events, rendered.automatic_playback_transitions);
+    let rendered = {
+        let _activation = runtime.activation_lock.clone().lock_owned().await;
+        let _ordered = runtime.playback_service.operation_lock();
+        let mut rendered = runtime.engine.render(options).map_err(io::Error::other)?;
+        let transitions = std::mem::take(&mut rendered.automatic_playback_transitions);
+        if let Some(show_id) = runtime.active_show.read().as_ref().map(|show| show.id.0) {
+            let changes = playback_service::automatic_projection_changes(
+                &runtime.engine,
+                PlaybackShowScope {
+                    show_id,
+                    show_revision: rendered.revision,
+                },
+                transitions,
+            );
+            publish_automatic_playback_events(runtime.playback_service.events(), changes);
+        }
+        rendered
+    };
     let frames = output_frames(&mut runtime.control.lock(), rendered.universes);
     runtime
         .output
@@ -225,7 +246,9 @@ impl SharedResources {
             sequences: Arc::clone(&self.sequences),
             control: Arc::clone(&self.control),
             timecode: Arc::clone(&config.timecode),
-            events: config.events.clone(),
+            playback_service: config.playback_service.clone(),
+            active_show: Arc::clone(&config.active_show),
+            activation_lock: Arc::clone(&config.activation_lock),
             cancellation: config.cancellation.clone(),
         }
     }

@@ -1,5 +1,11 @@
 use super::*;
 
+#[derive(Debug)]
+pub(super) struct PlaybackDispatchOutcome {
+    pub(super) changed: bool,
+    pub(super) persistence_pending: bool,
+}
+
 /// The one authoritative playback action path for UI, OSC, attached hardware, and deferred
 /// preload actions. Desk selection is intentionally context-local; programmer selection remains
 /// shared by the registry's user identity.
@@ -11,7 +17,7 @@ pub(super) fn dispatch_playback_action(
     action_name: &str,
     input: &PoolPlaybackInput,
     source: &str,
-) -> Result<bool, ApiError> {
+) -> Result<PlaybackDispatchOutcome, ApiError> {
     let _serialized = state.playback_action_lock.lock();
     let was_enabled = state
         .engine
@@ -50,11 +56,35 @@ pub(super) fn dispatch_playback_action(
             );
         }
     }
+    let mut failures = Vec::new();
     if changed {
-        persist_active_playbacks(state)?;
-        persist_output_runtime(state)?;
+        if let Err(error) = persist_active_playbacks(state) {
+            failures.push(("active_playbacks", error.message));
+        }
+        if let Err(error) = persist_output_runtime(state) {
+            failures.push(("output_runtime", error.message));
+        }
     }
-    Ok(changed)
+    if !failures.is_empty() {
+        emit(
+            state,
+            "playback_persistence_pending",
+            serde_json::json!({
+                "desk_id": desk.map(|desk| desk.id),
+                "session_id": session.map(|session| session.id),
+                "playback_number": definition.number,
+                "source": source,
+                "failures": failures.iter().map(|(domain, error)| serde_json::json!({
+                    "domain": domain,
+                    "error": error,
+                })).collect::<Vec<_>>(),
+            }),
+        );
+    }
+    Ok(PlaybackDispatchOutcome {
+        changed,
+        persistence_pending: !failures.is_empty(),
+    })
 }
 
 pub(super) fn dispatch_playback_action_inner(

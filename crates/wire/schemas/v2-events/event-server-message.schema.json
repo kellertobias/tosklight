@@ -84,21 +84,139 @@
     }
   ],
   "$defs": {
-    "CueReference": {
+    "CueListRuntimeProjection": {
       "type": "object",
       "properties": {
-        "id": {
-          "type": "string",
-          "format": "uuid"
+        "activated_at": {
+          "type": "string"
         },
-        "number": {
+        "cue_index": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "current": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlaybackCueReference"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "effective_next": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlaybackCueReference"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "effective_next_is_loaded": {
+          "type": "boolean"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "fader_pickup_required": {
+          "type": "boolean"
+        },
+        "fader_position": {
           "type": "number",
-          "format": "double"
+          "format": "float"
+        },
+        "flash": {
+          "type": "boolean"
+        },
+        "loaded": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlaybackCueReference"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "manual_xfade_direction": {
+          "$ref": "#/$defs/ManualXFadeDirection"
+        },
+        "manual_xfade_position": {
+          "type": "number",
+          "format": "float"
+        },
+        "manual_xfade_progress": {
+          "type": "number",
+          "format": "float"
+        },
+        "master": {
+          "type": "number",
+          "format": "float"
+        },
+        "normal_next": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlaybackCueReference"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "paused": {
+          "type": "boolean"
+        },
+        "previous_index": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "swap_active": {
+          "type": "boolean"
+        },
+        "temporary": {
+          "type": "boolean"
+        },
+        "temporary_active": {
+          "type": "boolean"
+        },
+        "temporary_master": {
+          "type": "number",
+          "format": "float"
+        },
+        "transition_timing_bypassed": {
+          "type": "boolean"
         }
       },
       "required": [
-        "id",
-        "number"
+        "cue_index",
+        "previous_index",
+        "current",
+        "loaded",
+        "normal_next",
+        "effective_next",
+        "effective_next_is_loaded",
+        "paused",
+        "activated_at",
+        "master",
+        "fader_position",
+        "fader_pickup_required",
+        "flash",
+        "temporary",
+        "temporary_active",
+        "temporary_master",
+        "swap_active",
+        "enabled",
+        "transition_timing_bypassed",
+        "manual_xfade_position",
+        "manual_xfade_direction",
+        "manual_xfade_progress"
       ]
     },
     "EventActionSource": {
@@ -185,6 +303,15 @@
         "payload": {
           "$ref": "#/$defs/EventPayload"
         },
+        "related_objects": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/EventObject"
+          }
+        },
         "sequence": {
           "type": "integer",
           "format": "uint64",
@@ -226,17 +353,33 @@
         {
           "type": "object",
           "properties": {
-            "transition": {
-              "$ref": "#/$defs/PlaybackCueTransition"
+            "change": {
+              "$ref": "#/$defs/PlaybackRuntimeChange"
             },
             "type": {
               "type": "string",
-              "const": "playback_cue_transition"
+              "const": "playback_runtime_changed"
             }
           },
           "required": [
             "type",
-            "transition"
+            "change"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "projection": {
+              "$ref": "#/$defs/PlaybackDeskProjection"
+            },
+            "type": {
+              "type": "string",
+              "const": "playback_view_changed"
+            }
+          },
+          "required": [
+            "type",
+            "projection"
           ]
         },
         {
@@ -280,6 +423,22 @@
             "type": {
               "type": "string",
               "const": "show_objects_changed"
+            }
+          },
+          "required": [
+            "type",
+            "change"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "change": {
+              "$ref": "#/$defs/SelectiveImportChange"
+            },
+            "type": {
+              "type": "string",
+              "const": "selective_import_applied"
             }
           },
           "required": [
@@ -332,6 +491,78 @@
             "source"
           ]
         }
+      ]
+    },
+    "FixtureProfileIdentity": {
+      "type": "object",
+      "properties": {
+        "profile_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "profile_id",
+        "revision"
+      ]
+    },
+    "GrandMasterRuntimeProjection": {
+      "type": "object",
+      "properties": {
+        "blackout": {
+          "type": "boolean"
+        },
+        "dynamics_paused": {
+          "type": "boolean"
+        },
+        "effective_level": {
+          "type": "number",
+          "format": "float"
+        },
+        "flash_active": {
+          "type": "boolean"
+        },
+        "level": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "required": [
+        "level",
+        "effective_level",
+        "blackout",
+        "flash_active",
+        "dynamics_paused"
+      ]
+    },
+    "ManagedAssetReference": {
+      "type": "object",
+      "properties": {
+        "asset_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "asset_id",
+        "revision"
+      ]
+    },
+    "ManualXFadeDirection": {
+      "type": "string",
+      "enum": [
+        "towards_high",
+        "towards_low"
       ]
     },
     "OutputDeliveryMode": {
@@ -904,6 +1135,23 @@
         "address"
       ]
     },
+    "PlaybackCueReference": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "number": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "id",
+        "number"
+      ]
+    },
     "PlaybackCueTransition": {
       "type": "object",
       "properties": {
@@ -922,7 +1170,7 @@
         "current": {
           "anyOf": [
             {
-              "$ref": "#/$defs/CueReference"
+              "$ref": "#/$defs/PlaybackCueReference"
             },
             {
               "type": "null"
@@ -941,7 +1189,7 @@
         "previous": {
           "anyOf": [
             {
-              "$ref": "#/$defs/CueReference"
+              "$ref": "#/$defs/PlaybackCueReference"
             },
             {
               "type": "null"
@@ -958,6 +1206,284 @@
         "advanced_steps"
       ]
     },
+    "PlaybackDeskProjection": {
+      "type": "object",
+      "properties": {
+        "active_page": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "desk_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "scope": {
+          "$ref": "#/$defs/PlaybackShowScope"
+        },
+        "selected_playback": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "scope",
+        "desk_id",
+        "active_page",
+        "selected_playback"
+      ]
+    },
+    "PlaybackRuntimeChange": {
+      "type": "object",
+      "properties": {
+        "projection": {
+          "$ref": "#/$defs/PlaybackRuntimeProjection"
+        },
+        "transition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlaybackCueTransition"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "projection",
+        "transition"
+      ]
+    },
+    "PlaybackRuntimeIdentity": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "playback"
+            },
+            "playback_number": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "playback_number"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "cue_list_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "kind": {
+              "type": "string",
+              "const": "cue_list"
+            }
+          },
+          "required": [
+            "kind",
+            "cue_list_id"
+          ]
+        }
+      ]
+    },
+    "PlaybackRuntimeProjection": {
+      "type": "object",
+      "properties": {
+        "playback_number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "requested": {
+          "$ref": "#/$defs/PlaybackRuntimeIdentity"
+        },
+        "scope": {
+          "$ref": "#/$defs/PlaybackShowScope"
+        }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "const": "missing"
+            }
+          },
+          "required": [
+            "target"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "cue_list_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "runtime": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CueListRuntimeProjection"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "target": {
+              "type": "string",
+              "const": "cue_list"
+            }
+          },
+          "required": [
+            "target",
+            "cue_list_id",
+            "runtime"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "flash_level": {
+              "type": "number",
+              "format": "float"
+            },
+            "group_id": {
+              "type": "string"
+            },
+            "master": {
+              "type": "number",
+              "format": "float"
+            },
+            "target": {
+              "type": "string",
+              "const": "group"
+            }
+          },
+          "required": [
+            "target",
+            "group_id",
+            "master",
+            "flash_level"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group": {
+              "type": "string"
+            },
+            "runtime": {
+              "$ref": "#/$defs/SpeedGroupRuntimeProjection"
+            },
+            "target": {
+              "type": "string",
+              "const": "speed_group"
+            }
+          },
+          "required": [
+            "target",
+            "group",
+            "runtime"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "runtime": {
+              "$ref": "#/$defs/GrandMasterRuntimeProjection"
+            },
+            "target": {
+              "type": "string",
+              "const": "grand_master"
+            }
+          },
+          "required": [
+            "target",
+            "runtime"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "millis": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "target": {
+              "type": "string",
+              "const": "programmer_fade"
+            }
+          },
+          "required": [
+            "target",
+            "millis"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "millis": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "target": {
+              "type": "string",
+              "const": "cue_fade"
+            }
+          },
+          "required": [
+            "target",
+            "millis"
+          ]
+        }
+      ],
+      "required": [
+        "scope",
+        "requested",
+        "playback_number"
+      ]
+    },
+    "PlaybackShowScope": {
+      "type": "object",
+      "properties": {
+        "show_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "show_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "show_id",
+        "show_revision"
+      ]
+    },
     "PlaybackTransitionCause": {
       "type": "string",
       "enum": [
@@ -968,6 +1494,68 @@
         "follow",
         "wait",
         "timecode"
+      ]
+    },
+    "SelectiveImportChange": {
+      "type": "object",
+      "properties": {
+        "managed_assets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ManagedAssetReference"
+          }
+        },
+        "objects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SelectiveImportObjectChange"
+          }
+        },
+        "profile_revisions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FixtureProfileIdentity"
+          }
+        },
+        "show_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "show_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "show_id",
+        "show_revision",
+        "objects",
+        "profile_revisions",
+        "managed_assets"
+      ]
+    },
+    "SelectiveImportObjectChange": {
+      "type": "object",
+      "properties": {
+        "body": true,
+        "kind": {
+          "type": "string"
+        },
+        "object_id": {
+          "type": "string"
+        },
+        "object_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "kind",
+        "object_id",
+        "object_revision",
+        "body"
       ]
     },
     "SequenceGap": {
@@ -1055,6 +1643,191 @@
         "show_id",
         "show_revision",
         "changes"
+      ]
+    },
+    "SoundLossReason": {
+      "type": "string",
+      "enum": [
+        "source_unavailable",
+        "no_usable_signal",
+        "low_confidence",
+        "tempo_outside_range",
+        "waiting_for_analysis"
+      ]
+    },
+    "SoundStatus": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "disabled"
+            }
+          },
+          "required": [
+            "status"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "confidence": {
+              "type": "number",
+              "format": "float"
+            },
+            "detected_bpm": {
+              "type": "number",
+              "format": "double"
+            },
+            "status": {
+              "type": "string",
+              "const": "active"
+            }
+          },
+          "required": [
+            "status",
+            "detected_bpm",
+            "confidence"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "reason": {
+              "$ref": "#/$defs/SoundLossReason"
+            },
+            "remaining_millis": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "status": {
+              "type": "string",
+              "const": "holding"
+            }
+          },
+          "required": [
+            "status",
+            "reason",
+            "remaining_millis"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "reason": {
+              "$ref": "#/$defs/SoundLossReason"
+            },
+            "status": {
+              "type": "string",
+              "const": "manual_fallback"
+            }
+          },
+          "required": [
+            "status",
+            "reason"
+          ]
+        }
+      ]
+    },
+    "SpeedGroupRuntimeProjection": {
+      "type": "object",
+      "properties": {
+        "beat_phase": {
+          "type": "number",
+          "format": "double"
+        },
+        "effective_bpm": {
+          "type": "number",
+          "format": "double"
+        },
+        "input_level": {
+          "type": "number",
+          "format": "float"
+        },
+        "manual_bpm": {
+          "type": "number",
+          "format": "double"
+        },
+        "paused": {
+          "type": "boolean"
+        },
+        "phase_advancing": {
+          "type": "boolean"
+        },
+        "phase_origin_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "selected_band_level": {
+          "type": "number",
+          "format": "float"
+        },
+        "sound_bpm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "sound_multiplier": {
+          "type": "number",
+          "format": "double"
+        },
+        "sound_status": {
+          "$ref": "#/$defs/SoundStatus"
+        },
+        "source": {
+          "$ref": "#/$defs/SpeedSource"
+        },
+        "source_available": {
+          "type": "boolean"
+        },
+        "speed_master_scale": {
+          "type": "number",
+          "format": "double"
+        },
+        "synchronized_with": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "usable_signal": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "manual_bpm",
+        "sound_bpm",
+        "effective_bpm",
+        "source",
+        "sound_status",
+        "paused",
+        "phase_advancing",
+        "speed_master_scale",
+        "sound_multiplier",
+        "source_available",
+        "usable_signal",
+        "input_level",
+        "selected_band_level",
+        "synchronized_with",
+        "phase_origin_millis",
+        "beat_phase"
+      ]
+    },
+    "SpeedSource": {
+      "type": "string",
+      "enum": [
+        "manual",
+        "sound",
+        "held_sound",
+        "manual_fallback"
       ]
     }
   }

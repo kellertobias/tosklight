@@ -14,6 +14,8 @@ mod active_show_route_tests;
 mod command_http_tests;
 #[path = "event_transport_route_tests.rs"]
 mod event_transport_route_tests;
+#[path = "playback_v2_route_tests.rs"]
+mod playback_v2_route_tests;
 #[path = "show_patch_route_tests.rs"]
 mod show_patch_route_tests;
 

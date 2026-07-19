@@ -6,7 +6,7 @@ export const LIMITS = Object.freeze({
 });
 
 // These are the only text files excluded from line limits. They are rewritten by
-// package managers or Tauri itself, so splitting them would corrupt their format.
+// package managers or deterministic generators, so splitting them would corrupt their format.
 const MACHINE_MANAGED_LOCKFILES = new Set([
   "Cargo.lock",
   "bun.lock",
@@ -15,6 +15,7 @@ const MACHINE_MANAGED_LOCKFILES = new Set([
   "yarn.lock",
 ]);
 const TAURI_SCHEMA = /^apps\/[^/]+\/src-tauri\/gen\/schemas\/[^/]+\.json$/u;
+const WIRE_SCHEMA = /^crates\/wire\/schemas\/[^/]+\/[^/]+\.schema\.json$/u;
 const TEST_DIRECTORY = /(^|\/)(?:__tests__|e2e|tests)(?:\/|$)/u;
 const TEST_FILENAME = /(?:^|\.)\b(?:spec|test)\.[^.]+$/u;
 
@@ -22,6 +23,7 @@ export function exemptionReason(repositoryPath) {
   const basename = repositoryPath.split("/").at(-1);
   if (MACHINE_MANAGED_LOCKFILES.has(basename)) return "machine-managed lockfile";
   if (TAURI_SCHEMA.test(repositoryPath)) return "Tauri-generated schema JSON";
+  if (WIRE_SCHEMA.test(repositoryPath)) return "Rust-generated wire schema JSON";
   return undefined;
 }
 

@@ -57,14 +57,27 @@ pub(super) async fn advance_test_clock(
         .ok_or_else(|| ApiError::not_found("test clock"))?;
     let now = clock.advance_millis(input.millis);
     refresh_speed_group_engine(&state);
-    let rendered = state
-        .engine
-        .render(state.output_control.lock().render_options())
-        .map_err(|error| ApiError::internal(error.to_string()))?;
-    publish_automatic_playback_events(
-        &state.application_events,
-        rendered.automatic_playback_transitions,
-    );
+    let rendered = {
+        let _activation = state.activation_lock.clone().lock_owned().await;
+        let _ordered = state.playback_service.operation_lock();
+        let mut rendered = state
+            .engine
+            .render(state.output_control.lock().render_options())
+            .map_err(|error| ApiError::internal(error.to_string()))?;
+        let transitions = std::mem::take(&mut rendered.automatic_playback_transitions);
+        if let Some(show_id) = state.active_show.read().as_ref().map(|show| show.id.0) {
+            let changes = playback_service::automatic_projection_changes(
+                &state.engine,
+                PlaybackShowScope {
+                    show_id,
+                    show_revision: rendered.revision,
+                },
+                transitions,
+            );
+            publish_automatic_playback_events(state.playback_service.events(), changes);
+        }
+        rendered
+    };
     let frames = {
         let mut control = state.output_control.lock();
         if control.hold {

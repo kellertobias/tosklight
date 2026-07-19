@@ -115,6 +115,47 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
 }
 
 #[test]
+fn osc_playback_source_cannot_cross_its_subscribed_desk_alias() {
+    let (state, data_dir) = test_state();
+    let user = state.desk.lock().users().unwrap().remove(0);
+    let session = Session {
+        id: SessionId::new(),
+        user,
+        token: "osc-alias-isolation".into(),
+        connected: true,
+        desk: test_control_desk(),
+    };
+    state.sessions.write().insert(session.id, session.clone());
+    let source: SocketAddr = "127.0.0.1:9011".parse().unwrap();
+    state.osc_subscribers.lock().insert(
+        "cross-desk".into(),
+        OscSubscriber {
+            desk_alias: "other-desk".into(),
+            target: source,
+            command_source: source,
+            session_id: session.id,
+            last_seen: Instant::now(),
+            shifted: false,
+            shift_held: false,
+            update_record_started: None,
+            update_first_release: None,
+            last_highlight_action: None,
+        },
+    );
+
+    assert!(
+        osc_playback_session(
+            &state,
+            Some("127.0.0.1:9011"),
+            "other-desk",
+            Some(&session.desk),
+        )
+        .is_err()
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
 fn held_shift_record_short_double_and_long_gestures_are_mutually_distinct() {
     let (state, data_dir) = test_state();
     let user = state.desk.lock().users().unwrap().remove(0);

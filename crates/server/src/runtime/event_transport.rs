@@ -2,9 +2,9 @@
 
 mod adapter;
 
-use super::{ApiError, AppState, Session, authenticate, authenticate_token};
+use super::{ApiError, AppState, Session, authenticate_token};
 use axum::{
-    Json, Router,
+    Router,
     extract::{State, WebSocketUpgrade, ws::Message, ws::WebSocket},
     http::{HeaderMap, header},
     response::{IntoResponse, Response},
@@ -19,9 +19,7 @@ const MAX_CAPACITY: usize = 1_024;
 const MAX_RATE_LIMITS: usize = 64;
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new()
-        .route("/api/v2/events", get(ws_events))
-        .route("/api/v2/events/playback-snapshot", get(playback_snapshot))
+    Router::new().route("/api/v2/events", get(ws_events))
 }
 
 async fn ws_events(
@@ -264,71 +262,6 @@ fn validate_rate_limit(limit: &wire::EventRateLimit) -> Result<(), String> {
 
 fn same_rate_topic(left: &wire::EventRateLimit, right: &wire::EventRateLimit) -> bool {
     left.capability == right.capability && left.class == right.class && left.object == right.object
-}
-
-async fn playback_snapshot(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<wire::PlaybackEventSnapshot>, ApiError> {
-    let session = authenticate(&state, &headers)?;
-    Ok(Json(playback_snapshot_from(
-        &state.application_events,
-        session.desk.id,
-        || {
-            state
-                .engine
-                .playback()
-                .read()
-                .runtime_status()
-                .into_iter()
-                .map(playback_state)
-                .collect()
-        },
-    )))
-}
-
-pub(super) fn playback_snapshot_from(
-    bus: &application::EventBus,
-    desk_id: Uuid,
-    projection: impl FnOnce() -> Vec<wire::PlaybackStateSnapshot>,
-) -> wire::PlaybackEventSnapshot {
-    let cursor = wire::EventSnapshotCursor {
-        sequence: bus.latest_sequence(),
-    };
-    wire::PlaybackEventSnapshot {
-        desk_id,
-        cursor,
-        playbacks: projection(),
-    }
-}
-
-fn playback_state(status: light_playback::PlaybackRuntimeStatus) -> wire::PlaybackStateSnapshot {
-    let playback = status.playback;
-    wire::PlaybackStateSnapshot {
-        object: playback_object(playback.playback_number, playback.cue_list_id.0),
-        playback_number: playback.playback_number,
-        cue_list_id: playback.cue_list_id.0,
-        current: cue(playback.current_cue_id, playback.current_cue_number),
-        loaded: cue(playback.loaded_cue_id, playback.loaded_cue_number),
-        paused: playback.paused,
-        enabled: playback.enabled,
-    }
-}
-
-fn playback_object(playback_number: Option<u16>, cue_list_id: Uuid) -> wire::EventObject {
-    let id = playback_number.map_or_else(
-        || format!("cuelist:{cue_list_id}"),
-        |number| format!("playback:{number}"),
-    );
-    wire::EventObject {
-        capability: wire::EventCapability::Playback,
-        id,
-    }
-}
-
-fn cue(id: Option<Uuid>, number: Option<f64>) -> Option<wire::CueReference> {
-    id.zip(number)
-        .map(|(id, number)| wire::CueReference { id, number })
 }
 
 #[cfg(test)]

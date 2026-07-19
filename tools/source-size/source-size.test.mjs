@@ -14,12 +14,16 @@ test("logical lines count a final unterminated line", () => {
   assert.equal(logicalLineCount("one\ntwo\n"), 2);
 });
 
-test("only package-manager locks and Tauri schemas are exempt", () => {
+test("only machine-managed locks and generated schemas are exempt", () => {
   assert.equal(exemptionReason("Cargo.lock"), "machine-managed lockfile");
   assert.equal(exemptionReason("apps/a/package-lock.json"), "machine-managed lockfile");
   assert.equal(
     exemptionReason("apps/a/src-tauri/gen/schemas/desktop-schema.json"),
     "Tauri-generated schema JSON",
+  );
+  assert.equal(
+    exemptionReason("crates/wire/schemas/v2-events/event-server-message.schema.json"),
+    "Rust-generated wire schema JSON",
   );
   assert.equal(exemptionReason("fixtures/schema.json"), undefined);
   assert.equal(exemptionReason("docs/generated.md"), undefined);

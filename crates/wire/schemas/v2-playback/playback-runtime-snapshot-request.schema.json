@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PlaybackRuntimeSnapshotRequest",
+  "description": "Requested identities for an authoritative, deliberately narrow repair snapshot.",
+  "type": "object",
+  "properties": {
+    "identities": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PlaybackRuntimeIdentity"
+      },
+      "maxItems": 256,
+      "minItems": 1
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "identities"
+  ],
+  "$defs": {
+    "PlaybackRuntimeIdentity": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "playback"
+            },
+            "playback_number": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "playback_number"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "cue_list_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "kind": {
+              "type": "string",
+              "const": "cue_list"
+            }
+          },
+          "required": [
+            "kind",
+            "cue_list_id"
+          ]
+        }
+      ]
+    }
+  }
+}

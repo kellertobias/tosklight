@@ -12,6 +12,7 @@ use light_application::{
 use light_control::TimecodeRouter;
 use light_media::MediaCache;
 use light_output::OutputHealth;
+use light_show::ShowEntry;
 use parking_lot::{Mutex, RwLock};
 use std::{
     collections::{HashMap, VecDeque},
@@ -60,6 +61,9 @@ struct RuntimeResources {
     pub(super) cancellation: CancellationToken,
     pub(super) scheduler: output_scheduler::OutputScheduler,
     pub(super) events: EventBus,
+    pub(super) playback_service: PlaybackService,
+    pub(super) active_show: Arc<RwLock<Option<ShowEntry>>>,
+    pub(super) activation_lock: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl RuntimeResources {
@@ -75,6 +79,9 @@ impl RuntimeResources {
         let matter_bridge = Arc::new(matter::MatterBridgeAdapter::default());
         let cancellation = CancellationToken::new();
         let events = EventBus::default();
+        let playback_service = PlaybackService::new(events.clone());
+        let active_show = Arc::new(RwLock::new(startup.persistent.active_show.clone()));
+        let activation_lock = Arc::new(tokio::sync::Mutex::new(()));
         let scheduler = output_scheduler::start(output_scheduler::Config {
             bind_ip: configuration.output_bind_ip,
             engine: Arc::clone(&startup.engine),
@@ -83,7 +90,9 @@ impl RuntimeResources {
             timecode: Arc::clone(&timecode_router),
             cancellation: cancellation.clone(),
             persisted_runtime,
-            events: events.clone(),
+            playback_service: playback_service.clone(),
+            active_show: Arc::clone(&active_show),
+            activation_lock: Arc::clone(&activation_lock),
             test_bench: startup.persistent.test_bench,
         })
         .await?;
@@ -95,6 +104,9 @@ impl RuntimeResources {
             cancellation,
             scheduler,
             events,
+            playback_service,
+            active_show,
+            activation_lock,
         })
     }
 }
@@ -176,7 +188,7 @@ fn build_app_state(
         ws_connections: Arc::new(Mutex::new(HashMap::new())),
         programmers: startup.programmers.clone(),
         programming: ProgrammingService::new(startup.programmers),
-        playback_service: PlaybackService::default(),
+        playback_service: resources.playback_service.clone(),
         engine: startup.engine,
         highlight: Arc::new(HighlightRegistry::default()),
         patch_preview_highlights: Arc::default(),
@@ -186,10 +198,10 @@ fn build_app_state(
         matter_bridge: Arc::clone(&resources.matter_bridge),
         matter_transport: Some(matter_transport),
         output_control,
-        activation_lock: Arc::new(tokio::sync::Mutex::new(())),
+        activation_lock: Arc::clone(&resources.activation_lock),
         playback_action_lock: Arc::new(Mutex::new(())),
         timecode_router: Arc::clone(&resources.timecode_router),
-        active_show: Arc::new(RwLock::new(startup.persistent.active_show)),
+        active_show: Arc::clone(&resources.active_show),
         active_show_error: Arc::new(RwLock::new(startup.active_show_error)),
         events: startup.events,
         application_events: application_events.clone(),

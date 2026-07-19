@@ -5,15 +5,25 @@ use super::{
 };
 use light_application::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionSource,
-    PendingPlaybackAction, PlaybackAction, PlaybackAddress, PlaybackCommand, PlaybackExecution,
-    PlaybackPorts, PlaybackResult, PlaybackSurface, ResolvedPlaybackAddress,
+    PendingPlaybackAction, PlaybackAction, PlaybackAddress, PlaybackCommand, PlaybackDurability,
+    PlaybackExecution, PlaybackPorts, PlaybackResult, PlaybackSurface, ResolvedPlaybackAddress,
 };
 
+#[path = "playback_service/capture.rs"]
+mod capture;
 #[path = "playback_service/conversion.rs"]
 mod conversion;
+#[path = "playback_service/desk.rs"]
+mod desk;
+#[path = "playback_service/projection.rs"]
+mod projection;
 #[path = "playback_service/response.rs"]
 mod response;
+#[path = "playback_service/semantics.rs"]
+mod semantics;
 
+pub(super) use desk::{projection as desk_projection, publish_change as publish_desk_change};
+pub(super) use projection::automatic_changes as automatic_projection_changes;
 pub(super) use response::{cue_list_http_payload, pool_http_payload, websocket_payload};
 
 use conversion::{
@@ -82,7 +92,7 @@ pub(super) fn websocket_action(
     execute(state, Some(session), Some(&session.desk), context, command)
 }
 
-fn execute(
+pub(super) fn execute(
     state: &AppState,
     session: Option<&Session>,
     desk: Option<&ControlDesk>,
@@ -93,6 +103,7 @@ fn execute(
         state,
         session,
         desk,
+        persistence_pending: std::sync::atomic::AtomicBool::new(false),
     };
     state
         .playback_service
@@ -100,10 +111,43 @@ fn execute(
         .map_err(action_error)
 }
 
+pub(super) fn snapshot(
+    state: &AppState,
+    session: &Session,
+    context: ActionContext,
+    identities: &[light_application::PlaybackRuntimeIdentity],
+) -> Result<light_application::PlaybackRuntimeSnapshot, ApiError> {
+    let ports = ServerPlaybackPorts {
+        state,
+        session: Some(session),
+        desk: Some(&session.desk),
+        persistence_pending: std::sync::atomic::AtomicBool::new(false),
+    };
+    state
+        .playback_service
+        .snapshot(&context, identities, &ports)
+        .map_err(action_error)
+}
+
+pub(in crate::runtime) fn read_runtime_projection(
+    state: &AppState,
+    context: &ActionContext,
+    identity: light_application::PlaybackRuntimeIdentity,
+) -> Result<light_application::PlaybackRuntimeProjection, ApiError> {
+    let ports = ServerPlaybackPorts {
+        state,
+        session: None,
+        desk: None,
+        persistence_pending: std::sync::atomic::AtomicBool::new(false),
+    };
+    PlaybackPorts::projection(&ports, context, identity).map_err(action_error)
+}
+
 struct ServerPlaybackPorts<'a> {
     pub(super) state: &'a AppState,
     pub(super) session: Option<&'a Session>,
     pub(super) desk: Option<&'a ControlDesk>,
+    persistence_pending: std::sync::atomic::AtomicBool,
 }
 
 impl PlaybackPorts for ServerPlaybackPorts<'_> {
@@ -147,17 +191,61 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
         surface: PlaybackSurface,
     ) -> Result<PlaybackExecution, ActionError> {
         match address {
-            ResolvedPlaybackAddress::CueList(id) => self.execute_cue_list(id, action),
+            ResolvedPlaybackAddress::CueList(id) => self.execute_cue_list(context, id, action),
             ResolvedPlaybackAddress::Pool { number, .. } => {
                 self.execute_pool(context, number, action, surface)
             }
         }
+    }
+
+    fn durability(&self) -> PlaybackDurability {
+        if self
+            .persistence_pending
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            PlaybackDurability::PersistencePending
+        } else {
+            PlaybackDurability::Durable
+        }
+    }
+
+    fn transition_cause(
+        &self,
+        context: &ActionContext,
+        address: ResolvedPlaybackAddress,
+        action: PlaybackAction,
+    ) -> Result<Option<light_application::PlaybackTransitionCause>, ActionError> {
+        semantics::transition_cause(self, context, address, action)
+    }
+
+    fn projection(
+        &self,
+        context: &ActionContext,
+        identity: light_application::PlaybackRuntimeIdentity,
+    ) -> Result<light_application::PlaybackRuntimeProjection, ActionError> {
+        projection::projection(self, context, identity)
+    }
+
+    fn projections(
+        &self,
+        context: &ActionContext,
+        identities: &[light_application::PlaybackRuntimeIdentity],
+    ) -> Result<Vec<light_application::PlaybackRuntimeProjection>, ActionError> {
+        projection::projections(self, context, identities)
+    }
+
+    fn desk_projection(
+        &self,
+        context: &ActionContext,
+    ) -> Result<Option<light_application::PlaybackDeskProjection>, ActionError> {
+        projection::desk_projection(self, context)
     }
 }
 
 impl ServerPlaybackPorts<'_> {
     fn execute_cue_list(
         &self,
+        context: &ActionContext,
         id: light_core::CueListId,
         action: PlaybackAction,
     ) -> Result<PlaybackExecution, ActionError> {
@@ -178,7 +266,9 @@ impl ServerPlaybackPorts<'_> {
             _ => return Err(invalid("action is incompatible with a cue list")),
         };
         drop(playback);
-        persist_active_playbacks(self.state).map_err(api_action_error)?;
+        if let Err(error) = persist_active_playbacks(self.state) {
+            self.mark_persistence_pending(context, "active_playbacks", error);
+        }
         Ok(execution)
     }
 
@@ -192,7 +282,8 @@ impl ServerPlaybackPorts<'_> {
         let definition = playback_definition(self.state, number)?;
         let (action_name, input) = legacy_action(action, surface);
         if captures_preload(context.source)
-            && let Some(pending) = self.capture(&definition, action_name, &input, surface)?
+            && let Some(pending) =
+                self.capture(context, &definition, action_name, &input, surface)?
         {
             return Ok(PlaybackExecution::Pool {
                 changed: false,
@@ -205,7 +296,7 @@ impl ServerPlaybackPorts<'_> {
                 pending: None,
             });
         }
-        let changed = dispatch_playback_action(
+        let dispatch = dispatch_playback_action(
             self.state,
             self.session,
             self.desk,
@@ -215,8 +306,12 @@ impl ServerPlaybackPorts<'_> {
             source_name(context.source),
         )
         .map_err(api_action_error)?;
+        if dispatch.persistence_pending {
+            self.persistence_pending
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+        }
         Ok(PlaybackExecution::Pool {
-            changed,
+            changed: dispatch.changed,
             pending: None,
         })
     }
@@ -236,63 +331,6 @@ impl ServerPlaybackPorts<'_> {
                     action_touched(action),
                 )
             })
-    }
-
-    fn capture(
-        &self,
-        definition: &light_playback::PlaybackDefinition,
-        action_name: &str,
-        input: &PoolPlaybackInput,
-        surface: PlaybackSurface,
-    ) -> Result<Option<PendingPlaybackAction>, ActionError> {
-        let Some(session) = self.session else {
-            return Ok(None);
-        };
-        let temp = predicted_preload_temp_state(self.state, session.id, definition.number);
-        let pending = preload_capture_action_with_temp_state(definition, action_name, input, temp)
-            .map_err(api_action_error)?;
-        if !self.should_capture(session, pending, surface) {
-            return Ok(None);
-        }
-        let pending = pending.expect("capture requires a pending action");
-        self.queue_capture(session, definition.number, pending, surface)?;
-        Ok(Some(parse_pending(pending)))
-    }
-
-    fn should_capture(
-        &self,
-        session: &Session,
-        pending: Option<&str>,
-        surface: PlaybackSurface,
-    ) -> bool {
-        self.state
-            .programmers
-            .get(session.id)
-            .is_some_and(|programmer| programmer.blind)
-            && pending.is_some()
-            && capture_enabled(self.state, surface)
-    }
-
-    fn queue_capture(
-        &self,
-        session: &Session,
-        number: u16,
-        pending: &str,
-        surface: PlaybackSurface,
-    ) -> Result<(), ActionError> {
-        self.state.programmers.queue_preload_playback_action(
-            session.id,
-            number,
-            pending.to_owned(),
-            surface_name(surface).to_owned(),
-        );
-        persist_programmer(self.state, session).map_err(api_action_error)?;
-        emit(
-            self.state,
-            "programmer_changed",
-            serde_json::json!({"session_id":session.id,"preload_playback_action":pending,"playback_number":number,"surface":surface_name(surface)}),
-        );
-        Ok(())
     }
 }
 

@@ -109,9 +109,13 @@ pub(super) fn commit_preload(
     state: &AppState,
     session: &Session,
 ) -> Result<serde_json::Value, String> {
-    // Use the same lock ordering as normal playback actions: playback serialization first, then
-    // the user's reentrant Programmer transaction gate. This keeps queued actions stable while
-    // the candidate playback engine is validated.
+    // Match the normal action and render order from show identity through semantic publication.
+    let _activation = state
+        .activation_lock
+        .clone()
+        .try_lock_owned()
+        .map_err(|_| "the active show is changing; retry Preload GO".to_owned())?;
+    let _ordered = state.playback_service.operation_lock();
     let _serialized = state.playback_action_lock.lock();
     state
         .programmers
@@ -122,13 +126,99 @@ pub(super) fn commit_preload_transaction(
     state: &AppState,
     session: &Session,
 ) -> Result<serde_json::Value, String> {
+    let PreparedPreloadCommit {
+        pending,
+        committed_at,
+        programmer_fade_millis,
+        staged_playback,
+        staged_actions,
+        identities,
+        before,
+        context,
+    } = prepare_preload_commit(state, session)?;
+    install_preload_commit(state, session, pending, committed_at, staged_playback)?;
+    let event_sequences =
+        publish_preload_changes(state, &context, &identities, before, &staged_actions)?;
+    emit_preload_exclusions(state, session, &staged_actions);
+    let executed = executed_preload_actions(staged_actions, committed_at, programmer_fade_millis);
+    let warnings = persist_preload_commit(state, session, !executed.is_empty());
+    Ok(preload_commit_response(
+        state,
+        session,
+        committed_at,
+        programmer_fade_millis,
+        executed,
+        event_sequences,
+        warnings,
+    ))
+}
+
+type PlaybackIdentity = light_application::PlaybackRuntimeIdentity;
+type PlaybackProjection = light_application::PlaybackRuntimeProjection;
+
+struct PreparedPreloadCommit {
+    pending: Vec<light_programmer::PreloadPlaybackAction>,
+    committed_at: chrono::DateTime<chrono::Utc>,
+    programmer_fade_millis: u64,
+    staged_playback: light_playback::PlaybackEngine,
+    staged_actions: Vec<StagedPreloadPlaybackAction>,
+    identities: Vec<PlaybackIdentity>,
+    before: Vec<(PlaybackIdentity, PlaybackProjection)>,
+    context: light_application::ActionContext,
+}
+
+fn prepare_preload_commit(
+    state: &AppState,
+    session: &Session,
+) -> Result<PreparedPreloadCommit, String> {
     let pending = state
         .programmers
         .get(session.id)
         .ok_or_else(|| "programmer does not exist".to_owned())?
         .preload_playback_pending;
     let snapshot = state.engine.snapshot();
-    let definitions = pending
+    let definitions = preload_definitions(&pending, &snapshot)?;
+    let committed_at = state.programmers.clock().now();
+    let programmer_fade_millis = state.configuration.read().programmer_fade_millis;
+    let exclusion_zones = virtual_playback_zone_numbers(state, session.desk.id);
+    let identities = preload_identities(&definitions, &exclusion_zones);
+    let context = light_application::ActionContext::operator(
+        session.desk.id,
+        session.user.id.0,
+        session.id.0,
+        light_application::ActionSource::UserInterface,
+    );
+    let before = read_preload_projections(state, &context, &identities)?;
+    let (staged_playback, staged_actions) = stage_preload_playback_batch(
+        &state.engine.playback().read(),
+        &definitions,
+        committed_at,
+        programmer_fade_millis,
+        &exclusion_zones,
+    )?;
+    Ok(PreparedPreloadCommit {
+        pending,
+        committed_at,
+        programmer_fade_millis,
+        staged_playback,
+        staged_actions,
+        identities,
+        before,
+        context,
+    })
+}
+
+fn preload_definitions(
+    pending: &[light_programmer::PreloadPlaybackAction],
+    snapshot: &EngineSnapshot,
+) -> Result<
+    Vec<(
+        light_programmer::PreloadPlaybackAction,
+        light_playback::PlaybackDefinition,
+    )>,
+    String,
+> {
+    pending
         .iter()
         .map(|action| {
             snapshot
@@ -139,20 +229,60 @@ pub(super) fn commit_preload_transaction(
                 .map(|definition| (action.clone(), definition))
                 .ok_or_else(|| format!("playback {} no longer exists", action.playback_number))
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect()
+}
 
-    let committed_at = state.programmers.clock().now();
-    let programmer_fade_millis = state.configuration.read().programmer_fade_millis;
-    let exclusion_zones = virtual_playback_zone_numbers(state, session.desk.id);
+fn preload_identities(
+    definitions: &[(
+        light_programmer::PreloadPlaybackAction,
+        light_playback::PlaybackDefinition,
+    )],
+    exclusion_zones: &[Vec<u16>],
+) -> Vec<PlaybackIdentity> {
+    let mut identities = definitions
+        .iter()
+        .map(|(_, definition)| PlaybackIdentity::Playback(definition.number))
+        .chain(
+            exclusion_zones
+                .iter()
+                .flatten()
+                .copied()
+                .map(PlaybackIdentity::Playback),
+        )
+        .collect::<Vec<_>>();
+    identities.sort_by_key(|identity| match identity {
+        PlaybackIdentity::Playback(number) => *number,
+        PlaybackIdentity::CueList(_) => 0,
+    });
+    identities.dedup();
+    identities
+}
+
+fn read_preload_projections(
+    state: &AppState,
+    context: &light_application::ActionContext,
+    identities: &[PlaybackIdentity],
+) -> Result<Vec<(PlaybackIdentity, PlaybackProjection)>, String> {
+    identities
+        .iter()
+        .copied()
+        .map(|identity| {
+            playback_service::read_runtime_projection(state, context, identity)
+                .map(|projection| (identity, projection))
+                .map_err(|error| error.message)
+        })
+        .collect()
+}
+
+fn install_preload_commit(
+    state: &AppState,
+    session: &Session,
+    pending: Vec<light_programmer::PreloadPlaybackAction>,
+    committed_at: chrono::DateTime<chrono::Utc>,
+    staged_playback: light_playback::PlaybackEngine,
+) -> Result<(), String> {
     let playback = state.engine.playback();
     let mut live_playback = playback.write();
-    let (staged_playback, staged_actions) = stage_preload_playback_batch(
-        &live_playback,
-        &definitions,
-        committed_at,
-        programmer_fade_millis,
-        &exclusion_zones,
-    )?;
 
     // Nothing live has changed before this point. The Programmer transaction restores its exact
     // checkpoint if the queue somehow differs despite holding the per-user mutation gate.
@@ -169,23 +299,62 @@ pub(super) fn commit_preload_transaction(
     // write guard across Programmer activation also exposes the combined result at one render
     // boundary instead of allowing a torn frame between the two domains.
     *live_playback = staged_playback;
-    drop(live_playback);
+    Ok(())
+}
 
-    for action in &staged_actions {
-        if !action.released_playbacks.is_empty() {
-            emit(
-                state,
-                "playback_exclusion_applied",
-                serde_json::json!({
-                    "desk_id":session.desk.id,
-                    "activated_playback":action.playback_number,
-                    "released_playbacks":action.released_playbacks,
-                    "source":"preload",
-                }),
-            );
-        }
+fn publish_preload_changes(
+    state: &AppState,
+    context: &light_application::ActionContext,
+    identities: &[PlaybackIdentity],
+    before: Vec<(PlaybackIdentity, PlaybackProjection)>,
+    actions: &[StagedPreloadPlaybackAction],
+) -> Result<Vec<u64>, String> {
+    let after = read_preload_projections(state, context, identities)?
+        .into_iter()
+        .collect::<std::collections::HashMap<_, _>>();
+    Ok(before
+        .into_iter()
+        .filter_map(|(identity, before)| {
+            let projection = after.get(&identity)?.clone();
+            state.playback_service.publish_committed_change(
+                context,
+                preload_event_action(actions, identity),
+                None,
+                before,
+                projection,
+            )
+        })
+        .collect())
+}
+
+fn emit_preload_exclusions(
+    state: &AppState,
+    session: &Session,
+    actions: &[StagedPreloadPlaybackAction],
+) {
+    for action in actions
+        .iter()
+        .filter(|action| !action.released_playbacks.is_empty())
+    {
+        emit(
+            state,
+            "playback_exclusion_applied",
+            serde_json::json!({
+                "desk_id":session.desk.id,
+                "activated_playback":action.playback_number,
+                "released_playbacks":action.released_playbacks,
+                "source":"preload",
+            }),
+        );
     }
-    let executed = staged_actions
+}
+
+fn executed_preload_actions(
+    actions: Vec<StagedPreloadPlaybackAction>,
+    committed_at: chrono::DateTime<chrono::Utc>,
+    programmer_fade_millis: u64,
+) -> Vec<serde_json::Value> {
+    actions
         .into_iter()
         .map(|action| {
             serde_json::json!({
@@ -196,8 +365,14 @@ pub(super) fn commit_preload_transaction(
                 "fallback_millis":programmer_fade_millis
             })
         })
-        .collect::<Vec<_>>();
+        .collect()
+}
 
+fn persist_preload_commit(
+    state: &AppState,
+    session: &Session,
+    has_playback_actions: bool,
+) -> Vec<String> {
     // Persistence is deliberately downstream of the commit point. A disk/store error is an
     // accepted operation with an explicit warning and audit event, never a false rejection after
     // the live Programmer and Playback states have changed.
@@ -210,7 +385,7 @@ pub(super) fn commit_preload_transaction(
             error,
         ));
     }
-    if !executed.is_empty() {
+    if has_playback_actions {
         if let Err(error) = persist_active_playbacks(state) {
             warnings.push(record_preload_persistence_failure(
                 state,
@@ -228,12 +403,25 @@ pub(super) fn commit_preload_transaction(
             ));
         }
     }
+    warnings
+}
 
+#[allow(clippy::too_many_arguments)]
+fn preload_commit_response(
+    state: &AppState,
+    session: &Session,
+    committed_at: chrono::DateTime<chrono::Utc>,
+    programmer_fade_millis: u64,
+    executed: Vec<serde_json::Value>,
+    playback_event_sequences: Vec<u64>,
+    warnings: Vec<String>,
+) -> serde_json::Value {
     let mut payload = serde_json::json!({
         "session_id":session.id,
         "application_timestamp":committed_at,
         "programmer_fade_millis":programmer_fade_millis,
-        "playback_actions":executed
+        "playback_actions":executed,
+        "playback_event_sequences":playback_event_sequences,
     });
     if !warnings.is_empty() {
         payload["warnings"] = serde_json::json!(warnings);
@@ -256,12 +444,48 @@ pub(super) fn commit_preload_transaction(
         "application_timestamp":committed_at,
         "programmer_fade_millis":programmer_fade_millis,
         "playback_actions":payload["playback_actions"],
+        "playback_event_sequences":payload["playback_event_sequences"],
         "programmer":state.programmers.get(session.id)
     });
     if let Some(warnings) = payload.get("warnings") {
         response["warnings"] = warnings.clone();
     }
-    Ok(response)
+    response
+}
+
+fn preload_event_action(
+    actions: &[StagedPreloadPlaybackAction],
+    identity: light_application::PlaybackRuntimeIdentity,
+) -> light_application::PlaybackAction {
+    let light_application::PlaybackRuntimeIdentity::Playback(number) = identity else {
+        return light_application::PlaybackAction::None { pressed: true };
+    };
+    if actions
+        .iter()
+        .any(|action| action.released_playbacks.contains(&number))
+    {
+        return light_application::PlaybackAction::Off { pressed: true };
+    }
+    match actions
+        .iter()
+        .find(|action| action.playback_number == number)
+        .map(|action| action.action.as_str())
+    {
+        Some("toggle") => light_application::PlaybackAction::Toggle { pressed: true },
+        Some("go") => light_application::PlaybackAction::Go { pressed: true },
+        Some("go-minus") => light_application::PlaybackAction::Back { pressed: true },
+        Some("off") => light_application::PlaybackAction::Off { pressed: true },
+        Some("on") => light_application::PlaybackAction::On { pressed: true },
+        Some("temp-on") => light_application::PlaybackAction::Temporary {
+            enabled: true,
+            pressed: true,
+        },
+        Some("temp-off") => light_application::PlaybackAction::Temporary {
+            enabled: false,
+            pressed: false,
+        },
+        _ => light_application::PlaybackAction::None { pressed: true },
+    }
 }
 
 pub(super) fn validate_programmer_attribute_value(

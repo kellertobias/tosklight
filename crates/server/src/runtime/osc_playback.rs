@@ -151,12 +151,16 @@ fn handle_osc_page(state: &AppState, parts: &[&str], arguments: &[OscArgument]) 
         let _ordered = state.playback_service.operation_lock();
         let context =
             light_application::ActionContext::system(desk.id, light_application::ActionSource::Osc);
+        let Ok(before) = playback_service::desk_projection(state, &context) else {
+            return true;
+        };
         if !ensure_playback_page_for_advance(state, &show, page, &context)
             .is_ok_and(|availability| availability.available())
         {
             return true;
         }
         let _ = state.desk.lock().set_desk_page(desk.id, show.id, page);
+        let _ = playback_service::publish_desk_change(state, &context, before);
     }
     emit(
         state,
@@ -195,29 +199,47 @@ fn osc_playback_address(parts: &[&str]) -> Option<(PlaybackAddress, usize)> {
     }
 }
 
-fn osc_playback_session(
+pub(super) fn osc_playback_session(
     state: &AppState,
     source: Option<&str>,
+    action_alias: &str,
     action_desk: Option<&ControlDesk>,
-) -> Option<Session> {
+) -> Result<Option<Session>, ()> {
     let source = source.and_then(|source| source.parse::<SocketAddr>().ok());
     let subscribed = state
         .osc_subscribers
         .lock()
         .values()
         .find(|subscriber| Some(subscriber.command_source) == source)
-        .map(|subscriber| subscriber.session_id);
-    subscribed
-        .and_then(|session| state.sessions.read().get(&session).cloned())
-        .or_else(|| {
-            let desk = action_desk?;
-            state
-                .sessions
-                .read()
-                .values()
-                .find(|session| session.connected && session.desk.id == desk.id)
-                .cloned()
-        })
+        .cloned();
+    if let Some(subscriber) = subscribed {
+        let desk = action_desk.ok_or(())?;
+        if !subscriber.desk_alias.eq_ignore_ascii_case(action_alias) {
+            return Err(());
+        }
+        let session = state
+            .sessions
+            .read()
+            .get(&subscriber.session_id)
+            .filter(|session| session.connected && session.desk.id == desk.id)
+            .cloned()
+            .ok_or(())?;
+        if !subscriber
+            .desk_alias
+            .eq_ignore_ascii_case(&session.desk.osc_alias)
+        {
+            return Err(());
+        }
+        return Ok(Some(session));
+    }
+    Ok(action_desk.and_then(|desk| {
+        state
+            .sessions
+            .read()
+            .values()
+            .find(|session| session.connected && session.desk.id == desk.id)
+            .cloned()
+    }))
 }
 
 pub(super) fn handle_playback_osc(
@@ -245,6 +267,9 @@ pub(super) fn handle_playback_osc(
     let Some((playback_address, action_index)) = osc_playback_address(&parts) else {
         return;
     };
+    let Ok(_activation) = state.activation_lock.clone().try_lock_owned() else {
+        return;
+    };
     let button = (parts[action_index] == "button")
         .then(|| parts.get(action_index + 1)?.parse::<u8>().ok())
         .flatten();
@@ -255,16 +280,46 @@ pub(super) fn handle_playback_osc(
         surface: Some("osc".into()),
         ..PoolPlaybackInput::default()
     };
-    let action_alias = if parts
+    let path_alias = if parts
         .get(2)
         .is_some_and(|part| *part == "page-playback" || *part == "paged-playback")
     {
-        parts[1]
+        Some(parts[1])
     } else {
-        "main"
+        None
     };
-    let action_desk = osc_control_desk(state, action_alias);
-    let session = osc_playback_session(state, source, action_desk.as_ref());
+    let subscribed = source
+        .and_then(|source| source.parse::<SocketAddr>().ok())
+        .and_then(|source| {
+            state
+                .osc_subscribers
+                .lock()
+                .values()
+                .find(|subscriber| subscriber.command_source == source)
+                .cloned()
+        });
+    let action_alias = path_alias
+        .map(str::to_owned)
+        .or_else(|| {
+            subscribed
+                .as_ref()
+                .map(|subscriber| subscriber.desk_alias.clone())
+        })
+        .unwrap_or_else(|| "main".into());
+    let action_desk = subscribed
+        .as_ref()
+        .and_then(|subscriber| {
+            state
+                .sessions
+                .read()
+                .get(&subscriber.session_id)
+                .map(|session| session.desk.clone())
+        })
+        .or_else(|| osc_control_desk(state, &action_alias));
+    let Ok(session) = osc_playback_session(state, source, &action_alias, action_desk.as_ref())
+    else {
+        return;
+    };
     let action = if parts[action_index] == "fader" {
         "master"
     } else {

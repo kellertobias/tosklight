@@ -19,5 +19,7 @@ The v2 event socket is `/api/v2/events`. Offer `light.events.v2` (or `light.v2`)
 existing `light.token.<session token>` subprotocol, then send one `EventClientMessage::Subscribe`.
 The server derives the desk from that session; clients cannot subscribe as another desk. Capacity
 is bounded, filters are explicit, and optional rate limits apply only to replaceable projection or
-telemetry topics. A `gap` requires an authoritative `/api/v2/events/playback-snapshot` read followed
-by `EventClientMessage::Repair` with the returned cursor before incremental delivery resumes.
+telemetry topics. A `gap` requires a desk-scoped `POST
+/api/v2/desks/{desk_id}/playback-runtime/snapshot` containing only the Playback and Cuelist
+identities relevant to the current view, followed by `EventClientMessage::Repair` with the returned
+cursor before incremental delivery resumes.

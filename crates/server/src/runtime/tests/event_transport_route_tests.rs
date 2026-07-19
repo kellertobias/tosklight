@@ -3,7 +3,7 @@
 use super::*;
 
 #[tokio::test]
-async fn v2_snapshot_and_socket_protocols_use_the_live_session_authenticator() {
+async fn v2_socket_protocol_uses_live_auth_and_the_broad_snapshot_is_removed() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
@@ -18,17 +18,7 @@ async fn v2_snapshot_and_socket_protocols_use_the_live_session_authenticator() {
     assert_eq!(session.token, token);
     assert!(event_transport::authenticate_protocols(&state, &HeaderMap::new()).is_err());
 
-    let denied = app
-        .clone()
-        .oneshot(
-            Request::get("/api/v2/events/playback-snapshot")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
-    let allowed = app
+    let removed = app
         .oneshot(
             Request::get("/api/v2/events/playback-snapshot")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
@@ -37,10 +27,6 @@ async fn v2_snapshot_and_socket_protocols_use_the_live_session_authenticator() {
         )
         .await
         .unwrap();
-    assert_eq!(allowed.status(), StatusCode::OK);
-    let snapshot = json(allowed).await;
-    assert_eq!(snapshot["desk_id"], session.desk.id.to_string());
-    assert_eq!(snapshot["cursor"]["sequence"], 0);
-    assert_eq!(snapshot["playbacks"], serde_json::json!([]));
+    assert_eq!(removed.status(), StatusCode::NOT_FOUND);
     let _ = std::fs::remove_dir_all(data_dir);
 }

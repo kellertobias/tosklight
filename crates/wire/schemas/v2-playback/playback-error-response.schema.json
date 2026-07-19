@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PlaybackErrorResponse",
+  "type": "object",
+  "properties": {
+    "error": {
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/PlaybackErrorKind"
+    },
+    "retryable": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "kind",
+    "error",
+    "retryable"
+  ],
+  "$defs": {
+    "PlaybackErrorKind": {
+      "type": "string",
+      "enum": [
+        "invalid",
+        "unauthorized",
+        "forbidden",
+        "not_found",
+        "conflict",
+        "unavailable",
+        "internal"
+      ]
+    }
+  }
+}

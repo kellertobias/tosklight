@@ -1,5 +1,7 @@
 //! Stable filtered event-subscription and playback-repair DTOs.
 
+use super::playback::{PlaybackDeskProjection, PlaybackRuntimeChange};
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -48,7 +50,7 @@ pub enum EventClientMessage {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EventServerMessage {
     Ready { cursor: EventSnapshotCursor },
-    Event { event: EventEnvelope },
+    Event { event: Box<EventEnvelope> },
     Gap { gap: SequenceGap },
     Repaired { cursor: EventSnapshotCursor },
     Error { error: String },
@@ -78,6 +80,9 @@ pub struct EventEnvelope {
     pub desk_id: Option<Uuid>,
     pub class: EventClass,
     pub object: Option<EventObject>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub related_objects: Option<Vec<EventObject>>,
     pub source: EventSource,
     pub correlation_id: Option<Uuid>,
     pub delivery: EventDeliveryPolicy,
@@ -145,10 +150,12 @@ pub enum EventActionSource {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EventPayload {
-    PlaybackCueTransition { transition: PlaybackCueTransition },
+    PlaybackRuntimeChanged { change: PlaybackRuntimeChange },
+    PlaybackViewChanged { projection: PlaybackDeskProjection },
     ShowPatchChanged { delta: super::patch::PatchDelta },
     OutputRouteChanged { change: OutputRouteChange },
     ShowObjectsChanged { change: ShowObjectsChange },
+    SelectiveImportApplied { change: Box<SelectiveImportChange> },
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -178,6 +185,40 @@ pub enum ShowObjectKind {
     Playback,
     PlaybackPage,
     Preset,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct SelectiveImportChange {
+    pub show_id: Uuid,
+    #[ts(type = "number")]
+    pub show_revision: u64,
+    pub objects: Vec<SelectiveImportObjectChange>,
+    pub profile_revisions: Vec<FixtureProfileIdentity>,
+    pub managed_assets: Vec<ManagedAssetReference>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct SelectiveImportObjectChange {
+    pub kind: String,
+    pub object_id: String,
+    #[ts(type = "number")]
+    pub object_revision: u64,
+    #[ts(type = "unknown")]
+    pub body: serde_json::Value,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct FixtureProfileIdentity {
+    pub profile_id: Uuid,
+    #[ts(type = "number")]
+    pub revision: u64,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ManagedAssetReference {
+    pub asset_id: Uuid,
+    #[ts(type = "number")]
+    pub revision: u64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -216,51 +257,4 @@ pub enum OutputDeliveryMode {
     Broadcast,
     Multicast,
     Unicast,
-}
-
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-pub struct PlaybackCueTransition {
-    pub playback_number: Option<u16>,
-    pub cue_list_id: Uuid,
-    pub previous: Option<CueReference>,
-    pub current: Option<CueReference>,
-    pub cause: PlaybackTransitionCause,
-    #[ts(type = "number")]
-    pub advanced_steps: u64,
-}
-
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-pub struct CueReference {
-    pub id: Uuid,
-    pub number: f64,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(rename_all = "snake_case")]
-pub enum PlaybackTransitionCause {
-    Go,
-    Back,
-    Jump,
-    Chaser,
-    Follow,
-    Wait,
-    Timecode,
-}
-
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-pub struct PlaybackEventSnapshot {
-    pub desk_id: Uuid,
-    pub cursor: EventSnapshotCursor,
-    pub playbacks: Vec<PlaybackStateSnapshot>,
-}
-
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-pub struct PlaybackStateSnapshot {
-    pub object: EventObject,
-    pub playback_number: Option<u16>,
-    pub cue_list_id: Uuid,
-    pub current: Option<CueReference>,
-    pub loaded: Option<CueReference>,
-    pub paused: bool,
-    pub enabled: bool,
 }

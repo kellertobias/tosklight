@@ -252,27 +252,26 @@ pub(super) fn apply_matter_playback_write(
         .matter_bridge
         .resolve_write(endpoint_id, write)
         .map_err(|error| ApiError::bad_request(error.to_string()))?;
-    let definition = state
-        .engine
-        .snapshot()
-        .playbacks
-        .iter()
-        .find(|definition| definition.number == resolved.playback_number)
-        .cloned()
-        .ok_or_else(|| ApiError::not_found("playback"))?;
-    let changed = dispatch_playback_action(
+    let result = playback_service::execute(
         state,
         None,
         None,
-        &definition,
-        "fader",
-        &PoolPlaybackInput {
-            value: Some(resolved.level),
-            surface: Some("matter".into()),
-            ..PoolPlaybackInput::default()
+        light_application::ActionContext::system(
+            Uuid::nil(),
+            light_application::ActionSource::Matter,
+        ),
+        light_application::PlaybackCommand {
+            address: light_application::PlaybackAddress::Pool(resolved.playback_number),
+            action: light_application::PlaybackAction::Master(
+                light_application::PlaybackLevel::new(resolved.level),
+            ),
+            surface: light_application::PlaybackSurface::Matter,
         },
-        "matter",
     )?;
+    let changed = matches!(
+        result.execution,
+        light_application::PlaybackExecution::Pool { changed: true, .. }
+    );
     if changed {
         emit(
             state,

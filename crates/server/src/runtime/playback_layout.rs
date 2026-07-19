@@ -235,9 +235,10 @@ pub(super) async fn update_desk_page(
         .read()
         .clone()
         .ok_or_else(|| ApiError::bad_request("no show is open"))?;
-    let event_sequence = {
+    let (page_creation_event_sequence, event_sequence) = {
         let _ordered = state.playback_service.operation_lock();
         let context = operator_action_context(&session, light_application::ActionSource::Http);
+        let before = playback_service::desk_projection(&state, &context)?;
         let availability = ensure_playback_page_for_advance(&state, &show, input.page, &context)?;
         if !availability.available() {
             return Err(ApiError::bad_request("playback page does not exist"));
@@ -247,7 +248,8 @@ pub(super) async fn update_desk_page(
             .lock()
             .set_desk_page(id, show.id, input.page)
             .map_err(ApiError::store)?;
-        availability.event_sequence()
+        let view_sequence = playback_service::publish_desk_change(&state, &context, before)?;
+        (availability.event_sequence(), view_sequence)
     };
     emit(
         &state,
@@ -258,6 +260,7 @@ pub(super) async fn update_desk_page(
     Ok(Json(serde_json::json!({
         "desk_id":id,
         "page":input.page,
-        "event_sequence":event_sequence
+        "event_sequence":event_sequence,
+        "page_creation_event_sequence":page_creation_event_sequence
     })))
 }

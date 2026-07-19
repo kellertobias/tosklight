@@ -4,14 +4,17 @@ use std::sync::Arc;
 
 use chrono::{Duration as ChronoDuration, Utc};
 use light_application::{
-    CueReference as AppCue, EventBus, EventDraft, EventReplay, EventSource,
-    PlaybackCueTransition as AppTransition, PlaybackTransitionCause,
-    publish_automatic_playback_events,
+    ActionContext, ActionSource, ActiveShowObjectChange, ActiveShowObjectKind,
+    ActiveShowObjectsChange, EventBus, EventDraft, EventSource, PlaybackCueReference as AppCue,
+    PlaybackCueTransition as AppTransition, PlaybackRuntimeChange, PlaybackRuntimeIdentity,
+    PlaybackRuntimeProjection, PlaybackShowScope, PlaybackTargetProjection,
+    PlaybackTransitionCause, publish_automatic_playback_events,
 };
-use light_core::{CueListId, ManualClock};
+use light_core::{CueListId, ManualClock, ShowId};
 use light_playback::{Cue, CueList, CueListMode, IntensityPriorityMode, RestartMode, WrapMode};
 use light_wire::v2::events as wire;
 
+use super::super::playback_service;
 use super::super::{Engine, EngineSnapshot, ProgrammerRegistry, RenderOptions};
 use super::*;
 
@@ -53,7 +56,12 @@ async fn running_chaser_wakes_only_its_narrow_subscriber() {
     bus.publish(transition_draft(Some(99), Uuid::from_u128(99)));
     clock.set(started + ChronoDuration::milliseconds(100));
     let rendered = engine.render(RenderOptions::default()).unwrap();
-    publish_automatic_playback_events(&bus, rendered.automatic_playback_transitions);
+    let changes = playback_service::automatic_projection_changes(
+        &engine,
+        test_playback_scope(),
+        rendered.automatic_playback_transitions,
+    );
+    publish_automatic_playback_events(&bus, changes);
 
     let message = tokio::time::timeout(std::time::Duration::from_secs(1), waiting)
         .await
@@ -65,10 +73,13 @@ async fn running_chaser_wakes_only_its_narrow_subscriber() {
     };
     assert_eq!(event.sequence, 3);
     assert_eq!(event.object, Some(object));
-    let wire::EventPayload::PlaybackCueTransition { transition } = event.payload else {
-        panic!("expected a Playback Cue transition");
+    let wire::EventPayload::PlaybackRuntimeChanged { change } = event.payload else {
+        panic!("expected a Playback runtime change");
     };
-    assert_eq!(transition.cause, wire::PlaybackTransitionCause::Chaser);
+    assert_eq!(
+        change.transition.map(|transition| transition.cause),
+        Some(light_wire::v2::playback::PlaybackTransitionCause::Chaser)
+    );
 }
 
 #[tokio::test]
@@ -85,12 +96,12 @@ async fn reconnect_gap_repairs_from_an_authoritative_snapshot_cursor() {
     };
     assert_eq!(gap.oldest_available, 2);
     assert_eq!(gap.latest_sequence, 3);
-    let snapshot = playback_snapshot_from(&bus, desk_id, Vec::new);
+    let cursor = wire::EventSnapshotCursor {
+        sequence: bus.latest_sequence(),
+    };
     assert_eq!(
-        stream.repair(snapshot.cursor),
-        wire::EventServerMessage::Repaired {
-            cursor: snapshot.cursor
-        }
+        stream.repair(cursor),
+        wire::EventServerMessage::Repaired { cursor }
     );
 
     let expected = bus.publish(transition_draft(Some(4), Uuid::from_u128(20)));
@@ -101,23 +112,55 @@ async fn reconnect_gap_repairs_from_an_authoritative_snapshot_cursor() {
 }
 
 #[tokio::test]
-async fn snapshot_cursor_precedes_projection_so_concurrent_events_replay() {
-    let bus = EventBus::new(4);
+async fn exact_show_object_subscription_keeps_the_aggregate_event_identity() {
+    let bus = EventBus::new(8);
     let desk_id = Uuid::from_u128(1);
-    let snapshot = playback_snapshot_from(&bus, desk_id, || {
-        bus.publish(transition_draft(Some(2), Uuid::from_u128(20)));
-        Vec::new()
-    });
-
-    assert_eq!(snapshot.cursor.sequence, 0);
-    let EventReplay::Events(events) = bus.replay(
-        snapshot.cursor.sequence,
-        &light_application::EventFilter::for_desk(desk_id),
-    ) else {
-        panic!("cursor captured before projection should remain replayable");
+    let show_id = ShowId(Uuid::from_u128(2));
+    let group_route = wire::EventObject {
+        capability: wire::EventCapability::Show,
+        id: format!("objects:{}:kind:group:object:1", show_id.0),
     };
-    assert_eq!(events.len(), 1);
-    assert_eq!(events[0].sequence, 1);
+    let mut stream = EventStream::subscribe(
+        &bus,
+        desk_id,
+        show_subscription(group_route.clone(), Some(0)),
+    )
+    .unwrap();
+
+    bus.publish(show_objects_draft(
+        show_id,
+        ActiveShowObjectKind::Preset,
+        "2.1",
+    ));
+    bus.publish(show_objects_draft(
+        show_id,
+        ActiveShowObjectKind::Group,
+        "2",
+    ));
+    assert!(stream.subscription.try_next().is_none());
+    let expected = bus.publish(show_objects_draft(
+        show_id,
+        ActiveShowObjectKind::Group,
+        "1",
+    ));
+
+    let Some(wire::EventServerMessage::Event { event }) = stream.next().await else {
+        panic!("the relevant Group batch should be delivered");
+    };
+    assert_eq!(event.sequence, expected.sequence);
+    assert_eq!(
+        event.object,
+        Some(wire::EventObject {
+            capability: wire::EventCapability::Show,
+            id: format!("objects:{}", show_id.0),
+        })
+    );
+    assert!(
+        event
+            .related_objects
+            .as_ref()
+            .is_some_and(|objects| objects.contains(&group_route))
+    );
 }
 
 #[test]
@@ -179,26 +222,80 @@ fn subscription(
     })
 }
 
+fn show_subscription(
+    object: wire::EventObject,
+    after_sequence: Option<u64>,
+) -> Result<wire::EventClientMessage, String> {
+    Ok(wire::EventClientMessage::Subscribe {
+        filter: wire::EventSubscriptionFilter {
+            capabilities: vec![wire::EventCapability::Show],
+            classes: vec![wire::EventClass::Projection],
+            objects: vec![object],
+        },
+        after_sequence,
+        capacity: Some(4),
+        rate_limits: Vec::new(),
+    })
+}
+
+fn show_objects_draft(show_id: ShowId, kind: ActiveShowObjectKind, object_id: &str) -> EventDraft {
+    EventDraft::active_show_objects_changed(
+        &ActionContext::system(Uuid::from_u128(1), ActionSource::System),
+        ActiveShowObjectsChange {
+            show_id,
+            show_revision: Default::default(),
+            changes: vec![ActiveShowObjectChange {
+                kind,
+                object_id: object_id.into(),
+                object_revision: 1,
+                body: Some(serde_json::json!({})),
+                deleted: false,
+            }],
+        },
+    )
+}
+
 fn transition_draft(playback_number: Option<u16>, cue_list_id: Uuid) -> EventDraft {
-    EventDraft::playback_transition(
+    EventDraft::playback_runtime_changed(
         None,
-        AppTransition {
-            playback_number,
-            cue_list_id,
-            previous: Some(AppCue {
-                id: Uuid::from_u128(1),
-                number: 1.0,
+        PlaybackRuntimeChange {
+            projection: PlaybackRuntimeProjection {
+                scope: test_playback_scope(),
+                requested: playback_number.map_or(
+                    PlaybackRuntimeIdentity::CueList(CueListId(cue_list_id)),
+                    PlaybackRuntimeIdentity::Playback,
+                ),
+                playback_number,
+                target: PlaybackTargetProjection::CueList {
+                    cue_list_id: CueListId(cue_list_id),
+                    runtime: None,
+                },
+            },
+            transition: Some(AppTransition {
+                playback_number,
+                cue_list_id,
+                previous: Some(AppCue {
+                    id: Uuid::from_u128(1),
+                    number: 1.0,
+                }),
+                current: Some(AppCue {
+                    id: Uuid::from_u128(2),
+                    number: 2.0,
+                }),
+                cause: PlaybackTransitionCause::Chaser,
+                advanced_steps: 1,
             }),
-            current: Some(AppCue {
-                id: Uuid::from_u128(2),
-                number: 2.0,
-            }),
-            cause: PlaybackTransitionCause::Chaser,
-            advanced_steps: 1,
         },
         EventSource::Runtime,
         None,
     )
+}
+
+fn test_playback_scope() -> PlaybackShowScope {
+    PlaybackShowScope {
+        show_id: Uuid::from_u128(10),
+        show_revision: 1,
+    }
 }
 
 fn chaser() -> CueList {

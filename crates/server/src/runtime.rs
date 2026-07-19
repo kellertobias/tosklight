@@ -19,6 +19,7 @@ mod http_router;
 mod matter;
 mod output_scheduler;
 mod playback_service;
+mod playback_v2;
 mod startup_options;
 mod startup_state;
 
@@ -44,7 +45,7 @@ use base64::{
 use bytes::Bytes;
 use light_application::{
     ActiveShowService, EventBus, PlaybackAddress, PlaybackExecution, PlaybackService,
-    ProgrammingService, ShowPatchService, publish_automatic_playback_events,
+    PlaybackShowScope, ProgrammingService, ShowPatchService, publish_automatic_playback_events,
 };
 use light_control::speed::{
     SoundObservation, SoundToLightConfig, SpeedGroupController, SpeedSnapshot,

@@ -283,6 +283,58 @@ fn preload_rejects_a_late_invalid_action_without_publishing_earlier_actions() {
 }
 
 #[test]
+fn committed_preload_publishes_the_exact_typed_playback_change() {
+    let (state, data_dir) = test_state();
+    let user = state.desk.lock().users().unwrap().remove(0);
+    let session = Session {
+        id: SessionId::new(),
+        user: user.clone(),
+        token: "typed-preload".into(),
+        connected: true,
+        desk: test_control_desk(),
+    };
+    state.programmers.start(session.id, user.id);
+    state
+        .engine
+        .replace_snapshot(preload_atomicity_test_snapshot())
+        .unwrap();
+    assert!(state.programmers.arm_preload(session.id, true));
+    assert!(state.programmers.queue_preload_playback_action(
+        session.id,
+        1,
+        "go".into(),
+        "physical".into(),
+    ));
+
+    let response = commit_preload(&state, &session).unwrap();
+
+    assert_eq!(response["playback_event_sequences"], serde_json::json!([1]));
+    let light_application::EventReplay::Events(events) = state.application_events.replay(
+        0,
+        &light_application::EventFilter::default(),
+    ) else {
+        panic!("committed Preload should retain its semantic event");
+    };
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        events[0].source,
+        light_application::EventSource::Action(light_application::ActionSource::UserInterface)
+    );
+    let light_application::ApplicationEvent::Playback(
+        light_application::PlaybackEvent::RuntimeChanged(change),
+    ) = &events[0].payload
+    else {
+        panic!("expected a typed Playback runtime change");
+    };
+    assert_eq!(change.projection.playback_number, Some(1));
+    assert_eq!(
+        change.transition.as_ref().map(|transition| transition.cause),
+        Some(light_application::PlaybackTransitionCause::Go)
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
 fn staged_preload_applies_exclusions_without_mutating_the_source_engine() {
     let (state, data_dir) = test_state();
     state

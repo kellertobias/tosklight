@@ -1,5 +1,7 @@
 //! Translation between transport-independent application events and v2 wire DTOs.
 
+mod selective_import;
+
 use light_application as application;
 use light_wire::v2::events as wire;
 use uuid::Uuid;
@@ -67,7 +69,7 @@ pub(super) fn wire_delivery(
 ) -> wire::EventServerMessage {
     match delivery {
         application::SubscriptionDelivery::Event(event) => wire::EventServerMessage::Event {
-            event: wire_event(&event),
+            event: Box::new(wire_event(&event)),
         },
         application::SubscriptionDelivery::Gap(gap) => {
             wire::EventServerMessage::Gap { gap: wire_gap(gap) }
@@ -90,6 +92,8 @@ fn wire_event(event: &application::EventEnvelope) -> wire::EventEnvelope {
         desk_id: event.desk_id,
         class: wire_class(event.class),
         object: event.object.as_ref().map(wire_object),
+        related_objects: (!event.related_objects.is_empty())
+            .then(|| event.related_objects.iter().map(wire_object).collect()),
         source: wire_source(event.source),
         correlation_id: event.correlation_id,
         delivery: wire_delivery_policy(event.delivery),
@@ -163,10 +167,15 @@ fn wire_action_source(source: application::ActionSource) -> wire::EventActionSou
 
 fn wire_payload(payload: &application::ApplicationEvent, sequence: u64) -> wire::EventPayload {
     match payload {
-        application::ApplicationEvent::Playback(application::PlaybackEvent::CueTransition(
-            transition,
-        )) => wire::EventPayload::PlaybackCueTransition {
-            transition: wire_transition(transition),
+        application::ApplicationEvent::Playback(application::PlaybackEvent::RuntimeChanged(
+            change,
+        )) => wire::EventPayload::PlaybackRuntimeChanged {
+            change: super::super::playback_v2::runtime_change(change),
+        },
+        application::ApplicationEvent::Desk(application::DeskEvent::PlaybackViewChanged(
+            projection,
+        )) => wire::EventPayload::PlaybackViewChanged {
+            projection: super::super::playback_v2::desk_projection(*projection),
         },
         application::ApplicationEvent::Show(application::ShowEvent::PatchChanged(change)) => {
             wire::EventPayload::ShowPatchChanged {
@@ -183,6 +192,11 @@ fn wire_payload(payload: &application::ApplicationEvent, sequence: u64) -> wire:
                 change: wire_show_objects_change(change),
             }
         }
+        application::ApplicationEvent::Show(application::ShowEvent::SelectiveImportApplied(
+            change,
+        )) => wire::EventPayload::SelectiveImportApplied {
+            change: Box::new(selective_import::wire_change(change)),
+        },
     }
 }
 
@@ -242,132 +256,5 @@ fn wire_output_route(route: &light_output::OutputRoute) -> wire::OutputRoute {
     }
 }
 
-fn wire_transition(transition: &application::PlaybackCueTransition) -> wire::PlaybackCueTransition {
-    wire::PlaybackCueTransition {
-        playback_number: transition.playback_number,
-        cue_list_id: transition.cue_list_id,
-        previous: transition.previous.as_ref().map(wire_cue),
-        current: transition.current.as_ref().map(wire_cue),
-        cause: wire_cause(transition.cause),
-        advanced_steps: transition.advanced_steps,
-    }
-}
-
-fn wire_cue(cue: &application::CueReference) -> wire::CueReference {
-    wire::CueReference {
-        id: cue.id,
-        number: cue.number,
-    }
-}
-
-fn wire_cause(cause: application::PlaybackTransitionCause) -> wire::PlaybackTransitionCause {
-    use application::PlaybackTransitionCause as App;
-    match cause {
-        App::Go => wire::PlaybackTransitionCause::Go,
-        App::Back => wire::PlaybackTransitionCause::Back,
-        App::Jump => wire::PlaybackTransitionCause::Jump,
-        App::Chaser => wire::PlaybackTransitionCause::Chaser,
-        App::Follow => wire::PlaybackTransitionCause::Follow,
-        App::Wait => wire::PlaybackTransitionCause::Wait,
-        App::Timecode => wire::PlaybackTransitionCause::Timecode,
-    }
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use light_application::{
-        ActionContext, ActionSource, ActiveShowObjectChange, ActiveShowObjectKind,
-        ActiveShowObjectsChange, EventBus, EventDraft, PatchChange,
-    };
-    use light_core::ShowId;
-
-    #[test]
-    fn patch_event_delta_uses_the_authoritative_envelope_sequence() {
-        let bus = EventBus::new(4);
-        let context = ActionContext::operator(
-            Uuid::from_u128(1),
-            Uuid::from_u128(2),
-            Uuid::from_u128(3),
-            ActionSource::Http,
-        );
-        let show_id = ShowId(Uuid::from_u128(4));
-        let event = bus.publish(EventDraft::patch_changed(
-            &context,
-            PatchChange {
-                show_id,
-                show_revision: Default::default(),
-                patch_revision: Default::default(),
-                fixtures: Vec::new(),
-                removed_fixture_ids: Vec::new(),
-                profile_revisions: Vec::new(),
-            },
-        ));
-
-        let wire::EventServerMessage::Event { event } =
-            wire_delivery(application::SubscriptionDelivery::Event(event))
-        else {
-            panic!("expected an event delivery");
-        };
-        let wire::EventPayload::ShowPatchChanged { delta } = event.payload else {
-            panic!("expected a show Patch event");
-        };
-        assert_eq!(event.sequence, 1);
-        assert_eq!(delta.show_id, show_id.0);
-        assert_eq!(delta.event_sequence, Some(event.sequence));
-    }
-
-    #[test]
-    fn show_object_batch_keeps_one_event_and_targeted_raw_deltas() {
-        let bus = EventBus::new(4);
-        let context = ActionContext::operator(
-            Uuid::from_u128(1),
-            Uuid::from_u128(2),
-            Uuid::from_u128(3),
-            ActionSource::Osc,
-        );
-        let show_id = ShowId(Uuid::from_u128(4));
-        let event = bus.publish(EventDraft::active_show_objects_changed(
-            &context,
-            ActiveShowObjectsChange {
-                show_id,
-                show_revision: Default::default(),
-                changes: vec![ActiveShowObjectChange {
-                    kind: ActiveShowObjectKind::CueList,
-                    object_id: Uuid::from_u128(7).to_string(),
-                    object_revision: 3,
-                    body: Some(serde_json::json!({
-                        "id":Uuid::from_u128(7),
-                        "cues":[{"id":Uuid::from_u128(8),"future":true}]
-                    })),
-                    deleted: false,
-                }],
-            },
-        ));
-
-        let wire::EventServerMessage::Event { event } =
-            wire_delivery(application::SubscriptionDelivery::Event(event))
-        else {
-            panic!("expected an event delivery");
-        };
-        let wire::EventPayload::ShowObjectsChanged { change } = event.payload else {
-            panic!("expected a show-object event");
-        };
-        assert_eq!(event.sequence, 1);
-        assert_eq!(
-            event.source,
-            wire::EventSource::Action {
-                source: wire::EventActionSource::Osc
-            }
-        );
-        assert_eq!(event.correlation_id, Some(context.correlation_id));
-        assert_eq!(change.show_id, show_id.0);
-        assert_eq!(change.show_revision, 0);
-        assert_eq!(change.changes[0].kind, wire::ShowObjectKind::CueList);
-        assert_eq!(change.changes[0].object_id, Uuid::from_u128(7).to_string());
-        assert_eq!(
-            change.changes[0].body.as_ref().unwrap()["cues"][0]["future"],
-            true
-        );
-    }
-}
+mod tests;

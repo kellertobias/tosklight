@@ -19,7 +19,7 @@ fn test_state() -> (AppState, PathBuf) {
             ws_connections: Arc::new(Mutex::new(HashMap::new())),
             programmers: programmers.clone(),
             programming: ProgrammingService::new(programmers),
-            playback_service: PlaybackService::default(),
+            playback_service: PlaybackService::new(application_events.clone()),
             engine,
             highlight: Arc::new(HighlightRegistry::default()),
             patch_preview_highlights: Arc::default(),

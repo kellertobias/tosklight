@@ -45,8 +45,6 @@ export type EventDeliveryPolicy = "lossless" | "replaceable";
 
 export type EventActionSource = "user_interface" | "keyboard" | "osc" | "http" | "midi" | "matter" | "cue" | "timecode" | "scheduler" | "macro" | "system";
 
-export type PlaybackTransitionCause = "go" | "back" | "jump" | "chaser" | "follow" | "wait" | "timecode";
-
 export type EventObject = { capability: EventCapability, id: string, };
 
 export type EventSubscriptionFilter = { capabilities: Array<EventCapability>, classes: Array<EventClass>, objects: Array<EventObject>, };
@@ -59,9 +57,51 @@ export type SequenceGap = { after_sequence: number, oldest_available: number, la
 
 export type EventSource = { "kind": "runtime" } | { "kind": "action", source: EventActionSource, };
 
-export type CueReference = { id: string, number: number, };
+export type PlaybackSurface = "virtual" | "physical";
 
-export type PlaybackCueTransition = { playback_number: number | null, cue_list_id: string, previous: CueReference | null, current: CueReference | null, cause: PlaybackTransitionCause, advanced_steps: number, };
+export type PlaybackAddress = { "kind": "cue_list", cue_list_id: string, } | { "kind": "playback", playback_number: number, } | { "kind": "current_page", slot: number, } | { "kind": "explicit_page", page: number, slot: number, };
+
+export type ResolvedPlaybackAddress = { "kind": "cue_list", cue_list_id: string, } | { "kind": "playback", playback_number: number, page: number | null, slot: number | null, };
+
+export type PlaybackAction = { "type": "go", pressed: boolean, } | { "type": "back", pressed: boolean, } | { "type": "pause", pressed: boolean, } | { "type": "release" } | { "type": "on", pressed: boolean, } | { "type": "off", pressed: boolean, } | { "type": "toggle", pressed: boolean, } | { "type": "fast_forward", pressed: boolean, } | { "type": "fast_rewind", pressed: boolean, } | { "type": "flash", pressed: boolean, } | { "type": "temp", pressed: boolean, } | { "type": "swap", pressed: boolean, } | { "type": "select", pressed: boolean, } | { "type": "select_contents", pressed: boolean, } | { "type": "select_dereferenced", pressed: boolean, } | { "type": "learn", pressed: boolean, } | { "type": "double", pressed: boolean, } | { "type": "half", pressed: boolean, } | { "type": "blackout", pressed: boolean, } | { "type": "pause_dynamics", pressed: boolean, } | { "type": "none", pressed: boolean, } | { "type": "master", value: number, } | { "type": "go_to", cue_number: number, } | { "type": "load", cue_number: number, } | { "type": "crossfade", enabled: boolean, } | { "type": "temporary", enabled: boolean, pressed: boolean, } | { "type": "configured_button", number: number, pressed: boolean, };
+
+export type PendingPlaybackAction = "toggle" | "go" | "back" | "off" | "on" | "temporary_on" | "temporary_off";
+
+export type PlaybackOutcome = { "status": "applied" } | { "status": "no_change" } | { "status": "captured", pending: PendingPlaybackAction, };
+
+export type PlaybackDurability = "durable" | "persistence_pending";
+
+export type PlaybackRuntimeIdentity = { "kind": "playback", playback_number: number, } | { "kind": "cue_list", cue_list_id: string, };
+
+export type PlaybackShowScope = { show_id: string, show_revision: number, };
+
+export type PlaybackCueReference = { id: string, number: number, };
+
+export type ManualXFadeDirection = "towards_high" | "towards_low";
+
+export type SoundLossReason = "source_unavailable" | "no_usable_signal" | "low_confidence" | "tempo_outside_range" | "waiting_for_analysis";
+
+export type SpeedSource = "manual" | "sound" | "held_sound" | "manual_fallback";
+
+export type SoundStatus = { "status": "disabled" } | { "status": "active", detected_bpm: number, confidence: number, } | { "status": "holding", reason: SoundLossReason, remaining_millis: number, } | { "status": "manual_fallback", reason: SoundLossReason, };
+
+export type CueListRuntimeProjection = { cue_index: number, previous_index: number | null, current: PlaybackCueReference | null, loaded: PlaybackCueReference | null, normal_next: PlaybackCueReference | null, effective_next: PlaybackCueReference | null, effective_next_is_loaded: boolean, paused: boolean, activated_at: string, master: number, fader_position: number, fader_pickup_required: boolean, flash: boolean, temporary: boolean, temporary_active: boolean, temporary_master: number, swap_active: boolean, enabled: boolean, transition_timing_bypassed: boolean, manual_xfade_position: number, manual_xfade_direction: ManualXFadeDirection, manual_xfade_progress: number, };
+
+export type SpeedGroupRuntimeProjection = { manual_bpm: number, sound_bpm: number | null, effective_bpm: number, source: SpeedSource, sound_status: SoundStatus, paused: boolean, phase_advancing: boolean, speed_master_scale: number, sound_multiplier: number, source_available: boolean, usable_signal: boolean, input_level: number, selected_band_level: number, synchronized_with: number | null, phase_origin_millis: number, beat_phase: number, };
+
+export type GrandMasterRuntimeProjection = { level: number, effective_level: number, blackout: boolean, flash_active: boolean, dynamics_paused: boolean, };
+
+export type PlaybackTargetProjection = { "target": "missing" } | { "target": "cue_list", cue_list_id: string, runtime: CueListRuntimeProjection | null, } | { "target": "group", group_id: string, master: number, flash_level: number, } | { "target": "speed_group", group: string, runtime: SpeedGroupRuntimeProjection, } | { "target": "grand_master", runtime: GrandMasterRuntimeProjection, } | { "target": "programmer_fade", millis: number, } | { "target": "cue_fade", millis: number, };
+
+export type PlaybackRuntimeProjection = { scope: PlaybackShowScope, requested: PlaybackRuntimeIdentity, playback_number: number | null, } & ({ "target": "missing" } | { "target": "cue_list", cue_list_id: string, runtime: CueListRuntimeProjection | null, } | { "target": "group", group_id: string, master: number, flash_level: number, } | { "target": "speed_group", group: string, runtime: SpeedGroupRuntimeProjection, } | { "target": "grand_master", runtime: GrandMasterRuntimeProjection, } | { "target": "programmer_fade", millis: number, } | { "target": "cue_fade", millis: number, });
+
+export type PlaybackDeskProjection = { scope: PlaybackShowScope, desk_id: string, active_page: number, selected_playback: number | null, };
+
+export type PlaybackTransitionCause = "go" | "back" | "jump" | "chaser" | "follow" | "wait" | "timecode";
+
+export type PlaybackCueTransition = { playback_number: number | null, cue_list_id: string, previous: PlaybackCueReference | null, current: PlaybackCueReference | null, cause: PlaybackTransitionCause, advanced_steps: number, };
+
+export type PlaybackRuntimeChange = { projection: PlaybackRuntimeProjection, transition: PlaybackCueTransition | null, };
 
 export type OutputProtocol = "art_net" | "sacn";
 
@@ -77,17 +117,51 @@ export type ShowObjectChange = { kind: ShowObjectKind, object_id: string, object
 
 export type ShowObjectsChange = { show_id: string, show_revision: number, changes: Array<ShowObjectChange>, };
 
-export type EventPayload = { "type": "playback_cue_transition", transition: PlaybackCueTransition, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, };
+export type SelectiveImportObjectChange = { kind: string, object_id: string, object_revision: number, body: unknown, };
 
-export type EventEnvelope = { sequence: number, occurred_at: string, desk_id: string | null, class: EventClass, object: EventObject | null, source: EventSource, correlation_id: string | null, delivery: EventDeliveryPolicy, payload: EventPayload, };
+export type FixtureProfileIdentity = { profile_id: string, revision: number, };
+
+export type ManagedAssetReference = { asset_id: string, revision: number, };
+
+export type SelectiveImportChange = { show_id: string, show_revision: number, objects: Array<SelectiveImportObjectChange>, profile_revisions: Array<FixtureProfileIdentity>, managed_assets: Array<ManagedAssetReference>, };
+
+export type EventPayload = { "type": "playback_runtime_changed", change: PlaybackRuntimeChange, } | { "type": "playback_view_changed", projection: PlaybackDeskProjection, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, } | { "type": "selective_import_applied", change: SelectiveImportChange, };
+
+export type EventEnvelope = { sequence: number, occurred_at: string, desk_id: string | null, class: EventClass, object: EventObject | null, related_objects?: Array<EventObject> | null, source: EventSource, correlation_id: string | null, delivery: EventDeliveryPolicy, payload: EventPayload, };
 
 export type EventClientMessage = { "type": "subscribe", filter: EventSubscriptionFilter, after_sequence?: number | null, capacity?: number | null, rate_limits: Array<EventRateLimit>, } | { "type": "repair", cursor: EventSnapshotCursor, };
 
 export type EventServerMessage = { "type": "ready", cursor: EventSnapshotCursor, } | { "type": "event", event: EventEnvelope, } | { "type": "gap", gap: SequenceGap, } | { "type": "repaired", cursor: EventSnapshotCursor, } | { "type": "error", error: string, };
 
-export type PlaybackStateSnapshot = { object: EventObject, playback_number: number | null, cue_list_id: string, current: CueReference | null, loaded: CueReference | null, paused: boolean, enabled: boolean, };
+export type PlaybackActionRequest = {
+/**
+ * Idempotency is retained for the 4096 most-recent IDs in the live server process. After
+ * eviction or restart, clients repair from a narrow runtime snapshot before retrying.
+ */
+request_id: string, address: PlaybackAddress, action: PlaybackAction,
+/**
+ * Selects virtual or physical preload-capture semantics. The HTTP source itself is always
+ * recorded by the server and cannot be supplied by a caller.
+ */
+surface: PlaybackSurface, };
 
-export type PlaybackEventSnapshot = { desk_id: string, cursor: EventSnapshotCursor, playbacks: Array<PlaybackStateSnapshot>, };
+export type PlaybackActionOutcome = { request_id: string, correlation_id: string, requested: PlaybackAddress, resolved: ResolvedPlaybackAddress, outcome: PlaybackOutcome, durability: PlaybackDurability, projection: PlaybackRuntimeProjection, desk: PlaybackDeskProjection | null,
+/**
+ * Exact sequence of the emitted semantic event; absent for no-change or captured actions.
+ */
+event_sequence?: number | null,
+/**
+ * Sequence of a separate desk-local view event when selection changed.
+ */
+desk_event_sequence?: number | null, replayed: boolean, };
+
+export type PlaybackErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
+
+export type PlaybackErrorResponse = { kind: PlaybackErrorKind, error: string, retryable: boolean, };
+
+export type PlaybackRuntimeSnapshotRequest = { identities: Array<PlaybackRuntimeIdentity>, };
+
+export type PlaybackRuntimeSnapshot = { cursor: EventSnapshotCursor, desk: PlaybackDeskProjection, projections: Array<PlaybackRuntimeProjection>, };
 
 export type PatchDirectControlProtocol = "citp";
 
