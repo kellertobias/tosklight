@@ -1,15 +1,16 @@
 # Major Refactoring Progress
 
-Estimated progress: **78%**
+Estimated progress: **79%**
 
-Estimated ETA: **10–14 focused implementation slices, or roughly 2–3 weeks of active
+Estimated ETA: **9–13 focused implementation slices, or roughly 2–3 weeks of active
 refactoring**, to repository-wide acceptance.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-19 after the end-to-end Programmer-values client and mutation contract.
+Last updated: 2026-07-19 after the capture-safe end-to-end Programmer-values client and mutation
+contract.
 
 ## Guardrails
 
@@ -150,7 +151,11 @@ Last updated: 2026-07-19 after the end-to-end Programmer-values client and mutat
   response/event order, rollback, replay, no-change results, cursor repair, authority replacement,
   and late responses. Action-only consumers stay dormant; the first mounted values view performs
   the narrow snapshot/subscription, and scoped events neither request bootstrap nor rerender an
-  unrelated global consumer.
+  unrelated global consumer. A separate exact-user capture-mode projection now supplies the atomic
+  revision precondition that prevents a normal write from crossing into active Preload capture.
+  Capture changes, Programmer replacement, and session recreation preserve monotonic authority,
+  invalidate stale replay entries, and publish at most one values event and one capture event per
+  real transition without admitting modes or Preload content into the values projection.
 - [x] Migrated every parameter-bank family, fader, encoder, range, release, and direct action onto
   the scoped ordered selection projection. Fixture membership uses sets, streamed peer or OSC
   selection immediately retargets writes, and inactive parameter views perform no selection
@@ -254,9 +259,10 @@ Last updated: 2026-07-19 after the end-to-end Programmer-values client and mutat
   Programmer-values slice did not change it.
 - The earlier full-tree design-goal report was 52 files above 400 lines and 3,479 functions above
   20. The two remaining in-scope hotspots named by that report have since been split: Programming
-  service is now 380 lines and the command HTTP adapter is 304 lines. The complete source-size
-  ratchet was not rerun during this immediate wrap-up; planning/test sources and the unrelated
-  Dynamics Editor experiment accounted for the other large files in the earlier report.
+  service is now 399 lines and the command HTTP adapter is 304 lines. The expanded server feature
+  boundary was split into a 113-line composition hook and an 81-line Programmer-values helper.
+  The source-size ratchet reports no changed production function above 150 lines and only the
+  pre-existing committed Dynamics Editor experiment at 1,382 lines.
 - Focused application, server, wire, frontend, architecture, source-size, MVR, File Manager,
   Playback, Preload, Patch, Output, event, shared-control, Stage 3D, build, and strict Clippy checks
   have passed for their committed slices. The latest command-line slice passed 18 Programming
@@ -276,20 +282,27 @@ Last updated: 2026-07-19 after the end-to-end Programmer-values client and mutat
   full frontend typecheck. The parameter-bank migration passes 17 focused tests across its legacy
   behavior and streamed selection suites. The modal migration passes 13 focused tests including
   ordered streamed writes and closed-view teardown. Both slices pass the full frontend typecheck.
-- The completed backend Programmer-values slice passes `cargo fmt --all -- --check`; all 56
-  `light-programmer` tests; all 194 `light-application` tests; all 21 `light-wire` unit tests plus
-  generated-contract verification; all 8 focused server Programmer-values tests; the focused v1
-  compatibility-category test; and `cargo check -p light-server --no-default-features`. Fixture and
-  Group set/release, one-action batch and clear, exact no-op/event behavior, replay, revision
-  conflict, user ownership, same-user multi-desk sharing, foreign-user rejection, and timing/order
-  preservation are covered. Wire tests print the existing non-fatal `ts-rs`
+- The completed backend Programmer-values slice passes `cargo fmt --all -- --check`; all 60
+  `light-programmer` tests; all 201 `light-application` tests; all 24 `light-wire` unit tests plus
+  generated-contract verification; all 8 focused server Programmer-values tests; all 6 focused
+  capture-mode tests; the lifecycle deletion/recreation regression; the 6 active-Preload tests;
+  the transient compatibility regression; and
+  `cargo check -p light-server --no-default-features`. The full server library run has 234 passing
+  tests and 1 ignored test; only the known sandbox-blocked CITP socket test fails with the sandbox's
+  `Operation not permitted` error. Fixture and Group set/release, one-action batch and clear, exact
+  no-op/event behavior, replay, rollback and revision conflict, capture/write concurrency,
+  lifecycle replacement, user ownership, same-user multi-desk sharing, foreign-user rejection, and
+  timing/order preservation are covered. Wire tests print the existing non-fatal `ts-rs`
   `deny_unknown_fields` warning.
-- The production frontend Programmer-values slice passes 59 focused tests across strict wire
-  decoding, HTTP/WebSocket transport, prediction, store, session, writer, mounted view, and normal
-  `ServerProvider` composition, plus the full frontend typecheck. The focused tests cover rollback,
-  safe exact-request replay, no-change results, both response/event orders, cursor-gap repair,
-  server/session replacement, late-response isolation, exact-user subscription, first-view
-  dormancy, absence of a broad bootstrap request, and suppression of unrelated context rerenders.
+- The production frontend Programmer-values and capture-authority slice passes 99 focused tests
+  across strict wire decoding, HTTP/WebSocket transport, prediction, stores, sessions, writer,
+  mounted views, and normal `ServerProvider` composition, plus the full frontend typecheck and
+  scoped Biome checks. The focused tests cover rollback, safe exact-request replay, no-change
+  results, both response/event orders, capture and values cursor-gap repair, concurrent repair
+  joining, server/session replacement, late-response isolation, exact-user subscriptions,
+  first-view dormancy, refusal while authority is loading or active Preload captures Programmer,
+  absence of a broad bootstrap request, and suppression of unrelated context rerenders. The
+  extracted boundary composition passed its focused 7-test rerun after the size fix.
   `git diff --check` is clean. The complete frontend/workspace suites and real desktop path were not
   rerun for this focused slice.
 - The most recent pre-wrap complete frontend suite passed all 811 tests and its production build;
@@ -300,7 +313,12 @@ Last updated: 2026-07-19 after the end-to-end Programmer-values client and mutat
 
 - The completed slice establishes the end-to-end normal Programmer-values contract from typed
   application mutation through authenticated v2 transport to the dormant production provider and
-  optimistic frontend writer. It does not migrate the broad production reader/writer population.
+  optimistic frontend writer. Its separate capture authority makes routing races explicit and
+  repairs both scopes without folding Preload or modes into normal values. It does not migrate the
+  broad production reader/writer population.
+- Lifecycle deletion/recreation now preserves monotonic exact-user values and capture revisions and
+  invalidates old replays. The general Programmer ownership/lifecycle projection named in the
+  remaining architecture work is still broader than this narrowly required replacement repair.
 - No Patch/setup selection cleanup or public test-DSL refactoring was started in this slice.
 - Recommended next slice: migrate the first coherent production Programmer-values consumer cohort
   (parameter controls, faders, and encoders) onto the scoped values actions/view, then retire only
