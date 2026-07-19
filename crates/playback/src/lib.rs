@@ -3,6 +3,7 @@
 
 mod arbitration;
 mod automatic;
+mod compiled;
 mod contribution;
 mod controls;
 mod cue_tracking;
@@ -35,7 +36,8 @@ use uuid::Uuid;
 
 type AttributeAddress = (FixtureId, AttributeKey);
 
-pub(crate) use model::cue::{apply_changes, cue_completion_millis, effective_chaser_step_millis};
+pub(crate) use compiled::{CompiledAttribute, CompiledCueList};
+pub(crate) use model::cue::{cue_completion_millis, effective_chaser_step_millis};
 pub(crate) use model::runtime::{
     PlaybackKey, TemporaryPlaybackKind, advance_chaser_steps, new_active_playback,
     reset_manual_transition,

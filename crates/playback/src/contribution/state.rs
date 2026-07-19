@@ -1,15 +1,23 @@
 use super::ContributionContext;
 use crate::*;
 
+pub(super) enum PreviousState {
+    Tracked(usize),
+    Deleted(HashMap<AttributeAddress, AttributeValue>),
+    Empty,
+}
+
 pub(super) struct PlaybackFrame<'a> {
     pub(super) playback: &'a ActivePlayback,
     pub(super) cue_list: &'a CueList,
     pub(super) cue: &'a Cue,
+    pub(super) compiled: &'a CompiledCueList,
     pub(super) source: SequenceMasterSource,
     pub(super) sequence_master: f32,
     pub(super) snap_sequence_master: f32,
-    pub(super) target: HashMap<AttributeAddress, AttributeValue>,
-    pub(super) previous: HashMap<AttributeAddress, AttributeValue>,
+    pub(super) target_index: usize,
+    pub(super) target_tracking_wrap: bool,
+    pub(super) previous: PreviousState,
     pub(super) effective_now: DateTime<Utc>,
     pub(super) elapsed: u64,
     pub(super) cue_fade_millis: u64,
@@ -24,9 +32,11 @@ impl<'a> PlaybackFrame<'a> {
         snap_sequence_master: f32,
     ) -> Self {
         let cue_list = &context.engine.cue_lists[&playback.cue_list_id];
+        let compiled = &context.engine.compiled_cue_lists[&playback.cue_list_id];
         let target_index = playback.manual_xfade_to_index.unwrap_or(playback.cue_index);
-        let target = target_state(cue_list, playback, target_index);
-        let previous = previous_state(cue_list, playback);
+        let target_tracking_wrap =
+            playback.tracking_wrap && playback.manual_xfade_to_index.is_none();
+        let previous = previous_state(playback);
         let cue = &cue_list.cues[target_index];
         let effective_now = playback.paused_at.unwrap_or(context.dynamics_now);
         let elapsed = (effective_now - playback.activated_at)
@@ -37,10 +47,12 @@ impl<'a> PlaybackFrame<'a> {
             playback,
             cue_list,
             cue,
+            compiled,
             source,
             sequence_master,
             snap_sequence_master,
-            target,
+            target_index,
+            target_tracking_wrap,
             previous,
             effective_now,
             elapsed,
@@ -55,37 +67,70 @@ impl<'a> PlaybackFrame<'a> {
             self.sequence_master
         }
     }
+
+    pub(super) fn target_value<'b>(
+        &self,
+        attribute: &'b CompiledAttribute,
+    ) -> Option<&'b AttributeValue> {
+        attribute.value(self.target_index, self.target_tracking_wrap)
+    }
+
+    pub(super) fn previous_value<'b>(
+        &'b self,
+        attribute: &'b CompiledAttribute,
+    ) -> Option<&'b AttributeValue> {
+        match &self.previous {
+            PreviousState::Tracked(index) => attribute.value(*index, false),
+            PreviousState::Deleted(values) => {
+                values.get(&(attribute.fixture_id(), attribute.attribute().clone()))
+            }
+            PreviousState::Empty => None,
+        }
+    }
+
+    pub(super) fn target_value_for(
+        &self,
+        fixture_id: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<&AttributeValue> {
+        self.compiled.value(
+            fixture_id,
+            attribute,
+            self.target_index,
+            self.target_tracking_wrap,
+        )
+    }
+
+    pub(super) fn deleted_previous(&self) -> Option<&HashMap<AttributeAddress, AttributeValue>> {
+        match &self.previous {
+            PreviousState::Deleted(values) => Some(values),
+            _ => None,
+        }
+    }
+
+    pub(super) fn relevant_attributes(&self) -> &[CompiledAttribute] {
+        if self.target_tracking_wrap || matches!(&self.previous, PreviousState::Deleted(_)) {
+            return self.compiled.attributes();
+        }
+        let latest_index = match &self.previous {
+            PreviousState::Tracked(index) => self.target_index.max(*index),
+            PreviousState::Empty | PreviousState::Deleted(_) => self.target_index,
+        };
+        self.compiled.attributes_through(latest_index)
+    }
 }
 
-fn target_state(
-    cue_list: &CueList,
-    playback: &ActivePlayback,
-    target_index: usize,
-) -> HashMap<AttributeAddress, AttributeValue> {
-    if !playback.tracking_wrap || playback.manual_xfade_to_index.is_some() {
-        return cue_list.state_at_index(target_index);
-    }
-    let mut state = cue_list.state_at_index(cue_list.cues.len() - 1);
-    for cue in cue_list.cues.iter().take(target_index + 1) {
-        apply_changes(&mut state, &cue.changes);
-    }
-    state
-}
-
-fn previous_state(
-    cue_list: &CueList,
-    playback: &ActivePlayback,
-) -> HashMap<AttributeAddress, AttributeValue> {
+fn previous_state(playback: &ActivePlayback) -> PreviousState {
     if let Some(index) = playback.manual_xfade_from_index {
-        return cue_list.state_at_index(index);
+        return PreviousState::Tracked(index);
     }
     if let Some(source) = &playback.deleted_cue_transition_source {
-        return normalized_deleted_source(source, playback);
+        return PreviousState::Deleted(normalized_deleted_source(source, playback));
     }
     playback
         .previous_index
-        .map(|index| cue_list.state_at_index(index))
-        .unwrap_or_default()
+        .map(PreviousState::Tracked)
+        .unwrap_or(PreviousState::Empty)
 }
 
 fn normalized_deleted_source(

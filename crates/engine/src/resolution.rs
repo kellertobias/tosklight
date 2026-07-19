@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::atomic::Ordering};
 
 use chrono::{DateTime, Utc};
-use light_core::{AttributeKey, AttributeValue, MergeMode, ProgrammerId, TimedValue};
+use light_core::{AttributeKey, MergeMode, ProgrammerId, TimedValue};
 use light_playback::{
     ActivePlayback, AutomaticPlaybackTransition, MoveInBlackCandidate, PlaybackEngine,
     PlaybackTickResult,
@@ -9,8 +9,9 @@ use light_playback::{
 use light_programmer::{GroupDefinition, GroupProgrammerValue, ProgrammerState, resolve_group};
 
 use super::{
-    Engine, EngineContribution, EngineSnapshot, ProgrammerTransitionSource, ResolvedAttributes,
-    RuntimeGeneration, resolve_engine_contributions, value_for_ordered_position,
+    Engine, EngineContribution, EngineContributionResolver, EngineSnapshot,
+    ProgrammerTransitionSource, ResolvedAttributes, ResolvedContributionIndex, RuntimeGeneration,
+    value_for_ordered_position,
 };
 
 struct PlaybackResolution {
@@ -22,6 +23,28 @@ struct PlaybackResolution {
 
 type GroupValues = HashMap<String, HashMap<AttributeKey, GroupProgrammerValue>>;
 type GroupAttributes = HashMap<AttributeKey, GroupProgrammerValue>;
+
+fn programmers_need_underlay(programmers: &[ProgrammerState]) -> bool {
+    programmers.iter().any(|programmer| {
+        programmer
+            .values
+            .iter()
+            .chain(
+                programmer
+                    .transient_values
+                    .iter()
+                    .flat_map(|action| &action.values),
+            )
+            .chain(&programmer.preload_active)
+            .any(|value| value.fade)
+            || programmer
+                .group_values
+                .values()
+                .chain(programmer.preload_group_active.values())
+                .flat_map(HashMap::values)
+                .any(|value| value.fade)
+    })
+}
 
 impl Engine {
     /// Advance scheduler-owned runtime exactly once on the authoritative output path.
@@ -52,26 +75,31 @@ impl Engine {
         let snapshot = generation.snapshot();
         let groups = generation.groups();
         let mut playback = self.resolve_playback(generation, now, advance_playback);
-        let underlay = resolve_engine_contributions(playback.contributions.clone()).values;
-        playback
-            .contributions
-            .extend(self.programmer_contributions(generation, now, groups, &underlay));
-        playback
-            .contributions
-            .extend(group_contributions(snapshot, groups, now));
-        let base = resolve_engine_contributions(playback.contributions.clone());
-        playback.contributions.extend(
-            self.move_in_black_contributions(
-                generation,
-                playback.move_in_black_candidates,
-                &playback.active_playbacks,
-                &base.values,
-                now,
-            )
-            .into_iter()
-            .map(EngineContribution::unscaled),
+        let programmers = self.programmers.active();
+        let programmer = {
+            let underlay = programmers_need_underlay(&programmers)
+                .then(|| ResolvedContributionIndex::new(&playback.contributions));
+            self.programmer_contributions(programmers, generation, now, groups, underlay.as_ref())
+        };
+        playback.contributions.extend(programmer);
+        let mut resolver = EngineContributionResolver::new(playback.contributions);
+        add_group_contributions(&mut resolver, snapshot, groups, now);
+        let base = if playback.move_in_black_candidates.is_empty() {
+            HashMap::new()
+        } else {
+            resolver.values()
+        };
+        let move_in_black = self.move_in_black_contributions(
+            generation,
+            playback.move_in_black_candidates,
+            &playback.active_playbacks,
+            &base,
+            now,
         );
-        let mut resolved = resolve_engine_contributions(playback.contributions);
+        for contribution in move_in_black {
+            resolver.add_unscaled(contribution);
+        }
+        let mut resolved = resolver.finish();
         resolved.automatic_playback_transitions = playback.automatic_transitions;
         resolved
     }
@@ -118,13 +146,13 @@ fn playback_resolution(
 impl Engine {
     fn programmer_contributions(
         &self,
+        programmers: Vec<ProgrammerState>,
         generation: &RuntimeGeneration,
         now: DateTime<Utc>,
         groups: &HashMap<String, GroupDefinition>,
-        underlay: &HashMap<(light_core::FixtureId, AttributeKey), AttributeValue>,
+        underlay: Option<&ResolvedContributionIndex<'_>>,
     ) -> Vec<EngineContribution> {
-        self.programmers
-            .active()
+        programmers
             .into_iter()
             .flat_map(|programmer| {
                 self.resolve_programmer(programmer, generation, now, groups, underlay)
@@ -139,7 +167,7 @@ impl Engine {
         generation: &RuntimeGeneration,
         now: DateTime<Utc>,
         groups: &HashMap<String, GroupDefinition>,
-        underlay: &HashMap<(light_core::FixtureId, AttributeKey), AttributeValue>,
+        underlay: Option<&ResolvedContributionIndex<'_>>,
     ) -> Vec<TimedValue> {
         let ProgrammerState {
             id,
@@ -187,14 +215,15 @@ impl Engine {
         value: TimedValue,
         generation: &RuntimeGeneration,
         now: DateTime<Utc>,
-        underlay: &HashMap<(light_core::FixtureId, AttributeKey), AttributeValue>,
+        underlay: Option<&ResolvedContributionIndex<'_>>,
         programmer_id: ProgrammerId,
         source: ProgrammerTransitionSource,
     ) -> TimedValue {
         if !value.fade {
             return value;
         }
-        let underlying = underlay.get(&(value.fixture_id, value.attribute.clone()));
+        let underlying =
+            underlay.and_then(|values| values.value(value.fixture_id, &value.attribute));
         let snap = generation.attribute_is_snap(value.fixture_id, &value.attribute);
         self.faded_programmer_value(value, now, underlying, programmer_id, source, snap)
     }
@@ -207,7 +236,7 @@ impl Engine {
         generation: &RuntimeGeneration,
         now: DateTime<Utc>,
         groups: &HashMap<String, GroupDefinition>,
-        underlay: &HashMap<(light_core::FixtureId, AttributeKey), AttributeValue>,
+        underlay: Option<&ResolvedContributionIndex<'_>>,
         programmer_id: ProgrammerId,
         priority: i16,
     ) -> Vec<TimedValue> {
@@ -246,7 +275,7 @@ impl Engine {
         generation: &RuntimeGeneration,
         now: DateTime<Utc>,
         groups: &HashMap<String, GroupDefinition>,
-        underlay: &HashMap<(light_core::FixtureId, AttributeKey), AttributeValue>,
+        underlay: Option<&ResolvedContributionIndex<'_>>,
         programmer_id: ProgrammerId,
         priority: i16,
     ) -> Vec<TimedValue> {
@@ -313,38 +342,29 @@ fn programmer_winners(values: Vec<TimedValue>) -> Vec<TimedValue> {
         .collect()
 }
 
-fn group_contributions(
+fn add_group_contributions(
+    resolver: &mut EngineContributionResolver,
     snapshot: &EngineSnapshot,
     groups: &HashMap<String, GroupDefinition>,
     now: DateTime<Utc>,
-) -> Vec<EngineContribution> {
-    snapshot
-        .groups
-        .iter()
-        .flat_map(|group| {
-            resolve_group(&group.id, groups)
-                .unwrap_or_default()
-                .into_iter()
-                .flat_map(move |fixture_id| {
-                    group.programming.iter().map(move |(attribute, value)| {
-                        EngineContribution::unscaled(TimedValue {
-                            fixture_id,
-                            attribute: attribute.clone(),
-                            value: value.clone(),
-                            priority: 0,
-                            changed_at: now,
-                            programmer_order: 0,
-                            merge_mode: if attribute.is_intensity() {
-                                MergeMode::Htp
-                            } else {
-                                MergeMode::Ltp
-                            },
-                            fade: false,
-                            fade_millis: None,
-                            delay_millis: None,
-                        })
-                    })
-                })
-        })
-        .collect()
+) {
+    for group in &snapshot.groups {
+        let fixtures = resolve_group(&group.id, groups).unwrap_or_default();
+        for fixture_id in fixtures {
+            for (attribute, value) in &group.programming {
+                resolver.add_borrowed_unscaled(
+                    fixture_id,
+                    attribute,
+                    value,
+                    0,
+                    now,
+                    if attribute.is_intensity() {
+                        MergeMode::Htp
+                    } else {
+                        MergeMode::Ltp
+                    },
+                );
+            }
+        }
+    }
 }

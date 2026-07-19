@@ -29,40 +29,75 @@ impl ContributionContext<'_> {
         values: &mut Vec<PlaybackContribution>,
         frame: &PlaybackFrame<'_>,
     ) {
-        let timing = cue_timing(frame.cue);
-        let addresses: HashSet<_> = frame
-            .previous
-            .keys()
-            .chain(frame.target.keys())
-            .cloned()
-            .collect();
-        for (fixture_id, attribute) in addresses {
-            let snap = (self.is_snap)(fixture_id, &attribute);
-            let progress = progress(frame, timing.get(&(fixture_id, attribute.clone())), snap);
-            let Some(value) = interpolate(
-                frame.previous.get(&(fixture_id, attribute.clone())),
-                frame.target.get(&(fixture_id, attribute.clone())),
-                progress,
-            ) else {
-                continue;
-            };
-            values.push(attribute_contribution(
-                frame, fixture_id, attribute, value, snap,
-            ));
+        let attributes = frame.relevant_attributes();
+        values.reserve(attributes.len());
+        for attribute in attributes {
+            let previous = frame.previous_value(attribute);
+            let target = frame.target_value(attribute);
+            self.extend_one_attribute(values, frame, attribute, previous, target);
+        }
+        if let Some(previous) = frame.deleted_previous() {
+            for ((fixture_id, attribute), value) in previous {
+                if !frame.compiled.contains(*fixture_id, attribute) {
+                    self.extend_deleted_attribute(values, frame, *fixture_id, attribute, value);
+                }
+            }
         }
     }
-}
 
-fn cue_timing(cue: &Cue) -> HashMap<AttributeAddress, (Option<u64>, Option<u64>)> {
-    cue.changes
-        .iter()
-        .map(|change| (change.address(), (change.fade_millis, change.delay_millis)))
-        .collect()
+    fn extend_one_attribute(
+        &self,
+        values: &mut Vec<PlaybackContribution>,
+        frame: &PlaybackFrame<'_>,
+        attribute: &CompiledAttribute,
+        previous: Option<&AttributeValue>,
+        target: Option<&AttributeValue>,
+    ) {
+        if previous.is_none() && target.is_none() {
+            return;
+        }
+        let fixture_id = attribute.fixture_id();
+        let key = attribute.attribute();
+        let snap = (self.is_snap)(fixture_id, key);
+        let progress = progress(frame, attribute.timing(frame.target_index), snap);
+        let Some(value) = interpolate(previous, target, progress) else {
+            return;
+        };
+        values.push(attribute_contribution(
+            frame,
+            fixture_id,
+            key.clone(),
+            value,
+            snap,
+        ));
+    }
+
+    fn extend_deleted_attribute(
+        &self,
+        values: &mut Vec<PlaybackContribution>,
+        frame: &PlaybackFrame<'_>,
+        fixture_id: FixtureId,
+        attribute: &AttributeKey,
+        previous: &AttributeValue,
+    ) {
+        let snap = (self.is_snap)(fixture_id, attribute);
+        let progress = progress(frame, None, snap);
+        let Some(value) = interpolate(Some(previous), None, progress) else {
+            return;
+        };
+        values.push(attribute_contribution(
+            frame,
+            fixture_id,
+            attribute.clone(),
+            value,
+            snap,
+        ));
+    }
 }
 
 fn progress(
     frame: &PlaybackFrame<'_>,
-    timing: Option<&(Option<u64>, Option<u64>)>,
+    timing: Option<(Option<u64>, Option<u64>)>,
     snap: bool,
 ) -> f32 {
     let (fade_millis, delay_millis) = effective_timing(frame, timing);
@@ -86,9 +121,9 @@ fn progress(
 
 fn effective_timing(
     frame: &PlaybackFrame<'_>,
-    timing: Option<&(Option<u64>, Option<u64>)>,
+    timing: Option<(Option<u64>, Option<u64>)>,
 ) -> (u64, u64) {
-    let (fade_override, delay_override) = timing.copied().unwrap_or((None, None));
+    let (fade_override, delay_override) = timing.unwrap_or((None, None));
     if frame.cue_list.disable_cue_timing {
         (0, 0)
     } else if frame.cue_list.force_cue_timing {

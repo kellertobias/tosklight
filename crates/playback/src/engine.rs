@@ -3,6 +3,7 @@ use crate::*;
 #[derive(Clone, Debug)]
 pub struct PlaybackEngine {
     pub(crate) cue_lists: HashMap<CueListId, CueList>,
+    pub(crate) compiled_cue_lists: HashMap<CueListId, Arc<CompiledCueList>>,
     pub(crate) active: HashMap<PlaybackKey, ActivePlayback>,
     pub(crate) temporary: HashMap<(u16, TemporaryPlaybackKind), ActivePlayback>,
     pub(crate) swap_held: HashSet<u16>,
@@ -24,6 +25,7 @@ impl PlaybackEngine {
     pub fn with_clock(clock: SharedClock) -> Self {
         Self {
             cue_lists: HashMap::new(),
+            compiled_cue_lists: HashMap::new(),
             active: HashMap::new(),
             temporary: HashMap::new(),
             swap_held: HashSet::new(),
@@ -122,6 +124,9 @@ impl PlaybackEngine {
     pub fn register(&mut self, mut cue_list: CueList) -> Result<(), String> {
         cue_list.validate()?;
         cue_list.migrate_legacy_chaser_xfade(&self.speed_groups_bpm);
+        let compiled = CompiledCueList::new(&cue_list);
+        self.compiled_cue_lists
+            .insert(cue_list.id, Arc::new(compiled));
         self.cue_lists.insert(cue_list.id, cue_list);
         Ok(())
     }

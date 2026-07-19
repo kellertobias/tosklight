@@ -32,8 +32,7 @@ impl ContributionContext<'_> {
             attribute_phaser.fixture_ids.len(),
         );
         let base = frame
-            .target
-            .get(&(fixture_id, attribute_phaser.attribute.clone()))
+            .target_value_for(fixture_id, &attribute_phaser.attribute)
             .and_then(AttributeValue::normalized)
             .unwrap_or(0.0);
         let mut level = match attribute_phaser.phaser.mode {

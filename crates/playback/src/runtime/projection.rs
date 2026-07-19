@@ -97,130 +97,23 @@ impl PlaybackEngine {
             let Some(cue_list) = self.cue_lists.get(&playback.cue_list_id) else {
                 continue;
             };
-            let Some(current_index) = playback
-                .current_cue_id
-                .and_then(|id| cue_list.cues.iter().position(|cue| cue.id == id))
-                .or_else(|| {
-                    playback.current_cue_number.and_then(|number| {
-                        cue_list.cues.iter().position(|cue| cue.number == number)
-                    })
-                })
-                .or_else(|| {
-                    cue_list
-                        .cues
-                        .get(playback.cue_index)
-                        .map(|_| playback.cue_index)
-                })
-            else {
+            let Some(compiled) = self.compiled_cue_lists.get(&playback.cue_list_id) else {
                 continue;
             };
-            let current_cue = &cue_list.cues[current_index];
-            let current_state = cue_list.state_at_index(current_index);
-            let fixtures = current_state
-                .keys()
-                .map(|(fixture_id, _)| *fixture_id)
-                .collect::<HashSet<_>>();
-            for fixture_id in fixtures {
-                let current_intensity = current_state
-                    .iter()
-                    .filter(|((candidate, attribute), _)| {
-                        *candidate == fixture_id && attribute.is_intensity()
-                    })
-                    .filter_map(|(_, value)| value.normalized())
-                    .fold(0.0_f32, f32::max);
-                if current_intensity != 0.0 {
-                    continue;
-                }
-                let Some((target_index, target_state)) = cue_list
-                    .cues
-                    .iter()
-                    .enumerate()
-                    .skip(current_index + 1)
-                    .find_map(|(index, _)| {
-                        let state = cue_list.state_at_index(index);
-                        let intensity = state
-                            .iter()
-                            .filter(|((candidate, attribute), _)| {
-                                *candidate == fixture_id && attribute.is_intensity()
-                            })
-                            .filter_map(|(_, value)| value.normalized())
-                            .fold(0.0_f32, f32::max);
-                        (intensity > 0.0).then_some((index, state))
-                    })
-                else {
+            let Some(current_index) = current_cue_index(playback, cue_list) else {
+                continue;
+            };
+            for fixture_id in compiled.fixture_ids_through(current_index) {
+                let Some(candidate) = self.move_in_black_candidate(
+                    playback,
+                    cue_list,
+                    compiled,
+                    current_index,
+                    fixture_id,
+                ) else {
                     continue;
                 };
-                let target_cue = &cue_list.cues[target_index];
-                let cue_fade_millis = if cue_list.disable_cue_timing {
-                    0
-                } else if cue_list.mode == CueListMode::Chaser {
-                    effective_chaser_xfade_millis(cue_list, &self.speed_groups_bpm)
-                } else if target_cue.fade_millis == 0 {
-                    self.sequence_master_fade_millis
-                } else {
-                    target_cue.fade_millis
-                };
-                let timing = target_cue
-                    .changes
-                    .iter()
-                    .filter(|change| change.fixture_id == fixture_id)
-                    .map(|change| (change.attribute.clone(), change.fade_millis))
-                    .collect::<HashMap<_, _>>();
-                let position_attributes = current_state
-                    .keys()
-                    .chain(target_state.keys())
-                    .filter(|(candidate, attribute)| {
-                        *candidate == fixture_id && attribute.is_position()
-                    })
-                    .map(|(_, attribute)| attribute.clone())
-                    .collect::<HashSet<_>>();
-                let mut values = position_attributes
-                    .into_iter()
-                    .filter_map(|attribute| {
-                        let current = current_state
-                            .get(&(fixture_id, attribute.clone()))
-                            .cloned()
-                            .unwrap_or(AttributeValue::Normalized(0.0));
-                        let target = target_state
-                            .get(&(fixture_id, attribute.clone()))
-                            .cloned()
-                            .unwrap_or(AttributeValue::Normalized(0.0));
-                        if current == target {
-                            return None;
-                        }
-                        let fade_millis = if cue_list.disable_cue_timing {
-                            0
-                        } else if cue_list.force_cue_timing {
-                            cue_fade_millis
-                        } else {
-                            timing
-                                .get(&attribute)
-                                .copied()
-                                .flatten()
-                                .unwrap_or(cue_fade_millis)
-                        };
-                        Some(MoveInBlackTargetValue {
-                            attribute,
-                            current,
-                            target,
-                            fade_millis,
-                        })
-                    })
-                    .collect::<Vec<_>>();
-                values.sort_by(|left, right| left.attribute.cmp(&right.attribute));
-                if !values.is_empty() {
-                    candidates.push(MoveInBlackCandidate {
-                        playback_number: playback.playback_number,
-                        cue_list_id: cue_list.id,
-                        current_cue_id: current_cue.id,
-                        current_cue_number: current_cue.number,
-                        target_cue_id: target_cue.id,
-                        target_cue_number: target_cue.number,
-                        fixture_id,
-                        priority: cue_list.priority,
-                        values,
-                    });
-                }
+                candidates.push(candidate);
             }
         }
         candidates.sort_by(|left, right| {
@@ -229,5 +122,152 @@ impl PlaybackEngine {
                 .then_with(|| left.fixture_id.0.cmp(&right.fixture_id.0))
         });
         candidates
+    }
+
+    fn move_in_black_candidate(
+        &self,
+        playback: &ActivePlayback,
+        cue_list: &CueList,
+        compiled: &CompiledCueList,
+        current_index: usize,
+        fixture_id: FixtureId,
+    ) -> Option<MoveInBlackCandidate> {
+        if !fixture_has_state(compiled, fixture_id, current_index)
+            || fixture_intensity(compiled, fixture_id, current_index) != 0.0
+        {
+            return None;
+        }
+        let target_index = (current_index + 1..cue_list.cues.len())
+            .find(|index| fixture_intensity(compiled, fixture_id, *index) > 0.0)?;
+        let target_cue = &cue_list.cues[target_index];
+        let cue_fade_millis = cue_fade_millis(
+            cue_list,
+            target_cue,
+            &self.speed_groups_bpm,
+            self.sequence_master_fade_millis,
+        );
+        let mut values = move_in_black_values(
+            compiled,
+            cue_list,
+            fixture_id,
+            current_index,
+            target_index,
+            cue_fade_millis,
+        );
+        if values.is_empty() {
+            return None;
+        }
+        values.sort_by(|left, right| left.attribute.cmp(&right.attribute));
+        let current_cue = &cue_list.cues[current_index];
+        Some(MoveInBlackCandidate {
+            playback_number: playback.playback_number,
+            cue_list_id: cue_list.id,
+            current_cue_id: current_cue.id,
+            current_cue_number: current_cue.number,
+            target_cue_id: target_cue.id,
+            target_cue_number: target_cue.number,
+            fixture_id,
+            priority: cue_list.priority,
+            values,
+        })
+    }
+}
+
+fn current_cue_index(playback: &ActivePlayback, cue_list: &CueList) -> Option<usize> {
+    playback
+        .current_cue_id
+        .and_then(|id| cue_list.cues.iter().position(|cue| cue.id == id))
+        .or_else(|| {
+            playback
+                .current_cue_number
+                .and_then(|number| cue_list.cues.iter().position(|cue| cue.number == number))
+        })
+        .or_else(|| {
+            cue_list
+                .cues
+                .get(playback.cue_index)
+                .map(|_| playback.cue_index)
+        })
+}
+
+fn fixture_has_state(compiled: &CompiledCueList, fixture_id: FixtureId, cue_index: usize) -> bool {
+    compiled
+        .attributes_for_fixture(fixture_id)
+        .any(|attribute| attribute.value(cue_index, false).is_some())
+}
+
+fn fixture_intensity(compiled: &CompiledCueList, fixture_id: FixtureId, cue_index: usize) -> f32 {
+    compiled
+        .attributes_for_fixture(fixture_id)
+        .filter(|attribute| attribute.attribute().is_intensity())
+        .filter_map(|attribute| attribute.value(cue_index, false))
+        .filter_map(AttributeValue::normalized)
+        .fold(0.0_f32, f32::max)
+}
+
+fn cue_fade_millis(
+    cue_list: &CueList,
+    target_cue: &Cue,
+    speed_groups_bpm: &[f64; 5],
+    sequence_master_fade_millis: u64,
+) -> u64 {
+    if cue_list.disable_cue_timing {
+        0
+    } else if cue_list.mode == CueListMode::Chaser {
+        effective_chaser_xfade_millis(cue_list, speed_groups_bpm)
+    } else if target_cue.fade_millis == 0 {
+        sequence_master_fade_millis
+    } else {
+        target_cue.fade_millis
+    }
+}
+
+fn move_in_black_values(
+    compiled: &CompiledCueList,
+    cue_list: &CueList,
+    fixture_id: FixtureId,
+    current_index: usize,
+    target_index: usize,
+    cue_fade_millis: u64,
+) -> Vec<MoveInBlackTargetValue> {
+    compiled
+        .attributes_for_fixture(fixture_id)
+        .filter(|attribute| attribute.attribute().is_position())
+        .filter_map(|attribute| {
+            let current = attribute
+                .value(current_index, false)
+                .cloned()
+                .unwrap_or(AttributeValue::Normalized(0.0));
+            let target = attribute
+                .value(target_index, false)
+                .cloned()
+                .unwrap_or(AttributeValue::Normalized(0.0));
+            (current != target).then(|| MoveInBlackTargetValue {
+                attribute: attribute.attribute().clone(),
+                current,
+                target,
+                fade_millis: position_fade_millis(
+                    cue_list,
+                    attribute.timing(target_index),
+                    cue_fade_millis,
+                ),
+            })
+        })
+        .collect()
+}
+
+fn position_fade_millis(
+    cue_list: &CueList,
+    timing: Option<(Option<u64>, Option<u64>)>,
+    cue_fade_millis: u64,
+) -> u64 {
+    if cue_list.disable_cue_timing {
+        0
+    } else if cue_list.force_cue_timing {
+        cue_fade_millis
+    } else {
+        timing
+            .and_then(|(fade_millis, _)| fade_millis)
+            .unwrap_or(cue_fade_millis)
     }
 }

@@ -32,7 +32,7 @@ pub use model::{
 };
 
 pub(crate) use contribution::{
-    EngineContribution, ResolvedAttributes, resolve_engine_contributions,
+    EngineContribution, EngineContributionResolver, ResolvedAttributes, ResolvedContributionIndex,
     value_for_ordered_position,
 };
 pub(crate) use fixture::profile_head_owner;

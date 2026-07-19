@@ -180,6 +180,7 @@ impl PlaybackEngine {
                     .map(|cue| cue.number);
                 let mut isolated = PlaybackEngine {
                     cue_lists: self.cue_lists.clone(),
+                    compiled_cue_lists: self.compiled_cue_lists.clone(),
                     active: HashMap::from([(*key, playback.clone())]),
                     temporary: HashMap::new(),
                     swap_held: HashSet::new(),
