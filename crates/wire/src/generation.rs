@@ -19,10 +19,19 @@ use crate::v2::events::{
     PlaybackCueTransition, PlaybackEventSnapshot, PlaybackStateSnapshot, PlaybackTransitionCause,
     SequenceGap,
 };
+use crate::v2::patch::{
+    PatchDelta, PatchDirectControlEndpoint, PatchDirectControlProtocol, PatchFixtureInput,
+    PatchFixtureLocation, PatchFixtureProjection, PatchFixtureRotation, PatchFixturesOutcome,
+    PatchFixturesRequest, PatchHighlightOverrideInput, PatchHighlightOverrideProjection,
+    PatchLogicalHeadProjection, PatchModeProjection, PatchModeSplitProjection,
+    PatchMultiPatchInput, PatchMultiPatchProjection, PatchProfilePolicy,
+    PatchProfileRevisionProjection, PatchSnapshot, PatchSplitAssignment,
+};
 
 const TYPESCRIPT_PATH: &str = "apps/control-ui/src/api/generated/light-wire.ts";
 const SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-command-line";
 const EVENT_SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-events";
+const PATCH_SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-patch";
 
 /// One generated artifact relative to the workspace root.
 #[derive(Debug, Eq, PartialEq)]
@@ -48,6 +57,14 @@ pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
         event_request_schema::<EventClientMessage>("event-client-message"),
         event_response_schema::<EventServerMessage>("event-server-message"),
         event_response_schema::<PlaybackEventSnapshot>("playback-event-snapshot"),
+        patch_request_schema::<PatchFixturesRequest>("patch-fixtures-request"),
+        patch_response_schema::<PatchFixturesOutcome>("patch-fixtures-outcome"),
+        patch_response_schema::<PatchSnapshot>("patch-snapshot"),
+        patch_response_schema::<PatchDelta>("patch-delta"),
+        patch_response_schema::<PatchFixtureProjection>("patch-fixture-projection"),
+        patch_response_schema::<PatchProfileRevisionProjection>(
+            "patch-profile-revision-projection",
+        ),
     ]
 }
 
@@ -79,9 +96,23 @@ fn event_response_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
     event_schema::<T>(name, SchemaSettings::draft2020_12().for_serialize())
 }
 
+fn patch_request_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
+    patch_schema::<T>(name, SchemaSettings::draft2020_12().for_deserialize())
+}
+
+fn patch_response_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
+    patch_schema::<T>(name, SchemaSettings::draft2020_12().for_serialize())
+}
+
 fn event_schema<T: JsonSchema>(name: &str, settings: SchemaSettings) -> GeneratedArtifact {
     let mut artifact = schema_artifact::<T>(name, settings);
     artifact.path = format!("{EVENT_SCHEMA_DIRECTORY}/{name}.schema.json");
+    artifact
+}
+
+fn patch_schema<T: JsonSchema>(name: &str, settings: SchemaSettings) -> GeneratedArtifact {
+    let mut artifact = schema_artifact::<T>(name, settings);
+    artifact.path = format!("{PATCH_SCHEMA_DIRECTORY}/{name}.schema.json");
     artifact
 }
 
@@ -136,10 +167,37 @@ fn typescript_bindings() -> String {
         EventServerMessage::decl(&config),
         PlaybackStateSnapshot::decl(&config),
         PlaybackEventSnapshot::decl(&config),
+        PatchDirectControlProtocol::decl(&config),
+        PatchProfilePolicy::decl(&config),
+        PatchSplitAssignment::decl(&config),
+        PatchDirectControlEndpoint::decl(&config),
+        PatchFixtureLocation::decl(&config),
+        PatchFixtureRotation::decl(&config),
+        PatchMultiPatchInput::decl(&config),
+        PatchHighlightOverrideInput::decl(&config),
+        PatchFixtureInput::decl(&config),
+        PatchFixturesRequest::decl(&config),
+        PatchLogicalHeadProjection::decl(&config),
+        PatchMultiPatchProjection::decl(&config),
+        PatchHighlightOverrideProjection::decl(&config),
+        PatchFixtureProjection::decl(&config),
+        PatchModeSplitProjection::decl(&config),
+        PatchModeProjection::decl(&config),
+        PatchProfileRevisionProjection::decl(&config),
+        PatchDelta::decl(&config),
+        PatchFixturesOutcome::decl(&config),
+        PatchSnapshot::decl(&config),
     ];
     let declarations = declarations
         .into_iter()
-        .map(|declaration| format!("export {declaration}"))
+        .map(|declaration| {
+            let declaration = declaration
+                .lines()
+                .map(str::trim_end)
+                .collect::<Vec<_>>()
+                .join("\n");
+            format!("export {declaration}")
+        })
         .collect::<Vec<_>>()
         .join("\n\n");
     format!(

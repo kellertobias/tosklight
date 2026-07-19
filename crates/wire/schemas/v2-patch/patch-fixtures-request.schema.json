@@ -1,0 +1,298 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PatchFixturesRequest",
+  "description": "Body of the atomic, idempotent `PatchFixtures` POST operation.",
+  "type": "object",
+  "properties": {
+    "fixtures": {
+      "description": "One non-empty candidate batch. The application service validates and applies it atomically.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PatchFixtureInput"
+      },
+      "minItems": 1
+    },
+    "request_id": {
+      "description": "Client-generated idempotency identity, scoped to the authenticated desk session.",
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "fixtures"
+  ],
+  "$defs": {
+    "PatchDirectControlEndpoint": {
+      "type": "object",
+      "properties": {
+        "ip_address": {
+          "description": "Transport adapters validate this as an IP address before invoking the application service.",
+          "type": "string"
+        },
+        "port": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "protocol": {
+          "$ref": "#/$defs/PatchDirectControlProtocol"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "ip_address",
+        "port"
+      ]
+    },
+    "PatchDirectControlProtocol": {
+      "type": "string",
+      "enum": [
+        "citp"
+      ]
+    },
+    "PatchFixtureInput": {
+      "description": "One fixture candidate containing only identities and state owned by the portable patch.",
+      "type": "object",
+      "properties": {
+        "direct_control": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatchDirectControlEndpoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fixture_id": {
+          "description": "Stable identity generated once by the caller and retained across an idempotent retry.",
+          "type": "string",
+          "format": "uuid"
+        },
+        "fixture_number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "highlight_overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchHighlightOverrideInput"
+          }
+        },
+        "layer_id": {
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/PatchFixtureLocation"
+        },
+        "mode_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "move_in_black_delay_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "move_in_black_enabled": {
+          "type": "boolean"
+        },
+        "multipatch": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchMultiPatchInput"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "profile_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "profile_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "rotation": {
+          "$ref": "#/$defs/PatchFixtureRotation"
+        },
+        "split_patches": {
+          "description": "Canonical split assignments. An unpatched split has two `null` address fields.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchSplitAssignment"
+          },
+          "minItems": 1
+        },
+        "virtual_fixture_number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "fixture_id",
+        "name",
+        "profile_id",
+        "profile_revision",
+        "mode_id",
+        "split_patches",
+        "layer_id",
+        "location",
+        "rotation",
+        "multipatch",
+        "move_in_black_enabled",
+        "move_in_black_delay_millis",
+        "highlight_overrides"
+      ]
+    },
+    "PatchFixtureLocation": {
+      "description": "Stage position in integer millimetres.",
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "y": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "z": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "z"
+      ]
+    },
+    "PatchFixtureRotation": {
+      "description": "Stage rotation in degrees.",
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "format": "float"
+        },
+        "y": {
+          "type": "number",
+          "format": "float"
+        },
+        "z": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "z"
+      ]
+    },
+    "PatchHighlightOverrideInput": {
+      "type": "object",
+      "properties": {
+        "channel_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "raw_value": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "channel_id",
+        "raw_value"
+      ]
+    },
+    "PatchMultiPatchInput": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "location": {
+          "$ref": "#/$defs/PatchFixtureLocation"
+        },
+        "name": {
+          "type": "string"
+        },
+        "rotation": {
+          "$ref": "#/$defs/PatchFixtureRotation"
+        },
+        "split_patches": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchSplitAssignment"
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "split_patches",
+        "location",
+        "rotation"
+      ]
+    },
+    "PatchSplitAssignment": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "split": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "universe": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "split"
+      ]
+    }
+  }
+}

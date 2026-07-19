@@ -1,0 +1,457 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PatchDelta",
+  "description": "Targeted post-mutation projection suitable for a Patch store and a typed patch-change event.",
+  "type": "object",
+  "properties": {
+    "event_sequence": {
+      "description": "Sequence of the single semantic patch-change event produced by this transaction.",
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "fixtures": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PatchFixtureProjection"
+      }
+    },
+    "patch_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "profile_revisions": {
+      "description": "Unique metadata needed to interpret the fixture projections in this delta.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PatchProfileRevisionProjection"
+      }
+    },
+    "removed_fixture_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      }
+    },
+    "show_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "show_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "show_id",
+    "show_revision",
+    "patch_revision",
+    "event_sequence",
+    "fixtures",
+    "removed_fixture_ids",
+    "profile_revisions"
+  ],
+  "$defs": {
+    "PatchDirectControlEndpoint": {
+      "type": "object",
+      "properties": {
+        "ip_address": {
+          "description": "Transport adapters validate this as an IP address before invoking the application service.",
+          "type": "string"
+        },
+        "port": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "protocol": {
+          "$ref": "#/$defs/PatchDirectControlProtocol"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "ip_address",
+        "port"
+      ]
+    },
+    "PatchDirectControlProtocol": {
+      "type": "string",
+      "enum": [
+        "citp"
+      ]
+    },
+    "PatchFixtureLocation": {
+      "description": "Stage position in integer millimetres.",
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "y": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "z": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "z"
+      ]
+    },
+    "PatchFixtureProjection": {
+      "description": "Portable, authoritative Patch representation of one fixture without an inline definition.",
+      "type": "object",
+      "properties": {
+        "direct_control": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatchDirectControlEndpoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "fixture_number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "fixture_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "highlight_overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchHighlightOverrideProjection"
+          }
+        },
+        "layer_id": {
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/PatchFixtureLocation"
+        },
+        "logical_heads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchLogicalHeadProjection"
+          }
+        },
+        "mode_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "move_in_black_delay_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "move_in_black_enabled": {
+          "type": "boolean"
+        },
+        "multipatch": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchMultiPatchProjection"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "profile_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "profile_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "rotation": {
+          "$ref": "#/$defs/PatchFixtureRotation"
+        },
+        "split_patches": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchSplitAssignment"
+          }
+        },
+        "virtual_fixture_number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "fixture_id",
+        "fixture_revision",
+        "fixture_number",
+        "virtual_fixture_number",
+        "name",
+        "profile_id",
+        "profile_revision",
+        "mode_id",
+        "split_patches",
+        "layer_id",
+        "direct_control",
+        "location",
+        "rotation",
+        "logical_heads",
+        "multipatch",
+        "move_in_black_enabled",
+        "move_in_black_delay_millis",
+        "highlight_overrides"
+      ]
+    },
+    "PatchFixtureRotation": {
+      "description": "Stage rotation in degrees.",
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "format": "float"
+        },
+        "y": {
+          "type": "number",
+          "format": "float"
+        },
+        "z": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "z"
+      ]
+    },
+    "PatchHighlightOverrideProjection": {
+      "type": "object",
+      "properties": {
+        "channel_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "raw_value": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "channel_id",
+        "raw_value"
+      ]
+    },
+    "PatchLogicalHeadProjection": {
+      "type": "object",
+      "properties": {
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "head_index": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "head_index",
+        "fixture_id"
+      ]
+    },
+    "PatchModeProjection": {
+      "type": "object",
+      "properties": {
+        "mode_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "splits": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchModeSplitProjection"
+          }
+        }
+      },
+      "required": [
+        "mode_id",
+        "name",
+        "splits"
+      ]
+    },
+    "PatchModeSplitProjection": {
+      "type": "object",
+      "properties": {
+        "footprint": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "split": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "split",
+        "footprint"
+      ]
+    },
+    "PatchMultiPatchProjection": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "location": {
+          "$ref": "#/$defs/PatchFixtureLocation"
+        },
+        "name": {
+          "type": "string"
+        },
+        "rotation": {
+          "$ref": "#/$defs/PatchFixtureRotation"
+        },
+        "split_patches": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchSplitAssignment"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "split_patches",
+        "location",
+        "rotation"
+      ]
+    },
+    "PatchProfilePolicy": {
+      "type": "string",
+      "enum": [
+        "dmx",
+        "visual_only"
+      ]
+    },
+    "PatchProfileRevisionProjection": {
+      "description": "Deduplicated, Patch-only metadata for one immutable profile revision.",
+      "type": "object",
+      "properties": {
+        "content_digest": {
+          "type": "string"
+        },
+        "fixture_type": {
+          "type": "string"
+        },
+        "manufacturer": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "patch_policy": {
+          "$ref": "#/$defs/PatchProfilePolicy"
+        },
+        "profile_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "profile_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "referenced_modes": {
+          "description": "Only modes referenced by fixtures in the containing snapshot or delta, never the catalog.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchModeProjection"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "profile_id",
+        "profile_revision",
+        "content_digest",
+        "manufacturer",
+        "name",
+        "fixture_type",
+        "patch_policy",
+        "referenced_modes"
+      ]
+    },
+    "PatchSplitAssignment": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "split": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "universe": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "split",
+        "universe",
+        "address"
+      ]
+    }
+  }
+}

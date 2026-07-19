@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PatchProfileRevisionProjection",
+  "description": "Deduplicated, Patch-only metadata for one immutable profile revision.",
+  "type": "object",
+  "properties": {
+    "content_digest": {
+      "type": "string"
+    },
+    "fixture_type": {
+      "type": "string"
+    },
+    "manufacturer": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "patch_policy": {
+      "$ref": "#/$defs/PatchProfilePolicy"
+    },
+    "profile_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "profile_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "referenced_modes": {
+      "description": "Only modes referenced by fixtures in the containing snapshot or delta, never the catalog.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PatchModeProjection"
+      },
+      "minItems": 1
+    }
+  },
+  "required": [
+    "profile_id",
+    "profile_revision",
+    "content_digest",
+    "manufacturer",
+    "name",
+    "fixture_type",
+    "patch_policy",
+    "referenced_modes"
+  ],
+  "$defs": {
+    "PatchModeProjection": {
+      "type": "object",
+      "properties": {
+        "mode_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "splits": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchModeSplitProjection"
+          }
+        }
+      },
+      "required": [
+        "mode_id",
+        "name",
+        "splits"
+      ]
+    },
+    "PatchModeSplitProjection": {
+      "type": "object",
+      "properties": {
+        "footprint": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "split": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "split",
+        "footprint"
+      ]
+    },
+    "PatchProfilePolicy": {
+      "type": "string",
+      "enum": [
+        "dmx",
+        "visual_only"
+      ]
+    }
+  }
+}

@@ -74,3 +74,91 @@ export type EventServerMessage = { "type": "ready", cursor: EventSnapshotCursor,
 export type PlaybackStateSnapshot = { object: EventObject, playback_number: number | null, cue_list_id: string, current: CueReference | null, loaded: CueReference | null, paused: boolean, enabled: boolean, };
 
 export type PlaybackEventSnapshot = { desk_id: string, cursor: EventSnapshotCursor, playbacks: Array<PlaybackStateSnapshot>, };
+
+export type PatchDirectControlProtocol = "citp";
+
+export type PatchProfilePolicy = "dmx" | "visual_only";
+
+export type PatchSplitAssignment = { split: number, universe: number | null, address: number | null, };
+
+export type PatchDirectControlEndpoint = { protocol: PatchDirectControlProtocol,
+/**
+ * Transport adapters validate this as an IP address before invoking the application service.
+ */
+ip_address: string, port: number, };
+
+export type PatchFixtureLocation = { x: number, y: number, z: number, };
+
+export type PatchFixtureRotation = { x: number, y: number, z: number, };
+
+export type PatchMultiPatchInput = { id: string, name: string, split_patches: Array<PatchSplitAssignment>, location: PatchFixtureLocation, rotation: PatchFixtureRotation, };
+
+export type PatchHighlightOverrideInput = { channel_id: string, raw_value: number, };
+
+export type PatchFixtureInput = {
+/**
+ * Stable identity generated once by the caller and retained across an idempotent retry.
+ */
+fixture_id: string, fixture_number: number | null, virtual_fixture_number: number | null, name: string, profile_id: string, profile_revision: number, mode_id: string,
+/**
+ * Canonical split assignments. An unpatched split has two `null` address fields.
+ */
+split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, location: PatchFixtureLocation, rotation: PatchFixtureRotation, multipatch: Array<PatchMultiPatchInput>, move_in_black_enabled: boolean, move_in_black_delay_millis: number, highlight_overrides: Array<PatchHighlightOverrideInput>, };
+
+export type PatchFixturesRequest = {
+/**
+ * Client-generated idempotency identity, scoped to the authenticated desk session.
+ */
+request_id: string,
+/**
+ * One non-empty candidate batch. The application service validates and applies it atomically.
+ */
+fixtures: Array<PatchFixtureInput>, };
+
+export type PatchLogicalHeadProjection = { head_index: number, fixture_id: string, };
+
+export type PatchMultiPatchProjection = { id: string, name: string, split_patches: Array<PatchSplitAssignment>, location: PatchFixtureLocation, rotation: PatchFixtureRotation, };
+
+export type PatchHighlightOverrideProjection = { channel_id: string, raw_value: number, };
+
+export type PatchFixtureProjection = { fixture_id: string, fixture_revision: number, fixture_number: number | null, virtual_fixture_number: number | null, name: string, profile_id: string, profile_revision: number, mode_id: string, split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, location: PatchFixtureLocation, rotation: PatchFixtureRotation, logical_heads: Array<PatchLogicalHeadProjection>, multipatch: Array<PatchMultiPatchProjection>, move_in_black_enabled: boolean, move_in_black_delay_millis: number, highlight_overrides: Array<PatchHighlightOverrideProjection>, };
+
+export type PatchModeSplitProjection = { split: number, footprint: number, };
+
+export type PatchModeProjection = { mode_id: string, name: string, splits: Array<PatchModeSplitProjection>, };
+
+export type PatchProfileRevisionProjection = { profile_id: string, profile_revision: number, content_digest: string, manufacturer: string, name: string, fixture_type: string, patch_policy: PatchProfilePolicy,
+/**
+ * Only modes referenced by fixtures in the containing snapshot or delta, never the catalog.
+ */
+referenced_modes: Array<PatchModeProjection>, };
+
+export type PatchDelta = { show_id: string, show_revision: number, patch_revision: number,
+/**
+ * Sequence of the single semantic patch-change event produced by this transaction.
+ */
+event_sequence: number, fixtures: Array<PatchFixtureProjection>, removed_fixture_ids: Array<string>,
+/**
+ * Unique metadata needed to interpret the fixture projections in this delta.
+ */
+profile_revisions: Array<PatchProfileRevisionProjection>, };
+
+export type PatchFixturesOutcome = { request_id: string,
+/**
+ * `true` when idempotency replay returned the already committed authoritative result.
+ */
+replayed: boolean, show_id: string, show_revision: number, patch_revision: number,
+/**
+ * Sequence of the single semantic patch-change event produced by this transaction.
+ */
+event_sequence: number, fixtures: Array<PatchFixtureProjection>, removed_fixture_ids: Array<string>,
+/**
+ * Unique metadata needed to interpret the fixture projections in this delta.
+ */
+profile_revisions: Array<PatchProfileRevisionProjection>, };
+
+export type PatchSnapshot = { show_id: string, show_revision: number, patch_revision: number, cursor: EventSnapshotCursor, fixtures: Array<PatchFixtureProjection>,
+/**
+ * Exactly one entry per profile revision referenced by `fixtures`.
+ */
+profile_revisions: Array<PatchProfileRevisionProjection>, };
