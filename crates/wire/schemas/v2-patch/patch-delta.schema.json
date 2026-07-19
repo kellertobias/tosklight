@@ -5,8 +5,11 @@
   "type": "object",
   "properties": {
     "event_sequence": {
-      "description": "Sequence of the single semantic patch-change event produced by this transaction.",
-      "type": "integer",
+      "description": "Sequence of the semantic patch-change event, absent for a no-op desired-state request.",
+      "type": [
+        "integer",
+        "null"
+      ],
       "format": "uint64",
       "minimum": 0
     },
@@ -281,9 +284,18 @@
           "format": "uint16",
           "maximum": 65535,
           "minimum": 0
+        },
+        "profile_head_id": {
+          "description": "Stable semantic head identity from the selected immutable profile revision.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
         }
       },
       "required": [
+        "profile_head_id",
         "head_index",
         "fixture_id"
       ]

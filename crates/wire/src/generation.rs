@@ -20,11 +20,11 @@ use crate::v2::events::{
     SequenceGap,
 };
 use crate::v2::patch::{
-    PatchDelta, PatchDirectControlEndpoint, PatchDirectControlProtocol, PatchFixtureInput,
-    PatchFixtureLocation, PatchFixtureProjection, PatchFixtureRotation, PatchFixturesOutcome,
-    PatchFixturesRequest, PatchHighlightOverrideInput, PatchHighlightOverrideProjection,
-    PatchLogicalHeadProjection, PatchModeProjection, PatchModeSplitProjection,
-    PatchMultiPatchInput, PatchMultiPatchProjection, PatchProfilePolicy,
+    PatchDelta, PatchDirectControlEndpoint, PatchDirectControlProtocol, PatchErrorResponse,
+    PatchFixtureInput, PatchFixtureLocation, PatchFixtureProjection, PatchFixtureRotation,
+    PatchFixturesOutcome, PatchFixturesRequest, PatchHighlightOverrideInput,
+    PatchHighlightOverrideProjection, PatchLogicalHeadProjection, PatchModeProjection,
+    PatchModeSplitProjection, PatchMultiPatchInput, PatchMultiPatchProjection, PatchProfilePolicy,
     PatchProfileRevisionProjection, PatchSnapshot, PatchSplitAssignment,
 };
 
@@ -59,6 +59,7 @@ pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
         event_response_schema::<PlaybackEventSnapshot>("playback-event-snapshot"),
         patch_request_schema::<PatchFixturesRequest>("patch-fixtures-request"),
         patch_response_schema::<PatchFixturesOutcome>("patch-fixtures-outcome"),
+        patch_response_schema::<PatchErrorResponse>("patch-error-response"),
         patch_response_schema::<PatchSnapshot>("patch-snapshot"),
         patch_response_schema::<PatchDelta>("patch-delta"),
         patch_response_schema::<PatchFixtureProjection>("patch-fixture-projection"),
@@ -177,6 +178,7 @@ fn typescript_bindings() -> String {
         PatchHighlightOverrideInput::decl(&config),
         PatchFixtureInput::decl(&config),
         PatchFixturesRequest::decl(&config),
+        PatchErrorResponse::decl(&config),
         PatchLogicalHeadProjection::decl(&config),
         PatchMultiPatchProjection::decl(&config),
         PatchHighlightOverrideProjection::decl(&config),

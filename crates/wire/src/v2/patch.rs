@@ -18,9 +18,13 @@ pub struct PatchFixturesRequest {
     /// Client-generated idempotency identity, scoped to the authenticated desk session.
     #[schemars(length(min = 1, max = 128))]
     pub request_id: String,
-    /// One non-empty candidate batch. The application service validates and applies it atomically.
-    #[schemars(length(min = 1))]
+    /// Fixture upserts. The application service requires at least one upsert or removal.
+    #[serde(default)]
     pub fixtures: Vec<PatchFixtureInput>,
+    /// Stable fixture identities removed by the same atomic operation. Already-absent identities
+    /// are accepted as the requested desired state.
+    #[serde(default)]
+    pub remove_fixture_ids: Vec<Uuid>,
 }
 
 /// One fixture candidate containing only identities and state owned by the portable patch.
@@ -115,8 +119,19 @@ pub struct PatchFixturesOutcome {
     pub request_id: String,
     /// `true` when idempotency replay returned the already committed authoritative result.
     pub replayed: bool,
+    /// `false` when the requested desired state was already authoritative and emitted no event.
+    pub changed: bool,
     #[serde(flatten)]
     pub delta: PatchDelta,
+}
+
+/// Transport error for revisioned Patch operations.
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchErrorResponse {
+    pub error: String,
+    #[ts(as = "Option<f64>", optional = nullable)]
+    pub current_revision: Option<u64>,
+    pub retryable: bool,
 }
 
 /// Authoritative current Patch projection used for initial load and sequence-gap repair.
@@ -141,9 +156,9 @@ pub struct PatchDelta {
     pub show_revision: u64,
     #[ts(type = "number")]
     pub patch_revision: u64,
-    /// Sequence of the single semantic patch-change event produced by this transaction.
-    #[ts(type = "number")]
-    pub event_sequence: u64,
+    /// Sequence of the semantic patch-change event, absent for a no-op desired-state request.
+    #[ts(as = "Option<f64>", optional = nullable)]
+    pub event_sequence: Option<u64>,
     pub fixtures: Vec<PatchFixtureProjection>,
     pub removed_fixture_ids: Vec<Uuid>,
     /// Unique metadata needed to interpret the fixture projections in this delta.
@@ -178,6 +193,8 @@ pub struct PatchFixtureProjection {
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct PatchLogicalHeadProjection {
+    /// Stable semantic head identity from the selected immutable profile revision.
+    pub profile_head_id: Option<Uuid>,
     pub head_index: u16,
     pub fixture_id: Uuid,
 }

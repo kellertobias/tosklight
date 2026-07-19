@@ -146,6 +146,7 @@ pub enum EventActionSource {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EventPayload {
     PlaybackCueTransition { transition: PlaybackCueTransition },
+    ShowPatchChanged { delta: super::patch::PatchDelta },
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

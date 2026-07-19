@@ -5,12 +5,21 @@
   "type": "object",
   "properties": {
     "fixtures": {
-      "description": "One non-empty candidate batch. The application service validates and applies it atomically.",
+      "description": "Fixture upserts. The application service requires at least one upsert or removal.",
       "type": "array",
+      "default": [],
       "items": {
         "$ref": "#/$defs/PatchFixtureInput"
-      },
-      "minItems": 1
+      }
+    },
+    "remove_fixture_ids": {
+      "description": "Stable fixture identities removed by the same atomic operation. Already-absent identities\nare accepted as the requested desired state.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      }
     },
     "request_id": {
       "description": "Client-generated idempotency identity, scoped to the authenticated desk session.",
@@ -21,8 +30,7 @@
   },
   "additionalProperties": false,
   "required": [
-    "request_id",
-    "fixtures"
+    "request_id"
   ],
   "$defs": {
     "PatchDirectControlEndpoint": {

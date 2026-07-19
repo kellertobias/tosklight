@@ -63,7 +63,7 @@ export type CueReference = { id: string, number: number, };
 
 export type PlaybackCueTransition = { playback_number: number | null, cue_list_id: string, previous: CueReference | null, current: CueReference | null, cause: PlaybackTransitionCause, advanced_steps: number, };
 
-export type EventPayload = { "type": "playback_cue_transition", transition: PlaybackCueTransition, };
+export type EventPayload = { "type": "playback_cue_transition", transition: PlaybackCueTransition, } | { "type": "show_patch_changed", delta: PatchDelta, };
 
 export type EventEnvelope = { sequence: number, occurred_at: string, desk_id: string | null, class: EventClass, object: EventObject | null, source: EventSource, correlation_id: string | null, delivery: EventDeliveryPolicy, payload: EventPayload, };
 
@@ -111,11 +111,22 @@ export type PatchFixturesRequest = {
  */
 request_id: string,
 /**
- * One non-empty candidate batch. The application service validates and applies it atomically.
+ * Fixture upserts. The application service requires at least one upsert or removal.
  */
-fixtures: Array<PatchFixtureInput>, };
+fixtures: Array<PatchFixtureInput>,
+/**
+ * Stable fixture identities removed by the same atomic operation. Already-absent identities
+ * are accepted as the requested desired state.
+ */
+remove_fixture_ids: Array<string>, };
 
-export type PatchLogicalHeadProjection = { head_index: number, fixture_id: string, };
+export type PatchErrorResponse = { error: string, current_revision?: number | null, retryable: boolean, };
+
+export type PatchLogicalHeadProjection = {
+/**
+ * Stable semantic head identity from the selected immutable profile revision.
+ */
+profile_head_id: string | null, head_index: number, fixture_id: string, };
 
 export type PatchMultiPatchProjection = { id: string, name: string, split_patches: Array<PatchSplitAssignment>, location: PatchFixtureLocation, rotation: PatchFixtureRotation, };
 
@@ -135,9 +146,9 @@ referenced_modes: Array<PatchModeProjection>, };
 
 export type PatchDelta = { show_id: string, show_revision: number, patch_revision: number,
 /**
- * Sequence of the single semantic patch-change event produced by this transaction.
+ * Sequence of the semantic patch-change event, absent for a no-op desired-state request.
  */
-event_sequence: number, fixtures: Array<PatchFixtureProjection>, removed_fixture_ids: Array<string>,
+event_sequence?: number | null, fixtures: Array<PatchFixtureProjection>, removed_fixture_ids: Array<string>,
 /**
  * Unique metadata needed to interpret the fixture projections in this delta.
  */
@@ -147,11 +158,15 @@ export type PatchFixturesOutcome = { request_id: string,
 /**
  * `true` when idempotency replay returned the already committed authoritative result.
  */
-replayed: boolean, show_id: string, show_revision: number, patch_revision: number,
+replayed: boolean,
 /**
- * Sequence of the single semantic patch-change event produced by this transaction.
+ * `false` when the requested desired state was already authoritative and emitted no event.
  */
-event_sequence: number, fixtures: Array<PatchFixtureProjection>, removed_fixture_ids: Array<string>,
+changed: boolean, show_id: string, show_revision: number, patch_revision: number,
+/**
+ * Sequence of the semantic patch-change event, absent for a no-op desired-state request.
+ */
+event_sequence?: number | null, fixtures: Array<PatchFixtureProjection>, removed_fixture_ids: Array<string>,
 /**
  * Unique metadata needed to interpret the fixture projections in this delta.
  */

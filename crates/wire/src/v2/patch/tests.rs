@@ -9,6 +9,7 @@ fn request_contains_references_and_patch_owned_state_only() {
     let request = PatchFixturesRequest {
         request_id: "patch-1".into(),
         fixtures: vec![fixture_input()],
+        remove_fixture_ids: Vec::new(),
     };
     let value = serde_json::to_value(request).expect("serialize patch request");
     let fixture = value["fixtures"][0]
@@ -32,6 +33,7 @@ fn request_rejects_mass_assigned_definition_data() {
     let mut value = serde_json::to_value(PatchFixturesRequest {
         request_id: "patch-2".into(),
         fixtures: vec![fixture_input()],
+        remove_fixture_ids: Vec::new(),
     })
     .expect("serialize patch request");
     value["fixtures"][0]["definition"] = serde_json::json!({ "modes": ["catalog"] });
@@ -48,7 +50,7 @@ fn request_schema_bounds_idempotency_identity_and_batch_collections() {
 
     assert_eq!(schema["properties"]["request_id"]["minLength"], 1);
     assert_eq!(schema["properties"]["request_id"]["maxLength"], 128);
-    assert_eq!(schema["properties"]["fixtures"]["minItems"], 1);
+    assert!(schema["properties"]["fixtures"].get("minItems").is_none());
     assert_eq!(
         schema["$defs"]["PatchFixtureInput"]["properties"]["split_patches"]["minItems"],
         1
@@ -64,11 +66,12 @@ fn outcome_flattens_the_authoritative_delta_and_replay_identity() {
     let outcome = PatchFixturesOutcome {
         request_id: "patch-3".into(),
         replayed: true,
+        changed: true,
         delta: PatchDelta {
             show_id: Uuid::from_u128(4),
             show_revision: 8,
             patch_revision: 4,
-            event_sequence: 21,
+            event_sequence: Some(21),
             fixtures: vec![fixture_projection()],
             removed_fixture_ids: Vec::new(),
             profile_revisions: vec![profile_projection()],
@@ -78,6 +81,7 @@ fn outcome_flattens_the_authoritative_delta_and_replay_identity() {
 
     assert_eq!(value["request_id"], "patch-3");
     assert_eq!(value["replayed"], true);
+    assert_eq!(value["changed"], true);
     assert_eq!(value["show_revision"], 8);
     assert_eq!(value["patch_revision"], 4);
     assert_eq!(value["event_sequence"], 21);

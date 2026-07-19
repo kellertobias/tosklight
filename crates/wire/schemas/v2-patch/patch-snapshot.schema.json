@@ -283,9 +283,18 @@
           "format": "uint16",
           "maximum": 65535,
           "minimum": 0
+        },
+        "profile_head_id": {
+          "description": "Stable semantic head identity from the selected immutable profile revision.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
         }
       },
       "required": [
+        "profile_head_id",
         "head_index",
         "fixture_id"
       ]
