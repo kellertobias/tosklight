@@ -6,6 +6,8 @@ use super::*;
 mod command_http_tests;
 #[path = "event_transport_route_tests.rs"]
 mod event_transport_route_tests;
+#[path = "show_patch_route_tests.rs"]
+mod show_patch_route_tests;
 
 include!("preload_tests.rs");
 include!("command_input_tests.rs");

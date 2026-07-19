@@ -93,7 +93,7 @@ fn wire_event(event: &application::EventEnvelope) -> wire::EventEnvelope {
         source: wire_source(event.source),
         correlation_id: event.correlation_id,
         delivery: wire_delivery_policy(event.delivery),
-        payload: wire_payload(&event.payload),
+        payload: wire_payload(&event.payload, event.sequence),
     }
 }
 
@@ -161,12 +161,18 @@ fn wire_action_source(source: application::ActionSource) -> wire::EventActionSou
     }
 }
 
-fn wire_payload(payload: &application::ApplicationEvent) -> wire::EventPayload {
-    let application::ApplicationEvent::Playback(application::PlaybackEvent::CueTransition(
-        transition,
-    )) = payload;
-    wire::EventPayload::PlaybackCueTransition {
-        transition: wire_transition(transition),
+fn wire_payload(payload: &application::ApplicationEvent, sequence: u64) -> wire::EventPayload {
+    match payload {
+        application::ApplicationEvent::Playback(application::PlaybackEvent::CueTransition(
+            transition,
+        )) => wire::EventPayload::PlaybackCueTransition {
+            transition: wire_transition(transition),
+        },
+        application::ApplicationEvent::Show(application::ShowEvent::PatchChanged(change)) => {
+            wire::EventPayload::ShowPatchChanged {
+                delta: super::super::show_patch_wire::wire_delta(change, Some(sequence)),
+            }
+        }
     }
 }
 
@@ -198,5 +204,47 @@ fn wire_cause(cause: application::PlaybackTransitionCause) -> wire::PlaybackTran
         App::Follow => wire::PlaybackTransitionCause::Follow,
         App::Wait => wire::PlaybackTransitionCause::Wait,
         App::Timecode => wire::PlaybackTransitionCause::Timecode,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use light_application::{ActionContext, ActionSource, EventBus, EventDraft, PatchChange};
+    use light_core::ShowId;
+
+    #[test]
+    fn patch_event_delta_uses_the_authoritative_envelope_sequence() {
+        let bus = EventBus::new(4);
+        let context = ActionContext::operator(
+            Uuid::from_u128(1),
+            Uuid::from_u128(2),
+            Uuid::from_u128(3),
+            ActionSource::Http,
+        );
+        let show_id = ShowId(Uuid::from_u128(4));
+        let event = bus.publish(EventDraft::patch_changed(
+            &context,
+            PatchChange {
+                show_id,
+                show_revision: Default::default(),
+                patch_revision: Default::default(),
+                fixtures: Vec::new(),
+                removed_fixture_ids: Vec::new(),
+                profile_revisions: Vec::new(),
+            },
+        ));
+
+        let wire::EventServerMessage::Event { event } =
+            wire_delivery(application::SubscriptionDelivery::Event(event))
+        else {
+            panic!("expected an event delivery");
+        };
+        let wire::EventPayload::ShowPatchChanged { delta } = event.payload else {
+            panic!("expected a show Patch event");
+        };
+        assert_eq!(event.sequence, 1);
+        assert_eq!(delta.show_id, show_id.0);
+        assert_eq!(delta.event_sequence, Some(event.sequence));
     }
 }

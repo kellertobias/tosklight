@@ -44,7 +44,7 @@ use base64::{
 use bytes::Bytes;
 use light_application::{
     EventBus, PlaybackAddress, PlaybackExecution, PlaybackService, ProgrammingService,
-    publish_automatic_playback_events,
+    ShowPatchService, publish_automatic_playback_events,
 };
 use light_control::speed::{
     SoundObservation, SoundToLightConfig, SpeedGroupController, SpeedSnapshot,
@@ -146,6 +146,9 @@ mod show_library;
 mod show_library_mutations;
 mod show_mutation_backup;
 mod show_open;
+mod show_patch_adapter;
+mod show_patch_http;
+mod show_patch_wire;
 mod speed_groups;
 mod state;
 mod store_api;
@@ -217,6 +220,7 @@ use show_library::*;
 use show_library_mutations::*;
 use show_mutation_backup::*;
 use show_open::*;
+use show_patch_adapter::*;
 use speed_groups::*;
 use state::*;
 use store_api::*;

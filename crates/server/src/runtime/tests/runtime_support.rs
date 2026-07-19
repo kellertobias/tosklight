@@ -7,6 +7,7 @@ fn test_state() -> (AppState, PathBuf) {
     let programmers = ProgrammerRegistry::default();
     let engine = Arc::new(Engine::new(programmers.clone()));
     let (events, _) = broadcast::channel(32);
+    let application_events = EventBus::default();
     (
         AppState {
             desk: Arc::new(Mutex::new(desk)),
@@ -33,7 +34,8 @@ fn test_state() -> (AppState, PathBuf) {
             active_show: Arc::default(),
             active_show_error: Arc::default(),
             events,
-            application_events: EventBus::default(),
+            application_events: application_events.clone(),
+            show_patch: ShowPatchService::new(application_events),
             audit_events: Arc::new(Mutex::new(VecDeque::with_capacity(2048))),
             command_history: Arc::new(Mutex::new(HashMap::new())),
             event_revision: Arc::new(AtomicU64::new(0)),

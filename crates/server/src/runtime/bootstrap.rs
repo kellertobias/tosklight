@@ -6,7 +6,7 @@ use super::{
     spawn_control_inputs, spawn_matter_bridge_sync, startup_options, startup_state::StartupState,
 };
 use axum::Router;
-use light_application::{EventBus, PlaybackService, ProgrammingService};
+use light_application::{EventBus, PlaybackService, ProgrammingService, ShowPatchService};
 use light_control::TimecodeRouter;
 use light_media::MediaCache;
 use light_output::OutputHealth;
@@ -163,6 +163,7 @@ fn build_app_state(
     let output_control = resources.scheduler.control();
     let matter_transport = Arc::new(matter::MatterTransport::new(&startup.persistent.data_dir));
     let osc_feedback = Arc::new(UdpSocket::bind("0.0.0.0:0")?);
+    let application_events = resources.events.clone();
     Ok(AppState {
         desk: Arc::new(Mutex::new(startup.persistent.desk)),
         fixture_library: Arc::new(Mutex::new(startup.persistent.fixture_library)),
@@ -188,7 +189,8 @@ fn build_app_state(
         active_show: Arc::new(RwLock::new(startup.persistent.active_show)),
         active_show_error: Arc::new(RwLock::new(startup.active_show_error)),
         events: startup.events,
-        application_events: resources.events.clone(),
+        application_events: application_events.clone(),
+        show_patch: ShowPatchService::new(application_events),
         audit_events: Arc::new(Mutex::new(VecDeque::with_capacity(2048))),
         command_history: Arc::new(Mutex::new(HashMap::new())),
         event_revision: Arc::new(AtomicU64::new(0)),

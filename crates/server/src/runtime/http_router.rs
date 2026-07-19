@@ -7,6 +7,7 @@ pub(super) fn build(state: AppState) -> Router {
     let router = Router::new()
         .merge(help::router::<AppState>())
         .merge(event_transport::router())
+        .merge(show_patch_http::router())
         .merge(operator_routes())
         .merge(fixture_routes())
         .merge(media_and_output_routes())

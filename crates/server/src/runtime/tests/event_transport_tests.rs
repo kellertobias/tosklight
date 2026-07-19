@@ -65,7 +65,9 @@ async fn running_chaser_wakes_only_its_narrow_subscriber() {
     };
     assert_eq!(event.sequence, 3);
     assert_eq!(event.object, Some(object));
-    let wire::EventPayload::PlaybackCueTransition { transition } = event.payload;
+    let wire::EventPayload::PlaybackCueTransition { transition } = event.payload else {
+        panic!("expected a Playback Cue transition");
+    };
     assert_eq!(transition.cause, wire::PlaybackTransitionCause::Chaser);
 }
 
