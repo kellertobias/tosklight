@@ -201,8 +201,6 @@ pub(super) fn ws_programmer_mode(
             serde_json::json!({"desk_id":session.desk.id,"user_id":session.user.id,"state":&transition.state}),
         );
         highlight_state = Some(transition.state);
-    } else if input.blind.is_some() || input.preview.is_some() {
-        highlight_state = reconcile_highlight_capture_mode(state, session, "programmer_mode");
     }
     Ok(serde_json::json!({"updated":true,"highlight":highlight_state}))
 }

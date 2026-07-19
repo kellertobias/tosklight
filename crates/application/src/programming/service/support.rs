@@ -1,5 +1,5 @@
 use super::super::{ProgrammingAction, ProgrammingCommand, ProgrammingOutcome, ProgrammingResult};
-use crate::{ActionEnvelope, ActionError, ActionErrorKind};
+use crate::{ActionContext, ActionEnvelope, ActionError, ActionErrorKind};
 use light_core::SessionId;
 use light_programmer::{
     CommandLineReplaceError, CommandLineState, ProgrammerRegistry, ProgrammerSelection,
@@ -39,6 +39,15 @@ pub(super) fn required_session(
         ActionError::new(
             ActionErrorKind::Unauthorized,
             "programming actions require an operator session",
+        )
+    })
+}
+
+pub(super) fn context_session(context: &ActionContext) -> Result<SessionId, ActionError> {
+    context.session_id.map(SessionId).ok_or_else(|| {
+        ActionError::new(
+            ActionErrorKind::Unauthorized,
+            "programming interactions require an operator session",
         )
     })
 }

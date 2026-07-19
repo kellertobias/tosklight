@@ -55,6 +55,35 @@ const PROGRAMMER_CHANGED_COMMANDS: &[&str] = &[
     "preload.clear",
 ];
 
+const PROGRAMMING_INTERACTION_COMMANDS: &[&str] = &[
+    "selection.set",
+    "selection.gesture",
+    "selection.macro",
+    "group.select",
+    "programmer.set",
+    "programmer.set_many",
+    "programmer.set_value",
+    "programmer.control_action",
+    "programmer.priority",
+    "programmer.release",
+    "programmer.group.set",
+    "programmer.group.release",
+    "programmer.align",
+    "programmer.command_line",
+    "programmer.command_target",
+    "programmer.execute",
+    "programmer.clear",
+    "programmer.undo",
+    "programmer.redo",
+    "programmer.mode",
+    "preload.enter",
+    "preload.group.set",
+    "preload.go",
+    "preload.clear",
+    "preload.release",
+    "preset.apply",
+];
+
 fn dispatch_ws_payload(
     state: &AppState,
     session: &Session,
@@ -80,7 +109,7 @@ fn dispatch_ws_payload(
         "programmer.clear" => ws_programmer_clear(state, session, command),
         "preload.enter" => ws_preload_enter(state, session, command),
         "preload.group.set" => ws_preload_group_set(state, session, command),
-        "preload.go" => commit_preload(state, session),
+        "preload.go" => commit_preload_while_show_stable(state, session),
         "preload.clear" => ws_preload_clear(state, session, command),
         "preload.release" => ws_preload_release(state, session, command),
         "programmer.undo" => Ok(serde_json::json!({"changed":state.programmers.undo(session.id)})),
@@ -111,9 +140,6 @@ pub(super) fn dispatch_ws_command(
         Err(error) => return failed_ws_response(&command, revision, error),
     };
     let result = dispatch_validated_ws_command(state, session, &command, live_absolute);
-    if let Err(error) = persist_undo_redo(state, session, &command, &result.response) {
-        return failed_ws_response(&command, revision, error);
-    }
     match result.response {
         Ok(payload) => successful_ws_response(state, session, command, payload),
         Err(error) => failed_ws_response(&command, revision, error),
@@ -164,14 +190,53 @@ fn dispatch_validated_ws_command(
     if !live_absolute {
         return WsProgrammingOutput::untracked(dispatch_ws_payload(state, session, command));
     }
-    state
+    if !PROGRAMMING_INTERACTION_COMMANDS.contains(&command.command.as_str()) {
+        return WsProgrammingOutput::untracked(dispatch_ws_payload(state, session, command));
+    }
+    let _activation = match programming_activation(state, command) {
+        Ok(activation) => activation,
+        Err(error) => return WsProgrammingOutput::untracked(Err(error)),
+    };
+    let context = interaction_context(session, command);
+    let ports = command_http::ServerProgrammingPorts::new(state, session, "software", true);
+    match state
         .programming
-        .run_unit_of_work(WsProgrammingOperation {
-            state,
-            session,
-            command,
-        })
-        .output
+        .run_external_interaction(&context, &ports, || {
+            dispatch_live_interaction(state, session, command)
+        }) {
+        Ok(completed) => completed.output,
+        Err(error) => WsProgrammingOutput::untracked(Err(error.message)),
+    }
+}
+
+fn programming_activation(
+    state: &AppState,
+    command: &WsCommand,
+) -> Result<Option<tokio::sync::OwnedMutexGuard<()>>, String> {
+    if command.command != "preload.go" {
+        return Ok(None);
+    }
+    state
+        .activation_lock
+        .clone()
+        .try_lock_owned()
+        .map(Some)
+        .map_err(|_| "the active show is changing; retry Preload GO".to_owned())
+}
+
+fn dispatch_live_interaction(
+    state: &AppState,
+    session: &Session,
+    command: &WsCommand,
+) -> WsProgrammingOutput {
+    let before = tracked_state(state, session);
+    let mut response = dispatch_ws_payload(state, session, command);
+    if let Err(error) = persist_undo_redo(state, session, command, &response) {
+        response = Err(error);
+    }
+    let mutated = tracked_state(state, session);
+    reconcile_interaction(state, session, command, &before, &mutated, response.is_ok());
+    WsProgrammingOutput { response }
 }
 
 fn persist_undo_redo(
@@ -251,12 +316,6 @@ fn emit_programmer_changed(state: &AppState, session: &Session, command: &WsComm
     );
 }
 
-struct WsProgrammingOperation<'a> {
-    state: &'a AppState,
-    session: &'a Session,
-    command: &'a WsCommand,
-}
-
 struct WsProgrammingOutput {
     response: Result<serde_json::Value, String>,
 }
@@ -267,108 +326,52 @@ impl WsProgrammingOutput {
     }
 }
 
-impl light_application::ProgrammingUnitOfWork for WsProgrammingOperation<'_> {
-    type Output = WsProgrammingOutput;
-
-    fn desk_id(&self) -> Uuid {
-        self.session.desk.id
-    }
-
-    fn execute(self) -> light_application::ProgrammingOperation<Self::Output> {
-        let before = interaction_version(self.state, self.session);
-        let response = dispatch_ws_payload(self.state, self.session, self.command);
-        let mutated = interaction_version(self.state, self.session);
-        reconcile_interaction(
-            self.state,
-            self.session,
-            self.command,
-            &before,
-            &mutated,
-            &response,
-        );
-        let after = interaction_version(self.state, self.session);
-        let events = interaction_event(
-            self.state,
-            self.session,
-            self.command,
-            &before,
-            &after,
-            &response,
-        );
-        let output = WsProgrammingOutput { response };
-        light_application::ProgrammingOperation::with_events(output, events)
-    }
-}
-
 fn reconcile_interaction(
     state: &AppState,
     session: &Session,
     command: &WsCommand,
-    before: &Option<light_programmer::ProgrammerInteractionVersion>,
-    mutated: &Option<light_programmer::ProgrammerInteractionVersion>,
-    response: &Result<serde_json::Value, String>,
+    before: &WsTrackedState,
+    mutated: &WsTrackedState,
+    response_succeeded: bool,
 ) {
-    if response.is_err() {
-        return;
-    }
-    if matches!(command.command.as_str(), "preload.enter" | "preload.go") {
-        reconcile_highlight_capture_mode(state, session, "preload");
-    } else if selection_revision(before) != selection_revision(mutated) {
+    let capture_mode_changed = before.capture_mode() != mutated.capture_mode();
+    let explicit_highlight_succeeded = command.command == "programmer.mode"
+        && command
+            .payload
+            .get("highlight")
+            .is_some_and(|value| !value.is_null())
+        && response_succeeded;
+    if capture_mode_changed {
+        if !explicit_highlight_succeeded {
+            reconcile_highlight_capture_mode(state, session, "programmer_capture_mode");
+        }
+    } else if before.selection_revision() != mutated.selection_revision() {
         reconcile_highlight_selection(state, session, "programmer_selection");
     }
 }
 
-fn selection_revision(
-    state: &Option<light_programmer::ProgrammerInteractionVersion>,
-) -> Option<u64> {
-    state.as_ref().map(|state| state.selection_revision)
+struct WsTrackedState {
+    interaction: Option<light_programmer::ProgrammerInteractionVersion>,
 }
 
-fn interaction_version(
-    state: &AppState,
-    session: &Session,
-) -> Option<light_programmer::ProgrammerInteractionVersion> {
-    state.programmers.interaction_version(session.id)
+impl WsTrackedState {
+    fn selection_revision(&self) -> Option<u64> {
+        self.interaction
+            .as_ref()
+            .map(|state| state.selection_revision)
+    }
+
+    fn capture_mode(&self) -> Option<bool> {
+        self.interaction
+            .as_ref()
+            .map(|state| state.capture_mode_active)
+    }
 }
 
-fn interaction_event(
-    state: &AppState,
-    session: &Session,
-    command: &WsCommand,
-    before: &Option<light_programmer::ProgrammerInteractionVersion>,
-    after: &Option<light_programmer::ProgrammerInteractionVersion>,
-    response: &Result<serde_json::Value, String>,
-) -> Vec<light_application::EventDraft> {
-    let Some(change) = changed_interaction(state, session, before, after, response) else {
-        return Vec::new();
-    };
-    vec![
-        light_application::EventDraft::programming_interaction_changed(
-            &interaction_context(session, command),
-            change,
-        ),
-    ]
-}
-
-fn changed_interaction(
-    state: &AppState,
-    session: &Session,
-    before: &Option<light_programmer::ProgrammerInteractionVersion>,
-    after: &Option<light_programmer::ProgrammerInteractionVersion>,
-    response: &Result<serde_json::Value, String>,
-) -> Option<light_application::ProgrammingInteractionChange> {
-    response.as_ref().ok()?;
-    let before = before.as_ref()?;
-    let after = after.as_ref()?;
-    let command_line =
-        (before.command_line != after.command_line).then(|| after.command_line.clone());
-    let selection = (before.selection_revision != after.selection_revision)
-        .then(|| state.programmers.selection(session.id).unwrap_or_default());
-    light_application::ProgrammingInteractionChange::from_components(
-        session.desk.id,
-        command_line,
-        selection,
-    )
+fn tracked_state(state: &AppState, session: &Session) -> WsTrackedState {
+    WsTrackedState {
+        interaction: state.programmers.interaction_version(session.id),
+    }
 }
 
 fn interaction_context(session: &Session, command: &WsCommand) -> light_application::ActionContext {

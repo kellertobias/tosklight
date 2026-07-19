@@ -103,6 +103,13 @@ pub(super) fn commit_preload(
         .clone()
         .try_lock_owned()
         .map_err(|_| "the active show is changing; retry Preload GO".to_owned())?;
+    commit_preload_while_show_stable(state, session)
+}
+
+pub(super) fn commit_preload_while_show_stable(
+    state: &AppState,
+    session: &Session,
+) -> Result<serde_json::Value, String> {
     let completed = state
         .playback_service
         .run_unit_of_work(CommitPreload { state, session });

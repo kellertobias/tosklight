@@ -8,6 +8,7 @@ use light_core::{FixtureId, SessionId, UserId};
 use light_programmer::command_line::{CommandKey, CommandKeyPhase};
 use light_programmer::{HighlightRegistry, ProgrammerRegistry, ProgrammerSelection};
 use parking_lot::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::thread;
 use uuid::Uuid;
@@ -17,6 +18,7 @@ mod routing;
 
 #[derive(Default)]
 struct LivePorts {
+    authorization_error: Mutex<Option<crate::ActionError>>,
     selection: Mutex<Vec<FixtureId>>,
     reconciled_selection: Mutex<Option<Vec<FixtureId>>>,
     reconciliations: Mutex<Vec<ProgrammingReconciliation>>,
@@ -24,6 +26,10 @@ struct LivePorts {
 }
 
 impl ProgrammingPorts for LivePorts {
+    fn authorize(&self, _context: &ActionContext) -> Result<(), crate::ActionError> {
+        self.authorization_error.lock().clone().map_or(Ok(()), Err)
+    }
+
     fn execute(
         &self,
         programmers: &ProgrammerRegistry,
@@ -264,6 +270,117 @@ fn final_change_is_captured_after_selection_reconciliation() {
 }
 
 #[test]
+fn external_interaction_publishes_the_final_state_even_when_adapter_output_is_an_error() {
+    let setup = LiveSetup::new(8);
+    let session = SessionId(setup.context.session_id.unwrap());
+    let registry = setup.ports.registry.as_ref().unwrap();
+    let first = FixtureId::new();
+    let final_fixture = FixtureId::new();
+
+    let completed = setup
+        .service
+        .run_external_interaction(&setup.context, &setup.ports, || {
+            registry.select(session, [first]);
+            registry.select(session, [final_fixture]);
+            Err::<(), _>("adapter persistence failed")
+        })
+        .unwrap();
+
+    assert_eq!(completed.output, Err("adapter persistence failed"));
+    assert_eq!(completed.event_sequence, Some(1));
+    let EventReplay::Events(events) = setup.events.replay(0, &setup.selection_filter()) else {
+        panic!("the external interaction event should be replayable")
+    };
+    let ApplicationEvent::Programming(ProgrammingEvent::InteractionChanged(change)) =
+        &events[0].payload
+    else {
+        panic!("expected a typed Programming interaction event")
+    };
+    assert_eq!(change.selection().unwrap().selected, vec![final_fixture]);
+    assert_eq!(events[0].correlation_id, Some(setup.context.correlation_id));
+    assert_eq!(
+        events[0].source,
+        crate::EventSource::Action(ActionSource::UserInterface)
+    );
+}
+
+#[test]
+fn external_interaction_error_without_a_mutation_does_not_publish() {
+    let setup = LiveSetup::new(8);
+
+    let completed = setup
+        .service
+        .run_external_interaction(&setup.context, &setup.ports, || Err::<(), _>("rejected"))
+        .unwrap();
+
+    assert_eq!(completed.output, Err("rejected"));
+    assert_eq!(completed.event_sequence, None);
+    assert_eq!(setup.events.latest_sequence(), 0);
+}
+
+#[test]
+fn external_interaction_requires_an_operator_session_before_running_adapter_work() {
+    let setup = LiveSetup::new(8);
+    let context = ActionContext::system(setup.context.desk_id, ActionSource::System);
+    let ran = AtomicBool::new(false);
+
+    let error = setup
+        .service
+        .run_external_interaction(&context, &setup.ports, || {
+            ran.store(true, Ordering::Relaxed)
+        })
+        .unwrap_err();
+
+    assert_eq!(error.kind, crate::ActionErrorKind::Unauthorized);
+    assert!(!ran.load(Ordering::Relaxed));
+    assert_eq!(setup.events.latest_sequence(), 0);
+}
+
+#[test]
+fn external_interaction_rejects_an_unknown_session_before_running_adapter_work() {
+    let setup = LiveSetup::new(8);
+    let context = ActionContext::operator(
+        setup.context.desk_id,
+        setup.context.user_id.unwrap(),
+        Uuid::new_v4(),
+        ActionSource::Http,
+    );
+    let ran = AtomicBool::new(false);
+
+    let error = setup
+        .service
+        .run_external_interaction(&context, &setup.ports, || {
+            ran.store(true, Ordering::Relaxed)
+        })
+        .unwrap_err();
+
+    assert_eq!(error.kind, crate::ActionErrorKind::NotFound);
+    assert!(!ran.load(Ordering::Relaxed));
+    assert_eq!(setup.events.latest_sequence(), 0);
+}
+
+#[test]
+fn external_interaction_authorizes_before_running_adapter_work() {
+    let setup = LiveSetup::new(8);
+    *setup.ports.authorization_error.lock() = Some(crate::ActionError::new(
+        crate::ActionErrorKind::Forbidden,
+        "forged action context",
+    ));
+    let ran = AtomicBool::new(false);
+
+    let error = setup
+        .service
+        .run_external_interaction(&setup.context, &setup.ports, || {
+            ran.store(true, Ordering::Relaxed)
+        })
+        .unwrap_err();
+
+    assert_eq!(error.kind, crate::ActionErrorKind::Forbidden);
+    assert!(!ran.load(Ordering::Relaxed));
+    assert_eq!(setup.events.latest_sequence(), 0);
+}
+
+#[test]
 fn preload_capture_reconciliation_is_included_in_the_same_final_event() {
     let setup = LiveSetup::new(8);
     let fixture = FixtureId::new();
@@ -290,17 +407,20 @@ fn preload_capture_reconciliation_is_included_in_the_same_final_event() {
 }
 
 #[test]
-fn unit_of_work_and_handle_share_the_private_desk_gate() {
+fn external_interaction_and_handle_share_the_private_desk_gate() {
     let setup = LiveSetup::new(8);
     let (entered_tx, entered_rx) = mpsc::channel();
     let (release_tx, release_rx) = mpsc::channel();
     let service = setup.service.clone();
-    let operation_context = setup.context.clone();
+    let context = setup.context.clone();
+    let registry = setup.ports.registry.as_ref().unwrap().clone();
+    let session = SessionId(context.session_id.unwrap());
+    let fixture = FixtureId::new();
     let operation = thread::spawn(move || {
-        service.run_unit_of_work(BlockingOperation {
-            context: operation_context,
-            entered: entered_tx,
-            release: release_rx,
+        service.run_external_interaction(&context, &LivePorts::default(), || {
+            entered_tx.send(()).unwrap();
+            release_rx.recv().unwrap();
+            registry.select(session, [fixture]);
         })
     });
     entered_rx.recv().unwrap();
@@ -323,9 +443,9 @@ fn unit_of_work_and_handle_share_the_private_desk_gate() {
     assert_eq!(setup.events.latest_sequence(), 0);
     release_tx.send(()).unwrap();
 
-    let operation = operation.join().unwrap();
+    let completed = operation.join().unwrap().unwrap();
     let result = worker.join().unwrap().unwrap();
-    assert_eq!(operation.event_sequences, vec![1]);
+    assert_eq!(completed.event_sequence, Some(1));
     assert_eq!(result.interaction_event_sequence, Some(2));
 }
 
@@ -336,36 +456,4 @@ fn service_shares_the_injected_highlight_registry() {
         setup.service.highlight_registry(),
         &setup.highlight
     ));
-}
-
-struct BlockingOperation {
-    context: ActionContext,
-    entered: mpsc::Sender<()>,
-    release: mpsc::Receiver<()>,
-}
-
-impl ProgrammingUnitOfWork for BlockingOperation {
-    type Output = &'static str;
-
-    fn desk_id(&self) -> Uuid {
-        self.context.desk_id
-    }
-
-    fn execute(self) -> ProgrammingOperation<Self::Output> {
-        self.entered.send(()).unwrap();
-        self.release.recv().unwrap();
-        let change = ProgrammingInteractionChange::from_components(
-            self.context.desk_id,
-            Some(Default::default()),
-            None,
-        )
-        .unwrap();
-        ProgrammingOperation::with_events(
-            "committed",
-            vec![crate::EventDraft::programming_interaction_changed(
-                &self.context,
-                change,
-            )],
-        )
-    }
 }

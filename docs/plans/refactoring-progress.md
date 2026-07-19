@@ -4,7 +4,7 @@ This is the living handoff for [`major-refactoring.md`](major-refactoring.md). U
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-19 after the typed Programmer selection mutation slice.
+Last updated: 2026-07-19 after the external Programmer interaction boundary.
 
 ## Guardrails
 
@@ -75,6 +75,13 @@ Last updated: 2026-07-19 after the typed Programmer selection mutation slice.
   optimistic writer with one safe network retry, rollback or narrow repair by failure class,
   show/desk generation guards, and an execution barrier shared with command-line Enter. Capability
   narrowing now reopens its scoped stream from the existing cursor without another REST snapshot.
+- [x] Added one authenticated application boundary for adapter-owned Programmer interactions. It
+  serializes with typed commands per desk, captures the final command/selection state even when
+  persistence fails after an in-memory mutation, and publishes before releasing the gate. The
+  compatibility WebSocket path now uses this boundary; capture-mode reconciliation is driven by a
+  lightweight coherent version, Preload GO follows activation → Programming → Playback ordering,
+  unrelated Output/Playback commands no longer take the Programming gate, and the superseded
+  public Programming unit-of-work escape hatch is removed.
 - [x] Migrated the production command-line editors and action consumers onto the scoped
   Programming store. A provider-owned latest-wins writer gives immediate optimistic feedback,
   bounds slow writes to one in flight plus the newest pending value, waits for accepted writes
@@ -124,6 +131,9 @@ Last updated: 2026-07-19 after the typed Programmer selection mutation slice.
 - [ ] Move the remaining selection consumers onto the scoped Programming store, then remove their
   legacy bootstrap fields and broad Programmer refresh paths. Group Pool, Group Strip, and the
   command bar have moved; Stage, channel, Patch, and miscellaneous readers still use the facade.
+- [ ] Route direct Highlight HTTP/OSC, legacy Programmer writes, selection-capable Playback input,
+  and engine-wide live-Group refreshes through the same ordered typed-event boundary. Multi-desk
+  generation installs need deterministic desk locking and exactly one event per changed desk.
 - [ ] Replace inferred Cue ambiguity in the command-line text projection with explicit desk-local
   pending-choice state that is set only by `ChoiceRequired` after ENT and cleared by edit, reset,
   selection, or Cancel. Until then, cross-session choice visibility remains a documented

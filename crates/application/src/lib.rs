@@ -84,10 +84,10 @@ pub use playback::{
 pub use programming::{
     CueMoveCopyChoice, CueTransferOperation, ExecutionPolicy, ProgrammingAction,
     ProgrammingChoiceOption, ProgrammingChoiceOptionId, ProgrammingCommand, ProgrammingExecution,
-    ProgrammingInteractionChange, ProgrammingInteractionProjection, ProgrammingLiveSnapshot,
-    ProgrammingOperation, ProgrammingOperationResult, ProgrammingOutcome, ProgrammingPorts,
-    ProgrammingReconciliation, ProgrammingResult, ProgrammingSelectionEnvironment,
-    ProgrammingSelectionQuery, ProgrammingService, ProgrammingUnitOfWork, SelectionGestureSource,
+    ProgrammingInteractionChange, ProgrammingInteractionProjection, ProgrammingInteractionResult,
+    ProgrammingLiveSnapshot, ProgrammingOutcome, ProgrammingPorts, ProgrammingReconciliation,
+    ProgrammingResult, ProgrammingSelectionEnvironment, ProgrammingSelectionQuery,
+    ProgrammingService, SelectionGestureSource,
 };
 pub use scheduling::{
     MonotonicClock, MonotonicMoment, MonotonicScheduler, SchedulerError, SchedulerErrorKind,

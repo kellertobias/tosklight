@@ -9,7 +9,7 @@ use light_programmer::ProgrammerRegistry;
 
 use super::super::{AppState, Session};
 
-pub(super) struct ServerProgrammingPorts<'a> {
+pub(crate) struct ServerProgrammingPorts<'a> {
     state: &'a AppState,
     session: &'a Session,
     source: &'static str,
@@ -17,7 +17,7 @@ pub(super) struct ServerProgrammingPorts<'a> {
 }
 
 impl<'a> ServerProgrammingPorts<'a> {
-    pub(super) const fn new(
+    pub(crate) const fn new(
         state: &'a AppState,
         session: &'a Session,
         source: &'static str,

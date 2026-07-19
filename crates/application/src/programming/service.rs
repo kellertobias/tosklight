@@ -1,6 +1,7 @@
 use super::{
     ExecutionPolicy, ProgrammingAction, ProgrammingCommand, ProgrammingExecution,
-    ProgrammingInteractionChange, ProgrammingOutcome, ProgrammingPorts, ProgrammingResult,
+    ProgrammingInteractionChange, ProgrammingInteractionResult, ProgrammingOutcome,
+    ProgrammingPorts, ProgrammingResult,
 };
 use crate::{ActionContext, ActionEnvelope, ActionError, EventBus, EventDraft};
 use light_core::SessionId;
@@ -18,8 +19,8 @@ mod support;
 
 use state::{interaction_change, reconciliation};
 use support::{
-    ReplayCache, Snapshot, accepted, command_line, replace_error, required_session,
-    unknown_programmer, validate_command,
+    ReplayCache, Snapshot, accepted, command_line, context_session, replace_error,
+    required_session, unknown_programmer, validate_command,
 };
 
 use super::operation::DeskOperationGates;
@@ -73,6 +74,42 @@ impl ProgrammingService {
                 self.publish_interaction(&action.context, interaction);
             self.remember(&action, session, &result);
             Ok(result)
+        })
+    }
+
+    /// Serializes adapter-owned Programming mutations with typed commands on the same desk.
+    ///
+    /// Authorization runs under the desk gate. The closure must finish validation, mutation,
+    /// persistence, and reconciliation without deleting the session or re-entering this desk's
+    /// Programming gate. The boundary captures final state even when the closure returns an error
+    /// as its output, then publishes the sparse authoritative change before releasing the gate.
+    pub fn run_external_interaction<T>(
+        &self,
+        context: &ActionContext,
+        ports: &dyn ProgrammingPorts,
+        operation: impl FnOnce() -> T,
+    ) -> Result<ProgrammingInteractionResult<T>, ActionError> {
+        let session = context_session(context)?;
+        self.with_desk_gate(context.desk_id, || {
+            ports.authorize(context)?;
+            self.capture_external_interaction(context, session, operation)
+        })
+    }
+
+    fn capture_external_interaction<T>(
+        &self,
+        context: &ActionContext,
+        session: SessionId,
+        operation: impl FnOnce() -> T,
+    ) -> Result<ProgrammingInteractionResult<T>, ActionError> {
+        let before = Snapshot::read(&self.programmers, context.desk_id, session)?;
+        let output = operation();
+        let after = Snapshot::read(&self.programmers, context.desk_id, session)?;
+        let change =
+            interaction_change(&self.programmers, context.desk_id, session, &before, &after);
+        Ok(ProgrammingInteractionResult {
+            output,
+            event_sequence: self.publish_interaction(context, change),
         })
     }
 

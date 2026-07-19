@@ -11,7 +11,7 @@ pub use command::{
     ProgrammingResult, SelectionGestureSource,
 };
 pub use event::ProgrammingInteractionChange;
-pub use operation::{ProgrammingOperation, ProgrammingOperationResult, ProgrammingUnitOfWork};
+pub use operation::ProgrammingInteractionResult;
 pub use ports::{
     ProgrammingExecution, ProgrammingPorts, ProgrammingReconciliation,
     ProgrammingSelectionEnvironment, ProgrammingSelectionQuery,

@@ -88,6 +88,7 @@ pub struct ProgrammerInteractionState {
 pub struct ProgrammerInteractionVersion {
     pub command_line: CommandLineState,
     pub selection_revision: u64,
+    pub capture_mode_active: bool,
 }
 
 pub(crate) fn canonical_command_text(text: String, pristine: bool) -> String {
@@ -115,6 +116,11 @@ impl ProgrammerRegistry {
             return None;
         }
         let context = self.command_context(session);
+        let capture_mode_active = self
+            .states
+            .read()
+            .get(&self.key(session))
+            .is_some_and(|state| state.blind || state.preview);
         Some(ProgrammerInteractionVersion {
             command_line: self
                 .command_states
@@ -127,6 +133,7 @@ impl ProgrammerRegistry {
                 .read()
                 .get(&context)
                 .map_or(0, |selection| selection.revision),
+            capture_mode_active,
         })
     }
 

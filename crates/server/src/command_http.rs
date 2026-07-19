@@ -28,6 +28,7 @@ pub(super) use adapter::{
     ExistingCommandOutcome, ExistingCommandPolicy, execute_existing_command, route_osc_command_key,
 };
 pub(super) use interaction_wire::interaction_change;
+pub(crate) use programming_ports::ServerProgrammingPorts;
 pub(super) use routes::router;
 
 #[cfg(test)]
