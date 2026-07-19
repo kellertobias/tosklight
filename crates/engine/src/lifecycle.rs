@@ -51,6 +51,14 @@ impl Engine {
         self.install_prepared_snapshot_with_playback_policy(prepared, true);
     }
 
+    /// Installs a prepared snapshot while dropping runtime playback state from the previous show.
+    ///
+    /// Show activation prepares before committing any persisted migration, then uses this
+    /// infallible boundary so a successful commit cannot leave persistence ahead of the engine.
+    pub fn install_prepared_snapshot_releasing_playback(&self, prepared: PreparedEngineSnapshot) {
+        self.install_prepared_snapshot_with_playback_policy(prepared, false);
+    }
+
     /// Validates every runtime-dependent part of a candidate snapshot without mutating the live
     /// engine. Server persistence uses this preflight so an invalid Chaser or playback assignment
     /// cannot be written first and rejected only during the subsequent live-engine refresh.

@@ -55,7 +55,7 @@ use light_control::{
     UdpInputProtocol, encode_osc_message,
 };
 use light_core::{ATTRIBUTE_REGISTRY, ApplicationClock, ManualClock, SessionId};
-use light_engine::{Engine, EngineSnapshot, RenderOptions};
+use light_engine::{Engine, EngineSnapshot, PreparedEngineSnapshot, RenderOptions};
 use light_media::{CitpClient, LibraryId, MediaCache, PreviewKey, ThumbnailKey};
 use light_output::{NetworkOutput, OutputHealth};
 use light_programmer::ProgrammerRegistry;
@@ -144,8 +144,8 @@ mod show_compile;
 mod show_compile_migrations;
 mod show_library;
 mod show_library_mutations;
+mod show_mutation_backup;
 mod show_open;
-mod show_schema_defaults;
 mod speed_groups;
 mod state;
 mod store_api;
@@ -215,8 +215,8 @@ use show_compile::*;
 use show_compile_migrations::*;
 use show_library::*;
 use show_library_mutations::*;
+use show_mutation_backup::*;
 use show_open::*;
-use show_schema_defaults::*;
 use speed_groups::*;
 use state::*;
 use store_api::*;

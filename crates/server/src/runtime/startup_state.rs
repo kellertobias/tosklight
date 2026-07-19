@@ -179,17 +179,22 @@ fn load_engine(
     programmers: &ProgrammerRegistry,
 ) -> anyhow::Result<(Arc<Engine>, Option<String>)> {
     let engine = Arc::new(Engine::new(programmers.clone()));
-    let active_show_error = compile_active_show(&engine, persistent.active_show.as_ref());
+    let active_show_error = compile_active_show(&engine, persistent);
     tracing::info!("engine snapshot ready");
     configure_engine(&engine, &persistent.configuration);
     restore_active_playbacks(persistent, &engine, active_show_error.as_deref())?;
     Ok((engine, active_show_error))
 }
 
-fn compile_active_show(engine: &Engine, active_show: Option<&ShowEntry>) -> Option<String> {
-    let active = active_show?;
+fn compile_active_show(engine: &Engine, persistent: &PersistentState) -> Option<String> {
+    let active = persistent.active_show.as_ref()?;
     tracing::info!(show=%active.name, "compiling active show");
-    let message = compile_active_show_for_startup(engine, active)?;
+    let message = compile_active_show_for_startup(
+        engine,
+        active,
+        &persistent.data_dir,
+        persistent.configuration.backup_retention,
+    )?;
     tracing::error!(show=%active.name, error=%message, "starting in show recovery mode");
     Some(message)
 }

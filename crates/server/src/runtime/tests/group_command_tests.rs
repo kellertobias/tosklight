@@ -12,7 +12,7 @@ fn invalid_active_show_enters_recovery_instead_of_aborting_startup() {
         updated_at: String::new(),
         revision_copy: None,
     };
-    let error = compile_active_show_for_startup(&engine, &entry)
+    let error = compile_active_show_for_startup(&engine, &entry, &std::env::temp_dir(), 5)
         .expect("invalid show should enter recovery mode");
     assert!(error.contains("might be corrupted or incompatible"));
     assert!(error.contains("Damaged Show"));

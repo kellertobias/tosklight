@@ -100,14 +100,6 @@ pub(super) async fn open_show_revision(
         return Err(ApiError::bad_request("saved show revision is unavailable"));
     }
     validate_show_file(&saved_revision.path).map_err(ApiError::store)?;
-    let revision_entry = ShowEntry {
-        path: saved_revision.path.clone(),
-        ..entry.clone()
-    };
-    let compiled = load_engine_snapshot(&revision_entry).map_err(ApiError::internal)?;
-    compiled
-        .validate()
-        .map_err(|error| ApiError::bad_request(error.to_string()))?;
     let copied_at = chrono::Utc::now();
     let revision_copy = RevisionCopySource {
         show_id: entry.id,
@@ -121,10 +113,7 @@ pub(super) async fn open_show_revision(
         .data_dir
         .join("shows")
         .join(format!("{copy_name}.show"));
-    ShowStore::open(&saved_revision.path)
-        .map_err(ApiError::store)?
-        .backup_to(&copy_path)
-        .map_err(ApiError::store)?;
+    std::fs::copy(&saved_revision.path, &copy_path).map_err(ApiError::io)?;
     let copy = match state.desk.lock().upsert_show_with_revision_copy(
         &copy_name,
         &copy_path.display().to_string(),
@@ -145,15 +134,17 @@ pub(super) async fn open_show_revision(
         return Err(ApiError::store(error));
     }
     let _activation = state.activation_lock.lock().await;
+    let prepared = match prepare_show_for_runtime(&state, &copy) {
+        Ok(prepared) => prepared,
+        Err(error) => {
+            let _ = state.desk.lock().remove_show(copy.id);
+            let _ = std::fs::remove_file(&copy_path);
+            return Err(error);
+        }
+    };
     let previous = state.active_show.read().clone();
     let transition = input.transition.unwrap_or(Transition::SafeBlackout);
-    if let Err(error) =
-        activate_snapshot(&state, compiled, &transition, input.transition_millis).await
-    {
-        let _ = state.desk.lock().remove_show(copy.id);
-        let _ = std::fs::remove_file(&copy_path);
-        return Err(error);
-    }
+    activate_prepared_snapshot(&state, prepared, &transition, input.transition_millis).await;
     state
         .desk
         .lock()

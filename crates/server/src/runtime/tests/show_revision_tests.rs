@@ -52,10 +52,34 @@ async fn revision_layout(app: &Router, token: &str, show_id: &str) -> Response {
 #[tokio::test]
 async fn named_revision_load_creates_an_independent_provenanced_copy() {
     let (state, data_dir) = test_state();
-    let app = router(state);
+    let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let show = create_show(&app, &token, "Revision source").await;
     let show_id = show["id"].as_str().unwrap();
+    let show_uuid = Uuid::parse_str(show_id).unwrap();
+    let source_entry = state
+        .desk
+        .lock()
+        .show(light_core::ShowId(show_uuid))
+        .unwrap()
+        .unwrap();
+    let seed_path = data_dir.join("legacy-revision-seed.show");
+    default_show::initialise(&seed_path).unwrap();
+    let legacy_fixture = ShowStore::open(&seed_path)
+        .unwrap()
+        .objects("patched_fixture")
+        .unwrap()
+        .remove(0);
+    ShowStore::open(&source_entry.path)
+        .unwrap()
+        .put_object(
+            "patched_fixture",
+            &legacy_fixture.id,
+            &legacy_fixture.body,
+            0,
+        )
+        .unwrap();
+    std::fs::remove_file(seed_path).unwrap();
     let first = put_revision_layout(&app, &token, show_id, 0, "manual").await;
     assert_eq!(first.status(), StatusCode::OK);
     let saved = app
@@ -74,6 +98,13 @@ async fn named_revision_load_creates_an_independent_provenanced_copy() {
     assert_eq!(saved["revision"], 1);
     assert_eq!(saved["name"], "Before experiment");
     assert!(saved.get("path").is_none());
+    let saved_revision = state
+        .desk
+        .lock()
+        .show_revision(light_core::ShowId(show_uuid), 1)
+        .unwrap()
+        .unwrap();
+    let saved_source = std::fs::read(&saved_revision.path).unwrap();
     let autosaved = put_revision_layout(&app, &token, show_id, 1, "autosave").await;
     assert_eq!(autosaved.status(), StatusCode::OK);
     let opened = open_named_revision(&app, &token, show_id).await;
@@ -92,6 +123,23 @@ async fn named_revision_load_creates_an_independent_provenanced_copy() {
     assert_eq!(copy["revision_copy"]["revision"], 1);
     assert_eq!(copy["revision_copy"]["revision_name"], "Before experiment");
     assert!(copy["revision_copy"]["copied_at"].as_str().is_some());
+    assert_eq!(std::fs::read(&saved_revision.path).unwrap(), saved_source);
+    let copy_entry = state
+        .desk
+        .lock()
+        .show(light_core::ShowId(Uuid::parse_str(copy_id).unwrap()))
+        .unwrap()
+        .unwrap();
+    let copy_fixture = ShowStore::open(&copy_entry.path)
+        .unwrap()
+        .objects("patched_fixture")
+        .unwrap()
+        .remove(0);
+    assert!(
+        !light_fixture::PortablePatchedFixtureRecord::decode(copy_fixture.body)
+            .unwrap()
+            .is_legacy_inline()
+    );
 
     let original_objects = revision_layout(&app, &token, show_id).await;
     assert_eq!(original_objects.status(), StatusCode::OK);
@@ -116,6 +164,7 @@ async fn named_revision_load_creates_an_independent_provenanced_copy() {
     assert_ne!(second_copy["id"], copy["id"]);
     assert_ne!(second_copy["name"], copy["name"]);
     assert!(second_copy["name"].as_str().unwrap().ends_with("-2"));
+    assert_eq!(std::fs::read(&saved_revision.path).unwrap(), saved_source);
 
     let revisions = app
         .clone()

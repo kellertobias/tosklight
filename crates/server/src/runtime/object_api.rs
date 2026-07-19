@@ -217,7 +217,7 @@ fn validate_object_candidate(
         return Ok(());
     }
     let candidate = load_engine_snapshot_with_override(entry, Some((kind, object_id, body)))
-        .map_err(ApiError::internal)?;
+        .map_err(show_load_api_error)?;
     if active || matches!(kind, "playback" | "playback_page") {
         state.engine.validate_snapshot_for_runtime(&candidate)
     } else {
@@ -238,10 +238,8 @@ async fn activate_object_change(
             .terminate_routes(&[route], &mut *state.output_sequences.lock().await)
             .await;
     }
-    state
-        .engine
-        .replace_snapshot(load_engine_snapshot(entry).map_err(ApiError::internal)?)
-        .map_err(|error| ApiError::internal(error.to_string()))?;
+    let prepared = prepare_show_for_runtime(state, entry)?;
+    state.engine.install_prepared_snapshot(prepared);
     if kind == "patched_fixture"
         && let Ok(fixture) = serde_json::from_value::<light_fixture::PatchedFixture>(body.clone())
     {
@@ -268,6 +266,7 @@ pub(super) async fn put_object(
         .show(show_id)
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("show"))?;
+    let _activation = state.activation_lock.lock().await;
     let body = normalize_object_body(&state, &kind, &object_id, body)?;
     let active = state
         .active_show
@@ -315,6 +314,7 @@ pub(super) async fn delete_object(
         .show(show_id)
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("show"))?;
+    let _activation = state.activation_lock.lock().await;
     let store = ShowStore::open(&entry.path).map_err(ApiError::store)?;
     let object = store
         .objects(&kind)
@@ -348,10 +348,8 @@ pub(super) async fn delete_object(
                 .terminate_routes(&[route], &mut *state.output_sequences.lock().await)
                 .await;
         }
-        state
-            .engine
-            .replace_snapshot(load_engine_snapshot(&entry).map_err(ApiError::internal)?)
-            .map_err(|error| ApiError::internal(error.to_string()))?;
+        let prepared = prepare_show_for_runtime(&state, &entry)?;
+        state.engine.install_prepared_snapshot(prepared);
     }
     emit(
         &state,

@@ -72,12 +72,27 @@ pub(super) async fn activate_snapshot(
     transition: &Transition,
     duration: Option<u64>,
 ) -> Result<(), ApiError> {
+    let prepared = state
+        .engine
+        .prepare_snapshot(snapshot)
+        .map_err(|error| ApiError::internal(error.to_string()))?;
+    activate_prepared_snapshot(state, prepared, transition, duration).await;
+    Ok(())
+}
+
+pub(super) async fn activate_prepared_snapshot(
+    state: &AppState,
+    prepared: PreparedEngineSnapshot,
+    transition: &Transition,
+    duration: Option<u64>,
+) {
     // A remembered Highlight selection belongs only to the current live show context. Clear the
     // transient overlay before any transition so it cannot reappear in the newly loaded show.
     state.highlight.clear_all();
     state.patch_preview_highlights.lock().clear();
     state.engine.clear_highlighted_fixtures();
-    let media_fixture_ids = snapshot
+    let media_fixture_ids = prepared
+        .snapshot()
         .fixtures
         .iter()
         .filter(|fixture| fixture.direct_control.is_some())
@@ -99,8 +114,7 @@ pub(super) async fn activate_snapshot(
             state.output_control.lock().hold = true;
             state
                 .engine
-                .replace_snapshot_releasing_playback(snapshot)
-                .map_err(|error| ApiError::internal(error.to_string()))?;
+                .install_prepared_snapshot_releasing_playback(prepared);
             tokio::time::sleep(frame).await;
             state.output_control.lock().hold = false;
         }
@@ -109,8 +123,7 @@ pub(super) async fn activate_snapshot(
             tokio::time::sleep(frame * 2).await;
             state
                 .engine
-                .replace_snapshot_releasing_playback(snapshot)
-                .map_err(|error| ApiError::internal(error.to_string()))?;
+                .install_prepared_snapshot_releasing_playback(prepared);
             tokio::time::sleep(frame).await;
             state.output_control.lock().options.blackout = false;
         }
@@ -124,13 +137,11 @@ pub(super) async fn activate_snapshot(
             }
             state
                 .engine
-                .replace_snapshot_releasing_playback(snapshot)
-                .map_err(|error| ApiError::internal(error.to_string()))?;
+                .install_prepared_snapshot_releasing_playback(prepared);
             for step in 1..=steps {
                 state.output_control.lock().options.grand_master = step as f32 / steps as f32;
                 tokio::time::sleep(sleep).await;
             }
         }
     }
-    Ok(())
 }

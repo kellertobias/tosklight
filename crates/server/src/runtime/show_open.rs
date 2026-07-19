@@ -18,12 +18,8 @@ pub(super) async fn open_show(
     if !FsPath::new(&entry.path).exists() {
         return Err(ApiError::bad_request("show file is unavailable"));
     }
-    validate_show_file(&entry.path).map_err(ApiError::store)?;
-    let compiled = load_engine_snapshot(&entry).map_err(ApiError::internal)?;
-    compiled
-        .validate()
-        .map_err(|error| ApiError::bad_request(error.to_string()))?;
     let _activation = state.activation_lock.lock().await;
+    validate_show_file(&entry.path).map_err(ApiError::store)?;
     let previous = state.active_show.read().clone();
     if let Some(previous) = &previous {
         state
@@ -32,8 +28,9 @@ pub(super) async fn open_show(
             .set_setting("previous_active_show_id", &previous.id.0.to_string())
             .map_err(ApiError::store)?;
     }
+    let prepared = prepare_show_for_runtime(&state, &entry)?;
     let transition = input.transition.unwrap_or(Transition::SafeBlackout);
-    activate_snapshot(&state, compiled, &transition, input.transition_millis).await?;
+    activate_prepared_snapshot(&state, prepared, &transition, input.transition_millis).await;
     state
         .desk
         .lock()
@@ -75,21 +72,18 @@ pub(super) async fn open_clean_default_show(
         let _ = std::fs::remove_file(&path);
         return Err(ApiError::store(error));
     }
-    let compiled = match load_engine_snapshot(&entry) {
-        Ok(compiled) => compiled,
+    let _activation = state.activation_lock.lock().await;
+    let prepared = match prepare_show_for_runtime(&state, &entry) {
+        Ok(prepared) => prepared,
         Err(error) => {
             let _ = state.desk.lock().remove_show(entry.id);
             let _ = std::fs::remove_file(&path);
-            return Err(ApiError::internal(error));
+            return Err(error);
         }
     };
-    compiled
-        .validate()
-        .map_err(|error| ApiError::bad_request(error.to_string()))?;
-    let _activation = state.activation_lock.lock().await;
     let previous = state.active_show.read().clone();
     let transition = input.transition.unwrap_or(Transition::SafeBlackout);
-    activate_snapshot(&state, compiled, &transition, input.transition_millis).await?;
+    activate_prepared_snapshot(&state, prepared, &transition, input.transition_millis).await;
     state
         .desk
         .lock()
@@ -133,14 +127,11 @@ pub(super) async fn rollback_show(
         .show(previous_id)
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("rollback show"))?;
-    let compiled = load_engine_snapshot(&entry).map_err(ApiError::internal)?;
-    compiled
-        .validate()
-        .map_err(|error| ApiError::bad_request(error.to_string()))?;
     let _activation = state.activation_lock.lock().await;
+    let prepared = prepare_show_for_runtime(&state, &entry)?;
     let current = state.active_show.read().clone();
     let transition = input.transition.unwrap_or(Transition::SafeBlackout);
-    activate_snapshot(&state, compiled, &transition, input.transition_millis).await?;
+    activate_prepared_snapshot(&state, prepared, &transition, input.transition_millis).await;
     state
         .desk
         .lock()

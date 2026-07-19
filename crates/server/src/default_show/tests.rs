@@ -308,6 +308,11 @@ fn upgrades_the_legacy_single_universe_default_patch() {
     for object in store.objects("patched_fixture").unwrap() {
         let mut fixture: PatchedFixture = serde_json::from_value(object.body).unwrap();
         fixture.universe = Some(1);
+        fixture.split_patches = vec![light_fixture::SplitPatch {
+            split: 1,
+            universe: Some(1),
+            address: fixture.address,
+        }];
         store
             .put_object(
                 "patched_fixture",
@@ -317,8 +322,11 @@ fn upgrades_the_legacy_single_universe_default_patch() {
             )
             .unwrap();
     }
+    let document = store.portable_document().unwrap();
+    let mut transaction = document.transaction();
+    stage_upgrade(&document, &mut transaction).unwrap();
+    store.apply_portable_transaction(transaction).unwrap();
     drop(store);
-    upgrade(&path).unwrap();
     let fixtures = ShowStore::open(&path)
         .unwrap()
         .objects("patched_fixture")
@@ -337,6 +345,13 @@ fn upgrades_the_legacy_single_universe_default_patch() {
             .find(|fixture| fixture.name == name)
             .unwrap();
         assert_eq!((fixture.universe, fixture.address), expected);
+        assert_eq!(
+            (
+                fixture.split_patches[0].universe,
+                fixture.split_patches[0].address
+            ),
+            expected
+        );
     }
     std::fs::remove_file(path).unwrap();
 }
