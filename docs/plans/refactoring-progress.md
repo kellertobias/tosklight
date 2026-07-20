@@ -1,16 +1,16 @@
 # Major Refactoring Progress
 
-Estimated progress: **79%**
+Estimated progress: **80%**
 
-Estimated ETA: **9–13 focused implementation slices, or roughly 2–3 weeks of active
+Estimated ETA: **8–12 focused implementation slices, or roughly 2–3 weeks of active
 refactoring**, to repository-wide acceptance.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-19 after the capture-safe end-to-end Programmer-values client and mutation
-contract.
+Last updated: 2026-07-20 after final acceptance hardening of the capture-safe end-to-end
+Programmer-values client and mutation contract.
 
 ## Guardrails
 
@@ -155,7 +155,11 @@ contract.
   revision precondition that prevents a normal write from crossing into active Preload capture.
   Capture changes, Programmer replacement, and session recreation preserve monotonic authority,
   invalidate stale replay entries, and publish at most one values event and one capture event per
-  real transition without admitting modes or Preload content into the values projection.
+  real transition without admitting modes or Preload content into the values projection. The
+  frontend decoders reject undeclared fields at every values snapshot, outcome, error, projection,
+  value, and event-envelope boundary. Provider disposal is safe under React StrictMode effect
+  replay, so reused values/capture sessions and the values writer remain live after the development
+  mount cycle while replaced authorities still stop promptly.
 - [x] Migrated every parameter-bank family, fader, encoder, range, release, and direct action onto
   the scoped ordered selection projection. Fixture membership uses sets, streamed peer or OSC
   selection immediately retargets writes, and inactive parameter views perform no selection
@@ -253,10 +257,12 @@ contract.
 
 ## Current verification snapshot
 
-- The committed source-size baseline has no production file above 1,200 and no production function
-  above 150. Dependency-direction checks and all 10 scanner/ratchet unit tests pass. The architecture
-  command still reports the pre-existing committed Dynamics Editor experiment at 1,382 lines; this
-  Programmer-values slice did not change it.
+- Every production file and function touched by this slice remains within the hard 1,200-line and
+  150-line limits; the values wire implementation is split into feature-owned projection, event,
+  and mutation modules below 400 lines each. Dependency-direction checks and all 10
+  scanner/ratchet unit tests pass. The repository-wide architecture command still exits 1 because
+  it reports the pre-existing committed Dynamics Editor experiment at 1,382 lines; this
+  Programmer-values slice deliberately did not expand into that separate experiment.
 - The earlier full-tree design-goal report was 52 files above 400 lines and 3,479 functions above
   20. The two remaining in-scope hotspots named by that report have since been split: Programming
   service is now 399 lines and the command HTTP adapter is 304 lines. The expanded server feature
@@ -294,20 +300,23 @@ contract.
   lifecycle replacement, user ownership, same-user multi-desk sharing, foreign-user rejection, and
   timing/order preservation are covered. Wire tests print the existing non-fatal `ts-rs`
   `deny_unknown_fields` warning.
-- The production frontend Programmer-values and capture-authority slice passes 99 focused tests
-  across strict wire decoding, HTTP/WebSocket transport, prediction, stores, sessions, writer,
-  mounted views, and normal `ServerProvider` composition, plus the full frontend typecheck and
-  scoped Biome checks. The focused tests cover rollback, safe exact-request replay, no-change
-  results, both response/event orders, capture and values cursor-gap repair, concurrent repair
-  joining, server/session replacement, late-response isolation, exact-user subscriptions,
-  first-view dormancy, refusal while authority is loading or active Preload captures Programmer,
-  absence of a broad bootstrap request, and suppression of unrelated context rerenders. The
-  extracted boundary composition passed its focused 7-test rerun after the size fix.
-  `git diff --check` is clean. The complete frontend/workspace suites and real desktop path were not
-  rerun for this focused slice.
-- The most recent pre-wrap complete frontend suite passed all 811 tests and its production build;
-  the newer selection/value-store slices have focused coverage and typecheck evidence but did not
-  rerun that complete suite. A final repository-wide suite and real desktop run remains pending.
+- The production frontend Programmer-values and capture-authority slice passes 106 focused tests
+  across exact wire decoding, HTTP/WebSocket transport, prediction, stores, sessions, writer,
+  mounted views, and normal `ServerProvider` composition. The focused tests cover rollback, safe
+  exact-request replay, no-change results, both response/event orders, capture and values
+  cursor-gap repair, concurrent repair joining, server/session replacement, late-response
+  isolation, exact-user subscriptions, first-view dormancy, refusal while authority is loading or
+  active Preload captures Programmer, absence of a broad bootstrap request, suppression of
+  unrelated context rerenders, undeclared wire fields, and React StrictMode effect replay. The
+  complete frontend suite passes all 936 tests in 148 files; typecheck and the production Vite
+  build pass, with only the existing large-chunk advisory. The raw-control audit and Numeric Pad
+  selection harness were corrected so test-only probes do not masquerade as production controls
+  and the keypad test follows scoped selection authority.
+- Current focused backend verification passes 2 normal-values Programmer tests, 7 Programming
+  application action tests, and 8 server authentication/action/subscription tests. Generated wire
+  contracts match the Rust DTOs, `cargo fmt --all -- --check` passes, and `git diff --check` is
+  clean. Wire tests print the existing non-fatal `ts-rs` `deny_unknown_fields` warnings. A final
+  repository-wide Rust/Clippy suite and real desktop run remain pending.
 
 ## Wrap-up handoff
 
