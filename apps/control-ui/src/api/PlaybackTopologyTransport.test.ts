@@ -97,7 +97,9 @@ describe("Playback topology v2 HTTP adapter", () => {
 				page: 1,
 				slot: 2,
 				expected_page_revision: 3,
+				expected_page_object_id: "1",
 				expected_playback_revision: 4,
+				expected_playback_object_id: "7",
 			},
 		});
 		expect(String(url)).not.toMatch(/bootstrap|api\/v1\/playbacks/);
