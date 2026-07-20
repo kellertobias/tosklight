@@ -16,6 +16,7 @@ import { useProgrammingSelectionView } from "../features/programmingInteraction/
 import { usePresetRecording } from "../features/presetRecording/PresetRecordingProvider";
 import { resolvePresetCards } from "../features/presetRecording/presetCards";
 import { submitPresetRecording } from "../features/presetRecording/submitRecording";
+import { useCommandLineSurface } from "../components/control/commandLine/useCommandLineSurface";
 
 type PresetCustomization = { title?: string; icon?: string; color?: string };
 
@@ -25,6 +26,7 @@ export function PresetsWindow({ active = true, compact, paneId, showGroupShortcu
   const selection = useProgrammingSelectionView(active);
   const storedPresets = usePresets();
   const presetRecording = usePresetRecording();
+  const command = useCommandLineSurface({ enabled: active, observeCommand: false });
   const { state, dispatch } = useApp();
   const family = compact ? (presetFamily ?? state.presetFamily) : state.presetFamily;
   const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
@@ -57,10 +59,10 @@ export function PresetsWindow({ active = true, compact, paneId, showGroupShortcu
     setRecordPresetIndex(null);
     dispatch({ type: "SET_STORE_ARMED", value: false });
   };
-  const recordPreset = (index: number, mode: RecordMode) => {
+  const recordPreset = async (index: number, mode: RecordMode) => {
     setRecordPresetIndex(null);
     dispatch({ type: "SET_STORE_ARMED", value: false });
-    submitPresetRecording({
+    const outcome = await submitPresetRecording({
       card: cards[index],
       index,
       family,
@@ -69,6 +71,7 @@ export function PresetsWindow({ active = true, compact, paneId, showGroupShortcu
       actions: presetRecording,
       storePreload: server.storePreload,
     });
+    if (outcome) await command.reset();
   };
 
   const activate = (index: number) => {
@@ -81,7 +84,7 @@ export function PresetsWindow({ active = true, compact, paneId, showGroupShortcu
     if (!preset && !state.storeArmed) return;
     if (state.storeArmed) {
       if (preset) setRecordPresetIndex(index);
-      else recordPreset(index, "overwrite");
+      else void recordPreset(index, "overwrite");
     } else if (preset) {
       void server.applyPreset(presetAddress(normalizePresetFamily(preset.body.family), preset.body.number));
     }

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PresetsWindow } from "./PresetsWindow";
 
@@ -14,7 +14,8 @@ const mocks = vi.hoisted(() => ({
 	} as Record<string, unknown>,
 	dispatch: vi.fn(),
 	presets: [] as Array<Record<string, unknown>>,
-	record: vi.fn(async () => null),
+	record: vi.fn(),
+	commandReset: vi.fn(async () => true),
 	storePreload: vi.fn(async () => true),
 	applyPreset: vi.fn(async () => undefined),
 }));
@@ -41,6 +42,9 @@ vi.mock("../features/programmingInteraction/ProgrammingInteractionView", () => (
 vi.mock("../features/presetRecording/PresetRecordingProvider", () => ({
 	usePresetRecording: () => ({ record: mocks.record }),
 }));
+vi.mock("../components/control/commandLine/useCommandLineSurface", () => ({
+	useCommandLineSurface: () => ({ reset: mocks.commandReset }),
+}));
 vi.mock("../components/shared/GroupStrip", () => ({ GroupStrip: () => null }));
 
 function firstPresetCell() {
@@ -54,7 +58,9 @@ beforeEach(() => {
 	mocks.state.storeArmed = true;
 	mocks.presets = [];
 	mocks.dispatch.mockClear();
-	mocks.record.mockClear();
+	mocks.record.mockReset();
+	mocks.record.mockResolvedValue(null);
+	mocks.commandReset.mockClear();
 	mocks.storePreload.mockClear();
 });
 
@@ -79,6 +85,24 @@ describe("PresetsWindow normal recording boundary", () => {
 			type: "SET_STORE_ARMED",
 			value: false,
 		});
+	});
+
+	it("resets the authoritative command only after a successful normal recording", async () => {
+		mocks.record.mockResolvedValue({ status: "changed" });
+		render(<PresetsWindow compact />);
+
+		fireEvent.click(firstPresetCell());
+
+		await waitFor(() => expect(mocks.commandReset).toHaveBeenCalledOnce());
+	});
+
+	it("retains the authoritative command when normal recording fails", async () => {
+		render(<PresetsWindow compact />);
+
+		fireEvent.click(firstPresetCell());
+
+		await waitFor(() => expect(mocks.record).toHaveBeenCalledOnce());
+		expect(mocks.commandReset).not.toHaveBeenCalled();
 	});
 
 	it("preserves the existing-target mode dialog and object revision", () => {
@@ -158,6 +182,7 @@ describe("PresetsWindow normal recording boundary", () => {
 			},
 			0,
 		);
+		expect(mocks.commandReset).not.toHaveBeenCalled();
 	});
 
 });

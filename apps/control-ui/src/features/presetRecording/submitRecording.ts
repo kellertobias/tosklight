@@ -29,7 +29,7 @@ interface SubmitPresetRecordingOptions {
 	) => Promise<boolean>;
 }
 
-export function submitPresetRecording(options: SubmitPresetRecordingOptions) {
+export async function submitPresetRecording(options: SubmitPresetRecordingOptions) {
 	const { card, index, family, mode } = options;
 	const targetFamily = normalizePresetFamily(card?.body.family, family);
 	const address = presetAddress(targetFamily, index + 1);
@@ -47,9 +47,10 @@ export function submitPresetRecording(options: SubmitPresetRecordingOptions) {
 			},
 			revision,
 		);
-		return;
+		return null;
 	}
-	void options.actions?.record({
+	if (!options.actions) return null;
+	return options.actions.record({
 		objectId: card?.id ?? canonicalId,
 		address,
 		name,
