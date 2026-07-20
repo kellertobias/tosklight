@@ -1,16 +1,16 @@
 # Major Refactoring Progress
 
-Estimated progress: **88%**
+Estimated progress: **90%**
 
-Estimated Codex ETA: **3–6 focused implementation slices, or roughly 12–23 hours of active Codex
+Estimated Codex ETA: **2–5 focused implementation slices, or roughly 10–20 hours of active Codex
 execution**, to repository-wide acceptance.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-20 after completing typed action-time normal Preset recording across touch,
-command-line HTTP, OSC, and compatibility WebSocket surfaces.
+Last updated: 2026-07-20 after completing typed action-time Group recording across touch,
+command-line HTTP, keyboard, OSC, and compatibility WebSocket surfaces.
 
 ## Guardrails
 
@@ -258,6 +258,15 @@ command-line HTTP, OSC, and compatibility WebSocket surfaces.
   rollback, gaps, authority replacement, and late responses without a Programmer or bootstrap
   read. It prefers the canonical object when a legacy alias also exists and strictly validates the
   complete outcome before installing authority.
+- [x] Added typed action-time Group recording. One Programming action captures the actor desk's
+  ordered selection for overwrite, merge, subtract, or delete while preserving exact opaque IDs,
+  stored-empty versus absent Groups, live/frozen relationships, portable programming, lossless
+  legacy bodies, dependency-safe deletion, revision checks, replay isolation, and user ownership.
+  Command-line HTTP, keyboard, OSC, and compatibility WebSocket paths converge on the same action
+  and publish one retained Show event per semantic transition. Group Pool and Group Strip now use
+  a strict action-only client that captures the dialog-open revision, reconciles stored/deleted
+  outcomes in either event/response order, repairs only the conflicted Group, and clears the scoped
+  `RECORD` command only after success. The old multi-request Group store/refresh adapter is gone.
 - [x] Exposed Selective Show Import through authenticated v2 catalog, preview, and atomic apply
   adapters with checked-in schemas, generated TypeScript, exact source/target revisions, strict
   response validation, and focused server contracts. **Show → Load → Partial Show Load** now uses a
@@ -297,11 +306,11 @@ command-line HTTP, OSC, and compatibility WebSocket surfaces.
   command bar, Stage, Stage/Fixture pane chrome, Channels, Fixture Sheet, Patch, and Presets have
   moved, as have Patch setup, the complete parameter bank, and selection-driven operator modals;
   a small number of keypad/miscellaneous readers still use the facade.
-- [ ] Finish the remaining action-time recording callers. Normal Preset recording is typed end to
-  end and no longer reads the compatibility Programmer projection. Group recording and the larger
-  Cue/Playback recording transaction still require separate typed application actions; keep their
-  selection, dependency, deletion, and playback semantics independent rather than generalizing the
-  Preset contract.
+- [ ] Finish the remaining action-time recording caller. Normal Preset and Group recording are
+  typed end to end and no longer read or submit the compatibility Programmer projection. The larger
+  Cue/Playback recording transaction still requires its own typed application action; keep its Cue
+  merge, Preload, assignment, take-live, tracking, and rollback semantics independent rather than
+  generalizing the Preset or Group contracts.
 - [ ] Replace inferred Cue ambiguity in the command-line text projection with explicit desk-local
   pending-choice state that is set only by `ChoiceRequired` after ENT and cleared by edit, reset,
   selection, or Cancel. Until then, cross-session choice visibility remains a documented
@@ -480,6 +489,22 @@ command-line HTTP, OSC, and compatibility WebSocket surfaces.
   exits non-zero for two pre-existing committed ratchet findings outside this slice: the
   1,382-line Dynamics Editor experiment and the 154-line `handle_subscription_osc` function.
   Every production file and function changed by Preset recording remains within the hard limits.
+- Typed Group recording passes all 83 `light-programmer` tests, all 250 `light-application` tests,
+  all 42 `light-wire` unit tests plus generated-contract verification, and the full server library
+  with 272 passing, 1 ignored, and only the sandbox-blocked CITP test filtered. Independent focused
+  review additionally passes 7 Group domain tests, 9 Group service tests, 8 active-show transaction
+  tests, 7 wire tests, 11 Group server tests, and the compatibility WebSocket scenario. The frontend
+  passes all 1,161 tests in 182 files, typecheck, and the production build with only the existing
+  large-chunk advisory. Coverage includes overwrite/merge/subtract/delete, stored-empty and no-op,
+  replay, conflict rollback and exact-object repair, both event/response orders, deletion settlement,
+  same-user two-desk capture, foreign-user and forged-context rejection, one Show event per mutation,
+  gesture-event ordering, direct/nested Highlight reconciliation, first-action dormancy, authority
+  replacement, and successful-command reset versus failure retention. `cargo fmt --all -- --check`,
+  generated contracts, dependency directions, all 10 scanner tests, and `git diff --check` pass.
+  The repository-wide architecture command still exits non-zero only for the same unrelated
+  1,382-line Dynamics experiment and 154-line `handle_subscription_osc`; every production file
+  changed by Group recording remains below 400 lines and every changed production function remains
+  below the hard limit.
 
 ## Wrap-up handoff
 
@@ -496,14 +521,15 @@ command-line HTTP, OSC, and compatibility WebSocket surfaces.
   queued-playback, and aggregate lifecycle authority. It invalidates old mutation replays and emits
   only the final safe projections.
 - Public bootstrap no longer contains Programmer state. The authenticated v1 compatibility list
-  is restricted to same-user session rows and remains only for startup plus action-time Group/Cue
-  migration callers.
+  is restricted to same-user session rows and remains only for startup plus the action-time Cue
+  migration caller.
 - Patch/setup selection is complete. The public test DSL remains a separate future milestone.
-- Recommended next slice: add typed action-time Group recording shared by touch, command-line,
-  keyboard, and OSC. Preserve exact opaque Group IDs, ordered membership, stored-empty versus
-  absent state, live/frozen relationships, portable programming, dependency-safe deletion, and one
-  final selection event before the one Show event. Keep the larger Cue/Playback recording
-  transaction and the public test DSL as distinct later milestones.
+- Recommended next slice: add one typed action-time Cue/Playback recording transaction shared by
+  touch, command-line, keyboard, and OSC. Capture normal or pending-Preload values on the server,
+  preserve Cue merge/tracking/timing/Phaser behavior and exact target ambiguity, atomically create
+  any required Cuelist/playback/page topology, and take a newly recorded non-Preload Cue live only
+  after the portable transaction succeeds. Keep Cue editor/Update/transfer cleanup and the public
+  test DSL as distinct later milestones.
 
 Test files may exceed the hard limits, but should still be split when it improves readability and
 makes operator intent more visible.
