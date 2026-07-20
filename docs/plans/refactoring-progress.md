@@ -1,18 +1,18 @@
 # Major Refactoring Progress
 
-Estimated progress: **98%**
+Estimated progress: **99%**
 
-Estimated Codex ETA: **1–2 focused implementation slices, or roughly 3–8 hours of active Codex
-execution**, to repository-wide acceptance. Final-state-aware Preload preparation and desk-exact
-restart isolation are complete; typed Cuelist/topology mutation, the Virtual Playback compatibility
-migration, and final acceptance remain.
+Estimated Codex ETA: **one focused implementation slice plus final acceptance, or roughly 2–5
+hours of active Codex execution**, to repository-wide acceptance. Portable Playback topology and
+the Virtual Playback migration are complete; Cue editor/Update/transfer convergence, the public
+test-DSL handoff, and final acceptance remain.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-20 after making queued Preload preparation final-state-aware and persisting
-desk/surface activation provenance for restart-exact virtual Playback exclusions.
+Last updated: 2026-07-20 after adding typed portable Playback topology actions and migrating the
+Virtual Playback surface onto scoped Show, runtime, and desk-zone authority.
 
 ## Guardrails
 
@@ -69,6 +69,17 @@ desk/surface activation provenance for restart-exact virtual Playback exclusions
   and gaps and malformed messages repair from authoritative snapshots. Concurrent fader and page
   mutations use independent optimistic overlays with request-ordered rollback and authoritative
   event/outcome reconciliation. Active compatibility panes still poll until their consumers move.
+- [x] Added typed portable Playback topology actions for Cuelist save, slot configure, and mapped
+  Playback clear. One show-revisioned application action preserves legacy storage identities and
+  unknown fields, returns one coherent Page/Playback/Cuelist projection, publishes at most one
+  Show event, and retains exact request replay. The strict client binds the requested objects and
+  exact deleted Playback to captured storage identities and status-aware revisions before atomic
+  installation. Virtual Playback now hydrates only its portable topology, exact runtime
+  identities, active desk view, and show/desk-scoped exclusion zones; it no longer reads the broad
+  Playback bootstrap facade.
+  Empty-slot assignment and mapped clear remain one serialized network action, held Flash/Swap
+  releases survive same-Show session replacement without crossing a Show switch, and inactive
+  panes open no snapshot/socket and subscribe to no topology/runtime selectors.
 - [x] Made virtual Playback exclusion activation one atomic Engine transition. Actual exclusion and
   auto-off releases are returned as sorted related projections, published once before the primary
   high-water event, retained by idempotent replay without re-execution, and applied to the frontend
@@ -358,8 +369,9 @@ desk/surface activation provenance for restart-exact virtual Playback exclusions
 
 - [ ] Continue vertical feature-store/event slices and move the remaining production callers away
   from broad `useServer()`, polling, and generic show-object mutation.
-- [ ] Finish the Playback ownership boundary with typed Cuelist/topology mutation and migrate the
-  remaining active compatibility panes, beginning with Virtual Playback.
+- [ ] Finish the remaining Playback ownership callers: move Cue editor Save Cuelist, typed Update
+  and transfer workflows, then the physical compatibility panes onto the committed topology and
+  runtime boundaries. Virtual Playback is complete.
 - [ ] Move the remaining selection consumers onto the scoped Programming store, then remove their
   legacy bootstrap fields and broad Programmer refresh paths. Group Pool, Group Strip, and the
   command bar, Stage, Stage/Fixture pane chrome, Channels, Fixture Sheet, Patch, and Presets have
@@ -638,6 +650,25 @@ desk/surface activation provenance for restart-exact virtual Playback exclusions
   and all 10 architecture scanner tests pass; the aggregate architecture command still exits 1
   solely for the separately owned 1,382-line Dynamics Editor experiment. Every touched production
   file remains below 400 lines; the largest is Playback ports at 393 lines.
+- Portable Playback topology and the Virtual Playback migration pass 10 focused application tests,
+  4 wire tests, generated-contract verification, 5 topology route tests, 2 scoped-zone route tests,
+  the stale-Show runtime-action guard, and the legacy Speed Group migration regression. The
+  no-default-features server check, formatting, strict application/wire/server Clippy, and
+  `git diff --check` pass; Clippy and wire generation retain only the known non-fatal `ts-rs`
+  `deny_unknown_fields` warning. The complete frontend passes all 1,341 tests in 199 files,
+  typecheck, and the production build. Focused coverage proves strict relational outcomes and
+  status-aware object revisions, legacy storage identities, one-action configure/clear, response
+  ordering, replay/no-change/conflict repair, same-Show authority replacement, Show-switch
+  rejection, held Flash/Swap release, shared zone-cache/save ordering, inactive-view dormancy,
+  no bootstrap or broad Playback read, and unrelated-render suppression. The Vite build retains
+  its existing large-chunk advisory. Dependency directions and all 10 architecture scanner tests
+  pass; the aggregate architecture command still exits 1 only for the separately owned 1,382-line
+  Dynamics Editor experiment. New feature-owned production modules remain below 400 lines; the
+  existing shared Show Objects session/store files received only narrow dormancy hooks and remain
+  below the hard 1,200-line limit. One coalesced v1 `/playbacks` compatibility reload remains after
+  real topology changes so unmigrated physical panes stay current; the scoped Virtual surface
+  never consumes it. Empty-slot assignments display the authoritative server allocation rather
+  than a speculative grid identity.
 
 ## Wrap-up handoff
 
@@ -660,10 +691,10 @@ desk/surface activation provenance for restart-exact virtual Playback exclusions
   remains a separate future milestone.
 - Preload now prepares one final-state-aware batch, and virtual-exclusion restart authority is
   private, desk-exact, migration-compatible, and absent from public runtime projections.
-- Recommended next slice: add typed Cuelist/topology mutation and migrate the Virtual Playback pane
-  as the first compatibility-free Playback surface. Keep Cue editor/Update/transfer cleanup and the
-  public test DSL as distinct later milestones. Follow that slice with the final repository-wide
-  acceptance and performance pass.
+- Recommended next slice: migrate Cue editor Save Cuelist plus typed Update and transfer workflows
+  onto the committed topology authority, then retire the remaining physical Playback compatibility
+  reload. Keep the public test DSL and final repository-wide acceptance/performance run as the
+  closing milestone.
 
 Test files may exceed the hard limits, but should still be split when it improves readability and
 makes operator intent more visible.
