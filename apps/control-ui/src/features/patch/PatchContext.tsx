@@ -12,14 +12,37 @@ import {
 	createPatchDefinitionResolver,
 	type PatchFixtureCandidate,
 } from "./model";
+import type { PatchFixtureProjection } from "./contracts";
 import { PatchSession } from "./session";
 import type { PatchStoreSnapshot } from "./store";
 import type { PatchTransport } from "./transport";
 
+export interface PatchedFixtureResult {
+	fixtureId: string;
+	selectionFixtureIds: readonly string[];
+}
+
+export function patchedFixtureResults(
+	candidates: readonly PatchFixtureCandidate[],
+	projections: readonly PatchFixtureProjection[],
+): readonly PatchedFixtureResult[] {
+	const byId = new Map(projections.map((fixture) => [fixture.fixtureId, fixture]));
+	return candidates.map((candidate) => {
+		const fixtureId = candidate.fixture.fixture_id;
+		const heads = byId.get(fixtureId)?.logicalHeads ?? [];
+		return {
+			fixtureId,
+			selectionFixtureIds: heads.length
+				? heads.map((head) => head.fixtureId)
+				: [fixtureId],
+		};
+	});
+}
+
 export interface PatchContextValue extends PatchStoreSnapshot {
 	patchFixtures(
 		candidates: readonly PatchFixtureCandidate[],
-	): Promise<string[] | null>;
+	): Promise<readonly PatchedFixtureResult[] | null>;
 	updateFixture(
 		fixtureId: string,
 		changes: Partial<PatchedFixture>,
@@ -93,8 +116,8 @@ export function PatchViewProvider({
 			patchFixtures: async (candidates) => {
 				if (!session) return null;
 				try {
-					await session.patchFixtures(candidates);
-					return candidates.map((candidate) => candidate.fixture.fixture_id);
+					const outcome = await session.patchFixtures(candidates);
+					return patchedFixtureResults(candidates, outcome.fixtures);
 				} catch {
 					return null;
 				}

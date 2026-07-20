@@ -1,5 +1,17 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+	act,
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { PatchedFixture } from "../../../api/types";
+import type {
+	SelectionActionOutcome,
+	SelectionActionRequest,
+} from "../../../features/programmingInteraction/contracts";
 import { ProgrammingInteractionViewProvider } from "../../../features/programmingInteraction/ProgrammingInteractionView";
 import { ProgrammingInteractionStore } from "../../../features/programmingInteraction/store";
 import {
@@ -8,10 +20,16 @@ import {
 	FIXTURE_1,
 	FIXTURE_2,
 	programmingSnapshot,
+	selection,
 	selectionChange,
 	SHOW_ID,
 } from "../../../features/programmingInteraction/testFixtures";
-import { usePatchSelection } from "./selection";
+import { toggledFixtureSelection, usePatchSelection } from "./selection";
+
+const secondFixture = {
+	fixture_id: FIXTURE_2,
+	logical_heads: [],
+} as unknown as PatchedFixture;
 
 function Probe({ active }: { active: boolean }) {
 	const selection = usePatchSelection(active);
@@ -19,6 +37,32 @@ function Probe({ active }: { active: boolean }) {
 		<output data-testid="patch-selection">
 			{selection.fixtureIds ? [...selection.fixtureIds].join(",") : "loading"}
 		</output>
+	);
+}
+
+function ToggleProbe() {
+	const patchSelection = usePatchSelection(true);
+	const selected = patchSelection.orderedFixtureIds;
+	return (
+		<>
+			<output data-testid="patch-selection">
+				{selected?.join(",") ?? "loading"}
+			</output>
+			<button
+				type="button"
+				disabled={!selected || !patchSelection.actions}
+				onClick={() =>
+					void patchSelection.actions?.replace({
+						resolvedFixtures: toggledFixtureSelection(
+							selected ?? [],
+							secondFixture,
+						),
+					})
+				}
+			>
+				Toggle second fixture
+			</button>
+		</>
 	);
 }
 
@@ -96,5 +140,75 @@ describe("Patch scoped selection", () => {
 		await waitFor(() =>
 			expect(transport.subscriptions[0]?.close).toHaveBeenCalledOnce(),
 		);
+	});
+
+	it("preserves a closed static selection during an optimistic additive replacement", async () => {
+		const store = new ProgrammingInteractionStore();
+		const transport = new FakeProgrammingTransport();
+		let resolve!: (outcome: SelectionActionOutcome) => void;
+		const response = new Promise<SelectionActionOutcome>((settle) => {
+			resolve = settle;
+		});
+		const applySelection = vi.fn(
+			(_deskId: string, _request: SelectionActionRequest) => response,
+		);
+		render(
+			<ProgrammingInteractionViewProvider
+				showId={SHOW_ID}
+				deskId={DESK_ID}
+				store={store}
+				transport={transport}
+				loadSnapshot={async () => programmingSnapshot()}
+				applySelection={applySelection}
+			>
+				<ToggleProbe />
+			</ProgrammingInteractionViewProvider>,
+		);
+		const toggle = await screen.findByRole("button", {
+			name: "Toggle second fixture",
+		});
+
+		fireEvent.click(toggle);
+		expect(screen.getByTestId("patch-selection")).toHaveTextContent(
+			`${FIXTURE_1},${FIXTURE_2}`,
+		);
+		await waitFor(() => expect(applySelection).toHaveBeenCalledOnce());
+		const request = applySelection.mock.calls[0][1];
+		expect(request.action).toEqual({
+			type: "replace",
+			fixtures: [FIXTURE_1, FIXTURE_2],
+			expectedRevision: 1,
+		});
+		act(() =>
+			resolve({
+				requestId: request.requestId,
+				correlationId: "patch-add",
+				action: "replaced",
+				applied: 2,
+				selection: selection(2, [FIXTURE_1, FIXTURE_2]),
+				eventSequence: 11,
+				replayed: false,
+				warning: null,
+			}),
+		);
+		await waitFor(() =>
+			expect(store.getSnapshot().selection?.revision).toBe(2),
+		);
+	});
+
+	it("removes all logical heads without disturbing earlier ordered fixtures", () => {
+		const multiHead = {
+			fixture_id: "master",
+			logical_heads: [
+				{ fixture_id: "head-left" },
+				{ fixture_id: "head-right" },
+			],
+		} as unknown as PatchedFixture;
+		expect(
+			toggledFixtureSelection(
+				[FIXTURE_1, "head-left", "head-right"],
+				multiHead,
+			),
+		).toEqual([FIXTURE_1]);
 	});
 });

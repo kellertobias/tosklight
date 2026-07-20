@@ -242,7 +242,10 @@ beforeEach(() => {
 	server.patchFixture.mockResolvedValue("new-fixture");
 	patchFeature.patchFixtures.mockImplementation(
 		async (candidates: Array<{ fixture: PatchedFixture }>) =>
-			candidates.map((candidate) => candidate.fixture.fixture_id),
+			candidates.map((candidate) => ({
+				fixtureId: candidate.fixture.fixture_id,
+				selectionFixtureIds: [candidate.fixture.fixture_id],
+			})),
 	);
 });
 
@@ -263,7 +266,7 @@ describe("selected split selection and SET editing", () => {
 		third.name = "Split Wash 19";
 		server.patch.fixtures = [splitFixture(), second, third];
 		const onStagePreview = vi.fn();
-		render(
+		const rendered = render(
 			<FixturePatchSetup
 				onMedia={vi.fn()}
 				stagePreviewOpen
@@ -291,13 +294,18 @@ describe("selected split selection and SET editing", () => {
 			resolvedFixtures: ["fixture-split"],
 		});
 		programming.selection.selected = ["fixture-split"];
+		rendered.rerender(
+			<FixturePatchSetup
+				onMedia={vi.fn()}
+				stagePreviewOpen
+				onStagePreview={onStagePreview}
+			/>,
+		);
 		fireEvent.click(screen.getByRole("row", { name: /18 Split Wash 18/ }), {
 			metaKey: true,
 		});
-		expect(programming.actions.gesture).toHaveBeenLastCalledWith({
-			source: { type: "fixture", fixtureId: "fixture-18" },
-			resolvedFixtures: ["fixture-18"],
-			operation: "add",
+		expect(programming.actions.replace).toHaveBeenLastCalledWith({
+			resolvedFixtures: ["fixture-split", "fixture-18"],
 		});
 		fireEvent.click(screen.getByRole("row", { name: /19 Split Wash 19/ }), {
 			shiftKey: true,
@@ -367,7 +375,7 @@ describe("selected split selection and SET editing", () => {
 		});
 	});
 
-	it("toggles every logical head through one typed gesture", () => {
+	it("toggles every logical head through one typed replacement", () => {
 		const fixture = splitFixture();
 		fixture.logical_heads = [
 			{ fixture_id: "head-left", head_index: 1 },
@@ -376,15 +384,17 @@ describe("selected split selection and SET editing", () => {
 		server.patch.fixtures = [fixture];
 		programming.selection.selected = ["head-left", "head-right"];
 		render(<FixturePatchSetup />);
-
-		fireEvent.click(screen.getByRole("row", { name: /17 Split Wash 17/ }), {
-			metaKey: true,
-		});
-
-		expect(programming.actions.gesture).toHaveBeenCalledWith({
-			source: { type: "fixture", fixtureId: "fixture-split" },
+		const row = screen.getByRole("row", { name: /17 Split Wash 17/ });
+		fireEvent.click(row);
+		expect(programming.actions.replace).toHaveBeenLastCalledWith({
 			resolvedFixtures: ["head-left", "head-right"],
-			operation: "remove",
+		});
+		programming.actions.replace.mockClear();
+
+		fireEvent.click(row, { metaKey: true });
+
+		expect(programming.actions.replace).toHaveBeenCalledWith({
+			resolvedFixtures: [],
 		});
 	});
 
@@ -563,7 +573,7 @@ describe("fixture batch DMX placement", () => {
 		);
 	});
 
-	it("shows every fixture in a batch and patches from independently dragged addresses", async () => {
+	it("patches dragged batch addresses and selects authoritative targets", async () => {
 		const placement = openDimmerPlacement();
 		fireEvent.change(
 			within(placement).getByRole("textbox", { name: "Count" }),
@@ -604,6 +614,16 @@ describe("fixture batch DMX placement", () => {
 		expect(grid.querySelector('[data-dmx-address="50"]')).toHaveAccessibleName(
 			/Fixture 2/,
 		);
+		patchFeature.patchFixtures.mockImplementationOnce(
+			async (candidates: Array<{ fixture: PatchedFixture }>) =>
+				candidates.map((candidate, index) => ({
+					fixtureId: candidate.fixture.fixture_id,
+					selectionFixtureIds:
+						index === candidates.length - 1
+							? ["last-head-left", "last-head-right"]
+							: [candidate.fixture.fixture_id],
+				})),
+		);
 
 		fireEvent.click(
 			within(placement).getByRole("button", { name: "Add 3 fixtures" }),
@@ -615,10 +635,8 @@ describe("fixture batch DMX placement", () => {
 					candidate.fixture.address,
 			),
 		).toEqual([1, 50, 3]);
-		const lastFixture = patchFeature.patchFixtures.mock.calls[0][0].at(-1)
-			.fixture as PatchedFixture;
 		expect(programming.actions.replace).toHaveBeenCalledWith({
-			resolvedFixtures: [lastFixture.fixture_id],
+			resolvedFixtures: ["last-head-left", "last-head-right"],
 		});
 	});
 });

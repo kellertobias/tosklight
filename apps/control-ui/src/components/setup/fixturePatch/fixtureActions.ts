@@ -9,6 +9,11 @@ import {
 	parseVirtualFixtureNumber,
 } from "./fixtureIds";
 import { unpatchFixtureChanges } from "./patchModel";
+import {
+	fixtureSelectionIds,
+	orderedFixtureSelectionIds,
+	toggledFixtureSelection,
+} from "./selection";
 
 export async function createLayer(
 	controller: PatchController,
@@ -199,16 +204,14 @@ export function selectPatchFixture(
 	}
 	ui.setSelectedFixture(fixture.fixture_id);
 	if (appState.patchSetArmed) return;
-	const ordered = controller.data.visible.map(
-		(candidate) => candidate.fixture_id,
-	);
+	const ordered = controller.data.visible;
 	if (event.shiftKey && ui.selectionAnchor.current) {
 		selectFixtureRange(controller, ordered, fixture.fixture_id);
 	} else if (event.ctrlKey || event.metaKey) {
 		selectFixtureAdditively(controller, fixture);
 	} else {
 		void controller.selection.actions?.replace({
-			resolvedFixtures: [fixture.fixture_id],
+			resolvedFixtures: fixtureSelectionIds(fixture),
 		});
 	}
 	ui.selectionAnchor.current = fixture.fixture_id;
@@ -216,18 +219,17 @@ export function selectPatchFixture(
 
 function selectFixtureRange(
 	controller: PatchController,
-	ordered: string[],
+	ordered: readonly PatchedFixture[],
 	fixtureId: string,
 ) {
 	const anchor = controller.ui.selectionAnchor.current;
 	if (!anchor) return;
-	const from = ordered.indexOf(anchor);
-	const to = ordered.indexOf(fixtureId);
+	const from = ordered.findIndex((fixture) => fixture.fixture_id === anchor);
+	const to = ordered.findIndex((fixture) => fixture.fixture_id === fixtureId);
 	if (from >= 0 && to >= 0)
 		void controller.selection.actions?.replace({
-			resolvedFixtures: ordered.slice(
-				Math.min(from, to),
-				Math.max(from, to) + 1,
+			resolvedFixtures: orderedFixtureSelectionIds(
+				ordered.slice(Math.min(from, to), Math.max(from, to) + 1),
 			),
 		});
 }
@@ -236,15 +238,10 @@ function selectFixtureAdditively(
 	controller: PatchController,
 	fixture: PatchedFixture,
 ) {
-	const current = controller.selection.fixtureIds;
+	const current = controller.selection.orderedFixtureIds;
 	const actions = controller.selection.actions;
 	if (!current || !actions) return;
-	const members = fixture.logical_heads.length
-		? fixture.logical_heads.map((head) => head.fixture_id)
-		: [fixture.fixture_id];
-	void actions.gesture({
-		source: { type: "fixture", fixtureId: fixture.fixture_id },
-		resolvedFixtures: members,
-		operation: members.every((member) => current.has(member)) ? "remove" : "add",
+	void actions.replace({
+		resolvedFixtures: toggledFixtureSelection(current, fixture),
 	});
 }

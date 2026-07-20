@@ -7,6 +7,7 @@ import {
 	effectiveSplitPatches,
 	splitPatchSetError,
 } from "./patchModel";
+import { fixtureSelectionIds } from "./selection";
 
 export function armEdit(
 	controller: PatchController,
@@ -54,7 +55,7 @@ export function selectSplitAddress(
 	ui.setSelectedFixture(fixture.fixture_id);
 	if (!appState.patchSetArmed)
 		void selection.actions?.replace({
-			resolvedFixtures: [fixture.fixture_id],
+			resolvedFixtures: fixtureSelectionIds(fixture),
 		});
 	ui.setEditingSplit(split);
 	ui.setEditError("");

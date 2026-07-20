@@ -22,6 +22,7 @@ import {
 	createPatchDefinitionResolver,
 	newPatchFixtureCandidate,
 } from "./model";
+import { patchedFixtureResults } from "./PatchContext";
 import { PatchSession } from "./session";
 import { PatchStore } from "./store";
 import {
@@ -259,6 +260,19 @@ function candidate(fixtureId = FIXTURE_ID, fixtureNumber = 1) {
 }
 
 describe("Patch v2 wire boundary", () => {
+	it("derives selection targets from authoritative logical heads", () => {
+		expect(
+			patchedFixtureResults([candidate()], [fixtureProjection()]),
+		).toEqual([
+			{
+				fixtureId: FIXTURE_ID,
+				selectionFixtureIds: [
+					"70000000-0000-0000-0000-000000000001",
+				],
+			},
+		]);
+	});
+
 	it("accepts a complete targeted snapshot and rejects unsafe revisions", () => {
 		const value = wireSnapshot(7, 4, 22, [wireFixtureProjection()]);
 		expect(decodePatchSnapshot(value)).toMatchObject({

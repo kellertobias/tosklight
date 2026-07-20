@@ -2,6 +2,7 @@ import type { SplitPatch } from "../../../api/types";
 import {
 	newPatchFixtureCandidate,
 	type PatchFixtureCandidate,
+	type PatchedFixtureResult,
 } from "../../../features/patch/PatchContext";
 import { parsePatchAddress } from "../../input/ConsoleFields";
 import { conflicts, incrementFixtureName, isDmxPatchable } from "../patchUtils";
@@ -73,11 +74,11 @@ async function addVirtualBatch(controller: PatchController) {
 		usedFixtureNumbers.add(nextFixtureNumber);
 		fixtureNumberCursor = nextFixtureNumber + 1;
 	}
-	const ids = await commitPlacementBatch(controller, candidates);
-	if (!ids) return;
+	const results = await commitPlacementBatch(controller, candidates);
+	if (!results) return;
 	const remaining = requested - candidates.length;
-	const lastId = ids.at(-1) ?? null;
-	if (lastId) ui.setSelectedFixture(lastId);
+	const last = results.at(-1);
+	if (last) ui.setSelectedFixture(last.fixtureId);
 	if (!remaining) closeCompletedBatch(controller);
 }
 
@@ -121,12 +122,11 @@ async function addSingleSplitBatch(controller: PatchController) {
 		usedFixtureNumbers.add(nextFixtureNumber);
 		fixtureNumberCursor = nextFixtureNumber + 1;
 	}
-	const ids = await commitPlacementBatch(controller, candidates);
-	if (!ids) return;
+	const results = await commitPlacementBatch(controller, candidates);
+	if (!results) return;
 	const added = candidates.length;
 	const remaining = planned.length - added;
-	const lastId = ids.at(-1) ?? null;
-	selectLastAdded(controller, lastId);
+	selectLastAdded(controller, results.at(-1));
 	if (!remaining) {
 		closeCompletedBatch(controller);
 		return;
@@ -216,12 +216,11 @@ async function addSplitBatch(controller: PatchController) {
 				item.address += item.split.footprint;
 		});
 	}
-	const ids = await commitPlacementBatch(controller, candidates);
-	if (!ids) return;
+	const results = await commitPlacementBatch(controller, candidates);
+	if (!results) return;
 	const added = candidates.length;
 	const remaining = requested - added;
-	const lastId = ids.at(-1) ?? null;
-	selectLastAdded(controller, lastId);
+	selectLastAdded(controller, results.at(-1));
 	if (!remaining) {
 		closeCompletedBatch(controller);
 		return;
@@ -315,7 +314,7 @@ function physicalFixtureNumbers(fixtures: PatchController["data"]["all"]) {
 async function commitPlacementBatch(
 	controller: PatchController,
 	candidates: readonly PatchFixtureCandidate[],
-): Promise<string[] | null> {
+): Promise<readonly PatchedFixtureResult[] | null> {
 	if (!candidates.length) {
 		controller.ui.setStatus("No available fixture IDs could be added.");
 		return null;
@@ -338,10 +337,15 @@ async function commitPlacementBatch(
 	}
 }
 
-function selectLastAdded(controller: PatchController, lastId: string | null) {
-	if (!lastId) return;
-	controller.ui.setSelectedFixture(lastId);
-	void controller.selection.actions?.replace({ resolvedFixtures: [lastId] });
+function selectLastAdded(
+	controller: PatchController,
+	last: PatchedFixtureResult | undefined,
+) {
+	if (!last) return;
+	controller.ui.setSelectedFixture(last.fixtureId);
+	void controller.selection.actions?.replace({
+		resolvedFixtures: last.selectionFixtureIds,
+	});
 }
 
 function closeCompletedBatch(controller: PatchController) {
