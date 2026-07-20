@@ -1,16 +1,16 @@
 # Major Refactoring Progress
 
-Estimated progress: **86%**
+Estimated progress: **88%**
 
-Estimated Codex ETA: **4–7 focused implementation slices, or roughly 14–26 hours of active Codex
+Estimated Codex ETA: **3–6 focused implementation slices, or roughly 12–23 hours of active Codex
 execution**, to repository-wide acceptance.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-20 after completing Programmer lifecycle ownership, the exact-user queued
-Preload playback authority, and public Programmer-state hardening.
+Last updated: 2026-07-20 after completing typed action-time normal Preset recording across touch,
+command-line HTTP, OSC, and compatibility WebSocket surfaces.
 
 ## Guardrails
 
@@ -26,8 +26,9 @@ Preload playback authority, and public Programmer-state hardening.
 
 ## Completed and committed
 
-- [x] Added source-size and dependency-direction architecture checks. The current tree has no
-  production file above 1,200 lines and no production function above 150 lines.
+- [x] Added source-size and dependency-direction architecture checks with a ratchet against new or
+  growing hard-limit violations. The two remaining committed findings are tracked explicitly in
+  the current verification snapshot below.
 - [x] Reduced the server executable to composition and lifecycle startup; routers and feature
   adapters live in the server library.
 - [x] Added `light-application` and `light-wire`, checked-in schemas, generated TypeScript DTOs,
@@ -245,6 +246,18 @@ Preload playback authority, and public Programmer-state hardening.
   cloning session rows, same-user desks remain visible to each other, and foreign-user values,
   selection, modes, command text, Preload buffers, and undo/redo history are never serialized.
   Production and acceptance callers now authenticate explicitly.
+- [x] Added typed action-time normal Preset recording. Touch, command-line HTTP, OSC keys, and the
+  compatibility WebSocket command path now capture only normal recordable fixture/Group values
+  through the Programming application boundary. One request performs one lossless active-show
+  transaction and returns a strict changed/no-change union with request/correlation identity,
+  replay state, authoritative Preset body and revisions, and an event sequence only for a real
+  mutation. Canonical and numeric legacy storage identities remain compatible, unknown body fields
+  survive, and replay does not repeat persistence, command history, or interaction side effects.
+  The action-only frontend provider stays dormant until its Show Objects Preset view is mounted;
+  its pending-only writer reconciles either response/event order, no-change, replay, conflicts,
+  rollback, gaps, authority replacement, and late responses without a Programmer or bootstrap
+  read. It prefers the canonical object when a legacy alias also exists and strictly validates the
+  complete outcome before installing authority.
 - [x] Exposed Selective Show Import through authenticated v2 catalog, preview, and atomic apply
   adapters with checked-in schemas, generated TypeScript, exact source/target revisions, strict
   response validation, and focused server contracts. **Show → Load → Partial Show Load** now uses a
@@ -284,12 +297,11 @@ Preload playback authority, and public Programmer-state hardening.
   command bar, Stage, Stage/Fixture pane chrome, Channels, Fixture Sheet, Patch, and Presets have
   moved, as have Patch setup, the complete parameter bank, and selection-driven operator modals;
   a small number of keypad/miscellaneous readers still use the facade.
-- [ ] Migrate production normal Programmer-value readers and writers onto the connected scoped
-  values provider in focused cohorts. Mounted value readers and interactive writers, including
-  Fixture Sheet active filtering, have moved and their value-triggered bootstrap refreshes and
-  recordable compatibility facade are retired. Action-time Group/Preset/Cue recording still reads
-  a fresh authenticated legacy Programmer projection. Typed action-time normal Preset recording
-  is the next bounded cohort; Group and Cue recording remain separate transactions.
+- [ ] Finish the remaining action-time recording callers. Normal Preset recording is typed end to
+  end and no longer reads the compatibility Programmer projection. Group recording and the larger
+  Cue/Playback recording transaction still require separate typed application actions; keep their
+  selection, dependency, deletion, and playback semantics independent rather than generalizing the
+  Preset contract.
 - [ ] Replace inferred Cue ambiguity in the command-line text projection with explicit desk-local
   pending-choice state that is set only by `ChoiceRequired` after ENT and cleared by edit, reset,
   selection, or Cancel. Until then, cross-session choice visibility remains a documented
@@ -455,6 +467,19 @@ Preload playback authority, and public Programmer-state hardening.
   socket test is excluded; that one test cannot bind under the sandbox. Thirteen stale absolute
   event-sequence assertions exposed by login lifecycle publication now use post-setup baselines
   while retaining exact per-action count and ordering checks.
+- Typed Preset recording passes all 76 `light-programmer` tests, all 233 `light-application`
+  tests, all 35 `light-wire` unit tests and generated-contract verification, and all 31 focused
+  command HTTP server tests. The server set covers authoritative changed/no-change outcomes,
+  revision conflict, replay, authentication, forged values, Preload rejection, one Show event per
+  real mutation, command-line convergence, a real OSC key sequence, and WebSocket replay without
+  repeated interaction side effects. `cargo check -p light-server --no-default-features` and
+  `cargo fmt --all -- --check` pass. The frontend passes 82 focused Preset/Show Objects/API tests
+  and the complete 1,124-test suite in 178 files; typecheck and the production build pass with only
+  the existing large-chunk advisory. Dependency directions, all 10 source-size scanner tests,
+  generated contracts, and `git diff --check` pass. The repository-wide source-size command still
+  exits non-zero for two pre-existing committed ratchet findings outside this slice: the
+  1,382-line Dynamics Editor experiment and the 154-line `handle_subscription_osc` function.
+  Every production file and function changed by Preset recording remains within the hard limits.
 
 ## Wrap-up handoff
 
@@ -471,13 +496,14 @@ Preload playback authority, and public Programmer-state hardening.
   queued-playback, and aggregate lifecycle authority. It invalidates old mutation replays and emits
   only the final safe projections.
 - Public bootstrap no longer contains Programmer state. The authenticated v1 compatibility list
-  is restricted to same-user session rows and remains only for startup plus action-time
-  Group/Preset/Cue migration callers.
+  is restricted to same-user session rows and remains only for startup plus action-time Group/Cue
+  migration callers.
 - Patch/setup selection is complete. The public test DSL remains a separate future milestone.
-- Recommended next slice: add typed action-time normal Preset recording shared by touch,
-  command-line HTTP, and OSC keys, then remove its full compatibility Programmer read. Keep Group
-  recording, the larger Cue/Playback recording transaction, and the public test DSL as distinct
-  milestones.
+- Recommended next slice: add typed action-time Group recording shared by touch, command-line,
+  keyboard, and OSC. Preserve exact opaque Group IDs, ordered membership, stored-empty versus
+  absent state, live/frozen relationships, portable programming, dependency-safe deletion, and one
+  final selection event before the one Show event. Keep the larger Cue/Playback recording
+  transaction and the public test DSL as distinct later milestones.
 
 Test files may exceed the hard limits, but should still be split when it improves readability and
 makes operator intent more visible.
