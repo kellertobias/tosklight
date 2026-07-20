@@ -1,16 +1,16 @@
 # Major Refactoring Progress
 
-Estimated progress: **84%**
+Estimated progress: **86%**
 
-Estimated Codex ETA: **5–8 focused implementation slices, or roughly 17–30 hours of active Codex
+Estimated Codex ETA: **4–7 focused implementation slices, or roughly 14–26 hours of active Codex
 execution**, to repository-wide acceptance.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-20 after migrating Patch/setup selection and preserving logical-head and
-closed-selection semantics through the scoped authority.
+Last updated: 2026-07-20 after completing Programmer lifecycle ownership, the exact-user queued
+Preload playback authority, and public Programmer-state hardening.
 
 ## Guardrails
 
@@ -224,6 +224,27 @@ closed-selection semantics through the scoped authority.
   complete typed replacement. Additive clicks preserve an existing closed ordered selection, and
   every path selects resolved logical heads rather than a parent fixture. Newly patched fixtures
   consume the authoritative server result, so the client does not guess server-generated head IDs.
+- [x] Added a safe aggregate Programmer lifecycle authority for System Controls. The application
+  projects only ownership, connectivity, per-user value counts, selected-fixture count, and
+  session identity; it neither clones full Programmer history nor exposes foreign-user values.
+  Shared command contexts count their selection once across an app and attached OSC surface.
+  Authenticated snapshots and lossless global deltas cover session and Programmer replacement,
+  disconnect, value-count changes, and selection-count changes while quiet paths publish nothing.
+  The dormant frontend store updates only mounted lifecycle views and keeps unrelated global
+  consumers outside its render path.
+- [x] Added an exact-user queued Preload playback authority with ordered duplicate actions and
+  typed physical, virtual, OSC, and Matter surfaces. Capture, successful GO drain, clear, release,
+  undo/redo, rollback, and Programmer replacement pass through the Programming boundary and emit
+  at most one replaceable projection per semantic transition. The strict frontend snapshot/event
+  adapter remains dormant until its Command Line value view mounts, repairs cursor gaps, rejects
+  foreign scope, and refuses stale bootstrap queue data across show, session, or server changes.
+  Queue-only compatibility events, including the interaction-plus-queue GO shape, no longer
+  request broad bootstrap state.
+- [x] Removed full Programmer state from the unauthenticated bootstrap response and authenticated
+  the remaining v1 compatibility list. The compatibility endpoint filters the current user before
+  cloning session rows, same-user desks remain visible to each other, and foreign-user values,
+  selection, modes, command text, Preload buffers, and undo/redo history are never serialized.
+  Production and acceptance callers now authenticate explicitly.
 - [x] Exposed Selective Show Import through authenticated v2 catalog, preview, and atomic apply
   adapters with checked-in schemas, generated TypeScript, exact source/target revisions, strict
   response validation, and focused server contracts. **Show → Load → Partial Show Load** now uses a
@@ -267,8 +288,8 @@ closed-selection semantics through the scoped authority.
   values provider in focused cohorts. Mounted value readers and interactive writers, including
   Fixture Sheet active filtering, have moved and their value-triggered bootstrap refreshes and
   recordable compatibility facade are retired. Action-time Group/Preset/Cue recording still reads
-  a fresh legacy Programmer projection; foreign-user rows stay on bootstrap until the Programmer
-  lifecycle projection exists.
+  a fresh authenticated legacy Programmer projection. Typed action-time normal Preset recording
+  is the next bounded cohort; Group and Cue recording remain separate transactions.
 - [ ] Replace inferred Cue ambiguity in the command-line text projection with explicit desk-local
   pending-choice state that is set only by `ChoiceRequired` after ENT and cleared by edit, reset,
   selection, or Cancel. Until then, cross-session choice visibility remains a documented
@@ -279,9 +300,9 @@ closed-selection semantics through the scoped authority.
 1. Complete vertical frontend slices for Playback, Programmer, Highlight, Output health, remaining
    Show capabilities, Patch, Screens, Files, and Configuration. Replace polling and broad bootstrap
    refreshes with narrow snapshots plus relevant event subscriptions.
-2. Publish the remaining externally observable transitions once through typed events: Programmer
-   ownership changes, Highlight movement, transition completion, output health/overload, and any
-   remaining automatic runtime changes.
+2. Publish the remaining externally observable transitions once through typed events: Highlight
+   movement, transition completion, output health/overload, and any remaining automatic runtime
+   changes.
 3. Migrate remaining layout and miscellaneous portable-show mutations, then remove generic
    frontend show-object mutation.
 4. Replace production `useServer()` callers with feature-local stores/hooks. Remove broad global
@@ -415,6 +436,25 @@ closed-selection semantics through the scoped authority.
   `git diff --check`, dependency directions, and all 10 architecture scanner tests pass; the
   architecture command still exits non-zero only for the pre-existing committed 1,382-line
   Dynamics Editor experiment. Every changed production file remains below 400 lines.
+- The Programmer lifecycle slice passes the complete 215-test application suite, 69 Programmer
+  tests before the later queue additions, 29 wire tests plus generated-contract verification, 6
+  focused server lifecycle tests, and 31 focused frontend tests. The row-level selection-count
+  correction separately passes 6 Programmer, 9 application, 3 wire, and 6 server lifecycle tests.
+  Dependency directions, all 10 scanner tests, frontend typecheck, and `cargo fmt` pass.
+- The queued Preload playback backend passes all 73 Programmer tests, all 219 application tests,
+  all 30 wire tests plus generated-contract verification, 3 focused snapshot/subscription server
+  tests, the successful capture/replay/GO-drain scenario, and failed-GO rollback. The final
+  generated DTO matches the strict frontend decoder. Eight frontend files pass 82 focused tests;
+  the complete frontend run passes 1,093 tests in 174 files, typecheck, and the production build
+  with only the existing large-chunk advisory. Review confirms first-view dormancy, exact-user
+  routing, stale-bootstrap refusal, scope replacement, gap repair, and unrelated-render isolation.
+- Public Programmer-state hardening passes the focused unauthenticated-bootstrap, authentication,
+  same-user/foreign-user server tests, the pre-clone user-filter Programmer test, 18 API-client
+  tests, frontend typecheck, `cargo check -p light-server --no-default-features`, `cargo fmt`, and
+  `git diff --check`. The server library passes 254 tests with 1 ignored when the CITP thumbnail
+  socket test is excluded; that one test cannot bind under the sandbox. Thirteen stale absolute
+  event-sequence assertions exposed by login lifecycle publication now use post-setup baselines
+  while retaining exact per-action count and ordering checks.
 
 ## Wrap-up handoff
 
@@ -427,19 +467,17 @@ closed-selection semantics through the scoped authority.
   retained projection, and at most one values event. Large fixture batches are indexed and
   retained once rather than scanning the vector per address; replay retains fingerprints rather
   than request bodies and is explicitly memory bounded.
-- Lifecycle deletion/recreation still preserves monotonic exact-user values and capture revisions
-  and invalidates old replays. The broader Programmer ownership/lifecycle projection remains
-  separate architecture work.
-- The legacy public bootstrap and unauthenticated `/api/v1/programmers` endpoint still serialize
-  full Programmer state, including values, Preload, selection, modes, command line, and undo/redo
-  history. This is both an ownership leak and repeated-cloning cost; a lifecycle DTO must be built
-  directly rather than by cloning and redacting `ProgrammerState`.
+- Lifecycle deletion/recreation preserves monotonic exact-user values, capture, pending-values,
+  queued-playback, and aggregate lifecycle authority. It invalidates old mutation replays and emits
+  only the final safe projections.
+- Public bootstrap no longer contains Programmer state. The authenticated v1 compatibility list
+  is restricted to same-user session rows and remains only for startup plus action-time
+  Group/Preset/Cue migration callers.
 - Patch/setup selection is complete. The public test DSL remains a separate future milestone.
-- Recommended next slice: first redact Programmer state from public bootstrap and authenticate the
-  compatibility endpoint, then add the typed Programmer lifecycle/ownership projection needed by
-  foreign-user System Controls rows and exact-current-user queued Preload playback activity. Keep
-  typed Preset recording, the larger Cue/Playback recording transaction, and the public test DSL
-  as distinct milestones.
+- Recommended next slice: add typed action-time normal Preset recording shared by touch,
+  command-line HTTP, and OSC keys, then remove its full compatibility Programmer read. Keep Group
+  recording, the larger Cue/Playback recording transaction, and the public test DSL as distinct
+  milestones.
 
 Test files may exceed the hard limits, but should still be split when it improves readability and
 makes operator intent more visible.
