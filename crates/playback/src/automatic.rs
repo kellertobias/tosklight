@@ -61,6 +61,7 @@ impl PlaybackEngine {
         for key in releases {
             if let Some(playback) = self.active.get_mut(&key) {
                 playback.enabled = false;
+                playback.activation = None;
             }
         }
         for playback in self.temporary.values_mut() {

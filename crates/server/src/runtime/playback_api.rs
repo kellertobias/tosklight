@@ -245,7 +245,7 @@ impl VirtualPlaybackExclusionResolver {
     }
 
     pub(super) fn zone_numbers(&self, addressed_page: Option<u8>) -> Vec<Vec<u16>> {
-        if addressed_page.is_some_and(|page| page != self.current_page) {
+        if !self.applies_to_page(addressed_page) {
             return Vec::new();
         }
         let Some(slots) = self.pages.get(&self.current_page) else {
@@ -257,6 +257,10 @@ impl VirtualPlaybackExclusionResolver {
             .map(|zone| zone_numbers(zone, slots))
             .filter(|numbers| numbers.len() >= 2)
             .collect()
+    }
+
+    pub(super) fn applies_to_page(&self, addressed_page: Option<u8>) -> bool {
+        addressed_page.is_none_or(|page| page == self.current_page)
     }
 }
 

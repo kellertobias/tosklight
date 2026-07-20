@@ -36,8 +36,8 @@ pub(super) use projection::automatic_changes as automatic_projection_changes;
 pub(super) use response::{cue_list_http_payload, pool_http_payload, websocket_payload};
 
 use conversion::{
-    action_touched, legacy_action, parse_action, parse_pending, parse_surface, source_name,
-    surface_name,
+    action_touched, activation_surface, legacy_action, parse_action, parse_pending, parse_surface,
+    source_name, surface_name,
 };
 use support::{
     action_error, api_action_error, capture_enabled, captures_preload, invalid, operator_context,
@@ -159,15 +159,6 @@ pub(super) fn snapshot(
         .playback_service
         .snapshot(&context, identities, &ports)
         .map_err(action_error)
-}
-
-pub(in crate::runtime) fn read_runtime_projection(
-    state: &AppState,
-    context: &ActionContext,
-    identity: light_application::PlaybackRuntimeIdentity,
-) -> Result<light_application::PlaybackRuntimeProjection, ApiError> {
-    let ports = ServerPlaybackPorts::new(state, None, None);
-    PlaybackPorts::projection(&ports, context, identity).map_err(action_error)
 }
 
 pub(in crate::runtime) fn read_runtime_projections(

@@ -325,6 +325,7 @@ fn restored_exclusion_normalization_emits_each_loser_once_and_is_idempotent() {
     let first = normalize_restored_virtual_playback_exclusions(&state).unwrap();
 
     assert_eq!(first.released_playbacks, vec![1, 2]);
+    assert!(first.provenance_migrated);
     assert!(!first.persistence_pending);
     let light_application::EventReplay::Events(events) = state
         .application_events
@@ -358,6 +359,7 @@ fn restored_exclusion_normalization_emits_each_loser_once_and_is_idempotent() {
     let second = normalize_restored_virtual_playback_exclusions(&state).unwrap();
 
     assert!(second.released_playbacks.is_empty());
+    assert!(!second.provenance_migrated);
     assert!(!second.persistence_pending);
     assert_eq!(state.application_events.latest_sequence(), 2);
     let enabled = state
@@ -375,6 +377,12 @@ fn restored_exclusion_normalization_emits_each_loser_once_and_is_idempotent() {
         .unwrap()
         .unwrap();
     let persisted: Vec<light_playback::ActivePlayback> = serde_json::from_str(&persisted).unwrap();
+    assert!(
+        persisted
+            .iter()
+            .filter(|playback| playback.enabled)
+            .all(|playback| playback.activation.is_some())
+    );
     assert_eq!(
         persisted
             .into_iter()
@@ -384,6 +392,243 @@ fn restored_exclusion_normalization_emits_each_loser_once_and_is_idempotent() {
         HashSet::from([3, 4])
     );
     let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn restored_exclusions_replay_each_activation_with_its_own_desk_zones() {
+    for configured_desk_activates_last in [false, true] {
+        let (state, data_dir) = test_state();
+        let show = ShowEntry {
+            id: light_core::ShowId::new(),
+            name: "Desk exact restored exclusions".into(),
+            path: data_dir.join("shows/desk-exact.show").display().to_string(),
+            revision: 1,
+            updated_at: String::new(),
+            revision_copy: None,
+        };
+        *state.active_show.write() = Some(show.clone());
+        let cue_list_id = light_core::CueListId::new();
+        state
+            .engine
+            .replace_snapshot(restored_exclusion_snapshot(cue_list_id))
+            .unwrap();
+        let configured = state
+            .desk
+            .lock()
+            .add_desk("Configured restart desk", "configured-restart")
+            .unwrap();
+        let unconfigured = state
+            .desk
+            .lock()
+            .add_desk("Unconfigured restart desk", "unconfigured-restart")
+            .unwrap();
+        for desk in [&configured, &unconfigured] {
+            state
+                .desk
+                .lock()
+                .set_desk_page(desk.id, show.id, 1)
+                .unwrap();
+        }
+        store_restart_zone(&state, &show, configured.id);
+        let (first, second) = if configured_desk_activates_last {
+            ((2, unconfigured.id), (1, configured.id))
+        } else {
+            ((1, configured.id), (2, unconfigured.id))
+        };
+        state
+            .engine
+            .execute_playback(EnginePlaybackCommand::RestoreActive(vec![
+                restored_exclusion_active_with_origin(first.0, cue_list_id, 1, first.1),
+                restored_exclusion_active_with_origin(second.0, cue_list_id, 2, second.1),
+            ]))
+            .unwrap();
+        persist_active_playbacks(&state).unwrap();
+        if !configured_desk_activates_last {
+            assert!(
+                state
+                    .desk
+                    .lock()
+                    .remove_client_desk(unconfigured.id)
+                    .unwrap()
+            );
+        }
+
+        let outcome = normalize_restored_virtual_playback_exclusions(&state).unwrap();
+
+        let expected_released = if configured_desk_activates_last {
+            vec![2]
+        } else {
+            Vec::new()
+        };
+        assert_eq!(outcome.released_playbacks, expected_released);
+        assert!(!outcome.provenance_migrated);
+        let enabled = state
+            .engine
+            .playback_runtime()
+            .into_iter()
+            .filter(|playback| playback.enabled)
+            .filter_map(|playback| playback.playback_number)
+            .collect::<HashSet<_>>();
+        let expected_enabled = if configured_desk_activates_last {
+            HashSet::from([1])
+        } else {
+            HashSet::from([1, 2])
+        };
+        assert_eq!(enabled, expected_enabled);
+        let persisted = state
+            .desk
+            .lock()
+            .setting(&active_playbacks_setting(show.id))
+            .unwrap()
+            .unwrap();
+        assert!(persisted.contains("\"activation\""));
+        assert!(
+            !serde_json::to_string(&state.engine.playback_runtime())
+                .unwrap()
+                .contains("\"activation\"")
+        );
+        let second = normalize_restored_virtual_playback_exclusions(&state).unwrap();
+        assert!(second.released_playbacks.is_empty());
+        assert!(!second.provenance_migrated);
+        assert!(!second.persistence_pending);
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+}
+
+#[test]
+fn timed_preload_release_restart_keeps_the_original_activation_order() {
+    let (state, data_dir) = test_state();
+    let show = ShowEntry {
+        id: light_core::ShowId::new(),
+        name: "Timed Preload restart".into(),
+        path: data_dir.join("shows/timed-preload.show").display().to_string(),
+        revision: 1,
+        updated_at: String::new(),
+        revision_copy: None,
+    };
+    *state.active_show.write() = Some(show.clone());
+    let cue_list_id = light_core::CueListId::new();
+    state
+        .engine
+        .replace_snapshot(restored_exclusion_snapshot(cue_list_id))
+        .unwrap();
+    let desk = state
+        .desk
+        .lock()
+        .add_desk("Timed Preload desk", "timed-preload")
+        .unwrap();
+    state
+        .desk
+        .lock()
+        .set_desk_page(desk.id, show.id, 1)
+        .unwrap();
+    store_restart_zone(&state, &show, desk.id);
+
+    let mut releasing = restored_exclusion_active_with_origin(1, cue_list_id, 1, desk.id);
+    releasing.activation.as_mut().unwrap().at = "2026-01-01T00:00:01Z".parse().unwrap();
+    releasing.activated_at = "2026-01-01T00:00:03Z".parse().unwrap();
+    let mut later = restored_exclusion_active_with_origin(2, cue_list_id, 2, desk.id);
+    later.activation = Some(light_playback::PlaybackActivationProvenance {
+        ordinal: 2,
+        at: "2026-01-01T00:00:02Z".parse().unwrap(),
+        desk_id: None,
+        surface: light_playback::PlaybackActivationSurface::Matter,
+        exclusion_scope: light_playback::PlaybackExclusionScope::None,
+    });
+    state
+        .engine
+        .execute_playback(EnginePlaybackCommand::RestoreActive(vec![releasing, later]))
+        .unwrap();
+    let prepared = state
+        .engine
+        .prepare_playback_batch(
+            &[light_engine::PlaybackBatchCommand {
+                number: 1,
+                action: light_engine::PlaybackBatchAction::Off,
+                exclusion_zones: std::sync::Arc::default(),
+                activation_origin: None,
+            }],
+            "2026-01-01T00:00:04Z".parse().unwrap(),
+            1_000,
+        )
+        .unwrap();
+    state
+        .engine
+        .install_prepared_playback_batch(prepared)
+        .unwrap();
+    let active_release = state
+        .engine
+        .playback_runtime()
+        .into_iter()
+        .find(|playback| playback.playback_number == Some(1))
+        .unwrap();
+    assert!(active_release.enabled);
+    assert_eq!(active_release.activation.unwrap().ordinal, 1);
+    persist_active_playbacks(&state).unwrap();
+    let checkpoint = state
+        .desk
+        .lock()
+        .setting(&active_playbacks_setting(show.id))
+        .unwrap()
+        .unwrap();
+    let restored = serde_json::from_str(&checkpoint).unwrap();
+    state
+        .engine
+        .execute_playback(EnginePlaybackCommand::RestoreActive(restored))
+        .unwrap();
+
+    let normalized = normalize_restored_virtual_playback_exclusions(&state).unwrap();
+    assert!(!normalized.provenance_migrated);
+    assert!(normalized.released_playbacks.is_empty());
+    let enabled = state
+        .engine
+        .playback_runtime()
+        .into_iter()
+        .filter(|playback| playback.enabled)
+        .filter_map(|playback| playback.playback_number)
+        .collect::<HashSet<_>>();
+    assert_eq!(enabled, HashSet::from([1, 2]));
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+fn store_restart_zone(state: &AppState, show: &ShowEntry, desk_id: Uuid) {
+    let stored = VirtualPlaybackExclusionStore::from([(
+        desk_id.to_string(),
+        HashMap::from([(
+            "restart-surface".into(),
+            vec![VirtualPlaybackExclusionZone {
+                id: "restart-zone".into(),
+                name: "Restart zone".into(),
+                slots: vec![1, 2],
+            }],
+        )]),
+    )]);
+    state
+        .desk
+        .lock()
+        .set_setting(
+            &virtual_playback_exclusion_setting(show.id),
+            &serde_json::to_string(&stored).unwrap(),
+        )
+        .unwrap();
+}
+
+fn restored_exclusion_active_with_origin(
+    number: u16,
+    cue_list_id: light_core::CueListId,
+    ordinal: u64,
+    desk_id: Uuid,
+) -> light_playback::ActivePlayback {
+    let mut playback =
+        restored_exclusion_active(number, cue_list_id, "2026-01-01T00:00:00Z");
+    playback.activation = Some(light_playback::PlaybackActivationProvenance {
+        ordinal,
+        at: playback.activated_at,
+        desk_id: Some(desk_id),
+        surface: light_playback::PlaybackActivationSurface::Virtual,
+        exclusion_scope: light_playback::PlaybackExclusionScope::OriginatingDesk,
+    });
+    playback
 }
 
 fn restored_exclusion_snapshot(cue_list_id: light_core::CueListId) -> EngineSnapshot {

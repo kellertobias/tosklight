@@ -53,6 +53,7 @@ fn matter_feedback_tracks_faderless_temp_and_manual_xfade_positions() {
             desk: None,
             source: "osc",
             exclusion_zones: &[],
+            activation_origin: None,
         },
     )
     .unwrap_err();

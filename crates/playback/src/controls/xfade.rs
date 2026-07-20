@@ -94,6 +94,7 @@ impl PlaybackEngine {
             active.master = target;
             if !on {
                 active.enabled = false;
+                active.activation = None;
             }
         } else {
             active.master_transition = Some(PlaybackMasterTransition {
@@ -117,13 +118,23 @@ impl PlaybackEngine {
     /// has executed against the playback's then-current state. This does not rewrite Cue data:
     /// explicit Cue/attribute timing still wins, while a zero Cue time falls back to Programmer
     /// Fade for this transition only.
+    pub fn preload_timing_state(&self, number: u16) -> Option<PlaybackPreloadTimingState> {
+        self.active
+            .get(&PlaybackKey::Number(number))
+            .map(|playback| PlaybackPreloadTimingState {
+                enabled: playback.enabled,
+                master: playback.master,
+                activation: playback.activation.clone(),
+            })
+    }
+
     pub fn apply_preload_timing(
         &mut self,
         number: u16,
         action: &str,
         started_at: DateTime<Utc>,
         fallback_millis: u64,
-        previous: Option<(bool, f32)>,
+        previous: Option<PlaybackPreloadTimingState>,
     ) -> Result<(), String> {
         self.apply_preload_timing_mutation(number, action, started_at, fallback_millis, previous)
             .map(|_| ())
@@ -135,7 +146,7 @@ impl PlaybackEngine {
         action: &str,
         started_at: DateTime<Utc>,
         fallback_millis: u64,
-        previous: Option<(bool, f32)>,
+        previous: Option<PlaybackPreloadTimingState>,
     ) -> Result<PlaybackMutation<()>, String> {
         self.cue_list_for(number)?;
         let key = PlaybackKey::Number(number);
@@ -237,14 +248,14 @@ fn apply_active_preload_timing(
     action: &str,
     started_at: DateTime<Utc>,
     fallback_millis: u64,
-    previous: Option<(bool, f32)>,
+    previous: Option<PlaybackPreloadTimingState>,
 ) -> bool {
     let mut changed = false;
     if playback.enabled && matches!(action, "go" | "go-minus" | "on" | "toggle") {
         changed |= set_transition_timing(playback, started_at, fallback_millis);
     }
     match (previous, playback.enabled) {
-        (Some((false, _)), true)
+        (Some(PlaybackPreloadTimingState { enabled: false, .. }), true)
             if matches!(action, "go" | "on" | "toggle") && fallback_millis > 0 =>
         {
             let target = playback.master;
@@ -261,21 +272,22 @@ fn apply_active_preload_timing(
                 true,
             );
         }
-        (Some((true, previous_master)), false)
-            if matches!(action, "off" | "toggle") && fallback_millis > 0 =>
+        (Some(previous), false)
+            if previous.enabled && matches!(action, "off" | "toggle") && fallback_millis > 0 =>
         {
             changed |= set_master_transition(
                 playback,
                 PlaybackMasterTransition {
-                    from: previous_master,
+                    from: previous.master,
                     to: 0.0,
                     started_at,
                     duration_millis: fallback_millis,
                     release_after: true,
                 },
-                previous_master,
+                previous.master,
                 true,
             );
+            playback.activation = previous.activation;
         }
         _ => {}
     }

@@ -13,6 +13,7 @@ pub struct PlaybackEngine {
     pub(crate) sequence_master_fade_millis: u64,
     pub(crate) definitions: HashMap<u16, PlaybackDefinition>,
     pub(crate) clock: SharedClock,
+    pub(crate) next_activation_ordinal: u64,
 }
 
 impl Default for PlaybackEngine {
@@ -35,6 +36,7 @@ impl PlaybackEngine {
             sequence_master_fade_millis: 0,
             definitions: HashMap::new(),
             clock,
+            next_activation_ordinal: 1,
         }
     }
 

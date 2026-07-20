@@ -55,6 +55,7 @@ impl PlaybackEngine {
         let playback = match self.active.entry(key) {
             std::collections::hash_map::Entry::Vacant(entry) => entry.insert(ActivePlayback {
                 playback_number: None,
+                activation: None,
                 cue_list_id: id,
                 cue_index: 0,
                 previous_index: None,
@@ -182,6 +183,7 @@ impl PlaybackEngine {
             .ok_or("cue does not exist")?;
         let playback = self.active.entry(key).or_insert(ActivePlayback {
             playback_number: None,
+            activation: None,
             cue_list_id: id,
             cue_index: index,
             previous_index: None,

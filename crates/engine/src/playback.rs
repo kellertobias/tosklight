@@ -145,11 +145,22 @@ impl Engine {
         action: PoolPlaybackAction,
         exclusion_zones: &[Vec<u16>],
     ) -> Result<PoolPlaybackTransition, String> {
+        self.execute_pool_playback_with_activation(number, action, exclusion_zones, None)
+    }
+
+    pub fn execute_pool_playback_with_activation(
+        &self,
+        number: u16,
+        action: PoolPlaybackAction,
+        exclusion_zones: &[Vec<u16>],
+        activation_origin: Option<light_playback::PlaybackActivationOrigin>,
+    ) -> Result<PoolPlaybackTransition, String> {
         let generation = self.generation.load();
         let (outcome, released_playbacks) = apply_with_exclusions(
             &mut generation.playback().write(),
             number,
             exclusion_zones,
+            activation_origin,
             |playback| execute_pool(playback, number, action),
         )?;
         let outcome = combine_release_effect(outcome, &released_playbacks)?;

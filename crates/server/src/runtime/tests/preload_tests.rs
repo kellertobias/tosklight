@@ -453,6 +453,7 @@ fn staged_preload_applies_exclusions_without_mutating_the_source_engine() {
         .unwrap();
     let pending = light_programmer::PreloadPlaybackAction {
         playback_number: 1,
+        origin_desk_id: None,
         page: None,
         action: light_programmer::PreloadPlaybackQueueAction::On,
         surface: light_programmer::PreloadPlaybackQueueSurface::Virtual,

@@ -4,10 +4,13 @@ use crate::{PreloadPlaybackQueueAction, PreloadPlaybackQueueSurface};
 use chrono::{DateTime, Utc};
 use light_core::{AttributeKey, AttributeValue, SessionId};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct PreloadPlaybackAction {
     pub playback_number: u16,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin_desk_id: Option<Uuid>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub page: Option<u8>,
     pub action: PreloadPlaybackQueueAction,
@@ -73,6 +76,25 @@ impl ProgrammerRegistry {
         action: PreloadPlaybackQueueAction,
         surface: PreloadPlaybackQueueSurface,
     ) -> bool {
+        self.queue_preload_playback_action_with_origin(
+            session,
+            playback_number,
+            page,
+            action,
+            surface,
+            None,
+        )
+    }
+
+    pub fn queue_preload_playback_action_with_origin(
+        &self,
+        session: SessionId,
+        playback_number: u16,
+        page: Option<u8>,
+        action: PreloadPlaybackQueueAction,
+        surface: PreloadPlaybackQueueSurface,
+        origin_desk_id: Option<Uuid>,
+    ) -> bool {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();
         let mut states = self.states.write();
@@ -82,6 +104,7 @@ impl ProgrammerRegistry {
         state.checkpoint();
         state.preload_playback_pending.push(PreloadPlaybackAction {
             playback_number,
+            origin_desk_id,
             page,
             action,
             surface,

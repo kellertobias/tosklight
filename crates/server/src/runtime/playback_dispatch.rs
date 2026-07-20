@@ -13,6 +13,7 @@ pub(super) struct PlaybackDispatchContext<'a> {
     pub(super) desk: Option<&'a ControlDesk>,
     pub(super) source: &'a str,
     pub(super) exclusion_zones: &'a [Vec<u16>],
+    pub(super) activation_origin: Option<light_playback::PlaybackActivationOrigin>,
 }
 
 /// The one authoritative playback action path for UI, OSC, attached hardware, and deferred
@@ -98,6 +99,7 @@ pub(super) fn dispatch_playback_action_inner(
             input,
             context.source,
             context.exclusion_zones,
+            context.activation_origin,
         );
     }
     if let Some(outcome) = apply_direct_playback_action(
@@ -106,6 +108,7 @@ pub(super) fn dispatch_playback_action_inner(
         action_name,
         input,
         context.exclusion_zones,
+        context.activation_origin,
     )? {
         return Ok(outcome);
     }
@@ -129,6 +132,7 @@ pub(super) fn dispatch_playback_action_inner(
         input,
         pressed,
         context.exclusion_zones,
+        context.activation_origin,
     )?;
     Ok(outcome.combine(PlaybackTargetOutcome::changed(selection_changed)))
 }

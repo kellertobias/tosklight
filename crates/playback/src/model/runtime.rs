@@ -18,10 +18,58 @@ pub(crate) enum TemporaryPlaybackKind {
     Swap,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlaybackActivationSurface {
+    Physical,
+    Virtual,
+    Osc,
+    Matter,
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlaybackExclusionScope {
+    OriginatingDesk,
+    LegacyAllDesks,
+    #[serde(other)]
+    None,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PlaybackActivationOrigin {
+    pub at: DateTime<Utc>,
+    pub desk_id: Option<Uuid>,
+    pub surface: PlaybackActivationSurface,
+    pub exclusion_scope: PlaybackExclusionScope,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct PlaybackActivationProvenance {
+    pub ordinal: u64,
+    pub at: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub desk_id: Option<Uuid>,
+    pub surface: PlaybackActivationSurface,
+    pub exclusion_scope: PlaybackExclusionScope,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlaybackPreloadTimingState {
+    pub enabled: bool,
+    pub master: f32,
+    pub activation: Option<PlaybackActivationProvenance>,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ActivePlayback {
     #[serde(default)]
     pub playback_number: Option<u16>,
+    /// Internal restart authority. Public runtime payloads deliberately omit this field.
+    #[serde(default, skip_serializing)]
+    pub activation: Option<PlaybackActivationProvenance>,
     pub cue_list_id: CueListId,
     pub cue_index: usize,
     pub previous_index: Option<usize>,
@@ -226,6 +274,7 @@ pub(crate) fn new_active_playback(
 ) -> ActivePlayback {
     ActivePlayback {
         playback_number,
+        activation: None,
         cue_list_id: cue_list.id,
         cue_index: 0,
         previous_index: None,

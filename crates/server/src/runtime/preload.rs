@@ -51,6 +51,7 @@ pub(super) fn preload_batch_commands(
                 number: pending.playback_number,
                 action,
                 exclusion_zones: std::sync::Arc::default(),
+                activation_origin: None,
             })
         })
         .collect()

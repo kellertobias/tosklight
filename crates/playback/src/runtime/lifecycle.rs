@@ -55,6 +55,7 @@ impl PlaybackEngine {
         for key in release {
             if let Some(playback) = self.active.get_mut(&key) {
                 playback.enabled = false;
+                playback.activation = None;
             }
         }
         changed
@@ -114,6 +115,7 @@ impl PlaybackEngine {
                 .playback_number
                 .map(PlaybackKey::Number)
                 .unwrap_or(PlaybackKey::CueList(playback.cue_list_id));
+            self.observe_restored_activation(playback.activation.as_ref());
             self.active.insert(key, playback);
         }
     }
@@ -192,6 +194,7 @@ impl PlaybackEngine {
                     sequence_master_fade_millis: self.sequence_master_fade_millis,
                     definitions: self.definitions.clone(),
                     clock: Arc::clone(&self.clock),
+                    next_activation_ordinal: self.next_activation_ordinal,
                 };
                 isolated.active.get_mut(key).unwrap().deleted_cue_hold = None;
                 isolated

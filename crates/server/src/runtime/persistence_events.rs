@@ -62,13 +62,34 @@ pub(super) fn persist_active_playbacks(state: &AppState) -> Result<(), ApiError>
         return Ok(());
     };
     let runtime = state.engine.playback_runtime();
+    let persisted = runtime
+        .iter()
+        .map(PersistedActivePlayback::from)
+        .collect::<Vec<_>>();
     let serialized =
-        serde_json::to_string(&runtime).map_err(|error| ApiError::internal(error.to_string()))?;
+        serde_json::to_string(&persisted).map_err(|error| ApiError::internal(error.to_string()))?;
     state
         .desk
         .lock()
         .set_setting(&active_playbacks_setting(show.id), &serialized)
         .map_err(ApiError::store)
+}
+
+#[derive(serde::Serialize)]
+struct PersistedActivePlayback<'a> {
+    #[serde(flatten)]
+    runtime: &'a light_playback::ActivePlayback,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    activation: Option<&'a light_playback::PlaybackActivationProvenance>,
+}
+
+impl<'a> From<&'a light_playback::ActivePlayback> for PersistedActivePlayback<'a> {
+    fn from(runtime: &'a light_playback::ActivePlayback) -> Self {
+        Self {
+            runtime,
+            activation: runtime.activation.as_ref(),
+        }
+    }
 }
 pub(super) fn emit(state: &AppState, kind: &str, payload: serde_json::Value) {
     let event = Event {

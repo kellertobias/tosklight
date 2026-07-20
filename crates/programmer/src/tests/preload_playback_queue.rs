@@ -19,6 +19,7 @@ fn persisted_queue_actions_accept_old_json_and_omit_an_unknown_page() {
     });
     let action: PreloadPlaybackAction = serde_json::from_value(legacy.clone()).unwrap();
     assert_eq!(action.page, None);
+    assert_eq!(action.origin_desk_id, None);
     assert_eq!(serde_json::to_value(&action).unwrap(), legacy);
 
     let with_page = PreloadPlaybackAction {
@@ -26,6 +27,32 @@ fn persisted_queue_actions_accept_old_json_and_omit_an_unknown_page() {
         ..action
     };
     assert_eq!(serde_json::to_value(with_page).unwrap()["page"], 3);
+}
+
+#[test]
+fn captured_origin_round_trips_with_the_persisted_queue_action() {
+    let registry = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    let desk_id = uuid::Uuid::new_v4();
+    registry.start(session, UserId::new());
+
+    assert!(registry.queue_preload_playback_action_with_origin(
+        session,
+        7,
+        Some(3),
+        PreloadPlaybackQueueAction::Go,
+        PreloadPlaybackQueueSurface::Physical,
+        Some(desk_id),
+    ));
+
+    let queued = registry.preload_playback_actions(session).unwrap();
+    assert_eq!(queued[0].origin_desk_id, Some(desk_id));
+    let encoded = serde_json::to_value(&queued[0]).unwrap();
+    assert_eq!(encoded["origin_desk_id"], desk_id.to_string());
+    assert_eq!(
+        serde_json::from_value::<PreloadPlaybackAction>(encoded).unwrap(),
+        queued[0]
+    );
 }
 
 #[test]

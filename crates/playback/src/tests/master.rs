@@ -21,11 +21,7 @@ fn preload_transition_uses_one_timestamp_and_programmer_fade_only_as_fallback() 
 
     let committed_at = started + ChronoDuration::milliseconds(750);
     clock.set(committed_at);
-    let previous = engine
-        .runtime()
-        .into_iter()
-        .find(|playback| playback.playback_number == Some(1))
-        .map(|playback| (playback.enabled, playback.master));
+    let previous = engine.preload_timing_state(1);
     engine.go_playback(1).unwrap();
     engine
         .apply_preload_timing(1, "go", committed_at, 2_000, previous)
@@ -60,11 +56,7 @@ fn explicit_cue_time_remains_authoritative_for_a_preload_transition() {
     engine.register(cue_list).unwrap();
     engine.register_definition(definition(1, id)).unwrap();
     engine.go_playback(1).unwrap();
-    let previous = engine
-        .runtime()
-        .into_iter()
-        .find(|playback| playback.playback_number == Some(1))
-        .map(|playback| (playback.enabled, playback.master));
+    let previous = engine.preload_timing_state(1);
     engine.go_playback(1).unwrap();
     engine
         .apply_preload_timing(1, "go", started, 2_000, previous)

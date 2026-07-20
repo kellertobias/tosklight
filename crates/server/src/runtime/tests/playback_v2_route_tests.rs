@@ -488,6 +488,21 @@ async fn v2_explicit_non_current_page_does_not_borrow_virtual_exclusions() {
     assert_eq!(events.len(), 1);
     assert_eq!(playback_event_state(&events[0]), (1, true));
     assert_eq!(response["event_sequence"], events[0].sequence);
+    assert_eq!(
+        state
+            .engine
+            .playback_runtime()
+            .into_iter()
+            .find(|playback| playback.playback_number == Some(1))
+            .unwrap()
+            .activation
+            .unwrap()
+            .exclusion_scope,
+        light_playback::PlaybackExclusionScope::None
+    );
+    let normalized = normalize_restored_virtual_playback_exclusions(&state).unwrap();
+    assert!(normalized.released_playbacks.is_empty());
+    assert_eq!(enabled_playback_numbers(&state), vec![1, 2]);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -527,6 +542,19 @@ async fn v2_virtual_exclusion_configuration_is_desk_scoped() {
     let events = playback_runtime_events(&state, cursor);
     assert_eq!(events.len(), 1);
     assert_eq!(playback_event_state(&events[0]), (1, true));
+    let activation = state
+        .engine
+        .playback_runtime()
+        .into_iter()
+        .find(|playback| playback.playback_number == Some(1))
+        .unwrap()
+        .activation
+        .unwrap();
+    assert_eq!(activation.desk_id, Some(second_desk.id));
+    assert_eq!(
+        activation.surface,
+        light_playback::PlaybackActivationSurface::Virtual
+    );
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -1250,6 +1278,78 @@ async fn transient_preload_cancellation_drains_without_runtime_event_or_persiste
     );
     let snapshot = json(preload_queue_snapshot(&app, Some(&token), session.user.id.0).await).await;
     assert_eq!(snapshot["projection"]["actions"], serde_json::json!([]));
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn same_user_preload_commit_keeps_each_captured_actions_originating_desk() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (first_token, _) = login(&app, "Operator").await;
+    let first_session = session_for_token(&state, &first_token);
+    let second_desk = state
+        .desk
+        .lock()
+        .add_desk("Preload origin wing", "preload-origin-wing")
+        .unwrap();
+    let second_token = login_playback_user_on_desk(&app, "Operator", second_desk.id).await;
+    open_playback_test_show(&app, &first_token).await;
+    install_virtual_exclusion_test_state(&state);
+    set_pool_enabled(&state, 2, true);
+    put_virtual_exclusion_zone(&app, &first_token, &[1, 2]).await;
+    assert_preload_key(
+        &app,
+        &second_token,
+        second_desk.id,
+        "enter-origin-queue",
+        "preload_entered",
+    )
+    .await;
+    let mut capture = action_request(
+        "capture-from-unconfigured-desk",
+        1,
+        serde_json::json!({"type":"on","pressed":true}),
+    );
+    capture["surface"] = "physical".into();
+    let captured = post_action(&app, Some(&second_token), second_desk.id, capture).await;
+    assert_eq!(captured.status(), StatusCode::OK);
+    assert_eq!(json(captured).await["outcome"]["status"], "captured");
+
+    assert_preload_key(
+        &app,
+        &first_token,
+        first_session.desk.id,
+        "commit-origin-queue",
+        "preload_committed",
+    )
+    .await;
+
+    assert_eq!(enabled_playback_numbers(&state), vec![1, 2]);
+    let activation = state
+        .engine
+        .playback_runtime()
+        .into_iter()
+        .find(|playback| playback.playback_number == Some(1))
+        .unwrap()
+        .activation
+        .unwrap();
+    assert_eq!(activation.desk_id, Some(second_desk.id));
+    assert_eq!(
+        activation.surface,
+        light_playback::PlaybackActivationSurface::Physical
+    );
+    assert_eq!(
+        activation.exclusion_scope,
+        light_playback::PlaybackExclusionScope::OriginatingDesk
+    );
+    let show_id = state.active_show.read().as_ref().unwrap().id;
+    let persisted = state
+        .desk
+        .lock()
+        .setting(&active_playbacks_setting(show_id))
+        .unwrap()
+        .unwrap();
+    assert!(persisted.contains(&second_desk.id.to_string()));
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

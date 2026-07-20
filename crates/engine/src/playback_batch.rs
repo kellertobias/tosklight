@@ -22,6 +22,7 @@ pub struct PlaybackBatchCommand {
     pub number: u16,
     pub action: PlaybackBatchAction,
     pub exclusion_zones: Arc<[Vec<u16>]>,
+    pub activation_origin: Option<light_playback::PlaybackActivationOrigin>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -113,13 +114,12 @@ fn apply_command(
     started_at: DateTime<Utc>,
     fallback_millis: u64,
 ) -> Result<PlaybackBatchOutcome, String> {
-    let previous = playback
-        .playback_runtime(command.number)
-        .map(|runtime| (runtime.enabled, runtime.master));
+    let previous = playback.preload_timing_state(command.number);
     let (effects, released_playbacks) = apply_with_exclusions(
         playback,
         command.number,
         &command.exclusion_zones,
+        command.activation_origin,
         |playback| apply_action(playback, command),
     )?;
     let timing_effect = if effects.addressed.changed() {

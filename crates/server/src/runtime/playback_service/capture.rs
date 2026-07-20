@@ -54,13 +54,16 @@ impl ServerPlaybackPorts<'_> {
         let queue_surface =
             light_programmer::PreloadPlaybackQueueSurface::try_from(surface_name(surface))
                 .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error))?;
-        self.state.programmers.queue_preload_playback_action(
-            session.id,
-            number,
-            page,
-            action,
-            queue_surface,
-        );
+        self.state
+            .programmers
+            .queue_preload_playback_action_with_origin(
+                session.id,
+                number,
+                page,
+                action,
+                queue_surface,
+                Some(session.desk.id),
+            );
         if let Err(error) = persist_programmer(self.state, session) {
             self.mark_persistence_pending(context, "programmer", error);
         }

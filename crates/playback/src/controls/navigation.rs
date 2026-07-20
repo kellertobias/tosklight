@@ -196,6 +196,7 @@ const fn runtime_effect(changed: bool) -> PlaybackRuntimeEffect {
 fn inactive_playback(number: u16, cue_list_id: CueListId, now: DateTime<Utc>) -> ActivePlayback {
     ActivePlayback {
         playback_number: Some(number),
+        activation: None,
         cue_list_id,
         cue_index: 0,
         previous_index: None,

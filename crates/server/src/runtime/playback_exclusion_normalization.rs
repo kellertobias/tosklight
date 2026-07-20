@@ -3,10 +3,12 @@ use light_application::{
     ActionContext, ActionSource, EventDraft, PlaybackAction, PlaybackOperation,
     PlaybackRuntimeIdentity, PlaybackUnitOfWork, committed_playback_event,
 };
+use std::sync::Arc;
 
 #[derive(Debug, Default, Eq, PartialEq)]
 pub(super) struct RestoredExclusionOutcome {
     pub(super) released_playbacks: Vec<u16>,
+    pub(super) provenance_migrated: bool,
     pub(super) persistence_pending: bool,
 }
 
@@ -38,20 +40,18 @@ impl PlaybackUnitOfWork for RestoredExclusionNormalization<'_> {
 
 impl RestoredExclusionNormalization<'_> {
     fn apply(self) -> Result<(RestoredExclusionOutcome, Vec<EventDraft>), ApiError> {
-        let candidates = restored_exclusion_losers(self.state);
+        let provenance_migrated = migrate_activation_provenance(self.state)?;
+        let candidates = restored_exclusion_losers(self.state)?;
         let before = projections(self.state, &self.context, &candidates)?;
         let released = release_candidates(self.state, candidates)?;
-        if released.is_empty() {
-            return Ok((RestoredExclusionOutcome::default(), Vec::new()));
-        }
-        let persistence_pending = persist_active_playbacks(self.state)
-            .inspect_err(|error| tracing::warn!(error=%error.message, "restored Playback exclusion persistence is pending"))
-            .is_err();
+        let persistence_pending =
+            persist_normalized_runtime(self.state, provenance_migrated || !released.is_empty());
         let after = projections(self.state, &self.context, &released)?;
         let events = changed_events(&self.context, before, after);
         Ok((
             RestoredExclusionOutcome {
                 released_playbacks: released,
+                provenance_migrated,
                 persistence_pending,
             },
             events,
@@ -59,21 +59,135 @@ impl RestoredExclusionNormalization<'_> {
     }
 }
 
-fn restored_exclusion_losers(state: &AppState) -> Vec<u16> {
-    let zones = all_restored_zones(state);
+fn migrate_activation_provenance(state: &AppState) -> Result<bool, ApiError> {
+    let mut runtime = state.engine.playback_runtime();
+    if !activation_migration_required(&runtime) {
+        return Ok(false);
+    }
+    let mut ordered = runtime
+        .iter()
+        .enumerate()
+        .filter(|(_, playback)| playback.enabled && playback.playback_number.is_some())
+        .map(|(index, playback)| (index, activation_time(playback), playback.playback_number))
+        .collect::<Vec<_>>();
+    ordered.sort_by_key(|(_, at, number)| (*at, *number));
+    for (offset, (index, _, _)) in ordered.into_iter().enumerate() {
+        migrate_activation(&mut runtime[index], offset as u64 + 1);
+    }
+    for playback in runtime.iter_mut().filter(|playback| !playback.enabled) {
+        playback.activation = None;
+    }
+    state
+        .engine
+        .execute_playback(EnginePlaybackCommand::RestoreActive(runtime))
+        .map_err(ApiError::internal)?;
+    Ok(true)
+}
+
+fn activation_migration_required(runtime: &[light_playback::ActivePlayback]) -> bool {
+    let mut ordinals = HashSet::new();
+    for playback in runtime {
+        if !playback.enabled && playback.activation.is_some() {
+            return true;
+        }
+        if !playback.enabled || playback.playback_number.is_none() {
+            continue;
+        }
+        let Some(activation) = &playback.activation else {
+            return true;
+        };
+        if activation.ordinal == 0 || !ordinals.insert(activation.ordinal) {
+            return true;
+        }
+    }
+    false
+}
+
+fn migrate_activation(playback: &mut light_playback::ActivePlayback, ordinal: u64) {
+    let activation = playback.activation.take();
+    playback.activation = Some(light_playback::PlaybackActivationProvenance {
+        ordinal,
+        at: activation
+            .as_ref()
+            .map_or(playback.activated_at, |activation| activation.at),
+        desk_id: activation
+            .as_ref()
+            .and_then(|activation| activation.desk_id),
+        surface: activation.as_ref().map_or(
+            light_playback::PlaybackActivationSurface::Unknown,
+            |activation| activation.surface,
+        ),
+        exclusion_scope: activation.as_ref().map_or(
+            light_playback::PlaybackExclusionScope::LegacyAllDesks,
+            |activation| activation.exclusion_scope,
+        ),
+    });
+}
+
+fn activation_time(playback: &light_playback::ActivePlayback) -> chrono::DateTime<chrono::Utc> {
+    playback
+        .activation
+        .as_ref()
+        .map_or(playback.activated_at, |activation| activation.at)
+}
+
+fn restored_exclusion_losers(state: &AppState) -> Result<Vec<u16>, ApiError> {
+    let legacy_zones: Arc<[Vec<u16>]> = all_restored_zones(state).into();
+    let mut desk_zones = HashMap::<Uuid, Arc<[Vec<u16>]>>::new();
     let mut active = state
         .engine
         .playback_runtime()
         .into_iter()
-        .filter(|playback| playback.enabled)
-        .filter(|playback| {
-            playback
-                .playback_number
-                .is_some_and(|number| zones.iter().any(|zone| zone.contains(&number)))
-        })
+        .filter(|playback| playback.enabled && playback.playback_number.is_some())
         .collect::<Vec<_>>();
-    active.sort_by_key(|playback| (playback.activated_at, playback.playback_number));
-    losing_playbacks(&zones, &active)
+    active.sort_by_key(|playback| {
+        (
+            playback
+                .activation
+                .as_ref()
+                .map_or(u64::MAX, |activation| activation.ordinal),
+            playback.playback_number,
+        )
+    });
+    losing_playbacks(&active, |playback| {
+        activation_zones(state, playback, &legacy_zones, &mut desk_zones)
+    })
+}
+
+fn activation_zones(
+    state: &AppState,
+    playback: &light_playback::ActivePlayback,
+    legacy_zones: &Arc<[Vec<u16>]>,
+    desk_zones: &mut HashMap<Uuid, Arc<[Vec<u16>]>>,
+) -> Result<Arc<[Vec<u16>]>, ApiError> {
+    let Some(activation) = &playback.activation else {
+        return Ok(Arc::clone(legacy_zones));
+    };
+    match activation.exclusion_scope {
+        light_playback::PlaybackExclusionScope::None => Ok(Arc::default()),
+        light_playback::PlaybackExclusionScope::LegacyAllDesks => Ok(Arc::clone(legacy_zones)),
+        light_playback::PlaybackExclusionScope::OriginatingDesk => {
+            let Some(desk_id) = activation.desk_id else {
+                return Ok(Arc::default());
+            };
+            if let Some(zones) = desk_zones.get(&desk_id) {
+                return Ok(Arc::clone(zones));
+            }
+            let exists = state
+                .desk
+                .lock()
+                .control_desk(desk_id)
+                .map_err(ApiError::store)?
+                .is_some();
+            let zones: Arc<[Vec<u16>]> = if exists {
+                virtual_playback_zone_numbers(state, desk_id).into()
+            } else {
+                Arc::default()
+            };
+            desk_zones.insert(desk_id, Arc::clone(&zones));
+            Ok(zones)
+        }
+    }
 }
 
 fn all_restored_zones(state: &AppState) -> Vec<Vec<u16>> {
@@ -90,12 +204,14 @@ fn all_restored_zones(state: &AppState) -> Vec<Vec<u16>> {
         .collect()
 }
 
-fn losing_playbacks(zones: &[Vec<u16>], active: &[light_playback::ActivePlayback]) -> Vec<u16> {
+fn losing_playbacks(
+    active: &[light_playback::ActivePlayback],
+    mut zones_for: impl FnMut(&light_playback::ActivePlayback) -> Result<Arc<[Vec<u16>]>, ApiError>,
+) -> Result<Vec<u16>, ApiError> {
     let mut retained = HashSet::new();
-    for number in active
-        .iter()
-        .filter_map(|playback| playback.playback_number)
-    {
+    for playback in active {
+        let number = playback.playback_number.expect("active pool Playback");
+        let zones = zones_for(playback)?;
         for peer in zones.iter().filter(|zone| zone.contains(&number)).flatten() {
             retained.remove(peer);
         }
@@ -108,7 +224,7 @@ fn losing_playbacks(zones: &[Vec<u16>], active: &[light_playback::ActivePlayback
         .collect::<Vec<_>>();
     losers.sort_unstable();
     losers.dedup();
-    losers
+    Ok(losers)
 }
 
 fn release_candidates(state: &AppState, candidates: Vec<u16>) -> Result<Vec<u16>, ApiError> {
@@ -124,22 +240,28 @@ fn release_candidates(state: &AppState, candidates: Vec<u16>) -> Result<Vec<u16>
     }
 }
 
+fn persist_normalized_runtime(state: &AppState, changed: bool) -> bool {
+    changed
+        && persist_active_playbacks(state)
+            .inspect_err(|error| tracing::warn!(error=%error.message, "restored Playback exclusion persistence is pending"))
+            .is_err()
+}
+
 fn projections(
     state: &AppState,
     context: &ActionContext,
     numbers: &[u16],
 ) -> Result<HashMap<u16, light_application::PlaybackRuntimeProjection>, ApiError> {
-    numbers
+    if numbers.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let identities = numbers
         .iter()
-        .map(|number| {
-            playback_service::read_runtime_projection(
-                state,
-                context,
-                PlaybackRuntimeIdentity::Playback(*number),
-            )
-            .map(|projection| (*number, projection))
-        })
-        .collect()
+        .copied()
+        .map(PlaybackRuntimeIdentity::Playback)
+        .collect::<Vec<_>>();
+    let projections = playback_service::read_runtime_projections(state, context, &identities)?;
+    Ok(numbers.iter().copied().zip(projections).collect())
 }
 
 fn changed_events(
@@ -171,20 +293,29 @@ mod tests {
     #[test]
     fn overlapping_zones_retain_the_last_activation_independent_of_zone_order() {
         let active = vec![active(1, 1), active(3, 2), active(2, 3), active(9, 4)];
-        let zones = vec![vec![1, 2], vec![2, 3]];
+        let zones: Arc<[Vec<u16>]> = vec![vec![1, 2], vec![2, 3]].into();
 
-        assert_eq!(losing_playbacks(&zones, &active), vec![1, 3]);
+        assert_eq!(
+            losing_playbacks(&active, |_| Ok(Arc::clone(&zones))).unwrap(),
+            vec![1, 3]
+        );
 
-        let reversed = zones.into_iter().rev().collect::<Vec<_>>();
-        assert_eq!(losing_playbacks(&reversed, &active), vec![1, 3]);
+        let reversed: Arc<[Vec<u16>]> = zones.iter().cloned().rev().collect::<Vec<_>>().into();
+        assert_eq!(
+            losing_playbacks(&active, |_| Ok(Arc::clone(&reversed))).unwrap(),
+            vec![1, 3]
+        );
     }
 
     #[test]
     fn loser_numbers_are_stably_sorted() {
         let active = vec![active(10, 1), active(2, 2), active(11, 3), active(3, 4)];
-        let zones = vec![vec![10, 11], vec![2, 3]];
+        let zones: Arc<[Vec<u16>]> = vec![vec![10, 11], vec![2, 3]].into();
 
-        assert_eq!(losing_playbacks(&zones, &active), vec![2, 10]);
+        assert_eq!(
+            losing_playbacks(&active, |_| Ok(Arc::clone(&zones))).unwrap(),
+            vec![2, 10]
+        );
     }
 
     fn active(number: u16, second: u8) -> light_playback::ActivePlayback {

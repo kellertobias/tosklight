@@ -155,6 +155,17 @@ pub(super) const fn surface_name(surface: PlaybackSurface) -> &'static str {
     }
 }
 
+pub(super) const fn activation_surface(
+    surface: PlaybackSurface,
+) -> light_playback::PlaybackActivationSurface {
+    match surface {
+        PlaybackSurface::Physical => light_playback::PlaybackActivationSurface::Physical,
+        PlaybackSurface::Virtual => light_playback::PlaybackActivationSurface::Virtual,
+        PlaybackSurface::Osc => light_playback::PlaybackActivationSurface::Osc,
+        PlaybackSurface::Matter => light_playback::PlaybackActivationSurface::Matter,
+    }
+}
+
 pub(super) fn parse_pending(action: &str) -> PendingPlaybackAction {
     match action {
         "toggle" => PendingPlaybackAction::Toggle,

@@ -282,6 +282,7 @@ fn deactivate(playback: &mut ActivePlayback) -> bool {
         || playback.loaded_cue_id.is_some()
         || playback.loaded_cue_number.is_some();
     playback.enabled = false;
+    playback.activation = None;
     playback.flash = false;
     playback.fader_pickup_required = pickup_required;
     playback.master_transition = None;

@@ -93,6 +93,104 @@ fn matter_bridge_writes_and_tracking_feedback_use_explicit_global_addresses() {
 }
 
 #[test]
+fn matter_activation_checkpoint_keeps_desk_independent_restart_scope() {
+    let (state, data_dir) = test_state();
+    let show = ShowEntry {
+        id: light_core::ShowId::new(),
+        name: "Matter restart scope".into(),
+        path: data_dir.join("shows/matter-restart.show").display().to_string(),
+        revision: 1,
+        updated_at: String::new(),
+        revision_copy: None,
+    };
+    *state.active_show.write() = Some(show.clone());
+    let cue_list_id = light_core::CueListId::new();
+    state
+        .engine
+        .replace_snapshot(restored_exclusion_snapshot(cue_list_id))
+        .unwrap();
+    state.configuration.write().matter_enabled = true;
+    let desk = state
+        .desk
+        .lock()
+        .add_desk("Matter restart desk", "matter-restart")
+        .unwrap();
+    state
+        .desk
+        .lock()
+        .set_desk_page(desk.id, show.id, 1)
+        .unwrap();
+    store_restart_zone(&state, &show, desk.id);
+    state
+        .engine
+        .execute_pool_playback_with_activation(
+            1,
+            PoolPlaybackAction::On,
+            &[vec![1, 2]],
+            Some(light_playback::PlaybackActivationOrigin {
+                at: state.engine.application_time(),
+                desk_id: Some(desk.id),
+                surface: light_playback::PlaybackActivationSurface::Virtual,
+                exclusion_scope: light_playback::PlaybackExclusionScope::OriginatingDesk,
+            }),
+        )
+        .unwrap();
+
+    apply_matter_playback_write(
+        &state,
+        matter::endpoint_id(1, 2).unwrap(),
+        matter::MatterPlaybackWrite {
+            on: Some(true),
+            level: None,
+        },
+    )
+    .unwrap();
+
+    let activation = state
+        .engine
+        .playback_runtime()
+        .into_iter()
+        .find(|playback| playback.playback_number == Some(2))
+        .unwrap()
+        .activation
+        .unwrap();
+    assert_eq!(activation.desk_id, None);
+    assert_eq!(
+        activation.surface,
+        light_playback::PlaybackActivationSurface::Matter
+    );
+    assert_eq!(
+        activation.exclusion_scope,
+        light_playback::PlaybackExclusionScope::None
+    );
+    persist_active_playbacks(&state).unwrap();
+    let checkpoint = state
+        .desk
+        .lock()
+        .setting(&active_playbacks_setting(show.id))
+        .unwrap()
+        .unwrap();
+    let restored = serde_json::from_str(&checkpoint).unwrap();
+    state
+        .engine
+        .execute_playback(EnginePlaybackCommand::RestoreActive(restored))
+        .unwrap();
+
+    let normalized = normalize_restored_virtual_playback_exclusions(&state).unwrap();
+    assert!(!normalized.provenance_migrated);
+    assert!(normalized.released_playbacks.is_empty());
+    let enabled = state
+        .engine
+        .playback_runtime()
+        .into_iter()
+        .filter(|playback| playback.enabled)
+        .filter_map(|playback| playback.playback_number)
+        .collect::<HashSet<_>>();
+    assert_eq!(enabled, HashSet::from([1, 2]));
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
 fn matter_virtual_master_controls_and_tracks_a_faderless_assignment() {
     let (state, data_dir) = test_state();
     state.configuration.write().matter_enabled = true;
@@ -123,6 +221,7 @@ fn matter_virtual_master_controls_and_tracks_a_faderless_assignment() {
             desk: None,
             source: "osc",
             exclusion_zones: &[],
+            activation_origin: None,
         },
     )
     .unwrap_err();

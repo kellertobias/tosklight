@@ -1,5 +1,5 @@
 use crate::{Engine, playback::EnginePlaybackOutcome};
-use light_playback::PlaybackEngine;
+use light_playback::{PlaybackActivationOrigin, PlaybackEngine};
 use std::collections::{BTreeSet, HashSet};
 
 #[derive(Clone, Debug)]
@@ -37,11 +37,16 @@ pub(crate) fn apply_with_exclusions<T>(
     playback: &mut PlaybackEngine,
     activated_number: u16,
     zones: &[Vec<u16>],
+    activation_origin: Option<PlaybackActivationOrigin>,
     apply: impl FnOnce(&mut PlaybackEngine) -> Result<T, String>,
 ) -> Result<(T, Vec<u16>), String> {
     let was_enabled = is_enabled(playback, activated_number);
     let outcome = apply(playback)?;
-    let released = if !was_enabled && is_enabled(playback, activated_number) {
+    let activated = !was_enabled && is_enabled(playback, activated_number);
+    if activated && let Some(origin) = activation_origin {
+        playback.record_activation(activated_number, origin);
+    }
+    let released = if activated {
         release_active_peers(playback, zones, activated_number)
     } else {
         Vec::new()

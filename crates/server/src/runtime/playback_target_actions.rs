@@ -52,10 +52,11 @@ fn execute_pool_with_exclusions(
     number: u16,
     action: PoolPlaybackAction,
     exclusion_zones: &[Vec<u16>],
+    activation_origin: Option<light_playback::PlaybackActivationOrigin>,
 ) -> Result<PlaybackTargetOutcome, ApiError> {
     let transition = state
         .engine
-        .execute_pool_playback_with_exclusions(number, action, exclusion_zones)
+        .execute_pool_playback_with_activation(number, action, exclusion_zones, activation_origin)
         .map_err(ApiError::bad_request)?;
     let EnginePlaybackOutcome::Changed(effect) = transition.outcome else {
         return Err(ApiError::internal("unexpected pool Playback outcome"));
@@ -86,6 +87,7 @@ pub(super) fn apply_playback_master(
     input: &PoolPlaybackInput,
     source: &str,
     exclusion_zones: &[Vec<u16>],
+    activation_origin: Option<light_playback::PlaybackActivationOrigin>,
 ) -> Result<PlaybackTargetOutcome, ApiError> {
     let virtual_fader = source == "matter" && !definition.has_fader;
     if !definition.has_fader && !virtual_fader {
@@ -104,6 +106,7 @@ pub(super) fn apply_playback_master(
                 definition.number,
                 PoolPlaybackAction::SetVirtualMaster(value),
                 exclusion_zones,
+                activation_origin,
             )
         } else {
             execute_pool_with_exclusions(
@@ -111,6 +114,7 @@ pub(super) fn apply_playback_master(
                 definition.number,
                 PoolPlaybackAction::SetMaster(value),
                 exclusion_zones,
+                activation_origin,
             )
         };
     }
@@ -123,6 +127,7 @@ pub(super) fn apply_direct_playback_action(
     action: &str,
     input: &PoolPlaybackInput,
     exclusion_zones: &[Vec<u16>],
+    activation_origin: Option<light_playback::PlaybackActivationOrigin>,
 ) -> Result<Option<PlaybackTargetOutcome>, ApiError> {
     let cue = || {
         input
@@ -135,18 +140,21 @@ pub(super) fn apply_direct_playback_action(
             definition.number,
             PoolPlaybackAction::GoTo(cue()?),
             exclusion_zones,
+            activation_origin,
         )?,
         "load" => execute_pool_with_exclusions(
             state,
             definition.number,
             PoolPlaybackAction::Load(cue()?),
             exclusion_zones,
+            activation_origin,
         )?,
         "xfade-on" | "xfade-off" => execute_pool_with_exclusions(
             state,
             definition.number,
             PoolPlaybackAction::XFade(action == "xfade-on"),
             exclusion_zones,
+            activation_origin,
         )?,
         "temp-on" | "temp-off" => {
             if !matches!(definition.target, PlaybackTarget::CueList { .. }) {
@@ -159,6 +167,7 @@ pub(super) fn apply_direct_playback_action(
                 definition.number,
                 PoolPlaybackAction::SetTempButton(action == "temp-on"),
                 exclusion_zones,
+                activation_origin,
             )?
         }
         _ => return Ok(None),
@@ -207,6 +216,7 @@ fn apply_cuelist_action(
     action: Action,
     pressed: bool,
     exclusion_zones: &[Vec<u16>],
+    activation_origin: Option<light_playback::PlaybackActivationOrigin>,
 ) -> Result<PlaybackTargetOutcome, ApiError> {
     let command = match action {
         Action::On => Some(PoolPlaybackAction::On),
@@ -235,7 +245,13 @@ fn apply_cuelist_action(
         }
     };
     if let Some(command) = command {
-        return execute_pool_with_exclusions(state, definition.number, command, exclusion_zones);
+        return execute_pool_with_exclusions(
+            state,
+            definition.number,
+            command,
+            exclusion_zones,
+            activation_origin,
+        );
     }
     Ok(PlaybackTargetOutcome::changed(action != Action::Select))
 }
@@ -248,6 +264,7 @@ pub(super) fn apply_playback_target_action(
     input: &PoolPlaybackInput,
     pressed: bool,
     exclusion_zones: &[Vec<u16>],
+    activation_origin: Option<light_playback::PlaybackActivationOrigin>,
 ) -> Result<PlaybackTargetOutcome, ApiError> {
     if let PlaybackTarget::CueList { cue_list_id } = &definition.target {
         return apply_cuelist_action(
@@ -258,6 +275,7 @@ pub(super) fn apply_playback_target_action(
             action,
             pressed,
             exclusion_zones,
+            activation_origin,
         );
     }
     apply_specialized_target_action(state, session, definition, action, input, pressed)

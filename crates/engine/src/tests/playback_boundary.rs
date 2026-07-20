@@ -1,6 +1,10 @@
 use super::*;
 use crate::playback::combine_release_effect;
-use light_playback::PlaybackRuntimeEffect;
+use light_playback::{
+    PlaybackActivationOrigin, PlaybackActivationSurface, PlaybackExclusionScope,
+    PlaybackRuntimeEffect,
+};
+use uuid::Uuid;
 
 #[test]
 fn prepared_batch_is_isolated_until_one_typed_install() {
@@ -12,6 +16,7 @@ fn prepared_batch_is_isolated_until_one_typed_install() {
                 number: 1,
                 action: PlaybackBatchAction::On,
                 exclusion_zones: Arc::default(),
+                activation_origin: None,
             }],
             started_at,
             0,
@@ -38,6 +43,7 @@ fn prepared_batch_cannot_overwrite_a_new_compiled_generation() {
                 number: 1,
                 action: PlaybackBatchAction::Go,
                 exclusion_zones: Arc::default(),
+                activation_origin: None,
             }],
             chrono::Utc::now(),
             0,
@@ -103,6 +109,138 @@ fn atomic_pool_noop_and_deactivation_do_not_release_peers() {
 }
 
 #[test]
+fn activation_provenance_is_atomic_stable_on_noop_and_cleared_on_release() {
+    let engine = playback_engine_with_numbers(&[1, 2]);
+    let first_desk = Uuid::new_v4();
+    let second_desk = Uuid::new_v4();
+    let first = activation_origin(first_desk, PlaybackActivationSurface::Virtual);
+    let second = activation_origin(second_desk, PlaybackActivationSurface::Physical);
+
+    engine
+        .execute_pool_playback_with_activation(1, PoolPlaybackAction::On, &[], Some(first))
+        .unwrap();
+    let recorded = playback_runtime(&engine, 1).activation.unwrap();
+    assert_eq!(recorded.desk_id, Some(first_desk));
+    assert_eq!(recorded.surface, PlaybackActivationSurface::Virtual);
+    assert_eq!(recorded.ordinal, 1);
+
+    let mut replacement = (*engine.snapshot()).clone();
+    replacement.revision += 1;
+    replacement.cue_lists[0].cues.push(Cue::new(2.0));
+    engine.replace_snapshot(replacement).unwrap();
+    engine
+        .execute_pool_playback_with_activation(1, PoolPlaybackAction::Go, &[], Some(second))
+        .unwrap();
+    let advanced = playback_runtime(&engine, 1);
+    assert_eq!(advanced.current_cue_number, Some(2.0));
+    assert_eq!(advanced.activation.as_ref(), Some(&recorded));
+
+    let repeated = engine
+        .execute_pool_playback_with_activation(1, PoolPlaybackAction::On, &[], Some(second))
+        .unwrap();
+    assert_changed_effect(repeated.outcome, PlaybackRuntimeEffect::None);
+    assert_eq!(
+        playback_runtime(&engine, 1).activation,
+        Some(recorded.clone())
+    );
+
+    engine
+        .execute_pool_playback_with_activation(2, PoolPlaybackAction::On, &[], Some(second))
+        .unwrap();
+    let transition = engine
+        .execute_pool_playback_with_activation(
+            1,
+            PoolPlaybackAction::Off,
+            &[vec![1, 2]],
+            Some(first),
+        )
+        .unwrap();
+    assert!(transition.released_playbacks.is_empty());
+    assert!(playback_runtime(&engine, 1).activation.is_none());
+
+    engine
+        .execute_pool_playback_with_activation(
+            1,
+            PoolPlaybackAction::On,
+            &[vec![1, 2]],
+            Some(first),
+        )
+        .unwrap();
+    assert!(playback_runtime(&engine, 2).activation.is_none());
+    assert_eq!(playback_runtime(&engine, 1).activation.unwrap().ordinal, 3);
+}
+
+#[test]
+fn prepared_batch_assigns_distinct_activation_ordinals_in_queue_order() {
+    let engine = playback_engine_with_numbers(&[1, 2]);
+    let at = chrono::Utc::now();
+    let desk_id = Uuid::new_v4();
+    let origin = PlaybackActivationOrigin {
+        at,
+        desk_id: Some(desk_id),
+        surface: PlaybackActivationSurface::Physical,
+        exclusion_scope: PlaybackExclusionScope::OriginatingDesk,
+    };
+    let prepared = engine
+        .prepare_playback_batch(
+            &[
+                PlaybackBatchCommand {
+                    number: 2,
+                    action: PlaybackBatchAction::On,
+                    exclusion_zones: Arc::default(),
+                    activation_origin: Some(origin),
+                },
+                PlaybackBatchCommand {
+                    number: 1,
+                    action: PlaybackBatchAction::On,
+                    exclusion_zones: Arc::default(),
+                    activation_origin: Some(origin),
+                },
+            ],
+            at,
+            0,
+        )
+        .unwrap();
+
+    engine.install_prepared_playback_batch(prepared).unwrap();
+    assert_eq!(playback_runtime(&engine, 2).activation.unwrap().ordinal, 1);
+    assert_eq!(playback_runtime(&engine, 1).activation.unwrap().ordinal, 2);
+}
+
+#[test]
+fn timed_preload_release_retains_activation_provenance_while_fade_is_active() {
+    let engine = playback_engine();
+    let origin = activation_origin(Uuid::new_v4(), PlaybackActivationSurface::Virtual);
+    engine
+        .execute_pool_playback_with_activation(1, PoolPlaybackAction::On, &[], Some(origin))
+        .unwrap();
+    let activation = playback_runtime(&engine, 1).activation.unwrap();
+    let prepared = engine
+        .prepare_playback_batch(
+            &[PlaybackBatchCommand {
+                number: 1,
+                action: PlaybackBatchAction::Off,
+                exclusion_zones: Arc::default(),
+                activation_origin: Some(origin),
+            }],
+            origin.at + chrono::Duration::seconds(1),
+            1_000,
+        )
+        .unwrap();
+
+    engine.install_prepared_playback_batch(prepared).unwrap();
+    let releasing = playback_runtime(&engine, 1);
+    assert!(releasing.enabled);
+    assert!(
+        releasing
+            .master_transition
+            .as_ref()
+            .is_some_and(|transition| transition.release_after)
+    );
+    assert_eq!(releasing.activation, Some(activation));
+}
+
+#[test]
 fn toggle_off_reports_a_real_transition_without_releasing_peers() {
     let engine = playback_engine_with_numbers(&[1, 2]);
     execute_pool(&engine, 1, PoolPlaybackAction::On);
@@ -156,6 +294,7 @@ fn prepared_batch_reports_only_peers_it_actually_releases() {
                 number: 1,
                 action: PlaybackBatchAction::On,
                 exclusion_zones: vec![vec![3, 2, 1, 2]].into(),
+                activation_origin: None,
             }],
             chrono::Utc::now(),
             0,
@@ -289,6 +428,7 @@ fn peer_only_auto_off_batch_does_not_retime_the_addressed_playback() {
                 number: 2,
                 action: PlaybackBatchAction::On,
                 exclusion_zones: Arc::default(),
+                activation_origin: None,
             }],
             started_at,
             1_000,
@@ -369,11 +509,13 @@ fn prepared_batch_classifies_the_exact_final_state_after_transient_cancellation(
                     number: 1,
                     action: PlaybackBatchAction::SetTempButton(true),
                     exclusion_zones: Arc::default(),
+                    activation_origin: None,
                 },
                 PlaybackBatchCommand {
                     number: 1,
                     action: PlaybackBatchAction::SetTempButton(false),
                     exclusion_zones: Arc::default(),
+                    activation_origin: None,
                 },
             ],
             chrono::Utc::now(),
@@ -407,6 +549,7 @@ fn repeated_on_batch_does_not_retrigger_timing_or_signal_persistence() {
                 number: 1,
                 action: PlaybackBatchAction::On,
                 exclusion_zones: Arc::default(),
+                activation_origin: None,
             }],
             started_at,
             1_000,
@@ -465,6 +608,18 @@ fn playback_runtime(engine: &Engine, number: u16) -> light_playback::ActivePlayb
         .unwrap()
 }
 
+fn activation_origin(
+    desk_id: Uuid,
+    surface: PlaybackActivationSurface,
+) -> PlaybackActivationOrigin {
+    PlaybackActivationOrigin {
+        at: chrono::Utc::now(),
+        desk_id: Some(desk_id),
+        surface,
+        exclusion_scope: PlaybackExclusionScope::OriginatingDesk,
+    }
+}
+
 fn prepare_batch(engine: &Engine, action: PlaybackBatchAction) -> PreparedPlaybackBatch {
     engine
         .prepare_playback_batch(
@@ -472,6 +627,7 @@ fn prepare_batch(engine: &Engine, action: PlaybackBatchAction) -> PreparedPlayba
                 number: 1,
                 action,
                 exclusion_zones: Arc::default(),
+                activation_origin: None,
             }],
             chrono::Utc::now(),
             0,

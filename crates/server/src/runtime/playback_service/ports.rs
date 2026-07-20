@@ -15,6 +15,7 @@ pub(super) struct ServerPlaybackPorts<'a> {
 struct CachedExclusionZones {
     addressed_page: Option<u8>,
     zones: Vec<Vec<u16>>,
+    scope: light_playback::PlaybackExclusionScope,
 }
 
 impl<'a> ServerPlaybackPorts<'a> {
@@ -33,22 +34,34 @@ impl<'a> ServerPlaybackPorts<'a> {
         }
     }
 
-    fn exclusion_zones(&self, address: ResolvedPlaybackAddress) -> &[Vec<u16>] {
+    fn exclusion_context(
+        &self,
+        address: ResolvedPlaybackAddress,
+    ) -> (&[Vec<u16>], light_playback::PlaybackExclusionScope) {
         let ResolvedPlaybackAddress::Pool { page, .. } = address else {
-            return &[];
+            return (&[], light_playback::PlaybackExclusionScope::None);
         };
-        let cached = self.exclusion_zones.get_or_init(|| CachedExclusionZones {
-            addressed_page: page,
-            zones: self
-                .desk
-                .map(|desk| {
-                    super::super::VirtualPlaybackExclusionResolver::read(self.state, desk.id)
-                        .zone_numbers(page)
-                })
-                .unwrap_or_default(),
+        let cached = self.exclusion_zones.get_or_init(|| {
+            let resolver = self.desk.map(|desk| {
+                super::super::VirtualPlaybackExclusionResolver::read(self.state, desk.id)
+            });
+            CachedExclusionZones {
+                addressed_page: page,
+                zones: resolver
+                    .as_ref()
+                    .map(|resolver| resolver.zone_numbers(page))
+                    .unwrap_or_default(),
+                scope: resolver.map_or(light_playback::PlaybackExclusionScope::None, |resolver| {
+                    if resolver.applies_to_page(page) {
+                        light_playback::PlaybackExclusionScope::OriginatingDesk
+                    } else {
+                        light_playback::PlaybackExclusionScope::None
+                    }
+                }),
+            }
         });
         debug_assert_eq!(cached.addressed_page, page);
-        &cached.zones
+        (&cached.zones, cached.scope)
     }
 }
 
@@ -145,7 +158,7 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
         let mut related = BTreeSet::new();
         if may_activate_playback(action) {
             related.extend(super::super::virtual_playback_peer_numbers(
-                self.exclusion_zones(address),
+                self.exclusion_context(address).0,
                 number,
             ));
         }
@@ -322,6 +335,13 @@ impl ServerPlaybackPorts<'_> {
                 pending: None,
             });
         }
+        let (exclusion_zones, exclusion_scope) = self.exclusion_context(address);
+        let activation_origin = Some(light_playback::PlaybackActivationOrigin {
+            at: self.state.engine.application_time(),
+            desk_id: self.desk.map(|desk| desk.id),
+            surface: activation_surface(surface),
+            exclusion_scope,
+        });
         let dispatch = dispatch_playback_action(
             self.state,
             &definition,
@@ -331,7 +351,8 @@ impl ServerPlaybackPorts<'_> {
                 session: self.session,
                 desk: self.desk,
                 source: source_name(context.source),
-                exclusion_zones: self.exclusion_zones(address),
+                exclusion_zones,
+                activation_origin,
             },
         )
         .map_err(api_action_error)?;

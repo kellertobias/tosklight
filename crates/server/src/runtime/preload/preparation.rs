@@ -25,7 +25,7 @@ pub(super) fn prepare_preload_commit(
     let programmer_fade_millis = state.configuration.read().programmer_fade_millis;
     let context = action_context(session);
     let mut commands = preload_batch_commands(&pending)?;
-    attach_shared_exclusions(state, session, &pending, &mut commands);
+    attach_shared_exclusions(state, session, committed_at, &pending, &mut commands);
     let prepared_playback =
         state
             .engine
@@ -100,16 +100,82 @@ fn action_context(session: &Session) -> light_application::ActionContext {
 fn attach_shared_exclusions(
     state: &AppState,
     session: &Session,
+    committed_at: chrono::DateTime<chrono::Utc>,
     pending: &[light_programmer::PreloadPlaybackAction],
     commands: &mut [light_engine::PlaybackBatchCommand],
 ) {
-    let resolver = VirtualPlaybackExclusionResolver::read(state, session.desk.id);
-    let mut cached = HashMap::<Option<u8>, Arc<[Vec<u16>]>>::new();
+    let mut resolvers = HashMap::<uuid::Uuid, VirtualPlaybackExclusionResolver>::new();
+    let mut cached = HashMap::<(uuid::Uuid, Option<u8>), ResolvedExclusions>::new();
     for (pending, command) in pending.iter().zip(commands) {
-        let zones = cached
-            .entry(pending.page)
-            .or_insert_with(|| resolver.zone_numbers(pending.page).into());
-        command.exclusion_zones = Arc::clone(zones);
+        let desk_id = pending.origin_desk_id.unwrap_or(session.desk.id);
+        let key = (desk_id, pending.page);
+        let exclusions = cached
+            .entry(key)
+            .or_insert_with(|| resolve_exclusions(state, desk_id, pending.page, &mut resolvers));
+        command.exclusion_zones = Arc::clone(&exclusions.zones);
+        command.activation_origin = Some(light_playback::PlaybackActivationOrigin {
+            at: committed_at,
+            desk_id: Some(desk_id),
+            surface: activation_surface(pending.surface),
+            exclusion_scope: exclusions.scope,
+        });
+    }
+}
+
+struct ResolvedExclusions {
+    zones: Arc<[Vec<u16>]>,
+    scope: light_playback::PlaybackExclusionScope,
+}
+
+fn resolve_exclusions(
+    state: &AppState,
+    desk_id: uuid::Uuid,
+    page: Option<u8>,
+    resolvers: &mut HashMap<uuid::Uuid, VirtualPlaybackExclusionResolver>,
+) -> ResolvedExclusions {
+    let desk_exists = state
+        .desk
+        .lock()
+        .control_desk(desk_id)
+        .ok()
+        .flatten()
+        .is_some();
+    if !desk_exists {
+        return ResolvedExclusions {
+            zones: Arc::default(),
+            scope: light_playback::PlaybackExclusionScope::None,
+        };
+    }
+    let resolver = resolvers
+        .entry(desk_id)
+        .or_insert_with(|| VirtualPlaybackExclusionResolver::read(state, desk_id));
+    let scope = if resolver.applies_to_page(page) {
+        light_playback::PlaybackExclusionScope::OriginatingDesk
+    } else {
+        light_playback::PlaybackExclusionScope::None
+    };
+    ResolvedExclusions {
+        zones: resolver.zone_numbers(page).into(),
+        scope,
+    }
+}
+
+const fn activation_surface(
+    surface: light_programmer::PreloadPlaybackQueueSurface,
+) -> light_playback::PlaybackActivationSurface {
+    match surface {
+        light_programmer::PreloadPlaybackQueueSurface::Physical => {
+            light_playback::PlaybackActivationSurface::Physical
+        }
+        light_programmer::PreloadPlaybackQueueSurface::Virtual => {
+            light_playback::PlaybackActivationSurface::Virtual
+        }
+        light_programmer::PreloadPlaybackQueueSurface::Osc => {
+            light_playback::PlaybackActivationSurface::Osc
+        }
+        light_programmer::PreloadPlaybackQueueSurface::Matter => {
+            light_playback::PlaybackActivationSurface::Matter
+        }
     }
 }
 
