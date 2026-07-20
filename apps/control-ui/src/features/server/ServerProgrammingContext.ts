@@ -11,14 +11,6 @@ export interface ServerProgrammingContext {
 			| { type: "dereferenced_group"; group_id: string },
 		remove?: boolean,
 	) => Promise<void>;
-	setProgrammer: (
-		fixtureId: string,
-		attribute: string,
-		value: number,
-	) => Promise<void>;
-	setProgrammerMany: (
-		assignments: Array<{ fixtureId: string; attribute: string; value: number }>,
-	) => Promise<boolean>;
 	controlFixtureAction: (
 		fixtureId: string,
 		actionId: string,

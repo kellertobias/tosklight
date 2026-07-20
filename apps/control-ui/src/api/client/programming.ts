@@ -22,12 +22,6 @@ type SelectionGestureSource =
 	| { type: "live_group"; group_id: string }
 	| { type: "dereferenced_group"; group_id: string };
 
-interface ProgrammerAssignment {
-	fixtureId: string;
-	attribute: string;
-	value: number;
-}
-
 export class ProgrammingApiClient {
 	constructor(private readonly transport: LiveClientTransport) {}
 
@@ -112,24 +106,6 @@ export class ProgrammingApiClient {
 
 	preload(action: "enter" | "go" | "clear" | "release") {
 		return this.transport.command(`preload.${action}`, {});
-	}
-
-	setProgrammer(fixtureId: string, attribute: string, value: number) {
-		return this.transport.command("programmer.set", {
-			fixture_id: fixtureId,
-			attribute,
-			value,
-		});
-	}
-
-	setProgrammerMany(assignments: ProgrammerAssignment[]) {
-		return this.transport.command("programmer.set_many", {
-			assignments: assignments.map(({ fixtureId, attribute, value }) => ({
-				fixture_id: fixtureId,
-				attribute,
-				value,
-			})),
-		});
 	}
 
 	controlFixtureAction(fixtureId: string, actionId: string, active: boolean) {

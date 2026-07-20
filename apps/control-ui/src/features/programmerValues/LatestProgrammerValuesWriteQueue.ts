@@ -1,4 +1,4 @@
-interface ParameterWriteTask {
+interface ProgrammerValuesWriteTask {
 	key: string | null;
 	fingerprint: string | null;
 	run(): Promise<unknown>;
@@ -7,10 +7,10 @@ interface ParameterWriteTask {
 	promise: Promise<unknown | null>;
 }
 
-/** Keeps continuous controls responsive without building an unbounded HTTP FIFO. */
-export class LatestParameterWriteQueue {
-	private readonly pending: ParameterWriteTask[] = [];
-	private active: ParameterWriteTask | null = null;
+/** Keeps continuous Programmer controls responsive without an unbounded HTTP FIFO. */
+export class LatestProgrammerValuesWriteQueue {
+	private readonly pending: ProgrammerValuesWriteTask[] = [];
+	private active: ProgrammerValuesWriteTask | null = null;
 	private stopped = false;
 
 	submitLatest<T>(key: string, fingerprint: string, run: () => Promise<T>) {
@@ -46,7 +46,7 @@ export class LatestParameterWriteQueue {
 		void this.drain();
 	}
 
-	private replacePendingContinuousWrite(task: ParameterWriteTask) {
+	private replacePendingContinuousWrite(task: ProgrammerValuesWriteTask) {
 		for (let index = this.pending.length - 1; index >= 0; index--) {
 			const pending = this.pending[index];
 			if (!pending || pending.key === null) break;
@@ -77,7 +77,7 @@ export class LatestParameterWriteQueue {
 		key: string | null,
 		fingerprint: string | null,
 		run: () => Promise<T>,
-	): ParameterWriteTask {
+	): ProgrammerValuesWriteTask {
 		let resolve!: (value: unknown | null) => void;
 		let reject!: (reason: unknown) => void;
 		const promise = new Promise<unknown | null>((settle, fail) => {

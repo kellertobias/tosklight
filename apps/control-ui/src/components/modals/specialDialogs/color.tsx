@@ -1,5 +1,10 @@
 import { type PointerEvent, useRef, useState } from "react";
 import { useServer } from "../../../api/ServerContext";
+import {
+	normalizedFixtureMutations,
+	programmerValuesMutationKey,
+	type ProgrammerValuesMutationQueueController,
+} from "../../../features/programmerValues/useProgrammerValuesMutationQueue";
 import { Button } from "../../common";
 import {
 	colorProgrammerAssignments,
@@ -22,6 +27,7 @@ interface ColorDialogController {
 	hue: number;
 	saturation: number;
 	swatch: string;
+	disabled: boolean;
 	cancelColor: (event: PointerEvent<HTMLDivElement>) => void;
 	changeBrightness: (delta: number) => void;
 	completeColor: (event: PointerEvent<HTMLDivElement>) => void;
@@ -32,6 +38,7 @@ interface ColorDialogController {
 export function useColorDialog(
 	selectedFixtureIds: readonly string[],
 	shiftArmed: boolean,
+	valueWrites: ProgrammerValuesMutationQueueController,
 ): ColorDialogController {
 	const server = useServer();
 	const [hue, setHue] = useState(0.52);
@@ -45,13 +52,26 @@ export function useColorDialog(
 		start: PickerColor;
 	} | null>(null);
 
-	const applyColors = async (colors: PickerColor[]) => {
+	const applyColors = async (
+		colors: PickerColor[],
+		mode: "latest" | "barrier",
+	) => {
 		const assignments = colorProgrammerAssignments(
 			selectedFixtureIds,
 			server.patch?.fixtures ?? [],
 			colors,
 		);
-		if (assignments.length) await server.setProgrammerMany(assignments);
+		const mutations = normalizedFixtureMutations(
+			assignments,
+			server.configuration?.programmer_fade_millis,
+		);
+		if (!mutations.length) return;
+		if (mode === "barrier") await valueWrites.submitBarrier(mutations);
+		else
+			await valueWrites.submitLatest(
+				programmerValuesMutationKey(mutations),
+				mutations,
+			);
 	};
 
 	const pickerColor = (event: PointerEvent<HTMLDivElement>): PickerColor => {
@@ -60,6 +80,7 @@ export function useColorDialog(
 	};
 
 	const moveColor = (event: PointerEvent<HTMLDivElement>) => {
+		if (!valueWrites.canWrite) return;
 		const next = pickerColor(event);
 		setHue(next.hue);
 		setSaturation(next.saturation);
@@ -68,10 +89,14 @@ export function useColorDialog(
 			setColorRangePreview({ start: gesture.start, end: next, active: true });
 			return;
 		}
-		void applyColors(selectedFixtureIds.map(() => next));
+		void applyColors(
+			selectedFixtureIds.map(() => next),
+			"latest",
+		);
 	};
 
 	const startColor = (event: PointerEvent<HTMLDivElement>) => {
+		if (!valueWrites.canWrite) return;
 		event.currentTarget.setPointerCapture(event.pointerId);
 		const start = pickerColor(event);
 		if (event.shiftKey || shiftArmed) {
@@ -92,12 +117,10 @@ export function useColorDialog(
 		setHue(end.hue);
 		setSaturation(end.saturation);
 		setColorRangePreview({ start: gesture.start, end, active: false });
+		if (!valueWrites.canWrite) return;
 		void applyColors(
-			interpolatePickerRange(
-				selectedFixtureIds.length,
-				gesture.start,
-				end,
-			),
+			interpolatePickerRange(selectedFixtureIds.length, gesture.start, end),
+			"barrier",
 		);
 	};
 
@@ -108,6 +131,7 @@ export function useColorDialog(
 	};
 
 	const changeBrightness = (delta: number) => {
+		if (!valueWrites.canWrite) return;
 		const value = Math.max(0, Math.min(1, brightness + delta));
 		setBrightness(value);
 		void applyColors(
@@ -116,6 +140,7 @@ export function useColorDialog(
 				saturation,
 				brightness: value,
 			})),
+			"barrier",
 		);
 	};
 
@@ -128,6 +153,7 @@ export function useColorDialog(
 		hue,
 		saturation,
 		swatch,
+		disabled: !valueWrites.canWrite,
 		cancelColor,
 		changeBrightness,
 		completeColor,
@@ -147,6 +173,7 @@ export function ColorDialog({
 	hue,
 	saturation,
 	swatch,
+	disabled,
 	shiftArmed,
 	cancelColor,
 	changeBrightness,
@@ -160,6 +187,7 @@ export function ColorDialog({
 				ref={colorSheet}
 				className="color-sheet"
 				data-range-shift={shiftArmed ? "armed" : "idle"}
+				aria-disabled={disabled}
 				style={{ backgroundColor: `hsl(${hue * 360} 100% 50%)` }}
 				onPointerDown={startColor}
 				onPointerMove={(event) => {
@@ -184,6 +212,7 @@ export function ColorDialog({
 				<span>Brightness</span>
 				<Button
 					aria-label="Decrease brightness"
+					disabled={disabled}
 					onClick={() => changeBrightness(-0.05)}
 				>
 					−
@@ -191,6 +220,7 @@ export function ColorDialog({
 				<b>{Math.round(brightness * 100)}%</b>
 				<Button
 					aria-label="Increase brightness"
+					disabled={disabled}
 					onClick={() => changeBrightness(0.05)}
 				>
 					+

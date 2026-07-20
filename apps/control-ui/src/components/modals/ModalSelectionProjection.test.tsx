@@ -16,16 +16,23 @@ import {
 	FIXTURE_1,
 	FIXTURE_2,
 	programmingSnapshot,
-	selectionChange,
 	SHOW_ID,
+	selectionChange,
 } from "../../features/programmingInteraction/testFixtures";
 import { SpecialDialogsModal } from "./SpecialDialogsModal";
 import { SystemControlsModal } from "./SystemControlsModal";
 
 const mocks = vi.hoisted(() => {
 	const selectionAccess = vi.fn();
+	const mutationQueue = {
+		canWrite: true,
+		route: "normal" as const,
+		submitLatest: vi.fn(async () => undefined),
+		submitBarrier: vi.fn(async () => undefined),
+	};
 	const server = {
 		error: null,
+		configuration: { programmer_fade_millis: 3_000 },
 		patch: { fixtures: [] },
 		playbacks: { active: [], pool: [], cue_lists: [] },
 		bootstrap: { active_programmers: [] },
@@ -37,8 +44,6 @@ const mocks = vi.hoisted(() => {
 			blackout: false,
 			values: [],
 		})),
-		setProgrammer: vi.fn(async () => undefined),
-		setProgrammerMany: vi.fn(async () => true),
 		controlFixtureAction: vi.fn(async () => undefined),
 		setMaster: vi.fn(async () => undefined),
 		playbackAction: vi.fn(async () => undefined),
@@ -54,6 +59,8 @@ const mocks = vi.hoisted(() => {
 	return {
 		server,
 		selectionAccess,
+		mutationQueue,
+		mutationQueueUse: vi.fn(),
 		dispatch: vi.fn(),
 		appState: {
 			specialDialogsOpen: false,
@@ -65,6 +72,22 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => mocks.server }));
+vi.mock(
+	"../../features/programmerValues/useProgrammerValuesMutationQueue",
+	async (importOriginal) => {
+		const actual =
+			await importOriginal<
+				typeof import("../../features/programmerValues/useProgrammerValuesMutationQueue")
+			>();
+		return {
+			...actual,
+			useProgrammerValuesMutationQueue: (active: boolean) => {
+				mocks.mutationQueueUse(active);
+				return mocks.mutationQueue;
+			},
+		};
+	},
+);
 vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state: mocks.appState, dispatch: mocks.dispatch }),
 }));
@@ -109,6 +132,7 @@ function renderSelectionView(children: ReactNode) {
 beforeEach(() => {
 	mocks.appState.specialDialogsOpen = false;
 	mocks.appState.systemControlsOpen = false;
+	mocks.mutationQueue.canWrite = true;
 });
 
 afterEach(() => {
@@ -142,11 +166,36 @@ describe("modal selection projections", () => {
 
 		await screen.findByText("2 fixtures selected");
 		fireEvent.click(screen.getByRole("button", { name: "Dynamic speed" }));
-		await waitFor(() => expect(mocks.server.setProgrammer).toHaveBeenCalledTimes(2));
-		expect(mocks.server.setProgrammer.mock.calls).toEqual([
-			[FIXTURE_2, "dynamic.speed", 0.5],
-			[FIXTURE_1, "dynamic.speed", 0.5],
-		]);
+		await waitFor(() =>
+			expect(mocks.mutationQueue.submitLatest).toHaveBeenCalledOnce(),
+		);
+		expect(mocks.mutationQueue.submitLatest).toHaveBeenCalledWith(
+			expect.any(String),
+			[
+				{
+					action: "set_fixture",
+					fixtureId: FIXTURE_2,
+					attribute: "dynamic.speed",
+					value: { kind: "normalized", value: 0.5 },
+					timing: {
+						fade: true,
+						fadeMillis: 3_000,
+						delayMillis: null,
+					},
+				},
+				{
+					action: "set_fixture",
+					fixtureId: FIXTURE_1,
+					attribute: "dynamic.speed",
+					value: { kind: "normalized", value: 0.5 },
+					timing: {
+						fade: true,
+						fadeMillis: 3_000,
+						delayMillis: null,
+					},
+				},
+			],
+		);
 		expect(mocks.selectionAccess).not.toHaveBeenCalled();
 	});
 
@@ -190,6 +239,9 @@ describe("modal selection projections", () => {
 
 		expect(loadSnapshot).not.toHaveBeenCalled();
 		expect(transport.subscriptions).toHaveLength(0);
+		expect(mocks.mutationQueueUse).toHaveBeenCalledWith(false);
+		expect(mocks.mutationQueue.submitLatest).not.toHaveBeenCalled();
+		expect(mocks.mutationQueue.submitBarrier).not.toHaveBeenCalled();
 		expect(mocks.selectionAccess).not.toHaveBeenCalled();
 
 		mocks.appState.specialDialogsOpen = true;

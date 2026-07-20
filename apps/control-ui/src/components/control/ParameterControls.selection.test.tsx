@@ -33,8 +33,6 @@ const mocks = vi.hoisted(() => {
 		session: { session_id: "session-a", user: { id: "operator" } },
 		readVisualization: vi.fn(async () => ({ values: [] })),
 		alignSelection: vi.fn(async () => undefined),
-		setProgrammer: vi.fn(async () => undefined),
-		setProgrammerMany: vi.fn(async () => undefined),
 		controlFixtureAction: vi.fn(async () => undefined),
 		generateFixturePresets: vi.fn(async () => ({ created: [] })),
 	};
@@ -219,7 +217,6 @@ describe("ParameterControls selection projection", () => {
 				],
 			}),
 		);
-		expect(mocks.server.setProgrammer).not.toHaveBeenCalled();
 		expect(view.loadSnapshot).toHaveBeenCalledOnce();
 		expect(mocks.legacySelectionAccess).not.toHaveBeenCalled();
 	});

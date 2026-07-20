@@ -1,35 +1,12 @@
 import type { ServerController } from "./model";
 import type { ServerContextValue } from "./ServerContextValue";
 
-export function createProgrammerValueActions(
+/** Compatibility surface for transient fixture actions and preset generation only. */
+export function createFixtureProgrammingActions(
 	model: ServerController,
-): Pick<
-	ServerContextValue,
-	| "setProgrammer"
-	| "setProgrammerMany"
-	| "controlFixtureAction"
-	| "generateFixturePresets"
-> {
+): Pick<ServerContextValue, "controlFixtureAction" | "generateFixturePresets"> {
 	const { client, setError, bootstrap } = model;
 	return {
-		setProgrammer: async (fixtureId, attribute, level) => {
-			try {
-				await client.setProgrammer(fixtureId, attribute, level);
-				setError(null);
-			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
-			}
-		},
-		setProgrammerMany: async (assignments) => {
-			try {
-				await client.setProgrammerMany(assignments);
-				setError(null);
-				return true;
-			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
-				return false;
-			}
-		},
 		controlFixtureAction: async (fixtureId, actionId, active) => {
 			try {
 				await client.controlFixtureAction(fixtureId, actionId, active);

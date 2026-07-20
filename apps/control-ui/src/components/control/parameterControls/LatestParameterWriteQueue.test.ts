@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { LatestParameterWriteQueue } from "./LatestParameterWriteQueue";
+import { LatestProgrammerValuesWriteQueue } from "../../../features/programmerValues/LatestProgrammerValuesWriteQueue";
 
 function deferred<T>() {
 	let resolve!: (value: T) => void;
@@ -13,7 +13,7 @@ describe("LatestParameterWriteQueue", () => {
 	it("sends the active and latest continuous value without an unbounded FIFO", async () => {
 		const first = deferred<string>();
 		const calls: string[] = [];
-		const queue = new LatestParameterWriteQueue();
+		const queue = new LatestProgrammerValuesWriteQueue();
 		const active = queue.submitLatest("fixture:intensity", "0.1", async () => {
 			calls.push("0.1");
 			return first.promise;
@@ -42,7 +42,7 @@ describe("LatestParameterWriteQueue", () => {
 	it("treats range or release work as a FIFO barrier", async () => {
 		const first = deferred<void>();
 		const calls: string[] = [];
-		const queue = new LatestParameterWriteQueue();
+		const queue = new LatestProgrammerValuesWriteQueue();
 		const active = queue.submitLatest("fixture:intensity", "0.1", async () => {
 			calls.push("first");
 			return first.promise;
@@ -63,7 +63,7 @@ describe("LatestParameterWriteQueue", () => {
 	it("keeps only the latest pending write per continuous target", async () => {
 		const first = deferred<void>();
 		const calls: string[] = [];
-		const queue = new LatestParameterWriteQueue();
+		const queue = new LatestProgrammerValuesWriteQueue();
 		const active = queue.submitLatest("fixture:intensity", "0.1", async () => {
 			calls.push("active");
 			return first.promise;
@@ -87,7 +87,7 @@ describe("LatestParameterWriteQueue", () => {
 	it("collapses a duplicate pointer-up while the same value is active", async () => {
 		const first = deferred<void>();
 		const run = vi.fn(() => first.promise);
-		const queue = new LatestParameterWriteQueue();
+		const queue = new LatestProgrammerValuesWriteQueue();
 		const active = queue.submitLatest("group:pan", "0.5", run);
 		expect(await queue.submitLatest("group:pan", "0.5", run)).toBeNull();
 		first.resolve();
@@ -98,7 +98,7 @@ describe("LatestParameterWriteQueue", () => {
 	it("continues with the latest value after an active failure", async () => {
 		const first = deferred<void>();
 		const calls: string[] = [];
-		const queue = new LatestParameterWriteQueue();
+		const queue = new LatestProgrammerValuesWriteQueue();
 		const active = queue.submitLatest("fixture:pan", "0.1", async () => {
 			calls.push("first");
 			await first.promise;

@@ -1,6 +1,11 @@
 import { useMemo, useState } from "react";
 import { useServer } from "../../api/ServerContext";
 import { useProgrammingSelectionView } from "../../features/programmingInteraction/ProgrammingInteractionView";
+import {
+	normalizedFixtureMutations,
+	programmerValuesMutationKey,
+	useProgrammerValuesMutationQueue,
+} from "../../features/programmerValues/useProgrammerValuesMutationQueue";
 import { useApp } from "../../state/AppContext";
 import { Button, ModalPortal } from "../common";
 import {
@@ -27,12 +32,20 @@ export function SpecialDialogsModal() {
 	const [dynamicSpeed, setDynamicSpeed] = useState(30);
 	const family = state.specialDialogFamily;
 	const selection = useProgrammingSelectionView(state.specialDialogsOpen);
+	const valueWrites = useProgrammerValuesMutationQueue(
+		state.specialDialogsOpen,
+	);
 	const selectedFixtureIds = selection?.selected ?? EMPTY_FIXTURE_IDS;
 	const positionDialog = usePositionDialog(
 		state.specialDialogsOpen && family === "Position",
 		selectedFixtureIds,
+		valueWrites,
 	);
-	const colorDialog = useColorDialog(selectedFixtureIds, state.shiftArmed);
+	const colorDialog = useColorDialog(
+		selectedFixtureIds,
+		state.shiftArmed,
+		valueWrites,
+	);
 	const available = useMemo(
 		() =>
 			availableSpecialDialogAttributes(
@@ -46,14 +59,17 @@ export function SpecialDialogsModal() {
 		dispatch({ type: "SET_MODAL", modal: "specialDialogsOpen", value: false });
 
 	const apply = async (attribute: string, value: number) => {
-		const actions = selectedFixtureIds.map((fixtureId) => ({
-			fixtureId,
-			attribute,
-		}));
-		await Promise.all(
-			actions.map((action) =>
-				server.setProgrammer(action.fixtureId, action.attribute, value),
-			),
+		const mutations = normalizedFixtureMutations(
+			selectedFixtureIds.map((fixtureId) => ({
+				fixtureId,
+				attribute,
+				value,
+			})),
+			server.configuration?.programmer_fade_millis,
+		);
+		await valueWrites.submitLatest(
+			programmerValuesMutationKey(mutations),
+			mutations,
 		);
 	};
 
@@ -81,6 +97,9 @@ export function SpecialDialogsModal() {
 					</Button>
 					<h2>{family} · Special Dialog</h2>
 					<p>{selectedFixtureIds.length} fixtures selected</p>
+					{!valueWrites.canWrite && (
+						<p className="modal-status">Programmer values loading…</p>
+					)}
 					<div className="special-dialog-content">
 						{family === "Position" && <PositionDialog {...positionDialog} />}
 						{family === "Color" && (
@@ -92,6 +111,7 @@ export function SpecialDialogsModal() {
 								family={family}
 								page={beamPage}
 								setPage={setBeamPage}
+								disabled={!valueWrites.canWrite}
 								apply={apply}
 							/>
 						)}
@@ -102,6 +122,7 @@ export function SpecialDialogsModal() {
 							<DynamicsDialog
 								speed={dynamicSpeed}
 								setSpeed={setDynamicSpeed}
+								disabled={!valueWrites.canWrite}
 								apply={apply}
 							/>
 						)}

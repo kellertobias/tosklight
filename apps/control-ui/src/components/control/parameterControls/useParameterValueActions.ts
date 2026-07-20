@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import { useProgrammerPreloadValuesActions } from "../../../features/programmerPreloadValues/ProgrammerPreloadValuesView";
+import { LatestProgrammerValuesWriteQueue } from "../../../features/programmerValues/LatestProgrammerValuesWriteQueue";
 import { useProgrammerValuesActions } from "../../../features/programmerValues/ProgrammerValuesView";
 import { useStrictModeSafeStop } from "../../../features/shared/useStrictModeSafeStop";
-import { LatestParameterWriteQueue } from "./LatestParameterWriteQueue";
 import type { DirectValueChoice } from "./model";
 import {
 	directValueMutations,
@@ -23,7 +23,10 @@ export function useParameterValueActions(projection: ParameterProjection) {
 		normalActions,
 		preloadActions,
 	);
-	const queue = useMemo(() => new LatestParameterWriteQueue(), [actions]);
+	const queue = useMemo(
+		() => new LatestProgrammerValuesWriteQueue(),
+		[actions],
+	);
 	useStrictModeSafeStop(queue);
 	const canWriteValues = projection.programmerValuesReady && actions !== null;
 	const submit = (mutations: ReturnType<typeof setParameterMutations>) =>

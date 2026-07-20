@@ -21,8 +21,8 @@ import {
 	FIXTURE_1,
 	FIXTURE_2,
 	programmingSnapshot,
-	selectionChange,
 	SHOW_ID,
+	selectionChange,
 } from "../features/programmingInteraction/testFixtures";
 import { ChannelsWindow } from "./ChannelsWindow";
 import { FixtureSheetWindow } from "./FixtureSheetWindow";
@@ -31,6 +31,12 @@ import { PresetsWindow } from "./PresetsWindow";
 
 const mocks = vi.hoisted(() => {
 	const selectionAccess = vi.fn();
+	const mutationQueue = {
+		canWrite: true,
+		route: "normal" as const,
+		submitLatest: vi.fn(async () => undefined),
+		submitBarrier: vi.fn(async () => undefined),
+	};
 	const server = {
 		bootstrap: {
 			active_show: true,
@@ -38,7 +44,10 @@ const mocks = vi.hoisted(() => {
 			hardware_connected: false,
 		},
 		session: { session_id: "session-a" },
-		configuration: { patch_preview_highlight_dmx: true },
+		configuration: {
+			patch_preview_highlight_dmx: true,
+			programmer_fade_millis: 3_000,
+		},
 		patch: {
 			fixtures: [
 				{
@@ -56,7 +65,6 @@ const mocks = vi.hoisted(() => {
 		playbacks: { cue_lists: [] },
 		highlight: { active: false },
 		readVisualization: vi.fn(async () => ({ values: [] })),
-		setProgrammer: vi.fn(async () => undefined),
 		setPatchPreviewHighlight: vi.fn(async () => undefined),
 	};
 	Object.defineProperty(server, "selectedFixtures", {
@@ -68,11 +76,29 @@ const mocks = vi.hoisted(() => {
 	return {
 		server,
 		selectionAccess,
+		mutationQueue,
+		mutationQueueUse: vi.fn(),
 		dispatch: vi.fn(),
 	};
 });
 
 vi.mock("../api/ServerContext", () => ({ useServer: () => mocks.server }));
+vi.mock(
+	"../features/programmerValues/useProgrammerValuesMutationQueue",
+	async (importOriginal) => {
+		const actual =
+			await importOriginal<
+				typeof import("../features/programmerValues/useProgrammerValuesMutationQueue")
+			>();
+		return {
+			...actual,
+			useProgrammerValuesMutationQueue: (active: boolean) => {
+				mocks.mutationQueueUse(active);
+				return mocks.mutationQueue;
+			},
+		};
+	},
+);
 vi.mock("../state/AppContext", () => ({
 	useApp: () => ({
 		state: {
@@ -96,7 +122,19 @@ vi.mock("../state/AppContext", () => ({
 	}),
 }));
 vi.mock("../components/control/VerticalTouchFader", () => ({
-	VerticalTouchFader: ({ label }: { label: string }) => <span>{label}</span>,
+	VerticalTouchFader: ({
+		label,
+		disabled,
+		onChange,
+	}: {
+		label: string;
+		disabled?: boolean;
+		onChange?: (value: number) => void;
+	}) => (
+		<button type="button" disabled={disabled} onClick={() => onChange?.(42)}>
+			{label}
+		</button>
+	),
 }));
 vi.mock("../components/shared/GroupStrip", () => ({
 	GroupStrip: () => null,
@@ -237,6 +275,10 @@ beforeEach(() => {
 	mocks.selectionAccess.mockClear();
 	mocks.server.readVisualization.mockClear();
 	mocks.server.setPatchPreviewHighlight.mockClear();
+	mocks.mutationQueue.canWrite = true;
+	mocks.mutationQueue.submitLatest.mockClear();
+	mocks.mutationQueue.submitBarrier.mockClear();
+	mocks.mutationQueueUse.mockClear();
 });
 
 afterEach(cleanup);
@@ -286,7 +328,9 @@ describe("window selection projections", () => {
 			}),
 		);
 		await waitFor(() =>
-			expect(screen.getAllByText("Select fixtures to record")).toHaveLength(200),
+			expect(screen.getAllByText("Select fixtures to record")).toHaveLength(
+				200,
+			),
 		);
 		expect(screen.getByText("0 selected")).toBeInTheDocument();
 		expect(loadSnapshot).toHaveBeenCalledOnce();
@@ -313,6 +357,41 @@ describe("window selection projections", () => {
 			fixtures: [FIXTURE_2],
 			expectedRevision: 1,
 		});
+	});
+
+	it("writes one typed latest intensity mutation from Channels", async () => {
+		renderSelectionView(<ChannelsWindow compact />);
+		const channel = await screen.findByRole("button", { name: "CH 1" });
+
+		fireEvent.click(channel);
+
+		await waitFor(() =>
+			expect(mocks.mutationQueue.submitLatest).toHaveBeenCalledOnce(),
+		);
+		expect(mocks.mutationQueue.submitLatest).toHaveBeenCalledWith(
+			expect.any(String),
+			[
+				{
+					action: "set_fixture",
+					fixtureId: FIXTURE_1,
+					attribute: "intensity",
+					value: { kind: "normalized", value: 0.42 },
+					timing: {
+						fade: true,
+						fadeMillis: 3_000,
+						delayMillis: null,
+					},
+				},
+			],
+		);
+	});
+
+	it("disables Channel value writes while scoped authority is loading", async () => {
+		mocks.mutationQueue.canWrite = false;
+		renderSelectionView(<ChannelsWindow compact />);
+
+		expect(await screen.findByRole("button", { name: "CH 1" })).toBeDisabled();
+		expect(mocks.mutationQueue.submitLatest).not.toHaveBeenCalled();
 	});
 
 	it("optimistically applies Fixture Sheet logical-target gestures", async () => {
@@ -401,6 +480,9 @@ describe("window selection projections", () => {
 		);
 		expect(loadSnapshot).not.toHaveBeenCalled();
 		expect(transport.subscriptions).toHaveLength(0);
+		expect(mocks.mutationQueueUse).toHaveBeenCalledWith(false);
+		expect(mocks.mutationQueue.submitLatest).not.toHaveBeenCalled();
+		expect(mocks.mutationQueue.submitBarrier).not.toHaveBeenCalled();
 		expect(mocks.selectionAccess).not.toHaveBeenCalled();
 	});
 });

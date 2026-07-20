@@ -1,5 +1,10 @@
 import { type PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useServer } from "../../../api/ServerContext";
+import {
+	normalizedFixtureMutations,
+	programmerValuesMutationKey,
+	type ProgrammerValuesMutationQueueController,
+} from "../../../features/programmerValues/useProgrammerValuesMutationQueue";
 import { Button } from "../../common";
 import {
 	moveLampPositions,
@@ -36,6 +41,7 @@ function averagePosition(positions: Map<string, LampPosition>) {
 export function usePositionDialog(
 	active: boolean,
 	selectedFixtureIds: readonly string[],
+	valueWrites: ProgrammerValuesMutationQueueController,
 ): PositionDialogController {
 	const server = useServer();
 	const selectedFixtureKey = selectedFixtureIds.join("\u0000");
@@ -46,10 +52,7 @@ export function usePositionDialog(
 	const fixturePositions = useRef(new Map<string, LampPosition>());
 	const homeAssignments = useMemo(
 		() =>
-			returnHomeAssignments(
-				selectedFixtureIds,
-				server.patch?.fixtures ?? [],
-			),
+			returnHomeAssignments(selectedFixtureIds, server.patch?.fixtures ?? []),
 		[server.patch, selectedFixtureIds],
 	);
 
@@ -70,7 +73,11 @@ export function usePositionDialog(
 	};
 
 	const returnHome = async () => {
-		if (!(await server.setProgrammerMany(homeAssignments))) return;
+		const mutations = normalizedFixtureMutations(
+			homeAssignments,
+			server.configuration?.programmer_fade_millis,
+		);
+		if ((await valueWrites.submitBarrier(mutations)) === null) return;
 		const positions = new Map(fixturePositions.current);
 		for (const assignment of homeAssignments) {
 			const position = positions.get(assignment.fixtureId);
@@ -102,7 +109,7 @@ export function usePositionDialog(
 	}, [active, selectedFixtureKey]);
 
 	useEffect(() => {
-		if (!active) return;
+		if (!active || !valueWrites.canWrite) return;
 		const timer = window.setInterval(() => {
 			const vector = joystick.current;
 			const magnitude = Math.min(1, Math.hypot(vector.x, vector.y));
@@ -110,24 +117,36 @@ export function usePositionDialog(
 			const speed = 0.002 + magnitude * magnitude * 0.028;
 			const positions = fixturePositions.current;
 			if (!positions.size) return;
-			const updates: Promise<void>[] = [];
 			moveLampPositions(positions, vector.x, vector.y, speed);
-			for (const [fixture, position] of positions) {
-				updates.push(server.setProgrammer(fixture, "pan", position.pan));
-				updates.push(server.setProgrammer(fixture, "tilt", position.tilt));
-			}
-			void Promise.all(updates);
+			const assignments = [...positions].flatMap(([fixtureId, position]) => [
+				{ fixtureId, attribute: "pan", value: position.pan },
+				{ fixtureId, attribute: "tilt", value: position.tilt },
+			]);
+			const mutations = normalizedFixtureMutations(
+				assignments,
+				server.configuration?.programmer_fade_millis,
+			);
+			void valueWrites.submitLatest(
+				programmerValuesMutationKey(mutations),
+				mutations,
+			);
 			updateAverages(positions);
 		}, 32);
 		return () => window.clearInterval(timer);
-	}, [active, selectedFixtureKey]);
+	}, [
+		active,
+		selectedFixtureKey,
+		server.configuration?.programmer_fade_millis,
+		valueWrites.canWrite,
+		valueWrites.submitLatest,
+	]);
 
 	return {
 		pan,
 		tilt,
 		joystick,
 		trackball,
-		homeDisabled: homeAssignments.length === 0,
+		homeDisabled: homeAssignments.length === 0 || !valueWrites.canWrite,
 		movePosition,
 		releasePosition,
 		returnHome,

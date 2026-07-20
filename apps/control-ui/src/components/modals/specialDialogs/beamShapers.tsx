@@ -8,6 +8,7 @@ interface BeamShapersDialogProps {
 	attributes: string[];
 	family: BeamFamily;
 	page: number;
+	disabled: boolean;
 	apply: (attribute: string, value: number) => Promise<void>;
 	setPage: (page: number) => void;
 }
@@ -48,6 +49,7 @@ export function BeamShapersDialog({
 	attributes,
 	family,
 	page,
+	disabled,
 	apply,
 	setPage,
 }: BeamShapersDialogProps) {
@@ -76,6 +78,7 @@ export function BeamShapersDialog({
 							key={attribute}
 							label={attribute.replaceAll(".", " ")}
 							value={0}
+							disabled={disabled}
 							onChange={(value) => void apply(attribute, value / 100)}
 						/>
 					))

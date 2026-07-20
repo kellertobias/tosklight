@@ -61,8 +61,6 @@ const server = {
 	session: { session_id: "session-1", user: { id: "operator" } },
 	readVisualization: vi.fn().mockResolvedValue({ values: [] }),
 	alignSelection: vi.fn(),
-	setProgrammer: vi.fn(),
-	setProgrammerMany: vi.fn(),
 	controlFixtureAction: vi.fn(),
 	generateFixturePresets: vi.fn().mockResolvedValue({ created: [] }),
 };
@@ -259,7 +257,6 @@ describe("ParameterControls projection lifecycle", () => {
 			],
 		});
 		expect(normalValuesActions.batch).not.toHaveBeenCalled();
-		expect(server.setProgrammer).not.toHaveBeenCalled();
 	});
 });
 

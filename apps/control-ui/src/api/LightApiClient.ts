@@ -203,11 +203,6 @@ export class LightApiClient extends LightClientRuntime {
 	selectionMacro = bindClientMethod(this.programmingApi, "selectionMacro");
 	align = bindClientMethod(this.programmingApi, "align");
 	preload = bindClientMethod(this.programmingApi, "preload");
-	setProgrammer = bindClientMethod(this.programmingApi, "setProgrammer");
-	setProgrammerMany = bindClientMethod(
-		this.programmingApi,
-		"setProgrammerMany",
-	);
 	controlFixtureAction = bindClientMethod(
 		this.programmingApi,
 		"controlFixtureAction",
