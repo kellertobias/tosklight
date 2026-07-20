@@ -2,17 +2,18 @@
 
 Estimated progress: **99%**
 
-Estimated Codex ETA: **one focused implementation slice plus final acceptance, or roughly 2–5
-hours of active Codex execution**, to repository-wide acceptance. Portable Playback topology and
-the Virtual Playback migration are complete; Cue editor/Update/transfer convergence, the public
-test-DSL handoff, and final acceptance remain.
+Estimated Codex ETA: **three focused implementation milestones plus final acceptance, or roughly
+8–16 hours of active Codex execution**, to repository-wide acceptance. Portable Playback
+topology, Virtual Playback, and Cue-editor/Cuelist settings convergence are complete; typed
+Update, typed transfer, the physical compatibility panes, the public test-DSL handoff, and final
+acceptance remain.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-20 after adding typed portable Playback topology actions and migrating the
-Virtual Playback surface onto scoped Show, runtime, and desk-zone authority.
+Last updated: 2026-07-20 after migrating inline Cue edits, Cuelist settings, and atomic
+renumbering onto captured-identity Playback topology actions without broad refreshes.
 
 ## Guardrails
 
@@ -58,8 +59,8 @@ Virtual Playback surface onto scoped Show, runtime, and desk-zone authority.
 - [x] Migrated the primary manual, automatic, scheduled, OSC, Preload, current-page, and
   explicit-page Playback action paths into the typed application service and v2 runtime contract.
   Virtual exclusion peers and startup normalization now use that boundary; exact semantic no-op
-  reporting is complete, while typed Cuelist/topology mutation and active compatibility panes
-  remain below.
+  reporting is complete. Portable topology and Cuelist mutation are complete below, while the
+  physical compatibility panes remain.
 - [x] Removed mutable Playback-service lock exposure from the migrated paths: Engine callers use
   typed commands and immutable projections, Preload installs generation-bound prepared batches,
   and application-owned units of work serialize page changes, automatic render transitions, and
@@ -68,7 +69,9 @@ Virtual Playback surface onto scoped Show, runtime, and desk-zone authority.
   activated only by mounted Playback/Cuelist views, desk-only views request no runtime identities,
   and gaps and malformed messages repair from authoritative snapshots. Concurrent fader and page
   mutations use independent optimistic overlays with request-ordered rollback and authoritative
-  event/outcome reconciliation. Active compatibility panes still poll until their consumers move.
+  event/outcome reconciliation. Unmigrated physical panes remain on the broad v1 `/playbacks`
+  snapshot; they do not poll periodically. Real Playback/Page topology events trigger a coalesced
+  compatibility reload, and legacy mutation callers may issue an additional explicit reload.
 - [x] Added typed portable Playback topology actions for Cuelist save, slot configure, and mapped
   Playback clear. One show-revisioned application action preserves legacy storage identities and
   unknown fields, returns one coherent Page/Playback/Cuelist projection, publishes at most one
@@ -80,6 +83,14 @@ Virtual Playback surface onto scoped Show, runtime, and desk-zone authority.
   Empty-slot assignment and mapped clear remain one serialized network action, held Flash/Swap
   releases survive same-Show session replacement without crossing a Show switch, and inactive
   panes open no snapshot/socket and subscribe to no topology/runtime selectors.
+- [x] Migrated inline Cue-editor writes, Cuelist settings, and atomic renumbering from generic
+  show-object mutation plus broad refresh onto the typed Playback topology action. Writes capture
+  the exact storage identity and revision, preserve lossless body extensions, return authoritative
+  scoped objects, and reject replacement races before mutation. Rapid inline edits serialize and
+  rebase only on the preceding authoritative outcome; failure cancels later queued intent without
+  stranding retries, repaired authority supports explicit retry, and old writer/session responses
+  cannot cross into a replacement scope. Real changes remain one action with at most one Show
+  event, and the legacy `saveCueList` server-context adapter is removed.
 - [x] Made virtual Playback exclusion activation one atomic Engine transition. Actual exclusion and
   auto-off releases are returned as sorted related projections, published once before the primary
   high-water event, retained by idempotent replay without re-execution, and applied to the frontend
@@ -369,9 +380,9 @@ Virtual Playback surface onto scoped Show, runtime, and desk-zone authority.
 
 - [ ] Continue vertical feature-store/event slices and move the remaining production callers away
   from broad `useServer()`, polling, and generic show-object mutation.
-- [ ] Finish the remaining Playback ownership callers: move Cue editor Save Cuelist, typed Update
-  and transfer workflows, then the physical compatibility panes onto the committed topology and
-  runtime boundaries. Virtual Playback is complete.
+- [ ] Finish the remaining Playback ownership callers: move typed Update and transfer workflows,
+  then the physical compatibility panes onto the committed topology and runtime boundaries. Cue
+  editor/Cuelist settings and Virtual Playback are complete.
 - [ ] Move the remaining selection consumers onto the scoped Programming store, then remove their
   legacy bootstrap fields and broad Programmer refresh paths. Group Pool, Group Strip, and the
   command bar, Stage, Stage/Fixture pane chrome, Channels, Fixture Sheet, Patch, and Presets have
@@ -666,9 +677,21 @@ Virtual Playback surface onto scoped Show, runtime, and desk-zone authority.
   Dynamics Editor experiment. New feature-owned production modules remain below 400 lines; the
   existing shared Show Objects session/store files received only narrow dormancy hooks and remain
   below the hard 1,200-line limit. One coalesced v1 `/playbacks` compatibility reload remains after
-  real topology changes so unmigrated physical panes stay current; the scoped Virtual surface
-  never consumes it. Empty-slot assignments display the authoritative server allocation rather
-  than a speculative grid identity.
+  real topology changes so unmigrated physical panes stay current; legacy physical mutation callers
+  may also request an explicit reload. Scoped Virtual and Cue-editor paths never consume the broad
+  projection. Empty-slot assignments display the authoritative server allocation rather than a
+  speculative grid identity.
+- Cue-editor/Cuelist topology convergence passes 11 application tests, 4 strict wire tests,
+  generated-contract verification, 5 server route tests, 41 focused frontend tests, frontend
+  typecheck/build, and all 3 CUE-011 API/UI/supplemental browser paths. Coverage proves required
+  nullable storage-identity preconditions, revision and replacement conflicts, lossless extension
+  retention, one-action settings and renumber saves, rapid-edit response/event ordering, queued
+  failure cancellation, repaired-authority retry, same-ID writer/session replacement, no broad
+  `refresh()` or generic Cuelist reload, and the stale-dialog E2E conflict path. Strict application,
+  wire, and server Clippy passes with the established `too_many_arguments` allowance; formatting
+  and `git diff --check` pass. Dependency directions and all 10 architecture scanner tests pass;
+  the aggregate architecture command still exits 1 only for the separately owned 1,382-line
+  Dynamics Editor experiment. Every touched production file remains below 400 lines.
 
 ## Wrap-up handoff
 
@@ -691,10 +714,10 @@ Virtual Playback surface onto scoped Show, runtime, and desk-zone authority.
   remains a separate future milestone.
 - Preload now prepares one final-state-aware batch, and virtual-exclusion restart authority is
   private, desk-exact, migration-compatible, and absent from public runtime projections.
-- Recommended next slice: migrate Cue editor Save Cuelist plus typed Update and transfer workflows
-  onto the committed topology authority, then retire the remaining physical Playback compatibility
-  reload. Keep the public test DSL and final repository-wide acceptance/performance run as the
-  closing milestone.
+- Recommended next slice: move Update planning and mutation into a typed Programming application
+  boundary, then publish its strict v2 contract and migrate the production workflow without broad
+  refreshes. Typed Cue transfer and the physical Playback compatibility snapshot follow; keep the
+  public test DSL and final repository-wide acceptance/performance run as the closing milestone.
 
 Test files may exceed the hard limits, but should still be split when it improves readability and
 makes operator intent more visible.
