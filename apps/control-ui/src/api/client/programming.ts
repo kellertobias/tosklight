@@ -70,10 +70,6 @@ export class ProgrammingApiClient {
 		});
 	}
 
-	clearProgrammerValues() {
-		return this.transport.command("programmer.clear", {});
-	}
-
 	selectGroup(
 		groupId: string,
 		frozen = false,

@@ -195,10 +195,6 @@ export class LightApiClient extends LightClientRuntime {
 		"applyProgrammingSelection",
 	);
 	clearProgrammer = bindClientMethod(this.programmingApi, "clearProgrammer");
-	clearProgrammerValues = bindClientMethod(
-		this.programmingApi,
-		"clearProgrammerValues",
-	);
 	selectGroup = bindClientMethod(this.programmingApi, "selectGroup");
 	selectionMacro = bindClientMethod(this.programmingApi, "selectionMacro");
 	align = bindClientMethod(this.programmingApi, "align");

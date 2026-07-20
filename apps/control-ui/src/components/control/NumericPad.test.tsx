@@ -9,17 +9,16 @@ const dispatch = vi.fn((action: { type: string; value?: boolean }) => {
 });
 const server = {
 	bootstrap: { active_programmers: [] as Array<Record<string, unknown>> },
-	session: { user: { id: "operator" } },
+	session: { session_id: "desk-session", user: { id: "operator" } },
 	selectedFixtures: [] as string[],
 	configuration: { programmer_fade_millis: 3_000 },
 	commandLine: "FIXTURE",
 	commandTargetMode: "FIXTURE",
 	commandLinePristine: true,
 	resetCommandLine: vi.fn(),
-	setSelection: vi.fn(),
-	clearProgrammerValues: vi.fn(),
 	clearProgrammer: vi.fn(),
 	undoProgrammer: vi.fn(),
+	preloadAction: vi.fn().mockResolvedValue(undefined),
 	executeCommandLine: vi.fn().mockResolvedValue(true),
 	setCommandLine: vi.fn(),
 	setControlTiming: vi.fn(),
@@ -53,10 +52,30 @@ const state = {
 	playbackSetArmed: false,
 	shiftArmed: false,
 };
+const valuesActivity = {
+	current: {
+		authority: "loading" as "loading" | "normal" | "preload",
+		ready: false,
+		valueCount: 0,
+		pendingValueCount: 0,
+	},
+};
+const programmerValuesActions = {
+	clear: vi.fn().mockResolvedValue(null),
+};
+const selectionActions = {
+	replace: vi.fn().mockResolvedValue(null),
+};
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
 vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state, dispatch }),
+}));
+vi.mock("../../features/programmerValues/useProgrammerValuesActivity", () => ({
+	useProgrammerValuesActivity: () => valuesActivity.current,
+}));
+vi.mock("../../features/programmerValues/ProgrammerValuesView", () => ({
+	useProgrammerValuesActions: () => programmerValuesActions,
 }));
 vi.mock(
 	"../../features/programmingInteraction/ProgrammingInteractionView",
@@ -68,6 +87,7 @@ vi.mock(
 			revision: 1,
 			gestureOpen: false,
 		}),
+		useProgrammingSelectionActions: () => selectionActions,
 	}),
 );
 
@@ -78,29 +98,24 @@ afterEach(() => {
 	server.commandLine = "FIXTURE";
 	server.commandLinePristine = true;
 	state.shiftArmed = false;
+	state.preload = "idle";
 	state.activeDeskId = "programming";
+	valuesActivity.current = {
+		authority: "loading",
+		ready: false,
+		valueCount: 0,
+		pendingValueCount: 0,
+	};
 	(state as { builtIn: string | null }).builtIn = null;
 	(state.desks[0] as { panes: Array<{ kind: string }> }).panes = [];
 	vi.clearAllMocks();
 });
 
 describe("NumericPad Clear and SET routing", () => {
-	it("shows dark, lit, and blinking Clear states and clears selection before values", () => {
-		const { rerender } = render(<NumericPad />);
-		const clear = () => screen.getByRole("button", { name: "CLR" });
-		expect(clear()).toHaveClass("clear-idle");
-
-		server.selectedFixtures = ["fixture-1"];
-		rerender(<NumericPad />);
-		expect(clear()).toHaveClass("clear-active");
-		fireEvent.click(clear());
-		expect(server.setSelection).toHaveBeenCalledWith([]);
-		expect(server.clearProgrammerValues).not.toHaveBeenCalled();
-
-		server.selectedFixtures = [];
+	it("ignores stale bootstrap values and clears selection before scoped normal values", () => {
 		server.bootstrap.active_programmers = [
 			{
-				user_id: "operator",
+				session_id: "desk-session",
 				values: [
 					{
 						fixture_id: "fixture-1",
@@ -111,14 +126,59 @@ describe("NumericPad Clear and SET routing", () => {
 				group_values: {},
 			},
 		];
+		const { rerender } = render(<NumericPad />);
+		const clear = () => screen.getByRole("button", { name: "CLR" });
+		expect(clear()).toHaveClass("clear-idle");
+
+		server.selectedFixtures = ["fixture-1"];
+		valuesActivity.current = {
+			authority: "normal",
+			ready: true,
+			valueCount: 1,
+			pendingValueCount: 0,
+		};
+		rerender(<NumericPad />);
+		expect(clear()).toHaveClass("clear-active");
+		fireEvent.click(clear());
+		expect(selectionActions.replace).toHaveBeenCalledWith({
+			resolvedFixtures: [],
+		});
+		expect(programmerValuesActions.clear).not.toHaveBeenCalled();
+
+		server.selectedFixtures = [];
 		rerender(<NumericPad />);
 		expect(clear()).toHaveClass("clear-warning");
 		fireEvent.click(clear());
-		expect(server.clearProgrammerValues).toHaveBeenCalledTimes(1);
+		expect(programmerValuesActions.clear).toHaveBeenCalledWith(
+			expect.any(String),
+		);
 
-		server.bootstrap.active_programmers = [];
+		valuesActivity.current = {
+			authority: "normal",
+			ready: true,
+			valueCount: 0,
+			pendingValueCount: 0,
+		};
 		rerender(<NumericPad />);
 		expect(clear()).toHaveClass("clear-idle");
+	});
+
+	it("routes Clear through the active Preload authority", () => {
+		state.preload = "blind";
+		valuesActivity.current = {
+			authority: "preload",
+			ready: true,
+			valueCount: 1,
+			pendingValueCount: 1,
+		};
+		render(<NumericPad />);
+
+		const clear = screen.getByRole("button", { name: "CLR" });
+		expect(clear).toHaveClass("clear-warning");
+		fireEvent.click(clear);
+
+		expect(server.preloadAction).toHaveBeenCalledWith("clear");
+		expect(programmerValuesActions.clear).not.toHaveBeenCalled();
 	});
 
 	it("arms playback configuration when a Virtual Playback grid is the available target surface", () => {

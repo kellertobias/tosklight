@@ -124,7 +124,6 @@ export interface ServerCoreContext
 	exportPaperwork: () => void;
 	shutdownServer: () => Promise<boolean>;
 	clearProgrammer: (sessionId: string) => Promise<void>;
-	clearProgrammerValues: () => Promise<void>;
 	setMaster: (grandMaster?: number, blackout?: boolean) => Promise<void>;
 	setDeskToken: (token: string) => void;
 	setServerUrl: (url: string) => void;
