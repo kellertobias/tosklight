@@ -20,6 +20,8 @@ const mocks = vi.hoisted(() => ({
 	executeCommandLine: vi.fn(),
 	setCommandLine: vi.fn(),
 	refresh: vi.fn(),
+	resetCommandLine: vi.fn(),
+	recordCue: vi.fn(),
 	saveCueList: vi.fn(),
 	state: {
 		activeDeskId: "desk-1",
@@ -67,9 +69,41 @@ vi.mock("../api/ServerContext", () => ({
 		executeCommandLine: mocks.executeCommandLine,
 		setCommandLine: mocks.setCommandLine,
 		refresh: mocks.refresh,
+		resetCommandLine: mocks.resetCommandLine,
 		cueObjects: mocks.cueObjects,
 		saveCueList: mocks.saveCueList,
 	}),
+}));
+vi.mock("../features/cueRecording/CueRecordingProvider", () => ({
+	useCueRecording: () => ({ record: mocks.recordCue }),
+}));
+vi.mock("../features/showObjects/ShowObjectsState", () => ({
+	useCueLists: () =>
+		mocks.cueObjects.length
+			? mocks.cueObjects
+			: mocks.playbacks.cue_lists.map((body) => ({
+					kind: "cue_list",
+					id: body.id,
+					revision: 1,
+					updated_at: "",
+					body,
+				})),
+	usePlaybackDefinitions: () =>
+		mocks.playbacks.pool.map((body) => ({
+			kind: "playback",
+			id: String(body.number),
+			revision: 1,
+			updated_at: "",
+			body,
+		})),
+	usePlaybackPages: () =>
+		mocks.playbacks.pages.map((body: Record<string, unknown>) => ({
+			kind: "playback_page",
+			id: String(body.number),
+			revision: 1,
+			updated_at: "",
+			body,
+		})),
 }));
 vi.mock("../features/server/useShowObjectsState", () => ({
 	useGroups: () => [],
@@ -93,6 +127,8 @@ function resetCuelistWindowMocks() {
 	mocks.executeCommandLine.mockReset().mockResolvedValue(true);
 	mocks.setCommandLine.mockReset();
 	mocks.refresh.mockReset().mockResolvedValue(undefined);
+	mocks.resetCommandLine.mockReset().mockResolvedValue(true);
+	mocks.recordCue.mockReset().mockResolvedValue({ status: "changed" });
 	mocks.saveCueList.mockReset().mockResolvedValue(true);
 	mocks.state.storeArmed = true;
 	mocks.state.paneSettingsId = null;
@@ -631,10 +667,18 @@ describe("CuelistWindow pool recording", () => {
 			screen.getAllByText("Tap to record Cuelist")[0].closest("button")!,
 		);
 		await waitFor(() =>
-			expect(mocks.executeCommandLine).toHaveBeenCalledWith("RECORD SET 1"),
+			expect(mocks.recordCue).toHaveBeenCalledWith({
+				target: { kind: "pool", playbackNumber: 1 },
+				operation: "overwrite",
+				timing: {},
+				cueOnly: false,
+				capturePolicy: "current_capture",
+				activationPolicy: "hold",
+			}),
 		);
-		expect(mocks.setCommandLine).not.toHaveBeenCalled();
-		expect(mocks.refresh).toHaveBeenCalledOnce();
+		expect(mocks.executeCommandLine).not.toHaveBeenCalled();
+		expect(mocks.refresh).not.toHaveBeenCalled();
+		expect(mocks.resetCommandLine).toHaveBeenCalledOnce();
 		expect(mocks.dispatch).toHaveBeenCalledWith({
 			type: "SET_STORE_ARMED",
 			value: false,

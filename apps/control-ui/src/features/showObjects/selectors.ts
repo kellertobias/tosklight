@@ -12,3 +12,21 @@ export function selectPresets(
 ): readonly ShowObject<"preset">[] {
 	return snapshot.presets;
 }
+
+export function selectCueLists(
+	snapshot: ShowObjectsSnapshot,
+): readonly ShowObject<"cue_list">[] {
+	return snapshot.cueLists;
+}
+
+export function selectPlaybacks(
+	snapshot: ShowObjectsSnapshot,
+): readonly ShowObject<"playback">[] {
+	return snapshot.playbacks;
+}
+
+export function selectPlaybackPages(
+	snapshot: ShowObjectsSnapshot,
+): readonly ShowObject<"playback_page">[] {
+	return snapshot.playbackPages;
+}

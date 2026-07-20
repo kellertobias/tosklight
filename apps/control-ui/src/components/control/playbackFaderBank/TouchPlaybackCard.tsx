@@ -100,7 +100,7 @@ export function TouchPlaybackCard({
 				/>
 			)}
 			{hasFader && (
-				<VerticalTouchFader
+			<VerticalTouchFader
 					disabled={controller.assignmentPending || !playback}
 					label={playbackFaderLabel(playback)}
 					value={value}

@@ -1,6 +1,7 @@
 import { useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { useServer } from "../../api/ServerContext";
+import { usePlaybackDeskView } from "../../features/playbackRuntime/PlaybackRuntimeView";
 import { useApp } from "../../state/AppContext";
 import { Button } from "../common";
 import { ModalNumberInput } from "../input/ModalInputControls";
@@ -9,7 +10,8 @@ import { PlaybackPageMenu, PlaybackPageRenameDialog } from "./PlaybackPageDialog
 
 export function HardwareControlSummary() {
   const server = useServer(); const { state, dispatch } = useApp(); const [pagesOpen, setPagesOpen] = useState(false); const [pageRenameOpen, setPageRenameOpen] = useState(false); const [timeInput, setTimeInput] = useState<"prog" | "cue" | null>(null); const [inputValue, setInputValue] = useState(""); const taps = useRef<Record<string, number[]>>({});
-  const bpms = server.configuration?.speed_groups_bpm ?? [120, 90, 60, 30, 15]; const prog = (server.configuration?.programmer_fade_millis ?? 3000) / 1000; const cue = (server.configuration?.sequence_master_fade_millis ?? 3000) / 1000; const page = server.playbacks?.active_page ?? state.playbackPage + 1;
+  const playbackDesk = usePlaybackDeskView();
+  const bpms = server.configuration?.speed_groups_bpm ?? [120, 90, 60, 30, 15]; const prog = (server.configuration?.programmer_fade_millis ?? 3000) / 1000; const cue = (server.configuration?.sequence_master_fade_millis ?? 3000) / 1000; const page = playbackDesk?.active_page ?? server.playbacks?.active_page ?? state.playbackPage + 1;
   const openTime = (kind: "prog" | "cue", value: number) => { setTimeInput(kind); setInputValue(String(Number(value.toFixed(1)))); };
   const activePage = server.playbacks?.pages.find((item) => item.number === page) ?? null;
   const openPagesOrRename = () => { if (state.playbackSetArmed && activePage) { dispatch({ type: "SET_PLAYBACK_SET_ARMED", value: false }); setPageRenameOpen(true); } else setPagesOpen(true); };

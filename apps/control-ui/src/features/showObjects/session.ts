@@ -69,14 +69,22 @@ export class ShowObjectsSession {
 	}
 
 	activate(kind: HydrationTarget["kind"], objectId?: string) {
-		this.scope.activate(kind, objectId);
+		return this.activateTargets([{ kind, objectId }]);
+	}
+
+	activateKinds(kinds: readonly HydrationTarget["kind"][]) {
+		return this.activateTargets(kinds.map((kind) => ({ kind })));
+	}
+
+	private activateTargets(targets: readonly HydrationTarget[]) {
+		for (const target of targets) this.scope.activate(target.kind, target.objectId);
 		this.ensureHydrations();
 		this.reconcileStream();
 		let active = true;
 		return () => {
 			if (!active) return;
 			active = false;
-			this.deactivate(kind, objectId);
+			this.deactivateTargets(targets);
 		};
 	}
 
@@ -89,9 +97,11 @@ export class ShowObjectsSession {
 		this.closeSocket();
 	}
 
-	private deactivate(kind: HydrationTarget["kind"], objectId?: string) {
-		const removed = this.scope.deactivate(kind, objectId);
-		if (removed) this.invalidateHydration({ kind, objectId });
+	private deactivateTargets(targets: readonly HydrationTarget[]) {
+		for (const target of targets) {
+			const removed = this.scope.deactivate(target.kind, target.objectId);
+			if (removed) this.invalidateHydration(target);
+		}
 		if (!this.scope.hasViews()) {
 			this.queued.clear();
 			this.clearHydrations();
@@ -147,9 +157,15 @@ export class ShowObjectsSession {
 					run.target.kind,
 					loaded.collection as never,
 					run.floor,
+					loaded.showRevision,
 				);
 			else
-				this.store.installObjects(this.showId, loaded.installs, run.floor);
+				this.store.installObjects(
+					this.showId,
+					loaded.installs,
+					run.floor,
+					loaded.showRevision,
+				);
 			if (run.target.kind === "group" && run.target.objectId)
 				this.scope.setGroupDependencies(
 					run.target.objectId,
@@ -239,6 +255,7 @@ export class ShowObjectsSession {
 	}
 
 	private routeChange(change: ShowObjectsChange) {
+		if (this.rejectForeignShow(change)) return;
 		const relevant = change.changes.filter((item) => this.scope.includesChange(item));
 		if (!relevant.length) return;
 		if (
@@ -262,6 +279,7 @@ export class ShowObjectsSession {
 		change: ShowObjectsChange,
 		relevant = change.changes.filter((item) => this.scope.includesChange(item)),
 	) {
+		if (this.rejectForeignShow(change)) return;
 		if (!relevant.length) return;
 		this.store.applyChange({ ...change, changes: relevant });
 		this.cursors.installEvent(change.eventSequence);
@@ -274,6 +292,17 @@ export class ShowObjectsSession {
 				change.eventSequence,
 				true,
 			);
+	}
+
+	private rejectForeignShow(change: ShowObjectsChange) {
+		if (change.showId === this.showId) return false;
+		this.protocolReset(
+			new ShowObjectsProtocolError(
+				`Expected Show ${this.showId}, received ${change.showId}`,
+				change.eventSequence,
+			),
+		);
+		return true;
 	}
 
 	private flushQueued() {

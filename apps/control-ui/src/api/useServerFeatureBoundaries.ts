@@ -1,17 +1,19 @@
 import { useCallback, useMemo, useRef } from "react";
 import type { ServerState } from "../features/server/useServerState";
-import type { ShowObject } from "../features/showObjects/contracts";
+import type { ShowObjectKind } from "../features/showObjects/contracts";
 import { createFeatureErrorGroup } from "./featureErrorReporting";
 import { configuredServerUrl } from "./LightApiClient";
 import { browserDeskBoundaryToken } from "./PatchTransport";
 import { WebSocketPlaybackEventTransport } from "./PlaybackEventTransport";
 import { WebSocketProgrammingEventTransport } from "./ProgrammingEventTransport";
 import { WebSocketShowObjectsEventTransport } from "./ShowObjectsEventTransport";
+import { HttpShowObjectSnapshotTransport } from "./ShowObjectSnapshotTransport";
 import type { PlaybackRuntimeIdentity } from "./types";
 import { useProgrammerLifecycleBoundaries } from "./useProgrammerLifecycleBoundaries";
 import { useProgrammerValuesBoundaries } from "./useProgrammerValuesBoundaries";
 import { usePresetRecordingBoundaries } from "./usePresetRecordingBoundaries";
 import { useGroupRecordingBoundaries } from "./useGroupRecordingBoundaries";
+import { useCueRecordingBoundaries } from "./useCueRecordingBoundaries";
 
 export function useServerFeatureBoundaries(state: ServerState) {
 	const programmingErrors = useMemo(
@@ -22,16 +24,29 @@ export function useServerFeatureBoundaries(state: ServerState) {
 	const programmerLifecycle = useProgrammerLifecycleBoundaries(state);
 	const presetRecording = usePresetRecordingBoundaries(state);
 	const groupRecording = useGroupRecordingBoundaries(state);
+	const cueRecording = useCueRecordingBoundaries(state);
 	const showObjectsAuthorityKey = [
 		configuredServerUrl(),
 		state.connectionGeneration,
 		state.session?.session_id ?? "",
 		state.session?.client_id ?? "",
+		state.session?.user.id ?? "",
 	].join("|");
 	const showObjectsTransport = useMemo(
 		() =>
 			state.session
 				? new WebSocketShowObjectsEventTransport({
+						baseUrl: configuredServerUrl(),
+						sessionToken: state.session.token,
+						deskBoundaryToken: browserDeskBoundaryToken(),
+					})
+				: null,
+		[state.session],
+	);
+	const showObjectSnapshotTransport = useMemo(
+		() =>
+			state.session
+				? new HttpShowObjectSnapshotTransport({
 						baseUrl: configuredServerUrl(),
 						sessionToken: state.session.token,
 						deskBoundaryToken: browserDeskBoundaryToken(),
@@ -77,18 +92,29 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		return state.client.programmingInteractionSnapshot(state.session.desk.id);
 	}, [state.client, state.session]);
 	const loadShowObjectCollection = useCallback(
-		(showId: string, kind: "group" | "preset") =>
-			state.client.objects(showId, kind) as Promise<ShowObject[]>,
-		[state.client],
+		(showId: string, kind: ShowObjectKind) => {
+			if (!showObjectSnapshotTransport)
+				throw new Error("Show-object session is unavailable");
+			return showObjectSnapshotTransport.collection(showId, kind);
+		},
+		[showObjectSnapshotTransport],
+	);
+	const loadShowObjectSnapshot = useCallback(
+		<K extends ShowObjectKind>(
+			showId: string,
+			kind: K,
+			objectId: string,
+		) => {
+			if (!showObjectSnapshotTransport)
+				throw new Error("Show-object session is unavailable");
+			return showObjectSnapshotTransport.object(showId, kind, objectId);
+		},
+		[showObjectSnapshotTransport],
 	);
 	const loadShowObject = useCallback(
-		(showId: string, kind: "group" | "preset", objectId: string) =>
-			state.client.objectOrNull(
-				showId,
-				kind,
-				objectId,
-			) as Promise<ShowObject | null>,
-		[state.client],
+		async <K extends ShowObjectKind>(showId: string, kind: K, objectId: string) =>
+			(await loadShowObjectSnapshot(showId, kind, objectId)).object,
+		[loadShowObjectSnapshot],
 	);
 	return {
 		showObjectsTransport,
@@ -99,9 +125,11 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		...programmerValues,
 		...presetRecording,
 		...groupRecording,
+		...cueRecording,
 		loadPlaybackSnapshot,
 		loadProgrammingInteractionSnapshot,
 		loadShowObjectCollection,
+		loadShowObjectSnapshot,
 		loadShowObject,
 		reportShowObjectError: useFeatureErrorReporter(state.setError),
 		reportPlaybackError: useFeatureErrorReporter(state.setError),

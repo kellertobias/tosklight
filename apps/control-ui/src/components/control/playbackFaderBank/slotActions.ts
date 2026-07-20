@@ -67,7 +67,9 @@ export function buildPlaybackActions({
 						? "RESUME"
 						: playbackButtonLabel(action),
 				disabled:
-					controller.assignmentPending || !playback || action === "none",
+					controller.assignmentPending ||
+					!playback ||
+					action === "none",
 				className: buttonFeedbackClass(
 					action,
 					active,

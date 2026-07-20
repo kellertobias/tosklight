@@ -24,7 +24,6 @@ import { createSessionActions } from "./session";
 import { createShowLifecycleActions } from "./showLifecycle";
 import { createShowRevisionActions } from "./showRevisions";
 import { createServerSnapshotValue } from "./snapshot";
-import { createStorePlaybackValue } from "./storePlayback";
 import { createSystemActions } from "./system";
 import { createUpdateActions } from "./update";
 
@@ -57,6 +56,5 @@ export function composeServerContextValue(model: ServerController) {
 		...createMediaActions(model),
 		...createFixtureLibraryActions(model),
 		...createPatchActions(model),
-		...createStorePlaybackValue(model),
 	};
 }

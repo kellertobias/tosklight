@@ -106,7 +106,7 @@ describe("WebSocketShowObjectsEventTransport", () => {
 		expect(observer.closed).not.toHaveBeenCalled();
 	});
 
-	it("maps exact Group/Preset bodies and ignores unrelated object kinds", () => {
+	it("maps exact scoped bodies and ignores unrelated object kinds", () => {
 		FakeWebSocket.instances = [];
 		const observer = {
 			message: vi.fn(),
@@ -151,8 +151,8 @@ describe("WebSocketShowObjectsEventTransport", () => {
 									deleted: false,
 								},
 								{
-									kind: "cue_list",
-									object_id: "cues",
+									kind: "fixture",
+									object_id: "fixture-2",
 									object_revision: 2,
 									body: { name: "Main" },
 									deleted: false,

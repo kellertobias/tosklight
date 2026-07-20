@@ -19,8 +19,6 @@ export class ShowObjectsApiClient {
 	objects<T>(showId: string, kind: string): Promise<VersionedObject<T>[]> {
 		return this.transport.request(
 			`/api/v1/shows/${showId}/objects/${encodeURIComponent(kind)}`,
-			{},
-			false,
 		);
 	}
 

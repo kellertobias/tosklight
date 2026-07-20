@@ -86,6 +86,19 @@ export function useShowObjectView(
 	}, [enabled, kind, objectId, session]);
 }
 
+/** Activates one complete multi-kind view scope before opening its event stream. */
+export function useShowObjectKindsView(
+	kinds: readonly ShowObjectKind[],
+	enabled = true,
+) {
+	const scopeKey = kinds.join("|");
+	const session = useContext(ShowObjectsViewContext);
+	useEffect(() => {
+		if (!session || !enabled || !scopeKey) return;
+		return session.activateKinds(scopeKey.split("|") as ShowObjectKind[]);
+	}, [enabled, scopeKey, session]);
+}
+
 /** Owns an exact-object subscription for a selected detail projection. */
 export function ShowObjectDetailSubscription({
 	kind,

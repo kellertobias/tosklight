@@ -12,31 +12,35 @@ export function installAuthoritativeObjects(
 	watermarks: ShowObjectEventWatermarks,
 	installs: readonly ShowObjectInstall[],
 	minimumEventSequence?: number | null,
+	sequenceMode: "floor" | "seal" = "floor",
 ) {
 	const projectKinds = new Set<ShowObjectKind>();
 	for (const { kind, objectId, object } of installs) {
-		projectKinds.add(kind);
 		const responseEventObserved = watermarks.hasAppliedAtOrAfter(
 			kind,
 			objectKey(kind, objectId),
 			minimumEventSequence,
 		);
-		watermarks.raiseObjectFloor(kind, objectId, minimumEventSequence);
+		if (sequenceMode === "seal")
+			watermarks.sealExactResponse(kind, objectId, minimumEventSequence);
+		else watermarks.raiseObjectFloor(kind, objectId, minimumEventSequence);
 		const collection = authoritative[kind] as ShowObject[];
 		const existing = collection.find((candidate) => candidate.id === objectId);
 		if (!responseEventObserved && !object) {
+			if (!existing) continue;
 			authoritative[kind] = collection.filter(
 				(candidate) => candidate.id !== objectId,
 			) as never;
+			projectKinds.add(kind);
 		} else if (
 			!responseEventObserved &&
 			object &&
-			(minimumEventSequence != null ||
-				!existing ||
-				existing.revision <= object.revision)
+			(!existing || existing.revision <= object.revision)
 		) {
+			if (existing?.revision === object.revision) continue;
 			upsertCollection(collection, object);
 			sortObjects(collection);
+			projectKinds.add(kind);
 		}
 	}
 	return projectKinds;

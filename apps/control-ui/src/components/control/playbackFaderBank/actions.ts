@@ -5,6 +5,7 @@ import { normalizePlaybackTopology } from "../PlaybackConfigurationModal";
 import { cueUpdateTarget, requestUpdateTarget } from "../updateWorkflow";
 import type { PlaybackBankController } from "./controller";
 import { emptyConfiguration } from "./feedback";
+import { loadRecordSettings } from "../../setup/ProgrammerDefaults";
 
 export function isPlaybackSetClickArmed(controller: PlaybackBankController) {
 	const { state } = controller;
@@ -19,7 +20,7 @@ export function openPlaybackConfiguration(
 	playback: PlaybackDefinition | null,
 	slot: number,
 ) {
-	const { server, dispatch, activePageNumber, buttons } = controller;
+	const { server, dispatch, activePageNumber, buttons, cueLists } = controller;
 	const fallbackButtons = Math.max(
 		0,
 		Math.min(3, buttons ?? server.playbacks?.desk.buttons ?? 3),
@@ -32,7 +33,7 @@ export function openPlaybackConfiguration(
 					slot,
 					fallbackButtons,
 					true,
-					server.playbacks?.cue_lists[0]?.id ?? "",
+					cueLists[0]?.id ?? "",
 				),
 			fallbackButtons,
 			true,
@@ -63,16 +64,23 @@ export async function recordPlayback(
 	if (!controller.state.storeArmed) return;
 	event.preventDefault();
 	event.stopPropagation();
-	const cueListId =
-		playback?.target.type === "cue_list"
-			? playback.target.cue_list_id
-			: undefined;
+	const settings = loadRecordSettings();
+	const outcome = await controller.cueRecording?.record({
+		target: {
+			kind: "page_slot",
+			page: controller.activePageNumber,
+			slot,
+		},
+		operation:
+			settings.mergeActiveCue ? "merge" : "overwrite",
+		timing: {},
+		cueOnly: settings.cueOnly,
+		capturePolicy: "current_capture",
+		activationPolicy: "go_to_if_normal",
+	});
+	if (!outcome) return;
 	controller.dispatch({ type: "SET_STORE_ARMED", value: false });
-	await controller.server.storePlayback(
-		slot - 1,
-		cueListId,
-		controller.activePageNumber,
-	);
+	await controller.command.reset();
 }
 
 export async function activateHardwareCard(

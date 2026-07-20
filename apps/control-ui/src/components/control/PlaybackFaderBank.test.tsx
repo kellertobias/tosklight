@@ -47,7 +47,7 @@ const mocks = vi.hoisted(() => ({
 	resetCommandLine: vi.fn(),
 	savePlaybackSlot: vi.fn(),
 	clearPlaybackSlot: vi.fn(),
-	storePlayback: vi.fn(),
+	recordCue: vi.fn(),
 	commandLine: "FIXTURE",
 	error: null as string | null,
 	hardwareConnected: false,
@@ -82,6 +82,7 @@ const mocks = vi.hoisted(() => ({
 		desk: { buttons: 3 },
 		selected_playback: null as number | null,
 	},
+	scopedCueLists: [] as Array<Record<string, any>>,
 }));
 
 vi.mock("../../api/ServerContext", () => ({
@@ -102,8 +103,36 @@ vi.mock("../../api/ServerContext", () => ({
 		poolPlaybackAction: mocks.poolPlaybackAction,
 		savePlaybackSlot: mocks.savePlaybackSlot,
 		clearPlaybackSlot: mocks.clearPlaybackSlot,
-		storePlayback: mocks.storePlayback,
 	}),
+}));
+vi.mock("../../features/cueRecording/CueRecordingProvider", () => ({
+	useCueRecording: () => ({ record: mocks.recordCue }),
+}));
+vi.mock("../../features/showObjects/ShowObjectsState", () => ({
+	useCueLists: () =>
+		mocks.scopedCueLists.map((body) => ({
+			kind: "cue_list",
+			id: body.id,
+			revision: 1,
+			updated_at: "",
+			body,
+		})),
+	usePlaybackDefinitions: () =>
+		mocks.playbacks.pool.map((body) => ({
+			kind: "playback",
+			id: String(body.number),
+			revision: 1,
+			updated_at: "",
+			body,
+		})),
+	usePlaybackPages: () =>
+		mocks.playbacks.pages.map((body) => ({
+			kind: "playback_page",
+			id: String(body.number),
+			revision: 1,
+			updated_at: "",
+			body,
+		})),
 }));
 vi.mock("../../features/server/useShowObjectsState", () => ({
 	useGroups: () => [],
@@ -122,7 +151,21 @@ function resetPlaybackFaderMocks() {
 	mocks.resetCommandLine.mockReset();
 	mocks.savePlaybackSlot.mockReset().mockResolvedValue(true);
 	mocks.clearPlaybackSlot.mockReset().mockResolvedValue(true);
-	mocks.storePlayback.mockReset().mockResolvedValue(undefined);
+	mocks.recordCue.mockReset().mockResolvedValue({ status: "changed" });
+	mocks.playbacks.cue_lists = [
+		{
+			id: "front",
+			name: "Front sequence",
+			cues: [],
+			mode: "sequence",
+			priority: 0,
+			looped: false,
+		},
+	];
+	mocks.scopedCueLists = mocks.playbacks.cue_lists.map((cueList) => ({
+		...cueList,
+		cues: [...cueList.cues],
+	}));
 	mocks.commandLine = "FIXTURE";
 	mocks.error = null;
 	mocks.hardwareConnected = false;
@@ -301,6 +344,33 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 			expect.objectContaining({ number: 0, button_count: 3, has_fader: true }),
 		);
 	});
+
+	it("uses the scoped Cuelist authority for an empty slot default", () => {
+		Object.assign(mocks.state, {
+			cueListSetTarget: null,
+			cueListSetArmed: false,
+			playbackSetArmed: true,
+		});
+		mocks.playbacks.cue_lists = [
+			{ ...mocks.playbacks.cue_lists[0], id: "legacy", name: "Legacy" },
+		];
+		mocks.scopedCueLists = [
+			{ ...mocks.playbacks.cue_lists[0], id: "scoped", name: "Scoped" },
+		];
+
+		render(<PlaybackFaderBank count={1} />);
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "Playback representation page 1 playback 1",
+			}),
+		);
+
+		expect(screen.getByRole("radio", { name: "Scoped" })).toHaveAttribute(
+			"aria-checked",
+			"true",
+		);
+		expect(screen.queryByRole("radio", { name: "Legacy" })).toBeNull();
+	});
 });
 
 describe("PlaybackFaderBank configuration shortcuts", () => {
@@ -320,7 +390,7 @@ describe("PlaybackFaderBank configuration shortcuts", () => {
 	it("routes Update before playback execution with concrete playback and current Cue context", () => {
 		assignPlayback();
 		mocks.state.updateArmed = true;
-		mocks.playbacks.cue_lists[0].cues = [
+		mocks.scopedCueLists[0].cues = [
 			{
 				id: "cue-2",
 				number: 2,
@@ -376,7 +446,7 @@ describe("PlaybackFaderBank selection and Record targets", () => {
 	it("makes the hardware card one display-only Cuelist selection surface", async () => {
 		assignPlayback();
 		mocks.hardwareConnected = true;
-		mocks.playbacks.cue_lists[0].cues = [
+		mocks.scopedCueLists[0].cues = [
 			{
 				id: "cue-1",
 				number: 1,
@@ -503,10 +573,19 @@ describe("PlaybackFaderBank Record targets", () => {
 			fireEvent.click(surface);
 		}
 		await waitFor(() =>
-			expect(mocks.storePlayback).toHaveBeenCalledTimes(surfaces.length),
+			expect(mocks.recordCue).toHaveBeenCalledTimes(surfaces.length),
 		);
-		for (const call of mocks.storePlayback.mock.calls)
-			expect(call).toEqual([0, "front", 3]);
+		for (const call of mocks.recordCue.mock.calls)
+			expect(call).toEqual([
+				{
+					target: { kind: "page_slot", page: 3, slot: 1 },
+					operation: "overwrite",
+					timing: {},
+					cueOnly: false,
+					capturePolicy: "current_capture",
+					activationPolicy: "go_to_if_normal",
+				},
+			]);
 		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
 		expect(mocks.dispatch).toHaveBeenCalledTimes(surfaces.length);
 		expect(mocks.dispatch).toHaveBeenCalledWith({
@@ -531,9 +610,32 @@ describe("PlaybackFaderBank Record targets", () => {
 		);
 		fireEvent.click(container.querySelector("article")!);
 		await waitFor(() =>
-			expect(mocks.storePlayback).toHaveBeenCalledWith(0, undefined, 4),
+			expect(mocks.recordCue).toHaveBeenCalledWith({
+				target: { kind: "page_slot", page: 4, slot: 1 },
+				operation: "overwrite",
+				timing: {},
+				cueOnly: false,
+				capturePolicy: "current_capture",
+				activationPolicy: "go_to_if_normal",
+			}),
 		);
 		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
+	});
+
+	it("keeps Record armed and the command intact when the typed action fails", async () => {
+		mocks.state.storeArmed = true;
+		mocks.recordCue.mockResolvedValueOnce(null);
+		const { container } = render(
+			<PlaybackFaderBank pageNumber={4} count={1} />,
+		);
+
+		fireEvent.click(container.querySelector("article")!);
+		await waitFor(() => expect(mocks.recordCue).toHaveBeenCalledOnce());
+		expect(mocks.dispatch).not.toHaveBeenCalledWith({
+			type: "SET_STORE_ARMED",
+			value: false,
+		});
+		expect(mocks.resetCommandLine).not.toHaveBeenCalled();
 	});
 });
 

@@ -27,6 +27,8 @@ import {
 import {
 	ALL_COLLECTIONS,
 	createShowObjectsSnapshot,
+	emptyShowObjectCollections,
+	initialShowObjectsSnapshot,
 	NO_COLLECTIONS,
 	projectedCollection,
 } from "./storeSnapshot";
@@ -34,24 +36,13 @@ import {
 export type { ShowObjectInstall, ShowObjectsSnapshot } from "./storeTypes";
 
 export class ShowObjectsStore {
-	private authoritative: ShowObjectCollections = { group: [], preset: [] };
+	private authoritative: ShowObjectCollections = emptyShowObjectCollections();
 	private authorityKey: string | null = null;
 	private authorityGeneration = 0;
 	private readonly pending = new ShowObjectPendingMutations();
 	private readonly watermarks = new ShowObjectEventWatermarks();
 	private readonly listeners = new Set<() => void>();
-	private snapshot: ShowObjectsSnapshot = {
-		showId: null,
-		authorityGeneration: 0,
-		showRevision: null,
-		eventSequence: null,
-		groups: [],
-		presets: [],
-		readyCollections: new Set(),
-		pendingObjectKeys: new Set(),
-		status: "idle",
-		error: null,
-	};
+	private snapshot: ShowObjectsSnapshot = initialShowObjectsSnapshot();
 
 	readonly subscribe = (listener: () => void) => {
 		this.listeners.add(listener);
@@ -59,14 +50,13 @@ export class ShowObjectsStore {
 	};
 
 	readonly getSnapshot = () => this.snapshot;
-
 	reset(showId: string | null, authorityKey?: string) {
 		const authorityChanged =
 			authorityKey !== undefined && authorityKey !== this.authorityKey;
 		if (this.snapshot.showId === showId && !authorityChanged) return;
 		if (authorityKey !== undefined) this.authorityKey = authorityKey;
 		this.authorityGeneration += 1;
-		this.authoritative = { group: [], preset: [] };
+		this.authoritative = emptyShowObjectCollections();
 		this.pending.clear();
 		this.watermarks.clear();
 		this.publish({
@@ -79,12 +69,12 @@ export class ShowObjectsStore {
 			error: null,
 		});
 	}
-
 	setCollection<K extends ShowObjectKind>(
 		showId: string,
 		kind: K,
 		objects: ShowObjectCollections[K],
 		eventFloor?: number,
+		showRevision?: number,
 	) {
 		if (this.snapshot.showId !== showId) this.reset(showId);
 		let next = [...objects] as ShowObjectCollections[K];
@@ -116,6 +106,10 @@ export class ShowObjectsStore {
 		if (eventFloor != null) this.watermarks.setKindFloor(kind, eventFloor);
 		this.publish(
 			{
+				showRevision:
+					showRevision == null
+						? this.snapshot.showRevision
+						: Math.max(this.snapshot.showRevision ?? 0, showRevision),
 				readyCollections: new Set([...this.snapshot.readyCollections, kind]),
 				status: "ready",
 				error: null,
@@ -123,7 +117,6 @@ export class ShowObjectsStore {
 			projectedCollection(kind),
 		);
 	}
-
 	updateCollection<K extends ShowObjectKind>(
 		kind: K,
 		update: CollectionUpdate<K>,
@@ -133,7 +126,6 @@ export class ShowObjectsStore {
 		this.authoritative[kind] = [...next] as ShowObjectCollections[K];
 		this.publish({}, projectedCollection(kind));
 	}
-
 	installObject<K extends ShowObjectKind>(
 		showId: string,
 		kind: K,
@@ -149,12 +141,12 @@ export class ShowObjectsStore {
 			minimumEventSequence,
 		);
 	}
-
-	/** Installs one authoritative exact-object projection (and its dependencies) atomically. */
 	installObjects(
 		showId: string,
 		installs: readonly ShowObjectInstall[],
 		minimumEventSequence?: number | null,
+		showRevision?: number,
+		sequenceMode: "floor" | "seal" = "floor",
 	) {
 		if (this.snapshot.showId !== showId) return;
 		const projectKinds = installAuthoritativeObjects(
@@ -162,8 +154,33 @@ export class ShowObjectsStore {
 			this.watermarks,
 			installs,
 			minimumEventSequence,
+			sequenceMode,
 		);
-		this.publish({ status: "ready", error: null }, projectKinds);
+		this.publish(
+			{
+				showRevision:
+					showRevision == null
+						? this.snapshot.showRevision
+						: Math.max(this.snapshot.showRevision ?? 0, showRevision),
+				status: "ready",
+				error: null,
+			},
+			projectKinds,
+		);
+	}
+	installShowRevision(
+		showId: string,
+		showRevision: number,
+		authorityGeneration = this.authorityGeneration,
+	) {
+		if (
+			this.snapshot.showId !== showId ||
+			this.authorityGeneration !== authorityGeneration
+		)
+			return false;
+		if ((this.snapshot.showRevision ?? -1) >= showRevision) return true;
+		this.publish({ showRevision }, NO_COLLECTIONS);
+		return true;
 	}
 
 	beginOptimistic<K extends ShowObjectKind>(

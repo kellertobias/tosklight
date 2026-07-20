@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useServer } from "../api/ServerContext";
 import { usePlaybackDeskView } from "../features/playbackRuntime/PlaybackRuntimeView";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
+import { useCueLists } from "../features/showObjects/ShowObjectsState";
 import { useApp } from "../state/AppContext";
 import { CuelistDetail } from "./cuelistWindow/CuelistDetail";
 import { CuelistPool } from "./cuelistWindow/CuelistPool";
@@ -21,6 +22,7 @@ export function CuelistWindow({
 	const server = useServer();
 	const { state, dispatch } = useApp();
 	const pool = useCuelistPool();
+	const cueLists = useCueLists();
 	const playbackDesk = usePlaybackDeskView(
 		active && cueListSource === "follow-selection",
 	);
@@ -33,6 +35,9 @@ export function CuelistWindow({
 	const [message, setMessage] = useState("");
 	const tab = builtIn ? state.cuelistBuiltInView : localTab;
 	useShowObjectView("group", active && tab !== "pool");
+	useShowObjectView("cue_list", active);
+	useShowObjectView("playback", active);
+	useShowObjectView("playback_page", active && tab === "pool");
 	const firstAvailableCuelist = pool[0]?.number ?? 1;
 	const paneSelectedCuelist =
 		cueListSource === "follow-selection"
@@ -68,7 +73,7 @@ export function CuelistWindow({
 			? settingsDefinition.target.cue_list_id
 			: null;
 	const settingsCueObject = settingsCueListId
-		? server.cueObjects?.find((candidate) => candidate.id === settingsCueListId)
+		? cueLists.find((candidate) => candidate.id === settingsCueListId)
 		: undefined;
 	const settings = settingsOpen && settingsCueObject && (
 		<CuelistSettings

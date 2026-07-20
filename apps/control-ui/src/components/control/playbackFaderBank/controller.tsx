@@ -2,8 +2,14 @@ import { useState } from "react";
 import { useServer } from "../../../api/ServerContext";
 import type { PlaybackSurfaceLayout } from "../../../api/types";
 import { usePlaybackDeskView } from "../../../features/playbackRuntime/PlaybackRuntimeView";
+import { useCueRecording } from "../../../features/cueRecording/CueRecordingProvider";
 import { useGroups } from "../../../features/server/useShowObjectsState";
-import { useShowObjectView } from "../../../features/showObjects/ShowObjectsView";
+import {
+	useCueLists,
+	usePlaybackDefinitions,
+	usePlaybackPages,
+} from "../../../features/showObjects/ShowObjectsState";
+import { useShowObjectKindsView } from "../../../features/showObjects/ShowObjectsView";
 import { useApp } from "../../../state/AppContext";
 import { playbackRowUnits, projectPlaybackSlots } from "./projection";
 import type { PlaybackConfigurationState } from "./types";
@@ -18,6 +24,9 @@ export interface PlaybackFaderBankProps {
 	playbackLayout?: PlaybackSurfaceLayout | null;
 }
 
+const PLAYBACK_KINDS = ["cue_list", "playback", "playback_page"] as const;
+const PLAYBACK_AND_GROUP_KINDS = [...PLAYBACK_KINDS, "group"] as const;
+
 export function usePlaybackBankController({
 	pageNumber,
 	firstSlot = 1,
@@ -28,7 +37,11 @@ export function usePlaybackBankController({
 }: PlaybackFaderBankProps) {
 	const server = useServer();
 	const command = useCommandLineSurface();
+	const cueRecording = useCueRecording();
 	const groups = useGroups(server.playbacks);
+	const cueLists = useCueLists();
+	const playbackDefinitions = usePlaybackDefinitions();
+	const playbackPages = usePlaybackPages();
 	const { state, dispatch } = useApp();
 	const playbackDesk = usePlaybackDeskView();
 	const hardware = Boolean(
@@ -43,15 +56,16 @@ export function usePlaybackBankController({
 		playbackDesk?.active_page ??
 		server.playbacks?.active_page ??
 		state.playbackPage + 1;
-	const page = server.playbacks?.pages.find(
-		(candidate) => candidate.number === activePageNumber,
-	);
+	const page = playbackPages.find(
+		(candidate) => candidate.body.number === activePageNumber,
+	)?.body;
 	const [configuration, setConfiguration] =
 		useState<PlaybackConfigurationState | null>(null);
 	const assignmentPending = state.cueListSetTarget != null;
 	const selectionPending = /^SELECT\s*$/i.test(command.text);
 	const slots = projectPlaybackSlots({
-		server,
+		cueLists,
+		playbackDefinitions,
 		groups,
 		page,
 		playbackLayout,
@@ -59,9 +73,10 @@ export function usePlaybackBankController({
 		firstSlot,
 		pageSize,
 	});
-	useShowObjectView(
-		"group",
-		slots.some((slot) => slot.playback?.target.type === "group"),
+	useShowObjectKindsView(
+		slots.some((slot) => slot.playback?.target.type === "group")
+			? PLAYBACK_AND_GROUP_KINDS
+			: PLAYBACK_KINDS,
 	);
 	const rowTracks = playbackLayout
 		? playbackLayout.rows
@@ -71,6 +86,8 @@ export function usePlaybackBankController({
 	return {
 		server,
 		command,
+		cueRecording,
+		cueLists,
 		playbackDesk,
 		state,
 		dispatch,

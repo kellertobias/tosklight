@@ -1,14 +1,25 @@
 import type {
+	CueList,
+	PlaybackDefinition,
+	PlaybackPage,
 	StoredGroup,
 	StoredPreset,
 	VersionedObject,
 } from "../../api/types";
 
-export type ShowObjectKind = "group" | "preset";
+export type ShowObjectKind =
+	| "group"
+	| "preset"
+	| "cue_list"
+	| "playback"
+	| "playback_page";
 
 export interface ShowObjectBodies {
 	group: StoredGroup;
 	preset: StoredPreset;
+	cue_list: CueList;
+	playback: PlaybackDefinition;
+	playback_page: PlaybackPage;
 }
 
 export type ShowObject<K extends ShowObjectKind = ShowObjectKind> =

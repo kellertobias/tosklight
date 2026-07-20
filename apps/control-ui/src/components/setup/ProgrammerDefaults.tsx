@@ -23,14 +23,17 @@ export const defaultRecordSettings: RecordSettings = {
 };
 
 export function loadRecordSettings(): RecordSettings {
+	const stored = (key: string) =>
+		typeof globalThis.localStorage?.getItem === "function"
+			? globalThis.localStorage.getItem(key)
+			: null;
 	return {
 		mode:
-			localStorage.getItem("light.store-mode") === "overwrite"
+			stored("light.store-mode") === "overwrite"
 				? "overwrite"
 				: "merge",
-		cueOnly: localStorage.getItem("light.store-cue-only") === "true",
-		mergeActiveCue:
-			localStorage.getItem("light.store-merge-active-cue") === "true",
+		cueOnly: stored("light.store-cue-only") === "true",
+		mergeActiveCue: stored("light.store-merge-active-cue") === "true",
 	};
 }
 

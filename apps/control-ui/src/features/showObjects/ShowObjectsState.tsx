@@ -7,10 +7,22 @@ import {
 	useSyncExternalStore,
 } from "react";
 import type { ShowObject, ShowObjectKind } from "./contracts";
-import { selectPortableGroups, selectPresets } from "./selectors";
+import {
+	selectCueLists,
+	selectPlaybackPages,
+	selectPlaybacks,
+	selectPortableGroups,
+	selectPresets,
+} from "./selectors";
 import { ShowObjectsStore, type ShowObjectsSnapshot } from "./store";
 
-export { selectPortableGroups, selectPresets } from "./selectors";
+export {
+	selectCueLists,
+	selectPlaybackPages,
+	selectPlaybacks,
+	selectPortableGroups,
+	selectPresets,
+} from "./selectors";
 
 type GroupObject = ShowObject<"group">;
 type PresetObject = ShowObject<"preset">;
@@ -49,6 +61,18 @@ export function useShowObjectsStore(): ShowObjectsStore {
 
 export function usePresets(): readonly PresetObject[] {
 	return useShowObjectsSelector(selectPresets, shallowEqualArray);
+}
+
+export function useCueLists(): readonly ShowObject<"cue_list">[] {
+	return useShowObjectsSelector(selectCueLists, shallowEqualArray);
+}
+
+export function usePlaybackDefinitions(): readonly ShowObject<"playback">[] {
+	return useShowObjectsSelector(selectPlaybacks, shallowEqualArray);
+}
+
+export function usePlaybackPages(): readonly ShowObject<"playback_page">[] {
+	return useShowObjectsSelector(selectPlaybackPages, shallowEqualArray);
 }
 
 export function useShowObjectMutationState(

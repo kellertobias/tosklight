@@ -17,8 +17,13 @@ import {
 } from "../../components/window-kit";
 import { runtimeMaster } from "../../features/playbackRuntime/legacy";
 import { usePlaybackProjectionMap } from "../../features/playbackRuntime/PlaybackRuntimeView";
+import { useCueRecording } from "../../features/cueRecording/CueRecordingProvider";
+import { usePlaybackPages } from "../../features/showObjects/ShowObjectsState";
+import { useShowObjectKindsView } from "../../features/showObjects/ShowObjectsView";
 import { useApp } from "../../state/AppContext";
 import { useCommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
+import { loadRecordSettings } from "../../components/setup/ProgrammerDefaults";
+import { useCuelistPool } from "./useCuelistSelection";
 
 interface CuelistPoolProps {
 	active: boolean;
@@ -46,6 +51,8 @@ interface PoolSlotProps {
 	onPointerEnd: () => void;
 	onClick: () => void;
 }
+
+const CUELIST_POOL_KINDS = ["cue_list", "playback", "playback_page"] as const;
 
 function CuelistPoolSlot(props: PoolSlotProps) {
 	const { number, playback, runtimeMaster, usage } = props;
@@ -92,6 +99,7 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 		enabled: props.active,
 		observeCommand: false,
 	});
+	const cueRecording = useCueRecording();
 	const { state, dispatch } = useApp();
 	const holdTimer = useRef<number | null>(null);
 	const held = useRef(false);
@@ -121,12 +129,20 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 			return;
 		}
 		if (state.storeArmed) {
-			void command
-				.execute(`RECORD SET ${number}`)
-				.then(async (ok) => {
-					if (!ok) return;
-					await server.refresh();
+			const settings = loadRecordSettings();
+			void cueRecording
+				?.record({
+					target: { kind: "pool", playbackNumber: number },
+					operation: "overwrite",
+					timing: {},
+					cueOnly: settings.cueOnly,
+					capturePolicy: "current_capture",
+					activationPolicy: "hold",
+				})
+				.then(async (outcome) => {
+					if (!outcome) return;
 					dispatch({ type: "SET_STORE_ARMED", value: false });
+					await command.reset();
 				});
 			return;
 		}
@@ -196,20 +212,16 @@ export function CuelistPool(props: CuelistPoolProps) {
 	const { server, state, clearHold, startHold, click } =
 		useCuelistPoolActions(props);
 	const [search, setSearch] = useState("");
-	const pool = useMemo(
-		() =>
-			(server.playbacks?.pool ?? []).filter(
-				(definition) => definition.target.type === "cue_list",
-			),
-		[server.playbacks?.pool],
-	);
+	const pool = useCuelistPool();
+	const pages = usePlaybackPages();
+	useShowObjectKindsView(CUELIST_POOL_KINDS, props.active);
 	const runtimes = usePlaybackProjectionMap(
 		props.active ? pool.map((playback) => playback.number) : [],
 	);
 	const filteredPool = usePoolSlots(
 		pool,
 		search,
-		server.playbacks?.pages,
+		pages.map((object) => object.body),
 		runtimes,
 		server.playbacks?.active,
 	);

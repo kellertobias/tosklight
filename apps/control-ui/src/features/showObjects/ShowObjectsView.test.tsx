@@ -1,5 +1,6 @@
 import { render, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import type { ShowObjectKind } from "./contracts";
 import {
 	ShowObjectDetailSubscription,
 	ShowObjectsViewProvider,
@@ -13,6 +14,14 @@ import type {
 } from "./transport";
 
 const SHOW_ID = "11111111-1111-4111-8111-111111111111";
+
+function collectionSnapshot<T>(objects: T[], showRevision = 1) {
+	return { objects, showRevision };
+}
+
+function exactSnapshot<T>(object: T | null, showRevision = 1) {
+	return { object, showRevision };
+}
 
 class FakeTransport implements ShowObjectsEventTransport {
 	readonly subscriptions: Array<{
@@ -55,9 +64,11 @@ describe("ShowObjectsViewProvider", () => {
 	it("keeps Preset readiness false when an unrelated Group hydration finishes first", async () => {
 		const store = new ShowObjectsStore();
 		store.reset(SHOW_ID);
-		const presets = deferred<never[]>();
-		const loadCollection = vi.fn((_showId: string, kind: "group" | "preset") =>
-			kind === "group" ? Promise.resolve([]) : presets.promise,
+		const presets = deferred<ReturnType<typeof collectionSnapshot<never>>>();
+		const loadCollection = vi.fn((_showId: string, kind: ShowObjectKind) =>
+			kind === "group"
+				? Promise.resolve(collectionSnapshot([]))
+				: presets.promise,
 		);
 		render(
 			<ShowObjectsViewProvider
@@ -74,21 +85,22 @@ describe("ShowObjectsViewProvider", () => {
 
 		await waitFor(() => expect(store.isCollectionReady("group")).toBe(true));
 		expect(store.isCollectionReady("preset")).toBe(false);
-		presets.resolve([]);
+		presets.resolve(collectionSnapshot([]));
 		await waitFor(() => expect(store.isCollectionReady("preset")).toBe(true));
 	});
 
 	it("rejects late hydration and events from a replaced same-show authority", async () => {
 		const store = new ShowObjectsStore();
-		const oldLoad = deferred<
-			Array<{
+		const oldLoad = deferred<{
+			objects: Array<{
 				kind: "group";
 				id: string;
 				revision: number;
 				updated_at: string;
 				body: { name: string; fixtures: string[] };
-			}>
-		>();
+			}>;
+			showRevision: number;
+		}>();
 		const transport = new FakeTransport();
 		const replacement = {
 			kind: "group" as const,
@@ -100,7 +112,7 @@ describe("ShowObjectsViewProvider", () => {
 		const loadCollection = vi.fn(() =>
 			loadCollection.mock.calls.length === 1
 				? oldLoad.promise
-				: Promise.resolve([replacement]),
+				: Promise.resolve(collectionSnapshot([replacement], 9)),
 		);
 		const loadObject = vi.fn();
 		const view = (authorityKey: string) => (
@@ -123,13 +135,18 @@ describe("ShowObjectsViewProvider", () => {
 		await waitFor(() => expect(loadCollection).toHaveBeenCalledTimes(2));
 		await waitFor(() => expect(transport.subscriptions).toHaveLength(2));
 		await waitFor(() => expect(store.getSnapshot().groups).toEqual([replacement]));
-		oldLoad.resolve([
-			{
-				...replacement,
-				revision: 1,
-				body: { name: "Late hydration", fixtures: [] },
-			},
-		]);
+		oldLoad.resolve(
+			collectionSnapshot(
+				[
+					{
+						...replacement,
+						revision: 1,
+						body: { name: "Late hydration", fixtures: [] },
+					},
+				],
+				1,
+			),
+		);
 		transport.subscriptions[0].observer.message({
 			type: "event",
 			change: {
@@ -163,7 +180,9 @@ describe("ShowObjectsViewProvider", () => {
 			updated_at: "",
 			body: { name: "Front", fixtures: [] },
 		};
-		const loadCollection = vi.fn().mockResolvedValue([group]);
+		const loadCollection = vi
+			.fn()
+			.mockResolvedValue(collectionSnapshot([group]));
 		const loadObject = vi.fn();
 		render(
 			<ShowObjectsViewProvider
@@ -187,8 +206,8 @@ describe("ShowObjectsViewProvider", () => {
 		const store = new ShowObjectsStore();
 		store.reset(SHOW_ID);
 		const transport = new FakeTransport();
-		const loadCollection = vi.fn().mockResolvedValue([]);
-		const loadObject = vi.fn().mockResolvedValue(null);
+		const loadCollection = vi.fn().mockResolvedValue(collectionSnapshot([]));
+		const loadObject = vi.fn().mockResolvedValue(exactSnapshot(null));
 		const view = (active: boolean) => (
 			<ShowObjectsViewProvider
 				showId={SHOW_ID}
@@ -216,13 +235,15 @@ describe("ShowObjectsViewProvider", () => {
 		store.reset(SHOW_ID);
 		const transport = new FakeTransport();
 		const loadCollection = vi.fn();
-		const loadObject = vi.fn().mockResolvedValue({
-			kind: "group",
-			id: "1",
-			revision: 1,
-			updated_at: "",
-			body: { name: "Selected", fixtures: [] },
-		});
+		const loadObject = vi.fn().mockResolvedValue(
+			exactSnapshot({
+				kind: "group",
+				id: "1",
+				revision: 1,
+				updated_at: "",
+				body: { name: "Selected", fixtures: [] },
+			}),
+		);
 		render(
 			<ShowObjectsViewProvider
 				showId={SHOW_ID}

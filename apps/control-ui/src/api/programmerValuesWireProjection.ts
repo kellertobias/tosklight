@@ -117,7 +117,7 @@ function optionalMillis(
 	return value == null ? null : integerAt(value, `${path}.${key}`);
 }
 
-function decodeAttributeValue(value: unknown, path: string): AttributeValue {
+export function decodeAttributeValue(value: unknown, path: string): AttributeValue {
 	const attribute = exactRecordAt(value, path, ["kind", "value"]);
 	const kind = enumAt(attribute.kind, `${path}.kind`, [
 		"normalized",

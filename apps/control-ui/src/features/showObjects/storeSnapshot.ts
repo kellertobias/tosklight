@@ -6,13 +6,52 @@ import type {
 import { projectCollection } from "./storeProjection";
 import type { PendingMutation, ShowObjectsSnapshot } from "./storeTypes";
 
-export const ALL_COLLECTIONS = new Set<ShowObjectKind>(["group", "preset"]);
+export const ALL_COLLECTIONS = new Set<ShowObjectKind>([
+	"group",
+	"preset",
+	"cue_list",
+	"playback",
+	"playback_page",
+]);
 export const NO_COLLECTIONS = new Set<ShowObjectKind>();
-const GROUP_COLLECTION = new Set<ShowObjectKind>(["group"]);
-const PRESET_COLLECTION = new Set<ShowObjectKind>(["preset"]);
+const PROJECTED_COLLECTIONS: Record<ShowObjectKind, ReadonlySet<ShowObjectKind>> = {
+	group: new Set(["group"]),
+	preset: new Set(["preset"]),
+	cue_list: new Set(["cue_list"]),
+	playback: new Set(["playback"]),
+	playback_page: new Set(["playback_page"]),
+};
+
+export function emptyShowObjectCollections(): ShowObjectCollections {
+	return {
+		group: [],
+		preset: [],
+		cue_list: [],
+		playback: [],
+		playback_page: [],
+	};
+}
+
+export function initialShowObjectsSnapshot(): ShowObjectsSnapshot {
+	return {
+		showId: null,
+		authorityGeneration: 0,
+		showRevision: null,
+		eventSequence: null,
+		groups: [],
+		presets: [],
+		cueLists: [],
+		playbacks: [],
+		playbackPages: [],
+		readyCollections: new Set(),
+		pendingObjectKeys: new Set(),
+		status: "idle",
+		error: null,
+	};
+}
 
 export function projectedCollection(kind: ShowObjectKind) {
-	return kind === "group" ? GROUP_COLLECTION : PRESET_COLLECTION;
+	return PROJECTED_COLLECTIONS[kind];
 }
 
 export function createShowObjectsSnapshot(
@@ -40,6 +79,27 @@ export function createShowObjectsSnapshot(
 					pendingOperations,
 				) as ShowObject<"preset">[])
 			: previous.presets,
+		cueLists: projectKinds.has("cue_list")
+			? (projectCollection(
+					"cue_list",
+					authoritative.cue_list,
+					pendingOperations,
+				) as ShowObject<"cue_list">[])
+			: previous.cueLists,
+		playbacks: projectKinds.has("playback")
+			? (projectCollection(
+					"playback",
+					authoritative.playback,
+					pendingOperations,
+				) as ShowObject<"playback">[])
+			: previous.playbacks,
+		playbackPages: projectKinds.has("playback_page")
+			? (projectCollection(
+					"playback_page",
+					authoritative.playback_page,
+					pendingOperations,
+				) as ShowObject<"playback_page">[])
+			: previous.playbackPages,
 		pendingObjectKeys: new Set(pendingKeys),
 		...changes,
 	};

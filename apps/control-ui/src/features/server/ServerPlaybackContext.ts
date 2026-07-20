@@ -85,9 +85,4 @@ export interface ServerPlaybackContext {
 		revision: number,
 	) => Promise<boolean>;
 	deleteOutputRoute: (id: string, revision: number) => Promise<boolean>;
-	storePlayback: (
-		slot: number,
-		cueListId?: string,
-		pageNumber?: number,
-	) => Promise<void>;
 }

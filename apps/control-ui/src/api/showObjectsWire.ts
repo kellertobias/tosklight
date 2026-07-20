@@ -5,6 +5,7 @@ import type {
 	ShowObjectsEventMessage,
 } from "../features/showObjects/contracts";
 import { WireValidationError } from "./wireValidation";
+import { decodeShowObjectBody } from "./showObjectBodyWire";
 
 function recordAt(value: unknown, path: string): Record<string, unknown> {
 	if (!value || typeof value !== "object" || Array.isArray(value))
@@ -15,12 +16,6 @@ function recordAt(value: unknown, path: string): Record<string, unknown> {
 function stringAt(value: unknown, path: string): string {
 	if (typeof value !== "string" || !value)
 		throw new WireValidationError(path, "non-empty string", value);
-	return value;
-}
-
-function plainStringAt(value: unknown, path: string): string {
-	if (typeof value !== "string")
-		throw new WireValidationError(path, "string", value);
 	return value;
 }
 
@@ -61,22 +56,11 @@ function validateRelatedObjects(event: Record<string, unknown>) {
 
 function supportedKindAt(value: unknown, path: string): ShowObjectKind | null {
 	const kind = stringAt(value, path);
-	return kind === "group" || kind === "preset" ? kind : null;
-}
-
-function validateGroupBody(value: unknown, path: string) {
-	const body = recordAt(value, path);
-	if (!Array.isArray(body.fixtures) || body.fixtures.some((id) => typeof id !== "string"))
-		throw new WireValidationError(`${path}.fixtures`, "string array", body.fixtures);
-	return body;
-}
-
-function validatePresetBody(value: unknown, path: string) {
-	const body = recordAt(value, path);
-	plainStringAt(body.name, `${path}.name`);
-	integerAt(body.number, `${path}.number`);
-	recordAt(body.values, `${path}.values`);
-	return body;
+	return ["group", "preset", "cue_list", "playback", "playback_page"].includes(
+		kind,
+	)
+		? (kind as ShowObjectKind)
+		: null;
 }
 
 function decodeChange(value: unknown, path: string): ShowObjectChange | null {
@@ -89,18 +73,17 @@ function decodeChange(value: unknown, path: string): ShowObjectChange | null {
 		throw new WireValidationError(`${path}.body`, "null deletion body", body);
 	if (!deleted && body == null)
 		throw new WireValidationError(`${path}.body`, `${kind} body`, body);
+	const objectId = stringAt(change.object_id, `${path}.object_id`);
 	return {
 		kind,
-		objectId: stringAt(change.object_id, `${path}.object_id`),
+		objectId,
 		objectRevision: integerAt(
 			change.object_revision,
 			`${path}.object_revision`,
 		),
 		body: deleted
 			? null
-			: kind === "group"
-				? validateGroupBody(body, `${path}.body`)
-				: validatePresetBody(body, `${path}.body`),
+			: decodeShowObjectBody(kind, body, `${path}.body`, objectId),
 		deleted,
 	} as ShowObjectChange;
 }

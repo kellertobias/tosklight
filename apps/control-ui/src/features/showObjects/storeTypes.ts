@@ -12,6 +12,9 @@ export interface ShowObjectsSnapshot {
 	eventSequence: number | null;
 	groups: readonly ShowObject<"group">[];
 	presets: readonly ShowObject<"preset">[];
+	cueLists: readonly ShowObject<"cue_list">[];
+	playbacks: readonly ShowObject<"playback">[];
+	playbackPages: readonly ShowObject<"playback_page">[];
 	readyCollections: ReadonlySet<ShowObjectKind>;
 	pendingObjectKeys: ReadonlySet<string>;
 	status: "idle" | "loading" | "ready" | "error";

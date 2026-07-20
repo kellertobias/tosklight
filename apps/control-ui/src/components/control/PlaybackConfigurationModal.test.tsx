@@ -25,6 +25,10 @@ const mocks = vi.hoisted(() => ({
 			{ id: "cue-2", name: "Encore" },
 		],
 	},
+	scopedCueLists: [
+		{ id: "cue-1", name: "Main sequence" },
+		{ id: "cue-2", name: "Encore" },
+	],
 	groups: [{ id: "group-1", body: { name: "Front Wash" } }],
 }));
 
@@ -37,6 +41,16 @@ vi.mock("../../api/ServerContext", () => ({
 }));
 vi.mock("../../features/server/useShowObjectsState", () => ({
 	useGroups: () => mocks.groups,
+}));
+vi.mock("../../features/showObjects/ShowObjectsState", () => ({
+	useCueLists: () =>
+		mocks.scopedCueLists.map((body) => ({
+			kind: "cue_list",
+			id: body.id,
+			revision: 1,
+			updated_at: "",
+			body,
+		})),
 }));
 
 const base: PlaybackDefinition = {
@@ -61,6 +75,10 @@ beforeEach(() => {
 	mocks.clearPlaybackSlot.mockReset().mockResolvedValue(true);
 	mocks.error = null;
 	mocks.playbacks.cue_lists = [
+		{ id: "cue-1", name: "Main sequence" },
+		{ id: "cue-2", name: "Encore" },
+	];
+	mocks.scopedCueLists = [
 		{ id: "cue-1", name: "Main sequence" },
 		{ id: "cue-2", name: "Encore" },
 	];
@@ -364,13 +382,25 @@ describe("PlaybackConfigurationModal layout and persistence", () => {
 	});
 
 	it("uses the same reusable row geometry for an empty option list", () => {
-		mocks.playbacks.cue_lists = [];
+		mocks.scopedCueLists = [];
 		show();
 		const empty = screen.getByRole("status");
 		const option = screen.getByRole("radio", { name: "Cue List" });
 		expect(empty).toHaveTextContent("No options are available");
 		expect(empty).toHaveClass("ui-selection-list-option");
 		expect(option).toHaveClass("ui-selection-list-option");
+	});
+
+	it("lists scoped Cuelists when the legacy Playback snapshot is stale", () => {
+		mocks.playbacks.cue_lists = [{ id: "legacy", name: "Legacy" }];
+		mocks.scopedCueLists = [{ id: "scoped", name: "Scoped authority" }];
+
+		show();
+
+		expect(
+			screen.getByRole("radio", { name: "Scoped authority" }),
+		).toBeInTheDocument();
+		expect(screen.queryByRole("radio", { name: "Legacy" })).toBeNull();
 	});
 
 	it("renders exactly one control and no fader for a virtual topology", () => {

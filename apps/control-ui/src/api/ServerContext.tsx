@@ -15,6 +15,7 @@ import {
 } from "../features/server/useShowData";
 import { PresetRecordingProvider } from "../features/presetRecording/PresetRecordingProvider";
 import { GroupRecordingProvider } from "../features/groupRecording/GroupRecordingProvider";
+import { CueRecordingProvider } from "../features/cueRecording/CueRecordingProvider";
 import type { SessionRole } from "../features/session/ownership";
 import { ShowObjectsViewProvider } from "../features/showObjects/ShowObjectsView";
 import { ServerProgrammingProviders } from "./ServerProgrammingProviders";
@@ -101,7 +102,7 @@ export function ServerProvider({
 				store={state.showObjectsStore}
 				transport={boundaries.showObjectsTransport}
 				loadCollection={boundaries.loadShowObjectCollection}
-				loadObject={boundaries.loadShowObject}
+				loadObject={boundaries.loadShowObjectSnapshot}
 				onError={boundaries.reportShowObjectError}
 			>
 				<GroupRecordingProvider
@@ -118,19 +119,29 @@ export function ServerProvider({
 						loadPreset={boundaries.loadPresetForRepair}
 						onError={boundaries.reportPresetRecordingError}
 					>
-						<ServerProgrammingProviders
-							state={state}
-							boundaries={boundaries}
-							value={value}
+						<CueRecordingProvider
+							showId={state.bootstrap?.active_show?.id ?? null}
+							store={state.showObjectsStore}
+							playbackRuntimeStore={state.playbackRuntimeStore}
+							transport={boundaries.cueRecordingTransport}
+							selectedPlayback={boundaries.selectedCueRecordingPlayback}
+							loadObject={boundaries.loadShowObject}
+							onError={boundaries.reportCueRecordingError}
 						>
-							<SelectiveImportProvider source={selectiveImportSource}>
-								<FilesProvider source={fileSource}>
-									<ScreensProvider source={screenSource}>
-										{children}
-									</ScreensProvider>
-								</FilesProvider>
-							</SelectiveImportProvider>
-						</ServerProgrammingProviders>
+							<ServerProgrammingProviders
+								state={state}
+								boundaries={boundaries}
+								value={value}
+							>
+								<SelectiveImportProvider source={selectiveImportSource}>
+									<FilesProvider source={fileSource}>
+										<ScreensProvider source={screenSource}>
+											{children}
+										</ScreensProvider>
+									</FilesProvider>
+								</SelectiveImportProvider>
+							</ServerProgrammingProviders>
+						</CueRecordingProvider>
 					</PresetRecordingProvider>
 				</GroupRecordingProvider>
 			</ShowObjectsViewProvider>

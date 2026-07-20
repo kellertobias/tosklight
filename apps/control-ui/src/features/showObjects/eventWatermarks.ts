@@ -58,6 +58,21 @@ export class ShowObjectEventWatermarks {
 		);
 	}
 
+	sealExactResponse(
+		kind: ShowObjectKind,
+		objectId: string,
+		minimum?: number | null,
+	) {
+		if (minimum == null) return;
+		const key = objectKey(kind, objectId);
+		this.objectSequences.set(
+			key,
+			Math.max(this.objectSequences.get(key) ?? 0, minimum),
+		);
+		if ((this.objectFloors.get(key) ?? 0) <= minimum)
+			this.objectFloors.delete(key);
+	}
+
 	acceptChange(kind: ShowObjectKind, objectId: string, sequence: number) {
 		const key = objectKey(kind, objectId);
 		const kindFloor = this.kindFloors.get(kind) ?? 0;

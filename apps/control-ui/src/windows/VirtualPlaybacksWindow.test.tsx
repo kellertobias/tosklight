@@ -19,6 +19,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../state/AppContext", () => ({ useApp: () => ({ state: mocks.state, dispatch: mocks.dispatch }) }));
 vi.mock("../api/ServerContext", () => ({ useServer: () => ({ playbacks: mocks.playbacks, groups: [], poolPlaybackAction: mocks.poolPlaybackAction, savePlaybackSlot: mocks.savePlaybackSlot, clearPlaybackSlot: mocks.clearPlaybackSlot, readVirtualPlaybackExclusionZones: mocks.readVirtualPlaybackExclusionZones, saveVirtualPlaybackExclusionZones: mocks.saveVirtualPlaybackExclusionZones, error: mocks.error }) }));
 vi.mock("../features/server/useShowObjectsState", () => ({ useGroups: () => [] }));
+vi.mock("../features/showObjects/ShowObjectsState", () => ({
+  useCueLists: () => mocks.playbacks.cue_lists.map((body) => ({ kind: "cue_list", id: body.id, revision: 1, updated_at: "", body })),
+}));
 
 afterEach(cleanup);
 beforeEach(() => {
