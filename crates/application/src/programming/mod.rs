@@ -2,6 +2,7 @@ mod capture_mode_projection;
 mod command;
 mod event;
 mod lifecycle;
+mod lifecycle_projection;
 mod operation;
 mod ports;
 mod preload_values_action;
@@ -22,6 +23,10 @@ pub use command::{
 pub use event::ProgrammingInteractionChange;
 pub use lifecycle::{
     ProgrammingLifecycleCompletion, ProgrammingLifecycleResult, ProgrammingLifecycleTarget,
+};
+pub use lifecycle_projection::{
+    ProgrammingLifecycleChange, ProgrammingLifecycleDelta, ProgrammingLifecycleProgrammer,
+    ProgrammingLifecycleProjection, ProgrammingLifecycleSession, ProgrammingLifecycleSnapshot,
 };
 pub use operation::{
     ProgrammingInteractionResult, ProgrammingSelectionRefreshEvent,

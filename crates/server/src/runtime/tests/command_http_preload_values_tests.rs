@@ -72,7 +72,7 @@ async fn preload_values_batch_is_atomic_revisioned_replay_safe_and_sparse_on_no_
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(response.headers()[header::ETAG], "\"1\"");
     let changed = json(response).await;
-    assert_preload_values_changed(&changed, "preload-batch", 1, 2);
+    assert_preload_values_changed(&changed, "preload-batch", 1, 3);
     assert_eq!(changed["capture_mode_revision"], 1);
     assert_eq!(changed["projection"]["fixture_values"][0]["fade"], true);
     assert_eq!(
@@ -86,8 +86,8 @@ async fn preload_values_batch_is_atomic_revisioned_replay_safe_and_sparse_on_no_
 
     let replay = json(scenario.preload_values_action(batch).await).await;
     assert_eq!(replay["replayed"], true);
-    assert_preload_values_changed(&replay, "preload-batch", 1, 2);
-    assert_eq!(scenario.state.application_events.latest_sequence(), 2);
+    assert_preload_values_changed(&replay, "preload-batch", 1, 3);
+    assert_eq!(scenario.state.application_events.latest_sequence(), 3);
 
     let exact = json(
         scenario
@@ -110,7 +110,7 @@ async fn preload_values_batch_is_atomic_revisioned_replay_safe_and_sparse_on_no_
     assert_eq!(exact["revision"], 1);
     assert!(exact.get("projection").is_none());
     assert!(exact.get("event_sequence").is_none());
-    assert_eq!(scenario.state.application_events.latest_sequence(), 2);
+    assert_eq!(scenario.state.application_events.latest_sequence(), 3);
 
     let conflict = scenario
         .preload_values_action(preload_fixture_request(
@@ -156,7 +156,7 @@ async fn preload_values_share_one_user_across_desks_and_reject_foreign_actions()
         .await;
     assert_eq!(peer.status(), StatusCode::OK);
     let peer = json(peer).await;
-    assert_preload_values_changed(&peer, "peer-preload", 1, 2);
+    assert_preload_values_changed(&peer, "peer-preload", 1, 4);
     let snapshot = json(scenario.preload_values_snapshot().await).await;
     assert_eq!(snapshot["projection"]["revision"], 1);
     assert_eq!(snapshot["projection"]["fixture_values"].as_array().unwrap().len(), 1);
@@ -267,7 +267,7 @@ async fn preload_values_fixture_and_group_releases_are_individual_atomic_actions
             .await,
     )
     .await;
-    assert_preload_values_changed(&fixture_release, "release-preload-fixture", 2, 3);
+    assert_preload_values_changed(&fixture_release, "release-preload-fixture", 2, 4);
     assert!(
         fixture_release["projection"]["fixture_values"]
             .as_array()
@@ -297,7 +297,7 @@ async fn preload_values_fixture_and_group_releases_are_individual_atomic_actions
             .await,
     )
     .await;
-    assert_preload_values_changed(&group_release, "release-preload-group", 3, 4);
+    assert_preload_values_changed(&group_release, "release-preload-group", 3, 5);
     assert!(
         group_release["projection"]["group_values"]
             .as_array()

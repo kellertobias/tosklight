@@ -9,6 +9,7 @@ use light_application::{
     PlaybackCueTransition as AppTransition, PlaybackRuntimeChange, PlaybackRuntimeIdentity,
     PlaybackRuntimeProjection, PlaybackShowScope, PlaybackTargetProjection,
     PlaybackTransitionCause, ProgrammingCaptureModeChange, ProgrammingCaptureModeProjection,
+    ProgrammingLifecycleChange, ProgrammingLifecycleProgrammer, ProgrammingLifecycleSession,
     ProgrammingPreloadValuesChange, ProgrammingPreloadValuesProjection, ProgrammingValuesChange,
     ProgrammingValuesProjection, publish_automatic_playback_events,
 };
@@ -258,6 +259,82 @@ fn programmer_values_objects_are_limited_to_the_authenticated_user() {
 }
 
 #[test]
+fn programmer_lifecycle_is_the_only_aggregate_programmer_object() {
+    let bus = EventBus::new(8);
+    let session = event_session(Uuid::from_u128(1), Uuid::from_u128(11));
+    let lifecycle = wire::EventObject {
+        capability: wire::EventCapability::Programmer,
+        id: "programming-lifecycle".into(),
+    };
+    assert!(
+        EventStream::subscribe(&bus, &session, programmer_subscription(lifecycle, None)).is_ok()
+    );
+
+    for id in ["programming-lifecycle:foreign", "programming-unknown"] {
+        let request = programmer_subscription(
+            wire::EventObject {
+                capability: wire::EventCapability::Programmer,
+                id: id.into(),
+            },
+            None,
+        );
+        assert!(EventStream::subscribe(&bus, &session, request).is_err());
+    }
+}
+
+#[tokio::test]
+async fn lifecycle_aggregate_delivers_foreign_safe_rows_through_the_wire_adapter() {
+    let bus = EventBus::new(8);
+    let session = event_session(Uuid::from_u128(1), Uuid::from_u128(11));
+    let object = wire::EventObject {
+        capability: wire::EventCapability::Programmer,
+        id: "programming-lifecycle".into(),
+    };
+    let mut stream = EventStream::subscribe(
+        &bus,
+        &session,
+        programmer_subscription(object.clone(), Some(0)),
+    )
+    .unwrap();
+    let foreign_user = UserId(Uuid::from_u128(12));
+    let change = ProgrammingLifecycleChange::upsert(
+        1,
+        ProgrammingLifecycleProgrammer {
+            programmer_id: light_core::ProgrammerId(Uuid::from_u128(20)),
+            user_id: foreign_user,
+            connected: true,
+            selected_fixture_count: 3,
+            normal_value_count: 2,
+            sessions: vec![ProgrammingLifecycleSession {
+                session_id: light_core::SessionId(Uuid::from_u128(30)),
+            }],
+        },
+    );
+    bus.publish(EventDraft::programming_lifecycle_changed(
+        change,
+        EventSource::Runtime,
+        None,
+    ));
+
+    let Some(wire::EventServerMessage::Event { event }) = stream.next().await else {
+        panic!("expected the installation lifecycle event")
+    };
+    assert_eq!(event.object, Some(object));
+    let wire::EventPayload::ProgrammingLifecycleChanged { change } = event.payload else {
+        panic!("expected a Programmer lifecycle payload")
+    };
+    assert_eq!(change.revision, 1);
+    let light_wire::v2::programmer_lifecycle::ProgrammingLifecycleDelta::Upsert { programmer } =
+        change.delta
+    else {
+        panic!("expected the foreign safe row")
+    };
+    assert_eq!(programmer.user_id, foreign_user.0);
+    assert_eq!(programmer.normal_value_count, 2);
+    assert_eq!(programmer.selected_fixture_count, 3);
+}
+
+#[test]
 fn programmer_capture_mode_objects_are_limited_to_the_authenticated_user() {
     let bus = EventBus::new(8);
     let user_id = Uuid::from_u128(11);
@@ -467,6 +544,22 @@ fn subscription(
             capabilities: vec![wire::EventCapability::Playback],
             classes: vec![wire::EventClass::Transition],
             objects: object.into_iter().collect(),
+        },
+        after_sequence,
+        capacity: Some(4),
+        rate_limits: Vec::new(),
+    })
+}
+
+fn programmer_subscription(
+    object: wire::EventObject,
+    after_sequence: Option<u64>,
+) -> Result<wire::EventClientMessage, String> {
+    Ok(wire::EventClientMessage::Subscribe {
+        filter: wire::EventSubscriptionFilter {
+            capabilities: vec![wire::EventCapability::Programmer],
+            classes: vec![wire::EventClass::Projection],
+            objects: vec![object],
         },
         after_sequence,
         capacity: Some(4),

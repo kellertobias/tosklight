@@ -167,6 +167,18 @@ impl CommandHttpScenario {
             .unwrap()
     }
 
+    async fn lifecycle_snapshot(&self, token: Option<&str>) -> Response {
+        let mut request = Request::get("/api/v2/programmer-lifecycle/snapshot");
+        if let Some(token) = token {
+            request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
+        }
+        self.app
+            .clone()
+            .oneshot(request.body(Body::empty()).unwrap())
+            .await
+            .unwrap()
+    }
+
     async fn values_action(&self, input: serde_json::Value) -> Response {
         self.values_action_for(self.session.user.id.0, &self.token, input)
             .await

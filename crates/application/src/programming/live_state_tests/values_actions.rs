@@ -160,7 +160,7 @@ fn capture_precondition_is_atomic_and_successful_replay_survives_mode_changes() 
             setup.registry.arm_preload(setup.session, true)
         })
         .unwrap();
-    assert_eq!(mode_change.capture_mode_event_sequence, Some(2));
+    assert_eq!(mode_change.capture_mode_event_sequence, Some(3));
     assert_eq!(setup.registry.capture_mode_revision(setup.user), 1);
     super::super::values_projection::reset_projection_read_count();
 
@@ -420,7 +420,7 @@ fn exact_and_interaction_only_actions_do_not_materialize_values() {
         exact.outcome,
         ProgrammingValuesOutcome::NoChange { revision: 1 }
     );
-    assert_eq!(setup.events.latest_sequence(), 1);
+    assert_eq!(setup.events.latest_sequence(), 2);
     assert_eq!(super::super::values_projection::projection_read_count(), 0);
     assert_eq!(*setup.ports.persisted.lock(), vec!["programmer.values"]);
 
@@ -443,7 +443,7 @@ fn exact_and_interaction_only_actions_do_not_materialize_values() {
         interaction_only.outcome,
         ProgrammingValuesOutcome::NoChange { revision: 1 }
     );
-    assert_eq!(interaction_only.interaction_event_sequence, Some(2));
+    assert_eq!(interaction_only.interaction_event_sequence, Some(3));
     assert_eq!(
         setup.values_events(setup.context.desk_id, setup.user).len(),
         1
@@ -469,7 +469,7 @@ fn values_replay_precedes_revision_checks_and_failures_do_not_mutate() {
     assert!(!first.replayed);
     assert!(replayed.replayed);
     assert_eq!(replayed.outcome, first.outcome);
-    assert_eq!(setup.events.latest_sequence(), 1);
+    assert_eq!(setup.events.latest_sequence(), 2);
     assert_eq!(*setup.ports.persisted.lock(), vec!["programmer.values"]);
 
     let reused = setup.service.handle_values(
@@ -503,7 +503,7 @@ fn values_replay_precedes_revision_checks_and_failures_do_not_mutate() {
         Some(1)
     );
     assert_eq!(setup.registry.get(setup.session).unwrap().undo.len(), 1);
-    assert_eq!(setup.events.latest_sequence(), 1);
+    assert_eq!(setup.events.latest_sequence(), 2);
     assert_eq!(*setup.ports.persisted.lock(), vec!["programmer.values"]);
 }
 
@@ -732,5 +732,5 @@ fn same_user_desks_share_values_while_other_users_and_forged_contexts_are_isolat
         )
         .unwrap_err();
     assert_eq!(action_error.kind, ActionErrorKind::Forbidden);
-    assert_eq!(setup.events.latest_sequence(), 3);
+    assert_eq!(setup.events.latest_sequence(), 6);
 }

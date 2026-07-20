@@ -98,6 +98,7 @@ fn target_user_replacement_is_monotonic_exact_once_and_invalidates_old_values_re
             registry.arm_preload(second_session, true)
         })
         .unwrap();
+    let old_programmer_id = registry.get(first_session).unwrap().id;
     let cursor = events.latest_sequence();
 
     let result = service
@@ -131,16 +132,32 @@ fn target_user_replacement_is_monotonic_exact_once_and_invalidates_old_values_re
     let EventReplay::Events(published) = events.replay(cursor, &EventFilter::default()) else {
         panic!("lifecycle events should remain replayable")
     };
-    assert_eq!(published.len(), 2);
+    assert_eq!(published.len(), 3);
     assert!(published.iter().all(|event| event.desk_id.is_none()));
-    assert!(published.iter().all(|event| {
-        event.source == EventSource::Action(ActionSource::Http)
-            && event
-                .object
-                .as_ref()
-                .and_then(EventObject::programming_user_id)
-                == Some(target_user.0)
-    }));
+    assert!(
+        published
+            .iter()
+            .all(|event| event.source == EventSource::Action(ActionSource::Http))
+    );
+    let lifecycle = published
+        .iter()
+        .filter_map(|event| match &event.payload {
+            ApplicationEvent::Programming(ProgrammingEvent::LifecycleChanged(change)) => {
+                Some(change)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(lifecycle.len(), 1);
+    let ProgrammingLifecycleDelta::Upsert { programmer } = &lifecycle[0].delta else {
+        panic!("replacement should upsert the new Programmer identity")
+    };
+    assert_eq!(programmer.user_id, target_user);
+    assert_ne!(programmer.programmer_id, old_programmer_id);
+    assert_eq!(
+        programmer.programmer_id,
+        registry.get(first_session).unwrap().id
+    );
 
     let stale = service.handle_values(old_action, &ports).unwrap_err();
     assert_eq!(stale.kind, ActionErrorKind::Conflict);

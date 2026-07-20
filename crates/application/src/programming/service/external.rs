@@ -31,10 +31,11 @@ impl ProgrammingService {
         user_id: UserId,
         operation: impl FnOnce() -> T,
     ) -> Result<ProgrammingInteractionResult<T>, ActionError> {
+        let lifecycle_before = self.active_lifecycle_programmer(user_id);
         let before = super::Snapshot::read(&self.programmers, context.desk_id, session, user_id)?;
         let output = operation();
         let after = super::Snapshot::read(&self.programmers, context.desk_id, session, user_id)?;
-        Ok(ProgrammingInteractionResult {
+        let result = ProgrammingInteractionResult {
             output,
             event_sequence: self.publish_interaction(
                 context,
@@ -68,6 +69,8 @@ impl ProgrammingService {
                     after.preload_values_generation,
                 )?,
             ),
-        })
+        };
+        self.publish_lifecycle_for_context(context, lifecycle_before);
+        Ok(result)
     }
 }

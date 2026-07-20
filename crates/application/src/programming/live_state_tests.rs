@@ -17,6 +17,8 @@ use uuid::Uuid;
 mod capture_mode;
 #[path = "live_state_tests/lifecycle.rs"]
 mod lifecycle;
+#[path = "live_state_tests/lifecycle_publication.rs"]
+mod lifecycle_publication;
 #[path = "live_state_tests/preload_values_actions.rs"]
 mod preload_values_actions;
 #[path = "live_state_tests/routing.rs"]
@@ -159,10 +161,10 @@ fn handle_publishes_one_sparse_authoritative_change_per_interaction() {
     });
     assert_eq!(selected.interaction_event_sequence, Some(2));
 
-    let EventReplay::Events(events) = setup
-        .events
-        .replay(0, &EventFilter::for_desk(setup.context.desk_id))
-    else {
+    let EventReplay::Events(events) = setup.events.replay(
+        0,
+        &EventFilter::for_desk(setup.context.desk_id).with_capability(EventCapability::Desk),
+    ) else {
         panic!("retained interaction events should be replayable")
     };
     assert_eq!(events.len(), 2);
@@ -458,7 +460,7 @@ fn external_interaction_and_handle_share_the_private_desk_gate() {
     let completed = operation.join().unwrap().unwrap();
     let result = worker.join().unwrap().unwrap();
     assert_eq!(completed.event_sequence, Some(1));
-    assert_eq!(result.interaction_event_sequence, Some(2));
+    assert_eq!(result.interaction_event_sequence, Some(3));
 }
 
 #[test]

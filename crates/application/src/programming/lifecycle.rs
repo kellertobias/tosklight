@@ -90,6 +90,7 @@ impl ProgrammingService {
         operation: impl FnOnce() -> ProgrammingLifecycleCompletion<T>,
     ) -> Result<ProgrammingLifecycleResult<T>, ActionError> {
         self.assert_lifecycle_target(&target)?;
+        let lifecycle_before = self.active_lifecycle_programmer(target.user_id);
         let before_values = ProgrammingValuesContent::read(
             &self.programmers,
             target.current_session_id,
@@ -122,6 +123,7 @@ impl ProgrammingService {
         let values_event_sequence = self.publish_values(actor_context, values);
         let preload_values_event_sequence =
             self.publish_preload_values(actor_context, preload_values);
+        self.publish_lifecycle_for_user(actor_context, target.user_id, lifecycle_before);
         Ok(ProgrammingLifecycleResult {
             output: completion.output,
             values_revision: self.programmers.normal_values_revision(target.user_id),

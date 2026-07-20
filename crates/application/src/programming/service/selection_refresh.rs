@@ -51,42 +51,76 @@ impl ProgrammingService {
             .map(|target| target.desk_id)
             .collect::<Vec<_>>();
         let targets = normalized_targets(locked_targets.iter().copied().chain(owned_target));
-        self.with_desk_gates(&desk_ids, || {
-            let before = targets
-                .iter()
-                .filter_map(|target| {
-                    self.programmers
-                        .selection(target.interaction_id)
-                        .map(|selection| (*target, selection.revision))
-                })
-                .collect::<Vec<_>>();
-            let output = operation();
-            let events = before
-                .into_iter()
-                .filter_map(|(target, before_revision)| {
-                    let selection = self.programmers.selection(target.interaction_id)?;
-                    if selection.revision == before_revision {
-                        return None;
-                    }
-                    let change = ProgrammingInteractionChange::from_components(
-                        target.desk_id,
-                        None,
-                        Some(selection),
-                    )?;
-                    let event_sequence = self.publish_selection_refresh(
-                        context,
-                        change,
-                        Some(target.desk_id)
-                            == owned_target.map(|owned_target| owned_target.desk_id),
-                    );
-                    Some(ProgrammingSelectionRefreshEvent {
-                        desk_id: target.desk_id,
-                        event_sequence,
-                    })
-                })
-                .collect();
-            ProgrammingSelectionRefreshResult { output, events }
+        let mut users = targets
+            .iter()
+            .flat_map(|target| {
+                self.programmers
+                    .lifecycle_users_for_interaction(target.interaction_id)
+            })
+            .collect::<Vec<_>>();
+        users.sort_unstable_by_key(|user| user.0);
+        users.dedup();
+        self.programmers.with_users_serialized(users.clone(), || {
+            self.with_desk_gates(&desk_ids, || {
+                self.run_locked_selection_refresh(
+                    context,
+                    owned_target,
+                    &targets,
+                    &users,
+                    operation,
+                )
+            })
         })
+    }
+
+    fn run_locked_selection_refresh<T>(
+        &self,
+        context: &ActionContext,
+        owned_target: Option<ProgrammingSelectionTarget>,
+        targets: &[ProgrammingSelectionTarget],
+        users: &[light_core::UserId],
+        operation: impl FnOnce() -> T,
+    ) -> ProgrammingSelectionRefreshResult<T> {
+        let lifecycle_before = users
+            .iter()
+            .map(|user| (*user, self.active_lifecycle_programmer(*user)))
+            .collect::<Vec<_>>();
+        let before = targets
+            .iter()
+            .filter_map(|target| {
+                self.programmers
+                    .selection(target.interaction_id)
+                    .map(|selection| (*target, selection.revision))
+            })
+            .collect::<Vec<_>>();
+        let output = operation();
+        let events = before
+            .into_iter()
+            .filter_map(|(target, before_revision)| {
+                let selection = self.programmers.selection(target.interaction_id)?;
+                if selection.revision == before_revision {
+                    return None;
+                }
+                let change = ProgrammingInteractionChange::from_components(
+                    target.desk_id,
+                    None,
+                    Some(selection),
+                )?;
+                let event_sequence = self.publish_selection_refresh(
+                    context,
+                    change,
+                    Some(target.desk_id) == owned_target.map(|owner| owner.desk_id),
+                );
+                Some(ProgrammingSelectionRefreshEvent {
+                    desk_id: target.desk_id,
+                    event_sequence,
+                })
+            })
+            .collect();
+        for (user, before) in lifecycle_before {
+            self.publish_lifecycle_for_user(context, user, before);
+        }
+        ProgrammingSelectionRefreshResult { output, events }
     }
 }
 

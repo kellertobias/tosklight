@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProgrammingLifecycleSnapshot",
+  "type": "object",
+  "properties": {
+    "cursor": {
+      "$ref": "#/$defs/EventSnapshotCursor"
+    },
+    "projection": {
+      "$ref": "#/$defs/ProgrammingLifecycleProjection"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "cursor",
+    "projection"
+  ],
+  "$defs": {
+    "EventSnapshotCursor": {
+      "type": "object",
+      "properties": {
+        "sequence": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "sequence"
+      ]
+    },
+    "ProgrammingLifecycleProgrammer": {
+      "type": "object",
+      "properties": {
+        "connected": {
+          "type": "boolean"
+        },
+        "normal_value_count": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "programmer_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "selected_fixture_count": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "sessions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProgrammingLifecycleSession"
+          }
+        },
+        "user_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "programmer_id",
+        "user_id",
+        "connected",
+        "selected_fixture_count",
+        "normal_value_count",
+        "sessions"
+      ]
+    },
+    "ProgrammingLifecycleProjection": {
+      "type": "object",
+      "properties": {
+        "programmers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProgrammingLifecycleProgrammer"
+          }
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "revision",
+        "programmers"
+      ]
+    },
+    "ProgrammingLifecycleSession": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "session_id"
+      ]
+    }
+  }
+}

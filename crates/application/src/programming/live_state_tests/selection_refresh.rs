@@ -77,7 +77,10 @@ fn shared_selection_refresh_publishes_changed_desks_once_in_uuid_order() {
             .collect::<Vec<_>>(),
         vec![1, 2]
     );
-    let EventReplay::Events(published) = events.replay(0, &EventFilter::default()) else {
+    let EventReplay::Events(published) = events.replay(
+        0,
+        &EventFilter::default().with_capability(EventCapability::Desk),
+    ) else {
         panic!("selection refresh events should remain replayable")
     };
     assert_eq!(published.len(), 2);
@@ -93,6 +96,15 @@ fn shared_selection_refresh_publishes_changed_desks_once_in_uuid_order() {
         };
         assert_eq!(change.selection().unwrap().selected, vec![first, second]);
     }
+    let EventReplay::Events(lifecycle) = events.replay(
+        0,
+        &EventFilter::default().with_object(EventObject::programming_lifecycle()),
+    ) else {
+        panic!("selection counts should publish lifecycle deltas")
+    };
+    assert_eq!(lifecycle.len(), 2);
+    assert_eq!(lifecycle[0].sequence, 3);
+    assert_eq!(lifecycle[1].sequence, 4);
 }
 
 #[test]
@@ -208,7 +220,7 @@ fn owned_refresh_publishes_inside_outer_interaction_without_a_duplicate() {
     assert_eq!(completed.output.events.len(), 1);
     assert_eq!(completed.output.events[0].event_sequence, 1);
     assert_eq!(completed.event_sequence, None);
-    assert_eq!(setup.events.latest_sequence(), 1);
+    assert_eq!(setup.events.latest_sequence(), 2);
     assert_eq!(
         registry.selection(session).unwrap().selected,
         vec![first, second]

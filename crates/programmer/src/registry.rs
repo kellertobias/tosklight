@@ -94,6 +94,23 @@ impl ProgrammerRegistry {
         operation()
     }
 
+    /// Serialize one transition across a deterministic set of user authorities.
+    pub fn with_users_serialized<R>(
+        &self,
+        users: impl IntoIterator<Item = UserId>,
+        operation: impl FnOnce() -> R,
+    ) -> R {
+        let mut users = users.into_iter().collect::<Vec<_>>();
+        users.sort_unstable_by_key(|user| user.0);
+        users.dedup();
+        let gates = users
+            .into_iter()
+            .map(|user| self.mutation_gate_for_user(user))
+            .collect::<Vec<_>>();
+        let _guards = gates.iter().map(|gate| gate.lock()).collect::<Vec<_>>();
+        operation()
+    }
+
     pub(crate) fn mutation_gate(&self, session: SessionId) -> Arc<ReentrantMutex<()>> {
         let state_key = self.key(session);
         let user_id = self

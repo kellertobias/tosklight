@@ -45,6 +45,7 @@ pub(crate) fn router() -> Router<AppState> {
         )
         .layer(DefaultBodyLimit::max(32 * 1024));
     command_line
+        .merge(super::lifecycle_routes::router())
         .merge(super::preload_values_routes::router())
         .merge(super::selection_routes::router())
         .merge(super::values_routes::router())

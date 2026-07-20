@@ -66,6 +66,7 @@ impl ProgrammingService {
         revision_before: u64,
         capture_mode_revision: u64,
     ) -> Result<ProgrammingValuesResult, ActionError> {
+        let lifecycle_before = self.active_lifecycle_programmer(user_id);
         let before = Snapshot::read(&self.programmers, action.context.desk_id, session, user_id)?;
         let mutations = action.command.command.mutations();
         if !mutations.is_empty() {
@@ -93,6 +94,7 @@ impl ProgrammingService {
         )?;
         let interaction_event_sequence = self.publish_interaction(&action.context, interaction);
         let outcome = self.values_outcome(&action.context, values, revision_before);
+        self.publish_lifecycle_for_context(&action.context, lifecycle_before);
         Ok(ProgrammingValuesResult {
             context: action.context.clone(),
             outcome,

@@ -24,7 +24,7 @@ async fn programming_selection_actions_are_scoped_revisioned_and_replay_safe() {
     assert_eq!(first["selection"]["selected"], serde_json::json!([fixture.0]));
     assert_eq!(first["selection"]["gesture_open"], false);
     assert_eq!(first["replayed"], false);
-    assert_eq!(first["event_sequence"], 1);
+    assert_eq!(first["event_sequence"], 2);
     assert!(Uuid::parse_str(first["correlation_id"].as_str().unwrap()).is_ok());
     let selection_revision = first["selection"]["revision"].as_u64().unwrap();
 
@@ -33,8 +33,8 @@ async fn programming_selection_actions_are_scoped_revisioned_and_replay_safe() {
     let replay = json(replay).await;
     assert_eq!(replay["replayed"], true);
     assert_eq!(replay["selection"]["revision"], selection_revision);
-    assert_eq!(replay["event_sequence"], 1);
-    assert_eq!(scenario.state.application_events.latest_sequence(), 1);
+    assert_eq!(replay["event_sequence"], 2);
+    assert_eq!(scenario.state.application_events.latest_sequence(), 3);
 
     let stale = scenario
         .selection_action(serde_json::json!({
@@ -54,7 +54,7 @@ async fn programming_selection_actions_are_scoped_revisioned_and_replay_safe() {
             .selected,
         vec![fixture]
     );
-    assert_eq!(scenario.state.application_events.latest_sequence(), 1);
+    assert_eq!(scenario.state.application_events.latest_sequence(), 3);
 
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
@@ -83,7 +83,8 @@ async fn programming_selection_gestures_return_the_complete_authoritative_contex
     assert_eq!(snapshot.status(), StatusCode::OK);
     let snapshot = json(snapshot).await;
     assert_eq!(snapshot["projection"]["selection"], gesture["selection"]);
-    assert_eq!(snapshot["cursor"]["sequence"], gesture["event_sequence"]);
+    assert_eq!(snapshot["cursor"]["sequence"], 3);
+    assert_eq!(gesture["event_sequence"], 2);
 
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }

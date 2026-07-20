@@ -5,5 +5,6 @@ pub mod events;
 pub mod patch;
 pub mod playback;
 pub mod preload_values;
+pub mod programmer_lifecycle;
 pub mod programming;
 pub mod selective_import;

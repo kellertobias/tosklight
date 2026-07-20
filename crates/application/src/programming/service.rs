@@ -13,6 +13,8 @@ use std::sync::Arc;
 
 #[path = "service/external.rs"]
 mod external;
+#[path = "service/lifecycle_publication.rs"]
+mod lifecycle_publication;
 #[path = "service/preload_values.rs"]
 mod preload_values;
 #[path = "service/preload_values_replay.rs"]
@@ -38,6 +40,7 @@ mod values_replay_memory;
 #[path = "service/values_validation.rs"]
 mod values_validation;
 
+use lifecycle_publication::LifecyclePublicationGate;
 use preload_values_replay::PreloadValuesReplayCache;
 use state::{interaction_change, reconciliation};
 use support::{
@@ -64,6 +67,7 @@ pub struct ProgrammingService {
     values_replay: Arc<Mutex<ValuesReplayCache>>,
     preload_values_replay: Arc<Mutex<PreloadValuesReplayCache>>,
     pub(super) events: EventBus,
+    lifecycle_publication: Arc<Mutex<LifecyclePublicationGate>>,
     nested_selection_publications: Arc<Mutex<HashMap<uuid::Uuid, u64>>>,
     _highlight: Arc<HighlightRegistry>,
 }
@@ -81,6 +85,7 @@ impl ProgrammingService {
             values_replay: Arc::default(),
             preload_values_replay: Arc::default(),
             events,
+            lifecycle_publication: Arc::default(),
             nested_selection_publications: Arc::default(),
             _highlight: highlight,
         }
@@ -107,6 +112,7 @@ impl ProgrammingService {
             if let Some(cached) = self.cached(&action, session)? {
                 return Ok(cached);
             }
+            let lifecycle_before = self.active_lifecycle_programmer(user_id);
             let mut applied = self.apply(&action, session, user_id, ports)?;
             applied.result.interaction_event_sequence =
                 self.publish_interaction(&action.context, applied.interaction);
@@ -116,6 +122,7 @@ impl ProgrammingService {
                 self.publish_values(&action.context, applied.values);
             applied.result.preload_values_event_sequence =
                 self.publish_preload_values(&action.context, applied.preload_values);
+            self.publish_lifecycle_for_context(&action.context, lifecycle_before);
             self.remember(&action, session, &applied.result);
             Ok(applied.result)
         })

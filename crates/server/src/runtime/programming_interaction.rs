@@ -62,7 +62,7 @@ pub(super) fn run_programmer_lifecycle<T>(
         .map_err(programming_action_error)
 }
 
-fn programming_action_error(error: ActionError) -> ApiError {
+pub(super) fn programming_action_error(error: ActionError) -> ApiError {
     match error.kind {
         ActionErrorKind::Invalid => ApiError::bad_request(error.message),
         ActionErrorKind::Unauthorized => ApiError::unauthorized(error.message),

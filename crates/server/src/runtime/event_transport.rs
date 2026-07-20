@@ -225,13 +225,16 @@ fn validate_programming_object(
     if object.capability != wire::EventCapability::Programmer {
         return Ok(());
     }
+    if object.id == "programming-lifecycle" {
+        return Ok(());
+    }
     let user = object
         .id
         .strip_prefix("programming-values:")
         .or_else(|| object.id.strip_prefix("programming-preload-values:"))
         .or_else(|| object.id.strip_prefix("programming-capture-mode:"));
     let Some(user) = user else {
-        return Ok(());
+        return Err("unknown Programmer event object".into());
     };
     let user = Uuid::parse_str(user)
         .map_err(|_| "user-scoped Programmer event objects require a valid user UUID".to_owned())?;

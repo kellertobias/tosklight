@@ -468,7 +468,7 @@ fn stale_selection_replacement_does_not_mutate_persist_or_publish() {
         harness.ports.persisted.lock().as_slice(),
         ["programmer.selection.replace"]
     );
-    assert_eq!(harness.service.events().latest_sequence(), 1);
+    assert_eq!(harness.service.events().latest_sequence(), 2);
 }
 
 #[test]

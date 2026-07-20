@@ -179,7 +179,10 @@ pub(super) fn handle_subscription_osc(
         return true;
     };
     if address == "/light/unsubscribe" {
-        state.osc_subscribers.lock().remove(&client_id);
+        let removed = state.osc_subscribers.lock().remove(&client_id);
+        if let Some(subscriber) = removed {
+            disconnect_orphaned_osc_session(state, subscriber.session_id);
+        }
         emit(
             state,
             "hardware_connection_changed",
@@ -223,10 +226,41 @@ pub(super) fn handle_subscription_osc(
     if let Some(session) = &attached_session {
         attach_session_command_context(state, session);
     }
+    let reusable_session = existing
+        .as_ref()
+        .filter(|subscriber| !subscriber.desk_alias.eq_ignore_ascii_case(&desk_alias))
+        .filter(|subscriber| {
+            !state
+                .session_clients
+                .read()
+                .contains_key(&subscriber.session_id)
+        })
+        .filter(|subscriber| {
+            state
+                .osc_subscribers
+                .lock()
+                .iter()
+                .all(|(id, peer)| id == &client_id || peer.session_id != subscriber.session_id)
+        })
+        .and_then(|subscriber| state.sessions.read().get(&subscriber.session_id).cloned());
     let session_id = existing
         .filter(|subscriber| subscriber.desk_alias.eq_ignore_ascii_case(&desk_alias))
         .map(|subscriber| subscriber.session_id)
         .or_else(|| attached_session.map(|session| session.id))
+        .or_else(|| {
+            reusable_session.map(|mut session| {
+                session.desk = desk.clone();
+                let context =
+                    programming_context(&session, light_application::ActionSource::Osc, None);
+                state
+                    .programming
+                    .run_lifecycle_transition(&context, session.user.id, || {
+                        attach_session_command_context(state, &session);
+                        state.sessions.write().insert(session.id, session.clone());
+                    });
+                session.id
+            })
+        })
         .unwrap_or_else(|| {
             let Some(user) = state
                 .desk
@@ -245,12 +279,17 @@ pub(super) fn handle_subscription_osc(
                 connected: true,
                 desk: desk.clone(),
             };
-            state.programmers.start(id, user.id);
-            attach_session_command_context(state, &session);
-            state.sessions.write().insert(id, session);
+            let context = programming_context(&session, light_application::ActionSource::Osc, None);
+            state
+                .programming
+                .run_lifecycle_transition(&context, user.id, || {
+                    state.programmers.start(id, user.id);
+                    attach_session_command_context(state, &session);
+                    state.sessions.write().insert(id, session);
+                });
             id
         });
-    state.osc_subscribers.lock().insert(
+    let replaced = state.osc_subscribers.lock().insert(
         client_id,
         OscSubscriber {
             desk_alias,
@@ -265,6 +304,11 @@ pub(super) fn handle_subscription_osc(
             last_highlight_action: None,
         },
     );
+    if let Some(replaced) = replaced
+        && replaced.session_id != session_id
+    {
+        disconnect_orphaned_osc_session(state, replaced.session_id);
+    }
     emit(
         state,
         "hardware_connection_changed",
@@ -272,4 +316,25 @@ pub(super) fn handle_subscription_osc(
     );
     send_osc_feedback(state, true);
     true
+}
+
+pub(super) fn disconnect_orphaned_osc_session(state: &AppState, session_id: SessionId) {
+    if state.session_clients.read().contains_key(&session_id)
+        || state
+            .osc_subscribers
+            .lock()
+            .values()
+            .any(|subscriber| subscriber.session_id == session_id)
+    {
+        return;
+    }
+    let Some(session) = state.sessions.write().remove(&session_id) else {
+        return;
+    };
+    let context = programming_context(&session, light_application::ActionSource::Osc, None);
+    state
+        .programming
+        .run_lifecycle_transition(&context, session.user.id, || {
+            state.programmers.disconnect(session_id);
+        });
 }

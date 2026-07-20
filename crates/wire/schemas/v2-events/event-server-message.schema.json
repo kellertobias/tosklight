@@ -533,6 +533,22 @@
           "type": "object",
           "properties": {
             "change": {
+              "$ref": "#/$defs/ProgrammingLifecycleChange"
+            },
+            "type": {
+              "type": "string",
+              "const": "programming_lifecycle_changed"
+            }
+          },
+          "required": [
+            "type",
+            "change"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "change": {
               "$ref": "#/$defs/PlaybackRuntimeChange"
             },
             "type": {
@@ -2345,6 +2361,117 @@
             "selection"
           ]
         }
+      ]
+    },
+    "ProgrammingLifecycleChange": {
+      "type": "object",
+      "properties": {
+        "delta": {
+          "$ref": "#/$defs/ProgrammingLifecycleDelta"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "revision",
+        "delta"
+      ]
+    },
+    "ProgrammingLifecycleDelta": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "programmer": {
+              "$ref": "#/$defs/ProgrammingLifecycleProgrammer"
+            },
+            "type": {
+              "type": "string",
+              "const": "upsert"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "programmer"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "programmer_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": {
+              "type": "string",
+              "const": "remove"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "programmer_id"
+          ]
+        }
+      ]
+    },
+    "ProgrammingLifecycleProgrammer": {
+      "type": "object",
+      "properties": {
+        "connected": {
+          "type": "boolean"
+        },
+        "normal_value_count": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "programmer_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "selected_fixture_count": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "sessions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProgrammingLifecycleSession"
+          }
+        },
+        "user_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "programmer_id",
+        "user_id",
+        "connected",
+        "selected_fixture_count",
+        "normal_value_count",
+        "sessions"
+      ]
+    },
+    "ProgrammingLifecycleSession": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "session_id"
       ]
     },
     "ProgrammingPreloadAttributeValue": {

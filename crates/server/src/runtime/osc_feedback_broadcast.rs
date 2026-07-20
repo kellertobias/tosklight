@@ -4,16 +4,28 @@ fn active_osc_subscribers(state: &AppState) -> Vec<OscSubscriber> {
     let now = Instant::now();
     let mut subscribers = state.osc_subscribers.lock();
     let before = subscribers.len();
+    let expired = subscribers
+        .values()
+        .filter(|subscriber| now.duration_since(subscriber.last_seen) >= Duration::from_secs(20))
+        .map(|subscriber| subscriber.session_id)
+        .collect::<Vec<_>>();
     subscribers
         .retain(|_, subscriber| now.duration_since(subscriber.last_seen) < Duration::from_secs(20));
-    if before != subscribers.len() {
+    let changed = before != subscribers.len();
+    let connected = !subscribers.is_empty();
+    let active = subscribers.values().cloned().collect();
+    drop(subscribers);
+    for session_id in expired {
+        disconnect_orphaned_osc_session(state, session_id);
+    }
+    if changed {
         emit(
             state,
             "hardware_connection_changed",
-            serde_json::json!({"connected":!subscribers.is_empty()}),
+            serde_json::json!({"connected":connected}),
         );
     }
-    subscribers.values().cloned().collect()
+    active
 }
 
 pub(super) fn send_osc_feedback(state: &AppState, _full: bool) {

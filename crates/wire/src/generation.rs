@@ -26,6 +26,7 @@ use crate::v2::preload_values::{
     ProgrammingPreloadValuesActionOutcome, ProgrammingPreloadValuesActionRequest,
     ProgrammingPreloadValuesErrorResponse, ProgrammingPreloadValuesSnapshot,
 };
+use crate::v2::programmer_lifecycle::ProgrammingLifecycleSnapshot;
 use crate::v2::programming::{
     ProgrammingCaptureModeSnapshot, ProgrammingValuesActionOutcome, ProgrammingValuesActionRequest,
     ProgrammingValuesErrorResponse, ProgrammingValuesSnapshot,
@@ -88,6 +89,9 @@ pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
         programming_response_schema::<ProgrammingValuesSnapshot>("programming-values-snapshot"),
         programming_response_schema::<ProgrammingCaptureModeSnapshot>(
             "programming-capture-mode-snapshot",
+        ),
+        programming_response_schema::<ProgrammingLifecycleSnapshot>(
+            "programming-lifecycle-snapshot",
         ),
         programming_request_schema::<ProgrammingPreloadValuesActionRequest>(
             "programming-preload-values-action-request",

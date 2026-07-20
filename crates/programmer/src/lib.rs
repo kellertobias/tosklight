@@ -7,6 +7,7 @@ mod fixture_value_batch;
 mod groups;
 pub mod highlight;
 mod history;
+mod lifecycle_projection;
 mod normal_values;
 mod preload;
 mod preload_values;
@@ -34,6 +35,7 @@ pub use highlight::{
     HighlightSelectionWrite, HighlightState, HighlightTransition, OSC_REPEAT_GUARD,
     is_duplicate_osc_action,
 };
+pub use lifecycle_projection::{ProgrammerLifecycleSession, ProgrammerLifecycleSummary};
 pub use normal_values::{NormalProgrammerValueMutation, NormalProgrammerValueTiming};
 pub use preload::PreloadPlaybackAction;
 pub use preload_values::{

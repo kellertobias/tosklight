@@ -255,3 +255,115 @@ fn competing_file_input_context_claims_are_atomic() {
     assert_eq!(state.file_input_contexts.lock().len(), 1);
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[test]
+fn synthetic_osc_sessions_publish_start_and_removal_on_unsubscribe_and_timeout() {
+    let (state, data_dir) = test_state();
+    state
+        .desk
+        .lock()
+        .add_desk("OSC lifecycle main", "osc-lifecycle-main")
+        .unwrap();
+    let subscribe = |client: &str| {
+        assert!(handle_subscription_osc(
+            &state,
+            "/light/subscribe",
+            &[
+                OscArgument::String(client.into()),
+                OscArgument::String("main".into()),
+                OscArgument::Int(19_011),
+            ],
+            Some("127.0.0.1:19010"),
+        ));
+        state
+            .osc_subscribers
+            .lock()
+            .get(client)
+            .unwrap_or_else(|| panic!("subscriber {client} was not retained"))
+            .session_id
+    };
+
+    let first = subscribe("lifecycle-unsubscribe");
+    assert!(state.sessions.read().contains_key(&first));
+    assert!(handle_subscription_osc(
+        &state,
+        "/light/unsubscribe",
+        &[OscArgument::String("lifecycle-unsubscribe".into())],
+        Some("127.0.0.1:19010"),
+    ));
+    assert!(!state.sessions.read().contains_key(&first));
+    assert!(state.programmers.active_for_sessions().is_empty());
+
+    let second = subscribe("lifecycle-timeout");
+    state
+        .osc_subscribers
+        .lock()
+        .get_mut("lifecycle-timeout")
+        .unwrap()
+        .last_seen = Instant::now() - Duration::from_secs(21);
+    send_osc_feedback(&state, false);
+    assert!(!state.sessions.read().contains_key(&second));
+    assert!(!state
+        .osc_subscribers
+        .lock()
+        .contains_key("lifecycle-timeout"));
+
+    let filter = light_application::EventFilter::default()
+        .with_object(light_application::EventObject::programming_lifecycle());
+    let light_application::EventReplay::Events(events) =
+        state.application_events.replay(0, &filter)
+    else {
+        panic!("synthetic session lifecycle events should remain replayable")
+    };
+    assert_eq!(events.len(), 4);
+    for index in [1, 3] {
+        assert!(matches!(
+            events[index].payload,
+            light_application::ApplicationEvent::Programming(
+                light_application::ProgrammingEvent::LifecycleChanged(
+                    light_application::ProgrammingLifecycleChange {
+                        delta: light_application::ProgrammingLifecycleDelta::Remove { .. },
+                        ..
+                    }
+                )
+            )
+        ));
+    }
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn synthetic_osc_resubscribe_reuses_an_orphan_session_without_transient_lifecycle_rows() {
+    let (state, data_dir) = test_state();
+    state
+        .desk
+        .lock()
+        .add_desk("OSC lifecycle main", "osc-lifecycle-main")
+        .unwrap();
+    let second = state
+        .desk
+        .lock()
+        .add_desk("OSC lifecycle second", "osc-lifecycle-second")
+        .unwrap();
+    let subscribe = |desk: &str| {
+        assert!(handle_subscription_osc(
+            &state,
+            "/light/subscribe",
+            &[
+                OscArgument::String("lifecycle-replace".into()),
+                OscArgument::String(desk.into()),
+                OscArgument::Int(19_011),
+            ],
+            Some("127.0.0.1:19010"),
+        ));
+        state.osc_subscribers.lock()["lifecycle-replace"].session_id
+    };
+
+    let session_id = subscribe("main");
+    let before = state.application_events.latest_sequence();
+    assert_eq!(subscribe(&second.osc_alias), session_id);
+    assert_eq!(state.application_events.latest_sequence(), before);
+    assert_eq!(state.sessions.read().len(), 1);
+    assert_eq!(state.programmers.active_for_sessions().len(), 1);
+    let _ = std::fs::remove_dir_all(data_dir);
+}

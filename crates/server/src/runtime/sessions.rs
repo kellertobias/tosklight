@@ -113,10 +113,15 @@ pub(super) async fn create_session(
     };
     let _activation = state.activation_lock.clone().lock_owned().await;
     state.session_clients.write().insert(session.id, client_id);
-    state.programmers.start(session.id, user.id);
-    attach_session_command_context(&state, &session);
-    state.sessions.write().insert(session.id, session.clone());
-    persist_programmer(&state, &session)?;
+    let context = programming_context(&session, light_application::ActionSource::Http, None);
+    state
+        .programming
+        .run_lifecycle_transition(&context, user.id, || -> Result<(), ApiError> {
+            state.programmers.start(session.id, user.id);
+            attach_session_command_context(&state, &session);
+            state.sessions.write().insert(session.id, session.clone());
+            persist_programmer(&state, &session)
+        })?;
     emit(
         &state,
         "session_started",
@@ -232,7 +237,12 @@ pub(super) async fn close_session(
     sync_highlight_output(&state);
     file_manager::release_session_input(&state, &session, "session_closed");
     persist_programmer(&state, &session)?;
-    state.programmers.disconnect(id);
+    let context = programming_context(&session, light_application::ActionSource::Http, None);
+    state
+        .programming
+        .run_lifecycle_transition(&context, session.user.id, || {
+            state.programmers.disconnect(id);
+        });
     emit(
         &state,
         "session_disconnected",

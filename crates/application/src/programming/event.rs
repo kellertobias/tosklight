@@ -1,6 +1,6 @@
 use super::{
-    ProgrammingCaptureModeChange, ProgrammingInteractionProjection, ProgrammingPreloadValuesChange,
-    ProgrammingValuesChange,
+    ProgrammingCaptureModeChange, ProgrammingInteractionProjection, ProgrammingLifecycleChange,
+    ProgrammingPreloadValuesChange, ProgrammingValuesChange,
 };
 use crate::{
     ActionContext, ApplicationEvent, DeliveryPolicy, EventCapability, EventClass, EventDraft,
@@ -95,6 +95,10 @@ impl EventObject {
         )
     }
 
+    pub fn programming_lifecycle() -> Self {
+        Self::new(EventCapability::Programmer, "programming-lifecycle")
+    }
+
     pub fn programming_values_user_id(&self) -> Option<Uuid> {
         (self.capability == EventCapability::Programmer)
             .then(|| self.id.strip_prefix("programming-values:"))
@@ -124,6 +128,23 @@ impl EventObject {
 }
 
 impl EventDraft {
+    pub fn programming_lifecycle_changed(
+        change: ProgrammingLifecycleChange,
+        source: EventSource,
+        correlation_id: Option<Uuid>,
+    ) -> Self {
+        Self {
+            desk_id: None,
+            class: EventClass::Projection,
+            object: Some(EventObject::programming_lifecycle()),
+            related_objects: Vec::new(),
+            source,
+            correlation_id,
+            delivery: DeliveryPolicy::Lossless,
+            payload: ApplicationEvent::Programming(ProgrammingEvent::LifecycleChanged(change)),
+        }
+    }
+
     pub fn programming_interaction_changed(
         context: &ActionContext,
         change: ProgrammingInteractionChange,

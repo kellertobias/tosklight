@@ -197,6 +197,11 @@ fn wire_payload(
         ) => wire::EventPayload::ProgrammingPreloadValuesChanged {
             change: super::super::command_http::preload_values_change(change),
         },
+        application::ApplicationEvent::Programming(
+            application::ProgrammingEvent::LifecycleChanged(change),
+        ) => wire::EventPayload::ProgrammingLifecycleChanged {
+            change: super::super::command_http::lifecycle_change(change),
+        },
         application::ApplicationEvent::Playback(application::PlaybackEvent::RuntimeChanged(
             change,
         )) => wire::EventPayload::PlaybackRuntimeChanged {

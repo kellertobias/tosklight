@@ -57,6 +57,18 @@ export type SequenceGap = { after_sequence: number, oldest_available: number, la
 
 export type EventSource = { "kind": "runtime" } | { "kind": "action", source: EventActionSource, };
 
+export type ProgrammingLifecycleSession = { session_id: string, };
+
+export type ProgrammingLifecycleProgrammer = { programmer_id: string, user_id: string, connected: boolean, selected_fixture_count: number, normal_value_count: number, sessions: Array<ProgrammingLifecycleSession>, };
+
+export type ProgrammingLifecycleProjection = { revision: number, programmers: Array<ProgrammingLifecycleProgrammer>, };
+
+export type ProgrammingLifecycleDelta = { "type": "upsert", programmer: ProgrammingLifecycleProgrammer, } | { "type": "remove", programmer_id: string, };
+
+export type ProgrammingLifecycleChange = { revision: number, delta: ProgrammingLifecycleDelta, };
+
+export type ProgrammingLifecycleSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingLifecycleProjection, };
+
 export type ProgrammingColorXyz = { x: number, y: number, z: number, };
 
 export type ProgrammingAttributeValue = { "kind": "normalized", "value": number } | { "kind": "spread", "value": Array<number> } | { "kind": "discrete", "value": string } | { "kind": "color_xyz", "value": ProgrammingColorXyz } | { "kind": "raw_dmx", "value": number } | { "kind": "raw_dmx_exact", "value": number };
@@ -201,7 +213,7 @@ export type ManagedAssetReference = { asset_id: string, revision: number, };
 
 export type SelectiveImportChange = { show_id: string, show_revision: number, objects: Array<SelectiveImportObjectChange>, profile_revisions: Array<FixtureProfileIdentity>, managed_assets: Array<ManagedAssetReference>, };
 
-export type EventPayload = { "type": "programming_interaction_changed", change: ProgrammingInteractionChange, } | { "type": "programming_values_changed", change: ProgrammingValuesChange, } | { "type": "programming_capture_mode_changed", change: ProgrammingCaptureModeChange, } | { "type": "programming_preload_values_changed", change: ProgrammingPreloadValuesChange, } | { "type": "playback_runtime_changed", change: PlaybackRuntimeChange, } | { "type": "playback_view_changed", projection: PlaybackDeskProjection, } | { "type": "output_runtime_changed", change: OutputRuntimeChange, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, } | { "type": "selective_import_applied", change: SelectiveImportChange, };
+export type EventPayload = { "type": "programming_interaction_changed", change: ProgrammingInteractionChange, } | { "type": "programming_values_changed", change: ProgrammingValuesChange, } | { "type": "programming_capture_mode_changed", change: ProgrammingCaptureModeChange, } | { "type": "programming_preload_values_changed", change: ProgrammingPreloadValuesChange, } | { "type": "programming_lifecycle_changed", change: ProgrammingLifecycleChange, } | { "type": "playback_runtime_changed", change: PlaybackRuntimeChange, } | { "type": "playback_view_changed", projection: PlaybackDeskProjection, } | { "type": "output_runtime_changed", change: OutputRuntimeChange, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, } | { "type": "selective_import_applied", change: SelectiveImportChange, };
 
 export type EventEnvelope = { sequence: number, occurred_at: string, desk_id: string | null, class: EventClass, object: EventObject | null, related_objects?: Array<EventObject> | null, source: EventSource, correlation_id: string | null, delivery: EventDeliveryPolicy, payload: EventPayload, };
 

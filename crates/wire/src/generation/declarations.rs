@@ -5,6 +5,7 @@ use crate::v2::events::*;
 use crate::v2::patch::*;
 use crate::v2::playback::*;
 use crate::v2::preload_values::*;
+use crate::v2::programmer_lifecycle::*;
 use crate::v2::programming::*;
 use crate::v2::selective_import::*;
 
@@ -61,6 +62,12 @@ fn event_subscription(config: &Config) -> Vec<String> {
 
 fn programming(config: &Config) -> Vec<String> {
     vec![
+        ProgrammingLifecycleSession::decl(config),
+        ProgrammingLifecycleProgrammer::decl(config),
+        ProgrammingLifecycleProjection::decl(config),
+        ProgrammingLifecycleDelta::decl(config),
+        ProgrammingLifecycleChange::decl(config),
+        ProgrammingLifecycleSnapshot::decl(config),
         ProgrammingColorXyz::decl(config),
         ProgrammingAttributeValue::decl(config),
         ProgrammingFixtureValue::decl(config),
