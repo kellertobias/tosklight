@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import type { CueList, VersionedObject } from "../../api/types";
+import {
+	cueListWriteBasis,
+	type SaveCueListTopology,
+} from "../../features/playbackTopology/useCueListTopologyWriter";
 
 export interface CuelistSettingsProps {
 	object: VersionedObject<CueList>;
 	speedGroupsBpm: number[];
 	close: () => void;
-	save: (cueList: CueList, revision: number) => Promise<boolean>;
+	save: SaveCueListTopology;
 }
 
 function legacyChaserXfadePercent(
@@ -59,6 +63,7 @@ export function useCuelistSettings({
 	const [draft, setDraft] = useState<CueList>(() =>
 		initialSettingsDraft(object.body, speedGroupsBpm),
 	);
+	const writeBasis = useRef(cueListWriteBasis(object)).current;
 	const draftRef = useRef(draft);
 	const priorityInputRef = useRef<HTMLInputElement>(null);
 	const [renumberOpen, setRenumberOpen] = useState(false);
@@ -117,7 +122,7 @@ export function useCuelistSettings({
 			return;
 		}
 		next.chaser_xfade_millis = 0;
-		if (await save(next, object.revision)) close();
+		if (await save(writeBasis, next)) close();
 		else
 			setSettingsError(
 				"Unable to save Cuelist settings. Check the values or refresh after a revision conflict.",
@@ -144,7 +149,7 @@ export function useCuelistSettings({
 			})),
 		};
 		setRenumberError("");
-		if (await save(next, object.revision)) {
+		if (await save(writeBasis, next)) {
 			setRenumberOpen(false);
 			close();
 		} else

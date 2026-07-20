@@ -99,7 +99,7 @@ function cueListObject() {
 		kind: "cue_list",
 		object_id: "legacy-main-list",
 		object_revision: 5,
-		body: cueList(),
+		body: { ...cueList(), future_cue_list: { retained: true } },
 	};
 }
 
@@ -131,12 +131,27 @@ describe("Playback topology v2 wire", () => {
 				page: 4,
 				slot: 2,
 				expected_page_revision: 7,
+				expected_page_object_id: "legacy-page-four",
 				expected_playback_revision: 3,
+				expected_playback_object_id: "legacy-playback-seven",
 				playback: {
 					...playback(),
 					presentation_icon: null,
 					presentation_image: null,
 				},
+			},
+		});
+	});
+
+	it("encodes the exact Cuelist storage identity precondition", () => {
+		expect(encodePlaybackTopologyRequest(cueListRequest())).toEqual({
+			request_id: REQUEST_ID,
+			action: {
+				type: "save_cue_list",
+				cue_list_id: CUE_LIST_ID,
+				expected_revision: 4,
+				expected_object_id: "legacy-main-list",
+				body: cueList(),
 			},
 		});
 	});
@@ -215,6 +230,30 @@ describe("Playback topology v2 wire", () => {
 			objectId: "legacy-main-list",
 			body: { id: CUE_LIST_ID },
 		});
+	});
+
+	it("rejects a saved Cuelist whose known body differs from the request", () => {
+		expect(() =>
+			decodePlaybackTopologyOutcome(
+				{
+					request_id: REQUEST_ID,
+					correlation_id: CORRELATION_ID,
+					show_revision: 12,
+					resolution: { kind: "cue_list", cue_list_id: CUE_LIST_ID },
+					status: "changed",
+					objects: [
+						{
+							...cueListObject(),
+							body: { ...cueList(), name: "Different" },
+						},
+					],
+					event_sequence: 41,
+					replayed: false,
+				},
+				cueListRequest(),
+				11,
+			),
+		).toThrow(/submitted Cuelist known fields/);
 	});
 
 	it("decodes no-change and multi-page clear without inventing an event", () => {

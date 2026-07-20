@@ -228,8 +228,15 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     const staleDialog = page.getByRole("dialog", { name: "Renumber Cues" });
     await staleDialog.getByLabel("Start Cue").fill("10");
     let intercepted = false;
-    await page.route(`**/objects/cue_list/${installed.id}`, async (route) => {
-      if (route.request().method() !== "PUT" || intercepted) return route.continue();
+    const topologyActionUrl = "**/api/v2/shows/*/playback-topology/actions";
+    await page.route(topologyActionUrl, async (route) => {
+      const request = route.request();
+      const payload = request.method() === "POST" ? request.postDataJSON() : null;
+      if (
+        intercepted ||
+        payload?.action?.type !== "save_cue_list" ||
+        payload.action.cue_list_id !== installed.id
+      ) return route.continue();
       intercepted = true;
       const current = await object<any>(api, "cue_list", installed.id);
       await putObject(api, "cue_list", installed.id, { ...current.body, name: "Concurrent Renumber Sequence" }, current.revision);
@@ -238,7 +245,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     await staleDialog.getByRole("button", { name: "Renumber", exact: true }).click();
     await expect(staleDialog.getByRole("alert")).toContainText("revision conflict");
     expect((await object<any>(api, "cue_list", installed.id)).body.cues.map((cue: any) => cue.number)).toEqual([1, 2, 3, 4]);
-    await page.unroute(`**/objects/cue_list/${installed.id}`);
+    await page.unroute(topologyActionUrl);
     await staleDialog.getByRole("button", { name: "Cancel", exact: true }).click();
     await page.getByRole("dialog", { name: "Cuelist Settings" }).getByRole("button", { name: "Close Cuelist Settings", exact: true }).click();
     await expect(page.locator(".ui-window-header")).toContainText("Concurrent Renumber Sequence");

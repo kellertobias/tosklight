@@ -75,11 +75,10 @@ async fn configure_no_change_replay_conflict_and_clear_are_one_event_actions() {
     assert_eq!(stale_show["current_revision"], initial_revision + 1);
     assert!(stale_show.get("current_related_revision").is_none());
 
+    let mut stale_page_request = configure_request("stale-page", 0, playback_revision);
+    stale_page_request["action"]["expected_page_object_id"] = serde_json::json!("1");
     let stale_page = scenario
-        .action(
-            initial_revision + 1,
-            configure_request("stale-page", 0, playback_revision),
-        )
+        .action(initial_revision + 1, stale_page_request)
         .await;
     assert_eq!(stale_page.status(), StatusCode::CONFLICT);
     assert_etag(&stale_page, initial_revision + 1);
@@ -122,7 +121,7 @@ async fn save_cue_list_preserves_extensions_and_returns_the_committed_projection
         .unwrap()
         .to_owned();
 
-    let response = scenario.action(revision, request).await;
+    let response = scenario.action(revision, request.clone()).await;
 
     assert_eq!(response.status(), StatusCode::OK);
     assert_etag(&response, revision + 1);
@@ -136,9 +135,32 @@ async fn save_cue_list_preserves_extensions_and_returns_the_committed_projection
         true
     );
     assert_one_topology_event(&scenario.state, cursor, 1);
+    {
+        let document = scenario.document();
+        let stored = document.object("cue_list", &cue_list_id).unwrap();
+        assert_eq!(stored.body()["future_topology"]["retained"], true);
+    }
+
+    let mut wrong_identity = request;
+    wrong_identity["request_id"] = serde_json::json!("save-replacement-conflict");
+    wrong_identity["action"]["expected_revision"] = serde_json::json!(1);
+    wrong_identity["action"]["expected_object_id"] = serde_json::json!("replacement-storage-id");
+    wrong_identity["action"]["body"]["name"] = serde_json::json!("Must not replace");
+    let conflict = scenario.action(revision + 1, wrong_identity).await;
+    assert_eq!(conflict.status(), StatusCode::CONFLICT);
+    assert_etag(&conflict, revision + 1);
+    let conflict = json(conflict).await;
+    assert_eq!(conflict["kind"], "conflict");
+    assert_eq!(conflict["current_revision"], revision + 1);
+    assert_eq!(conflict["current_related_revision"], 1);
+    assert_eq!(scenario.show_revision(), revision + 1);
+    assert_eq!(
+        scenario.state.application_events.latest_sequence(),
+        cursor + 1
+    );
     let document = scenario.document();
     let stored = document.object("cue_list", &cue_list_id).unwrap();
-    assert_eq!(stored.body()["future_topology"]["retained"], true);
+    assert_ne!(stored.body()["name"], "Must not replace");
     scenario.cleanup();
 }
 

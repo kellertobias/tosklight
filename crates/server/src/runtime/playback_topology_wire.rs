@@ -13,10 +13,12 @@ pub(super) fn application_command(
         wire::PlaybackTopologyAction::SaveCueList {
             cue_list_id,
             expected_revision,
+            expected_object_id,
             body,
         } => application::PlaybackTopologyAction::SaveCueList {
             cue_list_id: CueListId(non_nil(cue_list_id, "cue_list_id")?),
             expected_revision,
+            expected_object_id: expected_object_id.into_option(),
             cue_list: serde_json::from_value(body.clone())
                 .map_err(|error| format!("Cuelist body is invalid: {error}"))?,
             raw_body: Arc::new(body),
@@ -25,25 +27,33 @@ pub(super) fn application_command(
             page,
             slot,
             expected_page_revision,
+            expected_page_object_id,
             expected_playback_revision,
+            expected_playback_object_id,
             playback,
         } => application::PlaybackTopologyAction::ConfigureSlot {
             page,
             slot,
             expected_page_revision,
+            expected_page_object_id: expected_page_object_id.into_option(),
             expected_playback_revision,
+            expected_playback_object_id: expected_playback_object_id.into_option(),
             playback: application_playback(playback)?,
         },
         wire::PlaybackTopologyAction::ClearMappedPlayback {
             page,
             slot,
             expected_page_revision,
+            expected_page_object_id,
             expected_playback_revision,
+            expected_playback_object_id,
         } => application::PlaybackTopologyAction::ClearMappedPlayback {
             page,
             slot,
             expected_page_revision,
+            expected_page_object_id: expected_page_object_id.into_option(),
             expected_playback_revision,
+            expected_playback_object_id: expected_playback_object_id.into_option(),
         },
     };
     Ok((

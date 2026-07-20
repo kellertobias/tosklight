@@ -103,6 +103,21 @@ pub(super) fn validate_revision<T>(
         .at_related_revision(current))
 }
 
+pub(super) fn validate_identity<T>(
+    stored: Option<&Stored<T>>,
+    expected: Option<&str>,
+    label: &str,
+    show_revision: Revision,
+) -> Result<(), ActionError> {
+    let current = stored.map(|value| value.object_id.as_str());
+    if current == expected {
+        return Ok(());
+    }
+    Err(conflict(format!("stale {label} storage identity"))
+        .at_revision(show_revision)
+        .at_related_revision(stored.map_or(0, |value| value.object_revision)))
+}
+
 pub(super) fn next_revision(current: Revision) -> Result<Revision, ActionError> {
     current
         .checked_add(1)

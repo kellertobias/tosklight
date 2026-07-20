@@ -24,6 +24,7 @@ pub enum PlaybackTopologyAction {
     SaveCueList {
         cue_list_id: CueListId,
         expected_revision: Revision,
+        expected_object_id: Option<String>,
         cue_list: CueList,
         /// Exact request body retained so supplied extension fields survive a real typed change.
         raw_body: Arc<Value>,
@@ -32,14 +33,18 @@ pub enum PlaybackTopologyAction {
         page: u8,
         slot: u8,
         expected_page_revision: Revision,
+        expected_page_object_id: Option<String>,
         expected_playback_revision: Revision,
+        expected_playback_object_id: Option<String>,
         playback: PlaybackDefinition,
     },
     ClearMappedPlayback {
         page: u8,
         slot: u8,
         expected_page_revision: Revision,
+        expected_page_object_id: Option<String>,
         expected_playback_revision: Revision,
+        expected_playback_object_id: Option<String>,
     },
 }
 

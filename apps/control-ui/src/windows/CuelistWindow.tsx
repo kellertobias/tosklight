@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useServer } from "../api/ServerContext";
 import { usePlaybackDeskView } from "../features/playbackRuntime/PlaybackRuntimeView";
+import { useCueListTopologyWriter } from "../features/playbackTopology/useCueListTopologyWriter";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
 import { useCueLists } from "../features/showObjects/ShowObjectsState";
 import { useApp } from "../state/AppContext";
@@ -20,6 +21,7 @@ export function CuelistWindow({
 	fixedCueListNumber,
 }: WindowProps) {
 	const server = useServer();
+	const saveCueList = useCueListTopologyWriter();
 	const { state, dispatch } = useApp();
 	const pool = useCuelistPool();
 	const cueLists = useCueLists();
@@ -73,7 +75,7 @@ export function CuelistWindow({
 			? settingsDefinition.target.cue_list_id
 			: null;
 	const settingsCueObject = settingsCueListId
-		? cueLists.find((candidate) => candidate.id === settingsCueListId)
+		? cueLists.find((candidate) => candidate.body.id === settingsCueListId)
 		: undefined;
 	const settings = settingsOpen && settingsCueObject && (
 		<CuelistSettings
@@ -82,7 +84,7 @@ export function CuelistWindow({
 				server.configuration?.speed_groups_bpm ?? [120, 90, 60, 30, 15]
 			}
 			close={() => setSettingsOpen(false)}
-			save={server.saveCueList}
+			save={saveCueList}
 		/>
 	);
 	if (tab === "pool")

@@ -3,32 +3,9 @@ import type { ServerContextValue } from "./ServerContextValue";
 
 export function createCueListActions(
 	model: ServerController,
-): Pick<ServerContextValue, "saveCueList" | "unassignPagePlayback"> {
-	const { client, setError, bootstrap, session, loadShowObjects, refresh } =
-		model;
+): Pick<ServerContextValue, "unassignPagePlayback"> {
+	const { client, setError, bootstrap, refresh } = model;
 	return {
-		saveCueList: async (cueList, revision) => {
-			if (!bootstrap?.active_show) return false;
-			try {
-				await client.putObject(
-					bootstrap.active_show.id,
-					"cue_list",
-					cueList.id,
-					cueList,
-					revision,
-				);
-				await refresh();
-				await loadShowObjects(
-					bootstrap.active_show.id,
-					session?.user.id ?? null,
-				);
-				setError(null);
-				return true;
-			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
-				return false;
-			}
-		},
 		unassignPagePlayback: async (pageNumber, slot) => {
 			if (!bootstrap?.active_show) return false;
 			try {

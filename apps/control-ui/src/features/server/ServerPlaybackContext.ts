@@ -67,10 +67,6 @@ export interface ServerPlaybackContext {
 		playback: import("../../api/types").PlaybackDefinition,
 	) => Promise<boolean>;
 	clearPlaybackSlot: (page: number, slot: number) => Promise<boolean>;
-	saveCueList: (
-		cueList: import("../../api/types").CueList,
-		revision: number,
-	) => Promise<boolean>;
 	unassignPagePlayback: (page: number, slot: number) => Promise<boolean>;
 	readDmx: () => Promise<DmxSnapshot>;
 	readVisualization: (preload?: boolean) => Promise<VisualizationSnapshot>;

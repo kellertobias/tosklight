@@ -118,6 +118,7 @@ function encodeAction(action: PlaybackTopologyAction) {
 				action.expectedRevision,
 				"$.action.expectedRevision",
 			),
+			expected_object_id: action.expectedObjectId,
 			body: action.body,
 		};
 	const shared = {
@@ -128,10 +129,12 @@ function encodeAction(action: PlaybackTopologyAction) {
 			action.expectedPageRevision,
 			"$.action.expectedPageRevision",
 		),
+		expected_page_object_id: action.expectedPageObjectId,
 		expected_playback_revision: revisionAt(
 			action.expectedPlaybackRevision,
 			"$.action.expectedPlaybackRevision",
 		),
+		expected_playback_object_id: action.expectedPlaybackObjectId,
 	};
 	return action.type === "configure_slot"
 		? { ...shared, playback: encodePlayback(action.playback) }

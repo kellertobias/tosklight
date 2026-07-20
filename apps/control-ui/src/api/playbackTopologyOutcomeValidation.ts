@@ -1,10 +1,14 @@
-import type { PlaybackDefinition, PlaybackPage } from "./types";
+import type { CueList, PlaybackDefinition, PlaybackPage } from "./types";
 import type {
 	PlaybackTopologyAction,
 	PlaybackTopologyObject,
 	PlaybackTopologyResolution,
 } from "../features/playbackTopology/contracts";
 import { WireValidationError } from "./wireValidation";
+import {
+	sameKnownCueList,
+	sameKnownPlayback,
+} from "./playbackTopologyKnownBodies";
 
 /** Limits a successful response to authority owned by the submitted action. */
 export function validatePlaybackTopologyObjects(
@@ -53,6 +57,8 @@ function validateSavedCueList(
 		status,
 		"Cuelist",
 	);
+	if (!sameKnownCueList(object.body as CueList, action.body))
+		invalid("the submitted Cuelist known fields", objects);
 }
 
 function validateConfiguredSlot(
@@ -244,49 +250,6 @@ function validateStorageId(
 ) {
 	if (actual !== (expected ?? fallback))
 		invalid(`${label} storage identity ${expected ?? fallback}`, actual);
-}
-
-function sameKnownPlayback(
-	actual: PlaybackDefinition,
-	requested: PlaybackDefinition,
-	number: number,
-) {
-	return JSON.stringify(knownPlayback(actual, number)) ===
-		JSON.stringify(knownPlayback(requested, number));
-}
-
-function knownPlayback(playback: PlaybackDefinition, number: number) {
-	const fader =
-		playback.target.type === "speed_group" && playback.fader === "speed"
-			? "learned_percentage"
-			: playback.fader;
-	return {
-		number,
-		name: playback.name,
-		target: knownTarget(playback.target),
-		buttons: playback.buttons,
-		button_count: playback.button_count ?? 3,
-		fader,
-		has_fader: playback.has_fader ?? true,
-		go_activates: playback.go_activates,
-		auto_off: playback.auto_off,
-		xfade_millis: playback.xfade_millis,
-		color: playback.color ?? "#20c997",
-		flash_release: playback.flash_release ?? "release_all",
-		protect_from_swap: playback.protect_from_swap ?? false,
-		presentation_icon: playback.presentation_icon ?? null,
-		presentation_image: playback.presentation_image ?? null,
-	};
-}
-
-function knownTarget(target: PlaybackDefinition["target"]) {
-	if (target.type === "cue_list")
-		return { type: target.type, cue_list_id: target.cue_list_id };
-	if (target.type === "group")
-		return { type: target.type, group_id: target.group_id };
-	if (target.type === "speed_group")
-		return { type: target.type, group: target.group };
-	return { type: target.type };
 }
 
 function matchingPage(objects: PlaybackTopologyObject[], pageNumber: number) {

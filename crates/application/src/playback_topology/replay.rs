@@ -126,19 +126,21 @@ pub(super) fn fingerprint(
     expected_show_revision: u64,
 ) -> Result<RequestFingerprint, ActionError> {
     let mut hasher = Sha256::new();
-    hash_bytes(&mut hasher, b"playback-topology-v1");
+    hash_bytes(&mut hasher, b"playback-topology-v2");
     hasher.update(command.show_id.0.as_bytes());
     hasher.update(expected_show_revision.to_le_bytes());
     match &command.action {
         PlaybackTopologyAction::SaveCueList {
             cue_list_id,
             expected_revision,
+            expected_object_id,
             cue_list,
             raw_body,
         } => {
             hasher.update([0]);
             hasher.update(cue_list_id.0.as_bytes());
             hasher.update(expected_revision.to_le_bytes());
+            hash_json(&mut hasher, expected_object_id)?;
             hash_json(&mut hasher, cue_list)?;
             hash_json(&mut hasher, raw_body)?;
         }
@@ -146,23 +148,31 @@ pub(super) fn fingerprint(
             page,
             slot,
             expected_page_revision,
+            expected_page_object_id,
             expected_playback_revision,
+            expected_playback_object_id,
             playback,
         } => {
             hasher.update([1, *page, *slot]);
             hasher.update(expected_page_revision.to_le_bytes());
+            hash_json(&mut hasher, expected_page_object_id)?;
             hasher.update(expected_playback_revision.to_le_bytes());
+            hash_json(&mut hasher, expected_playback_object_id)?;
             hash_json(&mut hasher, playback)?;
         }
         PlaybackTopologyAction::ClearMappedPlayback {
             page,
             slot,
             expected_page_revision,
+            expected_page_object_id,
             expected_playback_revision,
+            expected_playback_object_id,
         } => {
             hasher.update([2, *page, *slot]);
             hasher.update(expected_page_revision.to_le_bytes());
+            hash_json(&mut hasher, expected_page_object_id)?;
             hasher.update(expected_playback_revision.to_le_bytes());
+            hash_json(&mut hasher, expected_playback_object_id)?;
         }
     }
     Ok(hasher.finalize().into())

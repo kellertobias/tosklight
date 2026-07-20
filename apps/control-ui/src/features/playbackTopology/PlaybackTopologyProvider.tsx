@@ -13,6 +13,7 @@ import type {
 } from "../showObjects/contracts";
 import type { ShowObjectsStore } from "../showObjects/store";
 import type {
+	PlaybackTopologyActions,
 	PlaybackTopologyCapability,
 	PlaybackTopologyTransport,
 } from "./contracts";
@@ -67,15 +68,18 @@ export function PlaybackTopologyProvider({
 	);
 	useStrictModeSafeStop(writer);
 	useEffect(() => setError(null), [writer]);
-	const capability = useMemo<PlaybackTopologyCapability | null>(
+	const actions = useMemo<PlaybackTopologyActions | null>(
 		() =>
 			writer && {
-				error,
 				saveCueList: writer.saveCueList.bind(writer),
 				configureSlot: writer.configureSlot.bind(writer),
 				clearMappedPlayback: writer.clearMappedPlayback.bind(writer),
 			},
-		[error, writer],
+		[writer],
+	);
+	const capability = useMemo<PlaybackTopologyCapability | null>(
+		() => actions && { ...actions, error },
+		[actions, error],
 	);
 	return (
 		<PlaybackTopologyContext.Provider value={capability}>

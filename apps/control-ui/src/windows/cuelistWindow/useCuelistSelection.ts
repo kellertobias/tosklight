@@ -39,7 +39,7 @@ export function useSelectedCuelist(
 	const legacyFirstCueObject =
 		pool.length === 0 && selectedCuelist === 1 ? cueLists[0] : undefined;
 	const selectedCueObject = selectedCueListId
-		? cueLists.find((candidate) => candidate.id === selectedCueListId)
+		? cueLists.find((candidate) => candidate.body.id === selectedCueListId)
 		: legacyFirstCueObject;
 	const cueList = selectedCueObject?.body;
 	const liveActive = useCueListRuntime(

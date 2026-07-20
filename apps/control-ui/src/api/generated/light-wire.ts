@@ -337,11 +337,11 @@ export type PlaybackTopologyFlashReleaseMode = "release_all" | "release_intensit
 
 export type PlaybackTopologyPlaybackDefinition = { number: number, name: string, target: PlaybackTopologyTarget, buttons: [PlaybackTopologyButtonAction, PlaybackTopologyButtonAction, PlaybackTopologyButtonAction], button_count: number, fader: PlaybackTopologyFaderMode, has_fader: boolean, go_activates: boolean, auto_off: boolean, xfade_millis: number, color: string, flash_release: PlaybackTopologyFlashReleaseMode, protect_from_swap: boolean, presentation_icon?: string | null, presentation_image?: string | null, };
 
-export type PlaybackTopologyAction = { "type": "save_cue_list", cue_list_id: string, expected_revision: number,
+export type PlaybackTopologyAction = { "type": "save_cue_list", cue_list_id: string, expected_revision: number, expected_object_id: string | null,
 /**
  * Extensible portable body; adapters strictly decode its known Cuelist fields.
  */
-body: unknown, } | { "type": "configure_slot", page: number, slot: number, expected_page_revision: number, expected_playback_revision: number, playback: PlaybackTopologyPlaybackDefinition, } | { "type": "clear_mapped_playback", page: number, slot: number, expected_page_revision: number, expected_playback_revision: number, };
+body: unknown, } | { "type": "configure_slot", page: number, slot: number, expected_page_revision: number, expected_page_object_id: string | null, expected_playback_revision: number, expected_playback_object_id: string | null, playback: PlaybackTopologyPlaybackDefinition, } | { "type": "clear_mapped_playback", page: number, slot: number, expected_page_revision: number, expected_page_object_id: string | null, expected_playback_revision: number, expected_playback_object_id: string | null, };
 
 export type PlaybackTopologyActionRequest = { request_id: string, action: PlaybackTopologyAction, };
 

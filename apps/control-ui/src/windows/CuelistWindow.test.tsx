@@ -1,5 +1,6 @@
 import {
 	act,
+	cleanup,
 	fireEvent,
 	render,
 	screen,
@@ -22,7 +23,8 @@ const mocks = vi.hoisted(() => ({
 	refresh: vi.fn(),
 	resetCommandLine: vi.fn(),
 	recordCue: vi.fn(),
-	saveCueList: vi.fn(),
+	saveTopologyCueList: vi.fn(),
+	activeSaveTopologyCueList: null as ((...args: any[]) => any) | null,
 	state: {
 		activeDeskId: "desk-1",
 		paneSettingsId: null as string | null,
@@ -71,7 +73,12 @@ vi.mock("../api/ServerContext", () => ({
 		refresh: mocks.refresh,
 		resetCommandLine: mocks.resetCommandLine,
 		cueObjects: mocks.cueObjects,
-		saveCueList: mocks.saveCueList,
+	}),
+}));
+vi.mock("../features/playbackTopology/PlaybackTopologyProvider", () => ({
+	usePlaybackTopologyActions: () => ({
+		saveCueList:
+			mocks.activeSaveTopologyCueList ?? mocks.saveTopologyCueList,
 	}),
 }));
 vi.mock("../features/cueRecording/CueRecordingProvider", () => ({
@@ -123,13 +130,25 @@ vi.mock("./stage3dScene", () => ({
 }));
 
 function resetCuelistWindowMocks() {
+	cleanup();
 	mocks.dispatch.mockReset();
 	mocks.executeCommandLine.mockReset().mockResolvedValue(true);
 	mocks.setCommandLine.mockReset();
 	mocks.refresh.mockReset().mockResolvedValue(undefined);
 	mocks.resetCommandLine.mockReset().mockResolvedValue(true);
 	mocks.recordCue.mockReset().mockResolvedValue({ status: "changed" });
-	mocks.saveCueList.mockReset().mockResolvedValue(true);
+	mocks.activeSaveTopologyCueList = null;
+	mocks.saveTopologyCueList.mockReset().mockImplementation(
+		(
+			_cueListId: string,
+			expectedRevision: number,
+			expectedObjectId: string,
+			body: CueList,
+		) =>
+			Promise.resolve(
+				savedCueListOutcome(expectedObjectId, expectedRevision + 1, body),
+			),
+	);
 	mocks.state.storeArmed = true;
 	mocks.state.paneSettingsId = null;
 	mocks.state.cueListSetArmed = false;
@@ -139,6 +158,66 @@ function resetCuelistWindowMocks() {
 	mocks.playbacks.active = [];
 	mocks.playbacks.selected_playback = null;
 	mocks.cueObjects = [];
+}
+
+function editableCueList(): CueList {
+	return {
+		id: "main",
+		name: "Main",
+		priority: 10,
+		mode: "sequence",
+		looped: false,
+		cues: [
+			{
+				id: "cue-1",
+				number: 1,
+				name: "Opening",
+				fade_millis: 2_500,
+				delay_millis: 0,
+				trigger: { type: "manual" },
+				changes: [],
+			},
+		],
+	};
+}
+
+function showEditableCueList(cueList = editableCueList()) {
+	mocks.state.storeArmed = false;
+	mocks.playbacks.pool = [
+		{
+			number: 1,
+			name: "Main",
+			target: { type: "cue_list", cue_list_id: cueList.id },
+			buttons: ["go", "go_minus", "flash"],
+			fader: "master",
+			go_activates: true,
+			auto_off: true,
+			xfade_millis: 0,
+		},
+	];
+	mocks.cueObjects = [
+		{ id: "legacy-main", revision: 3, body: cueList },
+	];
+	return cueList;
+}
+
+function savedCueListOutcome(
+	objectId: string,
+	objectRevision: number,
+	body: CueList,
+) {
+	return {
+		status: "changed",
+		objects: [
+			{
+				kind: "cue_list",
+				state: "present",
+				objectId,
+				objectRevision,
+				body,
+			},
+		],
+	};
 }
 
 describe("CuelistWindow Cue settings", () => {
@@ -593,7 +672,7 @@ describe("CuelistWindow pane and Cuelist settings", () => {
 			ui.queryByRole("heading", { name: "Cue Settings" }),
 		).not.toBeInTheDocument();
 		expect(ui.getByText("Selected Cue · 1")).toBeInTheDocument();
-		expect(mocks.saveCueList).not.toHaveBeenCalled();
+		expect(mocks.saveTopologyCueList).not.toHaveBeenCalled();
 	});
 });
 
@@ -653,7 +732,326 @@ describe("CuelistWindow Cue draft validation", () => {
 		expect(await ui.findByRole("alert")).toHaveTextContent(
 			"Cue edit was not saved",
 		);
-		expect(mocks.saveCueList).not.toHaveBeenCalled();
+		expect(mocks.saveTopologyCueList).not.toHaveBeenCalled();
+	});
+
+	it("saves an inline Cue through its captured topology identity without a broad refresh", async () => {
+		const cueList = showEditableCueList();
+		const view = render(<CuelistWindow />);
+		const ui = within(view.container);
+		fireEvent.click(ui.getByText("Main").closest("button")!);
+		fireEvent.change(ui.getByLabelText("Fade"), { target: { value: "3" } });
+
+		mocks.cueObjects = [
+			{
+				id: "replacement-main",
+				revision: 9,
+				body: { ...cueList, name: "Concurrent" },
+			},
+		];
+		view.rerender(<CuelistWindow />);
+		fireEvent.keyDown(ui.getByLabelText("Fade"), { key: "Enter" });
+
+		await waitFor(() => expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce());
+		expect(mocks.saveTopologyCueList).toHaveBeenCalledWith(
+			"main",
+			3,
+			"legacy-main",
+			expect.objectContaining({
+				id: "main",
+				name: "Main",
+				cues: [expect.objectContaining({ id: "cue-1", fade_millis: 3_000 })],
+			}),
+		);
+		expect(mocks.refresh).not.toHaveBeenCalled();
+	});
+
+	it("rebases queued inline edits onto the preceding authoritative outcome", async () => {
+		showEditableCueList();
+		let resolveFirst!: (outcome: ReturnType<typeof savedCueListOutcome>) => void;
+		const first = new Promise<ReturnType<typeof savedCueListOutcome>>(
+			(resolve) => {
+				resolveFirst = resolve;
+			},
+		);
+		mocks.saveTopologyCueList
+			.mockReset()
+			.mockImplementationOnce(() => first)
+			.mockImplementationOnce(
+				(
+					_cueListId: string,
+					expectedRevision: number,
+					expectedObjectId: string,
+					body: CueList,
+				) =>
+					Promise.resolve(
+						savedCueListOutcome(
+							expectedObjectId,
+							expectedRevision + 1,
+							body,
+						),
+					),
+			);
+		const view = render(<CuelistWindow />);
+		const ui = within(view.container);
+		fireEvent.click(ui.getByText("Main").closest("button")!);
+		fireEvent.change(ui.getByLabelText("Fade"), { target: { value: "3" } });
+		fireEvent.keyDown(ui.getByLabelText("Fade"), { key: "Enter" });
+		await waitFor(() => expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce());
+
+		fireEvent.change(ui.getByLabelText("Delay"), { target: { value: "2" } });
+		fireEvent.keyDown(ui.getByLabelText("Delay"), { key: "Enter" });
+		expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce();
+		const firstBody = mocks.saveTopologyCueList.mock.calls[0][3] as CueList;
+		act(() =>
+			resolveFirst(savedCueListOutcome("legacy-main", 4, firstBody)),
+		);
+
+		await waitFor(() =>
+			expect(mocks.saveTopologyCueList).toHaveBeenCalledTimes(2),
+		);
+		expect(mocks.saveTopologyCueList.mock.calls[1]).toEqual([
+			"main",
+			4,
+			"legacy-main",
+			expect.objectContaining({
+				cues: [
+					expect.objectContaining({
+						fade_millis: 3_000,
+						delay_millis: 2_000,
+					}),
+				],
+			}),
+		]);
+	});
+
+	it("cancels later queued edits after failure and lets the operator retry on repaired authority", async () => {
+		const cueList = showEditableCueList();
+		let resolveFirst!: (outcome: null) => void;
+		const first = new Promise<null>((resolve) => {
+			resolveFirst = resolve;
+		});
+		mocks.saveTopologyCueList
+			.mockReset()
+			.mockImplementationOnce(() => first)
+			.mockImplementationOnce(
+				(
+					_cueListId: string,
+					expectedRevision: number,
+					expectedObjectId: string,
+					body: CueList,
+				) =>
+					Promise.resolve(
+						savedCueListOutcome(
+							expectedObjectId,
+							expectedRevision + 1,
+							body,
+						),
+					),
+			);
+		const view = render(<CuelistWindow />);
+		const ui = within(view.container);
+		fireEvent.click(ui.getByText("Main").closest("button")!);
+		fireEvent.change(ui.getByLabelText("Fade"), { target: { value: "3" } });
+		fireEvent.keyDown(ui.getByLabelText("Fade"), { key: "Enter" });
+		await waitFor(() => expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce());
+		fireEvent.change(ui.getByLabelText("Delay"), { target: { value: "2" } });
+		fireEvent.keyDown(ui.getByLabelText("Delay"), { key: "Enter" });
+
+		mocks.cueObjects = [
+			{
+				id: "legacy-main",
+				revision: 4,
+				body: { ...cueList, name: "Concurrent repair" },
+			},
+		];
+		view.rerender(<CuelistWindow />);
+		act(() => resolveFirst(null));
+		await waitFor(() =>
+			expect(ui.getByRole("alert")).toHaveTextContent("revision conflict"),
+		);
+		expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce();
+
+		fireEvent.keyDown(ui.getByLabelText("Delay"), { key: "Enter" });
+		await waitFor(() =>
+			expect(mocks.saveTopologyCueList).toHaveBeenCalledTimes(2),
+		);
+		expect(mocks.saveTopologyCueList.mock.calls[1]).toEqual([
+			"main",
+			4,
+			"legacy-main",
+			expect.objectContaining({
+				name: "Concurrent repair",
+				cues: [
+					expect.objectContaining({
+						fade_millis: 3_000,
+						delay_millis: 2_000,
+					}),
+				],
+			}),
+		]);
+	});
+
+	it("isolates a replacement writer from a late same-object response", async () => {
+		showEditableCueList();
+		let resolveOld!: (outcome: null) => void;
+		const oldResponse = new Promise<null>((resolve) => {
+			resolveOld = resolve;
+		});
+		mocks.saveTopologyCueList.mockReset().mockImplementationOnce(() => oldResponse);
+		const view = render(<CuelistWindow />);
+		const ui = within(view.container);
+		fireEvent.click(ui.getByText("Main").closest("button")!);
+		fireEvent.change(ui.getByLabelText("Fade"), { target: { value: "3" } });
+		fireEvent.keyDown(ui.getByLabelText("Fade"), { key: "Enter" });
+		await waitFor(() => expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce());
+
+		const replacementWriter = vi.fn(
+			(
+				_cueListId: string,
+				expectedRevision: number,
+				expectedObjectId: string,
+				body: CueList,
+			) =>
+				Promise.resolve(
+					savedCueListOutcome(
+						expectedObjectId,
+						expectedRevision + 1,
+						body,
+					),
+				),
+		);
+		mocks.activeSaveTopologyCueList = replacementWriter;
+		view.rerender(<CuelistWindow />);
+		fireEvent.change(ui.getByLabelText("Delay"), { target: { value: "2" } });
+		fireEvent.keyDown(ui.getByLabelText("Delay"), { key: "Enter" });
+		await waitFor(() => expect(replacementWriter).toHaveBeenCalledOnce());
+
+		act(() => resolveOld(null));
+		await act(async () => Promise.resolve());
+		expect(ui.queryByRole("alert")).not.toBeInTheDocument();
+		expect(replacementWriter).toHaveBeenCalledOnce();
+	});
+
+	it("clears a stale repair marker after retry instead of rebasing a later dirty draft", async () => {
+		showEditableCueList();
+		mocks.saveTopologyCueList
+			.mockReset()
+			.mockResolvedValueOnce(null)
+			.mockImplementation(
+				(
+					_cueListId: string,
+					expectedRevision: number,
+					expectedObjectId: string,
+					body: CueList,
+				) =>
+					Promise.resolve(
+						savedCueListOutcome(
+							expectedObjectId,
+							expectedRevision + 1,
+							body,
+						),
+					),
+			);
+		const view = render(<CuelistWindow />);
+		const ui = within(view.container);
+		fireEvent.click(ui.getByText("Main").closest("button")!);
+		fireEvent.change(ui.getByLabelText("Fade"), { target: { value: "3" } });
+		fireEvent.keyDown(ui.getByLabelText("Fade"), { key: "Enter" });
+		await ui.findByRole("alert");
+		fireEvent.keyDown(ui.getByLabelText("Fade"), { key: "Enter" });
+		await waitFor(() =>
+			expect(mocks.saveTopologyCueList).toHaveBeenCalledTimes(2),
+		);
+
+		const retriedBody = mocks.saveTopologyCueList.mock.calls[1][3] as CueList;
+		mocks.cueObjects = [
+			{ id: "legacy-main", revision: 4, body: retriedBody },
+		];
+		view.rerender(<CuelistWindow />);
+		fireEvent.change(ui.getByLabelText("Delay"), { target: { value: "2" } });
+		mocks.cueObjects = [
+			{
+				id: "legacy-main",
+				revision: 5,
+				body: { ...retriedBody, name: "Later concurrent change" },
+			},
+		];
+		view.rerender(<CuelistWindow />);
+		fireEvent.keyDown(ui.getByLabelText("Delay"), { key: "Enter" });
+
+		await waitFor(() =>
+			expect(mocks.saveTopologyCueList).toHaveBeenCalledTimes(3),
+		);
+		expect(mocks.saveTopologyCueList.mock.calls[2]).toEqual([
+			"main",
+			4,
+			"legacy-main",
+			expect.objectContaining({
+				name: "Main",
+				cues: [expect.objectContaining({ delay_millis: 2_000 })],
+			}),
+		]);
+	});
+});
+
+describe("CuelistWindow topology-backed Cuelist settings", () => {
+	beforeEach(resetCuelistWindowMocks);
+
+	it("saves settings against the modal-open storage identity and revision", async () => {
+		const cueList = showEditableCueList();
+		const view = render(<CuelistWindow />);
+		const ui = within(view.container);
+		fireEvent.click(ui.getByText("Main").closest("button")!);
+		fireEvent.click(ui.getByRole("button", { name: "Cuelist Settings" }));
+		const settings = screen.getByRole("dialog", { name: "Cuelist Settings" });
+		fireEvent.change(within(settings).getByLabelText("Numeric priority"), {
+			target: { value: "11" },
+		});
+
+		mocks.cueObjects = [
+			{
+				id: "replacement-main",
+				revision: 9,
+				body: { ...cueList, name: "Concurrent" },
+			},
+		];
+		view.rerender(<CuelistWindow />);
+		fireEvent.click(within(settings).getByRole("button", { name: "Save" }));
+
+		await waitFor(() => expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce());
+		expect(mocks.saveTopologyCueList).toHaveBeenCalledWith(
+			"main",
+			3,
+			"legacy-main",
+			expect.objectContaining({ name: "Main", priority: 11 }),
+		);
+		expect(mocks.refresh).not.toHaveBeenCalled();
+	});
+
+	it("renumbers the complete Cuelist in one topology action", async () => {
+		showEditableCueList();
+		render(<CuelistWindow />);
+		fireEvent.click(screen.getByText("Main").closest("button")!);
+		fireEvent.click(screen.getByRole("button", { name: "Cuelist Settings" }));
+		const settings = screen.getByRole("dialog", { name: "Cuelist Settings" });
+		fireEvent.click(within(settings).getByRole("button", { name: "Renumber Cues" }));
+		const renumber = screen.getByRole("dialog", { name: "Renumber Cues" });
+		fireEvent.change(within(renumber).getByLabelText("Start Cue"), {
+			target: { value: "10" },
+		});
+		fireEvent.click(within(renumber).getByRole("button", { name: "Renumber" }));
+
+		await waitFor(() => expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce());
+		expect(mocks.saveTopologyCueList).toHaveBeenCalledWith(
+			"main",
+			3,
+			"legacy-main",
+			expect.objectContaining({
+				cues: [expect.objectContaining({ id: "cue-1", number: 10 })],
+			}),
+		);
+		expect(mocks.refresh).not.toHaveBeenCalled();
 	});
 });
 

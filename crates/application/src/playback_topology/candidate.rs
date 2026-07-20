@@ -3,7 +3,8 @@ use super::{
     change::{PreparedTopology, changed_configure, changed_present, no_change},
     stored::{
         Stored, conflict, find_cue_list, find_page, find_playback, invalid, next_playback_number,
-        next_revision, not_found, pages, same_typed, stored_projection, validate_revision,
+        next_revision, not_found, pages, same_typed, stored_projection, validate_identity,
+        validate_revision,
     },
 };
 use crate::active_show::PreparedActiveShowTransaction;
@@ -25,6 +26,7 @@ pub(super) fn prepare(
         PlaybackTopologyAction::SaveCueList {
             cue_list_id,
             expected_revision,
+            expected_object_id,
             cue_list,
             raw_body,
         } => save_cue_list(
@@ -32,6 +34,7 @@ pub(super) fn prepare(
             command,
             *cue_list_id,
             *expected_revision,
+            expected_object_id.as_deref(),
             cue_list,
             raw_body,
         ),
@@ -39,25 +42,37 @@ pub(super) fn prepare(
             page,
             slot,
             expected_page_revision,
+            expected_page_object_id,
             expected_playback_revision,
+            expected_playback_object_id,
             playback,
         } => configure_slot(
             document,
             command,
             (*page, *slot),
             (*expected_page_revision, *expected_playback_revision),
+            (
+                expected_page_object_id.as_deref(),
+                expected_playback_object_id.as_deref(),
+            ),
             playback,
         ),
         PlaybackTopologyAction::ClearMappedPlayback {
             page,
             slot,
             expected_page_revision,
+            expected_page_object_id,
             expected_playback_revision,
+            expected_playback_object_id,
         } => clear_mapped_playback(
             document,
             command,
             (*page, *slot),
             (*expected_page_revision, *expected_playback_revision),
+            (
+                expected_page_object_id.as_deref(),
+                expected_playback_object_id.as_deref(),
+            ),
         ),
     }
 }
@@ -67,6 +82,7 @@ fn save_cue_list(
     command: &PlaybackTopologyCommand,
     cue_list_id: light_core::CueListId,
     expected_revision: u64,
+    expected_object_id: Option<&str>,
     cue_list: &CueList,
     raw_body: &Value,
 ) -> Result<PreparedActiveShowTransaction<PreparedTopology>, ActionError> {
@@ -81,6 +97,12 @@ fn save_cue_list(
     }
     cue_list.validate().map_err(invalid)?;
     let stored = find_cue_list(document, cue_list_id)?;
+    validate_identity(
+        stored.as_ref(),
+        expected_object_id,
+        "Cuelist",
+        document.revision().value(),
+    )?;
     validate_revision(
         stored.as_ref(),
         expected_revision,
@@ -117,11 +139,18 @@ fn configure_slot(
     command: &PlaybackTopologyCommand,
     address: (u8, u8),
     expected: (u64, u64),
+    expected_ids: (Option<&str>, Option<&str>),
     requested: &PlaybackDefinition,
 ) -> Result<PreparedActiveShowTransaction<PreparedTopology>, ActionError> {
     validate_address(address)?;
     let (page_number, slot) = address;
     let page = find_page(document, page_number)?;
+    validate_identity(
+        page.as_ref(),
+        expected_ids.0,
+        "Playback Page",
+        document.revision().value(),
+    )?;
     validate_revision(
         page.as_ref(),
         expected.0,
@@ -133,6 +162,12 @@ fn configure_slot(
         .and_then(|page| page.typed.slots.get(&slot).copied())
         .map_or_else(|| next_playback_number(document), Ok)?;
     let playback = find_playback(document, number)?;
+    validate_identity(
+        playback.as_ref(),
+        expected_ids.1,
+        "Playback",
+        document.revision().value(),
+    )?;
     validate_revision(
         playback.as_ref(),
         expected.1,
@@ -199,10 +234,17 @@ fn clear_mapped_playback(
     command: &PlaybackTopologyCommand,
     address: (u8, u8),
     expected: (u64, u64),
+    expected_ids: (Option<&str>, Option<&str>),
 ) -> Result<PreparedActiveShowTransaction<PreparedTopology>, ActionError> {
     validate_address(address)?;
     let (page_number, slot) = address;
     let page = find_page(document, page_number)?;
+    validate_identity(
+        page.as_ref(),
+        expected_ids.0,
+        "Playback Page",
+        document.revision().value(),
+    )?;
     validate_revision(
         page.as_ref(),
         expected.0,
@@ -213,6 +255,12 @@ fn clear_mapped_playback(
         .as_ref()
         .and_then(|value| value.typed.slots.get(&slot).copied())
     else {
+        validate_identity::<PlaybackDefinition>(
+            None,
+            expected_ids.1,
+            "Playback",
+            document.revision().value(),
+        )?;
         validate_revision::<PlaybackDefinition>(
             None,
             expected.1,
@@ -236,6 +284,12 @@ fn clear_mapped_playback(
         ));
     };
     let playback = find_playback(document, number)?;
+    validate_identity(
+        playback.as_ref(),
+        expected_ids.1,
+        "Playback",
+        document.revision().value(),
+    )?;
     validate_revision(
         playback.as_ref(),
         expected.1,

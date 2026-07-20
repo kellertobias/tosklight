@@ -162,7 +162,9 @@ pub(super) fn configure_request(
             "page": 1,
             "slot": 4,
             "expected_page_revision": page_revision,
+            "expected_page_object_id": if page_revision == 0 { None } else { Some("1") },
             "expected_playback_revision": playback_revision,
+            "expected_playback_object_id": if playback_revision == 0 { None } else { Some("1") },
             "playback": playback_body()
         }
     })
@@ -180,7 +182,9 @@ pub(super) fn clear_request(
             "page": 1,
             "slot": 4,
             "expected_page_revision": page_revision,
-            "expected_playback_revision": playback_revision
+            "expected_page_object_id": if page_revision == 0 { None } else { Some("1") },
+            "expected_playback_revision": playback_revision,
+            "expected_playback_object_id": if playback_revision == 0 { None } else { Some("1") }
         }
     })
 }
@@ -196,6 +200,11 @@ pub(super) fn save_request(request_id: &str, expected_revision: u64) -> serde_js
             "type": "save_cue_list",
             "cue_list_id": cue_list_id,
             "expected_revision": expected_revision,
+            "expected_object_id": if expected_revision == 0 {
+                None
+            } else {
+                Some(cue_list_id.to_string())
+            },
             "body": body
         }
     })

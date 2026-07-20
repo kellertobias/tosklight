@@ -7,6 +7,22 @@ use serde_json::Value;
 use ts_rs::TS;
 use uuid::Uuid;
 
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Eq, Serialize, TS)]
+#[serde(untagged)]
+pub enum PlaybackTopologyObjectIdentity {
+    Present(String),
+    Absent(()),
+}
+
+impl PlaybackTopologyObjectIdentity {
+    pub fn into_option(self) -> Option<String> {
+        match self {
+            Self::Present(value) => Some(value),
+            Self::Absent(()) => None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct PlaybackTopologyActionRequest {
@@ -22,6 +38,8 @@ pub enum PlaybackTopologyAction {
         cue_list_id: Uuid,
         #[ts(type = "number")]
         expected_revision: u64,
+        #[ts(type = "string | null")]
+        expected_object_id: PlaybackTopologyObjectIdentity,
         /// Extensible portable body; adapters strictly decode its known Cuelist fields.
         #[ts(type = "unknown")]
         body: Value,
@@ -33,8 +51,12 @@ pub enum PlaybackTopologyAction {
         slot: u8,
         #[ts(type = "number")]
         expected_page_revision: u64,
+        #[ts(type = "string | null")]
+        expected_page_object_id: PlaybackTopologyObjectIdentity,
         #[ts(type = "number")]
         expected_playback_revision: u64,
+        #[ts(type = "string | null")]
+        expected_playback_object_id: PlaybackTopologyObjectIdentity,
         playback: PlaybackTopologyPlaybackDefinition,
     },
     ClearMappedPlayback {
@@ -44,8 +66,12 @@ pub enum PlaybackTopologyAction {
         slot: u8,
         #[ts(type = "number")]
         expected_page_revision: u64,
+        #[ts(type = "string | null")]
+        expected_page_object_id: PlaybackTopologyObjectIdentity,
         #[ts(type = "number")]
         expected_playback_revision: u64,
+        #[ts(type = "string | null")]
+        expected_playback_object_id: PlaybackTopologyObjectIdentity,
     },
 }
 
@@ -226,18 +252,21 @@ mod tests {
             json!({
                 "request_id":"save",
                 "action":{"type":"save_cue_list","cue_list_id":Uuid::nil(),
-                    "expected_revision":3,"body":{"id":Uuid::nil(),"future":true}}
+                    "expected_revision":3,"expected_object_id":null,
+                    "body":{"id":Uuid::nil(),"future":true}}
             }),
             json!({
                 "request_id":"configure",
                 "action":{"type":"configure_slot","page":2,"slot":4,
-                    "expected_page_revision":5,"expected_playback_revision":6,
+                    "expected_page_revision":5,"expected_page_object_id":null,
+                    "expected_playback_revision":6,"expected_playback_object_id":null,
                     "playback":playback_json()}
             }),
             json!({
                 "request_id":"clear",
                 "action":{"type":"clear_mapped_playback","page":2,"slot":4,
-                    "expected_page_revision":5,"expected_playback_revision":6}
+                    "expected_page_revision":5,"expected_page_object_id":null,
+                    "expected_playback_revision":6,"expected_playback_object_id":null}
             }),
         ];
         for action in actions {
@@ -267,6 +296,20 @@ mod tests {
         let mut target = configure_request();
         target["action"]["playback"]["target"]["future"] = json!(true);
         assert!(serde_json::from_value::<PlaybackTopologyActionRequest>(target).is_err());
+
+        for field in ["expected_page_object_id", "expected_playback_object_id"] {
+            let mut missing = configure_request();
+            missing["action"].as_object_mut().unwrap().remove(field);
+            assert!(serde_json::from_value::<PlaybackTopologyActionRequest>(missing).is_err());
+        }
+        let missing_save_identity = json!({
+            "request_id":"save",
+            "action":{"type":"save_cue_list","cue_list_id":Uuid::nil(),
+                "expected_revision":3,"body":{"id":Uuid::nil()}}
+        });
+        assert!(
+            serde_json::from_value::<PlaybackTopologyActionRequest>(missing_save_identity).is_err()
+        );
     }
 
     #[test]
@@ -300,7 +343,8 @@ mod tests {
 
     fn configure_request() -> Value {
         json!({"request_id":"configure","action":{"type":"configure_slot","page":2,"slot":4,
-            "expected_page_revision":5,"expected_playback_revision":6,
+            "expected_page_revision":5,"expected_page_object_id":"legacy-page-two",
+            "expected_playback_revision":6,"expected_playback_object_id":"legacy-six",
             "playback":playback_json()}})
     }
 

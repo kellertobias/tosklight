@@ -39,6 +39,7 @@ fn save_cue_list_is_lossless_and_semantic_repetition_is_no_change() {
             PlaybackTopologyAction::SaveCueList {
                 cue_list_id,
                 expected_revision: 1,
+                expected_object_id: Some(cue_list_id.0.to_string()),
                 cue_list: changed.clone(),
                 raw_body: Arc::new(request),
             },
@@ -63,6 +64,7 @@ fn save_cue_list_is_lossless_and_semantic_repetition_is_no_change() {
             PlaybackTopologyAction::SaveCueList {
                 cue_list_id,
                 expected_revision: 2,
+                expected_object_id: Some(cue_list_id.0.to_string()),
                 cue_list: changed,
                 raw_body: projection.clone(),
             },
@@ -74,6 +76,66 @@ fn save_cue_list_is_lossless_and_semantic_repetition_is_no_change() {
     ));
     assert_eq!(rig.steps(), ["authorize", "begin"]);
     assert_one_event(&rig, 1);
+}
+
+#[test]
+fn storage_identity_conflicts_stop_before_topology_mutation() {
+    let cue_rig = TestRig::new();
+    let cue_list_id = CueListId::new();
+    let cue_list = cue_list(cue_list_id, "Original");
+    let cue_body = serde_json::to_value(&cue_list).unwrap();
+    cue_rig.seed("cue_list", "legacy-main", &cue_body);
+
+    let cue_error = cue_rig
+        .handle(
+            "stale-cue-identity",
+            cue_rig.show_revision(),
+            PlaybackTopologyAction::SaveCueList {
+                cue_list_id,
+                expected_revision: 1,
+                expected_object_id: Some("replacement-main".into()),
+                cue_list,
+                raw_body: Arc::new(cue_body),
+            },
+        )
+        .unwrap_err();
+
+    assert_eq!(cue_error.kind, ActionErrorKind::Conflict);
+    assert_eq!(cue_error.current_related_revision, Some(1));
+    assert_eq!(cue_rig.steps(), ["authorize", "begin"]);
+    assert_one_event(&cue_rig, 0);
+
+    let slot_rig = TestRig::new();
+    slot_rig.seed(
+        "playback",
+        "legacy-seven",
+        &serde_json::to_value(playback(7, "Original")).unwrap(),
+    );
+    slot_rig.seed(
+        "playback_page",
+        "legacy-page-one",
+        &json!({"number":1,"name":"Main","slots":{"1":7}}),
+    );
+    let slot_error = slot_rig
+        .handle(
+            "stale-slot-identity",
+            slot_rig.show_revision(),
+            PlaybackTopologyAction::ConfigureSlot {
+                page: 1,
+                slot: 1,
+                expected_page_revision: 1,
+                expected_page_object_id: Some("legacy-page-one".into()),
+                expected_playback_revision: 1,
+                expected_playback_object_id: Some("replacement-seven".into()),
+                playback: playback(7, "Changed"),
+            },
+        )
+        .unwrap_err();
+
+    assert_eq!(slot_error.kind, ActionErrorKind::Conflict);
+    assert_eq!(slot_error.current_related_revision, Some(1));
+    assert_eq!(slot_rig.steps(), ["authorize", "begin"]);
+    assert_one_event(&slot_rig, 0);
 }
 
 #[test]
@@ -93,7 +155,9 @@ fn configure_empty_slot_allocates_once_and_commits_playback_and_page_together() 
                 page: 1,
                 slot: 4,
                 expected_page_revision: 1,
+                expected_page_object_id: Some("legacy-page-one".into()),
                 expected_playback_revision: 0,
+                expected_playback_object_id: None,
                 playback: playback(999, "House"),
             },
         )
@@ -147,7 +211,9 @@ fn legacy_semantic_configure_is_no_change_without_normalizing_raw_json() {
                 page: 1,
                 slot: 2,
                 expected_page_revision: 1,
+                expected_page_object_id: Some("1".into()),
                 expected_playback_revision: 1,
+                expected_playback_object_id: Some("legacy-seven".into()),
                 playback: decoded,
             },
         )
@@ -194,7 +260,9 @@ fn changed_playback_preserves_nested_extensions_and_returns_unchanged_page_autho
                 page: 1,
                 slot: 2,
                 expected_page_revision: 1,
+                expected_page_object_id: Some("page-one".into()),
                 expected_playback_revision: 1,
+                expected_playback_object_id: Some("legacy-seven".into()),
                 playback: changed,
             },
         )
@@ -256,7 +324,9 @@ fn clear_removes_one_playback_from_every_page_in_one_event() {
                 page: 1,
                 slot: 1,
                 expected_page_revision: 1,
+                expected_page_object_id: Some("page-a".into()),
                 expected_playback_revision: 1,
+                expected_playback_object_id: Some("legacy-nine".into()),
             },
         )
         .unwrap();
@@ -305,7 +375,9 @@ fn empty_clear_is_no_change_and_does_not_prepare_or_emit() {
                 page: 1,
                 slot: 2,
                 expected_page_revision: 1,
+                expected_page_object_id: Some("1".into()),
                 expected_playback_revision: 0,
+                expected_playback_object_id: None,
             },
         )
         .unwrap();
@@ -331,7 +403,9 @@ fn exact_replay_returns_original_authority_without_a_second_transaction_or_event
         page: 1,
         slot: 1,
         expected_page_revision: 1,
+        expected_page_object_id: Some("1".into()),
         expected_playback_revision: 0,
+        expected_playback_object_id: None,
         playback: playback(0, "Replay"),
     };
     let expected = rig.show_revision();
@@ -359,7 +433,9 @@ fn show_object_and_request_conflicts_stop_before_side_effects() {
         page: 1,
         slot: 1,
         expected_page_revision: 0,
+        expected_page_object_id: Some("1".into()),
         expected_playback_revision: 0,
+        expected_playback_object_id: None,
         playback: playback(0, "Conflict"),
     };
     let error = rig
@@ -379,7 +455,9 @@ fn show_object_and_request_conflicts_stop_before_side_effects() {
                 page: 1,
                 slot: 1,
                 expected_page_revision: 1,
+                expected_page_object_id: Some("1".into()),
                 expected_playback_revision: 0,
+                expected_playback_object_id: None,
             },
         )
         .unwrap_err();
@@ -393,7 +471,9 @@ fn show_object_and_request_conflicts_stop_before_side_effects() {
         page: 1,
         slot: 1,
         expected_page_revision: 1,
+        expected_page_object_id: Some("1".into()),
         expected_playback_revision: 0,
+        expected_playback_object_id: None,
     };
     rig.handle("collision", current, noop.clone()).unwrap();
     rig.clear_steps();
@@ -405,7 +485,9 @@ fn show_object_and_request_conflicts_stop_before_side_effects() {
                 page: 1,
                 slot: 2,
                 expected_page_revision: 1,
+                expected_page_object_id: Some("1".into()),
                 expected_playback_revision: 0,
+                expected_playback_object_id: None,
             },
         )
         .unwrap_err();
@@ -425,7 +507,9 @@ fn replay_identity_isolated_by_user_desk_and_session() {
         page: 1,
         slot: 1,
         expected_page_revision: 1,
+        expected_page_object_id: Some("1".into()),
         expected_playback_revision: 0,
+        expected_playback_object_id: None,
     };
     let show_revision = rig.show_revision();
     for (user, desk, session) in [(2, 1, 3), (20, 1, 3), (2, 10, 3), (2, 1, 30)] {
@@ -463,7 +547,9 @@ fn request_actor_session_and_exact_show_revision_are_required_before_opening_sho
         page: 1,
         slot: 1,
         expected_page_revision: 0,
+        expected_page_object_id: None,
         expected_playback_revision: 0,
+        expected_playback_object_id: None,
     };
     let operator = ActionContext::operator(
         Uuid::from_u128(1),
