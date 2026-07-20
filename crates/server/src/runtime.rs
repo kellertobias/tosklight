@@ -21,6 +21,10 @@ mod output_scheduler;
 mod playback_service;
 mod playback_v2;
 mod programming_update_adapter;
+mod programming_update_http;
+mod programming_update_http_error;
+mod programming_update_wire;
+mod programming_update_wire_output;
 mod startup_options;
 mod startup_state;
 

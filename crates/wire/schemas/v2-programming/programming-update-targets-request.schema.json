@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProgrammingUpdateTargetsRequest",
+  "type": "object",
+  "properties": {
+    "filter": {
+      "$ref": "#/$defs/ProgrammingUpdateTargetFilter"
+    },
+    "request_id": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "filter"
+  ],
+  "$defs": {
+    "ProgrammingUpdateTargetFilter": {
+      "type": "string",
+      "enum": [
+        "eligible_for_update_existing",
+        "show_all_active"
+      ]
+    }
+  }
+}

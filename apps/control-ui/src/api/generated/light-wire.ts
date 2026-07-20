@@ -205,6 +205,66 @@ export type CueRecordErrorKind = "invalid" | "unauthorized" | "forbidden" | "not
 
 export type CueRecordErrorResponse = { kind: CueRecordErrorKind, error: string, current_revision?: number | null, retryable: boolean, };
 
+export type ProgrammingUpdateCueMode = "existing_only" | "existing_in_current_cue" | "add_to_current_cue" | "add_new";
+
+export type ProgrammingUpdateExistingContentMode = "update_existing" | "add_new";
+
+export type ProgrammingUpdateMode = { "target_type": "cue", "mode": ProgrammingUpdateCueMode } | { "target_type": "existing_content", "mode": ProgrammingUpdateExistingContentMode };
+
+export type ProgrammingUpdateTarget = { "type": "cue", cue_list_id: string, playback_number?: number | null, cue_id?: string | null, cue_number?: number | null, validate_active_context: boolean, } | { "type": "preset", object_id: string, } | { "type": "group", object_id: string, };
+
+export type ProgrammingUpdateTargetFamily = { "type": "cue" } | { "type": "preset" } | { "type": "group" };
+
+export type ProgrammingUpdateCueIdentity = { id: string, number: number, };
+
+export type ProgrammingUpdateTargetIdentity = { family: ProgrammingUpdateTargetFamily, object_id: string, name: string, playback_number?: number | null, cue?: ProgrammingUpdateCueIdentity | null, };
+
+export type ProgrammingUpdateObjectKind = "cue_list" | "preset" | "group";
+
+export type ProgrammingUpdateObjectIdentity = { kind: ProgrammingUpdateObjectKind, object_id: string, object_revision: number, };
+
+export type ProgrammingUpdateTargetFilter = "eligible_for_update_existing" | "show_all_active";
+
+export type ProgrammingUpdateAddress = { "type": "fixture_attribute", fixture_id: string, attribute: string, } | { "type": "group_attribute", group_id: string, attribute: string, } | { "type": "group_membership", fixture_id: string, };
+
+export type ProgrammingUpdateCueSource = { cue_id: string, cue_number: number, cue_index: number, };
+
+export type ProgrammingUpdateIgnoreReason = "new_address" | "not_in_current_cue" | "not_in_active_tracked_state" | "new_group_member";
+
+export type ProgrammingUpdateItemOutcome = { "outcome": "change_at_source", source: ProgrammingUpdateCueSource, } | { "outcome": "change_in_current_cue", cue: ProgrammingUpdateCueSource, } | { "outcome": "add_to_current_cue", cue: ProgrammingUpdateCueSource, } | { "outcome": "add_new_to_current_cue", cue: ProgrammingUpdateCueSource, } | { "outcome": "update_existing" } | { "outcome": "add_new" } | { "outcome": "unchanged", source?: ProgrammingUpdateCueSource | null, } | { "outcome": "ignored", reason: ProgrammingUpdateIgnoreReason, };
+
+export type ProgrammingUpdatePreviewItem = { address: ProgrammingUpdateAddress, outcome: ProgrammingUpdateItemOutcome, };
+
+export type ProgrammingUpdatePreview = { target: ProgrammingUpdateTargetIdentity, mode: ProgrammingUpdateMode, items: Array<ProgrammingUpdatePreviewItem>, };
+
+export type ProgrammingUpdatePreviewRequest = { request_id: string, target: ProgrammingUpdateTarget, mode: ProgrammingUpdateMode, };
+
+export type ProgrammingUpdatePreviewResponse = { request_id: string, correlation_id: string, show_id: string, show_revision: number, object: ProgrammingUpdateObjectIdentity, programmer_revision: string, preview: ProgrammingUpdatePreview, };
+
+export type ProgrammingUpdateTargetsRequest = { request_id: string, filter: ProgrammingUpdateTargetFilter, };
+
+export type ProgrammingUpdateTargetEntry = { request_target: ProgrammingUpdateTarget, object: ProgrammingUpdateObjectIdentity, programmer_revision: string, active_or_referenced: boolean, existing_preview: ProgrammingUpdatePreview, add_new_preview: ProgrammingUpdatePreview, };
+
+export type ProgrammingUpdateTargetsResponse = { request_id: string, correlation_id: string, show_id: string, show_revision: number, targets: Array<ProgrammingUpdateTargetEntry>, };
+
+export type ProgrammingUpdateAction = { "type": "confirm_preview", target: ProgrammingUpdateTarget, mode: ProgrammingUpdateMode, expected_object_revision: number, expected_programmer_revision: string, } | { "type": "apply_direct", target: ProgrammingUpdateTarget, mode: ProgrammingUpdateMode, };
+
+export type ProgrammingUpdateActionRequest = { request_id: string, action: ProgrammingUpdateAction, };
+
+export type ProgrammingUpdateProjection = { kind: ProgrammingUpdateObjectKind, object_id: string, object_revision: number, body: unknown, };
+
+export type ProgrammingUpdateSummary = { target: ProgrammingUpdateTargetIdentity, revision_before: number, revision_after: number, eligible_count: number, changed_count: number, added_count: number, ignored_count: number, changed_cues: Array<ProgrammingUpdateCueSource>, programmer_values_retained: boolean, };
+
+export type ProgrammingUpdateActionOutcome = { "status": "changed", request_id: string, correlation_id: string, replayed: boolean, show_id: string, show_revision: number, projection: ProgrammingUpdateProjection, event_sequence: number, summary: ProgrammingUpdateSummary, };
+
+export type ProgrammingUpdateErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
+
+export type ProgrammingUpdateErrorResponse = { kind: ProgrammingUpdateErrorKind, error: string, current_object_revision?: number | null, current_show_revision?: number | null, retryable: boolean, };
+
+export type ProgrammingUpdateSettings = { cue_mode: ProgrammingUpdateCueMode, preset_mode: ProgrammingUpdateExistingContentMode, group_mode: ProgrammingUpdateExistingContentMode, show_update_modal_on_touch: boolean, };
+
+export type ProgrammingUpdateSettingsProjection = { desk_id: string, settings: ProgrammingUpdateSettings, };
+
 export type PlaybackSurface = "virtual" | "physical";
 
 export type PlaybackAddress = { "kind": "cue_list", cue_list_id: string, } | { "kind": "playback", playback_number: number, } | { "kind": "current_page", slot: number, } | { "kind": "explicit_page", page: number, slot: number, };

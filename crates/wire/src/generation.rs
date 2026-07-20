@@ -42,6 +42,12 @@ use crate::v2::programming::{
     ProgrammingCaptureModeSnapshot, ProgrammingValuesActionOutcome, ProgrammingValuesActionRequest,
     ProgrammingValuesErrorResponse, ProgrammingValuesSnapshot,
 };
+use crate::v2::programming_update::{
+    ProgrammingUpdateActionOutcome, ProgrammingUpdateActionRequest, ProgrammingUpdateErrorResponse,
+    ProgrammingUpdatePreviewRequest, ProgrammingUpdatePreviewResponse, ProgrammingUpdateSettings,
+    ProgrammingUpdateSettingsProjection, ProgrammingUpdateTargetsRequest,
+    ProgrammingUpdateTargetsResponse,
+};
 use crate::v2::selective_import::{
     SelectiveImportApplyRequest, SelectiveImportCatalog, SelectiveImportErrorResponse,
     SelectiveImportOutcome, SelectiveImportPreview, SelectiveImportSelection,
@@ -128,6 +134,31 @@ pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
         programming_request_schema::<CueRecordRequest>("cue-record-request"),
         programming_response_schema::<CueRecordOutcome>("cue-record-outcome"),
         programming_response_schema::<CueRecordErrorResponse>("cue-record-error-response"),
+        programming_request_schema::<ProgrammingUpdatePreviewRequest>(
+            "programming-update-preview-request",
+        ),
+        programming_response_schema::<ProgrammingUpdatePreviewResponse>(
+            "programming-update-preview-response",
+        ),
+        programming_request_schema::<ProgrammingUpdateTargetsRequest>(
+            "programming-update-targets-request",
+        ),
+        programming_response_schema::<ProgrammingUpdateTargetsResponse>(
+            "programming-update-targets-response",
+        ),
+        programming_request_schema::<ProgrammingUpdateActionRequest>(
+            "programming-update-action-request",
+        ),
+        programming_response_schema::<ProgrammingUpdateActionOutcome>(
+            "programming-update-action-outcome",
+        ),
+        programming_response_schema::<ProgrammingUpdateErrorResponse>(
+            "programming-update-error-response",
+        ),
+        programming_request_schema::<ProgrammingUpdateSettings>("programming-update-settings"),
+        programming_response_schema::<ProgrammingUpdateSettingsProjection>(
+            "programming-update-settings-projection",
+        ),
         playback_request_schema::<PlaybackActionRequest>("playback-action-request"),
         playback_response_schema::<PlaybackActionOutcome>("playback-action-outcome"),
         playback_response_schema::<PlaybackErrorResponse>("playback-error-response"),

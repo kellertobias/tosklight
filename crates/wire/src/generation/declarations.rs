@@ -12,12 +12,14 @@ use crate::v2::preload_values::*;
 use crate::v2::preset_recording::*;
 use crate::v2::programmer_lifecycle::*;
 use crate::v2::programming::*;
+use crate::v2::programming_update::*;
 use crate::v2::selective_import::*;
 
 pub(super) fn all(config: &Config) -> Vec<String> {
     let mut declarations = command_line(config);
     declarations.extend(event_subscription(config));
     declarations.extend(programming(config));
+    declarations.extend(programming_update(config));
     declarations.extend(playback_projection(config));
     declarations.extend(event_payload(config));
     declarations.extend(playback_transport(config));
@@ -26,6 +28,41 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(selective_import(config));
     declarations.extend(interaction(config));
     declarations
+}
+
+fn programming_update(config: &Config) -> Vec<String> {
+    vec![
+        ProgrammingUpdateCueMode::decl(config),
+        ProgrammingUpdateExistingContentMode::decl(config),
+        ProgrammingUpdateMode::decl(config),
+        ProgrammingUpdateTarget::decl(config),
+        ProgrammingUpdateTargetFamily::decl(config),
+        ProgrammingUpdateCueIdentity::decl(config),
+        ProgrammingUpdateTargetIdentity::decl(config),
+        ProgrammingUpdateObjectKind::decl(config),
+        ProgrammingUpdateObjectIdentity::decl(config),
+        ProgrammingUpdateTargetFilter::decl(config),
+        ProgrammingUpdateAddress::decl(config),
+        ProgrammingUpdateCueSource::decl(config),
+        ProgrammingUpdateIgnoreReason::decl(config),
+        ProgrammingUpdateItemOutcome::decl(config),
+        ProgrammingUpdatePreviewItem::decl(config),
+        ProgrammingUpdatePreview::decl(config),
+        ProgrammingUpdatePreviewRequest::decl(config),
+        ProgrammingUpdatePreviewResponse::decl(config),
+        ProgrammingUpdateTargetsRequest::decl(config),
+        ProgrammingUpdateTargetEntry::decl(config),
+        ProgrammingUpdateTargetsResponse::decl(config),
+        ProgrammingUpdateAction::decl(config),
+        ProgrammingUpdateActionRequest::decl(config),
+        ProgrammingUpdateProjection::decl(config),
+        ProgrammingUpdateSummary::decl(config),
+        ProgrammingUpdateActionOutcome::decl(config),
+        ProgrammingUpdateErrorKind::decl(config),
+        ProgrammingUpdateErrorResponse::decl(config),
+        ProgrammingUpdateSettings::decl(config),
+        ProgrammingUpdateSettingsProjection::decl(config),
+    ]
 }
 
 fn command_line(config: &Config) -> Vec<String> {

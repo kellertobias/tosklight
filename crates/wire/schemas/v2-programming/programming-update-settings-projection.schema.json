@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProgrammingUpdateSettingsProjection",
+  "type": "object",
+  "properties": {
+    "desk_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "settings": {
+      "$ref": "#/$defs/ProgrammingUpdateSettings"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "desk_id",
+    "settings"
+  ],
+  "$defs": {
+    "ProgrammingUpdateCueMode": {
+      "type": "string",
+      "enum": [
+        "existing_only",
+        "existing_in_current_cue",
+        "add_to_current_cue",
+        "add_new"
+      ]
+    },
+    "ProgrammingUpdateExistingContentMode": {
+      "type": "string",
+      "enum": [
+        "update_existing",
+        "add_new"
+      ]
+    },
+    "ProgrammingUpdateSettings": {
+      "type": "object",
+      "properties": {
+        "cue_mode": {
+          "$ref": "#/$defs/ProgrammingUpdateCueMode"
+        },
+        "group_mode": {
+          "$ref": "#/$defs/ProgrammingUpdateExistingContentMode"
+        },
+        "preset_mode": {
+          "$ref": "#/$defs/ProgrammingUpdateExistingContentMode"
+        },
+        "show_update_modal_on_touch": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "cue_mode",
+        "preset_mode",
+        "group_mode",
+        "show_update_modal_on_touch"
+      ]
+    }
+  }
+}

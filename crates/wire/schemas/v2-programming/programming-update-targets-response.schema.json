@@ -1,0 +1,621 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProgrammingUpdateTargetsResponse",
+  "type": "object",
+  "properties": {
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "show_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "show_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ProgrammingUpdateTargetEntry"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "correlation_id",
+    "show_id",
+    "show_revision",
+    "targets"
+  ],
+  "$defs": {
+    "ProgrammingUpdateAddress": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "attribute": {
+              "type": "string"
+            },
+            "fixture_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": {
+              "type": "string",
+              "const": "fixture_attribute"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "fixture_id",
+            "attribute"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "attribute": {
+              "type": "string"
+            },
+            "group_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "group_attribute"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "group_id",
+            "attribute"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "fixture_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": {
+              "type": "string",
+              "const": "group_membership"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "fixture_id"
+          ]
+        }
+      ]
+    },
+    "ProgrammingUpdateCueIdentity": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "number": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "number"
+      ]
+    },
+    "ProgrammingUpdateCueMode": {
+      "type": "string",
+      "enum": [
+        "existing_only",
+        "existing_in_current_cue",
+        "add_to_current_cue",
+        "add_new"
+      ]
+    },
+    "ProgrammingUpdateCueSource": {
+      "type": "object",
+      "properties": {
+        "cue_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "cue_index": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "cue_number": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "cue_id",
+        "cue_number",
+        "cue_index"
+      ]
+    },
+    "ProgrammingUpdateExistingContentMode": {
+      "type": "string",
+      "enum": [
+        "update_existing",
+        "add_new"
+      ]
+    },
+    "ProgrammingUpdateIgnoreReason": {
+      "type": "string",
+      "enum": [
+        "new_address",
+        "not_in_current_cue",
+        "not_in_active_tracked_state",
+        "new_group_member"
+      ]
+    },
+    "ProgrammingUpdateItemOutcome": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "outcome": {
+              "type": "string",
+              "const": "change_at_source"
+            },
+            "source": {
+              "$ref": "#/$defs/ProgrammingUpdateCueSource"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "outcome",
+            "source"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "cue": {
+              "$ref": "#/$defs/ProgrammingUpdateCueSource"
+            },
+            "outcome": {
+              "type": "string",
+              "const": "change_in_current_cue"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "outcome",
+            "cue"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "cue": {
+              "$ref": "#/$defs/ProgrammingUpdateCueSource"
+            },
+            "outcome": {
+              "type": "string",
+              "const": "add_to_current_cue"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "outcome",
+            "cue"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "cue": {
+              "$ref": "#/$defs/ProgrammingUpdateCueSource"
+            },
+            "outcome": {
+              "type": "string",
+              "const": "add_new_to_current_cue"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "outcome",
+            "cue"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "outcome": {
+              "type": "string",
+              "const": "update_existing"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "outcome"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "outcome": {
+              "type": "string",
+              "const": "add_new"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "outcome"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "outcome": {
+              "type": "string",
+              "const": "unchanged"
+            },
+            "source": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ProgrammingUpdateCueSource"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "outcome"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "outcome": {
+              "type": "string",
+              "const": "ignored"
+            },
+            "reason": {
+              "$ref": "#/$defs/ProgrammingUpdateIgnoreReason"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "outcome",
+            "reason"
+          ]
+        }
+      ]
+    },
+    "ProgrammingUpdateMode": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "$ref": "#/$defs/ProgrammingUpdateCueMode"
+            },
+            "target_type": {
+              "type": "string",
+              "const": "cue"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "target_type",
+            "mode"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "$ref": "#/$defs/ProgrammingUpdateExistingContentMode"
+            },
+            "target_type": {
+              "type": "string",
+              "const": "existing_content"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "target_type",
+            "mode"
+          ]
+        }
+      ]
+    },
+    "ProgrammingUpdateObjectIdentity": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ProgrammingUpdateObjectKind"
+        },
+        "object_id": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "object_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "object_id",
+        "object_revision"
+      ]
+    },
+    "ProgrammingUpdateObjectKind": {
+      "type": "string",
+      "enum": [
+        "cue_list",
+        "preset",
+        "group"
+      ]
+    },
+    "ProgrammingUpdatePreview": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProgrammingUpdatePreviewItem"
+          }
+        },
+        "mode": {
+          "$ref": "#/$defs/ProgrammingUpdateMode"
+        },
+        "target": {
+          "$ref": "#/$defs/ProgrammingUpdateTargetIdentity"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "mode",
+        "items"
+      ]
+    },
+    "ProgrammingUpdatePreviewItem": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "$ref": "#/$defs/ProgrammingUpdateAddress"
+        },
+        "outcome": {
+          "$ref": "#/$defs/ProgrammingUpdateItemOutcome"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "address",
+        "outcome"
+      ]
+    },
+    "ProgrammingUpdateTarget": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "cue_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            },
+            "cue_list_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "cue_number": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "playback_number": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "cue"
+            },
+            "validate_active_context": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "cue_list_id",
+            "validate_active_context"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "object_id": {
+              "type": "string",
+              "maxLength": 256,
+              "minLength": 1
+            },
+            "type": {
+              "type": "string",
+              "const": "preset"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "object_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "object_id": {
+              "type": "string",
+              "maxLength": 256,
+              "minLength": 1
+            },
+            "type": {
+              "type": "string",
+              "const": "group"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "object_id"
+          ]
+        }
+      ]
+    },
+    "ProgrammingUpdateTargetEntry": {
+      "type": "object",
+      "properties": {
+        "active_or_referenced": {
+          "type": "boolean"
+        },
+        "add_new_preview": {
+          "$ref": "#/$defs/ProgrammingUpdatePreview"
+        },
+        "existing_preview": {
+          "$ref": "#/$defs/ProgrammingUpdatePreview"
+        },
+        "object": {
+          "$ref": "#/$defs/ProgrammingUpdateObjectIdentity"
+        },
+        "programmer_revision": {
+          "type": "string"
+        },
+        "request_target": {
+          "$ref": "#/$defs/ProgrammingUpdateTarget"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "request_target",
+        "object",
+        "programmer_revision",
+        "active_or_referenced",
+        "existing_preview",
+        "add_new_preview"
+      ]
+    },
+    "ProgrammingUpdateTargetFamily": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "cue"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "preset"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "group"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "ProgrammingUpdateTargetIdentity": {
+      "type": "object",
+      "properties": {
+        "cue": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProgrammingUpdateCueIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "family": {
+          "$ref": "#/$defs/ProgrammingUpdateTargetFamily"
+        },
+        "name": {
+          "type": "string"
+        },
+        "object_id": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "playback_number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "family",
+        "object_id",
+        "name"
+      ]
+    }
+  }
+}

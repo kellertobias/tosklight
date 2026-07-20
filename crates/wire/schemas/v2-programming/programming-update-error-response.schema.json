@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProgrammingUpdateErrorResponse",
+  "type": "object",
+  "properties": {
+    "current_object_revision": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
+    "current_show_revision": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
+    "error": {
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/ProgrammingUpdateErrorKind"
+    },
+    "retryable": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "error",
+    "retryable"
+  ],
+  "$defs": {
+    "ProgrammingUpdateErrorKind": {
+      "type": "string",
+      "enum": [
+        "invalid",
+        "unauthorized",
+        "forbidden",
+        "not_found",
+        "conflict",
+        "unavailable",
+        "internal"
+      ]
+    }
+  }
+}

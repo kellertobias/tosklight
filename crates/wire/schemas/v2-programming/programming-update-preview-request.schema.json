@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProgrammingUpdatePreviewRequest",
+  "type": "object",
+  "properties": {
+    "mode": {
+      "$ref": "#/$defs/ProgrammingUpdateMode"
+    },
+    "request_id": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1
+    },
+    "target": {
+      "$ref": "#/$defs/ProgrammingUpdateTarget"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "target",
+    "mode"
+  ],
+  "$defs": {
+    "ProgrammingUpdateCueMode": {
+      "type": "string",
+      "enum": [
+        "existing_only",
+        "existing_in_current_cue",
+        "add_to_current_cue",
+        "add_new"
+      ]
+    },
+    "ProgrammingUpdateExistingContentMode": {
+      "type": "string",
+      "enum": [
+        "update_existing",
+        "add_new"
+      ]
+    },
+    "ProgrammingUpdateMode": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "$ref": "#/$defs/ProgrammingUpdateCueMode"
+            },
+            "target_type": {
+              "type": "string",
+              "const": "cue"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "target_type",
+            "mode"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "$ref": "#/$defs/ProgrammingUpdateExistingContentMode"
+            },
+            "target_type": {
+              "type": "string",
+              "const": "existing_content"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "target_type",
+            "mode"
+          ]
+        }
+      ]
+    },
+    "ProgrammingUpdateTarget": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "cue_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            },
+            "cue_list_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "cue_number": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "playback_number": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "cue"
+            },
+            "validate_active_context": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "cue_list_id",
+            "validate_active_context"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "object_id": {
+              "type": "string",
+              "maxLength": 256,
+              "minLength": 1
+            },
+            "type": {
+              "type": "string",
+              "const": "preset"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "object_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "object_id": {
+              "type": "string",
+              "maxLength": 256,
+              "minLength": 1
+            },
+            "type": {
+              "type": "string",
+              "const": "group"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "object_id"
+          ]
+        }
+      ]
+    }
+  }
+}
