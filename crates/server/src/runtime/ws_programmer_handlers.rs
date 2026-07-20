@@ -280,7 +280,10 @@ pub(super) fn ws_programmer_control_action(
                 "programmer_changed",
                 serde_json::json!({
                     "session_id":session.id,
+                    "user_id":session.user.id,
+                    "desk_id":session.desk.id,
                     "command":"programmer.control_action",
+                    "changes":["transient_control"],
                     "action_id":input.action_id,
                     "active":false,
                     "timed_pulse_complete":true,

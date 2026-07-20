@@ -171,6 +171,7 @@ mod store_preload_targets;
 mod test_bench;
 mod update_api;
 mod update_plans;
+mod ws_compatibility_events;
 mod ws_dispatch;
 mod ws_output_handlers;
 mod ws_preload_handlers;

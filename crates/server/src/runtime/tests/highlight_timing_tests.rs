@@ -136,6 +136,11 @@ async fn timed_control_action_is_transient_and_reveals_latched_fan_value_at_dead
     assert_eq!(events[4].payload["action_id"], action_id.to_string());
     assert_eq!(events[4].payload["active"], false);
     assert_eq!(events[4].payload["timed_pulse_complete"], true);
+    assert_eq!(
+        events[4].payload["changes"],
+        serde_json::json!(["transient_control"])
+    );
+    assert_eq!(events[4].payload["user_id"], serde_json::json!(user.id));
     drop(events);
 
     let _ = std::fs::remove_dir_all(data_dir);

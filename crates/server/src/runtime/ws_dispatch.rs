@@ -1,3 +1,4 @@
+use super::ws_compatibility_events::publish_compatibility_events;
 use super::*;
 
 const LIVE_ABSOLUTE_COMMANDS: &[&str] = &[
@@ -188,6 +189,7 @@ fn dispatch_validated_ws_command(
         Ok(completed) => completed.output.with_changes(
             completed.event_sequence.is_some(),
             completed.values_event_sequence.is_some(),
+            completed.preload_values_event_sequence.is_some(),
         ),
         Err(error) => WsProgrammingOutput::untracked(Err(error.message)),
     }
@@ -279,44 +281,6 @@ fn failed_ws_response(command: &WsCommand, revision: u64, error: String) -> WsRe
     }
 }
 
-fn publish_compatibility_events(
-    state: &AppState,
-    session: &Session,
-    command: &WsCommand,
-    payload: &serde_json::Value,
-    changes: &[&str],
-) {
-    let no_op_release = command.command == "preload.release"
-        && payload.get("released").and_then(serde_json::Value::as_bool) == Some(false);
-    if !no_op_release {
-        emit_command_applied(state, session, command);
-    }
-    if !changes.is_empty() {
-        emit_programmer_changed(state, session, command, changes);
-    }
-}
-
-fn emit_command_applied(state: &AppState, session: &Session, command: &WsCommand) {
-    emit(
-        state,
-        "command_applied",
-        serde_json::json!({"request_id":command.request_id,"session_id":session.id,"command":command.command}),
-    );
-}
-
-fn emit_programmer_changed(
-    state: &AppState,
-    session: &Session,
-    command: &WsCommand,
-    changes: &[&str],
-) {
-    emit(
-        state,
-        "programmer_changed",
-        serde_json::json!({"session_id":session.id,"command":command.command,"changes":changes}),
-    );
-}
-
 struct WsProgrammingOutput {
     response: Result<serde_json::Value, String>,
     changes: Vec<&'static str>,
@@ -330,12 +294,15 @@ impl WsProgrammingOutput {
         }
     }
 
-    fn with_changes(mut self, interaction: bool, values: bool) -> Self {
+    fn with_changes(mut self, interaction: bool, values: bool, preload_values: bool) -> Self {
         if interaction {
             self.changes.push("interaction");
         }
         if values {
             self.changes.push("values");
+        }
+        if preload_values {
+            self.changes.push("preload_values");
         }
         self
     }

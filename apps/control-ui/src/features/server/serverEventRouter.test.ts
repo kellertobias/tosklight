@@ -467,6 +467,45 @@ describe("show object event reconciliation", () => {
 });
 
 describe("broad state hydration boundaries", () => {
+	it.each([
+		["normal", ["values"]],
+		["Preload", ["preload_values"]],
+		["combined", ["values", "preload_values"]],
+	])("leaves own %s value changes to scoped stores", async (_label, changes) => {
+		const harness = createHarness();
+		harness.route(
+			event("programmer_changed", { user_id: session.user.id, changes }),
+		);
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(harness.client.bootstrap).not.toHaveBeenCalled();
+	});
+
+	it("does not hydrate serially unrepresentable transient controls", async () => {
+		const harness = createHarness();
+		harness.route(
+			event("programmer_changed", { changes: ["transient_control"] }),
+		);
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(harness.client.bootstrap).not.toHaveBeenCalled();
+	});
+
+	it("leaves same-user peer-desk value changes to the shared scoped store", async () => {
+		const harness = createHarness();
+		harness.route(
+			event("programmer_changed", {
+				user_id: session.user.id,
+				session_id: "peer-session",
+				desk_id: "peer-desk",
+				changes: ["values"],
+			}),
+		);
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(harness.client.bootstrap).not.toHaveBeenCalled();
+	});
+
 	it("leaves categorized command-line edits to the scoped interaction store", async () => {
 		const harness = createHarness();
 		harness.route(
@@ -497,6 +536,20 @@ describe("broad state hydration boundaries", () => {
 				1,
 			),
 		);
+		await vi.waitFor(() =>
+			expect(harness.client.bootstrap).toHaveBeenCalledOnce(),
+		);
+	});
+
+	it.each([
+		["foreign", { user_id: "user-2", changes: ["values"] }],
+		["unowned", { changes: ["values"] }],
+		["mixed", { user_id: session.user.id, changes: ["values", "runtime"] }],
+		["duplicated", { user_id: session.user.id, changes: ["values", "values"] }],
+		["empty", { user_id: session.user.id, changes: [] }],
+	])("retains compatibility hydration for %s value events", async (_label, payload) => {
+		const harness = createHarness();
+		harness.route(event("programmer_changed", payload));
 		await vi.waitFor(() =>
 			expect(harness.client.bootstrap).toHaveBeenCalledOnce(),
 		);

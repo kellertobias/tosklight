@@ -412,6 +412,45 @@ async fn compatibility_programmer_changed_reports_only_authoritative_changed_pro
         .cloned()
         .unwrap();
     assert_eq!(values_event.payload["changes"], serde_json::json!(["values"]));
+    assert_eq!(values_event.payload["user_id"], serde_json::json!(session.user.id));
+    assert_eq!(values_event.payload["desk_id"], serde_json::json!(session.desk.id));
+
+    let preload_enter = dispatch_ws_command(
+        &state,
+        &session,
+        command("preload-enter", "preload.enter", serde_json::Value::Null),
+    );
+    assert!(preload_enter.ok, "{:?}", preload_enter.error);
+    let preload_values = dispatch_ws_command(
+        &state,
+        &session,
+        command(
+            "preload-values",
+            "preload.group.set",
+            serde_json::json!({
+                "group_id": "front",
+                "attribute": "intensity",
+                "value": 0.5
+            }),
+        ),
+    );
+    assert!(preload_values.ok, "{:?}", preload_values.error);
+    let preload_event = state
+        .audit_events
+        .lock()
+        .iter()
+        .rev()
+        .find(|event| event.kind == "programmer_changed")
+        .cloned()
+        .unwrap();
+    assert_eq!(
+        preload_event.payload["changes"],
+        serde_json::json!(["preload_values"])
+    );
+    assert_eq!(
+        preload_event.payload["user_id"],
+        serde_json::json!(session.user.id)
+    );
 
     let before_priority = changed_count();
     let priority = dispatch_ws_command(
