@@ -9,6 +9,7 @@ import {
 	useRef,
 	useSyncExternalStore,
 } from "react";
+import { useStrictModeSafeStop } from "../shared/useStrictModeSafeStop";
 import {
 	capturesProgrammerWrites,
 	type ProgrammerCaptureModeProjection,
@@ -93,8 +94,8 @@ export function ProgrammerCaptureModeViewProvider({
 	);
 	useLayoutEffect(() => {
 		store.reset(showId, userId, authorityKey);
-		return () => session?.stop();
-	}, [authorityKey, session, showId, store, userId]);
+	}, [authorityKey, showId, store, userId]);
+	useStrictModeSafeStop(session);
 	return (
 		<StoreContext.Provider value={store}>
 			<SessionContext.Provider value={session}>

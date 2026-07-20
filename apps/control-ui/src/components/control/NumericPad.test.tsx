@@ -58,6 +58,18 @@ vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
 vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state, dispatch }),
 }));
+vi.mock(
+	"../../features/programmingInteraction/ProgrammingInteractionView",
+	async (importOriginal) => ({
+		...(await importOriginal()),
+		useProgrammingSelectionView: () => ({
+			selected: server.selectedFixtures,
+			expression: { type: "static" },
+			revision: 1,
+			gestureOpen: false,
+		}),
+	}),
+);
 
 afterEach(() => {
 	cleanup();

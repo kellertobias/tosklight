@@ -1,7 +1,6 @@
 import type {
 	ProgrammerValuesActionOutcome,
 	ProgrammerValuesActionRequest,
-	ProgrammerValuesEventMessage,
 	ProgrammerValuesMutation,
 	ProgrammerValuesSnapshot,
 	ProgrammerValueTiming,
@@ -14,9 +13,9 @@ import type {
 	ProgrammingValueTiming as WireProgrammingValueTiming,
 } from "./generated/light-wire";
 import {
-	arrayAt,
 	booleanAt,
 	enumAt,
+	exactRecordAt,
 	integerAt,
 	recordAt,
 	stringAt,
@@ -26,6 +25,8 @@ import {
 	programmerValuesUuidAt,
 } from "./programmerValuesWireProjection";
 import { WireValidationError } from "./wireValidation";
+
+export { decodeProgrammerValuesEventMessage } from "./programmerValuesEventWire";
 
 export const PROGRAMMER_VALUES_ERROR_KINDS = [
 	"invalid",
@@ -51,7 +52,7 @@ export function decodeProgrammerValuesSnapshot(
 	value: unknown,
 	expectedUserId: string,
 ): ProgrammerValuesSnapshot {
-	const snapshot = recordAt(value, "$");
+	const snapshot = exactRecordAt(value, "$", ["cursor", "projection"]);
 	return {
 		cursor: decodeCursor(snapshot, "$"),
 		projection: decodeProgrammerValuesProjection(
@@ -92,8 +93,10 @@ export function decodeProgrammerValuesActionOutcome(
 	const status = enumAt(response.status, "$.status", ["changed", "no_change"]);
 	if (status === "no_change") {
 		assertNoProjection(response);
+		assertOutcomeFields(response, false);
 		return { ...base, status };
 	}
+	assertOutcomeFields(response, true);
 	const projection = decodeProgrammerValuesProjection(
 		response.projection,
 		"$.projection",
@@ -116,7 +119,13 @@ export function decodeProgrammerValuesActionOutcome(
 export function decodeProgrammerValuesErrorResponse(
 	value: unknown,
 ): ProgrammerValuesErrorResponse {
-	const response = recordAt(value, "$");
+	const response = exactRecordAt(value, "$", [
+		"kind",
+		"error",
+		"current_revision",
+		"current_capture_mode_revision",
+		"retryable",
+	]);
 	return {
 		kind: enumAt(response.kind, "$.kind", PROGRAMMER_VALUES_ERROR_KINDS),
 		error: stringAt(response.error, "$.error"),
@@ -135,27 +144,6 @@ export function decodeProgrammerValuesErrorResponse(
 	};
 }
 
-export function decodeProgrammerValuesEventMessage(
-	value: unknown,
-	expectedUserId: string,
-): ProgrammerValuesEventMessage {
-	programmerValuesUuidAt(expectedUserId, "$.requested_user_id");
-	const message = recordAt(value, "$");
-	const type = enumAt(message.type, "$.type", [
-		"ready",
-		"event",
-		"gap",
-		"repaired",
-		"error",
-	]);
-	if (type === "ready" || type === "repaired")
-		return { type, cursor: decodeCursor(message, "$") };
-	if (type === "error")
-		return { type, error: stringAt(message.error, "$.error") };
-	if (type === "gap") return decodeGap(message);
-	return decodeValuesEvent(recordAt(message.event, "$.event"), expectedUserId);
-}
-
 export function encodeProgrammerValuesActionRequest(
 	request: ProgrammerValuesActionRequest,
 ): WireProgrammingValuesActionRequest {
@@ -168,108 +156,29 @@ export function encodeProgrammerValuesActionRequest(
 	};
 }
 
-function decodeValuesEvent(
-	event: Record<string, unknown>,
-	expectedUserId: string,
-): ProgrammerValuesEventMessage {
-	const sequence = integerAt(event.sequence, "$.event.sequence");
-	validateValuesEnvelope(event, expectedUserId);
-	const payload = recordAt(event.payload, "$.event.payload");
-	enumAt(payload.type, "$.event.payload.type", ["programming_values_changed"]);
-	const change = recordAt(payload.change, "$.event.payload.change");
-	return {
-		type: "event",
-		sequence,
-		correlationId: optionalUuid(event, "correlation_id", "$.event"),
-		projection: decodeProgrammerValuesProjection(
-			change.projection,
-			"$.event.payload.change.projection",
-			expectedUserId,
-		),
-	};
-}
-
-function validateValuesEnvelope(
-	event: Record<string, unknown>,
-	expectedUserId: string,
-) {
-	stringAt(event.occurred_at, "$.event.occurred_at");
-	if (!("desk_id" in event) || event.desk_id !== null)
-		throw new WireValidationError("$.event.desk_id", "null", event.desk_id);
-	enumAt(event.class, "$.event.class", ["projection"]);
-	enumAt(event.delivery, "$.event.delivery", ["replaceable"]);
-	const object = recordAt(event.object, "$.event.object");
-	enumAt(object.capability, "$.event.object.capability", ["programmer"]);
-	const expectedObject = `programming-values:${expectedUserId}`;
-	const objectId = stringAt(object.id, "$.event.object.id");
-	if (objectId.toLowerCase() !== expectedObject.toLowerCase())
-		throw new WireValidationError(
-			"$.event.object.id",
-			expectedObject,
-			objectId,
-		);
-	assertNoRelatedObjects(event);
-	validateSource(event.source);
-}
-
-function validateSource(value: unknown) {
-	const source = recordAt(value, "$.event.source");
-	enumAt(source.kind, "$.event.source.kind", ["action"]);
-	enumAt(source.source, "$.event.source.source", [
-		"user_interface",
-		"keyboard",
-		"osc",
-		"http",
-		"midi",
-		"matter",
-		"cue",
-		"timecode",
-		"scheduler",
-		"macro",
-		"system",
-	]);
-}
-
-function assertNoRelatedObjects(event: Record<string, unknown>) {
-	if (!("related_objects" in event) || event.related_objects == null) return;
-	const related = arrayAt(event.related_objects, "$.event.related_objects");
-	if (related.length > 0)
-		throw new WireValidationError(
-			"$.event.related_objects",
-			"an empty array",
-			related,
-		);
-}
-
-function decodeGap(
-	message: Record<string, unknown>,
-): ProgrammerValuesEventMessage {
-	const gap = recordAt(message.gap, "$.gap");
-	return {
-		type: "gap",
-		afterSequence: integerAt(gap.after_sequence, "$.gap.after_sequence"),
-		oldestAvailable: integerAt(gap.oldest_available, "$.gap.oldest_available"),
-		latestSequence: integerAt(gap.latest_sequence, "$.gap.latest_sequence"),
-	};
-}
-
 function decodeCursor(message: Record<string, unknown>, path: string) {
+	const cursor = exactRecordAt(message.cursor, `${path}.cursor`, ["sequence"]);
 	return integerAt(
-		recordAt(message.cursor, `${path}.cursor`).sequence,
+		cursor.sequence,
 		`${path}.cursor.sequence`,
 	);
 }
 
-function optionalUuid(
-	object: Record<string, unknown>,
-	key: string,
-	path: string,
+function assertOutcomeFields(
+	response: Record<string, unknown>,
+	changed: boolean,
 ) {
-	if (!(key in object))
-		throw new WireValidationError(`${path}.${key}`, "UUID or null", undefined);
-	return object[key] == null
-		? null
-		: programmerValuesUuidAt(object[key], `${path}.${key}`);
+	const fields = [
+		"request_id",
+		"correlation_id",
+		"revision",
+		"capture_mode_revision",
+		"status",
+		"replayed",
+		"warning",
+	];
+	if (changed) fields.push("projection", "event_sequence");
+	exactRecordAt(response, "$", fields);
 }
 
 function optionalString(

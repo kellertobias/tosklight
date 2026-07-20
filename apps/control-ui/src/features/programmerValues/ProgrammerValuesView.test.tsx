@@ -1,6 +1,6 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
-import { useCallback } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { StrictMode, useCallback } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProgrammerCaptureModeViewProvider } from "../programmerCaptureMode/ProgrammerCaptureModeView";
 import { ProgrammerCaptureModeStore } from "../programmerCaptureMode/store";
 import {
@@ -8,7 +8,11 @@ import {
 	captureModeSnapshot,
 	FakeProgrammerCaptureModeTransport,
 } from "../programmerCaptureMode/testFixtures";
-import type { ProgrammerValuesActions } from "./contracts";
+import type {
+	ProgrammerValuesActionRequest,
+	ProgrammerValuesActions,
+	ProgrammerValuesScope,
+} from "./contracts";
 import {
 	ProgrammerValuesViewProvider,
 	useProgrammerValuesActions,
@@ -80,6 +84,8 @@ function actions(): ProgrammerValuesActions {
 		clear: vi.fn(async () => null),
 	};
 }
+
+afterEach(cleanup);
 
 describe("ProgrammerValuesViewProvider", () => {
 	it("keeps an action-only provider dormant", async () => {
@@ -155,6 +161,62 @@ describe("ProgrammerValuesViewProvider", () => {
 		);
 		expect(captureModeTransport.subscriptions[0].close).toHaveBeenCalledOnce();
 		expect(screen.getByText("Hidden")).toBeInTheDocument();
+	});
+
+	it("keeps scoped sessions and the writer live through StrictMode replay", async () => {
+		const store = new ProgrammerValuesStore();
+		const transport = new FakeProgrammerValuesTransport();
+		const captureModeStore = new ProgrammerCaptureModeStore();
+		const captureModeTransport = new FakeProgrammerCaptureModeTransport();
+		const onWriter = vi.fn();
+		const applyAction = vi.fn(
+			async (
+				_scope: ProgrammerValuesScope,
+				request: ProgrammerValuesActionRequest,
+			) =>
+				({
+					requestId: request.requestId,
+					correlationId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+					status: "no_change",
+					revision: 1,
+					captureModeRevision: 1,
+					replayed: false,
+					warning: null,
+				}) as const,
+		);
+		render(
+			<StrictMode>
+				<ProgrammerCaptureModeViewProvider
+					showId={SHOW_ID}
+					userId={USER_ID}
+					store={captureModeStore}
+					transport={captureModeTransport}
+					loadSnapshot={async () => captureModeSnapshot()}
+				>
+					<ProgrammerValuesViewProvider
+						showId={SHOW_ID}
+						userId={USER_ID}
+						store={store}
+						transport={transport}
+						loadSnapshot={async () => valuesSnapshot()}
+						applyAction={applyAction}
+					>
+						<WriterIdentityProbe onWriter={onWriter} />
+					</ProgrammerValuesViewProvider>
+				</ProgrammerCaptureModeViewProvider>
+			</StrictMode>,
+		);
+
+		await waitFor(() => expect(transport.subscriptions).toHaveLength(1));
+		await waitFor(() =>
+			expect(captureModeTransport.subscriptions).toHaveLength(1),
+		);
+		const writer = onWriter.mock.calls.at(-1)?.[0];
+		expect(writer).not.toBeNull();
+		await expect(writer?.clear("strict-mode-write")).resolves.toMatchObject({
+			status: "no_change",
+		});
+		expect(applyAction).toHaveBeenCalledOnce();
 	});
 
 	it("suppresses renders for unchanged selected data and action context", async () => {

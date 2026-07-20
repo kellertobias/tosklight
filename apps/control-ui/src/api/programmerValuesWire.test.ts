@@ -134,6 +134,28 @@ describe("Programmer values wire projection", () => {
 			),
 		).toThrow(WireValidationError);
 	});
+
+	it("rejects undeclared snapshot and projection fields", () => {
+		const snapshot = {
+			cursor: { sequence: 1 },
+			projection: projection(),
+			extra: true,
+		};
+		expect(() => decodeProgrammerValuesSnapshot(snapshot, USER_ID)).toThrow(
+			/declared wire field/,
+		);
+		delete (snapshot as { extra?: boolean }).extra;
+		(snapshot.projection as ReturnType<typeof projection> & { extra?: boolean })
+			.extra = true;
+		expect(() => decodeProgrammerValuesSnapshot(snapshot, USER_ID)).toThrow(
+			/declared wire field/,
+		);
+		delete (snapshot.projection as { extra?: boolean }).extra;
+		(snapshot.projection.fixture_values[0] as { extra?: boolean }).extra = true;
+		expect(() => decodeProgrammerValuesSnapshot(snapshot, USER_ID)).toThrow(
+			/declared wire field/,
+		);
+	});
 });
 
 describe("Programmer values mutation wire boundary", () => {
@@ -269,6 +291,24 @@ describe("Programmer values mutation wire boundary", () => {
 			retryable: false,
 		});
 	});
+
+	it("rejects undeclared outcome and error fields", () => {
+		expect(() =>
+			decodeProgrammerValuesActionOutcome(
+				{ ...changedOutcome(), extra: true },
+				USER_ID,
+				"request-1",
+			),
+		).toThrow(/declared wire field/);
+		expect(() =>
+			decodeProgrammerValuesErrorResponse({
+				kind: "conflict",
+				error: "revision conflict",
+				retryable: false,
+				extra: true,
+			}),
+		).toThrow(/declared wire field/);
+	});
 });
 
 describe("Programmer values event wire boundary", () => {
@@ -312,5 +352,29 @@ describe("Programmer values event wire boundary", () => {
 		expect(() => decodeProgrammerValuesEventMessage(event, USER_ID)).toThrow(
 			WireValidationError,
 		);
+	});
+
+	it("rejects undeclared message, envelope, and payload fields", () => {
+		const messageExtra = { ...valuesEvent(), extra: true };
+		expect(() =>
+			decodeProgrammerValuesEventMessage(messageExtra, USER_ID),
+		).toThrow(/declared wire field/);
+
+		const envelopeExtra = valuesEvent();
+		(envelopeExtra.event as typeof envelopeExtra.event & { extra?: boolean })
+			.extra = true;
+		expect(() =>
+			decodeProgrammerValuesEventMessage(envelopeExtra, USER_ID),
+		).toThrow(/declared wire field/);
+
+		const payloadExtra = valuesEvent();
+		(
+			payloadExtra.event.payload as typeof payloadExtra.event.payload & {
+				extra?: boolean;
+			}
+		).extra = true;
+		expect(() =>
+			decodeProgrammerValuesEventMessage(payloadExtra, USER_ID),
+		).toThrow(/declared wire field/);
 	});
 });

@@ -9,6 +9,22 @@ export function recordAt(
 	return value as Record<string, unknown>;
 }
 
+export function exactRecordAt(
+	value: unknown,
+	path: string,
+	keys: readonly string[],
+): Record<string, unknown> {
+	const record = recordAt(value, path);
+	const unexpected = Object.keys(record).find((key) => !keys.includes(key));
+	if (unexpected)
+		throw new WireValidationError(
+			`${path}.${unexpected}`,
+			"a declared wire field",
+			record[unexpected],
+		);
+	return record;
+}
+
 export function arrayAt(value: unknown, path: string) {
 	if (!Array.isArray(value))
 		throw new WireValidationError(path, "array", value);

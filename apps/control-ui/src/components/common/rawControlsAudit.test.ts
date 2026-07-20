@@ -16,9 +16,14 @@ function ownsLegacyInputUsage(file: string) {
     || file.includes("/components/common/controls/");
 }
 
+function isTestSource(file: string) {
+  return file.endsWith(".test.tsx");
+}
+
 describe("shared-control enforcement", () => {
   it("keeps raw controls inside the shared primitive implementation", () => {
     const offenders = Object.entries(sources)
+      .filter(([file]) => !isTestSource(file))
       .filter(([file, source]) => !ownsRawControls(file)
         && /<(?:button|input|select|textarea)\b/.test(source))
       .map(([file]) => file);
@@ -30,6 +35,7 @@ describe("shared-control enforcement", () => {
 describe("unified form enforcement", () => {
   it("keeps ordinary fields out of the legacy Input compatibility wrapper", () => {
     const offenders = Object.entries(sources)
+      .filter(([file]) => !isTestSource(file))
       .filter(([file]) => !ownsLegacyInputUsage(file))
       .filter(([, source]) => [...source.matchAll(/<Input\b[^>]*>/g)]
         .some(([tag]) => !/(?:type="(?:file|range|hidden)"|hidden)/.test(tag)))

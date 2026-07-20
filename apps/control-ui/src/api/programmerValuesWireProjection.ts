@@ -8,9 +8,9 @@ import {
 	arrayAt,
 	booleanAt,
 	enumAt,
+	exactRecordAt,
 	integerAt,
 	numberAt,
-	recordAt,
 	stringAt,
 } from "./playbackWirePrimitives";
 import { WireValidationError } from "./wireValidation";
@@ -24,7 +24,12 @@ export function decodeProgrammerValuesProjection(
 	expectedUserId: string,
 ): ProgrammerValuesProjection {
 	programmerValuesUuidAt(expectedUserId, "$.requested_user_id");
-	const projection = recordAt(value, path);
+	const projection = exactRecordAt(value, path, [
+		"user_id",
+		"revision",
+		"fixture_values",
+		"group_values",
+	]);
 	const userId = programmerValuesUuidAt(projection.user_id, `${path}.user_id`);
 	assertExpectedUser(userId, expectedUserId, `${path}.user_id`);
 	const fixtureValues = arrayAt(
@@ -52,7 +57,15 @@ function decodeFixtureValue(
 	value: unknown,
 	path: string,
 ): ProgrammerFixtureValue {
-	const item = recordAt(value, path);
+	const item = exactRecordAt(value, path, [
+		"fixture_id",
+		"attribute",
+		"value",
+		"programmer_order",
+		"fade",
+		"fade_millis",
+		"delay_millis",
+	]);
 	return {
 		fixtureId: programmerValuesUuidAt(item.fixture_id, `${path}.fixture_id`),
 		attribute: stringAt(item.attribute, `${path}.attribute`),
@@ -66,7 +79,15 @@ function decodeFixtureValue(
 }
 
 function decodeGroupValue(value: unknown, path: string): ProgrammerGroupValue {
-	const item = recordAt(value, path);
+	const item = exactRecordAt(value, path, [
+		"group_id",
+		"attribute",
+		"value",
+		"programmer_order",
+		"fade",
+		"fade_millis",
+		"delay_millis",
+	]);
 	return {
 		groupId: stringAt(item.group_id, `${path}.group_id`),
 		attribute: stringAt(item.attribute, `${path}.attribute`),
@@ -97,7 +118,7 @@ function optionalMillis(
 }
 
 function decodeAttributeValue(value: unknown, path: string): AttributeValue {
-	const attribute = recordAt(value, path);
+	const attribute = exactRecordAt(value, path, ["kind", "value"]);
 	const kind = enumAt(attribute.kind, `${path}.kind`, [
 		"normalized",
 		"spread",
@@ -149,7 +170,7 @@ function decodeSpread(value: unknown, path: string) {
 }
 
 function decodeColor(value: unknown, path: string) {
-	const color = recordAt(value, path);
+	const color = exactRecordAt(value, path, ["x", "y", "z"]);
 	return {
 		x: nonNegativeAt(color.x, `${path}.x`),
 		y: nonNegativeAt(color.y, `${path}.y`),

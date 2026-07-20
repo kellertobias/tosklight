@@ -97,7 +97,7 @@ impl ValuesReplayCache {
 }
 
 impl ProgrammingService {
-    pub(super) fn invalidate_values_replay(&self, user_id: UserId) {
+    pub(in crate::programming) fn invalidate_values_replay(&self, user_id: UserId) {
         self.values_replay.lock().invalidate_user(user_id);
     }
 }
