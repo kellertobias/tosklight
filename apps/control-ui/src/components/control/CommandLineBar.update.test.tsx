@@ -6,7 +6,6 @@ import {
 	screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Button } from "../common";
 import { ProgrammingInteractionViewProvider } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import { ProgrammingInteractionStore } from "../../features/programmingInteraction/store";
 import {
@@ -15,9 +14,10 @@ import {
 	DESK_ID,
 	FakeProgrammingTransport,
 	programmingSnapshot,
-	settleSession,
 	SHOW_ID,
+	settleSession,
 } from "../../features/programmingInteraction/testFixtures";
+import { Button } from "../common";
 import { CommandLineBar } from "./CommandLineBar";
 import {
 	UPDATE_SETTINGS_EVENT,
@@ -30,6 +30,18 @@ const activity = vi.hoisted(() => ({
 		ready: false,
 		valueCount: 0,
 		pendingValueCount: 0,
+	},
+}));
+
+const playbackQueue = vi.hoisted(() => ({
+	current: null as null | {
+		userId: string;
+		revision: number;
+		actions: Array<{
+			playbackNumber: number;
+			action: "go" | "back" | "temporary_on" | "temporary_off";
+			surface: "virtual";
+		}>;
 	},
 }));
 
@@ -124,6 +136,12 @@ vi.mock("../../state/AppContext", () => ({
 vi.mock("../../features/programmerValues/useProgrammerValuesActivity", () => ({
 	useProgrammerValuesActivity: () => activity.current,
 }));
+vi.mock(
+	"../../features/programmerPreloadPlaybackQueue/ProgrammerPreloadPlaybackQueueView",
+	() => ({
+		useProgrammerPreloadPlaybackQueueView: () => playbackQueue.current,
+	}),
+);
 
 beforeEach(() => {
 	vi.useFakeTimers();
@@ -145,6 +163,7 @@ beforeEach(() => {
 		valueCount: 0,
 		pendingValueCount: 0,
 	};
+	playbackQueue.current = null;
 	vi.clearAllMocks();
 });
 
@@ -240,7 +259,7 @@ describe("scoped command-line integration", () => {
 });
 
 describe("Shift+Record Update gestures", () => {
-	it("uses scoped recordable and pending counts without stale bootstrap values", () => {
+	it("uses scoped recordable values and playback queue without stale bootstrap", () => {
 		server.bootstrap.active_programmers = [
 			{
 				session_id: "session-a",
@@ -256,11 +275,31 @@ describe("Shift+Record Update gestures", () => {
 			valueCount: 2,
 			pendingValueCount: 2,
 		};
+		playbackQueue.current = {
+			userId: "user-a",
+			revision: 3,
+			actions: [
+				{ playbackNumber: 4, action: "go", surface: "virtual" },
+				{ playbackNumber: 7, action: "back", surface: "virtual" },
+				{
+					playbackNumber: 8,
+					action: "temporary_on",
+					surface: "virtual",
+				},
+				{
+					playbackNumber: 9,
+					action: "temporary_off",
+					surface: "virtual",
+				},
+			],
+		};
 		state.preload = "blind";
 
 		const { rerender } = render(<CommandLineBar />);
 
-		expect(screen.getByText("PROG 2 · GO 4")).toBeInTheDocument();
+		expect(
+			screen.getByText("PROG 2 · GO 4 · GO MINUS 7 · TEMP ON 8 · TEMP OFF 9"),
+		).toBeInTheDocument();
 		expect(screen.queryByText(/PROG 6/)).not.toBeInTheDocument();
 
 		state.preload = "idle";

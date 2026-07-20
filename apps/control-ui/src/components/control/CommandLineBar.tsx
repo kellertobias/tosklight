@@ -19,8 +19,22 @@ import { useCommandLineShortcuts } from "./commandLine/useCommandLineShortcuts";
 import { useCommandLineSurface } from "./commandLine/useCommandLineSurface";
 import { useRecordGesture } from "./commandLine/useRecordGesture";
 import "./CommandLineHistory.css";
+import { useProgrammerPreloadPlaybackQueueView } from "../../features/programmerPreloadPlaybackQueue/ProgrammerPreloadPlaybackQueueView";
 import { useProgrammerValuesActivity } from "../../features/programmerValues/useProgrammerValuesActivity";
 import { openUpdateTargetMenu } from "./updateWorkflow";
+
+const queuedPlaybackLabels = {
+	back: "GO MINUS",
+	temporary_on: "TEMP ON",
+	temporary_off: "TEMP OFF",
+} as const;
+
+function queuedPlaybackLabel(action: string, playbackNumber: number) {
+	const label =
+		queuedPlaybackLabels[action as keyof typeof queuedPlaybackLabels] ??
+		action.replaceAll("_", " ").toUpperCase();
+	return `${label} ${playbackNumber}`;
+}
 
 function useCommandErrors(setCompleted: Dispatch<SetStateAction<boolean>>) {
 	const server = useServer();
@@ -96,6 +110,7 @@ export function CommandLineBar() {
 	const server = useServer();
 	const command = useCommandLineSurface({ selection: true });
 	const programmerActivity = useProgrammerValuesActivity();
+	const preloadPlaybackQueue = useProgrammerPreloadPlaybackQueueView();
 	const hardware = Boolean(
 		server.bootstrap?.hardware_connected || state.midiProfile,
 	);
@@ -105,16 +120,12 @@ export function CommandLineBar() {
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const historyPanel = useRef<HTMLElement | null>(null);
 	useHistoryDismissal(historyOpen, historyPanel, setHistoryOpen);
-	const ownProgrammer = server.bootstrap?.active_programmers.find(
-		(programmer) => programmer.session_id === server.session?.session_id,
-	);
 	const hasRecordableContent =
 		command.selected.length > 0 ||
 		(programmerActivity.ready && programmerActivity.valueCount > 0) ||
 		state.preloadActive;
-	const pendingLabels = (ownProgrammer?.preload_playback_pending ?? []).map(
-		(pending) =>
-			`${pending.action.replaceAll("-", " ").toUpperCase()} ${pending.playback_number}`,
+	const pendingLabels = (preloadPlaybackQueue?.actions ?? []).map((pending) =>
+		queuedPlaybackLabel(pending.action, pending.playbackNumber),
 	);
 	const pendingSummary = [
 		programmerActivity.pendingValueCount

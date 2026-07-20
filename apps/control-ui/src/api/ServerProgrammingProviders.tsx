@@ -2,6 +2,7 @@ import type { PropsWithChildren } from "react";
 import { PlaybackRuntimeViewProvider } from "../features/playbackRuntime/PlaybackRuntimeView";
 import { ProgrammerCaptureModeViewProvider } from "../features/programmerCaptureMode/ProgrammerCaptureModeView";
 import { ProgrammerLifecycleViewProvider } from "../features/programmerLifecycle/ProgrammerLifecycleView";
+import { ProgrammerPreloadPlaybackQueueViewProvider } from "../features/programmerPreloadPlaybackQueue/ProgrammerPreloadPlaybackQueueView";
 import { ProgrammerPreloadValuesViewProvider } from "../features/programmerPreloadValues/ProgrammerPreloadValuesView";
 import { ProgrammerValuesViewProvider } from "../features/programmerValues/ProgrammerValuesView";
 import { ProgrammingInteractionViewProvider } from "../features/programmingInteraction/ProgrammingInteractionView";
@@ -100,24 +101,42 @@ export function ServerProgrammingProviders({
 								boundaries.reportProgrammerPreloadValuesMutationError
 							}
 						>
-							<ProgrammingInteractionViewProvider
+							<ProgrammerPreloadPlaybackQueueViewProvider
 								showId={showId}
-								deskId={state.session?.desk.id ?? null}
-								store={state.programmingInteractionStore}
-								transport={boundaries.programmingTransport}
-								loadSnapshot={boundaries.loadProgrammingInteractionSnapshot}
-								replaceCommandLine={state.client.replaceProgrammingCommandLine}
-								applySelection={state.client.applyProgrammingSelection}
-								onSessionError={boundaries.reportProgrammingSessionError}
-								onMutationError={boundaries.reportProgrammingMutationError}
+								userId={userId}
+								authorityKey={
+									boundaries.programmerPreloadPlaybackQueueAuthorityKey
+								}
+								store={state.programmerPreloadPlaybackQueueStore}
+								transport={boundaries.programmerPreloadPlaybackQueueTransport}
+								loadSnapshot={
+									boundaries.loadProgrammerPreloadPlaybackQueueSnapshot
+								}
+								onSessionError={
+									boundaries.reportProgrammerPreloadPlaybackQueueSessionError
+								}
 							>
-								<SelectedGroupMembershipSync state={state} />
-								<ShowObjectDetailSubscription
-									kind="group"
-									objectId={value.selectedGroupId}
-								/>
-								{children}
-							</ProgrammingInteractionViewProvider>
+								<ProgrammingInteractionViewProvider
+									showId={showId}
+									deskId={state.session?.desk.id ?? null}
+									store={state.programmingInteractionStore}
+									transport={boundaries.programmingTransport}
+									loadSnapshot={boundaries.loadProgrammingInteractionSnapshot}
+									replaceCommandLine={
+										state.client.replaceProgrammingCommandLine
+									}
+									applySelection={state.client.applyProgrammingSelection}
+									onSessionError={boundaries.reportProgrammingSessionError}
+									onMutationError={boundaries.reportProgrammingMutationError}
+								>
+									<SelectedGroupMembershipSync state={state} />
+									<ShowObjectDetailSubscription
+										kind="group"
+										objectId={value.selectedGroupId}
+									/>
+									{children}
+								</ProgrammingInteractionViewProvider>
+							</ProgrammerPreloadPlaybackQueueViewProvider>
 						</ProgrammerPreloadValuesViewProvider>
 					</ProgrammerValuesViewProvider>
 				</ProgrammerCaptureModeViewProvider>

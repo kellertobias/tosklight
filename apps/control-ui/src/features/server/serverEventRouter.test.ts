@@ -470,7 +470,12 @@ describe("broad state hydration boundaries", () => {
 	it.each([
 		["normal", ["values"]],
 		["Preload", ["preload_values"]],
+		["Preload playback queue", ["preload_playback_queue"]],
 		["combined", ["values", "preload_values"]],
+		[
+			"combined with playback queue",
+			["values", "preload_values", "preload_playback_queue"],
+		],
 	])("leaves own %s value changes to scoped stores", async (_label, changes) => {
 		const harness = createHarness();
 		harness.route(
@@ -499,6 +504,20 @@ describe("broad state hydration boundaries", () => {
 				session_id: "peer-session",
 				desk_id: "peer-desk",
 				changes: ["values"],
+			}),
+		);
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(harness.client.bootstrap).not.toHaveBeenCalled();
+	});
+
+	it("leaves an own queue transition with interaction to both scoped stores", async () => {
+		const harness = createHarness();
+		harness.route(
+			event("programmer_changed", {
+				user_id: session.user.id,
+				command: "preload.go",
+				changes: ["interaction", "preload_playback_queue"],
 			}),
 		);
 		await Promise.resolve();
@@ -543,6 +562,10 @@ describe("broad state hydration boundaries", () => {
 
 	it.each([
 		["foreign", { user_id: "user-2", changes: ["values"] }],
+		[
+			"foreign playback queue",
+			{ user_id: "user-2", changes: ["preload_playback_queue"] },
+		],
 		["unowned", { changes: ["values"] }],
 		["mixed", { user_id: session.user.id, changes: ["values", "runtime"] }],
 		["duplicated", { user_id: session.user.id, changes: ["values", "values"] }],

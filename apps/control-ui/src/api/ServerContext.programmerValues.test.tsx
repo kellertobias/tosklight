@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { useProgrammerLifecycleView } from "../features/programmerLifecycle/ProgrammerLifecycleView";
+import { useProgrammerPreloadPlaybackQueueView } from "../features/programmerPreloadPlaybackQueue/ProgrammerPreloadPlaybackQueueView";
 import {
 	useProgrammerValuesActions,
 	useProgrammerValuesView,
@@ -20,6 +21,8 @@ const boundaries = vi.hoisted(() => ({
 	subscribeCaptureMode: vi.fn(),
 	loadLifecycle: vi.fn(),
 	subscribeLifecycle: vi.fn(),
+	loadQueue: vi.fn(),
+	subscribeQueue: vi.fn(),
 }));
 
 vi.mock("../features/server/useServerPolling", () => ({
@@ -99,17 +102,22 @@ vi.mock("./useServerFeatureBoundaries", () => ({
 			subscribe: boundaries.subscribeLifecycle,
 		},
 		programmerValuesTransport: { subscribe: boundaries.subscribeValues },
+		programmerPreloadPlaybackQueueTransport: {
+			subscribe: boundaries.subscribeQueue,
+		},
 		programmerCaptureModeTransport: {
 			subscribe: boundaries.subscribeCaptureMode,
 		},
 		programmerValuesAuthorityKey: "server-session-a",
 		programmerCaptureModeAuthorityKey: "server-session-a",
 		programmerLifecycleAuthorityKey: "server-session-a",
+		programmerPreloadPlaybackQueueAuthorityKey: "server-session-a",
 		loadPlaybackSnapshot: vi.fn(),
 		loadProgrammingInteractionSnapshot: vi.fn(),
 		loadProgrammerValuesSnapshot: boundaries.loadValues,
 		loadProgrammerCaptureModeSnapshot: boundaries.loadCaptureMode,
 		loadProgrammerLifecycleSnapshot: boundaries.loadLifecycle,
+		loadProgrammerPreloadPlaybackQueueSnapshot: boundaries.loadQueue,
 		applyProgrammerValuesAction: boundaries.applyValues,
 		loadShowObjectCollection: vi.fn(),
 		loadShowObject: vi.fn(),
@@ -121,6 +129,7 @@ vi.mock("./useServerFeatureBoundaries", () => ({
 		reportProgrammerValuesMutationError: vi.fn(),
 		reportProgrammerCaptureModeSessionError: vi.fn(),
 		reportProgrammerLifecycleSessionError: vi.fn(),
+		reportProgrammerPreloadPlaybackQueueSessionError: vi.fn(),
 	}),
 }));
 
@@ -148,12 +157,19 @@ function LifecycleProbe() {
 	return <span>Lifecycle {projection?.revision ?? "loading"}</span>;
 }
 
+function QueueProbe() {
+	const projection = useProgrammerPreloadPlaybackQueueView();
+	return <span>Queue {projection?.revision ?? "loading"}</span>;
+}
+
 function Harness({
 	showValues,
 	showLifecycle = false,
+	showQueue = false,
 }: {
 	showValues: boolean;
 	showLifecycle?: boolean;
+	showQueue?: boolean;
 }) {
 	return (
 		<ServerProvider>
@@ -161,6 +177,7 @@ function Harness({
 			<ActionProbe />
 			{showValues ? <ValuesProbe /> : null}
 			{showLifecycle ? <LifecycleProbe /> : null}
+			{showQueue ? <QueueProbe /> : null}
 		</ServerProvider>
 	);
 }
@@ -197,6 +214,14 @@ function lifecycleProjection(revision: number) {
 				sessions: [],
 			},
 		],
+	};
+}
+
+function queueProjection(revision: number) {
+	return {
+		userId: USER_ID,
+		revision,
+		actions: [{ playbackNumber: 7, action: "go", surface: "virtual" }],
 	};
 }
 
@@ -314,6 +339,55 @@ describe("ServerProvider Programmer values boundary", () => {
 		);
 
 		expect(screen.getByText("Lifecycle 2")).toBeInTheDocument();
+		expect(unrelatedRenders).toBe(rendersBeforeEvent);
+		expect(broadBootstrap).not.toHaveBeenCalled();
+		rendered.unmount();
+		broadBootstrap.mockRestore();
+	});
+
+	it("keeps the exact-user Preload playback queue dormant and locally reactive", async () => {
+		boundaries.loadQueue.mockReset();
+		boundaries.subscribeQueue.mockReset();
+		const broadBootstrap = vi.spyOn(LightApiClient.prototype, "bootstrap");
+		let observer: { message(value: unknown): void } | null = null;
+		boundaries.loadQueue.mockResolvedValue({
+			cursor: 30,
+			projection: queueProjection(1),
+		});
+		boundaries.subscribeQueue.mockImplementation(
+			(_scope, _cursor, nextObserver) => {
+				observer = nextObserver;
+				return { close: vi.fn(), repair: vi.fn() };
+			},
+		);
+		unrelatedRenders = 0;
+		const rendered = render(<Harness showValues={false} />);
+		await waitFor(() =>
+			expect(screen.getByText("Actions ready")).toBeInTheDocument(),
+		);
+
+		expect(boundaries.loadQueue).not.toHaveBeenCalled();
+		expect(boundaries.subscribeQueue).not.toHaveBeenCalled();
+		expect(broadBootstrap).not.toHaveBeenCalled();
+
+		rendered.rerender(<Harness showValues={false} showQueue />);
+		await waitFor(() =>
+			expect(screen.getByText("Queue 1")).toBeInTheDocument(),
+		);
+		expect(boundaries.loadQueue).toHaveBeenCalledOnce();
+		expect(boundaries.subscribeQueue).toHaveBeenCalledOnce();
+		const rendersBeforeEvent = unrelatedRenders;
+
+		act(() =>
+			observer?.message({
+				type: "event",
+				sequence: 31,
+				correlationId: null,
+				projection: queueProjection(2),
+			}),
+		);
+
+		expect(screen.getByText("Queue 2")).toBeInTheDocument();
 		expect(unrelatedRenders).toBe(rendersBeforeEvent);
 		expect(broadBootstrap).not.toHaveBeenCalled();
 		rendered.unmount();

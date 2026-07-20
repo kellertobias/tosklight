@@ -4,6 +4,7 @@ import { createFeatureErrorGroup } from "./featureErrorReporting";
 import { configuredServerUrl } from "./LightApiClient";
 import { browserDeskBoundaryToken } from "./PatchTransport";
 import { HttpProgrammerCaptureModeTransport } from "./ProgrammerCaptureModeTransport";
+import { HttpProgrammerPreloadPlaybackQueueTransport } from "./ProgrammerPreloadPlaybackQueueTransport";
 import { HttpProgrammerPreloadValuesTransport } from "./ProgrammerPreloadValuesTransport";
 import { HttpProgrammerValuesTransport } from "./ProgrammerValuesTransport";
 
@@ -17,6 +18,10 @@ export function useProgrammerValuesBoundaries(state: ServerState) {
 		[state.setError],
 	);
 	const preloadValuesErrors = useMemo(
+		() => createFeatureErrorGroup(state.setError),
+		[state.setError],
+	);
+	const preloadPlaybackQueueErrors = useMemo(
 		() => createFeatureErrorGroup(state.setError),
 		[state.setError],
 	);
@@ -54,6 +59,18 @@ export function useProgrammerValuesBoundaries(state: ServerState) {
 				: null,
 		[state.session],
 	);
+	const programmerPreloadPlaybackQueueTransport = useMemo(
+		() =>
+			state.session
+				? new HttpProgrammerPreloadPlaybackQueueTransport({
+						baseUrl: configuredServerUrl(),
+						sessionToken: state.session.token,
+						deskBoundaryToken: browserDeskBoundaryToken(),
+						authenticatedUserId: state.session.user.id,
+					})
+				: null,
+		[state.session],
+	);
 	const programmerScope = useMemo(() => {
 		const showId = state.bootstrap?.active_show?.id;
 		const userId = state.session?.user.id;
@@ -77,6 +94,13 @@ export function useProgrammerValuesBoundaries(state: ServerState) {
 			throw new Error("Programmer Preload values session is unavailable");
 		return programmerPreloadValuesTransport.loadSnapshot(programmerScope);
 	}, [programmerPreloadValuesTransport, programmerScope]);
+	const loadProgrammerPreloadPlaybackQueueSnapshot = useCallback(() => {
+		if (!programmerPreloadPlaybackQueueTransport || !programmerScope)
+			throw new Error("Programmer Preload playback queue is unavailable");
+		return programmerPreloadPlaybackQueueTransport.loadSnapshot(
+			programmerScope,
+		);
+	}, [programmerPreloadPlaybackQueueTransport, programmerScope]);
 	const applyProgrammerValuesAction = useCallback(
 		(
 			scope: NonNullable<typeof programmerScope>,
@@ -104,12 +128,15 @@ export function useProgrammerValuesBoundaries(state: ServerState) {
 	return {
 		programmerValuesTransport,
 		programmerPreloadValuesTransport,
+		programmerPreloadPlaybackQueueTransport,
 		programmerCaptureModeTransport,
 		programmerValuesAuthorityKey: authorityKey,
 		programmerPreloadValuesAuthorityKey: authorityKey,
+		programmerPreloadPlaybackQueueAuthorityKey: authorityKey,
 		programmerCaptureModeAuthorityKey: authorityKey,
 		loadProgrammerValuesSnapshot,
 		loadProgrammerPreloadValuesSnapshot,
+		loadProgrammerPreloadPlaybackQueueSnapshot,
 		loadProgrammerCaptureModeSnapshot,
 		applyProgrammerValuesAction,
 		applyProgrammerPreloadValuesAction,
@@ -119,6 +146,8 @@ export function useProgrammerValuesBoundaries(state: ServerState) {
 			preloadValuesErrors.reportSession,
 		reportProgrammerPreloadValuesMutationError:
 			preloadValuesErrors.reportMutation,
+		reportProgrammerPreloadPlaybackQueueSessionError:
+			preloadPlaybackQueueErrors.reportSession,
 		reportProgrammerCaptureModeSessionError: captureModeErrors.reportSession,
 	};
 }

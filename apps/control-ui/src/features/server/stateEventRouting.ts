@@ -121,6 +121,7 @@ function isHandledByScopedProgrammerState(
 	return (
 		isScopedCommandLineEdit(event) ||
 		isOwnScopedValuesOnly(event, session) ||
+		isOwnScopedQueueInteraction(event, session) ||
 		isTransientControlOnly(event)
 	);
 }
@@ -149,19 +150,40 @@ function hasExactUniqueChanges(
 	);
 }
 
-const scopedValueChanges = new Set(["values", "preload_values"]);
+const scopedProgrammerChanges = new Set([
+	"values",
+	"preload_values",
+	"preload_playback_queue",
+]);
 const transientControlChanges = new Set(["transient_control"]);
 const interactionChanges = new Set(["interaction"]);
+const queueInteractionChanges = new Set([
+	"interaction",
+	"preload_playback_queue",
+]);
 
 function isOwnScopedValuesOnly(event: ServerEvent, session: SessionResponse) {
 	return (
 		event.payload.user_id === session.user.id &&
-		hasExactUniqueChanges(event, scopedValueChanges)
+		hasExactUniqueChanges(event, scopedProgrammerChanges)
 	);
 }
 
 function isTransientControlOnly(event: ServerEvent) {
 	return hasExactUniqueChanges(event, transientControlChanges);
+}
+
+function isOwnScopedQueueInteraction(
+	event: ServerEvent,
+	session: SessionResponse,
+) {
+	const changes = programmerChanges(event);
+	return (
+		event.payload.user_id === session.user.id &&
+		changes?.length === queueInteractionChanges.size &&
+		new Set(changes).size === changes.length &&
+		changes.every((change) => queueInteractionChanges.has(change))
+	);
 }
 
 function isScopedCommandLineEdit(event: ServerEvent) {

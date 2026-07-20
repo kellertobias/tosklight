@@ -18,12 +18,6 @@ import type {
 	VersionedObject,
 } from "../../api/types";
 import type { CommandTargetMode } from "../../controlSurface/commandTarget";
-import { PlaybackRuntimeStore } from "../playbackRuntime/store";
-import { ProgrammerCaptureModeStore } from "../programmerCaptureMode/store";
-import { ProgrammerLifecycleStore } from "../programmerLifecycle/store";
-import { ProgrammerPreloadValuesStore } from "../programmerPreloadValues/store";
-import { ProgrammerValuesStore } from "../programmerValues/store";
-import { ProgrammingInteractionStore } from "../programmingInteraction/store";
 import type {
 	PendingCommandChoice,
 	StoredDeskLayout,
@@ -31,6 +25,7 @@ import type {
 } from "./contracts";
 import { useHighlightState } from "./useHighlightState";
 import { useMediaServerState } from "./useMediaServerState";
+import { useServerFeatureStores } from "./useServerFeatureStores";
 import { useShowObjectsState } from "./useShowObjectsState";
 
 export function useServerState() {
@@ -51,20 +46,7 @@ export function useServerState() {
 		[],
 	);
 	const [playbacks, setPlaybacks] = useState<PlaybackSnapshot | null>(null);
-	const playbackRuntimeStore = useRef(new PlaybackRuntimeStore()).current;
-	const programmingInteractionStore = useRef(
-		new ProgrammingInteractionStore(),
-	).current;
-	const programmerCaptureModeStore = useRef(
-		new ProgrammerCaptureModeStore(),
-	).current;
-	const programmerLifecycleStore = useRef(
-		new ProgrammerLifecycleStore(),
-	).current;
-	const programmerValuesStore = useRef(new ProgrammerValuesStore()).current;
-	const programmerPreloadValuesStore = useRef(
-		new ProgrammerPreloadValuesStore(),
-	).current;
+	const featureStores = useServerFeatureStores();
 	const [screens, setScreens] = useState<ScreenSnapshot | null>(null);
 	const [shows, setShows] = useState<ShowEntry[]>([]);
 	const [configuration, setConfiguration] = useState<DeskConfiguration | null>(
@@ -129,12 +111,7 @@ export function useServerState() {
 		setPatchLayers,
 		playbacks,
 		setPlaybacks,
-		playbackRuntimeStore,
-		programmingInteractionStore,
-		programmerCaptureModeStore,
-		programmerLifecycleStore,
-		programmerValuesStore,
-		programmerPreloadValuesStore,
+		...featureStores,
 		screens,
 		setScreens,
 		shows,
