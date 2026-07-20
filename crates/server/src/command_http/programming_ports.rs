@@ -144,7 +144,9 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
     }
 
     fn commit_preload(&self, _context: &ActionContext) -> Result<Option<String>, String> {
-        let committed = super::super::commit_preload(self.state, self.session)?;
+        // Every command-line/OSC Programming caller already owns the active-show gate before
+        // entering the application boundary. Re-entering it would reject every valid Preload GO.
+        let committed = super::super::commit_preload_while_show_stable(self.state, self.session)?;
         Ok(committed
             .get("warnings")
             .and_then(serde_json::Value::as_array)

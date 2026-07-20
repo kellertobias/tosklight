@@ -3,6 +3,7 @@
 use super::{
     command_line::ProgrammingInteractionChange,
     playback::{PlaybackDeskProjection, PlaybackRuntimeChange},
+    preload_playback_queue::ProgrammingPreloadPlaybackQueueChange,
     preload_values::ProgrammingPreloadValuesChange,
     programmer_lifecycle::ProgrammingLifecycleChange,
     programming::{ProgrammingCaptureModeChange, ProgrammingValuesChange},
@@ -167,6 +168,9 @@ pub enum EventPayload {
     },
     ProgrammingPreloadValuesChanged {
         change: ProgrammingPreloadValuesChange,
+    },
+    ProgrammingPreloadPlaybackQueueChanged {
+        change: ProgrammingPreloadPlaybackQueueChange,
     },
     ProgrammingLifecycleChanged {
         change: ProgrammingLifecycleChange,

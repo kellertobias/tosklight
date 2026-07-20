@@ -251,14 +251,14 @@ fn preload_rejects_a_late_invalid_action_without_publishing_earlier_actions() {
     assert!(state.programmers.queue_preload_playback_action(
         session.id,
         1,
-        "go".into(),
-        "physical".into(),
+        light_programmer::PreloadPlaybackQueueAction::Go,
+        light_programmer::PreloadPlaybackQueueSurface::Physical,
     ));
     assert!(state.programmers.queue_preload_playback_action(
         session.id,
         3,
-        "on".into(),
-        "virtual".into(),
+        light_programmer::PreloadPlaybackQueueAction::On,
+        light_programmer::PreloadPlaybackQueueSurface::Virtual,
     ));
     let programmer_before = state.programmers.get(session.id).unwrap();
 
@@ -302,8 +302,8 @@ fn committed_preload_publishes_the_exact_typed_playback_change() {
     assert!(state.programmers.queue_preload_playback_action(
         session.id,
         1,
-        "go".into(),
-        "physical".into(),
+        light_programmer::PreloadPlaybackQueueAction::Go,
+        light_programmer::PreloadPlaybackQueueSurface::Physical,
     ));
 
     let response = commit_preload(&state, &session).unwrap();
@@ -350,8 +350,8 @@ fn staged_preload_applies_exclusions_without_mutating_the_source_engine() {
         .unwrap();
     let pending = light_programmer::PreloadPlaybackAction {
         playback_number: 1,
-        action: "on".into(),
-        surface: "virtual".into(),
+        action: light_programmer::PreloadPlaybackQueueAction::On,
+        surface: light_programmer::PreloadPlaybackQueueSurface::Virtual,
     };
     let source = state.engine.playback_runtime();
     let pending = vec![pending];

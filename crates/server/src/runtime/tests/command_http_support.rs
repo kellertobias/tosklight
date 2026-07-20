@@ -224,6 +224,29 @@ impl CommandHttpScenario {
             .unwrap()
     }
 
+    async fn preload_playback_queue_snapshot(&self) -> Response {
+        self.preload_playback_queue_snapshot_for(self.session.user.id.0, Some(&self.token))
+            .await
+    }
+
+    async fn preload_playback_queue_snapshot_for(
+        &self,
+        user_id: Uuid,
+        token: Option<&str>,
+    ) -> Response {
+        let mut request = Request::get(format!(
+            "/api/v2/users/{user_id}/programmer-preload-playback-queue/snapshot"
+        ));
+        if let Some(token) = token {
+            request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
+        }
+        self.app
+            .clone()
+            .oneshot(request.body(Body::empty()).unwrap())
+            .await
+            .unwrap()
+    }
+
     async fn preload_values_action(&self, input: serde_json::Value) -> Response {
         self.preload_values_action_for(self.session.user.id.0, &self.token, input)
             .await

@@ -1,12 +1,13 @@
 use super::ProgrammingService;
 use crate::{
     ActionContext, ActionError, EventDraft, ProgrammingCaptureModeChange,
-    ProgrammingCaptureModeProjection, ProgrammingInteractionChange, ProgrammingPreloadValuesChange,
-    ProgrammingValuesChange,
+    ProgrammingCaptureModeProjection, ProgrammingInteractionChange,
+    ProgrammingPreloadPlaybackQueueChange, ProgrammingPreloadValuesChange, ProgrammingValuesChange,
 };
 use light_core::{SessionId, UserId};
 use std::sync::Arc;
 
+use super::super::preload_playback_queue_projection::ProgrammingPreloadPlaybackQueueContent;
 use super::super::preload_values_projection::ProgrammingPreloadValuesContent;
 use super::super::values_projection::ProgrammingValuesContent;
 
@@ -65,6 +66,20 @@ impl ProgrammingService {
         })
     }
 
+    pub(in crate::programming) fn publish_preload_playback_queue(
+        &self,
+        context: &ActionContext,
+        change: Option<ProgrammingPreloadPlaybackQueueChange>,
+    ) -> Option<u64> {
+        change.map(|change| {
+            self.events
+                .publish(EventDraft::programming_preload_playback_queue_changed(
+                    context, change,
+                ))
+                .sequence
+        })
+    }
+
     pub(in crate::programming) fn capture_mode_change(
         &self,
         user_id: UserId,
@@ -112,6 +127,26 @@ impl ProgrammingService {
         let content = ProgrammingPreloadValuesContent::read(&self.programmers, session, user_id)?;
         let revision = self.programmers.advance_preload_values_revision(user_id);
         Ok(Some(ProgrammingPreloadValuesChange {
+            projection: Arc::new(content.projection(user_id, revision)),
+        }))
+    }
+
+    pub(super) fn preload_playback_queue_change(
+        &self,
+        user_id: UserId,
+        session: SessionId,
+        before_generation: u64,
+        after_generation: u64,
+    ) -> Result<Option<ProgrammingPreloadPlaybackQueueChange>, ActionError> {
+        if before_generation == after_generation {
+            return Ok(None);
+        }
+        let content =
+            ProgrammingPreloadPlaybackQueueContent::read(&self.programmers, session, user_id)?;
+        let revision = self
+            .programmers
+            .advance_preload_playback_queue_revision(user_id);
+        Ok(Some(ProgrammingPreloadPlaybackQueueChange {
             projection: Arc::new(content.projection(user_id, revision)),
         }))
     }

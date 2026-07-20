@@ -69,6 +69,15 @@ impl ProgrammingService {
                     after.preload_values_generation,
                 )?,
             ),
+            preload_playback_queue_event_sequence: self.publish_preload_playback_queue(
+                context,
+                self.preload_playback_queue_change(
+                    user_id,
+                    session,
+                    before.preload_playback_queue_generation,
+                    after.preload_playback_queue_generation,
+                )?,
+            ),
         };
         self.publish_lifecycle_for_context(context, lifecycle_before);
         Ok(result)

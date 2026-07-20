@@ -149,5 +149,6 @@ pub struct ProgrammingResult {
     pub capture_mode_event_sequence: Option<u64>,
     pub values_event_sequence: Option<u64>,
     pub preload_values_event_sequence: Option<u64>,
+    pub preload_playback_queue_event_sequence: Option<u64>,
     pub replayed: bool,
 }

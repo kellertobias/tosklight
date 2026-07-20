@@ -1,7 +1,9 @@
+use super::preload_playback_queue_projection::ProgrammingPreloadPlaybackQueueContent;
 use super::preload_values_projection::ProgrammingPreloadValuesContent;
 use super::values_projection::ProgrammingValuesContent;
 use super::{
-    ProgrammingPorts, ProgrammingPreloadValuesChange, ProgrammingService, ProgrammingValuesChange,
+    ProgrammingPorts, ProgrammingPreloadPlaybackQueueChange, ProgrammingPreloadValuesChange,
+    ProgrammingService, ProgrammingValuesChange,
 };
 use crate::{ActionContext, ActionError, ActionErrorKind};
 use light_core::{SessionId, UserId};
@@ -56,8 +58,10 @@ pub struct ProgrammingLifecycleResult<T> {
     pub values_revision: u64,
     pub capture_mode_revision: u64,
     pub preload_values_revision: u64,
+    pub preload_playback_queue_revision: u64,
     pub values_event_sequence: Option<u64>,
     pub preload_values_event_sequence: Option<u64>,
+    pub preload_playback_queue_event_sequence: Option<u64>,
     pub capture_mode_event_sequence: Option<u64>,
 }
 
@@ -105,12 +109,19 @@ impl ProgrammingService {
             target.current_session_id,
             target.user_id,
         )?;
+        let before_preload_playback_queue = ProgrammingPreloadPlaybackQueueContent::read(
+            &self.programmers,
+            target.current_session_id,
+            target.user_id,
+        )?;
         let completion = operation();
         self.invalidate_values_replay(target.user_id);
         self.invalidate_preload_values_replay(target.user_id);
         let after_values = self.lifecycle_values(&target, completion.replacement_session_id)?;
         let after_preload_values =
             self.lifecycle_preload_values(&target, completion.replacement_session_id)?;
+        let after_preload_playback_queue =
+            self.lifecycle_preload_playback_queue(&target, completion.replacement_session_id)?;
         let after_mode = self.lifecycle_mode(&target, completion.replacement_session_id)?;
         let values = self.lifecycle_values_change(target.user_id, before_values, after_values);
         let preload_values = self.lifecycle_preload_values_change(
@@ -119,18 +130,29 @@ impl ProgrammingService {
             after_preload_values,
         );
         let capture_mode = self.capture_mode_change(target.user_id, before_mode, after_mode);
+        let preload_playback_queue = self.lifecycle_preload_playback_queue_change(
+            target.user_id,
+            before_preload_playback_queue,
+            after_preload_playback_queue,
+        );
         let capture_mode_event_sequence = self.publish_capture_mode(actor_context, capture_mode);
         let values_event_sequence = self.publish_values(actor_context, values);
         let preload_values_event_sequence =
             self.publish_preload_values(actor_context, preload_values);
+        let preload_playback_queue_event_sequence =
+            self.publish_preload_playback_queue(actor_context, preload_playback_queue);
         self.publish_lifecycle_for_user(actor_context, target.user_id, lifecycle_before);
         Ok(ProgrammingLifecycleResult {
             output: completion.output,
             values_revision: self.programmers.normal_values_revision(target.user_id),
             capture_mode_revision: self.programmers.capture_mode_revision(target.user_id),
             preload_values_revision: self.programmers.preload_values_revision(target.user_id),
+            preload_playback_queue_revision: self
+                .programmers
+                .preload_playback_queue_revision(target.user_id),
             values_event_sequence,
             preload_values_event_sequence,
+            preload_playback_queue_event_sequence,
             capture_mode_event_sequence,
         })
     }
@@ -191,6 +213,23 @@ impl ProgrammingService {
         )
     }
 
+    fn lifecycle_preload_playback_queue(
+        &self,
+        target: &ProgrammingLifecycleTarget,
+        session: Option<SessionId>,
+    ) -> Result<ProgrammingPreloadPlaybackQueueContent, ActionError> {
+        session.map_or_else(
+            || Ok(ProgrammingPreloadPlaybackQueueContent::default()),
+            |session| {
+                ProgrammingPreloadPlaybackQueueContent::read(
+                    &self.programmers,
+                    session,
+                    target.user_id,
+                )
+            },
+        )
+    }
+
     fn lifecycle_values_change(
         &self,
         user_id: UserId,
@@ -217,6 +256,23 @@ impl ProgrammingService {
         }
         let revision = self.programmers.advance_preload_values_revision(user_id);
         Some(ProgrammingPreloadValuesChange {
+            projection: Arc::new(after.projection(user_id, revision)),
+        })
+    }
+
+    fn lifecycle_preload_playback_queue_change(
+        &self,
+        user_id: UserId,
+        before: ProgrammingPreloadPlaybackQueueContent,
+        after: ProgrammingPreloadPlaybackQueueContent,
+    ) -> Option<ProgrammingPreloadPlaybackQueueChange> {
+        if before == after {
+            return None;
+        }
+        let revision = self
+            .programmers
+            .advance_preload_playback_queue_revision(user_id);
+        Some(ProgrammingPreloadPlaybackQueueChange {
             projection: Arc::new(after.projection(user_id, revision)),
         })
     }

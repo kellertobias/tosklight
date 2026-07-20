@@ -33,8 +33,8 @@ impl ServerPlaybackPorts<'_> {
     ) -> bool {
         self.state
             .programmers
-            .get(session.id)
-            .is_some_and(|programmer| programmer.blind)
+            .capture_mode(session.id)
+            .is_some_and(|mode| mode.blind)
             && pending.is_some()
             && capture_enabled(self.state, surface)
     }
@@ -47,11 +47,16 @@ impl ServerPlaybackPorts<'_> {
         pending: &str,
         surface: PlaybackSurface,
     ) -> Result<(), ActionError> {
+        let action = light_programmer::PreloadPlaybackQueueAction::try_from(pending)
+            .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error))?;
+        let queue_surface =
+            light_programmer::PreloadPlaybackQueueSurface::try_from(surface_name(surface))
+                .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error))?;
         self.state.programmers.queue_preload_playback_action(
             session.id,
             number,
-            pending.to_owned(),
-            surface_name(surface).to_owned(),
+            action,
+            queue_surface,
         );
         if let Err(error) = persist_programmer(self.state, session) {
             self.mark_persistence_pending(context, "programmer", error);
@@ -59,7 +64,7 @@ impl ServerPlaybackPorts<'_> {
         emit(
             self.state,
             "programmer_changed",
-            serde_json::json!({"session_id":session.id,"preload_playback_action":pending,"playback_number":number,"surface":surface_name(surface)}),
+            serde_json::json!({"session_id":session.id,"user_id":session.user.id,"preload_playback_action":pending,"playback_number":number,"surface":surface_name(surface),"changes":["preload_playback_queue"]}),
         );
         Ok(())
     }

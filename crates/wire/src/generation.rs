@@ -22,6 +22,7 @@ use crate::v2::playback::{
     PlaybackActionOutcome, PlaybackActionRequest, PlaybackErrorResponse, PlaybackRuntimeSnapshot,
     PlaybackRuntimeSnapshotRequest,
 };
+use crate::v2::preload_playback_queue::ProgrammingPreloadPlaybackQueueSnapshot;
 use crate::v2::preload_values::{
     ProgrammingPreloadValuesActionOutcome, ProgrammingPreloadValuesActionRequest,
     ProgrammingPreloadValuesErrorResponse, ProgrammingPreloadValuesSnapshot,
@@ -104,6 +105,9 @@ pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
         ),
         programming_response_schema::<ProgrammingPreloadValuesSnapshot>(
             "programming-preload-values-snapshot",
+        ),
+        programming_response_schema::<ProgrammingPreloadPlaybackQueueSnapshot>(
+            "programming-preload-playback-queue-snapshot",
         ),
         playback_request_schema::<PlaybackActionRequest>("playback-action-request"),
         playback_response_schema::<PlaybackActionOutcome>("playback-action-outcome"),

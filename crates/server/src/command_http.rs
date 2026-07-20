@@ -13,6 +13,10 @@ mod interaction_wire;
 mod lifecycle_routes;
 #[path = "command_http/lifecycle_wire.rs"]
 mod lifecycle_wire;
+#[path = "command_http/preload_playback_queue_routes.rs"]
+mod preload_playback_queue_routes;
+#[path = "command_http/preload_playback_queue_wire.rs"]
+mod preload_playback_queue_wire;
 #[path = "command_http/preload_values_routes.rs"]
 mod preload_values_routes;
 #[path = "command_http/preload_values_wire.rs"]
@@ -43,6 +47,7 @@ pub(super) use adapter::{
 };
 pub(super) use interaction_wire::interaction_change;
 pub(super) use lifecycle_wire::lifecycle_change;
+pub(super) use preload_playback_queue_wire::change as preload_playback_queue_change;
 pub(super) use preload_values_wire::change as preload_values_change;
 pub(crate) use programming_ports::ServerProgrammingPorts;
 pub(super) use routes::router;

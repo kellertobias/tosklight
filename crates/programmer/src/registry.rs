@@ -27,6 +27,10 @@ pub struct ProgrammerRegistry {
     pub(crate) preload_values_generations: Arc<RwLock<HashMap<UserId, u64>>>,
     /// Monotonic public projection revision for pending Preload values.
     pub(crate) preload_values_revisions: Arc<RwLock<HashMap<UserId, u64>>>,
+    /// Cheap per-user stamp for the ordered pending Preload playback queue.
+    pub(crate) preload_playback_queue_generations: Arc<RwLock<HashMap<UserId, u64>>>,
+    /// Monotonic public projection revision for the pending Preload playback queue.
+    pub(crate) preload_playback_queue_revisions: Arc<RwLock<HashMap<UserId, u64>>>,
     /// Runtime-only public revision for the exact capture-mode tuple. Domain helpers never
     /// advance it; the Programming application boundary advances it once per semantic tuple
     /// transition after all nested mutations and reconciliation have completed.
@@ -59,6 +63,8 @@ impl ProgrammerRegistry {
             normal_values_revisions: Arc::default(),
             preload_values_generations: Arc::default(),
             preload_values_revisions: Arc::default(),
+            preload_playback_queue_generations: Arc::default(),
+            preload_playback_queue_revisions: Arc::default(),
             capture_mode_revisions: Arc::default(),
             mutation_gates: Arc::default(),
             unknown_mutation_gate: Arc::new(ReentrantMutex::new(())),
@@ -202,6 +208,8 @@ impl ProgrammerRegistry {
             self.normal_values_revisions.write().clear();
             self.preload_values_generations.write().clear();
             self.preload_values_revisions.write().clear();
+            self.preload_playback_queue_generations.write().clear();
+            self.preload_playback_queue_revisions.write().clear();
             self.capture_mode_revisions.write().clear();
         });
     }
@@ -269,6 +277,34 @@ impl ProgrammerRegistry {
         *revision
     }
 
+    pub fn preload_playback_queue_generation(&self, session: SessionId) -> Option<u64> {
+        let user_id = self.states.read().get(&self.key(session))?.user_id;
+        Some(self.preload_playback_queue_generation_for_user(user_id))
+    }
+
+    pub(crate) fn preload_playback_queue_generation_for_user(&self, user_id: UserId) -> u64 {
+        self.preload_playback_queue_generations
+            .read()
+            .get(&user_id)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    pub fn preload_playback_queue_revision(&self, user_id: UserId) -> u64 {
+        self.preload_playback_queue_revisions
+            .read()
+            .get(&user_id)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    pub fn advance_preload_playback_queue_revision(&self, user_id: UserId) -> u64 {
+        let mut revisions = self.preload_playback_queue_revisions.write();
+        let revision = revisions.entry(user_id).or_default();
+        *revision = revision.saturating_add(1);
+        *revision
+    }
+
     pub fn capture_mode_revision(&self, user_id: UserId) -> u64 {
         self.capture_mode_revisions
             .read()
@@ -292,6 +328,12 @@ impl ProgrammerRegistry {
 
     pub(crate) fn mark_preload_values_changed(&self, user_id: UserId) {
         let mut generations = self.preload_values_generations.write();
+        let generation = generations.entry(user_id).or_default();
+        *generation = generation.saturating_add(1);
+    }
+
+    pub(crate) fn mark_preload_playback_queue_changed(&self, user_id: UserId) {
+        let mut generations = self.preload_playback_queue_generations.write();
         let generation = generations.entry(user_id).or_default();
         *generation = generation.saturating_add(1);
     }
@@ -387,6 +429,9 @@ impl ProgrammerRegistry {
         }
         if !state.preload_pending.is_empty() || !state.preload_group_pending.is_empty() {
             self.mark_preload_values_changed(state.user_id);
+        }
+        if !state.preload_playback_pending.is_empty() {
+            self.mark_preload_playback_queue_changed(state.user_id);
         }
         true
     }

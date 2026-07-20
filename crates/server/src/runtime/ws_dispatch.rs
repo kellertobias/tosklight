@@ -190,6 +190,7 @@ fn dispatch_validated_ws_command(
             completed.event_sequence.is_some(),
             completed.values_event_sequence.is_some(),
             completed.preload_values_event_sequence.is_some(),
+            completed.preload_playback_queue_event_sequence.is_some(),
         ),
         Err(error) => WsProgrammingOutput::untracked(Err(error.message)),
     }
@@ -294,7 +295,13 @@ impl WsProgrammingOutput {
         }
     }
 
-    fn with_changes(mut self, interaction: bool, values: bool, preload_values: bool) -> Self {
+    fn with_changes(
+        mut self,
+        interaction: bool,
+        values: bool,
+        preload_values: bool,
+        preload_playback_queue: bool,
+    ) -> Self {
         if interaction {
             self.changes.push("interaction");
         }
@@ -303,6 +310,9 @@ impl WsProgrammingOutput {
         }
         if preload_values {
             self.changes.push("preload_values");
+        }
+        if preload_playback_queue {
+            self.changes.push("preload_playback_queue");
         }
         self
     }

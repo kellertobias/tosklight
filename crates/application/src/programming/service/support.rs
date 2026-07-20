@@ -111,6 +111,7 @@ pub(super) struct Snapshot {
     pub(super) capture_mode: ProgrammerCaptureMode,
     pub(super) values_generation: u64,
     pub(super) preload_values_generation: u64,
+    pub(super) preload_playback_queue_generation: u64,
 }
 
 impl Snapshot {
@@ -139,6 +140,9 @@ impl Snapshot {
             preload_values_generation: programmers
                 .preload_values_generation(session)
                 .ok_or_else(unknown_programmer)?,
+            preload_playback_queue_generation: programmers
+                .preload_playback_queue_generation(session)
+                .ok_or_else(unknown_programmer)?,
         })
     }
 
@@ -161,6 +165,7 @@ impl Snapshot {
             capture_mode_event_sequence: None,
             values_event_sequence: None,
             preload_values_event_sequence: None,
+            preload_playback_queue_event_sequence: None,
             replayed: false,
         }
     }

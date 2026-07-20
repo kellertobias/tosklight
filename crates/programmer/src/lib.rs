@@ -10,6 +10,7 @@ mod history;
 mod lifecycle_projection;
 mod normal_values;
 mod preload;
+mod preload_playback_queue;
 mod preload_values;
 mod presets;
 mod registry;
@@ -38,6 +39,7 @@ pub use highlight::{
 pub use lifecycle_projection::{ProgrammerLifecycleSession, ProgrammerLifecycleSummary};
 pub use normal_values::{NormalProgrammerValueMutation, NormalProgrammerValueTiming};
 pub use preload::PreloadPlaybackAction;
+pub use preload_playback_queue::{PreloadPlaybackQueueAction, PreloadPlaybackQueueSurface};
 pub use preload_values::{
     PreloadProgrammerFixtureValue, PreloadProgrammerGroupValue, PreloadProgrammerValueMutation,
     PreloadProgrammerValueTiming, PreloadProgrammerValuesContent,

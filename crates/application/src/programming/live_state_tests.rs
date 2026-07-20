@@ -19,6 +19,8 @@ mod capture_mode;
 mod lifecycle;
 #[path = "live_state_tests/lifecycle_publication.rs"]
 mod lifecycle_publication;
+#[path = "live_state_tests/preload_playback_queue.rs"]
+mod preload_playback_queue;
 #[path = "live_state_tests/preload_values_actions.rs"]
 mod preload_values_actions;
 #[path = "live_state_tests/routing.rs"]

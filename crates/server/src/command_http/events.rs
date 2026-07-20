@@ -73,7 +73,7 @@ fn publish_osc_accepted(
             "source":"osc",
             "command_line":result.command_line.visible_text(),
             "command_revision":result.command_line.revision,
-            "changes":change_categories(action),
+            "changes":change_categories(result, action),
         }),
     );
 }
@@ -236,7 +236,7 @@ fn publish_programmer_changed(
             "request_id":request_id,
             "preload_armed":action == ProgrammingAction::PreloadEntered,
             "command_revision":result.command_line.revision,
-            "changes":change_categories(action),
+            "changes":change_categories(result, action),
         }),
     );
 }
@@ -359,7 +359,27 @@ const fn action_name(action: ProgrammingAction) -> &'static str {
     }
 }
 
-const fn change_categories(action: ProgrammingAction) -> &'static [&'static str] {
+fn change_categories(result: &ProgrammingResult, action: ProgrammingAction) -> Vec<&'static str> {
+    if result.preload_playback_queue_event_sequence.is_some()
+        && result.values_event_sequence.is_none()
+        && result.preload_values_event_sequence.is_none()
+        && result.capture_mode_event_sequence.is_none()
+    {
+        let mut changes = Vec::with_capacity(2);
+        if result.interaction_event_sequence.is_some() {
+            changes.push("interaction");
+        }
+        changes.push("preload_playback_queue");
+        return changes;
+    }
+    let mut changes = base_change_categories(action).to_vec();
+    if result.preload_playback_queue_event_sequence.is_some() {
+        changes.push("preload_playback_queue");
+    }
+    changes
+}
+
+const fn base_change_categories(action: ProgrammingAction) -> &'static [&'static str] {
     match action {
         ProgrammingAction::Edited
         | ProgrammingAction::ClearedCommandLine

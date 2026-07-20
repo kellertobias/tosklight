@@ -1,5 +1,6 @@
 use crate::ProgrammerRegistry;
 use crate::groups::GroupProgrammerValue;
+use crate::{PreloadPlaybackQueueAction, PreloadPlaybackQueueSurface};
 use chrono::{DateTime, Utc};
 use light_core::{AttributeKey, AttributeValue, SessionId};
 use serde::{Deserialize, Serialize};
@@ -7,8 +8,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct PreloadPlaybackAction {
     pub playback_number: u16,
-    pub action: String,
-    pub surface: String,
+    pub action: PreloadPlaybackQueueAction,
+    pub surface: PreloadPlaybackQueueSurface,
 }
 
 impl ProgrammerRegistry {
@@ -66,8 +67,8 @@ impl ProgrammerRegistry {
         &self,
         session: SessionId,
         playback_number: u16,
-        action: String,
-        surface: String,
+        action: PreloadPlaybackQueueAction,
+        surface: PreloadPlaybackQueueSurface,
     ) -> bool {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();
@@ -82,7 +83,21 @@ impl ProgrammerRegistry {
             surface,
         });
         state.last_activity = self.clock.now();
+        let user_id = state.user_id;
+        drop(states);
+        self.mark_preload_playback_queue_changed(user_id);
         true
+    }
+
+    /// Clone only the ordered queued playback actions, without materializing a Programmer state.
+    pub fn preload_playback_actions(
+        &self,
+        session: SessionId,
+    ) -> Option<Vec<PreloadPlaybackAction>> {
+        self.states
+            .read()
+            .get(&self.key(session))
+            .map(|state| state.preload_playback_pending.clone())
     }
 
     pub fn take_preload_playback_actions(&self, session: SessionId) -> Vec<PreloadPlaybackAction> {
@@ -92,27 +107,37 @@ impl ProgrammerRegistry {
         let Some(state) = states.get_mut(&self.key(session)) else {
             return Vec::new();
         };
-        std::mem::take(&mut state.preload_playback_pending)
+        let drained = std::mem::take(&mut state.preload_playback_pending);
+        let user_id = state.user_id;
+        drop(states);
+        if !drained.is_empty() {
+            self.mark_preload_playback_queue_changed(user_id);
+        }
+        drained
     }
     pub fn clear_preload_pending(&self, session: SessionId) -> bool {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();
-        let (user_id, pending_values_changed) = {
+        let (user_id, pending_values_changed, queue_changed) = {
             let mut states = self.states.write();
             let Some(state) = states.get_mut(&self.key(session)) else {
                 return false;
             };
             let pending_values_changed =
                 !state.preload_pending.is_empty() || !state.preload_group_pending.is_empty();
+            let queue_changed = !state.preload_playback_pending.is_empty();
             state.checkpoint();
             state.preload_pending.clear();
             state.preload_group_pending.clear();
             state.preload_playback_pending.clear();
             state.last_activity = self.clock.now();
-            (state.user_id, pending_values_changed)
+            (state.user_id, pending_values_changed, queue_changed)
         };
         if pending_values_changed {
             self.mark_preload_values_changed(user_id);
+        }
+        if queue_changed {
+            self.mark_preload_playback_queue_changed(user_id);
         }
         true
     }
@@ -125,6 +150,7 @@ impl ProgrammerRegistry {
         };
         let pending_values_changed =
             !state.preload_pending.is_empty() || !state.preload_group_pending.is_empty();
+        let queue_changed = !state.preload_playback_pending.is_empty();
         let changed = state.blind
             || !state.preload_pending.is_empty()
             || !state.preload_active.is_empty()
@@ -146,6 +172,9 @@ impl ProgrammerRegistry {
         drop(states);
         if pending_values_changed {
             self.mark_preload_values_changed(user_id);
+        }
+        if queue_changed {
+            self.mark_preload_playback_queue_changed(user_id);
         }
         true
     }

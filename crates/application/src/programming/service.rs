@@ -1,7 +1,7 @@
 use super::{
     ExecutionPolicy, ProgrammingAction, ProgrammingCaptureModeChange, ProgrammingCommand,
     ProgrammingExecution, ProgrammingInteractionChange, ProgrammingOutcome, ProgrammingPorts,
-    ProgrammingResult, ProgrammingValuesChange,
+    ProgrammingPreloadPlaybackQueueChange, ProgrammingResult, ProgrammingValuesChange,
 };
 use crate::{ActionEnvelope, ActionError, EventBus};
 use light_core::{SessionId, UserId};
@@ -57,6 +57,7 @@ struct AppliedProgramming {
     capture_mode: Option<ProgrammingCaptureModeChange>,
     values: Option<ProgrammingValuesChange>,
     preload_values: Option<super::ProgrammingPreloadValuesChange>,
+    preload_playback_queue: Option<ProgrammingPreloadPlaybackQueueChange>,
 }
 
 #[derive(Clone)]
@@ -122,6 +123,8 @@ impl ProgrammingService {
                 self.publish_values(&action.context, applied.values);
             applied.result.preload_values_event_sequence =
                 self.publish_preload_values(&action.context, applied.preload_values);
+            applied.result.preload_playback_queue_event_sequence = self
+                .publish_preload_playback_queue(&action.context, applied.preload_playback_queue);
             self.publish_lifecycle_for_context(&action.context, lifecycle_before);
             self.remember(&action, session, &applied.result);
             Ok(applied.result)
@@ -210,6 +213,12 @@ impl ProgrammingService {
             before.preload_values_generation,
             after.preload_values_generation,
         )?;
+        let preload_playback_queue = self.preload_playback_queue_change(
+            user_id,
+            session,
+            before.preload_playback_queue_generation,
+            after.preload_playback_queue_generation,
+        )?;
         let capture_mode =
             self.capture_mode_change(user_id, before.capture_mode, after.capture_mode);
         Ok(AppliedProgramming {
@@ -218,6 +227,7 @@ impl ProgrammingService {
             capture_mode,
             values,
             preload_values,
+            preload_playback_queue,
         })
     }
 

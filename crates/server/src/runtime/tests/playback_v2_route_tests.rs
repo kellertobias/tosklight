@@ -363,6 +363,138 @@ async fn v2_playback_rejects_forged_sources_control_ids_and_no_change_emits_noth
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
+#[tokio::test]
+async fn captured_preload_queue_is_replay_safe_snapshot_owned_and_drained_once_by_go() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = session_for_token(&state, &token);
+    open_playback_test_show(&app, &token).await;
+    install_playback_test_state(&state);
+    assert_preload_key(
+        &app,
+        &token,
+        session.desk.id,
+        "enter-queue",
+        "preload_entered",
+    )
+    .await;
+
+    let mut request = action_request(
+        "capture-queue-once",
+        1,
+        serde_json::json!({"type":"go","pressed":true}),
+    );
+    request["surface"] = "physical".into();
+    let first = json(post_action(&app, Some(&token), session.desk.id, request.clone()).await).await;
+    assert_eq!(first["outcome"]["status"], "captured");
+    let events = preload_queue_events(&state, session.user.id.0);
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].desk_id, None);
+    assert_eq!(
+        events[0].delivery,
+        light_application::DeliveryPolicy::Replaceable
+    );
+    assert_eq!(
+        events[0].source,
+        light_application::EventSource::Action(light_application::ActionSource::Http)
+    );
+    assert_eq!(
+        events[0].correlation_id.unwrap().to_string(),
+        first["correlation_id"]
+    );
+    let light_application::ApplicationEvent::Programming(
+        light_application::ProgrammingEvent::PreloadPlaybackQueueChanged(change),
+    ) = &events[0].payload
+    else {
+        panic!("captured action should publish the typed queue projection")
+    };
+    assert_eq!(change.projection.revision, 1);
+    let legacy = state
+        .audit_events
+        .lock()
+        .iter()
+        .find(|event| {
+            event.kind == "programmer_changed"
+                && event.payload.get("preload_playback_action").is_some()
+        })
+        .cloned()
+        .unwrap();
+    assert_eq!(legacy.payload["user_id"], session.user.id.0.to_string());
+    assert_eq!(
+        legacy.payload["changes"],
+        serde_json::json!(["preload_playback_queue"])
+    );
+    let replay = json(post_action(&app, Some(&token), session.desk.id, request).await).await;
+    assert_eq!(replay["replayed"], true);
+    assert_eq!(preload_queue_events(&state, session.user.id.0).len(), 1);
+
+    let snapshot = json(preload_queue_snapshot(&app, Some(&token), session.user.id.0).await).await;
+    assert_eq!(snapshot["projection"]["revision"], 1);
+    assert_eq!(
+        snapshot["projection"]["actions"],
+        serde_json::json!([{
+            "playback_number": 1,
+            "action": "go",
+            "surface": "physical",
+        }])
+    );
+    assert_preload_key(
+        &app,
+        &token,
+        session.desk.id,
+        "drain-queue",
+        "preload_committed",
+    )
+    .await;
+    assert_eq!(preload_queue_events(&state, session.user.id.0).len(), 2);
+    let snapshot = json(preload_queue_snapshot(&app, Some(&token), session.user.id.0).await).await;
+    assert_eq!(snapshot["projection"]["revision"], 2);
+    assert_eq!(snapshot["projection"]["actions"], serde_json::json!([]));
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn failed_preload_go_rolls_back_queue_generation_and_emits_no_projection() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = session_for_token(&state, &token);
+    open_playback_test_show(&app, &token).await;
+    install_playback_test_state(&state);
+    assert_preload_key(
+        &app,
+        &token,
+        session.desk.id,
+        "enter-failed-queue",
+        "preload_entered",
+    )
+    .await;
+    let mut capture = action_request(
+        "capture-before-failure",
+        1,
+        serde_json::json!({"type":"go","pressed":true}),
+    );
+    capture["surface"] = "physical".into();
+    let response = post_action(&app, Some(&token), session.desk.id, capture).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(preload_queue_events(&state, session.user.id.0).len(), 1);
+    state
+        .engine
+        .replace_snapshot(EngineSnapshot::default())
+        .unwrap();
+
+    assert_preload_key(&app, &token, session.desk.id, "failed-queue-go", "rejected").await;
+    assert_eq!(preload_queue_events(&state, session.user.id.0).len(), 1);
+    let snapshot = json(preload_queue_snapshot(&app, Some(&token), session.user.id.0).await).await;
+    assert_eq!(snapshot["projection"]["revision"], 1);
+    assert_eq!(
+        snapshot["projection"]["actions"].as_array().unwrap().len(),
+        1
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
 fn action_request(
     request_id: &str,
     playback_number: u16,
@@ -393,6 +525,67 @@ async fn post_action(
         .unwrap()
 }
 
+async fn assert_preload_key(
+    app: &Router,
+    token: &str,
+    desk_id: Uuid,
+    request_id: &str,
+    expected: &str,
+) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post(format!("/api/v2/desks/{desk_id}/command-line/keys"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "key":"PRE",
+                        "phase":"press",
+                        "request_id":request_id,
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = json(response).await;
+    if expected == "rejected" {
+        assert_eq!(response["outcome"], "rejected");
+    } else {
+        assert_eq!(response["action"], expected, "{response}");
+    }
+}
+
+async fn preload_queue_snapshot(app: &Router, token: Option<&str>, user_id: Uuid) -> Response {
+    let mut request = Request::get(format!(
+        "/api/v2/users/{user_id}/programmer-preload-playback-queue/snapshot"
+    ));
+    if let Some(token) = token {
+        request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
+    }
+    app.clone()
+        .oneshot(request.body(Body::empty()).unwrap())
+        .await
+        .unwrap()
+}
+
+fn preload_queue_events(
+    state: &AppState,
+    user_id: Uuid,
+) -> Vec<std::sync::Arc<light_application::EventEnvelope>> {
+    let filter = light_application::EventFilter::default()
+        .with_object(light_application::EventObject::programming_preload_playback_queue(user_id));
+    let light_application::EventReplay::Events(events) =
+        state.application_events.replay(0, &filter)
+    else {
+        panic!("queue events should remain replayable")
+    };
+    events
+}
+
 fn session_desk_id(state: &AppState, token: &str) -> Uuid {
     state
         .sessions
@@ -402,6 +595,16 @@ fn session_desk_id(state: &AppState, token: &str) -> Uuid {
         .unwrap()
         .desk
         .id
+}
+
+fn session_for_token(state: &AppState, token: &str) -> Session {
+    state
+        .sessions
+        .read()
+        .values()
+        .find(|session| session.token == token)
+        .cloned()
+        .unwrap()
 }
 
 fn active_show_id(state: &AppState) -> Uuid {

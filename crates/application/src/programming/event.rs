@@ -1,6 +1,6 @@
 use super::{
     ProgrammingCaptureModeChange, ProgrammingInteractionProjection, ProgrammingLifecycleChange,
-    ProgrammingPreloadValuesChange, ProgrammingValuesChange,
+    ProgrammingPreloadPlaybackQueueChange, ProgrammingPreloadValuesChange, ProgrammingValuesChange,
 };
 use crate::{
     ActionContext, ApplicationEvent, DeliveryPolicy, EventCapability, EventClass, EventDraft,
@@ -95,6 +95,13 @@ impl EventObject {
         )
     }
 
+    pub fn programming_preload_playback_queue(user_id: Uuid) -> Self {
+        Self::new(
+            EventCapability::Programmer,
+            format!("programming-preload-playback-queue:{user_id}"),
+        )
+    }
+
     pub fn programming_lifecycle() -> Self {
         Self::new(EventCapability::Programmer, "programming-lifecycle")
     }
@@ -123,7 +130,15 @@ impl EventObject {
     pub fn programming_user_id(&self) -> Option<Uuid> {
         self.programming_values_user_id()
             .or_else(|| self.programming_preload_values_user_id())
+            .or_else(|| self.programming_preload_playback_queue_user_id())
             .or_else(|| self.programming_capture_mode_user_id())
+    }
+
+    pub fn programming_preload_playback_queue_user_id(&self) -> Option<Uuid> {
+        (self.capability == EventCapability::Programmer)
+            .then(|| self.id.strip_prefix("programming-preload-playback-queue:"))
+            .flatten()
+            .and_then(|value| Uuid::parse_str(value).ok())
     }
 }
 
@@ -213,6 +228,25 @@ impl EventDraft {
             correlation_id: Some(context.correlation_id),
             delivery: DeliveryPolicy::Replaceable,
             payload: ApplicationEvent::Programming(ProgrammingEvent::PreloadValuesChanged(change)),
+        }
+    }
+
+    pub fn programming_preload_playback_queue_changed(
+        context: &ActionContext,
+        change: ProgrammingPreloadPlaybackQueueChange,
+    ) -> Self {
+        let object = EventObject::programming_preload_playback_queue(change.projection.user_id.0);
+        Self {
+            desk_id: None,
+            class: EventClass::Projection,
+            object: Some(object),
+            related_objects: Vec::new(),
+            source: EventSource::Action(context.source),
+            correlation_id: Some(context.correlation_id),
+            delivery: DeliveryPolicy::Replaceable,
+            payload: ApplicationEvent::Programming(ProgrammingEvent::PreloadPlaybackQueueChanged(
+                change,
+            )),
         }
     }
 }

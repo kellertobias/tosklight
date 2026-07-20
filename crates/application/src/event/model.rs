@@ -7,7 +7,8 @@ use crate::{
     playback::{PlaybackDeskProjection, PlaybackRuntimeChange, PlaybackRuntimeIdentity},
     programming::{
         ProgrammingCaptureModeChange, ProgrammingInteractionChange, ProgrammingLifecycleChange,
-        ProgrammingPreloadValuesChange, ProgrammingValuesChange,
+        ProgrammingPreloadPlaybackQueueChange, ProgrammingPreloadValuesChange,
+        ProgrammingValuesChange,
     },
 };
 use light_core::ShowId;
@@ -117,6 +118,7 @@ pub enum ProgrammingEvent {
     CaptureModeChanged(ProgrammingCaptureModeChange),
     ValuesChanged(ProgrammingValuesChange),
     PreloadValuesChanged(ProgrammingPreloadValuesChange),
+    PreloadPlaybackQueueChanged(ProgrammingPreloadPlaybackQueueChange),
 }
 
 #[derive(Clone, Debug, PartialEq)]

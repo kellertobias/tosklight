@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProgrammingPreloadPlaybackQueueSnapshot",
+  "type": "object",
+  "properties": {
+    "cursor": {
+      "$ref": "#/$defs/EventSnapshotCursor"
+    },
+    "projection": {
+      "$ref": "#/$defs/ProgrammingPreloadPlaybackQueueProjection"
+    }
+  },
+  "required": [
+    "cursor",
+    "projection"
+  ],
+  "$defs": {
+    "EventSnapshotCursor": {
+      "type": "object",
+      "properties": {
+        "sequence": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "sequence"
+      ]
+    },
+    "ProgrammingPreloadPlaybackAction": {
+      "type": "string",
+      "enum": [
+        "toggle",
+        "go",
+        "back",
+        "off",
+        "on",
+        "temporary_on",
+        "temporary_off"
+      ]
+    },
+    "ProgrammingPreloadPlaybackQueueItem": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/ProgrammingPreloadPlaybackAction"
+        },
+        "playback_number": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "surface": {
+          "$ref": "#/$defs/ProgrammingPreloadPlaybackSurface"
+        }
+      },
+      "required": [
+        "playback_number",
+        "action",
+        "surface"
+      ]
+    },
+    "ProgrammingPreloadPlaybackQueueProjection": {
+      "type": "object",
+      "properties": {
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProgrammingPreloadPlaybackQueueItem"
+          }
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "user_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "user_id",
+        "revision",
+        "actions"
+      ]
+    },
+    "ProgrammingPreloadPlaybackSurface": {
+      "type": "string",
+      "enum": [
+        "physical",
+        "virtual",
+        "osc",
+        "matter"
+      ]
+    }
+  }
+}

@@ -26,15 +26,18 @@ pub(super) fn preload_batch_commands(
     pending
         .iter()
         .map(|pending| {
-            let action = match pending.action.as_str() {
-                "toggle" => PlaybackBatchAction::Toggle,
-                "go" => PlaybackBatchAction::Go,
-                "go-minus" => PlaybackBatchAction::Back,
-                "off" => PlaybackBatchAction::Off,
-                "on" => PlaybackBatchAction::On,
-                "temp-on" => PlaybackBatchAction::SetTempButton(true),
-                "temp-off" => PlaybackBatchAction::SetTempButton(false),
-                action => return Err(format!("unsupported queued Preload action {action}")),
+            let action = match pending.action {
+                light_programmer::PreloadPlaybackQueueAction::Toggle => PlaybackBatchAction::Toggle,
+                light_programmer::PreloadPlaybackQueueAction::Go => PlaybackBatchAction::Go,
+                light_programmer::PreloadPlaybackQueueAction::Back => PlaybackBatchAction::Back,
+                light_programmer::PreloadPlaybackQueueAction::Off => PlaybackBatchAction::Off,
+                light_programmer::PreloadPlaybackQueueAction::On => PlaybackBatchAction::On,
+                light_programmer::PreloadPlaybackQueueAction::TemporaryOn => {
+                    PlaybackBatchAction::SetTempButton(true)
+                }
+                light_programmer::PreloadPlaybackQueueAction::TemporaryOff => {
+                    PlaybackBatchAction::SetTempButton(false)
+                }
             };
             Ok(PlaybackBatchCommand {
                 number: pending.playback_number,
@@ -62,8 +65,8 @@ fn staged_preload_action(
     debug_assert_eq!(pending.playback_number, outcome.number);
     StagedPreloadPlaybackAction {
         playback_number: pending.playback_number,
-        action: pending.action.clone(),
-        surface: pending.surface.clone(),
+        action: pending.action.legacy_name().to_owned(),
+        surface: pending.surface.name().to_owned(),
         released_playbacks: outcome.released_playbacks.clone(),
     }
 }
@@ -93,6 +96,7 @@ pub(super) fn record_preload_persistence_failure(
     warning
 }
 
+#[cfg(test)]
 pub(super) fn commit_preload(
     state: &AppState,
     session: &Session,

@@ -533,6 +533,22 @@
           "type": "object",
           "properties": {
             "change": {
+              "$ref": "#/$defs/ProgrammingPreloadPlaybackQueueChange"
+            },
+            "type": {
+              "type": "string",
+              "const": "programming_preload_playback_queue_changed"
+            }
+          },
+          "required": [
+            "type",
+            "change"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "change": {
               "$ref": "#/$defs/ProgrammingLifecycleChange"
             },
             "type": {
@@ -2704,6 +2720,85 @@
         "value",
         "programmer_order",
         "fade"
+      ]
+    },
+    "ProgrammingPreloadPlaybackAction": {
+      "type": "string",
+      "enum": [
+        "toggle",
+        "go",
+        "back",
+        "off",
+        "on",
+        "temporary_on",
+        "temporary_off"
+      ]
+    },
+    "ProgrammingPreloadPlaybackQueueChange": {
+      "type": "object",
+      "properties": {
+        "projection": {
+          "$ref": "#/$defs/ProgrammingPreloadPlaybackQueueProjection"
+        }
+      },
+      "required": [
+        "projection"
+      ]
+    },
+    "ProgrammingPreloadPlaybackQueueItem": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/ProgrammingPreloadPlaybackAction"
+        },
+        "playback_number": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "surface": {
+          "$ref": "#/$defs/ProgrammingPreloadPlaybackSurface"
+        }
+      },
+      "required": [
+        "playback_number",
+        "action",
+        "surface"
+      ]
+    },
+    "ProgrammingPreloadPlaybackQueueProjection": {
+      "type": "object",
+      "properties": {
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProgrammingPreloadPlaybackQueueItem"
+          }
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "user_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "user_id",
+        "revision",
+        "actions"
+      ]
+    },
+    "ProgrammingPreloadPlaybackSurface": {
+      "type": "string",
+      "enum": [
+        "physical",
+        "virtual",
+        "osc",
+        "matter"
       ]
     },
     "ProgrammingPreloadValuesChange": {

@@ -216,7 +216,12 @@ fn count_changes_publish_after_authoritative_events_while_same_count_and_replay_
         .unwrap();
     service
         .run_external_interaction(&context, &ports, || {
-            registry.queue_preload_playback_action(session, 1, "go".into(), "main".into())
+            registry.queue_preload_playback_action(
+                session,
+                1,
+                light_programmer::PreloadPlaybackQueueAction::Go,
+                light_programmer::PreloadPlaybackQueueSurface::Physical,
+            )
         })
         .unwrap();
     service

@@ -4,6 +4,7 @@ use crate::v2::command_line::*;
 use crate::v2::events::*;
 use crate::v2::patch::*;
 use crate::v2::playback::*;
+use crate::v2::preload_playback_queue::*;
 use crate::v2::preload_values::*;
 use crate::v2::programmer_lifecycle::*;
 use crate::v2::programming::*;
@@ -101,6 +102,12 @@ fn programming(config: &Config) -> Vec<String> {
         ProgrammingPreloadValuesActionOutcome::decl(config),
         ProgrammingPreloadValuesErrorKind::decl(config),
         ProgrammingPreloadValuesErrorResponse::decl(config),
+        ProgrammingPreloadPlaybackAction::decl(config),
+        ProgrammingPreloadPlaybackSurface::decl(config),
+        ProgrammingPreloadPlaybackQueueItem::decl(config),
+        ProgrammingPreloadPlaybackQueueProjection::decl(config),
+        ProgrammingPreloadPlaybackQueueChange::decl(config),
+        ProgrammingPreloadPlaybackQueueSnapshot::decl(config),
     ]
 }
 

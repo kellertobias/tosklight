@@ -56,9 +56,8 @@ fn prepare_preload_commit(
 ) -> Result<PreparedPreloadCommit, String> {
     let pending = state
         .programmers
-        .get(session.id)
-        .ok_or_else(|| "programmer does not exist".to_owned())?
-        .preload_playback_pending;
+        .preload_playback_actions(session.id)
+        .ok_or_else(|| "programmer does not exist".to_owned())?;
     let snapshot = state.engine.snapshot();
     let definitions = preload_definitions(&pending, &snapshot)?;
     let committed_at = state.programmers.clock().now();
@@ -306,7 +305,12 @@ pub(super) fn preload_commit_response(
     emit(
         state,
         "programmer_changed",
-        serde_json::json!({"session_id":session.id,"preload_committed_at":committed_at}),
+        serde_json::json!({
+            "session_id":session.id,
+            "user_id":session.user.id,
+            "preload_committed_at":committed_at,
+            "changes":if executed.is_empty() { Vec::<&str>::new() } else { vec!["preload_playback_queue"] },
+        }),
     );
     if !executed.is_empty() {
         emit(
@@ -321,7 +325,6 @@ pub(super) fn preload_commit_response(
         "programmer_fade_millis":programmer_fade_millis,
         "playback_actions":payload["playback_actions"],
         "playback_event_sequences":payload["playback_event_sequences"],
-        "programmer":state.programmers.get(session.id)
     });
     if let Some(warnings) = payload.get("warnings") {
         response["warnings"] = warnings.clone();

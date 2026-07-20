@@ -251,8 +251,8 @@ fn disabled_programmer_domain_stays_live_and_playback_verbs_retain_order() {
         assert!(registry.queue_preload_playback_action(
             session,
             1,
-            action.into(),
-            "physical".into(),
+            PreloadPlaybackQueueAction::try_from(action).unwrap(),
+            PreloadPlaybackQueueSurface::Physical,
         ));
     }
     let state = registry.get(session).unwrap();
@@ -264,7 +264,7 @@ fn disabled_programmer_domain_stays_live_and_playback_verbs_retain_order() {
         state
             .preload_playback_pending
             .iter()
-            .map(|pending| pending.action.as_str())
+            .map(|pending| pending.action.legacy_name())
             .collect::<Vec<_>>(),
         [
             "toggle", "go", "go-minus", "off", "on", "temp-on", "temp-off"

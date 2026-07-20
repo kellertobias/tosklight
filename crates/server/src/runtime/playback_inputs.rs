@@ -17,7 +17,7 @@ pub(super) fn predicted_preload_temp_state(
             .iter()
             .filter(|pending| pending.playback_number == number)
         {
-            match pending.action.as_str() {
+            match pending.action.legacy_name() {
                 "temp-on" => active = true,
                 "temp-off" => active = false,
                 _ => {}

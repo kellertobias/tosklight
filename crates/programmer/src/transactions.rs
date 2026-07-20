@@ -15,6 +15,7 @@ pub struct ProgrammerTransactionSnapshot {
     state: ProgrammerState,
     normal_values_generation: u64,
     preload_values_generation: u64,
+    preload_playback_queue_generation: u64,
     interaction_context: SessionId,
     selection: Option<SelectionContext>,
     command_line: Option<CommandLineState>,
@@ -151,6 +152,18 @@ impl ProgrammerRegistry {
             .get(&user_id)
             .copied()
             .unwrap_or(0);
+        let preload_playback_queue_generation = self
+            .preload_playback_queue_generations
+            .read()
+            .get(&user_id)
+            .copied()
+            .unwrap_or(0);
+        let preload_playback_queue_revision = self
+            .preload_playback_queue_revisions
+            .read()
+            .get(&user_id)
+            .copied()
+            .unwrap_or(0);
         let capture_mode_revision = self
             .capture_mode_revisions
             .read()
@@ -191,6 +204,14 @@ impl ProgrammerRegistry {
                 user_id,
                 preload_values_revision,
             )]))),
+            preload_playback_queue_generations: Arc::new(RwLock::new(HashMap::from([(
+                user_id,
+                preload_playback_queue_generation,
+            )]))),
+            preload_playback_queue_revisions: Arc::new(RwLock::new(HashMap::from([(
+                user_id,
+                preload_playback_queue_revision,
+            )]))),
             capture_mode_revisions: Arc::new(RwLock::new(HashMap::from([(
                 user_id,
                 capture_mode_revision,
@@ -224,6 +245,12 @@ impl ProgrammerRegistry {
             .unwrap_or(0);
         let staged_preload_values_generation = staged
             .preload_values_generations
+            .read()
+            .get(&user_id)
+            .copied()
+            .unwrap_or(0);
+        let staged_preload_playback_queue_generation = staged
+            .preload_playback_queue_generations
             .read()
             .get(&user_id)
             .copied()
@@ -263,6 +290,9 @@ impl ProgrammerRegistry {
         self.preload_values_generations
             .write()
             .insert(user_id, staged_preload_values_generation);
+        self.preload_playback_queue_generations
+            .write()
+            .insert(user_id, staged_preload_playback_queue_generation);
         true
     }
 
@@ -291,6 +321,12 @@ impl ProgrammerRegistry {
             .get(&state.user_id)
             .copied()
             .unwrap_or(0);
+        let preload_playback_queue_generation = self
+            .preload_playback_queue_generations
+            .read()
+            .get(&state.user_id)
+            .copied()
+            .unwrap_or(0);
         let selection = self
             .selection_contexts
             .read()
@@ -306,6 +342,7 @@ impl ProgrammerRegistry {
             state,
             normal_values_generation,
             preload_values_generation,
+            preload_playback_queue_generation,
             interaction_context,
             selection,
             command_line,
@@ -326,6 +363,9 @@ impl ProgrammerRegistry {
         self.preload_values_generations
             .write()
             .insert(user_id, snapshot.preload_values_generation);
+        self.preload_playback_queue_generations
+            .write()
+            .insert(user_id, snapshot.preload_playback_queue_generation);
         let mut selections = self.selection_contexts.write();
         match snapshot.selection {
             Some(selection) => {
