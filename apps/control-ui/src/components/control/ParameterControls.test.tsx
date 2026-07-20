@@ -25,12 +25,35 @@ const programmerValues = vi.hoisted(() => ({
 		groupValues: [] as ProgrammerGroupValue[],
 	},
 }));
+const captureMode = vi.hoisted(() => ({
+	ready: true,
+	projection: {
+		userId: "operator",
+		revision: 1,
+		blind: false,
+		preview: false,
+		preloadCaptureProgrammer: true,
+	},
+}));
+const preloadProgrammerValues = vi.hoisted(() => ({
+	view: {
+		ready: true,
+		fixtureValues: [] as ProgrammerFixtureValue[],
+		groupValues: [] as ProgrammerGroupValue[],
+	},
+}));
+const normalValuesActions = vi.hoisted(() => ({
+	batch: vi.fn(async () => null),
+}));
+const preloadValuesActions = vi.hoisted(() => ({
+	batch: vi.fn(async () => null),
+}));
 const legacyProgrammerValuesAccess = vi.fn();
 const server = {
 	selectedFixtures: [] as string[],
 	selectedGroupId: null as string | null,
-	groups: [] as any[],
-	patch: { fixtures: [] as any[] },
+	groups: [] as Array<Record<string, unknown>>,
+	patch: { fixtures: [] as Array<Record<string, unknown>> },
 	bootstrap: { hardware_connected: false } as {
 		hardware_connected: boolean;
 		readonly active_programmers: unknown[];
@@ -58,6 +81,27 @@ vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state, dispatch }),
 }));
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
+vi.mock(
+	"../../features/programmerCaptureMode/ProgrammerCaptureModeView",
+	() => ({
+		useProgrammerCaptureModeView: (enabled = true) =>
+			enabled && captureMode.ready ? captureMode.projection : null,
+	}),
+);
+vi.mock("../../features/programmerValues/ProgrammerValuesView", () => ({
+	useProgrammerValuesActions: () => normalValuesActions,
+}));
+vi.mock(
+	"../../features/programmerPreloadValues/ProgrammerPreloadValuesView",
+	() => ({
+		useProgrammerPreloadValuesActions: () => preloadValuesActions,
+		useProgrammerPreloadValuesSelector: (
+			_selector: unknown,
+			_equal: unknown,
+			enabled = true,
+		) => (enabled ? preloadProgrammerValues.view : null),
+	}),
+);
 vi.mock(
 	"../../features/programmingInteraction/ProgrammingInteractionView",
 	() => ({
@@ -104,6 +148,14 @@ afterEach(() => {
 	programmerValues.view.ready = true;
 	programmerValues.view.fixtureValues = [];
 	programmerValues.view.groupValues = [];
+	preloadProgrammerValues.view.ready = true;
+	preloadProgrammerValues.view.fixtureValues = [];
+	preloadProgrammerValues.view.groupValues = [];
+	captureMode.ready = true;
+	captureMode.projection.revision = 1;
+	captureMode.projection.blind = false;
+	captureMode.projection.preview = false;
+	captureMode.projection.preloadCaptureProgrammer = true;
 	vi.clearAllMocks();
 });
 
@@ -144,9 +196,78 @@ describe("ParameterControls projection lifecycle", () => {
 
 		expect(legacyProgrammerValuesAccess).not.toHaveBeenCalled();
 	});
+
+	it("keeps value controls inert while capture authority is loading", () => {
+		captureMode.ready = false;
+		server.selectedFixtures = ["fixture-1"];
+		server.patch.fixtures = [schemaV2Fixture()];
+
+		render(<ParameterControls />);
+		fireEvent.click(
+			screen.getByRole("button", { name: "Direct values and actions" }),
+		);
+
+		expect(
+			screen.getByRole("button", { name: "Dots indexed value" }),
+		).toBeDisabled();
+		expect(normalValuesActions.batch).not.toHaveBeenCalled();
+		expect(preloadValuesActions.batch).not.toHaveBeenCalled();
+		expect(legacyProgrammerValuesAccess).not.toHaveBeenCalled();
+	});
+
+	it("routes active capture values and writes only through pending Preload", () => {
+		captureMode.projection.blind = true;
+		server.selectedFixtures = ["fixture-1"];
+		server.patch.fixtures = [
+			{
+				fixture_id: "fixture-1",
+				logical_heads: [],
+				definition: {
+					heads: [
+						{
+							shared: true,
+							parameters: [{ attribute: "intensity", capabilities: [] }],
+						},
+					],
+				},
+			},
+		];
+		preloadProgrammerValues.view.fixtureValues = [
+			{
+				fixtureId: "fixture-1",
+				attribute: "intensity",
+				value: { kind: "normalized", value: 0.25 },
+				programmerOrder: 1,
+				fade: true,
+				fadeMillis: 3_000,
+				delayMillis: null,
+			},
+		];
+
+		render(<ParameterControls />);
+		const fader = screen.getByRole("slider", { name: "Enc 1 · Dimmer" });
+		expect(fader).toHaveValue("25");
+		fireEvent.input(fader, { target: { value: "50" } });
+		fireEvent.pointerUp(fader);
+
+		expect(preloadValuesActions.batch).toHaveBeenCalledWith({
+			requestId: expect.any(String),
+			mutations: [
+				{
+					action: "set_fixture",
+					fixtureId: "fixture-1",
+					attribute: "intensity",
+					value: { kind: "normalized", value: 0.5 },
+					timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
+				},
+			],
+		});
+		expect(normalValuesActions.batch).not.toHaveBeenCalled();
+		expect(server.setProgrammer).not.toHaveBeenCalled();
+	});
 });
 
-function schemaV2Fixture(): any {
+function schemaV2Fixture() {
 	return {
 		fixture_id: "fixture-1",
 		logical_heads: [],
@@ -188,7 +309,7 @@ function schemaV2Fixture(): any {
 								id: "action-1",
 								name: "Lamp reset",
 								kind: "momentary",
-								duration_millis: null,
+								duration_millis: null as number | null,
 								assignments: [
 									{ channel_id: "channel-1", active_raw: 255, inactive_raw: 0 },
 								],
@@ -202,7 +323,8 @@ function schemaV2Fixture(): any {
 }
 
 describe("ParameterControls hardware encoders", () => {
-	it("keeps six numbered hardware feedback slots and routes fine and press-turn changes", () => {
+	it("refuses hardware edits while capture authority is loading", () => {
+		captureMode.ready = false;
 		server.bootstrap.hardware_connected = true;
 		server.selectedFixtures = ["fixture-1"];
 		server.patch.fixtures = [
@@ -219,7 +341,39 @@ describe("ParameterControls hardware encoders", () => {
 				},
 			},
 		];
+
 		render(<ParameterControls />);
+		expect(screen.getByLabelText("Encoder 1: Dimmer, 0%").tagName).toBe(
+			"SECTION",
+		);
+		window.dispatchEvent(
+			new CustomEvent("light:encoder-action", {
+				detail: { control: "encode/1", value: "up" },
+			}),
+		);
+
+		expect(normalValuesActions.batch).not.toHaveBeenCalled();
+		expect(preloadValuesActions.batch).not.toHaveBeenCalled();
+	});
+
+	it("keeps six numbered hardware slots and accumulates fine and coarse turns", async () => {
+		server.bootstrap.hardware_connected = true;
+		server.selectedFixtures = ["fixture-1"];
+		server.patch.fixtures = [
+			{
+				fixture_id: "fixture-1",
+				logical_heads: [],
+				definition: {
+					heads: [
+						{
+							shared: true,
+							parameters: [{ attribute: "intensity", capabilities: [] }],
+						},
+					],
+				},
+			},
+		];
+		const rendered = render(<ParameterControls />);
 
 		expect(screen.getByLabelText("Encoder 1: Dimmer, 0%")).toBeInTheDocument();
 		for (let slot = 2; slot <= 6; slot += 1)
@@ -233,21 +387,57 @@ describe("ParameterControls hardware encoders", () => {
 				detail: { control: "encode/1", value: "up" },
 			}),
 		);
-		expect(server.setProgrammer).toHaveBeenLastCalledWith(
-			"fixture-1",
-			"intensity",
-			0.01,
-		);
+		expect(normalValuesActions.batch).toHaveBeenLastCalledWith({
+			requestId: expect.any(String),
+			mutations: [
+				{
+					action: "set_fixture",
+					fixtureId: "fixture-1",
+					attribute: "intensity",
+					value: { kind: "normalized", value: 0.01 },
+					timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
+				},
+			],
+		});
 		window.dispatchEvent(
 			new CustomEvent("light:encoder-action", {
 				detail: { control: "encode/1", value: "right" },
 			}),
 		);
-		expect(server.setProgrammer).toHaveBeenLastCalledWith(
-			"fixture-1",
-			"intensity",
-			0.1,
+		await vi.waitFor(() =>
+			expect(normalValuesActions.batch).toHaveBeenLastCalledWith({
+				requestId: expect.any(String),
+				mutations: [
+					{
+						action: "set_fixture",
+						fixtureId: "fixture-1",
+						attribute: "intensity",
+						value: { kind: "normalized", value: 0.11 },
+						timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
+					},
+				],
+			}),
 		);
+
+		captureMode.projection.blind = true;
+		rendered.rerender(<ParameterControls />);
+		window.dispatchEvent(
+			new CustomEvent("light:encoder-action", {
+				detail: { control: "encode/1", value: "up" },
+			}),
+		);
+		expect(preloadValuesActions.batch).toHaveBeenLastCalledWith({
+			requestId: expect.any(String),
+			mutations: [
+				{
+					action: "set_fixture",
+					fixtureId: "fixture-1",
+					attribute: "intensity",
+					value: { kind: "normalized", value: 0.01 },
+					timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
+				},
+			],
+		});
 	});
 
 	it("uses the hardware encoder card itself as the set-value target", () => {
@@ -305,11 +495,32 @@ describe("ParameterControls hardware encoders", () => {
 			fireEvent.click(screen.getByRole("button", { name: key }));
 		}
 
-		expect(server.setProgrammerMany).toHaveBeenCalledWith([
-			{ fixtureId: "fixture-3", attribute: "intensity", value: 0 },
-			{ fixtureId: "fixture-1", attribute: "intensity", value: 0.25 },
-			{ fixtureId: "fixture-2", attribute: "intensity", value: 0.5 },
-		]);
+		expect(normalValuesActions.batch).toHaveBeenCalledWith({
+			requestId: expect.any(String),
+			mutations: [
+				{
+					action: "set_fixture",
+					fixtureId: "fixture-3",
+					attribute: "intensity",
+					value: { kind: "normalized", value: 0 },
+					timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
+				},
+				{
+					action: "set_fixture",
+					fixtureId: "fixture-1",
+					attribute: "intensity",
+					value: { kind: "normalized", value: 0.25 },
+					timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
+				},
+				{
+					action: "set_fixture",
+					fixtureId: "fixture-2",
+					attribute: "intensity",
+					value: { kind: "normalized", value: 0.5 },
+					timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
+				},
+			],
+		});
 	});
 
 	it("clears all physical encoder mappings in Direct mode", () => {
@@ -453,10 +664,17 @@ describe("ParameterControls programmer targets and alignment", () => {
 		];
 		render(<ParameterControls />);
 		fireEvent.click(screen.getByRole("button", { name: "Release Dimmer" }));
-		expect(server.releaseProgrammer).toHaveBeenCalledWith(
-			"fixture-1",
-			"intensity",
-		);
+		expect(normalValuesActions.batch).toHaveBeenCalledWith({
+			requestId: expect.any(String),
+			mutations: [
+				{
+					action: "release_fixture",
+					fixtureId: "fixture-1",
+					attribute: "intensity",
+				},
+			],
+		});
+		expect(server.releaseProgrammer).not.toHaveBeenCalled();
 		expect(server.releaseGroupValue).not.toHaveBeenCalled();
 	});
 
@@ -588,11 +806,19 @@ describe("ParameterControls schema-v2 direct picker", () => {
 		);
 		fireEvent.click(screen.getByRole("button", { name: "Dots indexed value" }));
 
-		expect(server.setProgrammerValue).toHaveBeenCalledWith(
-			"fixture-1",
-			"gobo.1",
-			{ kind: "discrete", value: "gobo.dots" },
-		);
+		expect(normalValuesActions.batch).toHaveBeenCalledWith({
+			requestId: expect.any(String),
+			mutations: [
+				{
+					action: "set_fixture",
+					fixtureId: "fixture-1",
+					attribute: "gobo.1",
+					value: { kind: "discrete", value: "gobo.dots" },
+					timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
+				},
+			],
+		});
+		expect(server.setProgrammerValue).not.toHaveBeenCalled();
 	});
 
 	it("holds and releases every assignment through one typed momentary action", () => {

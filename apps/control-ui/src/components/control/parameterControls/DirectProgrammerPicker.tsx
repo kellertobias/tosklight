@@ -95,7 +95,10 @@ function DirectChoiceColumns({
 					{directChoices.values.map((choice) => (
 						<Button
 							key={choice.key}
-							disabled={Boolean(controller.selectedGroupId)}
+							disabled={
+								Boolean(controller.selectedGroupId) ||
+								!controller.canWriteValues
+							}
 							className={controller.directChoiceActive(choice) ? "active" : ""}
 							aria-label={`${choice.label} ${choice.kind} value`}
 							onClick={() => void controller.applyDirectValue(choice)}
@@ -156,8 +159,7 @@ export function DirectProgrammerPicker({
 				</div>
 				<Button
 					disabled={
-						!directChoices.values.length ||
-						Boolean(controller.selectedGroupId)
+						!directChoices.values.length || Boolean(controller.selectedGroupId)
 					}
 					onClick={() => void controller.generateDirectPresets()}
 				>

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useServer } from "../../../api/ServerContext";
 import type { VisualizationSnapshot } from "../../../api/types";
+import { capturesProgrammerWrites } from "../../../features/programmerCaptureMode/contracts";
+import { useProgrammerCaptureModeView } from "../../../features/programmerCaptureMode/ProgrammerCaptureModeView";
 import { selectedGroupId } from "../../../features/programmingInteraction/contracts";
 import { useProgrammingSelectionView } from "../../../features/programmingInteraction/ProgrammingInteractionView";
 import { useGroups } from "../../../features/server/useShowObjectsState";
@@ -11,6 +13,7 @@ import {
 	type ParameterFamily,
 	parameterFamilies,
 } from "./model";
+import { useParameterPreloadValues } from "./useParameterPreloadValues";
 import { useParameterProgrammerValues } from "./useParameterProgrammerValues";
 
 const EMPTY_FIXTURE_IDS: readonly string[] = [];
@@ -100,11 +103,23 @@ export function useParameterProjection(family: ParameterFamily, active = true) {
 	const selection = useProgrammingSelectionView(active);
 	const selectedFixtureIds = selection?.selected ?? EMPTY_FIXTURE_IDS;
 	const selectedGroup = selectedGroupId(selection);
-	const programmerValuesView = useParameterProgrammerValues(
+	const captureMode = useProgrammerCaptureModeView(active);
+	const preloadCaptureActive = capturesProgrammerWrites(captureMode);
+	const normalValuesView = useParameterProgrammerValues(
 		selectedFixtureIds,
 		selectedGroup,
-		active,
+		active && captureMode !== null && !preloadCaptureActive,
 	);
+	const preloadValuesView = useParameterPreloadValues(
+		selectedFixtureIds,
+		selectedGroup,
+		active && preloadCaptureActive,
+	);
+	const programmerValuesView = captureMode
+		? preloadCaptureActive
+			? preloadValuesView
+			: normalValuesView
+		: null;
 	const visualization = useVisualization(active, selectedFixtureIds);
 	const supported = useSupportedAttributes(selectedFixtureIds, selectedGroup);
 	const values = useResolvedValues(visualization, selectedFixtureIds);
@@ -122,6 +137,11 @@ export function useParameterProjection(family: ParameterFamily, active = true) {
 		active,
 		selectedFixtureIds,
 		selectedGroupId: selectedGroup,
+		programmerValuesRoute: captureMode
+			? preloadCaptureActive
+				? ("preload" as const)
+				: ("normal" as const)
+			: null,
 		programmerValuesReady: programmerValuesView?.ready ?? false,
 		programmerValues:
 			programmerValuesView?.fixtureValues ?? EMPTY_PROGRAMMER_VALUES,

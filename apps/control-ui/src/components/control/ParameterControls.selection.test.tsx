@@ -56,10 +56,40 @@ const mocks = vi.hoisted(() => {
 			},
 		},
 	});
-	return { legacySelectionAccess, server, dispatch: vi.fn() };
+	return {
+		legacySelectionAccess,
+		server,
+		dispatch: vi.fn(),
+		valuesActions: { batch: vi.fn(async () => null) },
+	};
 });
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => mocks.server }));
+vi.mock(
+	"../../features/programmerCaptureMode/ProgrammerCaptureModeView",
+	() => ({
+		useProgrammerCaptureModeView: (enabled = true) =>
+			enabled
+				? {
+						userId: "operator",
+						revision: 1,
+						blind: false,
+						preview: false,
+						preloadCaptureProgrammer: true,
+					}
+				: null,
+	}),
+);
+vi.mock("../../features/programmerValues/ProgrammerValuesView", () => ({
+	useProgrammerValuesActions: () => mocks.valuesActions,
+}));
+vi.mock(
+	"../../features/programmerPreloadValues/ProgrammerPreloadValuesView",
+	() => ({
+		useProgrammerPreloadValuesActions: () => null,
+		useProgrammerPreloadValuesSelector: () => null,
+	}),
+);
 vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({
 		state: {
@@ -155,13 +185,20 @@ describe("ParameterControls selection projection", () => {
 			name: "Enc 1 · Dimmer",
 		});
 		fireEvent.click(encoder);
-		expect(mocks.server.setProgrammer).toHaveBeenLastCalledWith(
-			FIXTURE_1,
-			"intensity",
-			0.5,
-		);
+		expect(mocks.valuesActions.batch).toHaveBeenLastCalledWith({
+			requestId: expect.any(String),
+			mutations: [
+				{
+					action: "set_fixture",
+					fixtureId: FIXTURE_1,
+					attribute: "intensity",
+					value: { kind: "normalized", value: 0.5 },
+					timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
+				},
+			],
+		});
 
-		mocks.server.setProgrammer.mockClear();
+		mocks.valuesActions.batch.mockClear();
 		act(() =>
 			view.transport.emit({
 				type: "event",
@@ -172,11 +209,21 @@ describe("ParameterControls selection projection", () => {
 		);
 		fireEvent.click(screen.getByRole("button", { name: "Enc 1 · Dimmer" }));
 
-		expect(mocks.server.setProgrammer).toHaveBeenLastCalledWith(
-			FIXTURE_2,
-			"intensity",
-			0.5,
+		await waitFor(() =>
+			expect(mocks.valuesActions.batch).toHaveBeenLastCalledWith({
+				requestId: expect.any(String),
+				mutations: [
+					{
+						action: "set_fixture",
+						fixtureId: FIXTURE_2,
+						attribute: "intensity",
+						value: { kind: "normalized", value: 0.5 },
+						timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
+					},
+				],
+			}),
 		);
+		expect(mocks.server.setProgrammer).not.toHaveBeenCalled();
 		expect(view.loadSnapshot).toHaveBeenCalledOnce();
 		expect(mocks.legacySelectionAccess).not.toHaveBeenCalled();
 	});

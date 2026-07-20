@@ -70,7 +70,7 @@ function EncoderSurface({
 				target={{ label, value: discrete ?? display }}
 				editValue={discrete ? undefined : value * 100}
 				onEdit={
-					discrete
+					discrete || !controller.canWriteValues
 						? undefined
 						: (next) =>
 								void controller.applyParameter(
@@ -79,12 +79,12 @@ function EncoderSurface({
 								)
 				}
 				onEditRange={
-					discrete
+					discrete || !controller.canWriteValues
 						? undefined
 						: (points) => void controller.applyParameterRange(attribute, points)
 				}
 				onRelease={
-					hasScopedValue
+					hasScopedValue && controller.canWriteValues
 						? () => void controller.releaseParameter(attribute)
 						: undefined
 				}
@@ -98,6 +98,7 @@ function EncoderSurface({
 			accentColor={attributeColor(attribute)}
 			mode={controller.dynamicsMode ? "Dynamics" : undefined}
 			directInput
+			disabled={!controller.canWriteValues}
 			actions={
 				hasScopedValue
 					? [
@@ -105,6 +106,7 @@ function EncoderSurface({
 								id: "release",
 								label: "Release",
 								"aria-label": `Release ${parameterLabels[attribute] ?? attribute}`,
+								disabled: !controller.canWriteValues,
 								onClick: () => void controller.releaseParameter(attribute),
 							},
 						]

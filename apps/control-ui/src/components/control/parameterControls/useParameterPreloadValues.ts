@@ -1,15 +1,13 @@
 import { useCallback, useMemo } from "react";
-import { useProgrammerValuesSelector } from "../../../features/programmerValues/ProgrammerValuesView";
-import type { ProgrammerValuesState } from "../../../features/programmerValues/store";
+import { useProgrammerPreloadValuesSelector } from "../../../features/programmerPreloadValues/ProgrammerPreloadValuesView";
+import type { ProgrammerPreloadValuesState } from "../../../features/programmerPreloadValues/store";
 import {
 	equalParameterValues,
 	type ParameterProgrammerValuesView,
 	selectParameterValues,
 } from "./parameterValuesView";
 
-export type { ParameterProgrammerValuesView } from "./parameterValuesView";
-
-export function useParameterProgrammerValues(
+export function useParameterPreloadValues(
 	selectedFixtureIds: readonly string[],
 	selectedGroupId: string | null,
 	enabled: boolean,
@@ -22,9 +20,13 @@ export function useParameterProgrammerValues(
 		[fixtureKey],
 	);
 	const selector = useCallback(
-		(state: ProgrammerValuesState) =>
+		(state: ProgrammerPreloadValuesState) =>
 			selectParameterValues(state, fixtureIds, selectedGroupId),
 		[fixtureIds, selectedGroupId],
 	);
-	return useProgrammerValuesSelector(selector, equalParameterValues, enabled);
+	return useProgrammerPreloadValuesSelector(
+		selector,
+		equalParameterValues,
+		enabled,
+	);
 }
