@@ -23,6 +23,8 @@ mod lifecycle_publication;
 mod preload_playback_queue;
 #[path = "live_state_tests/preload_values_actions.rs"]
 mod preload_values_actions;
+#[path = "live_state_tests/preset_recording.rs"]
+mod preset_recording;
 #[path = "live_state_tests/routing.rs"]
 mod routing;
 #[path = "live_state_tests/selection_refresh.rs"]

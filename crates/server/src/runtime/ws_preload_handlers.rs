@@ -148,6 +148,9 @@ pub(super) fn ws_programmer_execute(
         )
         .with_request_id(&command.request_id)
     });
+    if let Some(result) = ws_typed_preset_record(state, session, &input.value, &context) {
+        return result;
+    }
     match command_http::execute_existing_command(
         state,
         session,
@@ -173,4 +176,27 @@ pub(super) fn ws_programmer_execute(
         })),
         command_http::ExistingCommandOutcome::Rejected { error } => Err(error),
     }
+}
+
+fn ws_typed_preset_record(
+    state: &AppState,
+    session: &Session,
+    command: &str,
+    context: &light_application::ActionContext,
+) -> Option<Result<serde_json::Value, String>> {
+    let ports = command_http::ServerProgrammingPorts::new(state, session, "software", true);
+    let outcome = ports.record_preset_command(&state.programmers, context, command)?;
+    Some(match outcome {
+        light_application::ProgrammingExecution::Accepted { applied, warning } => {
+            Ok(serde_json::json!({
+                "applied":applied,
+                "persistence_warning":warning,
+                "programmer":state.programmers.get(session.id)
+            }))
+        }
+        light_application::ProgrammingExecution::Rejected { error } => Err(error),
+        light_application::ProgrammingExecution::ChoiceRequired { .. } => {
+            Err("Preset recording returned an unexpected command choice".into())
+        }
+    })
 }

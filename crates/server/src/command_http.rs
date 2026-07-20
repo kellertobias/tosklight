@@ -21,6 +21,12 @@ mod preload_playback_queue_wire;
 mod preload_values_routes;
 #[path = "command_http/preload_values_wire.rs"]
 mod preload_values_wire;
+#[path = "command_http/preset_recording_ports.rs"]
+mod preset_recording_ports;
+#[path = "command_http/preset_recording_routes.rs"]
+mod preset_recording_routes;
+#[path = "command_http/preset_recording_wire.rs"]
+mod preset_recording_wire;
 #[path = "command_http/programming_ports.rs"]
 mod programming_ports;
 #[path = "command_http/routes.rs"]

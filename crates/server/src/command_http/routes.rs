@@ -48,6 +48,7 @@ pub(crate) fn router() -> Router<AppState> {
         .merge(super::lifecycle_routes::router())
         .merge(super::preload_playback_queue_routes::router())
         .merge(super::preload_values_routes::router())
+        .merge(super::preset_recording_routes::router())
         .merge(super::selection_routes::router())
         .merge(super::values_routes::router())
 }

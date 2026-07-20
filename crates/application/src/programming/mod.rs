@@ -8,6 +8,8 @@ mod ports;
 mod preload_playback_queue_projection;
 mod preload_values_action;
 mod preload_values_projection;
+mod preset_active_show;
+mod preset_recording;
 mod projection;
 mod service;
 mod values_action;
@@ -50,6 +52,12 @@ pub use preload_values_action::{
 pub use preload_values_projection::{
     ProgrammingPreloadValuesChange, ProgrammingPreloadValuesProjection,
     ProgrammingPreloadValuesSnapshot,
+};
+pub use preset_recording::{
+    ProgrammingPresetActiveShowPorts, ProgrammingPresetCommit, ProgrammingPresetCommitResult,
+    ProgrammingPresetProjection, ProgrammingPresetRecordOutcome, ProgrammingPresetRecordRequest,
+    ProgrammingPresetRecordResult, ProgrammingPresetRecordingPorts,
+    ProgrammingPresetRevisionExpectation,
 };
 pub use projection::{ProgrammingInteractionProjection, ProgrammingLiveSnapshot};
 pub use service::ProgrammingService;

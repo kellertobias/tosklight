@@ -72,6 +72,27 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
         .unwrap();
     assert_eq!(interaction_event.payload["command"], "programmer.command_line");
     assert_eq!(interaction_event.payload["changes"], serde_json::json!(["interaction"]));
+    state
+        .programmers
+        .set_command_line(session.id, String::new());
+    handle_programmer_osc(
+        &state,
+        "/light/main/programmer/record",
+        &pressed,
+        Some("127.0.0.1:9010"),
+    );
+    assert_eq!(
+        state.programmers.get(session.id).unwrap().command_line,
+        "RECORD "
+    );
+    assert!(!state.audit_events.lock().iter().any(|event| {
+        event.kind == "desk_action"
+            && event.payload["action"] == "record"
+            && event.payload["session_id"] == serde_json::json!(session.id)
+    }));
+    state
+        .programmers
+        .set_command_line(session.id, "TIME".into());
     handle_programmer_osc(
         &state,
         "/light/main/programmer/minus",

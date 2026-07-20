@@ -12,6 +12,7 @@ mod normal_values;
 mod preload;
 mod preload_playback_queue;
 mod preload_values;
+mod preset_capture;
 mod presets;
 mod registry;
 mod selection;

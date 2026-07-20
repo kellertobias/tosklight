@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PresetRecordOutcome",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "correlation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_sequence": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "preset": {
+          "$ref": "#/$defs/RecordedPresetProjection"
+        },
+        "replayed": {
+          "type": "boolean"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "show_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "const": "changed"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "request_id",
+        "correlation_id",
+        "replayed",
+        "show_revision",
+        "preset",
+        "event_sequence"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "correlation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "preset": {
+          "$ref": "#/$defs/RecordedPresetProjection"
+        },
+        "replayed": {
+          "type": "boolean"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "show_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "const": "no_change"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "request_id",
+        "correlation_id",
+        "replayed",
+        "show_revision",
+        "preset"
+      ]
+    }
+  ],
+  "$defs": {
+    "RecordedPresetProjection": {
+      "description": "Exact persisted Preset object, including unknown compatible extensions.",
+      "type": "object",
+      "properties": {
+        "body": true,
+        "id": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "revision",
+        "body"
+      ]
+    }
+  }
+}

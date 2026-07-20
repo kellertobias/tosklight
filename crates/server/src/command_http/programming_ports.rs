@@ -2,9 +2,9 @@ use super::adapter::{ExistingCommandOutcome, ExistingCommandPolicy, execute_exis
 use super::events::persist_with_warning;
 use super::wire::application_choice;
 use light_application::{
-    ActionContext, ActionError, ActionErrorKind, ExecutionPolicy, ProgrammingExecution,
-    ProgrammingPorts, ProgrammingSelectionEnvironment, ProgrammingSelectionQuery,
-    ProgrammingValuesEnvironment,
+    ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ExecutionPolicy,
+    ProgrammingExecution, ProgrammingPorts, ProgrammingPresetRecordingPorts,
+    ProgrammingSelectionEnvironment, ProgrammingSelectionQuery, ProgrammingValuesEnvironment,
 };
 use light_programmer::ProgrammerRegistry;
 
@@ -31,6 +31,141 @@ impl<'a> ServerProgrammingPorts<'a> {
             require_unlocked,
         }
     }
+
+    pub(super) const fn state(&self) -> &'a AppState {
+        self.state
+    }
+
+    pub(crate) fn record_preset_command(
+        &self,
+        programmers: &ProgrammerRegistry,
+        context: &ActionContext,
+        command: &str,
+    ) -> Option<ProgrammingExecution> {
+        let address = super::adapter::preset_record_address(command)
+            .ok()
+            .flatten()?;
+        let result = self.execute_preset_recording(programmers, context, address, command);
+        Some(match result {
+            Ok(warning) => ProgrammingExecution::Accepted {
+                applied: 1,
+                warning,
+            },
+            Err(error) => {
+                super::super::record_command_history(
+                    self.state,
+                    self.session,
+                    command,
+                    "rejected",
+                    &error,
+                    self.source,
+                    context.request_id.as_deref(),
+                );
+                ProgrammingExecution::Rejected { error }
+            }
+        })
+    }
+
+    fn execute_preset_recording(
+        &self,
+        programmers: &ProgrammerRegistry,
+        context: &ActionContext,
+        address: light_programmer::PresetAddress,
+        raw_command: &str,
+    ) -> Result<Option<String>, String> {
+        let show_id = self
+            .state
+            .active_show
+            .read()
+            .as_ref()
+            .map(|entry| entry.id)
+            .ok_or("no show is open")?;
+        let context = preset_record_context(context);
+        let command = light_application::ProgrammingPresetRecordRequest {
+            show_id,
+            address,
+            name: format!("Preset {}", address.storage_key()),
+            mode: light_programmer::PresetStoreMode::Overwrite,
+            expected_object_revision:
+                light_application::ProgrammingPresetRevisionExpectation::Current,
+            expected_show_revision: None,
+        };
+        let result = self
+            .state
+            .programming
+            .record_preset_within_interaction(
+                ActionEnvelope {
+                    context: context.clone(),
+                    command,
+                },
+                self,
+            )
+            .map_err(|error| error.message)?;
+        if result.replayed {
+            return Ok(None);
+        }
+        clear_command_line(programmers, self.session)?;
+        Ok(self.accepted_preset_command(&context, raw_command))
+    }
+
+    fn accepted_preset_command(
+        &self,
+        context: &ActionContext,
+        raw_command: &str,
+    ) -> Option<String> {
+        let warning = persist_with_warning(
+            self.state,
+            self.session,
+            self.source,
+            context.request_id.as_deref(),
+            "programmer.execute",
+        );
+        let feedback = warning.as_ref().map_or_else(
+            || "Applied to 1 target(s)".to_owned(),
+            |warning| format!("Applied to 1 target(s); {warning}"),
+        );
+        super::super::record_command_history(
+            self.state,
+            self.session,
+            raw_command,
+            "accepted",
+            &feedback,
+            self.source,
+            context.request_id.as_deref(),
+        );
+        warning
+    }
+}
+
+fn preset_record_context(context: &ActionContext) -> ActionContext {
+    if context.request_id.is_some() {
+        context.clone()
+    } else {
+        context
+            .clone()
+            .with_request_id(format!("preset-record-{}", context.correlation_id))
+    }
+}
+
+fn clear_command_line(programmers: &ProgrammerRegistry, session: &Session) -> Result<(), String> {
+    programmers
+        .update_command_line(session.id, |current| (String::new(), current.target, true))
+        .ok_or_else(|| "programmer command line does not exist".to_owned())?;
+    Ok(())
+}
+
+impl ProgrammingPresetRecordingPorts for ServerProgrammingPorts<'_> {
+    fn authorize_preset_recording(&self, context: &ActionContext) -> Result<(), ActionError> {
+        <Self as ProgrammingPorts>::authorize(self, context)
+    }
+
+    fn commit_preset(
+        &self,
+        context: &ActionContext,
+        commit: &light_application::ProgrammingPresetCommit,
+    ) -> Result<light_application::ProgrammingPresetCommitResult, ActionError> {
+        super::preset_recording_ports::commit(self.state(), context, commit)
+    }
 }
 
 impl ProgrammingPorts for ServerProgrammingPorts<'_> {
@@ -56,11 +191,14 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
 
     fn execute(
         &self,
-        _programmers: &ProgrammerRegistry,
+        programmers: &ProgrammerRegistry,
         context: &ActionContext,
         command: &str,
         policy: ExecutionPolicy,
     ) -> ProgrammingExecution {
+        if let Some(outcome) = self.record_preset_command(programmers, context, command) {
+            return outcome;
+        }
         let policy = match policy {
             ExecutionPolicy::AtomicProgrammer => ExistingCommandPolicy::AtomicProgrammer,
             ExecutionPolicy::Compatibility => ExistingCommandPolicy::Compatibility,

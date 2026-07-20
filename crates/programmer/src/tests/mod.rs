@@ -13,6 +13,7 @@ mod normal_values_actions;
 mod normal_values_generation;
 mod preload_playback_queue;
 mod preload_values_actions;
+mod preset_capture;
 mod selection_and_sessions;
 mod transactions;
 mod values_and_presets;

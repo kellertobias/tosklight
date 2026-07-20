@@ -19,6 +19,10 @@ mod lifecycle_publication;
 mod preload_values;
 #[path = "service/preload_values_replay.rs"]
 mod preload_values_replay;
+#[path = "service/preset_recording.rs"]
+mod preset_recording;
+#[path = "service/preset_recording_replay.rs"]
+mod preset_recording_replay;
 #[path = "service/publication.rs"]
 mod publication;
 #[path = "service/selection.rs"]
@@ -42,6 +46,7 @@ mod values_validation;
 
 use lifecycle_publication::LifecyclePublicationGate;
 use preload_values_replay::PreloadValuesReplayCache;
+use preset_recording_replay::PresetRecordingReplayCache;
 use state::{interaction_change, reconciliation};
 use support::{
     ReplayCache, Snapshot, accepted, command_line, context_session, context_user, replace_error,
@@ -67,6 +72,7 @@ pub struct ProgrammingService {
     replay: Arc<Mutex<ReplayCache>>,
     values_replay: Arc<Mutex<ValuesReplayCache>>,
     preload_values_replay: Arc<Mutex<PreloadValuesReplayCache>>,
+    preset_recording_replay: Arc<Mutex<PresetRecordingReplayCache>>,
     pub(super) events: EventBus,
     lifecycle_publication: Arc<Mutex<LifecyclePublicationGate>>,
     nested_selection_publications: Arc<Mutex<HashMap<uuid::Uuid, u64>>>,
@@ -85,6 +91,7 @@ impl ProgrammingService {
             replay: Arc::default(),
             values_replay: Arc::default(),
             preload_values_replay: Arc::default(),
+            preset_recording_replay: Arc::default(),
             events,
             lifecycle_publication: Arc::default(),
             nested_selection_publications: Arc::default(),

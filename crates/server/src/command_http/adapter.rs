@@ -66,6 +66,22 @@ fn atomic_policy_error(command: &str, policy: ExistingCommandPolicy) -> Option<S
     }
 }
 
+pub(super) fn preset_record_address(
+    command: &str,
+) -> Result<Option<light_programmer::PresetAddress>, String> {
+    let (tokens, timing) = super::super::tokenize_programmer_command(command)?;
+    if !tokens
+        .first()
+        .is_some_and(|token| matches!(token.as_str(), "RECORD" | "REC"))
+        || timing.fade_millis.is_some()
+        || timing.delay_millis.is_some()
+        || tokens.len() != 4
+    {
+        return Ok(None);
+    }
+    Ok(super::super::command_preset_address(&tokens[1..]).ok())
+}
+
 fn execute_with_policy(
     state: &AppState,
     session: &Session,
@@ -147,6 +163,9 @@ fn accepted_command(
 }
 
 pub(super) fn compatibility_only_family(command: &str) -> Result<Option<&'static str>, String> {
+    if preset_record_address(command)?.is_some() {
+        return Ok(None);
+    }
     let Some(family) = super::super::normalized_programmer_command_family(command)? else {
         return Ok(None);
     };
@@ -258,6 +277,7 @@ pub(crate) fn osc_command_key(action: &str) -> Option<CommandKey> {
         "set" => CommandKey::Set,
         "grp" | "group" => CommandKey::Group,
         "cue" => CommandKey::Cue,
+        "record" => CommandKey::Record,
         "undo" => CommandKey::Undo,
         "clear" => CommandKey::Clear,
         "del" | "delete" => CommandKey::Delete,

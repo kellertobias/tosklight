@@ -27,6 +27,9 @@ use crate::v2::preload_values::{
     ProgrammingPreloadValuesActionOutcome, ProgrammingPreloadValuesActionRequest,
     ProgrammingPreloadValuesErrorResponse, ProgrammingPreloadValuesSnapshot,
 };
+use crate::v2::preset_recording::{
+    PresetRecordErrorResponse, PresetRecordOutcome, PresetRecordRequest,
+};
 use crate::v2::programmer_lifecycle::ProgrammingLifecycleSnapshot;
 use crate::v2::programming::{
     ProgrammingCaptureModeSnapshot, ProgrammingValuesActionOutcome, ProgrammingValuesActionRequest,
@@ -109,6 +112,9 @@ pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
         programming_response_schema::<ProgrammingPreloadPlaybackQueueSnapshot>(
             "programming-preload-playback-queue-snapshot",
         ),
+        programming_request_schema::<PresetRecordRequest>("preset-record-request"),
+        programming_response_schema::<PresetRecordOutcome>("preset-record-outcome"),
+        programming_response_schema::<PresetRecordErrorResponse>("preset-record-error-response"),
         playback_request_schema::<PlaybackActionRequest>("playback-action-request"),
         playback_response_schema::<PlaybackActionOutcome>("playback-action-outcome"),
         playback_response_schema::<PlaybackErrorResponse>("playback-error-response"),
