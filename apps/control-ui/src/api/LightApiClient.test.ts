@@ -66,7 +66,9 @@ describe("LightApiClient server selection and sessions", () => {
 	});
 
 	it("creates a username session and authenticates subsequent REST requests", async () => {
-		const fetchMock = vi.fn().mockResolvedValueOnce(
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
 				new Response(
 					JSON.stringify({
 						session_id: "session-a",
@@ -276,18 +278,16 @@ describe("LightApiClient programmer and preset contracts", () => {
 		]);
 	});
 	it("addresses applied presets by family and pool-local number", async () => {
-		const fetchMock = vi
-			.fn()
-			.mockResolvedValueOnce(
-				new Response(
-					JSON.stringify({
-						session_id: "session-a",
-						token: "token-a",
-						user: { id: "user-a", name: "Operator", enabled: true },
-					}),
-					{ status: 200, headers: { "content-type": "application/json" } },
-				),
-			);
+		const fetchMock = vi.fn().mockResolvedValueOnce(
+			new Response(
+				JSON.stringify({
+					session_id: "session-a",
+					token: "token-a",
+					user: { id: "user-a", name: "Operator", enabled: true },
+				}),
+				{ status: 200, headers: { "content-type": "application/json" } },
+			),
+		);
 		vi.stubGlobal("fetch", fetchMock);
 		const client = new LightApiClient("http://desk.local");
 		await client.login("Operator");
@@ -391,103 +391,6 @@ describe("LightApiClient show lifecycle contracts", () => {
 		expect(fetchMock.mock.calls[1][1].method).toBe("PUT");
 		expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
 			name: "Opening Night",
-		});
-	});
-});
-
-describe("LightApiClient Update contracts", () => {
-	it("uses the desk-scoped Update settings, preview, apply, and eligible-target contracts", async () => {
-		const settings = {
-			cue_mode: "add_to_current_cue" as const,
-			preset_mode: "update_existing" as const,
-			group_mode: "update_existing" as const,
-			other_target_modes: {},
-			show_update_modal_on_touch: true,
-		};
-		const target = {
-			family: { type: "cue" as const },
-			object_id: "cue-list-a",
-			playback_number: 7,
-			cue_id: "cue-a",
-			cue_number: 2,
-		};
-		const mode = {
-			target_type: "cue" as const,
-			mode: "existing_only" as const,
-		};
-		const response = (body: unknown) =>
-			new Response(JSON.stringify(body), {
-				status: 200,
-				headers: { "content-type": "application/json" },
-			});
-		const fetchMock = vi
-			.fn()
-			.mockResolvedValueOnce(
-				response({
-					session_id: "session-a",
-					token: "token-a",
-					user: { id: "user-a", name: "Operator", enabled: true },
-					desk: { id: "desk-a" },
-				}),
-			)
-			.mockResolvedValueOnce(response(settings))
-			.mockResolvedValueOnce(response(settings))
-			.mockResolvedValueOnce(
-				response({
-					revision: 4,
-					show_revision: 12,
-					programmer_revision: "programmer-a",
-					target: {
-						...target,
-						name: "Main",
-						family: target.family,
-						cue: { id: "cue-a", number: 2 },
-					},
-					mode,
-					items: [],
-				}),
-			)
-			.mockResolvedValueOnce(
-				response({
-					target: { ...target, name: "Main", family: target.family },
-					revision_before: 4,
-					revision_after: 5,
-					eligible_count: 1,
-					changed_count: 1,
-					added_count: 0,
-					ignored_count: 0,
-					changed_cues: [],
-					programmer_values_retained: true,
-				}),
-			)
-			.mockResolvedValueOnce(response([]));
-		vi.stubGlobal("fetch", fetchMock);
-		const client = new LightApiClient("http://desk.local");
-		await client.login("Operator");
-		await client.updateSettings();
-		await client.saveUpdateSettings(settings);
-		await client.previewUpdate(target, mode);
-		await client.applyUpdate(target, mode, 4, "programmer-a", 12);
-		await client.updateTargets("show_all_active");
-
-		expect(fetchMock.mock.calls.slice(1).map((call) => call[0])).toEqual([
-			"http://desk.local/api/v1/update/settings",
-			"http://desk.local/api/v1/update/settings",
-			"http://desk.local/api/v1/update/preview",
-			"http://desk.local/api/v1/update/apply",
-			"http://desk.local/api/v1/update/targets?filter=show_all_active",
-		]);
-		expect(fetchMock.mock.calls[2][1].method).toBe("PUT");
-		expect(JSON.parse(fetchMock.mock.calls[3][1].body)).toEqual({
-			target,
-			mode,
-		});
-		expect(JSON.parse(fetchMock.mock.calls[4][1].body)).toEqual({
-			target,
-			mode,
-			expected_revision: 4,
-			expected_programmer_revision: "programmer-a",
-			expected_show_revision: 12,
 		});
 	});
 });

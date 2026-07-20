@@ -1,10 +1,7 @@
-import { useServer } from "../../api/ServerContext";
-import type {
-	UpdateMenuEntry,
-	UpdateMode,
-	UpdateResult,
-	UpdateSettings,
-} from "../../api/types";
+import { useRef } from "react";
+import type { UpdateMode, UpdateResult, UpdateSettings } from "../../api/types";
+import type { ProgrammingUpdateMenuEntry } from "../../features/programmingUpdate/contracts";
+import { useProgrammingUpdate } from "../../features/programmingUpdate/ProgrammingUpdateProvider";
 import {
 	requestFromUpdateIdentity,
 	updateTargetKey,
@@ -36,68 +33,114 @@ export function useUpdateWorkflowActions({
 	setResult,
 	setSettingsOpen,
 }: UpdateWorkflowActionOptions) {
-	const server = useServer();
+	const update = useProgrammingUpdate();
+	const actionEpoch = useRef(0);
+	const scopeKeyRef = useRef(update?.scopeKey ?? "unavailable");
+	scopeKeyRef.current = update?.scopeKey ?? "unavailable";
+	const begin = () => ({
+		epoch: ++actionEpoch.current,
+		scopeKey: scopeKeyRef.current,
+	});
+	const current = (attempt: ReturnType<typeof begin>) =>
+		attempt.epoch === actionEpoch.current &&
+		attempt.scopeKey === scopeKeyRef.current;
 
 	const changeOperationMode = async (mode: UpdateMode) => {
 		if (!operation) return;
+		const attempt = begin();
 		setBusy(true);
 		setLocalError(null);
-		const preview = await server.previewUpdate(operation.request, mode);
-		setBusy(false);
-		if (preview) setOperation({ ...operation, preview });
-		else setLocalError("This Update mode could not be previewed.");
+		try {
+			const authority = await update?.preview(operation.request, mode);
+			if (!current(attempt)) return;
+			setBusy(false);
+			if (authority)
+				setOperation({
+					request: requestFromUpdateIdentity(authority.preview.target),
+					preview: authority.preview,
+					authority,
+				});
+			else setLocalError("This Update mode could not be previewed.");
+		} catch (reason) {
+			if (!current(attempt)) return;
+			setBusy(false);
+			setLocalError(errorMessage(reason));
+		}
 	};
 	const applyOperation = async () => {
 		if (!operation) return;
+		const attempt = begin();
 		setBusy(true);
 		setLocalError(null);
-		const applied = await server.applyUpdate(
-			operation.request,
-			operation.preview.mode,
-			operation.preview.revision,
-			operation.preview.programmer_revision,
-			operation.preview.show_revision,
-		);
-		setBusy(false);
-		if (!applied) {
-			setLocalError("Update failed; no show data was changed.");
-			return;
+		try {
+			const applied = await update?.confirm(operation.authority);
+			if (!current(attempt)) return;
+			setBusy(false);
+			if (!applied) {
+				setLocalError("Update failed; no show data was changed.");
+				return;
+			}
+			setOperation(null);
+			disarm();
+			setResult(applied.result);
+		} catch (reason) {
+			if (!current(attempt)) return;
+			setBusy(false);
+			setLocalError(errorMessage(reason));
 		}
-		setOperation(null);
-		disarm();
-		setResult(applied);
 	};
 	const saveSettings = async () => {
+		const attempt = begin();
 		setBusy(true);
 		setLocalError(null);
-		const saved = await server.saveUpdateSettings(settings);
-		setBusy(false);
-		if (saved) setSettingsOpen(false);
-		else setLocalError("Update Settings were not saved.");
+		try {
+			const saved = await update?.saveSettings(settings);
+			if (!current(attempt)) return;
+			setBusy(false);
+			if (saved) setSettingsOpen(false);
+			else setLocalError("Update Settings were not saved.");
+		} catch (reason) {
+			if (!current(attempt)) return;
+			setBusy(false);
+			setLocalError(errorMessage(reason));
+		}
 	};
-	const applyMenuTarget = async (entry: UpdateMenuEntry, mode: UpdateMode) => {
+	const applyMenuTarget = async (
+		entry: ProgrammingUpdateMenuEntry,
+		mode: UpdateMode,
+	) => {
+		const attempt = begin();
 		const key = updateTargetKey(entry.target);
 		setBusyKey(key);
 		setLocalError(null);
-		const selectedPreview =
-			entry.add_new_preview?.mode.target_type === mode.target_type &&
-			entry.add_new_preview.mode.mode === mode.mode
-				? entry.add_new_preview
-				: entry.existing_preview;
-		const applied = await server.applyUpdate(
-			requestFromUpdateIdentity(entry.target),
-			mode,
-			entry.revision,
-			selectedPreview.programmer_revision,
-			selectedPreview.show_revision,
-		);
-		setBusyKey(null);
-		if (!applied) {
-			setLocalError("Update failed; no show data was changed.");
-			return;
+		const authority = authorityForMode(entry, mode);
+		try {
+			const applied = await update?.confirm(authority);
+			if (!current(attempt)) return;
+			setBusyKey(null);
+			if (!applied) {
+				setLocalError("Update failed; no show data was changed.");
+				return;
+			}
+			setMenuOpen(false);
+			setResult(applied.result);
+		} catch (reason) {
+			if (!current(attempt)) return;
+			setBusyKey(null);
+			setLocalError(errorMessage(reason));
 		}
-		setMenuOpen(false);
-		setResult(applied);
 	};
 	return { changeOperationMode, applyOperation, saveSettings, applyMenuTarget };
+}
+
+function authorityForMode(entry: ProgrammingUpdateMenuEntry, mode: UpdateMode) {
+	const candidate = entry.addNewAuthority;
+	return candidate.preview.mode.target_type === mode.target_type &&
+		candidate.preview.mode.mode === mode.mode
+		? candidate
+		: entry.existingAuthority;
+}
+
+function errorMessage(reason: unknown) {
+	return reason instanceof Error ? reason.message : String(reason);
 }

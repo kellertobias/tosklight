@@ -8,9 +8,11 @@ import {
 	type RecordSettings,
 	saveRecordSettings,
 } from "../../components/setup/ProgrammerDefaults";
+import { useProgrammingUpdate } from "../../features/programmingUpdate/ProgrammingUpdateProvider";
 
 export function useSetupWindowController() {
 	const server = useServer();
+	const programmingUpdate = useProgrammingUpdate();
 	const [section, setSection] = useState(0);
 	const [draft, setDraft] = useState<DeskConfiguration | null>(
 		server.configuration,
@@ -58,22 +60,35 @@ export function useSetupWindowController() {
 	useEffect(() => {
 		if (section !== 2) return;
 		let active = true;
+		setProgrammerSettingsLoaded(false);
 		setRecordSettings(loadRecordSettings());
 		setProgrammerSettingsError(null);
-		void server.updateSettings().then((settings) => {
-			if (!active) return;
-			setUpdateSettings(settings ?? defaultUpdateSettings);
+		void programmingUpdate
+			?.loadSettings()
+			.then((settings) => {
+				if (!active) return;
+				setUpdateSettings(settings ?? defaultUpdateSettings);
+				setProgrammerSettingsLoaded(true);
+				if (!settings)
+					setProgrammerSettingsError(
+						"Update defaults could not be loaded; deterministic defaults are shown.",
+					);
+			})
+			.catch((reason) => {
+				if (!active) return;
+				setUpdateSettings(defaultUpdateSettings);
+				setProgrammerSettingsLoaded(true);
+				setProgrammerSettingsError(errorMessage(reason));
+			});
+		if (!programmingUpdate) {
+			setUpdateSettings(defaultUpdateSettings);
 			setProgrammerSettingsLoaded(true);
-			if (!settings) {
-				setProgrammerSettingsError(
-					"Update defaults could not be loaded; deterministic defaults are shown.",
-				);
-			}
-		});
+			setProgrammerSettingsError("Update defaults are unavailable.");
+		}
 		return () => {
 			active = false;
 		};
-	}, [section]);
+	}, [programmingUpdate, section]);
 
 	const editDraft = (next: DeskConfiguration) => {
 		draftRevision.current += 1;
@@ -89,7 +104,7 @@ export function useSetupWindowController() {
 		const [requiresRestart, updateSaved] = await Promise.all([
 			server.saveConfiguration(draft),
 			section === 2 && programmerSettingsLoaded
-				? server.saveUpdateSettings(updateSettings)
+				? saveUpdateSettings(programmingUpdate, updateSettings)
 				: Promise.resolve(true),
 		]);
 		if (section === 2) saveRecordSettings(recordSettings);
@@ -109,6 +124,7 @@ export function useSetupWindowController() {
 		editDraft,
 		fixtureLibraryOpen,
 		programmerSettingsError,
+		programmerSettingsLoaded,
 		recordSettings,
 		restartRequired,
 		save,
@@ -129,3 +145,18 @@ export function useSetupWindowController() {
 }
 
 export type SetupWindowController = ReturnType<typeof useSetupWindowController>;
+
+function saveUpdateSettings(
+	update: ReturnType<typeof useProgrammingUpdate>,
+	settings: UpdateSettings,
+) {
+	if (!update) return Promise.resolve(false);
+	return update
+		.saveSettings(settings)
+		.then(Boolean)
+		.catch(() => false);
+}
+
+function errorMessage(reason: unknown) {
+	return reason instanceof Error ? reason.message : String(reason);
+}

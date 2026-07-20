@@ -15,13 +15,6 @@ import type {
 	PlaybackSnapshot,
 	SessionResponse,
 	ShowEntry,
-	UpdateMenuEntry,
-	UpdateMode,
-	UpdatePreview,
-	UpdateResult,
-	UpdateSettings,
-	UpdateTargetFilter,
-	UpdateTargetRequest,
 	VersionedObject,
 } from "../../api/types";
 import type { CommandTargetMode } from "../../controlSurface/commandTarget";
@@ -88,22 +81,6 @@ export interface ServerCoreContext
 		active: boolean,
 		fixtureIds?: string[],
 	) => Promise<boolean>;
-	updateSettings: () => Promise<UpdateSettings | null>;
-	saveUpdateSettings: (settings: UpdateSettings) => Promise<boolean>;
-	previewUpdate: (
-		target: UpdateTargetRequest,
-		mode: UpdateMode,
-	) => Promise<UpdatePreview | null>;
-	applyUpdate: (
-		target: UpdateTargetRequest,
-		mode: UpdateMode,
-		expectedRevision?: number,
-		expectedProgrammerRevision?: string,
-		expectedShowRevision?: number,
-	) => Promise<UpdateResult | null>;
-	updateTargets: (
-		filter: UpdateTargetFilter,
-	) => Promise<UpdateMenuEntry[] | null>;
 	refresh: () => Promise<void>;
 	setCommandLine: (value: string, pristine?: boolean) => void;
 	resetCommandLine: () => void;

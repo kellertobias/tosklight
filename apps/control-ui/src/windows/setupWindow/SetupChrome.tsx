@@ -39,7 +39,10 @@ export function SetupHeader({
 						{
 							id: "save",
 							label: "Save changes",
-							disabled: !controller.draft,
+							disabled:
+								!controller.draft ||
+								(controller.section === 2 &&
+									!controller.programmerSettingsLoaded),
 							onClick: () => void controller.save(),
 						},
 					],

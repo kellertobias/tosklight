@@ -6,6 +6,7 @@ import { ProgrammerPreloadPlaybackQueueViewProvider } from "../features/programm
 import { ProgrammerPreloadValuesViewProvider } from "../features/programmerPreloadValues/ProgrammerPreloadValuesView";
 import { ProgrammerValuesViewProvider } from "../features/programmerValues/ProgrammerValuesView";
 import { ProgrammingInteractionViewProvider } from "../features/programmingInteraction/ProgrammingInteractionView";
+import { ProgrammingUpdateProvider } from "../features/programmingUpdate/ProgrammingUpdateProvider";
 import type { ServerContextValue } from "../features/server/ServerContextValue";
 import { useSelectedGroupMembership } from "../features/server/useSelectedGroupMembership";
 import type { useServerState } from "../features/server/useServerState";
@@ -43,107 +44,118 @@ export function ServerProgrammingProviders({
 	const showId = state.bootstrap?.active_show?.id ?? null;
 	const userId = state.session?.user.id ?? null;
 	return (
-		<ProgrammerLifecycleViewProvider
-			authorityKey={boundaries.programmerLifecycleAuthorityKey}
-			store={state.programmerLifecycleStore}
-			transport={boundaries.programmerLifecycleTransport}
-			loadSnapshot={boundaries.loadProgrammerLifecycleSnapshot}
-			onSessionError={boundaries.reportProgrammerLifecycleSessionError}
+		<ProgrammingUpdateProvider
+			showId={showId}
+			deskId={state.session?.desk.id ?? null}
+			userId={userId}
+			initialShowRevision={state.bootstrap?.active_show?.revision ?? null}
+			authorityKey={boundaries.programmingUpdateAuthorityKey}
+			store={state.showObjectsStore}
+			transport={boundaries.programmingUpdateTransport}
+			loadObject={boundaries.loadShowObject}
 		>
-			<PlaybackRuntimeViewProvider
-				showId={showId}
-				deskId={state.session?.desk.id ?? null}
-				authorityKey={boundaries.playbackAuthorityKey}
-				store={state.playbackRuntimeStore}
-				transport={boundaries.playbackTransport}
-				loadSnapshot={boundaries.loadPlaybackSnapshot}
-				applyAction={boundaries.applyPlaybackRuntimeAction}
-				initialDesk={
-					state.playbacks
-						? {
-								activePage: state.playbacks.active_page,
-								selectedPlayback: state.playbacks.selected_playback ?? null,
-							}
-						: null
-				}
-				onError={boundaries.reportPlaybackError}
+			<ProgrammerLifecycleViewProvider
+				authorityKey={boundaries.programmerLifecycleAuthorityKey}
+				store={state.programmerLifecycleStore}
+				transport={boundaries.programmerLifecycleTransport}
+				loadSnapshot={boundaries.loadProgrammerLifecycleSnapshot}
+				onSessionError={boundaries.reportProgrammerLifecycleSessionError}
 			>
-				<ProgrammerCaptureModeViewProvider
+				<PlaybackRuntimeViewProvider
 					showId={showId}
-					userId={userId}
-					authorityKey={boundaries.programmerCaptureModeAuthorityKey}
-					store={state.programmerCaptureModeStore}
-					transport={boundaries.programmerCaptureModeTransport}
-					loadSnapshot={boundaries.loadProgrammerCaptureModeSnapshot}
-					onSessionError={boundaries.reportProgrammerCaptureModeSessionError}
+					deskId={state.session?.desk.id ?? null}
+					authorityKey={boundaries.playbackAuthorityKey}
+					store={state.playbackRuntimeStore}
+					transport={boundaries.playbackTransport}
+					loadSnapshot={boundaries.loadPlaybackSnapshot}
+					applyAction={boundaries.applyPlaybackRuntimeAction}
+					initialDesk={
+						state.playbacks
+							? {
+									activePage: state.playbacks.active_page,
+									selectedPlayback: state.playbacks.selected_playback ?? null,
+								}
+							: null
+					}
+					onError={boundaries.reportPlaybackError}
 				>
-					<ProgrammerValuesViewProvider
+					<ProgrammerCaptureModeViewProvider
 						showId={showId}
 						userId={userId}
-						authorityKey={boundaries.programmerValuesAuthorityKey}
-						store={state.programmerValuesStore}
-						transport={boundaries.programmerValuesTransport}
-						loadSnapshot={boundaries.loadProgrammerValuesSnapshot}
-						applyAction={boundaries.applyProgrammerValuesAction}
-						onSessionError={boundaries.reportProgrammerValuesSessionError}
-						onMutationError={boundaries.reportProgrammerValuesMutationError}
+						authorityKey={boundaries.programmerCaptureModeAuthorityKey}
+						store={state.programmerCaptureModeStore}
+						transport={boundaries.programmerCaptureModeTransport}
+						loadSnapshot={boundaries.loadProgrammerCaptureModeSnapshot}
+						onSessionError={boundaries.reportProgrammerCaptureModeSessionError}
 					>
-						<ProgrammerPreloadValuesViewProvider
+						<ProgrammerValuesViewProvider
 							showId={showId}
 							userId={userId}
-							authorityKey={boundaries.programmerPreloadValuesAuthorityKey}
-							store={state.programmerPreloadValuesStore}
-							transport={boundaries.programmerPreloadValuesTransport}
-							loadSnapshot={boundaries.loadProgrammerPreloadValuesSnapshot}
-							applyAction={boundaries.applyProgrammerPreloadValuesAction}
-							onSessionError={
-								boundaries.reportProgrammerPreloadValuesSessionError
-							}
-							onMutationError={
-								boundaries.reportProgrammerPreloadValuesMutationError
-							}
+							authorityKey={boundaries.programmerValuesAuthorityKey}
+							store={state.programmerValuesStore}
+							transport={boundaries.programmerValuesTransport}
+							loadSnapshot={boundaries.loadProgrammerValuesSnapshot}
+							applyAction={boundaries.applyProgrammerValuesAction}
+							onSessionError={boundaries.reportProgrammerValuesSessionError}
+							onMutationError={boundaries.reportProgrammerValuesMutationError}
 						>
-							<ProgrammerPreloadPlaybackQueueViewProvider
+							<ProgrammerPreloadValuesViewProvider
 								showId={showId}
 								userId={userId}
-								authorityKey={
-									boundaries.programmerPreloadPlaybackQueueAuthorityKey
-								}
-								store={state.programmerPreloadPlaybackQueueStore}
-								transport={boundaries.programmerPreloadPlaybackQueueTransport}
-								loadSnapshot={
-									boundaries.loadProgrammerPreloadPlaybackQueueSnapshot
-								}
+								authorityKey={boundaries.programmerPreloadValuesAuthorityKey}
+								store={state.programmerPreloadValuesStore}
+								transport={boundaries.programmerPreloadValuesTransport}
+								loadSnapshot={boundaries.loadProgrammerPreloadValuesSnapshot}
+								applyAction={boundaries.applyProgrammerPreloadValuesAction}
 								onSessionError={
-									boundaries.reportProgrammerPreloadPlaybackQueueSessionError
+									boundaries.reportProgrammerPreloadValuesSessionError
+								}
+								onMutationError={
+									boundaries.reportProgrammerPreloadValuesMutationError
 								}
 							>
-								<ProgrammingInteractionViewProvider
+								<ProgrammerPreloadPlaybackQueueViewProvider
 									showId={showId}
-									deskId={state.session?.desk.id ?? null}
-									authorityKey={boundaries.programmingAuthorityKey}
-									store={state.programmingInteractionStore}
-									transport={boundaries.programmingTransport}
-									loadSnapshot={boundaries.loadProgrammingInteractionSnapshot}
-									replaceCommandLine={
-										state.client.replaceProgrammingCommandLine
+									userId={userId}
+									authorityKey={
+										boundaries.programmerPreloadPlaybackQueueAuthorityKey
 									}
-									applySelection={state.client.applyProgrammingSelection}
-									onSessionError={boundaries.reportProgrammingSessionError}
-									onMutationError={boundaries.reportProgrammingMutationError}
+									store={state.programmerPreloadPlaybackQueueStore}
+									transport={boundaries.programmerPreloadPlaybackQueueTransport}
+									loadSnapshot={
+										boundaries.loadProgrammerPreloadPlaybackQueueSnapshot
+									}
+									onSessionError={
+										boundaries.reportProgrammerPreloadPlaybackQueueSessionError
+									}
 								>
-									<SelectedGroupMembershipSync state={state} />
-									<ShowObjectDetailSubscription
-										kind="group"
-										objectId={value.selectedGroupId}
-									/>
-									{children}
-								</ProgrammingInteractionViewProvider>
-							</ProgrammerPreloadPlaybackQueueViewProvider>
-						</ProgrammerPreloadValuesViewProvider>
-					</ProgrammerValuesViewProvider>
-				</ProgrammerCaptureModeViewProvider>
-			</PlaybackRuntimeViewProvider>
-		</ProgrammerLifecycleViewProvider>
+									<ProgrammingInteractionViewProvider
+										showId={showId}
+										deskId={state.session?.desk.id ?? null}
+										authorityKey={boundaries.programmingAuthorityKey}
+										store={state.programmingInteractionStore}
+										transport={boundaries.programmingTransport}
+										loadSnapshot={boundaries.loadProgrammingInteractionSnapshot}
+										replaceCommandLine={
+											state.client.replaceProgrammingCommandLine
+										}
+										applySelection={state.client.applyProgrammingSelection}
+										onSessionError={boundaries.reportProgrammingSessionError}
+										onMutationError={boundaries.reportProgrammingMutationError}
+									>
+										<SelectedGroupMembershipSync state={state} />
+										<ShowObjectDetailSubscription
+											kind="group"
+											objectId={value.selectedGroupId}
+										/>
+										{children}
+									</ProgrammingInteractionViewProvider>
+								</ProgrammerPreloadPlaybackQueueViewProvider>
+							</ProgrammerPreloadValuesViewProvider>
+						</ProgrammerValuesViewProvider>
+					</ProgrammerCaptureModeViewProvider>
+				</PlaybackRuntimeViewProvider>
+			</ProgrammerLifecycleViewProvider>
+		</ProgrammingUpdateProvider>
 	);
 }

@@ -9,10 +9,9 @@ import { OutputApiClient } from "./client/output";
 import { PlaybackApiClient } from "./client/playback";
 import { ProgrammingApiClient } from "./client/programming";
 import { LightClientRuntime } from "./client/runtime";
-import { ShowApiClient } from "./client/shows";
-import { ShowObjectsApiClient } from "./client/showObjects";
 import { SelectiveImportApiClient } from "./client/selectiveImport";
-import { UpdateApiClient } from "./client/update";
+import { ShowObjectsApiClient } from "./client/showObjects";
+import { ShowApiClient } from "./client/shows";
 
 export {
 	configuredServerUrl,
@@ -40,7 +39,6 @@ export class LightApiClient extends LightClientRuntime {
 	private readonly helpApi = new HelpApiClient(this.transport);
 	private readonly deskApi = new DeskApiClient(this.transport);
 	private readonly outputApi = new OutputApiClient(this.transport);
-	private readonly updateApi = new UpdateApiClient(this.transport);
 	private readonly selectiveImportApi = new SelectiveImportApiClient(
 		this.transport,
 	);
@@ -56,11 +54,6 @@ export class LightApiClient extends LightClientRuntime {
 		this.outputApi,
 		"setPatchPreviewHighlight",
 	);
-	updateSettings = bindClientMethod(this.updateApi, "updateSettings");
-	saveUpdateSettings = bindClientMethod(this.updateApi, "saveUpdateSettings");
-	previewUpdate = bindClientMethod(this.updateApi, "previewUpdate");
-	applyUpdate = bindClientMethod(this.updateApi, "applyUpdate");
-	updateTargets = bindClientMethod(this.updateApi, "updateTargets");
 	auditEvents = bindClientMethod(this.deskApi, "auditEvents");
 	setMaster = bindClientMethod(this.outputApi, "setMaster");
 

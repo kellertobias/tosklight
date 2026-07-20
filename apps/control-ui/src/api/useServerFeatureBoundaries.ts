@@ -6,15 +6,16 @@ import { configuredServerUrl } from "./LightApiClient";
 import { browserDeskBoundaryToken } from "./PatchTransport";
 import { WebSocketPlaybackEventTransport } from "./PlaybackEventTransport";
 import { WebSocketProgrammingEventTransport } from "./ProgrammingEventTransport";
-import { WebSocketShowObjectsEventTransport } from "./ShowObjectsEventTransport";
 import { HttpShowObjectSnapshotTransport } from "./ShowObjectSnapshotTransport";
+import { WebSocketShowObjectsEventTransport } from "./ShowObjectsEventTransport";
 import type { PlaybackRuntimeIdentity } from "./types";
+import { useCueRecordingBoundaries } from "./useCueRecordingBoundaries";
+import { useGroupRecordingBoundaries } from "./useGroupRecordingBoundaries";
+import { usePlaybackTopologyBoundaries } from "./usePlaybackTopologyBoundaries";
+import { usePresetRecordingBoundaries } from "./usePresetRecordingBoundaries";
 import { useProgrammerLifecycleBoundaries } from "./useProgrammerLifecycleBoundaries";
 import { useProgrammerValuesBoundaries } from "./useProgrammerValuesBoundaries";
-import { usePresetRecordingBoundaries } from "./usePresetRecordingBoundaries";
-import { useGroupRecordingBoundaries } from "./useGroupRecordingBoundaries";
-import { useCueRecordingBoundaries } from "./useCueRecordingBoundaries";
-import { usePlaybackTopologyBoundaries } from "./usePlaybackTopologyBoundaries";
+import { useProgrammingUpdateBoundaries } from "./useProgrammingUpdateBoundaries";
 
 export function useServerFeatureBoundaries(state: ServerState) {
 	const programmingErrors = useMemo(
@@ -27,6 +28,7 @@ export function useServerFeatureBoundaries(state: ServerState) {
 	const groupRecording = useGroupRecordingBoundaries(state);
 	const cueRecording = useCueRecordingBoundaries(state);
 	const playbackTopology = usePlaybackTopologyBoundaries(state);
+	const programmingUpdate = useProgrammingUpdateBoundaries(state);
 	const showObjectsAuthorityKey = [
 		configuredServerUrl(),
 		state.connectionGeneration,
@@ -103,11 +105,7 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		[showObjectSnapshotTransport],
 	);
 	const loadShowObjectSnapshot = useCallback(
-		<K extends ShowObjectKind>(
-			showId: string,
-			kind: K,
-			objectId: string,
-		) => {
+		<K extends ShowObjectKind>(showId: string, kind: K, objectId: string) => {
 			if (!showObjectSnapshotTransport)
 				throw new Error("Show-object session is unavailable");
 			return showObjectSnapshotTransport.object(showId, kind, objectId);
@@ -115,8 +113,11 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		[showObjectSnapshotTransport],
 	);
 	const loadShowObject = useCallback(
-		async <K extends ShowObjectKind>(showId: string, kind: K, objectId: string) =>
-			(await loadShowObjectSnapshot(showId, kind, objectId)).object,
+		async <K extends ShowObjectKind>(
+			showId: string,
+			kind: K,
+			objectId: string,
+		) => (await loadShowObjectSnapshot(showId, kind, objectId)).object,
 		[loadShowObjectSnapshot],
 	);
 	return {
@@ -132,6 +133,7 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		...groupRecording,
 		...cueRecording,
 		...playbackTopology,
+		...programmingUpdate,
 		loadPlaybackSnapshot,
 		loadProgrammingInteractionSnapshot,
 		loadShowObjectCollection,

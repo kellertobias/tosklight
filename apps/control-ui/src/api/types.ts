@@ -1,8 +1,8 @@
 import type { PresetFamily } from "../presetFamilies";
 import type { ShowEntry } from "./types/desk";
 
-export * from "./types/desk";
 export type * from "./playbackRuntimeTypes";
+export * from "./types/desk";
 
 export type CueUpdateMode =
 	| "existing_only"
@@ -17,8 +17,7 @@ export type UpdateTargetFilter =
 export type UpdateTargetFamily =
 	| { type: "cue" }
 	| { type: "preset" }
-	| { type: "group" }
-	| { type: "other"; kind: string };
+	| { type: "group" };
 
 export type UpdateMode =
 	| { target_type: "cue"; mode: CueUpdateMode }
@@ -38,7 +37,6 @@ export interface UpdateSettings {
 	cue_mode: CueUpdateMode;
 	preset_mode: ExistingContentMode;
 	group_mode: ExistingContentMode;
-	other_target_modes: Record<string, ExistingContentMode>;
 	show_update_modal_on_touch: boolean;
 }
 

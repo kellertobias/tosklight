@@ -97,19 +97,19 @@ function previewForMode(entry: UpdateMenuEntry, mode: UpdateMode) {
 	return null;
 }
 
-interface UpdateTargetMenuProps {
-	entries: UpdateMenuEntry[];
+interface UpdateTargetMenuProps<T extends UpdateMenuEntry> {
+	entries: T[];
 	filter: UpdateTargetFilter;
 	modes: Record<string, UpdateMode>;
 	busyKey: string | null;
 	error: string | null;
 	onFilter: (filter: UpdateTargetFilter) => void;
 	onMode: (key: string, mode: UpdateMode) => void;
-	onApply: (entry: UpdateMenuEntry, mode: UpdateMode) => void;
+	onApply: (entry: T, mode: UpdateMode) => void;
 	onCancel: () => void;
 }
 
-function UpdateTargetRow({
+function UpdateTargetRow<T extends UpdateMenuEntry>({
 	entry,
 	filter,
 	mode,
@@ -117,12 +117,12 @@ function UpdateTargetRow({
 	onMode,
 	onApply,
 }: {
-	entry: UpdateMenuEntry;
+	entry: T;
 	filter: UpdateTargetFilter;
 	mode: UpdateMode;
 	busyKey: string | null;
 	onMode: (key: string, mode: UpdateMode) => void;
-	onApply: (entry: UpdateMenuEntry, mode: UpdateMode) => void;
+	onApply: (entry: T, mode: UpdateMode) => void;
 }) {
 	const key = updateTargetKey(entry.target);
 	const preview = previewForMode(entry, mode);
@@ -171,7 +171,7 @@ function UpdateTargetRow({
 	);
 }
 
-export function UpdateTargetMenu({
+export function UpdateTargetMenu<T extends UpdateMenuEntry>({
 	entries,
 	filter,
 	modes,
@@ -181,7 +181,7 @@ export function UpdateTargetMenu({
 	onMode,
 	onApply,
 	onCancel,
-}: UpdateTargetMenuProps) {
+}: UpdateTargetMenuProps<T>) {
 	return (
 		<div
 			className="modal-backdrop update-workflow-layer"

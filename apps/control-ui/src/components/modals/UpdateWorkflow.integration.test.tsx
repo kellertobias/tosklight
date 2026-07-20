@@ -1,201 +1,306 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { UpdateMenuEntry, UpdateResult, UpdateSettings, UpdateTargetRequest } from "../../api/types";
 import {
-  UPDATE_TARGET_EVENT,
-  UPDATE_TARGET_MENU_EVENT,
-  defaultUpdateSettings,
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { UpdateSettings, UpdateTargetRequest } from "../../api/types";
+import {
+	defaultUpdateSettings,
+	UPDATE_SETTINGS_EVENT,
+	UPDATE_TARGET_EVENT,
+	UPDATE_TARGET_MENU_EVENT,
 } from "../control/updateWorkflow";
 import { UpdateWorkflow } from "./UpdateWorkflow";
+import {
+	addNewAuthority,
+	cueEntry,
+	existingAuthority,
+	mutationFor,
+	targetsFor,
+} from "./updateWorkflowTestFixtures";
 
 const workflow = vi.hoisted(() => {
-  const state = { updateArmed: false, shiftArmed: false };
-  const dispatch = vi.fn((action: { type: string; value?: boolean }) => {
-    if (action.type === "SET_UPDATE_ARMED") state.updateArmed = Boolean(action.value);
-    if (action.type === "SET_SHIFT_ARMED") state.shiftArmed = Boolean(action.value);
-  });
-  return {
-    state,
-    dispatch,
-    server: {
-      error: null as string | null,
-      commandLine: "",
-      updateSettings: vi.fn(),
-      saveUpdateSettings: vi.fn(),
-      updateTargets: vi.fn(),
-      previewUpdate: vi.fn(),
-      applyUpdate: vi.fn(),
-      setCommandLine: vi.fn(),
-      resetCommandLine: vi.fn(),
-    },
-  };
+	const state = { updateArmed: false, shiftArmed: false };
+	const dispatch = vi.fn((action: { type: string; value?: boolean }) => {
+		if (action.type === "SET_UPDATE_ARMED")
+			state.updateArmed = Boolean(action.value);
+		if (action.type === "SET_SHIFT_ARMED")
+			state.shiftArmed = Boolean(action.value);
+	});
+	return {
+		state,
+		dispatch,
+		update: {
+			scopeKey: "authority-a",
+			loadSettings: vi.fn(),
+			saveSettings: vi.fn(),
+			preview: vi.fn(),
+			targets: vi.fn(),
+			confirm: vi.fn(),
+			applyDirect: vi.fn(),
+		},
+		server: {
+			commandLine: "",
+			commandTargetMode: "Fixture",
+			commandLinePristine: true,
+			setCommandLine: vi.fn(),
+			resetCommandLine: vi.fn(),
+			executeCommandLine: vi.fn(),
+			cancelCommandChoice: vi.fn(),
+		},
+	};
 });
 
-vi.mock("../../api/ServerContext", () => ({ useServer: () => workflow.server }));
-vi.mock("../../state/AppContext", () => ({ useApp: () => ({ state: workflow.state, dispatch: workflow.dispatch }) }));
-
-const cueTarget = {
-  family: { type: "cue" as const },
-  object_id: "cue-list-a",
-  name: "Main Cuelist",
-  playback_number: 7,
-  cue: { id: "cue-2", number: 2 },
-};
-const cueEntry: UpdateMenuEntry = {
-  revision: 4,
-  target: cueTarget,
-  active_or_referenced: true,
-  existing_preview: {
-    revision: 4,
-    show_revision: 12,
-    programmer_revision: "programmer-existing",
-    target: cueTarget,
-    mode: { target_type: "cue", mode: "existing_only" },
-    items: [{
-      address: { type: "fixture_attribute", fixture_id: "fixture-1", attribute: "intensity" },
-      outcome: { outcome: "change_at_source", source: { cue_id: "cue-1", cue_number: 1, cue_index: 0 } },
-    }],
-  },
-  add_new_preview: {
-    revision: 4,
-    show_revision: 12,
-    programmer_revision: "programmer-add-new",
-    target: cueTarget,
-    mode: { target_type: "cue", mode: "add_new" },
-    items: [{
-      address: { type: "fixture_attribute", fixture_id: "fixture-2", attribute: "color.red" },
-      outcome: { outcome: "add_new_to_current_cue", cue: { cue_id: "cue-2", cue_number: 2, cue_index: 1 } },
-    }],
-  },
-};
-
-function resultFor(target: UpdateResult["target"] = cueTarget): UpdateResult {
-  return {
-    target,
-    revision_before: 4,
-    revision_after: 5,
-    eligible_count: 1,
-    changed_count: 1,
-    added_count: 1,
-    ignored_count: 0,
-    changed_cues: [],
-    programmer_values_retained: true,
-  };
-}
+vi.mock("../../features/programmingUpdate/ProgrammingUpdateProvider", () => ({
+	useProgrammingUpdate: () => workflow.update,
+}));
+vi.mock("../../api/ServerContext", () => ({
+	useServer: () => workflow.server,
+}));
+vi.mock("../../state/AppContext", () => ({
+	useApp: () => ({ state: workflow.state, dispatch: workflow.dispatch }),
+}));
 
 beforeEach(() => {
-  workflow.state.updateArmed = false;
-  workflow.state.shiftArmed = false;
-  workflow.server.error = null;
-  workflow.server.commandLine = "";
-  vi.clearAllMocks();
-  workflow.server.updateSettings.mockResolvedValue(defaultUpdateSettings);
-  workflow.server.saveUpdateSettings.mockResolvedValue(defaultUpdateSettings);
-  workflow.server.updateTargets.mockResolvedValue([]);
-  workflow.server.previewUpdate.mockResolvedValue(null);
-  workflow.server.applyUpdate.mockResolvedValue(null);
+	workflow.state.updateArmed = false;
+	workflow.state.shiftArmed = false;
+	workflow.update.scopeKey = "authority-a";
+	workflow.server.commandLine = "";
+	vi.clearAllMocks();
+	workflow.update.loadSettings.mockResolvedValue(defaultUpdateSettings);
+	workflow.update.saveSettings.mockResolvedValue(defaultUpdateSettings);
+	workflow.update.targets.mockResolvedValue(targetsFor([]));
+	workflow.update.preview.mockResolvedValue(null);
+	workflow.update.confirm.mockResolvedValue(null);
+	workflow.update.applyDirect.mockResolvedValue(null);
 });
 
 afterEach(cleanup);
 
 describe("Update workflow integration", () => {
-  it("rerenders Show All Active, selects Add New per target, and applies that concrete mode", async () => {
-    workflow.server.updateTargets.mockResolvedValue([cueEntry]);
-    workflow.server.applyUpdate.mockResolvedValue(resultFor());
-    render(<UpdateWorkflow/>);
+	it("loads the typed menu and confirms the exact Add New authority", async () => {
+		workflow.update.targets.mockResolvedValue(targetsFor());
+		workflow.update.confirm.mockResolvedValue(mutationFor());
+		render(<UpdateWorkflow />);
 
-    fireEvent(window, new Event(UPDATE_TARGET_MENU_EVENT));
-    const dialog = await screen.findByRole("dialog", { name: "Update Update" });
-    expect(workflow.server.updateTargets).toHaveBeenCalledWith("eligible_for_update_existing");
-    expect(within(dialog).queryByText("Mode for Main Cuelist", { selector: "label" })).not.toBeInTheDocument();
+		fireEvent(window, new Event(UPDATE_TARGET_MENU_EVENT));
+		const dialog = await screen.findByRole("dialog", { name: "Update Update" });
+		expect(workflow.update.targets).toHaveBeenCalledWith(
+			"eligible_for_update_existing",
+		);
+		expect(
+			within(dialog).queryByText("Mode for Main Cuelist", {
+				selector: "label",
+			}),
+		).not.toBeInTheDocument();
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "Show All Active" }));
-    await waitFor(() => expect(workflow.server.updateTargets).toHaveBeenLastCalledWith("show_all_active"));
-    const modeLabel = within(dialog).getByText("Mode for Main Cuelist", { selector: "label" });
-    const modeTrigger = modeLabel.closest(".ui-form-field")!.querySelector(".ui-select-trigger") as HTMLButtonElement;
-    expect(modeTrigger).toHaveTextContent("Existing Only");
+		fireEvent.click(
+			within(dialog).getByRole("button", { name: "Show All Active" }),
+		);
+		await waitFor(() =>
+			expect(workflow.update.targets).toHaveBeenLastCalledWith(
+				"show_all_active",
+			),
+		);
+		const modeLabel = within(dialog).getByText("Mode for Main Cuelist", {
+			selector: "label",
+		});
+		const modeTrigger = modeLabel
+			.closest(".ui-form-field")
+			?.querySelector(".ui-select-trigger") as HTMLButtonElement;
+		expect(modeTrigger).toHaveTextContent("Existing Only");
 
-    fireEvent.click(modeTrigger);
-    fireEvent.click(screen.getByRole("option", { name: "Add New" }));
-    expect(modeTrigger).toHaveTextContent("Add New");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Update" }));
+		fireEvent.click(modeTrigger);
+		fireEvent.click(screen.getByRole("option", { name: "Add New" }));
+		fireEvent.click(within(dialog).getByRole("button", { name: "Update" }));
 
-    await waitFor(() => expect(workflow.server.applyUpdate).toHaveBeenCalledWith(
-      {
-        family: { type: "cue" },
-        object_id: "cue-list-a",
-        playback_number: 7,
-        cue_id: "cue-2",
-        cue_number: 2,
-        validate_active_context: true,
-      },
-      { target_type: "cue", mode: "add_new" },
-      4,
-      "programmer-add-new",
-      12,
-    ));
-    expect(await screen.findByRole("dialog", { name: "Update complete" })).toBeInTheDocument();
-  });
+		await waitFor(() =>
+			expect(workflow.update.confirm).toHaveBeenCalledWith(addNewAuthority),
+		);
+		expect(addNewAuthority.requestTarget).toMatchObject({
+			type: "cue",
+			cue_id: "cue-2",
+			cue_number: 2,
+			validate_active_context: true,
+		});
+		expect(addNewAuthority.object).toEqual({
+			kind: "cue_list",
+			object_id: "legacy-cue-list-a",
+			object_revision: 4,
+		});
+		expect(addNewAuthority.scopeKey).toBe(workflow.update.scopeKey);
+		expect(workflow.update.applyDirect).not.toHaveBeenCalled();
+		expect(
+			await screen.findByRole("dialog", { name: "Update complete" }),
+		).toBeInTheDocument();
+	});
 
-  it("routes a touched target directly to the configured default when its modal is disabled", async () => {
-    const request: UpdateTargetRequest = { family: { type: "group" }, object_id: "3" };
-    const settings: UpdateSettings = {
-      ...defaultUpdateSettings,
-      group_mode: "add_new",
-      show_update_modal_on_touch: false,
-    };
-    const target = { family: { type: "group" as const }, object_id: "3", name: "Group 3" };
-    workflow.state.updateArmed = true;
-    workflow.state.shiftArmed = true;
-    workflow.server.commandLine = "UPDATE GROUP 3";
-    workflow.server.updateSettings.mockResolvedValue(settings);
-    workflow.server.applyUpdate.mockResolvedValue(resultFor(target));
-    render(<UpdateWorkflow/>);
+	it("uses applyDirect for a touched target whose configured modal is disabled", async () => {
+		const request: UpdateTargetRequest = {
+			family: { type: "group" },
+			object_id: "3",
+		};
+		const settings: UpdateSettings = {
+			...defaultUpdateSettings,
+			group_mode: "add_new",
+			show_update_modal_on_touch: false,
+		};
+		const target = {
+			family: { type: "group" as const },
+			object_id: "3",
+			name: "Group 3",
+		};
+		workflow.state.updateArmed = true;
+		workflow.state.shiftArmed = true;
+		workflow.server.commandLine = "UPDATE GROUP 3";
+		workflow.update.loadSettings.mockResolvedValue(settings);
+		workflow.update.applyDirect.mockResolvedValue(mutationFor(target));
+		render(<UpdateWorkflow />);
 
-    expect(screen.getByRole("status")).toHaveTextContent("UPDATE armed");
-    fireEvent(window, new CustomEvent<UpdateTargetRequest>(UPDATE_TARGET_EVENT, { detail: request }));
+		expect(screen.getByRole("status")).toHaveTextContent("UPDATE armed");
+		fireEvent(
+			window,
+			new CustomEvent<UpdateTargetRequest>(UPDATE_TARGET_EVENT, {
+				detail: request,
+			}),
+		);
 
-    await waitFor(() => expect(workflow.server.applyUpdate).toHaveBeenCalledWith(
-      request,
-      { target_type: "existing_content", mode: "add_new" },
-    ));
-    expect(workflow.server.previewUpdate).not.toHaveBeenCalled();
-    expect(await screen.findByRole("dialog", { name: "Update complete" })).toBeInTheDocument();
-    expect(workflow.dispatch).toHaveBeenCalledWith({ type: "SET_UPDATE_ARMED", value: false });
-    expect(workflow.dispatch).toHaveBeenCalledWith({ type: "SET_SHIFT_ARMED", value: false });
-    expect(workflow.server.resetCommandLine).toHaveBeenCalledOnce();
-    expect(screen.queryByText(/UPDATE armed/)).not.toBeInTheDocument();
-  });
+		await waitFor(() =>
+			expect(workflow.update.applyDirect).toHaveBeenCalledWith(request, {
+				target_type: "existing_content",
+				mode: "add_new",
+			}),
+		);
+		expect(workflow.update.preview).not.toHaveBeenCalled();
+		expect(workflow.update.confirm).not.toHaveBeenCalled();
+		expect(
+			await screen.findByRole("dialog", { name: "Update complete" }),
+		).toBeInTheDocument();
+		expect(workflow.dispatch).toHaveBeenCalledWith({
+			type: "SET_UPDATE_ARMED",
+			value: false,
+		});
+		expect(workflow.dispatch).toHaveBeenCalledWith({
+			type: "SET_SHIFT_ARMED",
+			value: false,
+		});
+		expect(workflow.server.resetCommandLine).toHaveBeenCalledOnce();
+	});
 
-  it("pins a cue-less touched request to the exact Cue returned by preview", async () => {
-    const request: UpdateTargetRequest = {
-      family: { type: "cue" },
-      object_id: "cue-list-a",
-      playback_number: 7,
-      validate_active_context: true,
-    };
-    workflow.state.updateArmed = true;
-    workflow.server.previewUpdate.mockResolvedValue(cueEntry.existing_preview);
-    workflow.server.applyUpdate.mockResolvedValue(resultFor());
-    render(<UpdateWorkflow/>);
+	it("confirms the exact preview authority for a Cue-less touched request", async () => {
+		const request: UpdateTargetRequest = {
+			family: { type: "cue" },
+			object_id: "cue-list-a",
+			playback_number: 7,
+			validate_active_context: true,
+		};
+		workflow.state.updateArmed = true;
+		workflow.update.loadSettings.mockResolvedValue({
+			...defaultUpdateSettings,
+			cue_mode: "existing_only",
+		});
+		workflow.update.preview.mockResolvedValue(existingAuthority);
+		workflow.update.confirm.mockResolvedValue(mutationFor());
+		render(<UpdateWorkflow />);
 
-    fireEvent(window, new CustomEvent<UpdateTargetRequest>(UPDATE_TARGET_EVENT, { detail: request }));
-    const dialog = await screen.findByRole("dialog", { name: "Update Main Cuelist" });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Update Cuelist" }));
+		fireEvent(
+			window,
+			new CustomEvent<UpdateTargetRequest>(UPDATE_TARGET_EVENT, {
+				detail: request,
+			}),
+		);
+		const dialog = await screen.findByRole("dialog", {
+			name: "Update Main Cuelist",
+		});
+		fireEvent.click(
+			within(dialog).getByRole("button", { name: "Update Cuelist" }),
+		);
 
-    await waitFor(() => expect(workflow.server.applyUpdate).toHaveBeenCalledWith(
-      {
-        family: { type: "cue" },
-        object_id: "cue-list-a",
-        playback_number: 7,
-        cue_id: "cue-2",
-        cue_number: 2,
-        validate_active_context: true,
-      },
-      cueEntry.existing_preview.mode,
-      cueEntry.existing_preview.revision,
-      cueEntry.existing_preview.programmer_revision,
-      cueEntry.existing_preview.show_revision,
-    ));
-  });
+		expect(workflow.update.preview).toHaveBeenCalledWith(
+			request,
+			existingAuthority.preview.mode,
+		);
+		await waitFor(() =>
+			expect(workflow.update.confirm).toHaveBeenCalledWith(existingAuthority),
+		);
+		expect(existingAuthority.requestTarget).toMatchObject({
+			cue_id: "cue-2",
+			cue_number: 2,
+		});
+	});
+
+	it("loads and saves settings through the scoped capability", async () => {
+		workflow.update.saveSettings.mockImplementation(
+			async (settings) => settings,
+		);
+		render(<UpdateWorkflow />);
+
+		fireEvent(window, new Event(UPDATE_SETTINGS_EVENT));
+		const dialog = await screen.findByRole("dialog", {
+			name: "Update Settings",
+		});
+		expect(workflow.update.loadSettings).toHaveBeenCalledOnce();
+		fireEvent.click(
+			within(dialog).getByRole("switch", {
+				name: "Show Update modal on touch",
+			}),
+		);
+		fireEvent.click(
+			within(dialog).getByRole("button", { name: "Save Update Settings" }),
+		);
+
+		await waitFor(() =>
+			expect(workflow.update.saveSettings).toHaveBeenCalledWith({
+				...defaultUpdateSettings,
+				show_update_modal_on_touch: false,
+			}),
+		);
+	});
+
+	it("shows a local capability error without falling back to legacy Update methods", async () => {
+		workflow.update.targets.mockRejectedValue(
+			new Error("target query rejected"),
+		);
+		render(<UpdateWorkflow />);
+
+		fireEvent(window, new Event(UPDATE_TARGET_MENU_EVENT));
+		const dialog = await screen.findByRole("dialog", { name: "Update Update" });
+		expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+			"target query rejected",
+		);
+	});
+
+	it("ignores a late target response after the capability scope changes", async () => {
+		const pending = deferred<ReturnType<typeof targetsFor>>();
+		workflow.update.targets.mockReturnValue(pending.promise);
+		const view = render(<UpdateWorkflow />);
+
+		fireEvent(window, new Event(UPDATE_TARGET_MENU_EVENT));
+		await screen.findByRole("dialog", { name: "Update Update" });
+		workflow.update.scopeKey = "authority-b";
+		view.rerender(<UpdateWorkflow />);
+		await waitFor(() =>
+			expect(
+				screen.queryByRole("dialog", { name: "Update Update" }),
+			).not.toBeInTheDocument(),
+		);
+
+		const lateAuthority = targetsFor([cueEntry]);
+		expect(lateAuthority.scopeKey).toBe("authority-a");
+		pending.resolve(lateAuthority);
+		await Promise.resolve();
+		expect(screen.queryByText("Main Cuelist")).not.toBeInTheDocument();
+	});
 });
+
+function deferred<T>() {
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((finish) => {
+		resolve = finish;
+	});
+	return { promise, resolve };
+}

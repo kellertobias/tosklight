@@ -2,6 +2,7 @@ import type {
 	CueUpdateMode,
 	ExistingContentMode,
 	UpdateMode,
+	UpdatePreview,
 } from "../../api/types";
 import { Button } from "../common";
 import {
@@ -16,10 +17,9 @@ import {
 	updatePreviewStats,
 	updateTargetContext,
 } from "./updateWorkflowPresentation";
-import type { UpdateOperation } from "./useUpdateWorkflowEvents";
 
 interface UpdateOperationDialogProps {
-	operation: UpdateOperation;
+	operation: { preview: UpdatePreview; request?: unknown };
 	busy: boolean;
 	error: string | null;
 	onMode: (mode: UpdateMode) => void;

@@ -3,8 +3,8 @@ import { createScreenActions } from "../screens/actions";
 import { createCommandLineActions } from "./commandLine";
 import { createConfigurationActions } from "./configuration";
 import { createCueListActions } from "./cueLists";
-import { createFixtureProgrammingActions } from "./fixtureProgramming";
 import { createFixtureLibraryActions } from "./fixtureLibrary";
+import { createFixtureProgrammingActions } from "./fixtureProgramming";
 import { createGroupDerivationActions } from "./groupDerivation";
 import { createGroupEditingActions } from "./groupEditing";
 import { createGroupSelectionActions } from "./groupSelection";
@@ -25,7 +25,6 @@ import { createShowLifecycleActions } from "./showLifecycle";
 import { createShowRevisionActions } from "./showRevisions";
 import { createServerSnapshotValue } from "./snapshot";
 import { createSystemActions } from "./system";
-import { createUpdateActions } from "./update";
 
 export function composeServerContextValue(model: ServerController) {
 	return {
@@ -34,7 +33,6 @@ export function composeServerContextValue(model: ServerController) {
 		...createSessionActions(model),
 		...createScreenActions(model),
 		...createHighlightActions(model),
-		...createUpdateActions(model),
 		...createCommandLineActions(model),
 		...createProgrammerSelectionActions(model),
 		...createFixtureProgrammingActions(model),
