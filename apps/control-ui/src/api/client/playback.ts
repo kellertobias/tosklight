@@ -78,11 +78,12 @@ export class PlaybackApiClient {
 	}
 
 	async playbackRuntimeAction(
+		showId: string,
 		deskId: string,
 		request: PlaybackActionRequest,
 	): Promise<PlaybackActionOutcome> {
 		const value = await this.transport.request<unknown>(
-			`/api/v2/desks/${encodeURIComponent(deskId)}/playback-actions`,
+			`/api/v2/shows/${encodeURIComponent(showId)}/desks/${encodeURIComponent(deskId)}/playback-actions`,
 			{
 				method: "POST",
 				headers: { "content-type": "application/json" },

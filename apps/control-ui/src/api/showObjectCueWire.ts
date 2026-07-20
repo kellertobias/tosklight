@@ -14,12 +14,11 @@ import { WireValidationError } from "./wireValidation";
 export function decodeCueListBody(
 	value: unknown,
 	path: string,
-	objectId?: string,
+	_objectId?: string,
 ): CueList {
 	const body = recordAt(value, path);
 	const id = stringAt(body.id, `${path}.id`);
-	if (objectId != null && id !== objectId)
-		invalid(`${path}.id`, `object ID ${objectId}`, id);
+	// Portable objects can retain a legacy storage key; `body.id` is the Cuelist identity.
 	return {
 		...body,
 		id,

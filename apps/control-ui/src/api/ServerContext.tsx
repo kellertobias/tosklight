@@ -16,8 +16,10 @@ import {
 import { PresetRecordingProvider } from "../features/presetRecording/PresetRecordingProvider";
 import { GroupRecordingProvider } from "../features/groupRecording/GroupRecordingProvider";
 import { CueRecordingProvider } from "../features/cueRecording/CueRecordingProvider";
+import { PlaybackTopologyProvider } from "../features/playbackTopology/PlaybackTopologyProvider";
 import type { SessionRole } from "../features/session/ownership";
 import { ShowObjectsViewProvider } from "../features/showObjects/ShowObjectsView";
+import { VirtualPlaybackZonesProvider } from "../features/virtualPlaybackZones/VirtualPlaybackZonesContext";
 import { ServerProgrammingProviders } from "./ServerProgrammingProviders";
 import { useServerFeatureBoundaries } from "./useServerFeatureBoundaries";
 
@@ -105,45 +107,57 @@ export function ServerProvider({
 				loadObject={boundaries.loadShowObjectSnapshot}
 				onError={boundaries.reportShowObjectError}
 			>
-				<GroupRecordingProvider
+				<PlaybackTopologyProvider
 					showId={state.bootstrap?.active_show?.id ?? null}
 					store={state.showObjectsStore}
-					transport={boundaries.groupRecordingTransport}
-					loadGroup={boundaries.loadGroupForRepair}
-					onError={boundaries.reportGroupRecordingError}
+					transport={boundaries.playbackTopologyTransport}
+					loadObject={boundaries.loadShowObject}
 				>
-					<PresetRecordingProvider
-						showId={state.bootstrap?.active_show?.id ?? null}
-						store={state.showObjectsStore}
-						transport={boundaries.presetRecordingTransport}
-						loadPreset={boundaries.loadPresetForRepair}
-						onError={boundaries.reportPresetRecordingError}
+					<VirtualPlaybackZonesProvider
+						authority={boundaries.virtualPlaybackZonesAuthority}
+						transport={boundaries.virtualPlaybackZonesTransport}
 					>
-						<CueRecordingProvider
+						<GroupRecordingProvider
 							showId={state.bootstrap?.active_show?.id ?? null}
 							store={state.showObjectsStore}
-							playbackRuntimeStore={state.playbackRuntimeStore}
-							transport={boundaries.cueRecordingTransport}
-							selectedPlayback={boundaries.selectedCueRecordingPlayback}
-							loadObject={boundaries.loadShowObject}
-							onError={boundaries.reportCueRecordingError}
+							transport={boundaries.groupRecordingTransport}
+							loadGroup={boundaries.loadGroupForRepair}
+							onError={boundaries.reportGroupRecordingError}
 						>
-							<ServerProgrammingProviders
-								state={state}
-								boundaries={boundaries}
-								value={value}
+							<PresetRecordingProvider
+								showId={state.bootstrap?.active_show?.id ?? null}
+								store={state.showObjectsStore}
+								transport={boundaries.presetRecordingTransport}
+								loadPreset={boundaries.loadPresetForRepair}
+								onError={boundaries.reportPresetRecordingError}
 							>
-								<SelectiveImportProvider source={selectiveImportSource}>
-									<FilesProvider source={fileSource}>
-										<ScreensProvider source={screenSource}>
-											{children}
-										</ScreensProvider>
-									</FilesProvider>
-								</SelectiveImportProvider>
-							</ServerProgrammingProviders>
-						</CueRecordingProvider>
-					</PresetRecordingProvider>
-				</GroupRecordingProvider>
+								<CueRecordingProvider
+									showId={state.bootstrap?.active_show?.id ?? null}
+									store={state.showObjectsStore}
+									playbackRuntimeStore={state.playbackRuntimeStore}
+									transport={boundaries.cueRecordingTransport}
+									selectedPlayback={boundaries.selectedCueRecordingPlayback}
+									loadObject={boundaries.loadShowObject}
+									onError={boundaries.reportCueRecordingError}
+								>
+									<ServerProgrammingProviders
+										state={state}
+										boundaries={boundaries}
+										value={value}
+									>
+										<SelectiveImportProvider source={selectiveImportSource}>
+											<FilesProvider source={fileSource}>
+												<ScreensProvider source={screenSource}>
+													{children}
+												</ScreensProvider>
+											</FilesProvider>
+										</SelectiveImportProvider>
+									</ServerProgrammingProviders>
+								</CueRecordingProvider>
+							</PresetRecordingProvider>
+						</GroupRecordingProvider>
+					</VirtualPlaybackZonesProvider>
+				</PlaybackTopologyProvider>
 			</ShowObjectsViewProvider>
 		</ServerContext.Provider>
 	);

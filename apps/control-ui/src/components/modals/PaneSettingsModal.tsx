@@ -1,7 +1,17 @@
 import { useState } from "react";
 import { useServer } from "../../api/ServerContext";
+import type { PlaybackDefinition } from "../../api/types";
+import { useVirtualPlaybackSurfaceZones } from "../control/virtualPlayback/useVirtualPlaybackSurfaceZones";
+import {
+  usePlaybackDeskView,
+  usePlaybackRuntimeStatus,
+} from "../../features/playbackRuntime/PlaybackRuntimeView";
+import {
+  MAX_PERSISTED_VIRTUAL_PLAYBACK_ZONE_SLOT,
+  type VirtualPlaybackZone,
+} from "../../features/virtualPlaybackZones/contracts";
 import { useApp } from "../../state/AppContext";
-import { GRID_COLUMNS, GRID_ROWS, type PaneModel, type VirtualPlaybackExclusionZone } from "../../types";
+import { GRID_COLUMNS, GRID_ROWS, type PaneModel } from "../../types";
 import { TouchSelect } from "../common/TouchSelect";
 import { Button, FormLayout, MultiValueToggleField, NumberField, SelectField, SwitchField, TextField } from "../common";
 import { WindowSettings, type WindowSettingsTab } from "../window-kit";
@@ -9,42 +19,54 @@ import { DEVELOPMENT_VIEW_OPTIONS } from "../../windows/DevelopmentWindow";
 import { requestPaneRemoval } from "../shell/paneRemovalGuard";
 import { PRESET_FAMILIES } from "../../presetFamilies";
 
-function VirtualPlaybackZoneEditor({ pane, zone, zones, visibleCells }: { pane: PaneModel; zone: VirtualPlaybackExclusionZone; zones: VirtualPlaybackExclusionZone[]; visibleCells: number }) {
-  const { dispatch } = useApp();
-  const server = useServer();
+function VirtualPlaybackZoneEditor({ zone, zones, visibleCells, saving, persist }: { zone: VirtualPlaybackZone; zones: readonly VirtualPlaybackZone[]; visibleCells: number; saving: boolean; persist: (zones: readonly VirtualPlaybackZone[]) => void }) {
   const [name, setName] = useState(zone.name);
-  const persist = async (next: VirtualPlaybackExclusionZone[]) => {
-    if (await server.saveVirtualPlaybackExclusionZones(pane.id, next)) dispatch({ type: "SET_VIRTUAL_PLAYBACK_EXCLUSION_ZONES", id: pane.id, zones: next });
-  };
   const saveName = () => {
     const trimmed = name.trim();
     if (!trimmed || trimmed === zone.name) return;
-    void persist(zones.map((candidate) => candidate.id === zone.id ? { ...candidate, name: trimmed } : candidate));
+    setName(trimmed);
+    persist(zones.map((candidate) => candidate.id === zone.id ? { ...candidate, name: trimmed } : candidate));
   };
   const toggleSlot = (slot: number) => {
+    if (slot < 1 || slot > MAX_PERSISTED_VIRTUAL_PLAYBACK_ZONE_SLOT) return;
     const slots = zone.slots.includes(slot) ? zone.slots.filter((candidate) => candidate !== slot) : [...zone.slots, slot].sort((left, right) => left - right);
     if (slots.length < 2) return;
-    void persist(zones.map((candidate) => candidate.id === zone.id ? { ...candidate, slots } : candidate));
+    persist(zones.map((candidate) => candidate.id === zone.id ? { ...candidate, slots } : candidate));
   };
   const hiddenSlots = zone.slots.filter((slot) => slot > visibleCells);
   return <article className="virtual-playback-zone-editor">
-    <header><TextField label={`Name for ${zone.name}`} maxLength={80} value={name} onChange={(event) => setName(event.target.value)}/><Button disabled={!name.trim() || name.trim() === zone.name} onClick={saveName}>Save name</Button><Button className="danger" onClick={() => void persist(zones.filter((candidate) => candidate.id !== zone.id))}>Delete zone</Button></header>
+    <header><TextField label={`Name for ${zone.name}`} maxLength={80} value={name} disabled={saving} onChange={(event) => setName(event.target.value)}/><Button disabled={saving || !name.trim() || name.trim() === zone.name} onClick={saveName}>Save name</Button><Button className="danger" disabled={saving} onClick={() => persist(zones.filter((candidate) => candidate.id !== zone.id))}>Delete zone</Button></header>
     <div className="virtual-playback-zone-members" role="group" aria-label={`${zone.name} cells`}>
-      {Array.from({ length: visibleCells }, (_, index) => index + 1).map((slot) => <Button key={slot} active={zone.slots.includes(slot)} aria-label={`${zone.name} cell ${slot}`} onClick={() => toggleSlot(slot)}>{slot}</Button>)}
+      {Array.from({ length: visibleCells }, (_, index) => index + 1).map((slot) => <Button key={slot} active={zone.slots.includes(slot)} disabled={saving} aria-label={`${zone.name} cell ${slot}`} onClick={() => toggleSlot(slot)}>{slot}</Button>)}
     </div>
-    {hiddenSlots.length > 0 && <div className="virtual-playback-zone-hidden"><small>{hiddenSlots.length} hidden grid {hiddenSlots.length === 1 ? "cell is" : "cells are"} retained:</small>{hiddenSlots.map((slot) => <Button key={slot} active aria-label={`${zone.name} hidden cell ${slot}`} onClick={() => toggleSlot(slot)}>{slot}</Button>)}</div>}
+    {hiddenSlots.length > 0 && <div className="virtual-playback-zone-hidden"><small>{hiddenSlots.length} hidden grid {hiddenSlots.length === 1 ? "cell is" : "cells are"} retained:</small>{hiddenSlots.map((slot) => <Button key={slot} active disabled={saving} aria-label={`${zone.name} hidden cell ${slot}`} onClick={() => toggleSlot(slot)}>{slot}</Button>)}</div>}
     <small>{zone.slots.length} cells · zone order {zones.findIndex((candidate) => candidate.id === zone.id) + 1}</small>
   </article>;
 }
 
 function VirtualPlaybackZoneSettings({ pane, rows, columns }: { pane: PaneModel; rows: number; columns: number }) {
-  const zones = pane.virtualPlaybackExclusionZones ?? [];
-  return <section className="virtual-playback-zone-settings" aria-label="Playback Exclusion Zones"><h3>Playback Exclusion Zones</h3><p>Shift-select at least two cells in the pane to create a zone. A newly activated member releases the other active members; creating or editing a zone never operates a playback.</p>{zones.length === 0 ? <p>No exclusion zones are configured for this pane.</p> : zones.map((zone) => <VirtualPlaybackZoneEditor key={zone.id} pane={pane} zone={zone} zones={zones} visibleCells={rows * columns}/>)}</section>;
+  const desk = usePlaybackDeskView(true);
+  const runtimeStatus = usePlaybackRuntimeStatus();
+  const authorityReady = runtimeStatus.status === "ready" && desk !== null;
+  const surface = useVirtualPlaybackSurfaceZones({ surfaceId: pane.id, active: true, authorityReady });
+  const visibleCells = Math.min(rows * columns, 127);
+  return <section className="virtual-playback-zone-settings" aria-label="Playback Exclusion Zones"><h3>Playback Exclusion Zones</h3><p>Shift-select at least two cells in the pane to create a zone. A newly activated member releases the other active members; creating or editing a zone never operates a playback.</p>{surface.saving && <p role="status">Saving Playback Exclusion Zones…</p>}{!surface.ready ? <p role={surface.error ? "alert" : "status"}>{surface.error ?? "Loading Playback Exclusion Zones…"}</p> : surface.zones.length === 0 ? <p>No exclusion zones are configured for this pane.</p> : surface.zones.map((zone) => <VirtualPlaybackZoneEditor key={zone.id} zone={zone} zones={surface.zones} visibleCells={visibleCells} saving={surface.saving} persist={(next) => void surface.persist(next)}/>)}</section>;
+}
+
+function CuePaneSettings({ pane }: { pane: PaneModel }) {
+  const { dispatch } = useApp();
+  const server = useServer();
+  const cueLists = (server.playbacks?.pool ?? []).filter((definition): definition is PlaybackDefinition & { target: { type: "cue_list"; cue_list_id: string } } => definition.target.type === "cue_list").sort((left, right) => left.number - right.number);
+  const fixedNumber = pane.fixedCueListNumber ?? cueLists[0]?.number;
+  return <FormLayout labelPlacement="side">
+    <MultiValueToggleField label="Displayed Cuelist" value={pane.cueListSource ?? "fixed"} onChange={(source) => dispatch({ type: "SET_PANE_CUELIST", id: pane.id, source })} options={[{ value: "fixed", label: "Fixed" }, { value: "follow-selection", label: "Follow selection" }]}/>
+    <SelectField label="Cuelist" value={String(fixedNumber ?? "")} disabled={(pane.cueListSource ?? "fixed") !== "fixed" || cueLists.length === 0} onChange={(value) => dispatch({ type: "SET_PANE_CUELIST", id: pane.id, number: Number(value) })} options={cueLists.map((definition) => ({ value: String(definition.number), label: `${definition.number} · ${definition.name}` }))}/>
+    <SwitchField label="Show Cue sidebar" checked={pane.showCueSidebar ?? true} onChange={(event) => dispatch({ type: "SET_PANE_CUE_SIDEBAR", id: pane.id, value: event.target.checked })}/>
+  </FormLayout>;
 }
 
 export function PaneSettingsModal() {
   const { state, dispatch } = useApp();
-  const server = useServer();
   if (!state.paneSettingsId) return null;
   const desk = state.desks.find((item) => item.id === state.activeDeskId)!;
   const pane = desk.panes.find((item) => item.id === state.paneSettingsId);
@@ -52,13 +74,7 @@ export function PaneSettingsModal() {
   const close = () => dispatch({ type: "SET_PANE_SETTINGS", id: null });
   const tabs: WindowSettingsTab[] = [{ id: "pane", label: "Pane Settings", content: <><p>Selected pane: <b>{pane.title}</b></p><div className="size-grid"><TouchSelect label="Grid width" value={pane.width} options={Array.from({ length: GRID_COLUMNS }, (_, index) => index + 1)} onChange={(width) => dispatch({ type: "SET_PANE_RECT", id: pane.id, rect: { width } })}/><TouchSelect label="Grid height" value={pane.height} options={Array.from({ length: GRID_ROWS }, (_, index) => index + 1)} onChange={(height) => dispatch({ type: "SET_PANE_RECT", id: pane.id, rect: { height } })}/></div><div className="dialog-grid"><Button className="danger" onClick={() => { if (requestPaneRemoval(pane.id)) dispatch({ type: "REMOVE_PANE", id: pane.id }); }}>Remove pane</Button></div></> }];
   if (pane.kind === "cues") {
-    const cueLists = (server.playbacks?.pool ?? []).filter((definition) => definition.target.type === "cue_list").sort((left, right) => left.number - right.number);
-    const fixedNumber = pane.fixedCueListNumber ?? cueLists[0]?.number;
-    tabs.push({ id: "cues", label: "Cues", content: <FormLayout labelPlacement="side">
-      <MultiValueToggleField label="Displayed Cuelist" value={pane.cueListSource ?? "fixed"} onChange={(source) => dispatch({ type: "SET_PANE_CUELIST", id: pane.id, source })} options={[{ value: "fixed", label: "Fixed" }, { value: "follow-selection", label: "Follow selection" }]}/>
-      <SelectField label="Cuelist" value={String(fixedNumber ?? "")} disabled={(pane.cueListSource ?? "fixed") !== "fixed" || cueLists.length === 0} onChange={(value) => dispatch({ type: "SET_PANE_CUELIST", id: pane.id, number: Number(value) })} options={cueLists.map((definition) => ({ value: String(definition.number), label: `${definition.number} · ${definition.name}` }))}/>
-      <SwitchField label="Show Cue sidebar" checked={pane.showCueSidebar ?? true} onChange={(event) => dispatch({ type: "SET_PANE_CUE_SIDEBAR", id: pane.id, value: event.target.checked })}/>
-    </FormLayout> });
+    tabs.push({ id: "cues", label: "Cues", content: <CuePaneSettings pane={pane}/> });
   }
   if (pane.kind === "presets") tabs.push({ id: "pool", label: "Pool", content: <><h3>Preset family</h3><div className="button-group">{PRESET_FAMILIES.map((family) => <Button key={family} className={(pane.presetFamily ?? state.presetFamily) === family ? "active" : ""} onClick={() => dispatch({ type: "SET_PANE_PRESET_FAMILY", id: pane.id, family })}>{family}</Button>)}</div><SwitchField label="Enable pool colors" checked={pane.presetPoolColors ?? true} onChange={(event) => dispatch({ type: "SET_PANE_PRESET_COLORS", id: pane.id, value: event.target.checked })}/></> });
   if (pane.kind === "stage") tabs.push({ id: "stage", label: "Stage", content: <FormLayout labelPlacement="side"><MultiValueToggleField label="Stage view" value={pane.stageView ?? "2d"} onChange={(value) => dispatch({ type: "SET_PANE_STAGE_OPTION", id: pane.id, option: "stageView", value })} options={[{ value: "2d", label: "2D" }, { value: "3d", label: "3D" }]}/><SwitchField label="Follow Preload" checked={Boolean(pane.followPreload)} onChange={(event) => dispatch({ type: "SET_PANE_STAGE_OPTION", id: pane.id, option: "followPreload", value: event.target.checked })}/><SwitchField label="Beam direction guides" checked={pane.showBeamGuides ?? true} onChange={(event) => dispatch({ type: "SET_PANE_STAGE_OPTION", id: pane.id, option: "showBeamGuides", value: event.target.checked })}/></FormLayout> });

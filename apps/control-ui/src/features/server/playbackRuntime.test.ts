@@ -67,6 +67,7 @@ describe("Playback runtime actions", () => {
 		);
 		const legacyPlaybacks = vi.fn();
 		const model = {
+			bootstrap: { active_show: { id: SHOW_ID } },
 			client: { playbackRuntimeAction, playbacks: legacyPlaybacks },
 			session: { desk: { id: DESK_ID } },
 			playbacks: null,
@@ -78,6 +79,11 @@ describe("Playback runtime actions", () => {
 		const pending = actions.poolPlaybackAction(1, "master", { value: 0.35 });
 		expect(master(store)).toBe(0.35);
 		expect(playbackRuntimeAction).toHaveBeenCalledOnce();
+		expect(playbackRuntimeAction).toHaveBeenCalledWith(
+			SHOW_ID,
+			DESK_ID,
+			expect.any(Object),
+		);
 		expect(legacyPlaybacks).not.toHaveBeenCalled();
 
 		resolveOutcome(outcome(masterProjection(0.35)));
@@ -101,6 +107,7 @@ describe("Playback runtime actions", () => {
 		);
 		const setError = vi.fn();
 		const model = {
+			bootstrap: { active_show: { id: SHOW_ID } },
 			client: { playbackRuntimeAction },
 			session: { desk: { id: DESK_ID } },
 			playbacks: null,
@@ -177,6 +184,7 @@ describe("Playback runtime actions", () => {
 		);
 		const setError = vi.fn();
 		const model = {
+			bootstrap: { active_show: { id: SHOW_ID } },
 			client: { playbackRuntimeAction },
 			session: { desk: { id: DESK_ID } },
 			playbacks: null,

@@ -9,6 +9,7 @@ import { PlaybackApiClient } from "./playback";
 import type { LiveClientTransport } from "./transport";
 
 const REQUEST_ID = "playback-request-1";
+const SHOW_ID = "11111111-1111-4111-8111-111111111111";
 
 const actionRequest: PlaybackActionRequest = {
 	request_id: REQUEST_ID,
@@ -55,10 +56,10 @@ describe("PlaybackApiClient v2 action boundary", () => {
 		const { client, request } = clientReturning(actionOutcome());
 
 		await expect(
-			client.playbackRuntimeAction(DESK_ID, actionRequest),
+			client.playbackRuntimeAction(SHOW_ID, DESK_ID, actionRequest),
 		).resolves.toMatchObject({ request_id: REQUEST_ID });
 		expect(request).toHaveBeenCalledWith(
-			`/api/v2/desks/${DESK_ID}/playback-actions`,
+			`/api/v2/shows/${SHOW_ID}/desks/${DESK_ID}/playback-actions`,
 			expect.objectContaining({
 				method: "POST",
 				body: JSON.stringify(actionRequest),
@@ -70,7 +71,7 @@ describe("PlaybackApiClient v2 action boundary", () => {
 		const { client } = clientReturning(actionOutcome("playback-request-2"));
 
 		await expect(
-			client.playbackRuntimeAction(DESK_ID, actionRequest),
+			client.playbackRuntimeAction(SHOW_ID, DESK_ID, actionRequest),
 		).rejects.toMatchObject({
 			name: "WireValidationError",
 			path: "$.request_id",

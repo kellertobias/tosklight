@@ -109,6 +109,7 @@ vi.mock("../../features/cueRecording/CueRecordingProvider", () => ({
 	useCueRecording: () => ({ record: mocks.recordCue }),
 }));
 vi.mock("../../features/showObjects/ShowObjectsState", () => ({
+	usePortableGroups: () => [],
 	useCueLists: () =>
 		mocks.scopedCueLists.map((body) => ({
 			kind: "cue_list",

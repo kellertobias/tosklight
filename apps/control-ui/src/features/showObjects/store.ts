@@ -350,6 +350,12 @@ export class ShowObjectsStore {
 	isCollectionReady(kind: ShowObjectKind) {
 		return this.snapshot.readyCollections.has(kind);
 	}
+	markCollectionDormant(kind: ShowObjectKind) {
+		if (!this.snapshot.readyCollections.has(kind)) return;
+		const readyCollections = new Set(this.snapshot.readyCollections);
+		readyCollections.delete(kind);
+		this.publish({ readyCollections }, NO_COLLECTIONS);
+	}
 
 	setError(error: Error) {
 		this.publish({ status: "error", error }, NO_COLLECTIONS);

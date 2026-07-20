@@ -100,7 +100,11 @@ export class ShowObjectsSession {
 	private deactivateTargets(targets: readonly HydrationTarget[]) {
 		for (const target of targets) {
 			const removed = this.scope.deactivate(target.kind, target.objectId);
-			if (removed) this.invalidateHydration(target);
+			if (removed) {
+				this.invalidateHydration(target);
+				if (target.objectId === undefined && !this.scope.isTargetActive(target))
+					this.store.markCollectionDormant(target.kind);
+			}
 		}
 		if (!this.scope.hasViews()) {
 			this.queued.clear();

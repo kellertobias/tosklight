@@ -1,119 +1,210 @@
-import { useEffect, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
-import { useApp } from "../state/AppContext";
-import { useServer } from "../api/ServerContext";
 import { Button, FormLayout, TextField } from "../components/common";
-import { emptyConfiguration } from "../components/control/PlaybackFaderBank";
-import { normalizePlaybackTopology, PlaybackConfigurationModal } from "../components/control/PlaybackConfigurationModal";
-import type { PlaybackDefinition } from "../api/types";
-import type { VirtualPlaybackExclusionZone } from "../types";
+import { VirtualPlaybackConfigurationModal } from "../components/control/VirtualPlaybackConfigurationModal";
+import { VirtualPlaybackGrid } from "../components/control/virtualPlayback/VirtualPlaybackGrid";
+import { useVirtualPlaybackController } from "../components/control/virtualPlayback/useVirtualPlaybackController";
 import type { WindowProps } from "./windowTypes";
-import { cueUpdateTarget, requestUpdateTarget } from "../components/control/updateWorkflow";
-import {
-	usePlaybackDeskView,
-	usePlaybackProjectionMap,
-} from "../features/playbackRuntime/PlaybackRuntimeView";
-import { legacyPlaybackRuntime } from "../features/playbackRuntime/legacy";
 
 export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
-  const { state, dispatch } = useApp();
-  const server = useServer();
-  const surfaceId = paneId ?? "builtin-virtual-playbacks";
-  const pane = state.desks.flatMap((desk) => desk.panes).find((candidate) => candidate.id === paneId);
-  const rows = pane?.virtualPlaybackRows ?? 2;
-  const columns = pane?.virtualPlaybackColumns ?? 2;
-  const playbackDesk = usePlaybackDeskView(active);
-  const pageNumber = playbackDesk?.active_page ?? server.playbacks?.active_page ?? state.playbackPage + 1;
-  const page = server.playbacks?.pages.find((candidate) => candidate.number === pageNumber);
-  const playbackNumbers = Array.from({ length: rows * columns }, (_, index) => page?.slots[String(index + 1)]).filter((number): number is number => number != null);
-  const runtimeByPlayback = usePlaybackProjectionMap(active ? playbackNumbers : []);
-  const [configuration, setConfiguration] = useState<{ playback: PlaybackDefinition; slot: number; empty: boolean } | null>(null);
-  const [selectedSlots, setSelectedSlots] = useState<number[]>([]);
-  const [creatingZone, setCreatingZone] = useState(false);
-  const [zoneName, setZoneName] = useState("");
-  const [builtInZones, setBuiltInZones] = useState<VirtualPlaybackExclusionZone[]>([]);
-  const zones = pane ? pane.virtualPlaybackExclusionZones ?? [] : builtInZones;
-  const configurationArmed = state.playbackSetArmed || (state.cueListSetArmed && state.cueListSetTarget == null);
-  const assignmentPending = state.cueListSetTarget != null;
+	const controller = useVirtualPlaybackController(paneId, active);
+	if (!controller.authorityReady || controller.pageNumber == null)
+		return (
+			<section className="virtual-playback-pane" aria-busy="true">
+				<p
+					role={
+						controller.topology.error || controller.runtimeStatus.error
+							? "alert"
+							: "status"
+					}
+				>
+					{controller.topology.error?.message ??
+						controller.runtimeStatus.error?.message ??
+						"Loading Virtual Playbacks…"}
+				</p>
+			</section>
+		);
+	return (
+		<section
+			className="virtual-playback-pane"
+			aria-label={`Virtual Playbacks page ${controller.pageNumber}`}
+		>
+			<VirtualPlaybackToolbar
+				pageNumber={controller.pageNumber}
+				rows={controller.rows}
+				columns={controller.columns}
+				zonesReady={controller.zones.ready}
+				zoneError={controller.zones.error}
+				actionError={controller.topologyActionError}
+				zoneCount={controller.zones.zones.length}
+				selectedSlots={controller.selectedSlots}
+				onSetSource={() => {
+					controller.dispatch({ type: "SET_CUELIST_SET_TARGET", value: null });
+					controller.dispatch({ type: "SET_CUELIST_SET_ARMED", value: true });
+				}}
+				onAddTarget={() =>
+					controller.dispatch({ type: "SET_CUELIST_SET_ARMED", value: true })
+				}
+				onCreateZone={(name) => {
+					controller.setZoneName(name);
+					controller.setCreatingZone(true);
+				}}
+				onCancelZone={() => {
+					controller.setSelectedSlots([]);
+					controller.dispatch({ type: "SET_SHIFT_ARMED", value: false });
+				}}
+			/>
+			<VirtualPlaybackGrid
+				pageNumber={controller.pageNumber}
+				page={controller.page}
+				rows={controller.rows}
+				columns={controller.columns}
+				playbacks={controller.playbacks}
+				cueLists={controller.cueLists}
+				runtimes={controller.runtimes}
+				runtimeActions={controller.runtimeActions}
+				zones={controller.zones.zones}
+				selectedSlots={controller.selectedSlots}
+				configurationArmed={controller.configurationArmed}
+				assignmentPending={controller.assignmentPending}
+				assignmentTarget={controller.state.cueListSetTarget}
+				updateArmed={controller.state.updateArmed}
+				shiftArmed={controller.state.shiftArmed}
+				onConfigure={controller.openConfiguration}
+				onAssign={(slot) => void controller.assignSource(slot)}
+				onToggleZone={controller.toggleZoneSlot}
+			/>
+			{controller.configuration && (
+				<VirtualPlaybackConfigurationModal
+					playback={controller.configuration.playback}
+					page={controller.pageNumber}
+					slot={controller.configuration.slot}
+					empty={controller.configuration.empty}
+					expectedPageRevision={
+						controller.configuration.expectedPageRevision
+					}
+					expectedPageObjectId={
+						controller.configuration.expectedPageObjectId
+					}
+					expectedPlaybackRevision={
+						controller.configuration.expectedPlaybackRevision
+					}
+					expectedPlaybackObjectId={
+						controller.configuration.expectedPlaybackObjectId
+					}
+					onClose={() => controller.setConfiguration(null)}
+				/>
+			)}
+			{controller.creatingZone && (
+				<CreateZoneModal
+					selectedSlots={controller.selectedSlots}
+					name={controller.zoneName}
+					error={controller.zones.error}
+					saving={controller.zones.saving}
+					onNameChange={controller.setZoneName}
+					onClose={() => controller.setCreatingZone(false)}
+					onCreate={() => void controller.createZone()}
+				/>
+			)}
+		</section>
+	);
+}
 
-  useEffect(() => {
-    let cancelled = false;
-    void server.readVirtualPlaybackExclusionZones()
-      .then((snapshot) => {
-        if (cancelled) return;
-        const restored = snapshot.surfaces[surfaceId] ?? [];
-        if (paneId) dispatch({ type: "SET_VIRTUAL_PLAYBACK_EXCLUSION_ZONES", id: paneId, zones: restored });
-        else setBuiltInZones(restored);
-      })
-      .catch(() => undefined);
-    return () => { cancelled = true; };
-    // Surface configuration is scoped by the authenticated desk and active show.
-  }, [paneId, server.session?.desk.id, server.bootstrap?.active_show?.id]);
+function VirtualPlaybackToolbar(props: {
+	pageNumber: number;
+	rows: number;
+	columns: number;
+	zonesReady: boolean;
+	zoneError: string | null;
+	actionError: string | null;
+	zoneCount: number;
+	selectedSlots: readonly number[];
+	onSetSource(): void;
+	onAddTarget(): void;
+	onCreateZone(name: string): void;
+	onCancelZone(): void;
+}) {
+	return (
+		<header className="virtual-playback-toolbar">
+			<Button onClick={props.onSetSource}>Set Source</Button>
+			<Button onClick={props.onAddTarget}>Add Target</Button>
+			{props.zonesReady && props.selectedSlots.length >= 2 && (
+				<Button
+					className="primary"
+					onClick={() =>
+						props.onCreateZone(`Exclusion Zone ${props.zoneCount + 1}`)
+					}
+				>
+					Create Exclusion Zone
+				</Button>
+			)}
+			{props.selectedSlots.length > 0 && (
+				<Button onClick={props.onCancelZone}>Cancel zone selection</Button>
+			)}
+			<span>
+				{props.selectedSlots.length > 0
+					? `${props.selectedSlots.length} cells selected · `
+					: ""}
+				Page {props.pageNumber} · {props.rows}×{props.columns}
+				{!props.zonesReady && !props.zoneError ? " · Loading zones…" : ""}
+			</span>
+			{props.zoneError && <span role="alert">{props.zoneError}</span>}
+			{props.actionError && <span role="alert">{props.actionError}</span>}
+		</header>
+	);
+}
 
-  useEffect(() => setSelectedSlots((current) => current.filter((slot) => slot <= rows * columns)), [rows, columns]);
-
-  const openConfiguration = (playback: PlaybackDefinition | null, slot: number) => {
-    const next = playback ?? emptyConfiguration(pageNumber, slot, 1, false, server.playbacks?.cue_lists[0]?.id ?? "");
-    setConfiguration({ playback: normalizePlaybackTopology({ ...next, button_count: 1, has_fader: false }, 1, false), slot, empty: !playback });
-    dispatch({ type: "SET_PLAYBACK_SET_ARMED", value: false });
-    dispatch({ type: "SET_CUELIST_SET_ARMED", value: false });
-    dispatch({ type: "SET_SHIFT_ARMED", value: false });
-  };
-  const assignSource = async (slot: number) => {
-    if (state.cueListSetTarget == null) return;
-    const source = server.playbacks?.pool.find((candidate) => candidate.number === state.cueListSetTarget);
-    if (!source || source.target.type !== "cue_list") return;
-    const draft = emptyConfiguration(pageNumber, slot, 1, false, source.target.cue_list_id);
-    const saved = await server.savePlaybackSlot(pageNumber, slot, { ...draft, name: source.name, color: source.color, buttons: [source.buttons[0] === "none" ? "go" : source.buttons[0], "none", "none"], presentation_icon: source.presentation_icon, presentation_image: source.presentation_image });
-    if (saved) dispatch({ type: "SET_CUELIST_SET_ARMED", value: false });
-  };
-  const toggleZoneSlot = (slot: number) => setSelectedSlots((current) => current.includes(slot) ? current.filter((candidate) => candidate !== slot) : [...current, slot].sort((left, right) => left - right));
-  const createZone = async () => {
-    const name = zoneName.trim();
-    if (!name || selectedSlots.length < 2) return;
-    const zone: VirtualPlaybackExclusionZone = { id: crypto.randomUUID(), name, slots: [...selectedSlots] };
-    const next = [...zones, zone];
-    if (!await server.saveVirtualPlaybackExclusionZones(surfaceId, next)) return;
-    if (paneId) dispatch({ type: "SET_VIRTUAL_PLAYBACK_EXCLUSION_ZONES", id: paneId, zones: next });
-    else setBuiltInZones(next);
-    dispatch({ type: "SET_SHIFT_ARMED", value: false });
-    setSelectedSlots([]);
-    setZoneName("");
-    setCreatingZone(false);
-  };
-
-  return <section className="virtual-playback-pane" aria-label={`Virtual Playbacks page ${pageNumber}`}>
-    <header className="virtual-playback-toolbar"><Button onClick={() => { dispatch({ type: "SET_CUELIST_SET_TARGET", value: null }); dispatch({ type: "SET_CUELIST_SET_ARMED", value: true }); }}>Set Source</Button><Button onClick={() => dispatch({ type: "SET_CUELIST_SET_ARMED", value: true })}>Add Target</Button>{selectedSlots.length >= 2 && <Button className="primary" onClick={() => { setZoneName(`Exclusion Zone ${zones.length + 1}`); setCreatingZone(true); }}>Create Exclusion Zone</Button>}{selectedSlots.length > 0 && <Button onClick={() => { setSelectedSlots([]); dispatch({ type: "SET_SHIFT_ARMED", value: false }); }}>Cancel zone selection</Button>}<span>{selectedSlots.length > 0 ? `${selectedSlots.length} cells selected · ` : ""}Page {pageNumber} · {rows}×{columns}</span></header>
-    <div className="virtual-playback-grid" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` }}>
-      {Array.from({ length: rows * columns }, (_, index) => {
-        const slot = index + 1;
-        const number = page?.slots[String(slot)];
-        const playback = server.playbacks?.pool.find((candidate) => candidate.number === number) ?? null;
-        const runtime = legacyPlaybackRuntime(playback ? runtimeByPlayback.get(playback.number) : undefined) ?? (playback ? server.playbacks?.active.find((candidate) => candidate.playback_number === playback.number) : undefined);
-        const playbackCueListId = playback?.target.type === "cue_list" ? playback.target.cue_list_id : null;
-        const cueList = playbackCueListId ? server.playbacks?.cue_lists.find((candidate) => candidate.id === playbackCueListId) : null;
-        const currentCue = cueList && runtime && runtime.cue_index >= 0 ? cueList.cues[runtime.cue_index] : null;
-        const requestPlaybackUpdate = () => {
-          if (!playback || playback.target.type !== "cue_list") return;
-          requestUpdateTarget(cueUpdateTarget(playback.target.cue_list_id, playback.number, currentCue?.id ? { id: currentCue.id, number: currentCue.number } : null));
-        };
-        const action = playback?.buttons[0] ?? "none";
-        const held = action === "flash" || action === "swap";
-        const background = playback?.presentation_image ? `linear-gradient(#08101488,#081014cc),url(${JSON.stringify(playback.presentation_image)})` : undefined;
-        const style = playback ? { "--playback-color": playback.color ?? "#20c997", backgroundImage: background } as CSSProperties : undefined;
-        const selectedForZone = selectedSlots.includes(slot);
-        const containingZones = zones.filter((zone) => zone.slots.includes(slot));
-        const intercept = (event: ReactPointerEvent<HTMLButtonElement>) => { if (state.updateArmed) { event.preventDefault(); event.stopPropagation(); return true; } if (state.shiftArmed || event.shiftKey) { event.preventDefault(); event.stopPropagation(); return true; } if (!configurationArmed) return false; event.preventDefault(); event.stopPropagation(); openConfiguration(playback, slot); return true; };
-        return <Button key={slot} aria-label={`Virtual playback page ${pageNumber} cell ${slot}${playback ? ` ${playback.name}` : " empty"}`} aria-pressed={selectedForZone} data-exclusion-zones={containingZones.map((zone) => zone.name).join(", ")} className={`virtual-playback-cell ${playback ? "playback-colored" : ""} ${runtime?.enabled !== false && runtime ? "running" : ""} ${configurationArmed ? "configuration-armed" : ""} ${assignmentPending ? "assignment-pending" : ""} ${selectedForZone ? "exclusion-selected" : ""} ${containingZones.length > 0 ? "exclusion-member" : ""} ${state.updateArmed ? "update-target" : ""}`} style={style}
-          onPointerDown={(event) => { if (intercept(event)) return; if (assignmentPending) { event.preventDefault(); return; } if (playback && held) { event.currentTarget.setPointerCapture?.(event.pointerId); void server.poolPlaybackAction(playback.number, "button", { button: 1, pressed: true, surface: "virtual" }); } }}
-          onPointerUp={(event) => !state.updateArmed && !(state.shiftArmed || event.shiftKey) && playback && held && void server.poolPlaybackAction(playback.number, "button", { button: 1, pressed: false, surface: "virtual" })}
-          onPointerCancel={(event) => !state.updateArmed && !(state.shiftArmed || event.shiftKey) && playback && held && void server.poolPlaybackAction(playback.number, "button", { button: 1, pressed: false, surface: "virtual" })}
-          onLostPointerCapture={(event) => !state.updateArmed && !(state.shiftArmed || event.shiftKey) && playback && held && void server.poolPlaybackAction(playback.number, "button", { button: 1, pressed: false, surface: "virtual" })}
-          onClick={(event) => { if (state.updateArmed) { event.preventDefault(); requestPlaybackUpdate(); return; } if (state.shiftArmed || event.shiftKey) { event.preventDefault(); toggleZoneSlot(slot); return; } if (configurationArmed) { event.preventDefault(); openConfiguration(playback, slot); return; } if (assignmentPending) { void assignSource(slot); return; } if (playback && !held && action !== "none") void server.poolPlaybackAction(playback.number, "button", { button: 1, pressed: true, surface: "virtual" }); }}>
-          <span>{playback?.presentation_icon ?? slot}</span><b>{playback?.name ?? "Empty"}</b><small>{selectedForZone ? "Selected for exclusion zone" : assignmentPending ? `Assign Cuelist ${state.cueListSetTarget}` : configurationArmed ? "Configure Playback" : containingZones.length > 0 ? containingZones.map((zone) => zone.name).join(" · ") : playback ? `${action.replaceAll("_", " ").toUpperCase()}${runtime ? ` · Cue ${(runtime.cue_index ?? 0) + 1}` : ""}` : "Unassigned"}</small>
-        </Button>;
-      })}
-    </div>
-    {configuration && <PlaybackConfigurationModal playback={configuration.playback} page={pageNumber} slot={configuration.slot} empty={configuration.empty} virtual onClose={() => setConfiguration(null)}/>}
-    {creatingZone && <div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && setCreatingZone(false)}><section className="nested-modal virtual-playback-zone-modal" role="dialog" aria-modal="true" aria-label="Create Exclusion Zone"><Button className="modal-close" onClick={() => setCreatingZone(false)}>×</Button><h3>Create Exclusion Zone</h3><p>Cells {selectedSlots.join(", ")} on the current page will be mutually exclusive. Creating the zone does not operate any playback.</p><FormLayout labelPlacement="side"><TextField label="Zone name" autoFocus maxLength={80} value={zoneName} onChange={(event) => setZoneName(event.target.value)}/></FormLayout><footer><Button onClick={() => setCreatingZone(false)}>Cancel</Button><Button className="primary" disabled={!zoneName.trim() || selectedSlots.length < 2} onClick={() => void createZone()}>Create zone</Button></footer>{server.error && <p className="modal-error">{server.error}</p>}</section></div>}
-  </section>;
+function CreateZoneModal(props: {
+	selectedSlots: readonly number[];
+	name: string;
+	error: string | null;
+	saving: boolean;
+	onNameChange(name: string): void;
+	onClose(): void;
+	onCreate(): void;
+}) {
+	return (
+		<div
+			className="stacked-modal-layer"
+			onPointerDown={(event) =>
+				event.target === event.currentTarget && props.onClose()
+			}
+		>
+			<section
+				className="nested-modal virtual-playback-zone-modal"
+				role="dialog"
+				aria-modal="true"
+				aria-label="Create Exclusion Zone"
+			>
+				<Button className="modal-close" onClick={props.onClose}>×</Button>
+				<h3>Create Exclusion Zone</h3>
+				<p>
+					Cells {props.selectedSlots.join(", ")} on the current page will be
+					mutually exclusive. Creating the zone does not operate any playback.
+				</p>
+				<FormLayout labelPlacement="side">
+					<TextField
+						label="Zone name"
+						autoFocus
+						maxLength={80}
+						value={props.name}
+						onChange={(event) => props.onNameChange(event.target.value)}
+					/>
+				</FormLayout>
+				<footer>
+					<Button onClick={props.onClose}>Cancel</Button>
+					<Button
+						className="primary"
+						disabled={
+							props.saving ||
+							!props.name.trim() ||
+							props.selectedSlots.length < 2
+						}
+						onClick={props.onCreate}
+					>
+						{props.saving ? "Creating…" : "Create zone"}
+					</Button>
+				</footer>
+				{props.error && <p className="modal-error">{props.error}</p>}
+			</section>
+		</div>
+	);
 }

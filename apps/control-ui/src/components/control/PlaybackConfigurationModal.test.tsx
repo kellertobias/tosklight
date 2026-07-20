@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlaybackDefinition } from "../../api/types";
 import {
 	normalizePlaybackTopology,
+	PlaybackConfigurationDialog,
 	PlaybackConfigurationModal,
 	withFunctionDefaults,
 } from "./PlaybackConfigurationModal";
@@ -28,7 +29,7 @@ const mocks = vi.hoisted(() => ({
 	scopedCueLists: [
 		{ id: "cue-1", name: "Main sequence" },
 		{ id: "cue-2", name: "Encore" },
-	],
+	] as Array<{ id: string; name: string; storageId?: string }>,
 	groups: [{ id: "group-1", body: { name: "Front Wash" } }],
 }));
 
@@ -43,13 +44,14 @@ vi.mock("../../features/server/useShowObjectsState", () => ({
 	useGroups: () => mocks.groups,
 }));
 vi.mock("../../features/showObjects/ShowObjectsState", () => ({
+	usePortableGroups: () => mocks.groups,
 	useCueLists: () =>
 		mocks.scopedCueLists.map((body) => ({
 			kind: "cue_list",
-			id: body.id,
+			id: body.storageId ?? body.id,
 			revision: 1,
 			updated_at: "",
-			body,
+			body: { id: body.id, name: body.name },
 		})),
 }));
 
@@ -118,6 +120,32 @@ function choose(label: string, option: string) {
 }
 
 describe("PlaybackConfigurationModal function and behavior", () => {
+	it("uses a Cuelist semantic ID instead of its legacy storage key", async () => {
+		const cueListId = "11111111-1111-4111-8111-111111111111";
+		mocks.scopedCueLists = [
+			{ id: cueListId, name: "Legacy Main", storageId: "main" },
+		];
+		show({ ...base, target: { type: "cue_list", cue_list_id: cueListId } });
+
+		const option = screen.getByRole("radio", { name: "Legacy Main" });
+		expect(option).toHaveAttribute("aria-checked", "true");
+		fireEvent.click(option);
+		fireEvent.change(screen.getByLabelText("Playback name"), {
+			target: { value: "Changed" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+		await waitFor(() =>
+			expect(mocks.savePlaybackSlot).toHaveBeenCalledWith(
+				2,
+				4,
+				expect.objectContaining({
+					target: { type: "cue_list", cue_list_id: cueListId },
+				}),
+			),
+		);
+	});
+
 	it("uses three tabs, title-bar Apply, Close, and no footer Cancel", () => {
 		show();
 		for (const tab of ["Function", "Behavior", "Layout"])
@@ -423,6 +451,37 @@ describe("PlaybackConfigurationModal layout and persistence", () => {
 			screen.queryByText("Middle button", { selector: "label", exact: true }),
 		).not.toBeInTheDocument();
 		expect(screen.getByText("No fader on this playback.")).toBeInTheDocument();
+	});
+
+	it("replaces a generic failed Apply message with the scoped action error", async () => {
+		const save = vi.fn().mockResolvedValue(false);
+		const props = {
+			playback: base,
+			page: 2,
+			slot: 4,
+			fallbackButtons: 1,
+			save,
+			clear: vi.fn().mockResolvedValue(false),
+			onClose: vi.fn(),
+		};
+		const rendered = render(
+			<PlaybackConfigurationDialog {...props} error={null} virtual />,
+		);
+		fireEvent.change(screen.getByLabelText("Playback name"), {
+			target: { value: "Changed" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+		await screen.findByText("Playback configuration could not be saved.");
+
+		rendered.rerender(
+			<PlaybackConfigurationDialog
+				{...props}
+				error="stale Playback revision"
+				virtual
+			/>,
+		);
+
+		await screen.findByText("stale Playback revision");
 	});
 });
 

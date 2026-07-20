@@ -57,6 +57,7 @@ export function ServerProgrammingProviders({
 				store={state.playbackRuntimeStore}
 				transport={boundaries.playbackTransport}
 				loadSnapshot={boundaries.loadPlaybackSnapshot}
+				applyAction={boundaries.applyPlaybackRuntimeAction}
 				initialDesk={
 					state.playbacks
 						? {

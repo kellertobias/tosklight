@@ -1,13 +1,12 @@
 import { createPortal } from "react-dom";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { PlaybackButtonAction, PlaybackDefinition } from "../../api/types";
 import { useServer } from "../../api/ServerContext";
 import { Button, ColorPickerField, FormField, FormLayout, MultiValueToggleField, SelectField, SwitchField, TextField } from "../common";
 import { ModalTitleBar } from "../common/ModalTitleBar";
 import { SelectionTree, WindowScrollArea, type SelectionListOption } from "../window-kit";
 import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
-import { useCueLists } from "../../features/showObjects/ShowObjectsState";
-import { useGroups } from "../../features/server/useShowObjectsState";
+import { useCueLists, usePortableGroups } from "../../features/showObjects/ShowObjectsState";
 
 export const PLAYBACK_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16", "#22c55e", "#20c997", "#06b6d4", "#0ea5e9", "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#ec4899", "#f43f5e", "#f8fafc"] as const;
 
@@ -66,19 +65,34 @@ export interface PlaybackConfigurationModalProps {
 }
 
 export function PlaybackConfigurationModal({ playback, page, slot, empty = false, virtual = false, onClose }: PlaybackConfigurationModalProps) {
+  const server = useServer();
+  return <PlaybackConfigurationDialog playback={playback} page={page} slot={slot} empty={empty} virtual={virtual} fallbackButtons={virtual ? 1 : server.playbacks?.desk.buttons ?? 3} save={server.savePlaybackSlot} clear={server.clearPlaybackSlot} error={server.error} onClose={onClose}/>;
+}
+
+export interface PlaybackConfigurationDialogProps extends PlaybackConfigurationModalProps {
+  fallbackButtons: number;
+  save: (page: number, slot: number, playback: PlaybackDefinition) => Promise<boolean>;
+  clear: (page: number, slot: number) => Promise<boolean>;
+  error?: string | null;
+}
+
+/** Shared modal body; callers choose the physical or scoped topology mutation boundary. */
+export function PlaybackConfigurationDialog({ playback, page, slot, empty = false, virtual = false, fallbackButtons, save, clear, error, onClose }: PlaybackConfigurationDialogProps) {
   useShowObjectView("group");
   useShowObjectView("cue_list");
-  const server = useServer();
-  const groups = useGroups(server.playbacks);
+  const groups = usePortableGroups();
   const cueListObjects = useCueLists();
-  const cueLists = useMemo(() => cueListObjects.map(({ id, body }) => ({ id, name: body.name || id })), [cueListObjects]);
-  const [initialDraft] = useState(() => normalizePlaybackTopology(playback, virtual ? 1 : server.playbacks?.desk.buttons ?? 3, !virtual));
+  const cueLists = useMemo(() => cueListObjects.map(({ body }) => ({ id: body.id, name: body.name || body.id })), [cueListObjects]);
+  const [initialDraft] = useState(() => normalizePlaybackTopology(playback, fallbackButtons, !virtual));
   const [draft, setDraft] = useState(initialDraft);
   const initialFamily = familyFromTarget(initialDraft.target.type);
   const [family, setFamily] = useState<PlaybackFamily>(initialFamily);
   const [tab, setTab] = useState<PlaybackTab>("function");
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  useEffect(() => {
+    if (failure && error && failure !== error) setFailure(error);
+  }, [error, failure]);
   const presentation = draft.presentation_image ? "image" : draft.presentation_icon ? "icon" : "label";
   const targetValid = family === "none" || ((draft.target.type !== "cue_list" || Boolean(draft.target.cue_list_id)) && (draft.target.type !== "group" || Boolean(draft.target.group_id)));
   const currentPayload = cleanPresentation(normalizePlaybackTopology(draft, draft.button_count ?? 3, Boolean(draft.has_fader)));
@@ -90,11 +104,11 @@ export function PlaybackConfigurationModal({ playback, page, slot, empty = false
   const apply = async () => {
     setBusy(true); setFailure(null);
     const succeeded = family === "none"
-      ? await server.clearPlaybackSlot(page, slot)
-      : await server.savePlaybackSlot(page, slot, cleanPresentation(normalizePlaybackTopology(draft, draft.button_count ?? 3, Boolean(draft.has_fader))));
+      ? await clear(page, slot)
+      : await save(page, slot, cleanPresentation(normalizePlaybackTopology(draft, draft.button_count ?? 3, Boolean(draft.has_fader))));
     setBusy(false);
     if (succeeded) onClose();
-    else setFailure(server.error ?? (family === "none" ? "Playback could not be cleared." : "Playback configuration could not be saved."));
+    else setFailure(error ?? (family === "none" ? "Playback could not be cleared." : "Playback configuration could not be saved."));
   };
   const chooseFamily = (next: PlaybackFamily) => {
     setFamily(next);

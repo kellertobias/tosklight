@@ -63,16 +63,16 @@ export function usePresets(): readonly PresetObject[] {
 	return useShowObjectsSelector(selectPresets, shallowEqualArray);
 }
 
-export function useCueLists(): readonly ShowObject<"cue_list">[] {
-	return useShowObjectsSelector(selectCueLists, shallowEqualArray);
+export function useCueLists(enabled = true): readonly ShowObject<"cue_list">[] {
+	return useShowObjectsSelector(selectCueLists, shallowEqualArray, enabled);
 }
 
-export function usePlaybackDefinitions(): readonly ShowObject<"playback">[] {
-	return useShowObjectsSelector(selectPlaybacks, shallowEqualArray);
+export function usePlaybackDefinitions(enabled = true): readonly ShowObject<"playback">[] {
+	return useShowObjectsSelector(selectPlaybacks, shallowEqualArray, enabled);
 }
 
-export function usePlaybackPages(): readonly ShowObject<"playback_page">[] {
-	return useShowObjectsSelector(selectPlaybackPages, shallowEqualArray);
+export function usePlaybackPages(enabled = true): readonly ShowObject<"playback_page">[] {
+	return useShowObjectsSelector(selectPlaybackPages, shallowEqualArray, enabled);
 }
 
 export function useShowObjectMutationState(
@@ -90,16 +90,33 @@ export function useShowObjectMutationState(
 	return useShowObjectsSelector(selector, equalMutationState);
 }
 
-export function useShowObjectsStatus(): Pick<
+export function useShowObjectsStatus(enabled = true): Pick<
 	ShowObjectsSnapshot,
 	"status" | "error"
 > {
-	return useShowObjectsSelector(selectStatus, equalStatus);
+	return useShowObjectsSelector(selectStatus, equalStatus, enabled);
+}
+
+export function useShowObjectCollectionsReady(
+	kinds: readonly ShowObjectKind[],
+	enabled = true,
+): boolean {
+	const key = kinds.join("|");
+	const selector = useCallback(
+		(snapshot: ShowObjectsSnapshot) =>
+			key.length > 0 &&
+			key
+				.split("|")
+				.every((kind) => snapshot.readyCollections.has(kind as ShowObjectKind)),
+		[key],
+	);
+	return useShowObjectsSelector(selector, Object.is, enabled);
 }
 
 function useShowObjectsSelector<T>(
 	selector: (snapshot: ShowObjectsSnapshot) => T,
 	equal: (left: T, right: T) => boolean = Object.is,
+	enabled = true,
 ): T {
 	const store = useShowObjectsStore();
 	const cache = useRef<{
@@ -128,8 +145,14 @@ function useShowObjectsSelector<T>(
 		cache.current = { source, selection, hasSelection: true, selector };
 		return selection;
 	}, [equal, selector, store]);
-	return useSyncExternalStore(store.subscribe, getSelection, getSelection);
+	return useSyncExternalStore(
+		enabled ? store.subscribe : NO_SUBSCRIPTION,
+		getSelection,
+		getSelection,
+	);
 }
+
+const NO_SUBSCRIPTION = () => () => undefined;
 
 function shallowEqualArray<T>(left: readonly T[], right: readonly T[]) {
 	return (

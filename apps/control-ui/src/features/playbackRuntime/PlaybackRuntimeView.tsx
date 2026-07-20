@@ -8,6 +8,11 @@ import {
 	useRef,
 	useSyncExternalStore,
 } from "react";
+import {
+	PlaybackRuntimeActionWriter,
+	type PlaybackRuntimeActionApply,
+	type PlaybackRuntimeActions,
+} from "./actionWriter";
 import type { PlaybackIdentity, PlaybackProjection } from "./contracts";
 import { cueListIdentity, identityKey, playbackIdentity } from "./contracts";
 import { legacyPlaybackRuntime } from "./legacy";
@@ -17,20 +22,23 @@ import {
 } from "./session";
 import { type PlaybackRuntimeState, PlaybackRuntimeStore } from "./store";
 import type { PlaybackEventTransport } from "./transport";
+import { useStrictModeSafeStop } from "../shared/useStrictModeSafeStop";
 
-interface PlaybackRuntimeViewProviderProps {
+export interface PlaybackRuntimeViewProviderProps {
 	showId: string | null;
 	deskId: string | null;
 	authorityKey: string;
 	store: PlaybackRuntimeStore;
 	transport: PlaybackEventTransport | null;
 	loadSnapshot: PlaybackRuntimeSessionOptions["loadSnapshot"];
+	applyAction?: PlaybackRuntimeActionApply | null;
 	initialDesk?: { activePage: number; selectedPlayback: number | null } | null;
 	onError?: (error: Error | null) => void;
 }
 
 const StoreContext = createContext<PlaybackRuntimeStore | null>(null);
 const SessionContext = createContext<PlaybackRuntimeSession | null>(null);
+const ActionsContext = createContext<PlaybackRuntimeActions | null>(null);
 const fallbackStore = new PlaybackRuntimeStore();
 
 export function PlaybackRuntimeViewProvider({
@@ -41,6 +49,7 @@ export function PlaybackRuntimeViewProvider({
 	store,
 	transport,
 	loadSnapshot,
+	applyAction,
 	initialDesk,
 	onError,
 }: PropsWithChildren<PlaybackRuntimeViewProviderProps>) {
@@ -59,21 +68,40 @@ export function PlaybackRuntimeViewProvider({
 				: null,
 		[authorityKey, deskId, loadSnapshot, onError, showId, store, transport],
 	);
+	const actions = useMemo(
+		() =>
+			showId && deskId && applyAction
+				? new PlaybackRuntimeActionWriter({
+						showId,
+						deskId,
+						store,
+						applyAction,
+					})
+				: null,
+		[applyAction, authorityKey, deskId, showId, store],
+	);
 	useEffect(() => {
 		if (!session) store.reset(showId, deskId, authorityKey);
-		return () => session?.stop();
 	}, [authorityKey, deskId, session, showId, store]);
+	useStrictModeSafeStop(session);
 	useEffect(() => {
 		if (initialDesk)
 			store.seedDesk(initialDesk.activePage, initialDesk.selectedPlayback);
 	}, [authorityKey, initialDesk, store]);
+	useStrictModeSafeStop(actions);
 	return (
 		<StoreContext.Provider value={store}>
 			<SessionContext.Provider value={session}>
-				{children}
+				<ActionsContext.Provider value={actions}>
+					{children}
+				</ActionsContext.Provider>
 			</SessionContext.Provider>
 		</StoreContext.Provider>
 	);
+}
+
+export function usePlaybackRuntimeActions() {
+	return useContext(ActionsContext);
 }
 
 export function usePlaybackRuntimeView(
@@ -104,6 +132,7 @@ export function usePlaybackDeskView(enabled = true) {
 			[enabled],
 		),
 		Object.is,
+		enabled,
 	);
 }
 
@@ -187,16 +216,18 @@ export function usePlaybackProjectionMap(playbackNumbers: readonly number[]) {
 			[key],
 		),
 		equalProjectionMap,
+		playbackNumbers.length > 0,
 	);
 }
 
-export function usePlaybackRuntimeStatus() {
-	return usePlaybackSelector(selectStatus, equalStatus);
+export function usePlaybackRuntimeStatus(enabled = true) {
+	return usePlaybackSelector(selectStatus, equalStatus, enabled);
 }
 
 function usePlaybackSelector<T>(
 	selector: (state: PlaybackRuntimeState) => T,
 	equal: (left: T, right: T) => boolean,
+	enabled = true,
 ) {
 	const store = useContext(StoreContext) ?? fallbackStore;
 	const cache = useRef<{ state: PlaybackRuntimeState | null; value?: T }>({
@@ -213,8 +244,14 @@ function usePlaybackSelector<T>(
 		cache.current = { state, value };
 		return value;
 	}, [equal, selector, store]);
-	return useSyncExternalStore(store.subscribe, getSelection, getSelection);
+	return useSyncExternalStore(
+		enabled ? store.subscribe : NO_SUBSCRIPTION,
+		getSelection,
+		getSelection,
+	);
 }
+
+const NO_SUBSCRIPTION = () => () => undefined;
 
 function equalProjectionMap(
 	left: ReadonlyMap<number, PlaybackProjection | undefined>,

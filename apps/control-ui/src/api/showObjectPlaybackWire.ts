@@ -39,41 +39,45 @@ const BUTTON_ACTIONS = [
 export function decodePlaybackBody(
 	value: unknown,
 	path: string,
-	objectId?: string,
+	_objectId?: string,
 ): PlaybackDefinition {
 	const playback = recordAt(value, path);
+	// Legacy portable objects may retain a non-numeric storage ID; `number` is the desk identity.
 	const number = positiveIntegerAt(playback.number, `${path}.number`, 1000);
-	if (objectId != null && String(number) !== objectId)
-		invalid(`${path}.number`, `object ID ${objectId}`, number);
+	const target = decodeTarget(playback.target, `${path}.target`);
 	const buttons = arrayAt(
-		playback.buttons ?? ["none", "none", "none"],
+		playback.buttons ?? defaultButtons(target),
 		`${path}.buttons`,
 	);
 	if (buttons.length !== 3) invalid(`${path}.buttons`, "three actions", buttons);
+	const fader = optionalEnum(
+		playback,
+		"fader",
+		path,
+		[
+			"master",
+			"temp",
+			"speed",
+			"x_fade",
+			"direct_bpm",
+			"centered_relative",
+			"learned_percentage",
+		],
+		defaultFader(target),
+	);
 	return {
 		...playback,
 		number,
 		name: plainStringAt(playback.name, `${path}.name`),
-		target: decodeTarget(playback.target, `${path}.target`),
+		target,
 		buttons: buttons.map((button, index) =>
 			enumAt(button, `${path}.buttons[${index}]`, BUTTON_ACTIONS),
 		) as PlaybackDefinition["buttons"],
 		button_count: optionalBoundedInteger(playback, "button_count", path, 3, 3),
-		fader: optionalEnum(
-			playback,
-			"fader",
-			path,
-			[
-				"master",
-				"temp",
-				"speed",
-				"x_fade",
-				"direct_bpm",
-				"centered_relative",
-				"learned_percentage",
-			],
-			"master",
-		),
+		fader:
+			target.type === "speed_group" && fader === "speed"
+				? "learned_percentage"
+				: fader,
 		has_fader: optionalBoolean(playback, "has_fader", path, true),
 		go_activates: optionalBoolean(playback, "go_activates", path, true),
 		auto_off: optionalBoolean(playback, "auto_off", path, true),
@@ -108,12 +112,11 @@ export function decodePlaybackBody(
 export function decodePlaybackPageBody(
 	value: unknown,
 	path: string,
-	objectId?: string,
+	_objectId?: string,
 ): PlaybackPage {
 	const page = recordAt(value, path);
+	// Page object keys are lossless storage identities and need not equal the page number.
 	const number = positiveIntegerAt(page.number, `${path}.number`, 127);
-	if (objectId != null && String(number) !== objectId)
-		invalid(`${path}.number`, `object ID ${objectId}`, number);
 	const slots = recordAt(page.slots ?? {}, `${path}.slots`);
 	const decodedSlots = Object.fromEntries(
 		Object.entries(slots).map(([slot, number]) => [
@@ -154,6 +157,22 @@ function decodeTarget(value: unknown, path: string) {
 	if (type === "speed_group")
 		return { ...target, type, group: stringAt(target.group, `${path}.group`) };
 	return { ...target, type };
+}
+
+function defaultButtons(
+	target: PlaybackDefinition["target"],
+): PlaybackDefinition["buttons"] {
+	if (target.type === "cue_list") return ["go_minus", "go", "flash"];
+	if (target.type === "group")
+		return ["select", "select_dereferenced", "flash"];
+	if (target.type === "speed_group") return ["double", "half", "learn"];
+	if (target.type === "programmer_fade" || target.type === "cue_fade")
+		return ["double", "half", "off"];
+	return ["blackout", "pause_dynamics", "flash"];
+}
+
+function defaultFader(target: PlaybackDefinition["target"]) {
+	return target.type === "speed_group" ? "learned_percentage" : "master";
 }
 
 function positiveIntegerAt(value: unknown, path: string, maximum: number) {

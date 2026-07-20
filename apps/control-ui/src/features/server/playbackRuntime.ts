@@ -19,15 +19,23 @@ export function createPlaybackRuntimeActions(
 	| "saveVirtualPlaybackExclusionZones"
 	| "setPlaybackPage"
 > {
-	const { client, setError, playbacks, session, playbackRuntimeStore } = model;
+	const {
+		bootstrap,
+		client,
+		setError,
+		playbacks,
+		session,
+		playbackRuntimeStore,
+	} = model;
 	return {
 		playbackAction: async (cueListId, action) => {
-			if (!session) return;
+			if (!session || !bootstrap?.active_show) return;
 			const requestToken = playbackRuntimeStore.beginRequest(
 				cueListIdentity(cueListId),
 			);
 			try {
 				const outcome = await client.playbackRuntimeAction(
+					bootstrap.active_show.id,
 					session.desk.id,
 					cueListPlaybackRequest(cueListId, action),
 				);
@@ -40,7 +48,7 @@ export function createPlaybackRuntimeActions(
 			}
 		},
 		poolPlaybackAction: async (number, action, input = {}) => {
-			if (!session) return;
+			if (!session || !bootstrap?.active_show) return;
 			const requestToken =
 				action === "master" && input.value != null
 					? playbackRuntimeStore.beginOptimisticMaster(number, input.value)
@@ -50,6 +58,7 @@ export function createPlaybackRuntimeActions(
 				playbackRuntimeStore.beginRequest(playbackIdentity(number));
 			try {
 				const outcome = await client.playbackRuntimeAction(
+					bootstrap.active_show.id,
 					session.desk.id,
 					poolPlaybackRequest(number, action, input),
 				);

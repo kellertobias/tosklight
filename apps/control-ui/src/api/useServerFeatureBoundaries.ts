@@ -14,6 +14,7 @@ import { useProgrammerValuesBoundaries } from "./useProgrammerValuesBoundaries";
 import { usePresetRecordingBoundaries } from "./usePresetRecordingBoundaries";
 import { useGroupRecordingBoundaries } from "./useGroupRecordingBoundaries";
 import { useCueRecordingBoundaries } from "./useCueRecordingBoundaries";
+import { usePlaybackTopologyBoundaries } from "./usePlaybackTopologyBoundaries";
 
 export function useServerFeatureBoundaries(state: ServerState) {
 	const programmingErrors = useMemo(
@@ -25,6 +26,7 @@ export function useServerFeatureBoundaries(state: ServerState) {
 	const presetRecording = usePresetRecordingBoundaries(state);
 	const groupRecording = useGroupRecordingBoundaries(state);
 	const cueRecording = useCueRecordingBoundaries(state);
+	const playbackTopology = usePlaybackTopologyBoundaries(state);
 	const showObjectsAuthorityKey = [
 		configuredServerUrl(),
 		state.connectionGeneration,
@@ -129,6 +131,7 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		...presetRecording,
 		...groupRecording,
 		...cueRecording,
+		...playbackTopology,
 		loadPlaybackSnapshot,
 		loadProgrammingInteractionSnapshot,
 		loadShowObjectCollection,

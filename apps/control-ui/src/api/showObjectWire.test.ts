@@ -60,6 +60,16 @@ describe("show-object wire decoders", () => {
 		});
 	});
 
+	it("keeps a legacy Cuelist storage key separate from its semantic ID", () => {
+		const decoded = decodeShowObject(
+			versioned("cue_list", "legacy-main-list", cueListBody()),
+			"cue_list",
+		);
+
+		expect(decoded.id).toBe("legacy-main-list");
+		expect(decoded.body.id).toBe(CUE_LIST_ID);
+	});
+
 	it("decodes current Playback and page topology with legacy defaults", () => {
 		const playback = decodeShowObject(
 			versioned("playback", "7", {
@@ -80,6 +90,7 @@ describe("show-object wire decoders", () => {
 		);
 
 		expect(playback.body).toMatchObject({
+			buttons: ["go_minus", "go", "flash"],
 			button_count: 3,
 			fader: "master",
 			has_fader: true,
@@ -89,14 +100,37 @@ describe("show-object wire decoders", () => {
 		expect(page.body.slots).toEqual({ 1: 7 });
 	});
 
+	it("uses target-aware defaults and migrates a legacy Speed Group fader", () => {
+		const missing = decodeShowObject(
+			versioned("playback", "speed-a", {
+				number: 8,
+				name: "Speed A",
+				target: { type: "speed_group", group: "A" },
+			}),
+			"playback",
+		);
+		const legacy = decodeShowObject(
+			versioned("playback", "speed-b", {
+				number: 9,
+				name: "Speed B",
+				target: { type: "speed_group", group: "B" },
+				buttons: ["double", "half", "learn"],
+				fader: "speed",
+			}),
+			"playback",
+		);
+
+		expect(missing.body).toMatchObject({
+			buttons: ["double", "half", "learn"],
+			fader: "learned_percentage",
+		});
+		expect(legacy.body.fader).toBe("learned_percentage");
+	});
+
 	it.each([
 		[
 			"mismatched object kind",
 			versioned("preset", CUE_LIST_ID, cueListBody()),
-		],
-		[
-			"mismatched CueList identity",
-			versioned("cue_list", "other", cueListBody()),
 		],
 		[
 			"invalid Cue number",
