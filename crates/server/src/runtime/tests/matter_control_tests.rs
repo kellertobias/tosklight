@@ -112,15 +112,18 @@ fn matter_virtual_master_controls_and_tracks_a_faderless_assignment() {
 
     let rejected = dispatch_playback_action(
         &state,
-        None,
-        None,
         &definition,
         "fader",
         &PoolPlaybackInput {
             value: Some(0.5),
             ..PoolPlaybackInput::default()
         },
-        "osc",
+        PlaybackDispatchContext {
+            session: None,
+            desk: None,
+            source: "osc",
+            exclusion_zones: &[],
+        },
     )
     .unwrap_err();
     assert_eq!(rejected.message, "playback does not have a fader");

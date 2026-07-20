@@ -686,8 +686,34 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     const firstAlias = firstSession.desk.osc_alias;
     const secondAlias = secondSession.desk.osc_alias;
     try {
-      await firstHardware.subscribe("osc-006-first", firstAlias);
-      await secondHardware.subscribe("osc-006-second", secondAlias);
+      const firstSubscriptionMark = firstHardware.mark();
+      await firstHardware.send("/light/subscribe", [
+        "osc-006-first",
+        firstAlias,
+        firstHardware.feedbackPort,
+      ]);
+      expect(
+        (
+          await firstHardware.expectAfter(
+            firstSubscriptionMark,
+            `/light/${firstAlias}/feedback/page`,
+          )
+        ).arguments,
+      ).toEqual([1]);
+      const secondSubscriptionMark = secondHardware.mark();
+      await secondHardware.send("/light/subscribe", [
+        "osc-006-second",
+        secondAlias,
+        secondHardware.feedbackPort,
+      ]);
+      expect(
+        (
+          await secondHardware.expectAfter(
+            secondSubscriptionMark,
+            `/light/${secondAlias}/feedback/page`,
+          )
+        ).arguments,
+      ).toEqual([2]);
       expect(await deskPage(api, firstSession)).toBe(1);
       expect(await deskPage(api, secondSession)).toBe(2);
 
@@ -704,7 +730,15 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       const pageFeedbackMark = firstHardware.mark();
       await selectPlaybackPage(page, "Page 2");
       await expect.poll(async () => deskPage(api, firstSession)).toBe(2);
-      expect((await firstHardware.expectAfter(pageFeedbackMark, `/light/${firstAlias}/feedback/page`)).arguments).toEqual([2]);
+      await expect
+        .poll(() =>
+          firstHardware.messages.slice(pageFeedbackMark).some(
+            (message) =>
+              message.address === `/light/${firstAlias}/feedback/page` &&
+              message.arguments[0] === 2,
+          ),
+        )
+        .toBe(true);
       await firstHardware.send(firstAddress, [true]);
       await expect.poll(async () => (await activePlayback(api, 2))?.current_cue_number).toBe(2);
       expect(await deskPage(api, secondSession)).toBe(2);
@@ -712,7 +746,15 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       const returnFeedbackMark = firstHardware.mark();
       await selectPlaybackPage(page, "Main");
       await expect.poll(async () => deskPage(api, firstSession)).toBe(1);
-      expect((await firstHardware.expectAfter(returnFeedbackMark, `/light/${firstAlias}/feedback/page`)).arguments).toEqual([1]);
+      await expect
+        .poll(() =>
+          firstHardware.messages.slice(returnFeedbackMark).some(
+            (message) =>
+              message.address === `/light/${firstAlias}/feedback/page` &&
+              message.arguments[0] === 1,
+          ),
+        )
+        .toBe(true);
 
       for (const level of [0, 0.5, 1]) {
         await firstHardware.sendFloat(`/light/${firstAlias}/page-playback/1/fader`, level);

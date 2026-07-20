@@ -585,6 +585,7 @@ async fn broad_subscription_delivers_only_authenticated_user_preload_playback_qu
     };
     assert_eq!(change.projection.user_id, user_id);
     assert_eq!(change.projection.revision, 2);
+    assert_eq!(change.projection.actions[0].page, Some(3));
 }
 
 fn event_session(desk_id: Uuid, user_id: Uuid) -> Session {
@@ -749,6 +750,7 @@ fn programmer_preload_playback_queue_draft(user_id: Uuid, revision: u64) -> Even
                 revision,
                 actions: vec![ProgrammingPreloadPlaybackQueueItem {
                     playback_number: 7,
+                    page: Some(3),
                     action: ProgrammingPreloadPlaybackAction::Go,
                     surface: ProgrammingPreloadPlaybackSurface::Virtual,
                 }],

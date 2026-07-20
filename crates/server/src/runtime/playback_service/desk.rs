@@ -12,12 +12,7 @@ pub(in crate::runtime) fn projection(
     state: &AppState,
     context: &ActionContext,
 ) -> Result<PlaybackDeskProjection, ApiError> {
-    let ports = ServerPlaybackPorts {
-        state,
-        session: None,
-        desk: None,
-        persistence_pending: std::sync::atomic::AtomicBool::new(false),
-    };
+    let ports = ServerPlaybackPorts::new(state, None, None);
     PlaybackPorts::desk_projection(&ports, context)
         .map_err(action_error)?
         .ok_or_else(|| ApiError::internal("playback desk projection unavailable"))

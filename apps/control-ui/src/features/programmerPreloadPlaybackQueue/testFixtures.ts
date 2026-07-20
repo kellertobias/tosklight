@@ -22,6 +22,7 @@ export function queuedPlayback(
 ): ProgrammerPreloadPlaybackQueueEntry {
 	return {
 		playbackNumber: 7,
+		page: null,
 		action: "go",
 		surface: "physical",
 		...overrides,

@@ -221,7 +221,9 @@ function queueProjection(revision: number) {
 	return {
 		userId: USER_ID,
 		revision,
-		actions: [{ playbackNumber: 7, action: "go", surface: "virtual" }],
+		actions: [
+			{ playbackNumber: 7, page: null, action: "go", surface: "virtual" },
+		],
 	};
 }
 

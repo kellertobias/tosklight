@@ -21,6 +21,7 @@ function validOutcome() {
 		outcome: { status: "applied" },
 		durability: "durable",
 		projection: cueProjection(),
+		related: [],
 		desk: deskProjection(),
 		event_sequence: 12,
 		desk_event_sequence: null,
@@ -60,6 +61,78 @@ describe("Playback wire validation", () => {
 		}
 	});
 
+	it("decodes related authoritative projections and their exact event sequences", () => {
+		const first = cueProjection(2, 3);
+		const second = cueProjection(3, 2);
+		const decoded = decodePlaybackOutcome({
+			...validOutcome(),
+			related: [
+				{
+					projection: first,
+					event_sequence: 10,
+					untrusted_extra: DESK_ID,
+				},
+				{ projection: second, event_sequence: 11 },
+			],
+		});
+
+		expect(decoded.related).toEqual([
+			{ projection: first, event_sequence: 10 },
+			{ projection: second, event_sequence: 11 },
+		]);
+	});
+
+	it.each([
+		[
+			"a foreign show",
+			{
+				projection: {
+					...cueProjection(2),
+					scope: {
+						...cueProjection(2).scope,
+						show_id: "99999999-9999-4999-8999-999999999999",
+					},
+				},
+				event_sequence: 11,
+			},
+		],
+		[
+			"a foreign show revision",
+			{
+				projection: {
+					...cueProjection(2),
+					scope: {
+						...cueProjection(2).scope,
+						show_revision: cueProjection(2).scope.show_revision + 1,
+					},
+				},
+				event_sequence: 11,
+			},
+		],
+	])("rejects related outcomes from %s", (_label, related) => {
+		expect(() =>
+			decodePlaybackOutcome({ ...validOutcome(), related: [related] }),
+		).toThrow(/related\[0\]\.projection\.scope/);
+	});
+
+	it.each([
+		["no high-water", [11], null],
+		["duplicate sequences", [11, 11], 12],
+		["decreasing sequences", [11, 10], 12],
+		["a sequence above the high-water", [11, 13], 12],
+	])("rejects related outcomes with %s", (_label, sequences, highWater) => {
+		expect(() =>
+			decodePlaybackOutcome({
+				...validOutcome(),
+				event_sequence: highWater,
+				related: sequences.map((eventSequence, index) => ({
+					projection: cueProjection(index + 2),
+					event_sequence: eventSequence,
+				})),
+			}),
+		).toThrow();
+	});
+
 	it.each([
 		[
 			"requested address",
@@ -68,6 +141,15 @@ describe("Playback wire validation", () => {
 		["resolved address", { resolved: { kind: "preview", playback_number: 1 } }],
 		["captured outcome", { outcome: { status: "captured", pending: "later" } }],
 		["durability", { durability: "eventually" }],
+		["related outcomes", { related: null }],
+		[
+			"related projection",
+			{ related: [{ projection: {}, event_sequence: 11 }] },
+		],
+		[
+			"related event sequence",
+			{ related: [{ projection: cueProjection(2), event_sequence: -1 }] },
+		],
 		["event sequence", { event_sequence: -1 }],
 		["replayed flag", { replayed: "false" }],
 	])("rejects a malformed %s variant", (_label, replacement) => {

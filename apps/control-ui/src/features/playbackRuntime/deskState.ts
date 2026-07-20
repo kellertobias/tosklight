@@ -22,6 +22,10 @@ export class PlaybackDeskState {
 		this.order = 0;
 	}
 
+	captureSequence() {
+		return this.sequence;
+	}
+
 	seed(projection: PlaybackDesk) {
 		if (!this.authoritative) this.authoritative = projection;
 		return this.render();

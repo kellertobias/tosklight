@@ -4,9 +4,28 @@ fn queue(registry: &ProgrammerRegistry, session: SessionId, number: u16) {
     assert!(registry.queue_preload_playback_action(
         session,
         number,
+        None,
         PreloadPlaybackQueueAction::Go,
         PreloadPlaybackQueueSurface::Virtual,
     ));
+}
+
+#[test]
+fn persisted_queue_actions_accept_old_json_and_omit_an_unknown_page() {
+    let legacy = serde_json::json!({
+        "playback_number": 7,
+        "action": "go",
+        "surface": "virtual",
+    });
+    let action: PreloadPlaybackAction = serde_json::from_value(legacy.clone()).unwrap();
+    assert_eq!(action.page, None);
+    assert_eq!(serde_json::to_value(&action).unwrap(), legacy);
+
+    let with_page = PreloadPlaybackAction {
+        page: Some(3),
+        ..action
+    };
+    assert_eq!(serde_json::to_value(with_page).unwrap()["page"], 3);
 }
 
 #[test]

@@ -10,6 +10,7 @@ impl ServerPlaybackPorts<'_> {
         action_name: &str,
         input: &PoolPlaybackInput,
         surface: PlaybackSurface,
+        page: Option<u8>,
     ) -> Result<Option<PendingPlaybackAction>, ActionError> {
         let Some(session) = self.session else {
             return Ok(None);
@@ -21,7 +22,7 @@ impl ServerPlaybackPorts<'_> {
             return Ok(None);
         }
         let pending = pending.expect("capture requires a pending action");
-        self.queue_capture(context, session, definition.number, pending, surface)?;
+        self.queue_capture(context, session, definition.number, pending, surface, page)?;
         Ok(Some(parse_pending(pending)))
     }
 
@@ -46,6 +47,7 @@ impl ServerPlaybackPorts<'_> {
         number: u16,
         pending: &str,
         surface: PlaybackSurface,
+        page: Option<u8>,
     ) -> Result<(), ActionError> {
         let action = light_programmer::PreloadPlaybackQueueAction::try_from(pending)
             .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error))?;
@@ -55,6 +57,7 @@ impl ServerPlaybackPorts<'_> {
         self.state.programmers.queue_preload_playback_action(
             session.id,
             number,
+            page,
             action,
             queue_surface,
         );
@@ -64,7 +67,7 @@ impl ServerPlaybackPorts<'_> {
         emit(
             self.state,
             "programmer_changed",
-            serde_json::json!({"session_id":session.id,"user_id":session.user.id,"preload_playback_action":pending,"playback_number":number,"surface":surface_name(surface),"changes":["preload_playback_queue"]}),
+            serde_json::json!({"session_id":session.id,"user_id":session.user.id,"preload_playback_action":pending,"playback_number":number,"surface":surface_name(surface),"page":page,"changes":["preload_playback_queue"]}),
         );
         Ok(())
     }

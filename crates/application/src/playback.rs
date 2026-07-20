@@ -10,11 +10,12 @@ mod operation;
 mod ports;
 mod projection;
 mod service;
+mod transition_set;
 
 pub use command::{
     CueNumber, PendingPlaybackAction, PlaybackAction, PlaybackAddress, PlaybackCommand,
-    PlaybackDurability, PlaybackExecution, PlaybackLevel, PlaybackOutcome, PlaybackResult,
-    PlaybackSurface, ResolvedPlaybackAddress,
+    PlaybackDurability, PlaybackExecution, PlaybackLevel, PlaybackOutcome, PlaybackRelatedResult,
+    PlaybackResult, PlaybackSurface, ResolvedPlaybackAddress,
 };
 pub use event::{
     PlaybackCueTransition, PlaybackRuntimeChange, PlaybackTransitionCause, committed_playback_event,

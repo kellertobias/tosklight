@@ -121,6 +121,7 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		showObjectsTransport,
 		showObjectsAuthorityKey,
 		playbackTransport,
+		playbackAuthorityKey: showObjectsAuthorityKey,
 		programmingTransport,
 		programmingAuthorityKey,
 		...programmerLifecycle,

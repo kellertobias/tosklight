@@ -60,6 +60,7 @@ describe("PlaybackRuntimeViewProvider", () => {
 			<PlaybackRuntimeViewProvider
 				showId={SHOW_ID}
 				deskId={DESK_ID}
+				authorityKey="authority-a"
 				store={store}
 				transport={transport}
 				loadSnapshot={loadSnapshot}
@@ -117,6 +118,7 @@ describe("PlaybackRuntimeViewProvider", () => {
 			<PlaybackRuntimeViewProvider
 				showId={SHOW_ID}
 				deskId={DESK_ID}
+				authorityKey="authority-a"
 				store={store}
 				transport={null}
 				loadSnapshot={loadSnapshot}
@@ -126,5 +128,34 @@ describe("PlaybackRuntimeViewProvider", () => {
 		);
 		await waitFor(() => expect(screen.getByText("Cue 1")).toBeInTheDocument());
 		expect(loadSnapshot).toHaveBeenCalledOnce();
+	});
+
+	it("replaces a same-show and same-desk session when authority changes", async () => {
+		const store = new PlaybackRuntimeStore();
+		const transport = new FakeTransport();
+		const loadSnapshot = vi.fn(async (identities) =>
+			playbackSnapshot(identities),
+		);
+		const view = (authorityKey: string) => (
+			<PlaybackRuntimeViewProvider
+				showId={SHOW_ID}
+				deskId={DESK_ID}
+				authorityKey={authorityKey}
+				store={store}
+				transport={transport}
+				loadSnapshot={loadSnapshot}
+			>
+				<RuntimeProbe visible onRender={() => undefined} />
+			</PlaybackRuntimeViewProvider>
+		);
+		const rendered = render(view("authority-a"));
+		await waitFor(() => expect(transport.subscriptions).toHaveLength(1));
+
+		rendered.rerender(view("authority-b"));
+
+		await waitFor(() => expect(transport.subscriptions).toHaveLength(2));
+		expect(transport.subscriptions[0].close).toHaveBeenCalledOnce();
+		expect(loadSnapshot).toHaveBeenCalledTimes(2);
+		expect(store.getSnapshot().status).toBe("ready");
 	});
 });

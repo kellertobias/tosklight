@@ -1,13 +1,15 @@
 use super::{
-    ApiError, AppState, ControlDesk, PoolPlaybackInput, ProgrammingLockPolicy, Session,
-    cuelist_for_page_playback, dispatch_playback_action, emit, intercept_update_playback_target,
-    persist_active_playbacks, persist_programmer, predicted_preload_temp_state,
-    preload_capture_action_with_temp_state, programming_context, run_programming_interaction,
+    ApiError, AppState, ControlDesk, PlaybackDispatchContext, PoolPlaybackInput,
+    ProgrammingLockPolicy, Session, cuelist_for_page_playback, dispatch_playback_action, emit,
+    intercept_update_playback_target, persist_active_playbacks, persist_programmer,
+    predicted_preload_temp_state, preload_capture_action_with_temp_state, programming_context,
+    run_programming_interaction,
 };
 use light_application::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionSource,
     PendingPlaybackAction, PlaybackAction, PlaybackAddress, PlaybackCommand, PlaybackDurability,
-    PlaybackExecution, PlaybackPorts, PlaybackResult, PlaybackSurface, ResolvedPlaybackAddress,
+    PlaybackExecution, PlaybackPorts, PlaybackResult, PlaybackRuntimeIdentity, PlaybackSurface,
+    ResolvedPlaybackAddress,
 };
 use light_engine::{CueListPlaybackAction, EnginePlaybackCommand, EnginePlaybackOutcome};
 
@@ -17,6 +19,8 @@ mod capture;
 mod conversion;
 #[path = "playback_service/desk.rs"]
 mod desk;
+#[path = "playback_service/ports.rs"]
+mod ports;
 #[path = "playback_service/projection.rs"]
 mod projection;
 #[path = "playback_service/response.rs"]
@@ -27,6 +31,7 @@ mod semantics;
 mod support;
 
 pub(super) use desk::ChangePage;
+use ports::ServerPlaybackPorts;
 pub(super) use projection::automatic_changes as automatic_projection_changes;
 pub(super) use response::{cue_list_http_payload, pool_http_payload, websocket_payload};
 
@@ -136,12 +141,7 @@ pub(super) fn execute(
     context: ActionContext,
     command: PlaybackCommand,
 ) -> Result<PlaybackResult, ApiError> {
-    let ports = ServerPlaybackPorts {
-        state,
-        session,
-        desk,
-        persistence_pending: std::sync::atomic::AtomicBool::new(false),
-    };
+    let ports = ServerPlaybackPorts::new(state, session, desk);
     state
         .playback_service
         .handle(ActionEnvelope { context, command }, &ports)
@@ -154,12 +154,7 @@ pub(super) fn snapshot(
     context: ActionContext,
     identities: &[light_application::PlaybackRuntimeIdentity],
 ) -> Result<light_application::PlaybackRuntimeSnapshot, ApiError> {
-    let ports = ServerPlaybackPorts {
-        state,
-        session: Some(session),
-        desk: Some(&session.desk),
-        persistence_pending: std::sync::atomic::AtomicBool::new(false),
-    };
+    let ports = ServerPlaybackPorts::new(state, Some(session), Some(&session.desk));
     state
         .playback_service
         .snapshot(&context, identities, &ports)
@@ -171,206 +166,6 @@ pub(in crate::runtime) fn read_runtime_projection(
     context: &ActionContext,
     identity: light_application::PlaybackRuntimeIdentity,
 ) -> Result<light_application::PlaybackRuntimeProjection, ApiError> {
-    let ports = ServerPlaybackPorts {
-        state,
-        session: None,
-        desk: None,
-        persistence_pending: std::sync::atomic::AtomicBool::new(false),
-    };
+    let ports = ServerPlaybackPorts::new(state, None, None);
     PlaybackPorts::projection(&ports, context, identity).map_err(action_error)
-}
-
-struct ServerPlaybackPorts<'a> {
-    pub(super) state: &'a AppState,
-    pub(super) session: Option<&'a Session>,
-    pub(super) desk: Option<&'a ControlDesk>,
-    persistence_pending: std::sync::atomic::AtomicBool,
-}
-
-impl PlaybackPorts for ServerPlaybackPorts<'_> {
-    fn authorize(&self, context: &ActionContext) -> Result<(), ActionError> {
-        let Some(session_id) = context.session_id else {
-            return Ok(());
-        };
-        self.session
-            .filter(|session| session.id.0 == session_id)
-            .map(|_| ())
-            .ok_or_else(|| ActionError::new(ActionErrorKind::Unauthorized, "invalid session"))
-    }
-
-    fn current_page(&self, context: &ActionContext) -> Result<u8, ActionError> {
-        let show = self
-            .state
-            .active_show
-            .read()
-            .clone()
-            .ok_or_else(|| invalid("no show is open"))?;
-        self.state
-            .desk
-            .lock()
-            .desk_page(context.desk_id, show.id)
-            .map_err(|error| invalid(error.to_string()))
-    }
-
-    fn playback_at(&self, page: u8, slot: u8) -> Result<Option<u16>, ActionError> {
-        Ok(cuelist_for_page_playback(
-            &self.state.engine.snapshot(),
-            page,
-            slot,
-        ))
-    }
-
-    fn execute(
-        &self,
-        context: &ActionContext,
-        address: ResolvedPlaybackAddress,
-        action: PlaybackAction,
-        surface: PlaybackSurface,
-    ) -> Result<PlaybackExecution, ActionError> {
-        match address {
-            ResolvedPlaybackAddress::CueList(id) => self.execute_cue_list(context, id, action),
-            ResolvedPlaybackAddress::Pool { number, .. } => {
-                self.execute_pool(context, number, action, surface)
-            }
-        }
-    }
-
-    fn durability(&self) -> PlaybackDurability {
-        if self
-            .persistence_pending
-            .load(std::sync::atomic::Ordering::Relaxed)
-        {
-            PlaybackDurability::PersistencePending
-        } else {
-            PlaybackDurability::Durable
-        }
-    }
-
-    fn transition_cause(
-        &self,
-        context: &ActionContext,
-        address: ResolvedPlaybackAddress,
-        action: PlaybackAction,
-    ) -> Result<Option<light_application::PlaybackTransitionCause>, ActionError> {
-        semantics::transition_cause(self, context, address, action)
-    }
-
-    fn projection(
-        &self,
-        context: &ActionContext,
-        identity: light_application::PlaybackRuntimeIdentity,
-    ) -> Result<light_application::PlaybackRuntimeProjection, ActionError> {
-        projection::projection(self, context, identity)
-    }
-
-    fn projections(
-        &self,
-        context: &ActionContext,
-        identities: &[light_application::PlaybackRuntimeIdentity],
-    ) -> Result<Vec<light_application::PlaybackRuntimeProjection>, ActionError> {
-        projection::projections(self, context, identities)
-    }
-
-    fn desk_projection(
-        &self,
-        context: &ActionContext,
-    ) -> Result<Option<light_application::PlaybackDeskProjection>, ActionError> {
-        projection::desk_projection(self, context)
-    }
-}
-
-impl ServerPlaybackPorts<'_> {
-    fn execute_cue_list(
-        &self,
-        context: &ActionContext,
-        id: light_core::CueListId,
-        action: PlaybackAction,
-    ) -> Result<PlaybackExecution, ActionError> {
-        let command = match action {
-            PlaybackAction::Go { pressed: true } => CueListPlaybackAction::Go,
-            PlaybackAction::Back { pressed: true } => CueListPlaybackAction::Back,
-            PlaybackAction::Pause { pressed: true } => CueListPlaybackAction::Pause,
-            PlaybackAction::Release => CueListPlaybackAction::Release,
-            _ => return Err(invalid("action is incompatible with a cue list")),
-        };
-        let outcome = self
-            .state
-            .engine
-            .execute_playback(EnginePlaybackCommand::CueList {
-                id,
-                action: command,
-            })
-            .map_err(invalid)?;
-        let execution = match outcome {
-            EnginePlaybackOutcome::Active(active) => PlaybackExecution::Active(active),
-            EnginePlaybackOutcome::ActiveList(active) => PlaybackExecution::ActiveList(active),
-            EnginePlaybackOutcome::Changed(released) => PlaybackExecution::Released(released),
-            _ => return Err(invalid("unexpected cue-list Playback outcome")),
-        };
-        if let Err(error) = persist_active_playbacks(self.state) {
-            self.mark_persistence_pending(context, "active_playbacks", error);
-        }
-        Ok(execution)
-    }
-
-    fn execute_pool(
-        &self,
-        context: &ActionContext,
-        number: u16,
-        action: PlaybackAction,
-        surface: PlaybackSurface,
-    ) -> Result<PlaybackExecution, ActionError> {
-        let definition = playback_definition(self.state, number)?;
-        let (action_name, input) = legacy_action(action, surface);
-        if captures_preload(context.source)
-            && let Some(pending) =
-                self.capture(context, &definition, action_name, &input, surface)?
-        {
-            return Ok(PlaybackExecution::Pool {
-                changed: false,
-                pending: Some(pending),
-            });
-        }
-        if self.intercept_update(context, &definition, action) {
-            return Ok(PlaybackExecution::Pool {
-                changed: false,
-                pending: None,
-            });
-        }
-        let dispatch = dispatch_playback_action(
-            self.state,
-            self.session,
-            self.desk,
-            &definition,
-            action_name,
-            &input,
-            source_name(context.source),
-        )
-        .map_err(api_action_error)?;
-        if dispatch.persistence_pending {
-            self.persistence_pending
-                .store(true, std::sync::atomic::Ordering::Relaxed);
-        }
-        Ok(PlaybackExecution::Pool {
-            changed: dispatch.changed,
-            pending: None,
-        })
-    }
-
-    fn intercept_update(
-        &self,
-        context: &ActionContext,
-        definition: &light_playback::PlaybackDefinition,
-        action: PlaybackAction,
-    ) -> bool {
-        context.source == ActionSource::Osc
-            && self.session.is_some_and(|session| {
-                intercept_update_playback_target(
-                    self.state,
-                    session,
-                    definition,
-                    action_touched(action),
-                )
-            })
-    }
 }

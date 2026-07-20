@@ -18,6 +18,7 @@ impl ProgrammingPorts for QueuePorts {
             programmers.queue_preload_playback_action(
                 SessionId(context.session_id.unwrap()),
                 7,
+                None,
                 PreloadPlaybackQueueAction::Go,
                 PreloadPlaybackQueueSurface::Virtual,
             );
@@ -91,11 +92,21 @@ impl QueueSetup {
     }
 
     fn queue(&self, context: &ActionContext, number: u16) -> ProgrammingInteractionResult<bool> {
+        self.queue_on_page(context, number, None)
+    }
+
+    fn queue_on_page(
+        &self,
+        context: &ActionContext,
+        number: u16,
+        page: Option<u8>,
+    ) -> ProgrammingInteractionResult<bool> {
         self.service
             .run_external_interaction(context, &self.ports, || {
                 self.registry.queue_preload_playback_action(
                     SessionId(context.session_id.unwrap()),
                     number,
+                    page,
                     PreloadPlaybackQueueAction::Toggle,
                     PreloadPlaybackQueueSurface::Physical,
                 )
@@ -116,7 +127,7 @@ impl QueueSetup {
 #[test]
 fn snapshot_is_authenticated_exact_user_and_preserves_ordered_duplicates() {
     let setup = QueueSetup::new();
-    setup.queue(&setup.first_context, 3);
+    setup.queue_on_page(&setup.first_context, 3, Some(4));
     setup.queue(&setup.second_context, 3);
 
     let snapshot = setup
@@ -133,6 +144,15 @@ fn snapshot_is_authenticated_exact_user_and_preserves_ordered_duplicates() {
             .map(|action| action.playback_number)
             .collect::<Vec<_>>(),
         [3, 3]
+    );
+    assert_eq!(
+        snapshot
+            .projection
+            .actions
+            .iter()
+            .map(|action| action.page)
+            .collect::<Vec<_>>(),
+        [Some(4), None]
     );
 
     let foreign = ActionContext::operator(

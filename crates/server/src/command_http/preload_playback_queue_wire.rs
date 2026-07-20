@@ -35,6 +35,7 @@ fn queue_item(
 ) -> wire::ProgrammingPreloadPlaybackQueueItem {
     wire::ProgrammingPreloadPlaybackQueueItem {
         playback_number: item.playback_number,
+        page: item.page,
         action: match item.action {
             application::ProgrammingPreloadPlaybackAction::Toggle => {
                 wire::ProgrammingPreloadPlaybackAction::Toggle

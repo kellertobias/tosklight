@@ -2,12 +2,38 @@ use super::*;
 
 use light_playback::{PlaybackButtonAction as Action, PlaybackTarget};
 
-fn execute_pool(state: &AppState, number: u16, action: PoolPlaybackAction) -> Result<(), ApiError> {
-    state
+#[derive(Debug)]
+pub(super) struct PlaybackTargetOutcome {
+    pub(super) changed: bool,
+    pub(super) released_playbacks: Vec<u16>,
+}
+
+impl PlaybackTargetOutcome {
+    pub(super) fn changed(changed: bool) -> Self {
+        Self {
+            changed,
+            released_playbacks: Vec::new(),
+        }
+    }
+}
+
+fn execute_pool_with_exclusions(
+    state: &AppState,
+    number: u16,
+    action: PoolPlaybackAction,
+    exclusion_zones: &[Vec<u16>],
+) -> Result<PlaybackTargetOutcome, ApiError> {
+    let transition = state
         .engine
-        .execute_playback(EnginePlaybackCommand::Pool { number, action })
-        .map(|_| ())
-        .map_err(ApiError::bad_request)
+        .execute_pool_playback_with_exclusions(number, action, exclusion_zones)
+        .map_err(ApiError::bad_request)?;
+    let EnginePlaybackOutcome::Changed(changed) = transition.outcome else {
+        return Err(ApiError::internal("unexpected pool Playback outcome"));
+    };
+    Ok(PlaybackTargetOutcome {
+        changed,
+        released_playbacks: transition.released_playbacks,
+    })
 }
 
 pub(super) fn apply_playback_master(
@@ -15,7 +41,8 @@ pub(super) fn apply_playback_master(
     definition: &light_playback::PlaybackDefinition,
     input: &PoolPlaybackInput,
     source: &str,
-) -> Result<bool, ApiError> {
+    exclusion_zones: &[Vec<u16>],
+) -> Result<PlaybackTargetOutcome, ApiError> {
     let virtual_fader = source == "matter" && !definition.has_fader;
     if !definition.has_fader && !virtual_fader {
         return Err(ApiError::bad_request("playback does not have a fader"));
@@ -28,22 +55,25 @@ pub(super) fn apply_playback_master(
     }
     match &definition.target {
         PlaybackTarget::CueList { .. } => {
-            if virtual_fader {
-                execute_pool(
+            return if virtual_fader {
+                execute_pool_with_exclusions(
                     state,
                     definition.number,
                     PoolPlaybackAction::SetVirtualMaster(value),
-                )?;
+                    exclusion_zones,
+                )
             } else {
-                execute_pool(
+                execute_pool_with_exclusions(
                     state,
                     definition.number,
                     PoolPlaybackAction::SetMaster(value),
-                )?;
-            }
+                    exclusion_zones,
+                )
+            };
         }
         PlaybackTarget::Group { group_id } => {
-            return set_group_playback_master(state, group_id, value);
+            return set_group_playback_master(state, group_id, value)
+                .map(PlaybackTargetOutcome::changed);
         }
         PlaybackTarget::SpeedGroup { group } => {
             apply_speed_group_playback_action(state, group, "master", input, definition.fader)?
@@ -62,7 +92,7 @@ pub(super) fn apply_playback_master(
             refresh_speed_group_engine(state);
         }
     }
-    Ok(true)
+    Ok(PlaybackTargetOutcome::changed(true))
 }
 
 pub(super) fn apply_direct_playback_action(
@@ -70,19 +100,31 @@ pub(super) fn apply_direct_playback_action(
     definition: &light_playback::PlaybackDefinition,
     action: &str,
     input: &PoolPlaybackInput,
-) -> Result<Option<bool>, ApiError> {
+    exclusion_zones: &[Vec<u16>],
+) -> Result<Option<PlaybackTargetOutcome>, ApiError> {
     let cue = || {
         input
             .cue_number
             .ok_or_else(|| ApiError::bad_request("cue_number is required"))
     };
-    match action {
-        "go-to" => execute_pool(state, definition.number, PoolPlaybackAction::GoTo(cue()?))?,
-        "load" => execute_pool(state, definition.number, PoolPlaybackAction::Load(cue()?))?,
-        "xfade-on" | "xfade-off" => execute_pool(
+    let outcome = match action {
+        "go-to" => execute_pool_with_exclusions(
+            state,
+            definition.number,
+            PoolPlaybackAction::GoTo(cue()?),
+            exclusion_zones,
+        )?,
+        "load" => execute_pool_with_exclusions(
+            state,
+            definition.number,
+            PoolPlaybackAction::Load(cue()?),
+            exclusion_zones,
+        )?,
+        "xfade-on" | "xfade-off" => execute_pool_with_exclusions(
             state,
             definition.number,
             PoolPlaybackAction::XFade(action == "xfade-on"),
+            exclusion_zones,
         )?,
         "temp-on" | "temp-off" => {
             if !matches!(definition.target, PlaybackTarget::CueList { .. }) {
@@ -90,15 +132,16 @@ pub(super) fn apply_direct_playback_action(
                     "Temp is available only for a Cuelist playback",
                 ));
             }
-            execute_pool(
+            execute_pool_with_exclusions(
                 state,
                 definition.number,
                 PoolPlaybackAction::SetTempButton(action == "temp-on"),
-            )?;
+                exclusion_zones,
+            )?
         }
         _ => return Ok(None),
-    }
-    Ok(Some(true))
+    };
+    Ok(Some(outcome))
 }
 
 pub(super) fn select_playback_target(
@@ -135,7 +178,8 @@ fn apply_cuelist_action(
     cue_list_id: light_core::CueListId,
     action: Action,
     pressed: bool,
-) -> Result<bool, ApiError> {
+    exclusion_zones: &[Vec<u16>],
+) -> Result<PlaybackTargetOutcome, ApiError> {
     let command = match action {
         Action::On => Some(PoolPlaybackAction::On),
         Action::Off => Some(PoolPlaybackAction::Off),
@@ -155,7 +199,7 @@ fn apply_cuelist_action(
             select_cuelist_contents(state, session, cue_list_id)?;
             None
         }
-        Action::None => return Ok(false),
+        Action::None => return Ok(PlaybackTargetOutcome::changed(false)),
         _ => {
             return Err(ApiError::bad_request(
                 "action is incompatible with a Cuelist playback",
@@ -163,9 +207,9 @@ fn apply_cuelist_action(
         }
     };
     if let Some(command) = command {
-        execute_pool(state, definition.number, command)?;
+        return execute_pool_with_exclusions(state, definition.number, command, exclusion_zones);
     }
-    Ok(true)
+    Ok(PlaybackTargetOutcome::changed(true))
 }
 
 fn apply_group_action(
@@ -279,20 +323,31 @@ pub(super) fn apply_playback_target_action(
     action: Action,
     input: &PoolPlaybackInput,
     pressed: bool,
-) -> Result<bool, ApiError> {
+    exclusion_zones: &[Vec<u16>],
+) -> Result<PlaybackTargetOutcome, ApiError> {
     match &definition.target {
-        PlaybackTarget::CueList { cue_list_id } => {
-            apply_cuelist_action(state, session, definition, *cue_list_id, action, pressed)
-        }
+        PlaybackTarget::CueList { cue_list_id } => apply_cuelist_action(
+            state,
+            session,
+            definition,
+            *cue_list_id,
+            action,
+            pressed,
+            exclusion_zones,
+        ),
         PlaybackTarget::Group { group_id } => {
             apply_group_action(state, session, group_id, action, pressed)
+                .map(PlaybackTargetOutcome::changed)
         }
         PlaybackTarget::SpeedGroup { group } => {
             apply_speed_action(state, group, action, input, definition.fader)
+                .map(PlaybackTargetOutcome::changed)
         }
-        PlaybackTarget::GrandMaster => apply_grand_master_action(state, action, pressed),
+        PlaybackTarget::GrandMaster => {
+            apply_grand_master_action(state, action, pressed).map(PlaybackTargetOutcome::changed)
+        }
         PlaybackTarget::ProgrammerFade | PlaybackTarget::CueFade => {
-            apply_time_master_action(state, definition, action)
+            apply_time_master_action(state, definition, action).map(PlaybackTargetOutcome::changed)
         }
     }
 }

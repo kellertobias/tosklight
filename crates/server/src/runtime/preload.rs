@@ -5,6 +5,8 @@ use light_engine::{
 
 #[path = "preload/programmer.rs"]
 mod programmer;
+#[path = "preload/response.rs"]
+mod response;
 #[path = "preload/transaction.rs"]
 mod transaction;
 
@@ -15,6 +17,7 @@ pub(super) use programmer::{
 #[derive(Debug)]
 pub(super) struct StagedPreloadPlaybackAction {
     pub(super) playback_number: u16,
+    pub(super) page: Option<u8>,
     pub(super) action: String,
     pub(super) surface: String,
     pub(super) released_playbacks: Vec<u16>,
@@ -42,6 +45,7 @@ pub(super) fn preload_batch_commands(
             Ok(PlaybackBatchCommand {
                 number: pending.playback_number,
                 action,
+                exclusion_zones: Vec::new(),
             })
         })
         .collect()
@@ -65,6 +69,7 @@ fn staged_preload_action(
     debug_assert_eq!(pending.playback_number, outcome.number);
     StagedPreloadPlaybackAction {
         playback_number: pending.playback_number,
+        page: pending.page,
         action: pending.action.legacy_name().to_owned(),
         surface: pending.surface.name().to_owned(),
         released_playbacks: outcome.released_playbacks.clone(),
@@ -118,7 +123,7 @@ pub(super) fn commit_preload_while_show_stable(
         .playback_service
         .run_unit_of_work(CommitPreload { state, session });
     let committed = completed.output?;
-    Ok(transaction::preload_commit_response(
+    Ok(response::preload_commit_response(
         state,
         session,
         committed,

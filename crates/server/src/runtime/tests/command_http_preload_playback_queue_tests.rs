@@ -15,6 +15,7 @@ async fn preload_playback_queue_snapshot_is_exact_user_authenticated_and_narrow(
     scenario.state.programmers.queue_preload_playback_action(
         scenario.session.id,
         7,
+        None,
         light_programmer::PreloadPlaybackQueueAction::TemporaryOn,
         light_programmer::PreloadPlaybackQueueSurface::Osc,
     );

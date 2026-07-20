@@ -102,8 +102,34 @@ fn preload_atomicity_test_snapshot() -> EngineSnapshot {
                 },
             ),
         ],
+        playback_pages: vec![light_playback::PlaybackPage {
+            number: 1,
+            name: "Preload".into(),
+            slots: HashMap::from([(1, 1), (2, 2)]),
+        }],
         ..Default::default()
     }
+}
+
+fn preload_auto_off_test_snapshot() -> EngineSnapshot {
+    let fixture = light_core::FixtureId::new();
+    let mut snapshot = preload_atomicity_test_snapshot();
+    snapshot.cue_lists[0].cues[0]
+        .changes
+        .push(light_playback::CueChange::set(
+            fixture,
+            light_core::AttributeKey("pan".into()),
+            light_core::AttributeValue::Normalized(0.2),
+        ));
+    snapshot.cue_lists[1].cues[0]
+        .changes
+        .push(light_playback::CueChange::set(
+            fixture,
+            light_core::AttributeKey("pan".into()),
+            light_core::AttributeValue::Normalized(0.8),
+        ));
+    snapshot.playbacks[0].auto_off = true;
+    snapshot
 }
 
 fn matter_test_snapshot() -> EngineSnapshot {
@@ -251,12 +277,14 @@ fn preload_rejects_a_late_invalid_action_without_publishing_earlier_actions() {
     assert!(state.programmers.queue_preload_playback_action(
         session.id,
         1,
+        None,
         light_programmer::PreloadPlaybackQueueAction::Go,
         light_programmer::PreloadPlaybackQueueSurface::Physical,
     ));
     assert!(state.programmers.queue_preload_playback_action(
         session.id,
         3,
+        None,
         light_programmer::PreloadPlaybackQueueAction::On,
         light_programmer::PreloadPlaybackQueueSurface::Virtual,
     ));
@@ -286,36 +314,86 @@ fn preload_rejects_a_late_invalid_action_without_publishing_earlier_actions() {
 fn committed_preload_publishes_the_exact_typed_playback_change() {
     let (state, data_dir) = test_state();
     let user = state.desk.lock().users().unwrap().remove(0);
+    let desk = state
+        .desk
+        .lock()
+        .add_desk("Preload exclusions", "preload-exclusions")
+        .unwrap();
     let session = Session {
         id: SessionId::new(),
         user: user.clone(),
         token: "typed-preload".into(),
         connected: true,
-        desk: test_control_desk(),
+        desk,
     };
     state.programmers.start(session.id, user.id);
     state
         .engine
         .replace_snapshot(preload_atomicity_test_snapshot())
         .unwrap();
+    let show = state
+        .desk
+        .lock()
+        .upsert_show(
+            "Preload exclusions",
+            &data_dir.join("shows/preload-exclusions.show").display().to_string(),
+            false,
+        )
+        .unwrap();
+    *state.active_show.write() = Some(show.clone());
+    state
+        .desk
+        .lock()
+        .set_desk_page(session.desk.id, show.id, 1)
+        .unwrap();
+    let zones = VirtualPlaybackExclusionStore::from([(
+        session.desk.id.to_string(),
+        HashMap::from([(
+            "preload-test".into(),
+            vec![VirtualPlaybackExclusionZone {
+                id: "preload-zone".into(),
+                name: "Preload zone".into(),
+                slots: vec![1, 2],
+            }],
+        )]),
+    )]);
+    state
+        .desk
+        .lock()
+        .set_setting(
+            &virtual_playback_exclusion_setting(show.id),
+            &serde_json::to_string(&zones).unwrap(),
+        )
+        .unwrap();
+    state
+        .engine
+        .execute_playback(EnginePlaybackCommand::Pool {
+            number: 2,
+            action: PoolPlaybackAction::On,
+        })
+        .unwrap();
     assert!(state.programmers.arm_preload(session.id, true));
     assert!(state.programmers.queue_preload_playback_action(
         session.id,
         1,
+        None,
         light_programmer::PreloadPlaybackQueueAction::Go,
         light_programmer::PreloadPlaybackQueueSurface::Physical,
     ));
 
     let response = commit_preload(&state, &session).unwrap();
 
-    assert_eq!(response["playback_event_sequences"], serde_json::json!([1]));
+    assert_eq!(
+        response["playback_event_sequences"],
+        serde_json::json!([1, 2])
+    );
     let light_application::EventReplay::Events(events) = state.application_events.replay(
         0,
         &light_application::EventFilter::default(),
     ) else {
         panic!("committed Preload should retain its semantic event");
     };
-    assert_eq!(events.len(), 1);
+    assert_eq!(events.len(), 2);
     assert_eq!(
         events[0].source,
         light_application::EventSource::Action(light_application::ActionSource::UserInterface)
@@ -326,11 +404,20 @@ fn committed_preload_publishes_the_exact_typed_playback_change() {
     else {
         panic!("expected a typed Playback runtime change");
     };
-    assert_eq!(change.projection.playback_number, Some(1));
+    assert_eq!(change.projection.playback_number, Some(2));
+    assert!(!change.projection.cue_list_runtime().unwrap().enabled);
+    let light_application::ApplicationEvent::Playback(
+        light_application::PlaybackEvent::RuntimeChanged(peer),
+    ) = &events[1].payload
+    else {
+        panic!("expected the released peer Playback event");
+    };
+    assert_eq!(peer.projection.playback_number, Some(1));
     assert_eq!(
-        change.transition.as_ref().map(|transition| transition.cause),
+        peer.transition.as_ref().map(|transition| transition.cause),
         Some(light_application::PlaybackTransitionCause::Go)
     );
+    assert_eq!(events[0].correlation_id, events[1].correlation_id);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -350,19 +437,18 @@ fn staged_preload_applies_exclusions_without_mutating_the_source_engine() {
         .unwrap();
     let pending = light_programmer::PreloadPlaybackAction {
         playback_number: 1,
+        page: None,
         action: light_programmer::PreloadPlaybackQueueAction::On,
         surface: light_programmer::PreloadPlaybackQueueSurface::Virtual,
     };
     let source = state.engine.playback_runtime();
     let pending = vec![pending];
-    let commands = preload_batch_commands(&pending).unwrap();
-    let prepared = state.engine.prepare_playback_batch(
-        &commands,
-        chrono::Utc::now(),
-        0,
-        &[vec![1, 2]],
-    )
-    .unwrap();
+    let mut commands = preload_batch_commands(&pending).unwrap();
+    commands[0].exclusion_zones = vec![vec![1, 2]];
+    let prepared = state
+        .engine
+        .prepare_playback_batch(&commands, chrono::Utc::now(), 0)
+        .unwrap();
     let actions = staged_preload_actions(&pending, &prepared);
 
     assert!(
@@ -400,5 +486,171 @@ fn staged_preload_applies_exclusions_without_mutating_the_source_engine() {
             .any(|runtime| { runtime.playback_number == Some(2) && !runtime.enabled })
     );
     assert_eq!(actions[0].released_playbacks, vec![2]);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn committed_preload_publishes_auto_off_before_the_activating_playback() {
+    let (state, data_dir) = test_state();
+    let user = state.desk.lock().users().unwrap().remove(0);
+    let session = Session {
+        id: SessionId::new(),
+        user: user.clone(),
+        token: "preload-auto-off".into(),
+        connected: true,
+        desk: test_control_desk(),
+    };
+    state.programmers.start(session.id, user.id);
+    state
+        .engine
+        .replace_snapshot(preload_auto_off_test_snapshot())
+        .unwrap();
+    let show = state
+        .desk
+        .lock()
+        .upsert_show(
+            "Preload auto-off",
+            &data_dir
+                .join("shows/preload-auto-off.show")
+                .display()
+                .to_string(),
+            false,
+        )
+        .unwrap();
+    *state.active_show.write() = Some(show);
+    state
+        .engine
+        .execute_playback(EnginePlaybackCommand::Pool {
+            number: 1,
+            action: PoolPlaybackAction::On,
+        })
+        .unwrap();
+    assert!(state.programmers.arm_preload(session.id, true));
+    assert!(state.programmers.queue_preload_playback_action(
+        session.id,
+        2,
+        None,
+        light_programmer::PreloadPlaybackQueueAction::Go,
+        light_programmer::PreloadPlaybackQueueSurface::Physical,
+    ));
+
+    let response = commit_preload(&state, &session).unwrap();
+
+    assert_eq!(response["playback_event_sequences"], serde_json::json!([1, 2]));
+    let light_application::EventReplay::Events(events) = state.application_events.replay(
+        0,
+        &light_application::EventFilter::default(),
+    ) else {
+        panic!("committed Preload should retain auto-off and target events");
+    };
+    let states = events
+        .iter()
+        .map(|event| {
+            let light_application::ApplicationEvent::Playback(
+                light_application::PlaybackEvent::RuntimeChanged(change),
+            ) = &event.payload
+            else {
+                panic!("expected Playback runtime events");
+            };
+            (
+                change.projection.playback_number.unwrap(),
+                change.projection.cue_list_runtime().unwrap().enabled,
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(states, vec![(1, false), (2, true)]);
+    assert_eq!(events[0].correlation_id, events[1].correlation_id);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn explicit_page_preload_does_not_borrow_current_page_exclusions() {
+    let (state, data_dir) = test_state();
+    let user = state.desk.lock().users().unwrap().remove(0);
+    let desk = state
+        .desk
+        .lock()
+        .add_desk("Explicit Preload page", "explicit-preload-page")
+        .unwrap();
+    let session = Session {
+        id: SessionId::new(),
+        user: user.clone(),
+        token: "explicit-preload-page".into(),
+        connected: true,
+        desk,
+    };
+    state.programmers.start(session.id, user.id);
+    let mut snapshot = preload_atomicity_test_snapshot();
+    snapshot.playback_pages.push(light_playback::PlaybackPage {
+        number: 2,
+        name: "Explicit".into(),
+        slots: HashMap::from([(1, 1)]),
+    });
+    state.engine.replace_snapshot(snapshot).unwrap();
+    let show = state
+        .desk
+        .lock()
+        .upsert_show(
+            "Explicit Preload page",
+            &data_dir
+                .join("shows/explicit-preload-page.show")
+                .display()
+                .to_string(),
+            false,
+        )
+        .unwrap();
+    *state.active_show.write() = Some(show.clone());
+    state
+        .desk
+        .lock()
+        .set_desk_page(session.desk.id, show.id, 1)
+        .unwrap();
+    let zones = VirtualPlaybackExclusionStore::from([(
+        session.desk.id.to_string(),
+        HashMap::from([(
+            "explicit-preload".into(),
+            vec![VirtualPlaybackExclusionZone {
+                id: "current-page-zone".into(),
+                name: "Current page".into(),
+                slots: vec![1, 2],
+            }],
+        )]),
+    )]);
+    state
+        .desk
+        .lock()
+        .set_setting(
+            &virtual_playback_exclusion_setting(show.id),
+            &serde_json::to_string(&zones).unwrap(),
+        )
+        .unwrap();
+    state
+        .engine
+        .execute_playback(EnginePlaybackCommand::Pool {
+            number: 2,
+            action: PoolPlaybackAction::On,
+        })
+        .unwrap();
+    assert!(state.programmers.arm_preload(session.id, true));
+    assert!(state.programmers.queue_preload_playback_action(
+        session.id,
+        1,
+        Some(2),
+        light_programmer::PreloadPlaybackQueueAction::Go,
+        light_programmer::PreloadPlaybackQueueSurface::Virtual,
+    ));
+
+    let response = commit_preload(&state, &session).unwrap();
+
+    assert_eq!(response["playback_actions"][0]["page"], 2);
+    assert_eq!(response["playback_event_sequences"], serde_json::json!([1]));
+    let enabled = state
+        .engine
+        .playback_runtime()
+        .into_iter()
+        .filter(|runtime| runtime.enabled)
+        .filter_map(|runtime| runtime.playback_number)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(enabled, std::collections::BTreeSet::from([1, 2]));
     let _ = std::fs::remove_dir_all(data_dir);
 }

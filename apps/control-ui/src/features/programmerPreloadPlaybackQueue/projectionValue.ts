@@ -42,9 +42,15 @@ function canonicalEntry(
 	entry: ProgrammerPreloadPlaybackQueueEntry,
 ): ProgrammerPreloadPlaybackQueueEntry {
 	assertPlaybackNumber(entry.playbackNumber);
+	if (entry.page !== null) assertPage(entry.page);
 	if (!ACTIONS.has(entry.action)) protocolError("action is not supported");
 	if (!SURFACES.has(entry.surface)) protocolError("surface is not supported");
 	return Object.freeze({ ...entry });
+}
+
+function assertPage(value: number) {
+	if (!Number.isInteger(value) || value < 0 || value > 255)
+		protocolError("page must be an unsigned 8-bit integer");
 }
 
 function assertPlaybackNumber(value: number) {

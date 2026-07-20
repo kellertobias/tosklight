@@ -97,14 +97,23 @@ pub struct PlaybackActionOutcome {
     pub outcome: PlaybackOutcome,
     pub durability: PlaybackDurability,
     pub projection: PlaybackRuntimeProjection,
+    /// Additional runtime identities changed atomically by the same action, in event order.
+    pub related: Vec<PlaybackRelatedOutcome>,
     pub desk: Option<PlaybackDeskProjection>,
-    /// Exact sequence of the emitted semantic event; absent for no-change or captured actions.
+    /// Highest sequence emitted by the action; absent for no-change or captured actions.
     #[ts(as = "Option<f64>", optional = nullable)]
     pub event_sequence: Option<u64>,
     /// Sequence of a separate desk-local view event when selection changed.
     #[ts(as = "Option<f64>", optional = nullable)]
     pub desk_event_sequence: Option<u64>,
     pub replayed: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PlaybackRelatedOutcome {
+    pub projection: PlaybackRuntimeProjection,
+    #[ts(as = "f64")]
+    pub event_sequence: u64,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

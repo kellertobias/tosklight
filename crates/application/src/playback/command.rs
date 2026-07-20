@@ -175,6 +175,12 @@ pub enum PlaybackDurability {
 }
 
 #[derive(Clone, Debug)]
+pub struct PlaybackRelatedResult {
+    pub projection: PlaybackRuntimeProjection,
+    pub event_sequence: u64,
+}
+
+#[derive(Clone, Debug)]
 pub struct PlaybackResult {
     pub context: ActionContext,
     pub requested: PlaybackAddress,
@@ -183,6 +189,8 @@ pub struct PlaybackResult {
     pub durability: PlaybackDurability,
     pub execution: PlaybackExecution,
     pub projection: PlaybackRuntimeProjection,
+    /// Additional runtime identities changed atomically by the same application action.
+    pub related: Vec<PlaybackRelatedResult>,
     pub desk: Option<PlaybackDeskProjection>,
     pub event_sequence: Option<u64>,
     pub desk_event_sequence: Option<u64>,

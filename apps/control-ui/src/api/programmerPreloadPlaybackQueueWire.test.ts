@@ -10,9 +10,14 @@ const CORRELATION_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 function actions() {
 	return [
-		{ playback_number: 4, action: "go", surface: "physical" },
+		{ playback_number: 4, page: 3, action: "go", surface: "physical" },
 		{ playback_number: 4, action: "go", surface: "osc" },
-		{ playback_number: 2, action: "temporary_off", surface: "matter" },
+		{
+			playback_number: 2,
+			page: null,
+			action: "temporary_off",
+			surface: "matter",
+		},
 	];
 }
 
@@ -57,10 +62,11 @@ describe("Preload playback queue wire decoding", () => {
 				userId: USER_ID,
 				revision: 3,
 				actions: [
-					{ playbackNumber: 4, action: "go", surface: "physical" },
-					{ playbackNumber: 4, action: "go", surface: "osc" },
+					{ playbackNumber: 4, page: 3, action: "go", surface: "physical" },
+					{ playbackNumber: 4, page: null, action: "go", surface: "osc" },
 					{
 						playbackNumber: 2,
+						page: null,
 						action: "temporary_off",
 						surface: "matter",
 					},
@@ -102,6 +108,7 @@ describe("Preload playback queue wire decoding", () => {
 		["action", "pause"],
 		["surface", "network"],
 		["playback_number", 65_536],
+		["page", 256],
 	] as const)("rejects invalid %s values", (field, invalid) => {
 		const malformed = actions();
 		malformed[0] = { ...malformed[0], [field]: invalid };

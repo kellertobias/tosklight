@@ -123,13 +123,15 @@ struct RunningServer {
 
 impl RunningServer {
     async fn start(mut startup: StartupState) -> anyhow::Result<Self> {
-        let resources = RuntimeResources::start(&mut startup).await?;
+        let mut resources = RuntimeResources::start(&mut startup).await?;
         let bind = startup.persistent.bind;
         let state = build_app_state(startup, &resources)?;
-        normalize_restored_virtual_playback_exclusions(&state);
+        normalize_restored_virtual_playback_exclusions(&state)
+            .map_err(|error| anyhow::anyhow!(error.message))?;
         refresh_matter_bridge(&state);
-        let matter_sync = spawn_matter_bridge_sync(state.clone(), resources.cancellation.clone());
         refresh_speed_group_engine(&state);
+        resources.scheduler.start_rendering()?;
+        let matter_sync = spawn_matter_bridge_sync(state.clone(), resources.cancellation.clone());
         let input_tasks = spawn_control_inputs(&state, resources.cancellation.clone());
         let app = router(state);
         Ok(Self {

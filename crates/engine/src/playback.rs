@@ -1,4 +1,7 @@
-use crate::{Engine, RuntimeGeneration};
+use crate::{
+    Engine, RuntimeGeneration,
+    playback_exclusion::{PoolPlaybackTransition, apply_with_exclusions},
+};
 use chrono::{DateTime, Utc};
 use light_core::CueListId;
 use light_playback::{ActivePlayback, PlaybackContribution, PlaybackEngine, PlaybackRuntimeStatus};
@@ -17,6 +20,7 @@ pub enum EnginePlaybackCommand {
         number: u16,
         action: PoolPlaybackAction,
     },
+    ReleasePoolBatch(Vec<u16>),
     RestoreActive(Vec<ActivePlayback>),
     RestoreDynamicsPausedSince(Option<DateTime<Utc>>),
     SetDynamicsPaused(bool),
@@ -61,6 +65,7 @@ pub enum EnginePlaybackOutcome {
     Active(Box<ActivePlayback>),
     ActiveList(Vec<ActivePlayback>),
     Changed(bool),
+    ChangedPlaybacks(Vec<u16>),
     DynamicsPaused(bool),
     Applied,
 }
@@ -82,10 +87,11 @@ pub enum PlaybackBatchAction {
     SetTempButton(bool),
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlaybackBatchCommand {
     pub number: u16,
     pub action: PlaybackBatchAction,
+    pub exclusion_zones: Vec<Vec<u16>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -119,6 +125,25 @@ impl Engine {
     ) -> Result<EnginePlaybackOutcome, String> {
         let generation = self.generation.load();
         execute(&mut generation.playback().write(), command)
+    }
+
+    pub fn execute_pool_playback_with_exclusions(
+        &self,
+        number: u16,
+        action: PoolPlaybackAction,
+        exclusion_zones: &[Vec<u16>],
+    ) -> Result<PoolPlaybackTransition, String> {
+        let generation = self.generation.load();
+        let (outcome, released_playbacks) = apply_with_exclusions(
+            &mut generation.playback().write(),
+            number,
+            exclusion_zones,
+            |playback| execute_pool(playback, number, action),
+        )?;
+        Ok(PoolPlaybackTransition {
+            outcome,
+            released_playbacks,
+        })
     }
 
     pub fn active_playbacks(&self) -> Vec<ActivePlayback> {
@@ -155,7 +180,6 @@ impl Engine {
         commands: &[PlaybackBatchCommand],
         started_at: DateTime<Utc>,
         fallback_millis: u64,
-        exclusion_zones: &[Vec<u16>],
     ) -> Result<PreparedPlaybackBatch, String> {
         let generation = self.generation.load_full();
         let mut playback = generation.playback().read().clone();
@@ -163,10 +187,9 @@ impl Engine {
         for command in commands {
             outcomes.push(apply_batch_command(
                 &mut playback,
-                *command,
+                command,
                 started_at,
                 fallback_millis,
-                exclusion_zones,
             )?);
         }
         Ok(PreparedPlaybackBatch {
@@ -196,6 +219,9 @@ fn execute(
     match command {
         EnginePlaybackCommand::CueList { id, action } => execute_cue_list(playback, id, action),
         EnginePlaybackCommand::Pool { number, action } => execute_pool(playback, number, action),
+        EnginePlaybackCommand::ReleasePoolBatch(numbers) => Ok(
+            EnginePlaybackOutcome::ChangedPlaybacks(release_pool_batch(playback, numbers)),
+        ),
         EnginePlaybackCommand::RestoreActive(active) => {
             playback.restore_active(active);
             Ok(EnginePlaybackOutcome::Applied)
@@ -212,6 +238,17 @@ fn execute(
             playback.toggle_dynamics_paused(),
         )),
     }
+}
+
+fn release_pool_batch(playback: &mut PlaybackEngine, numbers: Vec<u16>) -> Vec<u16> {
+    let mut seen = HashSet::with_capacity(numbers.len());
+    let mut changed = numbers
+        .into_iter()
+        .filter(|number| seen.insert(*number))
+        .filter(|number| playback.off(*number).unwrap_or(false))
+        .collect::<Vec<_>>();
+    changed.sort_unstable();
+    changed
 }
 
 fn execute_cue_list(
@@ -262,7 +299,9 @@ fn execute_pool(
         PoolPlaybackAction::FastRewind => playback.fast_rewind_playback(number).map(|_| true)?,
         PoolPlaybackAction::On => playback.on(number).map(|()| true)?,
         PoolPlaybackAction::Off => playback.off(number)?,
-        PoolPlaybackAction::Toggle => playback.toggle(number)?,
+        // `PlaybackEngine::toggle` returns the resulting enabled state, not whether the
+        // operation changed. A valid toggle always performs one semantic transition.
+        PoolPlaybackAction::Toggle => playback.toggle(number).map(|_| true)?,
         PoolPlaybackAction::GoTo(cue) => playback.goto_playback(number, cue).map(|_| true)?,
         PoolPlaybackAction::Load(cue) => playback.load_playback(number, cue).map(|_| true)?,
         PoolPlaybackAction::SetMaster(value) => {
@@ -303,27 +342,21 @@ fn toggle_pause(playback: &mut PlaybackEngine, number: u16) -> Result<bool, Stri
 
 fn apply_batch_command(
     playback: &mut PlaybackEngine,
-    command: PlaybackBatchCommand,
+    command: &PlaybackBatchCommand,
     started_at: DateTime<Utc>,
     fallback_millis: u64,
-    exclusion_zones: &[Vec<u16>],
 ) -> Result<PlaybackBatchOutcome, String> {
     let previous = playback
         .runtime()
         .into_iter()
         .find(|runtime| runtime.playback_number == Some(command.number))
         .map(|runtime| (runtime.enabled, runtime.master));
-    let was_enabled = previous.is_some_and(|(enabled, _)| enabled);
-    apply_batch_action(playback, command)?;
-    let now_enabled = playback
-        .runtime()
-        .iter()
-        .any(|runtime| runtime.playback_number == Some(command.number) && runtime.enabled);
-    let released_playbacks = if !was_enabled && now_enabled {
-        enforce_exclusions(playback, exclusion_zones, command.number)
-    } else {
-        Vec::new()
-    };
+    let (_, released_playbacks) = apply_with_exclusions(
+        playback,
+        command.number,
+        &command.exclusion_zones,
+        |playback| apply_batch_action(playback, command),
+    )?;
     playback.apply_preload_timing(
         command.number,
         batch_action_name(command.action),
@@ -339,7 +372,7 @@ fn apply_batch_command(
 
 fn apply_batch_action(
     playback: &mut PlaybackEngine,
-    command: PlaybackBatchCommand,
+    command: &PlaybackBatchCommand,
 ) -> Result<(), String> {
     match command.action {
         PlaybackBatchAction::Toggle => playback.toggle(command.number).map(|_| ()),
@@ -363,28 +396,4 @@ const fn batch_action_name(action: PlaybackBatchAction) -> &'static str {
         PlaybackBatchAction::SetTempButton(true) => "temp-on",
         PlaybackBatchAction::SetTempButton(false) => "temp-off",
     }
-}
-
-fn enforce_exclusions(
-    playback: &mut PlaybackEngine,
-    zones: &[Vec<u16>],
-    activated_number: u16,
-) -> Vec<u16> {
-    if !zones.iter().any(|zone| zone.contains(&activated_number)) {
-        return Vec::new();
-    }
-    let mut released = HashSet::new();
-    for number in zones
-        .iter()
-        .filter(|zone| zone.contains(&activated_number))
-        .flat_map(|zone| zone.iter().copied())
-        .filter(|number| *number != activated_number)
-    {
-        if released.insert(number) {
-            let _ = playback.off(number);
-        }
-    }
-    let mut released = released.into_iter().collect::<Vec<_>>();
-    released.sort_unstable();
-    released
 }

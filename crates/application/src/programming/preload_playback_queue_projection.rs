@@ -37,6 +37,7 @@ pub enum ProgrammingPreloadPlaybackSurface {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ProgrammingPreloadPlaybackQueueItem {
     pub playback_number: u16,
+    pub page: Option<u8>,
     pub action: ProgrammingPreloadPlaybackAction,
     pub surface: ProgrammingPreloadPlaybackSurface,
 }
@@ -153,6 +154,7 @@ fn queue_identity(context: &ActionContext) -> Result<(SessionId, UserId), Action
 fn queue_item(action: &PreloadPlaybackAction) -> ProgrammingPreloadPlaybackQueueItem {
     ProgrammingPreloadPlaybackQueueItem {
         playback_number: action.playback_number,
+        page: action.page,
         action: match action.action {
             PreloadPlaybackQueueAction::Toggle => ProgrammingPreloadPlaybackAction::Toggle,
             PreloadPlaybackQueueAction::Go => ProgrammingPreloadPlaybackAction::Go,

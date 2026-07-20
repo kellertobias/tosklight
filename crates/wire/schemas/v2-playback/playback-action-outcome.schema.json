@@ -30,7 +30,7 @@
       "$ref": "#/$defs/PlaybackDurability"
     },
     "event_sequence": {
-      "description": "Exact sequence of the emitted semantic event; absent for no-change or captured actions.",
+      "description": "Highest sequence emitted by the action; absent for no-change or captured actions.",
       "type": [
         "integer",
         "null"
@@ -43,6 +43,13 @@
     },
     "projection": {
       "$ref": "#/$defs/PlaybackRuntimeProjection"
+    },
+    "related": {
+      "description": "Additional runtime identities changed atomically by the same action, in event order.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PlaybackRelatedOutcome"
+      }
     },
     "replayed": {
       "type": "boolean"
@@ -65,6 +72,7 @@
     "outcome",
     "durability",
     "projection",
+    "related",
     "desk",
     "event_sequence",
     "desk_event_sequence",
@@ -438,6 +446,23 @@
             "pending"
           ]
         }
+      ]
+    },
+    "PlaybackRelatedOutcome": {
+      "type": "object",
+      "properties": {
+        "event_sequence": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "projection": {
+          "$ref": "#/$defs/PlaybackRuntimeProjection"
+        }
+      },
+      "required": [
+        "projection",
+        "event_sequence"
       ]
     },
     "PlaybackRuntimeIdentity": {

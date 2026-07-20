@@ -2751,6 +2751,15 @@
         "action": {
           "$ref": "#/$defs/ProgrammingPreloadPlaybackAction"
         },
+        "page": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
         "playback_number": {
           "type": "integer",
           "format": "uint16",

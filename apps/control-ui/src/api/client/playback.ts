@@ -5,6 +5,7 @@ import type {
 	PlaybackRuntimeSnapshot,
 } from "../generated/light-wire";
 import { decodePlaybackOutcome, decodePlaybackSnapshot } from "../playbackWire";
+import { WireValidationError } from "../wireValidation";
 import type {
 	ControlDesk,
 	PlaybackDefinition,
@@ -88,7 +89,14 @@ export class PlaybackApiClient {
 				body: JSON.stringify(request),
 			},
 		);
-		return decodePlaybackOutcome(value);
+		const outcome = decodePlaybackOutcome(value);
+		if (outcome.request_id !== request.request_id)
+			throw new WireValidationError(
+				"$.request_id",
+				`request ID ${request.request_id}`,
+				outcome.request_id,
+			);
+		return outcome;
 	}
 
 	screens(): Promise<ScreenSnapshot> {

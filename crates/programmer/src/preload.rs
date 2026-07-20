@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct PreloadPlaybackAction {
     pub playback_number: u16,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page: Option<u8>,
     pub action: PreloadPlaybackQueueAction,
     pub surface: PreloadPlaybackQueueSurface,
 }
@@ -67,6 +69,7 @@ impl ProgrammerRegistry {
         &self,
         session: SessionId,
         playback_number: u16,
+        page: Option<u8>,
         action: PreloadPlaybackQueueAction,
         surface: PreloadPlaybackQueueSurface,
     ) -> bool {
@@ -79,6 +82,7 @@ impl ProgrammerRegistry {
         state.checkpoint();
         state.preload_playback_pending.push(PreloadPlaybackAction {
             playback_number,
+            page,
             action,
             surface,
         });

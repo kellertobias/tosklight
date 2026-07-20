@@ -251,6 +251,7 @@ fn disabled_programmer_domain_stays_live_and_playback_verbs_retain_order() {
         assert!(registry.queue_preload_playback_action(
             session,
             1,
+            None,
             PreloadPlaybackQueueAction::try_from(action).unwrap(),
             PreloadPlaybackQueueSurface::Physical,
         ));

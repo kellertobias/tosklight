@@ -62,22 +62,22 @@ fn prepare_preload_commit(
     let definitions = preload_definitions(&pending, &snapshot)?;
     let committed_at = state.programmers.clock().now();
     let programmer_fade_millis = state.configuration.read().programmer_fade_millis;
-    let exclusion_zones = virtual_playback_zone_numbers(state, session.desk.id);
-    let identities = preload_identities(&definitions, &exclusion_zones);
+    let exclusions = VirtualPlaybackExclusionResolver::read(state, session.desk.id);
     let context = light_application::ActionContext::operator(
         session.desk.id,
         session.user.id.0,
         session.id.0,
         light_application::ActionSource::UserInterface,
     );
+    let mut commands = preload_batch_commands(&pending)?;
+    attach_preload_exclusions(&pending, &mut commands, &exclusions);
+    let auto_off = preload_auto_off_candidates(state, &commands);
+    let identities = preload_identities(&definitions, &commands, &auto_off);
     let before = read_preload_projections(state, &context, &identities)?;
-    let commands = preload_batch_commands(&pending)?;
-    let prepared_playback = state.engine.prepare_playback_batch(
-        &commands,
-        committed_at,
-        programmer_fade_millis,
-        &exclusion_zones,
-    )?;
+    let prepared_playback =
+        state
+            .engine
+            .prepare_playback_batch(&commands, committed_at, programmer_fade_millis)?;
     let staged_actions = staged_preload_actions(&pending, &prepared_playback);
     Ok(PreparedPreloadCommit {
         pending,
@@ -120,18 +120,20 @@ fn preload_identities(
         light_programmer::PreloadPlaybackAction,
         light_playback::PlaybackDefinition,
     )],
-    exclusion_zones: &[Vec<u16>],
+    commands: &[light_engine::PlaybackBatchCommand],
+    auto_off: &[u16],
 ) -> Vec<PlaybackIdentity> {
     let mut identities = definitions
         .iter()
         .map(|(_, definition)| PlaybackIdentity::Playback(definition.number))
         .chain(
-            exclusion_zones
+            commands
                 .iter()
-                .flatten()
+                .flat_map(|command| command.exclusion_zones.iter().flatten())
                 .copied()
                 .map(PlaybackIdentity::Playback),
         )
+        .chain(auto_off.iter().copied().map(PlaybackIdentity::Playback))
         .collect::<Vec<_>>();
     identities.sort_by_key(|identity| match identity {
         PlaybackIdentity::Playback(number) => *number,
@@ -139,6 +141,32 @@ fn preload_identities(
     });
     identities.dedup();
     identities
+}
+
+fn preload_auto_off_candidates(
+    state: &AppState,
+    commands: &[light_engine::PlaybackBatchCommand],
+) -> Vec<u16> {
+    if commands.iter().any(|command| {
+        matches!(
+            command.action,
+            PlaybackBatchAction::Toggle | PlaybackBatchAction::Go | PlaybackBatchAction::On
+        )
+    }) {
+        state.engine.enabled_auto_off_playbacks()
+    } else {
+        Vec::new()
+    }
+}
+
+fn attach_preload_exclusions(
+    pending: &[light_programmer::PreloadPlaybackAction],
+    commands: &mut [light_engine::PlaybackBatchCommand],
+    resolver: &VirtualPlaybackExclusionResolver,
+) {
+    for (pending, command) in pending.iter().zip(commands) {
+        command.exclusion_zones = resolver.zone_numbers(pending.page);
+    }
 }
 
 fn read_preload_projections(
@@ -184,22 +212,49 @@ fn preload_change_events(
     before: Vec<(PlaybackIdentity, PlaybackProjection)>,
     actions: &[StagedPreloadPlaybackAction],
 ) -> Result<Vec<light_application::EventDraft>, String> {
-    let after = read_preload_projections(state, context, identities)?
+    let mut after = read_preload_projections(state, context, identities)?
         .into_iter()
         .collect::<std::collections::HashMap<_, _>>();
-    Ok(before
+    let mut transitions = before
         .into_iter()
         .filter_map(|(identity, before)| {
-            let projection = after.get(&identity)?.clone();
-            light_application::committed_playback_event(
-                context,
-                preload_event_action(actions, identity),
-                None,
-                before,
-                projection,
-            )
+            let projection = after.remove(&identity)?;
+            Some((identity, before, projection))
+        })
+        .collect::<Vec<_>>();
+    transitions.sort_by_key(|(identity, before, after)| {
+        (
+            !playback_was_released(before, after),
+            identity_sort_key(*identity),
+        )
+    });
+    Ok(transitions
+        .into_iter()
+        .filter_map(|(identity, before, projection)| {
+            let action = if playback_was_released(&before, &projection) {
+                light_application::PlaybackAction::Off { pressed: true }
+            } else {
+                preload_event_action(actions, identity)
+            };
+            light_application::committed_playback_event(context, action, None, before, projection)
         })
         .collect())
+}
+
+fn playback_was_released(before: &PlaybackProjection, after: &PlaybackProjection) -> bool {
+    before
+        .cue_list_runtime()
+        .is_some_and(|runtime| runtime.enabled)
+        && !after
+            .cue_list_runtime()
+            .is_some_and(|runtime| runtime.enabled)
+}
+
+fn identity_sort_key(identity: PlaybackIdentity) -> (u8, u128) {
+    match identity {
+        PlaybackIdentity::Playback(number) => (0, u128::from(number)),
+        PlaybackIdentity::CueList(id) => (1, id.0.as_u128()),
+    }
 }
 
 fn emit_preload_exclusions(
@@ -232,13 +287,17 @@ fn executed_preload_actions(
     actions
         .into_iter()
         .map(|action| {
-            serde_json::json!({
+            let mut executed = serde_json::json!({
                 "playback_number":action.playback_number,
                 "action":action.action,
                 "surface":action.surface,
                 "started_at":committed_at,
                 "fallback_millis":programmer_fade_millis
-            })
+            });
+            if let Some(page) = action.page {
+                executed["page"] = page.into();
+            }
+            executed
         })
         .collect()
 }
@@ -276,60 +335,6 @@ fn persist_preload_commit(
         }
     }
     warnings
-}
-
-pub(super) fn preload_commit_response(
-    state: &AppState,
-    session: &Session,
-    committed: CommittedPreload,
-    playback_event_sequences: Vec<u64>,
-) -> serde_json::Value {
-    let CommittedPreload {
-        committed_at,
-        programmer_fade_millis,
-        executed,
-        warnings,
-        events: _,
-    } = committed;
-    let mut payload = serde_json::json!({
-        "session_id":session.id,
-        "application_timestamp":committed_at,
-        "programmer_fade_millis":programmer_fade_millis,
-        "playback_actions":executed,
-        "playback_event_sequences":playback_event_sequences,
-    });
-    if !warnings.is_empty() {
-        payload["warnings"] = serde_json::json!(warnings);
-    }
-    emit(state, "preload_committed", payload.clone());
-    emit(
-        state,
-        "programmer_changed",
-        serde_json::json!({
-            "session_id":session.id,
-            "user_id":session.user.id,
-            "preload_committed_at":committed_at,
-            "changes":if executed.is_empty() { Vec::<&str>::new() } else { vec!["preload_playback_queue"] },
-        }),
-    );
-    if !executed.is_empty() {
-        emit(
-            state,
-            "playback_changed",
-            serde_json::json!({"session_id":session.id,"source":"preload","application_timestamp":committed_at,"actions":executed}),
-        );
-    }
-    let mut response = serde_json::json!({
-        "active":true,
-        "application_timestamp":committed_at,
-        "programmer_fade_millis":programmer_fade_millis,
-        "playback_actions":payload["playback_actions"],
-        "playback_event_sequences":payload["playback_event_sequences"],
-    });
-    if let Some(warnings) = payload.get("warnings") {
-        response["warnings"] = warnings.clone();
-    }
-    response
 }
 
 fn preload_event_action(

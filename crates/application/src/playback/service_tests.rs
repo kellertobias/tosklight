@@ -312,6 +312,120 @@ fn changed_runtime_publishes_one_authoritative_event_and_replay_reuses_it() {
 }
 
 #[test]
+fn related_runtime_changes_publish_changed_peers_before_the_primary_once() {
+    let events = crate::EventBus::new(8);
+    let service = PlaybackService::new(events.clone());
+    let ports = RelatedRuntimePorts::changing();
+    let request = envelope(
+        ActionSource::UserInterface,
+        PlaybackAddress::Pool(8),
+        Some("runtime-with-peer"),
+    );
+
+    let first = service.handle(request.clone(), &ports).unwrap();
+    let replay = service.handle(request, &ports).unwrap();
+
+    assert_eq!(first.event_sequence, Some(2));
+    assert_eq!(first.related.len(), 1);
+    assert_eq!(
+        first.related[0].projection.requested,
+        PlaybackRuntimeIdentity::Playback(6)
+    );
+    assert_eq!(first.related[0].event_sequence, 1);
+    assert_eq!(replay.event_sequence, first.event_sequence);
+    assert_eq!(replay.related[0].event_sequence, 1);
+    assert!(replay.replayed);
+    assert_eq!(ports.executions.load(Ordering::Relaxed), 1);
+    assert_eq!(ports.related_reads.load(Ordering::Relaxed), 1);
+    assert_eq!(
+        ports.related_projection_reads.lock().as_slice(),
+        &[
+            vec![
+                PlaybackRuntimeIdentity::Playback(6),
+                PlaybackRuntimeIdentity::Playback(7),
+            ],
+            vec![
+                PlaybackRuntimeIdentity::Playback(6),
+                PlaybackRuntimeIdentity::Playback(7),
+            ],
+        ],
+        "the primary and duplicate peer identities must be removed before projection reads"
+    );
+    assert_eq!(events.latest_sequence(), 2, "replay must not republish");
+
+    let crate::EventReplay::Events(published) = events.replay(0, &crate::EventFilter::default())
+    else {
+        panic!("peer and primary events should remain replayable");
+    };
+    assert_eq!(
+        published
+            .iter()
+            .map(|event| event.object.clone())
+            .collect::<Vec<_>>(),
+        vec![
+            Some(crate::EventObject::playback(6)),
+            Some(crate::EventObject::playback(8)),
+        ],
+        "only the changed peer is emitted, in stable peer-before-primary order"
+    );
+    assert!(published.iter().all(|event| {
+        event.correlation_id == Some(first.context.correlation_id)
+            && event.source == crate::EventSource::Action(ActionSource::UserInterface)
+    }));
+    assert!(
+        !runtime_projection(&published[0])
+            .cue_list_runtime()
+            .unwrap()
+            .enabled
+    );
+    assert_eq!(
+        runtime_projection(&published[1])
+            .current_cue()
+            .unwrap()
+            .number,
+        2.0
+    );
+}
+
+#[test]
+fn no_change_and_capture_do_not_publish_related_runtime_events() {
+    for (execution, expected) in [
+        (
+            PlaybackExecution::Pool {
+                changed: false,
+                pending: None,
+            },
+            PlaybackOutcome::NoChange,
+        ),
+        (
+            PlaybackExecution::Pool {
+                changed: false,
+                pending: Some(PendingPlaybackAction::Go),
+            },
+            PlaybackOutcome::Captured(PendingPlaybackAction::Go),
+        ),
+    ] {
+        let events = crate::EventBus::new(4);
+        let service = PlaybackService::new(events.clone());
+        let ports = RelatedRuntimePorts::without_mutation(execution);
+
+        let result = service
+            .handle(
+                envelope(ActionSource::Http, PlaybackAddress::Pool(8), None),
+                &ports,
+            )
+            .unwrap();
+
+        assert_eq!(result.outcome, expected);
+        assert_eq!(result.event_sequence, None);
+        assert!(result.related.is_empty());
+        assert_eq!(events.latest_sequence(), 0);
+        assert_eq!(ports.related_reads.load(Ordering::Relaxed), 1);
+        assert_eq!(ports.related_projection_reads.lock().len(), 1);
+    }
+}
+
+#[test]
 fn accepted_pending_durability_is_retained_by_idempotent_replay() {
     let service = PlaybackService::default();
     let mut ports = StatefulPorts::changing(8);
@@ -646,6 +760,139 @@ struct StatefulPorts {
     selected_playback: Mutex<Option<u16>>,
 }
 
+struct RelatedRuntimePorts {
+    projections: Mutex<Vec<PlaybackRuntimeProjection>>,
+    related_projection_reads: Mutex<Vec<Vec<PlaybackRuntimeIdentity>>>,
+    execution: PlaybackExecution,
+    mutate: bool,
+    executions: AtomicUsize,
+    related_reads: AtomicUsize,
+}
+
+impl RelatedRuntimePorts {
+    fn changing() -> Self {
+        Self::new(
+            PlaybackExecution::Pool {
+                changed: true,
+                pending: None,
+            },
+            true,
+        )
+    }
+
+    fn without_mutation(execution: PlaybackExecution) -> Self {
+        Self::new(execution, false)
+    }
+
+    fn new(execution: PlaybackExecution, mutate: bool) -> Self {
+        let mut inactive_peer = cue_projection(7, 1.0);
+        set_enabled(&mut inactive_peer, false);
+        Self {
+            projections: Mutex::new(vec![
+                cue_projection(8, 1.0),
+                cue_projection(6, 1.0),
+                inactive_peer,
+            ]),
+            related_projection_reads: Mutex::default(),
+            execution,
+            mutate,
+            executions: AtomicUsize::new(0),
+            related_reads: AtomicUsize::new(0),
+        }
+    }
+
+    fn mutate_related_runtime(&self) {
+        let mut projections = self.projections.lock();
+        let primary = find_projection_mut(&mut projections, 8);
+        *primary = cue_projection(8, 2.0);
+        set_enabled(find_projection_mut(&mut projections, 6), false);
+    }
+
+    fn projections_for(
+        &self,
+        identities: &[PlaybackRuntimeIdentity],
+    ) -> Vec<PlaybackRuntimeProjection> {
+        let projections = self.projections.lock();
+        identities
+            .iter()
+            .map(|identity| {
+                projections
+                    .iter()
+                    .find(|projection| projection.requested == *identity)
+                    .cloned()
+                    .unwrap_or_else(|| missing_projection(*identity))
+            })
+            .collect()
+    }
+}
+
+impl PlaybackPorts for RelatedRuntimePorts {
+    fn current_page(&self, _context: &crate::ActionContext) -> Result<u8, ActionError> {
+        Ok(1)
+    }
+
+    fn playback_at(&self, _page: u8, _slot: u8) -> Result<Option<u16>, ActionError> {
+        Ok(None)
+    }
+
+    fn execute(
+        &self,
+        _context: &crate::ActionContext,
+        _address: ResolvedPlaybackAddress,
+        _action: PlaybackAction,
+        _surface: PlaybackSurface,
+    ) -> Result<PlaybackExecution, ActionError> {
+        self.executions.fetch_add(1, Ordering::Relaxed);
+        if self.mutate {
+            self.mutate_related_runtime();
+        }
+        Ok(self.execution.clone())
+    }
+
+    fn related_runtime_identities(
+        &self,
+        _context: &crate::ActionContext,
+        _address: ResolvedPlaybackAddress,
+        _action: PlaybackAction,
+        _surface: PlaybackSurface,
+    ) -> Result<Vec<PlaybackRuntimeIdentity>, ActionError> {
+        self.related_reads.fetch_add(1, Ordering::Relaxed);
+        Ok(vec![
+            PlaybackRuntimeIdentity::Playback(6),
+            PlaybackRuntimeIdentity::Playback(8),
+            PlaybackRuntimeIdentity::Playback(7),
+            PlaybackRuntimeIdentity::Playback(6),
+            PlaybackRuntimeIdentity::Playback(8),
+        ])
+    }
+
+    fn projection(
+        &self,
+        _context: &crate::ActionContext,
+        identity: PlaybackRuntimeIdentity,
+    ) -> Result<PlaybackRuntimeProjection, ActionError> {
+        Ok(self.projections_for(&[identity]).remove(0))
+    }
+
+    fn projections(
+        &self,
+        _context: &crate::ActionContext,
+        identities: &[PlaybackRuntimeIdentity],
+    ) -> Result<Vec<PlaybackRuntimeProjection>, ActionError> {
+        self.related_projection_reads
+            .lock()
+            .push(identities.to_vec());
+        Ok(self.projections_for(identities))
+    }
+
+    fn desk_projection(
+        &self,
+        context: &crate::ActionContext,
+    ) -> Result<Option<PlaybackDeskProjection>, ActionError> {
+        Ok(Some(test_desk(context.desk_id)))
+    }
+}
+
 impl StatefulPorts {
     fn changing(number: u16) -> Self {
         Self {
@@ -832,6 +1079,36 @@ fn cue_projection(number: u16, cue_number: f64) -> PlaybackRuntimeProjection {
             })),
         },
     }
+}
+
+fn find_projection_mut(
+    projections: &mut [PlaybackRuntimeProjection],
+    number: u16,
+) -> &mut PlaybackRuntimeProjection {
+    projections
+        .iter_mut()
+        .find(|projection| projection.requested == PlaybackRuntimeIdentity::Playback(number))
+        .expect("test projection should exist")
+}
+
+fn set_enabled(projection: &mut PlaybackRuntimeProjection, enabled: bool) {
+    let PlaybackTargetProjection::CueList {
+        runtime: Some(runtime),
+        ..
+    } = &mut projection.target
+    else {
+        panic!("test projection should target a Cuelist runtime");
+    };
+    runtime.enabled = enabled;
+}
+
+fn runtime_projection(event: &crate::EventEnvelope) -> &PlaybackRuntimeProjection {
+    let crate::ApplicationEvent::Playback(crate::PlaybackEvent::RuntimeChanged(change)) =
+        &event.payload
+    else {
+        panic!("expected Playback runtime event");
+    };
+    &change.projection
 }
 
 fn test_desk(desk_id: Uuid) -> PlaybackDeskProjection {

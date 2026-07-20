@@ -265,6 +265,202 @@ fn advancing_from_an_occupied_last_playback_page_creates_one_empty_page() {
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
+#[test]
+fn restored_exclusion_normalization_emits_each_loser_once_and_is_idempotent() {
+    let (state, data_dir) = test_state();
+    assert!(state.network_output.is_none());
+    let show = ShowEntry {
+        id: light_core::ShowId::new(),
+        name: "Restored exclusions".into(),
+        path: data_dir.join("shows/restored-exclusions.show").display().to_string(),
+        revision: 7,
+        updated_at: String::new(),
+        revision_copy: None,
+    };
+    *state.active_show.write() = Some(show.clone());
+    let cue_list_id = light_core::CueListId::new();
+    state
+        .engine
+        .replace_snapshot(restored_exclusion_snapshot(cue_list_id))
+        .unwrap();
+    let activated_at = "2026-01-01T00:00:00Z";
+    state
+        .engine
+        .execute_playback(EnginePlaybackCommand::RestoreActive(vec![
+            restored_exclusion_active(3, cue_list_id, activated_at),
+            restored_exclusion_active(1, cue_list_id, activated_at),
+            restored_exclusion_active(4, cue_list_id, activated_at),
+            restored_exclusion_active(2, cue_list_id, activated_at),
+        ]))
+        .unwrap();
+    let desk = state.desk.lock().add_desk("Restored", "restored").unwrap();
+    state.desk.lock().set_desk_page(desk.id, show.id, 1).unwrap();
+    let stored = VirtualPlaybackExclusionStore::from([(
+        desk.id.to_string(),
+        HashMap::from([(
+            "surface".into(),
+            vec![
+                VirtualPlaybackExclusionZone {
+                    id: "left".into(),
+                    name: "Left".into(),
+                    slots: vec![1, 2],
+                },
+                VirtualPlaybackExclusionZone {
+                    id: "right".into(),
+                    name: "Right".into(),
+                    slots: vec![2, 3],
+                },
+            ],
+        )]),
+    )]);
+    state
+        .desk
+        .lock()
+        .set_setting(
+            &virtual_playback_exclusion_setting(show.id),
+            &serde_json::to_string(&stored).unwrap(),
+        )
+        .unwrap();
+
+    let first = normalize_restored_virtual_playback_exclusions(&state).unwrap();
+
+    assert_eq!(first.released_playbacks, vec![1, 2]);
+    assert!(!first.persistence_pending);
+    let light_application::EventReplay::Events(events) = state
+        .application_events
+        .replay(0, &light_application::EventFilter::default())
+    else {
+        panic!("expected retained restored-exclusion events");
+    };
+    assert_eq!(events.len(), 2);
+    let numbers = events
+        .iter()
+        .map(|event| match &event.payload {
+            light_application::ApplicationEvent::Playback(
+                light_application::PlaybackEvent::RuntimeChanged(change),
+            ) => {
+                assert!(!change.projection.cue_list_runtime().unwrap().enabled);
+                change.projection.playback_number.unwrap()
+            }
+            other => panic!("expected Playback runtime event, got {other:?}"),
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(numbers, vec![1, 2]);
+    assert_eq!(events[0].sequence, 1);
+    assert_eq!(events[1].sequence, 2);
+    assert_eq!(events[0].correlation_id, events[1].correlation_id);
+    assert!(events[0].correlation_id.is_some());
+    assert!(events.iter().all(|event| {
+        event.source
+            == light_application::EventSource::Action(light_application::ActionSource::System)
+    }));
+
+    let second = normalize_restored_virtual_playback_exclusions(&state).unwrap();
+
+    assert!(second.released_playbacks.is_empty());
+    assert!(!second.persistence_pending);
+    assert_eq!(state.application_events.latest_sequence(), 2);
+    let enabled = state
+        .engine
+        .playback_runtime()
+        .into_iter()
+        .filter(|playback| playback.enabled)
+        .filter_map(|playback| playback.playback_number)
+        .collect::<HashSet<_>>();
+    assert_eq!(enabled, HashSet::from([3, 4]));
+    let persisted = state
+        .desk
+        .lock()
+        .setting(&active_playbacks_setting(show.id))
+        .unwrap()
+        .unwrap();
+    let persisted: Vec<light_playback::ActivePlayback> = serde_json::from_str(&persisted).unwrap();
+    assert_eq!(
+        persisted
+            .into_iter()
+            .filter(|playback| playback.enabled)
+            .filter_map(|playback| playback.playback_number)
+            .collect::<HashSet<_>>(),
+        HashSet::from([3, 4])
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+fn restored_exclusion_snapshot(cue_list_id: light_core::CueListId) -> EngineSnapshot {
+    let cue_list = light_playback::CueList {
+        id: cue_list_id,
+        name: "Restored exclusion look".into(),
+        priority: 0,
+        mode: light_playback::CueListMode::Sequence,
+        looped: false,
+        chaser_step_millis: 1_000,
+        speed_group: None,
+        intensity_priority_mode: light_playback::IntensityPriorityMode::Htp,
+        wrap_mode: Some(light_playback::WrapMode::Off),
+        restart_mode: light_playback::RestartMode::FirstCue,
+        force_cue_timing: false,
+        disable_cue_timing: false,
+        chaser_xfade_millis: 0,
+        chaser_xfade_percent: Some(0),
+        speed_multiplier: 1.0,
+        cues: vec![light_playback::Cue::new(1.0)],
+    };
+    EngineSnapshot {
+        revision: 7,
+        cue_lists: vec![cue_list],
+        playbacks: (1..=4)
+            .map(|number| restored_exclusion_playback(number, cue_list_id))
+            .collect(),
+        playback_pages: vec![light_playback::PlaybackPage {
+            number: 1,
+            name: "Page 1".into(),
+            slots: HashMap::from([(1, 1), (2, 2), (3, 3), (4, 4)]),
+        }],
+        ..EngineSnapshot::default()
+    }
+}
+
+fn restored_exclusion_playback(
+    number: u16,
+    cue_list_id: light_core::CueListId,
+) -> light_playback::PlaybackDefinition {
+    let target = light_playback::PlaybackTarget::CueList { cue_list_id };
+    light_playback::PlaybackDefinition {
+        number,
+        name: format!("Playback {number}"),
+        buttons: light_playback::PlaybackDefinition::default_buttons(&target),
+        target,
+        button_count: 3,
+        fader: light_playback::PlaybackFaderMode::Master,
+        has_fader: true,
+        go_activates: true,
+        auto_off: false,
+        xfade_millis: 0,
+        color: "#20c997".into(),
+        flash_release: light_playback::FlashReleaseMode::ReleaseAll,
+        protect_from_swap: false,
+        presentation_icon: None,
+        presentation_image: None,
+    }
+}
+
+fn restored_exclusion_active(
+    number: u16,
+    cue_list_id: light_core::CueListId,
+    activated_at: &str,
+) -> light_playback::ActivePlayback {
+    serde_json::from_value(serde_json::json!({
+        "playback_number": number,
+        "cue_list_id": cue_list_id,
+        "cue_index": 0,
+        "previous_index": null,
+        "paused": false,
+        "activated_at": activated_at,
+        "paused_at": null
+    }))
+    .expect("minimal restored Playback runtime must decode")
+}
+
 fn startup_show_object_backup_count(data_dir: &std::path::Path) -> usize {
     std::fs::read_dir(data_dir.join("backups"))
         .into_iter()

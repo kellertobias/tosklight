@@ -7,9 +7,10 @@ fn cue_move_copy_requires_a_choice_and_preserves_plain_status_and_move_copy_axes
         CueTransferCase { operation: "MOVE", mode: "STATUS", moves: true, status: true },
     ] {
         let scenario = CueTransferScenario::new();
-        let before = scenario.baseline();
+        let mut before = scenario.baseline();
         if case.operation == "COPY" && case.mode == "PLAIN" {
             verify_pending_cue_transfer_choice(&scenario, &before);
+            before = scenario.baseline();
         }
         execute_and_verify_cue_transfer(&scenario, &before, case);
         let _ = std::fs::remove_dir_all(scenario.data_dir);

@@ -10,6 +10,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use super::projection::validate_snapshot_identities;
+use super::transition_set::RelatedTransitionSet;
 
 const REQUEST_CACHE_LIMIT: usize = 4_096;
 
@@ -62,6 +63,8 @@ impl PlaybackService {
         let resolved = resolve(envelope.command.address, &envelope.context, ports)?;
         let identity = runtime_identity(resolved);
         let before = ports.projection(&envelope.context, identity)?;
+        let related =
+            RelatedTransitionSet::capture(envelope, resolved, identity, before.scope, ports)?;
         let before_desk = ports.desk_projection(&envelope.context)?;
         let configured_cause =
             ports.transition_cause(&envelope.context, resolved, envelope.command.action)?;
@@ -74,9 +77,20 @@ impl PlaybackService {
         let durability = ports.durability();
         let outcome = outcome(&execution);
         let projection = ports.projection(&envelope.context, identity)?;
+        if projection.scope != before.scope {
+            return Err(ActionError::new(
+                ActionErrorKind::Internal,
+                "playback action projections span multiple show revisions",
+            ));
+        }
         let desk = ports.desk_projection(&envelope.context)?;
         let applied = outcome == PlaybackOutcome::Applied;
-        let event_sequence = if applied {
+        let related = if applied {
+            related.publish_changes(&self.events, &envelope.context, ports)?
+        } else {
+            Vec::new()
+        };
+        let primary_event_sequence = if applied {
             committed_playback_event(
                 &envelope.context,
                 envelope.command.action,
@@ -88,6 +102,8 @@ impl PlaybackService {
         } else {
             None
         };
+        let event_sequence =
+            primary_event_sequence.or_else(|| related.last().map(|change| change.event_sequence));
         let desk_event_sequence = if applied && desk != before_desk {
             desk.map(|projection| {
                 self.events
@@ -108,6 +124,7 @@ impl PlaybackService {
             durability,
             execution,
             projection,
+            related,
             desk,
             event_sequence,
             desk_event_sequence,

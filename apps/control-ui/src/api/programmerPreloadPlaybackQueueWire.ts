@@ -111,6 +111,7 @@ function decodeProjection(
 function decodeEntry(value: unknown, path: string) {
 	const entry = exactRecordAt(value, path, [
 		"playback_number",
+		"page",
 		"action",
 		"surface",
 	]);
@@ -124,8 +125,12 @@ function decodeEntry(value: unknown, path: string) {
 			"16-bit playback number",
 			playbackNumber,
 		);
+	const page = entry.page == null ? null : integerAt(entry.page, `${path}.page`);
+	if (page !== null && page > 255)
+		throw new WireValidationError(`${path}.page`, "8-bit page", page);
 	return {
 		playbackNumber,
+		page,
 		action: enumAt(entry.action, `${path}.action`, ACTIONS),
 		surface: enumAt(entry.surface, `${path}.surface`, SURFACES),
 	};

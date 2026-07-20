@@ -13,6 +13,7 @@ mod move_in_black;
 mod move_in_black_candidate;
 mod move_in_black_runtime;
 mod playback;
+mod playback_exclusion;
 mod profile_blackout;
 mod profile_color;
 mod profile_encoding;
@@ -41,6 +42,7 @@ pub use playback::{
     PlaybackBatchCommand, PlaybackBatchOutcome, PlaybackDynamicsProjection, PoolPlaybackAction,
     PreparedPlaybackBatch,
 };
+pub use playback_exclusion::PoolPlaybackTransition;
 
 pub(crate) use contribution::{
     EngineContribution, EngineContributionResolver, ResolvedAttributes, ResolvedContributionIndex,

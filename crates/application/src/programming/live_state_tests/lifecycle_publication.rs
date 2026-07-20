@@ -219,6 +219,7 @@ fn count_changes_publish_after_authoritative_events_while_same_count_and_replay_
             registry.queue_preload_playback_action(
                 session,
                 1,
+                None,
                 light_programmer::PreloadPlaybackQueueAction::Go,
                 light_programmer::PreloadPlaybackQueueSurface::Physical,
             )

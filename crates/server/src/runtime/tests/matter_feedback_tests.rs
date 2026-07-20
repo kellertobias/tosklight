@@ -42,15 +42,18 @@ fn matter_feedback_tracks_faderless_temp_and_manual_xfade_positions() {
         .unwrap();
     let rejected = dispatch_playback_action(
         &state,
-        None,
-        None,
         &faderless_xfade,
         "fader",
         &PoolPlaybackInput {
             value: Some(0.5),
             ..PoolPlaybackInput::default()
         },
-        "osc",
+        PlaybackDispatchContext {
+            session: None,
+            desk: None,
+            source: "osc",
+            exclusion_zones: &[],
+        },
     )
     .unwrap_err();
     assert_eq!(rejected.message, "playback does not have a fader");

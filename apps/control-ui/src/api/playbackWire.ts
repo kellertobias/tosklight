@@ -162,6 +162,16 @@ export function decodePlaybackSnapshot(
 
 export function decodePlaybackOutcome(value: unknown): PlaybackActionOutcome {
 	const outcome = recordAt(value, "$");
+	const projection = decodePlaybackProjection(outcome.projection, "$.projection");
+	const related = arrayAt(outcome.related, "$.related").map((item, index) =>
+		decodeRelatedOutcome(item, `$.related[${index}]`),
+	);
+	const eventSequence = nullable(
+		outcome.event_sequence,
+		"$.event_sequence",
+		integerAt,
+	);
+	assertRelatedOutcomeSet(projection, related, eventSequence);
 	return {
 		request_id: stringAt(outcome.request_id, "$.request_id"),
 		correlation_id: stringAt(outcome.correlation_id, "$.correlation_id"),
@@ -172,19 +182,69 @@ export function decodePlaybackOutcome(value: unknown): PlaybackActionOutcome {
 			"durable",
 			"persistence_pending",
 		]) satisfies PlaybackDurability,
-		projection: decodePlaybackProjection(outcome.projection, "$.projection"),
+		projection,
+		related,
 		desk: nullable(outcome.desk, "$.desk", decodePlaybackDesk),
-		event_sequence: nullable(
-			outcome.event_sequence,
-			"$.event_sequence",
-			integerAt,
-		),
+		event_sequence: eventSequence,
 		desk_event_sequence: nullable(
 			outcome.desk_event_sequence,
 			"$.desk_event_sequence",
 			integerAt,
 		),
 		replayed: booleanAt(outcome.replayed, "$.replayed"),
+	};
+}
+
+function assertRelatedOutcomeSet(
+	primary: ReturnType<typeof decodePlaybackProjection>,
+	related: ReturnType<typeof decodeRelatedOutcome>[],
+	highWater: number | null,
+) {
+	if (related.length && highWater == null)
+		throw new WireValidationError(
+			"$.event_sequence",
+			"event high-water when related outcomes are present",
+			highWater,
+		);
+	let previous = -1;
+	for (const [index, item] of related.entries()) {
+		const path = `$.related[${index}]`;
+		if (
+			item.projection.scope.show_id !== primary.scope.show_id ||
+			item.projection.scope.show_revision !== primary.scope.show_revision
+		)
+			throw new WireValidationError(
+				`${path}.projection.scope`,
+				"the primary projection show scope",
+				item.projection.scope,
+			);
+		if (item.event_sequence <= previous)
+			throw new WireValidationError(
+				`${path}.event_sequence`,
+				"a strictly increasing event sequence",
+				item.event_sequence,
+			);
+		if (highWater != null && item.event_sequence > highWater)
+			throw new WireValidationError(
+				`${path}.event_sequence`,
+				`an event sequence at or below ${highWater}`,
+				item.event_sequence,
+			);
+		previous = item.event_sequence;
+	}
+}
+
+function decodeRelatedOutcome(value: unknown, path: string) {
+	const related = recordAt(value, path);
+	return {
+		projection: decodePlaybackProjection(
+			related.projection,
+			`${path}.projection`,
+		),
+		event_sequence: integerAt(
+			related.event_sequence,
+			`${path}.event_sequence`,
+		),
 	};
 }
 

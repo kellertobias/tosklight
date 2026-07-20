@@ -210,133 +210,77 @@ pub(super) async fn put_virtual_playback_exclusion_zones(
     ))
 }
 
-pub(super) fn virtual_playback_zone_numbers(state: &AppState, desk_id: Uuid) -> Vec<Vec<u16>> {
-    let Some(show) = state.active_show.read().clone() else {
-        return Vec::new();
-    };
-    let (page_number, surfaces) = {
+pub(super) struct VirtualPlaybackExclusionResolver {
+    current_page: u8,
+    surfaces: VirtualPlaybackExclusionSurfaces,
+    pages: HashMap<u8, HashMap<u8, u16>>,
+}
+
+impl VirtualPlaybackExclusionResolver {
+    pub(super) fn read(state: &AppState, desk_id: Uuid) -> Self {
+        let pages = state
+            .engine
+            .snapshot()
+            .playback_pages
+            .iter()
+            .map(|page| (page.number, page.slots.clone()))
+            .collect();
+        let Some(show) = state.active_show.read().clone() else {
+            return Self {
+                current_page: 1,
+                surfaces: HashMap::new(),
+                pages,
+            };
+        };
         let desk = state.desk.lock();
-        let page = desk.desk_page(desk_id, show.id).unwrap_or(1);
+        let current_page = desk.desk_page(desk_id, show.id).unwrap_or(1);
         let surfaces = read_virtual_playback_exclusion_store(&desk, show.id)
             .remove(&desk_id.to_string())
             .unwrap_or_default();
-        (page, surfaces)
-    };
-    let snapshot = state.engine.snapshot();
-    let Some(page) = snapshot
-        .playback_pages
+        Self {
+            current_page,
+            surfaces,
+            pages,
+        }
+    }
+
+    pub(super) fn zone_numbers(&self, addressed_page: Option<u8>) -> Vec<Vec<u16>> {
+        if addressed_page.is_some_and(|page| page != self.current_page) {
+            return Vec::new();
+        }
+        let Some(slots) = self.pages.get(&self.current_page) else {
+            return Vec::new();
+        };
+        self.surfaces
+            .values()
+            .flatten()
+            .map(|zone| zone_numbers(zone, slots))
+            .filter(|numbers| numbers.len() >= 2)
+            .collect()
+    }
+}
+
+fn zone_numbers(zone: &VirtualPlaybackExclusionZone, slots: &HashMap<u8, u16>) -> Vec<u16> {
+    let mut seen = HashSet::new();
+    zone.slots
         .iter()
-        .find(|candidate| candidate.number == page_number)
-    else {
-        return Vec::new();
-    };
-    surfaces
-        .into_values()
-        .flat_map(|zones| zones.into_iter())
-        .map(|zone| {
-            let mut seen = HashSet::new();
-            zone.slots
-                .into_iter()
-                .filter_map(|slot| page.slots.get(&slot).copied())
-                .filter(|number| seen.insert(*number))
-                .collect::<Vec<_>>()
-        })
-        .filter(|numbers| numbers.len() >= 2)
+        .filter_map(|slot| slots.get(slot).copied())
+        .filter(|number| seen.insert(*number))
         .collect()
 }
 
-pub(super) fn enforce_virtual_playback_exclusions(
-    state: &AppState,
-    desk_id: Uuid,
-    activated_number: u16,
-) -> Vec<u16> {
-    let zones = virtual_playback_zone_numbers(state, desk_id);
-    if !zones.iter().any(|zone| zone.contains(&activated_number)) {
-        return Vec::new();
-    }
-    if !state
-        .engine
-        .playback_runtime()
-        .iter()
-        .any(|active| active.playback_number == Some(activated_number) && active.enabled)
-    {
-        return Vec::new();
-    }
-    let mut released = HashSet::new();
-    for number in zones
+pub(super) fn virtual_playback_zone_numbers(state: &AppState, desk_id: Uuid) -> Vec<Vec<u16>> {
+    VirtualPlaybackExclusionResolver::read(state, desk_id).zone_numbers(None)
+}
+
+pub(super) fn virtual_playback_peer_numbers(zones: &[Vec<u16>], activated_number: u16) -> Vec<u16> {
+    let mut peers = zones
         .iter()
         .filter(|zone| zone.contains(&activated_number))
         .flat_map(|zone| zone.iter().copied())
         .filter(|number| *number != activated_number)
-    {
-        if released.insert(number) {
-            let _ = state.engine.execute_playback(EnginePlaybackCommand::Pool {
-                number,
-                action: PoolPlaybackAction::Off,
-            });
-        }
-    }
-    let mut released = released.into_iter().collect::<Vec<_>>();
-    released.sort_unstable();
-    released
-}
-
-pub(super) fn normalize_restored_virtual_playback_exclusions(state: &AppState) {
-    let Some(show) = state.active_show.read().clone() else {
-        return;
-    };
-    let desks = read_virtual_playback_exclusion_store(&state.desk.lock(), show.id)
-        .keys()
-        .filter_map(|id| Uuid::parse_str(id).ok())
         .collect::<Vec<_>>();
-    let zones = desks
-        .into_iter()
-        .flat_map(|desk_id| virtual_playback_zone_numbers(state, desk_id))
-        .collect::<Vec<_>>();
-    let mut active = state
-        .engine
-        .playback_runtime()
-        .into_iter()
-        .filter(|playback| {
-            playback.enabled
-                && playback
-                    .playback_number
-                    .is_some_and(|number| zones.iter().any(|zone| zone.contains(&number)))
-        })
-        .collect::<Vec<_>>();
-    active.sort_by_key(|playback| (playback.activated_at, playback.playback_number));
-    // Replay the retained activation order against every configured zone. This is independent of
-    // HashMap/surface iteration and gives overlapping zones the same last-serialized-wins result as
-    // live dispatch. Non-conflicting members may remain active.
-    let mut retained = HashSet::new();
-    for number in active
-        .iter()
-        .filter_map(|playback| playback.playback_number)
-    {
-        for other in zones
-            .iter()
-            .filter(|zone| zone.contains(&number))
-            .flat_map(|zone| zone.iter())
-        {
-            retained.remove(other);
-        }
-        retained.insert(number);
-    }
-    let mut changed = false;
-    for number in active
-        .into_iter()
-        .filter_map(|candidate| candidate.playback_number)
-        .filter(|number| !retained.contains(number))
-    {
-        changed |= state
-            .engine
-            .execute_playback(EnginePlaybackCommand::Pool {
-                number,
-                action: PoolPlaybackAction::Off,
-            })
-            .is_ok_and(|outcome| matches!(outcome, EnginePlaybackOutcome::Changed(true)));
-    }
-    if changed {
-        let _ = persist_active_playbacks(state);
-    }
+    peers.sort_unstable();
+    peers.dedup();
+    peers
 }

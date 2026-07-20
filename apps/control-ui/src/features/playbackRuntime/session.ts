@@ -3,6 +3,7 @@ import type {
 	PlaybackRuntimeEventMessage,
 	PlaybackSnapshot,
 } from "./contracts";
+import { identityKey, projectionKeys } from "./contracts";
 import { PlaybackViewScope } from "./scope";
 import type { PlaybackRuntimeStore } from "./store";
 import {
@@ -14,6 +15,7 @@ import {
 export interface PlaybackRuntimeSessionOptions {
 	showId: string;
 	deskId: string;
+	authorityKey: string;
 	store: PlaybackRuntimeStore;
 	transport: PlaybackEventTransport | null;
 	loadSnapshot(identities: PlaybackIdentity[]): Promise<PlaybackSnapshot>;
@@ -24,6 +26,7 @@ export class PlaybackRuntimeSession {
 	private readonly scope = new PlaybackViewScope();
 	private readonly showId: string;
 	private readonly deskId: string;
+	private readonly storeScope: number;
 	private readonly store: PlaybackRuntimeStore;
 	private readonly transport: PlaybackEventTransport | null;
 	private readonly loadSnapshot: PlaybackRuntimeSessionOptions["loadSnapshot"];
@@ -42,7 +45,8 @@ export class PlaybackRuntimeSession {
 		this.transport = options.transport;
 		this.loadSnapshot = options.loadSnapshot;
 		this.onError = options.onError;
-		this.store.reset(this.showId, this.deskId);
+		this.store.reset(this.showId, this.deskId, options.authorityKey);
+		this.storeScope = this.store.captureScope();
 	}
 
 	activate(identity: PlaybackIdentity) {
@@ -88,6 +92,7 @@ export class PlaybackRuntimeSession {
 	}
 
 	private async refresh() {
+		if (!this.store.isScopeCurrent(this.storeScope)) return;
 		const generation = ++this.lifecycle;
 		this.clearReconnect();
 		this.closeStream();
@@ -103,7 +108,7 @@ export class PlaybackRuntimeSession {
 			const snapshots = await this.loadSnapshots(identities);
 			if (!this.isCurrent(generation, key)) return;
 			for (const { snapshot, identities: batch } of snapshots) {
-				this.assertSnapshotScope(snapshot);
+				this.assertSnapshotScope(snapshot, batch);
 				this.store.installSnapshot(snapshot, batch);
 			}
 			cursor = Math.min(
@@ -178,9 +183,13 @@ export class PlaybackRuntimeSession {
 		this.repairRunning = true;
 		try {
 			const snapshots = await this.loadSnapshots(identities);
-			if (generation !== this.lifecycle) return;
+			if (
+				generation !== this.lifecycle ||
+				!this.store.isScopeCurrent(this.storeScope)
+			)
+				return;
 			for (const { snapshot, identities: batch } of snapshots) {
-				this.assertSnapshotScope(snapshot);
+				this.assertSnapshotScope(snapshot, batch);
 				this.store.installSnapshot(snapshot, batch);
 			}
 			this.stream?.repair(
@@ -205,7 +214,10 @@ export class PlaybackRuntimeSession {
 		return snapshots;
 	}
 
-	private assertSnapshotScope(snapshot: PlaybackSnapshot) {
+	private assertSnapshotScope(
+		snapshot: PlaybackSnapshot,
+		identities: readonly PlaybackIdentity[],
+	) {
 		if (
 			snapshot.desk.scope.show_id !== this.showId ||
 			snapshot.desk.desk_id !== this.deskId
@@ -213,6 +225,17 @@ export class PlaybackRuntimeSession {
 			throw new PlaybackProtocolError(
 				"Playback snapshot does not match the active show and desk",
 			);
+		const requested = new Set(identities.map(identityKey));
+		for (const projection of snapshot.projections) {
+			if (projection.scope.show_id !== this.showId)
+				throw new PlaybackProtocolError(
+					"Playback snapshot contains a projection from another show",
+				);
+			if (!projectionKeys(projection).some((key) => requested.has(key)))
+				throw new PlaybackProtocolError(
+					"Playback snapshot contains an unrequested projection",
+				);
+		}
 	}
 
 	private protocolReset(error: Error) {
@@ -235,7 +258,11 @@ export class PlaybackRuntimeSession {
 	}
 
 	private isCurrent(generation: number, key: string) {
-		return generation === this.lifecycle && key === this.scope.key();
+		return (
+			generation === this.lifecycle &&
+			key === this.scope.key() &&
+			this.store.isScopeCurrent(this.storeScope)
+		);
 	}
 
 	private closeStream() {

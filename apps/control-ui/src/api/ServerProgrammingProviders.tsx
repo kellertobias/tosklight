@@ -53,6 +53,7 @@ export function ServerProgrammingProviders({
 			<PlaybackRuntimeViewProvider
 				showId={showId}
 				deskId={state.session?.desk.id ?? null}
+				authorityKey={boundaries.playbackAuthorityKey}
 				store={state.playbackRuntimeStore}
 				transport={boundaries.playbackTransport}
 				loadSnapshot={boundaries.loadPlaybackSnapshot}

@@ -139,7 +139,7 @@ export type ProgrammingPreloadPlaybackAction = "toggle" | "go" | "back" | "off" 
 
 export type ProgrammingPreloadPlaybackSurface = "physical" | "virtual" | "osc" | "matter";
 
-export type ProgrammingPreloadPlaybackQueueItem = { playback_number: number, action: ProgrammingPreloadPlaybackAction, surface: ProgrammingPreloadPlaybackSurface, };
+export type ProgrammingPreloadPlaybackQueueItem = { playback_number: number, page?: number | null, action: ProgrammingPreloadPlaybackAction, surface: ProgrammingPreloadPlaybackSurface, };
 
 export type ProgrammingPreloadPlaybackQueueProjection = { user_id: string, revision: number, actions: Array<ProgrammingPreloadPlaybackQueueItem>, };
 
@@ -303,9 +303,15 @@ request_id: string, address: PlaybackAddress, action: PlaybackAction,
  */
 surface: PlaybackSurface, };
 
-export type PlaybackActionOutcome = { request_id: string, correlation_id: string, requested: PlaybackAddress, resolved: ResolvedPlaybackAddress, outcome: PlaybackOutcome, durability: PlaybackDurability, projection: PlaybackRuntimeProjection, desk: PlaybackDeskProjection | null,
+export type PlaybackRelatedOutcome = { projection: PlaybackRuntimeProjection, event_sequence: number, };
+
+export type PlaybackActionOutcome = { request_id: string, correlation_id: string, requested: PlaybackAddress, resolved: ResolvedPlaybackAddress, outcome: PlaybackOutcome, durability: PlaybackDurability, projection: PlaybackRuntimeProjection,
 /**
- * Exact sequence of the emitted semantic event; absent for no-change or captured actions.
+ * Additional runtime identities changed atomically by the same action, in event order.
+ */
+related: Array<PlaybackRelatedOutcome>, desk: PlaybackDeskProjection | null,
+/**
+ * Highest sequence emitted by the action; absent for no-change or captured actions.
  */
 event_sequence?: number | null,
 /**

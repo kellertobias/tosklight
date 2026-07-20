@@ -42,6 +42,7 @@ pub(super) struct OutputScheduler {
     pub(super) output: Arc<NetworkOutput>,
     pub(super) sequences: SharedSequences,
     pub(super) control: Arc<Mutex<OutputControl>>,
+    start: Option<tokio::sync::oneshot::Sender<()>>,
     pub(super) task: JoinHandle<()>,
 }
 
@@ -67,8 +68,15 @@ struct Runtime {
 pub(super) async fn start(config: Config) -> anyhow::Result<OutputScheduler> {
     let resources = SharedResources::create(&config).await?;
     let runtime = resources.runtime(&config);
-    let task = spawn(runtime, config.rate, config.health, config.test_bench);
-    Ok(resources.scheduler(task))
+    let (start, ready) = tokio::sync::oneshot::channel();
+    let task = spawn(
+        runtime,
+        config.rate,
+        config.health,
+        config.test_bench,
+        ready,
+    );
+    Ok(resources.scheduler(start, task))
 }
 
 async fn bind_output(bind_ip: IpAddr) -> anyhow::Result<Arc<NetworkOutput>> {
@@ -92,11 +100,25 @@ fn spawn(
     rate: Arc<AtomicU16>,
     health: Arc<std::sync::Mutex<OutputHealth>>,
     test_bench: bool,
+    ready: tokio::sync::oneshot::Receiver<()>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
+        if !await_start(ready, &runtime.cancellation).await {
+            return;
+        }
         run(&runtime, rate, health, test_bench).await;
         shut_down_safely(&runtime).await;
     })
+}
+
+async fn await_start(
+    ready: tokio::sync::oneshot::Receiver<()>,
+    cancellation: &CancellationToken,
+) -> bool {
+    tokio::select! {
+        result = ready => result.is_ok(),
+        _ = cancellation.cancelled() => false,
+    }
 }
 
 async fn run(
@@ -258,6 +280,14 @@ fn safe_shutdown_options(control: &Mutex<OutputControl>) -> RenderOptions {
 }
 
 impl OutputScheduler {
+    pub(super) fn start_rendering(&mut self) -> anyhow::Result<()> {
+        self.start
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("output scheduler was already started"))?
+            .send(())
+            .map_err(|_| anyhow::anyhow!("output scheduler stopped before startup completed"))
+    }
+
     pub(super) fn network_output(&self) -> Arc<NetworkOutput> {
         Arc::clone(&self.output)
     }
@@ -270,7 +300,8 @@ impl OutputScheduler {
         Arc::clone(&self.control)
     }
 
-    pub(super) async fn wait(self) {
+    pub(super) async fn wait(mut self) {
+        self.start.take();
         let _ = self.task.await;
     }
 }
@@ -298,51 +329,21 @@ impl SharedResources {
         }
     }
 
-    fn scheduler(self, task: JoinHandle<()>) -> OutputScheduler {
+    fn scheduler(
+        self,
+        start: tokio::sync::oneshot::Sender<()>,
+        task: JoinHandle<()>,
+    ) -> OutputScheduler {
         OutputScheduler {
             output: self.output,
             sequences: self.sequences,
             control: self.control,
+            start: Some(start),
             task,
         }
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use light_control::FrameRate;
-
-    #[test]
-    fn frame_selection_applies_overrides_and_reuses_held_frames() {
-        let mut control = OutputControl::default();
-        control.raw_overrides.insert((1, 2), 77);
-        let live = output_frames(&mut control, frames_with_value(1, 10));
-        assert_eq!(live[&1][0], 10);
-        assert_eq!(live[&1][1], 77);
-
-        control.hold = true;
-        let held = output_frames(&mut control, frames_with_value(1, 99));
-        assert_eq!(held, live);
-    }
-
-    #[test]
-    fn timecode_frame_uses_the_nominal_frame_rate() {
-        let timecode = SmpteTimecode {
-            hours: 1,
-            minutes: 2,
-            seconds: 3,
-            frames: 4,
-            rate: FrameRate::Fps25,
-            source: "test".into(),
-            received_at: chrono::Utc::now(),
-        };
-        assert_eq!(timecode_frame(&timecode), 93_079);
-    }
-
-    fn frames_with_value(universe: Universe, value: u8) -> HashMap<Universe, DmxFrame> {
-        let mut frame = [0; light_output::DMX_SLOTS];
-        frame[0] = value;
-        HashMap::from([(universe, frame)])
-    }
-}
+#[path = "output_scheduler_tests.rs"]
+mod tests;

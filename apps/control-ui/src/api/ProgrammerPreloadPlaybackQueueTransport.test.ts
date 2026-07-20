@@ -43,7 +43,7 @@ function projection() {
 	return {
 		user_id: USER_ID,
 		revision: 2,
-		actions: [{ playback_number: 4, action: "go", surface: "osc" }],
+		actions: [{ playback_number: 4, page: 5, action: "go", surface: "osc" }],
 	};
 }
 
@@ -105,7 +105,11 @@ describe("HttpProgrammerPreloadPlaybackQueueTransport", () => {
 
 		await expect(transport.loadSnapshot(scope)).resolves.toMatchObject({
 			cursor: 11,
-			projection: { userId: USER_ID, revision: 2 },
+			projection: {
+				userId: USER_ID,
+				revision: 2,
+				actions: [{ playbackNumber: 4, page: 5 }],
+			},
 		});
 		const [url, init] = fetch.mock.calls[0];
 		expect(url).toBe(

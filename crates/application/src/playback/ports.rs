@@ -40,6 +40,19 @@ pub trait PlaybackPorts: Send + Sync {
         Ok(None)
     }
 
+    /// Returns exact runtime identities which the addressed action may change as a semantic side
+    /// effect. The service snapshots these identities before execution and publishes only actual
+    /// projection differences. This includes virtual-exclusion and automatic release peers.
+    fn related_runtime_identities(
+        &self,
+        _context: &ActionContext,
+        _address: ResolvedPlaybackAddress,
+        _action: PlaybackAction,
+        _surface: PlaybackSurface,
+    ) -> Result<Vec<PlaybackRuntimeIdentity>, ActionError> {
+        Ok(Vec::new())
+    }
+
     /// Reads only the addressed immutable runtime/control projection. Implementations must not
     /// persist, compile, or construct a broad legacy Playback snapshot here.
     fn projection(

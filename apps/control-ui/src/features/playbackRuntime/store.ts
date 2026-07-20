@@ -8,6 +8,13 @@ import type {
 import { identityKey, projectionKeys } from "./contracts";
 import { PlaybackDeskState } from "./deskState";
 import { optimisticMaster } from "./optimistic";
+import { projectSnapshot, upsertProjection } from "./projectionCollection";
+import { PlaybackRequestTracker } from "./requestTracker";
+import {
+	outcomeEventSequence,
+	outcomeMatchesScope,
+	outcomeShowRevision,
+} from "./outcome";
 
 export interface PlaybackRuntimeState {
 	showId: string | null;
@@ -21,14 +28,6 @@ export interface PlaybackRuntimeState {
 	error: Error | null;
 }
 
-interface ProjectionOperation {
-	token: string;
-	key: string;
-	baseSequence: number;
-	order: number;
-	optimistic: PlaybackProjection;
-}
-
 export class PlaybackRuntimeStore {
 	private readonly listeners = new Set<() => void>();
 	private readonly keySequences = new Map<string, number>();
@@ -36,13 +35,10 @@ export class PlaybackRuntimeStore {
 		string,
 		readonly PlaybackProjection[]
 	>();
-	private readonly projectionOperations = new Map<
-		string,
-		ProjectionOperation
-	>();
-	private readonly latestProjectionTokens = new Map<string, string>();
 	private readonly deskState = new PlaybackDeskState();
-	private projectionOperationOrder = 0;
+	private readonly requests = new PlaybackRequestTracker();
+	private authorityKey = "";
+	private scope = 0;
 	private state: PlaybackRuntimeState = emptyState();
 
 	readonly subscribe = (listener: () => void) => {
@@ -52,14 +48,19 @@ export class PlaybackRuntimeStore {
 
 	readonly getSnapshot = () => this.state;
 
-	reset(showId: string | null, deskId: string | null) {
-		if (showId === this.state.showId && deskId === this.state.deskId) return;
+	reset(showId: string | null, deskId: string | null, authorityKey = "") {
+		if (
+			showId === this.state.showId &&
+			deskId === this.state.deskId &&
+			authorityKey === this.authorityKey
+		)
+			return;
+		this.scope++;
+		this.authorityKey = authorityKey;
 		this.keySequences.clear();
 		this.authoritativeProjections.clear();
-		this.projectionOperations.clear();
-		this.latestProjectionTokens.clear();
+		this.requests.reset();
 		this.deskState.reset();
-		this.projectionOperationOrder = 0;
 		this.state = {
 			...emptyState(),
 			showId,
@@ -67,6 +68,14 @@ export class PlaybackRuntimeStore {
 			status: showId && deskId ? "loading" : "idle",
 		};
 		this.emit();
+	}
+
+	captureScope() {
+		return this.scope;
+	}
+
+	isScopeCurrent(scope: number) {
+		return scope === this.scope;
 	}
 
 	seedDesk(activePage: number, selectedPlayback: number | null, revision = 0) {
@@ -127,24 +136,9 @@ export class PlaybackRuntimeStore {
 	}
 
 	applyProjection(projection: PlaybackProjection, sequence: number) {
-		if (!this.matches(projection.scope.show_id)) return false;
-		const keys = projectionKeys(projection);
 		const projections = new Map(this.state.projections);
-		let changed = false;
-		for (const key of keys) {
-			if ((this.keySequences.get(key) ?? 0) >= sequence) continue;
-			this.authoritativeProjections.set(
-				key,
-				upsertProjection(
-					this.authoritativeProjections.get(key) ?? [],
-					projection,
-				),
-			);
-			this.keySequences.set(key, sequence);
-			projections.set(key, this.renderProjectionKey(key));
-			changed = true;
-		}
-		if (!changed) return false;
+		if (!this.mergeProjection(projection, sequence, undefined, projections))
+			return false;
 		this.publish({
 			projections,
 			showRevision: Math.max(
@@ -177,30 +171,52 @@ export class PlaybackRuntimeStore {
 	}
 
 	installOutcome(outcome: PlaybackOutcome, token?: string | null) {
-		const operation = this.takeProjectionOperation(token);
-		const sequence = outcome.event_sequence ?? null;
+		const pending = this.requests.peek(token);
+		if (token && !pending) return false;
+		if (pending) this.assertOutcomeMatchesRequest(outcome, pending.key);
+		const operation = this.requests.take(token);
 		if (
-			sequence != null ||
-			!operation ||
-			(this.keySequences.get(operation.key) ?? 0) <= operation.baseSequence
+			!operation &&
+			!outcomeMatchesScope(outcome, this.state.showId, this.state.deskId)
 		)
-			this.installAuthoritativeProjection(
-				outcome.projection,
-				sequence,
-				operation?.baseSequence ?? this.state.eventSequence ?? 0,
+			return false;
+		const projections = new Map(this.state.projections);
+		const matchesOutcome = this.matches(outcome.projection.scope.show_id);
+		for (const related of outcome.related)
+			this.mergeProjection(
+				related.projection,
+				related.event_sequence,
+				operation?.baseSequences,
+				projections,
 			);
-		if (outcome.desk) {
-			const deskSequence = outcome.desk_event_sequence ?? sequence;
-			if (deskSequence != null) this.applyDesk(outcome.desk, deskSequence);
-			else
-				this.publish({
-					desk: this.deskState.installUnsequenced(
-						outcome.desk,
-						this.state.eventSequence ?? 0,
-					),
-				});
-		}
-		this.publish({ pendingKeys: this.pendingKeys(), error: null });
+		const sequence = outcome.event_sequence ?? null;
+		this.mergeProjection(
+			outcome.projection,
+			sequence,
+			operation?.baseSequences,
+			projections,
+		);
+		if (operation)
+			projections.set(operation.key, this.renderProjectionKey(operation.key));
+		this.publish({
+			projections,
+			desk: this.outcomeDesk(outcome, sequence, operation?.deskBaseSequence),
+			showRevision: outcomeShowRevision(
+				outcome,
+				this.state.showId,
+				this.state.showRevision,
+			),
+			eventSequence: outcomeEventSequence(
+				outcome,
+				this.state.showId,
+				this.state.deskId,
+				this.state.eventSequence,
+			),
+			pendingKeys: this.pendingKeys(),
+			status: matchesOutcome ? "ready" : this.state.status,
+			error: null,
+		});
+		return true;
 	}
 
 	beginOptimisticMaster(playbackNumber: number, value: number) {
@@ -212,24 +228,21 @@ export class PlaybackRuntimeStore {
 		if (!projection) return null;
 		const optimistic = optimisticMaster(projection, value);
 		if (!optimistic) return null;
-		const operation = {
-			token: crypto.randomUUID(),
-			key,
-			baseSequence: this.keySequences.get(key) ?? 0,
-			order: ++this.projectionOperationOrder,
-			optimistic,
-		};
-		this.projectionOperations.set(operation.token, operation);
-		this.latestProjectionTokens.set(key, operation.token);
+		const token = this.beginTrackedRequest(key, optimistic);
 		const projections = new Map(this.state.projections);
 		projections.set(key, this.renderProjectionKey(key));
 		this.publish({ projections, pendingKeys: this.pendingKeys(), error: null });
-		return operation.token;
+		return token;
+	}
+
+	beginRequest(identity: PlaybackIdentity) {
+		return this.beginTrackedRequest(identityKey(identity));
 	}
 
 	rollbackProjection(token: string | null, error: Error) {
-		const operation = this.takeProjectionOperation(token);
-		if (!operation) return;
+		const operation = this.requests.take(token);
+		if (!operation) return false;
+		if (!operation.optimistic) return true;
 		const projections = new Map(this.state.projections);
 		projections.set(operation.key, this.renderProjectionKey(operation.key));
 		this.publish({
@@ -238,6 +251,7 @@ export class PlaybackRuntimeStore {
 			status: "error",
 			error,
 		});
+		return true;
 	}
 
 	beginOptimisticPage(page: number) {
@@ -249,26 +263,31 @@ export class PlaybackRuntimeStore {
 
 	commitPage(token: string | null, _page: number, sequence: number | null) {
 		const desk = this.deskState.commit(token, sequence);
-		if (desk) this.publish({ desk, error: null });
+		if (!desk) return false;
+		this.publish({ desk, error: null });
+		return true;
 	}
 
 	rollbackPage(token: string | null, error: Error) {
 		const desk = this.deskState.rollback(token);
-		if (desk) this.publish({ desk, status: "error", error });
+		if (!desk) return false;
+		this.publish({ desk, status: "error", error });
+		return true;
 	}
 
-	private installAuthoritativeProjection(
+	private mergeProjection(
 		projection: PlaybackProjection,
 		sequence: number | null,
-		baseSequence: number,
+		baseSequences: ReadonlyMap<string, number> | undefined,
+		projections: Map<string, readonly PlaybackProjection[]>,
 	) {
-		if (sequence != null) {
-			this.applyProjection(projection, sequence);
-			return;
-		}
-		const projections = new Map(this.state.projections);
+		if (!this.matches(projection.scope.show_id)) return false;
+		let changed = false;
 		for (const key of projectionKeys(projection)) {
-			if ((this.keySequences.get(key) ?? 0) > baseSequence) continue;
+			const current = this.keySequences.get(key) ?? 0;
+			const baseline = baseSequences?.get(key) ?? 0;
+			if (sequence == null ? current > baseline : current >= sequence)
+				continue;
 			this.authoritativeProjections.set(
 				key,
 				upsertProjection(
@@ -276,41 +295,71 @@ export class PlaybackRuntimeStore {
 					projection,
 				),
 			);
+			if (sequence != null) this.keySequences.set(key, sequence);
 			projections.set(key, this.renderProjectionKey(key));
+			changed = true;
 		}
-		this.publish({ projections, status: "ready", error: null });
+		return changed;
 	}
 
-	private takeProjectionOperation(token?: string | null) {
-		if (!token) return null;
-		const operation = this.projectionOperations.get(token);
-		if (!operation) return null;
-		this.projectionOperations.delete(token);
-		if (this.latestProjectionTokens.get(operation.key) === token) {
-			const latest = [...this.projectionOperations.values()]
-				.filter((candidate) => candidate.key === operation.key)
-				.sort((left, right) => right.order - left.order)[0];
-			if (latest) this.latestProjectionTokens.set(operation.key, latest.token);
-			else this.latestProjectionTokens.delete(operation.key);
-		}
-		return operation;
+	private outcomeDesk(
+		outcome: PlaybackOutcome,
+		sequence: number | null,
+		deskBaseSequence: number | undefined,
+	) {
+		if (
+			!outcome.desk ||
+			!this.matches(outcome.desk.scope.show_id, outcome.desk.desk_id)
+		)
+			return this.state.desk;
+		const deskSequence = outcome.desk_event_sequence ?? sequence;
+		if (deskSequence != null)
+			return this.deskState.apply(outcome.desk, deskSequence) ?? this.state.desk;
+		return deskBaseSequence == null
+			? this.state.desk
+			: this.deskState.installUnsequenced(outcome.desk, deskBaseSequence);
+	}
+
+	private beginTrackedRequest(
+		key: string,
+		optimistic: PlaybackProjection | null = null,
+	) {
+		const keys = new Set([key]);
+		for (const projection of this.authoritativeProjections.get(key) ?? [])
+			for (const projectionKey of projectionKeys(projection))
+				keys.add(projectionKey);
+		const baselines = new Map(
+			[...keys].map((projectionKey) => [
+				projectionKey,
+				this.keySequences.get(projectionKey) ?? 0,
+			]),
+		);
+		return this.requests.begin(
+			key,
+			baselines,
+			this.deskState.captureSequence(),
+			optimistic,
+		);
 	}
 
 	private renderProjectionKey(key: string) {
 		const authoritative = this.authoritativeProjections.get(key) ?? [];
-		const token = this.latestProjectionTokens.get(key);
-		const optimistic = token
-			? this.projectionOperations.get(token)?.optimistic
-			: undefined;
-		return optimistic
-			? upsertProjection(authoritative, optimistic)
-			: authoritative;
+		return this.requests.render(key, authoritative);
 	}
 
 	private pendingKeys() {
-		return new Set(
-			[...this.projectionOperations.values()].map((operation) => operation.key),
-		);
+		return this.requests.pendingKeys();
+	}
+
+	private assertOutcomeMatchesRequest(
+		outcome: PlaybackOutcome,
+		requestKey: string,
+	) {
+		if (
+			!this.matches(outcome.projection.scope.show_id) ||
+			!projectionKeys(outcome.projection).includes(requestKey)
+		)
+			throw new Error("Playback outcome does not match the active request scope");
 	}
 
 	private matches(showId: string, deskId = this.state.deskId) {
@@ -339,28 +388,4 @@ function emptyState(): PlaybackRuntimeState {
 		status: "idle",
 		error: null,
 	};
-}
-
-function projectSnapshot(
-	projections: readonly PlaybackProjection[],
-	identities: readonly PlaybackIdentity[],
-) {
-	const result = new Map<string, PlaybackProjection[]>();
-	for (const identity of identities) result.set(identityKey(identity), []);
-	for (const projection of projections)
-		for (const key of projectionKeys(projection))
-			result.set(key, upsertProjection(result.get(key) ?? [], projection));
-	return result;
-}
-
-function upsertProjection(
-	current: readonly PlaybackProjection[],
-	projection: PlaybackProjection,
-) {
-	const key = projection.playback_number ?? null;
-	const next = current.filter((candidate) => candidate.playback_number !== key);
-	next.push(projection);
-	return next.sort(
-		(left, right) => (left.playback_number ?? 0) - (right.playback_number ?? 0),
-	);
 }

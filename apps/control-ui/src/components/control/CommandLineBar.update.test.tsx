@@ -39,6 +39,7 @@ const playbackQueue = vi.hoisted(() => ({
 		revision: number;
 		actions: Array<{
 			playbackNumber: number;
+			page: number | null;
 			action: "go" | "back" | "temporary_on" | "temporary_off";
 			surface: "virtual";
 		}>;
@@ -279,15 +280,17 @@ describe("Shift+Record Update gestures", () => {
 			userId: "user-a",
 			revision: 3,
 			actions: [
-				{ playbackNumber: 4, action: "go", surface: "virtual" },
-				{ playbackNumber: 7, action: "back", surface: "virtual" },
+				{ playbackNumber: 4, page: null, action: "go", surface: "virtual" },
+				{ playbackNumber: 7, page: null, action: "back", surface: "virtual" },
 				{
 					playbackNumber: 8,
+					page: null,
 					action: "temporary_on",
 					surface: "virtual",
 				},
 				{
 					playbackNumber: 9,
+					page: null,
 					action: "temporary_off",
 					surface: "virtual",
 				},

@@ -21,6 +21,7 @@ import type { PlaybackEventTransport } from "./transport";
 interface PlaybackRuntimeViewProviderProps {
 	showId: string | null;
 	deskId: string | null;
+	authorityKey: string;
 	store: PlaybackRuntimeStore;
 	transport: PlaybackEventTransport | null;
 	loadSnapshot: PlaybackRuntimeSessionOptions["loadSnapshot"];
@@ -36,6 +37,7 @@ export function PlaybackRuntimeViewProvider({
 	children,
 	showId,
 	deskId,
+	authorityKey,
 	store,
 	transport,
 	loadSnapshot,
@@ -48,22 +50,23 @@ export function PlaybackRuntimeViewProvider({
 				? new PlaybackRuntimeSession({
 						showId,
 						deskId,
+						authorityKey,
 						store,
 						transport,
 						loadSnapshot,
 						onError,
 					})
 				: null,
-		[deskId, loadSnapshot, onError, showId, store, transport],
+		[authorityKey, deskId, loadSnapshot, onError, showId, store, transport],
 	);
 	useEffect(() => {
-		if (!session) store.reset(showId, deskId);
+		if (!session) store.reset(showId, deskId, authorityKey);
 		return () => session?.stop();
-	}, [deskId, session, showId, store]);
+	}, [authorityKey, deskId, session, showId, store]);
 	useEffect(() => {
 		if (initialDesk)
 			store.seedDesk(initialDesk.activePage, initialDesk.selectedPlayback);
-	}, [initialDesk, store]);
+	}, [authorityKey, initialDesk, store]);
 	return (
 		<StoreContext.Provider value={store}>
 			<SessionContext.Provider value={session}>

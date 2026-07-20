@@ -149,6 +149,14 @@ pub(in crate::runtime) fn action_outcome(
             }
         },
         projection: runtime_projection(&result.projection),
+        related: result
+            .related
+            .iter()
+            .map(|related| wire::PlaybackRelatedOutcome {
+                projection: runtime_projection(&related.projection),
+                event_sequence: related.event_sequence,
+            })
+            .collect(),
         desk: result.desk.map(desk_projection),
         event_sequence: result.event_sequence,
         desk_event_sequence: result.desk_event_sequence,

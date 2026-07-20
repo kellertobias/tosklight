@@ -62,6 +62,7 @@ function createHarness(
 	const session = new PlaybackRuntimeSession({
 		showId: SHOW_ID,
 		deskId: DESK_ID,
+		authorityKey: "authority-a",
 		store,
 		transport,
 		loadSnapshot,
@@ -155,6 +156,36 @@ describe("PlaybackRuntimeSession", () => {
 		expect(harness.store.getSnapshot().projections.has("playback:2")).toBe(
 			false,
 		);
+	});
+
+	it.each([
+		[
+			"foreign-show",
+			{
+				...cueProjection(1),
+				scope: {
+					...cueProjection(1).scope,
+					show_id: "99999999-9999-4999-8999-999999999999",
+				},
+			},
+		],
+		["unrequested", cueProjection(2)],
+	])("rejects a %s snapshot projection", async (_label, projection) => {
+		const harness = createHarness();
+		const identity = playbackIdentity(1);
+		harness.loadSnapshot.mockResolvedValueOnce(
+			playbackSnapshot([identity], 10, [projection]),
+		);
+
+		harness.session.activate(identity);
+		await settle();
+
+		expect(harness.store.getSnapshot().projections.size).toBe(0);
+		expect(harness.store.getSnapshot().status).toBe("error");
+		expect(harness.onError).toHaveBeenCalledWith(
+			expect.any(PlaybackProtocolError),
+		);
+		harness.session.stop();
 	});
 
 	it("repairs a gap from a fresh authoritative cursor before resuming", async () => {

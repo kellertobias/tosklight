@@ -199,6 +199,7 @@ fn event_payload(config: &Config) -> Vec<String> {
 fn playback_transport(config: &Config) -> Vec<String> {
     vec![
         PlaybackActionRequest::decl(config),
+        PlaybackRelatedOutcome::decl(config),
         PlaybackActionOutcome::decl(config),
         PlaybackErrorKind::decl(config),
         PlaybackErrorResponse::decl(config),

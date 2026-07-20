@@ -17,6 +17,7 @@ export type ProgrammerPreloadPlaybackSurface =
 
 export interface ProgrammerPreloadPlaybackQueueEntry {
 	playbackNumber: number;
+	page: number | null;
 	action: ProgrammerPreloadPlaybackAction;
 	surface: ProgrammerPreloadPlaybackSurface;
 }
