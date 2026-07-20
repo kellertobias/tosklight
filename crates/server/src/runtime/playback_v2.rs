@@ -25,7 +25,11 @@ pub(super) fn router() -> Router<AppState> {
     Router::new()
         .route(
             "/api/v2/desks/{desk_id}/playback-actions",
-            post(playback_action),
+            post(unscoped_playback_action),
+        )
+        .route(
+            "/api/v2/shows/{show_id}/desks/{desk_id}/playback-actions",
+            post(scoped_playback_action),
         )
         .route(
             "/api/v2/desks/{desk_id}/playback-runtime/snapshot",
@@ -33,9 +37,28 @@ pub(super) fn router() -> Router<AppState> {
         )
 }
 
-async fn playback_action(
+async fn unscoped_playback_action(
     State(state): State<AppState>,
     Path(desk_id): Path<String>,
+    headers: HeaderMap,
+    request: Result<Json<PlaybackActionRequest>, JsonRejection>,
+) -> Result<Response, PlaybackHttpError> {
+    playback_action(state, None, desk_id, headers, request).await
+}
+
+async fn scoped_playback_action(
+    State(state): State<AppState>,
+    Path((show_id, desk_id)): Path<(Uuid, String)>,
+    headers: HeaderMap,
+    request: Result<Json<PlaybackActionRequest>, JsonRejection>,
+) -> Result<Response, PlaybackHttpError> {
+    playback_action(state, Some(show_id), desk_id, headers, request).await
+}
+
+async fn playback_action(
+    state: AppState,
+    expected_show: Option<Uuid>,
+    desk_id: String,
     headers: HeaderMap,
     request: Result<Json<PlaybackActionRequest>, JsonRejection>,
 ) -> Result<Response, PlaybackHttpError> {
@@ -44,6 +67,9 @@ async fn playback_action(
     let (request_id, command) =
         wire::application_command(request).map_err(PlaybackHttpError::invalid)?;
     let _activation = state.activation_lock.clone().lock_owned().await;
+    if let Some(show_id) = expected_show {
+        require_active_show(&state, show_id)?;
+    }
     let context = http_context(&session).with_request_id(request_id);
     let playback_context = context.clone();
     let result = run_programming_interaction(
@@ -66,6 +92,21 @@ async fn playback_action(
     .output
     .map_err(PlaybackHttpError::api)?;
     Ok(Json(wire::action_outcome(result)).into_response())
+}
+
+fn require_active_show(state: &AppState, requested: Uuid) -> Result<(), PlaybackHttpError> {
+    let active = state
+        .active_show
+        .read()
+        .as_ref()
+        .map(|show| show.id.0)
+        .ok_or_else(|| PlaybackHttpError::conflict("no show is active"))?;
+    if active != requested {
+        return Err(PlaybackHttpError::conflict(
+            "requested show is no longer active",
+        ));
+    }
+    Ok(())
 }
 
 async fn playback_snapshot(
@@ -147,6 +188,15 @@ impl PlaybackHttpError {
         Self::new(
             StatusCode::FORBIDDEN,
             PlaybackErrorKind::Forbidden,
+            message,
+            false,
+        )
+    }
+
+    fn conflict(message: impl Into<String>) -> Self {
+        Self::new(
+            StatusCode::CONFLICT,
+            PlaybackErrorKind::Conflict,
             message,
             false,
         )

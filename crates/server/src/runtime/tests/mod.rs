@@ -20,6 +20,10 @@ mod engine_selection_refresh_tests;
 mod event_transport_route_tests;
 #[path = "output_runtime_tests.rs"]
 mod output_runtime_tests;
+#[path = "playback_topology_route_support.rs"]
+mod playback_topology_route_support;
+#[path = "playback_topology_route_tests.rs"]
+mod playback_topology_route_tests;
 #[path = "playback_v2_route_tests.rs"]
 mod playback_v2_route_tests;
 #[path = "programming_interaction_adapter_tests.rs"]
@@ -28,6 +32,8 @@ mod programming_interaction_adapter_tests;
 mod selective_import_route_tests;
 #[path = "show_patch_route_tests.rs"]
 mod show_patch_route_tests;
+#[path = "virtual_playback_zones_route_tests.rs"]
+mod virtual_playback_zones_route_tests;
 
 include!("preload_tests.rs");
 include!("command_input_tests.rs");

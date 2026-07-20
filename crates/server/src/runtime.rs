@@ -41,8 +41,8 @@ use base64::{
 use bytes::Bytes;
 use light_application::{
     ActiveShowService, EventBus, OutputRuntimeService, PlaybackAction, PlaybackAddress,
-    PlaybackExecution, PlaybackService, ProgrammingService, SelectiveShowImportService,
-    ShowPatchService,
+    PlaybackExecution, PlaybackService, PlaybackTopologyService, ProgrammingService,
+    SelectiveShowImportService, ShowPatchService,
 };
 use light_control::speed::{
     SoundObservation, SoundToLightConfig, SpeedGroupController, SpeedSnapshot,
@@ -140,6 +140,9 @@ mod playback_layout_mutations;
 mod playback_persistence;
 mod playback_speed_groups;
 mod playback_target_actions;
+mod playback_topology_adapter;
+mod playback_topology_http;
+mod playback_topology_wire;
 mod preload;
 mod programmer_commands;
 mod programmer_fixture_commands;
@@ -174,6 +177,7 @@ mod store_preload_targets;
 mod test_bench;
 mod update_api;
 mod update_plans;
+mod virtual_playback_zones_http;
 mod ws_compatibility_events;
 mod ws_dispatch;
 mod ws_output_handlers;
@@ -223,6 +227,7 @@ use playback_inputs::*;
 use playback_layout::*;
 use playback_speed_groups::*;
 use playback_target_actions::*;
+use playback_topology_adapter::*;
 use preload::*;
 use programmer_commands::*;
 use programmer_fixture_commands::*;

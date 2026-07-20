@@ -1,0 +1,362 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PlaybackTopologyActionRequest",
+  "type": "object",
+  "properties": {
+    "action": {
+      "$ref": "#/$defs/PlaybackTopologyAction"
+    },
+    "request_id": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "action"
+  ],
+  "$defs": {
+    "PlaybackTopologyAction": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "body": {
+              "description": "Extensible portable body; adapters strictly decode its known Cuelist fields."
+            },
+            "cue_list_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "expected_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "save_cue_list"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "cue_list_id",
+            "expected_revision",
+            "body"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "expected_page_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "expected_playback_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "page": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 127,
+              "minimum": 1
+            },
+            "playback": {
+              "$ref": "#/$defs/PlaybackTopologyPlaybackDefinition"
+            },
+            "slot": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 127,
+              "minimum": 1
+            },
+            "type": {
+              "type": "string",
+              "const": "configure_slot"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "page",
+            "slot",
+            "expected_page_revision",
+            "expected_playback_revision",
+            "playback"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "expected_page_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "expected_playback_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "page": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 127,
+              "minimum": 1
+            },
+            "slot": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 127,
+              "minimum": 1
+            },
+            "type": {
+              "type": "string",
+              "const": "clear_mapped_playback"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "page",
+            "slot",
+            "expected_page_revision",
+            "expected_playback_revision"
+          ]
+        }
+      ]
+    },
+    "PlaybackTopologyButtonAction": {
+      "type": "string",
+      "enum": [
+        "on",
+        "off",
+        "toggle",
+        "go",
+        "go_minus",
+        "fast_forward",
+        "fast_rewind",
+        "flash",
+        "temp",
+        "swap",
+        "select",
+        "select_contents",
+        "select_dereferenced",
+        "learn",
+        "double",
+        "half",
+        "pause",
+        "blackout",
+        "pause_dynamics",
+        "none"
+      ]
+    },
+    "PlaybackTopologyFaderMode": {
+      "type": "string",
+      "enum": [
+        "master",
+        "temp",
+        "speed",
+        "x_fade",
+        "direct_bpm",
+        "centered_relative",
+        "learned_percentage"
+      ]
+    },
+    "PlaybackTopologyFlashReleaseMode": {
+      "type": "string",
+      "enum": [
+        "release_all",
+        "release_intensity_only"
+      ]
+    },
+    "PlaybackTopologyPlaybackDefinition": {
+      "type": "object",
+      "properties": {
+        "auto_off": {
+          "type": "boolean"
+        },
+        "button_count": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 3,
+          "minimum": 0
+        },
+        "buttons": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PlaybackTopologyButtonAction"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "color": {
+          "type": "string"
+        },
+        "fader": {
+          "$ref": "#/$defs/PlaybackTopologyFaderMode"
+        },
+        "flash_release": {
+          "$ref": "#/$defs/PlaybackTopologyFlashReleaseMode"
+        },
+        "go_activates": {
+          "type": "boolean"
+        },
+        "has_fader": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 80,
+          "minLength": 1
+        },
+        "number": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 1000,
+          "minimum": 0
+        },
+        "presentation_icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "presentation_image": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "protect_from_swap": {
+          "type": "boolean"
+        },
+        "target": {
+          "$ref": "#/$defs/PlaybackTopologyTarget"
+        },
+        "xfade_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "number",
+        "name",
+        "target",
+        "buttons",
+        "button_count",
+        "fader",
+        "has_fader",
+        "go_activates",
+        "auto_off",
+        "xfade_millis",
+        "color",
+        "flash_release",
+        "protect_from_swap"
+      ]
+    },
+    "PlaybackTopologyTarget": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "cue_list_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": {
+              "type": "string",
+              "const": "cue_list"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "cue_list_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "group"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "group_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "speed_group"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "group"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "programmer_fade"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "cue_fade"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "grand_master"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -327,6 +327,36 @@ export type PlaybackRuntimeSnapshotRequest = { identities: Array<PlaybackRuntime
 
 export type PlaybackRuntimeSnapshot = { cursor: EventSnapshotCursor, desk: PlaybackDeskProjection, projections: Array<PlaybackRuntimeProjection>, };
 
+export type PlaybackTopologyTarget = { "type": "cue_list", cue_list_id: string, } | { "type": "group", group_id: string, } | { "type": "speed_group", group: string, } | { "type": "programmer_fade", } | { "type": "cue_fade", } | { "type": "grand_master", };
+
+export type PlaybackTopologyButtonAction = "on" | "off" | "toggle" | "go" | "go_minus" | "fast_forward" | "fast_rewind" | "flash" | "temp" | "swap" | "select" | "select_contents" | "select_dereferenced" | "learn" | "double" | "half" | "pause" | "blackout" | "pause_dynamics" | "none";
+
+export type PlaybackTopologyFaderMode = "master" | "temp" | "speed" | "x_fade" | "direct_bpm" | "centered_relative" | "learned_percentage";
+
+export type PlaybackTopologyFlashReleaseMode = "release_all" | "release_intensity_only";
+
+export type PlaybackTopologyPlaybackDefinition = { number: number, name: string, target: PlaybackTopologyTarget, buttons: [PlaybackTopologyButtonAction, PlaybackTopologyButtonAction, PlaybackTopologyButtonAction], button_count: number, fader: PlaybackTopologyFaderMode, has_fader: boolean, go_activates: boolean, auto_off: boolean, xfade_millis: number, color: string, flash_release: PlaybackTopologyFlashReleaseMode, protect_from_swap: boolean, presentation_icon?: string | null, presentation_image?: string | null, };
+
+export type PlaybackTopologyAction = { "type": "save_cue_list", cue_list_id: string, expected_revision: number,
+/**
+ * Extensible portable body; adapters strictly decode its known Cuelist fields.
+ */
+body: unknown, } | { "type": "configure_slot", page: number, slot: number, expected_page_revision: number, expected_playback_revision: number, playback: PlaybackTopologyPlaybackDefinition, } | { "type": "clear_mapped_playback", page: number, slot: number, expected_page_revision: number, expected_playback_revision: number, };
+
+export type PlaybackTopologyActionRequest = { request_id: string, action: PlaybackTopologyAction, };
+
+export type PlaybackTopologyResolution = { "kind": "cue_list", cue_list_id: string, } | { "kind": "page_slot", page: number, slot: number, playback_number: number | null, };
+
+export type PlaybackTopologyObjectProjection = { "state": "present", kind: ShowObjectKind, object_id: string, object_revision: number, body: unknown, } | { "state": "deleted", kind: ShowObjectKind, object_id: string, object_revision: number, };
+
+export type PlaybackTopologyActionState = { "status": "changed", objects: Array<PlaybackTopologyObjectProjection>, event_sequence: number, } | { "status": "no_change", objects: Array<PlaybackTopologyObjectProjection>, };
+
+export type PlaybackTopologyActionOutcome = { request_id: string, correlation_id: string, show_revision: number, resolution: PlaybackTopologyResolution, replayed: boolean, } & ({ "status": "changed", objects: Array<PlaybackTopologyObjectProjection>, event_sequence: number, } | { "status": "no_change", objects: Array<PlaybackTopologyObjectProjection>, });
+
+export type PlaybackTopologyErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
+
+export type PlaybackTopologyErrorResponse = { kind: PlaybackTopologyErrorKind, error: string, current_revision?: number | null, current_related_revision?: number | null, retryable: boolean, };
+
 export type PatchDirectControlProtocol = "citp";
 
 export type PatchProfilePolicy = "dmx" | "visual_only";

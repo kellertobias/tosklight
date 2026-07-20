@@ -121,6 +121,69 @@ pub(super) fn read_virtual_playback_exclusion_store(
         .unwrap_or_default()
 }
 
+pub(super) fn validate_virtual_playback_exclusion_zones(
+    input: VirtualPlaybackExclusionZoneInput,
+) -> Result<Vec<VirtualPlaybackExclusionZone>, ApiError> {
+    let mut zone_ids = HashSet::new();
+    let mut zones = Vec::with_capacity(input.zones.len());
+    for mut zone in input.zones {
+        zone.id = zone.id.trim().to_owned();
+        zone.name = zone.name.trim().to_owned();
+        validate_virtual_playback_exclusion_zone(&mut zone, &mut zone_ids)?;
+        zones.push(zone);
+    }
+    Ok(zones)
+}
+
+fn validate_virtual_playback_exclusion_zone(
+    zone: &mut VirtualPlaybackExclusionZone,
+    zone_ids: &mut HashSet<String>,
+) -> Result<(), ApiError> {
+    if zone.id.is_empty() || zone.id.len() > 128 || !zone_ids.insert(zone.id.clone()) {
+        return Err(ApiError::bad_request(
+            "zone ids must be unique and contain 1-128 characters",
+        ));
+    }
+    if zone.name.is_empty() || zone.name.len() > 80 {
+        return Err(ApiError::bad_request(
+            "zone names must contain 1-80 characters",
+        ));
+    }
+    let mut seen = HashSet::new();
+    zone.slots
+        .retain(|slot| (1..=144).contains(slot) && seen.insert(*slot));
+    if zone.slots.len() < 2 {
+        return Err(ApiError::bad_request(
+            "an exclusion zone needs at least two cells",
+        ));
+    }
+    Ok(())
+}
+
+pub(super) fn write_virtual_playback_exclusion_surface(
+    desk: &DeskStore,
+    show_id: light_core::ShowId,
+    desk_id: Uuid,
+    surface_id: &str,
+    zones: &[VirtualPlaybackExclusionZone],
+) -> Result<(), ApiError> {
+    let mut stored = read_virtual_playback_exclusion_store(desk, show_id);
+    let surfaces = stored.entry(desk_id.to_string()).or_default();
+    if zones.is_empty() {
+        surfaces.remove(surface_id);
+    } else {
+        surfaces.insert(surface_id.to_owned(), zones.to_vec());
+    }
+    if surfaces.is_empty() {
+        stored.remove(&desk_id.to_string());
+    }
+    desk.set_setting(
+        &virtual_playback_exclusion_setting(show_id),
+        &serde_json::to_string(&stored).map_err(|error| ApiError::internal(error.to_string()))?,
+    )
+    .map_err(ApiError::store)
+}
+
 pub(super) async fn virtual_playback_exclusion_zones(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -158,47 +221,9 @@ pub(super) async fn put_virtual_playback_exclusion_zones(
             "surface id must contain 1-128 characters",
         ));
     }
-    let mut zone_ids = HashSet::new();
-    let mut zones = Vec::with_capacity(input.zones.len());
-    for mut zone in input.zones {
-        zone.id = zone.id.trim().to_owned();
-        zone.name = zone.name.trim().to_owned();
-        if zone.id.is_empty() || zone.id.len() > 128 || !zone_ids.insert(zone.id.clone()) {
-            return Err(ApiError::bad_request(
-                "zone ids must be unique and contain 1-128 characters",
-            ));
-        }
-        if zone.name.is_empty() || zone.name.len() > 80 {
-            return Err(ApiError::bad_request(
-                "zone names must contain 1-80 characters",
-            ));
-        }
-        let mut seen = HashSet::new();
-        zone.slots
-            .retain(|slot| (1..=144).contains(slot) && seen.insert(*slot));
-        if zone.slots.len() < 2 {
-            return Err(ApiError::bad_request(
-                "an exclusion zone needs at least two cells",
-            ));
-        }
-        zones.push(zone);
-    }
+    let zones = validate_virtual_playback_exclusion_zones(input)?;
     let desk = state.desk.lock();
-    let mut stored = read_virtual_playback_exclusion_store(&desk, show.id);
-    let surfaces = stored.entry(session.desk.id.to_string()).or_default();
-    if zones.is_empty() {
-        surfaces.remove(&surface_id);
-    } else {
-        surfaces.insert(surface_id.clone(), zones.clone());
-    }
-    if surfaces.is_empty() {
-        stored.remove(&session.desk.id.to_string());
-    }
-    desk.set_setting(
-        &virtual_playback_exclusion_setting(show.id),
-        &serde_json::to_string(&stored).map_err(|error| ApiError::internal(error.to_string()))?,
-    )
-    .map_err(ApiError::store)?;
+    write_virtual_playback_exclusion_surface(&desk, show.id, session.desk.id, &surface_id, &zones)?;
     drop(desk);
     emit(
         &state,

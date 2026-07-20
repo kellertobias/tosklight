@@ -7,8 +7,8 @@ use super::{
 };
 use axum::Router;
 use light_application::{
-    ActiveShowService, EventBus, OutputRuntimeService, PlaybackService, ProgrammingService,
-    SelectiveShowImportService, ShowPatchService,
+    ActiveShowService, EventBus, OutputRuntimeService, PlaybackService, PlaybackTopologyService,
+    ProgrammingService, SelectiveShowImportService, ShowPatchService,
 };
 use light_control::TimecodeRouter;
 use light_media::MediaCache;
@@ -215,6 +215,7 @@ fn build_app_state(
         events: startup.events,
         application_events: application_events.clone(),
         active_show_service: active_show_service.clone(),
+        playback_topology: PlaybackTopologyService::new(active_show_service.clone()),
         show_patch: ShowPatchService::new(active_show_service.clone()),
         selective_show_import: SelectiveShowImportService::new(active_show_service),
         #[cfg(test)]

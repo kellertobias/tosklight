@@ -53,6 +53,7 @@ fn test_state_with_programmers(
             events,
             application_events: application_events.clone(),
             active_show_service: active_show_service.clone(),
+            playback_topology: PlaybackTopologyService::new(active_show_service.clone()),
             show_patch: ShowPatchService::new(active_show_service.clone()),
             selective_show_import: SelectiveShowImportService::new(active_show_service),
             patch_profile_resolution: Arc::default(),

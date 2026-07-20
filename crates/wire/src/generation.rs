@@ -26,6 +26,9 @@ use crate::v2::playback::{
     PlaybackActionOutcome, PlaybackActionRequest, PlaybackErrorResponse, PlaybackRuntimeSnapshot,
     PlaybackRuntimeSnapshotRequest,
 };
+use crate::v2::playback_topology::{
+    PlaybackTopologyActionOutcome, PlaybackTopologyActionRequest, PlaybackTopologyErrorResponse,
+};
 use crate::v2::preload_playback_queue::ProgrammingPreloadPlaybackQueueSnapshot;
 use crate::v2::preload_values::{
     ProgrammingPreloadValuesActionOutcome, ProgrammingPreloadValuesActionRequest,
@@ -132,6 +135,15 @@ pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
             "playback-runtime-snapshot-request",
         ),
         playback_response_schema::<PlaybackRuntimeSnapshot>("playback-runtime-snapshot"),
+        playback_topology_request_schema::<PlaybackTopologyActionRequest>(
+            "playback-topology-action-request",
+        ),
+        playback_topology_response_schema::<PlaybackTopologyActionOutcome>(
+            "playback-topology-action-outcome",
+        ),
+        playback_topology_response_schema::<PlaybackTopologyErrorResponse>(
+            "playback-topology-error-response",
+        ),
         patch_request_schema::<PatchFixturesRequest>("patch-fixtures-request"),
         patch_response_schema::<PatchFixturesOutcome>("patch-fixtures-outcome"),
         patch_response_schema::<PatchErrorResponse>("patch-error-response"),
@@ -191,6 +203,14 @@ fn playback_request_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
 }
 
 fn playback_response_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
+    playback_schema::<T>(name, SchemaSettings::draft2020_12().for_serialize())
+}
+
+fn playback_topology_request_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
+    playback_schema::<T>(name, SchemaSettings::draft2020_12().for_deserialize())
+}
+
+fn playback_topology_response_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
     playback_schema::<T>(name, SchemaSettings::draft2020_12().for_serialize())
 }
 

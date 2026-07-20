@@ -1,6 +1,49 @@
 use super::*;
 
 #[tokio::test]
+async fn v2_scoped_playback_action_rejects_stale_show_before_execution() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let desk_id = session_desk_id(&state, &token);
+    open_playback_test_show(&app, &token).await;
+    install_playback_test_state(&state);
+    let show_id = active_show_id(&state);
+
+    let accepted = post_scoped_action(
+        &app,
+        Some(&token),
+        show_id,
+        desk_id,
+        action_request(
+            "scoped-on",
+            1,
+            serde_json::json!({"type":"on","pressed":true}),
+        ),
+    )
+    .await;
+    assert_eq!(accepted.status(), StatusCode::OK);
+    let cursor = state.application_events.latest_sequence();
+
+    let rejected = post_scoped_action(
+        &app,
+        Some(&token),
+        Uuid::new_v4(),
+        desk_id,
+        action_request(
+            "stale-show-off",
+            1,
+            serde_json::json!({"type":"off","pressed":true}),
+        ),
+    )
+    .await;
+    assert_eq!(rejected.status(), StatusCode::CONFLICT);
+    assert_eq!(json(rejected).await["kind"], "conflict");
+    assert_eq!(state.application_events.latest_sequence(), cursor);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn v2_playback_action_is_desk_scoped_typed_and_idempotent() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
@@ -1471,6 +1514,26 @@ async fn post_action(
 ) -> Response {
     let mut builder = Request::post(format!("/api/v2/desks/{desk_id}/playback-actions"))
         .header(header::CONTENT_TYPE, "application/json");
+    if let Some(token) = token {
+        builder = builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
+    }
+    app.clone()
+        .oneshot(builder.body(Body::from(request.to_string())).unwrap())
+        .await
+        .unwrap()
+}
+
+async fn post_scoped_action(
+    app: &Router,
+    token: Option<&str>,
+    show_id: Uuid,
+    desk_id: Uuid,
+    request: serde_json::Value,
+) -> Response {
+    let mut builder = Request::post(format!(
+        "/api/v2/shows/{show_id}/desks/{desk_id}/playback-actions"
+    ))
+    .header(header::CONTENT_TYPE, "application/json");
     if let Some(token) = token {
         builder = builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
     }

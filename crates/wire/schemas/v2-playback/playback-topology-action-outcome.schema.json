@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PlaybackTopologyActionOutcome",
+  "type": "object",
+  "properties": {
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "replayed": {
+      "type": "boolean"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "resolution": {
+      "$ref": "#/$defs/PlaybackTopologyResolution"
+    },
+    "show_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "event_sequence": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "objects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PlaybackTopologyObjectProjection"
+          }
+        },
+        "status": {
+          "type": "string",
+          "const": "changed"
+        }
+      },
+      "required": [
+        "status",
+        "objects",
+        "event_sequence"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "objects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PlaybackTopologyObjectProjection"
+          }
+        },
+        "status": {
+          "type": "string",
+          "const": "no_change"
+        }
+      },
+      "required": [
+        "status",
+        "objects"
+      ]
+    }
+  ],
+  "required": [
+    "request_id",
+    "correlation_id",
+    "show_revision",
+    "resolution",
+    "replayed"
+  ],
+  "$defs": {
+    "PlaybackTopologyObjectProjection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "body": true,
+            "kind": {
+              "$ref": "#/$defs/ShowObjectKind"
+            },
+            "object_id": {
+              "type": "string"
+            },
+            "object_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "state": {
+              "type": "string",
+              "const": "present"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "kind",
+            "object_id",
+            "object_revision",
+            "body"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "$ref": "#/$defs/ShowObjectKind"
+            },
+            "object_id": {
+              "type": "string"
+            },
+            "object_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "state": {
+              "type": "string",
+              "const": "deleted"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "kind",
+            "object_id",
+            "object_revision"
+          ]
+        }
+      ]
+    },
+    "PlaybackTopologyResolution": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "cue_list_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "kind": {
+              "type": "string",
+              "const": "cue_list"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "cue_list_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "page_slot"
+            },
+            "page": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0
+            },
+            "playback_number": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            },
+            "slot": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "page",
+            "slot",
+            "playback_number"
+          ]
+        }
+      ]
+    },
+    "ShowObjectKind": {
+      "type": "string",
+      "enum": [
+        "cue_list",
+        "group",
+        "playback",
+        "playback_page",
+        "preset"
+      ]
+    }
+  }
+}

@@ -6,6 +6,7 @@ pub mod events;
 pub mod group_recording;
 pub mod patch;
 pub mod playback;
+pub mod playback_topology;
 pub mod preload_playback_queue;
 pub mod preload_values;
 pub mod preset_recording;

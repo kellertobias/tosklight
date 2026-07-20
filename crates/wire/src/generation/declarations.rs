@@ -6,6 +6,7 @@ use crate::v2::events::*;
 use crate::v2::group_recording::*;
 use crate::v2::patch::*;
 use crate::v2::playback::*;
+use crate::v2::playback_topology::*;
 use crate::v2::preload_playback_queue::*;
 use crate::v2::preload_values::*;
 use crate::v2::preset_recording::*;
@@ -20,6 +21,7 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(playback_projection(config));
     declarations.extend(event_payload(config));
     declarations.extend(playback_transport(config));
+    declarations.extend(playback_topology(config));
     declarations.extend(patch(config));
     declarations.extend(selective_import(config));
     declarations.extend(interaction(config));
@@ -205,6 +207,24 @@ fn playback_transport(config: &Config) -> Vec<String> {
         PlaybackErrorResponse::decl(config),
         PlaybackRuntimeSnapshotRequest::decl(config),
         PlaybackRuntimeSnapshot::decl(config),
+    ]
+}
+
+fn playback_topology(config: &Config) -> Vec<String> {
+    vec![
+        PlaybackTopologyTarget::decl(config),
+        PlaybackTopologyButtonAction::decl(config),
+        PlaybackTopologyFaderMode::decl(config),
+        PlaybackTopologyFlashReleaseMode::decl(config),
+        PlaybackTopologyPlaybackDefinition::decl(config),
+        PlaybackTopologyAction::decl(config),
+        PlaybackTopologyActionRequest::decl(config),
+        PlaybackTopologyResolution::decl(config),
+        PlaybackTopologyObjectProjection::decl(config),
+        PlaybackTopologyActionState::decl(config),
+        PlaybackTopologyActionOutcome::decl(config),
+        PlaybackTopologyErrorKind::decl(config),
+        PlaybackTopologyErrorResponse::decl(config),
     ]
 }
 

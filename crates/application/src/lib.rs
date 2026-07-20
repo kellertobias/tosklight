@@ -13,6 +13,7 @@ pub mod managed_assets;
 pub mod mvr_import;
 pub mod output_runtime;
 pub mod playback;
+pub mod playback_topology;
 pub mod programming;
 pub mod scheduling;
 pub mod selective_import;
@@ -80,6 +81,11 @@ pub use playback::{
     ResolvedPlaybackAddress, SoundLossReason, SoundStatus, SpeedGroupRuntimeProjection,
     SpeedSource, automatic_playback_events, committed_playback_effect_event,
     committed_playback_event, publish_automatic_playback_events,
+};
+pub use playback_topology::{
+    PlaybackTopologyAction, PlaybackTopologyCommand, PlaybackTopologyObjectProjection,
+    PlaybackTopologyOutcome, PlaybackTopologyPorts, PlaybackTopologyResolution,
+    PlaybackTopologyResult, PlaybackTopologyService,
 };
 pub use programming::{
     CueMoveCopyChoice, CueTransferOperation, ExecutionPolicy, ProgrammingAction,
