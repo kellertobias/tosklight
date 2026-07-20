@@ -1,16 +1,16 @@
 # Major Refactoring Progress
 
-Estimated progress: **80%**
+Estimated progress: **81%**
 
-Estimated ETA: **8–12 focused implementation slices, or roughly 2–3 weeks of active
+Estimated ETA: **7–11 focused implementation slices, or roughly 2–3 weeks of active
 refactoring**, to repository-wide acceptance.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-20 after final acceptance hardening of the capture-safe end-to-end
-Programmer-values client and mutation contract.
+Last updated: 2026-07-20 after completing the capture-safe pending-Preload values contract and
+migrating the parameter-control value cohort.
 
 ## Guardrails
 
@@ -160,11 +160,30 @@ Programmer-values client and mutation contract.
   value, and event-envelope boundary. Provider disposal is safe under React StrictMode effect
   replay, so reused values/capture sessions and the values writer remain live after the development
   mount cycle while replaced authorities still stop promptly.
+- [x] Added a distinct exact-user pending-Preload values authority instead of routing typed normal
+  actions through a capture-mode race. Fixture and Group set/release plus ordered batch actions
+  carry both pending-values and capture-mode revision preconditions, share the Programming
+  application gate, preserve timing and Programmer order, and emit one retained projection/event
+  per real transition. Same-user desks share authority; another user cannot read, mutate, or
+  subscribe to it. The strict frontend provider remains dormant until capture is authoritatively
+  active and a values view mounts, then reconciles response/event ordering, replay, rollback,
+  no-change, gaps, scope replacement, and late responses without a bootstrap fallback. Normal and
+  pending fixture batches now use borrowed application slices and one indexed domain pass; the
+  10,000-mutation limit is covered directly. Both values replay caches retain fixed SHA-256 request
+  fingerprints and enforce a conservative 16 MiB projection/outcome budget in addition to their
+  entry cap.
 - [x] Migrated every parameter-bank family, fader, encoder, range, release, and direct action onto
   the scoped ordered selection projection. Fixture membership uses sets, streamed peer or OSC
   selection immediately retargets writes, and inactive parameter views perform no selection
-  hydration, visualization polling, or hardware-listener work. Normal Programmer values remain on
-  the compatibility projection until the values store is connected.
+  hydration, visualization polling, or hardware-listener work. The subsequent value cohort now
+  routes those recordable gestures through either normal or pending-Preload scoped authority.
+- [x] Migrated parameter faders, software and hardware encoders, range entry, release, and direct
+  fixed/indexed choices onto one typed ordered batch per gesture. Capture loading exposes neither
+  stale bootstrap values nor a writable route; normal and pending-Preload views are mutually
+  exclusive. Hardware deltas accumulate relatively across slow responses and reset at target or
+  authority changes, while continuous writes retain only the latest pending value per target and
+  range/release/direct work remains an ordered barrier. Transient fixture-control actions stay on
+  their independent non-recordable path.
 - [x] Migrated Special Dialogs and System Controls selection onto visibility-scoped streams. The
   ordered projection is passed explicitly through Color, Position, Beam/Shapers, Dynamics, Control,
   and Lamp On helpers without per-interaction copies; external changes update open modals, closed
@@ -211,7 +230,8 @@ Programmer-values client and mutation contract.
   a small number of keypad/miscellaneous readers still use the facade.
 - [ ] Migrate production normal Programmer-value readers and writers onto the connected scoped
   values provider in focused cohorts, then remove only their value-triggered bootstrap refreshes.
-  This contract slice deliberately did not broadly migrate consumers.
+  Parameter controls have moved; the command-bar activity summary, System Controls current-user
+  count, and compatibility facade retirement remain separate follow-up work.
 - [ ] Replace inferred Cue ambiguity in the command-line text projection with explicit desk-local
   pending-choice state that is set only by `ChoiceRequired` after ENT and cleared by edit, reset,
   selection, or Cancel. Until then, cross-session choice visibility remains a documented
@@ -317,22 +337,44 @@ Programmer-values client and mutation contract.
   contracts match the Rust DTOs, `cargo fmt --all -- --check` passes, and `git diff --check` is
   clean. Wire tests print the existing non-fatal `ts-rs` `deny_unknown_fields` warnings. A final
   repository-wide Rust/Clippy suite and real desktop run remain pending.
+- The pending-Preload and parameter-value slice passes 5 focused Programmer batch/action tests,
+  including a 10,000-fixture set/release batch completed in 0.05 seconds in the debug test run, and
+  3 focused generation tests including rejected live and staged transaction rollback. All 209
+  `light-application` tests pass, including 54 Programming tests, replay fingerprint/payload-reuse
+  checks, byte-budget eviction, and rejected-batch rollback. The 6 focused server pending-Preload
+  tests cover fixture/Group mutation and release, no-op, replay, conflict, same-user two-desk
+  sharing, a successful independent second user, foreign-user rejection, and exact-user event
+  filtering; all 8 normal Programmer-values server tests still pass. Both focused Preload wire
+  tests and generated-contract verification pass. Strict Clippy passes for Programmer,
+  application, wire, and server with the existing `too_many_arguments` allowance.
+- The frontend now passes 1,002 tests in 158 files, including pending-Preload wire/transport,
+  store/session/writer/provider composition, parameter routing, response-before-event and
+  event-before-response, rollback, replay/no-change, cursor repair, server/session replacement,
+  capture-loading refusal, dormant first-view behavior, no bootstrap request, and unrelated-render
+  suppression. Typecheck and the production Vite build pass; the only build output is the existing
+  large-chunk advisory. Dependency-direction and scanner tests pass. The source-size command still
+  exits non-zero solely for the pre-existing committed 1,382-line Dynamics Editor experiment; no
+  production file or function changed by this slice exceeds a hard limit.
 
 ## Wrap-up handoff
 
-- The completed slice establishes the end-to-end normal Programmer-values contract from typed
-  application mutation through authenticated v2 transport to the dormant production provider and
-  optimistic frontend writer. Its separate capture authority makes routing races explicit and
-  repairs both scopes without folding Preload or modes into normal values. It does not migrate the
-  broad production reader/writer population.
-- Lifecycle deletion/recreation now preserves monotonic exact-user values and capture revisions and
-  invalidates old replays. The general Programmer ownership/lifecycle projection named in the
-  remaining architecture work is still broader than this narrowly required replacement repair.
+- Normal and pending-Preload recordable values now have separate, capture-safe exact-user
+  authorities from typed application mutation through authenticated v2 transport to dormant
+  production providers and optimistic writers. The parameter-control cohort chooses between them
+  only after capture authority is ready and never routes a typed normal action into Preload or a
+  legacy Preload action into normal values.
+- Batch mutation work is one application action, one domain checkpoint, one timestamp, one
+  retained projection, and at most one values event. Large fixture batches are indexed and
+  retained once rather than scanning the vector per address; replay retains fingerprints rather
+  than request bodies and is explicitly memory bounded.
+- Lifecycle deletion/recreation still preserves monotonic exact-user values and capture revisions
+  and invalidates old replays. The broader Programmer ownership/lifecycle projection remains
+  separate architecture work.
 - No Patch/setup selection cleanup or public test-DSL refactoring was started in this slice.
-- Recommended next slice: migrate the first coherent production Programmer-values consumer cohort
-  (parameter controls, faders, and encoders) onto the scoped values actions/view, then retire only
-  those consumers' legacy value-triggered bootstrap refreshes. Keep Patch/setup selection and the
-  test-DSL refactor as separate later milestones.
+- Recommended next slice: move the command-bar normal/pending activity summary and the current-user
+  System Controls value count onto the scoped authorities, then remove the now-unused compatibility
+  value actions and value-triggered bootstrap refreshes. Keep multi-user Programmer lifecycle UI,
+  Patch/setup selection, and the public test DSL as distinct milestones.
 
 Test files may exceed the hard limits, but should still be split when it improves readability and
 makes operator intent more visible.
