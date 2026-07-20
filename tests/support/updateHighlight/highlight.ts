@@ -53,8 +53,6 @@ export async function storeCurrentProgrammerPreset(
 	const programmers = await api.request<any[]>(
 		"GET",
 		"/api/v1/programmers",
-		undefined,
-		false,
 	);
 	const current = programmers.find(
 		(entry) => entry.session_id === api.session!.session_id,

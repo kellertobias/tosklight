@@ -2,8 +2,13 @@ use super::*;
 
 pub(super) async fn list_programmers(
     State(state): State<AppState>,
-) -> Json<Vec<light_programmer::ProgrammerState>> {
-    Json(state.programmers.active_for_sessions())
+    headers: HeaderMap,
+) -> Result<Json<Vec<light_programmer::ProgrammerState>>, ApiError> {
+    let actor = authenticate(&state, &headers)?;
+    // Filter session ownership before cloning any complete compatibility row. New clients use
+    // narrow scoped projections; this endpoint remains only for authenticated migration callers.
+    let programmers = state.programmers.active_for_user_sessions(actor.user.id);
+    Ok(Json(programmers))
 }
 
 pub(super) fn update_settings_for(state: &AppState, desk_id: Uuid) -> update::UpdateSettings {

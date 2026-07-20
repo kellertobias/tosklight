@@ -520,7 +520,7 @@ async function captureConversion(api: ApiDriver, bench: any, fixtureId: string, 
   const sacnMark = bench.sacn.mark();
   const tick = await bench.tick(3_000);
   const offset = fixture.body.address - 1;
-  const programmer = await api.request<any[]>("GET", "/api/v1/programmers", undefined, false);
+  const programmer = await api.request<any[]>("GET", "/api/v1/programmers");
   const stored = programmer.flatMap((state) => state.values).find((entry: any) => entry.fixture_id === fixtureId && entry.attribute === "intensity");
   return {
     percent,

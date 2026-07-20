@@ -151,7 +151,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 });
 
 async function commandLine(api: ApiDriver): Promise<string> {
-	const programmers = await api.request<ProgrammerProjection[]>("GET", "/api/v1/programmers", undefined, false);
+	const programmers = await api.request<ProgrammerProjection[]>("GET", "/api/v1/programmers");
 	return programmers.find((programmer) => programmer.session_id === api.session?.session_id)?.command_line ?? "";
 }
 

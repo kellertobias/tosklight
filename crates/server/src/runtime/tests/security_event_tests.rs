@@ -35,6 +35,151 @@ async fn bootstrap_does_not_relock_the_desk_store() {
 }
 
 #[tokio::test]
+async fn unauthenticated_bootstrap_keeps_login_discovery_but_omits_programmers() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let discovery = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v1/bootstrap")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(discovery.status(), StatusCode::OK);
+    let discovery = json(discovery).await;
+    assert!(discovery["users"].as_array().unwrap().iter().any(|user| {
+        user["name"] == "Operator" && user["enabled"] == true
+    }));
+    assert_eq!(discovery["active_programmers"], serde_json::json!([]));
+
+    let (_, session_id) = login(&app, "Operator").await;
+    let session_id = SessionId(Uuid::parse_str(&session_id).unwrap());
+    state.programmers.set(
+        session_id,
+        light_core::FixtureId::new(),
+        light_core::AttributeKey::intensity(),
+        light_core::AttributeValue::Normalized(0.5),
+    );
+    let populated = app
+        .oneshot(
+            Request::get("/api/v1/bootstrap")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(populated.status(), StatusCode::OK);
+    assert_eq!(
+        json(populated).await["active_programmers"],
+        serde_json::json!([])
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn programmer_list_requires_authentication() {
+    let (state, data_dir) = test_state();
+    let app = router(state);
+    for authorization in [None, Some("Bearer invalid-session")] {
+        let mut request = Request::get("/api/v1/programmers");
+        if let Some(authorization) = authorization {
+            request = request.header(header::AUTHORIZATION, authorization);
+        }
+        let response = app
+            .clone()
+            .oneshot(request.body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn programmer_list_returns_only_same_user_session_rows() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (operator_token, first_operator) = login(&app, "Operator").await;
+    let (_, second_operator) = login(&app, "Operator").await;
+    state
+        .desk
+        .lock()
+        .add_user("Foreign operator")
+        .unwrap();
+    let (foreign_token, foreign_session) = login(&app, "Foreign operator").await;
+    let first_operator = SessionId(Uuid::parse_str(&first_operator).unwrap());
+    let second_operator = SessionId(Uuid::parse_str(&second_operator).unwrap());
+    let foreign_session = SessionId(Uuid::parse_str(&foreign_session).unwrap());
+    let operator_fixture = light_core::FixtureId::new();
+    let foreign_fixture = light_core::FixtureId::new();
+    state.programmers.set(
+        first_operator,
+        operator_fixture,
+        light_core::AttributeKey::intensity(),
+        light_core::AttributeValue::Normalized(0.5),
+    );
+    state.programmers.set(
+        foreign_session,
+        foreign_fixture,
+        light_core::AttributeKey::intensity(),
+        light_core::AttributeValue::Normalized(0.25),
+    );
+
+    let operator_rows = authenticated_programmer_rows(&app, &operator_token).await;
+    assert_eq!(operator_rows.len(), 2);
+    let operator_user = state.sessions.read()[&first_operator].user.id;
+    let mut operator_sessions = operator_rows
+        .iter()
+        .map(|row| row["session_id"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    operator_sessions.sort_unstable();
+    let mut expected_sessions = vec![first_operator.0.to_string(), second_operator.0.to_string()];
+    expected_sessions.sort_unstable();
+    assert_eq!(operator_sessions, expected_sessions);
+    assert!(operator_rows.iter().all(|row| {
+        row["user_id"] == operator_user.0.to_string()
+            && row["values"].as_array().unwrap().iter().any(|value| {
+                value["fixture_id"] == operator_fixture.0.to_string()
+            })
+            && row["values"].as_array().unwrap().iter().all(|value| {
+                value["fixture_id"] != foreign_fixture.0.to_string()
+            })
+    }));
+
+    let foreign_rows = authenticated_programmer_rows(&app, &foreign_token).await;
+    assert_eq!(foreign_rows.len(), 1);
+    assert_eq!(
+        foreign_rows[0]["session_id"],
+        foreign_session.0.to_string()
+    );
+    assert_eq!(
+        foreign_rows[0]["values"][0]["fixture_id"],
+        foreign_fixture.0.to_string()
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+async fn authenticated_programmer_rows(
+    app: &Router,
+    token: &str,
+) -> Vec<serde_json::Value> {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v1/programmers")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    json(response).await.as_array().unwrap().clone()
+}
+
+#[tokio::test]
 async fn optional_desk_token_guards_the_api_boundary() {
     let (mut state, data_dir) = test_state();
     state.desk_token = Some(Arc::from("shared-secret"));

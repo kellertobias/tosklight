@@ -59,8 +59,6 @@ export async function programmer(api: ApiDriver): Promise<ProgrammerState> {
 	const programmers = await api.request<ProgrammerState[]>(
 		"GET",
 		"/api/v1/programmers",
-		undefined,
-		false,
 	);
 	const current =
 		programmers.find(
@@ -80,8 +78,6 @@ export async function expectProgrammer(
 				const programmers = await api.request<ProgrammerState[]>(
 					"GET",
 					"/api/v1/programmers",
-					undefined,
-					false,
 				);
 				let lastError: unknown = null;
 				for (const snapshot of programmers) {

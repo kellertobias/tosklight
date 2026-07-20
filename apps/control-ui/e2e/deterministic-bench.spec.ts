@@ -16,7 +16,7 @@ function pairedGroupOutput(id: string, percent: number, expectedByte: number) {
       await desk.command(`GROUP 1 AT ${percent}`);
     },
     assert: async ({ bench, show }, marks) => {
-      await bench.waitForGroupProgrammer("1", percent / 100);
+      await bench.waitForGroupProgrammer("1", percent / 100, show.session.token);
       const tick = await bench.tick(3_000);
       expect(tick.now).toBe("2020-01-01T00:00:03Z");
       expect(tick.packets_sent).toBe(2);
@@ -48,7 +48,7 @@ test("OSC-002 @osc › hardware command matches the paired API and UI contract",
     await hardware.send(`/light/${alias}/programmer/digit-2`, [true]);
     await hardware.send(`/light/${alias}/programmer/digit-5`, [true]);
     await hardware.send(`/light/${alias}/programmer/enter`, [true]);
-    await bench.waitForGroupProgrammer("1", 0.25);
+    await bench.waitForGroupProgrammer("1", 0.25, show.session.token);
     const mark = bench.artnet.mark();
     const nextFeedback = hardware.mark();
     await bench.tick(3_000);

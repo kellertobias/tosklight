@@ -61,7 +61,7 @@ export class ProgrammingApiClient {
 	}
 
 	programmers(): Promise<ProgrammerState[]> {
-		return this.transport.request("/api/v1/programmers", {}, false);
+		return this.transport.request("/api/v1/programmers");
 	}
 
 	clearProgrammer(sessionId: string) {

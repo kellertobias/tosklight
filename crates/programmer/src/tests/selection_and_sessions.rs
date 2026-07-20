@@ -158,6 +158,31 @@ fn sessions_for_the_same_user_share_values_but_keep_command_lines_local() {
 }
 
 #[test]
+fn user_session_projection_filters_before_returning_compatibility_rows() {
+    let registry = ProgrammerRegistry::default();
+    let user = UserId::new();
+    let foreign_user = UserId::new();
+    let first = SessionId::new();
+    let second = SessionId::new();
+    let foreign = SessionId::new();
+    registry.start(first, user);
+    registry.start(second, user);
+    registry.start(foreign, foreign_user);
+    registry.set(
+        foreign,
+        FixtureId::new(),
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.5),
+    );
+
+    let rows = registry.active_for_user_sessions(user);
+
+    assert_eq!(rows.len(), 2);
+    assert!(rows.iter().all(|row| row.user_id == user));
+    assert!(rows.iter().all(|row| row.values.is_empty()));
+}
+
+#[test]
 fn sessions_share_programmer_values_by_user_and_command_interactions_by_desk() {
     let registry = ProgrammerRegistry::default();
     let user = UserId::new();

@@ -38,7 +38,7 @@ test("records the complete desk with OSC and DMX observers", async ({ api, bench
     const enter = `/light/${alias}/programmer/enter`;
     await hardware.send(enter, [true]);
     sent.push(`→ ${enter}  true`);
-    await bench.waitForGroupProgrammer("1", 0.25);
+    await bench.waitForGroupProgrammer("1", 0.25, api.session!.token);
     await stage(page, "PHYSICAL ENTER", "The completed OSC command has landed in the user’s shared programmer.", sent, hardware.messages, await dmxState(api, bench));
     await pause(page, 900);
 

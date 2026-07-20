@@ -439,6 +439,12 @@ impl ProgrammerRegistry {
         self.states.read().values().cloned().collect()
     }
     pub fn active_for_sessions(&self) -> Vec<ProgrammerState> {
+        self.active_sessions_for_user(None)
+    }
+    pub fn active_for_user_sessions(&self, user_id: UserId) -> Vec<ProgrammerState> {
+        self.active_sessions_for_user(Some(user_id))
+    }
+    fn active_sessions_for_user(&self, user_id: Option<UserId>) -> Vec<ProgrammerState> {
         let states = self.states.read();
         let command_contexts = self.command_contexts.read();
         let command_states = self.command_states.read();
@@ -447,7 +453,11 @@ impl ProgrammerRegistry {
             .read()
             .iter()
             .filter_map(|(session, key)| {
-                let mut state = states.get(key)?.clone();
+                let source = states.get(key)?;
+                if user_id.is_some_and(|user_id| source.user_id != user_id) {
+                    return None;
+                }
+                let mut state = source.clone();
                 state.session_id = *session;
                 let command_context = command_contexts.get(session).unwrap_or(session);
                 state.command_line = command_states

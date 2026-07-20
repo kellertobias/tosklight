@@ -105,7 +105,7 @@ export async function deleteObject(api: ApiDriver, kind: string, id: string, rev
 }
 
 export async function programmer(api: ApiDriver): Promise<ProgrammerState> {
-  const programmers = await api.request<ProgrammerState[]>("GET", "/api/v1/programmers", undefined, false);
+  const programmers = await api.request<ProgrammerState[]>("GET", "/api/v1/programmers");
   const current = programmers.find((item) => item.session_id === api.session?.session_id) ?? programmers[0];
   expect(current).toBeDefined();
   return current;
@@ -113,7 +113,7 @@ export async function programmer(api: ApiDriver): Promise<ProgrammerState> {
 
 export async function expectProgrammer(api: ApiDriver, assertion: (state: ProgrammerState) => void | Promise<void>): Promise<void> {
   await expect.poll(async () => {
-    const programmers = await api.request<ProgrammerState[]>("GET", "/api/v1/programmers", undefined, false);
+    const programmers = await api.request<ProgrammerState[]>("GET", "/api/v1/programmers");
     let error: unknown;
     for (const state of programmers) {
       try {

@@ -154,11 +154,14 @@ export class LightBench {
     throw new Error(`Timed out waiting for logical DMX U1.${address} = ${expected}`);
   }
 
-  async waitForGroupProgrammer(groupId: string, expected: number, timeout = 2_000): Promise<void> {
+  async waitForGroupProgrammer(groupId: string, expected: number, token: string, timeout = 2_000): Promise<void> {
     const deadline = Date.now() + timeout;
     let last: unknown = null;
     while (Date.now() < deadline) {
-      const response = await fetch(`${this.baseUrl}/api/v1/programmers`, { signal: AbortSignal.timeout(1_000) });
+      const response = await fetch(`${this.baseUrl}/api/v1/programmers`, {
+        headers: { authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(1_000),
+      });
       if (response.ok) {
         const programmers = await response.json() as Array<{ group_values: Record<string, Record<string, { value: { value?: number } | number }>> }>;
         last = programmers;

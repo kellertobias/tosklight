@@ -227,6 +227,35 @@ describe("LightApiClient server selection and sessions", () => {
 });
 
 describe("LightApiClient programmer and preset contracts", () => {
+	it("authenticates the legacy Programmer compatibility projection", async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						session_id: "session-a",
+						token: "token-a",
+						user: { id: "user-a", name: "Operator", enabled: true },
+					}),
+					{ status: 200, headers: { "content-type": "application/json" } },
+				),
+			)
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify([]), {
+					status: 200,
+					headers: { "content-type": "application/json" },
+				}),
+			);
+		vi.stubGlobal("fetch", fetchMock);
+		const client = new LightApiClient("http://desk.local");
+
+		await client.login("Operator");
+		await client.programmers();
+
+		const headers = fetchMock.mock.calls[1][1].headers as Headers;
+		expect(headers.get("authorization")).toBe("Bearer token-a");
+	});
+
 	it("uses fixture-action and opt-in preset-generation commands", async () => {
 		const client = new LightApiClient("http://desk.local");
 		const command = vi

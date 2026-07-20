@@ -147,7 +147,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       try {
         await expect.poll(async () => normalizeCommand((await programmerForSession(api, first)).command_line)).toBe("GROUP 1 +");
         await expect.poll(async () => normalizeCommand((await programmerForSession(api, state.second)).command_line)).toBe("GROUP 2 +");
-        const states = await api.request<any[]>("GET", "/api/v1/programmers", undefined, false);
+        const states = await api.request<any[]>("GET", "/api/v1/programmers");
         expect(states.filter((entry) => [first.session_id, state.second.session_id].includes(entry.session_id))
           .every((entry) => entry.values.length === 0 && Object.keys(entry.group_values).length === 0)).toBe(true);
 
@@ -199,7 +199,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       await expect(page.getByLabel("Command line")).toHaveClass(/error/);
     },
     assert: async ({ api, bench }) => {
-      const states = await api.request<any[]>("GET", "/api/v1/programmers", undefined, false);
+      const states = await api.request<any[]>("GET", "/api/v1/programmers");
       expect(states.every((state) => state.values.length === 0 && Object.keys(state.group_values).length === 0)).toBe(true);
       expect((await bench.tick(0)).universes.find((entry: any) => entry.universe === 1)!.slots.slice(0, 12)).toEqual(Array(12).fill(0));
     },
@@ -572,7 +572,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       await hardware.send("/light/main/programmer/unknown", [true]);
       await hardware.send("/light/main/programmer/digit-1", [true]);
       await bench.tick(0);
-      const states = await api.request<any[]>("GET", "/api/v1/programmers", undefined, false);
+      const states = await api.request<any[]>("GET", "/api/v1/programmers");
       expect(states.every((state) => !state.command_line && state.values.length === 0)).toBe(true);
     } finally { await hardware.close(); }
   });
@@ -809,7 +809,7 @@ async function assertRevisionConflict(api: ApiDriver, state: RevisionConflictSta
 }
 
 async function programmerForSession(api: ApiDriver, session: Session): Promise<any> {
-  const states = await api.request<any[]>("GET", "/api/v1/programmers", undefined, false);
+  const states = await api.request<any[]>("GET", "/api/v1/programmers");
   const found = states.find((state) => state.session_id === session.session_id);
   expect(found).toBeDefined();
   return found!;
@@ -967,13 +967,13 @@ async function ensureGroupSeven(api: ApiDriver): Promise<void> {
 }
 
 async function fixtureProgrammerValue(api: ApiDriver, fixtureId: string, attribute: string): Promise<number | null> {
-  const states = await api.request<any[]>("GET", "/api/v1/programmers", undefined, false);
+  const states = await api.request<any[]>("GET", "/api/v1/programmers");
   const value = states.flatMap((state) => state.values).find((entry) => entry.fixture_id === fixtureId && entry.attribute === attribute);
   return normalizedValue(value);
 }
 
 async function programmerCommand(api: ApiDriver, session: Session): Promise<string | null> {
-  const states = await api.request<any[]>("GET", "/api/v1/programmers", undefined, false);
+  const states = await api.request<any[]>("GET", "/api/v1/programmers");
   return states.find((state) => state.session_id === session.session_id)?.command_line?.trim() ?? null;
 }
 

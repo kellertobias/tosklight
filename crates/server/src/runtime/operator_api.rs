@@ -156,7 +156,9 @@ pub(super) async fn bootstrap(State(state): State<AppState>) -> Json<Bootstrap> 
         desks,
         clients,
         active_show: state.active_show.read().clone(),
-        active_programmers: state.programmers.active_for_sessions(),
+        // Bootstrap is intentionally available before login so clients can discover enabled
+        // users. Programmer state is authenticated separately through `/api/v1/programmers`.
+        active_programmers: Vec::new(),
         highlight_states,
         frame_rate_hz: state.output_rate.load(Ordering::Relaxed),
         output_health: state
