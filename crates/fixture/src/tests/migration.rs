@@ -138,6 +138,42 @@ fn embedded_legacy_patch_migrates_to_portable_profile_and_explicit_split_assignm
 }
 
 #[test]
+fn migrated_normalized_dmx_rounding_matches_the_legacy_encoder() {
+    let parameter = Parameter {
+        attribute: AttributeKey::intensity(),
+        components: vec![ChannelComponent {
+            offset: 0,
+            byte_order: ByteOrder::MsbFirst,
+        }],
+        default: 0.0,
+        virtual_dimmer: false,
+        metadata: ParameterMetadata::default(),
+        capabilities: vec![],
+    };
+    let mut legacy_frame = [0_u8; 512];
+    encode_parameter(&mut legacy_frame, 1, &parameter, 0.7).unwrap();
+
+    let mut legacy = definition(1);
+    legacy.heads[0].parameters.push(parameter);
+    let profile = FixtureProfile::from_legacy_modes(&[legacy]).unwrap();
+    let mode = &profile.modes[0];
+    let values = std::collections::HashMap::from([(
+        AttributeKey::intensity(),
+        light_core::AttributeValue::Normalized(0.7),
+    )]);
+    let migrated_raw = mode.resolve_channel_raw(
+        &mode.channels[0],
+        &values,
+        false,
+        None,
+        ChannelScales::default(),
+    );
+
+    assert_eq!(legacy_frame[0], 179);
+    assert_eq!(migrated_raw, u32::from(legacy_frame[0]));
+}
+
+#[test]
 fn legacy_library_migration_combines_compatible_modes_and_retains_sources() {
     let path = std::env::temp_dir().join(format!(
         "fixture-profile-migration-{}.sqlite",

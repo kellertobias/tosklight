@@ -305,8 +305,7 @@ pub(super) fn function_value(
 pub(super) fn mapped_raw(value: &AttributeValue, from: u32, to: u32) -> Option<ResolvedChannelRaw> {
     match value {
         AttributeValue::Normalized(value) => Some(ResolvedChannelRaw::Semantic {
-            raw: (f64::from(from) + f64::from(to - from) * f64::from(value.clamp(0.0, 1.0))).round()
-                as u32,
+            raw: normalized_raw(*value, from, to),
             from,
             to,
         }),
@@ -320,4 +319,9 @@ pub(super) fn mapped_raw(value: &AttributeValue, from: u32, to: u32) -> Option<R
         AttributeValue::RawDmxExact(value) => Some(ResolvedChannelRaw::Exact(*value)),
         _ => None,
     }
+}
+
+fn normalized_raw(value: f32, from: u32, to: u32) -> u32 {
+    let offset = (value.clamp(0.0, 1.0) * (to - from) as f32).round() as u32;
+    from.saturating_add(offset)
 }
