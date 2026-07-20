@@ -1,16 +1,16 @@
 # Major Refactoring Progress
 
-Estimated progress: **82%**
+Estimated progress: **83%**
 
-Estimated Codex ETA: **6–10 focused implementation slices, or roughly 20–35 hours of active
-Codex execution**, to repository-wide acceptance.
+Estimated Codex ETA: **5–9 focused implementation slices, or roughly 18–32 hours of active Codex
+execution**, to repository-wide acceptance.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-20 after migrating the current-user activity summaries, Channels, Special
-Dialogs, and Numeric Pad onto the capture-safe Programmer-values authorities.
+Last updated: 2026-07-20 after migrating Fixture Sheet active-value filtering and removing safe,
+owned value-only compatibility bootstrap hydration.
 
 ## Guardrails
 
@@ -202,6 +202,17 @@ Dialogs, and Numeric Pad onto the capture-safe Programmer-values authorities.
   Preload retains lifecycle clear semantics, and the obsolete legacy value-clear action plus its
   broad bootstrap reload are removed. The former oversized pad function is split into feature-owned
   controller and rendering modules below the hard source-size limits.
+- [x] Migrated Fixture Sheet active-value filtering and active-first ordering onto a capture-first
+  selector over the exact-user normal or pending values authority. The selector observes only
+  fixture/Group target membership, expands current Group membership including logical heads,
+  remains dormant unless an active pane uses the filter/order, suppresses value/timing-only
+  rerenders, and exposes loading instead of treating stale bootstrap values as authoritative empty
+  state.
+- [x] Stopped exact owned normal/Preload value-only compatibility events from requesting a broad
+  bootstrap snapshot. Categorized WebSocket events now carry user and desk identity plus the
+  previously omitted pending-values category; same-user peer-desk values stay on the scoped store,
+  transient-only changes skip an unrepresentable reload, and foreign, unowned, malformed,
+  duplicated, mixed, runtime, and lifecycle events fail closed to compatibility hydration.
 - [x] Migrated Special Dialogs and System Controls selection onto visibility-scoped streams. The
   ordered projection is passed explicitly through Color, Position, Beam/Shapers, Dynamics, Control,
   and Lamp On helpers without per-interaction copies; external changes update open modals, closed
@@ -247,11 +258,11 @@ Dialogs, and Numeric Pad onto the capture-safe Programmer-values authorities.
   moved, as have the complete parameter bank and selection-driven operator modals; Patch setup and
   a small number of keypad/miscellaneous readers still use the facade.
 - [ ] Migrate production normal Programmer-value readers and writers onto the connected scoped
-  values provider in focused cohorts, then remove only their value-triggered bootstrap refreshes.
-  Parameter controls, activity summaries, System Controls current-user counts, Channels, Special
-  Dialogs, and Numeric Pad have moved, and their recordable compatibility facade is retired. The
-  Fixture Sheet active-value filter and value-only compatibility event routing remain; foreign-user
-  rows stay on bootstrap until the Programmer lifecycle projection exists.
+  values provider in focused cohorts. Mounted value readers and interactive writers, including
+  Fixture Sheet active filtering, have moved and their value-triggered bootstrap refreshes and
+  recordable compatibility facade are retired. Action-time Group/Preset/Cue recording still reads
+  a fresh legacy Programmer projection; foreign-user rows stay on bootstrap until the Programmer
+  lifecycle projection exists.
 - [ ] Replace inferred Cue ambiguity in the command-line text projection with explicit desk-local
   pending-choice state that is set only by `ChoiceRequired` after ENT and cleared by edit, reset,
   selection, or Cancel. Until then, cross-session choice visibility remains a documented
@@ -384,6 +395,12 @@ Dialogs, and Numeric Pad onto the capture-safe Programmer-values authorities.
   26 focused tests after typed selection/value clearing. Dependency checks and all 10 architecture
   scanner tests pass; the architecture command still exits non-zero only for the separately owned
   Dynamics Editor experiment at 1,382 lines.
+- The Fixture Sheet target reader and compatibility-hydration slice passes 22 focused values,
+  filter, window, loading, logical-head, and dormancy tests plus 40 server-routing tests. Focused
+  Rust tests cover normal and pending value categorization, user/desk identity, transient
+  retrigger/release, and timed-pulse completion. Frontend typecheck, `cargo fmt --all -- --check`,
+  and `git diff --check` pass. The changed routing and server production modules are below 400
+  lines; malformed, foreign, and mixed compatibility events retain the conservative fallback.
 
 ## Wrap-up handoff
 
@@ -399,11 +416,11 @@ Dialogs, and Numeric Pad onto the capture-safe Programmer-values authorities.
 - Lifecycle deletion/recreation still preserves monotonic exact-user values and capture revisions
   and invalidates old replays. The broader Programmer ownership/lifecycle projection remains
   separate architecture work.
-- No Patch/setup selection cleanup or public test-DSL refactoring was started in this slice.
-- Recommended next slice: move the Fixture Sheet active-value filter onto the scoped normal or
-  pending projection and suppress exact value-only compatibility bootstrap refreshes. Keep queued
-  Preload playback labels, foreign-user Programmer rows, multi-user lifecycle, Patch/setup
-  selection, and the public test DSL as distinct milestones.
+- Patch/setup selection and the public test DSL remain separate, unstarted milestones.
+- Recommended next slice: add the typed Programmer lifecycle/ownership projection needed by
+  foreign-user System Controls rows and queued Preload playback activity, or finish the smaller
+  residual Patch/setup selection cohort first if its audit proves independent. Keep record-time
+  Group/Preset/Cue capture and the public test DSL as distinct milestones.
 
 Test files may exceed the hard limits, but should still be split when it improves readability and
 makes operator intent more visible.
