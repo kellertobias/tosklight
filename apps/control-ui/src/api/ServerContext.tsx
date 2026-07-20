@@ -1,16 +1,11 @@
 import { createContext, type PropsWithChildren, useContext } from "react";
 import { FilesProvider } from "../features/files/FilesContext";
-import { PlaybackRuntimeViewProvider } from "../features/playbackRuntime/PlaybackRuntimeView";
-import { ProgrammerCaptureModeViewProvider } from "../features/programmerCaptureMode/ProgrammerCaptureModeView";
-import { ProgrammerValuesViewProvider } from "../features/programmerValues/ProgrammerValuesView";
-import { ProgrammingInteractionViewProvider } from "../features/programmingInteraction/ProgrammingInteractionView";
 import { ScreensProvider } from "../features/screens/ScreensContext";
 import { SelectiveImportProvider } from "../features/selectiveImport/SelectiveImportContext";
 import { composeServerContextValue } from "../features/server/composeServerContextValue";
 import type { ServerContextValue } from "../features/server/ServerContextValue";
 import { useCommandLineController } from "../features/server/useCommandLineController";
 import { useFileAccess } from "../features/server/useFileAccess";
-import { useSelectedGroupMembership } from "../features/server/useSelectedGroupMembership";
 import { useServerConnection } from "../features/server/useServerConnection";
 import { useServerPolling } from "../features/server/useServerPolling";
 import { useServerState } from "../features/server/useServerState";
@@ -18,12 +13,9 @@ import {
 	useServerRefresh,
 	useShowObjects,
 } from "../features/server/useShowData";
-import { useGroups } from "../features/server/useShowObjectsState";
 import type { SessionRole } from "../features/session/ownership";
-import {
-	ShowObjectDetailSubscription,
-	ShowObjectsViewProvider,
-} from "../features/showObjects/ShowObjectsView";
+import { ShowObjectsViewProvider } from "../features/showObjects/ShowObjectsView";
+import { ServerProgrammingProviders } from "./ServerProgrammingProviders";
 import { useServerFeatureBoundaries } from "./useServerFeatureBoundaries";
 
 export type {
@@ -39,25 +31,6 @@ export {
 } from "../features/server/contracts";
 
 const ServerContext = createContext<ServerContextValue | null>(null);
-
-function SelectedGroupMembershipSync({
-	playbacks,
-	selectedGroupId,
-	setSelectedGroupId,
-	setSelectedFixtures,
-}: Pick<
-	ReturnType<typeof useServerState>,
-	"playbacks" | "selectedGroupId" | "setSelectedGroupId" | "setSelectedFixtures"
->) {
-	const groups = useGroups(playbacks);
-	useSelectedGroupMembership(
-		groups,
-		selectedGroupId,
-		setSelectedGroupId,
-		setSelectedFixtures,
-	);
-	return null;
-}
 
 export function ServerProvider({
 	children,
@@ -128,74 +101,19 @@ export function ServerProvider({
 				loadObject={boundaries.loadShowObject}
 				onError={boundaries.reportShowObjectError}
 			>
-				<PlaybackRuntimeViewProvider
-					showId={state.bootstrap?.active_show?.id ?? null}
-					deskId={state.session?.desk.id ?? null}
-					store={state.playbackRuntimeStore}
-					transport={boundaries.playbackTransport}
-					loadSnapshot={boundaries.loadPlaybackSnapshot}
-					initialDesk={
-						state.playbacks
-							? {
-									activePage: state.playbacks.active_page,
-									selectedPlayback: state.playbacks.selected_playback ?? null,
-								}
-							: null
-					}
-					onError={boundaries.reportPlaybackError}
+				<ServerProgrammingProviders
+					state={state}
+					boundaries={boundaries}
+					value={value}
 				>
-					<ProgrammerCaptureModeViewProvider
-						showId={state.bootstrap?.active_show?.id ?? null}
-						userId={state.session?.user.id ?? null}
-						authorityKey={boundaries.programmerCaptureModeAuthorityKey}
-						store={state.programmerCaptureModeStore}
-						transport={boundaries.programmerCaptureModeTransport}
-						loadSnapshot={boundaries.loadProgrammerCaptureModeSnapshot}
-						onSessionError={boundaries.reportProgrammerCaptureModeSessionError}
-					>
-						<ProgrammerValuesViewProvider
-							showId={state.bootstrap?.active_show?.id ?? null}
-							userId={state.session?.user.id ?? null}
-							authorityKey={boundaries.programmerValuesAuthorityKey}
-							store={state.programmerValuesStore}
-							transport={boundaries.programmerValuesTransport}
-							loadSnapshot={boundaries.loadProgrammerValuesSnapshot}
-							applyAction={boundaries.applyProgrammerValuesAction}
-							onSessionError={boundaries.reportProgrammerValuesSessionError}
-							onMutationError={boundaries.reportProgrammerValuesMutationError}
-						>
-							<ProgrammingInteractionViewProvider
-								showId={state.bootstrap?.active_show?.id ?? null}
-								deskId={state.session?.desk.id ?? null}
-								store={state.programmingInteractionStore}
-								transport={boundaries.programmingTransport}
-								loadSnapshot={boundaries.loadProgrammingInteractionSnapshot}
-								replaceCommandLine={state.client.replaceProgrammingCommandLine}
-								applySelection={state.client.applyProgrammingSelection}
-								onSessionError={boundaries.reportProgrammingSessionError}
-								onMutationError={boundaries.reportProgrammingMutationError}
-							>
-								<SelectedGroupMembershipSync
-									playbacks={state.playbacks}
-									selectedGroupId={state.selectedGroupId}
-									setSelectedGroupId={state.setSelectedGroupId}
-									setSelectedFixtures={state.setSelectedFixtures}
-								/>
-								<ShowObjectDetailSubscription
-									kind="group"
-									objectId={state.selectedGroupId}
-								/>
-								<SelectiveImportProvider source={selectiveImportSource}>
-									<FilesProvider source={fileSource}>
-										<ScreensProvider source={screenSource}>
-											{children}
-										</ScreensProvider>
-									</FilesProvider>
-								</SelectiveImportProvider>
-							</ProgrammingInteractionViewProvider>
-						</ProgrammerValuesViewProvider>
-					</ProgrammerCaptureModeViewProvider>
-				</PlaybackRuntimeViewProvider>
+					<SelectiveImportProvider source={selectiveImportSource}>
+						<FilesProvider source={fileSource}>
+							<ScreensProvider source={screenSource}>
+								{children}
+							</ScreensProvider>
+						</FilesProvider>
+					</SelectiveImportProvider>
+				</ServerProgrammingProviders>
 			</ShowObjectsViewProvider>
 		</ServerContext.Provider>
 	);

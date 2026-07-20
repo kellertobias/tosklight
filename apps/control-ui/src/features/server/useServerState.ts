@@ -20,6 +20,7 @@ import type {
 import type { CommandTargetMode } from "../../controlSurface/commandTarget";
 import { PlaybackRuntimeStore } from "../playbackRuntime/store";
 import { ProgrammerCaptureModeStore } from "../programmerCaptureMode/store";
+import { ProgrammerPreloadValuesStore } from "../programmerPreloadValues/store";
 import { ProgrammerValuesStore } from "../programmerValues/store";
 import { ProgrammingInteractionStore } from "../programmingInteraction/store";
 import type {
@@ -57,6 +58,9 @@ export function useServerState() {
 		new ProgrammerCaptureModeStore(),
 	).current;
 	const programmerValuesStore = useRef(new ProgrammerValuesStore()).current;
+	const programmerPreloadValuesStore = useRef(
+		new ProgrammerPreloadValuesStore(),
+	).current;
 	const [screens, setScreens] = useState<ScreenSnapshot | null>(null);
 	const [shows, setShows] = useState<ShowEntry[]>([]);
 	const [configuration, setConfiguration] = useState<DeskConfiguration | null>(
@@ -125,6 +129,7 @@ export function useServerState() {
 		programmingInteractionStore,
 		programmerCaptureModeStore,
 		programmerValuesStore,
+		programmerPreloadValuesStore,
 		screens,
 		setScreens,
 		shows,

@@ -28,6 +28,11 @@ export function chooseProgrammerValuesAuthority(
 			sequence,
 		);
 	}
+	if (authoritative && incoming.revision < authoritative.revision)
+		throw new ProgrammerValuesProtocolError(
+			`Programmer values revision moved backwards from ${authoritative.revision} to ${incoming.revision}`,
+			sequence,
+		);
 	return {
 		...chooseProgrammerValuesRevision(authoritative, incoming, currentSequence),
 		sequence,

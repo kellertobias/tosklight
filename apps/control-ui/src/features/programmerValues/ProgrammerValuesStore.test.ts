@@ -72,10 +72,9 @@ describe("ProgrammerValuesStore authority", () => {
 		});
 		expect(store.installSnapshot(valuesSnapshot())).toBe(false);
 		expect(
-			store.installSnapshot(
-				valuesSnapshot({ userId: OTHER_USER_ID }),
-				{ expectedScope: oldScope },
-			),
+			store.installSnapshot(valuesSnapshot({ userId: OTHER_USER_ID }), {
+				expectedScope: oldScope,
+			}),
 		).toBe(false);
 	});
 
@@ -110,15 +109,16 @@ describe("ProgrammerValuesStore authority", () => {
 		);
 		const projection = store.getSnapshot().projection;
 
-		expect(projection?.fixtureValues.map(({ fixtureId }) => fixtureId)).toEqual([
-			FIXTURE_1,
-			FIXTURE_2,
-		]);
+		expect(projection?.fixtureValues.map(({ fixtureId }) => fixtureId)).toEqual(
+			[FIXTURE_1, FIXTURE_2],
+		);
 		expect(Object.isFrozen(projection)).toBe(true);
 		expect(Object.isFrozen(projection?.fixtureValues)).toBe(true);
 		expect(Object.isFrozen(projection?.fixtureValues[1]?.value)).toBe(true);
 		const spread = projection?.fixtureValues[1]?.value;
-		expect(spread?.kind === "spread" && Object.isFrozen(spread.value)).toBe(true);
+		expect(spread?.kind === "spread" && Object.isFrozen(spread.value)).toBe(
+			true,
+		);
 	});
 
 	it("rejects duplicate addresses as a repairable protocol error", () => {
@@ -238,7 +238,7 @@ describe("ProgrammerValuesStore optimism", () => {
 });
 
 describe("ProgrammerValuesStore revision and cursor ordering", () => {
-	it("ignores stale cursors and projections while advancing valid cursors", () => {
+	it("ignores a projection delivered at a stale cursor", () => {
 		const store = readyStore(valuesProjection({ revision: 2 }));
 		store.applyProjection(
 			valuesProjection({ revision: 99, fixtureValues: [fixtureValue(0.99)] }),
@@ -246,15 +246,22 @@ describe("ProgrammerValuesStore revision and cursor ordering", () => {
 		);
 		expect(fixtureLevel(store)).toBe(0.25);
 		expect(store.getSnapshot().eventSequence).toBe(10);
+	});
 
-		store.applyProjection(
-			valuesProjection({ revision: 1, fixtureValues: [fixtureValue(0.1)] }),
-			11,
-		);
+	it("repairs instead of consuming a newer cursor with an older revision", () => {
+		const store = readyStore(valuesProjection({ revision: 2 }));
+
+		expect(() =>
+			store.applyProjection(
+				valuesProjection({ revision: 1, fixtureValues: [fixtureValue(0.1)] }),
+				11,
+			),
+		).toThrow(ProgrammerValuesProtocolError);
 		expect(fixtureLevel(store)).toBe(0.25);
 		expect(store.getSnapshot()).toMatchObject({
-			eventSequence: 11,
+			eventSequence: 10,
 			projection: { revision: 2 },
+			repairRequired: true,
 		});
 	});
 

@@ -4,6 +4,7 @@ import { createFeatureErrorGroup } from "./featureErrorReporting";
 import { configuredServerUrl } from "./LightApiClient";
 import { browserDeskBoundaryToken } from "./PatchTransport";
 import { HttpProgrammerCaptureModeTransport } from "./ProgrammerCaptureModeTransport";
+import { HttpProgrammerPreloadValuesTransport } from "./ProgrammerPreloadValuesTransport";
 import { HttpProgrammerValuesTransport } from "./ProgrammerValuesTransport";
 
 export function useProgrammerValuesBoundaries(state: ServerState) {
@@ -12,6 +13,10 @@ export function useProgrammerValuesBoundaries(state: ServerState) {
 		[state.setError],
 	);
 	const captureModeErrors = useMemo(
+		() => createFeatureErrorGroup(state.setError),
+		[state.setError],
+	);
+	const preloadValuesErrors = useMemo(
 		() => createFeatureErrorGroup(state.setError),
 		[state.setError],
 	);
@@ -37,6 +42,18 @@ export function useProgrammerValuesBoundaries(state: ServerState) {
 				: null,
 		[state.session],
 	);
+	const programmerPreloadValuesTransport = useMemo(
+		() =>
+			state.session
+				? new HttpProgrammerPreloadValuesTransport({
+						baseUrl: configuredServerUrl(),
+						sessionToken: state.session.token,
+						deskBoundaryToken: browserDeskBoundaryToken(),
+						authenticatedUserId: state.session.user.id,
+					})
+				: null,
+		[state.session],
+	);
 	const programmerScope = useMemo(() => {
 		const showId = state.bootstrap?.active_show?.id;
 		const userId = state.session?.user.id;
@@ -55,6 +72,11 @@ export function useProgrammerValuesBoundaries(state: ServerState) {
 			throw new Error("Programmer capture mode session is unavailable");
 		return programmerCaptureModeTransport.loadSnapshot(programmerScope);
 	}, [programmerCaptureModeTransport, programmerScope]);
+	const loadProgrammerPreloadValuesSnapshot = useCallback(() => {
+		if (!programmerPreloadValuesTransport || !programmerScope)
+			throw new Error("Programmer Preload values session is unavailable");
+		return programmerPreloadValuesTransport.loadSnapshot(programmerScope);
+	}, [programmerPreloadValuesTransport, programmerScope]);
 	const applyProgrammerValuesAction = useCallback(
 		(
 			scope: NonNullable<typeof programmerScope>,
@@ -66,16 +88,37 @@ export function useProgrammerValuesBoundaries(state: ServerState) {
 		},
 		[programmerValuesTransport],
 	);
+	const applyProgrammerPreloadValuesAction = useCallback(
+		(
+			scope: NonNullable<typeof programmerScope>,
+			request: Parameters<
+				HttpProgrammerPreloadValuesTransport["applyAction"]
+			>[1],
+		) => {
+			if (!programmerPreloadValuesTransport)
+				throw new Error("Programmer Preload values session is unavailable");
+			return programmerPreloadValuesTransport.applyAction(scope, request);
+		},
+		[programmerPreloadValuesTransport],
+	);
 	return {
 		programmerValuesTransport,
+		programmerPreloadValuesTransport,
 		programmerCaptureModeTransport,
 		programmerValuesAuthorityKey: authorityKey,
+		programmerPreloadValuesAuthorityKey: authorityKey,
 		programmerCaptureModeAuthorityKey: authorityKey,
 		loadProgrammerValuesSnapshot,
+		loadProgrammerPreloadValuesSnapshot,
 		loadProgrammerCaptureModeSnapshot,
 		applyProgrammerValuesAction,
+		applyProgrammerPreloadValuesAction,
 		reportProgrammerValuesSessionError: valuesErrors.reportSession,
 		reportProgrammerValuesMutationError: valuesErrors.reportMutation,
+		reportProgrammerPreloadValuesSessionError:
+			preloadValuesErrors.reportSession,
+		reportProgrammerPreloadValuesMutationError:
+			preloadValuesErrors.reportMutation,
 		reportProgrammerCaptureModeSessionError: captureModeErrors.reportSession,
 	};
 }
