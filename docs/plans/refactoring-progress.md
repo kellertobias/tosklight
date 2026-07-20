@@ -1,17 +1,18 @@
 # Major Refactoring Progress
 
-Estimated progress: **97%**
+Estimated progress: **98%**
 
-Estimated Codex ETA: **2–3 focused implementation slices, or roughly 5–12 hours of active Codex
-execution**, to repository-wide acceptance. Playback runtime effects and persistence are now exact;
-restart provenance, efficient Preload preparation, topology ownership, and final acceptance remain.
+Estimated Codex ETA: **1–2 focused implementation slices, or roughly 3–8 hours of active Codex
+execution**, to repository-wide acceptance. Final-state-aware Preload preparation and desk-exact
+restart isolation are complete; typed Cuelist/topology mutation, the Virtual Playback compatibility
+migration, and final acceptance remain.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-20 after separating accepted Playback operations from exact no-op,
-transient, and durable runtime effects and persisting only the domains that actually changed.
+Last updated: 2026-07-20 after making queued Preload preparation final-state-aware and persisting
+desk/surface activation provenance for restart-exact virtual Playback exclusions.
 
 ## Guardrails
 
@@ -57,7 +58,8 @@ transient, and durable runtime effects and persisting only the domains that actu
 - [x] Migrated the primary manual, automatic, scheduled, OSC, Preload, current-page, and
   explicit-page Playback action paths into the typed application service and v2 runtime contract.
   Virtual exclusion peers and startup normalization now use that boundary; exact semantic no-op
-  reporting is complete, while persisted topology and active compatibility panes remain below.
+  reporting is complete, while typed Cuelist/topology mutation and active compatibility panes
+  remain below.
 - [x] Removed mutable Playback-service lock exposure from the migrated paths: Engine callers use
   typed commands and immutable projections, Preload installs generation-bound prepared batches,
   and application-owned units of work serialize page changes, automatic render transitions, and
@@ -91,6 +93,21 @@ transient, and durable runtime effects and persisting only the domains that actu
   or either persistence write. Feature-owned persistence plans keep active Playback and
   output-runtime writes independent, so interaction-only actions and Cuelist changes cannot
   serialize unrelated output state.
+- [x] Made queued Preload preparation batch-native and final-state-aware. Batched projection reads
+  and shared immutable exclusion-zone data feed one prepared generation; exact final runtime
+  effects prevent mutate-then-cancel queues from installing, persisting, or publishing. The final
+  effective staged action owns transition cause and surface, so interim actions cannot leak into
+  retained events or exclusion audits.
+- [x] Added domain-owned Playback activation provenance for restart-exact virtual exclusions.
+  False-to-true activations atomically stamp a stable ordinal, activation timestamp, originating
+  desk, surface, and exclusion scope; Cue/timing changes preserve that authority and deactivation
+  clears it. Timed Preload releases retain the original authority until their release fade ends,
+  and deskless Matter activation remains explicitly outside desk-local exclusions. Only the private
+  active-runtime checkpoint serializes provenance; public runtime payloads omit it. Legacy
+  checkpoints migrate through an explicit all-desks fallback, while new checkpoints replay
+  activation order against each captured desk's zones. Same-user queued Preload actions retain
+  their capture desk when committed elsewhere, deleted desks inherit no zones, and explicit
+  non-current-page activations do not borrow current-page exclusions.
 - [x] Added a typed desk-local Programming interaction snapshot and stream. Command-line and
   ordered-selection changes use independent exact-object routes and non-empty sparse payloads;
   Highlight and Preload reconciliation finishes before the one authoritative event is captured.
@@ -341,9 +358,8 @@ transient, and durable runtime effects and persisting only the domains that actu
 
 - [ ] Continue vertical feature-store/event slices and move the remaining production callers away
   from broad `useServer()`, polling, and generic show-object mutation.
-- [ ] Finish the Playback ownership boundary for persisted activation provenance and Cuelist/
-  topology mutation, efficient Preload transition capture, and every active compatibility pane
-  still polling.
+- [ ] Finish the Playback ownership boundary with typed Cuelist/topology mutation and migrate the
+  remaining active compatibility panes, beginning with Virtual Playback.
 - [ ] Move the remaining selection consumers onto the scoped Programming store, then remove their
   legacy bootstrap fields and broad Programmer refresh paths. Group Pool, Group Strip, and the
   command bar, Stage, Stage/Fixture pane chrome, Channels, Fixture Sheet, Patch, and Presets have
@@ -369,23 +385,6 @@ transient, and durable runtime effects and persisting only the domains that actu
    acceptance test has moved to a typed replacement.
 7. Repair the remaining stale feature-plan links and keep the committed `docs/engineering` handoff
    synchronized as compatibility adapters are retired.
-
-## Known limitations
-
-- Persisted active Playback runtime does not retain the desk or surface that activated it. Live
-  exclusion actions remain desk-isolated, but restart normalization must currently merge the
-  configured current-page zones from every desk and therefore cannot reconstruct which desk's rule
-  originally applied. Add activation provenance and a two-desk restart regression before calling
-  restart isolation complete.
-- Preload currently reads related runtime projections once per identity and clones each applicable
-  zone set into its prepared commands. A queue with multiple actions for the same Playback also
-  derives the retained transition cause from the first matching action. Add a batched projection
-  read, share immutable zone data, define final-action transition metadata, and prove resolved-page
-  capture through the route before scaling this path to broad queued batches.
-- Prepared Preload effects currently combine monotonically. Commands which mutate and then cancel
-  the same retained state can therefore conservatively install and persist the prepared generation
-  even when a final full-runtime comparison would be equal. Add a final-state delta before removing
-  this conservative behavior; keep the batch as one application action and at most one event.
 
 ## Performance and acceptance still required
 
@@ -623,6 +622,22 @@ transient, and durable runtime effects and persisting only the domains that actu
   pass; the aggregate architecture command still exits 1 solely for the separately owned
   1,382-line Dynamics Editor experiment. Every production file touched by this slice remains below
   400 lines.
+- Final-state Preload preparation and activation provenance pass all 80 `light-playback` unit tests
+  plus 4 automatic-transition integration tests, all 73 Engine unit tests plus its integration
+  test, all 90 `light-programmer` tests, 21 focused Engine Playback-boundary tests, 33 focused
+  server Preload tests, and 25 focused v2 route tests. The server library passes 339 tests with 1
+  intentional Matter-port ignore and only the sandbox-blocked CITP thumbnail socket test filtered.
+  Coverage includes transient mutate/cancel no-op behavior, final-action event attribution,
+  captured origin across same-user desks, explicit-page no-scope behavior, deskless Matter
+  checkpoint/restore, false-to-true-only stamping, stable ordinals at equal timestamps, provenance
+  preservation through Cue/timing changes and timed release fades, release clearing, legacy
+  migration, both two-desk activation orders, deleted-desk isolation, public-payload omission,
+  private-checkpoint retention, and idempotent repeat startup normalization. All 48 wire tests and
+  generated-contract verification, control-ui typecheck, strict Clippy, the no-default-features
+  server check, `cargo fmt --all -- --check`, and `git diff --check` pass. Dependency directions
+  and all 10 architecture scanner tests pass; the aggregate architecture command still exits 1
+  solely for the separately owned 1,382-line Dynamics Editor experiment. Every touched production
+  file remains below 400 lines; the largest is Playback ports at 393 lines.
 
 ## Wrap-up handoff
 
@@ -643,11 +658,12 @@ transient, and durable runtime effects and persisting only the domains that actu
   compatibility surfaces tracked above.
 - Patch/setup selection and explicit Cue pending-choice authority are complete. The public test DSL
   remains a separate future milestone.
-- Recommended next slice: batch Preload runtime reads, share immutable exclusion-zone data, compare
-  final retained state, define final-action transition metadata, and persist activation desk/surface
-  provenance with a two-desk restart regression. Then add typed Cuelist/topology mutation and
-  migrate the Virtual Playback pane as the first compatibility-free Playback surface. Keep Cue
-  editor/Update/transfer cleanup and the public test DSL as distinct later milestones.
+- Preload now prepares one final-state-aware batch, and virtual-exclusion restart authority is
+  private, desk-exact, migration-compatible, and absent from public runtime projections.
+- Recommended next slice: add typed Cuelist/topology mutation and migrate the Virtual Playback pane
+  as the first compatibility-free Playback surface. Keep Cue editor/Update/transfer cleanup and the
+  public test DSL as distinct later milestones. Follow that slice with the final repository-wide
+  acceptance and performance pass.
 
 Test files may exceed the hard limits, but should still be split when it improves readability and
 makes operator intent more visible.
