@@ -7,32 +7,42 @@ import type {
 } from "./contracts";
 import {
 	objectKey,
-	projectCollection,
 	sortObjects,
 	upsertCollection,
 } from "./storeProjection";
+import { ShowObjectEventWatermarks } from "./eventWatermarks";
 import type {
 	CollectionUpdate,
-	PendingMutation,
 	ShowObjectInstall,
 	ShowObjectsSnapshot,
 } from "./storeTypes";
+import { ShowObjectPendingMutations } from "./pendingMutations";
+import { applyAuthoritativeChange } from "./changeApplication";
+import { installAuthoritativeObjects } from "./objectInstallation";
+import {
+	ALL_COLLECTIONS,
+	createShowObjectsSnapshot,
+	NO_COLLECTIONS,
+	projectedCollection,
+} from "./storeSnapshot";
 
 export type { ShowObjectInstall, ShowObjectsSnapshot } from "./storeTypes";
 
 export class ShowObjectsStore {
 	private authoritative: ShowObjectCollections = { group: [], preset: [] };
-	private readonly pending = new Map<string, PendingMutation[]>();
-	private readonly objectSequences = new Map<string, number>();
-	private readonly objectSequenceFloors = new Map<string, number>();
-	private readonly kindSequenceFloors = new Map<ShowObjectKind, number>();
+	private authorityKey: string | null = null;
+	private authorityGeneration = 0;
+	private readonly pending = new ShowObjectPendingMutations();
+	private readonly watermarks = new ShowObjectEventWatermarks();
 	private readonly listeners = new Set<() => void>();
 	private snapshot: ShowObjectsSnapshot = {
 		showId: null,
+		authorityGeneration: 0,
 		showRevision: null,
 		eventSequence: null,
 		groups: [],
 		presets: [],
+		readyCollections: new Set(),
 		pendingObjectKeys: new Set(),
 		status: "idle",
 		error: null,
@@ -45,16 +55,22 @@ export class ShowObjectsStore {
 
 	readonly getSnapshot = () => this.snapshot;
 
-	reset(showId: string | null) {
-		if (this.snapshot.showId === showId) return;
+	reset(showId: string | null, authorityKey?: string) {
+		const authorityChanged =
+			authorityKey !== undefined && authorityKey !== this.authorityKey;
+		if (this.snapshot.showId === showId && !authorityChanged) return;
+		if (authorityKey !== undefined) this.authorityKey = authorityKey;
+		this.authorityGeneration += 1;
 		this.authoritative = { group: [], preset: [] };
 		this.pending.clear();
-		this.clearEventWatermarks();
+		this.watermarks.clear();
 		this.publish({
 			showId,
+			authorityGeneration: this.authorityGeneration,
 			showRevision: null,
 			eventSequence: null,
 			status: showId ? "loading" : "idle",
+			readyCollections: new Set(),
 			error: null,
 		});
 	}
@@ -72,13 +88,15 @@ export class ShowObjectsStore {
 				this.authoritative[kind].map((object) => object.id),
 			);
 			next = next.filter((object) => {
-				const applied = this.objectSequences.get(objectKey(kind, object.id));
+				const applied = this.watermarks.objectSequence(
+					objectKey(kind, object.id),
+				);
 				return applied == null || applied <= eventFloor || currentIds.has(object.id);
 			}) as ShowObjectCollections[K];
 			for (const current of this.authoritative[kind]) {
 				const key = objectKey(kind, current.id);
-				const floor = this.objectSequenceFloors.get(key);
-				const applied = this.objectSequences.get(key);
+				const floor = this.watermarks.objectFloor(key);
+				const applied = this.watermarks.objectSequence(key);
 				if (
 					(floor != null && floor > eventFloor) ||
 					(applied != null && applied > eventFloor)
@@ -87,9 +105,16 @@ export class ShowObjectsStore {
 			}
 		}
 		this.authoritative[kind] = next;
-		this.clearKindWatermarks(kind, eventFloor);
-		if (eventFloor != null) this.kindSequenceFloors.set(kind, eventFloor);
-		this.publish({ status: "ready", error: null });
+		this.watermarks.clearKind(kind, eventFloor);
+		if (eventFloor != null) this.watermarks.setKindFloor(kind, eventFloor);
+		this.publish(
+			{
+				readyCollections: new Set([...this.snapshot.readyCollections, kind]),
+				status: "ready",
+				error: null,
+			},
+			projectedCollection(kind),
+		);
 	}
 
 	updateCollection<K extends ShowObjectKind>(
@@ -99,7 +124,7 @@ export class ShowObjectsStore {
 		const current = [...this.authoritative[kind]] as ShowObjectCollections[K];
 		const next = typeof update === "function" ? update(current) : update;
 		this.authoritative[kind] = [...next] as ShowObjectCollections[K];
-		this.publish();
+		this.publish({}, projectedCollection(kind));
 	}
 
 	installObject<K extends ShowObjectKind>(
@@ -125,29 +150,13 @@ export class ShowObjectsStore {
 		minimumEventSequence?: number | null,
 	) {
 		if (this.snapshot.showId !== showId) return;
-		for (const { kind, objectId, object } of installs) {
-			const key = objectKey(kind, objectId);
-			const responseEventObserved = this.hasAppliedAtOrAfter(
-				kind,
-				key,
-				minimumEventSequence,
-			);
-			this.raiseObjectSequenceFloor(kind, objectId, minimumEventSequence);
-			const existing = this.authoritative[kind].find(
-				(candidate) => candidate.id === objectId,
-			);
-			if (!responseEventObserved && !object)
-				this.removeAuthoritative(kind, objectId);
-			else if (
-				!responseEventObserved &&
-				object &&
-				(minimumEventSequence != null ||
-					!existing ||
-					existing.revision <= object.revision)
-			)
-				this.upsertAuthoritative(kind, object);
-		}
-		this.publish({ status: "ready", error: null });
+		const projectKinds = installAuthoritativeObjects(
+			this.authoritative,
+			this.watermarks,
+			installs,
+			minimumEventSequence,
+		);
+		this.publish({ status: "ready", error: null }, projectKinds);
 	}
 
 	beginOptimistic<K extends ShowObjectKind>(
@@ -156,22 +165,15 @@ export class ShowObjectsStore {
 		objectId: string,
 		body: ShowObjectBodies[K],
 	) {
-		if (this.snapshot.showId !== showId)
-			throw new Error(`Show ${showId} is no longer active`);
-		const token = crypto.randomUUID();
-		const key = objectKey(kind, objectId);
-		const operations = this.pending.get(key) ?? [];
-		operations.push({
-			token,
-			showId,
-			kind,
-			objectId,
-			body,
-			baseEventSequence: this.appliedSequence(kind, key),
-		});
-		this.pending.set(key, operations);
-		this.publish({ error: null });
-		return token;
+		return this.addPending(showId, kind, objectId, body);
+	}
+
+	beginPending<K extends ShowObjectKind>(
+		showId: string,
+		kind: K,
+		objectId: string,
+	) {
+		return this.addPending(showId, kind, objectId, null);
 	}
 
 	commit(
@@ -179,10 +181,10 @@ export class ShowObjectsStore {
 		objectRevision: number,
 		minimumEventSequence?: number | null,
 	) {
-		const operation = this.takePending(token);
+		const operation = this.pending.take(token);
 		if (!operation || this.snapshot.showId !== operation.showId) return;
 		const key = objectKey(operation.kind, operation.objectId);
-		this.raiseObjectSequenceFloor(
+		this.watermarks.raiseObjectFloor(
 			operation.kind,
 			operation.objectId,
 			minimumEventSequence,
@@ -190,7 +192,7 @@ export class ShowObjectsStore {
 		const existing = this.authoritative[operation.kind].find(
 			(candidate) => candidate.id === operation.objectId,
 		);
-		const eventSequence = this.appliedSequence(operation.kind, key);
+		const eventSequence = this.watermarks.appliedSequence(operation.kind, key);
 		const responseEventObserved =
 			minimumEventSequence != null
 				? eventSequence >= minimumEventSequence
@@ -207,78 +209,147 @@ export class ShowObjectsStore {
 				body: operation.body,
 			} as ShowObject);
 		}
-		this.publish({ error: null });
+		this.publish({ error: null }, projectedCollection(operation.kind));
 	}
 
 	rollback(token: string, error: Error) {
-		if (!this.takePending(token)) return;
-		this.publish({ status: "error", error });
+		const operation = this.pending.take(token);
+		if (!operation) return;
+		this.publish(
+			{ status: "error", error },
+			operation.body == null
+				? NO_COLLECTIONS
+				: projectedCollection(operation.kind),
+		);
+	}
+
+	abandon(token: string) {
+		const operation = this.pending.take(token);
+		if (!operation) return;
+		this.publish(
+			{},
+			operation.body == null
+				? NO_COLLECTIONS
+				: projectedCollection(operation.kind),
+		);
+	}
+
+	settlePending<K extends ShowObjectKind>(
+		token: string,
+		object: ShowObject<K>,
+		showRevision: number,
+		minimumEventSequence: number | null,
+		authorityGeneration: number,
+	) {
+		const operation = this.pending.take(token);
+		if (
+			!operation ||
+			this.snapshot.showId !== operation.showId ||
+			this.authorityGeneration !== authorityGeneration
+		)
+			return false;
+		const key = objectKey(operation.kind, object.id);
+		const responseEventObserved = this.hasAppliedAtOrAfter(
+			operation.kind,
+			key,
+			minimumEventSequence,
+		);
+		this.watermarks.raiseObjectFloor(
+			operation.kind,
+			object.id,
+			minimumEventSequence,
+		);
+		if (!responseEventObserved) {
+			const existing = this.authoritative[operation.kind].find(
+				(candidate) => candidate.id === object.id,
+			);
+			if (!existing || existing.revision <= object.revision)
+				this.upsertAuthoritative(operation.kind, object);
+		}
+		this.publish(
+			{
+				showRevision: Math.max(this.snapshot.showRevision ?? 0, showRevision),
+				status: "ready",
+				error: null,
+			},
+			projectedCollection(operation.kind),
+		);
+		return true;
 	}
 
 	applyChange(change: ShowObjectsChange) {
 		if (change.showId !== this.snapshot.showId) return;
-		let changed = false;
-		for (const objectChange of change.changes) {
-			const key = objectKey(objectChange.kind, objectChange.objectId);
-			const existing = this.authoritative[objectChange.kind].find(
-				(candidate) => candidate.id === objectChange.objectId,
-			);
-			const kindFloor = this.kindSequenceFloors.get(objectChange.kind) ?? 0;
-			const objectFloor = this.objectSequenceFloors.get(key) ?? 0;
-			const applied = this.objectSequences.get(key) ?? 0;
-			if (
-				change.eventSequence <= kindFloor ||
-				change.eventSequence < objectFloor ||
-				change.eventSequence <= applied
-			)
-				continue;
-			this.objectSequences.set(key, change.eventSequence);
-			if (change.eventSequence >= objectFloor)
-				this.objectSequenceFloors.delete(key);
-			changed = true;
-			if (existing && existing.revision > objectChange.objectRevision) continue;
-			if (objectChange.deleted) {
-				this.removeAuthoritative(objectChange.kind, objectChange.objectId);
-			} else if (objectChange.body) {
-				this.upsertAuthoritative(objectChange.kind, {
-					kind: objectChange.kind,
-					id: objectChange.objectId,
-					revision: objectChange.objectRevision,
-					updated_at: existing?.updated_at ?? "",
-					body: objectChange.body,
-				} as ShowObject);
-			}
-		}
-		if (!changed) return;
-		this.publish({
-			showRevision: Math.max(
-				this.snapshot.showRevision ?? 0,
-				change.showRevision,
-			),
-			eventSequence: Math.max(
-				this.snapshot.eventSequence ?? 0,
-				change.eventSequence,
-			),
-			status: "ready",
-			error: null,
-		});
+		const applied = applyAuthoritativeChange(
+			this.authoritative,
+			this.watermarks,
+			change,
+		);
+		if (!applied.accepted) return;
+		this.publish(
+			{
+				showRevision: Math.max(
+					this.snapshot.showRevision ?? 0,
+					change.showRevision,
+				),
+				eventSequence: Math.max(
+					this.snapshot.eventSequence ?? 0,
+					change.eventSequence,
+				),
+				status: "ready",
+				error: null,
+			},
+			applied.projectKinds,
+		);
 	}
 
-	setLoading() {
-		this.publish({ status: "loading" });
+	setLoading(kind?: ShowObjectKind) {
+		if (!kind) return this.publish({ status: "loading" }, NO_COLLECTIONS);
+		const readyCollections = new Set(this.snapshot.readyCollections);
+		readyCollections.delete(kind);
+		this.publish({ readyCollections, status: "loading" }, NO_COLLECTIONS);
+	}
+
+	isCollectionReady(kind: ShowObjectKind) {
+		return this.snapshot.readyCollections.has(kind);
 	}
 
 	setError(error: Error) {
-		this.publish({ status: "error", error });
+		this.publish({ status: "error", error }, NO_COLLECTIONS);
 	}
 
 	setReady() {
-		this.publish({ status: "ready", error: null });
+		this.publish({ status: "ready", error: null }, NO_COLLECTIONS);
 	}
 
 	beginEventResync() {
-		this.clearEventWatermarks();
-		this.publish({ showRevision: null, eventSequence: null });
+		this.watermarks.clear();
+		this.publish(
+			{ showRevision: null, eventSequence: null },
+			NO_COLLECTIONS,
+		);
+	}
+
+	private addPending<K extends ShowObjectKind>(
+		showId: string,
+		kind: K,
+		objectId: string,
+		body: ShowObjectBodies[K] | null,
+	) {
+		if (this.snapshot.showId !== showId)
+			throw new Error(`Show ${showId} is no longer active`);
+		const key = objectKey(kind, objectId);
+		const token = this.pending.begin(
+			showId,
+			kind,
+			objectId,
+			body,
+			this.watermarks.appliedSequence(kind, key),
+		);
+		this.publish(
+			{ error: null },
+			body == null ? NO_COLLECTIONS : projectedCollection(kind),
+		);
+		return token;
 	}
 
 	private upsertAuthoritative(kind: ShowObjectKind, object: ShowObject) {
@@ -289,101 +360,30 @@ export class ShowObjectsStore {
 		sortObjects(objects);
 	}
 
-	private removeAuthoritative(kind: ShowObjectKind, objectId: string) {
-		this.authoritative[kind] = this.authoritative[kind].filter(
-			(object) => object.id !== objectId,
-		) as never;
-	}
-
-	private takePending(token: string): PendingMutation | null {
-		for (const [key, operations] of this.pending) {
-			const index = operations.findIndex((operation) => operation.token === token);
-			if (index < 0) continue;
-			const [operation] = operations.splice(index, 1);
-			if (!operations.length) this.pending.delete(key);
-			return operation;
-		}
-		return null;
-	}
-
-	private appliedSequence(kind: ShowObjectKind, key: string) {
-		return Math.max(
-			this.kindSequenceFloors.get(kind) ?? 0,
-			this.objectSequences.get(key) ?? 0,
-		);
-	}
-
 	private hasAppliedAtOrAfter(
 		kind: ShowObjectKind,
 		key: string,
 		minimumEventSequence?: number | null,
 	) {
-		if (minimumEventSequence == null) return false;
-		return (
-			(this.kindSequenceFloors.get(kind) ?? -1) >= minimumEventSequence ||
-			(this.objectSequences.get(key) ?? -1) >= minimumEventSequence
-		);
-	}
-
-	private raiseObjectSequenceFloor(
-		kind: ShowObjectKind,
-		objectId: string,
-		minimumEventSequence?: number | null,
-	) {
-		if (minimumEventSequence == null) return;
-		const key = objectKey(kind, objectId);
-		if (minimumEventSequence <= this.appliedSequence(kind, key)) return;
-		this.objectSequenceFloors.set(
+		return this.watermarks.hasAppliedAtOrAfter(
+			kind,
 			key,
-			Math.max(this.objectSequenceFloors.get(key) ?? 0, minimumEventSequence),
+			minimumEventSequence,
 		);
 	}
 
-	private clearKindWatermarks(kind: ShowObjectKind, eventFloor?: number) {
-		const prefix = `${kind}:`;
-		for (const [key, sequence] of this.objectSequences)
-			if (
-				key.startsWith(prefix) &&
-				(eventFloor == null || sequence <= eventFloor)
-			)
-				this.objectSequences.delete(key);
-		for (const [key, sequence] of this.objectSequenceFloors)
-			if (
-				key.startsWith(prefix) &&
-				(eventFloor == null || sequence <= eventFloor)
-			)
-				this.objectSequenceFloors.delete(key);
-		this.kindSequenceFloors.delete(kind);
-	}
-
-	private clearEventWatermarks() {
-		this.objectSequences.clear();
-		this.objectSequenceFloors.clear();
-		this.kindSequenceFloors.clear();
-	}
-
-	private createSnapshot(
+	private publish(
 		changes: Partial<ShowObjectsSnapshot> = {},
-	): ShowObjectsSnapshot {
-		return {
-			...this.snapshot,
-			groups: projectCollection(
-				"group",
-				this.authoritative.group,
-				this.pending.values(),
-			) as ShowObject<"group">[],
-			presets: projectCollection(
-				"preset",
-				this.authoritative.preset,
-				this.pending.values(),
-			) as ShowObject<"preset">[],
-			pendingObjectKeys: new Set(this.pending.keys()),
-			...changes,
-		};
-	}
-
-	private publish(changes: Partial<ShowObjectsSnapshot> = {}) {
-		this.snapshot = this.createSnapshot(changes);
+		projectKinds: ReadonlySet<ShowObjectKind> = ALL_COLLECTIONS,
+	) {
+		this.snapshot = createShowObjectsSnapshot(
+			this.snapshot,
+			this.authoritative,
+			this.pending.values(),
+			this.pending.keys(),
+			changes,
+			projectKinds,
+		);
 		for (const listener of this.listeners) listener();
 	}
 }

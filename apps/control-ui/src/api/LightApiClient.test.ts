@@ -66,9 +66,7 @@ describe("LightApiClient server selection and sessions", () => {
 	});
 
 	it("creates a username session and authenticates subsequent REST requests", async () => {
-		const fetchMock = vi
-			.fn()
-			.mockResolvedValueOnce(
+		const fetchMock = vi.fn().mockResolvedValueOnce(
 				new Response(
 					JSON.stringify({
 						session_id: "session-a",
@@ -277,7 +275,7 @@ describe("LightApiClient programmer and preset contracts", () => {
 			["preset.generate_fixture_values", { fixture_ids: ["fixture-a"] }],
 		]);
 	});
-	it("addresses presets by family and pool-local number", async () => {
+	it("addresses applied presets by family and pool-local number", async () => {
 		const fetchMock = vi
 			.fn()
 			.mockResolvedValueOnce(
@@ -289,12 +287,6 @@ describe("LightApiClient programmer and preset contracts", () => {
 					}),
 					{ status: 200, headers: { "content-type": "application/json" } },
 				),
-			)
-			.mockResolvedValueOnce(
-				new Response(JSON.stringify({ revision: 1 }), {
-					status: 200,
-					headers: { "content-type": "application/json" },
-				}),
 			);
 		vi.stubGlobal("fetch", fetchMock);
 		const client = new LightApiClient("http://desk.local");
@@ -302,29 +294,9 @@ describe("LightApiClient programmer and preset contracts", () => {
 		const command = vi.spyOn(client, "command").mockResolvedValue({});
 
 		await client.applyPreset({ family: "Color", number: 1 });
-		await client.storePreset(
-			"show-a",
-			{ family: "Position", number: 1 },
-			{
-				name: "Position one",
-				family: "Position",
-				number: 1,
-				values: {},
-				group_values: {},
-			},
-			"overwrite",
-			0,
-		);
-
 		expect(command).toHaveBeenCalledWith("preset.apply", {
 			family: "Color",
 			number: 1,
-		});
-		expect(fetchMock.mock.calls[1][0]).toBe(
-			"http://desk.local/api/v1/shows/show-a/presets/3.1/store",
-		);
-		expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({
-			preset: { family: "Position", number: 1 },
 		});
 	});
 });

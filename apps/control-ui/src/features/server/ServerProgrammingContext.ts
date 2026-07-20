@@ -65,10 +65,4 @@ export interface ServerProgrammingContext {
 	refreshFrozenGroup: (id: string) => Promise<void>;
 	detachDerivedGroup: (id: string) => Promise<void>;
 	applyPreset: (address: PresetAddress) => Promise<void>;
-	storePreset: (
-		address: PresetAddress,
-		name: string,
-		mode: "merge" | "overwrite" | "add_missing_fixtures",
-		family?: PresetFamily,
-	) => Promise<void>;
 }

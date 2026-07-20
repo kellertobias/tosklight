@@ -126,7 +126,7 @@ export class ShowObjectsSession {
 		}
 		const run = { token: Symbol(key), target, floor };
 		this.runs.set(key, run);
-		this.store.setLoading();
+		this.store.setLoading(target.objectId === undefined ? target.kind : undefined);
 		void this.runHydration(run);
 	}
 

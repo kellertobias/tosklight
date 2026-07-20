@@ -13,6 +13,9 @@ import { normalizePresetFamily, presetAddress, presetStorageKey, PRESET_FAMILIES
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
 import { usePresets } from "../features/showObjects/ShowObjectsState";
 import { useProgrammingSelectionView } from "../features/programmingInteraction/ProgrammingInteractionView";
+import { usePresetRecording } from "../features/presetRecording/PresetRecordingProvider";
+import { resolvePresetCards } from "../features/presetRecording/presetCards";
+import { submitPresetRecording } from "../features/presetRecording/submitRecording";
 
 type PresetCustomization = { title?: string; icon?: string; color?: string };
 
@@ -21,6 +24,7 @@ export function PresetsWindow({ active = true, compact, paneId, showGroupShortcu
   const server = useServer();
   const selection = useProgrammingSelectionView(active);
   const storedPresets = usePresets();
+  const presetRecording = usePresetRecording();
   const { state, dispatch } = useApp();
   const family = compact ? (presetFamily ?? state.presetFamily) : state.presetFamily;
   const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
@@ -41,32 +45,30 @@ export function PresetsWindow({ active = true, compact, paneId, showGroupShortcu
             name: preset.name!,
             number: preset.id,
             values: {},
-            family: preset.family,
+            family: normalizePresetFamily(preset.family),
             color: preset.color,
             icon: preset.icon,
           },
         }));
   const stored = server.bootstrap?.active_show ? storedPresets : fallback;
-  const cards = Array.from({ length: 200 }, (_, index) =>
-    stored.find((preset) =>
-      normalizePresetFamily(preset.body.family) === family
-      && preset.body.number === index + 1,
-    ) ?? null,
-  );
+  const cards = resolvePresetCards(stored, family);
 
   const cancelRecording = () => {
     setRecordPresetIndex(null);
     dispatch({ type: "SET_STORE_ARMED", value: false });
   };
   const recordPreset = (index: number, mode: RecordMode) => {
-    const preset = cards[index];
-    const targetFamily = normalizePresetFamily(preset?.body.family, family);
-    const targetAddress = presetAddress(targetFamily, index + 1);
-    const targetId = presetStorageKey(targetAddress);
-    if (state.preload !== "idle") void server.storePreload({ target: "preset", target_id: targetId, name: preset?.body.name ?? `Preset ${index + 1}`, mode, family: targetFamily }, preset && "revision" in preset ? preset.revision : 0);
-    else void server.storePreset(targetAddress, preset?.body.name ?? `Preset ${index + 1}`, mode, targetFamily);
     setRecordPresetIndex(null);
     dispatch({ type: "SET_STORE_ARMED", value: false });
+    submitPresetRecording({
+      card: cards[index],
+      index,
+      family,
+      mode,
+      preloadActive: state.preload !== "idle",
+      actions: presetRecording,
+      storePreload: server.storePreload,
+    });
   };
 
   const activate = (index: number) => {

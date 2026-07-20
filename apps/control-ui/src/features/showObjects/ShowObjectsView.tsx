@@ -3,6 +3,7 @@ import {
 	type PropsWithChildren,
 	useContext,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 } from "react";
 import type { ShowObjectKind } from "./contracts";
@@ -17,6 +18,7 @@ import type { ShowObjectsEventTransport } from "./transport";
 
 interface ShowObjectsViewProviderProps {
 	showId: string | null;
+	authorityKey?: string;
 	store: ShowObjectsStore;
 	transport: ShowObjectsEventTransport | null;
 	loadCollection: ShowObjectCollectionLoader;
@@ -29,12 +31,16 @@ const ShowObjectsViewContext = createContext<ShowObjectsSession | null>(null);
 export function ShowObjectsViewProvider({
 	children,
 	showId,
+	authorityKey,
 	store,
 	transport,
 	loadCollection,
 	loadObject,
 	onError,
 }: PropsWithChildren<ShowObjectsViewProviderProps>) {
+	useLayoutEffect(() => {
+		store.reset(showId, authorityKey);
+	}, [authorityKey, showId, store]);
 	const session = useMemo(
 		() =>
 			showId
@@ -47,9 +53,17 @@ export function ShowObjectsViewProvider({
 						onError,
 					})
 				: null,
-		[loadCollection, loadObject, onError, showId, store, transport],
+		[
+			authorityKey,
+			loadCollection,
+			loadObject,
+			onError,
+			showId,
+			store,
+			transport,
+		],
 	);
-	useEffect(() => () => session?.stop(), [session]);
+	useLayoutEffect(() => () => session?.stop(), [session]);
 	return (
 		<ShowObjectsStateProvider store={store}>
 			<ShowObjectsViewContext.Provider value={session}>

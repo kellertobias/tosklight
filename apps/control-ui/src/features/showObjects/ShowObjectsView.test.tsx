@@ -38,7 +38,121 @@ function GroupConsumer({ active }: { active: boolean }) {
 	return null;
 }
 
+function PresetConsumer({ active }: { active: boolean }) {
+	useShowObjectView("preset", active);
+	return null;
+}
+
+function deferred<T>() {
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((onResolve) => {
+		resolve = onResolve;
+	});
+	return { promise, resolve };
+}
+
 describe("ShowObjectsViewProvider", () => {
+	it("keeps Preset readiness false when an unrelated Group hydration finishes first", async () => {
+		const store = new ShowObjectsStore();
+		store.reset(SHOW_ID);
+		const presets = deferred<never[]>();
+		const loadCollection = vi.fn((_showId: string, kind: "group" | "preset") =>
+			kind === "group" ? Promise.resolve([]) : presets.promise,
+		);
+		render(
+			<ShowObjectsViewProvider
+				showId={SHOW_ID}
+				store={store}
+				transport={null}
+				loadCollection={loadCollection}
+				loadObject={vi.fn()}
+			>
+				<GroupConsumer active />
+				<PresetConsumer active />
+			</ShowObjectsViewProvider>,
+		);
+
+		await waitFor(() => expect(store.isCollectionReady("group")).toBe(true));
+		expect(store.isCollectionReady("preset")).toBe(false);
+		presets.resolve([]);
+		await waitFor(() => expect(store.isCollectionReady("preset")).toBe(true));
+	});
+
+	it("rejects late hydration and events from a replaced same-show authority", async () => {
+		const store = new ShowObjectsStore();
+		const oldLoad = deferred<
+			Array<{
+				kind: "group";
+				id: string;
+				revision: number;
+				updated_at: string;
+				body: { name: string; fixtures: string[] };
+			}>
+		>();
+		const transport = new FakeTransport();
+		const replacement = {
+			kind: "group" as const,
+			id: "1",
+			revision: 9,
+			updated_at: "",
+			body: { name: "Replacement", fixtures: [] },
+		};
+		const loadCollection = vi.fn(() =>
+			loadCollection.mock.calls.length === 1
+				? oldLoad.promise
+				: Promise.resolve([replacement]),
+		);
+		const loadObject = vi.fn();
+		const view = (authorityKey: string) => (
+			<ShowObjectsViewProvider
+				showId={SHOW_ID}
+				authorityKey={authorityKey}
+				store={store}
+				transport={transport}
+				loadCollection={loadCollection}
+				loadObject={loadObject}
+			>
+				<GroupConsumer active />
+			</ShowObjectsViewProvider>
+		);
+		const rendered = render(view("session-a"));
+		await waitFor(() => expect(loadCollection).toHaveBeenCalledOnce());
+		await waitFor(() => expect(transport.subscriptions).toHaveLength(1));
+
+		rendered.rerender(view("session-b"));
+		await waitFor(() => expect(loadCollection).toHaveBeenCalledTimes(2));
+		await waitFor(() => expect(transport.subscriptions).toHaveLength(2));
+		await waitFor(() => expect(store.getSnapshot().groups).toEqual([replacement]));
+		oldLoad.resolve([
+			{
+				...replacement,
+				revision: 1,
+				body: { name: "Late hydration", fixtures: [] },
+			},
+		]);
+		transport.subscriptions[0].observer.message({
+			type: "event",
+			change: {
+				showId: SHOW_ID,
+				showRevision: 2,
+				eventSequence: 2,
+				changes: [
+					{
+						kind: "group",
+						objectId: "1",
+						objectRevision: 2,
+						body: { name: "Late event", fixtures: [] },
+						deleted: false,
+					},
+				],
+			},
+		});
+		await Promise.resolve();
+
+		expect(transport.subscriptions[0].close).toHaveBeenCalledOnce();
+		expect(store.getSnapshot().groups).toEqual([replacement]);
+	});
+
 	it("hydrates an active view before a WebSocket transport is available", async () => {
 		const store = new ShowObjectsStore();
 		store.reset(SHOW_ID);

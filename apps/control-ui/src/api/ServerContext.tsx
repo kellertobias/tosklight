@@ -13,6 +13,7 @@ import {
 	useServerRefresh,
 	useShowObjects,
 } from "../features/server/useShowData";
+import { PresetRecordingProvider } from "../features/presetRecording/PresetRecordingProvider";
 import type { SessionRole } from "../features/session/ownership";
 import { ShowObjectsViewProvider } from "../features/showObjects/ShowObjectsView";
 import { ServerProgrammingProviders } from "./ServerProgrammingProviders";
@@ -95,25 +96,34 @@ export function ServerProvider({
 		<ServerContext.Provider value={value}>
 			<ShowObjectsViewProvider
 				showId={state.bootstrap?.active_show?.id ?? null}
+				authorityKey={boundaries.showObjectsAuthorityKey}
 				store={state.showObjectsStore}
 				transport={boundaries.showObjectsTransport}
 				loadCollection={boundaries.loadShowObjectCollection}
 				loadObject={boundaries.loadShowObject}
 				onError={boundaries.reportShowObjectError}
 			>
-				<ServerProgrammingProviders
-					state={state}
-					boundaries={boundaries}
-					value={value}
+				<PresetRecordingProvider
+					showId={state.bootstrap?.active_show?.id ?? null}
+					store={state.showObjectsStore}
+					transport={boundaries.presetRecordingTransport}
+					loadPreset={boundaries.loadPresetForRepair}
+					onError={boundaries.reportPresetRecordingError}
 				>
-					<SelectiveImportProvider source={selectiveImportSource}>
-						<FilesProvider source={fileSource}>
-							<ScreensProvider source={screenSource}>
-								{children}
-							</ScreensProvider>
-						</FilesProvider>
-					</SelectiveImportProvider>
-				</ServerProgrammingProviders>
+					<ServerProgrammingProviders
+						state={state}
+						boundaries={boundaries}
+						value={value}
+					>
+						<SelectiveImportProvider source={selectiveImportSource}>
+							<FilesProvider source={fileSource}>
+								<ScreensProvider source={screenSource}>
+									{children}
+								</ScreensProvider>
+							</FilesProvider>
+						</SelectiveImportProvider>
+					</ServerProgrammingProviders>
+				</PresetRecordingProvider>
 			</ShowObjectsViewProvider>
 		</ServerContext.Provider>
 	);

@@ -30,6 +30,123 @@ function preset(revision: number, name: string): ShowObject<"preset"> {
 }
 
 describe("ShowObjectsStore", () => {
+	it("keeps a pending server-captured Preset authoritative until response settlement", () => {
+		const store = new ShowObjectsStore();
+		store.reset(SHOW_ID, "session-a");
+		store.setCollection(SHOW_ID, "preset", [preset(3, "Blue")], 10);
+		const generation = store.getSnapshot().authorityGeneration;
+		const before = store.getSnapshot();
+		const token = store.beginPending(SHOW_ID, "preset", "2.1");
+		const pending = store.getSnapshot();
+
+		expect(pending.presets).toBe(before.presets);
+		expect(pending.groups).toBe(before.groups);
+		expect(pending.presets).toEqual([preset(3, "Blue")]);
+		expect(pending.pendingObjectKeys).toEqual(
+			new Set(["preset:2.1"]),
+		);
+
+		store.settlePending(
+			token,
+			preset(4, "Deep Blue"),
+			12,
+			11,
+			generation,
+		);
+		expect(store.getSnapshot().presets[0]).toMatchObject({
+			revision: 4,
+			body: { name: "Deep Blue" },
+		});
+		expect(store.getSnapshot().groups).toBe(before.groups);
+		expect(store.getSnapshot().pendingObjectKeys.size).toBe(0);
+	});
+
+	it("abandons pending-only actions without reprojecting either collection", () => {
+		const store = new ShowObjectsStore();
+		store.reset(SHOW_ID, "session-a");
+		store.setCollection(SHOW_ID, "group", [group(1, "Front")]);
+		store.setCollection(SHOW_ID, "preset", [preset(3, "Blue")]);
+		const before = store.getSnapshot();
+		const token = store.beginPending(SHOW_ID, "preset", "2.1");
+
+		store.abandon(token);
+
+		const after = store.getSnapshot();
+		expect(after.groups).toBe(before.groups);
+		expect(after.presets).toBe(before.presets);
+		expect(after.pendingObjectKeys.size).toBe(0);
+	});
+
+	it("keeps an event authoritative when it precedes a pending-only response", () => {
+		const store = new ShowObjectsStore();
+		store.reset(SHOW_ID, "session-a");
+		store.setCollection(SHOW_ID, "preset", [preset(3, "Blue")], 10);
+		const generation = store.getSnapshot().authorityGeneration;
+		const token = store.beginPending(SHOW_ID, "preset", "2.1");
+		store.applyChange({
+			showId: SHOW_ID,
+			showRevision: 12,
+			eventSequence: 11,
+			changes: [
+				{
+					kind: "preset",
+					objectId: "2.1",
+					objectRevision: 4,
+					body: { ...preset(4, "Event body").body, icon: "◆" },
+					deleted: false,
+				},
+			],
+		});
+
+		store.settlePending(
+			token,
+			preset(4, "Delayed response"),
+			12,
+			11,
+			generation,
+		);
+		expect(store.getSnapshot().presets[0]).toMatchObject({
+			revision: 4,
+			body: { name: "Event body", icon: "◆" },
+		});
+	});
+
+	it("ignores a late pending response after same-show authority replacement", () => {
+		const store = new ShowObjectsStore();
+		store.reset(SHOW_ID, "session-a");
+		store.setCollection(SHOW_ID, "preset", [preset(1, "Old")]);
+		const generation = store.getSnapshot().authorityGeneration;
+		const token = store.beginPending(SHOW_ID, "preset", "2.1");
+
+		store.reset(SHOW_ID, "session-b");
+		store.setCollection(SHOW_ID, "preset", [preset(7, "Replacement")]);
+
+		expect(
+			store.settlePending(
+				token,
+				preset(2, "Late"),
+				2,
+				1,
+				generation,
+			),
+		).toBe(false);
+		expect(store.getSnapshot().presets).toEqual([preset(7, "Replacement")]);
+	});
+
+	it("settles a legacy Preset ID returned for a canonical pending target", () => {
+		const store = new ShowObjectsStore();
+		store.reset(SHOW_ID, "session-a");
+		store.setCollection(SHOW_ID, "preset", [], 10);
+		const generation = store.getSnapshot().authorityGeneration;
+		const token = store.beginPending(SHOW_ID, "preset", "2.1");
+		const legacy = { ...preset(1, "Legacy"), id: "preset-legacy" };
+
+		store.settlePending(token, legacy, 2, 11, generation);
+
+		expect(store.getSnapshot().pendingObjectKeys.size).toBe(0);
+		expect(store.getSnapshot().presets).toEqual([legacy]);
+	});
+
 	it("shows a targeted optimistic Group body and rolls it back on failure", () => {
 		const store = new ShowObjectsStore();
 		store.reset(SHOW_ID);
@@ -248,6 +365,7 @@ describe("ShowObjectsStore", () => {
 			...preset(1, "Local").body,
 			name: "Local",
 		});
+		expect(store.getSnapshot().presets[0]?.body.name).toBe("Local");
 		store.applyChange({
 			showId: SHOW_ID,
 			showRevision: 8,

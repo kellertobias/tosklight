@@ -8,7 +8,7 @@ import { projectLiveGroupMembership } from "./groupProjection";
 interface PendingProjection {
 	kind: ShowObjectKind;
 	objectId: string;
-	body: ShowObject["body"];
+	body: ShowObject["body"] | null;
 }
 
 export function objectKey(kind: ShowObjectKind, objectId: string) {
@@ -28,8 +28,8 @@ export function projectCollection<K extends ShowObjectKind>(
 ): ShowObjectCollections[K] {
 	const projected = new Map(authoritative.map((object) => [object.id, object]));
 	for (const operations of pending) {
-		const latest = operations.at(-1);
-		if (!latest || latest.kind !== kind) continue;
+		const latest = latestProjected(operations);
+		if (!latest || latest.kind !== kind || latest.body == null) continue;
 		const existing = projected.get(latest.objectId);
 		projected.set(latest.objectId, {
 			kind,
@@ -43,6 +43,14 @@ export function projectCollection<K extends ShowObjectKind>(
 	return (kind === "group"
 		? projectLiveGroupMembership(objects as ShowObject<"group">[])
 		: objects) as ShowObjectCollections[K];
+}
+
+function latestProjected(operations: readonly PendingProjection[]) {
+	for (let index = operations.length - 1; index >= 0; index -= 1) {
+		const operation = operations[index];
+		if (operation?.body != null) return operation;
+	}
+	return undefined;
 }
 
 export function upsertCollection<T extends ShowObject>(objects: T[], object: T) {

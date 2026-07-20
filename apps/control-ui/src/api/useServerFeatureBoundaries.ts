@@ -10,6 +10,7 @@ import { WebSocketShowObjectsEventTransport } from "./ShowObjectsEventTransport"
 import type { PlaybackRuntimeIdentity } from "./types";
 import { useProgrammerLifecycleBoundaries } from "./useProgrammerLifecycleBoundaries";
 import { useProgrammerValuesBoundaries } from "./useProgrammerValuesBoundaries";
+import { usePresetRecordingBoundaries } from "./usePresetRecordingBoundaries";
 
 export function useServerFeatureBoundaries(state: ServerState) {
 	const programmingErrors = useMemo(
@@ -18,6 +19,13 @@ export function useServerFeatureBoundaries(state: ServerState) {
 	);
 	const programmerValues = useProgrammerValuesBoundaries(state);
 	const programmerLifecycle = useProgrammerLifecycleBoundaries(state);
+	const presetRecording = usePresetRecordingBoundaries(state);
+	const showObjectsAuthorityKey = [
+		configuredServerUrl(),
+		state.connectionGeneration,
+		state.session?.session_id ?? "",
+		state.session?.client_id ?? "",
+	].join("|");
 	const showObjectsTransport = useMemo(
 		() =>
 			state.session
@@ -82,10 +90,12 @@ export function useServerFeatureBoundaries(state: ServerState) {
 	);
 	return {
 		showObjectsTransport,
+		showObjectsAuthorityKey,
 		playbackTransport,
 		programmingTransport,
 		...programmerLifecycle,
 		...programmerValues,
+		...presetRecording,
 		loadPlaybackSnapshot,
 		loadProgrammingInteractionSnapshot,
 		loadShowObjectCollection,

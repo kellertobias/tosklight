@@ -149,6 +149,9 @@ vi.mock("../features/showObjects/ShowObjectsView", () => ({
 vi.mock("../features/showObjects/ShowObjectsState", () => ({
 	usePresets: () => [],
 }));
+vi.mock("../features/presetRecording/PresetRecordingProvider", () => ({
+	usePresetRecording: () => null,
+}));
 vi.mock("../features/server/useShowObjectsState", () => ({
 	useGroups: () => [],
 }));

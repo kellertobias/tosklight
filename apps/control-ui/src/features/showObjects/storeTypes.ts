@@ -7,10 +7,12 @@ import type {
 
 export interface ShowObjectsSnapshot {
 	showId: string | null;
+	authorityGeneration: number;
 	showRevision: number | null;
 	eventSequence: number | null;
 	groups: readonly ShowObject<"group">[];
 	presets: readonly ShowObject<"preset">[];
+	readyCollections: ReadonlySet<ShowObjectKind>;
 	pendingObjectKeys: ReadonlySet<string>;
 	status: "idle" | "loading" | "ready" | "error";
 	error: Error | null;
@@ -25,7 +27,7 @@ export interface PendingMutation<K extends ShowObjectKind = ShowObjectKind> {
 	showId: string;
 	kind: K;
 	objectId: string;
-	body: ShowObjectBodies[K];
+	body: ShowObjectBodies[K] | null;
 	baseEventSequence: number;
 }
 

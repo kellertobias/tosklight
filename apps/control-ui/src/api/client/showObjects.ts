@@ -1,11 +1,7 @@
-import type {
-	PresetAddress,
-	PresetFamily,
-} from "../../presetFamilies";
-import { presetStorageKey } from "../../presetFamilies";
+import type { PresetFamily } from "../../presetFamilies";
 import type { ShowObjectMutationResponse } from "../../features/showObjects/contracts";
 import { ApiRequestError } from "../ApiRequestError";
-import type { StoredPreset, VersionedObject } from "../types";
+import type { VersionedObject } from "../types";
 import type { ClientTransport } from "./transport";
 
 interface PreloadStoreInput {
@@ -15,21 +11,6 @@ interface PreloadStoreInput {
 	name?: string;
 	mode?: "merge" | "overwrite" | "add_missing_fixtures";
 	family?: PresetFamily;
-}
-
-interface PresetStoreBody {
-	name: string;
-	family: PresetFamily;
-	number: number;
-	values: Record<string, Record<string, unknown>>;
-	group_values?: Record<string, Record<string, unknown>>;
-}
-
-interface PresetStoreResult {
-	revision: number;
-	event_sequence: number | null;
-	preset: StoredPreset;
-	source_session: string;
 }
 
 export class ShowObjectsApiClient {
@@ -104,24 +85,6 @@ export class ShowObjectsApiClient {
 			method: "POST",
 			headers: revisionHeaders(revision),
 		});
-	}
-
-	storePreset(
-		showId: string,
-		address: PresetAddress,
-		preset: PresetStoreBody,
-		mode: "merge" | "overwrite" | "add_missing_fixtures",
-		revision: number,
-	): Promise<PresetStoreResult> {
-		const storageKey = presetStorageKey(address);
-		return this.transport.request(
-			`/api/v1/shows/${showId}/presets/${encodeURIComponent(storageKey)}/store`,
-			{
-				method: "POST",
-				headers: revisionHeaders(revision, true),
-				body: JSON.stringify({ mode, preset }),
-			},
-		);
 	}
 }
 
