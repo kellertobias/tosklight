@@ -1,16 +1,16 @@
 # Major Refactoring Progress
 
-Estimated progress: **94%**
+Estimated progress: **95%**
 
-Estimated Codex ETA: **1–4 focused implementation slices, or roughly 6–16 hours of active Codex
+Estimated Codex ETA: **1–3 focused implementation slices, or roughly 4–12 hours of active Codex
 execution**, to repository-wide acceptance.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-20 after completing typed action-time Cue recording across touch,
-command-line HTTP, keyboard, OSC, compatibility WebSocket, and scoped frontend surfaces.
+Last updated: 2026-07-20 after replacing inferred Cue ambiguity with authoritative desk-local
+pending-choice state across the Programming boundary and scoped frontend surface.
 
 ## Guardrails
 
@@ -118,9 +118,14 @@ command-line HTTP, keyboard, OSC, compatibility WebSocket, and scoped frontend s
   action-only consumers do not rerender for command text. Exact categorized edit events no longer
   trigger broad bootstrap hydration, while malformed, expanded, and runtime changes retain the
   compatibility fallback. Edit persistence now occurs inside the replay boundary, so a failed
-  save cannot replay as a false success. The temporary Cue-choice modal remains tied to the
-  explicit execute response so it cannot appear before ENT, and scoped Cancel performs one v2
-  reset while dismissing that compatibility response locally.
+  save cannot replay as a false success. Cue ambiguity is now explicit runtime-only desk state set
+  only by a `ChoiceRequired` execution after ENT; command edits, reset, Cancel, an accepted choice,
+  and show replacement clear it without persisting it. The same desk shares one authoritative
+  choice across UI, OSC, and compatibility WebSocket surfaces while another desk remains isolated.
+  Replay returns current authority without resurrecting a resolved choice, and each semantic
+  transition publishes at most one sparse interaction event. The production modal consumes only
+  the scoped projection, reconciles optimistic Cancel with rollback, ignores legacy response-local
+  choice data, and rejects late outcomes after server/session authority replacement.
 - [x] Migrated the complete Stage selection path, Stage command controls, and Stage/Fixture pane
   counts onto the ordered Programming selection projection. Covered panes do not hydrate or
   subscribe, peer and OSC changes update the mounted view without a legacy reload, Stage gestures
@@ -318,10 +323,6 @@ command-line HTTP, keyboard, OSC, compatibility WebSocket, and scoped frontend s
   command bar, Stage, Stage/Fixture pane chrome, Channels, Fixture Sheet, Patch, and Presets have
   moved, as have Patch setup, the complete parameter bank, and selection-driven operator modals;
   a small number of keypad/miscellaneous readers still use the facade.
-- [ ] Replace inferred Cue ambiguity in the command-line text projection with explicit desk-local
-  pending-choice state that is set only by `ChoiceRequired` after ENT and cleared by edit, reset,
-  selection, or Cancel. Until then, cross-session choice visibility remains a documented
-  compatibility exception.
 
 ## Remaining architecture work
 
@@ -529,6 +530,21 @@ command-line HTTP, keyboard, OSC, compatibility WebSocket, and scoped frontend s
   pre-existing 1,382-line Dynamics experiment; OSC subscription handling was split below the hard
   function limit. `./build open` succeeds and `/api/v1/readiness` reports `ready` with no current-
   launch server error. Wire tests retain the existing non-fatal `ts-rs` warning.
+- Explicit Cue pending-choice authority passes all 88 `light-programmer` tests, all 271
+  `light-application` tests, all 47 `light-wire` unit tests plus generated-contract verification,
+  64 focused command HTTP tests, the Cue-transfer and 3 engine-selection-refresh regressions, and
+  the accepted compatibility Speed reset regression. Four focused frontend files pass all 44
+  modal, view, store, writer, rollback, narrow-selector, and authority-replacement tests; frontend
+  typecheck passes. All 8 Cue arbitration/transfer and Speed API/UI Playwright scenarios pass
+  serially outside the sandbox. Strict Clippy for Programmer, application, wire, and server,
+  `cargo fmt --all`, and `git diff --check` pass. The accepted Speed path exposed and fixed two
+  operator-visible integration defects: compatibility execution now persists the authoritative
+  command reset before its single retained event, and Programming snapshots acquire the user gate
+  before the desk gate so the globally mounted exact-desk observer cannot deadlock startup. Every
+  changed production file remains at or below 400 lines. `./build open` rebuilds and launches both
+  desktop bundles, `/api/v1/readiness` reports `ready`, and the current launch adds no server error;
+  Vite retains only its existing large-chunk advisory and wire generation retains the existing
+  non-fatal `ts-rs` warning.
 
 ## Wrap-up handoff
 
@@ -547,11 +563,12 @@ command-line HTTP, keyboard, OSC, compatibility WebSocket, and scoped frontend s
 - Public bootstrap no longer contains Programmer state. The authenticated v1 compatibility list
   is restricted to same-user session rows and remains only for startup and the shrinking
   compatibility surfaces tracked above.
-- Patch/setup selection is complete. The public test DSL remains a separate future milestone.
-- Recommended next slice: replace inferred Cue ambiguity in command-line text with explicit desk-
-  local pending-choice state set only by `ChoiceRequired` after ENT and cleared by edit, reset,
-  selection, or Cancel. Keep Cue editor/Update/transfer cleanup, the remaining Playback ownership
-  boundary, and the public test DSL as distinct later milestones.
+- Patch/setup selection and explicit Cue pending-choice authority are complete. The public test DSL
+  remains a separate future milestone.
+- Recommended next slice: finish the remaining Playback ownership boundary, beginning with virtual
+  exclusion peers and startup normalization, then persisted Cuelist/topology mutation and active
+  compatibility panes. Keep Cue editor/Update/transfer cleanup and the public test DSL as distinct
+  later milestones.
 
 Test files may exceed the hard limits, but should still be split when it improves readability and
 makes operator intent more visible.
