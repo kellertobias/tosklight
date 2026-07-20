@@ -1,4 +1,4 @@
-use crate::{ProgrammerCaptureMode, ProgrammerRegistry, ProgrammerSelection};
+use crate::{CueMoveCopyChoice, ProgrammerCaptureMode, ProgrammerRegistry, ProgrammerSelection};
 use light_core::SessionId;
 use serde::{Deserialize, Serialize};
 
@@ -42,6 +42,8 @@ pub struct CommandLineState {
     pub target: CommandTarget,
     pub pristine: bool,
     pub revision: u64,
+    #[serde(skip)]
+    pub pending_choice: Option<CueMoveCopyChoice>,
 }
 
 impl Default for CommandLineState {
@@ -51,6 +53,7 @@ impl Default for CommandLineState {
             target: CommandTarget::Fixture,
             pristine: true,
             revision: 0,
+            pending_choice: None,
         }
     }
 }
@@ -81,6 +84,13 @@ impl CommandLineState {
 pub struct ProgrammerInteractionState {
     pub command_line: CommandLineState,
     pub selection: ProgrammerSelection,
+}
+
+/// Lightweight desk-context state used to detect sparse interaction changes.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProgrammerInteractionContextVersion {
+    pub command_line: CommandLineState,
+    pub selection_revision: u64,
 }
 
 /// Lightweight interaction metadata for change detection without cloning ordered selections.
@@ -137,6 +147,31 @@ impl ProgrammerRegistry {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();
         self.interaction_state_while_gated(session)
+    }
+
+    /// Read cheap change metadata for a desk context while application-owned gates are held.
+    pub fn interaction_context_version(
+        &self,
+        context: SessionId,
+    ) -> ProgrammerInteractionContextVersion {
+        ProgrammerInteractionContextVersion {
+            command_line: self
+                .command_states
+                .read()
+                .get(&context)
+                .cloned()
+                .unwrap_or_default(),
+            selection_revision: self
+                .selection_contexts
+                .read()
+                .get(&context)
+                .map_or(0, |selection| selection.revision),
+        }
+    }
+
+    /// Materialize ordered selection authority only after its revision changed.
+    pub fn interaction_selection_for_context(&self, context: SessionId) -> ProgrammerSelection {
+        self.interaction_selection(context)
     }
 
     fn interaction_state_while_gated(
@@ -223,6 +258,7 @@ impl ProgrammerRegistry {
         if current.text != text || current.pristine != pristine {
             current.text = text;
             current.pristine = pristine;
+            current.pending_choice = None;
             current.revision += 1;
         }
         let result = current.clone();
@@ -250,6 +286,54 @@ impl ProgrammerRegistry {
             current.text = text;
             current.target = target;
             current.pristine = pristine;
+            current.pending_choice = None;
+            current.revision += 1;
+        }
+        let result = current.clone();
+        drop(commands);
+        self.touch(session);
+        Some(result)
+    }
+
+    /// Retain or clear one execution-produced choice in the shared desk interaction.
+    pub fn set_pending_command_choice(
+        &self,
+        session: SessionId,
+        pending_choice: Option<CueMoveCopyChoice>,
+    ) -> Option<CommandLineState> {
+        self.complete_command_execution(session, None, pending_choice)
+    }
+
+    /// Atomically install an execution-produced command line and its final pending choice.
+    pub fn complete_command_execution(
+        &self,
+        session: SessionId,
+        final_text: Option<&str>,
+        pending_choice: Option<CueMoveCopyChoice>,
+    ) -> Option<CommandLineState> {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
+        if !self.sessions.read().contains_key(&session) {
+            return None;
+        }
+        let context = self.command_context(session);
+        let mut commands = self.command_states.write();
+        let current = commands.entry(context).or_default();
+        let (text, pristine) = final_text.map_or_else(
+            || (current.text.clone(), current.pristine),
+            |text| {
+                let pristine = text.trim().is_empty()
+                    || text.trim().eq_ignore_ascii_case(current.target.as_str());
+                (canonical_command_text(text.to_owned(), pristine), pristine)
+            },
+        );
+        if current.text != text
+            || current.pristine != pristine
+            || current.pending_choice != pending_choice
+        {
+            current.text = text;
+            current.pristine = pristine;
+            current.pending_choice = pending_choice;
             current.revision += 1;
         }
         let result = current.clone();
@@ -269,6 +353,33 @@ impl ProgrammerRegistry {
             .map(|state| state.target.as_str().to_owned())
             .unwrap_or_else(|| CommandTarget::Fixture.as_str().to_owned())
     }
+
+    pub fn has_pending_command_choices_except_context(&self, excluded: Option<SessionId>) -> bool {
+        self.command_states
+            .read()
+            .iter()
+            .any(|(context, state)| Some(*context) != excluded && state.pending_choice.is_some())
+    }
+
+    pub fn clear_pending_command_choices_except_context(
+        &self,
+        excluded: Option<SessionId>,
+    ) -> usize {
+        self.with_all_mutation_gates(|| {
+            self.command_states
+                .write()
+                .iter_mut()
+                .filter(|(context, state)| {
+                    Some(**context) != excluded && state.pending_choice.is_some()
+                })
+                .map(|(_, state)| {
+                    state.pending_choice = None;
+                    state.revision += 1;
+                })
+                .count()
+        })
+    }
+
     pub fn set_command_target(&self, session: SessionId, target: String) -> bool {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();

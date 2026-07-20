@@ -42,6 +42,7 @@ fn osc_keypad_uses_the_same_scoped_selection_edits_as_the_ui() {
         target: CommandTarget::Fixture,
         pristine: false,
         revision: 0,
+        pending_choice: None,
     };
     press(&mut override_scope, "grp");
     press(&mut override_scope, "digit-8");
@@ -52,6 +53,7 @@ fn osc_keypad_uses_the_same_scoped_selection_edits_as_the_ui() {
         target: CommandTarget::Group,
         pristine: false,
         revision: 0,
+        pending_choice: None,
     };
     press(&mut group_scope, "digit-8");
     assert_eq!(group_scope.visible_text(), "G7 + G8");

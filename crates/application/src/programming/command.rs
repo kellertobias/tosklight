@@ -1,7 +1,7 @@
 use crate::{ActionContext, ApplicationCommand, CommandFamily};
 use light_core::FixtureId;
 use light_programmer::command_line::{CommandKey, CommandKeyPhase};
-use light_programmer::{CommandLineState, ProgrammerSelection, SelectionRule};
+use light_programmer::{CommandLineState, CueMoveCopyChoice, ProgrammerSelection, SelectionRule};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ExecutionPolicy {
@@ -92,33 +92,6 @@ pub enum ProgrammingAction {
     SelectionGestureApplied,
     GroupSelected,
     SelectionRuleApplied,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CueTransferOperation {
-    Copy,
-    Move,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ProgrammingChoiceOptionId {
-    Plain,
-    Status,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ProgrammingChoiceOption {
-    pub id: ProgrammingChoiceOptionId,
-    pub label: String,
-    pub command: String,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CueMoveCopyChoice {
-    pub operation: CueTransferOperation,
-    pub command: String,
-    pub options: Vec<ProgrammingChoiceOption>,
-    pub cancel_label: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

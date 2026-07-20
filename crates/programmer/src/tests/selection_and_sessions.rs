@@ -306,6 +306,68 @@ fn command_line_revisions_are_shared_by_desk_and_reject_stale_replacements() {
 }
 
 #[test]
+fn pending_command_choices_are_revisioned_shared_by_desk_and_cleared_by_edits() {
+    let registry = ProgrammerRegistry::default();
+    let user = UserId::new();
+    let first = SessionId::new();
+    let peer = SessionId::new();
+    let other = SessionId::new();
+    let desk = SessionId::new();
+    let other_desk = SessionId::new();
+    for session in [first, peer, other] {
+        registry.start(session, user);
+    }
+    assert!(registry.attach_command_context(first, desk));
+    assert!(registry.attach_command_context(peer, desk));
+    assert!(registry.attach_command_context(other, other_desk));
+    let command = "COPY SET 1 CUE 1 AT SET 2 CUE 2";
+    let edited = registry
+        .replace_command_line(first, 0, command.into())
+        .unwrap();
+    assert!(edited.pending_choice.is_none());
+
+    let choice = CueMoveCopyChoice {
+        operation: CueTransferOperation::Copy,
+        command: command.into(),
+        options: vec![],
+        cancel_label: "Cancel".into(),
+    };
+    let pending = registry
+        .set_pending_command_choice(first, Some(choice.clone()))
+        .unwrap();
+    assert_eq!(pending.revision, edited.revision + 1);
+    assert_eq!(pending.pending_choice, Some(choice.clone()));
+    assert_eq!(registry.command_line_state(peer).unwrap(), pending);
+    assert!(
+        registry
+            .command_line_state(other)
+            .unwrap()
+            .pending_choice
+            .is_none()
+    );
+
+    let repeated = registry
+        .set_pending_command_choice(peer, Some(choice))
+        .unwrap();
+    assert_eq!(repeated.revision, pending.revision);
+    assert!(
+        serde_json::to_value(&repeated)
+            .unwrap()
+            .get("pending_choice")
+            .is_none()
+    );
+    let unchanged = registry
+        .replace_command_line(peer, repeated.revision, command.into())
+        .unwrap();
+    assert_eq!(unchanged, repeated);
+    let cleared = registry
+        .replace_command_line(peer, repeated.revision, format!("{command} "))
+        .unwrap();
+    assert!(cleared.pending_choice.is_none());
+    assert_eq!(cleared.revision, repeated.revision + 1);
+}
+
+#[test]
 fn concurrent_command_line_replacements_have_one_cas_winner() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();

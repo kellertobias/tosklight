@@ -36,6 +36,20 @@ impl ProgrammingPorts for TestPorts {
                 error: "rejected".into(),
             };
         }
+        if command.starts_with("COPY SET") {
+            return ProgrammingExecution::ChoiceRequired {
+                pending_choice: CueMoveCopyChoice {
+                    operation: CueTransferOperation::Copy,
+                    command: command.into(),
+                    options: vec![ProgrammingChoiceOption {
+                        id: ProgrammingChoiceOptionId::Plain,
+                        label: "Plain Copy".into(),
+                        command: command.replacen("COPY", "COPY PLAIN", 1),
+                    }],
+                    cancel_label: "Cancel".into(),
+                },
+            };
+        }
         programmers.update_command_line(session, |current| (String::new(), current.target, true));
         ProgrammingExecution::Accepted {
             applied: 1,
@@ -262,6 +276,115 @@ fn request_replay_retains_an_edit_persistence_warning() {
         harness.ports.persisted.lock().as_slice(),
         ["programmer.command_line"]
     );
+}
+
+#[test]
+fn choice_required_is_explicit_revisioned_and_replay_cannot_restore_it() {
+    let harness = Harness::new(ActionSource::Http);
+    let command = "COPY SET 1 CUE 1 AT SET 2 CUE 2";
+    let typed = ProgrammingCommand::Execute {
+        command: Some(command.into()),
+        policy: ExecutionPolicy::AtomicProgrammer,
+    };
+    let sequence_before = harness.service.events().latest_sequence();
+    let first_context = harness.context.clone().with_request_id("choice-1");
+    let first = harness
+        .service
+        .handle(
+            ActionEnvelope {
+                context: first_context.clone(),
+                command: typed.clone(),
+            },
+            &harness.ports,
+        )
+        .unwrap();
+    assert!(matches!(
+        first.outcome,
+        ProgrammingOutcome::ChoiceRequired { .. }
+    ));
+    assert_eq!(first.command_line.visible_text(), command);
+    assert_eq!(first.command_line.revision, 1);
+    assert!(first.command_line.pending_choice.is_some());
+    assert_eq!(first.interaction_event_sequence, Some(sequence_before + 1));
+
+    let repeated = harness.handle(typed.clone());
+    assert_eq!(repeated.command_line.revision, first.command_line.revision);
+    assert!(repeated.interaction_event_sequence.is_none());
+    assert_eq!(
+        harness.service.events().latest_sequence(),
+        sequence_before + 1
+    );
+
+    let reset = harness
+        .service
+        .handle(
+            ActionEnvelope {
+                context: harness.context.clone().with_request_id("cancel-1"),
+                command: ProgrammingCommand::ReplaceCommandLine {
+                    text: String::new(),
+                    expected_revision: repeated.command_line.revision,
+                },
+            },
+            &harness.ports,
+        )
+        .unwrap();
+    assert!(reset.command_line.pending_choice.is_none());
+    assert_eq!(reset.command_line.revision, first.command_line.revision + 1);
+    assert_eq!(
+        harness.service.events().latest_sequence(),
+        sequence_before + 2
+    );
+
+    let replay = harness
+        .service
+        .handle(
+            ActionEnvelope {
+                context: first_context,
+                command: typed,
+            },
+            &harness.ports,
+        )
+        .unwrap();
+    assert!(replay.replayed);
+    assert!(matches!(
+        replay.outcome,
+        ProgrammingOutcome::ChoiceRequired { .. }
+    ));
+    assert_eq!(replay.command_line, reset.command_line);
+    assert!(replay.command_line.pending_choice.is_none());
+    assert_eq!(
+        harness.service.events().latest_sequence(),
+        sequence_before + 2
+    );
+}
+
+#[test]
+fn accepted_choice_selection_clears_the_command_and_choice_atomically() {
+    let harness = Harness::new(ActionSource::UserInterface);
+    let pending = harness.handle(ProgrammingCommand::Execute {
+        command: Some("COPY SET 1 CUE 1 AT SET 2 CUE 2".into()),
+        policy: ExecutionPolicy::Compatibility,
+    });
+    let sequence = harness.service.events().latest_sequence();
+
+    let accepted = harness.handle(ProgrammingCommand::Execute {
+        command: Some("COPY PLAIN SET 1 CUE 1 AT SET 2 CUE 2".into()),
+        policy: ExecutionPolicy::Compatibility,
+    });
+
+    assert!(matches!(
+        accepted.outcome,
+        ProgrammingOutcome::Accepted { .. }
+    ));
+    assert_eq!(accepted.command_line.visible_text(), "FIXTURE");
+    assert!(accepted.command_line.pristine);
+    assert!(accepted.command_line.pending_choice.is_none());
+    assert_eq!(
+        accepted.command_line.revision,
+        pending.command_line.revision + 1
+    );
+    assert_eq!(accepted.interaction_event_sequence, Some(sequence + 1));
+    assert_eq!(harness.service.events().latest_sequence(), sequence + 1);
 }
 
 #[test]

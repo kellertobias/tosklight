@@ -6,6 +6,7 @@ fn state(text: &str, target: CommandTarget, pristine: bool) -> CommandLineState 
         target,
         pristine,
         revision: 0,
+        pending_choice: None,
     }
 }
 

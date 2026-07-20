@@ -87,24 +87,32 @@ impl ProgrammingService {
             .collect::<Vec<_>>();
         let before = targets
             .iter()
-            .filter_map(|target| {
-                self.programmers
-                    .selection(target.interaction_id)
-                    .map(|selection| (*target, selection.revision))
+            .map(|target| {
+                (
+                    *target,
+                    self.programmers
+                        .interaction_context_version(target.interaction_id),
+                )
             })
             .collect::<Vec<_>>();
         let output = operation();
         let events = before
             .into_iter()
-            .filter_map(|(target, before_revision)| {
-                let selection = self.programmers.selection(target.interaction_id)?;
-                if selection.revision == before_revision {
-                    return None;
-                }
+            .filter_map(|(target, before)| {
+                let after = self
+                    .programmers
+                    .interaction_context_version(target.interaction_id);
+                let command_line =
+                    (before.command_line != after.command_line).then_some(after.command_line);
+                let selection =
+                    (before.selection_revision != after.selection_revision).then(|| {
+                        self.programmers
+                            .interaction_selection_for_context(target.interaction_id)
+                    });
                 let change = ProgrammingInteractionChange::from_components(
                     target.desk_id,
-                    None,
-                    Some(selection),
+                    command_line,
+                    selection,
                 )?;
                 let event_sequence = self.publish_selection_refresh(
                     context,

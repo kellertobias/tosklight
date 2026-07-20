@@ -70,12 +70,6 @@ impl DeskOperationGates {
 }
 
 impl ProgrammingService {
-    pub(super) fn with_desk_gate<T>(&self, desk_id: Uuid, operation: impl FnOnce() -> T) -> T {
-        let gate = self.desk_gates.gate(desk_id);
-        let _ordered = gate.lock();
-        operation()
-    }
-
     pub(super) fn with_desk_gates<T>(&self, desk_ids: &[Uuid], operation: impl FnOnce() -> T) -> T {
         self.desk_gates.with_gates(desk_ids, operation)
     }

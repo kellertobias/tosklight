@@ -149,20 +149,44 @@ pub(super) fn ws_programmer_execute(
         .with_request_id(&command.request_id)
     });
     if let Some(result) = ws_typed_recording(state, session, &input.value, &context) {
+        let final_text = Some(if result.is_ok() {
+            ""
+        } else {
+            input.value.as_str()
+        });
+        state
+            .programmers
+            .complete_command_execution(session.id, final_text, None);
         return result;
     }
-    match command_http::execute_existing_command(
+    let outcome = command_http::execute_existing_command(
         state,
         session,
         &input.value,
         "software",
         &context,
         command_http::ExistingCommandPolicy::Compatibility,
-    ) {
+    );
+    let pending_choice = match &outcome {
+        command_http::ExistingCommandOutcome::ChoiceRequired { pending_choice } => {
+            Some(pending_choice.clone())
+        }
+        command_http::ExistingCommandOutcome::Accepted { .. }
+        | command_http::ExistingCommandOutcome::Rejected { .. } => None,
+    };
+    let final_text = match &outcome {
+        command_http::ExistingCommandOutcome::Accepted { .. } => Some(""),
+        command_http::ExistingCommandOutcome::ChoiceRequired { .. }
+        | command_http::ExistingCommandOutcome::Rejected { .. } => Some(input.value.as_str()),
+    };
+    state
+        .programmers
+        .complete_command_execution(session.id, final_text, pending_choice);
+    match outcome {
         command_http::ExistingCommandOutcome::ChoiceRequired { pending_choice } => {
             Ok(serde_json::json!({
                 "applied":0,
-                "pending_choice":pending_choice,
+                "pending_choice":command_http::wire_choice(pending_choice),
                 "programmer":state.programmers.get(session.id)
             }))
         }

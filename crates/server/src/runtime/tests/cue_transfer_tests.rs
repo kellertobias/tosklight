@@ -17,6 +17,60 @@ fn cue_move_copy_requires_a_choice_and_preserves_plain_status_and_move_copy_axes
 }
 
 #[test]
+fn legacy_choice_selection_resets_the_authoritative_command_once() {
+    let scenario = CueTransferScenario::new();
+    let dispatch = |request_id: &str, value: &str| {
+        dispatch_ws_command(
+            &scenario.state,
+            &scenario.session,
+            WsCommand {
+                protocol_version: 1,
+                request_id: request_id.into(),
+                session_id: scenario.session.id,
+                expected_revision: None,
+                command: "programmer.execute".into(),
+                payload: serde_json::json!({"value":value}),
+            },
+        )
+    };
+    assert!(dispatch("pending-copy", "COPY SET 1 CUE 2 AT SET 2 CUE 2").ok);
+    let before = scenario.state.application_events.latest_sequence();
+
+    assert!(dispatch("plain-copy", "COPY PLAIN SET 1 CUE 2 AT SET 2 CUE 2").ok);
+
+    let command = scenario
+        .state
+        .programmers
+        .command_line_state(scenario.session.id)
+        .unwrap();
+    assert_eq!(command.visible_text(), "FIXTURE");
+    assert!(command.pristine);
+    assert!(command.pending_choice.is_none());
+    let persisted = scenario
+        .state
+        .desk
+        .lock()
+        .persisted_sessions()
+        .unwrap()
+        .into_iter()
+        .find(|session| session.id == scenario.session.id)
+        .unwrap();
+    let persisted: light_programmer::ProgrammerState =
+        serde_json::from_str(&persisted.programmer_json).unwrap();
+    assert!(persisted.command_line.is_empty());
+    let filter = light_application::EventFilter::for_desk(scenario.session.desk.id).with_object(
+        light_application::EventObject::programming_command_line(scenario.session.desk.id),
+    );
+    let light_application::EventReplay::Events(events) =
+        scenario.state.application_events.replay(before, &filter)
+    else {
+        panic!("accepted choice should publish one retained command event")
+    };
+    assert_eq!(events.len(), 1);
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[test]
 fn cue_copy_preserves_extensions_on_duplicate_id_destination_cues() {
     let scenario = CueTransferScenario::new();
     let store = ShowStore::open(&scenario.show_path).unwrap();
@@ -93,6 +147,15 @@ fn verify_pending_cue_transfer_choice(
     assert_eq!(pending["options"][0]["label"], "Plain Copy");
     assert_eq!(pending["options"][1]["label"], "Status Copy");
     assert_eq!(pending["cancel_label"], "Cancel");
+    let authoritative = scenario
+        .state
+        .programmers
+        .command_line_state(scenario.session.id)
+        .unwrap();
+    assert_eq!(
+        authoritative.pending_choice.as_ref().unwrap().command,
+        pending["command"].as_str().unwrap()
+    );
     assert!(execute_programmer_command(
         &scenario.state,
         &scenario.session,

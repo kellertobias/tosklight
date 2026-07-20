@@ -178,6 +178,74 @@ fn shared_selection_refresh_keeps_frozen_and_unchanged_desks_quiet() {
 }
 
 #[test]
+fn shared_interaction_refresh_publishes_pending_choice_invalidation_once_per_desk() {
+    let registry = ProgrammerRegistry::default();
+    let low_desk = Uuid::from_u128(1);
+    let high_desk = Uuid::from_u128(2);
+    let low_session = SessionId::new();
+    let high_session = SessionId::new();
+    for (session, desk) in [(low_session, low_desk), (high_session, high_desk)] {
+        registry.start(session, UserId::new());
+        assert!(registry.attach_command_context(session, SessionId(desk)));
+        registry.set_pending_command_choice(
+            session,
+            Some(CueMoveCopyChoice {
+                operation: CueTransferOperation::Copy,
+                command: "COPY SET 1 CUE 1 AT SET 2 CUE 2".into(),
+                options: Vec::new(),
+                cancel_label: "Cancel".into(),
+            }),
+        );
+    }
+    let events = EventBus::new(8);
+    let service = ProgrammingService::new(
+        registry.clone(),
+        events.clone(),
+        Arc::new(HighlightRegistry::default()),
+    );
+    let result = service.run_selection_refresh(
+        &ActionContext::system(high_desk, ActionSource::System),
+        [
+            ProgrammingSelectionTarget {
+                desk_id: high_desk,
+                interaction_id: SessionId(high_desk),
+            },
+            ProgrammingSelectionTarget {
+                desk_id: low_desk,
+                interaction_id: SessionId(low_desk),
+            },
+        ],
+        || registry.clear_pending_command_choices_except_context(None),
+    );
+
+    assert_eq!(result.output, 2);
+    assert_eq!(
+        result
+            .events
+            .iter()
+            .map(|event| event.desk_id)
+            .collect::<Vec<_>>(),
+        vec![low_desk, high_desk]
+    );
+    let EventReplay::Events(published) = events.replay(
+        0,
+        &EventFilter::default().with_capability(EventCapability::Desk),
+    ) else {
+        panic!("choice invalidation events should remain replayable")
+    };
+    assert_eq!(published.len(), 2);
+    for event in published {
+        let ApplicationEvent::Programming(ProgrammingEvent::InteractionChanged(change)) =
+            &event.payload
+        else {
+            panic!("expected a Programming interaction change")
+        };
+        assert!(change.command_line().unwrap().pending_choice.is_none());
+        assert!(change.selection().is_none());
+    }
+}
+
+#[test]
 fn owned_refresh_publishes_inside_outer_interaction_without_a_duplicate() {
     let setup = LiveSetup::new(8);
     let registry = setup.ports.registry.as_ref().unwrap();

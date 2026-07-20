@@ -199,16 +199,18 @@ fn command_playback_surface(source: light_application::ActionSource) -> Playback
     }
 }
 
-pub(super) fn pending_cue_transfer_choice(command_line: &str) -> Option<serde_json::Value> {
+pub(super) fn pending_cue_transfer_choice(
+    command_line: &str,
+) -> Option<light_application::CueMoveCopyChoice> {
     let tokens = command_line
         .replace(',', ".")
         .replace('.', " . ")
         .split_whitespace()
         .map(|token| token.to_ascii_uppercase())
         .collect::<Vec<_>>();
-    let operation = match tokens.first()?.as_str() {
-        "COPY" | "CPY" => "COPY",
-        "MOVE" | "MOV" => "MOVE",
+    let (operation, operation_token) = match tokens.first()?.as_str() {
+        "COPY" | "CPY" => (light_application::CueTransferOperation::Copy, "COPY"),
+        "MOVE" | "MOV" => (light_application::CueTransferOperation::Move, "MOVE"),
         _ => return None,
     };
     if tokens
@@ -225,26 +227,28 @@ pub(super) fn pending_cue_transfer_choice(command_line: &str) -> Option<serde_js
     {
         return None;
     }
-    let title = if operation == "COPY" { "Copy" } else { "Move" };
+    let title = match operation {
+        light_application::CueTransferOperation::Copy => "Copy",
+        light_application::CueTransferOperation::Move => "Move",
+    };
     let suffix = tokens[1..].join(" ");
-    Some(serde_json::json!({
-        "type":"cue_move_copy",
-        "operation":operation.to_ascii_lowercase(),
-        "command":command_line,
-        "options":[
-            {
-                "id":"plain",
-                "label":format!("Plain {title}"),
-                "command":format!("{operation} PLAIN {suffix}")
+    Some(light_application::CueMoveCopyChoice {
+        operation,
+        command: command_line.to_owned(),
+        options: vec![
+            light_application::ProgrammingChoiceOption {
+                id: light_application::ProgrammingChoiceOptionId::Plain,
+                label: format!("Plain {title}"),
+                command: format!("{operation_token} PLAIN {suffix}"),
             },
-            {
-                "id":"status",
-                "label":format!("Status {title}"),
-                "command":format!("{operation} STATUS {suffix}")
-            }
+            light_application::ProgrammingChoiceOption {
+                id: light_application::ProgrammingChoiceOptionId::Status,
+                label: format!("Status {title}"),
+                command: format!("{operation_token} STATUS {suffix}"),
+            },
         ],
-        "cancel_label":"Cancel"
-    }))
+        cancel_label: "Cancel".into(),
+    })
 }
 
 pub(super) fn command_speed_group_index(token: &str) -> Result<usize, String> {

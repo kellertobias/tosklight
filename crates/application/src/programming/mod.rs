@@ -23,9 +23,8 @@ pub use capture_mode_projection::{
     ProgrammingCaptureModeChange, ProgrammingCaptureModeProjection, ProgrammingCaptureModeSnapshot,
 };
 pub use command::{
-    CueMoveCopyChoice, CueTransferOperation, ExecutionPolicy, ProgrammingAction,
-    ProgrammingChoiceOption, ProgrammingChoiceOptionId, ProgrammingCommand, ProgrammingOutcome,
-    ProgrammingResult, SelectionGestureSource,
+    ExecutionPolicy, ProgrammingAction, ProgrammingCommand, ProgrammingOutcome, ProgrammingResult,
+    SelectionGestureSource,
 };
 pub use cue_recording::{
     ProgrammingCueActivationCompletion, ProgrammingCueActivationPolicy,
@@ -50,6 +49,9 @@ pub use lifecycle::{
 pub use lifecycle_projection::{
     ProgrammingLifecycleChange, ProgrammingLifecycleDelta, ProgrammingLifecycleProgrammer,
     ProgrammingLifecycleProjection, ProgrammingLifecycleSession, ProgrammingLifecycleSnapshot,
+};
+pub use light_programmer::{
+    CueMoveCopyChoice, CueTransferOperation, ProgrammingChoiceOption, ProgrammingChoiceOptionId,
 };
 pub use operation::{
     ProgrammingInteractionResult, ProgrammingSelectionRefreshEvent,

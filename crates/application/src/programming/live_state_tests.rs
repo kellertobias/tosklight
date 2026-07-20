@@ -187,6 +187,7 @@ fn handle_publishes_one_sparse_authoritative_change_per_interaction() {
         panic!("expected a typed Programming interaction event")
     };
     assert_eq!(change.desk_id(), setup.context.desk_id);
+    assert_eq!(change.command_line().unwrap().visible_text(), "FIXTURE");
     assert_eq!(change.selection().unwrap().selected, fixtures);
     let EventReplay::Events(selection_events) = setup.events.replay(0, &setup.selection_filter())
     else {
@@ -197,7 +198,7 @@ fn handle_publishes_one_sparse_authoritative_change_per_interaction() {
     else {
         panic!("command-line changes should be independently routable")
     };
-    assert_eq!(command_events.len(), 1);
+    assert_eq!(command_events.len(), 2);
     assert_eq!(
         events[1].correlation_id,
         Some(selected.context.correlation_id)

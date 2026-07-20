@@ -2,6 +2,7 @@
 //! User-scoped selection and programmer state, shared by all of a user's sessions.
 
 mod capture_mode;
+mod command_choice;
 mod command_state;
 mod cue_recording;
 mod fixture_value_batch;
@@ -26,9 +27,12 @@ mod values;
 pub mod command_line;
 
 pub use capture_mode::ProgrammerCaptureMode;
+pub use command_choice::{
+    CueMoveCopyChoice, CueTransferOperation, ProgrammingChoiceOption, ProgrammingChoiceOptionId,
+};
 pub use command_state::{
-    CommandLineReplaceError, CommandLineState, CommandTarget, ProgrammerInteractionState,
-    ProgrammerInteractionVersion,
+    CommandLineReplaceError, CommandLineState, CommandTarget, ProgrammerInteractionContextVersion,
+    ProgrammerInteractionState, ProgrammerInteractionVersion,
 };
 pub use cue_recording::{
     CueRecordingCapture, CueRecordingCaptureError, CueRecordingCapturedSource,

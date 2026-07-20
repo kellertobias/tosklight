@@ -509,3 +509,36 @@ fn spd_grp_commands_preserve_precision_mapping_relative_changes_and_phase_links(
     assert!(execute_programmer_command(&state, &session, "SPD GRP 6 AT 120").is_err());
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[test]
+fn legacy_speed_execution_resets_the_authoritative_command_line() {
+    let scenario = CommandContractScenario::new();
+    assert!(scenario.state.programmers.set_command_line(
+        scenario.session.id,
+        "SPD GRP 1 AT 120".into()
+    ));
+
+    let response = dispatch_ws_command(
+        &scenario.state,
+        &scenario.session,
+        WsCommand {
+            protocol_version: 1,
+            request_id: "speed-reset".into(),
+            session_id: scenario.session.id,
+            expected_revision: None,
+            command: "programmer.execute".into(),
+            payload: serde_json::json!({"value":"SPD GRP 1 AT 120"}),
+        },
+    );
+
+    assert!(response.ok, "{:?}", response.error);
+    let command = scenario
+        .state
+        .programmers
+        .command_line_state(scenario.session.id)
+        .unwrap();
+    assert_eq!(command.visible_text(), "FIXTURE");
+    assert!(command.pristine);
+    assert_eq!(scenario.state.configuration.read().speed_groups_bpm[0], 120.0);
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}

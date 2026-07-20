@@ -2,6 +2,7 @@ use super::{
     ExecutionPolicy, ProgrammingAction, ProgrammingCaptureModeChange, ProgrammingCommand,
     ProgrammingExecution, ProgrammingInteractionChange, ProgrammingOutcome, ProgrammingPorts,
     ProgrammingPreloadPlaybackQueueChange, ProgrammingResult, ProgrammingValuesChange,
+    operation::DeskOperationGates,
 };
 use crate::{ActionEnvelope, ActionError, EventBus};
 use light_core::{SessionId, UserId};
@@ -10,7 +11,6 @@ use light_programmer::{HighlightRegistry, ProgrammerRegistry};
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
-
 #[path = "service/cue_recording.rs"]
 mod cue_recording;
 #[path = "service/cue_recording_replay.rs"]
@@ -65,9 +65,6 @@ use support::{
     required_session, unknown_programmer, validate_command,
 };
 use values_replay::ValuesReplayCache;
-
-use super::operation::DeskOperationGates;
-
 struct AppliedProgramming {
     result: ProgrammingResult,
     interaction: Option<ProgrammingInteractionChange>,
@@ -133,7 +130,8 @@ impl ProgrammingService {
         let user_id = context_user(&action.context)?;
         self.with_user_and_desk_gate(action.context.desk_id, user_id, || {
             ports.authorize(&action.context)?;
-            if let Some(cached) = self.cached(&action, session)? {
+            if let Some(mut cached) = self.cached(&action, session)? {
+                cached.command_line = command_line(&self.programmers, session)?;
                 return Ok(cached);
             }
             let lifecycle_before = self.active_lifecycle_programmer(user_id);
@@ -346,9 +344,18 @@ impl ProgrammingService {
         let current = command_line(&self.programmers, session)?;
         let command = supplied.unwrap_or_else(|| current.visible_text());
         let outcome = ports.execute(&self.programmers, context, command, policy);
-        if !matches!(outcome, ProgrammingExecution::Accepted { .. }) {
-            self.retain_supplied(session, supplied)?;
-        }
+        let pending_choice = match &outcome {
+            ProgrammingExecution::ChoiceRequired { pending_choice } => Some(pending_choice.clone()),
+            ProgrammingExecution::Accepted { .. } | ProgrammingExecution::Rejected { .. } => None,
+        };
+        let final_text = if matches!(&outcome, ProgrammingExecution::Accepted { .. }) {
+            Some("")
+        } else {
+            supplied
+        };
+        self.programmers
+            .complete_command_execution(session, final_text, pending_choice)
+            .ok_or_else(unknown_programmer)?;
         Ok(match outcome {
             ProgrammingExecution::Accepted { applied, warning } => {
                 accepted(ProgrammingAction::Executed, Some(applied), warning)
@@ -358,26 +365,6 @@ impl ProgrammingService {
             }
             ProgrammingExecution::Rejected { error } => ProgrammingOutcome::Rejected { error },
         })
-    }
-
-    fn retain_supplied(
-        &self,
-        session: SessionId,
-        supplied: Option<&str>,
-    ) -> Result<(), ActionError> {
-        let Some(supplied) = supplied else {
-            return Ok(());
-        };
-        self.programmers
-            .update_command_line(session, |current| {
-                let pristine = supplied.trim().is_empty()
-                    || supplied
-                        .trim()
-                        .eq_ignore_ascii_case(current.target.as_str());
-                (supplied.to_owned(), current.target, pristine)
-            })
-            .ok_or_else(unknown_programmer)?;
-        Ok(())
     }
 
     fn cached(

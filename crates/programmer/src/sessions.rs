@@ -200,6 +200,7 @@ impl ProgrammerRegistry {
                 target,
                 pristine,
                 revision: 0,
+                pending_choice: None,
             },
         );
         let existing = self

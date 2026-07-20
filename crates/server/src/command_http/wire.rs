@@ -5,8 +5,8 @@ use axum::{
 };
 use light_application::{
     CueMoveCopyChoice as ApplicationCueChoice, CueTransferOperation as ApplicationCueOperation,
-    ProgrammingAction, ProgrammingChoiceOption,
-    ProgrammingChoiceOptionId as ApplicationChoiceOptionId, ProgrammingOutcome, ProgrammingResult,
+    ProgrammingAction, ProgrammingChoiceOptionId as ApplicationChoiceOptionId, ProgrammingOutcome,
+    ProgrammingResult,
 };
 use light_programmer::CommandLineState;
 use light_programmer::command_line::{CommandKey, CommandKeyPhase};
@@ -73,7 +73,7 @@ fn wire_action(action: ProgrammingAction) -> CommandAcceptedAction {
     }
 }
 
-pub(super) fn wire_choice(choice: ApplicationCueChoice) -> CueMoveCopyChoice {
+pub(crate) fn wire_choice(choice: ApplicationCueChoice) -> CueMoveCopyChoice {
     CueMoveCopyChoice {
         choice_type: WireChoiceType::CueMoveCopy,
         operation: match choice.operation {
@@ -97,37 +97,9 @@ pub(super) fn wire_choice(choice: ApplicationCueChoice) -> CueMoveCopyChoice {
     }
 }
 
-pub(super) fn application_choice(value: serde_json::Value) -> Result<ApplicationCueChoice, String> {
-    let choice: CueMoveCopyChoice =
-        serde_json::from_value(value).map_err(|error| error.to_string())?;
-    Ok(ApplicationCueChoice {
-        operation: match choice.operation {
-            WireCueOperation::Copy => ApplicationCueOperation::Copy,
-            WireCueOperation::Move => ApplicationCueOperation::Move,
-        },
-        command: choice.command,
-        options: choice
-            .options
-            .into_iter()
-            .map(|option| ProgrammingChoiceOption {
-                id: match option.id {
-                    WireChoiceOptionId::Plain => ApplicationChoiceOptionId::Plain,
-                    WireChoiceOptionId::Status => ApplicationChoiceOptionId::Status,
-                },
-                label: option.label,
-                command: option.command,
-            })
-            .collect(),
-        cancel_label: choice.cancel_label,
-    })
-}
-
 pub(super) fn command_line_from_state(state: CommandLineState) -> CommandLineResponse {
     let text = state.visible_text().to_owned();
-    let pending_choice = super::super::pending_cue_transfer_choice(&text).map(|choice| {
-        serde_json::from_value::<CueMoveCopyChoice>(choice)
-            .expect("the server's Cue transfer choice must satisfy the v2 wire contract")
-    });
+    let pending_choice = state.pending_choice.map(wire_choice);
     CommandLineResponse {
         text,
         target: match state.target {

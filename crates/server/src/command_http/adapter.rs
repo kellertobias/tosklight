@@ -15,7 +15,7 @@ pub(crate) enum ExistingCommandOutcome {
         persistence_warning: Option<String>,
     },
     ChoiceRequired {
-        pending_choice: serde_json::Value,
+        pending_choice: light_application::CueMoveCopyChoice,
     },
     Rejected {
         error: String,
@@ -40,14 +40,14 @@ pub(crate) fn execute_existing_command(
     policy: ExistingCommandPolicy,
 ) -> ExistingCommandOutcome {
     let request_id = context.request_id.as_deref();
+    if let Some(pending_choice) = super::super::pending_cue_transfer_choice(command) {
+        return ExistingCommandOutcome::ChoiceRequired { pending_choice };
+    }
     if let Some(error) = atomic_policy_error(command, policy) {
         super::super::record_command_history(
             state, session, command, "rejected", &error, source, request_id,
         );
         return ExistingCommandOutcome::Rejected { error };
-    }
-    if let Some(pending_choice) = super::super::pending_cue_transfer_choice(command) {
-        return ExistingCommandOutcome::ChoiceRequired { pending_choice };
     }
     let result = execute_with_policy(state, session, command, context, policy);
     finish_existing_command(state, session, command, source, request_id, result)
@@ -128,7 +128,10 @@ fn execute_with_policy(
     match policy {
         ExistingCommandPolicy::Compatibility => {
             // Cross-user reconciliation must not run while one user's mutation gate is held.
-            super::super::execute_programmer_command_from(state, session, command, context)
+            let applied =
+                super::super::execute_programmer_command_from(state, session, command, context)?;
+            super::programming_ports::clear_command_line(&state.programmers, session)?;
+            Ok(applied)
         }
         ExistingCommandPolicy::AtomicProgrammer => {
             state

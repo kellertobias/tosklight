@@ -111,6 +111,66 @@ async fn active_group_put_and_undo_refresh_each_live_desk_once_without_deadlocki
 }
 
 #[tokio::test]
+async fn active_show_install_clears_each_desk_pending_choice_once() {
+    let scenario = ActiveGroupScenario::new("Pending choice invalidation").await;
+    let command = "COPY SET 1 CUE 1 AT SET 2 CUE 2";
+    for session in [&scenario.actor, &scenario.peer] {
+        scenario.state.programmers.complete_command_execution(
+            session.id,
+            Some(command),
+            Some(light_application::CueMoveCopyChoice {
+                operation: light_application::CueTransferOperation::Copy,
+                command: command.into(),
+                options: Vec::new(),
+                cancel_label: "Cancel".into(),
+            }),
+        );
+    }
+    let before = scenario.state.application_events.latest_sequence();
+
+    let response = put_active_object(
+        &scenario.app,
+        &scenario.actor.token,
+        &scenario.show_id,
+        "group",
+        "1",
+        1,
+        group_body([scenario.first, scenario.second]),
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    for session in [&scenario.actor, &scenario.peer] {
+        assert!(
+            scenario
+                .state
+                .programmers
+                .command_line_state(session.id)
+                .unwrap()
+                .pending_choice
+                .is_none()
+        );
+        let filter = light_application::EventFilter::for_desk(session.desk.id).with_object(
+            light_application::EventObject::programming_command_line(session.desk.id),
+        );
+        let light_application::EventReplay::Events(events) =
+            scenario.state.application_events.replay(before, &filter)
+        else {
+            panic!("choice invalidation should remain replayable")
+        };
+        assert_eq!(events.len(), 1);
+        let light_application::ApplicationEvent::Programming(
+            light_application::ProgrammingEvent::InteractionChanged(change),
+        ) = &events[0].payload
+        else {
+            panic!("expected a Programming interaction change")
+        };
+        assert!(change.command_line().unwrap().pending_choice.is_none());
+    }
+    scenario.cleanup();
+}
+
+#[tokio::test]
 async fn nested_record_group_refreshes_actor_and_peer_once_without_relocking_the_actor() {
     let scenario = ActiveGroupScenario::new("Nested Record Group refresh").await;
     scenario.state.programmers.select_expression(

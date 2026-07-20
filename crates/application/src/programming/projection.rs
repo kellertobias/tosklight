@@ -1,6 +1,6 @@
 use super::{ProgrammingPorts, ProgrammingService};
 use crate::{ActionContext, ActionError, ActionErrorKind};
-use light_core::SessionId;
+use light_core::{SessionId, UserId};
 use light_programmer::{CommandLineState, ProgrammerRegistry, ProgrammerSelection};
 use uuid::Uuid;
 
@@ -46,7 +46,8 @@ impl ProgrammingService {
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingLiveSnapshot, ActionError> {
         let session = snapshot_session(context)?;
-        self.with_desk_gate(context.desk_id, || {
+        let user = snapshot_user(context)?;
+        self.with_user_and_desk_gate(context.desk_id, user, || {
             self.capture_snapshot(context, ports, session)
         })
     }
@@ -75,6 +76,15 @@ fn snapshot_session(context: &ActionContext) -> Result<SessionId, ActionError> {
         ActionError::new(
             ActionErrorKind::Unauthorized,
             "programming snapshots require an operator session",
+        )
+    })
+}
+
+fn snapshot_user(context: &ActionContext) -> Result<UserId, ActionError> {
+    context.user_id.map(UserId).ok_or_else(|| {
+        ActionError::new(
+            ActionErrorKind::Unauthorized,
+            "programming snapshots require an authenticated user",
         )
     })
 }

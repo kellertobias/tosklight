@@ -1,6 +1,5 @@
 use super::adapter::{ExistingCommandOutcome, ExistingCommandPolicy, execute_existing_command};
 use super::events::persist_with_warning;
-use super::wire::application_choice;
 use light_application::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ExecutionPolicy,
     ProgrammingExecution, ProgrammingGroupRecordingPorts, ProgrammingPorts,
@@ -322,10 +321,7 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
                 warning: persistence_warning,
             },
             ExistingCommandOutcome::ChoiceRequired { pending_choice } => {
-                match application_choice(pending_choice) {
-                    Ok(pending_choice) => ProgrammingExecution::ChoiceRequired { pending_choice },
-                    Err(error) => ProgrammingExecution::Rejected { error },
-                }
+                ProgrammingExecution::ChoiceRequired { pending_choice }
             }
             ExistingCommandOutcome::Rejected { error } => ProgrammingExecution::Rejected { error },
         }

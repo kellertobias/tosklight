@@ -1,9 +1,8 @@
+#[path = "events/choice.rs"]
+mod choice;
+
 use super::state_event::publish_command_line_change;
-use super::wire::wire_choice;
-use light_application::{
-    CueMoveCopyChoice as ApplicationCueChoice, ProgrammingAction, ProgrammingOutcome,
-    ProgrammingResult,
-};
+use light_application::{ProgrammingAction, ProgrammingOutcome, ProgrammingResult};
 
 use super::super::{AppState, Session};
 
@@ -20,17 +19,12 @@ pub(super) fn publish_osc_result(
         ProgrammingOutcome::Accepted { action, .. } => {
             publish_osc_accepted(state, session, desk_alias, result, *action)
         }
-        ProgrammingOutcome::ChoiceRequired { pending_choice } => super::super::emit(
-            state,
-            "programmer_choice_requested",
-            serde_json::json!({
-                "desk_id":session.desk.id,
-                "session_id":session.id,
-                "user_id":session.user.id,
-                "pending_choice":wire_choice(pending_choice.clone()),
-                "source":"osc",
-            }),
-        ),
+        ProgrammingOutcome::ChoiceRequired { pending_choice }
+            if result.interaction_event_sequence.is_some() =>
+        {
+            choice::publish_osc(state, session, pending_choice)
+        }
+        ProgrammingOutcome::ChoiceRequired { .. } => {}
         ProgrammingOutcome::Rejected { error } => publish_osc_error(state, session, result, error),
     }
 }
@@ -146,14 +140,19 @@ fn publish_operation_event(
         ProgrammingOutcome::Accepted { action, .. } => {
             publish_accepted_event(state, session, result, *action, request_id)
         }
-        ProgrammingOutcome::ChoiceRequired { pending_choice } => publish_choice_event(
-            state,
-            session,
-            result,
-            pending_choice,
-            request_id,
-            supplied_command,
-        ),
+        ProgrammingOutcome::ChoiceRequired { pending_choice }
+            if result.interaction_event_sequence.is_some() =>
+        {
+            choice::publish_http(
+                state,
+                session,
+                result,
+                pending_choice,
+                request_id,
+                supplied_command,
+            )
+        }
+        ProgrammingOutcome::ChoiceRequired { .. } => {}
         ProgrammingOutcome::Rejected { error } => {
             publish_rejection_event(state, session, result, error, request_id, supplied_command)
         }
@@ -237,37 +236,6 @@ fn publish_programmer_changed(
             "preload_armed":action == ProgrammingAction::PreloadEntered,
             "command_revision":result.command_line.revision,
             "changes":change_categories(result, action),
-        }),
-    );
-}
-
-fn publish_choice_event(
-    state: &AppState,
-    session: &Session,
-    result: &ProgrammingResult,
-    choice: &ApplicationCueChoice,
-    request_id: Option<&str>,
-    supplied_command: Option<&str>,
-) {
-    let command = supplied_command.unwrap_or_else(|| result.command_line_before.visible_text());
-    let (audit_command, sensitive) = super::super::command_audit_projection(command);
-    let pending_choice = if sensitive {
-        serde_json::json!({"type":"cue_move_copy","redacted":true})
-    } else {
-        serde_json::to_value(wire_choice(choice.clone()))
-            .expect("the application Cue choice satisfies the wire contract")
-    };
-    super::super::emit(
-        state,
-        "programmer_choice_requested",
-        serde_json::json!({
-            "request_id":request_id,
-            "desk_id":session.desk.id,
-            "session_id":session.id,
-            "user_id":session.user.id,
-            "command":audit_command,
-            "pending_choice":pending_choice,
-            "source":"http",
         }),
     );
 }

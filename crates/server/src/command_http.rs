@@ -79,6 +79,7 @@ pub(super) use preload_values_wire::change as preload_values_change;
 pub(crate) use programming_ports::ServerProgrammingPorts;
 pub(super) use routes::router;
 pub(super) use values_wire::{capture_mode_change, values_change};
+pub(super) use wire::wire_choice;
 
 #[cfg(test)]
 use adapter::compatibility_only_family;

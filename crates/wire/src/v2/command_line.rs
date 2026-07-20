@@ -331,15 +331,36 @@ mod tests {
                 "target": "FIXTURE",
                 "pristine": false,
                 "revision": 8,
-                "pending_choice": null
+                "pending_choice": {
+                    "type": "cue_move_copy",
+                    "operation": "copy",
+                    "command": "COPY SET 1 CUE 1 AT SET 2 CUE 2",
+                    "options": [
+                        {
+                            "id": "plain",
+                            "label": "Plain Copy",
+                            "command": "COPY PLAIN SET 1 CUE 1 AT SET 2 CUE 2"
+                        },
+                        {
+                            "id": "status",
+                            "label": "Status Copy",
+                            "command": "COPY STATUS SET 1 CUE 1 AT SET 2 CUE 2"
+                        }
+                    ],
+                    "cancel_label": "Cancel"
+                }
             }
         }))
         .expect("decode current choice response");
 
-        let CommandOperationOutcome::ChoiceRequired { pending_choice } = response.outcome else {
+        let CommandOperationOutcome::ChoiceRequired { pending_choice } = &response.outcome else {
             panic!("expected choice-required outcome");
         };
         assert_eq!(pending_choice.operation, CueTransferOperation::Copy);
         assert_eq!(pending_choice.options.len(), 2);
+        assert_eq!(
+            response.command_line.pending_choice.as_ref(),
+            Some(pending_choice)
+        );
     }
 }

@@ -79,10 +79,15 @@ async fn verify_idempotent_execution(
 }
 
 async fn verify_choice_and_rejection_replay(scenario: &CommandHttpScenario) {
+    let command = "COPY SET 1 CUE 1 AT SET 2 CUE 2";
+    let before_enter = scenario.put(command, 2).await;
+    assert_eq!(before_enter.status(), StatusCode::OK);
+    let before_enter = json(before_enter).await;
+    assert!(before_enter["pending_choice"].is_null());
     let choice = command_http::execute_existing_command(
         &scenario.state,
         &scenario.session,
-        "COPY SET 1 CUE 1 AT SET 2 CUE 2",
+        command,
         "test",
         &operator_action_context(&scenario.session, light_application::ActionSource::Http)
             .with_request_id("compatibility-choice"),
@@ -93,24 +98,38 @@ async fn verify_choice_and_rejection_replay(scenario: &CommandHttpScenario) {
         command_http::ExistingCommandOutcome::ChoiceRequired { .. }
     ));
     let compatibility = scenario
-        .execute(
-            "pending-choice",
-            Some("COPY SET 1 CUE 1 AT SET 2 CUE 2"),
-        )
+        .execute("pending-choice", None)
         .await;
     assert_eq!(compatibility.status(), StatusCode::OK);
     let compatibility = json(compatibility).await;
-    assert_eq!(compatibility["outcome"], "rejected");
-    assert!(
-        compatibility["error"]
-            .as_str()
-            .unwrap()
-            .contains("not yet available through the atomic")
+    assert_eq!(compatibility["outcome"], "choice_required");
+    assert_eq!(
+        compatibility["pending_choice"],
+        compatibility["command_line"]["pending_choice"]
     );
     assert_eq!(
         compatibility["command_line"]["text"],
-        "COPY SET 1 CUE 1 AT SET 2 CUE 2"
+        command
     );
+    let choice_revision = compatibility["command_line"]["revision"].as_u64().unwrap();
+    assert_eq!(choice_revision, 4);
+    let authoritative = json(scenario.get().await).await;
+    assert_eq!(authoritative["pending_choice"], compatibility["pending_choice"]);
+    let snapshot = json(scenario.interaction_snapshot().await).await;
+    assert_eq!(
+        snapshot["projection"]["command_line"]["pending_choice"],
+        compatibility["pending_choice"]
+    );
+    let replay = json(scenario.execute("pending-choice", None).await).await;
+    assert_eq!(replay, compatibility);
+
+    let cancelled = scenario.put("", choice_revision).await;
+    assert_eq!(cancelled.status(), StatusCode::OK);
+    let cancelled = json(cancelled).await;
+    assert!(cancelled["pending_choice"].is_null());
+    let late_replay = json(scenario.execute("pending-choice", None).await).await;
+    assert_eq!(late_replay["outcome"], "choice_required");
+    assert_eq!(late_replay["command_line"], cancelled);
     verify_rejected_command_is_atomic(scenario).await;
 }
 
@@ -145,12 +164,12 @@ async fn verify_rejected_command_is_atomic(scenario: &CommandHttpScenario) {
         serde_json::to_value(programmer_after.group_values).unwrap(),
         serde_json::to_value(programmer_before.group_values).unwrap()
     );
-    assert_eq!(scenario.history_len(), 3);
+    assert_eq!(scenario.history_len(), 2);
     let replayed = scenario
         .execute("missing-fixture", Some("GROUP 1 AT BOGUS"))
         .await;
     assert_eq!(json(replayed).await, rejected);
-    assert_eq!(scenario.history_len(), 3);
+    assert_eq!(scenario.history_len(), 2);
 }
 
 #[tokio::test]

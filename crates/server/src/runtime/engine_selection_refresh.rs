@@ -57,7 +57,13 @@ pub(super) fn install_prepared_snapshot_with_selection_refresh(
         != selection_topology(&prepared.snapshot().groups);
     let finish_owner = owner
         .is_some_and(|owner| matches!(owner.gesture, ProgrammingOwnerGesturePolicy::Finish(_)));
-    if !groups_changed && !finish_owner {
+    let owner_context = owner.and_then(|owner| selection_target(state, owner.desk_id));
+    let pending_choice = state
+        .programmers
+        .has_pending_command_choices_except_context(
+            owner_context.map(|target| target.interaction_id),
+        );
+    if !groups_changed && !finish_owner && !pending_choice {
         install(state, prepared, playback);
         return ProgrammingSelectionRefreshResult {
             output: (),
@@ -65,7 +71,7 @@ pub(super) fn install_prepared_snapshot_with_selection_refresh(
         };
     }
 
-    let owned_target = owner.and_then(|owner| selection_target(state, owner.desk_id));
+    let owned_target = owner_context;
     let targets = selection_targets(state, owner.map(|owner| owner.desk_id));
     let highlight_sessions =
         if groups_changed && matches!(highlight, HighlightInstallPolicy::Reconcile) {
@@ -75,6 +81,11 @@ pub(super) fn install_prepared_snapshot_with_selection_refresh(
         };
     let install = || {
         install(state, prepared, playback);
+        state
+            .programmers
+            .clear_pending_command_choices_except_context(
+                owned_target.map(|target| target.interaction_id),
+            );
         finish_owned_selection_gesture(state, owner);
         for session in highlight_sessions {
             reconcile_highlight_selection(state, &session, "show_selection_refresh");
