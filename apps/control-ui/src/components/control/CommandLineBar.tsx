@@ -19,7 +19,7 @@ import { useCommandLineShortcuts } from "./commandLine/useCommandLineShortcuts";
 import { useCommandLineSurface } from "./commandLine/useCommandLineSurface";
 import { useRecordGesture } from "./commandLine/useRecordGesture";
 import "./CommandLineHistory.css";
-import { programmerValueCount } from "./programmerActivity";
+import { useProgrammerValuesActivity } from "../../features/programmerValues/useProgrammerValuesActivity";
 import { openUpdateTargetMenu } from "./updateWorkflow";
 
 function useCommandErrors(setCompleted: Dispatch<SetStateAction<boolean>>) {
@@ -95,6 +95,7 @@ export function CommandLineBar() {
 	const { state, dispatch } = useApp();
 	const server = useServer();
 	const command = useCommandLineSurface({ selection: true });
+	const programmerActivity = useProgrammerValuesActivity();
 	const hardware = Boolean(
 		server.bootstrap?.hardware_connected || state.midiProfile,
 	);
@@ -109,21 +110,16 @@ export function CommandLineBar() {
 	);
 	const hasRecordableContent =
 		command.selected.length > 0 ||
-		programmerValueCount(ownProgrammer) > 0 ||
-		state.preload !== "idle" ||
+		(programmerActivity.ready && programmerActivity.valueCount > 0) ||
 		state.preloadActive;
-	const pendingCount =
-		(ownProgrammer?.preload_pending?.length ?? 0) +
-		Object.values(ownProgrammer?.preload_group_pending ?? {}).reduce(
-			(count, attributes) => count + Object.keys(attributes).length,
-			0,
-		);
 	const pendingLabels = (ownProgrammer?.preload_playback_pending ?? []).map(
 		(pending) =>
 			`${pending.action.replaceAll("-", " ").toUpperCase()} ${pending.playback_number}`,
 	);
 	const pendingSummary = [
-		pendingCount ? `PROG ${pendingCount}` : "",
+		programmerActivity.pendingValueCount
+			? `PROG ${programmerActivity.pendingValueCount}`
+			: "",
 		...pendingLabels,
 	]
 		.filter(Boolean)

@@ -5,12 +5,9 @@ import { useApp } from "../../state/AppContext";
 import { HorizontalTouchFader } from "../control/HorizontalTouchFader";
 import { Button, ModalPortal } from "../common";
 import { compatibleSpecialDialogActions } from "./SpecialDialogsModal";
+import { ProgrammerList } from "./systemControls/ProgrammerList";
 
 const EMPTY_FIXTURE_IDS: readonly string[] = [];
-
-function countProgrammerValues(programmer: { values: unknown[]; group_values?: Record<string, Record<string, unknown>> }) {
-  return programmer.values.length + Object.values(programmer.group_values ?? {}).reduce((total, values) => total + Object.keys(values).length, 0);
-}
 
 export function SystemControlsModal() {
   const { state, dispatch } = useApp();
@@ -78,7 +75,7 @@ export function SystemControlsModal() {
     <div className="running-sections">
       <section><h3>Virtual playbacks <small>{virtualPlaybacks.length}</small></h3><div className="programmer-list">{virtualPlaybacks.map((playback) => playbackRow(playback, "Virtual playback"))}{!virtualPlaybacks.length && <p className="empty-window-message">No virtual playbacks are running.</p>}</div></section>
       <section><h3>Playbacks <small>{pagePlaybacks.length}</small></h3><div className="programmer-list">{pagePlaybacks.map((playback) => playbackRow(playback, "Playback"))}{!pagePlaybacks.length && <p className="empty-window-message">No playbacks are running.</p>}</div></section>
-      <section><h3>Active programmers <small>{activeProgrammers.length}</small></h3><div className="programmer-list">{activeProgrammers.map((programmer) => <article key={programmer.session_id}><span><b>{programmer.user_id === server.session?.user.id ? `${server.session.user.name} · Current user` : `User ${programmer.user_id.slice(0, 8)}`}</b><small>{programmer.selected.length} fixtures · {countProgrammerValues(programmer)} values · {programmer.connected ? "Connected" : "Disconnected"}</small></span><Button className="danger" aria-label={`Clear programmer ${programmer.user_id}`} onClick={() => void server.clearProgrammer(programmer.session_id)}>Clear</Button></article>)}{!activeProgrammers.length && <p className="empty-window-message">No active programmers.</p>}</div></section>
+      <ProgrammerList programmers={activeProgrammers} currentUserId={server.session?.user.id ?? null} currentUserName={server.session?.user.name ?? null} onClear={(sessionId) => void server.clearProgrammer(sessionId)}/>
       <section><h3>Dynamics <small>{runningDynamics.length}</small></h3><div className="programmer-list">{runningDynamics.map(({ playback, cueList, cue, index }) => <article key={`${playback.cue_list_id}-${index}`}><span><b>{cueList?.name ?? "Cuelist"} · Dynamic {index + 1}</b><small>Cue {cue?.number ?? playback.cue_index + 1} · Stop releases its source playback</small></span><Button className="danger" title="Stops this Dynamic by releasing its source playback" aria-label={`Stop Dynamic ${index + 1} from ${cueList?.name ?? "Cuelist"}`} onClick={() => void server.playbackAction(playback.cue_list_id, "release")}>Stop</Button></article>)}{!runningDynamics.length && <p className="empty-window-message">No dynamics are running.</p>}</div></section>
     </div>
     <h3>Output controls</h3><section className="master-controls"><HorizontalTouchFader label="Grand master" value={master} onChange={(value) => { setMaster(value); void server.setMaster(value / 100, undefined); }}/><Button className={blackout ? "danger active" : "danger"} onClick={() => { const next = !blackout; setBlackout(next); dispatch({ type: "SET_BLACKOUT", value: next }); void server.setMaster(undefined, next); }}>{blackout ? "RELEASE BLACKOUT" : "BLACKOUT"}</Button><Button className="lamp-on-all" disabled={!selectedFixtureIds.length} onClick={() => void allLampsOn("click")} onPointerDown={() => void allLampsOn("press")} onPointerUp={() => void allLampsOn("release")} onPointerCancel={() => void allLampsOn("release")} onKeyDown={(event: KeyboardEvent) => { if (!event.repeat && (event.key === "Enter" || event.key === " ")) void allLampsOn("press"); }} onKeyUp={(event: KeyboardEvent) => { if (event.key === "Enter" || event.key === " ") void allLampsOn("release"); }}>All Lamps On</Button></section>{lampResult && <p className="lamp-command-result">{lampResult}</p>}
