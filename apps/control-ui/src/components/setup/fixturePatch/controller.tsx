@@ -23,6 +23,7 @@ import {
 } from "../patchUtils";
 import { compareFixtureIds } from "./fixtureIds";
 import { definitionSplits } from "./patchModel";
+import { usePatchSelection } from "./selection";
 
 export type EditKind =
 	| "number"
@@ -49,6 +50,7 @@ export type PlacementBaseline = {
 };
 
 export type FixturePatchSetupProps = {
+	active?: boolean;
 	onMedia?: () => void;
 	stagePreviewOpen?: boolean;
 	stagePreviewClearance?: number;
@@ -287,6 +289,7 @@ function filterDefinitions(
 function useFixturePatchController(props: FixturePatchSetupProps) {
 	const server = useServer();
 	const patch = usePatch();
+	const selection = usePatchSelection(props.active ?? true);
 	const app = useApp();
 	const ui = usePatchUiState();
 	const data = usePatchDerivedState(server, patch, ui);
@@ -302,6 +305,7 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 	return {
 		server,
 		patch,
+		selection,
 		appState: app.state,
 		dispatch: app.dispatch,
 		ui,

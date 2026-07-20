@@ -50,9 +50,12 @@ export function selectSplitAddress(
 	fixture: PatchedFixture,
 	split: number,
 ) {
-	const { ui, appState, server } = controller;
+	const { ui, appState, selection } = controller;
 	ui.setSelectedFixture(fixture.fixture_id);
-	if (!appState.patchSetArmed) void server.setSelection([fixture.fixture_id]);
+	if (!appState.patchSetArmed)
+		void selection.actions?.replace({
+			resolvedFixtures: [fixture.fixture_id],
+		});
 	ui.setEditingSplit(split);
 	ui.setEditError("");
 	ui.setEditSplitDrafts(splitDraftValues(fixture));

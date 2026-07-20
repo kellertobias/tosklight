@@ -78,6 +78,7 @@ function PatchWindowContent({
 			className={`patch-window ${previewVisible ? "stage-preview-open" : ""}`}
 		>
 			<FixturePatchSetupContent
+				active={active}
 				onMedia={onMedia}
 				stagePreviewOpen={stagePreviewOpen}
 				stagePreviewClearance={stagePreviewClearance}

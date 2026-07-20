@@ -9,20 +9,22 @@ vi.mock("../components/setup/FixturePatchSetup", () => ({
 		<div data-testid="patch-boundary">{children}</div>
 	),
 	FixturePatchSetupContent: ({
+		active,
 		onStagePreview,
 		onMedia,
 	}: {
+		active?: boolean;
 		onStagePreview?: () => void;
 		onMedia?: () => void;
 	}) => (
-		<>
+		<div data-testid="patch-content" data-active={String(active)}>
 			<div role="button" tabIndex={0} onClick={onStagePreview}>
 				Preview Stage
 			</div>
 			<div role="button" tabIndex={0} onClick={onMedia}>
 				Media Servers
 			</div>
-		</>
+		</div>
 	),
 }));
 
@@ -77,8 +79,18 @@ describe("Patch window Stage preview", () => {
 	});
 
 	it("owns the Patch subscription only while the fixture view is active", () => {
-		render(<PatchWindow />);
+		const { rerender } = render(<PatchWindow active={false} />);
 		expect(screen.getByTestId("patch-boundary")).toBeInTheDocument();
+		expect(screen.getByTestId("patch-content")).toHaveAttribute(
+			"data-active",
+			"false",
+		);
+
+		rerender(<PatchWindow active />);
+		expect(screen.getByTestId("patch-content")).toHaveAttribute(
+			"data-active",
+			"true",
+		);
 
 		fireEvent.click(screen.getByRole("button", { name: "Media Servers" }));
 

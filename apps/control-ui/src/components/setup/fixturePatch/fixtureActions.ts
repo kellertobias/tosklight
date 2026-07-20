@@ -192,7 +192,7 @@ export function selectPatchFixture(
 	fixture: PatchedFixture,
 	event: PatchRowMouseEvent,
 ) {
-	const { ui, server, appState } = controller;
+	const { ui, appState } = controller;
 	if (ui.deleteArmed) {
 		requestFixtureDelete(controller, fixture);
 		return;
@@ -207,7 +207,9 @@ export function selectPatchFixture(
 	} else if (event.ctrlKey || event.metaKey) {
 		selectFixtureAdditively(controller, fixture);
 	} else {
-		void server.setSelection([fixture.fixture_id]);
+		void controller.selection.actions?.replace({
+			resolvedFixtures: [fixture.fixture_id],
+		});
 	}
 	ui.selectionAnchor.current = fixture.fixture_id;
 }
@@ -222,23 +224,27 @@ function selectFixtureRange(
 	const from = ordered.indexOf(anchor);
 	const to = ordered.indexOf(fixtureId);
 	if (from >= 0 && to >= 0)
-		void controller.server.setSelection(
-			ordered.slice(Math.min(from, to), Math.max(from, to) + 1),
-		);
+		void controller.selection.actions?.replace({
+			resolvedFixtures: ordered.slice(
+				Math.min(from, to),
+				Math.max(from, to) + 1,
+			),
+		});
 }
 
 function selectFixtureAdditively(
 	controller: PatchController,
 	fixture: PatchedFixture,
 ) {
-	const current = new Set(controller.server.selectedFixtures);
+	const current = controller.selection.fixtureIds;
+	const actions = controller.selection.actions;
+	if (!current || !actions) return;
 	const members = fixture.logical_heads.length
 		? fixture.logical_heads.map((head) => head.fixture_id)
 		: [fixture.fixture_id];
-	if (members.every((member) => current.has(member))) {
-		for (const member of members) current.delete(member);
-	} else {
-		for (const member of members) current.add(member);
-	}
-	void controller.server.setSelection([...current]);
+	void actions.gesture({
+		source: { type: "fixture", fixtureId: fixture.fixture_id },
+		resolvedFixtures: members,
+		operation: members.every((member) => current.has(member)) ? "remove" : "add",
+	});
 }

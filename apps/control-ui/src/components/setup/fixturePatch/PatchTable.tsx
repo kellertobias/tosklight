@@ -84,10 +84,11 @@ function FixtureRows({ fixture }: { fixture: PatchedFixture }) {
 
 function FixtureRow({ fixture }: { fixture: PatchedFixture }) {
 	const controller = usePatchController();
+	const selectedFixtureIds = controller.selection.fixtureIds;
 	const selected =
-		controller.server.selectedFixtures.includes(fixture.fixture_id) ||
+		selectedFixtureIds?.has(fixture.fixture_id) ||
 		fixture.logical_heads.some((head) =>
-			controller.server.selectedFixtures.includes(head.fixture_id),
+			selectedFixtureIds?.has(head.fixture_id),
 		) ||
 		controller.ui.selectedFixture === fixture.fixture_id;
 	const pending = controller.patch.pendingFixtureIds.has(fixture.fixture_id);

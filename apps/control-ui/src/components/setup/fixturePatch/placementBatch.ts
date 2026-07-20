@@ -341,7 +341,7 @@ async function commitPlacementBatch(
 function selectLastAdded(controller: PatchController, lastId: string | null) {
 	if (!lastId) return;
 	controller.ui.setSelectedFixture(lastId);
-	void controller.server.setSelection([lastId]);
+	void controller.selection.actions?.replace({ resolvedFixtures: [lastId] });
 }
 
 function closeCompletedBatch(controller: PatchController) {

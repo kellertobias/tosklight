@@ -19,6 +19,21 @@ import { blankFixtureProfile } from "./fixtureProfileModel";
 
 const state = { patchSetArmed: false };
 const dispatch = vi.fn();
+const programming = vi.hoisted(() => ({
+	ready: true,
+	selection: {
+		selected: [] as string[],
+		expression: null,
+		revision: 1,
+		gestureOpen: false,
+	},
+	actions: {
+		replace: vi.fn(),
+		gesture: vi.fn(),
+		selectGroup: vi.fn(),
+		applyRule: vi.fn(),
+	},
+}));
 const server = {
 	patch: { fixtures: [] as PatchedFixture[] },
 	patchLayers: [] as Array<{
@@ -40,6 +55,15 @@ const patchFeature = {
 };
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
+vi.mock(
+	"../../features/programmingInteraction/ProgrammingInteractionView",
+	() => ({
+		useProgrammingSelectionView: (active = true) =>
+			active && programming.ready ? programming.selection : null,
+		useProgrammingSelectionActions: (active = true) =>
+			active && programming.ready ? programming.actions : null,
+	}),
+);
 vi.mock("../../features/patch/PatchContext", async (importOriginal) => {
 	const actual =
 		await importOriginal<typeof import("../../features/patch/PatchContext")>();
@@ -208,7 +232,11 @@ beforeEach(() => {
 	server.patch.fixtures = [splitFixture()];
 	server.fixtureProfiles = [];
 	server.selectedFixtures = [];
+	programming.ready = true;
+	programming.selection.selected = [];
 	vi.clearAllMocks();
+	programming.actions.replace.mockResolvedValue(null);
+	programming.actions.gesture.mockResolvedValue(null);
 	server.updatePatchedFixture.mockResolvedValue(true);
 	server.deletePatchedFixture.mockResolvedValue(true);
 	server.patchFixture.mockResolvedValue("new-fixture");
@@ -259,22 +287,24 @@ describe("selected split selection and SET editing", () => {
 		expect(onStagePreview).toHaveBeenCalledOnce();
 
 		fireEvent.click(screen.getByRole("row", { name: /17 Split Wash 17/ }));
-		expect(server.setSelection).toHaveBeenLastCalledWith(["fixture-split"]);
-		server.selectedFixtures = ["fixture-split"];
+		expect(programming.actions.replace).toHaveBeenLastCalledWith({
+			resolvedFixtures: ["fixture-split"],
+		});
+		programming.selection.selected = ["fixture-split"];
 		fireEvent.click(screen.getByRole("row", { name: /18 Split Wash 18/ }), {
 			metaKey: true,
 		});
-		expect(server.setSelection).toHaveBeenLastCalledWith([
-			"fixture-split",
-			"fixture-18",
-		]);
+		expect(programming.actions.gesture).toHaveBeenLastCalledWith({
+			source: { type: "fixture", fixtureId: "fixture-18" },
+			resolvedFixtures: ["fixture-18"],
+			operation: "add",
+		});
 		fireEvent.click(screen.getByRole("row", { name: /19 Split Wash 19/ }), {
 			shiftKey: true,
 		});
-		expect(server.setSelection).toHaveBeenLastCalledWith([
-			"fixture-18",
-			"fixture-19",
-		]);
+		expect(programming.actions.replace).toHaveBeenLastCalledWith({
+			resolvedFixtures: ["fixture-18", "fixture-19"],
+		});
 		expect(
 			document.querySelector(".patch-stage-scroll-clearance"),
 		).toBeInTheDocument();
@@ -285,7 +315,9 @@ describe("selected split selection and SET editing", () => {
 		fireEvent.click(
 			screen.getByRole("button", { name: "Split 3 patch 2.201" }),
 		);
-		expect(server.setSelection).toHaveBeenCalledWith(["fixture-split"]);
+		expect(programming.actions.replace).toHaveBeenCalledWith({
+			resolvedFixtures: ["fixture-split"],
+		});
 
 		state.patchSetArmed = true;
 		rerender(<FixturePatchSetup />);
@@ -333,6 +365,40 @@ describe("selected split selection and SET editing", () => {
 			type: "SET_PATCH_ARMED",
 			value: false,
 		});
+	});
+
+	it("toggles every logical head through one typed gesture", () => {
+		const fixture = splitFixture();
+		fixture.logical_heads = [
+			{ fixture_id: "head-left", head_index: 1 },
+			{ fixture_id: "head-right", head_index: 2 },
+		];
+		server.patch.fixtures = [fixture];
+		programming.selection.selected = ["head-left", "head-right"];
+		render(<FixturePatchSetup />);
+
+		fireEvent.click(screen.getByRole("row", { name: /17 Split Wash 17/ }), {
+			metaKey: true,
+		});
+
+		expect(programming.actions.gesture).toHaveBeenCalledWith({
+			source: { type: "fixture", fixtureId: "fixture-split" },
+			resolvedFixtures: ["head-left", "head-right"],
+			operation: "remove",
+		});
+	});
+
+	it("does not treat legacy selection as scoped authority while loading", () => {
+		server.selectedFixtures = ["fixture-split"];
+		programming.ready = false;
+		render(<FixturePatchSetup />);
+		const row = screen.getByRole("row", { name: /17 Split Wash 17/ });
+
+		expect(row).not.toHaveClass("selected");
+		fireEvent.click(row, { metaKey: true });
+		expect(programming.actions.gesture).not.toHaveBeenCalled();
+		expect(programming.actions.replace).not.toHaveBeenCalled();
+		expect(server.setSelection).not.toHaveBeenCalled();
 	});
 });
 
@@ -549,6 +615,11 @@ describe("fixture batch DMX placement", () => {
 					candidate.fixture.address,
 			),
 		).toEqual([1, 50, 3]);
+		const lastFixture = patchFeature.patchFixtures.mock.calls[0][0].at(-1)
+			.fixture as PatchedFixture;
+		expect(programming.actions.replace).toHaveBeenCalledWith({
+			resolvedFixtures: [lastFixture.fixture_id],
+		});
 	});
 });
 
