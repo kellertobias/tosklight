@@ -1,16 +1,16 @@
 # Major Refactoring Progress
 
-Estimated progress: **83%**
+Estimated progress: **84%**
 
-Estimated Codex ETA: **5–9 focused implementation slices, or roughly 18–32 hours of active Codex
+Estimated Codex ETA: **5–8 focused implementation slices, or roughly 17–30 hours of active Codex
 execution**, to repository-wide acceptance.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-20 after migrating Fixture Sheet active-value filtering and removing safe,
-owned value-only compatibility bootstrap hydration.
+Last updated: 2026-07-20 after migrating Patch/setup selection and preserving logical-head and
+closed-selection semantics through the scoped authority.
 
 ## Guardrails
 
@@ -218,6 +218,12 @@ owned value-only compatibility bootstrap hydration.
   and Lamp On helpers without per-interaction copies; external changes update open modals, closed
   modals do no hydration and tear down their stream, and System Controls retains its separate
   compatibility list of all active Programmers pending the lifecycle slice.
+- [x] Migrated Patch/setup selection onto the scoped ordered Programming projection. The Patch
+  window activates the selection view only while visible; loading never falls back to bootstrap.
+  Normal, range, additive, split-address, parameter, and post-placement selection all issue one
+  complete typed replacement. Additive clicks preserve an existing closed ordered selection, and
+  every path selects resolved logical heads rather than a parent fixture. Newly patched fixtures
+  consume the authoritative server result, so the client does not guess server-generated head IDs.
 - [x] Exposed Selective Show Import through authenticated v2 catalog, preview, and atomic apply
   adapters with checked-in schemas, generated TypeScript, exact source/target revisions, strict
   response validation, and focused server contracts. **Show → Load → Partial Show Load** now uses a
@@ -255,7 +261,7 @@ owned value-only compatibility bootstrap hydration.
 - [ ] Move the remaining selection consumers onto the scoped Programming store, then remove their
   legacy bootstrap fields and broad Programmer refresh paths. Group Pool, Group Strip, and the
   command bar, Stage, Stage/Fixture pane chrome, Channels, Fixture Sheet, Patch, and Presets have
-  moved, as have the complete parameter bank and selection-driven operator modals; Patch setup and
+  moved, as have Patch setup, the complete parameter bank, and selection-driven operator modals;
   a small number of keypad/miscellaneous readers still use the facade.
 - [ ] Migrate production normal Programmer-value readers and writers onto the connected scoped
   values provider in focused cohorts. Mounted value readers and interactive writers, including
@@ -401,6 +407,14 @@ owned value-only compatibility bootstrap hydration.
   retrigger/release, and timed-pulse completion. Frontend typecheck, `cargo fmt --all -- --check`,
   and `git diff --check` pass. The changed routing and server production modules are below 400
   lines; malformed, foreign, and mixed compatibility events retain the conservative fallback.
+- The Patch/setup migration and semantic correction pass 69 focused Patch, selection-provider,
+  window-activation, parameter-control, and Patch-feature tests across 8 files plus the full
+  frontend typecheck. Tests cover hidden-view dormancy, exact selection-only subscription,
+  optimistic closed-selection preservation, ordered range/additive replacement, logical-head
+  toggle/removal, split and parameter selection, and authoritative post-placement head targets.
+  `git diff --check`, dependency directions, and all 10 architecture scanner tests pass; the
+  architecture command still exits non-zero only for the pre-existing committed 1,382-line
+  Dynamics Editor experiment. Every changed production file remains below 400 lines.
 
 ## Wrap-up handoff
 
@@ -416,11 +430,16 @@ owned value-only compatibility bootstrap hydration.
 - Lifecycle deletion/recreation still preserves monotonic exact-user values and capture revisions
   and invalidates old replays. The broader Programmer ownership/lifecycle projection remains
   separate architecture work.
-- Patch/setup selection and the public test DSL remain separate, unstarted milestones.
-- Recommended next slice: add the typed Programmer lifecycle/ownership projection needed by
-  foreign-user System Controls rows and queued Preload playback activity, or finish the smaller
-  residual Patch/setup selection cohort first if its audit proves independent. Keep record-time
-  Group/Preset/Cue capture and the public test DSL as distinct milestones.
+- The legacy public bootstrap and unauthenticated `/api/v1/programmers` endpoint still serialize
+  full Programmer state, including values, Preload, selection, modes, command line, and undo/redo
+  history. This is both an ownership leak and repeated-cloning cost; a lifecycle DTO must be built
+  directly rather than by cloning and redacting `ProgrammerState`.
+- Patch/setup selection is complete. The public test DSL remains a separate future milestone.
+- Recommended next slice: first redact Programmer state from public bootstrap and authenticate the
+  compatibility endpoint, then add the typed Programmer lifecycle/ownership projection needed by
+  foreign-user System Controls rows and exact-current-user queued Preload playback activity. Keep
+  typed Preset recording, the larger Cue/Playback recording transaction, and the public test DSL
+  as distinct milestones.
 
 Test files may exceed the hard limits, but should still be split when it improves readability and
 makes operator intent more visible.
