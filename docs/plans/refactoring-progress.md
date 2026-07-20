@@ -1,16 +1,16 @@
 # Major Refactoring Progress
 
-Estimated progress: **81%**
+Estimated progress: **82%**
 
-Estimated ETA: **7–11 focused implementation slices, or roughly 2–3 weeks of active
-refactoring**, to repository-wide acceptance.
+Estimated Codex ETA: **6–10 focused implementation slices, or roughly 20–35 hours of active
+Codex execution**, to repository-wide acceptance.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-20 after completing the capture-safe pending-Preload values contract and
-migrating the parameter-control value cohort.
+Last updated: 2026-07-20 after migrating the current-user activity summaries, Channels, Special
+Dialogs, and Numeric Pad onto the capture-safe Programmer-values authorities.
 
 ## Guardrails
 
@@ -184,6 +184,24 @@ migrating the parameter-control value cohort.
   authority changes, while continuous writes retain only the latest pending value per target and
   range/release/direct work remains an ordered barrier. Transient fixture-control actions stay on
   their independent non-recordable path.
+- [x] Moved the command-bar recordability and pending `PROG n` summaries plus every current-user
+  System Controls row onto scalar selectors over the exact-user values stores. Capture authority
+  resolves before exactly one normal or pending value view hydrates; loading never falls back to
+  stale bootstrap values, same-count value replacements do not rerender the summary, and foreign
+  users remain on the compatibility lifecycle list because exact-user authorization deliberately
+  prevents inspecting their scoped projections.
+- [x] Migrated Channels and every recordable Special Dialog gesture onto capture-safe typed value
+  batches. Channel, Beam, Dynamics, and Color motion retain only the newest pending value per
+  target; Color range completion and Position Home remain ordered barriers; and each 32 ms
+  Position tick sends one ordered batch instead of two requests per fixture. Controls refuse writes
+  while capture or values authority is loading. The remaining recordable set/release/batch client
+  facade is removed; transient fixture-control actions and preset generation keep their separate
+  non-value compatibility boundary.
+- [x] Migrated Numeric Pad CLR state and normal Programmer clearing off bootstrap. Scoped selection
+  is still the first normal clear step, typed values clear is the second, active or playback-only
+  Preload retains lifecycle clear semantics, and the obsolete legacy value-clear action plus its
+  broad bootstrap reload are removed. The former oversized pad function is split into feature-owned
+  controller and rendering modules below the hard source-size limits.
 - [x] Migrated Special Dialogs and System Controls selection onto visibility-scoped streams. The
   ordered projection is passed explicitly through Color, Position, Beam/Shapers, Dynamics, Control,
   and Lamp On helpers without per-interaction copies; external changes update open modals, closed
@@ -230,8 +248,10 @@ migrating the parameter-control value cohort.
   a small number of keypad/miscellaneous readers still use the facade.
 - [ ] Migrate production normal Programmer-value readers and writers onto the connected scoped
   values provider in focused cohorts, then remove only their value-triggered bootstrap refreshes.
-  Parameter controls have moved; the command-bar activity summary, System Controls current-user
-  count, and compatibility facade retirement remain separate follow-up work.
+  Parameter controls, activity summaries, System Controls current-user counts, Channels, Special
+  Dialogs, and Numeric Pad have moved, and their recordable compatibility facade is retired. The
+  Fixture Sheet active-value filter and value-only compatibility event routing remain; foreign-user
+  rows stay on bootstrap until the Programmer lifecycle projection exists.
 - [ ] Replace inferred Cue ambiguity in the command-line text projection with explicit desk-local
   pending-choice state that is set only by `ChoiceRequired` after ENT and cleared by edit, reset,
   selection, or Cancel. Until then, cross-session choice visibility remains a documented
@@ -355,6 +375,15 @@ migrating the parameter-control value cohort.
   large-chunk advisory. Dependency-direction and scanner tests pass. The source-size command still
   exits non-zero solely for the pre-existing committed 1,382-line Dynamics Editor experiment; no
   production file or function changed by this slice exceeds a hard limit.
+- The scoped activity-summary cohort passes 19 focused tests covering capture-first dormancy,
+  mutually exclusive normal/pending hydration, route replacement, scalar rerender suppression,
+  stale-bootstrap refusal, same-user System Controls rows, and foreign-user compatibility rows.
+  The remaining writer cohort passes 61 focused tests across the shared bounded write queue,
+  parameter controls, Channels, modal selection, one-batch Position ticks and Home, inactive-view
+  dormancy, API facade removal, and frontend typecheck. Numeric Pad and keypad coverage passes all
+  26 focused tests after typed selection/value clearing. Dependency checks and all 10 architecture
+  scanner tests pass; the architecture command still exits non-zero only for the separately owned
+  Dynamics Editor experiment at 1,382 lines.
 
 ## Wrap-up handoff
 
@@ -371,10 +400,10 @@ migrating the parameter-control value cohort.
   and invalidates old replays. The broader Programmer ownership/lifecycle projection remains
   separate architecture work.
 - No Patch/setup selection cleanup or public test-DSL refactoring was started in this slice.
-- Recommended next slice: move the command-bar normal/pending activity summary and the current-user
-  System Controls value count onto the scoped authorities, then remove the now-unused compatibility
-  value actions and value-triggered bootstrap refreshes. Keep multi-user Programmer lifecycle UI,
-  Patch/setup selection, and the public test DSL as distinct milestones.
+- Recommended next slice: move the Fixture Sheet active-value filter onto the scoped normal or
+  pending projection and suppress exact value-only compatibility bootstrap refreshes. Keep queued
+  Preload playback labels, foreign-user Programmer rows, multi-user lifecycle, Patch/setup
+  selection, and the public test DSL as distinct milestones.
 
 Test files may exceed the hard limits, but should still be split when it improves readability and
 makes operator intent more visible.
