@@ -8,6 +8,7 @@ import { WebSocketPlaybackEventTransport } from "./PlaybackEventTransport";
 import { WebSocketProgrammingEventTransport } from "./ProgrammingEventTransport";
 import { WebSocketShowObjectsEventTransport } from "./ShowObjectsEventTransport";
 import type { PlaybackRuntimeIdentity } from "./types";
+import { useProgrammerLifecycleBoundaries } from "./useProgrammerLifecycleBoundaries";
 import { useProgrammerValuesBoundaries } from "./useProgrammerValuesBoundaries";
 
 export function useServerFeatureBoundaries(state: ServerState) {
@@ -16,6 +17,7 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		[state.setError],
 	);
 	const programmerValues = useProgrammerValuesBoundaries(state);
+	const programmerLifecycle = useProgrammerLifecycleBoundaries(state);
 	const showObjectsTransport = useMemo(
 		() =>
 			state.session
@@ -82,6 +84,7 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		showObjectsTransport,
 		playbackTransport,
 		programmingTransport,
+		...programmerLifecycle,
 		...programmerValues,
 		loadPlaybackSnapshot,
 		loadProgrammingInteractionSnapshot,

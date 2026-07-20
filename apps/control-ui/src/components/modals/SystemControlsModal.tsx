@@ -1,83 +1,214 @@
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useServer } from "../../api/ServerContext";
+import { useProgrammerLifecycleView } from "../../features/programmerLifecycle/ProgrammerLifecycleView";
 import { useProgrammingSelectionView } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import { useApp } from "../../state/AppContext";
-import { HorizontalTouchFader } from "../control/HorizontalTouchFader";
 import { Button, ModalPortal } from "../common";
 import { compatibleSpecialDialogActions } from "./SpecialDialogsModal";
-import { ProgrammerList } from "./systemControls/ProgrammerList";
+import { OutputControls } from "./systemControls/OutputControls";
+import {
+	type RunningDynamic,
+	RunningSections,
+} from "./systemControls/RunningSections";
 
 const EMPTY_FIXTURE_IDS: readonly string[] = [];
+const EMPTY_PROGRAMMERS = [] as const;
+
+function useSystemControlsModel() {
+	const { state, dispatch } = useApp();
+	const server = useServer();
+	const [master, setMaster] = useState(100);
+	const [blackout, setBlackout] = useState(false);
+	const [lampResult, setLampResult] = useState("");
+	const [stoppingAll, setStoppingAll] = useState(false);
+	const selection = useProgrammingSelectionView(state.systemControlsOpen);
+	const lifecycle = useProgrammerLifecycleView(state.systemControlsOpen);
+	const selectedFixtureIds = selection?.selected ?? EMPTY_FIXTURE_IDS;
+	useEffect(() => {
+		if (!state.systemControlsOpen) return;
+		void server.readVisualization().then((snapshot) => {
+			setMaster(Math.round(snapshot.grand_master * 100));
+			setBlackout(snapshot.blackout);
+			dispatch({ type: "SET_BLACKOUT", value: snapshot.blackout });
+		});
+	}, [state.systemControlsOpen, server.readVisualization, dispatch]);
+	const lampActions = useMemo(
+		() =>
+			compatibleSpecialDialogActions(
+				server.patch?.fixtures ?? [],
+				"lamp_on",
+				selectedFixtureIds,
+			),
+		[server.patch, selectedFixtureIds],
+	);
+	const runningPlaybacks = server.playbacks?.active ?? [];
+	const pagePlaybacks = runningPlaybacks.filter(
+		(playback) => playback.playback_number != null,
+	);
+	const virtualPlaybacks = runningPlaybacks.filter(
+		(playback) => playback.playback_number == null,
+	);
+	const programmers = lifecycle?.programmers ?? EMPTY_PROGRAMMERS;
+	const dynamics: RunningDynamic[] = runningPlaybacks.flatMap((playback) => {
+		const cueList = server.playbacks?.cue_lists.find(
+			(candidate) => candidate.id === playback.cue_list_id,
+		);
+		const cue = cueList?.cues[playback.cue_index];
+		return (cue?.phasers ?? []).map((_, index) => ({
+			playback,
+			cueList,
+			cue,
+			index,
+		}));
+	});
+	const triggerLamps = async (phase: "click" | "press" | "release") => {
+		const actions = lampActions.filter((action) =>
+			phase === "click"
+				? action.kind !== "momentary"
+				: action.kind === "momentary",
+		);
+		await Promise.all(
+			actions.map((action) =>
+				server.controlFixtureAction(
+					action.fixtureId,
+					action.actionId,
+					phase !== "release",
+				),
+			),
+		);
+		const supported = new Set(lampActions.map((item) => item.fixtureId));
+		const skipped = Math.max(0, selectedFixtureIds.length - supported.size);
+		setLampResult(
+			`${supported.size} discharge lamp${supported.size === 1 ? "" : "s"} triggered${skipped ? ` · ${skipped} without Lamp On skipped` : ""}`,
+		);
+	};
+	const stopEverything = async () => {
+		setStoppingAll(true);
+		try {
+			await Promise.all([
+				...runningPlaybacks.map((playback) =>
+					server.playbackAction(playback.cue_list_id, "release"),
+				),
+				...programmers.flatMap((programmer) =>
+					programmer.sessions[0]
+						? [server.clearProgrammer(programmer.sessions[0].sessionId)]
+						: [],
+				),
+				server.preloadAction("release"),
+			]);
+			dispatch({ type: "RELEASE_PRELOAD" });
+		} finally {
+			setStoppingAll(false);
+		}
+	};
+	return {
+		open: state.systemControlsOpen,
+		server,
+		master,
+		blackout,
+		lampResult,
+		stoppingAll,
+		selectedFixtureIds,
+		lifecycle,
+		programmers,
+		runningPlaybacks,
+		pagePlaybacks,
+		virtualPlaybacks,
+		dynamics,
+		close: () =>
+			dispatch({
+				type: "SET_MODAL",
+				modal: "systemControlsOpen",
+				value: false,
+			}),
+		stopEverything,
+		triggerLamps,
+		setMaster: (value: number) => {
+			setMaster(value);
+			void server.setMaster(value / 100, undefined);
+		},
+		toggleBlackout: () => {
+			const next = !blackout;
+			setBlackout(next);
+			dispatch({ type: "SET_BLACKOUT", value: next });
+			void server.setMaster(undefined, next);
+		},
+	};
+}
 
 export function SystemControlsModal() {
-  const { state, dispatch } = useApp();
-  const server = useServer();
-  const [master, setMaster] = useState(100);
-  const [blackout, setBlackout] = useState(false);
-  const [lampResult, setLampResult] = useState("");
-  const [stoppingAll, setStoppingAll] = useState(false);
-  const selection = useProgrammingSelectionView(state.systemControlsOpen);
-  const selectedFixtureIds = selection?.selected ?? EMPTY_FIXTURE_IDS;
-  useEffect(() => { if (!state.systemControlsOpen) return; void server.readVisualization().then((snapshot) => { setMaster(Math.round(snapshot.grand_master * 100)); setBlackout(snapshot.blackout); dispatch({ type: "SET_BLACKOUT", value: snapshot.blackout }); }); }, [state.systemControlsOpen, server.readVisualization, dispatch]);
-  const lampActions = useMemo(() => compatibleSpecialDialogActions(
-    server.patch?.fixtures ?? [],
-    "lamp_on",
-    selectedFixtureIds,
-  ), [server.patch, selectedFixtureIds]);
-  const allLampsOn = async (phase: "click" | "press" | "release") => {
-    const actions = lampActions.filter((action) =>
-      phase === "click" ? action.kind !== "momentary" : action.kind === "momentary",
-    );
-    await Promise.all(actions.map((action) =>
-      server.controlFixtureAction(action.fixtureId, action.actionId, phase !== "release"),
-    ));
-    const supported = new Set(lampActions.map((item) => item.fixtureId));
-    const skipped = Math.max(0, selectedFixtureIds.length - supported.size);
-    setLampResult(`${supported.size} discharge lamp${supported.size === 1 ? "" : "s"} triggered${skipped ? ` · ${skipped} without Lamp On skipped` : ""}`);
-  };
-  if (!state.systemControlsOpen) return null;
-  const close = () => dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: false });
-  const runningPlaybacks = server.playbacks?.active ?? [];
-  const pagePlaybacks = runningPlaybacks.filter((playback) => playback.playback_number != null);
-  const virtualPlaybacks = runningPlaybacks.filter((playback) => playback.playback_number == null);
-  const activeProgrammers = server.bootstrap?.active_programmers ?? [];
-  const runningDynamics = runningPlaybacks.flatMap((playback) => {
-    const cueList = server.playbacks?.cue_lists.find((candidate) => candidate.id === playback.cue_list_id);
-    const cue = cueList?.cues[playback.cue_index];
-    return (cue?.phasers ?? []).map((_, index) => ({ playback, cueList, cue, index }));
-  });
-  const playbackRow = (playback: (typeof runningPlaybacks)[number], source: "Playback" | "Virtual playback") => {
-    const cueList = server.playbacks?.cue_lists.find((candidate) => candidate.id === playback.cue_list_id);
-    const cue = cueList?.cues[playback.cue_index];
-    const definition = playback.playback_number == null ? null : server.playbacks?.pool.find((candidate) => candidate.number === playback.playback_number);
-    const label = definition?.name || cueList?.name || `Cuelist ${playback.cue_list_id.slice(0, 8)}`;
-    return <article key={playback.cue_list_id}>
-      <span><b>{label}</b><small>{playback.playback_number == null ? source : `Playback ${playback.playback_number}`} · Cue {cue?.number ?? playback.cue_index + 1} · {Math.round(playback.master * 100)}% · {playback.paused ? "Paused" : "Running"}</small></span>
-      <Button className="danger" aria-label={`Stop ${source} ${label}`} onClick={() => void server.playbackAction(playback.cue_list_id, "release")}>Stop</Button>
-    </article>;
-  };
-  const stopEverything = async () => {
-    setStoppingAll(true);
-    try {
-      await Promise.all([
-        ...runningPlaybacks.map((playback) => server.playbackAction(playback.cue_list_id, "release")),
-        ...activeProgrammers.map((programmer) => server.clearProgrammer(programmer.session_id)),
-        server.preloadAction("release"),
-      ]);
-      dispatch({ type: "RELEASE_PRELOAD" });
-    } finally {
-      setStoppingAll(false);
-    }
-  };
-  return <ModalPortal><div className="modal-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) close(); }}><section className="modal-card system-controls-card" role="dialog" aria-modal="true" aria-label="Running and output">
-    <header className="system-controls-header"><div><h2>Running & Output</h2><small>Shift + Clear / Shift + Delete</small></div><Button className="modal-close" onClick={close}>×</Button></header>
-    <div className="running-summary"><span><b>{pagePlaybacks.length + virtualPlaybacks.length + activeProgrammers.length + runningDynamics.length}</b> active items</span><Button className="danger" disabled={stoppingAll || (!runningPlaybacks.length && !activeProgrammers.length)} onClick={() => void stopEverything()}>{stoppingAll ? "Stopping…" : "Stop everything"}</Button></div>
-    <div className="running-sections">
-      <section><h3>Virtual playbacks <small>{virtualPlaybacks.length}</small></h3><div className="programmer-list">{virtualPlaybacks.map((playback) => playbackRow(playback, "Virtual playback"))}{!virtualPlaybacks.length && <p className="empty-window-message">No virtual playbacks are running.</p>}</div></section>
-      <section><h3>Playbacks <small>{pagePlaybacks.length}</small></h3><div className="programmer-list">{pagePlaybacks.map((playback) => playbackRow(playback, "Playback"))}{!pagePlaybacks.length && <p className="empty-window-message">No playbacks are running.</p>}</div></section>
-      <ProgrammerList programmers={activeProgrammers} currentUserId={server.session?.user.id ?? null} currentUserName={server.session?.user.name ?? null} onClear={(sessionId) => void server.clearProgrammer(sessionId)}/>
-      <section><h3>Dynamics <small>{runningDynamics.length}</small></h3><div className="programmer-list">{runningDynamics.map(({ playback, cueList, cue, index }) => <article key={`${playback.cue_list_id}-${index}`}><span><b>{cueList?.name ?? "Cuelist"} · Dynamic {index + 1}</b><small>Cue {cue?.number ?? playback.cue_index + 1} · Stop releases its source playback</small></span><Button className="danger" title="Stops this Dynamic by releasing its source playback" aria-label={`Stop Dynamic ${index + 1} from ${cueList?.name ?? "Cuelist"}`} onClick={() => void server.playbackAction(playback.cue_list_id, "release")}>Stop</Button></article>)}{!runningDynamics.length && <p className="empty-window-message">No dynamics are running.</p>}</div></section>
-    </div>
-    <h3>Output controls</h3><section className="master-controls"><HorizontalTouchFader label="Grand master" value={master} onChange={(value) => { setMaster(value); void server.setMaster(value / 100, undefined); }}/><Button className={blackout ? "danger active" : "danger"} onClick={() => { const next = !blackout; setBlackout(next); dispatch({ type: "SET_BLACKOUT", value: next }); void server.setMaster(undefined, next); }}>{blackout ? "RELEASE BLACKOUT" : "BLACKOUT"}</Button><Button className="lamp-on-all" disabled={!selectedFixtureIds.length} onClick={() => void allLampsOn("click")} onPointerDown={() => void allLampsOn("press")} onPointerUp={() => void allLampsOn("release")} onPointerCancel={() => void allLampsOn("release")} onKeyDown={(event: KeyboardEvent) => { if (!event.repeat && (event.key === "Enter" || event.key === " ")) void allLampsOn("press"); }} onKeyUp={(event: KeyboardEvent) => { if (event.key === "Enter" || event.key === " ") void allLampsOn("release"); }}>All Lamps On</Button></section>{lampResult && <p className="lamp-command-result">{lampResult}</p>}
-  </section></div></ModalPortal>;
+	const model = useSystemControlsModel();
+	if (!model.open) return null;
+	const activeItems =
+		model.pagePlaybacks.length +
+		model.virtualPlaybacks.length +
+		model.programmers.length +
+		model.dynamics.length;
+	return (
+		<ModalPortal>
+			<div
+				className="modal-backdrop"
+				onPointerDown={(event) => {
+					if (event.target === event.currentTarget) model.close();
+				}}
+			>
+				<section
+					className="modal-card system-controls-card"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Running and output"
+				>
+					<header className="system-controls-header">
+						<div>
+							<h2>Running & Output</h2>
+							<small>Shift + Clear / Shift + Delete</small>
+						</div>
+						<Button className="modal-close" onClick={model.close}>
+							×
+						</Button>
+					</header>
+					<div className="running-summary">
+						<span>
+							<b>{activeItems}</b> active items
+						</span>
+						<Button
+							className="danger"
+							disabled={
+								model.stoppingAll ||
+								(!model.runningPlaybacks.length && !model.programmers.length)
+							}
+							onClick={() => void model.stopEverything()}
+						>
+							{model.stoppingAll ? "Stopping…" : "Stop everything"}
+						</Button>
+					</div>
+					<RunningSections
+						playbacks={model.server.playbacks}
+						pagePlaybacks={model.pagePlaybacks}
+						virtualPlaybacks={model.virtualPlaybacks}
+						dynamics={model.dynamics}
+						programmers={model.programmers}
+						programmersLoading={model.lifecycle === null}
+						currentUserId={model.server.session?.user.id ?? null}
+						currentUserName={model.server.session?.user.name ?? null}
+						onReleasePlayback={(cueListId) =>
+							void model.server.playbackAction(cueListId, "release")
+						}
+						onClearProgrammer={(sessionId) =>
+							void model.server.clearProgrammer(sessionId)
+						}
+					/>
+					<OutputControls
+						master={model.master}
+						blackout={model.blackout}
+						lampResult={model.lampResult}
+						lampActionsAvailable={model.selectedFixtureIds.length > 0}
+						onMaster={model.setMaster}
+						onBlackout={model.toggleBlackout}
+						onLamp={(phase) => void model.triggerLamps(phase)}
+					/>
+				</section>
+			</div>
+		</ModalPortal>
+	);
 }

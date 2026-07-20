@@ -11,7 +11,31 @@ import { SystemControlsModal } from "./SystemControlsModal";
 const dispatch = vi.fn();
 const playbackAction = vi.fn().mockResolvedValue(undefined);
 const clearProgrammer = vi.fn().mockResolvedValue(undefined);
-const scopedValues = vi.hoisted(() => ({ count: 3 as number | null }));
+const lifecycle = vi.hoisted(() => ({
+	projection: {
+		revision: 1,
+		programmers: [
+			{
+				programmerId: "programmer-1",
+				userId: "operator",
+				connected: true,
+				selectedFixtureCount: 1,
+				normalValueCount: 3,
+				sessions: [{ sessionId: "session-1" }],
+			},
+		],
+	} as {
+		revision: number;
+		programmers: Array<{
+			programmerId: string;
+			userId: string;
+			connected: boolean;
+			selectedFixtureCount: number;
+			normalValueCount: number;
+			sessions: Array<{ sessionId: string }>;
+		}>;
+	} | null,
+}));
 const server = {
 	readVisualization: vi
 		.fn()
@@ -82,15 +106,26 @@ vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
 vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state: { systemControlsOpen: true }, dispatch }),
 }));
-vi.mock("../../features/programmerValues/useProgrammerValuesActivity", () => ({
-	useNormalProgrammerValueCount: () => scopedValues.count,
+vi.mock("../../features/programmerLifecycle/ProgrammerLifecycleView", () => ({
+	useProgrammerLifecycleView: () => lifecycle.projection,
 }));
 
 afterEach(() => {
 	cleanup();
 	vi.clearAllMocks();
-	scopedValues.count = 3;
-	server.bootstrap.active_programmers.splice(1);
+	lifecycle.projection = {
+		revision: 1,
+		programmers: [
+			{
+				programmerId: "programmer-1",
+				userId: "operator",
+				connected: true,
+				selectedFixtureCount: 1,
+				normalValueCount: 3,
+				sessions: [{ sessionId: "session-1" }],
+			},
+		],
+	};
 });
 
 describe("SystemControlsModal", () => {
@@ -102,7 +137,7 @@ describe("SystemControlsModal", () => {
 		expect(screen.getByText("Operator · Current user")).toBeInTheDocument();
 		expect(screen.getByText("Main Cuelist · Dynamic 1")).toBeInTheDocument();
 		expect(
-			screen.getByText("1 fixtures · 3 values · Connected"),
+			screen.getByText("1 fixtures · 3 values · 1 session · Connected"),
 		).toBeInTheDocument();
 
 		fireEvent.click(
@@ -122,34 +157,27 @@ describe("SystemControlsModal", () => {
 		expect(clearProgrammer).toHaveBeenCalledWith("session-1");
 	});
 
-	it("uses scoped values for every current-user desk and legacy values for foreign users", () => {
-		server.bootstrap.active_programmers.push(
-			{
-				session_id: "session-2",
-				user_id: "operator",
-				selected: [],
-				values: [],
-				group_values: {},
-				connected: false,
-			},
-			{
-				session_id: "session-3",
-				user_id: "other-user",
-				selected: [],
-				values: [{}, {}],
-				group_values: { rear: { intensity: {} } },
-				connected: true,
-			},
-		);
+	it("groups same-user desks and uses safe lifecycle counts for foreign users", () => {
+		lifecycle.projection?.programmers[0].sessions.push({
+			sessionId: "session-2",
+		});
+		lifecycle.projection?.programmers.push({
+			programmerId: "programmer-2",
+			userId: "other-user",
+			connected: true,
+			selectedFixtureCount: 0,
+			normalValueCount: 3,
+			sessions: [{ sessionId: "session-3" }],
+		});
 
 		render(<SystemControlsModal />);
 
-		expect(screen.getAllByText(/3 values/)).toHaveLength(3);
+		expect(screen.getAllByText(/3 values/)).toHaveLength(2);
 		expect(
-			screen.getByText("0 fixtures · 3 values · Disconnected"),
+			screen.getByText("1 fixtures · 3 values · 2 sessions · Connected"),
 		).toBeInTheDocument();
 		expect(
-			screen.getByText("0 fixtures · 3 values · Connected"),
+			screen.getByText("0 fixtures · 3 values · 1 session · Connected"),
 		).toBeInTheDocument();
 		fireEvent.click(
 			screen.getByRole("button", { name: "Clear programmer other-user" }),
@@ -157,13 +185,11 @@ describe("SystemControlsModal", () => {
 		expect(clearProgrammer).toHaveBeenCalledWith("session-3");
 	});
 
-	it("never falls back to stale current-user bootstrap values while loading", () => {
-		scopedValues.count = null;
+	it("never falls back to stale bootstrap Programmers while loading", () => {
+		lifecycle.projection = null;
 		render(<SystemControlsModal />);
 
-		expect(
-			screen.getByText("1 fixtures · Values loading… · Connected"),
-		).toBeInTheDocument();
+		expect(screen.getByText("Programmers loading…")).toBeInTheDocument();
 		expect(screen.queryByText(/2 values/)).not.toBeInTheDocument();
 	});
 

@@ -19,7 +19,6 @@ export function createSystemActions(
 		client,
 		setError,
 		bootstrap,
-		setBootstrap,
 		session,
 		patch,
 		playbacks,
@@ -88,7 +87,6 @@ export function createSystemActions(
 					setCommandLineState(commandTargetModeRef.current);
 					setCommandLinePristine(true);
 				}
-				setBootstrap(await client.bootstrap());
 				setError(null);
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));

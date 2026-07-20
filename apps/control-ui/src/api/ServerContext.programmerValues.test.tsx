@@ -1,5 +1,6 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { useProgrammerLifecycleView } from "../features/programmerLifecycle/ProgrammerLifecycleView";
 import {
 	useProgrammerValuesActions,
 	useProgrammerValuesView,
@@ -17,6 +18,8 @@ const boundaries = vi.hoisted(() => ({
 	subscribeValues: vi.fn(),
 	loadCaptureMode: vi.fn(),
 	subscribeCaptureMode: vi.fn(),
+	loadLifecycle: vi.fn(),
+	subscribeLifecycle: vi.fn(),
 }));
 
 vi.mock("../features/server/useServerPolling", () => ({
@@ -92,16 +95,21 @@ vi.mock("./useServerFeatureBoundaries", () => ({
 		showObjectsTransport: null,
 		playbackTransport: null,
 		programmingTransport: null,
+		programmerLifecycleTransport: {
+			subscribe: boundaries.subscribeLifecycle,
+		},
 		programmerValuesTransport: { subscribe: boundaries.subscribeValues },
 		programmerCaptureModeTransport: {
 			subscribe: boundaries.subscribeCaptureMode,
 		},
 		programmerValuesAuthorityKey: "server-session-a",
 		programmerCaptureModeAuthorityKey: "server-session-a",
+		programmerLifecycleAuthorityKey: "server-session-a",
 		loadPlaybackSnapshot: vi.fn(),
 		loadProgrammingInteractionSnapshot: vi.fn(),
 		loadProgrammerValuesSnapshot: boundaries.loadValues,
 		loadProgrammerCaptureModeSnapshot: boundaries.loadCaptureMode,
+		loadProgrammerLifecycleSnapshot: boundaries.loadLifecycle,
 		applyProgrammerValuesAction: boundaries.applyValues,
 		loadShowObjectCollection: vi.fn(),
 		loadShowObject: vi.fn(),
@@ -112,6 +120,7 @@ vi.mock("./useServerFeatureBoundaries", () => ({
 		reportProgrammerValuesSessionError: vi.fn(),
 		reportProgrammerValuesMutationError: vi.fn(),
 		reportProgrammerCaptureModeSessionError: vi.fn(),
+		reportProgrammerLifecycleSessionError: vi.fn(),
 	}),
 }));
 
@@ -134,12 +143,24 @@ function ValuesProbe() {
 	return <span>{projection?.revision ?? "Loading values"}</span>;
 }
 
-function Harness({ showValues }: { showValues: boolean }) {
+function LifecycleProbe() {
+	const projection = useProgrammerLifecycleView();
+	return <span>Lifecycle {projection?.revision ?? "loading"}</span>;
+}
+
+function Harness({
+	showValues,
+	showLifecycle = false,
+}: {
+	showValues: boolean;
+	showLifecycle?: boolean;
+}) {
 	return (
 		<ServerProvider>
 			<UnrelatedServerConsumer />
 			<ActionProbe />
 			{showValues ? <ValuesProbe /> : null}
+			{showLifecycle ? <LifecycleProbe /> : null}
 		</ServerProvider>
 	);
 }
@@ -160,6 +181,22 @@ function captureModeProjection(revision: number) {
 		blind: false,
 		preview: false,
 		preloadCaptureProgrammer: false,
+	};
+}
+
+function lifecycleProjection(revision: number) {
+	return {
+		revision,
+		programmers: [
+			{
+				programmerId: "programmer-a",
+				userId: USER_ID,
+				connected: true,
+				selectedFixtureCount: 0,
+				normalValueCount: 0,
+				sessions: [],
+			},
+		],
 	};
 }
 
@@ -221,6 +258,65 @@ describe("ServerProvider Programmer values boundary", () => {
 
 		expect(screen.getByText("2")).toBeInTheDocument();
 		expect(unrelatedRenders).toBe(rendersBeforeEvent);
+		rendered.unmount();
+		broadBootstrap.mockRestore();
+	});
+
+	it("keeps the aggregate lifecycle dormant and outside global context renders", async () => {
+		boundaries.loadLifecycle.mockReset();
+		boundaries.subscribeLifecycle.mockReset();
+		const broadBootstrap = vi.spyOn(LightApiClient.prototype, "bootstrap");
+		let observer: { message(value: unknown): void } | null = null;
+		boundaries.loadLifecycle.mockResolvedValue({
+			cursor: 20,
+			projection: lifecycleProjection(1),
+		});
+		boundaries.subscribeLifecycle.mockImplementation(
+			(_cursor, nextObserver) => {
+				observer = nextObserver;
+				return { close: vi.fn(), repair: vi.fn() };
+			},
+		);
+		unrelatedRenders = 0;
+		const rendered = render(<Harness showValues={false} />);
+		await waitFor(() =>
+			expect(screen.getByText("Actions ready")).toBeInTheDocument(),
+		);
+
+		expect(boundaries.loadLifecycle).not.toHaveBeenCalled();
+		expect(boundaries.subscribeLifecycle).not.toHaveBeenCalled();
+		expect(broadBootstrap).not.toHaveBeenCalled();
+
+		rendered.rerender(<Harness showValues={false} showLifecycle />);
+		await waitFor(() =>
+			expect(screen.getByText("Lifecycle 1")).toBeInTheDocument(),
+		);
+		expect(boundaries.loadLifecycle).toHaveBeenCalledOnce();
+		expect(boundaries.subscribeLifecycle).toHaveBeenCalledOnce();
+		const rendersBeforeEvent = unrelatedRenders;
+
+		act(() =>
+			observer?.message({
+				type: "event",
+				sequence: 22,
+				correlationId: null,
+				change: {
+					revision: 2,
+					delta: {
+						type: "upsert",
+						programmer: {
+							...lifecycleProjection(1).programmers[0],
+							normalValueCount: 1,
+						},
+					},
+				},
+			}),
+		);
+
+		expect(screen.getByText("Lifecycle 2")).toBeInTheDocument();
+		expect(unrelatedRenders).toBe(rendersBeforeEvent);
+		expect(broadBootstrap).not.toHaveBeenCalled();
+		rendered.unmount();
 		broadBootstrap.mockRestore();
 	});
 });
