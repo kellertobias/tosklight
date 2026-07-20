@@ -3,8 +3,9 @@ use super::events::persist_with_warning;
 use super::wire::application_choice;
 use light_application::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ExecutionPolicy,
-    ProgrammingExecution, ProgrammingPorts, ProgrammingPresetRecordingPorts,
-    ProgrammingSelectionEnvironment, ProgrammingSelectionQuery, ProgrammingValuesEnvironment,
+    ProgrammingExecution, ProgrammingGroupRecordingPorts, ProgrammingPorts,
+    ProgrammingPresetRecordingPorts, ProgrammingSelectionEnvironment, ProgrammingSelectionQuery,
+    ProgrammingValuesEnvironment,
 };
 use light_programmer::ProgrammerRegistry;
 
@@ -36,6 +37,30 @@ impl<'a> ServerProgrammingPorts<'a> {
         self.state
     }
 
+    pub(crate) fn record_typed_command(
+        &self,
+        programmers: &ProgrammerRegistry,
+        context: &ActionContext,
+        command: &str,
+    ) -> Option<ProgrammingExecution> {
+        self.record_group_command(programmers, context, command)
+            .or_else(|| self.record_preset_command(programmers, context, command))
+    }
+
+    fn record_group_command(
+        &self,
+        programmers: &ProgrammerRegistry,
+        context: &ActionContext,
+        command: &str,
+    ) -> Option<ProgrammingExecution> {
+        let (group_id, operation) = super::adapter::group_record_command(command)
+            .ok()
+            .flatten()?;
+        let result =
+            self.execute_group_recording(programmers, context, group_id, operation, command);
+        Some(self.recording_execution(context, command, result))
+    }
+
     pub(crate) fn record_preset_command(
         &self,
         programmers: &ProgrammerRegistry,
@@ -46,24 +71,44 @@ impl<'a> ServerProgrammingPorts<'a> {
             .ok()
             .flatten()?;
         let result = self.execute_preset_recording(programmers, context, address, command);
-        Some(match result {
-            Ok(warning) => ProgrammingExecution::Accepted {
-                applied: 1,
-                warning,
-            },
-            Err(error) => {
-                super::super::record_command_history(
-                    self.state,
-                    self.session,
+        Some(self.recording_execution(context, command, result.map(|warning| (1, warning))))
+    }
+
+    fn execute_group_recording(
+        &self,
+        programmers: &ProgrammerRegistry,
+        context: &ActionContext,
+        group_id: String,
+        operation: light_application::ProgrammingGroupRecordOperation,
+        raw_command: &str,
+    ) -> Result<(usize, Option<String>), String> {
+        let show_id = self.active_show_id()?;
+        let context = recording_context(context, "group-record");
+        let command = light_application::ProgrammingGroupRecordRequest {
+            show_id,
+            group_id,
+            operation,
+            expected_object_revision:
+                light_application::ProgrammingGroupRevisionExpectation::Current,
+            expected_show_revision: None,
+        };
+        let result = self
+            .state
+            .programming
+            .record_group_within_interaction(
+                ActionEnvelope {
+                    context: context.clone(),
                     command,
-                    "rejected",
-                    &error,
-                    self.source,
-                    context.request_id.as_deref(),
-                );
-                ProgrammingExecution::Rejected { error }
-            }
-        })
+                },
+                self,
+            )
+            .map_err(|error| error.message)?;
+        if result.replayed {
+            return Ok((result.applied, None));
+        }
+        clear_command_line(programmers, self.session)?;
+        let warning = self.accepted_recording_command(&context, raw_command, result.applied);
+        Ok((result.applied, warning))
     }
 
     fn execute_preset_recording(
@@ -73,14 +118,8 @@ impl<'a> ServerProgrammingPorts<'a> {
         address: light_programmer::PresetAddress,
         raw_command: &str,
     ) -> Result<Option<String>, String> {
-        let show_id = self
-            .state
-            .active_show
-            .read()
-            .as_ref()
-            .map(|entry| entry.id)
-            .ok_or("no show is open")?;
-        let context = preset_record_context(context);
+        let show_id = self.active_show_id()?;
+        let context = recording_context(context, "preset-record");
         let command = light_application::ProgrammingPresetRecordRequest {
             show_id,
             address,
@@ -105,13 +144,23 @@ impl<'a> ServerProgrammingPorts<'a> {
             return Ok(None);
         }
         clear_command_line(programmers, self.session)?;
-        Ok(self.accepted_preset_command(&context, raw_command))
+        Ok(self.accepted_recording_command(&context, raw_command, 1))
     }
 
-    fn accepted_preset_command(
+    fn active_show_id(&self) -> Result<light_core::ShowId, String> {
+        self.state
+            .active_show
+            .read()
+            .as_ref()
+            .map(|entry| entry.id)
+            .ok_or_else(|| "no show is open".to_owned())
+    }
+
+    fn accepted_recording_command(
         &self,
         context: &ActionContext,
         raw_command: &str,
+        applied: usize,
     ) -> Option<String> {
         let warning = persist_with_warning(
             self.state,
@@ -121,8 +170,8 @@ impl<'a> ServerProgrammingPorts<'a> {
             "programmer.execute",
         );
         let feedback = warning.as_ref().map_or_else(
-            || "Applied to 1 target(s)".to_owned(),
-            |warning| format!("Applied to 1 target(s); {warning}"),
+            || format!("Applied to {applied} target(s)"),
+            |warning| format!("Applied to {applied} target(s); {warning}"),
         );
         super::super::record_command_history(
             self.state,
@@ -135,15 +184,56 @@ impl<'a> ServerProgrammingPorts<'a> {
         );
         warning
     }
+
+    fn recording_execution(
+        &self,
+        context: &ActionContext,
+        command: &str,
+        result: Result<(usize, Option<String>), String>,
+    ) -> ProgrammingExecution {
+        match result {
+            Ok((applied, warning)) => ProgrammingExecution::Accepted { applied, warning },
+            Err(error) => {
+                self.rejected_recording_command(context, command, &error);
+                ProgrammingExecution::Rejected { error }
+            }
+        }
+    }
+
+    fn rejected_recording_command(&self, context: &ActionContext, command: &str, error: &str) {
+        super::super::record_command_history(
+            self.state,
+            self.session,
+            command,
+            "rejected",
+            error,
+            self.source,
+            context.request_id.as_deref(),
+        );
+    }
 }
 
-fn preset_record_context(context: &ActionContext) -> ActionContext {
+fn recording_context(context: &ActionContext, prefix: &str) -> ActionContext {
     if context.request_id.is_some() {
         context.clone()
     } else {
         context
             .clone()
-            .with_request_id(format!("preset-record-{}", context.correlation_id))
+            .with_request_id(format!("{prefix}-{}", context.correlation_id))
+    }
+}
+
+impl ProgrammingGroupRecordingPorts for ServerProgrammingPorts<'_> {
+    fn authorize_group_recording(&self, context: &ActionContext) -> Result<(), ActionError> {
+        <Self as ProgrammingPorts>::authorize(self, context)
+    }
+
+    fn commit_group(
+        &self,
+        context: &ActionContext,
+        commit: &light_application::ProgrammingGroupCommit,
+    ) -> Result<light_application::ProgrammingGroupCommitResult, ActionError> {
+        super::group_recording_ports::commit(self.state(), context, commit)
     }
 }
 
@@ -196,7 +286,7 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
         command: &str,
         policy: ExecutionPolicy,
     ) -> ProgrammingExecution {
-        if let Some(outcome) = self.record_preset_command(programmers, context, command) {
+        if let Some(outcome) = self.record_typed_command(programmers, context, command) {
             return outcome;
         }
         let policy = match policy {

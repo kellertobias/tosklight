@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GroupRecordOutcome",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "correlation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_sequence": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "group": {
+          "$ref": "#/$defs/RecordedGroupProjection"
+        },
+        "replayed": {
+          "type": "boolean"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "show_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "const": "changed"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "request_id",
+        "correlation_id",
+        "replayed",
+        "show_revision",
+        "group",
+        "event_sequence"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "correlation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "group": {
+          "$ref": "#/$defs/RecordedStoredGroupProjection"
+        },
+        "replayed": {
+          "type": "boolean"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "show_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "const": "no_change"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "request_id",
+        "correlation_id",
+        "replayed",
+        "show_revision",
+        "group"
+      ]
+    }
+  ],
+  "$defs": {
+    "RecordedGroupProjection": {
+      "description": "Exact authoritative Group object or its revisioned deletion tombstone.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "body": true,
+            "id": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "state": {
+              "type": "string",
+              "const": "stored"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "id",
+            "revision",
+            "body"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "state": {
+              "type": "string",
+              "const": "deleted"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "id",
+            "revision"
+          ]
+        }
+      ]
+    },
+    "RecordedStoredGroupProjection": {
+      "description": "A no-change result can only retain an existing stored Group, never a deletion tombstone.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "body": true,
+            "id": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "state": {
+              "type": "string",
+              "const": "stored"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "id",
+            "revision",
+            "body"
+          ]
+        }
+      ]
+    }
+  }
+}

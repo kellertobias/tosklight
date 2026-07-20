@@ -2,6 +2,7 @@
 
 pub mod command_line;
 pub mod events;
+pub mod group_recording;
 pub mod patch;
 pub mod playback;
 pub mod preload_playback_queue;

@@ -3,7 +3,10 @@ use light_application::{
     ProgrammingPresetCommitResult,
 };
 
-use super::super::{AppState, ProgrammingInstallOwner, ServerActiveShowPorts};
+use super::super::{
+    AppState, ProgrammingInstallOwner, ProgrammingOwnerGesturePolicy,
+    ProgrammingOwnerHighlightPolicy, ServerActiveShowPorts,
+};
 
 impl ProgrammingPresetActiveShowPorts for ServerActiveShowPorts {}
 
@@ -23,6 +26,8 @@ pub(super) fn commit(
         ProgrammingInstallOwner {
             desk_id: context.desk_id,
             user_id: light_core::UserId(user_id),
+            gesture: ProgrammingOwnerGesturePolicy::Preserve,
+            highlight: ProgrammingOwnerHighlightPolicy::DeferToOuterInteraction,
         },
     );
     state

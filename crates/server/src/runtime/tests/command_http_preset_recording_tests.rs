@@ -140,7 +140,7 @@ async fn preset_record_route_rejects_auth_conflict_forged_values_and_preload_cap
 }
 
 #[tokio::test]
-async fn plain_preset_record_command_uses_typed_capability_but_group_stays_compatibility_only() {
+async fn plain_preset_and_group_record_commands_use_typed_capabilities() {
     let (scenario, show_id) = scenario_with_recordable_value().await;
     let response = scenario
         .execute("preset-command-record", Some("RECORD 0.8"))
@@ -166,13 +166,7 @@ async fn plain_preset_record_command_uses_typed_capability_but_group_stays_compa
         .await;
     assert_eq!(group.status(), StatusCode::OK);
     let group = json(group).await;
-    assert_eq!(group["outcome"], "rejected");
-    assert!(
-        group["error"]
-            .as_str()
-            .unwrap()
-            .contains("not yet available through the atomic")
-    );
+    assert_eq!(group["outcome"], "accepted");
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 

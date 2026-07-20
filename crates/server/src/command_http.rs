@@ -7,6 +7,12 @@
 mod adapter;
 #[path = "command_http/events.rs"]
 mod events;
+#[path = "command_http/group_recording_ports.rs"]
+mod group_recording_ports;
+#[path = "command_http/group_recording_routes.rs"]
+mod group_recording_routes;
+#[path = "command_http/group_recording_wire.rs"]
+mod group_recording_wire;
 #[path = "command_http/interaction_wire.rs"]
 mod interaction_wire;
 #[path = "command_http/lifecycle_routes.rs"]

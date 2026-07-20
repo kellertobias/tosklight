@@ -1,6 +1,8 @@
 mod capture_mode_projection;
 mod command;
 mod event;
+mod group_active_show;
+mod group_recording;
 mod lifecycle;
 mod lifecycle_projection;
 mod operation;
@@ -24,6 +26,12 @@ pub use command::{
     ProgrammingResult, SelectionGestureSource,
 };
 pub use event::ProgrammingInteractionChange;
+pub use group_recording::{
+    ProgrammingGroupActiveShowPorts, ProgrammingGroupCommit, ProgrammingGroupCommitResult,
+    ProgrammingGroupProjection, ProgrammingGroupRecordOperation, ProgrammingGroupRecordOutcome,
+    ProgrammingGroupRecordRequest, ProgrammingGroupRecordResult, ProgrammingGroupRecordingPorts,
+    ProgrammingGroupRevisionExpectation,
+};
 pub use lifecycle::{
     ProgrammingLifecycleCompletion, ProgrammingLifecycleResult, ProgrammingLifecycleTarget,
 };

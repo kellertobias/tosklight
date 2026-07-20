@@ -14,6 +14,9 @@ use crate::v2::command_line::{
     ReplaceCommandLineRequest,
 };
 use crate::v2::events::{EventClientMessage, EventServerMessage, OutputRuntimeSnapshot};
+use crate::v2::group_recording::{
+    GroupRecordErrorResponse, GroupRecordOutcome, GroupRecordRequest,
+};
 use crate::v2::patch::{
     PatchDelta, PatchErrorResponse, PatchFixtureProjection, PatchFixturesOutcome,
     PatchFixturesRequest, PatchProfileRevisionProjection, PatchSnapshot,
@@ -115,6 +118,9 @@ pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
         programming_request_schema::<PresetRecordRequest>("preset-record-request"),
         programming_response_schema::<PresetRecordOutcome>("preset-record-outcome"),
         programming_response_schema::<PresetRecordErrorResponse>("preset-record-error-response"),
+        programming_request_schema::<GroupRecordRequest>("group-record-request"),
+        programming_response_schema::<GroupRecordOutcome>("group-record-outcome"),
+        programming_response_schema::<GroupRecordErrorResponse>("group-record-error-response"),
         playback_request_schema::<PlaybackActionRequest>("playback-action-request"),
         playback_response_schema::<PlaybackActionOutcome>("playback-action-outcome"),
         playback_response_schema::<PlaybackErrorResponse>("playback-error-response"),

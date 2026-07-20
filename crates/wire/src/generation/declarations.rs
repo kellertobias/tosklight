@@ -2,6 +2,7 @@ use ts_rs::{Config, TS};
 
 use crate::v2::command_line::*;
 use crate::v2::events::*;
+use crate::v2::group_recording::*;
 use crate::v2::patch::*;
 use crate::v2::playback::*;
 use crate::v2::preload_playback_queue::*;
@@ -117,6 +118,13 @@ fn programming(config: &Config) -> Vec<String> {
         PresetRecordOutcome::decl(config),
         PresetRecordErrorKind::decl(config),
         PresetRecordErrorResponse::decl(config),
+        GroupRecordOperation::decl(config),
+        GroupRecordRequest::decl(config),
+        RecordedGroupProjection::decl(config),
+        RecordedStoredGroupProjection::decl(config),
+        GroupRecordOutcome::decl(config),
+        GroupRecordErrorKind::decl(config),
+        GroupRecordErrorResponse::decl(config),
     ]
 }
 

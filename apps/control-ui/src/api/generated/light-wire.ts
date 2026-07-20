@@ -163,6 +163,20 @@ export type PresetRecordErrorKind = "invalid" | "unauthorized" | "forbidden" | "
 
 export type PresetRecordErrorResponse = { kind: PresetRecordErrorKind, error: string, current_revision?: number | null, retryable: boolean, };
 
+export type GroupRecordOperation = "overwrite" | "merge" | "subtract" | "delete";
+
+export type GroupRecordRequest = { request_id: string, group_id: string, operation: GroupRecordOperation, expected_object_revision: number, };
+
+export type RecordedGroupProjection = { "state": "stored", id: string, revision: number, body: unknown, } | { "state": "deleted", id: string, revision: number, };
+
+export type RecordedStoredGroupProjection = { "state": "stored", id: string, revision: number, body: unknown, };
+
+export type GroupRecordOutcome = { "status": "changed", request_id: string, correlation_id: string, replayed: boolean, show_revision: number, group: RecordedGroupProjection, event_sequence: number, } | { "status": "no_change", request_id: string, correlation_id: string, replayed: boolean, show_revision: number, group: RecordedStoredGroupProjection, };
+
+export type GroupRecordErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
+
+export type GroupRecordErrorResponse = { kind: GroupRecordErrorKind, error: string, current_revision?: number | null, retryable: boolean, };
+
 export type PlaybackSurface = "virtual" | "physical";
 
 export type PlaybackAddress = { "kind": "cue_list", cue_list_id: string, } | { "kind": "playback", playback_number: number, } | { "kind": "current_page", slot: number, } | { "kind": "explicit_page", page: number, slot: number, };

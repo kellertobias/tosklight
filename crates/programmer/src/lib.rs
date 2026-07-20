@@ -4,6 +4,7 @@
 mod capture_mode;
 mod command_state;
 mod fixture_value_batch;
+mod group_recording;
 mod groups;
 pub mod highlight;
 mod history;
@@ -28,6 +29,7 @@ pub use command_state::{
     CommandLineReplaceError, CommandLineState, CommandTarget, ProgrammerInteractionState,
     ProgrammerInteractionVersion,
 };
+pub use group_recording::{GroupRecordingCapture, group_delete_blocker};
 pub use groups::{
     DerivedGroup, FrozenGroup, GroupDefinition, GroupProgrammerValue,
     merge_ordered_group_membership, resolve_group,

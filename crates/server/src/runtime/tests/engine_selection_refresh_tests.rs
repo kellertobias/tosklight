@@ -131,6 +131,7 @@ async fn nested_record_group_refreshes_actor_and_peer_once_without_relocking_the
     );
 
     let before_record = scenario.state.application_events.latest_sequence();
+    let before_audit = scenario.state.audit_events.lock().len();
     let worker_state = scenario.state.clone();
     let worker_actor = scenario.actor.clone();
     let response = tokio::time::timeout(
@@ -178,6 +179,37 @@ async fn nested_record_group_refreshes_actor_and_peer_once_without_relocking_the
         "the mutation must publish one Show event plus one selection and lifecycle event per changed desk"
     );
     assert_selection_events_precede_show_event(&scenario.state, before_record);
+    assert_eq!(
+        scenario
+            .state
+            .audit_events
+            .lock()
+            .iter()
+            .skip(before_audit)
+            .filter(|event| {
+                event.kind == "highlight_changed"
+                    && event.payload["desk_id"] == scenario.actor.desk.id.to_string()
+                    && event.payload["user_id"] == scenario.actor.user.id.0.to_string()
+                    && event.payload["source"] == "programmer_selection"
+            })
+            .count(),
+        1,
+        "the nested command must defer owner Highlight reconciliation to the outer interaction"
+    );
+    assert!(
+        scenario
+            .state
+            .audit_events
+            .lock()
+            .iter()
+            .skip(before_audit)
+            .all(|event| {
+                event.kind != "highlight_changed"
+                    || event.payload["desk_id"] != scenario.actor.desk.id.to_string()
+                    || event.payload["source"] != "show_selection_refresh"
+            }),
+        "the nested install must not also reconcile the owner Highlight"
+    );
     assert_group_membership(&scenario.state, &[scenario.first, scenario.second]);
 
     scenario.cleanup();

@@ -91,6 +91,8 @@ pub(super) fn run_active_show_object_action_in_programming_interaction(
             .user_id
             .map(light_core::UserId)
             .ok_or_else(|| ApiError::internal("Programming-owned show mutation has no user"))?,
+        gesture: super::ProgrammingOwnerGesturePolicy::Preserve,
+        highlight: super::ProgrammingOwnerHighlightPolicy::DeferToOuterInteraction,
     };
     let ports = ServerActiveShowPorts::show_objects_with_programming_owner(state.clone(), owner);
     run_active_show_object_action_with_ports(state, action, &ports)

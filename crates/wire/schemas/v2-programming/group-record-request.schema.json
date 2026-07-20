@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GroupRecordRequest",
+  "description": "Requests action-time capture; selection and Programmer state never cross the client boundary.",
+  "type": "object",
+  "properties": {
+    "expected_object_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "group_id": {
+      "type": "string",
+      "maxLength": 256,
+      "minLength": 1
+    },
+    "operation": {
+      "$ref": "#/$defs/GroupRecordOperation"
+    },
+    "request_id": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "group_id",
+    "operation",
+    "expected_object_revision"
+  ],
+  "$defs": {
+    "GroupRecordOperation": {
+      "type": "string",
+      "enum": [
+        "overwrite",
+        "merge",
+        "subtract",
+        "delete"
+      ]
+    }
+  }
+}

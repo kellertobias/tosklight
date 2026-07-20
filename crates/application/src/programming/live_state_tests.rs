@@ -15,6 +15,8 @@ use uuid::Uuid;
 
 #[path = "live_state_tests/capture_mode.rs"]
 mod capture_mode;
+#[path = "live_state_tests/group_recording.rs"]
+mod group_recording;
 #[path = "live_state_tests/lifecycle.rs"]
 mod lifecycle;
 #[path = "live_state_tests/lifecycle_publication.rs"]

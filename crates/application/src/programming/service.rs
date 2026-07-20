@@ -13,6 +13,10 @@ use std::sync::Arc;
 
 #[path = "service/external.rs"]
 mod external;
+#[path = "service/group_recording.rs"]
+mod group_recording;
+#[path = "service/group_recording_replay.rs"]
+mod group_recording_replay;
 #[path = "service/lifecycle_publication.rs"]
 mod lifecycle_publication;
 #[path = "service/preload_values.rs"]
@@ -44,6 +48,7 @@ mod values_replay_memory;
 #[path = "service/values_validation.rs"]
 mod values_validation;
 
+use group_recording_replay::GroupRecordingReplayCache;
 use lifecycle_publication::LifecyclePublicationGate;
 use preload_values_replay::PreloadValuesReplayCache;
 use preset_recording_replay::PresetRecordingReplayCache;
@@ -72,6 +77,7 @@ pub struct ProgrammingService {
     replay: Arc<Mutex<ReplayCache>>,
     values_replay: Arc<Mutex<ValuesReplayCache>>,
     preload_values_replay: Arc<Mutex<PreloadValuesReplayCache>>,
+    group_recording_replay: Arc<Mutex<GroupRecordingReplayCache>>,
     preset_recording_replay: Arc<Mutex<PresetRecordingReplayCache>>,
     pub(super) events: EventBus,
     lifecycle_publication: Arc<Mutex<LifecyclePublicationGate>>,
@@ -91,6 +97,7 @@ impl ProgrammingService {
             replay: Arc::default(),
             values_replay: Arc::default(),
             preload_values_replay: Arc::default(),
+            group_recording_replay: Arc::default(),
             preset_recording_replay: Arc::default(),
             events,
             lifecycle_publication: Arc::default(),

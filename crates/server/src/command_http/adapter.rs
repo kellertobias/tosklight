@@ -82,6 +82,42 @@ pub(super) fn preset_record_address(
     Ok(super::super::command_preset_address(&tokens[1..]).ok())
 }
 
+pub(super) fn group_record_command(
+    command: &str,
+) -> Result<Option<(String, light_application::ProgrammingGroupRecordOperation)>, String> {
+    let tokens = command.split_whitespace().collect::<Vec<_>>();
+    let parsed = match tokens.as_slice() {
+        [record, group, id] if is_record(record) && group.eq_ignore_ascii_case("GROUP") => Some((
+            (*id).to_owned(),
+            light_application::ProgrammingGroupRecordOperation::Overwrite,
+        )),
+        [record, operation, group, id]
+            if is_record(record) && group.eq_ignore_ascii_case("GROUP") =>
+        {
+            let operation = match *operation {
+                "+" => light_application::ProgrammingGroupRecordOperation::Merge,
+                "-" => light_application::ProgrammingGroupRecordOperation::Subtract,
+                _ => return Ok(None),
+            };
+            Some(((*id).to_owned(), operation))
+        }
+        [delete, group, id] if is_delete(delete) && group.eq_ignore_ascii_case("GROUP") => Some((
+            (*id).to_owned(),
+            light_application::ProgrammingGroupRecordOperation::Delete,
+        )),
+        _ => None,
+    };
+    Ok(parsed)
+}
+
+fn is_record(token: &str) -> bool {
+    token.eq_ignore_ascii_case("RECORD") || token.eq_ignore_ascii_case("REC")
+}
+
+fn is_delete(token: &str) -> bool {
+    token.eq_ignore_ascii_case("DELETE") || token.eq_ignore_ascii_case("DEL")
+}
+
 fn execute_with_policy(
     state: &AppState,
     session: &Session,
@@ -163,7 +199,7 @@ fn accepted_command(
 }
 
 pub(super) fn compatibility_only_family(command: &str) -> Result<Option<&'static str>, String> {
-    if preset_record_address(command)?.is_some() {
+    if preset_record_address(command)?.is_some() || group_record_command(command)?.is_some() {
         return Ok(None);
     }
     let Some(family) = super::super::normalized_programmer_command_family(command)? else {
