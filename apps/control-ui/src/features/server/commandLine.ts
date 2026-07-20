@@ -28,7 +28,6 @@ export function createCommandLineActions(
 		setCommandLinePristine,
 		commandLineWrite,
 		commandLineEpoch,
-		setPendingCommandChoice,
 		setSelectedFixtures,
 		setSelectedGroupId,
 		refresh,
@@ -90,7 +89,6 @@ export function createCommandLineActions(
 					  }
 					| undefined;
 				if (result?.pending_choice) {
-					setPendingCommandChoice(result.pending_choice);
 					setError(null);
 					return true;
 				}
@@ -102,7 +100,6 @@ export function createCommandLineActions(
 							: null,
 					);
 				}
-				setPendingCommandChoice(null);
 				const target = defaultCommandLine(commandTargetModeRef.current);
 				commandLineEpoch.current += 1;
 				setCommandLineState(target);

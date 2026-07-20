@@ -40,6 +40,7 @@ import type { ProgrammingEventTransport } from "./transport";
 interface ProgrammingInteractionViewProviderProps {
 	showId: string | null;
 	deskId: string | null;
+	authorityKey?: string;
 	store: ProgrammingInteractionStore;
 	transport: ProgrammingEventTransport | null;
 	loadSnapshot: ProgrammingInteractionSessionOptions["loadSnapshot"];
@@ -78,6 +79,7 @@ export function ProgrammingInteractionViewProvider({
 	children,
 	showId,
 	deskId,
+	authorityKey = "",
 	store,
 	transport,
 	loadSnapshot,
@@ -92,13 +94,22 @@ export function ProgrammingInteractionViewProvider({
 				? new ProgrammingInteractionSession({
 						showId,
 						deskId,
+						authorityKey,
 						store,
 						transport,
 						loadSnapshot,
 						onError: onSessionError,
 					})
 				: null,
-		[deskId, loadSnapshot, onSessionError, showId, store, transport],
+		[
+			authorityKey,
+			deskId,
+			loadSnapshot,
+			onSessionError,
+			showId,
+			store,
+			transport,
+		],
 	);
 	const commandLineWriter = useMemo(
 		() =>
@@ -113,6 +124,7 @@ export function ProgrammingInteractionViewProvider({
 					})
 				: null,
 		[
+			authorityKey,
 			deskId,
 			loadSnapshot,
 			onMutationError,
@@ -134,6 +146,7 @@ export function ProgrammingInteractionViewProvider({
 					})
 				: null,
 		[
+			authorityKey,
 			applySelection,
 			deskId,
 			loadSnapshot,
@@ -176,9 +189,9 @@ export function ProgrammingInteractionViewProvider({
 		[selectionWriter],
 	);
 	useLayoutEffect(() => {
-		store.reset(showId, deskId);
+		store.reset(showId, deskId, authorityKey);
 		return () => session?.stop();
-	}, [deskId, session, showId, store]);
+	}, [authorityKey, deskId, session, showId, store]);
 	useEffect(() => () => commandLineWriter?.stop(), [commandLineWriter]);
 	useEffect(() => () => selectionWriter?.stop(), [selectionWriter]);
 	return (
@@ -204,6 +217,18 @@ export function useProgrammingCommandLineView(
 			(state: ProgrammingInteractionState) =>
 				enabled && observe ? state.commandLine : null,
 			[enabled, observe],
+		),
+		Object.is,
+	);
+}
+
+export function useProgrammingPendingCommandChoiceView(enabled = true) {
+	useProgrammingCapabilityView("commandLine", enabled);
+	return useProgrammingSelector(
+		useCallback(
+			(state: ProgrammingInteractionState) =>
+				enabled ? (state.commandLine?.pendingChoice ?? null) : null,
+			[enabled],
 		),
 		Object.is,
 	);

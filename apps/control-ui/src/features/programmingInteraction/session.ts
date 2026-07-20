@@ -15,6 +15,7 @@ import {
 export interface ProgrammingInteractionSessionOptions {
 	showId: string;
 	deskId: string;
+	authorityKey?: string;
 	store: ProgrammingInteractionStore;
 	transport: ProgrammingEventTransport | null;
 	loadSnapshot(): Promise<ProgrammingSnapshot>;
@@ -25,6 +26,7 @@ export class ProgrammingInteractionSession {
 	private readonly scope = new ProgrammingViewScope();
 	private readonly showId: string;
 	private readonly deskId: string;
+	private readonly authorityKey: string;
 	private readonly store: ProgrammingInteractionStore;
 	private readonly transport: ProgrammingEventTransport | null;
 	private readonly loadSnapshot: ProgrammingInteractionSessionOptions["loadSnapshot"];
@@ -42,6 +44,7 @@ export class ProgrammingInteractionSession {
 	constructor(options: ProgrammingInteractionSessionOptions) {
 		this.showId = options.showId;
 		this.deskId = options.deskId;
+		this.authorityKey = options.authorityKey ?? "";
 		this.store = options.store;
 		this.transport = options.transport;
 		this.loadSnapshot = options.loadSnapshot;
@@ -294,7 +297,7 @@ export class ProgrammingInteractionSession {
 		if (this.stopped) return false;
 		const state = this.store.getSnapshot();
 		if (state.showId === null && state.deskId === null)
-			this.store.reset(this.showId, this.deskId);
+			this.store.reset(this.showId, this.deskId, this.authorityKey);
 		const scoped = this.store.getSnapshot();
 		if (scoped.showId !== this.showId || scoped.deskId !== this.deskId) {
 			const error = new ProgrammingProtocolError(

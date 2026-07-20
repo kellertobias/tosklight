@@ -43,6 +43,7 @@ export class ProgrammingInteractionStore {
 	private readonly operations = new Map<string, OptimisticOperation>();
 	private authoritativeCommandLine: CommandLineProjection | null = null;
 	private authoritativeSelection: SelectionProjection | null = null;
+	private authorityKey = "";
 	private scope = 0;
 	private state: ProgrammingInteractionState = emptyState();
 
@@ -53,9 +54,15 @@ export class ProgrammingInteractionStore {
 
 	readonly getSnapshot = () => this.state;
 
-	reset(showId: string | null, deskId: string | null) {
-		if (showId === this.state.showId && deskId === this.state.deskId) return;
+	reset(showId: string | null, deskId: string | null, authorityKey = "") {
+		if (
+			showId === this.state.showId &&
+			deskId === this.state.deskId &&
+			authorityKey === this.authorityKey
+		)
+			return;
 		this.scope++;
+		this.authorityKey = authorityKey;
 		this.authoritativeCommandLine = null;
 		this.authoritativeSelection = null;
 		this.operations.clear();

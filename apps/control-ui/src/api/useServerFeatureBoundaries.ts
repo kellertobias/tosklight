@@ -32,6 +32,7 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		state.session?.client_id ?? "",
 		state.session?.user.id ?? "",
 	].join("|");
+	const programmingAuthorityKey = showObjectsAuthorityKey;
 	const showObjectsTransport = useMemo(
 		() =>
 			state.session
@@ -121,6 +122,7 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		showObjectsAuthorityKey,
 		playbackTransport,
 		programmingTransport,
+		programmingAuthorityKey,
 		...programmerLifecycle,
 		...programmerValues,
 		...presetRecording,

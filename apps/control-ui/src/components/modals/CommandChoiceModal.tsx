@@ -2,19 +2,16 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button, ModalTitleBar } from "../common";
 import { useCommandLineSurface } from "../control/commandLine/useCommandLineSurface";
+import { useProgrammingPendingCommandChoiceView } from "../../features/programmingInteraction/ProgrammingInteractionView";
 
 export function CommandChoiceModal() {
-  // Choice visibility remains tied to the explicit execute response. The v2 text
-  // projection can infer an ambiguous Cue transfer before the operator presses ENT.
   const commandLine = useCommandLineSurface({ observeCommand: false });
-  const choice = commandLine.pendingChoice;
+  const choice = useProgrammingPendingCommandChoiceView();
   const [executing, setExecuting] = useState<string | null>(null);
-  const [dismissed, setDismissed] = useState<string | null>(null);
   useEffect(() => {
     setExecuting(null);
-    if (!choice) setDismissed(null);
   }, [choice]);
-  if (!choice || choice.command === dismissed) return null;
+  if (!choice) return null;
 
   const select = async (command: string) => {
     setExecuting(command);
@@ -23,9 +20,8 @@ export function CommandChoiceModal() {
   };
 
   const operation = choice.operation === "copy" ? "Copy" : "Move";
-  const cancelLabel = "cancelLabel" in choice ? choice.cancelLabel : choice.cancel_label;
+  const cancelLabel = choice.cancelLabel;
   const cancel = () => {
-    setDismissed(choice.command);
     void commandLine.cancelChoice();
   };
   return createPortal(

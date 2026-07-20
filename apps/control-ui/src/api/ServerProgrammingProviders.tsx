@@ -119,6 +119,7 @@ export function ServerProgrammingProviders({
 								<ProgrammingInteractionViewProvider
 									showId={showId}
 									deskId={state.session?.desk.id ?? null}
+									authorityKey={boundaries.programmingAuthorityKey}
 									store={state.programmingInteractionStore}
 									transport={boundaries.programmingTransport}
 									loadSnapshot={boundaries.loadProgrammingInteractionSnapshot}

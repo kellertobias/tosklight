@@ -95,7 +95,6 @@ export function useCommandLineSurface({
 	);
 	const cancelChoice = useCallback(() => {
 		if (store.getSnapshot().commandLine && actions) {
-			server.dismissCommandChoice();
 			return actions.reset();
 		}
 		server.cancelCommandChoice();
@@ -107,9 +106,6 @@ export function useCommandLineSurface({
 		pristine,
 		selected,
 		selectedGroupId: selectedGroupId(selectionProjection),
-		pendingChoice: projection
-			? projection.pendingChoice
-			: server.pendingCommandChoice,
 		read,
 		replace,
 		reset,

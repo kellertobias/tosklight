@@ -246,6 +246,23 @@ describe("ProgrammingInteractionStore optimism", () => {
 		);
 	});
 
+	it("invalidates authority when the server session changes on the same desk", () => {
+		const store = new ProgrammingInteractionStore();
+		store.reset(SHOW_ID, DESK_ID, "server-session-a");
+		store.installSnapshot(snapshot());
+		const scope = store.captureScope();
+		const token = store.beginOptimisticCommandLine(
+			{ pendingChoice: null, text: "FIXTURE 9" },
+			scope,
+		);
+
+		store.reset(SHOW_ID, DESK_ID, "server-session-b");
+
+		expect(store.isScopeCurrent(scope)).toBe(false);
+		expect(store.commitCommandLine(token, commandLine(2), scope)).toBe(false);
+		expect(store.getSnapshot().commandLine).toBeNull();
+	});
+
 	it("keeps a local command patch over a newer OSC authority", () => {
 		const store = readyStore();
 		const token = store.beginOptimisticCommandLine({

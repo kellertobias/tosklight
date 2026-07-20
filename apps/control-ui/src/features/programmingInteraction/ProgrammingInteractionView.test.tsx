@@ -10,6 +10,7 @@ import type {
 import {
 	ProgrammingInteractionViewProvider,
 	useProgrammingCommandLineView,
+	useProgrammingPendingCommandChoiceView,
 	useProgrammingSelectionActions,
 } from "./ProgrammingInteractionView";
 import { ProgrammingInteractionStore } from "./store";
@@ -76,6 +77,12 @@ function ActionProbe({ onRender }: { onRender: () => void }) {
 	onRender();
 	useCommandLineSurface({ observeCommand: false });
 	return <span>Action surface</span>;
+}
+
+function PendingChoiceProbe({ onRender }: { onRender: () => void }) {
+	onRender();
+	const choice = useProgrammingPendingCommandChoiceView();
+	return <span>{choice?.command ?? "No pending choice"}</span>;
 }
 
 function SelectionActionProbe({
@@ -215,6 +222,60 @@ describe("ProgrammingInteractionViewProvider", () => {
 		);
 
 		expect(onRender).toHaveBeenCalledTimes(renderCount);
+	});
+
+	it("observes pending choice without rerendering for ordinary command edits", async () => {
+		const store = new ProgrammingInteractionStore();
+		const transport = new FakeProgrammingTransport();
+		const onRender = vi.fn();
+		render(
+			<ProgrammingInteractionViewProvider
+				showId={SHOW_ID}
+				deskId={DESK_ID}
+				store={store}
+				transport={transport}
+				loadSnapshot={async () => programmingSnapshot()}
+			>
+				<PendingChoiceProbe onRender={onRender} />
+			</ProgrammingInteractionViewProvider>,
+		);
+		await waitFor(() => expect(transport.subscriptions).toHaveLength(1));
+		await screen.findByText("No pending choice");
+		const renderCount = onRender.mock.calls.length;
+
+		act(() =>
+			transport.emit({
+				type: "event",
+				sequence: 20,
+				correlationId: null,
+				change: commandChange({ revision: 2, text: "FIXTURE 20" }),
+			}),
+		);
+		expect(onRender).toHaveBeenCalledTimes(renderCount);
+
+		const command = "COPY SET 1 CUE 2 AT SET 2 CUE 2";
+		act(() =>
+			transport.emit({
+				type: "event",
+				sequence: 21,
+				correlationId: null,
+				change: {
+					deskId: DESK_ID,
+					commandLine: {
+						...commandLine(3, command),
+						pendingChoice: {
+							type: "cue_move_copy",
+							operation: "copy",
+							command,
+							options: [],
+							cancelLabel: "Cancel",
+						},
+					},
+				},
+			}),
+		);
+		await screen.findByText(command);
+		expect(onRender.mock.calls.length).toBeGreaterThan(renderCount);
 	});
 
 	it("activates selection actions only while their surface is visible", async () => {
