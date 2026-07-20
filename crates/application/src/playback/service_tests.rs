@@ -8,6 +8,9 @@ use std::thread;
 use std::time::Duration;
 use uuid::Uuid;
 
+#[path = "service_tests/event_effects.rs"]
+mod event_effects;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ObservedAction {
     source: ActionSource,
@@ -426,6 +429,19 @@ fn no_change_and_capture_do_not_publish_related_runtime_events() {
 }
 
 #[test]
+fn repeated_direct_cuelist_pause_is_an_accepted_no_change() {
+    let execution = PlaybackExecution::ActiveList {
+        active: Vec::new(),
+        changed: false,
+    };
+
+    assert_eq!(
+        super::service::outcome(&execution),
+        PlaybackOutcome::NoChange
+    );
+}
+
+#[test]
 fn accepted_pending_durability_is_retained_by_idempotent_replay() {
     let service = PlaybackService::default();
     let mut ports = StatefulPorts::changing(8);
@@ -757,6 +773,7 @@ struct StatefulPorts {
     reads: AtomicUsize,
     configured_cause: Option<PlaybackTransitionCause>,
     durability: PlaybackDurability,
+    addressed_event_required: bool,
     selected_playback: Mutex<Option<u16>>,
 }
 
@@ -764,7 +781,8 @@ struct RelatedRuntimePorts {
     projections: Mutex<Vec<PlaybackRuntimeProjection>>,
     related_projection_reads: Mutex<Vec<Vec<PlaybackRuntimeIdentity>>>,
     execution: PlaybackExecution,
-    mutate: bool,
+    mutate_primary: bool,
+    mutate_peer: bool,
     executions: AtomicUsize,
     related_reads: AtomicUsize,
 }
@@ -777,14 +795,26 @@ impl RelatedRuntimePorts {
                 pending: None,
             },
             true,
+            true,
+        )
+    }
+
+    fn peer_only() -> Self {
+        Self::new(
+            PlaybackExecution::Pool {
+                changed: true,
+                pending: None,
+            },
+            false,
+            true,
         )
     }
 
     fn without_mutation(execution: PlaybackExecution) -> Self {
-        Self::new(execution, false)
+        Self::new(execution, false, false)
     }
 
-    fn new(execution: PlaybackExecution, mutate: bool) -> Self {
+    fn new(execution: PlaybackExecution, mutate_primary: bool, mutate_peer: bool) -> Self {
         let mut inactive_peer = cue_projection(7, 1.0);
         set_enabled(&mut inactive_peer, false);
         Self {
@@ -795,7 +825,8 @@ impl RelatedRuntimePorts {
             ]),
             related_projection_reads: Mutex::default(),
             execution,
-            mutate,
+            mutate_primary,
+            mutate_peer,
             executions: AtomicUsize::new(0),
             related_reads: AtomicUsize::new(0),
         }
@@ -803,9 +834,12 @@ impl RelatedRuntimePorts {
 
     fn mutate_related_runtime(&self) {
         let mut projections = self.projections.lock();
-        let primary = find_projection_mut(&mut projections, 8);
-        *primary = cue_projection(8, 2.0);
-        set_enabled(find_projection_mut(&mut projections, 6), false);
+        if self.mutate_primary {
+            *find_projection_mut(&mut projections, 8) = cue_projection(8, 2.0);
+        }
+        if self.mutate_peer {
+            set_enabled(find_projection_mut(&mut projections, 6), false);
+        }
     }
 
     fn projections_for(
@@ -843,7 +877,7 @@ impl PlaybackPorts for RelatedRuntimePorts {
         _surface: PlaybackSurface,
     ) -> Result<PlaybackExecution, ActionError> {
         self.executions.fetch_add(1, Ordering::Relaxed);
-        if self.mutate {
+        if self.mutate_primary || self.mutate_peer {
             self.mutate_related_runtime();
         }
         Ok(self.execution.clone())
@@ -906,6 +940,7 @@ impl StatefulPorts {
             reads: AtomicUsize::new(0),
             configured_cause: None,
             durability: PlaybackDurability::Durable,
+            addressed_event_required: false,
             selected_playback: Mutex::new(None),
         }
     }
@@ -919,6 +954,7 @@ impl StatefulPorts {
             reads: AtomicUsize::new(0),
             configured_cause: None,
             durability: PlaybackDurability::Durable,
+            addressed_event_required: false,
             selected_playback: Mutex::new(None),
         }
     }
@@ -952,6 +988,10 @@ impl PlaybackPorts for StatefulPorts {
 
     fn durability(&self) -> PlaybackDurability {
         self.durability
+    }
+
+    fn addressed_runtime_event_required(&self) -> bool {
+        self.addressed_event_required
     }
 
     fn transition_cause(

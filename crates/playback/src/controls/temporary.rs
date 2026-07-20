@@ -39,76 +39,152 @@ impl PlaybackEngine {
     }
 
     pub fn toggle_temp(&mut self, number: u16) -> Result<bool, String> {
+        self.toggle_temp_mutation(number)
+            .map(|mutation| mutation.value)
+    }
+
+    pub fn toggle_temp_mutation(&mut self, number: u16) -> Result<PlaybackMutation<bool>, String> {
         let key = (number, TemporaryPlaybackKind::TempButton);
         if self.temporary.remove(&key).is_some() {
-            return Ok(false);
+            return Ok(PlaybackMutation::new(
+                false,
+                PlaybackRuntimeEffect::Transient,
+            ));
         }
         let playback = self.temporary_playback(number, 1.0, false)?;
         self.temporary.insert(key, playback);
-        Ok(true)
+        Ok(PlaybackMutation::new(
+            true,
+            PlaybackRuntimeEffect::Transient,
+        ))
     }
 
     pub fn set_temp_button(&mut self, number: u16, active: bool) -> Result<(), String> {
+        self.set_temp_button_mutation(number, active).map(|_| ())
+    }
+
+    pub fn set_temp_button_mutation(
+        &mut self,
+        number: u16,
+        active: bool,
+    ) -> Result<PlaybackMutation<()>, String> {
         let key = (number, TemporaryPlaybackKind::TempButton);
         if active {
-            if !self.temporary.contains_key(&key) {
-                let playback = self.temporary_playback(number, 1.0, false)?;
-                self.temporary.insert(key, playback);
+            if self.temporary.contains_key(&key) {
+                return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::None));
             }
+            let playback = self.temporary_playback(number, 1.0, false)?;
+            self.temporary.insert(key, playback);
         } else {
             self.cue_list_for(number)?;
-            self.temporary.remove(&key);
+            if self.temporary.remove(&key).is_none() {
+                return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::None));
+            }
         }
-        Ok(())
+        Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::Transient))
     }
 
     pub fn set_temp_fader(&mut self, number: u16, value: f32) -> Result<(), String> {
+        self.set_temp_fader_mutation(number, value).map(|_| ())
+    }
+
+    pub fn set_temp_fader_mutation(
+        &mut self,
+        number: u16,
+        value: f32,
+    ) -> Result<PlaybackMutation<()>, String> {
         if !value.is_finite() || !(0.0..=1.0).contains(&value) {
             return Err("playback Temp fader must be within 0-1".into());
         }
         let key = (number, TemporaryPlaybackKind::TempFader);
         if value == 0.0 {
-            self.temporary.remove(&key);
-            return Ok(());
+            let effect = if self.temporary.remove(&key).is_some() {
+                PlaybackRuntimeEffect::Transient
+            } else {
+                PlaybackRuntimeEffect::None
+            };
+            return Ok(PlaybackMutation::new((), effect));
         }
         if let Some(playback) = self.temporary.get_mut(&key) {
+            if playback.master == value && playback.fader_position == value {
+                return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::None));
+            }
             playback.master = value;
             playback.fader_position = value;
         } else {
             let playback = self.temporary_playback(number, value, false)?;
             self.temporary.insert(key, playback);
         }
-        Ok(())
+        Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::Transient))
     }
 
     pub fn set_swap(&mut self, number: u16, pressed: bool) -> Result<(), String> {
+        self.set_swap_mutation(number, pressed).map(|_| ())
+    }
+
+    pub fn set_swap_mutation(
+        &mut self,
+        number: u16,
+        pressed: bool,
+    ) -> Result<PlaybackMutation<()>, String> {
         self.cue_list_for(number)?;
         let key = (number, TemporaryPlaybackKind::Swap);
         if pressed {
-            let playback = self.temporary_playback(number, 1.0, true)?;
-            self.temporary.insert(key, playback);
-            self.swap_held.insert(number);
-        } else {
-            let released = self.temporary.remove(&key);
-            self.swap_held.remove(&number);
-            if self.definitions[&number].flash_release == FlashReleaseMode::ReleaseIntensityOnly
-                && let Some(mut released) = released
-            {
-                let active = self
-                    .active
-                    .entry(PlaybackKey::Number(number))
-                    .or_insert_with(|| {
-                        released.temporary = false;
-                        released.flash = false;
-                        released
-                    });
-                active.enabled = true;
-                active.master = 0.0;
-                active.temporary = false;
-                active.flash = false;
+            let mut changed = self.swap_held.insert(number);
+            if !self.temporary.contains_key(&key) {
+                let playback = self.temporary_playback(number, 1.0, true)?;
+                self.temporary.insert(key, playback);
+                changed = true;
             }
+            let effect = if changed {
+                PlaybackRuntimeEffect::Transient
+            } else {
+                PlaybackRuntimeEffect::None
+            };
+            return Ok(PlaybackMutation::new((), effect));
         }
-        Ok(())
+        let released = self.temporary.remove(&key);
+        let changed = self.swap_held.remove(&number) || released.is_some();
+        if !changed {
+            return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::None));
+        }
+        let promoted = self.definitions[&number].flash_release
+            == FlashReleaseMode::ReleaseIntensityOnly
+            && released
+                .is_some_and(|released| self.promote_intensity_release(number, released, false));
+        let effect = PlaybackRuntimeEffect::Transient.combine(if promoted {
+            PlaybackRuntimeEffect::Durable
+        } else {
+            PlaybackRuntimeEffect::None
+        });
+        Ok(PlaybackMutation::new((), effect))
+    }
+
+    pub(crate) fn promote_intensity_release(
+        &mut self,
+        number: u16,
+        mut released: ActivePlayback,
+        clear_restore_off: bool,
+    ) -> bool {
+        let key = PlaybackKey::Number(number);
+        let inserted = !self.active.contains_key(&key);
+        released.temporary = false;
+        released.flash = false;
+        let active = self.active.entry(key).or_insert(released);
+        let changed = inserted
+            || !active.enabled
+            || active.master != 0.0
+            || active.temporary
+            || active.flash
+            || (clear_restore_off && active.flash_restore_off);
+        active.enabled = true;
+        active.master = 0.0;
+        active.temporary = false;
+        active.flash = false;
+        if clear_restore_off {
+            active.flash_restore_off = false;
+        }
+        changed
     }
     pub fn button(&mut self, number: u16, button: u8, pressed: bool) -> Result<(), String> {
         let action = *self

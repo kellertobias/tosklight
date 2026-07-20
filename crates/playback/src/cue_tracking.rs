@@ -281,26 +281,43 @@ impl PlaybackEngine {
         Ok(playback)
     }
     pub fn pause(&mut self, id: CueListId) -> Result<(), String> {
-        self.pause_at(id, self.clock.now())
+        self.pause_mutation(id).map(|_| ())
+    }
+    pub fn pause_mutation(&mut self, id: CueListId) -> Result<PlaybackMutation<()>, String> {
+        self.pause_at_mutation(id, self.clock.now())
     }
     pub fn pause_playback(&mut self, number: u16) -> Result<(), String> {
+        self.pause_playback_mutation(number).map(|_| ())
+    }
+    pub fn pause_playback_mutation(&mut self, number: u16) -> Result<PlaybackMutation<()>, String> {
         let now = self.clock.now();
         let key = PlaybackKey::Number(number);
-        let playback = self.active.get_mut(&key).ok_or("playback is not active")?;
-        if !playback.paused {
-            playback.paused = true;
-            playback.paused_at = Some(now);
-        }
-        Ok(())
+        self.pause_key_at_mutation(key, now, "playback is not active")
     }
     pub fn pause_at(&mut self, id: CueListId, now: DateTime<Utc>) -> Result<(), String> {
+        self.pause_at_mutation(id, now).map(|_| ())
+    }
+    pub fn pause_at_mutation(
+        &mut self,
+        id: CueListId,
+        now: DateTime<Utc>,
+    ) -> Result<PlaybackMutation<()>, String> {
         let key = self.key_for_cue_list(id)?;
-        let playback = self.active.get_mut(&key).ok_or("cue list is not active")?;
-        if !playback.paused {
-            playback.paused = true;
-            playback.paused_at = Some(now);
+        self.pause_key_at_mutation(key, now, "cue list is not active")
+    }
+    fn pause_key_at_mutation(
+        &mut self,
+        key: PlaybackKey,
+        now: DateTime<Utc>,
+        inactive_error: &'static str,
+    ) -> Result<PlaybackMutation<()>, String> {
+        let playback = self.active.get_mut(&key).ok_or(inactive_error)?;
+        if playback.paused {
+            return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::None));
         }
-        Ok(())
+        playback.paused = true;
+        playback.paused_at = Some(now);
+        Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::Durable))
     }
     pub fn release(&mut self, id: CueListId) -> bool {
         self.key_for_cue_list(id)
@@ -319,5 +336,8 @@ impl PlaybackEngine {
         let mut runtime = self.active.values().cloned().collect::<Vec<_>>();
         runtime.sort_by_key(|playback| playback.playback_number.unwrap_or(u16::MAX));
         runtime
+    }
+    pub fn playback_runtime(&self, number: u16) -> Option<&ActivePlayback> {
+        self.active.get(&PlaybackKey::Number(number))
     }
 }

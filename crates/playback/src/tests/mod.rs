@@ -66,5 +66,6 @@ mod controls;
 mod cue_recording;
 mod cue_tracking;
 mod master;
+mod mutation;
 mod runtime;
 mod scheduling;

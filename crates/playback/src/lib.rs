@@ -19,6 +19,7 @@ pub use automatic::{
     AutomaticPlaybackTransition, AutomaticPlaybackTransitionCause, PlaybackCueReference,
     PlaybackTickResult,
 };
+pub use controls::{PlaybackMutation, PlaybackRuntimeEffect};
 pub use cue_recording::{
     CueListRecordingPlan, CueRecordOperation, CueRecordingContent, CueRecordingPlanError,
     CueRecordingTiming,

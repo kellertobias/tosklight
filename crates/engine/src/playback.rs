@@ -1,11 +1,14 @@
 use crate::{
-    Engine, RuntimeGeneration,
+    Engine,
     playback_exclusion::{PoolPlaybackTransition, apply_with_exclusions},
 };
 use chrono::{DateTime, Utc};
 use light_core::CueListId;
-use light_playback::{ActivePlayback, PlaybackContribution, PlaybackEngine, PlaybackRuntimeStatus};
-use std::{collections::HashSet, sync::Arc};
+use light_playback::{
+    ActivePlayback, PlaybackContribution, PlaybackEngine, PlaybackMutation, PlaybackRuntimeEffect,
+    PlaybackRuntimeStatus,
+};
+use std::collections::HashSet;
 
 /// A mutation accepted by the Engine's Playback boundary.
 ///
@@ -60,11 +63,57 @@ pub enum PoolPlaybackAction {
     SetSwap(bool),
 }
 
+/// The exact consequence of one accepted Playback action.
+///
+/// `addressed` belongs to the Playback named by the command. `aggregate` also includes automatic
+/// changes to related Playbacks, such as auto-off or exclusion releases.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct EnginePlaybackEffect {
+    pub addressed: PlaybackRuntimeEffect,
+    pub aggregate: PlaybackRuntimeEffect,
+}
+
+impl EnginePlaybackEffect {
+    pub const fn from_addressed(effect: PlaybackRuntimeEffect) -> Self {
+        Self {
+            addressed: effect,
+            aggregate: effect,
+        }
+    }
+
+    pub const fn with_related(self, related: PlaybackRuntimeEffect) -> Self {
+        Self {
+            addressed: self.addressed,
+            aggregate: self.aggregate.combine(related),
+        }
+    }
+
+    pub const fn changed(self) -> bool {
+        self.aggregate.changed()
+    }
+
+    pub const fn durable(self) -> bool {
+        self.aggregate.durable()
+    }
+}
+
+impl<T> From<PlaybackMutation<T>> for EnginePlaybackEffect {
+    fn from(mutation: PlaybackMutation<T>) -> Self {
+        Self {
+            addressed: mutation.addressed_effect,
+            aggregate: mutation.effect,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum EnginePlaybackOutcome {
     Active(Box<ActivePlayback>),
-    ActiveList(Vec<ActivePlayback>),
-    Changed(bool),
+    ActiveList {
+        active: Vec<ActivePlayback>,
+        effect: PlaybackRuntimeEffect,
+    },
+    Changed(EnginePlaybackEffect),
     ChangedPlaybacks(Vec<u16>),
     DynamicsPaused(bool),
     Applied,
@@ -75,43 +124,6 @@ pub enum EnginePlaybackOutcome {
 pub struct PlaybackDynamicsProjection {
     pub paused: bool,
     pub paused_since: Option<DateTime<Utc>>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PlaybackBatchAction {
-    Toggle,
-    Go,
-    Back,
-    Off,
-    On,
-    SetTempButton(bool),
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PlaybackBatchCommand {
-    pub number: u16,
-    pub action: PlaybackBatchAction,
-    pub exclusion_zones: Vec<Vec<u16>>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PlaybackBatchOutcome {
-    pub number: u16,
-    pub released_playbacks: Vec<u16>,
-}
-
-/// A validated, isolated Playback batch tied to the Engine generation it was prepared from.
-#[must_use = "a prepared Playback batch must be installed to affect live output"]
-pub struct PreparedPlaybackBatch {
-    generation: Arc<RuntimeGeneration>,
-    playback: PlaybackEngine,
-    outcomes: Vec<PlaybackBatchOutcome>,
-}
-
-impl PreparedPlaybackBatch {
-    pub fn outcomes(&self) -> &[PlaybackBatchOutcome] {
-        &self.outcomes
-    }
 }
 
 impl Engine {
@@ -140,6 +152,7 @@ impl Engine {
             exclusion_zones,
             |playback| execute_pool(playback, number, action),
         )?;
+        let outcome = combine_release_effect(outcome, &released_playbacks)?;
         Ok(PoolPlaybackTransition {
             outcome,
             released_playbacks,
@@ -173,42 +186,6 @@ impl Engine {
             paused: playback.dynamics_paused(),
             paused_since: playback.dynamics_paused_since(),
         }
-    }
-
-    pub fn prepare_playback_batch(
-        &self,
-        commands: &[PlaybackBatchCommand],
-        started_at: DateTime<Utc>,
-        fallback_millis: u64,
-    ) -> Result<PreparedPlaybackBatch, String> {
-        let generation = self.generation.load_full();
-        let mut playback = generation.playback().read().clone();
-        let mut outcomes = Vec::with_capacity(commands.len());
-        for command in commands {
-            outcomes.push(apply_batch_command(
-                &mut playback,
-                command,
-                started_at,
-                fallback_millis,
-            )?);
-        }
-        Ok(PreparedPlaybackBatch {
-            generation,
-            playback,
-            outcomes,
-        })
-    }
-
-    pub fn install_prepared_playback_batch(
-        &self,
-        prepared: PreparedPlaybackBatch,
-    ) -> Result<(), String> {
-        let current = self.generation.load_full();
-        if !Arc::ptr_eq(&current, &prepared.generation) {
-            return Err("the compiled show changed while Playback was being prepared".into());
-        }
-        *prepared.generation.playback().write() = prepared.playback;
-        Ok(())
     }
 }
 
@@ -278,10 +255,15 @@ fn execute_cue_list(
             .map(Box::new)
             .map(EnginePlaybackOutcome::Active),
         CueListPlaybackAction::Pause => {
-            playback.pause(id)?;
-            Ok(EnginePlaybackOutcome::ActiveList(playback.active()))
+            let effect = playback.pause_mutation(id)?.effect;
+            Ok(EnginePlaybackOutcome::ActiveList {
+                active: playback.active(),
+                effect,
+            })
         }
-        CueListPlaybackAction::Release => Ok(EnginePlaybackOutcome::Changed(playback.release(id))),
+        CueListPlaybackAction::Release => Ok(EnginePlaybackOutcome::Changed(addressed_effect(
+            durable_effect(playback.release(id)),
+        ))),
     }
 }
 
@@ -290,110 +272,84 @@ fn execute_pool(
     number: u16,
     action: PoolPlaybackAction,
 ) -> Result<EnginePlaybackOutcome, String> {
-    let changed = match action {
-        PoolPlaybackAction::Go => playback.go_playback(number).map(|_| true)?,
-        PoolPlaybackAction::Back => playback.back_playback(number).map(|_| true)?,
-        PoolPlaybackAction::Pause => playback.pause_playback(number).map(|()| true)?,
+    let effects = match action {
+        PoolPlaybackAction::Go => playback
+            .go_playback(number)
+            .map(|_| addressed_effect(PlaybackRuntimeEffect::Durable))?,
+        PoolPlaybackAction::Back => playback
+            .back_playback(number)
+            .map(|_| addressed_effect(PlaybackRuntimeEffect::Durable))?,
+        PoolPlaybackAction::Pause => playback.pause_playback_mutation(number)?.into(),
         PoolPlaybackAction::TogglePause => toggle_pause(playback, number)?,
-        PoolPlaybackAction::FastForward => playback.fast_forward_playback(number).map(|_| true)?,
-        PoolPlaybackAction::FastRewind => playback.fast_rewind_playback(number).map(|_| true)?,
-        PoolPlaybackAction::On => playback.on(number).map(|()| true)?,
-        PoolPlaybackAction::Off => playback.off(number)?,
-        // `PlaybackEngine::toggle` returns the resulting enabled state, not whether the
-        // operation changed. A valid toggle always performs one semantic transition.
-        PoolPlaybackAction::Toggle => playback.toggle(number).map(|_| true)?,
-        PoolPlaybackAction::GoTo(cue) => playback.goto_playback(number, cue).map(|_| true)?,
-        PoolPlaybackAction::Load(cue) => playback.load_playback(number, cue).map(|_| true)?,
-        PoolPlaybackAction::SetMaster(value) => {
-            playback.set_master(number, value).map(|()| true)?
-        }
+        PoolPlaybackAction::FastForward => playback
+            .fast_forward_playback(number)
+            .map(|_| addressed_effect(PlaybackRuntimeEffect::Durable))?,
+        PoolPlaybackAction::FastRewind => playback
+            .fast_rewind_playback(number)
+            .map(|_| addressed_effect(PlaybackRuntimeEffect::Durable))?,
+        PoolPlaybackAction::On => playback.on_mutation(number)?.into(),
+        PoolPlaybackAction::Off => playback.off_mutation(number)?.into(),
+        PoolPlaybackAction::Toggle => playback.toggle_mutation(number)?.into(),
+        PoolPlaybackAction::GoTo(cue) => playback.goto_playback_mutation(number, cue)?.into(),
+        PoolPlaybackAction::Load(cue) => playback.load_playback_mutation(number, cue)?.into(),
+        PoolPlaybackAction::SetMaster(value) => playback.set_master_mutation(number, value)?.into(),
         PoolPlaybackAction::SetVirtualMaster(value) => {
-            playback.set_virtual_master(number, value).map(|()| true)?
+            playback.set_virtual_master_mutation(number, value)?.into()
         }
         PoolPlaybackAction::SetManualXFade(value) => {
-            playback.set_manual_xfade(number, value).map(|()| true)?
+            playback.set_manual_xfade_mutation(number, value)?.into()
         }
-        PoolPlaybackAction::XFade(on) => playback.xfade(number, on).map(|()| true)?,
+        PoolPlaybackAction::XFade(on) => playback.xfade_mutation(number, on)?.into(),
         PoolPlaybackAction::SetTempButton(active) => {
-            playback.set_temp_button(number, active).map(|()| true)?
+            playback.set_temp_button_mutation(number, active)?.into()
         }
-        PoolPlaybackAction::ToggleTemp => playback.toggle_temp(number).map(|_| true)?,
+        PoolPlaybackAction::ToggleTemp => playback.toggle_temp_mutation(number)?.into(),
         PoolPlaybackAction::SetFlash(pressed) => {
-            playback.set_flash(number, pressed).map(|()| true)?
+            playback.set_flash_mutation(number, pressed)?.into()
         }
-        PoolPlaybackAction::SetSwap(pressed) => {
-            playback.set_swap(number, pressed).map(|()| true)?
-        }
+        PoolPlaybackAction::SetSwap(pressed) => playback.set_swap_mutation(number, pressed)?.into(),
     };
-    Ok(EnginePlaybackOutcome::Changed(changed))
+    Ok(EnginePlaybackOutcome::Changed(effects))
 }
 
-fn toggle_pause(playback: &mut PlaybackEngine, number: u16) -> Result<bool, String> {
+fn toggle_pause(
+    playback: &mut PlaybackEngine,
+    number: u16,
+) -> Result<EnginePlaybackEffect, String> {
     let paused = playback
-        .runtime()
-        .iter()
-        .any(|runtime| runtime.playback_number == Some(number) && runtime.paused);
+        .playback_runtime(number)
+        .is_some_and(|runtime| runtime.paused);
     if paused {
-        playback.go_playback(number).map(|_| true)
+        playback
+            .go_playback(number)
+            .map(|_| addressed_effect(PlaybackRuntimeEffect::Durable))
     } else {
-        playback.pause_playback(number).map(|()| true)
+        playback
+            .pause_playback_mutation(number)
+            .map(EnginePlaybackEffect::from)
     }
 }
 
-fn apply_batch_command(
-    playback: &mut PlaybackEngine,
-    command: &PlaybackBatchCommand,
-    started_at: DateTime<Utc>,
-    fallback_millis: u64,
-) -> Result<PlaybackBatchOutcome, String> {
-    let previous = playback
-        .runtime()
-        .into_iter()
-        .find(|runtime| runtime.playback_number == Some(command.number))
-        .map(|runtime| (runtime.enabled, runtime.master));
-    let (_, released_playbacks) = apply_with_exclusions(
-        playback,
-        command.number,
-        &command.exclusion_zones,
-        |playback| apply_batch_action(playback, command),
-    )?;
-    playback.apply_preload_timing(
-        command.number,
-        batch_action_name(command.action),
-        started_at,
-        fallback_millis,
-        previous,
-    )?;
-    Ok(PlaybackBatchOutcome {
-        number: command.number,
-        released_playbacks,
-    })
+pub(crate) fn combine_release_effect(
+    outcome: EnginePlaybackOutcome,
+    released: &[u16],
+) -> Result<EnginePlaybackOutcome, String> {
+    let EnginePlaybackOutcome::Changed(effects) = outcome else {
+        return Err("unexpected pool Playback outcome".into());
+    };
+    Ok(EnginePlaybackOutcome::Changed(
+        effects.with_related(durable_effect(!released.is_empty())),
+    ))
 }
 
-fn apply_batch_action(
-    playback: &mut PlaybackEngine,
-    command: &PlaybackBatchCommand,
-) -> Result<(), String> {
-    match command.action {
-        PlaybackBatchAction::Toggle => playback.toggle(command.number).map(|_| ()),
-        PlaybackBatchAction::Go => playback.go_playback(command.number).map(|_| ()),
-        PlaybackBatchAction::Back => playback.back_playback(command.number).map(|_| ()),
-        PlaybackBatchAction::Off => playback.off(command.number).map(|_| ()),
-        PlaybackBatchAction::On => playback.on(command.number),
-        PlaybackBatchAction::SetTempButton(active) => {
-            playback.set_temp_button(command.number, active)
-        }
-    }
+pub(crate) const fn addressed_effect(effect: PlaybackRuntimeEffect) -> EnginePlaybackEffect {
+    EnginePlaybackEffect::from_addressed(effect)
 }
 
-const fn batch_action_name(action: PlaybackBatchAction) -> &'static str {
-    match action {
-        PlaybackBatchAction::Toggle => "toggle",
-        PlaybackBatchAction::Go => "go",
-        PlaybackBatchAction::Back => "go-minus",
-        PlaybackBatchAction::Off => "off",
-        PlaybackBatchAction::On => "on",
-        PlaybackBatchAction::SetTempButton(true) => "temp-on",
-        PlaybackBatchAction::SetTempButton(false) => "temp-off",
+const fn durable_effect(changed: bool) -> PlaybackRuntimeEffect {
+    if changed {
+        PlaybackRuntimeEffect::Durable
+    } else {
+        PlaybackRuntimeEffect::None
     }
 }

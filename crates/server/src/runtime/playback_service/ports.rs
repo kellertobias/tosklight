@@ -8,6 +8,7 @@ pub(super) struct ServerPlaybackPorts<'a> {
     pub(super) session: Option<&'a Session>,
     pub(super) desk: Option<&'a ControlDesk>,
     pub(super) persistence_pending: std::sync::atomic::AtomicBool,
+    addressed_event_required: std::sync::atomic::AtomicBool,
     exclusion_zones: std::sync::OnceLock<CachedExclusionZones>,
 }
 
@@ -27,6 +28,7 @@ impl<'a> ServerPlaybackPorts<'a> {
             session,
             desk,
             persistence_pending: std::sync::atomic::AtomicBool::new(false),
+            addressed_event_required: std::sync::atomic::AtomicBool::new(false),
             exclusion_zones: std::sync::OnceLock::new(),
         }
     }
@@ -107,6 +109,11 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
         } else {
             PlaybackDurability::Durable
         }
+    }
+
+    fn addressed_runtime_event_required(&self) -> bool {
+        self.addressed_event_required
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     fn transition_cause(
@@ -264,13 +271,22 @@ impl ServerPlaybackPorts<'_> {
                 action: command,
             })
             .map_err(invalid)?;
-        let execution = match outcome {
-            EnginePlaybackOutcome::Active(active) => PlaybackExecution::Active(active),
-            EnginePlaybackOutcome::ActiveList(active) => PlaybackExecution::ActiveList(active),
-            EnginePlaybackOutcome::Changed(released) => PlaybackExecution::Released(released),
+        let (execution, durable) = match outcome {
+            EnginePlaybackOutcome::Active(active) => (PlaybackExecution::Active(active), true),
+            EnginePlaybackOutcome::ActiveList { active, effect } => (
+                PlaybackExecution::ActiveList {
+                    active,
+                    changed: effect.changed(),
+                },
+                effect.durable(),
+            ),
+            EnginePlaybackOutcome::Changed(effect) => (
+                PlaybackExecution::Released(effect.changed()),
+                effect.durable(),
+            ),
             _ => return Err(invalid("unexpected cue-list Playback outcome")),
         };
-        if let Err(error) = persist_active_playbacks(self.state) {
+        if durable && let Err(error) = persist_active_playbacks(self.state) {
             self.mark_persistence_pending(context, "active_playbacks", error);
         }
         Ok(execution)
@@ -321,6 +337,10 @@ impl ServerPlaybackPorts<'_> {
         .map_err(api_action_error)?;
         if dispatch.persistence_pending {
             self.persistence_pending
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        if dispatch.addressed_event_required {
+            self.addressed_event_required
                 .store(true, std::sync::atomic::Ordering::Relaxed);
         }
         Ok(PlaybackExecution::Pool {

@@ -257,6 +257,85 @@ async fn v2_auto_off_publishes_related_release_before_primary_high_water() {
 }
 
 #[tokio::test]
+async fn v2_peer_only_auto_off_change_does_not_emit_an_equal_primary_event() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let desk_id = session_desk_id(&state, &token);
+    open_playback_test_show(&app, &token).await;
+    install_auto_off_test_state(&state);
+    update_virtual_definition(&state, 1, |definition| definition.auto_off = false);
+    set_pool_enabled(&state, 1, true);
+    std::thread::sleep(std::time::Duration::from_millis(2));
+    set_pool_enabled(&state, 2, true);
+    update_virtual_definition(&state, 1, |definition| definition.auto_off = true);
+    let cursor = state.application_events.latest_sequence();
+    let request = action_request(
+        "repeat-covering-playback",
+        2,
+        serde_json::json!({"type":"on","pressed":true}),
+    );
+
+    let response = json(post_action(&app, Some(&token), desk_id, request.clone()).await).await;
+
+    assert_eq!(response["outcome"]["status"], "applied");
+    assert_eq!(response["related"].as_array().unwrap().len(), 1);
+    assert_eq!(playback_event_objects(&state, cursor), vec![1]);
+    assert_eq!(response["related"][0]["event_sequence"], cursor + 1);
+    assert_eq!(response["event_sequence"], cursor + 1);
+    assert_eq!(enabled_playback_numbers(&state), vec![2]);
+    let replay_cursor = state.application_events.latest_sequence();
+    let replay = json(post_action(&app, Some(&token), desk_id, request).await).await;
+    assert_eq!(replay["replayed"], true);
+    assert!(playback_runtime_events(&state, replay_cursor).is_empty());
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn v2_timed_crossfade_retrigger_emits_one_equal_projection_event() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let desk_id = session_desk_id(&state, &token);
+    open_playback_test_show(&app, &token).await;
+    install_virtual_exclusion_test_state(&state);
+    update_virtual_definition(&state, 1, |definition| definition.xfade_millis = 1_000);
+    let first = json(
+        post_action(
+            &app,
+            Some(&token),
+            desk_id,
+            action_request(
+                "start-timed-crossfade",
+                1,
+                serde_json::json!({"type":"crossfade","enabled":true}),
+            ),
+        )
+        .await,
+    )
+    .await;
+    let cursor = state.application_events.latest_sequence();
+    let request = action_request(
+        "retrigger-timed-crossfade",
+        1,
+        serde_json::json!({"type":"crossfade","enabled":true}),
+    );
+
+    let response = json(post_action(&app, Some(&token), desk_id, request.clone()).await).await;
+
+    assert_eq!(response["outcome"]["status"], "applied");
+    assert_eq!(response["projection"], first["projection"]);
+    assert_eq!(response["related"], serde_json::json!([]));
+    assert_eq!(response["event_sequence"], cursor + 1);
+    assert_eq!(playback_event_objects(&state, cursor), vec![1]);
+    let replay_cursor = state.application_events.latest_sequence();
+    let replay = json(post_action(&app, Some(&token), desk_id, request).await).await;
+    assert_eq!(replay["replayed"], true);
+    assert!(playback_runtime_events(&state, replay_cursor).is_empty());
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn v2_crossfade_activation_uses_the_same_atomic_exclusion_transition_set() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
@@ -739,6 +818,218 @@ async fn v2_playback_rejects_forged_sources_control_ids_and_no_change_emits_noth
 }
 
 #[tokio::test]
+async fn v2_explicit_playback_states_report_exact_repeat_no_changes() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let desk_id = session_desk_id(&state, &token);
+    open_playback_test_show(&app, &token).await;
+    install_playback_test_state(&state);
+
+    for (name, action) in [
+        ("on", serde_json::json!({"type":"on","pressed":true})),
+        ("master", serde_json::json!({"type":"master","value":0.5})),
+        ("load", serde_json::json!({"type":"load","cue_number":1.0})),
+        (
+            "temporary",
+            serde_json::json!({"type":"temporary","enabled":true,"pressed":true}),
+        ),
+        (
+            "crossfade",
+            serde_json::json!({"type":"crossfade","enabled":true}),
+        ),
+    ] {
+        assert_repeat_is_no_change(&app, &state, &token, desk_id, name, action).await;
+    }
+    assert_action_is_no_change(
+        &app,
+        &state,
+        &token,
+        desk_id,
+        "same-group-master",
+        2,
+        serde_json::json!({"type":"master","value":0.75}),
+    )
+    .await;
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn v2_playback_actions_persist_only_their_owned_runtime_domain() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let desk_id = session_desk_id(&state, &token);
+    open_playback_test_show(&app, &token).await;
+    install_playback_test_state(&state);
+    let show_id = state.active_show.read().as_ref().unwrap().id;
+    let active_key = active_playbacks_setting(show_id);
+    let output_key = output_runtime_setting(show_id);
+
+    set_runtime_sentinels(&state, &active_key, &output_key);
+    assert_action_is_no_change(
+        &app,
+        &state,
+        &token,
+        desk_id,
+        "same-group-master-domain",
+        2,
+        serde_json::json!({"type":"master","value":0.75}),
+    )
+    .await;
+    assert_runtime_sentinels(&state, &active_key, &output_key);
+
+    let flash = post_action(
+        &app,
+        Some(&token),
+        desk_id,
+        action_request(
+            "group-flash-domain",
+            2,
+            serde_json::json!({"type":"flash","pressed":true}),
+        ),
+    )
+    .await;
+    assert_eq!(flash.status(), StatusCode::OK);
+    assert_runtime_sentinels(&state, &active_key, &output_key);
+
+    let group_master = post_action(
+        &app,
+        Some(&token),
+        desk_id,
+        action_request(
+            "changed-group-master-domain",
+            2,
+            serde_json::json!({"type":"master","value":0.5}),
+        ),
+    )
+    .await;
+    assert_eq!(group_master.status(), StatusCode::OK);
+    assert_eq!(setting_value(&state, &active_key), "active-sentinel");
+    assert_ne!(setting_value(&state, &output_key), "output-sentinel");
+
+    state
+        .desk
+        .lock()
+        .set_setting(&output_key, "output-sentinel")
+        .unwrap();
+    let on = post_action(
+        &app,
+        Some(&token),
+        desk_id,
+        action_request(
+            "changed-cuelist-domain",
+            1,
+            serde_json::json!({"type":"on","pressed":true}),
+        ),
+    )
+    .await;
+    assert_eq!(on.status(), StatusCode::OK);
+    assert_ne!(setting_value(&state, &active_key), "active-sentinel");
+    assert_eq!(setting_value(&state, &output_key), "output-sentinel");
+
+    set_runtime_sentinels(&state, &active_key, &output_key);
+    assert_action_is_no_change(
+        &app,
+        &state,
+        &token,
+        desk_id,
+        "repeat-on-domain",
+        1,
+        serde_json::json!({"type":"on","pressed":true}),
+    )
+    .await;
+    assert_runtime_sentinels(&state, &active_key, &output_key);
+
+    let temporary = post_action(
+        &app,
+        Some(&token),
+        desk_id,
+        action_request(
+            "temporary-hold-domain",
+            1,
+            serde_json::json!({"type":"temporary","enabled":true,"pressed":true}),
+        ),
+    )
+    .await;
+    assert_eq!(temporary.status(), StatusCode::OK);
+    assert_runtime_sentinels(&state, &active_key, &output_key);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+fn set_runtime_sentinels(state: &AppState, active_key: &str, output_key: &str) {
+    let store = state.desk.lock();
+    store.set_setting(active_key, "active-sentinel").unwrap();
+    store.set_setting(output_key, "output-sentinel").unwrap();
+}
+
+fn assert_runtime_sentinels(state: &AppState, active_key: &str, output_key: &str) {
+    assert_eq!(setting_value(state, active_key), "active-sentinel");
+    assert_eq!(setting_value(state, output_key), "output-sentinel");
+}
+
+fn setting_value(state: &AppState, key: &str) -> String {
+    state.desk.lock().setting(key).unwrap().unwrap()
+}
+
+async fn assert_repeat_is_no_change(
+    app: &Router,
+    state: &AppState,
+    token: &str,
+    desk_id: Uuid,
+    name: &str,
+    action: serde_json::Value,
+) {
+    let first = post_action(
+        app,
+        Some(token),
+        desk_id,
+        action_request(&format!("first-{name}"), 1, action.clone()),
+    )
+    .await;
+    assert_eq!(first.status(), StatusCode::OK);
+    assert_eq!(json(first).await["outcome"]["status"], "applied");
+    let cursor = state.application_events.latest_sequence();
+
+    let repeated = post_action(
+        app,
+        Some(token),
+        desk_id,
+        action_request(&format!("repeat-{name}"), 1, action),
+    )
+    .await;
+    assert_eq!(repeated.status(), StatusCode::OK);
+    let repeated = json(repeated).await;
+    assert_eq!(repeated["outcome"]["status"], "no_change", "{name}");
+    assert!(repeated["event_sequence"].is_null(), "{name}");
+    assert_eq!(state.application_events.latest_sequence(), cursor, "{name}");
+}
+
+async fn assert_action_is_no_change(
+    app: &Router,
+    state: &AppState,
+    token: &str,
+    desk_id: Uuid,
+    name: &str,
+    playback_number: u16,
+    action: serde_json::Value,
+) {
+    let cursor = state.application_events.latest_sequence();
+    let response = post_action(
+        app,
+        Some(token),
+        desk_id,
+        action_request(name, playback_number, action),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = json(response).await;
+    assert_eq!(response["outcome"]["status"], "no_change", "{name}");
+    assert!(response["event_sequence"].is_null(), "{name}");
+    assert_eq!(state.application_events.latest_sequence(), cursor, "{name}");
+}
+
+#[tokio::test]
 async fn captured_preload_queue_is_replay_safe_snapshot_owned_and_drained_once_by_go() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
@@ -814,6 +1105,10 @@ async fn captured_preload_queue_is_replay_safe_snapshot_owned_and_drained_once_b
             "surface": "physical",
         }])
     );
+    let show_id = state.active_show.read().as_ref().unwrap().id;
+    let active_key = active_playbacks_setting(show_id);
+    let output_key = output_runtime_setting(show_id);
+    set_runtime_sentinels(&state, &active_key, &output_key);
     assert_preload_key(
         &app,
         &token,
@@ -822,9 +1117,116 @@ async fn captured_preload_queue_is_replay_safe_snapshot_owned_and_drained_once_b
         "preload_committed",
     )
     .await;
+    assert_ne!(setting_value(&state, &active_key), "active-sentinel");
+    assert_eq!(setting_value(&state, &output_key), "output-sentinel");
     assert_eq!(preload_queue_events(&state, session.user.id.0).len(), 2);
     let snapshot = json(preload_queue_snapshot(&app, Some(&token), session.user.id.0).await).await;
     assert_eq!(snapshot["projection"]["revision"], 2);
+    assert_eq!(snapshot["projection"]["actions"], serde_json::json!([]));
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn all_no_op_preload_batch_drains_without_runtime_event_or_persistence() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = session_for_token(&state, &token);
+    open_playback_test_show(&app, &token).await;
+    install_playback_test_state(&state);
+    set_pool_enabled(&state, 1, true);
+    assert_preload_key(
+        &app,
+        &token,
+        session.desk.id,
+        "enter-no-op-queue",
+        "preload_entered",
+    )
+    .await;
+
+    let mut request = action_request(
+        "capture-no-op-on",
+        1,
+        serde_json::json!({"type":"on","pressed":true}),
+    );
+    request["surface"] = "physical".into();
+    let captured = post_action(&app, Some(&token), session.desk.id, request).await;
+    assert_eq!(captured.status(), StatusCode::OK);
+    assert_eq!(json(captured).await["outcome"]["status"], "captured");
+
+    let show_id = state.active_show.read().as_ref().unwrap().id;
+    let active_key = active_playbacks_setting(show_id);
+    let output_key = output_runtime_setting(show_id);
+    set_runtime_sentinels(&state, &active_key, &output_key);
+    let cursor = state.application_events.latest_sequence();
+    assert_preload_key(
+        &app,
+        &token,
+        session.desk.id,
+        "commit-no-op-queue",
+        "preload_committed",
+    )
+    .await;
+
+    assert!(playback_event_objects(&state, cursor).is_empty());
+    assert_runtime_sentinels(&state, &active_key, &output_key);
+    let snapshot = json(preload_queue_snapshot(&app, Some(&token), session.user.id.0).await).await;
+    assert_eq!(snapshot["projection"]["actions"], serde_json::json!([]));
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn preload_hidden_addressed_change_emits_one_equal_projection_event() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = session_for_token(&state, &token);
+    open_playback_test_show(&app, &token).await;
+    install_playback_test_state(&state);
+    update_virtual_definition(&state, 1, |definition| definition.xfade_millis = 1_000);
+    set_pool_enabled(&state, 1, true);
+    let crossfade = post_action(
+        &app,
+        Some(&token),
+        session.desk.id,
+        action_request(
+            "arm-hidden-crossfade",
+            1,
+            serde_json::json!({"type":"crossfade","enabled":true}),
+        ),
+    )
+    .await;
+    assert_eq!(crossfade.status(), StatusCode::OK);
+    assert_preload_key(
+        &app,
+        &token,
+        session.desk.id,
+        "enter-hidden-queue",
+        "preload_entered",
+    )
+    .await;
+    let mut request = action_request(
+        "capture-hidden-on",
+        1,
+        serde_json::json!({"type":"on","pressed":true}),
+    );
+    request["surface"] = "physical".into();
+    let captured = post_action(&app, Some(&token), session.desk.id, request).await;
+    assert_eq!(captured.status(), StatusCode::OK);
+    assert_eq!(json(captured).await["outcome"]["status"], "captured");
+    let cursor = state.application_events.latest_sequence();
+
+    assert_preload_key(
+        &app,
+        &token,
+        session.desk.id,
+        "commit-hidden-queue",
+        "preload_committed",
+    )
+    .await;
+
+    assert_eq!(playback_event_objects(&state, cursor), vec![1]);
+    let snapshot = json(preload_queue_snapshot(&app, Some(&token), session.user.id.0).await).await;
     assert_eq!(snapshot["projection"]["actions"], serde_json::json!([]));
     let _ = std::fs::remove_dir_all(data_dir);
 }

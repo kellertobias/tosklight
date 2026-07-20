@@ -153,7 +153,10 @@ pub enum PendingPlaybackAction {
 #[derive(Clone, Debug)]
 pub enum PlaybackExecution {
     Active(Box<ActivePlayback>),
-    ActiveList(Vec<ActivePlayback>),
+    ActiveList {
+        active: Vec<ActivePlayback>,
+        changed: bool,
+    },
     Released(bool),
     Pool {
         changed: bool,

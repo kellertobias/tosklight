@@ -1,8 +1,10 @@
+use super::playback_persistence::{PlaybackPersistenceDomain, PlaybackPersistencePlan};
 use super::*;
 
 #[derive(Debug)]
 pub(super) struct PlaybackDispatchOutcome {
     pub(super) changed: bool,
+    pub(super) addressed_event_required: bool,
     pub(super) persistence_pending: bool,
 }
 
@@ -33,15 +35,7 @@ pub(super) fn dispatch_playback_action(
             serde_json::json!({"desk_id":desk.id,"activated_playback":definition.number,"released_playbacks":outcome.released_playbacks,"source":context.source}),
         );
     }
-    let mut failures = Vec::new();
-    if outcome.changed {
-        if let Err(error) = persist_active_playbacks(state) {
-            failures.push(("active_playbacks", error.message));
-        }
-        if let Err(error) = persist_output_runtime(state) {
-            failures.push(("output_runtime", error.message));
-        }
-    }
+    let failures = persist_playback_plan(state, outcome.persistence);
     if !failures.is_empty() {
         emit(
             state,
@@ -60,8 +54,33 @@ pub(super) fn dispatch_playback_action(
     }
     Ok(PlaybackDispatchOutcome {
         changed: outcome.changed,
+        addressed_event_required: outcome.addressed_event_required,
         persistence_pending: !failures.is_empty(),
     })
+}
+
+fn persist_playback_plan(
+    state: &AppState,
+    plan: PlaybackPersistencePlan,
+) -> Vec<(&'static str, String)> {
+    plan.domains()
+        .filter_map(|domain| persist_playback_domain(state, domain).err())
+        .collect()
+}
+
+fn persist_playback_domain(
+    state: &AppState,
+    domain: PlaybackPersistenceDomain,
+) -> Result<(), (&'static str, String)> {
+    let (name, result) = match domain {
+        PlaybackPersistenceDomain::ActivePlaybacks => {
+            ("active_playbacks", persist_active_playbacks(state))
+        }
+        PlaybackPersistenceDomain::OutputRuntime => {
+            ("output_runtime", persist_output_runtime(state))
+        }
+    };
+    result.map_err(|error| (name, error.message))
 }
 
 pub(super) fn dispatch_playback_action_inner(
@@ -101,8 +120,8 @@ pub(super) fn dispatch_playback_action_inner(
     {
         return Ok(PlaybackTargetOutcome::changed(false));
     }
-    select_playback_target(state, context.desk, definition, action)?;
-    apply_playback_target_action(
+    let selection_changed = select_playback_target(state, context.desk, definition, action)?;
+    let outcome = apply_playback_target_action(
         state,
         context.session,
         definition,
@@ -110,5 +129,6 @@ pub(super) fn dispatch_playback_action_inner(
         input,
         pressed,
         context.exclusion_zones,
-    )
+    )?;
+    Ok(outcome.combine(PlaybackTargetOutcome::changed(selection_changed)))
 }

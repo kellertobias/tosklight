@@ -78,8 +78,8 @@ pub use playback::{
     PlaybackRuntimeProjection, PlaybackRuntimeSnapshot, PlaybackService, PlaybackShowScope,
     PlaybackSurface, PlaybackTargetProjection, PlaybackTransitionCause, PlaybackUnitOfWork,
     ResolvedPlaybackAddress, SoundLossReason, SoundStatus, SpeedGroupRuntimeProjection,
-    SpeedSource, automatic_playback_events, committed_playback_event,
-    publish_automatic_playback_events,
+    SpeedSource, automatic_playback_events, committed_playback_effect_event,
+    committed_playback_event, publish_automatic_playback_events,
 };
 pub use programming::{
     CueMoveCopyChoice, CueTransferOperation, ExecutionPolicy, ProgrammingAction,

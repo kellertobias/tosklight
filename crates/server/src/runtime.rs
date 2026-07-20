@@ -137,6 +137,7 @@ mod playback_exclusion_normalization;
 mod playback_inputs;
 mod playback_layout;
 mod playback_layout_mutations;
+mod playback_persistence;
 mod playback_speed_groups;
 mod playback_target_actions;
 mod preload;

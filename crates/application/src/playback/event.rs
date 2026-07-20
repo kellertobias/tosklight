@@ -38,7 +38,19 @@ pub fn committed_playback_event(
     before: PlaybackRuntimeProjection,
     projection: PlaybackRuntimeProjection,
 ) -> Option<EventDraft> {
-    if before == projection {
+    committed_playback_effect_event(context, action, configured_cause, before, projection, false)
+}
+
+/// Builds an event for an addressed runtime effect omitted from the compact public projection.
+pub fn committed_playback_effect_event(
+    context: &ActionContext,
+    action: PlaybackAction,
+    configured_cause: Option<PlaybackTransitionCause>,
+    before: PlaybackRuntimeProjection,
+    projection: PlaybackRuntimeProjection,
+    addressed_effect_changed: bool,
+) -> Option<EventDraft> {
+    if !addressed_effect_changed && before == projection {
         return None;
     }
     let transition = manual_transition(action, configured_cause, &before, &projection);

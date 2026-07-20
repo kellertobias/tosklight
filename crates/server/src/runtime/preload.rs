@@ -20,6 +20,7 @@ pub(super) struct StagedPreloadPlaybackAction {
     pub(super) page: Option<u8>,
     pub(super) action: String,
     pub(super) surface: String,
+    pub(super) addressed_event_required: bool,
     pub(super) released_playbacks: Vec<u16>,
 }
 
@@ -72,6 +73,7 @@ fn staged_preload_action(
         page: pending.page,
         action: pending.action.legacy_name().to_owned(),
         surface: pending.surface.name().to_owned(),
+        addressed_event_required: outcome.addressed_effect.changed(),
         released_playbacks: outcome.released_playbacks.clone(),
     }
 }

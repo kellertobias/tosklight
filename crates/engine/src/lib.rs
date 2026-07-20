@@ -13,6 +13,7 @@ mod move_in_black;
 mod move_in_black_candidate;
 mod move_in_black_runtime;
 mod playback;
+mod playback_batch;
 mod playback_exclusion;
 mod profile_blackout;
 mod profile_color;
@@ -38,9 +39,11 @@ pub use model::{
     RenderOptions, RenderResult,
 };
 pub use playback::{
-    CueListPlaybackAction, EnginePlaybackCommand, EnginePlaybackOutcome, PlaybackBatchAction,
-    PlaybackBatchCommand, PlaybackBatchOutcome, PlaybackDynamicsProjection, PoolPlaybackAction,
-    PreparedPlaybackBatch,
+    CueListPlaybackAction, EnginePlaybackCommand, EnginePlaybackEffect, EnginePlaybackOutcome,
+    PlaybackDynamicsProjection, PoolPlaybackAction,
+};
+pub use playback_batch::{
+    PlaybackBatchAction, PlaybackBatchCommand, PlaybackBatchOutcome, PreparedPlaybackBatch,
 };
 pub use playback_exclusion::PoolPlaybackTransition;
 

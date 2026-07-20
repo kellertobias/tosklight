@@ -110,6 +110,18 @@ fn sound_double_half_adjust_ratio_but_manual_actions_adjust_manual_bpm() {
 }
 
 #[test]
+fn same_direct_bpm_entry_clears_an_armed_learn_tap_before_becoming_a_no_op() {
+    let mut speed = SpeedGroupController::new(120.0, SoundToLightConfig::default()).unwrap();
+    assert_eq!(speed.tap_learn(1_000), LearnResult::Armed);
+    assert!(!speed.manual_entry_is_current(120.0));
+
+    speed.set_manual_bpm(120.0).unwrap();
+
+    assert!(speed.manual_entry_is_current(120.0));
+    assert_eq!(speed.tap_learn(1_500), LearnResult::Armed);
+}
+
+#[test]
 fn learn_exits_sound_mode_and_averages_recent_taps() {
     let mut speed = SpeedGroupController::new(100.0, enabled_config()).unwrap();
     speed.observe_sound(SoundObservation::tempo(500, 140.0, 1.0));

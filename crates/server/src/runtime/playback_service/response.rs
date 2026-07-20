@@ -12,7 +12,7 @@ pub(in crate::runtime) fn cue_list_http_payload(
         PlaybackExecution::Active(active) => {
             serde_json::to_value(active).map_err(|error| ApiError::internal(error.to_string()))
         }
-        PlaybackExecution::ActiveList(active) => {
+        PlaybackExecution::ActiveList { active, .. } => {
             serde_json::to_value(active).map_err(|error| ApiError::internal(error.to_string()))
         }
         PlaybackExecution::Released(released) => Ok(serde_json::json!({"released":released})),
@@ -89,7 +89,7 @@ pub(in crate::runtime) fn websocket_payload(
         PlaybackExecution::Active(active) => {
             serde_json::to_value(active).map_err(|error| error.to_string())
         }
-        PlaybackExecution::ActiveList(_) => Ok(serde_json::json!({"paused":true})),
+        PlaybackExecution::ActiveList { .. } => Ok(serde_json::json!({"paused":true})),
         PlaybackExecution::Released(released) => Ok(serde_json::json!({"released":released})),
         PlaybackExecution::Pool { .. } => Err("cue-list action returned a pool result".to_owned()),
     }

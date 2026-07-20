@@ -45,6 +45,20 @@ impl SpeedGroupController {
         self.manual_bpm
     }
 
+    /// True only when another direct BPM entry would leave both visible rate and private
+    /// ownership state unchanged. An armed Learn tap deliberately makes the entry meaningful.
+    pub fn manual_entry_is_current(&self, bpm: f64) -> bool {
+        valid_bpm(bpm)
+            && self.manual_bpm == bpm
+            && !self.sound.enabled
+            && self.last_observation.is_none()
+            && self.last_accepted_at_millis.is_none()
+            && self.smoothed_sound_bpm.is_none()
+            && self.loss_reason == SoundLossReason::WaitingForAnalysis
+            && self.last_learn_tap_millis.is_none()
+            && self.learn_intervals.is_empty()
+    }
+
     pub fn sound_config(&self) -> &SoundToLightConfig {
         &self.sound
     }

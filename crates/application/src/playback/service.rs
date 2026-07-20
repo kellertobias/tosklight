@@ -1,7 +1,8 @@
 use super::{
     PlaybackAddress, PlaybackCommand, PlaybackExecution, PlaybackOperationResult, PlaybackOutcome,
     PlaybackPorts, PlaybackResult, PlaybackRuntimeIdentity, PlaybackRuntimeProjection,
-    PlaybackRuntimeSnapshot, PlaybackUnitOfWork, ResolvedPlaybackAddress, committed_playback_event,
+    PlaybackRuntimeSnapshot, PlaybackUnitOfWork, ResolvedPlaybackAddress,
+    committed_playback_effect_event,
 };
 use crate::{ActionContext, ActionEnvelope, ActionError, ActionErrorKind, EventBus, EventDraft};
 use parking_lot::Mutex;
@@ -76,6 +77,7 @@ impl PlaybackService {
         )?;
         let durability = ports.durability();
         let outcome = outcome(&execution);
+        let addressed_event_required = ports.addressed_runtime_event_required();
         let projection = ports.projection(&envelope.context, identity)?;
         if projection.scope != before.scope {
             return Err(ActionError::new(
@@ -91,12 +93,13 @@ impl PlaybackService {
             Vec::new()
         };
         let primary_event_sequence = if applied {
-            committed_playback_event(
+            committed_playback_effect_event(
                 &envelope.context,
                 envelope.command.action,
                 configured_cause,
                 before,
                 projection.clone(),
+                addressed_event_required,
             )
             .map(|draft| self.events.publish(draft).sequence)
         } else {
@@ -271,15 +274,15 @@ const fn pool(number: u16, page: Option<u8>, slot: Option<u8>) -> ResolvedPlayba
     ResolvedPlaybackAddress::Pool { number, page, slot }
 }
 
-fn outcome(execution: &PlaybackExecution) -> PlaybackOutcome {
+pub(super) fn outcome(execution: &PlaybackExecution) -> PlaybackOutcome {
     match execution {
         PlaybackExecution::Pool {
             pending: Some(action),
             ..
         } => PlaybackOutcome::Captured(*action),
-        PlaybackExecution::Pool { changed: false, .. } | PlaybackExecution::Released(false) => {
-            PlaybackOutcome::NoChange
-        }
+        PlaybackExecution::ActiveList { changed: false, .. }
+        | PlaybackExecution::Pool { changed: false, .. }
+        | PlaybackExecution::Released(false) => PlaybackOutcome::NoChange,
         _ => PlaybackOutcome::Applied,
     }
 }

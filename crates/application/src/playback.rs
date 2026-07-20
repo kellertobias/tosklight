@@ -18,7 +18,8 @@ pub use command::{
     PlaybackResult, PlaybackSurface, ResolvedPlaybackAddress,
 };
 pub use event::{
-    PlaybackCueTransition, PlaybackRuntimeChange, PlaybackTransitionCause, committed_playback_event,
+    PlaybackCueTransition, PlaybackRuntimeChange, PlaybackTransitionCause,
+    committed_playback_effect_event, committed_playback_event,
 };
 pub use operation::{PlaybackOperation, PlaybackOperationResult, PlaybackUnitOfWork};
 pub use ports::PlaybackPorts;

@@ -51,9 +51,8 @@ pub(crate) fn apply_with_exclusions<T>(
 
 fn is_enabled(playback: &PlaybackEngine, number: u16) -> bool {
     playback
-        .runtime()
-        .iter()
-        .any(|runtime| runtime.playback_number == Some(number) && runtime.enabled)
+        .playback_runtime(number)
+        .is_some_and(|runtime| runtime.enabled)
 }
 
 fn release_active_peers(
@@ -63,7 +62,9 @@ fn release_active_peers(
 ) -> Vec<u16> {
     exclusion_peers(zones, activated_number)
         .into_iter()
-        .filter(|number| playback.off(*number).is_ok_and(|changed| changed))
+        .filter(|number| {
+            is_enabled(playback, *number) && playback.off(*number).is_ok_and(|changed| changed)
+        })
         .collect()
 }
 

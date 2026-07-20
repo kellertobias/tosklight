@@ -1,7 +1,7 @@
 use crate::*;
 
 impl PlaybackEngine {
-    pub(crate) fn auto_off_overwritten(&mut self) {
+    pub(crate) fn auto_off_overwritten(&mut self) -> bool {
         let full: Vec<_> = self
             .active
             .iter()
@@ -51,11 +51,13 @@ impl PlaybackEngine {
                 release.push(*own_key);
             }
         }
+        let changed = !release.is_empty();
         for key in release {
             if let Some(playback) = self.active.get_mut(&key) {
                 playback.enabled = false;
             }
         }
+        changed
     }
     pub fn restore_active(&mut self, playbacks: impl IntoIterator<Item = ActivePlayback>) {
         for mut playback in playbacks {

@@ -14,11 +14,12 @@ pub(super) fn commit_preload_transaction(
         before,
         context,
     } = prepare_preload_commit(state, session)?;
+    let playback_runtime_changed = prepared_playback.effect().durable();
     install_preload_commit(state, session, pending, committed_at, prepared_playback)?;
     let events = preload_change_events(state, &context, &identities, before, &staged_actions)?;
     emit_preload_exclusions(state, session, &staged_actions);
     let executed = executed_preload_actions(staged_actions, committed_at, programmer_fade_millis);
-    let warnings = persist_preload_commit(state, session, !executed.is_empty());
+    let warnings = persist_preload_commit(state, session, playback_runtime_changed);
     Ok(CommittedPreload {
         committed_at,
         programmer_fade_millis,
@@ -236,9 +237,29 @@ fn preload_change_events(
             } else {
                 preload_event_action(actions, identity)
             };
-            light_application::committed_playback_event(context, action, None, before, projection)
+            light_application::committed_playback_effect_event(
+                context,
+                action,
+                None,
+                before,
+                projection,
+                preload_addressed_event_required(actions, identity),
+            )
         })
         .collect())
+}
+
+fn preload_addressed_event_required(
+    actions: &[StagedPreloadPlaybackAction],
+    identity: PlaybackIdentity,
+) -> bool {
+    let PlaybackIdentity::Playback(number) = identity else {
+        return false;
+    };
+    actions
+        .iter()
+        .filter(|action| action.playback_number == number)
+        .any(|action| action.addressed_event_required)
 }
 
 fn playback_was_released(before: &PlaybackProjection, after: &PlaybackProjection) -> bool {
@@ -305,7 +326,7 @@ fn executed_preload_actions(
 fn persist_preload_commit(
     state: &AppState,
     session: &Session,
-    has_playback_actions: bool,
+    active_playbacks_changed: bool,
 ) -> Vec<String> {
     let mut warnings = Vec::new();
     if let Err(error) = persist_programmer(state, session) {
@@ -316,23 +337,13 @@ fn persist_preload_commit(
             error,
         ));
     }
-    if has_playback_actions {
-        if let Err(error) = persist_active_playbacks(state) {
-            warnings.push(record_preload_persistence_failure(
-                state,
-                session,
-                "active playbacks",
-                error,
-            ));
-        }
-        if let Err(error) = persist_output_runtime(state) {
-            warnings.push(record_preload_persistence_failure(
-                state,
-                session,
-                "output runtime",
-                error,
-            ));
-        }
+    if active_playbacks_changed && let Err(error) = persist_active_playbacks(state) {
+        warnings.push(record_preload_persistence_failure(
+            state,
+            session,
+            "active playbacks",
+            error,
+        ));
     }
     warnings
 }

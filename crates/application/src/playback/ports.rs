@@ -29,6 +29,11 @@ pub trait PlaybackPorts: Send + Sync {
         PlaybackDurability::Durable
     }
 
+    /// True when the addressed Playback changed state omitted from its compact projection.
+    fn addressed_runtime_event_required(&self) -> bool {
+        false
+    }
+
     /// Resolves configuration-dependent navigation semantics before execution. Most commands
     /// carry their meaning directly; configured buttons need the authoritative Playback layout.
     fn transition_cause(
