@@ -192,7 +192,9 @@ describe("LightApiClient server selection and sessions", () => {
 		const client = new LightApiClient("http://desk.local");
 		await client.login("Operator");
 
-		await expect(client.objectOrNull("show-a", "group", "1")).resolves.toBeNull();
+		await expect(
+			client.objectOrNull("show-a", "group", "1"),
+		).resolves.toBeNull();
 	});
 
 	it("does not hide failures while loading an optional object", async () => {
@@ -215,38 +217,26 @@ describe("LightApiClient server selection and sessions", () => {
 		const client = new LightApiClient("http://desk.local");
 		await client.login("Operator");
 
-		await expect(client.objectOrNull("show-a", "group", "1")).rejects.toMatchObject(
-			{
-				message: "object service unavailable",
-				status: 503,
-			},
-		);
+		await expect(
+			client.objectOrNull("show-a", "group", "1"),
+		).rejects.toMatchObject({
+			message: "object service unavailable",
+			status: 503,
+		});
 	});
 });
 
 describe("LightApiClient programmer and preset contracts", () => {
-	it("uses typed programmer, fixture-action, and opt-in preset-generation commands", async () => {
+	it("uses fixture-action and opt-in preset-generation commands", async () => {
 		const client = new LightApiClient("http://desk.local");
 		const command = vi
 			.spyOn(client, "command")
 			.mockResolvedValue({ created: [] });
 
-		await client.setProgrammerValue("fixture-a", "gobo.1", {
-			kind: "discrete",
-			value: "gobo.dots",
-		});
 		await client.controlFixtureAction("fixture-a", "action-a", true);
 		await client.generateFixturePresets(["fixture-a"]);
 
 		expect(command.mock.calls).toEqual([
-			[
-				"programmer.set_value",
-				{
-					fixture_id: "fixture-a",
-					attribute: "gobo.1",
-					value: { kind: "discrete", value: "gobo.dots" },
-				},
-			],
 			[
 				"programmer.control_action",
 				{

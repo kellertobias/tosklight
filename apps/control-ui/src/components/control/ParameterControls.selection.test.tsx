@@ -35,12 +35,8 @@ const mocks = vi.hoisted(() => {
 		alignSelection: vi.fn(async () => undefined),
 		setProgrammer: vi.fn(async () => undefined),
 		setProgrammerMany: vi.fn(async () => undefined),
-		setProgrammerValue: vi.fn(async () => undefined),
 		controlFixtureAction: vi.fn(async () => undefined),
 		generateFixturePresets: vi.fn(async () => ({ created: [] })),
-		setGroupValue: vi.fn(async () => undefined),
-		releaseProgrammer: vi.fn(async () => undefined),
-		releaseGroupValue: vi.fn(async () => undefined),
 	};
 	Object.defineProperties(server, {
 		selectedFixtures: {

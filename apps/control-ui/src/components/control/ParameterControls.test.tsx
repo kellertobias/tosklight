@@ -63,12 +63,8 @@ const server = {
 	alignSelection: vi.fn(),
 	setProgrammer: vi.fn(),
 	setProgrammerMany: vi.fn(),
-	setProgrammerValue: vi.fn(),
 	controlFixtureAction: vi.fn(),
 	generateFixturePresets: vi.fn().mockResolvedValue({ created: [] }),
-	setGroupValue: vi.fn(),
-	releaseProgrammer: vi.fn(),
-	releaseGroupValue: vi.fn(),
 };
 Object.defineProperty(server.bootstrap, "active_programmers", {
 	get() {
@@ -674,8 +670,6 @@ describe("ParameterControls programmer targets and alignment", () => {
 				},
 			],
 		});
-		expect(server.releaseProgrammer).not.toHaveBeenCalled();
-		expect(server.releaseGroupValue).not.toHaveBeenCalled();
 	});
 
 	it("shows the fixture programmer target while visualization is still fading", async () => {
@@ -818,7 +812,6 @@ describe("ParameterControls schema-v2 direct picker", () => {
 				},
 			],
 		});
-		expect(server.setProgrammerValue).not.toHaveBeenCalled();
 	});
 
 	it("holds and releases every assignment through one typed momentary action", () => {

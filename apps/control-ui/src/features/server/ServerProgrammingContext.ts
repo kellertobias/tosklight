@@ -19,11 +19,6 @@ export interface ServerProgrammingContext {
 	setProgrammerMany: (
 		assignments: Array<{ fixtureId: string; attribute: string; value: number }>,
 	) => Promise<boolean>;
-	setProgrammerValue: (
-		fixtureId: string,
-		attribute: string,
-		value: import("../../api/types").AttributeValue,
-	) => Promise<void>;
 	controlFixtureAction: (
 		fixtureId: string,
 		actionId: string,
@@ -32,13 +27,6 @@ export interface ServerProgrammingContext {
 	generateFixturePresets: (
 		fixtureIds: string[],
 	) => Promise<import("../../api/types").GeneratedFixturePresetResult | null>;
-	releaseProgrammer: (fixtureId: string, attribute: string) => Promise<void>;
-	setGroupValue: (
-		attribute: string,
-		value: number | import("../../api/types").AttributeValue,
-	) => Promise<void>;
-	releaseGroupValue: (attribute: string) => Promise<void>;
-	setPreloadGroupValue: (attribute: string, value: number) => Promise<void>;
 	applyGroup: (id: string) => Promise<void>;
 	selectGroup: (
 		id: string,

@@ -31,7 +31,9 @@ export class LightApiClient extends LightClientRuntime {
 	private readonly fixtureApi = new FixtureApiClient(this.transport);
 	private readonly mediaApi = new MediaApiClient(this.transport);
 	private readonly showApi = new ShowApiClient(this.transport);
-	private readonly configurationApi = new ConfigurationApiClient(this.transport);
+	private readonly configurationApi = new ConfigurationApiClient(
+		this.transport,
+	);
 	private readonly showObjectsApi = new ShowObjectsApiClient(this.transport);
 	private readonly programmingApi = new ProgrammingApiClient(this.transport);
 	private readonly playbackApi = new PlaybackApiClient(this.transport);
@@ -39,30 +41,23 @@ export class LightApiClient extends LightClientRuntime {
 	private readonly deskApi = new DeskApiClient(this.transport);
 	private readonly outputApi = new OutputApiClient(this.transport);
 	private readonly updateApi = new UpdateApiClient(this.transport);
-	private readonly selectiveImportApi = new SelectiveImportApiClient(this.transport);
+	private readonly selectiveImportApi = new SelectiveImportApiClient(
+		this.transport,
+	);
 
 	helpCatalog = bindClientMethod(this.helpApi, "helpCatalog");
 	helpTopic = bindClientMethod(this.helpApi, "helpTopic");
 	commandHistory = bindClientMethod(this.deskApi, "commandHistory");
 	createUser = bindClientMethod(this.deskApi, "createUser");
-	setDmxOverride = bindClientMethod(
-		this.outputApi,
-		"setDmxOverride",
-	);
+	setDmxOverride = bindClientMethod(this.outputApi, "setDmxOverride");
 	highlight = bindClientMethod(this.outputApi, "highlight");
-	highlightAction = bindClientMethod(
-		this.outputApi,
-		"highlightAction",
-	);
+	highlightAction = bindClientMethod(this.outputApi, "highlightAction");
 	setPatchPreviewHighlight = bindClientMethod(
 		this.outputApi,
 		"setPatchPreviewHighlight",
 	);
 	updateSettings = bindClientMethod(this.updateApi, "updateSettings");
-	saveUpdateSettings = bindClientMethod(
-		this.updateApi,
-		"saveUpdateSettings",
-	);
+	saveUpdateSettings = bindClientMethod(this.updateApi, "saveUpdateSettings");
 	previewUpdate = bindClientMethod(this.updateApi, "previewUpdate");
 	applyUpdate = bindClientMethod(this.updateApi, "applyUpdate");
 	updateTargets = bindClientMethod(this.updateApi, "updateTargets");
@@ -94,10 +89,7 @@ export class LightApiClient extends LightClientRuntime {
 		this.fixtureApi,
 		"fixtureProfileRevisions",
 	);
-	putFixtureProfile = bindClientMethod(
-		this.fixtureApi,
-		"putFixtureProfile",
-	);
+	putFixtureProfile = bindClientMethod(this.fixtureApi, "putFixtureProfile");
 	deleteFixtureProfile = bindClientMethod(
 		this.fixtureApi,
 		"deleteFixtureProfile",
@@ -126,10 +118,7 @@ export class LightApiClient extends LightClientRuntime {
 	visualization = bindClientMethod(this.mediaApi, "visualization");
 	dmx = bindClientMethod(this.mediaApi, "dmx");
 	mediaServers = bindClientMethod(this.mediaApi, "mediaServers");
-	refreshMediaPreview = bindClientMethod(
-		this.mediaApi,
-		"refreshMediaPreview",
-	);
+	refreshMediaPreview = bindClientMethod(this.mediaApi, "refreshMediaPreview");
 	mediaPreview = bindClientMethod(this.mediaApi, "mediaPreview");
 	refreshMediaThumbnails = bindClientMethod(
 		this.mediaApi,
@@ -139,10 +128,7 @@ export class LightApiClient extends LightClientRuntime {
 	shows = bindClientMethod(this.showApi, "shows");
 	createShow = bindClientMethod(this.showApi, "createShow");
 	openShow = bindClientMethod(this.showApi, "openShow");
-	openCleanDefaultShow = bindClientMethod(
-		this.showApi,
-		"openCleanDefaultShow",
-	);
+	openCleanDefaultShow = bindClientMethod(this.showApi, "openCleanDefaultShow");
 	renameShow = bindClientMethod(this.showApi, "renameShow");
 	overwriteShow = bindClientMethod(this.showApi, "overwriteShow");
 	showRevisions = bindClientMethod(this.showApi, "showRevisions");
@@ -158,18 +144,12 @@ export class LightApiClient extends LightClientRuntime {
 	previewSelectiveImport = bindClientMethod(this.selectiveImportApi, "preview");
 	applySelectiveImport = bindClientMethod(this.selectiveImportApi, "apply");
 
-	configuration = bindClientMethod(
-		this.configurationApi,
-		"configuration",
-	);
+	configuration = bindClientMethod(this.configurationApi, "configuration");
 	updateConfiguration = bindClientMethod(
 		this.configurationApi,
 		"updateConfiguration",
 	);
-	matterStatus = bindClientMethod(
-		this.configurationApi,
-		"matterStatus",
-	);
+	matterStatus = bindClientMethod(this.configurationApi, "matterStatus");
 	speedGroup = bindClientMethod(this.configurationApi, "speedGroup");
 	updateSpeedGroup = bindClientMethod(
 		this.configurationApi,
@@ -214,36 +194,19 @@ export class LightApiClient extends LightClientRuntime {
 		this.programmingApi,
 		"applyProgrammingSelection",
 	);
-	clearProgrammer = bindClientMethod(
-		this.programmingApi,
-		"clearProgrammer",
-	);
+	clearProgrammer = bindClientMethod(this.programmingApi, "clearProgrammer");
 	clearProgrammerValues = bindClientMethod(
 		this.programmingApi,
 		"clearProgrammerValues",
 	);
 	selectGroup = bindClientMethod(this.programmingApi, "selectGroup");
-	selectionMacro = bindClientMethod(
-		this.programmingApi,
-		"selectionMacro",
-	);
+	selectionMacro = bindClientMethod(this.programmingApi, "selectionMacro");
 	align = bindClientMethod(this.programmingApi, "align");
 	preload = bindClientMethod(this.programmingApi, "preload");
-	setPreloadGroup = bindClientMethod(
-		this.programmingApi,
-		"setPreloadGroup",
-	);
-	setProgrammer = bindClientMethod(
-		this.programmingApi,
-		"setProgrammer",
-	);
+	setProgrammer = bindClientMethod(this.programmingApi, "setProgrammer");
 	setProgrammerMany = bindClientMethod(
 		this.programmingApi,
 		"setProgrammerMany",
-	);
-	setProgrammerValue = bindClientMethod(
-		this.programmingApi,
-		"setProgrammerValue",
 	);
 	controlFixtureAction = bindClientMethod(
 		this.programmingApi,
@@ -253,47 +216,20 @@ export class LightApiClient extends LightClientRuntime {
 		this.programmingApi,
 		"generateFixturePresets",
 	);
-	releaseProgrammer = bindClientMethod(
-		this.programmingApi,
-		"releaseProgrammer",
-	);
-	setGroupProgrammer = bindClientMethod(
-		this.programmingApi,
-		"setGroupProgrammer",
-	);
-	releaseGroupProgrammer = bindClientMethod(
-		this.programmingApi,
-		"releaseGroupProgrammer",
-	);
-	setGroupMaster = bindClientMethod(
-		this.programmingApi,
-		"setGroupMaster",
-	);
+	setGroupMaster = bindClientMethod(this.programmingApi, "setGroupMaster");
 	setGroupMasterFlash = bindClientMethod(
 		this.programmingApi,
 		"setGroupMasterFlash",
 	);
 	setSelection = bindClientMethod(this.programmingApi, "setSelection");
-	selectionGesture = bindClientMethod(
-		this.programmingApi,
-		"selectionGesture",
-	);
-	setCommandLine = bindClientMethod(
-		this.programmingApi,
-		"setCommandLine",
-	);
-	setCommandTarget = bindClientMethod(
-		this.programmingApi,
-		"setCommandTarget",
-	);
+	selectionGesture = bindClientMethod(this.programmingApi, "selectionGesture");
+	setCommandLine = bindClientMethod(this.programmingApi, "setCommandLine");
+	setCommandTarget = bindClientMethod(this.programmingApi, "setCommandTarget");
 	executeCommandLine = bindClientMethod(
 		this.programmingApi,
 		"executeCommandLine",
 	);
-	undoProgrammer = bindClientMethod(
-		this.programmingApi,
-		"undoProgrammer",
-	);
+	undoProgrammer = bindClientMethod(this.programmingApi, "undoProgrammer");
 	applyPreset = bindClientMethod(this.programmingApi, "applyPreset");
 
 	playbacks = bindClientMethod(this.playbackApi, "playbacks");
@@ -309,14 +245,8 @@ export class LightApiClient extends LightClientRuntime {
 	putScreen = bindClientMethod(this.playbackApi, "putScreen");
 	deleteScreen = bindClientMethod(this.playbackApi, "deleteScreen");
 	setScreenPage = bindClientMethod(this.playbackApi, "setScreenPage");
-	playbackAction = bindClientMethod(
-		this.playbackApi,
-		"playbackAction",
-	);
-	poolPlaybackAction = bindClientMethod(
-		this.playbackApi,
-		"poolPlaybackAction",
-	);
+	playbackAction = bindClientMethod(this.playbackApi, "playbackAction");
+	poolPlaybackAction = bindClientMethod(this.playbackApi, "poolPlaybackAction");
 	virtualPlaybackExclusionZones = bindClientMethod(
 		this.playbackApi,
 		"virtualPlaybackExclusionZones",
@@ -325,21 +255,9 @@ export class LightApiClient extends LightClientRuntime {
 		this.playbackApi,
 		"saveVirtualPlaybackExclusionZones",
 	);
-	savePlaybackSlot = bindClientMethod(
-		this.playbackApi,
-		"savePlaybackSlot",
-	);
-	clearPlaybackSlot = bindClientMethod(
-		this.playbackApi,
-		"clearPlaybackSlot",
-	);
-	setPlaybackPage = bindClientMethod(
-		this.playbackApi,
-		"setPlaybackPage",
-	);
-	updateControlDesk = bindClientMethod(
-		this.playbackApi,
-		"updateControlDesk",
-	);
+	savePlaybackSlot = bindClientMethod(this.playbackApi, "savePlaybackSlot");
+	clearPlaybackSlot = bindClientMethod(this.playbackApi, "clearPlaybackSlot");
+	setPlaybackPage = bindClientMethod(this.playbackApi, "setPlaybackPage");
+	updateControlDesk = bindClientMethod(this.playbackApi, "updateControlDesk");
 	removeClient = bindClientMethod(this.playbackApi, "removeClient");
 }

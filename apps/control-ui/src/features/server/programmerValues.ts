@@ -7,21 +7,10 @@ export function createProgrammerValueActions(
 	ServerContextValue,
 	| "setProgrammer"
 	| "setProgrammerMany"
-	| "setProgrammerValue"
 	| "controlFixtureAction"
 	| "generateFixturePresets"
-	| "releaseProgrammer"
-	| "setGroupValue"
-	| "releaseGroupValue"
-	| "setPreloadGroupValue"
 > {
-	const {
-		client,
-		setError,
-		bootstrap,
-		setBootstrap,
-		selectedGroupId,
-	} = model;
+	const { client, setError, bootstrap } = model;
 	return {
 		setProgrammer: async (fixtureId, attribute, level) => {
 			try {
@@ -39,14 +28,6 @@ export function createProgrammerValueActions(
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
 				return false;
-			}
-		},
-		setProgrammerValue: async (fixtureId, attribute, value) => {
-			try {
-				await client.setProgrammerValue(fixtureId, attribute, value);
-				setError(null);
-			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
 			}
 		},
 		controlFixtureAction: async (fixtureId, actionId, active) => {
@@ -67,52 +48,6 @@ export function createProgrammerValueActions(
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
 				return null;
-			}
-		},
-		releaseProgrammer: async (fixtureId, attribute) => {
-			try {
-				await client.releaseProgrammer(fixtureId, attribute);
-				setBootstrap(await client.bootstrap());
-				setError(null);
-			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
-			}
-		},
-		setGroupValue: async (attribute, level) => {
-			try {
-				if (!selectedGroupId)
-					throw new Error(
-						"Select a live group before setting group-relative values",
-					);
-				await client.setGroupProgrammer(selectedGroupId, attribute, level);
-				setError(null);
-			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
-			}
-		},
-		releaseGroupValue: async (attribute) => {
-			try {
-				if (!selectedGroupId)
-					throw new Error(
-						"Select a live group before releasing group-relative values",
-					);
-				await client.releaseGroupProgrammer(selectedGroupId, attribute);
-				setBootstrap(await client.bootstrap());
-				setError(null);
-			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
-			}
-		},
-		setPreloadGroupValue: async (attribute, level) => {
-			try {
-				if (!selectedGroupId)
-					throw new Error(
-						"Select a live group before setting group-relative preload values",
-					);
-				await client.setPreloadGroup(selectedGroupId, attribute, level);
-				setError(null);
-			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
 			}
 		},
 	};

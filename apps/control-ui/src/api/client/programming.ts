@@ -13,11 +13,7 @@ import {
 	decodeSelectionActionOutcome,
 	encodeSelectionActionRequest,
 } from "../programmingSelectionWire";
-import type {
-	AttributeValue,
-	GeneratedFixturePresetResult,
-	ProgrammerState,
-} from "../types";
+import type { GeneratedFixturePresetResult, ProgrammerState } from "../types";
 import type { LiveClientTransport } from "./transport";
 import { jsonRequest } from "./transport";
 
@@ -118,14 +114,6 @@ export class ProgrammingApiClient {
 		return this.transport.command(`preload.${action}`, {});
 	}
 
-	setPreloadGroup(groupId: string, attribute: string, value: number) {
-		return this.transport.command("preload.group.set", {
-			group_id: groupId,
-			attribute,
-			value,
-		});
-	}
-
 	setProgrammer(fixtureId: string, attribute: string, value: number) {
 		return this.transport.command("programmer.set", {
 			fixture_id: fixtureId,
@@ -144,18 +132,6 @@ export class ProgrammingApiClient {
 		});
 	}
 
-	setProgrammerValue(
-		fixtureId: string,
-		attribute: string,
-		value: AttributeValue,
-	) {
-		return this.transport.command("programmer.set_value", {
-			fixture_id: fixtureId,
-			attribute,
-			value,
-		});
-	}
-
 	controlFixtureAction(fixtureId: string, actionId: string, active: boolean) {
 		return this.transport.command("programmer.control_action", {
 			fixture_id: fixtureId,
@@ -170,32 +146,6 @@ export class ProgrammingApiClient {
 		return this.transport.command("preset.generate_fixture_values", {
 			fixture_ids: fixtureIds,
 		}) as Promise<GeneratedFixturePresetResult>;
-	}
-
-	releaseProgrammer(fixtureId: string, attribute: string) {
-		return this.transport.command("programmer.release", {
-			fixture_id: fixtureId,
-			attribute,
-		});
-	}
-
-	setGroupProgrammer(
-		groupId: string,
-		attribute: string,
-		value: number | AttributeValue,
-	) {
-		return this.transport.command("programmer.group.set", {
-			group_id: groupId,
-			attribute,
-			value,
-		});
-	}
-
-	releaseGroupProgrammer(groupId: string, attribute: string) {
-		return this.transport.command("programmer.group.release", {
-			group_id: groupId,
-			attribute,
-		});
 	}
 
 	setGroupMaster(groupId: string, value: number) {
