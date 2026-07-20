@@ -11,7 +11,7 @@ fn prepared_batch_is_isolated_until_one_typed_install() {
             &[PlaybackBatchCommand {
                 number: 1,
                 action: PlaybackBatchAction::On,
-                exclusion_zones: Vec::new(),
+                exclusion_zones: Arc::default(),
             }],
             started_at,
             0,
@@ -37,7 +37,7 @@ fn prepared_batch_cannot_overwrite_a_new_compiled_generation() {
             &[PlaybackBatchCommand {
                 number: 1,
                 action: PlaybackBatchAction::Go,
-                exclusion_zones: Vec::new(),
+                exclusion_zones: Arc::default(),
             }],
             chrono::Utc::now(),
             0,
@@ -155,7 +155,7 @@ fn prepared_batch_reports_only_peers_it_actually_releases() {
             &[PlaybackBatchCommand {
                 number: 1,
                 action: PlaybackBatchAction::On,
-                exclusion_zones: vec![vec![3, 2, 1, 2]],
+                exclusion_zones: vec![vec![3, 2, 1, 2]].into(),
             }],
             chrono::Utc::now(),
             0,
@@ -288,7 +288,7 @@ fn peer_only_auto_off_batch_does_not_retime_the_addressed_playback() {
             &[PlaybackBatchCommand {
                 number: 2,
                 action: PlaybackBatchAction::On,
-                exclusion_zones: Vec::new(),
+                exclusion_zones: Arc::default(),
             }],
             started_at,
             1_000,
@@ -360,6 +360,42 @@ fn prepared_batch_aggregates_none_transient_and_durable_effects() {
 }
 
 #[test]
+fn prepared_batch_classifies_the_exact_final_state_after_transient_cancellation() {
+    let engine = playback_engine();
+    let prepared = engine
+        .prepare_playback_batch(
+            &[
+                PlaybackBatchCommand {
+                    number: 1,
+                    action: PlaybackBatchAction::SetTempButton(true),
+                    exclusion_zones: Arc::default(),
+                },
+                PlaybackBatchCommand {
+                    number: 1,
+                    action: PlaybackBatchAction::SetTempButton(false),
+                    exclusion_zones: Arc::default(),
+                },
+            ],
+            chrono::Utc::now(),
+            0,
+        )
+        .unwrap();
+
+    assert_eq!(prepared.outcomes().len(), 2);
+    assert!(
+        prepared
+            .outcomes()
+            .iter()
+            .all(|outcome| outcome.effect == PlaybackRuntimeEffect::Transient)
+    );
+    assert_eq!(prepared.effect(), PlaybackRuntimeEffect::None);
+    assert_eq!(prepared.effect_for(1), PlaybackRuntimeEffect::None);
+    assert_eq!(prepared.changed_playback_numbers().count(), 0);
+    engine.install_prepared_playback_batch(prepared).unwrap();
+    assert!(engine.playback_runtime().is_empty());
+}
+
+#[test]
 fn repeated_on_batch_does_not_retrigger_timing_or_signal_persistence() {
     let engine = playback_engine();
     execute_pool(&engine, 1, PoolPlaybackAction::On);
@@ -370,7 +406,7 @@ fn repeated_on_batch_does_not_retrigger_timing_or_signal_persistence() {
             &[PlaybackBatchCommand {
                 number: 1,
                 action: PlaybackBatchAction::On,
-                exclusion_zones: Vec::new(),
+                exclusion_zones: Arc::default(),
             }],
             started_at,
             1_000,
@@ -435,7 +471,7 @@ fn prepare_batch(engine: &Engine, action: PlaybackBatchAction) -> PreparedPlayba
             &[PlaybackBatchCommand {
                 number: 1,
                 action,
-                exclusion_zones: Vec::new(),
+                exclusion_zones: Arc::default(),
             }],
             chrono::Utc::now(),
             0,

@@ -5,7 +5,7 @@ use crate::{
 };
 use chrono::{DateTime, Utc};
 use light_playback::{PlaybackEngine, PlaybackRuntimeEffect};
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PlaybackBatchAction {
@@ -21,7 +21,7 @@ pub enum PlaybackBatchAction {
 pub struct PlaybackBatchCommand {
     pub number: u16,
     pub action: PlaybackBatchAction,
-    pub exclusion_zones: Vec<Vec<u16>>,
+    pub exclusion_zones: Arc<[Vec<u16>]>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -39,6 +39,7 @@ pub struct PreparedPlaybackBatch {
     playback: PlaybackEngine,
     outcomes: Vec<PlaybackBatchOutcome>,
     effect: PlaybackRuntimeEffect,
+    numbered_effects: BTreeMap<u16, PlaybackRuntimeEffect>,
 }
 
 impl PreparedPlaybackBatch {
@@ -48,6 +49,17 @@ impl PreparedPlaybackBatch {
 
     pub const fn effect(&self) -> PlaybackRuntimeEffect {
         self.effect
+    }
+
+    pub fn changed_playback_numbers(&self) -> impl Iterator<Item = u16> + '_ {
+        self.numbered_effects.keys().copied()
+    }
+
+    pub fn effect_for(&self, number: u16) -> PlaybackRuntimeEffect {
+        self.numbered_effects
+            .get(&number)
+            .copied()
+            .unwrap_or_default()
     }
 }
 
@@ -64,16 +76,19 @@ impl Engine {
             .iter()
             .map(|command| apply_command(&mut playback, command, started_at, fallback_millis))
             .collect::<Result<_, _>>()?;
-        let effect = outcomes
-            .iter()
-            .fold(PlaybackRuntimeEffect::None, |effect, outcome| {
-                effect.combine(outcome.effect)
-            });
+        let before = generation.playback().read();
+        let effect = playback.retained_runtime_effect_since(&before);
+        let numbered_effects = playback
+            .numbered_runtime_effects_since(&before)
+            .into_iter()
+            .collect();
+        drop(before);
         Ok(PreparedPlaybackBatch {
             generation,
             playback,
             outcomes,
             effect,
+            numbered_effects,
         })
     }
 

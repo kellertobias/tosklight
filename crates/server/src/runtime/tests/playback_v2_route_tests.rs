@@ -1176,6 +1176,84 @@ async fn all_no_op_preload_batch_drains_without_runtime_event_or_persistence() {
 }
 
 #[tokio::test]
+async fn transient_preload_cancellation_drains_without_runtime_event_or_persistence() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = session_for_token(&state, &token);
+    open_playback_test_show(&app, &token).await;
+    install_playback_test_state(&state);
+    assert_preload_key(
+        &app,
+        &token,
+        session.desk.id,
+        "enter-cancelled-queue",
+        "preload_entered",
+    )
+    .await;
+
+    for (request_id, enabled) in [("capture-temp-on", true), ("capture-temp-off", false)] {
+        let mut request = action_request(
+            request_id,
+            1,
+            serde_json::json!({"type":"temporary","enabled":enabled,"pressed":true}),
+        );
+        request["surface"] = "physical".into();
+        let captured = post_action(&app, Some(&token), session.desk.id, request).await;
+        assert_eq!(captured.status(), StatusCode::OK);
+        assert_eq!(json(captured).await["outcome"]["status"], "captured");
+    }
+
+    let show_id = state.active_show.read().as_ref().unwrap().id;
+    let active_key = active_playbacks_setting(show_id);
+    let output_key = output_runtime_setting(show_id);
+    set_runtime_sentinels(&state, &active_key, &output_key);
+    let cursor = state.application_events.latest_sequence();
+    let exclusion_count = state
+        .audit_events
+        .lock()
+        .iter()
+        .filter(|event| event.kind == "playback_exclusion_applied")
+        .count();
+    assert_preload_key(
+        &app,
+        &token,
+        session.desk.id,
+        "commit-cancelled-queue",
+        "preload_committed",
+    )
+    .await;
+
+    let committed_actions = state
+        .audit_events
+        .lock()
+        .iter()
+        .rev()
+        .find(|event| event.kind == "preload_committed")
+        .unwrap()
+        .payload["playback_actions"]
+        .as_array()
+        .unwrap()
+        .len();
+    assert_eq!(committed_actions, 2);
+    assert!(playback_event_objects(&state, cursor).is_empty());
+    assert_runtime_sentinels(&state, &active_key, &output_key);
+    assert!(state.engine.playback_runtime().is_empty());
+    assert_eq!(
+        state
+            .audit_events
+            .lock()
+            .iter()
+            .filter(|event| event.kind == "playback_exclusion_applied")
+            .count(),
+        exclusion_count
+    );
+    let snapshot = json(preload_queue_snapshot(&app, Some(&token), session.user.id.0).await).await;
+    assert_eq!(snapshot["projection"]["actions"], serde_json::json!([]));
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn preload_hidden_addressed_change_emits_one_equal_projection_event() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
@@ -1308,7 +1386,7 @@ async fn assert_preload_key(
     desk_id: Uuid,
     request_id: &str,
     expected: &str,
-) {
+) -> serde_json::Value {
     let response = app
         .clone()
         .oneshot(
@@ -1334,6 +1412,7 @@ async fn assert_preload_key(
     } else {
         assert_eq!(response["action"], expected, "{response}");
     }
+    response
 }
 
 async fn preload_queue_snapshot(app: &Router, token: Option<&str>, user_id: Uuid) -> Response {

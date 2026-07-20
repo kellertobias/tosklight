@@ -169,3 +169,12 @@ pub(in crate::runtime) fn read_runtime_projection(
     let ports = ServerPlaybackPorts::new(state, None, None);
     PlaybackPorts::projection(&ports, context, identity).map_err(action_error)
 }
+
+pub(in crate::runtime) fn read_runtime_projections(
+    state: &AppState,
+    context: &ActionContext,
+    identities: &[light_application::PlaybackRuntimeIdentity],
+) -> Result<Vec<light_application::PlaybackRuntimeProjection>, ApiError> {
+    let ports = ServerPlaybackPorts::new(state, None, None);
+    PlaybackPorts::projections(&ports, context, identities).map_err(action_error)
+}

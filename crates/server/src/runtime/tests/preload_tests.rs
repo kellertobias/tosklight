@@ -377,12 +377,28 @@ fn committed_preload_publishes_the_exact_typed_playback_change() {
         session.id,
         1,
         None,
+        light_programmer::PreloadPlaybackQueueAction::On,
+        light_programmer::PreloadPlaybackQueueSurface::Physical,
+    ));
+    assert!(state.programmers.queue_preload_playback_action(
+        session.id,
+        1,
+        None,
         light_programmer::PreloadPlaybackQueueAction::Go,
         light_programmer::PreloadPlaybackQueueSurface::Physical,
     ));
 
     let response = commit_preload(&state, &session).unwrap();
 
+    assert_eq!(
+        response["playback_actions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|action| action["action"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["on", "go"]
+    );
     assert_eq!(
         response["playback_event_sequences"],
         serde_json::json!([1, 2])
@@ -444,7 +460,7 @@ fn staged_preload_applies_exclusions_without_mutating_the_source_engine() {
     let source = state.engine.playback_runtime();
     let pending = vec![pending];
     let mut commands = preload_batch_commands(&pending).unwrap();
-    commands[0].exclusion_zones = vec![vec![1, 2]];
+    commands[0].exclusion_zones = vec![vec![1, 2]].into();
     let prepared = state
         .engine
         .prepare_playback_batch(&commands, chrono::Utc::now(), 0)

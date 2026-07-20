@@ -18,7 +18,7 @@ pub(crate) enum TemporaryPlaybackKind {
     Swap,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ActivePlayback {
     #[serde(default)]
     pub playback_number: Option<u16>,
@@ -147,7 +147,7 @@ pub struct PlaybackContribution {
     pub source: SequenceMasterSource,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DeletedCueHold {
     pub deleted_number: f64,
     pub previous_number: Option<f64>,
@@ -196,7 +196,7 @@ pub(crate) fn advance_chaser_steps(
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PlaybackMasterTransition {
     pub from: f32,
     pub to: f32,

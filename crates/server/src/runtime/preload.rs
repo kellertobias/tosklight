@@ -3,6 +3,10 @@ use light_engine::{
     PlaybackBatchAction, PlaybackBatchCommand, PlaybackBatchOutcome, PreparedPlaybackBatch,
 };
 
+#[path = "preload/events.rs"]
+mod events;
+#[path = "preload/preparation.rs"]
+mod preparation;
 #[path = "preload/programmer.rs"]
 mod programmer;
 #[path = "preload/response.rs"]
@@ -18,9 +22,9 @@ pub(super) use programmer::{
 pub(super) struct StagedPreloadPlaybackAction {
     pub(super) playback_number: u16,
     pub(super) page: Option<u8>,
-    pub(super) action: String,
-    pub(super) surface: String,
-    pub(super) addressed_event_required: bool,
+    pub(super) action: light_programmer::PreloadPlaybackQueueAction,
+    pub(super) surface: light_programmer::PreloadPlaybackQueueSurface,
+    pub(super) addressed_effect_changed: bool,
     pub(super) released_playbacks: Vec<u16>,
 }
 
@@ -46,7 +50,7 @@ pub(super) fn preload_batch_commands(
             Ok(PlaybackBatchCommand {
                 number: pending.playback_number,
                 action,
-                exclusion_zones: Vec::new(),
+                exclusion_zones: std::sync::Arc::default(),
             })
         })
         .collect()
@@ -71,9 +75,9 @@ fn staged_preload_action(
     StagedPreloadPlaybackAction {
         playback_number: pending.playback_number,
         page: pending.page,
-        action: pending.action.legacy_name().to_owned(),
-        surface: pending.surface.name().to_owned(),
-        addressed_event_required: outcome.addressed_effect.changed(),
+        action: pending.action,
+        surface: pending.surface,
+        addressed_effect_changed: outcome.addressed_effect.changed(),
         released_playbacks: outcome.released_playbacks.clone(),
     }
 }
