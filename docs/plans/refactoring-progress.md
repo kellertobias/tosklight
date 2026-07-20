@@ -1,16 +1,16 @@
 # Major Refactoring Progress
 
-Estimated progress: **90%**
+Estimated progress: **94%**
 
-Estimated Codex ETA: **2–5 focused implementation slices, or roughly 10–20 hours of active Codex
+Estimated Codex ETA: **1–4 focused implementation slices, or roughly 6–16 hours of active Codex
 execution**, to repository-wide acceptance.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-20 after completing typed action-time Group recording across touch,
-command-line HTTP, keyboard, OSC, and compatibility WebSocket surfaces.
+Last updated: 2026-07-20 after completing typed action-time Cue recording across touch,
+command-line HTTP, keyboard, OSC, compatibility WebSocket, and scoped frontend surfaces.
 
 ## Guardrails
 
@@ -267,6 +267,18 @@ command-line HTTP, keyboard, OSC, and compatibility WebSocket surfaces.
   a strict action-only client that captures the dialog-open revision, reconciles stored/deleted
   outcomes in either event/response order, repairs only the conflicted Group, and clears the scoped
   `RECORD` command only after success. The old multi-request Group store/refresh adapter is gone.
+- [x] Added typed action-time Cue recording. One Programming action captures only normal or pending-
+  Preload recordable values, resolves explicit or authoritative active targets under the portable
+  Show revision, and atomically creates, updates, or deletes the Cue plus any required Cuelist,
+  Playback, and Page topology. Overwrite, merge, subtract, tracking, timing, Phaser data, active-
+  Preload release, take-live, no-change, revision conflict, replay, user ownership, same-user desks,
+  lossless extensions, and one retained Show event per semantic transition remain explicit. Touch,
+  command-line HTTP, keyboard, OSC, and compatibility WebSocket paths share that boundary and its
+  strict request/correlation/replay/outcome contract. The frontend now hydrates and subscribes only
+  when a Cue-related view mounts, installs one coherent multi-kind snapshot, reconciles either
+  response/event order, repairs exact objects after gaps or conflicts, and rejects stale work after
+  authority replacement without a bootstrap fallback. Exact non-Group repair reads one SQLite row;
+  equal-revision topology retains object identity and does not rerender unrelated consumers.
 - [x] Exposed Selective Show Import through authenticated v2 catalog, preview, and atomic apply
   adapters with checked-in schemas, generated TypeScript, exact source/target revisions, strict
   response validation, and focused server contracts. **Show → Load → Partial Show Load** now uses a
@@ -306,11 +318,6 @@ command-line HTTP, keyboard, OSC, and compatibility WebSocket surfaces.
   command bar, Stage, Stage/Fixture pane chrome, Channels, Fixture Sheet, Patch, and Presets have
   moved, as have Patch setup, the complete parameter bank, and selection-driven operator modals;
   a small number of keypad/miscellaneous readers still use the facade.
-- [ ] Finish the remaining action-time recording caller. Normal Preset and Group recording are
-  typed end to end and no longer read or submit the compatibility Programmer projection. The larger
-  Cue/Playback recording transaction still requires its own typed application action; keep its Cue
-  merge, Preload, assignment, take-live, tracking, and rollback semantics independent rather than
-  generalizing the Preset or Group contracts.
 - [ ] Replace inferred Cue ambiguity in the command-line text projection with explicit desk-local
   pending-choice state that is set only by `ChoiceRequired` after ENT and cleared by edit, reset,
   selection, or Cancel. Until then, cross-session choice visibility remains a documented
@@ -505,6 +512,23 @@ command-line HTTP, keyboard, OSC, and compatibility WebSocket surfaces.
   1,382-line Dynamics experiment and 154-line `handle_subscription_osc`; every production file
   changed by Group recording remains below 400 lines and every changed production function remains
   below the hard limit.
+- Typed Cue recording passes all 87 `light-programmer` tests, 268 `light-application` tests, 66
+  `light-playback` unit tests plus 4 automatic-transition tests, 55 `light-show` tests, 79
+  `light-fixture` tests, and 47 `light-wire` tests plus generated-contract verification. All 50
+  focused command HTTP tests and all 16 Cue-recording server tests pass. The complete server library
+  passes 296 tests with 1 ignored when the sandbox-blocked CITP socket test is skipped; the
+  unfiltered run fails only that test with `Operation not permitted`. The frontend passes all 1,230
+  tests in 189 files, typecheck, and the production build with only the existing large-chunk
+  advisory. The 27 focused Cue semantics and hardware-connected Playback API/UI scenarios pass
+  serially outside the sandbox. Coverage includes normal and Preload capture, overwrite/merge/
+  subtract/delete, topology creation, take-live, no-op, replay, conflict rollback, one authoritative
+  event, same-user desks, foreign-user rejection, exact snapshot repair, both optimistic ordering
+  races, scope replacement, first-view dormancy, no broad bootstrap request, and unrelated-render
+  suppression. Strict Clippy, formatting, dependency directions, all 10 source-size scanner tests,
+  generated contracts, and `git diff --check` pass. The source-size command now reports only the
+  pre-existing 1,382-line Dynamics experiment; OSC subscription handling was split below the hard
+  function limit. `./build open` succeeds and `/api/v1/readiness` reports `ready` with no current-
+  launch server error. Wire tests retain the existing non-fatal `ts-rs` warning.
 
 ## Wrap-up handoff
 
@@ -521,15 +545,13 @@ command-line HTTP, keyboard, OSC, and compatibility WebSocket surfaces.
   queued-playback, and aggregate lifecycle authority. It invalidates old mutation replays and emits
   only the final safe projections.
 - Public bootstrap no longer contains Programmer state. The authenticated v1 compatibility list
-  is restricted to same-user session rows and remains only for startup plus the action-time Cue
-  migration caller.
+  is restricted to same-user session rows and remains only for startup and the shrinking
+  compatibility surfaces tracked above.
 - Patch/setup selection is complete. The public test DSL remains a separate future milestone.
-- Recommended next slice: add one typed action-time Cue/Playback recording transaction shared by
-  touch, command-line, keyboard, and OSC. Capture normal or pending-Preload values on the server,
-  preserve Cue merge/tracking/timing/Phaser behavior and exact target ambiguity, atomically create
-  any required Cuelist/playback/page topology, and take a newly recorded non-Preload Cue live only
-  after the portable transaction succeeds. Keep Cue editor/Update/transfer cleanup and the public
-  test DSL as distinct later milestones.
+- Recommended next slice: replace inferred Cue ambiguity in command-line text with explicit desk-
+  local pending-choice state set only by `ChoiceRequired` after ENT and cleared by edit, reset,
+  selection, or Cancel. Keep Cue editor/Update/transfer cleanup, the remaining Playback ownership
+  boundary, and the public test DSL as distinct later milestones.
 
 Test files may exceed the hard limits, but should still be split when it improves readability and
 makes operator intent more visible.
