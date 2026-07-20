@@ -2,18 +2,18 @@
 
 Estimated progress: **99%**
 
-Estimated Codex ETA: **three focused implementation milestones plus final acceptance, or roughly
-8–16 hours of active Codex execution**, to repository-wide acceptance. Portable Playback
-topology, Virtual Playback, and Cue-editor/Cuelist settings convergence are complete; typed
-Update, typed transfer, the physical compatibility panes, the public test-DSL handoff, and final
-acceptance remain.
+Estimated Codex ETA: **two focused implementation milestones plus final acceptance, or roughly
+6–12 hours of active Codex execution**, to repository-wide acceptance. Portable Playback
+topology, Virtual Playback, Cue-editor/Cuelist settings, and typed Update convergence are
+complete; typed Cue transfer, the physical compatibility panes, the public test-DSL handoff, and
+final acceptance remain.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-20 after migrating inline Cue edits, Cuelist settings, and atomic
-renumbering onto captured-identity Playback topology actions without broad refreshes.
+Last updated: 2026-07-20 after completing the typed Programming Update application, wire, and
+frontend authority without broad refreshes.
 
 ## Guardrails
 
@@ -91,6 +91,17 @@ renumbering onto captured-identity Playback topology actions without broad refre
   stranding retries, repaired authority supports explicit retry, and old writer/session responses
   cannot cross into a replacement scope. Real changes remain one action with at most one Show
   event, and the legacy `saveCueList` server-context adapter is removed.
+- [x] Completed Programming Update as one typed Programming application workflow. Preview,
+  eligible-target discovery, confirmation, and direct apply share one coherent Programmer/desk/
+  Show capture, preserve exact Cue context and legacy storage identity, reject stale object,
+  Programmer, and Show revisions, retain idempotent replay, and produce one lossless portable
+  projection plus at most one Show event only for a semantic change. The strict v2 contract keeps
+  preview, target-menu, action, settings, and error payloads separate from feature models and
+  preserves external v1 compatibility. The production action-only provider is scoped by server,
+  session, Show, desk, and user; its FIFO writer handles either HTTP/event order, identical-request
+  retry, replay, pending rollback, exact conflict repair, and same-Show authority replacement.
+  Update dialogs and Setup settings now consume that capability without `refresh()`, bootstrap,
+  or broad Playback reads, and the internal v1 Update API/server-context facade is removed.
 - [x] Made virtual Playback exclusion activation one atomic Engine transition. Actual exclusion and
   auto-off releases are returned as sorted related projections, published once before the primary
   high-water event, retained by idempotent replay without re-execution, and applied to the frontend
@@ -380,9 +391,9 @@ renumbering onto captured-identity Playback topology actions without broad refre
 
 - [ ] Continue vertical feature-store/event slices and move the remaining production callers away
   from broad `useServer()`, polling, and generic show-object mutation.
-- [ ] Finish the remaining Playback ownership callers: move typed Update and transfer workflows,
-  then the physical compatibility panes onto the committed topology and runtime boundaries. Cue
-  editor/Cuelist settings and Virtual Playback are complete.
+- [ ] Finish the remaining Playback ownership callers: move typed Cue transfer, then the physical
+  compatibility panes onto the committed topology and runtime boundaries. Update, Cue editor/
+  Cuelist settings, and Virtual Playback are complete.
 - [ ] Move the remaining selection consumers onto the scoped Programming store, then remove their
   legacy bootstrap fields and broad Programmer refresh paths. Group Pool, Group Strip, and the
   command bar, Stage, Stage/Fixture pane chrome, Channels, Fixture Sheet, Patch, and Presets have
@@ -692,6 +703,21 @@ renumbering onto captured-identity Playback topology actions without broad refre
   and `git diff --check` pass. Dependency directions and all 10 architecture scanner tests pass;
   the aggregate architecture command still exits 1 only for the separately owned 1,382-line
   Dynamics Editor experiment. Every touched production file remains below 400 lines.
+- Programming Update convergence passes all 26 focused application tests, all 8 strict wire tests,
+  generated-contract verification, and the 14-test server `update` filter including all 12 Update
+  application/compatibility/v2 route paths. Strict Clippy for application, wire, and server,
+  `cargo fmt --all -- --check`, and `git diff --check` pass; wire generation retains only the known
+  non-fatal `ts-rs` `deny_unknown_fields` warning. The frontend passes 53 focused transport,
+  decoder, writer, provider, workflow, and legacy-facade tests plus the complete 1,379-test suite
+  in 203 files, typecheck, and the production build with only the existing Vite chunk advisory.
+  The focused UPDATE-001 API/UI acceptance pair passes outside the sandbox. Coverage proves strict
+  DTO mapping, exact request/revision/scope authority, one-action direct apply, safe retry/replay,
+  both HTTP/event orders, pending abandonment, narrow Group and legacy-key Cue conflict repair,
+  FIFO rebasing, late-response rejection, provider dormancy, stable unrelated renders, settings
+  ownership, and absence of bootstrap or broad Playback requests. Dependency directions and all
+  10 architecture scanner tests pass. Every new production file remains below 400 lines and the
+  split `UpdateWorkflow` function is 59 lines; the committed aggregate source-size exception for
+  the isolated Dynamics Editor experiment remains outside this slice.
 
 ## Wrap-up handoff
 
@@ -714,10 +740,11 @@ renumbering onto captured-identity Playback topology actions without broad refre
   remains a separate future milestone.
 - Preload now prepares one final-state-aware batch, and virtual-exclusion restart authority is
   private, desk-exact, migration-compatible, and absent from public runtime projections.
-- Recommended next slice: move Update planning and mutation into a typed Programming application
-  boundary, then publish its strict v2 contract and migrate the production workflow without broad
-  refreshes. Typed Cue transfer and the physical Playback compatibility snapshot follow; keep the
-  public test DSL and final repository-wide acceptance/performance run as the closing milestone.
+- Recommended next slice: move Cue COPY/MOVE Plain/Status transfer into one typed Programming
+  application action with exact source/destination authority, one coherent lossless projection,
+  replay, and scoped frontend installation. The physical Playback compatibility snapshot follows;
+  keep the public test DSL and final repository-wide acceptance/performance run as the closing
+  milestone.
 
 Test files may exceed the hard limits, but should still be split when it improves readability and
 makes operator intent more visible.
