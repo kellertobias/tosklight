@@ -63,6 +63,7 @@ fn contribution_level(engine: &PlaybackEngine, at: DateTime<Utc>, fixture: Fixtu
 mod automatic;
 mod contribution;
 mod controls;
+mod cue_recording;
 mod cue_tracking;
 mod master;
 mod runtime;

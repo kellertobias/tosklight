@@ -3,6 +3,7 @@
 
 mod capture_mode;
 mod command_state;
+mod cue_recording;
 mod fixture_value_batch;
 mod group_recording;
 mod groups;
@@ -28,6 +29,10 @@ pub use capture_mode::ProgrammerCaptureMode;
 pub use command_state::{
     CommandLineReplaceError, CommandLineState, CommandTarget, ProgrammerInteractionState,
     ProgrammerInteractionVersion,
+};
+pub use cue_recording::{
+    CueRecordingCapture, CueRecordingCaptureError, CueRecordingCapturedSource,
+    CueRecordingFixtureValue, CueRecordingGroupValue, CueRecordingSource,
 };
 pub use group_recording::{GroupRecordingCapture, group_delete_blocker};
 pub use groups::{

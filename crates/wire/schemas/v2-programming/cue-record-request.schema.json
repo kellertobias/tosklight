@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CueRecordRequest",
+  "description": "Requests an action-time capture; recordable Programmer values never cross the client boundary.",
+  "type": "object",
+  "properties": {
+    "activation_policy": {
+      "$ref": "#/$defs/CueRecordActivationPolicy"
+    },
+    "capture_policy": {
+      "$ref": "#/$defs/CueRecordCapturePolicy"
+    },
+    "cue_number": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "format": "double"
+    },
+    "cue_only": {
+      "type": "boolean"
+    },
+    "name": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 256
+    },
+    "operation": {
+      "$ref": "#/$defs/CueRecordOperation"
+    },
+    "request_id": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1
+    },
+    "target": {
+      "$ref": "#/$defs/CueRecordTarget"
+    },
+    "timing": {
+      "$ref": "#/$defs/CueRecordTiming"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "target",
+    "operation",
+    "timing",
+    "cue_only",
+    "capture_policy",
+    "activation_policy"
+  ],
+  "$defs": {
+    "CueRecordActivationPolicy": {
+      "type": "string",
+      "enum": [
+        "hold",
+        "go_to_if_normal"
+      ]
+    },
+    "CueRecordCapturePolicy": {
+      "type": "string",
+      "enum": [
+        "current_capture",
+        "pending_or_active_preload"
+      ]
+    },
+    "CueRecordOperation": {
+      "type": "string",
+      "enum": [
+        "overwrite",
+        "merge",
+        "subtract"
+      ]
+    },
+    "CueRecordTarget": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "pool"
+            },
+            "playback_number": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 1000,
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "playback_number"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "selected_playback"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "page_slot"
+            },
+            "page": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 127,
+              "minimum": 1
+            },
+            "slot": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 127,
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "page",
+            "slot"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "cue_list_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "kind": {
+              "type": "string",
+              "const": "cue_list"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "cue_list_id"
+          ]
+        }
+      ]
+    },
+    "CueRecordTiming": {
+      "type": "object",
+      "properties": {
+        "delay_millis": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0
+        },
+        "fade_millis": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

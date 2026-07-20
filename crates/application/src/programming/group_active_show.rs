@@ -156,11 +156,7 @@ fn complete_recording<P: ProgrammingGroupActiveShowPorts>(
         kind: ActiveShowObjectKind::Group,
         object_id: result.projection.object_id.clone(),
         object_revision: result.projection.object_revision,
-        body: result
-            .projection
-            .raw_body
-            .as_deref()
-            .map(serde_json::Value::clone),
+        body: result.projection.raw_body.as_deref().cloned(),
         deleted: result.projection.deleted,
     };
     result.event_sequence = Some(

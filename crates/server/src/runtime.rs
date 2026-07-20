@@ -120,6 +120,7 @@ mod mvr_import;
 mod object_api;
 mod object_normalization;
 mod operator_api;
+mod osc_cue_record_suppression;
 mod osc_feedback;
 mod osc_feedback_broadcast;
 mod osc_feedback_playbacks;

@@ -199,7 +199,10 @@ fn accepted_command(
 }
 
 pub(super) fn compatibility_only_family(command: &str) -> Result<Option<&'static str>, String> {
-    if preset_record_address(command)?.is_some() || group_record_command(command)?.is_some() {
+    if preset_record_address(command)?.is_some()
+        || group_record_command(command)?.is_some()
+        || super::cue_recording_command::parse(command)?.is_some()
+    {
         return Ok(None);
     }
     let Some(family) = super::super::normalized_programmer_command_family(command)? else {

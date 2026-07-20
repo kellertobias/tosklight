@@ -37,6 +37,10 @@ impl<'a> ServerProgrammingPorts<'a> {
         self.state
     }
 
+    pub(super) const fn session(&self) -> &'a Session {
+        self.session
+    }
+
     pub(crate) fn record_typed_command(
         &self,
         programmers: &ProgrammerRegistry,
@@ -45,6 +49,7 @@ impl<'a> ServerProgrammingPorts<'a> {
     ) -> Option<ProgrammingExecution> {
         self.record_group_command(programmers, context, command)
             .or_else(|| self.record_preset_command(programmers, context, command))
+            .or_else(|| self.record_cue_command(programmers, context, command))
     }
 
     fn record_group_command(
@@ -147,7 +152,7 @@ impl<'a> ServerProgrammingPorts<'a> {
         Ok(self.accepted_recording_command(&context, raw_command, 1))
     }
 
-    fn active_show_id(&self) -> Result<light_core::ShowId, String> {
+    pub(super) fn active_show_id(&self) -> Result<light_core::ShowId, String> {
         self.state
             .active_show
             .read()
@@ -156,7 +161,7 @@ impl<'a> ServerProgrammingPorts<'a> {
             .ok_or_else(|| "no show is open".to_owned())
     }
 
-    fn accepted_recording_command(
+    pub(super) fn accepted_recording_command(
         &self,
         context: &ActionContext,
         raw_command: &str,
@@ -185,7 +190,7 @@ impl<'a> ServerProgrammingPorts<'a> {
         warning
     }
 
-    fn recording_execution(
+    pub(super) fn recording_execution(
         &self,
         context: &ActionContext,
         command: &str,
@@ -200,7 +205,12 @@ impl<'a> ServerProgrammingPorts<'a> {
         }
     }
 
-    fn rejected_recording_command(&self, context: &ActionContext, command: &str, error: &str) {
+    pub(super) fn rejected_recording_command(
+        &self,
+        context: &ActionContext,
+        command: &str,
+        error: &str,
+    ) {
         super::super::record_command_history(
             self.state,
             self.session,
@@ -213,7 +223,7 @@ impl<'a> ServerProgrammingPorts<'a> {
     }
 }
 
-fn recording_context(context: &ActionContext, prefix: &str) -> ActionContext {
+pub(super) fn recording_context(context: &ActionContext, prefix: &str) -> ActionContext {
     if context.request_id.is_some() {
         context.clone()
     } else {
@@ -237,7 +247,10 @@ impl ProgrammingGroupRecordingPorts for ServerProgrammingPorts<'_> {
     }
 }
 
-fn clear_command_line(programmers: &ProgrammerRegistry, session: &Session) -> Result<(), String> {
+pub(super) fn clear_command_line(
+    programmers: &ProgrammerRegistry,
+    session: &Session,
+) -> Result<(), String> {
     programmers
         .update_command_line(session.id, |current| (String::new(), current.target, true))
         .ok_or_else(|| "programmer command line does not exist".to_owned())?;

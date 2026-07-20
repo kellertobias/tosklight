@@ -13,3 +13,5 @@ include!("command_http_preload_values_tests.rs");
 include!("command_http_preload_playback_queue_tests.rs");
 include!("command_http_preset_recording_tests.rs");
 include!("command_http_group_recording_tests.rs");
+include!("command_http_cue_recording_tests.rs");
+include!("command_http_cue_convergence_tests.rs");

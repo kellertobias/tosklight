@@ -233,6 +233,7 @@ fn build_app_state(
         input_locks: Arc::new(Mutex::new(HashMap::new())),
         file_input_contexts: Arc::new(Mutex::new(HashMap::new())),
         osc_subscribers: Arc::new(Mutex::new(HashMap::new())),
+        osc_cue_record_suppression: Arc::default(),
         osc_feedback: Some(osc_feedback),
         #[cfg(test)]
         osc_feedback_capture: Arc::new(Mutex::new(Vec::new())),

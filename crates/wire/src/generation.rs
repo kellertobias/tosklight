@@ -13,6 +13,7 @@ use crate::v2::command_line::{
     ProgrammingSelectionActionOutcome, ProgrammingSelectionActionRequest,
     ReplaceCommandLineRequest,
 };
+use crate::v2::cue_recording::{CueRecordErrorResponse, CueRecordOutcome, CueRecordRequest};
 use crate::v2::events::{EventClientMessage, EventServerMessage, OutputRuntimeSnapshot};
 use crate::v2::group_recording::{
     GroupRecordErrorResponse, GroupRecordOutcome, GroupRecordRequest,
@@ -121,6 +122,9 @@ pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
         programming_request_schema::<GroupRecordRequest>("group-record-request"),
         programming_response_schema::<GroupRecordOutcome>("group-record-outcome"),
         programming_response_schema::<GroupRecordErrorResponse>("group-record-error-response"),
+        programming_request_schema::<CueRecordRequest>("cue-record-request"),
+        programming_response_schema::<CueRecordOutcome>("cue-record-outcome"),
+        programming_response_schema::<CueRecordErrorResponse>("cue-record-error-response"),
         playback_request_schema::<PlaybackActionRequest>("playback-action-request"),
         playback_response_schema::<PlaybackActionOutcome>("playback-action-outcome"),
         playback_response_schema::<PlaybackErrorResponse>("playback-error-response"),

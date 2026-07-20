@@ -23,6 +23,62 @@ fn show_objects_enforce_optimistic_revisions() {
 }
 
 #[test]
+fn collection_snapshot_includes_the_matching_portable_revision() {
+    let path = temporary("object-collection-snapshot");
+    let (show, _) = ShowStore::create(&path, "Snapshot").unwrap();
+    show.put_object("group", "front", &serde_json::json!({"fixtures": []}), 0)
+        .unwrap();
+
+    let (revision, groups) = show.objects_with_portable_revision("group").unwrap();
+
+    assert_eq!(revision, show.portable_revision().unwrap());
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].id, "front");
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn exact_object_snapshot_does_not_decode_unrequested_siblings() {
+    let path = temporary("exact-object-snapshot");
+    let (show, _) = ShowStore::create(&path, "Exact snapshot").unwrap();
+    show.put_object("future", "wanted", &serde_json::json!({"value": 1}), 0)
+        .unwrap();
+    show.put_object("future", "sibling", &serde_json::json!({"value": 2}), 0)
+        .unwrap();
+    show.conn
+        .execute(
+            "UPDATE objects SET body_json=?1 WHERE kind=?2 AND id=?3",
+            rusqlite::params!["not-json", "future", "sibling"],
+        )
+        .unwrap();
+
+    let (revision, object) = show
+        .object_with_portable_revision("future", "wanted")
+        .unwrap();
+
+    assert_eq!(revision, show.portable_revision().unwrap());
+    assert_eq!(object.unwrap().body, serde_json::json!({"value": 1}));
+    assert!(show.objects_with_portable_revision("future").is_err());
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn missing_exact_object_snapshot_still_returns_the_current_revision() {
+    let path = temporary("missing-object-snapshot");
+    let (show, _) = ShowStore::create(&path, "Missing snapshot").unwrap();
+    show.put_object("future", "present", &serde_json::json!({}), 0)
+        .unwrap();
+
+    let (revision, object) = show
+        .object_with_portable_revision("future", "missing")
+        .unwrap();
+
+    assert_eq!(revision, show.portable_revision().unwrap());
+    assert!(object.is_none());
+    let _ = fs::remove_file(path);
+}
+
+#[test]
 fn related_object_writes_and_deletes_roll_back_together_on_revision_conflict() {
     let path = temporary("atomic-objects");
     let (show, _) = ShowStore::create(&path, "Atomic objects").unwrap();

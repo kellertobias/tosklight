@@ -7,7 +7,7 @@ fn active_osc_subscribers(state: &AppState) -> Vec<OscSubscriber> {
     let expired = subscribers
         .values()
         .filter(|subscriber| now.duration_since(subscriber.last_seen) >= Duration::from_secs(20))
-        .map(|subscriber| subscriber.session_id)
+        .map(|subscriber| (subscriber.session_id, subscriber.command_source))
         .collect::<Vec<_>>();
     subscribers
         .retain(|_, subscriber| now.duration_since(subscriber.last_seen) < Duration::from_secs(20));
@@ -15,7 +15,11 @@ fn active_osc_subscribers(state: &AppState) -> Vec<OscSubscriber> {
     let connected = !subscribers.is_empty();
     let active = subscribers.values().cloned().collect();
     drop(subscribers);
-    for session_id in expired {
+    for (session_id, source) in expired {
+        state
+            .osc_cue_record_suppression
+            .lock()
+            .remove_source(session_id, source);
         disconnect_orphaned_osc_session(state, session_id);
     }
     if changed {

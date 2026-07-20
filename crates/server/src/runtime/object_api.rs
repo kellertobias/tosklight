@@ -8,16 +8,16 @@ use output_routes::*;
 pub(super) async fn list_objects(
     State(state): State<AppState>,
     Path((id, kind)): Path<(Uuid, String)>,
-) -> Result<Json<Vec<light_show::VersionedObject>>, ApiError> {
+) -> Result<Response, ApiError> {
     let entry = state
         .desk
         .lock()
         .show(light_core::ShowId(id))
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("show"))?;
-    let mut objects = ShowStore::open(entry.path)
-        .map_err(ApiError::store)?
-        .objects(&kind)
+    let store = ShowStore::open(entry.path).map_err(ApiError::store)?;
+    let (show_revision, mut objects) = store
+        .objects_with_portable_revision(&kind)
         .map_err(ApiError::store)?;
     if kind == "group" {
         materialize_derived_group_memberships(&mut objects);
@@ -25,7 +25,11 @@ pub(super) async fn list_objects(
     if kind == "preset" {
         materialize_preset_addresses(&mut objects)?;
     }
-    Ok(Json(objects))
+    Ok((
+        [(header::ETAG, format!("\"{}\"", show_revision.value()))],
+        Json(objects),
+    )
+        .into_response())
 }
 pub(super) async fn get_object(
     State(state): State<AppState>,
@@ -39,25 +43,69 @@ pub(super) async fn get_object(
         .show(light_core::ShowId(id))
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("show"))?;
-    let mut objects = ShowStore::open(entry.path)
-        .map_err(ApiError::store)?
-        .objects(&kind)
-        .map_err(ApiError::store)?;
-    if kind == "group" {
-        materialize_derived_group_memberships(&mut objects);
-    }
-    if kind == "preset" {
-        materialize_preset_addresses(&mut objects)?;
-    }
-    let object = objects
-        .into_iter()
-        .find(|object| object.id == object_id)
-        .ok_or_else(|| ApiError::not_found("show object"))?;
+    let store = ShowStore::open(entry.path).map_err(ApiError::store)?;
+    let (show_revision, object) = exact_object_snapshot(&store, &kind, &object_id)?;
+    let Some(object) = object else {
+        let mut response = ApiError::not_found("show object").into_response();
+        insert_show_revision_header(&mut response, show_revision.value())?;
+        return Ok(response);
+    };
     Ok((
-        [(header::ETAG, format!("\"{}\"", object.revision))],
+        [
+            (header::ETAG, format!("\"{}\"", object.revision)),
+            (
+                header::HeaderName::from_static("x-light-show-revision"),
+                format!("\"{}\"", show_revision.value()),
+            ),
+        ],
         Json(object),
     )
         .into_response())
+}
+
+fn exact_object_snapshot(
+    store: &ShowStore,
+    kind: &str,
+    object_id: &str,
+) -> Result<
+    (
+        light_show::PortableShowRevision,
+        Option<light_show::VersionedObject>,
+    ),
+    ApiError,
+> {
+    if kind == "group" {
+        let (revision, mut objects) = store
+            .objects_with_portable_revision(kind)
+            .map_err(ApiError::store)?;
+        materialize_derived_group_memberships(&mut objects);
+        return Ok((
+            revision,
+            objects.into_iter().find(|object| object.id == object_id),
+        ));
+    }
+    let (revision, mut object) = store
+        .object_with_portable_revision(kind, object_id)
+        .map_err(ApiError::store)?;
+    if kind == "preset"
+        && let Some(object) = object.as_mut()
+    {
+        materialize_preset_addresses(std::slice::from_mut(object))?;
+    }
+    Ok((revision, object))
+}
+
+fn insert_show_revision_header(
+    response: &mut Response,
+    revision: light_core::Revision,
+) -> Result<(), ApiError> {
+    let value = format!("\"{revision}\"")
+        .parse()
+        .map_err(|error| ApiError::internal(format!("invalid Show revision header: {error}")))?;
+    response
+        .headers_mut()
+        .insert("x-light-show-revision", value);
+    Ok(())
 }
 
 pub(super) fn materialize_derived_group_memberships(objects: &mut [light_show::VersionedObject]) {

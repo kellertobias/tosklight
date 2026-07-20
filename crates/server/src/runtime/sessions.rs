@@ -217,6 +217,7 @@ pub(super) async fn close_session(
     let Some(session) = state.sessions.write().remove(&id) else {
         return Err(ApiError::not_found("session"));
     };
+    state.osc_cue_record_suppression.lock().remove_session(id);
     if let Some(client_id) = state.session_clients.write().remove(&id) {
         state
             .desk

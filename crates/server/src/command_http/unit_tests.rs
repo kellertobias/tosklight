@@ -17,16 +17,18 @@ fn atomic_family_filter_uses_the_execution_parser_after_timing_clauses() {
 }
 
 #[test]
-fn atomic_family_filter_owns_typed_preset_and_group_recording() {
+fn atomic_family_filter_owns_typed_preset_group_and_cue_recording() {
     assert_eq!(compatibility_only_family("RECORD 2.7").unwrap(), None);
     assert_eq!(compatibility_only_family("REC 3 . 9").unwrap(), None);
     assert_eq!(compatibility_only_family("RECORD GROUP 7").unwrap(), None);
     assert_eq!(compatibility_only_family("RECORD + GROUP 7").unwrap(), None);
     assert_eq!(compatibility_only_family("RECORD - GROUP 7").unwrap(), None);
     assert_eq!(compatibility_only_family("DELETE GROUP 7").unwrap(), None);
+    assert_eq!(compatibility_only_family("RECORD CUE 7").unwrap(), None);
+    assert_eq!(compatibility_only_family("RECORD SET 27").unwrap(), None);
     assert_eq!(
-        compatibility_only_family("RECORD CUE 7").unwrap(),
-        Some("RECORD")
+        compatibility_only_family("RECORD SET 2.7 CUE 3").unwrap(),
+        None
     );
     assert_eq!(
         compatibility_only_family("RECORD + 2.7").unwrap(),

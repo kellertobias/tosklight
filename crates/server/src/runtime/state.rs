@@ -49,6 +49,8 @@ pub(super) struct AppState {
     pub(super) input_locks: Arc<Mutex<HashMap<String, (light_core::UserId, Instant)>>>,
     pub(super) file_input_contexts: Arc<Mutex<HashMap<Uuid, file_manager::FileInputContext>>>,
     pub(super) osc_subscribers: Arc<Mutex<HashMap<String, OscSubscriber>>>,
+    pub(super) osc_cue_record_suppression:
+        Arc<Mutex<osc_cue_record_suppression::OscCueRecordSuppression>>,
     pub(super) osc_feedback: Option<Arc<std::net::UdpSocket>>,
     #[cfg(test)]
     pub(super) osc_feedback_capture: Arc<Mutex<Vec<CapturedOscMessage>>>,

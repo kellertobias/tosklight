@@ -6,6 +6,7 @@ mod automatic;
 mod compiled;
 mod contribution;
 mod controls;
+mod cue_recording;
 mod cue_tracking;
 mod engine;
 mod model;
@@ -17,6 +18,10 @@ pub use arbitration::resolve;
 pub use automatic::{
     AutomaticPlaybackTransition, AutomaticPlaybackTransitionCause, PlaybackCueReference,
     PlaybackTickResult,
+};
+pub use cue_recording::{
+    CueListRecordingPlan, CueRecordOperation, CueRecordingContent, CueRecordingPlanError,
+    CueRecordingTiming,
 };
 pub use engine::PlaybackEngine;
 pub use model::{cue::*, playback::*, runtime::*};

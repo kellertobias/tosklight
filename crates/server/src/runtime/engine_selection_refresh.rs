@@ -67,10 +67,12 @@ pub(super) fn install_prepared_snapshot_with_selection_refresh(
 
     let owned_target = owner.and_then(|owner| selection_target(state, owner.desk_id));
     let targets = selection_targets(state, owner.map(|owner| owner.desk_id));
-    let highlight_sessions = (groups_changed
-        && matches!(highlight, HighlightInstallPolicy::Reconcile))
-    .then(|| highlight_sessions(state, owner))
-    .unwrap_or_default();
+    let highlight_sessions =
+        if groups_changed && matches!(highlight, HighlightInstallPolicy::Reconcile) {
+            highlight_sessions(state, owner)
+        } else {
+            Vec::new()
+        };
     let install = || {
         install(state, prepared, playback);
         finish_owned_selection_gesture(state, owner);

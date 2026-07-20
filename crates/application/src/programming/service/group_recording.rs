@@ -266,7 +266,7 @@ fn validate_projection(
             !projection.deleted
                 && body.as_object().is_some_and(|body| {
                     body.get("id")
-                        .map_or(true, |id| id.as_str() == Some(request.group_id.as_str()))
+                        .is_none_or(|id| id.as_str() == Some(request.group_id.as_str()))
                 })
         }
         None => projection.deleted,

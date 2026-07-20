@@ -9,7 +9,14 @@ struct CommandHttpScenario {
 
 impl CommandHttpScenario {
     async fn new() -> Self {
-        let (state, data_dir) = test_state();
+        Self::from_state(test_state()).await
+    }
+
+    async fn with_clock(clock: Arc<ManualClock>) -> Self {
+        Self::from_state(test_state_with_clock(clock)).await
+    }
+
+    async fn from_state((state, data_dir): (AppState, PathBuf)) -> Self {
         let app = router(state.clone());
         let (token, _) = login(&app, "Operator").await;
         let session = state
@@ -319,6 +326,65 @@ impl CommandHttpScenario {
             .unwrap()
     }
 
+    async fn cue_recording_action(
+        &self,
+        show_id: &str,
+        token: Option<&str>,
+        expected_show_revision: Option<u64>,
+        input: serde_json::Value,
+    ) -> Response {
+        let mut request = Request::post(format!("/api/v2/shows/{show_id}/cues/record"));
+        if let Some(token) = token {
+            request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
+        }
+        if let Some(revision) = expected_show_revision {
+            request = request.header(header::IF_MATCH, revision.to_string());
+        }
+        self.app
+            .clone()
+            .oneshot(
+                request
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(input.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+
+    async fn playback_go_to(
+        &self,
+        request_id: &str,
+        playback_number: u16,
+        cue_number: f64,
+    ) -> Response {
+        self.app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/api/v2/desks/{}/playback-actions",
+                    self.session.desk.id
+                ))
+                .header(
+                    header::AUTHORIZATION,
+                    format!("Bearer {}", self.token),
+                )
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "request_id": request_id,
+                        "address": {"kind":"playback","playback_number":playback_number},
+                        "action": {"type":"go_to","cue_number":cue_number},
+                        "surface":"virtual"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+
     async fn press_key(&self, token: &str, key: &str, request_id: &str) -> Response {
         self.app
             .clone()
@@ -425,5 +491,18 @@ impl CommandHttpScenario {
             .get(&self.session.desk.id)
             .unwrap()
             .len()
+    }
+
+    fn cue_list_compatibility_payloads(&self) -> Vec<serde_json::Value> {
+        self.state
+            .audit_events
+            .lock()
+            .iter()
+            .filter(|event| {
+                event.kind == "show_object_changed"
+                    && event.payload["kind"] == serde_json::json!("cue_list")
+            })
+            .map(|event| event.payload.clone())
+            .collect()
     }
 }

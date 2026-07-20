@@ -263,6 +263,7 @@ pub(super) fn handle_playback_osc(
     // application service, alongside the HTTP and compatibility WebSocket paths.
     let parts = address.trim_matches('/').split('/').collect::<Vec<_>>();
     let (pressed, value) = osc_playback_values(arguments);
+    let source_socket = source.and_then(|source| source.parse::<SocketAddr>().ok());
     if handle_osc_page(state, &parts, arguments) {
         return;
     }
@@ -290,16 +291,14 @@ pub(super) fn handle_playback_osc(
     } else {
         None
     };
-    let subscribed = source
-        .and_then(|source| source.parse::<SocketAddr>().ok())
-        .and_then(|source| {
-            state
-                .osc_subscribers
-                .lock()
-                .values()
-                .find(|subscriber| subscriber.command_source == source)
-                .cloned()
-        });
+    let subscribed = source_socket.and_then(|source| {
+        state
+            .osc_subscribers
+            .lock()
+            .values()
+            .find(|subscriber| subscriber.command_source == source)
+            .cloned()
+    });
     let action_alias = path_alias
         .map(str::to_owned)
         .or_else(|| {
@@ -327,6 +326,40 @@ pub(super) fn handle_playback_osc(
     } else {
         parts[action_index]
     };
+    let suppression_input =
+        session
+            .as_ref()
+            .map(|session| osc_cue_record_suppression::OscSuppressionInput {
+                session_id: session.id,
+                source: source_socket,
+                address,
+                continuous: action == "master",
+                pressed,
+            });
+    if suppression_input.is_some_and(|input| {
+        state
+            .osc_cue_record_suppression
+            .lock()
+            .suppresses_input(input, Instant::now())
+    }) {
+        return;
+    }
+    if let Some(session) = session.as_ref()
+        && command_http::intercept_armed_cue_playback(
+            state,
+            session,
+            playback_address,
+            action == "master" || pressed,
+        )
+    {
+        if let Some(input) = suppression_input {
+            state
+                .osc_cue_record_suppression
+                .lock()
+                .remember_intercept(input, Instant::now());
+        }
+        return;
+    }
     let Ok(result) = playback_service::osc_action(
         state,
         session.as_ref(),

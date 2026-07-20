@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 mod capture_mode;
+mod cue_recording;
 mod group_recording;
 mod groups_and_preload;
 mod normal_values_actions;

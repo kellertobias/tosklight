@@ -1,5 +1,7 @@
 mod capture_mode_projection;
 mod command;
+mod cue_active_show;
+mod cue_recording;
 mod event;
 mod group_active_show;
 mod group_recording;
@@ -24,6 +26,16 @@ pub use command::{
     CueMoveCopyChoice, CueTransferOperation, ExecutionPolicy, ProgrammingAction,
     ProgrammingChoiceOption, ProgrammingChoiceOptionId, ProgrammingCommand, ProgrammingOutcome,
     ProgrammingResult, SelectionGestureSource,
+};
+pub use cue_recording::{
+    ProgrammingCueActivationCompletion, ProgrammingCueActivationPolicy,
+    ProgrammingCueActivationResult, ProgrammingCueActiveShowPorts, ProgrammingCueCapturePolicy,
+    ProgrammingCueCommit, ProgrammingCueCommitResult, ProgrammingCueObjectProjection,
+    ProgrammingCuePageSlot, ProgrammingCueProjections, ProgrammingCueRecordOperation,
+    ProgrammingCueRecordOutcome, ProgrammingCueRecordRequest, ProgrammingCueRecordResult,
+    ProgrammingCueRecordTarget, ProgrammingCueRecordTiming, ProgrammingCueRecordingEnvironment,
+    ProgrammingCueRecordingPorts, ProgrammingCueResolvedTarget,
+    ProgrammingCueShowRevisionExpectation, ProgrammingRecordedCue,
 };
 pub use event::ProgrammingInteractionChange;
 pub use group_recording::{
@@ -77,6 +89,8 @@ pub use values_projection::{
     ProgrammingValuesChange, ProgrammingValuesProjection, ProgrammingValuesSnapshot,
 };
 
+#[cfg(test)]
+mod cue_recording_service_tests;
 #[cfg(test)]
 mod live_state_tests;
 #[cfg(test)]

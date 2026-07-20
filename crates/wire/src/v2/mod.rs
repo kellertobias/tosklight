@@ -1,6 +1,7 @@
 //! Version 2 transport contracts.
 
 pub mod command_line;
+pub mod cue_recording;
 pub mod events;
 pub mod group_recording;
 pub mod patch;

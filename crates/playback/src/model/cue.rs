@@ -1,6 +1,6 @@
 use crate::*;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CueChange {
     pub fixture_id: FixtureId,
     pub attribute: AttributeKey,
@@ -32,7 +32,7 @@ impl CueChange {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Cue {
     #[serde(default = "Uuid::new_v4")]
     pub id: Uuid,
@@ -52,7 +52,7 @@ pub struct Cue {
     pub group_changes: Vec<GroupCueChange>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GroupCueChange {
     pub group_id: String,
     pub attribute: AttributeKey,
@@ -82,7 +82,7 @@ impl Cue {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum CueTrigger {
     Manual,
@@ -122,7 +122,7 @@ pub enum RestartMode {
     ContinueCurrentCue,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CueList {
     pub id: CueListId,
     pub name: String,

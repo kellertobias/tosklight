@@ -1,10 +1,20 @@
 fn test_state() -> (AppState, PathBuf) {
+    test_state_with_programmers(ProgrammerRegistry::default(), None)
+}
+
+fn test_state_with_clock(clock: Arc<ManualClock>) -> (AppState, PathBuf) {
+    test_state_with_programmers(ProgrammerRegistry::with_clock(clock.clone()), Some(clock))
+}
+
+fn test_state_with_programmers(
+    programmers: ProgrammerRegistry,
+    manual_clock: Option<Arc<ManualClock>>,
+) -> (AppState, PathBuf) {
     let data_dir = std::env::temp_dir().join(format!("light-server-test-{}", Uuid::new_v4()));
     std::fs::create_dir_all(data_dir.join("shows")).unwrap();
     let desk = DeskStore::open(data_dir.join("desk.sqlite")).unwrap();
     let fixture_library =
         light_fixture::FixtureLibrary::open(data_dir.join("fixtures.sqlite")).unwrap();
-    let programmers = ProgrammerRegistry::default();
     let engine = Arc::new(Engine::new(programmers.clone()));
     let (events, _) = broadcast::channel(32);
     let application_events = EventBus::default();
@@ -59,12 +69,13 @@ fn test_state() -> (AppState, PathBuf) {
             input_locks: Arc::new(Mutex::new(HashMap::new())),
             file_input_contexts: Arc::new(Mutex::new(HashMap::new())),
             osc_subscribers: Arc::new(Mutex::new(HashMap::new())),
+            osc_cue_record_suppression: Arc::default(),
             osc_feedback: None,
             osc_feedback_capture: Arc::new(Mutex::new(Vec::new())),
             mvr_imports: Arc::new(Mutex::new(HashMap::new())),
             network_output: None,
             output_sequences: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
-            manual_clock: None,
+            manual_clock,
             speed_groups: Arc::new(Mutex::new(std::array::from_fn(|index| {
                 SpeedGroupController::new(
                     default_speed_groups()[index],

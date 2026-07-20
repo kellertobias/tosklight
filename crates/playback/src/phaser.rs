@@ -13,13 +13,13 @@ pub enum PhaserCurve {
     Linear,
     Sine,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PhaserStep {
     pub position: f32,
     pub value: f32,
     pub curve_to_next: PhaserCurve,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Phaser {
     pub mode: PhaserMode,
     pub steps: Vec<PhaserStep>,
@@ -29,7 +29,7 @@ pub struct Phaser {
     pub width: f32,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AttributePhaser {
     pub fixture_ids: Vec<FixtureId>,
     #[serde(default)]

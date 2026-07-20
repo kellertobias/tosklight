@@ -177,6 +177,34 @@ export type GroupRecordErrorKind = "invalid" | "unauthorized" | "forbidden" | "n
 
 export type GroupRecordErrorResponse = { kind: GroupRecordErrorKind, error: string, current_revision?: number | null, retryable: boolean, };
 
+export type CueRecordTarget = { "kind": "pool", playback_number: number, } | { "kind": "selected_playback" } | { "kind": "page_slot", page: number, slot: number, } | { "kind": "cue_list", cue_list_id: string, };
+
+export type CueRecordOperation = "overwrite" | "merge" | "subtract";
+
+export type CueRecordTiming = { fade_millis?: number | null, delay_millis?: number | null, };
+
+export type CueRecordCapturePolicy = "current_capture" | "pending_or_active_preload";
+
+export type CueRecordActivationPolicy = "hold" | "go_to_if_normal";
+
+export type CueRecordRequest = { request_id: string, target: CueRecordTarget, operation: CueRecordOperation, cue_number?: number | null, timing: CueRecordTiming, cue_only: boolean, name?: string | null, capture_policy: CueRecordCapturePolicy, activation_policy: CueRecordActivationPolicy, };
+
+export type CueRecordCapturedSource = "normal" | "pending_preload" | "active_preload";
+
+export type RecordedCueObjectProjection = { id: string, revision: number, body: unknown, };
+
+export type CueRecordProjections = { cue_list: RecordedCueObjectProjection, playback: RecordedCueObjectProjection | null, page: RecordedCueObjectProjection | null, };
+
+export type RecordedCueProjection = { id: string, number: number, deleted: boolean, };
+
+export type CueRecordRuntimeOutcome = { projection: PlaybackRuntimeProjection, event_sequence: number, };
+
+export type CueRecordOutcome = { "status": "changed", request_id: string, correlation_id: string, replayed: boolean, captured_source: CueRecordCapturedSource, show_revision: number, recorded_cue: RecordedCueProjection, projections: CueRecordProjections, show_event_sequence: number, runtime: CueRecordRuntimeOutcome | null, } | { "status": "no_change", request_id: string, correlation_id: string, replayed: boolean, captured_source: CueRecordCapturedSource, show_revision: number, recorded_cue: RecordedCueProjection, projections: CueRecordProjections, };
+
+export type CueRecordErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
+
+export type CueRecordErrorResponse = { kind: CueRecordErrorKind, error: string, current_revision?: number | null, retryable: boolean, };
+
 export type PlaybackSurface = "virtual" | "physical";
 
 export type PlaybackAddress = { "kind": "cue_list", cue_list_id: string, } | { "kind": "playback", playback_number: number, } | { "kind": "current_page", slot: number, } | { "kind": "explicit_page", page: number, slot: number, };

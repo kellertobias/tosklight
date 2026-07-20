@@ -1,6 +1,6 @@
 use crate::{
-    PortableShowObjectUndo, RevisionCopySource, StoreError, VersionedObject, connection::configure,
-    portable,
+    PortableShowObjectUndo, PortableShowRevision, RevisionCopySource, StoreError, VersionedObject,
+    connection::configure, portable,
 };
 use light_core::{Revision, ShowId, UserId};
 use rusqlite::{Connection, MAIN_DB, OpenFlags, OptionalExtension, params};
@@ -179,28 +179,32 @@ impl ShowStore {
     }
 
     pub fn objects(&self, kind: &str) -> Result<Vec<VersionedObject>, StoreError> {
-        let mut statement = self.conn.prepare(
-            "SELECT id,body_json,revision,updated_at FROM objects WHERE kind=?1 ORDER BY id",
-        )?;
-        let rows = statement.query_map([kind], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, i64>(2)?,
-                row.get::<_, String>(3)?,
-            ))
-        })?;
-        rows.map(|row| {
-            let (id, body, revision, updated_at) = row?;
-            Ok(VersionedObject {
-                kind: kind.into(),
-                id,
-                body: serde_json::from_str(&body)?,
-                revision: revision as u64,
-                updated_at,
-            })
-        })
-        .collect()
+        load_versioned_objects(&self.conn, kind)
+    }
+
+    /// Reads one object collection and the whole-Show revision from the same SQLite snapshot.
+    pub fn objects_with_portable_revision(
+        &self,
+        kind: &str,
+    ) -> Result<(PortableShowRevision, Vec<VersionedObject>), StoreError> {
+        let transaction = self.conn.unchecked_transaction()?;
+        let revision = portable::current_revision(&transaction)?;
+        let objects = load_versioned_objects(&transaction, kind)?;
+        transaction.commit()?;
+        Ok((revision, objects))
+    }
+
+    /// Reads one exact object and the whole-Show revision from the same SQLite snapshot.
+    pub fn object_with_portable_revision(
+        &self,
+        kind: &str,
+        id: &str,
+    ) -> Result<(PortableShowRevision, Option<VersionedObject>), StoreError> {
+        let transaction = self.conn.unchecked_transaction()?;
+        let revision = portable::current_revision(&transaction)?;
+        let object = load_versioned_object(&transaction, kind, id)?;
+        transaction.commit()?;
+        Ok((revision, object))
     }
 
     pub fn delete_object(&self, kind: &str, id: &str) -> Result<bool, StoreError> {
@@ -221,6 +225,55 @@ impl ShowStore {
         self.conn.backup(MAIN_DB, destination, None)?;
         Ok(())
     }
+}
+
+fn load_versioned_objects(
+    connection: &Connection,
+    kind: &str,
+) -> Result<Vec<VersionedObject>, StoreError> {
+    let mut statement = connection.prepare(
+        "SELECT id,body_json,revision,updated_at FROM objects WHERE kind=?1 ORDER BY id",
+    )?;
+    let rows = statement.query_map([kind], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, i64>(2)?,
+            row.get::<_, String>(3)?,
+        ))
+    })?;
+    rows.map(|row| decode_versioned_object(kind, row?))
+        .collect()
+}
+
+fn load_versioned_object(
+    connection: &Connection,
+    kind: &str,
+    id: &str,
+) -> Result<Option<VersionedObject>, StoreError> {
+    let row = connection
+        .query_row(
+            "SELECT id,body_json,revision,updated_at FROM objects WHERE kind=?1 AND id=?2",
+            params![kind, id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .optional()?;
+    row.map(|row| decode_versioned_object(kind, row))
+        .transpose()
+}
+
+fn decode_versioned_object(
+    kind: &str,
+    row: (String, String, i64, String),
+) -> Result<VersionedObject, StoreError> {
+    let (id, body, revision, updated_at) = row;
+    Ok(VersionedObject {
+        kind: kind.into(),
+        id,
+        body: serde_json::from_str(&body)?,
+        revision: revision as u64,
+        updated_at,
+    })
 }
 
 pub fn initialise_show(path: impl AsRef<Path>, name: &str) -> Result<ShowId, StoreError> {
