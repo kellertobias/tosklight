@@ -23,6 +23,7 @@ async fn legacy_master_update_publishes_one_typed_change_and_v2_repairs_it() {
         .unwrap();
     assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
 
+    let cursor = state.application_events.latest_sequence();
     let response = put_master(
         &app,
         &token,
@@ -35,7 +36,7 @@ async fn legacy_master_update_publishes_one_typed_change_and_v2_repairs_it() {
     assert!((body["grand_master"].as_f64().unwrap() - 0.4).abs() < 0.000_001);
 
     let light_application::EventReplay::Events(events) = state.application_events.replay(
-        0,
+        cursor,
         &light_application::EventFilter::default()
             .with_object(light_application::EventObject::global_output()),
     ) else {
@@ -56,7 +57,7 @@ async fn legacy_master_update_publishes_one_typed_change_and_v2_repairs_it() {
     )
     .await;
     assert_eq!(no_change.status(), StatusCode::OK);
-    assert_eq!(state.application_events.latest_sequence(), 1);
+    assert_eq!(state.application_events.latest_sequence(), cursor + 1);
 
     let snapshot = app
         .clone()
@@ -73,7 +74,7 @@ async fn legacy_master_update_publishes_one_typed_change_and_v2_repairs_it() {
         .unwrap();
     assert_eq!(snapshot.status(), StatusCode::OK);
     let snapshot = json(snapshot).await;
-    assert_eq!(snapshot["cursor"]["sequence"], 1);
+    assert_eq!(snapshot["cursor"]["sequence"], cursor + 1);
     assert_eq!(snapshot["projection"]["identity"], "global_master");
     assert!((snapshot["projection"]["grand_master"].as_f64().unwrap() - 0.4).abs() < 0.000_001);
     assert_eq!(snapshot["projection"]["blackout"], true);
@@ -96,13 +97,14 @@ async fn websocket_master_retry_is_idempotent_at_the_typed_boundary() {
         payload: serde_json::json!({"grand_master":0.25}),
     };
 
+    let cursor = state.application_events.latest_sequence();
     let first = dispatch_ws_command(&state, &session, command());
     let replay = dispatch_ws_command(&state, &session, command());
     assert!(first.ok, "{:?}", first.error);
     assert!(replay.ok, "{:?}", replay.error);
     assert_eq!(first.payload, replay.payload);
     assert_eq!(state.output_control.lock().options.grand_master, 0.25);
-    assert_eq!(state.application_events.latest_sequence(), 1);
+    assert_eq!(state.application_events.latest_sequence(), cursor + 1);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

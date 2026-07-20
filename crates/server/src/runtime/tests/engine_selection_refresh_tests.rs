@@ -39,7 +39,7 @@ async fn active_group_put_and_undo_refresh_each_live_desk_once_without_deadlocki
     assert_eq!(changed.status(), StatusCode::OK);
     let changed = json(changed).await;
     assert_eq!(changed["revision"], 2);
-    assert_eq!(changed["event_sequence"], before_put + 3);
+    assert_eq!(changed["event_sequence"], before_put + 5);
 
     let put_correlation = assert_selection_refresh(
         &scenario.state,
@@ -59,7 +59,7 @@ async fn active_group_put_and_undo_refresh_each_live_desk_once_without_deadlocki
     );
     assert_eq!(
         scenario.state.application_events.latest_sequence(),
-        before_put + 3
+        before_put + 5
     );
     assert_selection_events_precede_show_event(&scenario.state, before_put);
     assert_group_membership(&scenario.state, &[scenario.first, scenario.second]);
@@ -81,7 +81,7 @@ async fn active_group_put_and_undo_refresh_each_live_desk_once_without_deadlocki
     assert_eq!(undone.status(), StatusCode::OK);
     let undone = json(undone).await;
     assert_eq!(undone["revision"], 3);
-    assert_eq!(undone["event_sequence"], before_undo + 3);
+    assert_eq!(undone["event_sequence"], before_undo + 5);
 
     let undo_correlation = assert_selection_refresh(
         &scenario.state,
@@ -102,7 +102,7 @@ async fn active_group_put_and_undo_refresh_each_live_desk_once_without_deadlocki
     assert_ne!(put_correlation, undo_correlation);
     assert_eq!(
         scenario.state.application_events.latest_sequence(),
-        before_undo + 3
+        before_undo + 5
     );
     assert_selection_events_precede_show_event(&scenario.state, before_undo);
     assert_group_membership(&scenario.state, &[scenario.first]);
@@ -174,8 +174,8 @@ async fn nested_record_group_refreshes_actor_and_peer_once_without_relocking_the
     );
     assert_eq!(
         scenario.state.application_events.latest_sequence(),
-        before_record + 3,
-        "the mutation must publish one Show event and one final selection per changed desk"
+        before_record + 5,
+        "the mutation must publish one Show event plus one selection and lifecycle event per changed desk"
     );
     assert_selection_events_precede_show_event(&scenario.state, before_record);
     assert_group_membership(&scenario.state, &[scenario.first, scenario.second]);
@@ -371,15 +371,21 @@ fn assert_selection_events_precede_show_event(state: &AppState, after_sequence: 
     else {
         panic!("the mutation events should remain replayable")
     };
-    assert_eq!(events.len(), 3);
+    assert_eq!(events.len(), 5);
     assert!(events[..2].iter().all(|event| matches!(
         &event.payload,
         light_application::ApplicationEvent::Programming(
             light_application::ProgrammingEvent::InteractionChanged(_)
         )
     )));
+    assert!(events[2..4].iter().all(|event| matches!(
+        &event.payload,
+        light_application::ApplicationEvent::Programming(
+            light_application::ProgrammingEvent::LifecycleChanged(_)
+        )
+    )));
     assert!(matches!(
-        &events[2].payload,
+        &events[4].payload,
         light_application::ApplicationEvent::Show(light_application::ShowEvent::ObjectsChanged(_))
     ));
 }

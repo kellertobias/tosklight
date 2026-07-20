@@ -490,6 +490,8 @@ async fn transient_control_retriggers_emit_compatibility_only_and_repeated_relea
             .filter(|event| event.kind == "programmer_changed")
             .count()
     };
+    let before_changed_count = changed_count();
+    let before_application_sequence = state.application_events.latest_sequence();
     let command = |request_id: &str, active: bool| WsCommand {
         protocol_version: 1,
         request_id: request_id.into(),
@@ -511,14 +513,18 @@ async fn transient_control_retriggers_emit_compatibility_only_and_repeated_relea
     ] {
         let response = dispatch_ws_command(&state, &session, command(request_id, active));
         assert!(response.ok, "{:?}", response.error);
-        assert_eq!(changed_count(), expected_changes);
+        assert_eq!(changed_count(), before_changed_count + expected_changes);
     }
-    assert_eq!(state.application_events.latest_sequence(), 0);
+    assert_eq!(
+        state.application_events.latest_sequence(),
+        before_application_sequence
+    );
     let changes = state
         .audit_events
         .lock()
         .iter()
         .filter(|event| event.kind == "programmer_changed")
+        .skip(before_changed_count)
         .map(|event| event.payload["changes"].clone())
         .collect::<Vec<_>>();
     assert_eq!(

@@ -85,7 +85,31 @@ fn assert_programming_selection_event(
     source: light_application::ActionSource,
     expected_selection: &[light_core::FixtureId],
 ) {
-    assert_eq!(state.application_events.latest_sequence(), after_sequence + 1);
+    let light_application::EventReplay::Events(published) = state
+        .application_events
+        .replay(after_sequence, &light_application::EventFilter::default())
+    else {
+        panic!("expected replayable Programming selection and lifecycle events");
+    };
+    assert!(matches!(published.len(), 1 | 2));
+    assert_eq!(
+        state.application_events.latest_sequence(),
+        after_sequence + published.len() as u64
+    );
+    assert!(matches!(
+        &published[0].payload,
+        light_application::ApplicationEvent::Programming(
+            light_application::ProgrammingEvent::InteractionChanged(_)
+        )
+    ));
+    if let Some(lifecycle) = published.get(1) {
+        assert!(matches!(
+            &lifecycle.payload,
+            light_application::ApplicationEvent::Programming(
+                light_application::ProgrammingEvent::LifecycleChanged(_)
+            )
+        ));
+    }
     let filter = light_application::EventFilter::for_desk(session.desk.id).with_object(
         light_application::EventObject::programming_selection(session.desk.id),
     );

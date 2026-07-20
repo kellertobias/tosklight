@@ -3,7 +3,7 @@ use super::*;
 #[tokio::test]
 async fn v2_patch_snapshot_authenticates_and_returns_the_patch_revision_etag() {
     let (state, data_dir) = test_state();
-    let app = router(state);
+    let app = router(state.clone());
     let denied = app
         .clone()
         .oneshot(
@@ -22,6 +22,7 @@ async fn v2_patch_snapshot_authenticates_and_returns_the_patch_revision_etag() {
     let show = create_show(&app, &token, "V2 Patch snapshot").await;
     let show_id = show["id"].as_str().unwrap();
     open_show_for_patch_test(&app, &token, show_id).await;
+    let baseline_sequence = state.application_events.latest_sequence();
 
     let response = app
         .oneshot(
@@ -39,7 +40,7 @@ async fn v2_patch_snapshot_authenticates_and_returns_the_patch_revision_etag() {
     assert_eq!(snapshot["show_id"], show_id);
     assert_eq!(snapshot["show_revision"], 1);
     assert_eq!(snapshot["patch_revision"], 0);
-    assert_eq!(snapshot["cursor"]["sequence"], 0);
+    assert_eq!(snapshot["cursor"]["sequence"], baseline_sequence);
     assert_eq!(snapshot["fixtures"], serde_json::json!([]));
     let _ = std::fs::remove_dir_all(data_dir);
 }
@@ -83,6 +84,7 @@ async fn v2_patch_requires_if_match_and_rejects_invalid_batches_without_side_eff
     let show = create_show(&app, &token, "V2 Patch validation").await;
     let show_id = show["id"].as_str().unwrap();
     open_show_for_patch_test(&app, &token, show_id).await;
+    let baseline_sequence = state.application_events.latest_sequence();
 
     let missing_precondition = post_patch(
         &app,
@@ -114,7 +116,11 @@ async fn v2_patch_requires_if_match_and_rejects_invalid_batches_without_side_eff
     let unchanged = json(unchanged).await;
     assert_eq!(unchanged["show_revision"], 1);
     assert_eq!(unchanged["patch_revision"], 0);
-    assert_eq!(unchanged["cursor"]["sequence"], 0);
+    assert_eq!(unchanged["cursor"]["sequence"], baseline_sequence);
+    assert_eq!(
+        state.application_events.latest_sequence(),
+        baseline_sequence
+    );
 
     let successful_request = valid_patch_request_for(profile_id, mode_id, "successful-route-test");
     let success = post_patch(&app, &token, show_id, Some(0), successful_request.clone()).await;
@@ -124,15 +130,23 @@ async fn v2_patch_requires_if_match_and_rejects_invalid_batches_without_side_eff
     assert_eq!(success["changed"], true);
     assert_eq!(success["show_revision"], 2);
     assert_eq!(success["patch_revision"], 1);
-    assert_eq!(success["event_sequence"], 1);
+    assert_eq!(success["event_sequence"], baseline_sequence + 1);
     assert_eq!(success["fixtures"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        state.application_events.latest_sequence(),
+        baseline_sequence + 1
+    );
 
     let replay = post_patch(&app, &token, show_id, Some(0), successful_request).await;
     assert_eq!(replay.status(), StatusCode::OK);
     assert_eq!(replay.headers()[header::ETAG], "\"1\"");
     let replay = json(replay).await;
     assert_eq!(replay["replayed"], true);
-    assert_eq!(replay["event_sequence"], 1);
+    assert_eq!(replay["event_sequence"], baseline_sequence + 1);
+    assert_eq!(
+        state.application_events.latest_sequence(),
+        baseline_sequence + 1
+    );
     assert_eq!(patch_backup_count(&data_dir), 1);
 
     let committed_response = get_patch(&app, &token, show_id).await;
@@ -140,7 +154,7 @@ async fn v2_patch_requires_if_match_and_rejects_invalid_batches_without_side_eff
     let committed = json(committed_response).await;
     assert_eq!(committed["show_revision"], 2);
     assert_eq!(committed["patch_revision"], 1);
-    assert_eq!(committed["cursor"]["sequence"], 1);
+    assert_eq!(committed["cursor"]["sequence"], baseline_sequence + 1);
     assert_eq!(committed["fixtures"].as_array().unwrap().len(), 1);
 
     open_show_for_patch_test(&app, &token, show_id).await;

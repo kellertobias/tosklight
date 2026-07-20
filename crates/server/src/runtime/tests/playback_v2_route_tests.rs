@@ -37,6 +37,7 @@ async fn v2_playback_action_is_desk_scoped_typed_and_idempotent() {
         1,
         serde_json::json!({"type":"go","pressed":true}),
     );
+    let cursor = state.application_events.latest_sequence();
     let first = post_action(&app, Some(&token), desk_id, request.clone()).await;
     assert_eq!(first.status(), StatusCode::OK);
     let first = json(first).await;
@@ -50,19 +51,19 @@ async fn v2_playback_action_is_desk_scoped_typed_and_idempotent() {
         active_show_id(&state).to_string()
     );
     assert_eq!(first["projection"]["scope"]["show_revision"], 0);
-    assert_eq!(first["event_sequence"], 1);
+    assert_eq!(first["event_sequence"], cursor + 1);
     assert_eq!(first["replayed"], false);
 
     let replay = post_action(&app, Some(&token), desk_id, request).await;
     assert_eq!(replay.status(), StatusCode::OK);
     let replay = json(replay).await;
-    assert_eq!(replay["event_sequence"], 1);
+    assert_eq!(replay["event_sequence"], cursor + 1);
     assert_eq!(replay["replayed"], true);
-    assert_eq!(state.application_events.latest_sequence(), 1);
+    assert_eq!(state.application_events.latest_sequence(), cursor + 1);
 
     let light_application::EventReplay::Events(events) = state
         .application_events
-        .replay(0, &light_application::EventFilter::for_desk(desk_id))
+        .replay(cursor, &light_application::EventFilter::for_desk(desk_id))
     else {
         panic!("playback event should be retained");
     };
@@ -251,6 +252,7 @@ async fn v2_snapshot_returns_only_requested_runtime_and_a_pre_read_cursor() {
     let desk_id = session_desk_id(&state, &token);
     open_playback_test_show(&app, &token).await;
     install_playback_test_state(&state);
+    let cursor = state.application_events.latest_sequence();
 
     let response = app
         .oneshot(
@@ -270,7 +272,7 @@ async fn v2_snapshot_returns_only_requested_runtime_and_a_pre_read_cursor() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let snapshot = json(response).await;
-    assert_eq!(snapshot["cursor"]["sequence"], 0);
+    assert_eq!(snapshot["cursor"]["sequence"], cursor);
     assert_eq!(snapshot["desk"]["desk_id"], desk_id.to_string());
     assert_eq!(
         snapshot["desk"]["scope"]["show_id"],
@@ -325,6 +327,7 @@ async fn v2_playback_rejects_forged_sources_control_ids_and_no_change_emits_noth
     let desk_id = session_desk_id(&state, &token);
     open_playback_test_show(&app, &token).await;
     install_playback_test_state(&state);
+    let cursor = state.application_events.latest_sequence();
 
     for invalid in [
         serde_json::json!({
@@ -359,7 +362,7 @@ async fn v2_playback_rejects_forged_sources_control_ids_and_no_change_emits_noth
     let no_change = json(no_change).await;
     assert_eq!(no_change["outcome"]["status"], "no_change");
     assert!(no_change["event_sequence"].is_null());
-    assert_eq!(state.application_events.latest_sequence(), 0);
+    assert_eq!(state.application_events.latest_sequence(), cursor);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
