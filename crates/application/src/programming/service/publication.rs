@@ -1,11 +1,13 @@
 use super::ProgrammingService;
 use crate::{
     ActionContext, ActionError, EventDraft, ProgrammingCaptureModeChange,
-    ProgrammingCaptureModeProjection, ProgrammingInteractionChange, ProgrammingValuesChange,
+    ProgrammingCaptureModeProjection, ProgrammingInteractionChange, ProgrammingPreloadValuesChange,
+    ProgrammingValuesChange,
 };
 use light_core::{SessionId, UserId};
 use std::sync::Arc;
 
+use super::super::preload_values_projection::ProgrammingPreloadValuesContent;
 use super::super::values_projection::ProgrammingValuesContent;
 
 impl ProgrammingService {
@@ -49,6 +51,20 @@ impl ProgrammingService {
         })
     }
 
+    pub(in crate::programming) fn publish_preload_values(
+        &self,
+        context: &ActionContext,
+        values: Option<ProgrammingPreloadValuesChange>,
+    ) -> Option<u64> {
+        values.map(|change| {
+            self.events
+                .publish(EventDraft::programming_preload_values_changed(
+                    context, change,
+                ))
+                .sequence
+        })
+    }
+
     pub(in crate::programming) fn capture_mode_change(
         &self,
         user_id: UserId,
@@ -79,6 +95,23 @@ impl ProgrammingService {
         let content = ProgrammingValuesContent::read(&self.programmers, session, user_id)?;
         let revision = self.programmers.advance_normal_values_revision(user_id);
         Ok(Some(ProgrammingValuesChange {
+            projection: Arc::new(content.projection(user_id, revision)),
+        }))
+    }
+
+    pub(super) fn preload_values_change(
+        &self,
+        user_id: UserId,
+        session: SessionId,
+        before_generation: u64,
+        after_generation: u64,
+    ) -> Result<Option<ProgrammingPreloadValuesChange>, ActionError> {
+        if before_generation == after_generation {
+            return Ok(None);
+        }
+        let content = ProgrammingPreloadValuesContent::read(&self.programmers, session, user_id)?;
+        let revision = self.programmers.advance_preload_values_revision(user_id);
+        Ok(Some(ProgrammingPreloadValuesChange {
             projection: Arc::new(content.projection(user_id, revision)),
         }))
     }

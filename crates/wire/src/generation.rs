@@ -22,6 +22,10 @@ use crate::v2::playback::{
     PlaybackActionOutcome, PlaybackActionRequest, PlaybackErrorResponse, PlaybackRuntimeSnapshot,
     PlaybackRuntimeSnapshotRequest,
 };
+use crate::v2::preload_values::{
+    ProgrammingPreloadValuesActionOutcome, ProgrammingPreloadValuesActionRequest,
+    ProgrammingPreloadValuesErrorResponse, ProgrammingPreloadValuesSnapshot,
+};
 use crate::v2::programming::{
     ProgrammingCaptureModeSnapshot, ProgrammingValuesActionOutcome, ProgrammingValuesActionRequest,
     ProgrammingValuesErrorResponse, ProgrammingValuesSnapshot,
@@ -84,6 +88,18 @@ pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
         programming_response_schema::<ProgrammingValuesSnapshot>("programming-values-snapshot"),
         programming_response_schema::<ProgrammingCaptureModeSnapshot>(
             "programming-capture-mode-snapshot",
+        ),
+        programming_request_schema::<ProgrammingPreloadValuesActionRequest>(
+            "programming-preload-values-action-request",
+        ),
+        programming_response_schema::<ProgrammingPreloadValuesActionOutcome>(
+            "programming-preload-values-action-outcome",
+        ),
+        programming_response_schema::<ProgrammingPreloadValuesErrorResponse>(
+            "programming-preload-values-error-response",
+        ),
+        programming_response_schema::<ProgrammingPreloadValuesSnapshot>(
+            "programming-preload-values-snapshot",
         ),
         playback_request_schema::<PlaybackActionRequest>("playback-action-request"),
         playback_response_schema::<PlaybackActionOutcome>("playback-action-outcome"),

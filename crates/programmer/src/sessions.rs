@@ -17,6 +17,14 @@ impl ProgrammerRegistry {
             .write()
             .entry(user_id)
             .or_default();
+        self.preload_values_generations
+            .write()
+            .entry(user_id)
+            .or_default();
+        self.preload_values_revisions
+            .write()
+            .entry(user_id)
+            .or_default();
         self.capture_mode_revisions
             .write()
             .entry(user_id)
@@ -112,6 +120,14 @@ impl ProgrammerRegistry {
             .entry(state.user_id)
             .or_default();
         self.normal_values_revisions
+            .write()
+            .entry(state.user_id)
+            .or_default();
+        self.preload_values_generations
+            .write()
+            .entry(state.user_id)
+            .or_default();
+        self.preload_values_revisions
             .write()
             .entry(state.user_id)
             .or_default();

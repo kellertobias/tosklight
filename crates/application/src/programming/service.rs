@@ -1,9 +1,9 @@
 use super::{
     ExecutionPolicy, ProgrammingAction, ProgrammingCaptureModeChange, ProgrammingCommand,
-    ProgrammingExecution, ProgrammingInteractionChange, ProgrammingInteractionResult,
-    ProgrammingOutcome, ProgrammingPorts, ProgrammingResult, ProgrammingValuesChange,
+    ProgrammingExecution, ProgrammingInteractionChange, ProgrammingOutcome, ProgrammingPorts,
+    ProgrammingResult, ProgrammingValuesChange,
 };
-use crate::{ActionContext, ActionEnvelope, ActionError, EventBus};
+use crate::{ActionEnvelope, ActionError, EventBus};
 use light_core::{SessionId, UserId};
 use light_programmer::command_line::{CommandKeyIntent, command_key_intent};
 use light_programmer::{HighlightRegistry, ProgrammerRegistry};
@@ -11,6 +11,12 @@ use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+#[path = "service/external.rs"]
+mod external;
+#[path = "service/preload_values.rs"]
+mod preload_values;
+#[path = "service/preload_values_replay.rs"]
+mod preload_values_replay;
 #[path = "service/publication.rs"]
 mod publication;
 #[path = "service/selection.rs"]
@@ -25,9 +31,14 @@ mod support;
 mod values;
 #[path = "service/values_replay.rs"]
 mod values_replay;
+#[path = "service/values_replay_fingerprint.rs"]
+mod values_replay_fingerprint;
+#[path = "service/values_replay_memory.rs"]
+mod values_replay_memory;
 #[path = "service/values_validation.rs"]
 mod values_validation;
 
+use preload_values_replay::PreloadValuesReplayCache;
 use state::{interaction_change, reconciliation};
 use support::{
     ReplayCache, Snapshot, accepted, command_line, context_session, context_user, replace_error,
@@ -37,12 +48,21 @@ use values_replay::ValuesReplayCache;
 
 use super::operation::DeskOperationGates;
 
+struct AppliedProgramming {
+    result: ProgrammingResult,
+    interaction: Option<ProgrammingInteractionChange>,
+    capture_mode: Option<ProgrammingCaptureModeChange>,
+    values: Option<ProgrammingValuesChange>,
+    preload_values: Option<super::ProgrammingPreloadValuesChange>,
+}
+
 #[derive(Clone)]
 pub struct ProgrammingService {
     pub(super) programmers: ProgrammerRegistry,
     pub(super) desk_gates: DeskOperationGates,
     replay: Arc<Mutex<ReplayCache>>,
     values_replay: Arc<Mutex<ValuesReplayCache>>,
+    preload_values_replay: Arc<Mutex<PreloadValuesReplayCache>>,
     pub(super) events: EventBus,
     nested_selection_publications: Arc<Mutex<HashMap<uuid::Uuid, u64>>>,
     _highlight: Arc<HighlightRegistry>,
@@ -59,6 +79,7 @@ impl ProgrammingService {
             desk_gates: DeskOperationGates::default(),
             replay: Arc::default(),
             values_replay: Arc::default(),
+            preload_values_replay: Arc::default(),
             events,
             nested_selection_publications: Arc::default(),
             _highlight: highlight,
@@ -86,63 +107,17 @@ impl ProgrammingService {
             if let Some(cached) = self.cached(&action, session)? {
                 return Ok(cached);
             }
-            let (mut result, interaction, capture_mode, values) =
-                self.apply(&action, session, user_id, ports)?;
-            result.interaction_event_sequence =
-                self.publish_interaction(&action.context, interaction);
-            result.capture_mode_event_sequence =
-                self.publish_capture_mode(&action.context, capture_mode);
-            result.values_event_sequence = self.publish_values(&action.context, values);
-            self.remember(&action, session, &result);
-            Ok(result)
-        })
-    }
-
-    /// Serializes adapter-owned Programming mutations with typed commands on the same desk.
-    ///
-    /// Authorization runs under the desk gate. The closure must finish validation, mutation,
-    /// persistence, and reconciliation without deleting the session or re-entering this desk's
-    /// Programming gate. The boundary captures final state even when the closure returns an error
-    /// as its output, then publishes the sparse authoritative change before releasing the gate.
-    pub fn run_external_interaction<T>(
-        &self,
-        context: &ActionContext,
-        ports: &dyn ProgrammingPorts,
-        operation: impl FnOnce() -> T,
-    ) -> Result<ProgrammingInteractionResult<T>, ActionError> {
-        let session = context_session(context)?;
-        let user_id = context_user(context)?;
-        self.with_user_and_desk_gate(context.desk_id, user_id, || {
-            ports.authorize(context)?;
-            self.capture_external_interaction(context, session, user_id, operation)
-        })
-    }
-
-    fn capture_external_interaction<T>(
-        &self,
-        context: &ActionContext,
-        session: SessionId,
-        user_id: UserId,
-        operation: impl FnOnce() -> T,
-    ) -> Result<ProgrammingInteractionResult<T>, ActionError> {
-        let before = Snapshot::read(&self.programmers, context.desk_id, session, user_id)?;
-        let output = operation();
-        let after = Snapshot::read(&self.programmers, context.desk_id, session, user_id)?;
-        let change =
-            interaction_change(&self.programmers, context.desk_id, session, &before, &after);
-        let values = self.values_change(
-            user_id,
-            session,
-            before.values_generation,
-            after.values_generation,
-        )?;
-        let capture_mode =
-            self.capture_mode_change(user_id, before.capture_mode, after.capture_mode);
-        Ok(ProgrammingInteractionResult {
-            output,
-            event_sequence: self.publish_interaction(context, change),
-            capture_mode_event_sequence: self.publish_capture_mode(context, capture_mode),
-            values_event_sequence: self.publish_values(context, values),
+            let mut applied = self.apply(&action, session, user_id, ports)?;
+            applied.result.interaction_event_sequence =
+                self.publish_interaction(&action.context, applied.interaction);
+            applied.result.capture_mode_event_sequence =
+                self.publish_capture_mode(&action.context, applied.capture_mode);
+            applied.result.values_event_sequence =
+                self.publish_values(&action.context, applied.values);
+            applied.result.preload_values_event_sequence =
+                self.publish_preload_values(&action.context, applied.preload_values);
+            self.remember(&action, session, &applied.result);
+            Ok(applied.result)
         })
     }
 
@@ -152,15 +127,7 @@ impl ProgrammingService {
         session: SessionId,
         user_id: UserId,
         ports: &dyn ProgrammingPorts,
-    ) -> Result<
-        (
-            ProgrammingResult,
-            Option<ProgrammingInteractionChange>,
-            Option<ProgrammingCaptureModeChange>,
-            Option<ProgrammingValuesChange>,
-        ),
-        ActionError,
-    > {
+    ) -> Result<AppliedProgramming, ActionError> {
         let before = Snapshot::read(&self.programmers, action.context.desk_id, session, user_id)?;
         let outcome = match &action.command {
             ProgrammingCommand::ApplyKey {
@@ -230,14 +197,21 @@ impl ProgrammingService {
             before.values_generation,
             after.values_generation,
         )?;
+        let preload_values = self.preload_values_change(
+            user_id,
+            session,
+            before.preload_values_generation,
+            after.preload_values_generation,
+        )?;
         let capture_mode =
             self.capture_mode_change(user_id, before.capture_mode, after.capture_mode);
-        Ok((
-            before.result(action.context.clone(), outcome, after, selection),
+        Ok(AppliedProgramming {
+            result: before.result(action.context.clone(), outcome, after, selection),
             interaction,
             capture_mode,
             values,
-        ))
+            preload_values,
+        })
     }
 
     fn apply_key(

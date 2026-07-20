@@ -1,8 +1,8 @@
-use super::super::ProgrammingValuesResult;
+use super::super::ProgrammingPreloadValuesResult;
 use super::ProgrammingService;
 use super::values_replay_fingerprint::RequestFingerprint;
 use super::values_replay_memory::{
-    ENTRY_CONTAINER_OVERHEAD, ReplayLimits, values_result_retained_bytes,
+    ENTRY_CONTAINER_OVERHEAD, ReplayLimits, preload_result_retained_bytes,
 };
 use crate::{ActionError, ActionErrorKind};
 use light_core::{SessionId, UserId};
@@ -17,21 +17,39 @@ struct ReplayKey {
     request_id: String,
 }
 
+pub(super) struct PreloadReplayIdentity {
+    pub(super) user_id: UserId,
+    pub(super) desk_id: uuid::Uuid,
+    pub(super) session_id: SessionId,
+    pub(super) request_id: String,
+}
+
+impl From<&PreloadReplayIdentity> for ReplayKey {
+    fn from(identity: &PreloadReplayIdentity) -> Self {
+        Self {
+            user_id: identity.user_id,
+            desk_id: identity.desk_id,
+            session_id: identity.session_id,
+            request_id: identity.request_id.clone(),
+        }
+    }
+}
+
 struct ReplayEntry {
     fingerprint: RequestFingerprint,
-    result: ProgrammingValuesResult,
+    result: ProgrammingPreloadValuesResult,
     retained_bytes: usize,
 }
 
 #[derive(Default)]
-pub(super) struct ValuesReplayCache {
+pub(super) struct PreloadValuesReplayCache {
     entries: HashMap<ReplayKey, ReplayEntry>,
     order: VecDeque<ReplayKey>,
     retained_bytes: usize,
     limits: ReplayLimits,
 }
 
-impl ValuesReplayCache {
+impl PreloadValuesReplayCache {
     pub(super) fn invalidate_user(&mut self, user_id: UserId) {
         self.entries.retain(|key, _| key.user_id != user_id);
         self.order.retain(|key| key.user_id != user_id);
@@ -44,25 +62,17 @@ impl ValuesReplayCache {
 
     pub(super) fn get(
         &self,
-        user_id: UserId,
-        desk_id: uuid::Uuid,
-        session_id: SessionId,
-        request_id: &str,
+        identity: &PreloadReplayIdentity,
         fingerprint: RequestFingerprint,
-    ) -> Result<Option<ProgrammingValuesResult>, ActionError> {
-        let key = ReplayKey {
-            user_id,
-            desk_id,
-            session_id,
-            request_id: request_id.to_owned(),
-        };
+    ) -> Result<Option<ProgrammingPreloadValuesResult>, ActionError> {
+        let key = ReplayKey::from(identity);
         let Some(entry) = self.entries.get(&key) else {
             return Ok(None);
         };
         if entry.fingerprint != fingerprint {
             return Err(ActionError::new(
                 ActionErrorKind::Conflict,
-                "request_id was already used for a different Programmer values action",
+                "request_id was already used for a different Preload values action",
             ));
         }
         let mut replayed = entry.result.clone();
@@ -72,19 +82,11 @@ impl ValuesReplayCache {
 
     pub(super) fn insert(
         &mut self,
-        user_id: UserId,
-        desk_id: uuid::Uuid,
-        session_id: SessionId,
-        request_id: String,
+        identity: PreloadReplayIdentity,
         fingerprint: RequestFingerprint,
-        result: ProgrammingValuesResult,
+        result: ProgrammingPreloadValuesResult,
     ) {
-        let key = ReplayKey {
-            user_id,
-            desk_id,
-            session_id,
-            request_id,
-        };
+        let key = ReplayKey::from(&identity);
         let retained_bytes = retained_entry_bytes(&key, &result);
         if !self.entries.contains_key(&key) {
             self.order.push_back(key.clone());
@@ -123,17 +125,17 @@ impl ValuesReplayCache {
     }
 }
 
-fn retained_entry_bytes(key: &ReplayKey, result: &ProgrammingValuesResult) -> usize {
+fn retained_entry_bytes(key: &ReplayKey, result: &ProgrammingPreloadValuesResult) -> usize {
     ENTRY_CONTAINER_OVERHEAD
         .saturating_add(2 * size_of::<ReplayKey>())
         .saturating_add(key.request_id.capacity() + key.request_id.len())
         .saturating_add(size_of::<ReplayEntry>())
-        .saturating_add(values_result_retained_bytes(result))
+        .saturating_add(preload_result_retained_bytes(result))
 }
 
 impl ProgrammingService {
-    pub(in crate::programming) fn invalidate_values_replay(&self, user_id: UserId) {
-        self.values_replay.lock().invalidate_user(user_id);
+    pub(in crate::programming) fn invalidate_preload_values_replay(&self, user_id: UserId) {
+        self.preload_values_replay.lock().invalidate_user(user_id);
     }
 }
 
@@ -141,10 +143,11 @@ impl ProgrammingService {
 mod tests {
     use super::*;
     use crate::{
-        ActionContext, ActionSource, ProgrammingValuesOutcome, ProgrammingValuesProjection,
+        ActionContext, ActionSource, ProgrammingPreloadValuesOutcome,
+        ProgrammingPreloadValuesProjection,
     };
     use light_core::{AttributeKey, AttributeValue};
-    use light_programmer::ProgrammerGroupUpdate;
+    use light_programmer::PreloadProgrammerGroupValue;
     use std::sync::Arc;
     use uuid::Uuid;
 
@@ -160,29 +163,24 @@ mod tests {
         let budget = retained_entry_bytes(&first_key, &first)
             + retained_entry_bytes(&second_key, &second)
             - 1;
-        let mut cache = ValuesReplayCache::with_limits(10, budget);
+        let mut cache = PreloadValuesReplayCache::with_limits(10, budget);
+        let first_identity = identity(user_id, desk_id, session_id, "first");
+        let second_identity = identity(user_id, desk_id, session_id, "second");
 
-        cache.insert(user_id, desk_id, session_id, "first".into(), [1; 32], first);
-        cache.insert(
-            user_id,
-            desk_id,
-            session_id,
-            "second".into(),
-            [2; 32],
-            second,
-        );
+        cache.insert(first_identity, [1; 32], first);
+        cache.insert(second_identity, [2; 32], second);
 
         assert_eq!(cache.entries.len(), 1);
         assert!(cache.retained_bytes <= budget);
         assert!(
             cache
-                .get(user_id, desk_id, session_id, "first", [1; 32])
+                .get(&identity(user_id, desk_id, session_id, "first"), [1; 32])
                 .unwrap()
                 .is_none()
         );
         assert!(
             cache
-                .get(user_id, desk_id, session_id, "second", [2; 32])
+                .get(&identity(user_id, desk_id, session_id, "second"), [2; 32])
                 .unwrap()
                 .is_some()
         );
@@ -197,18 +195,32 @@ mod tests {
         }
     }
 
+    fn identity(
+        user_id: UserId,
+        desk_id: Uuid,
+        session_id: SessionId,
+        request_id: &str,
+    ) -> PreloadReplayIdentity {
+        PreloadReplayIdentity {
+            user_id,
+            desk_id,
+            session_id,
+            request_id: request_id.into(),
+        }
+    }
+
     fn result(
         user_id: UserId,
         desk_id: Uuid,
         session_id: SessionId,
         request_id: &str,
         spread_len: usize,
-    ) -> ProgrammingValuesResult {
-        let projection = ProgrammingValuesProjection {
+    ) -> ProgrammingPreloadValuesResult {
+        let projection = ProgrammingPreloadValuesProjection {
             user_id,
             revision: 1,
             fixture_values: Vec::new(),
-            group_values: vec![ProgrammerGroupUpdate {
+            group_values: vec![PreloadProgrammerGroupValue {
                 group_id: "front".into(),
                 attribute: AttributeKey::intensity(),
                 value: AttributeValue::Spread(vec![0.5; spread_len]),
@@ -218,15 +230,15 @@ mod tests {
                 delay_millis: None,
             }],
         };
-        ProgrammingValuesResult {
+        ProgrammingPreloadValuesResult {
             context: ActionContext::operator(desk_id, user_id.0, session_id.0, ActionSource::Http)
                 .with_request_id(request_id)
                 .with_expected_revision(0),
-            outcome: ProgrammingValuesOutcome::Changed {
+            outcome: ProgrammingPreloadValuesOutcome::Changed {
                 projection: Arc::new(projection),
                 event_sequence: 1,
             },
-            capture_mode_revision: 0,
+            capture_mode_revision: 1,
             interaction_event_sequence: None,
             replayed: false,
             warning: None,

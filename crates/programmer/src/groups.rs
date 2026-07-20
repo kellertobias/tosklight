@@ -260,7 +260,9 @@ impl ProgrammerRegistry {
         state.last_activity = self.clock.now();
         let user_id = state.user_id;
         drop(states);
-        if !preload {
+        if preload {
+            self.mark_preload_values_changed(user_id);
+        } else {
             self.mark_normal_values_changed(user_id);
         }
         true
@@ -305,7 +307,9 @@ impl ProgrammerRegistry {
         state.last_activity = self.clock.now();
         let user_id = state.user_id;
         drop(states);
-        if !preload {
+        if preload {
+            self.mark_preload_values_changed(user_id);
+        } else {
             self.mark_normal_values_changed(user_id);
         }
         true
@@ -353,7 +357,9 @@ impl ProgrammerRegistry {
         state.last_activity = self.clock.now();
         let user_id = state.user_id;
         drop(states);
-        if !preload {
+        if preload {
+            self.mark_preload_values_changed(user_id);
+        } else {
             self.mark_normal_values_changed(user_id);
         }
         true

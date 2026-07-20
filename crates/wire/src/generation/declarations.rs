@@ -4,6 +4,7 @@ use crate::v2::command_line::*;
 use crate::v2::events::*;
 use crate::v2::patch::*;
 use crate::v2::playback::*;
+use crate::v2::preload_values::*;
 use crate::v2::programming::*;
 use crate::v2::selective_import::*;
 
@@ -78,6 +79,21 @@ fn programming(config: &Config) -> Vec<String> {
         ProgrammingValuesActionOutcome::decl(config),
         ProgrammingValuesErrorKind::decl(config),
         ProgrammingValuesErrorResponse::decl(config),
+        ProgrammingPreloadColorXyz::decl(config),
+        ProgrammingPreloadAttributeValue::decl(config),
+        ProgrammingPreloadFixtureValue::decl(config),
+        ProgrammingPreloadGroupValue::decl(config),
+        ProgrammingPreloadValuesProjection::decl(config),
+        ProgrammingPreloadValuesChange::decl(config),
+        ProgrammingPreloadValuesSnapshot::decl(config),
+        ProgrammingPreloadValueTiming::decl(config),
+        ProgrammingPreloadValueMutation::decl(config),
+        ProgrammingPreloadValuesAction::decl(config),
+        ProgrammingPreloadValuesActionRequest::decl(config),
+        ProgrammingPreloadValuesActionState::decl(config),
+        ProgrammingPreloadValuesActionOutcome::decl(config),
+        ProgrammingPreloadValuesErrorKind::decl(config),
+        ProgrammingPreloadValuesErrorResponse::decl(config),
     ]
 }
 

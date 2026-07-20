@@ -5,19 +5,19 @@ use crate::{GroupProgrammerValue, ProgrammerRegistry};
 use light_core::{AttributeKey, AttributeValue, FixtureId, SessionId, TimedValue};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct NormalProgrammerValueTiming {
+pub struct PreloadProgrammerValueTiming {
     pub fade: bool,
     pub fade_millis: Option<u64>,
     pub delay_millis: Option<u64>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum NormalProgrammerValueMutation {
+pub enum PreloadProgrammerValueMutation {
     SetFixture {
         fixture_id: FixtureId,
         attribute: AttributeKey,
         value: AttributeValue,
-        timing: NormalProgrammerValueTiming,
+        timing: PreloadProgrammerValueTiming,
     },
     ReleaseFixture {
         fixture_id: FixtureId,
@@ -27,7 +27,7 @@ pub enum NormalProgrammerValueMutation {
         group_id: String,
         attribute: AttributeKey,
         value: AttributeValue,
-        timing: NormalProgrammerValueTiming,
+        timing: PreloadProgrammerValueTiming,
     },
     ReleaseGroup {
         group_id: String,
@@ -35,15 +35,44 @@ pub enum NormalProgrammerValueMutation {
     },
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct PreloadProgrammerFixtureValue {
+    pub fixture_id: FixtureId,
+    pub attribute: AttributeKey,
+    pub value: AttributeValue,
+    pub programmer_order: u64,
+    pub fade: bool,
+    pub fade_millis: Option<u64>,
+    pub delay_millis: Option<u64>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PreloadProgrammerGroupValue {
+    pub group_id: String,
+    pub attribute: AttributeKey,
+    pub value: AttributeValue,
+    pub programmer_order: u64,
+    pub fade: bool,
+    pub fade_millis: Option<u64>,
+    pub delay_millis: Option<u64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PreloadProgrammerValuesContent {
+    pub fixture_values: Vec<PreloadProgrammerFixtureValue>,
+    pub group_values: Vec<PreloadProgrammerGroupValue>,
+}
+
 impl ProgrammerRegistry {
-    /// Apply one normal, recordable Programmer action independently of Preload capture mode.
+    /// Apply one ordered pending-Preload values action.
     ///
-    /// Callers provide unique addresses in operator order. The complete batch shares one Undo
-    /// checkpoint, timestamp, generation advance, and application-level projection event.
-    pub fn apply_normal_values(
+    /// The caller owns capture-mode authorization and provides unique addresses in operator
+    /// order. The complete batch shares one Undo checkpoint, timestamp, generation advance, and
+    /// application projection event.
+    pub fn apply_preload_values(
         &self,
         session: SessionId,
-        mutations: &[NormalProgrammerValueMutation],
+        mutations: &[PreloadProgrammerValueMutation],
     ) -> bool {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();
@@ -52,7 +81,10 @@ impl ProgrammerRegistry {
         let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
         };
-        let fixture_index = FixtureValueIndex::new(&state.values);
+        if !state.blind || !state.preload_capture_programmer {
+            return false;
+        }
+        let fixture_index = FixtureValueIndex::new(&state.preload_pending);
         let changed = mutations
             .iter()
             .map(|mutation| mutation_changes(state, &fixture_index, mutation))
@@ -69,46 +101,93 @@ impl ProgrammerRegistry {
                 apply_mutation(self, state, mutation, changed_at, &mut fixture_batch);
             }
         }
-        let touched = fixture_batch.commit(&mut state.values);
+        let touched = fixture_batch.commit(&mut state.preload_pending);
         restamp_transient_values(self, state, &touched, changed_at);
         state.last_activity = changed_at;
         let user_id = state.user_id;
         drop(states);
-        self.mark_normal_values_changed(user_id);
+        self.mark_preload_values_changed(user_id);
         true
     }
 
-    /// Clear only recordable fixture and Group values. Preload and transient actions are not part
-    /// of this boundary and remain untouched.
-    pub fn clear_normal_values(&self, session: SessionId) -> bool {
-        let mutation_gate = self.mutation_gate(session);
-        let _mutation_guard = mutation_gate.lock();
-        self.close_selection_gesture(session);
-        let mut states = self.states.write();
-        let Some(state) = states.get_mut(&self.key(session)) else {
-            return false;
-        };
-        if state.values.is_empty() && state.group_values.is_empty() {
-            return false;
-        }
-        state.checkpoint();
-        state.values.clear();
-        state.group_values.clear();
-        state.last_activity = self.clock.now();
-        let user_id = state.user_id;
-        drop(states);
-        self.mark_normal_values_changed(user_id);
-        true
+    pub fn preload_pending_values(
+        &self,
+        session: SessionId,
+    ) -> Option<PreloadProgrammerValuesContent> {
+        let key = self.key(session);
+        let states = self.states.read();
+        Some(content(states.get(&key)?))
+    }
+}
+
+fn content(state: &crate::ProgrammerState) -> PreloadProgrammerValuesContent {
+    let mut fixture_values = state
+        .preload_pending
+        .iter()
+        .map(fixture_value)
+        .collect::<Vec<_>>();
+    fixture_values.sort_by(|left, right| {
+        left.programmer_order
+            .cmp(&right.programmer_order)
+            .then_with(|| left.fixture_id.0.cmp(&right.fixture_id.0))
+            .then_with(|| left.attribute.cmp(&right.attribute))
+    });
+    let mut group_values = state
+        .preload_group_pending
+        .iter()
+        .flat_map(|(group_id, attributes)| {
+            attributes
+                .iter()
+                .map(move |(attribute, value)| group_value(group_id, attribute, value))
+        })
+        .collect::<Vec<_>>();
+    group_values.sort_by(|left, right| {
+        left.programmer_order
+            .cmp(&right.programmer_order)
+            .then_with(|| left.group_id.cmp(&right.group_id))
+            .then_with(|| left.attribute.cmp(&right.attribute))
+    });
+    PreloadProgrammerValuesContent {
+        fixture_values,
+        group_values,
+    }
+}
+
+fn fixture_value(value: &TimedValue) -> PreloadProgrammerFixtureValue {
+    PreloadProgrammerFixtureValue {
+        fixture_id: value.fixture_id,
+        attribute: value.attribute.clone(),
+        value: value.value.clone(),
+        programmer_order: value.programmer_order,
+        fade: value.fade,
+        fade_millis: value.fade_millis,
+        delay_millis: value.delay_millis,
+    }
+}
+
+fn group_value(
+    group_id: &str,
+    attribute: &AttributeKey,
+    value: &GroupProgrammerValue,
+) -> PreloadProgrammerGroupValue {
+    PreloadProgrammerGroupValue {
+        group_id: group_id.to_owned(),
+        attribute: attribute.clone(),
+        value: value.value.clone(),
+        programmer_order: value.programmer_order,
+        fade: value.fade,
+        fade_millis: value.fade_millis,
+        delay_millis: value.delay_millis,
     }
 }
 
 fn mutation_changes(
     state: &crate::ProgrammerState,
     fixture_index: &FixtureValueIndex<'_>,
-    mutation: &NormalProgrammerValueMutation,
+    mutation: &PreloadProgrammerValueMutation,
 ) -> bool {
     match mutation {
-        NormalProgrammerValueMutation::SetFixture {
+        PreloadProgrammerValueMutation::SetFixture {
             fixture_id,
             attribute,
             value,
@@ -116,34 +195,34 @@ fn mutation_changes(
         } => fixture_index
             .get(*fixture_id, attribute)
             .is_none_or(|stored| !fixture_value_matches(stored, value, *timing)),
-        NormalProgrammerValueMutation::ReleaseFixture {
+        PreloadProgrammerValueMutation::ReleaseFixture {
             fixture_id,
             attribute,
         } => fixture_index.get(*fixture_id, attribute).is_some(),
-        NormalProgrammerValueMutation::ReleaseGroup {
-            group_id,
-            attribute,
-        } => state
-            .group_values
-            .get(group_id)
-            .is_some_and(|values| values.contains_key(attribute)),
-        NormalProgrammerValueMutation::SetGroup {
+        PreloadProgrammerValueMutation::SetGroup {
             group_id,
             attribute,
             value,
             timing,
         } => state
-            .group_values
+            .preload_group_pending
             .get(group_id)
             .and_then(|values| values.get(attribute))
             .is_none_or(|stored| !group_value_matches(stored, value, *timing)),
+        PreloadProgrammerValueMutation::ReleaseGroup {
+            group_id,
+            attribute,
+        } => state
+            .preload_group_pending
+            .get(group_id)
+            .is_some_and(|values| values.contains_key(attribute)),
     }
 }
 
 fn fixture_value_matches(
     stored: &TimedValue,
     value: &AttributeValue,
-    timing: NormalProgrammerValueTiming,
+    timing: PreloadProgrammerValueTiming,
 ) -> bool {
     stored.value == *value
         && stored.fade == timing.fade
@@ -154,7 +233,7 @@ fn fixture_value_matches(
 fn group_value_matches(
     stored: &GroupProgrammerValue,
     value: &AttributeValue,
-    timing: NormalProgrammerValueTiming,
+    timing: PreloadProgrammerValueTiming,
 ) -> bool {
     stored.value == *value
         && stored.fade == timing.fade
@@ -165,12 +244,12 @@ fn group_value_matches(
 fn apply_mutation(
     registry: &ProgrammerRegistry,
     state: &mut crate::ProgrammerState,
-    mutation: &NormalProgrammerValueMutation,
+    mutation: &PreloadProgrammerValueMutation,
     changed_at: chrono::DateTime<chrono::Utc>,
     fixture_batch: &mut FixtureValueBatch,
 ) {
     match mutation {
-        NormalProgrammerValueMutation::SetFixture {
+        PreloadProgrammerValueMutation::SetFixture {
             fixture_id,
             attribute,
             value,
@@ -184,11 +263,11 @@ fn apply_mutation(
             fixture_timing(*timing),
             changed_at,
         ),
-        NormalProgrammerValueMutation::ReleaseFixture {
+        PreloadProgrammerValueMutation::ReleaseFixture {
             fixture_id,
             attribute,
         } => fixture_batch.release(*fixture_id, attribute),
-        NormalProgrammerValueMutation::SetGroup {
+        PreloadProgrammerValueMutation::SetGroup {
             group_id,
             attribute,
             value,
@@ -196,14 +275,14 @@ fn apply_mutation(
         } => set_group(
             registry, state, group_id, attribute, value, *timing, changed_at,
         ),
-        NormalProgrammerValueMutation::ReleaseGroup {
+        PreloadProgrammerValueMutation::ReleaseGroup {
             group_id,
             attribute,
         } => release_group(state, group_id, attribute),
     }
 }
 
-fn fixture_timing(timing: NormalProgrammerValueTiming) -> FixtureValueTiming {
+fn fixture_timing(timing: PreloadProgrammerValueTiming) -> FixtureValueTiming {
     FixtureValueTiming {
         fade: timing.fade,
         fade_millis: timing.fade_millis,
@@ -217,11 +296,11 @@ fn set_group(
     group_id: &str,
     attribute: &AttributeKey,
     value: &AttributeValue,
-    timing: NormalProgrammerValueTiming,
+    timing: PreloadProgrammerValueTiming,
     changed_at: chrono::DateTime<chrono::Utc>,
 ) {
     state
-        .group_values
+        .preload_group_pending
         .entry(group_id.to_owned())
         .or_default()
         .insert(
@@ -238,10 +317,10 @@ fn set_group(
 }
 
 fn release_group(state: &mut crate::ProgrammerState, group_id: &str, attribute: &AttributeKey) {
-    if let Some(values) = state.group_values.get_mut(group_id) {
+    if let Some(values) = state.preload_group_pending.get_mut(group_id) {
         values.remove(attribute);
         if values.is_empty() {
-            state.group_values.remove(group_id);
+            state.preload_group_pending.remove(group_id);
         }
     }
 }

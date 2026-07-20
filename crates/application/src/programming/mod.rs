@@ -4,6 +4,8 @@ mod event;
 mod lifecycle;
 mod operation;
 mod ports;
+mod preload_values_action;
+mod preload_values_projection;
 mod projection;
 mod service;
 mod values_action;
@@ -28,6 +30,15 @@ pub use operation::{
 pub use ports::{
     ProgrammingExecution, ProgrammingPorts, ProgrammingReconciliation,
     ProgrammingSelectionEnvironment, ProgrammingSelectionQuery, ProgrammingValuesEnvironment,
+};
+pub use preload_values_action::{
+    ProgrammingPreloadValueMutation, ProgrammingPreloadValueTiming,
+    ProgrammingPreloadValuesCommand, ProgrammingPreloadValuesOutcome,
+    ProgrammingPreloadValuesRequest, ProgrammingPreloadValuesResult,
+};
+pub use preload_values_projection::{
+    ProgrammingPreloadValuesChange, ProgrammingPreloadValuesProjection,
+    ProgrammingPreloadValuesSnapshot,
 };
 pub use projection::{ProgrammingInteractionProjection, ProgrammingLiveSnapshot};
 pub use service::ProgrammingService;

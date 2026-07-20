@@ -517,6 +517,22 @@
           "type": "object",
           "properties": {
             "change": {
+              "$ref": "#/$defs/ProgrammingPreloadValuesChange"
+            },
+            "type": {
+              "type": "string",
+              "const": "programming_preload_values_changed"
+            }
+          },
+          "required": [
+            "type",
+            "change"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "change": {
               "$ref": "#/$defs/PlaybackRuntimeChange"
             },
             "type": {
@@ -2329,6 +2345,283 @@
             "selection"
           ]
         }
+      ]
+    },
+    "ProgrammingPreloadAttributeValue": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "normalized"
+            },
+            "value": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "spread"
+            },
+            "value": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "float"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "discrete"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "color_xyz"
+            },
+            "value": {
+              "$ref": "#/$defs/ProgrammingPreloadColorXyz"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "raw_dmx"
+            },
+            "value": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "raw_dmx_exact"
+            },
+            "value": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "value"
+          ]
+        }
+      ]
+    },
+    "ProgrammingPreloadColorXyz": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "format": "float"
+        },
+        "y": {
+          "type": "number",
+          "format": "float"
+        },
+        "z": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "z"
+      ]
+    },
+    "ProgrammingPreloadFixtureValue": {
+      "type": "object",
+      "properties": {
+        "attribute": {
+          "type": "string"
+        },
+        "delay_millis": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "fade": {
+          "type": "boolean"
+        },
+        "fade_millis": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "programmer_order": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "value": {
+          "$ref": "#/$defs/ProgrammingPreloadAttributeValue"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "fixture_id",
+        "attribute",
+        "value",
+        "programmer_order",
+        "fade"
+      ]
+    },
+    "ProgrammingPreloadGroupValue": {
+      "type": "object",
+      "properties": {
+        "attribute": {
+          "type": "string"
+        },
+        "delay_millis": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "fade": {
+          "type": "boolean"
+        },
+        "fade_millis": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "group_id": {
+          "type": "string"
+        },
+        "programmer_order": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "value": {
+          "$ref": "#/$defs/ProgrammingPreloadAttributeValue"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "group_id",
+        "attribute",
+        "value",
+        "programmer_order",
+        "fade"
+      ]
+    },
+    "ProgrammingPreloadValuesChange": {
+      "type": "object",
+      "properties": {
+        "projection": {
+          "$ref": "#/$defs/ProgrammingPreloadValuesProjection"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "projection"
+      ]
+    },
+    "ProgrammingPreloadValuesProjection": {
+      "type": "object",
+      "properties": {
+        "fixture_values": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProgrammingPreloadFixtureValue"
+          }
+        },
+        "group_values": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProgrammingPreloadGroupValue"
+          }
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "user_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "user_id",
+        "revision",
+        "fixture_values",
+        "group_values"
       ]
     },
     "ProgrammingValuesChange": {

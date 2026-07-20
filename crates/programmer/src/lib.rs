@@ -3,11 +3,13 @@
 
 mod capture_mode;
 mod command_state;
+mod fixture_value_batch;
 mod groups;
 pub mod highlight;
 mod history;
 mod normal_values;
 mod preload;
+mod preload_values;
 mod presets;
 mod registry;
 mod selection;
@@ -34,6 +36,10 @@ pub use highlight::{
 };
 pub use normal_values::{NormalProgrammerValueMutation, NormalProgrammerValueTiming};
 pub use preload::PreloadPlaybackAction;
+pub use preload_values::{
+    PreloadProgrammerFixtureValue, PreloadProgrammerGroupValue, PreloadProgrammerValueMutation,
+    PreloadProgrammerValueTiming, PreloadProgrammerValuesContent,
+};
 pub use presets::{Preset, PresetAddress, PresetFamily, PresetStoreMode};
 pub use registry::ProgrammerRegistry;
 pub use selection::{

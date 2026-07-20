@@ -8,6 +8,7 @@ use light_core::{SessionId, UserId};
 use light_programmer::{NormalProgrammerValueMutation, NormalProgrammerValueTiming};
 use std::sync::Arc;
 
+use super::values_replay_fingerprint::{RequestFingerprint, values_request_fingerprint};
 use super::values_validation::{validate_request_id, validate_value_mutations};
 
 impl ProgrammingService {
@@ -20,13 +21,13 @@ impl ProgrammingService {
         self.with_user_and_desk_gate(action.context.desk_id, user_id, || {
             ports.authorize(&action.context)?;
             self.assert_values_owner(session, user_id)?;
+            let fingerprint = values_request_fingerprint(expected_revision, &action.command);
             if let Some(cached) = self.cached_values(
                 user_id,
                 action.context.desk_id,
                 session,
                 &request_id,
-                expected_revision,
-                &action.command,
+                fingerprint,
             )? {
                 return Ok(cached);
             }
@@ -49,8 +50,7 @@ impl ProgrammingService {
                 action.context.desk_id,
                 session,
                 request_id,
-                expected_revision,
-                action.command,
+                fingerprint,
                 result.clone(),
             );
             Ok(result)
@@ -70,9 +70,10 @@ impl ProgrammingService {
         let mutations = action.command.command.mutations();
         if !mutations.is_empty() {
             let environment = ports.values_environment(&action.context)?;
-            validate_value_mutations(&mutations, &environment)?;
+            validate_value_mutations(mutations.as_ref(), &environment)?;
         }
-        let changed = self.mutate_normal_values(session, &action.command.command, &mutations);
+        let changed =
+            self.mutate_normal_values(session, &action.command.command, mutations.as_ref());
         let warning = changed
             .then(|| ports.persist(&action.context, "programmer.values"))
             .flatten();
@@ -207,17 +208,11 @@ impl ProgrammingService {
         desk_id: uuid::Uuid,
         session_id: SessionId,
         request_id: &str,
-        expected_revision: u64,
-        request: &ProgrammingValuesRequest,
+        fingerprint: RequestFingerprint,
     ) -> Result<Option<ProgrammingValuesResult>, ActionError> {
-        self.values_replay.lock().get(
-            user_id,
-            desk_id,
-            session_id,
-            request_id,
-            expected_revision,
-            request,
-        )
+        self.values_replay
+            .lock()
+            .get(user_id, desk_id, session_id, request_id, fingerprint)
     }
 
     fn remember_values(
@@ -226,8 +221,7 @@ impl ProgrammingService {
         desk_id: uuid::Uuid,
         session_id: SessionId,
         request_id: String,
-        expected_revision: u64,
-        request: ProgrammingValuesRequest,
+        fingerprint: RequestFingerprint,
         result: ProgrammingValuesResult,
     ) {
         self.values_replay.lock().insert(
@@ -235,8 +229,7 @@ impl ProgrammingService {
             desk_id,
             session_id,
             request_id,
-            expected_revision,
-            request,
+            fingerprint,
             result,
         );
     }

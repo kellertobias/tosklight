@@ -9,7 +9,8 @@ use light_application::{
     PlaybackCueTransition as AppTransition, PlaybackRuntimeChange, PlaybackRuntimeIdentity,
     PlaybackRuntimeProjection, PlaybackShowScope, PlaybackTargetProjection,
     PlaybackTransitionCause, ProgrammingCaptureModeChange, ProgrammingCaptureModeProjection,
-    ProgrammingValuesChange, ProgrammingValuesProjection, publish_automatic_playback_events,
+    ProgrammingPreloadValuesChange, ProgrammingPreloadValuesProjection, ProgrammingValuesChange,
+    ProgrammingValuesProjection, publish_automatic_playback_events,
 };
 use light_core::{CueListId, ManualClock, ShowId, UserId};
 use light_engine::EnginePlaybackCommand;
@@ -312,6 +313,45 @@ fn programmer_capture_mode_objects_are_limited_to_the_authenticated_user() {
     assert!(EventStream::subscribe(&bus, &session, foreign_rate).is_err());
 }
 
+#[test]
+fn programmer_preload_values_objects_are_limited_to_the_authenticated_user() {
+    let bus = EventBus::new(8);
+    let user_id = Uuid::from_u128(11);
+    let session = event_session(Uuid::from_u128(1), user_id);
+    for id in [
+        format!("programming-preload-values:{}", Uuid::from_u128(12)),
+        "programming-preload-values:not-a-uuid".into(),
+    ] {
+        let request = Ok(wire::EventClientMessage::Subscribe {
+            filter: wire::EventSubscriptionFilter {
+                objects: vec![wire::EventObject {
+                    capability: wire::EventCapability::Programmer,
+                    id,
+                }],
+                ..Default::default()
+            },
+            after_sequence: None,
+            capacity: None,
+            rate_limits: Vec::new(),
+        });
+        assert!(EventStream::subscribe(&bus, &session, request).is_err());
+    }
+
+    let own = Ok(wire::EventClientMessage::Subscribe {
+        filter: wire::EventSubscriptionFilter {
+            objects: vec![wire::EventObject {
+                capability: wire::EventCapability::Programmer,
+                id: format!("programming-preload-values:{user_id}"),
+            }],
+            ..Default::default()
+        },
+        after_sequence: None,
+        capacity: None,
+        rate_limits: Vec::new(),
+    });
+    assert!(EventStream::subscribe(&bus, &session, own).is_ok());
+}
+
 #[tokio::test]
 async fn broad_subscription_delivers_only_authenticated_user_programmer_values() {
     let bus = EventBus::new(8);
@@ -363,6 +403,34 @@ async fn broad_subscription_delivers_only_authenticated_user_capture_mode() {
     assert_eq!(event.sequence, expected.sequence);
     let wire::EventPayload::ProgrammingCaptureModeChanged { change } = event.payload else {
         panic!("expected a Programmer capture-mode payload")
+    };
+    assert_eq!(change.projection.user_id, user_id);
+    assert_eq!(change.projection.revision, 2);
+}
+
+#[tokio::test]
+async fn broad_subscription_delivers_only_authenticated_user_preload_values() {
+    let bus = EventBus::new(8);
+    let user_id = Uuid::from_u128(11);
+    let session = event_session(Uuid::from_u128(1), user_id);
+    let request = Ok(wire::EventClientMessage::Subscribe {
+        filter: wire::EventSubscriptionFilter::default(),
+        after_sequence: Some(0),
+        capacity: None,
+        rate_limits: Vec::new(),
+    });
+    let mut stream = EventStream::subscribe(&bus, &session, request).unwrap();
+
+    bus.publish(programmer_preload_values_draft(Uuid::from_u128(12), 1));
+    assert!(stream.subscription.try_next().is_none());
+    let expected = bus.publish(programmer_preload_values_draft(user_id, 2));
+
+    let Some(wire::EventServerMessage::Event { event }) = stream.next().await else {
+        panic!("expected the authenticated user's Preload values")
+    };
+    assert_eq!(event.sequence, expected.sequence);
+    let wire::EventPayload::ProgrammingPreloadValuesChanged { change } = event.payload else {
+        panic!("expected a Preload values payload")
     };
     assert_eq!(change.projection.user_id, user_id);
     assert_eq!(change.projection.revision, 2);
@@ -474,6 +542,26 @@ fn programmer_capture_mode_draft(user_id: Uuid, revision: u64) -> EventDraft {
                 blind: true,
                 preview: false,
                 preload_capture_programmer: true,
+            }
+            .into(),
+        },
+    )
+}
+
+fn programmer_preload_values_draft(user_id: Uuid, revision: u64) -> EventDraft {
+    EventDraft::programming_preload_values_changed(
+        &ActionContext::operator(
+            Uuid::from_u128(1),
+            user_id,
+            Uuid::new_v4(),
+            ActionSource::UserInterface,
+        ),
+        ProgrammingPreloadValuesChange {
+            projection: ProgrammingPreloadValuesProjection {
+                user_id: UserId(user_id),
+                revision,
+                fixture_values: Vec::new(),
+                group_values: Vec::new(),
             }
             .into(),
         },

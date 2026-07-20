@@ -15,6 +15,7 @@ pub struct ProgrammingInteractionResult<T> {
     pub event_sequence: Option<u64>,
     pub capture_mode_event_sequence: Option<u64>,
     pub values_event_sequence: Option<u64>,
+    pub preload_values_event_sequence: Option<u64>,
 }
 
 /// One desk-local selection projection that may change during a shared runtime installation.

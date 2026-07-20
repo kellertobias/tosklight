@@ -58,7 +58,7 @@ impl ProgrammerRegistry {
     pub fn undo(&self, session: SessionId) -> bool {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();
-        let (selected, expression, user_id, values_changed) = {
+        let (selected, expression, user_id, values_changed, preload_values_changed) = {
             let mut states = self.states.write();
             let Some(state) = states.get_mut(&self.key(session)) else {
                 return false;
@@ -68,6 +68,8 @@ impl ProgrammerRegistry {
             };
             let values_changed =
                 state.values != previous.values || state.group_values != previous.group_values;
+            let preload_values_changed = state.preload_pending != previous.preload_pending
+                || state.preload_group_pending != previous.preload_group_pending;
             state.redo.push(Arc::new(state.snapshot()));
             state.restore_snapshot(Arc::unwrap_or_clone(previous), self.clock.now());
             (
@@ -75,6 +77,7 @@ impl ProgrammerRegistry {
                 state.selection_expression.clone(),
                 state.user_id,
                 values_changed,
+                preload_values_changed,
             )
         };
         self.selection_contexts.write().insert(
@@ -89,12 +92,15 @@ impl ProgrammerRegistry {
         if values_changed {
             self.mark_normal_values_changed(user_id);
         }
+        if preload_values_changed {
+            self.mark_preload_values_changed(user_id);
+        }
         true
     }
     pub fn redo(&self, session: SessionId) -> bool {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();
-        let (selected, expression, user_id, values_changed) = {
+        let (selected, expression, user_id, values_changed, preload_values_changed) = {
             let mut states = self.states.write();
             let Some(state) = states.get_mut(&self.key(session)) else {
                 return false;
@@ -104,6 +110,8 @@ impl ProgrammerRegistry {
             };
             let values_changed =
                 state.values != next.values || state.group_values != next.group_values;
+            let preload_values_changed = state.preload_pending != next.preload_pending
+                || state.preload_group_pending != next.preload_group_pending;
             state.undo.push(Arc::new(state.snapshot()));
             state.restore_snapshot(Arc::unwrap_or_clone(next), self.clock.now());
             (
@@ -111,6 +119,7 @@ impl ProgrammerRegistry {
                 state.selection_expression.clone(),
                 state.user_id,
                 values_changed,
+                preload_values_changed,
             )
         };
         self.selection_contexts.write().insert(
@@ -124,6 +133,9 @@ impl ProgrammerRegistry {
         );
         if values_changed {
             self.mark_normal_values_changed(user_id);
+        }
+        if preload_values_changed {
+            self.mark_preload_values_changed(user_id);
         }
         true
     }

@@ -1,22 +1,22 @@
-use super::ProgrammingValuesProjection;
+use super::ProgrammingPreloadValuesProjection;
 use crate::{ActionContext, ApplicationCommand, CommandFamily};
 use light_core::{AttributeKey, AttributeValue, FixtureId};
 use std::{borrow::Cow, sync::Arc};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct ProgrammingValueTiming {
+pub struct ProgrammingPreloadValueTiming {
     pub fade: bool,
     pub fade_millis: Option<u64>,
     pub delay_millis: Option<u64>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ProgrammingValueMutation {
+pub enum ProgrammingPreloadValueMutation {
     SetFixture {
         fixture_id: FixtureId,
         attribute: AttributeKey,
         value: AttributeValue,
-        timing: ProgrammingValueTiming,
+        timing: ProgrammingPreloadValueTiming,
     },
     ReleaseFixture {
         fixture_id: FixtureId,
@@ -26,7 +26,7 @@ pub enum ProgrammingValueMutation {
         group_id: String,
         attribute: AttributeKey,
         value: AttributeValue,
-        timing: ProgrammingValueTiming,
+        timing: ProgrammingPreloadValueTiming,
     },
     ReleaseGroup {
         group_id: String,
@@ -35,12 +35,12 @@ pub enum ProgrammingValueMutation {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ProgrammingValuesCommand {
+pub enum ProgrammingPreloadValuesCommand {
     SetFixture {
         fixture_id: FixtureId,
         attribute: AttributeKey,
         value: AttributeValue,
-        timing: ProgrammingValueTiming,
+        timing: ProgrammingPreloadValueTiming,
     },
     ReleaseFixture {
         fixture_id: FixtureId,
@@ -50,27 +50,26 @@ pub enum ProgrammingValuesCommand {
         group_id: String,
         attribute: AttributeKey,
         value: AttributeValue,
-        timing: ProgrammingValueTiming,
+        timing: ProgrammingPreloadValueTiming,
     },
     ReleaseGroup {
         group_id: String,
         attribute: AttributeKey,
     },
     Batch {
-        mutations: Vec<ProgrammingValueMutation>,
+        mutations: Vec<ProgrammingPreloadValueMutation>,
     },
-    Clear,
 }
 
-impl ProgrammingValuesCommand {
-    pub fn mutations(&self) -> Cow<'_, [ProgrammingValueMutation]> {
+impl ProgrammingPreloadValuesCommand {
+    pub fn mutations(&self) -> Cow<'_, [ProgrammingPreloadValueMutation]> {
         match self {
             Self::SetFixture {
                 fixture_id,
                 attribute,
                 value,
                 timing,
-            } => Cow::Owned(vec![ProgrammingValueMutation::SetFixture {
+            } => Cow::Owned(vec![ProgrammingPreloadValueMutation::SetFixture {
                 fixture_id: *fixture_id,
                 attribute: attribute.clone(),
                 value: value.clone(),
@@ -79,7 +78,7 @@ impl ProgrammingValuesCommand {
             Self::ReleaseFixture {
                 fixture_id,
                 attribute,
-            } => Cow::Owned(vec![ProgrammingValueMutation::ReleaseFixture {
+            } => Cow::Owned(vec![ProgrammingPreloadValueMutation::ReleaseFixture {
                 fixture_id: *fixture_id,
                 attribute: attribute.clone(),
             }]),
@@ -88,7 +87,7 @@ impl ProgrammingValuesCommand {
                 attribute,
                 value,
                 timing,
-            } => Cow::Owned(vec![ProgrammingValueMutation::SetGroup {
+            } => Cow::Owned(vec![ProgrammingPreloadValueMutation::SetGroup {
                 group_id: group_id.clone(),
                 attribute: attribute.clone(),
                 value: value.clone(),
@@ -97,40 +96,31 @@ impl ProgrammingValuesCommand {
             Self::ReleaseGroup {
                 group_id,
                 attribute,
-            } => Cow::Owned(vec![ProgrammingValueMutation::ReleaseGroup {
+            } => Cow::Owned(vec![ProgrammingPreloadValueMutation::ReleaseGroup {
                 group_id: group_id.clone(),
                 attribute: attribute.clone(),
             }]),
             Self::Batch { mutations } => Cow::Borrowed(mutations),
-            Self::Clear => Cow::Borrowed(&[]),
         }
     }
-
-    pub const fn is_clear(&self) -> bool {
-        matches!(self, Self::Clear)
-    }
 }
 
-/// One normal-values action plus its atomic capture-mode precondition.
-///
-/// The normal-values revision remains in `ActionContext.expected_revision`; keeping the related
-/// capture revision here avoids making generic action metadata feature-specific.
 #[derive(Clone, Debug, PartialEq)]
-pub struct ProgrammingValuesRequest {
+pub struct ProgrammingPreloadValuesRequest {
     pub expected_capture_mode_revision: u64,
-    pub command: ProgrammingValuesCommand,
+    pub command: ProgrammingPreloadValuesCommand,
 }
 
-impl ApplicationCommand for ProgrammingValuesRequest {
-    type Value = ProgrammingValuesResult;
+impl ApplicationCommand for ProgrammingPreloadValuesRequest {
+    type Value = ProgrammingPreloadValuesResult;
 
     const FAMILY: CommandFamily = CommandFamily::Programmer;
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ProgrammingValuesOutcome {
+pub enum ProgrammingPreloadValuesOutcome {
     Changed {
-        projection: Arc<ProgrammingValuesProjection>,
+        projection: Arc<ProgrammingPreloadValuesProjection>,
         event_sequence: u64,
     },
     NoChange {
@@ -138,7 +128,7 @@ pub enum ProgrammingValuesOutcome {
     },
 }
 
-impl ProgrammingValuesOutcome {
+impl ProgrammingPreloadValuesOutcome {
     pub fn revision(&self) -> u64 {
         match self {
             Self::Changed { projection, .. } => projection.revision,
@@ -148,9 +138,9 @@ impl ProgrammingValuesOutcome {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct ProgrammingValuesResult {
+pub struct ProgrammingPreloadValuesResult {
     pub context: ActionContext,
-    pub outcome: ProgrammingValuesOutcome,
+    pub outcome: ProgrammingPreloadValuesOutcome,
     pub capture_mode_revision: u64,
     pub interaction_event_sequence: Option<u64>,
     pub replayed: bool,

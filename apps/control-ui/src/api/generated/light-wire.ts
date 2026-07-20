@@ -93,6 +93,36 @@ export type ProgrammingValuesErrorKind = "invalid" | "unauthorized" | "forbidden
 
 export type ProgrammingValuesErrorResponse = { kind: ProgrammingValuesErrorKind, error: string, current_revision?: number | null, current_capture_mode_revision?: number | null, retryable: boolean, };
 
+export type ProgrammingPreloadColorXyz = { x: number, y: number, z: number, };
+
+export type ProgrammingPreloadAttributeValue = { "kind": "normalized", "value": number } | { "kind": "spread", "value": Array<number> } | { "kind": "discrete", "value": string } | { "kind": "color_xyz", "value": ProgrammingPreloadColorXyz } | { "kind": "raw_dmx", "value": number } | { "kind": "raw_dmx_exact", "value": number };
+
+export type ProgrammingPreloadFixtureValue = { fixture_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, programmer_order: number, fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };
+
+export type ProgrammingPreloadGroupValue = { group_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, programmer_order: number, fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };
+
+export type ProgrammingPreloadValuesProjection = { user_id: string, revision: number, fixture_values: Array<ProgrammingPreloadFixtureValue>, group_values: Array<ProgrammingPreloadGroupValue>, };
+
+export type ProgrammingPreloadValuesChange = { projection: ProgrammingPreloadValuesProjection, };
+
+export type ProgrammingPreloadValuesSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingPreloadValuesProjection, };
+
+export type ProgrammingPreloadValueTiming = { fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };
+
+export type ProgrammingPreloadValueMutation = { "type": "set_fixture", fixture_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, timing: ProgrammingPreloadValueTiming, } | { "type": "release_fixture", fixture_id: string, attribute: string, } | { "type": "set_group", group_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, timing: ProgrammingPreloadValueTiming, } | { "type": "release_group", group_id: string, attribute: string, };
+
+export type ProgrammingPreloadValuesAction = { "type": "set_fixture", fixture_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, timing: ProgrammingPreloadValueTiming, } | { "type": "release_fixture", fixture_id: string, attribute: string, } | { "type": "set_group", group_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, timing: ProgrammingPreloadValueTiming, } | { "type": "release_group", group_id: string, attribute: string, } | { "type": "batch", mutations: Array<ProgrammingPreloadValueMutation>, };
+
+export type ProgrammingPreloadValuesActionRequest = { request_id: string, expected_revision: number, expected_capture_mode_revision: number, action: ProgrammingPreloadValuesAction, };
+
+export type ProgrammingPreloadValuesActionState = { "status": "changed", projection: ProgrammingPreloadValuesProjection, event_sequence: number, } | { "status": "no_change" };
+
+export type ProgrammingPreloadValuesActionOutcome = { request_id: string, correlation_id: string, revision: number, capture_mode_revision: number, replayed: boolean, warning?: string | null, } & ({ "status": "changed", projection: ProgrammingPreloadValuesProjection, event_sequence: number, } | { "status": "no_change" });
+
+export type ProgrammingPreloadValuesErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
+
+export type ProgrammingPreloadValuesErrorResponse = { kind: ProgrammingPreloadValuesErrorKind, error: string, current_revision?: number | null, current_capture_mode_revision?: number | null, retryable: boolean, };
+
 export type PlaybackSurface = "virtual" | "physical";
 
 export type PlaybackAddress = { "kind": "cue_list", cue_list_id: string, } | { "kind": "playback", playback_number: number, } | { "kind": "current_page", slot: number, } | { "kind": "explicit_page", page: number, slot: number, };
@@ -171,7 +201,7 @@ export type ManagedAssetReference = { asset_id: string, revision: number, };
 
 export type SelectiveImportChange = { show_id: string, show_revision: number, objects: Array<SelectiveImportObjectChange>, profile_revisions: Array<FixtureProfileIdentity>, managed_assets: Array<ManagedAssetReference>, };
 
-export type EventPayload = { "type": "programming_interaction_changed", change: ProgrammingInteractionChange, } | { "type": "programming_values_changed", change: ProgrammingValuesChange, } | { "type": "programming_capture_mode_changed", change: ProgrammingCaptureModeChange, } | { "type": "playback_runtime_changed", change: PlaybackRuntimeChange, } | { "type": "playback_view_changed", projection: PlaybackDeskProjection, } | { "type": "output_runtime_changed", change: OutputRuntimeChange, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, } | { "type": "selective_import_applied", change: SelectiveImportChange, };
+export type EventPayload = { "type": "programming_interaction_changed", change: ProgrammingInteractionChange, } | { "type": "programming_values_changed", change: ProgrammingValuesChange, } | { "type": "programming_capture_mode_changed", change: ProgrammingCaptureModeChange, } | { "type": "programming_preload_values_changed", change: ProgrammingPreloadValuesChange, } | { "type": "playback_runtime_changed", change: PlaybackRuntimeChange, } | { "type": "playback_view_changed", projection: PlaybackDeskProjection, } | { "type": "output_runtime_changed", change: OutputRuntimeChange, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, } | { "type": "selective_import_applied", change: SelectiveImportChange, };
 
 export type EventEnvelope = { sequence: number, occurred_at: string, desk_id: string | null, class: EventClass, object: EventObject | null, related_objects?: Array<EventObject> | null, source: EventSource, correlation_id: string | null, delivery: EventDeliveryPolicy, payload: EventPayload, };
 

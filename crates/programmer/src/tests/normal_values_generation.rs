@@ -114,3 +114,43 @@ fn rejected_transactions_do_not_dirty_the_live_generation() {
         .unwrap();
     assert_eq!(registry.normal_values_generation(session), Some(1));
 }
+
+#[test]
+fn rejected_transactions_do_not_dirty_pending_preload_values_generation() {
+    let registry = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    let fixture = FixtureId::new();
+    registry.start(session, UserId::new());
+    assert!(registry.arm_preload(session, true));
+    let mutation = [PreloadProgrammerValueMutation::SetFixture {
+        fixture_id: fixture,
+        attribute: AttributeKey::intensity(),
+        value: AttributeValue::Normalized(0.5),
+        timing: Default::default(),
+    }];
+
+    let rejected = registry.with_transaction(session, || {
+        assert!(registry.apply_preload_values(session, &mutation));
+        Err::<(), _>("rejected")
+    });
+    assert_eq!(rejected, Err("rejected"));
+    assert_eq!(registry.preload_values_generation(session), Some(0));
+    assert!(registry.get(session).unwrap().preload_pending.is_empty());
+
+    let rejected = registry.with_staged_transaction(session, |staged| {
+        assert!(staged.apply_preload_values(session, &mutation));
+        Err::<(), _>("rejected".to_owned())
+    });
+    assert_eq!(rejected, Err("rejected".to_owned()));
+    assert_eq!(registry.preload_values_generation(session), Some(0));
+    assert!(registry.get(session).unwrap().preload_pending.is_empty());
+
+    registry
+        .with_staged_transaction(session, |staged| {
+            assert!(staged.apply_preload_values(session, &mutation));
+            Ok::<_, String>(())
+        })
+        .unwrap();
+    assert_eq!(registry.preload_values_generation(session), Some(1));
+    assert_eq!(registry.get(session).unwrap().preload_pending.len(), 1);
+}

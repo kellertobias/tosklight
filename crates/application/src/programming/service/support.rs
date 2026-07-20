@@ -110,6 +110,7 @@ pub(super) struct Snapshot {
     pub(super) selection_revision: u64,
     pub(super) capture_mode: ProgrammerCaptureMode,
     pub(super) values_generation: u64,
+    pub(super) preload_values_generation: u64,
 }
 
 impl Snapshot {
@@ -135,6 +136,9 @@ impl Snapshot {
             values_generation: programmers
                 .normal_values_generation(session)
                 .ok_or_else(unknown_programmer)?,
+            preload_values_generation: programmers
+                .preload_values_generation(session)
+                .ok_or_else(unknown_programmer)?,
         })
     }
 
@@ -156,6 +160,7 @@ impl Snapshot {
             interaction_event_sequence: None,
             capture_mode_event_sequence: None,
             values_event_sequence: None,
+            preload_values_event_sequence: None,
             replayed: false,
         }
     }

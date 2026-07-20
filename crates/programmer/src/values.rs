@@ -165,8 +165,8 @@ impl ProgrammerRegistry {
                 .iter()
                 .map(|(fixture_id, attribute, _)| (*fixture_id, attribute.clone()))
                 .collect::<HashSet<_>>();
+            let preload = state.blind && state.preload_capture_programmer;
             {
-                let preload = state.blind && state.preload_capture_programmer;
                 let values = if preload {
                     &mut state.preload_pending
                 } else {
@@ -203,10 +203,14 @@ impl ProgrammerRegistry {
                 value.programmer_order = self.next_programmer_order();
             }
             state.last_activity = changed_at;
-            (!state.blind || !state.preload_capture_programmer).then_some(state.user_id)
+            Some((state.user_id, preload))
         };
-        if let Some(user_id) = changed_user {
-            self.mark_normal_values_changed(user_id);
+        if let Some((user_id, preload)) = changed_user {
+            if preload {
+                self.mark_preload_values_changed(user_id);
+            } else {
+                self.mark_normal_values_changed(user_id);
+            }
         }
     }
     pub fn set_faded(
@@ -299,10 +303,14 @@ impl ProgrammerRegistry {
                 delay_millis: timing.delay_millis,
             });
             state.last_activity = self.clock.now();
-            (!preload).then_some(state.user_id)
+            Some((state.user_id, preload))
         };
-        if let Some(user_id) = changed_user {
-            self.mark_normal_values_changed(user_id);
+        if let Some((user_id, preload)) = changed_user {
+            if preload {
+                self.mark_preload_values_changed(user_id);
+            } else {
+                self.mark_normal_values_changed(user_id);
+            }
         }
     }
 }

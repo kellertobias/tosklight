@@ -148,5 +148,6 @@ pub struct ProgrammingResult {
     pub interaction_event_sequence: Option<u64>,
     pub capture_mode_event_sequence: Option<u64>,
     pub values_event_sequence: Option<u64>,
+    pub preload_values_event_sequence: Option<u64>,
     pub replayed: bool,
 }

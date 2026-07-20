@@ -228,6 +228,7 @@ fn validate_programming_object(
     let user = object
         .id
         .strip_prefix("programming-values:")
+        .or_else(|| object.id.strip_prefix("programming-preload-values:"))
         .or_else(|| object.id.strip_prefix("programming-capture-mode:"));
     let Some(user) = user else {
         return Ok(());

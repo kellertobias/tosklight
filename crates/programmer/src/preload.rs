@@ -24,32 +24,41 @@ impl ProgrammerRegistry {
     pub fn activate_preload_at(&self, session: SessionId, committed_at: DateTime<Utc>) -> bool {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();
-        let mut states = self.states.write();
-        let Some(state) = states.get_mut(&self.key(session)) else {
-            return false;
-        };
-        state.checkpoint();
-        for mut incoming in std::mem::take(&mut state.preload_pending) {
-            incoming.changed_at = committed_at;
-            state.preload_active.retain(|value| {
-                !(value.fixture_id == incoming.fixture_id && value.attribute == incoming.attribute)
-            });
-            state.preload_active.push(incoming);
-        }
-        for (group, mut attributes) in std::mem::take(&mut state.preload_group_pending) {
-            for value in attributes.values_mut() {
-                value.changed_at = committed_at;
+        let (user_id, pending_values_changed) = {
+            let mut states = self.states.write();
+            let Some(state) = states.get_mut(&self.key(session)) else {
+                return false;
+            };
+            let pending_values_changed =
+                !state.preload_pending.is_empty() || !state.preload_group_pending.is_empty();
+            state.checkpoint();
+            for mut incoming in std::mem::take(&mut state.preload_pending) {
+                incoming.changed_at = committed_at;
+                state.preload_active.retain(|value| {
+                    !(value.fixture_id == incoming.fixture_id
+                        && value.attribute == incoming.attribute)
+                });
+                state.preload_active.push(incoming);
             }
-            state
-                .preload_group_active
-                .entry(group)
-                .or_default()
-                .extend(attributes);
+            for (group, mut attributes) in std::mem::take(&mut state.preload_group_pending) {
+                for value in attributes.values_mut() {
+                    value.changed_at = committed_at;
+                }
+                state
+                    .preload_group_active
+                    .entry(group)
+                    .or_default()
+                    .extend(attributes);
+            }
+            // GO publishes the prepared values, then returns input to the live
+            // programmer. Entering preload again starts the next blind edit.
+            state.blind = false;
+            state.last_activity = committed_at;
+            (state.user_id, pending_values_changed)
+        };
+        if pending_values_changed {
+            self.mark_preload_values_changed(user_id);
         }
-        // GO publishes the prepared values, then returns input to the live
-        // programmer. Entering preload again starts the next blind edit.
-        state.blind = false;
-        state.last_activity = committed_at;
         true
     }
 
@@ -88,15 +97,23 @@ impl ProgrammerRegistry {
     pub fn clear_preload_pending(&self, session: SessionId) -> bool {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();
-        let mut states = self.states.write();
-        let Some(state) = states.get_mut(&self.key(session)) else {
-            return false;
+        let (user_id, pending_values_changed) = {
+            let mut states = self.states.write();
+            let Some(state) = states.get_mut(&self.key(session)) else {
+                return false;
+            };
+            let pending_values_changed =
+                !state.preload_pending.is_empty() || !state.preload_group_pending.is_empty();
+            state.checkpoint();
+            state.preload_pending.clear();
+            state.preload_group_pending.clear();
+            state.preload_playback_pending.clear();
+            state.last_activity = self.clock.now();
+            (state.user_id, pending_values_changed)
         };
-        state.checkpoint();
-        state.preload_pending.clear();
-        state.preload_group_pending.clear();
-        state.preload_playback_pending.clear();
-        state.last_activity = self.clock.now();
+        if pending_values_changed {
+            self.mark_preload_values_changed(user_id);
+        }
         true
     }
     pub fn release_preload(&self, session: SessionId) -> bool {
@@ -106,6 +123,8 @@ impl ProgrammerRegistry {
         let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
         };
+        let pending_values_changed =
+            !state.preload_pending.is_empty() || !state.preload_group_pending.is_empty();
         let changed = state.blind
             || !state.preload_pending.is_empty()
             || !state.preload_active.is_empty()
@@ -123,6 +142,11 @@ impl ProgrammerRegistry {
         state.preload_playback_pending.clear();
         state.blind = false;
         state.last_activity = self.clock.now();
+        let user_id = state.user_id;
+        drop(states);
+        if pending_values_changed {
+            self.mark_preload_values_changed(user_id);
+        }
         true
     }
     pub fn set_preload_group(
@@ -156,6 +180,9 @@ impl ProgrammerRegistry {
                 },
             );
         state.last_activity = self.clock.now();
+        let user_id = state.user_id;
+        drop(states);
+        self.mark_preload_values_changed(user_id);
         true
     }
 

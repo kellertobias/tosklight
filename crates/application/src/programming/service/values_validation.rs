@@ -1,4 +1,6 @@
-use super::super::{ProgrammingValueMutation, ProgrammingValuesEnvironment};
+use super::super::{
+    ProgrammingPreloadValueMutation, ProgrammingValueMutation, ProgrammingValuesEnvironment,
+};
 use crate::{ActionError, ActionErrorKind};
 use light_core::{AttributeKey, AttributeValue, FixtureId};
 use std::collections::HashSet;
@@ -28,6 +30,27 @@ pub(super) fn validate_value_mutations(
         if !addresses.insert(address(mutation)) {
             return Err(invalid(
                 "a Programmer values batch must address each fixture or Group attribute once",
+            ));
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn validate_preload_value_mutations(
+    mutations: &[ProgrammingPreloadValueMutation],
+    environment: &ProgrammingValuesEnvironment,
+) -> Result<(), ActionError> {
+    if mutations.len() > MUTATION_LIMIT {
+        return Err(invalid(
+            "a Preload values batch must not exceed 10000 mutations",
+        ));
+    }
+    let mut addresses = HashSet::with_capacity(mutations.len());
+    for mutation in mutations {
+        validate_preload_mutation(mutation, environment)?;
+        if !addresses.insert(preload_address(mutation)) {
+            return Err(invalid(
+                "a Preload values batch must address each fixture or Group attribute once",
             ));
         }
     }
@@ -88,6 +111,50 @@ fn validate_mutation(
     }
 }
 
+fn validate_preload_mutation(
+    mutation: &ProgrammingPreloadValueMutation,
+    environment: &ProgrammingValuesEnvironment,
+) -> Result<(), ActionError> {
+    match mutation {
+        ProgrammingPreloadValueMutation::SetFixture {
+            fixture_id,
+            attribute,
+            value,
+            timing,
+        } => {
+            validate_fixture(*fixture_id, environment)?;
+            validate_identifier(&attribute.0, "attribute")?;
+            validate_preload_timing(*timing)?;
+            validate_fixture_value(value)
+        }
+        ProgrammingPreloadValueMutation::ReleaseFixture {
+            fixture_id,
+            attribute,
+        } => {
+            validate_fixture(*fixture_id, environment)?;
+            validate_identifier(&attribute.0, "attribute")
+        }
+        ProgrammingPreloadValueMutation::SetGroup {
+            group_id,
+            attribute,
+            value,
+            timing,
+        } => {
+            validate_group(group_id, environment)?;
+            validate_identifier(&attribute.0, "attribute")?;
+            validate_preload_timing(*timing)?;
+            validate_group_value(value)
+        }
+        ProgrammingPreloadValueMutation::ReleaseGroup {
+            group_id,
+            attribute,
+        } => {
+            validate_group(group_id, environment)?;
+            validate_identifier(&attribute.0, "attribute")
+        }
+    }
+}
+
 fn validate_fixture(
     fixture_id: FixtureId,
     environment: &ProgrammingValuesEnvironment,
@@ -125,10 +192,20 @@ fn validate_identifier(value: &str, field: &str) -> Result<(), ActionError> {
 }
 
 fn validate_timing(timing: super::super::ProgrammingValueTiming) -> Result<(), ActionError> {
-    for duration in [timing.fade_millis, timing.delay_millis]
-        .into_iter()
-        .flatten()
-    {
+    validate_durations(timing.fade_millis, timing.delay_millis)
+}
+
+fn validate_preload_timing(
+    timing: super::super::ProgrammingPreloadValueTiming,
+) -> Result<(), ActionError> {
+    validate_durations(timing.fade_millis, timing.delay_millis)
+}
+
+fn validate_durations(
+    fade_millis: Option<u64>,
+    delay_millis: Option<u64>,
+) -> Result<(), ActionError> {
+    for duration in [fade_millis, delay_millis].into_iter().flatten() {
         if duration > JAVASCRIPT_MAX_SAFE_INTEGER {
             return Err(invalid(
                 "Programmer value timing exceeds the safe integer limit",
@@ -196,6 +273,29 @@ fn address(mutation: &ProgrammingValueMutation) -> ValueAddress {
             ..
         }
         | ProgrammingValueMutation::ReleaseGroup {
+            group_id,
+            attribute,
+        } => ValueAddress::Group(group_id.clone(), attribute.clone()),
+    }
+}
+
+fn preload_address(mutation: &ProgrammingPreloadValueMutation) -> ValueAddress {
+    match mutation {
+        ProgrammingPreloadValueMutation::SetFixture {
+            fixture_id,
+            attribute,
+            ..
+        }
+        | ProgrammingPreloadValueMutation::ReleaseFixture {
+            fixture_id,
+            attribute,
+        } => ValueAddress::Fixture(*fixture_id, attribute.clone()),
+        ProgrammingPreloadValueMutation::SetGroup {
+            group_id,
+            attribute,
+            ..
+        }
+        | ProgrammingPreloadValueMutation::ReleaseGroup {
             group_id,
             attribute,
         } => ValueAddress::Group(group_id.clone(), attribute.clone()),

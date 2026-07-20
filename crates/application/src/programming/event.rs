@@ -1,5 +1,6 @@
 use super::{
-    ProgrammingCaptureModeChange, ProgrammingInteractionProjection, ProgrammingValuesChange,
+    ProgrammingCaptureModeChange, ProgrammingInteractionProjection, ProgrammingPreloadValuesChange,
+    ProgrammingValuesChange,
 };
 use crate::{
     ActionContext, ApplicationEvent, DeliveryPolicy, EventCapability, EventClass, EventDraft,
@@ -87,6 +88,13 @@ impl EventObject {
         )
     }
 
+    pub fn programming_preload_values(user_id: Uuid) -> Self {
+        Self::new(
+            EventCapability::Programmer,
+            format!("programming-preload-values:{user_id}"),
+        )
+    }
+
     pub fn programming_values_user_id(&self) -> Option<Uuid> {
         (self.capability == EventCapability::Programmer)
             .then(|| self.id.strip_prefix("programming-values:"))
@@ -101,8 +109,16 @@ impl EventObject {
             .and_then(|value| Uuid::parse_str(value).ok())
     }
 
+    pub fn programming_preload_values_user_id(&self) -> Option<Uuid> {
+        (self.capability == EventCapability::Programmer)
+            .then(|| self.id.strip_prefix("programming-preload-values:"))
+            .flatten()
+            .and_then(|value| Uuid::parse_str(value).ok())
+    }
+
     pub fn programming_user_id(&self) -> Option<Uuid> {
         self.programming_values_user_id()
+            .or_else(|| self.programming_preload_values_user_id())
             .or_else(|| self.programming_capture_mode_user_id())
     }
 }
@@ -159,6 +175,23 @@ impl EventDraft {
             correlation_id: Some(context.correlation_id),
             delivery: DeliveryPolicy::Replaceable,
             payload: ApplicationEvent::Programming(ProgrammingEvent::CaptureModeChanged(change)),
+        }
+    }
+
+    pub fn programming_preload_values_changed(
+        context: &ActionContext,
+        change: ProgrammingPreloadValuesChange,
+    ) -> Self {
+        let object = EventObject::programming_preload_values(change.projection.user_id.0);
+        Self {
+            desk_id: None,
+            class: EventClass::Projection,
+            object: Some(object),
+            related_objects: Vec::new(),
+            source: EventSource::Action(context.source),
+            correlation_id: Some(context.correlation_id),
+            delivery: DeliveryPolicy::Replaceable,
+            payload: ApplicationEvent::Programming(ProgrammingEvent::PreloadValuesChanged(change)),
         }
     }
 }
