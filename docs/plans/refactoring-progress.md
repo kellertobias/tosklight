@@ -1,16 +1,17 @@
 # Major Refactoring Progress
 
-Estimated progress: **95%**
+Estimated progress: **96%**
 
-Estimated Codex ETA: **1–3 focused implementation slices, or roughly 4–12 hours of active Codex
-execution**, to repository-wide acceptance.
+Estimated Codex ETA: **2–4 focused implementation slices, or roughly 6–16 hours of active Codex
+execution**, to repository-wide acceptance. The range increased after the Playback audit exposed
+restart-provenance and exact no-op work that should not be hidden inside topology migration.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-20 after replacing inferred Cue ambiguity with authoritative desk-local
-pending-choice state across the Programming boundary and scoped frontend surface.
+Last updated: 2026-07-20 after making virtual Playback exclusions, related runtime publication,
+Preload application, startup normalization, and scoped frontend reconciliation one typed path.
 
 ## Guardrails
 
@@ -55,8 +56,8 @@ pending-choice state across the Programming boundary and scoped frontend surface
   global `ServerContext` consumers do not rerender.
 - [x] Migrated the primary manual, automatic, scheduled, OSC, Preload, current-page, and
   explicit-page Playback action paths into the typed application service and v2 runtime contract.
-  Virtual exclusion peers, startup normalization, and persisted topology are explicitly still in
-  progress below.
+  Virtual exclusion peers and startup normalization now use that boundary; exact semantic no-op
+  reporting, persisted topology, and active compatibility panes remain in progress below.
 - [x] Removed mutable Playback-service lock exposure from the migrated paths: Engine callers use
   typed commands and immutable projections, Preload installs generation-bound prepared batches,
   and application-owned units of work serialize page changes, automatic render transitions, and
@@ -66,6 +67,16 @@ pending-choice state across the Programming boundary and scoped frontend surface
   and gaps and malformed messages repair from authoritative snapshots. Concurrent fader and page
   mutations use independent optimistic overlays with request-ordered rollback and authoritative
   event/outcome reconciliation. Active compatibility panes still poll until their consumers move.
+- [x] Made virtual Playback exclusion activation one atomic Engine transition. Actual exclusion and
+  auto-off releases are returned as sorted related projections, published once before the primary
+  high-water event, retained by idempotent replay without re-execution, and applied to the frontend
+  store in one notification regardless of HTTP/event arrival order. Current-page, explicit-page,
+  direct, fader, Flash/Swap release-promotion, Crossfade, Matter, and queued Preload paths share the
+  same address-aware rule. Preload remains one prepared batch/install with one persistence phase;
+  its retained queue now carries the captured page. Restored exclusions normalize before the
+  output scheduler can render. The scoped client rejects mismatched request IDs, replaces authority
+  on server/session changes, ignores late work, repairs gaps, and remains dormant until a Playback
+  runtime view mounts.
 - [x] Added a typed desk-local Programming interaction snapshot and stream. Command-line and
   ordered-selection changes use independent exact-object routes and non-empty sparse payloads;
   Highlight and Preload reconciliation finishes before the one authoritative event is captured.
@@ -316,8 +327,9 @@ pending-choice state across the Programming boundary and scoped frontend surface
 
 - [ ] Continue vertical feature-store/event slices and move the remaining production callers away
   from broad `useServer()`, polling, and generic show-object mutation.
-- [ ] Finish the Playback ownership boundary for virtual exclusion peers, startup normalization,
-  persisted Cuelist/topology mutation, and every active compatibility pane still polling.
+- [ ] Finish the Playback ownership boundary for exact semantic no-op outcomes, persisted activation
+  provenance and Cuelist/topology mutation, efficient Preload transition capture, and every active
+  compatibility pane still polling.
 - [ ] Move the remaining selection consumers onto the scoped Programming store, then remove their
   legacy bootstrap fields and broad Programmer refresh paths. Group Pool, Group Strip, and the
   command bar, Stage, Stage/Fixture pane chrome, Channels, Fixture Sheet, Patch, and Presets have
@@ -343,6 +355,23 @@ pending-choice state across the Programming boundary and scoped frontend surface
    acceptance test has moved to a typed replacement.
 7. Repair the remaining stale feature-plan links and keep the committed `docs/engineering` handoff
    synchronized as compatibility adapters are retired.
+
+## Known limitations
+
+- Persisted active Playback runtime does not retain the desk or surface that activated it. Live
+  exclusion actions remain desk-isolated, but restart normalization must currently merge the
+  configured current-page zones from every desk and therefore cannot reconstruct which desk's rule
+  originally applied. Add activation provenance and a two-desk restart regression before calling
+  restart isolation complete.
+- Several accepted Pool operations still use `Changed(true)` for protocol acceptance rather than an
+  exact semantic delta. Projection comparison prevents a duplicate authoritative event, but repeat
+  On, same-value Master/XFade, and similar operations can still return `applied` and repeat
+  persistence. Separate accepted from changed and cover those exact no-op cases next.
+- Preload currently reads related runtime projections once per identity and clones each applicable
+  zone set into its prepared commands. A queue with multiple actions for the same Playback also
+  derives the retained transition cause from the first matching action. Add a batched projection
+  read, share immutable zone data, define final-action transition metadata, and prove resolved-page
+  capture through the route before scaling this path to broad queued batches.
 
 ## Performance and acceptance still required
 
@@ -545,6 +574,27 @@ pending-choice state across the Programming boundary and scoped frontend surface
   desktop bundles, `/api/v1/readiness` reports `ready`, and the current launch adds no server error;
   Vite retains only its existing large-chunk advisory and wire generation retains the existing
   non-fatal `ts-rs` warning.
+- Atomic Playback exclusions and scoped related-outcome reconciliation pass all 89 Programmer, 61
+  Engine, and 273 application library tests. The server library passes 315 tests with 1 intentional
+  Matter-port ignore when the CITP thumbnail socket test is filtered; that CITP test passes
+  separately outside the sandbox. Focused coverage passes 9 Engine Playback-boundary tests, 16
+  Playback application tests, 17 v2 route tests, 28 Preload tests, the restored-exclusion
+  normalization test, all 4 output-scheduler tests, and 7 Matter tests. The prior parallel-only Cue
+  transfer failure also passes alone. The 48 wire tests and generated-contract verification pass;
+  strict Clippy for Engine, application, wire, and server passes with the established
+  `too_many_arguments` allowance. `cargo fmt --all -- --check` and `git diff --check` pass. The
+  focused frontend contract passes 74 Playback, Preload-queue, store, session, view, and adapter
+  tests; request-correlation and command-summary regressions add 30 passing tests. The complete
+  frontend suite passes all 1,260 tests in 190 files; typecheck and the production build pass, with
+  only the existing Vite chunk-size advisory. Every changed production file remains below 400
+  lines; the Playback ports module is 352 lines after moving its focused test into a 60-line
+  feature-owned test module. The focused VPB-007, CUE-005, and OSC-006 API/UI/OSC acceptance paths
+  pass. OSC-006 now acknowledges
+  the expected page value instead of attributing an earlier UDP feedback packet to the subsequent
+  page transition; its final API/UI/OSC run passes all 3 paths. `./build open` rebuilds and launches
+  both desktop bundles; `/api/v1/readiness` reports `ready` at snapshot revision 30 in 0.073 seconds,
+  `/health` returns 200 in 0.001 seconds, and `/bootstrap` returns 200 in 0.003 seconds. The current
+  launch reaches Engine-ready/server-bind state without a new log error.
 
 ## Wrap-up handoff
 
@@ -565,9 +615,10 @@ pending-choice state across the Programming boundary and scoped frontend surface
   compatibility surfaces tracked above.
 - Patch/setup selection and explicit Cue pending-choice authority are complete. The public test DSL
   remains a separate future milestone.
-- Recommended next slice: finish the remaining Playback ownership boundary, beginning with virtual
-  exclusion peers and startup normalization, then persisted Cuelist/topology mutation and active
-  compatibility panes. Keep Cue editor/Update/transfer cleanup and the public test DSL as distinct
+- Recommended next slice: make Playback no-op outcomes and persistence exact, batch Preload runtime
+  reads and transition metadata, and design persisted activation provenance. Then add typed
+  Cuelist/topology mutation and migrate the Virtual Playback pane as the first compatibility-free
+  Playback surface. Keep Cue editor/Update/transfer cleanup and the public test DSL as distinct
   later milestones.
 
 Test files may exceed the hard limits, but should still be split when it improves readability and
