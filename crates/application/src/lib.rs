@@ -87,6 +87,7 @@ pub use playback_topology::{
     PlaybackTopologyOutcome, PlaybackTopologyPorts, PlaybackTopologyResolution,
     PlaybackTopologyResult, PlaybackTopologyService,
 };
+pub use programming::update as programming_update;
 pub use programming::{
     CueMoveCopyChoice, CueTransferOperation, ExecutionPolicy, ProgrammingAction,
     ProgrammingCaptureModeChange, ProgrammingCaptureModeProjection, ProgrammingCaptureModeSnapshot,

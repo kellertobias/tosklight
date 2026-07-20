@@ -166,15 +166,6 @@ pub(super) fn resolve_update_cue_target(
     update::resolve_cue_target(&request, active).map_err(update_api_error)
 }
 
-pub(super) fn update_content_revision(
-    content: &light_programmer::ProgrammerUpdateContent,
-) -> Result<String, ApiError> {
-    let encoded = serde_json::to_vec(content).map_err(|error| {
-        ApiError::internal(format!("could not fingerprint programmer: {error}"))
-    })?;
-    Ok(format!("{:x}", Sha256::digest(encoded)))
-}
-
 pub(super) fn update_api_error(error: update::UpdateError) -> ApiError {
     match error {
         update::UpdateError::StaleRevision { .. } => ApiError::conflict(error.to_string()),
@@ -183,6 +174,7 @@ pub(super) fn update_api_error(error: update::UpdateError) -> ApiError {
     }
 }
 
+#[cfg(test)]
 pub(super) fn stored_update_object(
     store: &ShowStore,
     kind: &str,
@@ -196,93 +188,11 @@ pub(super) fn stored_update_object(
         .ok_or_else(|| ApiError::not_found(format!("{kind} {id}")))
 }
 
+#[cfg(test)]
 pub(super) fn preview_update_request(
     state: &AppState,
     session: &Session,
     request: &UpdateApiRequest,
 ) -> Result<UpdatePreviewResponse, ApiError> {
-    let (_, store) = active_show_store(state).map_err(ApiError::bad_request)?;
-    let programmer = state
-        .programmers
-        .get(session.id)
-        .ok_or_else(|| ApiError::not_found("programmer"))?;
-    let content = programmer.update_content();
-    let programmer_revision = update_content_revision(&content)?;
-    let (revision, preview) = match request.target.family {
-        UpdateApiTargetFamily::Cue => {
-            let update::UpdateMode::Cue(mode) = request.mode else {
-                return Err(ApiError::bad_request(
-                    "Cue targets require one of the four Cue Update modes",
-                ));
-            };
-            let target =
-                resolve_update_cue_target(&request.target, &active_update_cue_contexts(state))?;
-            let id = target.cue_list_id.0.to_string();
-            let object = stored_update_object(&store, "cue_list", &id)?;
-            let cue_list = serde_json::from_value::<light_playback::CueList>(object.body)
-                .map_err(|error| ApiError::bad_request(format!("invalid Cuelist: {error}")))?;
-            (
-                object.revision,
-                update::preview_cue_update(&cue_list, &target, mode, &content)
-                    .map_err(update_api_error)?,
-            )
-        }
-        UpdateApiTargetFamily::Preset => {
-            let update::UpdateMode::ExistingContent(mode) = request.mode else {
-                return Err(ApiError::bad_request(
-                    "Preset targets require Update Existing or Add New",
-                ));
-            };
-            let id = request
-                .target
-                .object_id
-                .as_deref()
-                .ok_or_else(|| ApiError::bad_request("Preset Update requires object_id"))?;
-            let object = stored_update_object(&store, "preset", id)?;
-            let preset = serde_json::from_value::<light_programmer::Preset>(object.body)
-                .map_err(|error| ApiError::bad_request(format!("invalid Preset: {error}")))?;
-            (
-                object.revision,
-                update::preview_preset_update(id, &preset, mode, &content)
-                    .map_err(update_api_error)?,
-            )
-        }
-        UpdateApiTargetFamily::Group => {
-            let update::UpdateMode::ExistingContent(mode) = request.mode else {
-                return Err(ApiError::bad_request(
-                    "Group targets require Update Existing or Add New",
-                ));
-            };
-            let id = request
-                .target
-                .object_id
-                .as_deref()
-                .ok_or_else(|| ApiError::bad_request("Group Update requires object_id"))?;
-            let object = stored_update_object(&store, "group", id)?;
-            let mut group =
-                serde_json::from_value::<light_programmer::GroupDefinition>(object.body)
-                    .map_err(|error| ApiError::bad_request(format!("invalid Group: {error}")))?;
-            group.id = id.to_owned();
-            let groups = state
-                .engine
-                .snapshot()
-                .groups
-                .iter()
-                .cloned()
-                .map(|candidate| (candidate.id.clone(), candidate))
-                .collect::<HashMap<_, _>>();
-            let membership =
-                light_programmer::resolve_group(id, &groups).map_err(ApiError::bad_request)?;
-            (
-                object.revision,
-                update::preview_group_update(&group, &membership, mode, &content)
-                    .map_err(update_api_error)?,
-            )
-        }
-    };
-    Ok(UpdatePreviewResponse {
-        revision,
-        programmer_revision,
-        preview,
-    })
+    preview_update_application(state, session, request)
 }

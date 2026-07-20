@@ -118,6 +118,179 @@ async fn update_settings_endpoint_persists_and_reloads_per_desk() {
 }
 
 #[test]
+fn locked_desk_can_preview_update_but_cannot_apply_it() {
+    let (state, data_dir) = test_state();
+    let user = state.desk.lock().users().unwrap().remove(0);
+    let session = Session {
+        id: SessionId::new(),
+        user: user.clone(),
+        token: "locked-update-preview".into(),
+        connected: true,
+        desk: test_control_desk(),
+    };
+    state.programmers.start(session.id, user.id);
+    attach_session_command_context(&state, &session);
+    state.sessions.write().insert(session.id, session.clone());
+    let fixture = light_core::FixtureId::new();
+    state.programmers.select(session.id, [fixture]);
+
+    let show_path = data_dir.join("shows/locked-update-preview.show");
+    let show_id = initialise_show(&show_path, "Locked Update preview").unwrap();
+    *state.active_show.write() = Some(ShowEntry {
+        id: show_id,
+        name: "Locked Update preview".into(),
+        path: show_path.display().to_string(),
+        revision: 0,
+        updated_at: String::new(),
+        revision_copy: None,
+    });
+    ShowStore::open(&show_path)
+        .unwrap()
+        .put_object(
+            "group",
+            "982",
+            &serde_json::to_value(light_programmer::GroupDefinition {
+                id: "982".into(),
+                name: "Locked preview".into(),
+                ..Default::default()
+            })
+            .unwrap(),
+            0,
+        )
+        .unwrap();
+    write_desk_lock(
+        &state,
+        session.desk.id,
+        &DeskLockConfiguration {
+            locked: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let request = UpdateApiRequest {
+        target: UpdateApiTarget {
+            family: UpdateApiTargetFamily::Group,
+            object_id: Some("982".into()),
+            playback_number: None,
+            cue_id: None,
+            cue_number: None,
+            validate_active_context: false,
+        },
+        mode: update::UpdateMode::ExistingContent(update::ExistingContentMode::AddNew),
+        expected_revision: None,
+        expected_programmer_revision: None,
+        expected_show_revision: None,
+    };
+
+    let preview = preview_update_request(&state, &session, &request).unwrap();
+    assert_eq!(preview.preview.changed_count(), 1);
+    let error = perform_update(
+        &state,
+        &session,
+        &UpdateApiRequest {
+            expected_revision: Some(preview.revision),
+            expected_programmer_revision: Some(preview.programmer_revision),
+            ..request
+        },
+    )
+    .unwrap_err();
+    assert_eq!(error.status, StatusCode::CONFLICT);
+    assert_eq!(error.message, "desk is locked");
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn update_targets_endpoint_keeps_the_legacy_shape_over_one_application_query() {
+    let (state, data_dir) = test_state();
+    let user = state.desk.lock().users().unwrap().remove(0);
+    let session = Session {
+        id: SessionId::new(),
+        user: user.clone(),
+        token: "typed-update-targets".into(),
+        connected: true,
+        desk: test_control_desk(),
+    };
+    state.programmers.start(session.id, user.id);
+    attach_session_command_context(&state, &session);
+    state.sessions.write().insert(session.id, session.clone());
+    let fixture = light_core::FixtureId::new();
+    state.programmers.set(
+        session.id,
+        fixture,
+        light_core::AttributeKey::intensity(),
+        light_core::AttributeValue::Normalized(0.8),
+    );
+    assert!(state.programmers.set_modes(
+        session.id,
+        None,
+        None,
+        None,
+        Some(Some("preset:1.1".into())),
+    ));
+
+    let show_path = data_dir.join("shows/typed-update-targets.show");
+    let show_id = initialise_show(&show_path, "Typed Update targets").unwrap();
+    *state.active_show.write() = Some(ShowEntry {
+        id: show_id,
+        name: "Typed Update targets".into(),
+        path: show_path.display().to_string(),
+        revision: 0,
+        updated_at: String::new(),
+        revision_copy: None,
+    });
+    let revision = ShowStore::open(&show_path)
+        .unwrap()
+        .put_object(
+            "preset",
+            "1.1",
+            &serde_json::to_value(light_programmer::Preset {
+                name: "Intensity 1".into(),
+                family: light_programmer::PresetFamily::Intensity,
+                number: 1,
+                values: HashMap::from([(
+                    fixture,
+                    HashMap::from([(
+                        light_core::AttributeKey::intensity(),
+                        light_core::AttributeValue::Normalized(0.2),
+                    )]),
+                )]),
+                group_values: HashMap::new(),
+            })
+            .unwrap(),
+            0,
+        )
+        .unwrap();
+
+    let response = router(state)
+        .oneshot(
+            Request::get("/api/v1/update/targets?filter=show_all_active")
+                .header(
+                    header::AUTHORIZATION,
+                    format!("Bearer {}", session.token),
+                )
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json(response).await;
+    let entries = body.as_array().unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0]["target"]["family"]["type"], "preset");
+    assert_eq!(entries[0]["target"]["object_id"], "1.1");
+    assert_eq!(entries[0]["revision"], revision);
+    assert_eq!(entries[0]["existing_preview"]["revision"], revision);
+    assert_eq!(entries[0]["add_new_preview"]["revision"], revision);
+    assert_eq!(
+        entries[0]["existing_preview"]["programmer_revision"],
+        entries[0]["add_new_preview"]["programmer_revision"]
+    );
+    assert!(entries[0]["existing_preview"]["show_revision"].is_number());
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
 fn armed_hardware_playback_touch_requests_update_without_operating_playback() {
     let (state, data_dir) = test_state();
     let user = state.desk.lock().users().unwrap().remove(0);

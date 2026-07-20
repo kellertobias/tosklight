@@ -12,6 +12,13 @@ pub(super) enum IncomingValue<'a> {
 }
 
 impl IncomingValue<'_> {
+    pub(super) fn programmer_order(&self) -> u64 {
+        match self {
+            Self::Fixture(value) => value.programmer_order,
+            Self::Group(value) => value.programmer_order,
+        }
+    }
+
     pub(super) fn address(&self) -> UpdateAddress {
         match self {
             Self::Fixture(value) => UpdateAddress::FixtureAttribute {
@@ -48,12 +55,14 @@ impl IncomingValue<'_> {
 }
 
 pub(super) fn incoming_values(content: &ProgrammerUpdateContent) -> Vec<IncomingValue<'_>> {
-    content
+    let mut values = content
         .fixture_values
         .iter()
         .map(IncomingValue::Fixture)
         .chain(content.group_values.iter().map(IncomingValue::Group))
-        .collect()
+        .collect::<Vec<_>>();
+    values.sort_by_key(IncomingValue::programmer_order);
+    values
 }
 
 pub(super) fn incoming_preset_values<'a>(

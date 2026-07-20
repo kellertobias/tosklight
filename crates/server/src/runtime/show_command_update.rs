@@ -49,6 +49,7 @@ fn cue_update_request(
         mode: update::UpdateMode::Cue(settings.cue_mode),
         expected_revision: None,
         expected_programmer_revision: None,
+        expected_show_revision: None,
     })
 }
 
@@ -84,6 +85,7 @@ fn object_update_request(
         mode,
         expected_revision: None,
         expected_programmer_revision: None,
+        expected_show_revision: None,
     })
 }
 

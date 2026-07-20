@@ -251,6 +251,7 @@ fn confirmed_update_rejects_changed_programmer_and_is_one_step_undoable() {
         mode: update::UpdateMode::Cue(update::CueUpdateMode::ExistingOnly),
         expected_revision: None,
         expected_programmer_revision: None,
+        expected_show_revision: None,
     };
     let preview = preview_update_request(&state, &session, &preview_request).unwrap();
     assert_eq!(preview.revision, stored_revision);

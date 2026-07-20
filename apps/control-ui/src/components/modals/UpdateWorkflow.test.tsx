@@ -9,6 +9,7 @@ const existingOnly: UpdateMode = { target_type: "cue", mode: "existing_only" };
 const target = { family: { type: "cue" as const }, object_id: "cue-list-a", name: "Main Cuelist", playback_number: 7, cue: { id: "cue-2", number: 2 } };
 const preview: UpdatePreview = {
   revision: 4,
+  show_revision: 12,
   programmer_revision: "programmer-a",
   target,
   mode: existingOnly,

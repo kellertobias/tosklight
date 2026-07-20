@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod highlight;
-pub mod update;
+pub use light_application::programming_update as update;
 
 mod runtime;
 

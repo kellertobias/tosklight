@@ -90,6 +90,8 @@ export interface UpdatePreviewItem {
 export interface UpdatePreview {
 	/** Exact target object revision used to calculate this preview. */
 	revision: number;
+	/** Exact portable Show revision used to resolve target dependencies. */
+	show_revision: number;
 	/** Fingerprint of the exact normal-programmer content shown in this preview. */
 	programmer_revision: string;
 	target: UpdateTargetIdentity;

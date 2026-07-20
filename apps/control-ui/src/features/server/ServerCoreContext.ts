@@ -99,6 +99,7 @@ export interface ServerCoreContext
 		mode: UpdateMode,
 		expectedRevision?: number,
 		expectedProgrammerRevision?: string,
+		expectedShowRevision?: number,
 	) => Promise<UpdateResult | null>;
 	updateTargets: (
 		filter: UpdateTargetFilter,

@@ -294,6 +294,67 @@ fn update_content_captures_only_normal_programmer_edits_without_consuming_them()
 }
 
 #[test]
+fn update_capture_separates_shared_values_from_the_exact_desk_selection() {
+    let registry = ProgrammerRegistry::default();
+    let user = UserId::new();
+    let first_session = SessionId::new();
+    let second_session = SessionId::new();
+    let first_fixture = FixtureId::new();
+    let second_fixture = FixtureId::new();
+    registry.start(first_session, user);
+    registry.start(second_session, user);
+    registry.select(first_session, [first_fixture]);
+    registry.select(second_session, [second_fixture]);
+    registry.set(
+        first_session,
+        first_fixture,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.5),
+    );
+    assert!(registry.set_group(
+        first_session,
+        "front".into(),
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.25),
+    ));
+    registry.select_expression(
+        first_session,
+        vec![first_fixture],
+        SelectionExpression::Sources {
+            items: vec![
+                SelectionReference::LiveGroup {
+                    group_id: "side".into(),
+                },
+                SelectionReference::RemoveLiveGroup {
+                    group_id: "side".into(),
+                },
+            ],
+        },
+    );
+    assert!(registry.set_modes(
+        first_session,
+        None,
+        None,
+        None,
+        Some(Some("preset:1.1".into())),
+    ));
+
+    let first_values = registry.capture_update_values(first_session).unwrap();
+    let second_values = registry.capture_update_values(second_session).unwrap();
+    let first_selection = registry.capture_update_selection(first_session).unwrap();
+    let second_selection = registry.capture_update_selection(second_session).unwrap();
+
+    assert_eq!(first_values.values, second_values.values);
+    assert_eq!(first_selection.fixtures, vec![first_fixture]);
+    assert_eq!(second_selection.fixtures, vec![second_fixture]);
+
+    let menu = registry.capture_update_menu(first_session).unwrap();
+    assert_eq!(menu.selected_fixtures, vec![first_fixture]);
+    assert_eq!(menu.active_preset_id.as_deref(), Some("1.1"));
+    assert_eq!(menu.referenced_group_ids, vec!["front", "side"]);
+}
+
+#[test]
 fn ordered_group_merge_never_reorders_or_duplicates_existing_members() {
     let first = FixtureId::new();
     let second = FixtureId::new();

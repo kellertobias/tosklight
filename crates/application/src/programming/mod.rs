@@ -16,6 +16,7 @@ mod preset_active_show;
 mod preset_recording;
 mod projection;
 mod service;
+pub mod update;
 mod values_action;
 mod values_projection;
 

@@ -48,6 +48,7 @@ export function createUpdateActions(
 			mode,
 			expectedRevision,
 			expectedProgrammerRevision,
+			expectedShowRevision,
 		) => {
 			try {
 				const result = await client.applyUpdate(
@@ -55,6 +56,7 @@ export function createUpdateActions(
 					mode,
 					expectedRevision,
 					expectedProgrammerRevision,
+					expectedShowRevision,
 				);
 				await refresh();
 				setError(null);

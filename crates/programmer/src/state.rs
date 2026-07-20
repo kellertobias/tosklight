@@ -99,6 +99,13 @@ impl ProgrammerState {
     /// buffers. The returned value is owned, so planning an Update never clears or otherwise
     /// mutates the live programmer.
     pub fn update_content(&self) -> ProgrammerUpdateContent {
+        self.update_content_with_selection(&self.selected)
+    }
+
+    pub(crate) fn update_content_with_selection(
+        &self,
+        selected_fixtures: &[FixtureId],
+    ) -> ProgrammerUpdateContent {
         let mut fixture_values = self
             .values
             .iter()
@@ -146,7 +153,7 @@ impl ProgrammerState {
         ProgrammerUpdateContent {
             fixture_values,
             group_values,
-            selected_fixtures: self.selected.clone(),
+            selected_fixtures: selected_fixtures.to_vec(),
         }
     }
 }

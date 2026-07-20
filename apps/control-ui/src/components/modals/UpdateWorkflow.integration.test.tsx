@@ -47,6 +47,7 @@ const cueEntry: UpdateMenuEntry = {
   active_or_referenced: true,
   existing_preview: {
     revision: 4,
+    show_revision: 12,
     programmer_revision: "programmer-existing",
     target: cueTarget,
     mode: { target_type: "cue", mode: "existing_only" },
@@ -57,6 +58,7 @@ const cueEntry: UpdateMenuEntry = {
   },
   add_new_preview: {
     revision: 4,
+    show_revision: 12,
     programmer_revision: "programmer-add-new",
     target: cueTarget,
     mode: { target_type: "cue", mode: "add_new" },
@@ -130,6 +132,7 @@ describe("Update workflow integration", () => {
       { target_type: "cue", mode: "add_new" },
       4,
       "programmer-add-new",
+      12,
     ));
     expect(await screen.findByRole("dialog", { name: "Update complete" })).toBeInTheDocument();
   });
@@ -162,5 +165,37 @@ describe("Update workflow integration", () => {
     expect(workflow.dispatch).toHaveBeenCalledWith({ type: "SET_SHIFT_ARMED", value: false });
     expect(workflow.server.resetCommandLine).toHaveBeenCalledOnce();
     expect(screen.queryByText(/UPDATE armed/)).not.toBeInTheDocument();
+  });
+
+  it("pins a cue-less touched request to the exact Cue returned by preview", async () => {
+    const request: UpdateTargetRequest = {
+      family: { type: "cue" },
+      object_id: "cue-list-a",
+      playback_number: 7,
+      validate_active_context: true,
+    };
+    workflow.state.updateArmed = true;
+    workflow.server.previewUpdate.mockResolvedValue(cueEntry.existing_preview);
+    workflow.server.applyUpdate.mockResolvedValue(resultFor());
+    render(<UpdateWorkflow/>);
+
+    fireEvent(window, new CustomEvent<UpdateTargetRequest>(UPDATE_TARGET_EVENT, { detail: request }));
+    const dialog = await screen.findByRole("dialog", { name: "Update Main Cuelist" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Update Cuelist" }));
+
+    await waitFor(() => expect(workflow.server.applyUpdate).toHaveBeenCalledWith(
+      {
+        family: { type: "cue" },
+        object_id: "cue-list-a",
+        playback_number: 7,
+        cue_id: "cue-2",
+        cue_number: 2,
+        validate_active_context: true,
+      },
+      cueEntry.existing_preview.mode,
+      cueEntry.existing_preview.revision,
+      cueEntry.existing_preview.programmer_revision,
+      cueEntry.existing_preview.show_revision,
+    ));
   });
 });

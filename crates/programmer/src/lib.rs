@@ -22,6 +22,7 @@ mod selection;
 mod sessions;
 mod state;
 mod transactions;
+mod update_capture;
 mod values;
 
 pub mod command_line;
@@ -67,6 +68,10 @@ pub use state::{
     ProgrammerUpdateContent, TransientProgrammerAction,
 };
 pub use transactions::ProgrammerTransactionSnapshot;
+pub use update_capture::{
+    ProgrammerUpdateCaptureError, ProgrammerUpdateMenuCapture, ProgrammerUpdateSelectionCapture,
+    ProgrammerUpdateValue, ProgrammerUpdateValuesCapture,
+};
 
 #[cfg(test)]
 mod tests;

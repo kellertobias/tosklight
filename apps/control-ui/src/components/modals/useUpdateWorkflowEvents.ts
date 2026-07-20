@@ -11,6 +11,7 @@ import { useApp } from "../../state/AppContext";
 import {
 	configuredUpdateMode,
 	defaultUpdateSettings,
+	requestFromUpdateIdentity,
 	targetFamilyLabel,
 	UPDATE_ARMED_EVENT,
 	UPDATE_SETTINGS_EVENT,
@@ -87,7 +88,10 @@ export function useUpdateWorkflowEvents({
 					disarm();
 					return;
 				}
-				setOperation({ request, preview });
+				setOperation({
+					request: requestFromUpdateIdentity(preview.target),
+					preview,
+				});
 				void commandLine.replace(
 					`UPDATE ${targetFamilyLabel(preview.target).toUpperCase()} ${preview.target.name}`,
 					false,

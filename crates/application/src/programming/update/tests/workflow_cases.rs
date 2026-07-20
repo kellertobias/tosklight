@@ -95,6 +95,38 @@ fn one_atomic_cuelist_plan_reports_every_changed_source_and_retains_programmer_v
 }
 
 #[test]
+fn preview_preserves_global_programmer_order_across_fixture_and_group_values() {
+    let fixture = fixture(1);
+    let list = cue_list(vec![cue(1.0, vec![])]);
+    let target = target(&list, 0, Some(1));
+    let programmer = ProgrammerUpdateContent {
+        fixture_values: vec![fixture_update(fixture, "intensity", 0.8, 2)],
+        group_values: vec![ProgrammerGroupUpdate {
+            group_id: "front".into(),
+            attribute: attribute("pan"),
+            value: normalized(0.4),
+            programmer_order: 1,
+            fade: false,
+            fade_millis: None,
+            delay_millis: None,
+        }],
+        selected_fixtures: Vec::new(),
+    };
+
+    let preview =
+        preview_cue_update(&list, &target, CueUpdateMode::AddToCurrentCue, &programmer).unwrap();
+
+    assert!(matches!(
+        preview.items[0].address,
+        UpdateAddress::GroupAttribute { .. }
+    ));
+    assert!(matches!(
+        preview.items[1].address,
+        UpdateAddress::FixtureAttribute { .. }
+    ));
+}
+
+#[test]
 fn eligible_menu_filter_excludes_no_ops_but_show_all_keeps_them_distinguishable() {
     let fixture = fixture(1);
     let preset = Preset {

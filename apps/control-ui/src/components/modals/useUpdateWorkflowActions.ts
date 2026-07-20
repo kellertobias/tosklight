@@ -4,29 +4,12 @@ import type {
 	UpdateMode,
 	UpdateResult,
 	UpdateSettings,
-	UpdateTargetIdentity,
-	UpdateTargetRequest,
 } from "../../api/types";
-import { updateTargetKey } from "../control/updateWorkflow";
+import {
+	requestFromUpdateIdentity,
+	updateTargetKey,
+} from "../control/updateWorkflow";
 import type { UpdateOperation } from "./useUpdateWorkflowEvents";
-
-function requestFromIdentity(
-	target: UpdateTargetIdentity,
-): UpdateTargetRequest {
-	return {
-		family: target.family,
-		object_id: target.object_id,
-		...(target.playback_number == null
-			? {}
-			: { playback_number: target.playback_number }),
-		...(target.cue
-			? { cue_id: target.cue.id, cue_number: target.cue.number }
-			: {}),
-		...(target.playback_number == null
-			? {}
-			: { validate_active_context: true }),
-	};
-}
 
 interface UpdateWorkflowActionOptions {
 	operation: UpdateOperation | null;
@@ -73,6 +56,7 @@ export function useUpdateWorkflowActions({
 			operation.preview.mode,
 			operation.preview.revision,
 			operation.preview.programmer_revision,
+			operation.preview.show_revision,
 		);
 		setBusy(false);
 		if (!applied) {
@@ -101,10 +85,11 @@ export function useUpdateWorkflowActions({
 				? entry.add_new_preview
 				: entry.existing_preview;
 		const applied = await server.applyUpdate(
-			requestFromIdentity(entry.target),
+			requestFromUpdateIdentity(entry.target),
 			mode,
 			entry.revision,
 			selectedPreview.programmer_revision,
+			selectedPreview.show_revision,
 		);
 		setBusyKey(null);
 		if (!applied) {

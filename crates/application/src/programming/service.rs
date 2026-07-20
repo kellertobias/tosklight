@@ -43,6 +43,10 @@ mod selection_refresh;
 mod state;
 #[path = "service/support.rs"]
 mod support;
+#[path = "service/update.rs"]
+mod update;
+#[path = "service/update_replay.rs"]
+mod update_replay;
 #[path = "service/values.rs"]
 mod values;
 #[path = "service/values_replay.rs"]
@@ -64,6 +68,7 @@ use support::{
     ReplayCache, Snapshot, accepted, command_line, context_session, context_user, replace_error,
     required_session, unknown_programmer, validate_command,
 };
+use update_replay::UpdateReplayCache;
 use values_replay::ValuesReplayCache;
 struct AppliedProgramming {
     result: ProgrammingResult,
@@ -84,6 +89,7 @@ pub struct ProgrammingService {
     cue_recording_replay: Arc<Mutex<CueRecordingReplayCache>>,
     group_recording_replay: Arc<Mutex<GroupRecordingReplayCache>>,
     preset_recording_replay: Arc<Mutex<PresetRecordingReplayCache>>,
+    update_replay: Arc<Mutex<UpdateReplayCache>>,
     pub(super) events: EventBus,
     lifecycle_publication: Arc<Mutex<LifecyclePublicationGate>>,
     nested_selection_publications: Arc<Mutex<HashMap<uuid::Uuid, u64>>>,
@@ -105,6 +111,7 @@ impl ProgrammingService {
             cue_recording_replay: Arc::default(),
             group_recording_replay: Arc::default(),
             preset_recording_replay: Arc::default(),
+            update_replay: Arc::default(),
             events,
             lifecycle_publication: Arc::default(),
             nested_selection_publications: Arc::default(),

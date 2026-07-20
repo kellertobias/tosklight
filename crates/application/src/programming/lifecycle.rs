@@ -120,6 +120,7 @@ impl ProgrammingService {
         self.invalidate_cue_recording_replay(target.user_id);
         self.invalidate_group_recording_replay(target.user_id);
         self.invalidate_preset_recording_replay(target.user_id);
+        self.invalidate_update_replay(target.user_id);
         let after_values = self.lifecycle_values(&target, completion.replacement_session_id)?;
         let after_preload_values =
             self.lifecycle_preload_values(&target, completion.replacement_session_id)?;

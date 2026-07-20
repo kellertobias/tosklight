@@ -6,114 +6,44 @@ pub(super) async fn preview_update(
     Json(request): Json<UpdateApiRequest>,
 ) -> Result<Json<UpdatePreviewResponse>, ApiError> {
     let session = authenticate(&state, &headers)?;
-    Ok(Json(preview_update_request(&state, &session, &request)?))
+    Ok(Json(preview_update_application(
+        &state, &session, &request,
+    )?))
 }
 
-pub(super) fn plan_update_request(
+pub(super) fn preview_update_application(
     state: &AppState,
     session: &Session,
-    store: &ShowStore,
     request: &UpdateApiRequest,
-) -> Result<update::AtomicUpdatePlan, ApiError> {
-    let programmer = state
-        .programmers
-        .get(session.id)
-        .ok_or_else(|| ApiError::not_found("programmer"))?;
-    let content = programmer.update_content();
-    let programmer_revision = update_content_revision(&content)?;
-    if request
-        .expected_programmer_revision
+) -> Result<UpdatePreviewResponse, ApiError> {
+    let show_id = state
+        .active_show
+        .read()
         .as_ref()
-        .is_some_and(|expected| expected != &programmer_revision)
-    {
-        return Err(ApiError::conflict(
-            "programmer content changed after the Update preview; preview again",
-        ));
-    }
-    match request.target.family {
-        UpdateApiTargetFamily::Cue => {
-            let update::UpdateMode::Cue(mode) = request.mode else {
-                return Err(ApiError::bad_request(
-                    "Cue targets require one of the four Cue Update modes",
-                ));
-            };
-            let target =
-                resolve_update_cue_target(&request.target, &active_update_cue_contexts(state))?;
-            let id = target.cue_list_id.0.to_string();
-            let object = stored_update_object(store, "cue_list", &id)?;
-            let cue_list = serde_json::from_value::<light_playback::CueList>(object.body)
-                .map_err(|error| ApiError::bad_request(format!("invalid Cuelist: {error}")))?;
-            update::plan_cue_update(
-                &cue_list,
-                object.revision,
-                request.expected_revision.unwrap_or(object.revision),
-                &target,
-                mode,
-                &content,
-            )
-            .map_err(update_api_error)
-        }
-        UpdateApiTargetFamily::Preset => {
-            let update::UpdateMode::ExistingContent(mode) = request.mode else {
-                return Err(ApiError::bad_request(
-                    "Preset targets require Update Existing or Add New",
-                ));
-            };
-            let id = request
-                .target
-                .object_id
-                .as_deref()
-                .ok_or_else(|| ApiError::bad_request("Preset Update requires object_id"))?;
-            let object = stored_update_object(store, "preset", id)?;
-            let preset = serde_json::from_value::<light_programmer::Preset>(object.body)
-                .map_err(|error| ApiError::bad_request(format!("invalid Preset: {error}")))?;
-            update::plan_preset_update(
-                id,
-                &preset,
-                object.revision,
-                request.expected_revision.unwrap_or(object.revision),
-                mode,
-                &content,
-            )
-            .map_err(update_api_error)
-        }
-        UpdateApiTargetFamily::Group => {
-            let update::UpdateMode::ExistingContent(mode) = request.mode else {
-                return Err(ApiError::bad_request(
-                    "Group targets require Update Existing or Add New",
-                ));
-            };
-            let id = request
-                .target
-                .object_id
-                .as_deref()
-                .ok_or_else(|| ApiError::bad_request("Group Update requires object_id"))?;
-            let object = stored_update_object(store, "group", id)?;
-            let mut group =
-                serde_json::from_value::<light_programmer::GroupDefinition>(object.body)
-                    .map_err(|error| ApiError::bad_request(format!("invalid Group: {error}")))?;
-            group.id = id.to_owned();
-            let groups = state
-                .engine
-                .snapshot()
-                .groups
-                .iter()
-                .cloned()
-                .map(|candidate| (candidate.id.clone(), candidate))
-                .collect::<HashMap<_, _>>();
-            let membership =
-                light_programmer::resolve_group(id, &groups).map_err(ApiError::bad_request)?;
-            update::plan_group_update(
-                &group,
-                &membership,
-                object.revision,
-                request.expected_revision.unwrap_or(object.revision),
-                mode,
-                &content,
-            )
-            .map_err(update_api_error)
-        }
-    }
+        .map(|show| show.id)
+        .ok_or_else(|| ApiError::bad_request("no show is open"))?;
+    let context = operator_action_context(session, light_application::ActionSource::Http)
+        .with_request_id(format!("legacy-update-preview-{}", Uuid::new_v4()));
+    let command = light_application::programming_update::ProgrammingUpdatePreviewRequest {
+        show_id,
+        target: application_update_target(state, &request.target)?,
+        mode: request.mode,
+    };
+    let ports = ServerProgrammingUpdatePorts::new(state.clone(), session.clone(), false, false);
+    let result = state
+        .programming
+        .preview_update(
+            light_application::ActionEnvelope { context, command },
+            &state.active_show_service,
+            &ports,
+        )
+        .map_err(programming_action_error)?;
+    Ok(UpdatePreviewResponse {
+        revision: result.object_revision,
+        show_revision: result.show_revision.value(),
+        programmer_revision: result.programmer_revision,
+        preview: result.preview,
+    })
 }
 
 pub(super) fn perform_update(
@@ -159,67 +89,123 @@ fn perform_update_with_boundary(
     context: &light_application::ActionContext,
     programming: UpdateProgrammingBoundary,
 ) -> Result<update::UpdateResult, ApiError> {
-    let _activation = match programming {
-        UpdateProgrammingBoundary::Unowned => Some(
-            state
-                .activation_lock
-                .clone()
-                .try_lock_owned()
-                .map_err(|_| ApiError::conflict("the active show is changing; retry Update"))?,
-        ),
-        UpdateProgrammingBoundary::HeldByCaller => None,
+    validate_confirmed_legacy_cue(request)?;
+    let show_id = state
+        .active_show
+        .read()
+        .as_ref()
+        .map(|show| show.id)
+        .ok_or_else(|| ApiError::bad_request("no show is open"))?;
+    let command = light_application::programming_update::ProgrammingUpdateCommand {
+        show_id,
+        target: application_update_target(state, &request.target)?,
+        mode: request.mode,
+        expected_object_revision: request.expected_revision,
+        expected_programmer_revision: request.expected_programmer_revision.clone(),
+        expected_show_revision: request
+            .expected_show_revision
+            .map(light_show::PortableShowRevision::from_value),
     };
-    let (entry, store) = active_show_store(state).map_err(ApiError::bad_request)?;
-    let plan = plan_update_request(state, session, &store, request)?;
-    let kind = plan.object_kind().to_owned();
-    let id = plan.object_id().to_owned();
-    let body = plan
-        .body()
-        .map_err(|error| ApiError::internal(error.to_string()))?;
-    let object_kind = active_show_update_kind(&plan);
-    let action = active_show_object_action(
-        context.clone(),
-        entry.id,
-        vec![put_active_show_object(
-            object_kind,
-            id.clone(),
-            plan.expected_revision,
-            body,
-        )],
-    );
-    let revision = match programming {
-        UpdateProgrammingBoundary::Unowned => run_active_show_object_action(state, action),
-        UpdateProgrammingBoundary::HeldByCaller => {
-            run_active_show_object_action_in_programming_interaction(state, action)
+    let context = if context.request_id.is_some() {
+        context.clone()
+    } else {
+        context
+            .clone()
+            .with_request_id(format!("legacy-update-{}", context.correlation_id))
+    };
+    let within_interaction = matches!(programming, UpdateProgrammingBoundary::HeldByCaller);
+    let ports =
+        ServerProgrammingUpdatePorts::new(state.clone(), session.clone(), within_interaction, true);
+    let action = light_application::ActionEnvelope { context, command };
+    let result = match programming {
+        UpdateProgrammingBoundary::Unowned => {
+            state
+                .programming
+                .handle_update(action, &state.active_show_service, &ports)
         }
-    }?
-    .changes[0]
-        .object_revision;
-    let result = plan.complete(revision);
+        UpdateProgrammingBoundary::HeldByCaller => {
+            state
+                .programming
+                .update_within_interaction(action, &state.active_show_service, &ports)
+        }
+    }
+    .map_err(programming_action_error)?;
+    if !result.replayed {
+        publish_legacy_update(state, session, &result);
+    }
+    Ok(result.outcome.summary)
+}
+
+fn validate_confirmed_legacy_cue(request: &UpdateApiRequest) -> Result<(), ApiError> {
+    let confirmed = request.expected_revision.is_some()
+        || request.expected_programmer_revision.is_some()
+        || request.expected_show_revision.is_some();
+    if !confirmed || request.target.family != UpdateApiTargetFamily::Cue {
+        return Ok(());
+    }
+    if request.target.object_id.is_none()
+        || request.target.cue_id.is_none()
+        || request.target.cue_number.is_none()
+    {
+        return Err(ApiError::conflict(
+            "confirmed Cue Update requires the exact previewed Cue; preview again",
+        ));
+    }
+    Ok(())
+}
+
+pub(super) fn application_update_target(
+    state: &AppState,
+    target: &UpdateApiTarget,
+) -> Result<light_application::programming_update::ProgrammingUpdateTargetRequest, ApiError> {
+    use light_application::programming_update::ProgrammingUpdateTargetRequest;
+    match target.family {
+        UpdateApiTargetFamily::Cue => {
+            let resolved = resolve_update_cue_target(target, &active_update_cue_contexts(state))?;
+            Ok(ProgrammingUpdateTargetRequest::Cue {
+                cue_list_id: resolved.cue_list_id,
+                playback_number: resolved.playback_number,
+                cue_id: Some(resolved.cue_id),
+                cue_number: Some(resolved.cue_number),
+                validate_active_context: target.validate_active_context,
+            })
+        }
+        UpdateApiTargetFamily::Preset => Ok(ProgrammingUpdateTargetRequest::Preset {
+            object_id: required_update_object_id(target, "Preset")?,
+        }),
+        UpdateApiTargetFamily::Group => Ok(ProgrammingUpdateTargetRequest::Group {
+            object_id: required_update_object_id(target, "Group")?,
+        }),
+    }
+}
+
+fn required_update_object_id(target: &UpdateApiTarget, label: &str) -> Result<String, ApiError> {
+    target
+        .object_id
+        .clone()
+        .ok_or_else(|| ApiError::bad_request(format!("{label} Update requires object_id")))
+}
+
+fn publish_legacy_update(
+    state: &AppState,
+    session: &Session,
+    result: &light_application::programming_update::ProgrammingUpdateResult,
+) {
+    let projection = &result.outcome.projection;
     emit(
         state,
         "show_object_changed",
         serde_json::json!({
-            "show_id":entry.id,
-            "kind":kind,
-            "id":id,
-            "revision":revision,
+            "show_id":projection.show_id,
+            "kind":projection.kind.as_str(),
+            "id":projection.object_id,
+            "revision":projection.object_revision,
             "source":"update",
-            "result":result,
+            "result":result.outcome.summary,
             "session_id":session.id,
+            "application_event_sequence":result.outcome.event_sequence,
         }),
     );
-    Ok(result)
-}
-
-fn active_show_update_kind(
-    plan: &update::AtomicUpdatePlan,
-) -> light_application::ActiveShowObjectKind {
-    match &plan.object {
-        update::PlannedUpdateObject::CueList(_) => light_application::ActiveShowObjectKind::CueList,
-        update::PlannedUpdateObject::Preset(_) => light_application::ActiveShowObjectKind::Preset,
-        update::PlannedUpdateObject::Group(_) => light_application::ActiveShowObjectKind::Group,
-    }
 }
 
 pub(super) async fn apply_update(
@@ -231,121 +217,103 @@ pub(super) async fn apply_update(
     Ok(Json(perform_update(&state, &session, &request)?))
 }
 
-pub(super) fn referenced_update_targets(
-    state: &AppState,
-    session: &Session,
-) -> Result<Vec<UpdateApiTarget>, ApiError> {
-    let programmer = state
-        .programmers
-        .get(session.id)
-        .ok_or_else(|| ApiError::not_found("programmer"))?;
-    let mut targets = active_update_cue_contexts(state)
-        .into_iter()
-        .map(|context| UpdateApiTarget {
-            family: UpdateApiTargetFamily::Cue,
-            object_id: Some(context.cue_list_id.0.to_string()),
-            playback_number: Some(context.playback_number),
-            cue_id: Some(context.cue_id),
-            cue_number: Some(context.cue_number),
-            validate_active_context: true,
-        })
-        .collect::<Vec<_>>();
-    if let Some(id) = programmer
-        .active_context
-        .as_deref()
-        .and_then(|context| context.strip_prefix("preset:"))
-    {
-        targets.push(UpdateApiTarget {
-            family: UpdateApiTargetFamily::Preset,
-            object_id: Some(id.to_owned()),
-            playback_number: None,
-            cue_id: None,
-            cue_number: None,
-            validate_active_context: false,
-        });
-    }
-    let mut group_ids = programmer.group_values.keys().cloned().collect::<Vec<_>>();
-    match programmer.selection_expression {
-        Some(light_programmer::SelectionExpression::LiveGroup { group_id, .. }) => {
-            group_ids.push(group_id)
-        }
-        Some(light_programmer::SelectionExpression::Sources { items }) => {
-            group_ids.extend(items.into_iter().filter_map(|item| match item {
-                light_programmer::SelectionReference::LiveGroup { group_id }
-                | light_programmer::SelectionReference::RemoveLiveGroup { group_id } => {
-                    Some(group_id)
-                }
-                _ => None,
-            }));
-        }
-        _ => {}
-    }
-    group_ids.sort();
-    group_ids.dedup();
-    targets.extend(group_ids.into_iter().map(|id| UpdateApiTarget {
-        family: UpdateApiTargetFamily::Group,
-        object_id: Some(id),
-        playback_number: None,
-        cue_id: None,
-        cue_number: None,
-        validate_active_context: false,
-    }));
-    Ok(targets)
-}
-
 pub(super) async fn update_targets(
     State(state): State<AppState>,
     headers: HeaderMap,
     Query(query): Query<UpdateTargetsQuery>,
 ) -> Result<Json<Vec<UpdateMenuResponseEntry>>, ApiError> {
     let session = authenticate(&state, &headers)?;
-    let mut entries = Vec::new();
-    for target in referenced_update_targets(&state, &session)? {
-        let modes = match target.family {
-            UpdateApiTargetFamily::Cue => (
-                update::UpdateMode::Cue(update::CueUpdateMode::ExistingOnly),
-                update::UpdateMode::Cue(update::CueUpdateMode::AddNew),
-            ),
-            UpdateApiTargetFamily::Preset | UpdateApiTargetFamily::Group => (
-                update::UpdateMode::ExistingContent(update::ExistingContentMode::UpdateExisting),
-                update::UpdateMode::ExistingContent(update::ExistingContentMode::AddNew),
-            ),
-        };
-        let existing = preview_update_request(
-            &state,
-            &session,
-            &UpdateApiRequest {
-                target: target.clone(),
-                mode: modes.0,
-                expected_revision: None,
-                expected_programmer_revision: None,
-            },
-        );
-        let add_new = preview_update_request(
-            &state,
-            &session,
-            &UpdateApiRequest {
-                target: target.clone(),
-                mode: modes.1,
-                expected_revision: None,
-                expected_programmer_revision: None,
-            },
-        );
-        let (Ok(existing), Ok(add_new)) = (existing, add_new) else {
-            continue;
-        };
-        if query.filter == update::UpdateTargetFilter::EligibleForUpdateExisting
-            && !existing.preview.has_real_change()
-        {
-            continue;
-        }
-        entries.push(UpdateMenuResponseEntry {
-            target,
-            revision: existing.revision,
-            active_or_referenced: true,
-            existing_preview: existing,
-            add_new_preview: add_new,
-        });
+    let show_id = state
+        .active_show
+        .read()
+        .as_ref()
+        .map(|show| show.id)
+        .ok_or_else(|| ApiError::bad_request("no show is open"))?;
+    let context = operator_action_context(&session, light_application::ActionSource::Http)
+        .with_request_id(format!("legacy-update-targets-{}", Uuid::new_v4()));
+    let command = light_application::programming_update::ProgrammingUpdateTargetsRequest {
+        show_id,
+        filter: query.filter,
+    };
+    let ports = ServerProgrammingUpdatePorts::new(state.clone(), session, false, false);
+    let result = state
+        .programming
+        .update_targets(
+            light_application::ActionEnvelope { context, command },
+            &state.active_show_service,
+            &ports,
+        )
+        .map_err(programming_action_error)?;
+    let show_revision = result.show_revision.value();
+    Ok(Json(
+        result
+            .entries
+            .into_iter()
+            .map(|entry| legacy_menu_entry(entry, show_revision))
+            .collect(),
+    ))
+}
+
+fn legacy_menu_entry(
+    entry: light_application::programming_update::ProgrammingUpdateMenuEntry,
+    show_revision: u64,
+) -> UpdateMenuResponseEntry {
+    let revision = entry.object_revision;
+    let programmer_revision = entry.programmer_revision;
+    UpdateMenuResponseEntry {
+        target: legacy_update_target(entry.target),
+        revision,
+        active_or_referenced: entry.active_or_referenced,
+        existing_preview: UpdatePreviewResponse {
+            revision,
+            show_revision,
+            programmer_revision: programmer_revision.clone(),
+            preview: entry.existing_preview,
+        },
+        add_new_preview: UpdatePreviewResponse {
+            revision,
+            show_revision,
+            programmer_revision,
+            preview: entry.add_new_preview,
+        },
     }
-    Ok(Json(entries))
+}
+
+fn legacy_update_target(
+    target: light_application::programming_update::ProgrammingUpdateTargetRequest,
+) -> UpdateApiTarget {
+    use light_application::programming_update::ProgrammingUpdateTargetRequest;
+    match target {
+        ProgrammingUpdateTargetRequest::Cue {
+            cue_list_id,
+            playback_number,
+            cue_id,
+            cue_number,
+            validate_active_context,
+        } => UpdateApiTarget {
+            family: UpdateApiTargetFamily::Cue,
+            object_id: Some(cue_list_id.0.to_string()),
+            playback_number,
+            cue_id,
+            cue_number,
+            validate_active_context,
+        },
+        ProgrammingUpdateTargetRequest::Preset { object_id } => {
+            legacy_object_target(UpdateApiTargetFamily::Preset, object_id)
+        }
+        ProgrammingUpdateTargetRequest::Group { object_id } => {
+            legacy_object_target(UpdateApiTargetFamily::Group, object_id)
+        }
+    }
+}
+
+fn legacy_object_target(family: UpdateApiTargetFamily, object_id: String) -> UpdateApiTarget {
+    UpdateApiTarget {
+        family,
+        object_id: Some(object_id),
+        playback_number: None,
+        cue_id: None,
+        cue_number: None,
+        validate_active_context: false,
+    }
 }

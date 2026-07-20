@@ -212,11 +212,14 @@ pub(super) struct UpdateApiRequest {
     pub(super) expected_revision: Option<u64>,
     #[serde(default)]
     pub(super) expected_programmer_revision: Option<String>,
+    #[serde(default)]
+    pub(super) expected_show_revision: Option<u64>,
 }
 
 #[derive(Serialize)]
 pub(super) struct UpdatePreviewResponse {
     pub(super) revision: u64,
+    pub(super) show_revision: u64,
     pub(super) programmer_revision: String,
     #[serde(flatten)]
     pub(super) preview: update::UpdatePreview,

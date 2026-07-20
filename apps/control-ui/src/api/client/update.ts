@@ -37,6 +37,7 @@ export class UpdateApiClient {
 		mode: UpdateMode,
 		expectedRevision?: number,
 		expectedProgrammerRevision?: string,
+		expectedShowRevision?: number,
 	) {
 		return this.transport.request<UpdateResult>("/api/v1/update/apply", {
 			method: "POST",
@@ -50,6 +51,9 @@ export class UpdateApiClient {
 				...(expectedProgrammerRevision == null
 					? {}
 					: { expected_programmer_revision: expectedProgrammerRevision }),
+				...(expectedShowRevision == null
+					? {}
+					: { expected_show_revision: expectedShowRevision }),
 			}),
 		});
 	}

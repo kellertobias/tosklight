@@ -20,6 +20,7 @@ mod matter;
 mod output_scheduler;
 mod playback_service;
 mod playback_v2;
+mod programming_update_adapter;
 mod startup_options;
 mod startup_state;
 
@@ -234,6 +235,7 @@ use programmer_fixture_commands::*;
 use programmer_group_commands::*;
 use programmer_selection_values::*;
 use programming_interaction::*;
+use programming_update_adapter::*;
 use screens_playback::*;
 use selective_import_adapter::*;
 use sessions::*;

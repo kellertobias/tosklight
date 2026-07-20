@@ -435,6 +435,7 @@ describe("LightApiClient Update contracts", () => {
 			.mockResolvedValueOnce(
 				response({
 					revision: 4,
+					show_revision: 12,
 					programmer_revision: "programmer-a",
 					target: {
 						...target,
@@ -466,7 +467,7 @@ describe("LightApiClient Update contracts", () => {
 		await client.updateSettings();
 		await client.saveUpdateSettings(settings);
 		await client.previewUpdate(target, mode);
-		await client.applyUpdate(target, mode, 4, "programmer-a");
+		await client.applyUpdate(target, mode, 4, "programmer-a", 12);
 		await client.updateTargets("show_all_active");
 
 		expect(fetchMock.mock.calls.slice(1).map((call) => call[0])).toEqual([
@@ -486,6 +487,7 @@ describe("LightApiClient Update contracts", () => {
 			mode,
 			expected_revision: 4,
 			expected_programmer_revision: "programmer-a",
+			expected_show_revision: 12,
 		});
 	});
 });

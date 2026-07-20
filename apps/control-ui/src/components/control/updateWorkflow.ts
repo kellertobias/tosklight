@@ -56,6 +56,18 @@ export function cueUpdateTarget(
   };
 }
 
+export function requestFromUpdateIdentity(
+  target: UpdateTargetIdentity,
+): UpdateTargetRequest {
+  return {
+    family: target.family,
+    object_id: target.object_id,
+    ...(target.playback_number == null ? {} : { playback_number: target.playback_number }),
+    ...(target.cue ? { cue_id: target.cue.id, cue_number: target.cue.number } : {}),
+    ...(target.playback_number == null ? {} : { validate_active_context: true }),
+  };
+}
+
 export function requestUpdateTarget(target: UpdateTargetRequest) {
   window.dispatchEvent(new CustomEvent<UpdateTargetRequest>(UPDATE_TARGET_EVENT, { detail: target }));
 }
