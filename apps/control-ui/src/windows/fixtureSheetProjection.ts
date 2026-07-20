@@ -5,6 +5,7 @@ import type { VisualizationSnapshot } from "../api/types";
 import { fixtures } from "../data/mockData";
 import type { ShowObject } from "../features/showObjects/contracts";
 import { useGroups } from "../features/server/useShowObjectsState";
+import { useProgrammerValueTargets } from "../features/programmerValues/useProgrammerValueTargets";
 import type { FixtureSheetIncludedHeads, FixtureSheetOrder } from "../types";
 import {
 	activeProgrammerFixtureIds,
@@ -37,6 +38,7 @@ function orderedFixtureTargets({
 	cueListId,
 	includedHeads,
 	groups,
+	activeValueTargets,
 }: {
 	server: ReturnType<typeof useServer>;
 	fixtureOrder: FixtureSheetOrder;
@@ -44,11 +46,9 @@ function orderedFixtureTargets({
 	cueListId: string;
 	includedHeads: FixtureSheetIncludedHeads;
 	groups: readonly FixtureGroup[];
+	activeValueTargets: Parameters<typeof activeProgrammerFixtureIds>[0];
 }) {
-	const ownProgrammer = server.bootstrap?.active_programmers.find(
-		(programmer) => programmer.session_id === server.session?.session_id,
-	);
-	const activeIds = activeProgrammerFixtureIds(ownProgrammer, groups);
+	const activeIds = activeProgrammerFixtureIds(activeValueTargets, groups);
 	const selectedCueList = server.playbacks?.cue_lists.find(
 		(cueList) => cueList.id === cueListId,
 	);
@@ -199,6 +199,25 @@ function fixtureSheetRow({
 	};
 }
 
+function demoFixtureSheetRows() {
+	return fixtures.map((fixture) => ({
+		...fixture,
+		fixtureType: fixture.type,
+		patch: "",
+		icon: null,
+		fixtureId: "",
+		targetKind: "fixture" as const,
+		parentFixtureId: "",
+		childFixtureIds: [] as string[],
+		indented: false,
+		limitingGroups: [] as FixtureGroup[],
+		preloadDimmer: null,
+		preloadColor: null,
+		preloadPan: null,
+		preloadTilt: null,
+	}));
+}
+
 export function useFixtureSheetRows({
 	visualization,
 	preloadVisualization,
@@ -206,6 +225,7 @@ export function useFixtureSheetRows({
 	activeOnly,
 	cueListId,
 	includedHeads,
+	active = true,
 }: {
 	visualization: VisualizationSnapshot | null;
 	preloadVisualization: VisualizationSnapshot | null;
@@ -213,46 +233,46 @@ export function useFixtureSheetRows({
 	activeOnly: boolean;
 	cueListId: string;
 	includedHeads: FixtureSheetIncludedHeads;
+	active?: boolean;
 }) {
 	const server = useServer();
 	const groups = useGroups(server.playbacks);
+	const observesActiveValues =
+		active && (activeOnly || fixtureOrder === "active");
+	const activeValueTargets = useProgrammerValueTargets(observesActiveValues);
+	const activeValuesLoading =
+		observesActiveValues && activeValueTargets === null;
 	if (!server.bootstrap) {
-		return fixtures.map((fixture) => ({
-			...fixture,
-			fixtureType: fixture.type,
-			patch: "",
-			icon: null,
-			fixtureId: "",
-			targetKind: "fixture" as const,
-			parentFixtureId: "",
-			childFixtureIds: [] as string[],
-			indented: false,
-			limitingGroups: [] as FixtureGroup[],
-			preloadDimmer: null,
-			preloadColor: null,
-			preloadPan: null,
-			preloadTilt: null,
-		}));
+		return {
+			rows: demoFixtureSheetRows(),
+			activeValuesLoading: false,
+		};
 	}
-	return orderedFixtureTargets({
-		server,
-		fixtureOrder,
-		activeOnly,
-		cueListId,
-		includedHeads,
-		groups,
-	}).map((target, index) =>
-		fixtureSheetRow({
-			target,
-			index,
-			visualization,
-			preloadVisualization,
+	return {
+		rows: orderedFixtureTargets({
+			server,
+			fixtureOrder,
+			activeOnly,
+			cueListId,
+			includedHeads,
 			groups,
-		}),
-	);
+			activeValueTargets,
+		}).map((target, index) =>
+			fixtureSheetRow({
+				target,
+				index,
+				visualization,
+				preloadVisualization,
+				groups,
+			}),
+		),
+		activeValuesLoading,
+	};
 }
 
-export type FixtureSheetRow = ReturnType<typeof useFixtureSheetRows>[number];
+export type FixtureSheetRow =
+	| ReturnType<typeof fixtureSheetRow>
+	| ReturnType<typeof demoFixtureSheetRows>[number];
 
 export function useFixtureSheetVisualizations(
 	preloadActive: boolean,

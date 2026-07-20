@@ -78,6 +78,7 @@ const mocks = vi.hoisted(() => {
 		selectionAccess,
 		mutationQueue,
 		mutationQueueUse: vi.fn(),
+		fixtureSheetRows: { rows: [], activeValuesLoading: false },
 		dispatch: vi.fn(),
 	};
 });
@@ -153,7 +154,7 @@ vi.mock("../features/server/useShowObjectsState", () => ({
 }));
 vi.mock("./fixtureSheetColumns", () => ({ fixtureSheetColumns: () => [] }));
 vi.mock("./fixtureSheetProjection", () => ({
-	useFixtureSheetRows: () => [],
+	useFixtureSheetRows: () => mocks.fixtureSheetRows,
 	useFixtureSheetVisualizations: () => ({
 		visualization: null,
 		preloadVisualization: null,
@@ -279,11 +280,25 @@ beforeEach(() => {
 	mocks.mutationQueue.submitLatest.mockClear();
 	mocks.mutationQueue.submitBarrier.mockClear();
 	mocks.mutationQueueUse.mockClear();
+	mocks.fixtureSheetRows = { rows: [], activeValuesLoading: false };
 });
 
 afterEach(cleanup);
 
 describe("window selection projections", () => {
+	it("distinguishes loading scoped values from an authoritative empty Fixture Sheet filter", () => {
+		mocks.fixtureSheetRows = { rows: [], activeValuesLoading: true };
+		const { rerender, view } = renderSelectionView(<FixtureSheetWindow />);
+
+		expect(screen.getByRole("status")).toHaveTextContent(
+			"Programmer values loading…",
+		);
+
+		mocks.fixtureSheetRows = { rows: [], activeValuesLoading: false };
+		rerender(view(<FixtureSheetWindow />));
+		expect(screen.queryByText("Programmer values loading…")).not.toBeInTheDocument();
+	});
+
 	it("updates Channels, Fixture Sheet, and Presets from scoped events", async () => {
 		const loadSnapshot = vi.fn(async () => programmingSnapshot());
 		const { transport } = renderSelectionView(

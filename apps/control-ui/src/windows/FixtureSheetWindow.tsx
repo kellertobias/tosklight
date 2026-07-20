@@ -56,13 +56,14 @@ export function FixtureSheetWindow({
 		state.preload !== "idle",
 		active,
 	);
-	const rows = useFixtureSheetRows({
+	const { rows, activeValuesLoading } = useFixtureSheetRows({
 		visualization,
 		preloadVisualization,
 		fixtureOrder,
 		activeOnly,
 		cueListId,
 		includedHeads,
+		active,
 	});
 	const presentStep = useMemo(
 		() => createFixtureStepPresenter(server.highlight),
@@ -94,6 +95,11 @@ export function FixtureSheetWindow({
 						setSettingsAnchor(anchor.getBoundingClientRect())
 					}
 				/>
+			)}
+			{activeValuesLoading && (
+				<p className="fixture-sheet-loading" role="status">
+					Programmer values loading…
+				</p>
 			)}
 			<FixtureSheetTable
 				activeRow={activeRow}
