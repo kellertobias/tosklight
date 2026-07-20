@@ -1,7 +1,4 @@
-import type {
-	ShowObjectBodies,
-	ShowObjectKind,
-} from "./contracts";
+import type { ShowObjectBodies, ShowObjectKind } from "./contracts";
 import type { PendingMutation } from "./storeTypes";
 
 export class ShowObjectPendingMutations {
@@ -32,6 +29,14 @@ export class ShowObjectPendingMutations {
 		current.push({ token, showId, kind, objectId, body, baseEventSequence });
 		this.operations.set(key, current);
 		return token;
+	}
+
+	get(token: string): PendingMutation | null {
+		for (const current of this.operations.values()) {
+			const operation = current.find((candidate) => candidate.token === token);
+			if (operation) return operation;
+		}
+		return null;
 	}
 
 	take(token: string): PendingMutation | null {

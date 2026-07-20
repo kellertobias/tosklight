@@ -8,7 +8,6 @@ import { createFixtureLibraryActions } from "./fixtureLibrary";
 import { createGroupDerivationActions } from "./groupDerivation";
 import { createGroupEditingActions } from "./groupEditing";
 import { createGroupSelectionActions } from "./groupSelection";
-import { createGroupStoreActions } from "./groupStore";
 import { createHighlightActions } from "./highlight";
 import { createLayoutActions } from "./layouts";
 import { createMediaActions } from "./media";
@@ -51,7 +50,6 @@ export function composeServerContextValue(model: ServerController) {
 		...createLayoutActions(model),
 		...createGroupSelectionActions(model),
 		...createPreloadActions(model),
-		...createGroupStoreActions(model),
 		...createGroupEditingActions(model),
 		...createGroupDerivationActions(model),
 		...createPresetActions(model),

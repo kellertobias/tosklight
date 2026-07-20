@@ -42,13 +42,15 @@ describe("ShowObjectsStore", () => {
 		expect(pending.presets).toBe(before.presets);
 		expect(pending.groups).toBe(before.groups);
 		expect(pending.presets).toEqual([preset(3, "Blue")]);
-		expect(pending.pendingObjectKeys).toEqual(
-			new Set(["preset:2.1"]),
-		);
+		expect(pending.pendingObjectKeys).toEqual(new Set(["preset:2.1"]));
 
 		store.settlePending(
 			token,
-			preset(4, "Deep Blue"),
+			{
+				objectId: "2.1",
+				revision: 4,
+				object: preset(4, "Deep Blue"),
+			},
 			12,
 			11,
 			generation,
@@ -100,7 +102,11 @@ describe("ShowObjectsStore", () => {
 
 		store.settlePending(
 			token,
-			preset(4, "Delayed response"),
+			{
+				objectId: "2.1",
+				revision: 4,
+				object: preset(4, "Delayed response"),
+			},
 			12,
 			11,
 			generation,
@@ -124,7 +130,11 @@ describe("ShowObjectsStore", () => {
 		expect(
 			store.settlePending(
 				token,
-				preset(2, "Late"),
+				{
+					objectId: "2.1",
+					revision: 2,
+					object: preset(2, "Late"),
+				},
 				2,
 				1,
 				generation,
@@ -141,10 +151,130 @@ describe("ShowObjectsStore", () => {
 		const token = store.beginPending(SHOW_ID, "preset", "2.1");
 		const legacy = { ...preset(1, "Legacy"), id: "preset-legacy" };
 
-		store.settlePending(token, legacy, 2, 11, generation);
+		store.settlePending(
+			token,
+			{ objectId: legacy.id, revision: legacy.revision, object: legacy },
+			2,
+			11,
+			generation,
+		);
 
 		expect(store.getSnapshot().pendingObjectKeys.size).toBe(0);
 		expect(store.getSnapshot().presets).toEqual([legacy]);
+	});
+
+	it("settles a revisioned Group deletion before its canonical event", () => {
+		const store = new ShowObjectsStore();
+		store.reset(SHOW_ID, "session-a");
+		store.setCollection(SHOW_ID, "group", [group(2, "Front")], 10);
+		const generation = store.getSnapshot().authorityGeneration;
+		const token = store.beginPending(SHOW_ID, "group", "1");
+
+		store.settlePending(
+			token,
+			{ objectId: "1", revision: 3, object: null },
+			12,
+			11,
+			generation,
+		);
+
+		expect(store.getSnapshot().groups).toEqual([]);
+		expect(store.getSnapshot().pendingObjectKeys.size).toBe(0);
+		store.applyChange({
+			showId: SHOW_ID,
+			showRevision: 12,
+			eventSequence: 11,
+			changes: [
+				{
+					kind: "group",
+					objectId: "1",
+					objectRevision: 3,
+					body: null,
+					deleted: true,
+				},
+			],
+		});
+		expect(store.getSnapshot().groups).toEqual([]);
+	});
+
+	it("does not reproject a Group deletion response after its event", () => {
+		const store = new ShowObjectsStore();
+		store.reset(SHOW_ID, "session-a");
+		store.setCollection(SHOW_ID, "group", [group(2, "Front")], 10);
+		const generation = store.getSnapshot().authorityGeneration;
+		const token = store.beginPending(SHOW_ID, "group", "1");
+		store.applyChange({
+			showId: SHOW_ID,
+			showRevision: 12,
+			eventSequence: 11,
+			changes: [
+				{
+					kind: "group",
+					objectId: "1",
+					objectRevision: 3,
+					body: null,
+					deleted: true,
+				},
+			],
+		});
+		const afterEvent = store.getSnapshot().groups;
+
+		store.settlePending(
+			token,
+			{ objectId: "1", revision: 3, object: null },
+			12,
+			11,
+			generation,
+		);
+
+		expect(store.getSnapshot().groups).toBe(afterEvent);
+	});
+
+	it("keeps a mismatched Group settlement pending until it is abandoned", () => {
+		const store = new ShowObjectsStore();
+		store.reset(SHOW_ID, "session-a");
+		store.setCollection(SHOW_ID, "group", [group(2, "Front")]);
+		const generation = store.getSnapshot().authorityGeneration;
+		const token = store.beginPending(SHOW_ID, "group", "1");
+
+		expect(() =>
+			store.settlePending(
+				token,
+				{ objectId: "other", revision: 3, object: null },
+				12,
+				null,
+				generation,
+			),
+		).toThrow("Group settlement ID does not match pending mutation");
+		expect(store.getSnapshot().pendingObjectKeys).toEqual(new Set(["group:1"]));
+
+		store.abandon(token);
+		expect(store.getSnapshot().pendingObjectKeys.size).toBe(0);
+	});
+
+	it("guards an exact repair against a newer event on the same object", () => {
+		const store = new ShowObjectsStore();
+		store.reset(SHOW_ID, "session-a");
+		store.setCollection(SHOW_ID, "preset", [preset(3, "Blue")], 10);
+		const stamp = store.captureObjectAuthority(SHOW_ID, "preset", "2.1");
+		expect(stamp).not.toBeNull();
+		store.applyChange({
+			showId: SHOW_ID,
+			showRevision: 12,
+			eventSequence: 11,
+			changes: [
+				{
+					kind: "preset",
+					objectId: "2.1",
+					objectRevision: 4,
+					body: preset(4, "Event body").body,
+					deleted: false,
+				},
+			],
+		});
+
+		expect(store.installObjectIfAuthorityUnchanged(stamp!, null)).toBe(false);
+		expect(store.getSnapshot().presets).toEqual([preset(4, "Event body")]);
 	});
 
 	it("shows a targeted optimistic Group body and rolls it back on failure", () => {
@@ -308,10 +438,7 @@ describe("ShowObjectsStore", () => {
 		store.setCollection(
 			SHOW_ID,
 			"group",
-			[
-				group(1, "Stale update"),
-				{ ...group(1, "Stale deletion"), id: "2" },
-			],
+			[group(1, "Stale update"), { ...group(1, "Stale deletion"), id: "2" }],
 			11,
 		);
 		expect(store.getSnapshot().groups).toEqual([group(2, "Updated event")]);
@@ -533,12 +660,19 @@ describe("ShowObjectsStore", () => {
 		store.updateCollection("group", (groups) =>
 			groups.map((candidate) =>
 				candidate.id === "1"
-					? { ...candidate, body: { ...candidate.body, fixtures: ["b", "c", "d"] } }
+					? {
+							...candidate,
+							body: { ...candidate.body, fixtures: ["b", "c", "d"] },
+						}
 					: candidate,
 			),
 		);
-		expect(store.getSnapshot().groups.find((item) => item.id === "2")?.body.fixtures).toEqual(["b", "d"]);
-		expect(store.getSnapshot().groups.find((item) => item.id === "3")?.body.fixtures).toEqual(["a", "c"]);
+		expect(
+			store.getSnapshot().groups.find((item) => item.id === "2")?.body.fixtures,
+		).toEqual(["b", "d"]);
+		expect(
+			store.getSnapshot().groups.find((item) => item.id === "3")?.body.fixtures,
+		).toEqual(["a", "c"]);
 	});
 
 	it("orders by event sequence per object and accepts recreation at revision one", () => {

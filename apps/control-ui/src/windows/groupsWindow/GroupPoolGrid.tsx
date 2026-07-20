@@ -6,6 +6,11 @@ import { ButtonGrid, WindowScrollArea } from "../../components/window-kit";
 import { useApp } from "../../state/AppContext";
 import { GroupCard } from "./GroupCard";
 import type { FixtureMetadata, Group } from "./model";
+import {
+	captureGroupRecordingTarget,
+	emptyGroupRecordingTarget,
+	type GroupRecordingTarget,
+} from "../../features/groupRecording/target";
 
 export function GroupPoolGrid({
 	cards,
@@ -22,8 +27,8 @@ export function GroupPoolGrid({
 	command: CommandLineSurface;
 	onOpenContext: (id: string) => void;
 	onOpenProperties: (id: string) => void;
-	onOpenRecord: (id: string) => void;
-	recordGroup: (id: string) => Promise<unknown>;
+	onOpenRecord: (target: GroupRecordingTarget) => void;
+	recordGroup: (target: GroupRecordingTarget) => Promise<unknown>;
 	runCommand: (command: string) => Promise<unknown>;
 }) {
 	const server = useServer();
@@ -50,12 +55,14 @@ export function GroupPoolGrid({
 		}
 		if (!state.storeArmed) return;
 		if (group?.body.fixtures.length) {
-			onOpenRecord(group.id);
+			onOpenRecord(captureGroupRecordingTarget(group));
 			return;
 		}
-		void recordGroup(id).finally(() =>
-			dispatch({ type: "SET_STORE_ARMED", value: false }),
-		);
+		void recordGroup(
+			group
+				? captureGroupRecordingTarget(group)
+				: emptyGroupRecordingTarget(id),
+		).finally(() => dispatch({ type: "SET_STORE_ARMED", value: false }));
 	};
 
 	return (

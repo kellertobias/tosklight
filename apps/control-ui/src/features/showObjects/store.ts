@@ -5,20 +5,25 @@ import type {
 	ShowObjectKind,
 	ShowObjectsChange,
 } from "./contracts";
-import {
-	objectKey,
-	sortObjects,
-	upsertCollection,
-} from "./storeProjection";
+import { objectKey, upsertCollection } from "./storeProjection";
 import { ShowObjectEventWatermarks } from "./eventWatermarks";
 import type {
 	CollectionUpdate,
+	ShowObjectAuthorityStamp,
 	ShowObjectInstall,
+	ShowObjectSettlement,
 	ShowObjectsSnapshot,
 } from "./storeTypes";
 import { ShowObjectPendingMutations } from "./pendingMutations";
 import { applyAuthoritativeChange } from "./changeApplication";
 import { installAuthoritativeObjects } from "./objectInstallation";
+import {
+	applyPendingSettlement,
+	applyOptimisticCommit,
+	assertPendingSettlementIdentity,
+	captureObjectAuthority,
+	matchesObjectAuthority,
+} from "./objectAuthority";
 import {
 	ALL_COLLECTIONS,
 	createShowObjectsSnapshot,
@@ -91,7 +96,9 @@ export class ShowObjectsStore {
 				const applied = this.watermarks.objectSequence(
 					objectKey(kind, object.id),
 				);
-				return applied == null || applied <= eventFloor || currentIds.has(object.id);
+				return (
+					applied == null || applied <= eventFloor || currentIds.has(object.id)
+				);
 			}) as ShowObjectCollections[K];
 			for (const current of this.authoritative[kind]) {
 				const key = objectKey(kind, current.id);
@@ -183,32 +190,13 @@ export class ShowObjectsStore {
 	) {
 		const operation = this.pending.take(token);
 		if (!operation || this.snapshot.showId !== operation.showId) return;
-		const key = objectKey(operation.kind, operation.objectId);
-		this.watermarks.raiseObjectFloor(
-			operation.kind,
-			operation.objectId,
+		applyOptimisticCommit(
+			this.authoritative,
+			this.watermarks,
+			operation,
+			objectRevision,
 			minimumEventSequence,
 		);
-		const existing = this.authoritative[operation.kind].find(
-			(candidate) => candidate.id === operation.objectId,
-		);
-		const eventSequence = this.watermarks.appliedSequence(operation.kind, key);
-		const responseEventObserved =
-			minimumEventSequence != null
-				? eventSequence >= minimumEventSequence
-				: eventSequence > operation.baseEventSequence;
-		if (
-			(!existing || existing.revision < objectRevision) &&
-			!responseEventObserved
-		) {
-			this.upsertAuthoritative(operation.kind, {
-				kind: operation.kind,
-				id: operation.objectId,
-				revision: objectRevision,
-				updated_at: existing?.updated_at ?? "",
-				body: operation.body,
-			} as ShowObject);
-		}
 		this.publish({ error: null }, projectedCollection(operation.kind));
 	}
 
@@ -236,44 +224,77 @@ export class ShowObjectsStore {
 
 	settlePending<K extends ShowObjectKind>(
 		token: string,
-		object: ShowObject<K>,
+		settlement: ShowObjectSettlement<K>,
 		showRevision: number,
 		minimumEventSequence: number | null,
 		authorityGeneration: number,
 	) {
-		const operation = this.pending.take(token);
+		const pendingOperation = this.pending.get(token);
 		if (
-			!operation ||
-			this.snapshot.showId !== operation.showId ||
+			!pendingOperation ||
+			this.snapshot.showId !== pendingOperation.showId ||
 			this.authorityGeneration !== authorityGeneration
 		)
 			return false;
-		const key = objectKey(operation.kind, object.id);
-		const responseEventObserved = this.hasAppliedAtOrAfter(
+		assertPendingSettlementIdentity(pendingOperation, settlement);
+		const operation = this.pending.take(token);
+		if (!operation) return false;
+		const key = objectKey(operation.kind, settlement.objectId);
+		const responseEventObserved = this.watermarks.hasAppliedAtOrAfter(
 			operation.kind,
 			key,
 			minimumEventSequence,
 		);
 		this.watermarks.raiseObjectFloor(
 			operation.kind,
-			object.id,
+			settlement.objectId,
 			minimumEventSequence,
 		);
-		if (!responseEventObserved) {
-			const existing = this.authoritative[operation.kind].find(
-				(candidate) => candidate.id === object.id,
-			);
-			if (!existing || existing.revision <= object.revision)
-				this.upsertAuthoritative(operation.kind, object);
-		}
+		const changed =
+			!responseEventObserved &&
+			applyPendingSettlement(this.authoritative, operation, settlement);
 		this.publish(
 			{
 				showRevision: Math.max(this.snapshot.showRevision ?? 0, showRevision),
 				status: "ready",
 				error: null,
 			},
-			projectedCollection(operation.kind),
+			changed ? projectedCollection(operation.kind) : NO_COLLECTIONS,
 		);
+		return true;
+	}
+
+	captureObjectAuthority<K extends ShowObjectKind>(
+		showId: string,
+		kind: K,
+		objectId: string,
+	): ShowObjectAuthorityStamp<K> | null {
+		if (this.snapshot.showId !== showId) return null;
+		return captureObjectAuthority(
+			this.authoritative,
+			this.watermarks,
+			showId,
+			this.authorityGeneration,
+			kind,
+			objectId,
+		);
+	}
+
+	installObjectIfAuthorityUnchanged<K extends ShowObjectKind>(
+		stamp: ShowObjectAuthorityStamp<K>,
+		object: ShowObject<K> | null,
+	) {
+		if (
+			!matchesObjectAuthority(
+				this.authoritative,
+				this.watermarks,
+				this.snapshot.showId,
+				this.authorityGeneration,
+				stamp,
+			)
+		)
+			return false;
+		this.installObject(stamp.showId, stamp.kind, object, null, stamp.objectId);
 		return true;
 	}
 
@@ -323,10 +344,7 @@ export class ShowObjectsStore {
 
 	beginEventResync() {
 		this.watermarks.clear();
-		this.publish(
-			{ showRevision: null, eventSequence: null },
-			NO_COLLECTIONS,
-		);
+		this.publish({ showRevision: null, eventSequence: null }, NO_COLLECTIONS);
 	}
 
 	private addPending<K extends ShowObjectKind>(
@@ -350,26 +368,6 @@ export class ShowObjectsStore {
 			body == null ? NO_COLLECTIONS : projectedCollection(kind),
 		);
 		return token;
-	}
-
-	private upsertAuthoritative(kind: ShowObjectKind, object: ShowObject) {
-		const objects = this.authoritative[kind] as ShowObject[];
-		const index = objects.findIndex((candidate) => candidate.id === object.id);
-		if (index < 0) objects.push(object);
-		else objects[index] = object;
-		sortObjects(objects);
-	}
-
-	private hasAppliedAtOrAfter(
-		kind: ShowObjectKind,
-		key: string,
-		minimumEventSequence?: number | null,
-	) {
-		return this.watermarks.hasAppliedAtOrAfter(
-			kind,
-			key,
-			minimumEventSequence,
-		);
 	}
 
 	private publish(

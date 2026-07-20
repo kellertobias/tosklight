@@ -36,3 +36,18 @@ export interface ShowObjectInstall {
 	objectId: string;
 	object: ShowObject | null;
 }
+
+export interface ShowObjectSettlement<K extends ShowObjectKind> {
+	objectId: string;
+	revision: number;
+	object: ShowObject<K> | null;
+}
+
+export interface ShowObjectAuthorityStamp<K extends ShowObjectKind> {
+	showId: string;
+	authorityGeneration: number;
+	kind: K;
+	objectId: string;
+	eventSequence: number;
+	object: ShowObject<K> | null;
+}

@@ -49,12 +49,6 @@ export interface ServerProgrammingContext {
 		width: number,
 		direction: string,
 	) => Promise<void>;
-	storeGroup: (
-		id: string,
-		name: string,
-		mode?: "merge" | "overwrite",
-	) => Promise<void>;
-	refreshGroup: (id: string) => Promise<boolean>;
 	updateGroup: (
 		id: string,
 		update: Pick<StoredGroup, "name" | "color" | "icon">,

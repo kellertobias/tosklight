@@ -14,6 +14,7 @@ import {
 	useShowObjects,
 } from "../features/server/useShowData";
 import { PresetRecordingProvider } from "../features/presetRecording/PresetRecordingProvider";
+import { GroupRecordingProvider } from "../features/groupRecording/GroupRecordingProvider";
 import type { SessionRole } from "../features/session/ownership";
 import { ShowObjectsViewProvider } from "../features/showObjects/ShowObjectsView";
 import { ServerProgrammingProviders } from "./ServerProgrammingProviders";
@@ -103,27 +104,35 @@ export function ServerProvider({
 				loadObject={boundaries.loadShowObject}
 				onError={boundaries.reportShowObjectError}
 			>
-				<PresetRecordingProvider
+				<GroupRecordingProvider
 					showId={state.bootstrap?.active_show?.id ?? null}
 					store={state.showObjectsStore}
-					transport={boundaries.presetRecordingTransport}
-					loadPreset={boundaries.loadPresetForRepair}
-					onError={boundaries.reportPresetRecordingError}
+					transport={boundaries.groupRecordingTransport}
+					loadGroup={boundaries.loadGroupForRepair}
+					onError={boundaries.reportGroupRecordingError}
 				>
-					<ServerProgrammingProviders
-						state={state}
-						boundaries={boundaries}
-						value={value}
+					<PresetRecordingProvider
+						showId={state.bootstrap?.active_show?.id ?? null}
+						store={state.showObjectsStore}
+						transport={boundaries.presetRecordingTransport}
+						loadPreset={boundaries.loadPresetForRepair}
+						onError={boundaries.reportPresetRecordingError}
 					>
-						<SelectiveImportProvider source={selectiveImportSource}>
-							<FilesProvider source={fileSource}>
-								<ScreensProvider source={screenSource}>
-									{children}
-								</ScreensProvider>
-							</FilesProvider>
-						</SelectiveImportProvider>
-					</ServerProgrammingProviders>
-				</PresetRecordingProvider>
+						<ServerProgrammingProviders
+							state={state}
+							boundaries={boundaries}
+							value={value}
+						>
+							<SelectiveImportProvider source={selectiveImportSource}>
+								<FilesProvider source={fileSource}>
+									<ScreensProvider source={screenSource}>
+										{children}
+									</ScreensProvider>
+								</FilesProvider>
+							</SelectiveImportProvider>
+						</ServerProgrammingProviders>
+					</PresetRecordingProvider>
+				</GroupRecordingProvider>
 			</ShowObjectsViewProvider>
 		</ServerContext.Provider>
 	);

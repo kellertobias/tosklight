@@ -1,6 +1,10 @@
 import { useServer } from "../../api/ServerContext";
 import { Button, Input } from "../../components/common";
 import type { Group } from "./model";
+import {
+	captureGroupRecordingTarget,
+	type GroupRecordingTarget,
+} from "../../features/groupRecording/target";
 
 function orderedMembers(group: Group, fixtureNames: Map<string, string>) {
 	if (!group.body.fixtures.length) return "empty";
@@ -22,7 +26,7 @@ export function GroupContextMenu({
 	fixtureNames: Map<string, string>;
 	group: Group;
 	onClose: () => void;
-	recordGroup: (id: string) => Promise<unknown>;
+	recordGroup: (target: GroupRecordingTarget) => Promise<unknown>;
 	runCommand: (command: string) => Promise<unknown>;
 }) {
 	const server = useServer();
@@ -39,7 +43,7 @@ export function GroupContextMenu({
 				`Replace membership and apply ${count} stored attributes to the new members?`,
 			)
 		) {
-			void recordGroup(group.id);
+			void recordGroup(captureGroupRecordingTarget(group));
 		}
 		onClose();
 	};

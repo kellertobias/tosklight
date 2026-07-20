@@ -7,6 +7,8 @@ import {
 import { WindowHeader } from "../components/window-kit";
 import { useApp } from "../state/AppContext";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
+import { useGroupRecording } from "../features/groupRecording/GroupRecordingProvider";
+import type { GroupRecordingTarget } from "../features/groupRecording/target";
 import {
 	type CommandLineSurface,
 	useCommandLineSurface,
@@ -53,6 +55,7 @@ function GroupPoolHeader({ command }: { command: CommandLineSurface }) {
 export function GroupsWindow({ active = true, compact }: WindowProps) {
 	useShowObjectView("group", active);
 	const server = useServer();
+	const groupRecording = useGroupRecording();
 	const command = useCommandLineSurface({
 		selection: true,
 		enabled: active,
@@ -61,10 +64,11 @@ export function GroupsWindow({ active = true, compact }: WindowProps) {
 	const { dispatch } = useApp();
 	const model = useGroupPoolModel(server);
 	const [contextGroup, setContextGroup] = useState<string | null>(null);
-	const [recordGroup, setRecordGroup] = useState<string | null>(null);
+	const [recordGroup, setRecordGroup] = useState<GroupRecordingTarget | null>(
+		null,
+	);
 	const [propertiesGroup, setPropertiesGroup] = useState<string | null>(null);
 	const contextual = model.groups.find((group) => group.id === contextGroup);
-	const recordTarget = model.groups.find((group) => group.id === recordGroup);
 	const propertiesTarget = model.groups.find(
 		(group) => group.id === propertiesGroup,
 	);
@@ -84,23 +88,26 @@ export function GroupsWindow({ active = true, compact }: WindowProps) {
 	}, [active, model.groups]);
 
 	const runCommand = (value: string) => command.execute(value);
-	const recordGroupCommand = async (
-		id: string,
+	const recordGroupAction = async (
+		target: GroupRecordingTarget,
 		mode: RecordMode = "overwrite",
 	) => {
-		const ok = await runCommand(
-			mode === "merge" ? `RECORD + GROUP ${id}` : `RECORD GROUP ${id}`,
-		);
-		if (ok) await server.refreshGroup(id);
-		return ok;
+		if (!groupRecording) return null;
+		const outcome = await groupRecording.record({
+			objectId: target.objectId,
+			operation: mode,
+			expectedObjectRevision: target.expectedObjectRevision,
+		});
+		if (outcome) await command.reset();
+		return outcome;
 	};
 	const cancelRecording = () => {
 		setRecordGroup(null);
 		dispatch({ type: "SET_STORE_ARMED", value: false });
 	};
 	const recordExistingGroup = async (mode: RecordMode) => {
-		if (!recordTarget) return cancelRecording();
-		await recordGroupCommand(recordTarget.id, mode);
+		if (!recordGroup) return cancelRecording();
+		await recordGroupAction(recordGroup, mode);
 		cancelRecording();
 	};
 
@@ -115,7 +122,7 @@ export function GroupsWindow({ active = true, compact }: WindowProps) {
 				onOpenContext={setContextGroup}
 				onOpenProperties={setPropertiesGroup}
 				onOpenRecord={setRecordGroup}
-				recordGroup={recordGroupCommand}
+				recordGroup={recordGroupAction}
 				runCommand={runCommand}
 			/>
 			{contextual && (
@@ -123,13 +130,13 @@ export function GroupsWindow({ active = true, compact }: WindowProps) {
 					fixtureNames={model.fixtureNames}
 					group={contextual}
 					onClose={() => setContextGroup(null)}
-					recordGroup={recordGroupCommand}
+					recordGroup={recordGroupAction}
 					runCommand={runCommand}
 				/>
 			)}
-			{recordTarget && (
+			{recordGroup && (
 				<RecordModeDialog
-					target={recordTarget.body.name ?? `Group ${recordTarget.id}`}
+					target={recordGroup.label}
 					onChoose={recordExistingGroup}
 					onCancel={cancelRecording}
 				/>

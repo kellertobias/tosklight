@@ -4,6 +4,12 @@ import { useCommandLineSurface } from "../control/commandLine/useCommandLineSurf
 import { requestUpdateTarget } from "../control/updateWorkflow";
 import { groups } from "../../data/mockData";
 import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
+import { useGroupRecording } from "../../features/groupRecording/GroupRecordingProvider";
+import {
+	captureGroupRecordingTarget,
+	emptyGroupRecordingTarget,
+	type GroupRecordingTarget,
+} from "../../features/groupRecording/target";
 import { useGroups } from "../../features/server/useShowObjectsState";
 import { useApp } from "../../state/AppContext";
 import { Button } from "../common";
@@ -18,9 +24,7 @@ type ShortcutGroup = ReturnType<typeof useGroups>[number];
 export function groupShortcutCount(width: number) {
 	return Math.max(
 		1,
-		Math.floor(
-			(width + SHORTCUT_GAP) / (MIN_SHORTCUT_SIZE + SHORTCUT_GAP),
-		),
+		Math.floor((width + SHORTCUT_GAP) / (MIN_SHORTCUT_SIZE + SHORTCUT_GAP)),
 	);
 }
 
@@ -87,6 +91,7 @@ function GroupShortcut({
 export function GroupStrip({ active = true }: { active?: boolean }) {
 	useShowObjectView("group", active);
 	const server = useServer();
+	const groupRecording = useGroupRecording();
 	const commandLine = useCommandLineSurface({
 		selection: true,
 		enabled: active,
@@ -95,7 +100,9 @@ export function GroupStrip({ active = true }: { active?: boolean }) {
 	const storedGroups = useGroups(server.playbacks);
 	const { state, dispatch } = useApp();
 	const { gridRef, slotCount } = useGroupShortcutCount(active);
-	const [recordGroupId, setRecordGroupId] = useState<string | null>(null);
+	const [recordTarget, setRecordTarget] = useState<GroupRecordingTarget | null>(
+		null,
+	);
 	const stored: readonly ShortcutGroup[] = server.bootstrap
 		? storedGroups
 		: groups.map((group) => ({
@@ -105,9 +112,8 @@ export function GroupStrip({ active = true }: { active?: boolean }) {
 				updated_at: "",
 				body: {
 					name: group.name,
-					fixtures: Array.from(
-						{ length: group.fixtures },
-						(_, index) => String(index),
+					fixtures: Array.from({ length: group.fixtures }, (_, index) =>
+						String(index),
 					),
 				},
 			}));
@@ -116,18 +122,22 @@ export function GroupStrip({ active = true }: { active?: boolean }) {
 		(_, index) =>
 			stored.find((group) => group.id === String(index + 1)) ?? null,
 	);
-	const recordTarget = stored.find((group) => group.id === recordGroupId);
 	const disarmRecord = () => {
-		setRecordGroupId(null);
+		setRecordTarget(null);
 		dispatch({ type: "SET_STORE_ARMED", value: false });
 	};
 	const recordGroup = async (
-		id: string,
+		target: GroupRecordingTarget,
 		mode: RecordMode = "overwrite",
 	) => {
-		const command =
-			mode === "merge" ? `RECORD + GROUP ${id}` : `RECORD GROUP ${id}`;
-		if (await commandLine.execute(command)) await server.refreshGroup(id);
+		if (!groupRecording) return null;
+		const outcome = await groupRecording.record({
+			objectId: target.objectId,
+			operation: mode,
+			expectedObjectRevision: target.expectedObjectRevision,
+		});
+		if (outcome) await commandLine.reset();
+		return outcome;
 	};
 	const selectGroup = (id: string) => {
 		void server.selectionGesture({ type: "live_group", group_id: id });
@@ -145,14 +155,18 @@ export function GroupStrip({ active = true }: { active?: boolean }) {
 		}
 		if (!state.storeArmed) return;
 		if (group?.body.fixtures.length) {
-			setRecordGroupId(group.id);
+			setRecordTarget(captureGroupRecordingTarget(group));
 			return;
 		}
-		void recordGroup(id);
+		void recordGroup(
+			group
+				? captureGroupRecordingTarget(group)
+				: emptyGroupRecordingTarget(id),
+		);
 		disarmRecord();
 	};
 	const recordExistingGroup = (mode: RecordMode) => {
-		if (recordTarget) void recordGroup(recordTarget.id, mode);
+		if (recordTarget) void recordGroup(recordTarget, mode);
 		disarmRecord();
 	};
 
@@ -185,7 +199,7 @@ export function GroupStrip({ active = true }: { active?: boolean }) {
 			</ButtonGrid>
 			{recordTarget && (
 				<RecordModeDialog
-					target={recordTarget.body.name ?? `Group ${recordTarget.id}`}
+					target={recordTarget.label}
 					onChoose={recordExistingGroup}
 					onCancel={disarmRecord}
 				/>

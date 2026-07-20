@@ -1,35 +1,35 @@
 import type { ShowObject } from "../showObjects/contracts";
 import type { ShowObjectsStore } from "../showObjects/store";
 import type {
-	PresetRecordingActions,
-	PresetRecordingOutcome,
-	PresetRecordingRequest,
-	PresetRecordingTransport,
-	RecordPresetInput,
+	GroupRecordingActions,
+	GroupRecordingOutcome,
+	GroupRecordingRequest,
+	GroupRecordingTransport,
+	RecordGroupInput,
 } from "./contracts";
 
-export interface PresetRecordingWriterOptions {
+export interface GroupRecordingWriterOptions {
 	showId: string;
 	store: ShowObjectsStore;
-	transport: PresetRecordingTransport;
-	loadPreset(
+	transport: GroupRecordingTransport;
+	loadGroup(
 		showId: string,
 		objectId: string,
-	): Promise<ShowObject<"preset"> | null>;
+	): Promise<ShowObject<"group"> | null>;
 	onError?: (error: Error | null) => void;
 }
 
-/** Replays one action request without ever materializing Programmer values. */
-export class PresetRecordingWriter implements PresetRecordingActions {
+/** Replays one action request without reading or serializing Programmer state. */
+export class GroupRecordingWriter implements GroupRecordingActions {
 	private stopped = false;
 
-	constructor(private readonly options: PresetRecordingWriterOptions) {}
+	constructor(private readonly options: GroupRecordingWriterOptions) {}
 
-	async record(input: RecordPresetInput) {
+	async record(input: RecordGroupInput) {
 		if (this.stopped) return null;
-		if (!this.options.store.isCollectionReady("preset")) {
+		if (!this.options.store.isCollectionReady("group")) {
 			this.options.onError?.(
-				new Error("Authoritative Preset collection is still loading"),
+				new Error("Authoritative Group collection is still loading"),
 			);
 			return null;
 		}
@@ -37,7 +37,7 @@ export class PresetRecordingWriter implements PresetRecordingActions {
 		const request = recordingRequest(input);
 		const token = this.options.store.beginPending(
 			this.options.showId,
-			"preset",
+			"group",
 			input.objectId,
 		);
 		try {
@@ -47,9 +47,9 @@ export class PresetRecordingWriter implements PresetRecordingActions {
 			const settled = this.options.store.settlePending(
 				token,
 				{
-					objectId: outcome.preset.id,
-					revision: outcome.preset.revision,
-					object: outcome.preset,
+					objectId: outcome.group.id,
+					revision: outcome.group.revision,
+					object: outcome.group.object,
 				},
 				outcome.showRevision,
 				outcome.status === "changed" ? outcome.eventSequence : null,
@@ -59,11 +59,7 @@ export class PresetRecordingWriter implements PresetRecordingActions {
 			this.options.onError?.(null);
 			return outcome;
 		} catch (reason) {
-			if (
-				this.stopped ||
-				this.options.store.getSnapshot().authorityGeneration !== generation
-			)
-				return this.abandon(token);
+			if (!this.isCurrent(generation)) return this.abandon(token);
 			const error = asError(reason);
 			this.options.store.abandon(token);
 			await this.repairConflict(error, input.objectId, generation);
@@ -76,18 +72,13 @@ export class PresetRecordingWriter implements PresetRecordingActions {
 		this.stopped = true;
 	}
 
-	private async send(request: PresetRecordingRequest) {
+	private async send(request: GroupRecordingRequest) {
 		try {
 			return await this.options.transport.record(this.options.showId, request);
 		} catch (reason) {
 			if (!transportFailure(reason)?.retryable) throw reason;
 			return this.options.transport.record(this.options.showId, request);
 		}
-	}
-
-	private abandon(token: string): null {
-		this.options.store.abandon(token);
-		return null;
 	}
 
 	private async repairConflict(
@@ -98,38 +89,61 @@ export class PresetRecordingWriter implements PresetRecordingActions {
 		if (transportFailure(error)?.status !== 409) return;
 		const stamp = this.options.store.captureObjectAuthority(
 			this.options.showId,
-			"preset",
+			"group",
 			objectId,
 		);
 		if (!stamp || stamp.authorityGeneration !== generation) return;
 		try {
-			const preset = await this.options.loadPreset(
-				this.options.showId,
-				objectId,
-			);
-			this.options.store.installObjectIfAuthorityUnchanged(stamp, preset);
+			const group = await this.options.loadGroup(this.options.showId, objectId);
+			this.options.store.installObjectIfAuthorityUnchanged(stamp, group);
 		} catch {
 			// The original revision conflict remains the actionable error.
 		}
 	}
+
+	private isCurrent(generation: number) {
+		return (
+			!this.stopped &&
+			this.options.store.getSnapshot().authorityGeneration === generation
+		);
+	}
+
+	private abandon(token: string): null {
+		this.options.store.abandon(token);
+		return null;
+	}
 }
 
-function recordingRequest(input: RecordPresetInput): PresetRecordingRequest {
+function recordingRequest(input: RecordGroupInput): GroupRecordingRequest {
 	return {
 		requestId: crypto.randomUUID(),
-		address: input.address,
-		name: input.name,
-		mode: input.mode,
+		groupId: input.objectId,
+		operation: input.operation,
 		expectedObjectRevision: input.expectedObjectRevision,
 	};
 }
 
 function assertOutcome(
-	request: PresetRecordingRequest,
-	outcome: PresetRecordingOutcome,
+	request: GroupRecordingRequest,
+	outcome: GroupRecordingOutcome,
 ) {
 	if (outcome.requestId !== request.requestId)
-		throw new Error("Preset recording response request ID does not match");
+		throw new Error("Group recording response request ID does not match");
+	if (outcome.group.id !== request.groupId)
+		throw new Error("Group recording response object ID does not match");
+	if (outcome.status === "no_change" && outcome.group.state !== "stored")
+		throw new Error("Group no-change outcome must retain a stored projection");
+	if (
+		request.operation !== "subtract" &&
+		(request.operation === "delete") !== (outcome.group.state === "deleted")
+	)
+		throw new Error("Group recording projection does not match its operation");
+	const expectedRevision =
+		outcome.status === "changed"
+			? request.expectedObjectRevision + 1
+			: request.expectedObjectRevision;
+	if (outcome.group.revision !== expectedRevision)
+		throw new Error("Group recording response revision is inconsistent");
 }
 
 function asError(reason: unknown) {

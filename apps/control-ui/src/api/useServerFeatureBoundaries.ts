@@ -11,6 +11,7 @@ import type { PlaybackRuntimeIdentity } from "./types";
 import { useProgrammerLifecycleBoundaries } from "./useProgrammerLifecycleBoundaries";
 import { useProgrammerValuesBoundaries } from "./useProgrammerValuesBoundaries";
 import { usePresetRecordingBoundaries } from "./usePresetRecordingBoundaries";
+import { useGroupRecordingBoundaries } from "./useGroupRecordingBoundaries";
 
 export function useServerFeatureBoundaries(state: ServerState) {
 	const programmingErrors = useMemo(
@@ -20,6 +21,7 @@ export function useServerFeatureBoundaries(state: ServerState) {
 	const programmerValues = useProgrammerValuesBoundaries(state);
 	const programmerLifecycle = useProgrammerLifecycleBoundaries(state);
 	const presetRecording = usePresetRecordingBoundaries(state);
+	const groupRecording = useGroupRecordingBoundaries(state);
 	const showObjectsAuthorityKey = [
 		configuredServerUrl(),
 		state.connectionGeneration,
@@ -96,6 +98,7 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		...programmerLifecycle,
 		...programmerValues,
 		...presetRecording,
+		...groupRecording,
 		loadPlaybackSnapshot,
 		loadProgrammingInteractionSnapshot,
 		loadShowObjectCollection,
