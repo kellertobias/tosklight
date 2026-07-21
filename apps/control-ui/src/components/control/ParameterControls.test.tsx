@@ -49,6 +49,7 @@ const preloadValuesActions = vi.hoisted(() => ({
 	batch: vi.fn(async () => null),
 }));
 const legacyProgrammerValuesAccess = vi.fn();
+const legacyPlaybackAccess = vi.fn();
 const server = {
 	selectedFixtures: [] as string[],
 	selectedGroupId: null as string | null,
@@ -68,6 +69,12 @@ Object.defineProperty(server.bootstrap, "active_programmers", {
 	get() {
 		legacyProgrammerValuesAccess();
 		return [];
+	},
+});
+Object.defineProperty(server, "playbacks", {
+	get() {
+		legacyPlaybackAccess();
+		return null;
 	},
 });
 
@@ -117,9 +124,22 @@ vi.mock(
 		useProgrammingSelectionActions: () => null,
 	}),
 );
-vi.mock("../../features/server/useShowObjectsState", () => ({
-	useGroups: () => server.groups,
-}));
+vi.mock(
+	"./parameterControls/useSelectedPortableGroup",
+	async (importOriginal) => {
+		const actual =
+			await importOriginal<
+				typeof import("./parameterControls/useSelectedPortableGroup")
+			>();
+		return {
+			...actual,
+			useSelectedPortableGroup: (groupId: string | null, active = true) =>
+				active && groupId
+					? (server.groups.find((group) => group.id === groupId) ?? null)
+					: undefined,
+		};
+	},
+);
 vi.mock("./parameterControls/useParameterProgrammerValues", () => ({
 	useParameterProgrammerValues: (
 		_fixtureIds: readonly string[],
@@ -713,6 +733,27 @@ describe("ParameterControls programmer targets and alignment", () => {
 });
 
 describe("ParameterControls Group targets and alignment", () => {
+	it("takes supported attributes from the selected portable Group", () => {
+		server.selectedGroupId = "3";
+		server.groups = [
+			{
+				id: "3",
+				body: { programming: { pan: {} }, fixtures: [] },
+			},
+		];
+
+		render(<ParameterControls />);
+
+		expect(
+			screen.getByRole("slider", { name: "Enc 1 · Dimmer" }),
+		).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Position" }));
+		expect(
+			screen.getByRole("slider", { name: "Enc 1 · Pan" }),
+		).toBeInTheDocument();
+		expect(legacyPlaybackAccess).not.toHaveBeenCalled();
+	});
+
 	it("shows the Group programmer target while its members are still fading", async () => {
 		server.selectedFixtures = ["fixture-1"];
 		server.selectedGroupId = "3";

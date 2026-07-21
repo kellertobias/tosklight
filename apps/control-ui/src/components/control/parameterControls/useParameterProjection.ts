@@ -5,7 +5,6 @@ import { capturesProgrammerWrites } from "../../../features/programmerCaptureMod
 import { useProgrammerCaptureModeView } from "../../../features/programmerCaptureMode/ProgrammerCaptureModeView";
 import { selectedGroupId } from "../../../features/programmingInteraction/contracts";
 import { useProgrammingSelectionView } from "../../../features/programmingInteraction/ProgrammingInteractionView";
-import { useGroups } from "../../../features/server/useShowObjectsState";
 import { usePollingResource } from "../../../hooks/usePollingResource";
 import { useApp } from "../../../state/AppContext";
 import {
@@ -15,6 +14,10 @@ import {
 } from "./model";
 import { useParameterPreloadValues } from "./useParameterPreloadValues";
 import { useParameterProgrammerValues } from "./useParameterProgrammerValues";
+import {
+	selectedGroupSupportedAttributes,
+	useSelectedPortableGroup,
+} from "./useSelectedPortableGroup";
 
 const EMPTY_FIXTURE_IDS: readonly string[] = [];
 const EMPTY_PROGRAMMER_VALUES: readonly never[] = [];
@@ -42,9 +45,10 @@ function useVisualization(
 function useSupportedAttributes(
 	selectedFixtureIds: readonly string[],
 	groupId: string | null,
+	active: boolean,
 ) {
 	const server = useServer();
-	const groups = useGroups(server.playbacks);
+	const group = useSelectedPortableGroup(groupId, active);
 	return useMemo(() => {
 		const result = new Set<string>();
 		const selected = new Set(selectedFixtureIds);
@@ -57,14 +61,10 @@ function useSupportedAttributes(
 				for (const parameter of head.parameters)
 					result.add(parameter.attribute);
 		}
-		if (groupId) {
-			result.add("intensity");
-			const group = groups.find((candidate) => candidate.id === groupId);
-			for (const attribute of Object.keys(group?.body.programming ?? {}))
-				result.add(attribute);
-		}
+		for (const attribute of selectedGroupSupportedAttributes(groupId, group))
+			result.add(attribute);
 		return result;
-	}, [server.patch, selectedFixtureIds, groupId, groups]);
+	}, [server.patch, selectedFixtureIds, groupId, group]);
 }
 
 function useResolvedValues(
@@ -121,7 +121,11 @@ export function useParameterProjection(family: ParameterFamily, active = true) {
 			: normalValuesView
 		: null;
 	const visualization = useVisualization(active, selectedFixtureIds);
-	const supported = useSupportedAttributes(selectedFixtureIds, selectedGroup);
+	const supported = useSupportedAttributes(
+		selectedFixtureIds,
+		selectedGroup,
+		active,
+	);
 	const values = useResolvedValues(visualization, selectedFixtureIds);
 	const directChoices = useMemo(
 		() =>

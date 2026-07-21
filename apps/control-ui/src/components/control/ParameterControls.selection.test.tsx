@@ -97,9 +97,16 @@ vi.mock("../../state/AppContext", () => ({
 		dispatch: mocks.dispatch,
 	}),
 }));
-vi.mock("../../features/server/useShowObjectsState", () => ({
-	useGroups: () => [],
-}));
+vi.mock(
+	"./parameterControls/useSelectedPortableGroup",
+	async (importOriginal) => {
+		const actual =
+			await importOriginal<
+				typeof import("./parameterControls/useSelectedPortableGroup")
+			>();
+		return { ...actual, useSelectedPortableGroup: () => undefined };
+	},
+);
 vi.mock("./parameterControls/useParameterProgrammerValues", () => ({
 	useParameterProgrammerValues: (
 		_fixtureIds: readonly string[],

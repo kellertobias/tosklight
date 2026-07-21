@@ -69,7 +69,7 @@ export function CuelistDetail(props: CuelistDetailProps) {
 		followActiveCue:
 			props.cueListTab === "cues" && props.cueListSource === "follow-selection",
 	});
-	const thumbnails = useCueThumbnails(cues);
+	const thumbnails = useCueThumbnails(cues, props.active);
 	const showProperties =
 		props.showCueSidebar && (!props.compact || props.cueListTab === "cues");
 	return (
@@ -124,7 +124,7 @@ export function CuelistDetail(props: CuelistDetailProps) {
 						}}
 						thumbnail={thumbnails[editor.selectedCue]}
 						editError={editor.cueEditError}
-						active={true}
+						active={props.active}
 						layoutDependencies={[
 							props.compact,
 							editor.cueDraft.id,

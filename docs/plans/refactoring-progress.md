@@ -1,21 +1,21 @@
 # Major Refactoring Progress
 
-Estimated progress: **98%**
+Estimated progress: **98.5%**
 
-Estimated Codex ETA: **roughly 8–14 hours of active Codex execution**, to repository-wide
+Estimated Codex ETA: **roughly 6–11 hours of active Codex execution**, to repository-wide
 acceptance. Typed Playback Page creation/rename and strict desk selection, the companion Page and
 Playback surfaces, scoped command execution, Group selection, Cuelist authority, and typed CUE
-navigation are complete. Portable Group decoupling, System Controls and direct Group-master
-authority, broad frontend `/playbacks` retirement, public test-DSL convergence, and final
-performance/desktop acceptance remain.
+navigation are complete. Portable Group decoupling is now complete. System Controls and direct
+Group-master authority, broad frontend `/playbacks` retirement, public test-DSL convergence, and
+final performance/desktop acceptance remain.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-21 after completing the Playback Page and companion-surface cohort, strict
-command-line and Group/Cuelist authority migrations, and typed CUE navigation with one dedicated v1
-compatibility specification.
+Last updated: 2026-07-21 after completing portable Group decoupling for parameter projection, Cue
+thumbnails, selected-membership synchronization, Group derivation, and paperwork export, and after
+removing the dead Playback configuration facade.
 
 ## Guardrails
 
@@ -417,6 +417,16 @@ compatibility specification.
   retarget selection. Cuelist Window follow-selection, current-Cue display, and pool masters now
   read exact desk/runtime projections, while Cue-pane and Fixture Sheet Cuelist pickers hydrate only
   their feature-owned portable Show-object views.
+- [x] Removed the remaining non-runtime Group reads from the broad Playback snapshot. Parameter
+  projection activates portable Group authority only for a visible Group target and hides retained
+  programming until that authority is ready. Cue thumbnails consume active-pane portable Groups,
+  preserve ordered membership, synchronously hide stale results, and cancel late visualization
+  work across Cue, Show, authority, and capability replacement. Selected live-Group membership and
+  derived-Group detachment now use the Show Objects projection, and paperwork loads Cuelists,
+  Groups, and Presets on demand from the active Show. The unused Page, slot, definition, exclusion,
+  pool-action, and Cuelist-unassignment `ServerContext` facade actions are deleted. Broad
+  `/playbacks` now remains only for the separately tracked runtime Group masters and System
+  Controls enumeration.
 - [x] Added typed action-time Cue recording. One Programming action captures only normal or pending-
   Preload recordable values, resolves explicit or authoritative active targets under the portable
   Show revision, and atomically creates, updates, or deletes the Cue plus any required Cuelist,
@@ -461,9 +471,6 @@ compatibility specification.
 
 - [ ] Continue vertical feature-store/event slices and move the remaining production callers away
   from broad `useServer()`, polling, and generic show-object mutation.
-- [ ] Replace the remaining non-runtime Group reads derived from broad Playback state with portable
-  Group authority, then remove the dead Playback facade actions and broad Cuelist-definition
-  paperwork dependency.
 - [ ] Add direct scoped Group-master authority and move System Controls off broad Playback
   enumeration. Once those two semantic blockers are gone, remove frontend `/playbacks` hydration,
   refresh, event reconciliation, context state, and compatibility rerenders as one bounded slice.
@@ -472,35 +479,30 @@ compatibility specification.
 
 ## Remaining architecture work
 
-1. Decouple the remaining non-semantic Group consumers from broad Playback state. Parameter
-   projection, Cue thumbnails, Group derivation, Show-object selectors, and the remaining selected-
-   membership synchronization should read visibility-scoped portable Groups with no bootstrap or
-   global Playback dependency. Delete dead Playback facade actions and load paperwork Cuelists on
-   demand through the existing portable authority.
-2. Move System Controls onto scoped portable Playback/Cuelist definitions plus the exact runtime
+1. Move System Controls onto scoped portable Playback/Cuelist definitions plus the exact runtime
    identities it displays or releases. It must remain dormant while closed and preserve release-
    all semantics for mapped and direct Cuelist Playbacks without cloning the broad snapshot.
-3. Add a direct typed Group-master application, snapshot, action-outcome, and event authority.
+2. Add a direct typed Group-master application, snapshot, action-outcome, and event authority.
    Migrate Groups Window, Fixture Sheet, and Group editing onto its dormant frontend store while
    preserving stored-empty Groups, unassigned Group masters, exact no-op behavior, and existing
    Matter/WebSocket compatibility.
-4. Excise the broad frontend `/playbacks` path after those blockers move: remove bootstrap/session
+3. Excise the broad frontend `/playbacks` path after those blockers move: remove bootstrap/session
    ownership, global refresh, compatibility event reconciliation, context state, and unrelated
    rerenders. Keep the backend v1 endpoint/events only where external compatibility still requires
    them, and retain `/screens` refresh only for its separately owned screen state.
-5. Publish the remaining externally observable transitions once through typed events: Highlight
+4. Publish the remaining externally observable transitions once through typed events: Highlight
    movement, transition completion, output health/overload, and any remaining automatic runtime
    changes.
-6. Migrate remaining layout and miscellaneous portable-show mutations, then remove generic
+5. Migrate remaining layout and miscellaneous portable-show mutations, then remove generic
    frontend show-object mutation.
-7. Replace production `useServer()` callers with feature-local stores/hooks. Remove broad global
+6. Replace production `useServer()` callers with feature-local stores/hooks. Remove broad global
    React update ownership, DOM/custom-event SET/Store/Update routing, and polling-based refreshes.
-8. Expand the public test DSL and migrate remaining legacy command helpers. Tests must express the
+7. Expand the public test DSL and migrate remaining legacy command helpers. Tests must express the
    intended operator workflow and keep software, command-line, and OSC surfaces explicit rather
    than hiding meaningful parity behind one generic implementation shortcut.
-9. Remove REST/WebSocket v1 and `useServer()` compatibility only after every production caller and
+8. Remove REST/WebSocket v1 and `useServer()` compatibility only after every production caller and
    acceptance test has moved to a typed replacement.
-10. Repair the remaining stale feature-plan links and keep the committed `docs/engineering` handoff
+9. Repair the remaining stale feature-plan links and keep the committed `docs/engineering` handoff
    synchronized as compatibility adapters are retired.
 
 The last complete public-boundary audit counted 145 direct v1 WebSocket commands, 40 legacy text
@@ -865,6 +867,14 @@ and DesktopBridge must remain visible work rather than being hidden behind a gen
   response reconciliation, rollback/replay/no-change/conflict repair, abandoned-render and scope-
   replacement safety, inactive-view dormancy, no broad bootstrap request, and unrelated-render
   suppression.
+- The portable-Group decoupling cohort passes all 1,606 frontend tests in 222 files, frontend
+  typecheck, and the production build; Vite reports only the existing large-chunk advisory. Its 64
+  focused tests cover active-only Group hydration, stale-authority refusal, selected-object render
+  suppression, ordered Cue thumbnail expansion, deactivation and Show replacement cancellation,
+  projected derived membership, on-demand paperwork Cuelists, dead facade removal, and absence of
+  broad Playback reads. Dependency directions, all 10 source-size scanner tests, the zero-hard-
+  violation source-size ratchet, and `git diff --check` pass. New production modules remain below
+  200 lines.
 
 ## Wrap-up handoff
 
@@ -887,11 +897,10 @@ and DesktopBridge must remain visible work rather than being hidden behind a gen
   remains a separate future milestone.
 - Preload now prepares one final-state-aware batch, and virtual-exclusion restart authority is
   private, desk-exact, migration-compatible, and absent from public runtime projections.
-- Recommended next slice: decouple parameter projection, Cue thumbnails, Group derivation, and
-  Show-object selectors from broad Playback state by using visibility-scoped portable Groups.
-  Follow with scoped System Controls and direct Group-master authority; only then remove the broad
-  frontend `/playbacks` snapshot. Keep public test-DSL convergence and the final repository-wide
-  acceptance/performance run as the closing milestones.
+- Recommended next slice: move System Controls onto portable definitions and exact Cuelist runtime
+  identities, then add direct Group-master runtime authority. Only after both semantic blockers are
+  scoped should the broad frontend `/playbacks` snapshot be removed. Keep public test-DSL
+  convergence and the final repository-wide acceptance/performance run as the closing milestones.
 
 Test files may exceed the hard limits, but should still be split when it improves readability and
 makes operator intent more visible.

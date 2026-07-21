@@ -2,10 +2,7 @@ import type { StoredGroup } from "../../api/types";
 import type { ServerController } from "./model";
 import type { ServerContextValue } from "./ServerContextValue";
 import { runOptimisticShowObjectMutation } from "./showObjectMutations";
-import {
-	currentGroups,
-	currentPortableGroups,
-} from "./showObjectSelectors";
+import { currentPortableGroups } from "./showObjectSelectors";
 
 export function createGroupDerivationActions(
 	model: ServerController,
@@ -71,12 +68,11 @@ export function createGroupDerivationActions(
 				const existing = currentPortableGroups(model).find(
 					(item) => item.id === id,
 				);
-				const projected = currentGroups(model).find((item) => item.id === id);
-				if (!existing?.body.derived_from || !projected)
+				if (!existing?.body.derived_from)
 					throw new Error("Group is not derived");
 				const body: StoredGroup = {
 					...existing.body,
-					fixtures: projected.body.fixtures,
+					fixtures: existing.body.fixtures,
 					derived_from: null,
 				};
 				await runOptimisticShowObjectMutation(

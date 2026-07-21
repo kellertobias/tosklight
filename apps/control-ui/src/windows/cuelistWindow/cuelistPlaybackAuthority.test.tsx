@@ -65,6 +65,10 @@ const mocks = vi.hoisted(() => ({
 	pool: [] as PlaybackDefinition[],
 	cueLists: [] as CueList[],
 	pages: [] as Array<Record<string, unknown>>,
+	showObjectsStore: {
+		getSnapshot: () => ({ authorityGeneration: 1 }),
+		subscribe: () => () => undefined,
+	},
 }));
 
 vi.mock("../../api/ServerContext", () => ({
@@ -91,6 +95,9 @@ vi.mock("../../features/cueRecording/CueRecordingProvider", () => ({
 	useCueRecording: () => ({ record: mocks.recordCue }),
 }));
 vi.mock("../../features/showObjects/ShowObjectsState", () => ({
+	usePortableGroups: () => [],
+	useShowObjectCollectionsReady: () => true,
+	useShowObjectsStore: () => mocks.showObjectsStore,
 	useCueLists: () =>
 		mocks.cueLists.map((body) => ({
 			kind: "cue_list",

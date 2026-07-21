@@ -1,5 +1,5 @@
 import { saveServerUrl } from "../../api/LightApiClient";
-import type { StoredGroup, StoredPreset } from "../../api/types";
+import type { CueList, StoredGroup, StoredPreset } from "../../api/types";
 import type { ServerController } from "./model";
 import type { ServerContextValue } from "./ServerContextValue";
 
@@ -21,7 +21,6 @@ export function createSystemActions(
 		bootstrap,
 		session,
 		patch,
-		playbacks,
 		commandTargetModeRef,
 		setCommandLineState,
 		setCommandLinePristine,
@@ -36,17 +35,18 @@ export function createSystemActions(
 		exportPaperwork: async () => {
 			try {
 				const showId = bootstrap?.active_show?.id;
-				const [groups, presets] = showId
+				const [groups, presets, cueLists] = showId
 					? await Promise.all([
 							client.objects<StoredGroup>(showId, "group"),
 							client.objects<StoredPreset>(showId, "preset"),
+							client.objects<CueList>(showId, "cue_list"),
 						])
-					: [[], []];
+					: [[], [], []];
 				const payload = {
 					generated_at: new Date().toISOString(),
 					show: bootstrap?.active_show,
 					patch,
-					cue_lists: playbacks?.cue_lists,
+					cue_lists: cueLists.map((item) => item.body),
 					groups: groups.map((item) => item.body),
 					presets: presets.map((item) => ({
 						id: item.id,

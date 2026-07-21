@@ -12,7 +12,7 @@ import { ProgrammingUpdateProvider } from "../features/programmingUpdate/Program
 import type { ServerContextValue } from "../features/server/ServerContextValue";
 import { useSelectedGroupMembership } from "../features/server/useSelectedGroupMembership";
 import type { useServerState } from "../features/server/useServerState";
-import { useGroups } from "../features/server/useShowObjectsState";
+import { usePortableGroups } from "../features/showObjects/ShowObjectsState";
 import { ShowObjectDetailSubscription } from "../features/showObjects/ShowObjectsView";
 import type { useServerFeatureBoundaries } from "./useServerFeatureBoundaries";
 
@@ -27,7 +27,7 @@ function SelectedGroupMembershipSync({
 }: {
 	state: ReturnType<typeof useServerState>;
 }) {
-	const groups = useGroups(state.playbacks);
+	const groups = usePortableGroups(state.selectedGroupId !== null);
 	useSelectedGroupMembership(
 		groups,
 		state.selectedGroupId,
