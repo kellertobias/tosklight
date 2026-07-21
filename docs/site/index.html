@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ToskLight — show-lighting control desk</title>
+    <meta
+      name="description"
+      content="ToskLight is a show-lighting desk, engine, and control server for fixtures, groups, cue lists, playback faders, and Art-Net/sACN output."
+    />
+    <link rel="icon" href="icon.png" type="image/png" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0d12;
+        --panel: #141821;
+        --edge: #242b38;
+        --text: #e8ecf4;
+        --muted: #9aa5b8;
+        --accent: #ffb020;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      a { color: var(--accent); }
+      .wrap { max-width: 62rem; margin: 0 auto; padding: 0 1.5rem; }
+      header { padding: 5rem 0 3rem; text-align: center; }
+      header img { width: 96px; height: 96px; }
+      h1 { font-size: clamp(2.2rem, 6vw, 3.4rem); margin: 1rem 0 0.5rem; letter-spacing: -0.02em; }
+      .tagline { color: var(--muted); font-size: 1.15rem; max-width: 44rem; margin: 0 auto; }
+      .version {
+        display: inline-block;
+        margin-top: 1.25rem;
+        padding: 0.2rem 0.7rem;
+        border: 1px solid var(--edge);
+        border-radius: 999px;
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+      .cards {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+        padding: 2rem 0 1rem;
+      }
+      .card {
+        display: block;
+        padding: 1.5rem;
+        background: var(--panel);
+        border: 1px solid var(--edge);
+        border-radius: 0.9rem;
+        text-decoration: none;
+        color: inherit;
+        transition: border-color 0.15s ease, transform 0.15s ease;
+      }
+      .card:hover { border-color: var(--accent); transform: translateY(-2px); }
+      .card h2 { margin: 0 0 0.4rem; font-size: 1.15rem; }
+      .card p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+      section { padding: 2.5rem 0; border-top: 1px solid var(--edge); }
+      section h2 { font-size: 1.4rem; margin: 0 0 1rem; }
+      ul.features { margin: 0; padding-left: 1.2rem; color: var(--muted); }
+      ul.features li { margin-bottom: 0.4rem; }
+      ul.features strong { color: var(--text); font-weight: 600; }
+      .section-lede { color: var(--muted); margin: -0.5rem 0 1.5rem; font-size: 0.95rem; }
+      .gallery {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+      }
+      .shot {
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        background: var(--panel);
+        border: 1px solid var(--edge);
+        border-radius: 0.7rem;
+        overflow: hidden;
+      }
+      /* Source screenshots vary from 3:2 to 4:1. Fit whole frames into one tile ratio —
+         cropping to fill would zoom the wide keypad capture into an unreadable fragment. */
+      .shot img {
+        display: block;
+        width: 100%;
+        aspect-ratio: 16 / 10;
+        object-fit: contain;
+        background: #0f1219;
+        border-bottom: 1px solid var(--edge);
+      }
+      .shot figcaption { margin-top: auto; padding: 0.8rem 1rem; color: var(--muted); font-size: 0.88rem; }
+      .shot figcaption strong { display: block; color: var(--text); font-weight: 600; }
+      .downloads {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+      }
+      .platform {
+        padding: 1.25rem;
+        background: var(--panel);
+        border: 1px solid var(--edge);
+        border-radius: 0.7rem;
+      }
+      .platform h3 { margin: 0 0 0.3rem; font-size: 1.05rem; }
+      .platform-note { margin: 0 0 0.9rem; color: var(--muted); font-size: 0.85rem; }
+      .download-list { list-style: none; margin: 0; padding: 0; }
+      .download-list li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.7rem 0;
+        border-top: 1px solid var(--edge);
+      }
+      .download-list li:first-child { border-top: none; }
+      .download-meta { min-width: 0; }
+      .download-kind { display: block; font-size: 0.9rem; }
+      .download-list code {
+        display: block;
+        color: var(--muted);
+        font-size: 0.75rem;
+        word-break: break-all;
+      }
+      .download-button {
+        flex: none;
+        padding: 0.35rem 0.85rem;
+        border: 1px solid var(--accent);
+        border-radius: 0.4rem;
+        color: var(--accent);
+        font-size: 0.85rem;
+        font-weight: 600;
+        text-decoration: none;
+      }
+      .download-button:hover { background: var(--accent); color: #12151c; }
+      .signing-note { margin: 1.5rem 0 0; color: var(--muted); font-size: 0.85rem; }
+      a.version { text-decoration: none; }
+      a.version:hover { border-color: var(--accent); color: var(--text); }
+      footer {
+        padding: 2.5rem 0 4rem;
+        border-top: 1px solid var(--edge);
+        color: var(--muted);
+        font-size: 0.9rem;
+        text-align: center;
+      }
+      footer p { margin: 0 0 0.5rem; }
+      footer p:last-child { margin-bottom: 0; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <img src="icon.png" alt="ToskLight application icon" />
+        <h1>ToskLight</h1>
+        <p class="tagline">
+          A show-lighting desk, engine, and control server — fixtures, groups, cue lists, playback
+          faders, and Art-Net/sACN output from one portable show file.
+        </p>
+        <a
+          class="version"
+          id="version"
+          href="https://github.com/kellertobias/tosklight/releases/latest"
+          data-built="__VERSION__"
+          >v__VERSION__</a
+        >
+      </header>
+
+      <div class="cards">
+        <a class="card" href="manual/">
+          <h2>Operator manual →</h2>
+          <p>The full operator help: command line, programmer, patch, cue lists, playback, and output.</p>
+        </a>
+        <a class="card" href="safari/">
+          <h2>Code safari →</h2>
+          <p>A guided tour of the codebase — architecture, one action end to end, and how to add a capability.</p>
+        </a>
+        <a class="card" href="#downloads">
+          <h2>Downloads →</h2>
+          <p>Desktop application and standalone server builds for macOS, Windows, and Linux.</p>
+        </a>
+      </div>
+
+      <section>
+        <h2>The desk</h2>
+        <p class="section-lede">
+          Generated from the current help screenshots — the same images the operator manual uses.
+        </p>
+        <div class="gallery">
+        __GALLERY__
+        </div>
+      </section>
+
+      <section>
+        <h2>What it does</h2>
+        <ul class="features">
+          <li><strong>Command line first.</strong> Keypad grammar and muscle memory, matching a real desk.</li>
+          <li><strong>Live programmer.</strong> LTP programmer values over HTP playback, with a fixture sheet and 3D stage view.</li>
+          <li><strong>Cue lists and playback.</strong> Cue list pool, playback faders, and group masters with page addressing.</li>
+          <li><strong>One desk, many surfaces.</strong> Desktop app, browser, keyboard, and attached OSC hardware share one command line.</li>
+          <li><strong>Portable show files.</strong> Shows move between desks; desk-level data stays behind.</li>
+        </ul>
+      </section>
+
+      <section id="downloads">
+        <h2>Downloads</h2>
+        <p class="section-lede">
+          Version <strong>v__VERSION__</strong> · <a href="__RELEASE_URL__">all assets and release notes →</a>
+        </p>
+        <div class="downloads">
+        __DOWNLOADS__
+        </div>
+        <p class="signing-note">
+          Builds are not code-signed. On macOS, open the app once via right-click → Open; on
+          Windows, choose “More info” → “Run anyway” at the SmartScreen prompt.
+        </p>
+      </section>
+
+      <section>
+        <h2>Run the standalone server</h2>
+        <p style="color: var(--muted)">
+          Download the server archive for your platform, unpack it, and run <code>light-server</code>.
+          The operator UI is embedded — open <code>http://127.0.0.1:5000</code>. Bind beyond localhost
+          only on a trusted control network, and set <code>LIGHT_DESK_TOKEN</code> when you do.
+        </p>
+      </section>
+
+      <footer>
+        <p>
+          <a href="https://github.com/kellertobias/tosklight">Source on GitHub</a> ·
+          <a href="tosklight-manual.pdf">Manual (PDF)</a>
+        </p>
+        <p>
+          A project by <a href="https://tobisk.de">tobisk.de</a> ·
+          <a href="https://tobisk.de/imprint">Imprint &amp; Privacy</a>
+        </p>
+      </footer>
+    </div>
+    <script>
+      // The stamped version is whatever main was built from. Prefer the newest published
+      // release when GitHub is reachable; keep the build-time value on any failure.
+      (async () => {
+        const badge = document.getElementById("version");
+        try {
+          const response = await fetch(
+            "https://api.github.com/repos/kellertobias/tosklight/releases/latest",
+            { headers: { Accept: "application/vnd.github+json" } },
+          );
+          if (!response.ok) return;
+          const { tag_name: tag, html_url: url } = await response.json();
+          if (!tag) return;
+          badge.textContent = tag.startsWith("v") ? tag : `v${tag}`;
+          if (url) badge.href = url;
+          if (tag.replace(/^v/, "") !== badge.dataset.built) {
+            badge.title = `Latest release ${tag} · site built from ${badge.dataset.built}`;
+          }
+        } catch {
+          /* Offline or rate-limited: the stamped version already renders. */
+        }
+      })();
+    </script>
+  </body>
+</html>

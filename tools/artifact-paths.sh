@@ -50,6 +50,8 @@ light_init_artifact_paths() {
   export LIGHT_MANUAL_PDF="$LIGHT_MANUAL_ROOT/pdf/tosklight-manual.pdf"
   export LIGHT_MANUAL_HTML_DIR="$LIGHT_MANUAL_ROOT/html/tosklight-manual"
   export LIGHT_MANUAL_HTML_ARCHIVE="$LIGHT_MANUAL_ROOT/html/tosklight-manual-html.zip"
+  light_export_path LIGHT_PAGES_DIR "$repository_root" "${LIGHT_PAGES_DIR-$LIGHT_ARTIFACTS_DIR/$PAGES_ROOT}" || return 1
+  light_export_path LIGHT_SAFARI_DIR "$repository_root" "${LIGHT_SAFARI_DIR-$LIGHT_ARTIFACTS_DIR/$SAFARI_ROOT}" || return 1
 
   if [[ -n "${LIGHT_DATA_DIR+x}" ]]; then
     light_export_path LIGHT_DATA_DIR "$repository_root" "$LIGHT_DATA_DIR" || return 1

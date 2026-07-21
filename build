@@ -17,12 +17,15 @@ MANUAL_PYTHON="$MANUAL_VENV_DIR/bin/python"
 CONTROL_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-control-artifacts.json"
 HARDWARE_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-hardware-artifacts.json"
 DEV_SERVER_LABEL="de.tokenet.tosklight.dev-server"
+CODESAFARI_VERSION="1.0.0"
 
 usage() {
   cat <<'EOF'
 Usage:
   ./build open             Build debug server and app, stop old instances, and open ToskLight
   ./build manual           Build PDF and deployable HTML manuals from docs/help Markdown
+  ./build safari           Export the CodeSafari static site from .tour
+  ./build pages            Assemble the public site: landing page, manual, and code safari
   ./build archive          Create self-contained server archives for macOS, Windows, Linux AMD64, and Linux ARM64
   ./build archive install  Also install and open ToskLight.app in ~/Applications
   ./build migrate-artifacts
@@ -44,6 +47,47 @@ build_manual() {
   PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" "$MANUAL_PYTHON" "$ROOT/tools/verify_html_manual.py" \
     "$LIGHT_MANUAL_HTML_DIR" \
     "$LIGHT_MANUAL_HTML_ARCHIVE"
+}
+
+build_safari() {
+  require node
+  require npx
+  rm -rf "$LIGHT_SAFARI_DIR"
+  mkdir -p "$(dirname "$LIGHT_SAFARI_DIR")"
+  npx --yes "@tobisk/codesafari@$CODESAFARI_VERSION" export "$ROOT" --out "$LIGHT_SAFARI_DIR"
+  [[ -f "$LIGHT_SAFARI_DIR/index.html" ]] || {
+    echo "error: CodeSafari export produced no index.html in $LIGHT_SAFARI_DIR" >&2
+    exit 1
+  }
+  echo "Created $LIGHT_SAFARI_DIR"
+}
+
+# Assemble the deployable public site. The landing page sits at the root and links
+# into the two generated subdirectories; nothing here reaches outside $LIGHT_PAGES_DIR.
+build_pages() {
+  build_manual
+  build_safari
+
+  rm -rf "$LIGHT_PAGES_DIR"
+  mkdir -p "$LIGHT_PAGES_DIR"
+  cp -R "$LIGHT_MANUAL_HTML_DIR/." "$LIGHT_PAGES_DIR/manual"
+  cp -R "$LIGHT_SAFARI_DIR/." "$LIGHT_PAGES_DIR/safari"
+  cp "$LIGHT_MANUAL_PDF" "$LIGHT_PAGES_DIR/tosklight-manual.pdf"
+  cp -R "$ROOT/docs/site/." "$LIGHT_PAGES_DIR/"
+  # Same application icon the operator manual renders in its hero and sidebar.
+  cp "$ROOT/apps/control-ui/src-tauri/icons/icon.png" "$LIGHT_PAGES_DIR/icon.png"
+  # GitHub Pages otherwise runs the output through Jekyll and drops _-prefixed assets.
+  touch "$LIGHT_PAGES_DIR/.nojekyll"
+
+  node "$ROOT/tools/render-landing-page.mjs" "$LIGHT_PAGES_DIR/index.html"
+
+  for required in index.html manual/index.html safari/index.html; do
+    [[ -f "$LIGHT_PAGES_DIR/$required" ]] || {
+      echo "error: assembled site is missing $required" >&2
+      exit 1
+    }
+  done
+  echo "Created $LIGHT_PAGES_DIR"
 }
 
 ensure_manual_dependencies() {
@@ -310,6 +354,9 @@ print_artifact_path() {
     cargo) printf '%s\n' "$CARGO_TARGET_DIR" ;;
     manual-pdf) printf '%s\n' "$LIGHT_MANUAL_PDF" ;;
     manual-html) printf '%s\n' "$LIGHT_MANUAL_HTML_ARCHIVE" ;;
+    manual-html-dir) printf '%s\n' "$LIGHT_MANUAL_HTML_DIR" ;;
+    pages) printf '%s\n' "$LIGHT_PAGES_DIR" ;;
+    safari) printf '%s\n' "$LIGHT_SAFARI_DIR" ;;
     release) printf '%s\n' "$LIGHT_RELEASE_DIR" ;;
     runtime) printf '%s\n' "$LIGHT_RUNTIME_DATA_DIR" ;;
     test-results) printf '%s\n' "$LIGHT_TEST_RESULTS_DIR" ;;
@@ -323,6 +370,14 @@ case "${1:-}" in
   manual)
     [[ $# -eq 1 ]] || { usage >&2; exit 2; }
     build_manual
+    ;;
+  safari)
+    [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+    build_safari
+    ;;
+  pages)
+    [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+    build_pages
     ;;
   open)
     [[ $# -eq 1 ]] || { usage >&2; exit 2; }
