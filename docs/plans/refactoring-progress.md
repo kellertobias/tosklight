@@ -647,6 +647,13 @@ configuration field are both gone from the frontend facade.
   controls, so they now come from a scoped store with equality-cached 2d/3d selectors; a stage-layout
   write reads its expected revision from that store rather than from broad server state. The desk
   capability boundaries moved out of `ServerProvider` into their own composition module.
+- [x] Scoped desk-lock authority and removed `deskLock`, `configureDeskLock`, `lockDesk`, and
+  `unlockDesk` from the facade. The desk lock is polled every 500 ms, and each poll previously
+  pushed a fresh object into broad React state, rerendering every `useServer()` consumer twice per
+  second whether or not the lock had changed. The lock now lives outside React state entirely:
+  polling, bootstrap, and the three actions write straight into the store, and the store compares
+  the complete lock state so an unchanged poll publishes nothing. `DeskLockOverlay` no longer uses
+  `useServer()` at all.
 
 ## In progress
 
@@ -714,6 +721,13 @@ new scenarios may not add a direct family or raw v1 action without an exact base
 
 ## Current verification snapshot
 
+- The desk-lock slice passes the full frontend suite of 1,964 tests in 273 files, including 4 new
+  tests proving that an equivalent poll result publishes nothing, that a reader does not rerender
+  across equivalent polls, that a genuine lock change does rerender, and that a reader outside a
+  mounted boundary reports an unknown lock. Frontend typecheck, the production Vite build, and all
+  ratchets pass.
+  Known gaps: no desktop `./build open` run and no Playwright acceptance run for this slice, and the
+  2 Hz saving is reasoned from the removed state path rather than measured on the desk.
 - The stage-layout slice passes the full frontend suite of 1,960 tests in 272 files, including 4 new
   selector tests proving that a 3d-only change does not rerender a 2d reader, that a reader
   rerenders for its own positions, that the stored write revision is exposed, and that a reader
