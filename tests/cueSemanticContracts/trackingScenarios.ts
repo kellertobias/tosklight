@@ -1,5 +1,9 @@
 import { expect, test } from "../../apps/control-ui/e2e/bench/fixtures";
 import {
+	clearProgrammerValues,
+	setProgrammerFixtureValue,
+} from "../../apps/control-ui/e2e/bench/programmerValues";
+import {
 	fixtureIdsByNumber,
 	loadCanonicalCopy,
 	object,
@@ -19,18 +23,28 @@ import {
 	visualizationLevel,
 } from "./support";
 
-registerPairedCueScenario<{ completed: boolean }>({
+const PROGRAMMER_TIMING = {
+	fade: true,
+	fadeMillis: 0,
+	delayMillis: null,
+} as const;
+
+registerPairedCueScenario<{ completed: boolean; showId: string }>({
 	id: "CUE-010",
 	title:
 		"tracking and LTP ownership stay per attribute and reveal the underlying programmer",
-	arrange: () => ({ completed: false }),
-	api: async ({ api, bench }, state) => {
-		await loadCanonicalCopy(
+	arrange: async ({ api, bench }, surface) => {
+		const show = await loadCanonicalCopy(
 			api,
 			bench,
-			"cue-010-attribute-tracking",
+			surface === "api"
+				? "cue-010-attribute-tracking"
+				: "cue-010-attribute-tracking-ui",
 			"compact-rig",
 		);
+		return { completed: false, showId: show.id };
+	},
+	api: async ({ api, bench }, state) => {
 		await setSequenceMasterFade(api, 0);
 		const fixtures = await fixtureIdsByNumber(api);
 		const rgb = fixtures[21];
@@ -54,10 +68,13 @@ registerPairedCueScenario<{ completed: boolean }>({
 			["green", 1],
 			["blue", 0],
 		] as const)
-			await api.command("programmer.set", {
-				fixture_id: rgb,
+			await setProgrammerFixtureValue(api, {
+				surface: "api",
+				showId: state.showId,
+				fixtureId: rgb,
 				attribute,
-				value,
+				value: { kind: "normalized", value },
+				timing: PROGRAMMER_TIMING,
 			});
 		await bench.tick(1);
 
@@ -82,12 +99,6 @@ registerPairedCueScenario<{ completed: boolean }>({
 		state.completed = true;
 	},
 	ui: async ({ api, bench, desk, page }, state) => {
-		await loadCanonicalCopy(
-			api,
-			bench,
-			"cue-010-attribute-tracking-ui",
-			"compact-rig",
-		);
 		await setSequenceMasterFade(api, 0);
 		const fixtures = await fixtureIdsByNumber(api);
 		const rgb = fixtures[21];
@@ -119,10 +130,13 @@ registerPairedCueScenario<{ completed: boolean }>({
 			["green", 1],
 			["blue", 0],
 		] as const)
-			await api.command("programmer.set", {
-				fixture_id: rgb,
+			await setProgrammerFixtureValue(api, {
+				surface: "api",
+				showId: state.showId,
+				fixtureId: rgb,
 				attribute,
-				value,
+				value: { kind: "normalized", value },
+				timing: PROGRAMMER_TIMING,
 			});
 		await bench.tick(1);
 		await desk.open(bench.baseUrl);
@@ -156,7 +170,7 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 		api,
 		bench,
 	}) => {
-		await loadCanonicalCopy(
+		const show = await loadCanonicalCopy(
 			api,
 			bench,
 			"cue-013-inactive-delete",
@@ -189,7 +203,10 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 		});
 		expect(logicalSlots(await bench.tick(0), 12)).toEqual(beforeSlots);
 
-		await api.executeCompatibilityProgrammerCommand({ family: "cue_delete", command: "DELETE SET 1 CUE 1" });
+		await api.executeCompatibilityProgrammerCommand({
+			family: "cue_delete",
+			command: "DELETE SET 1 CUE 1",
+		});
 		expect(
 			(await object<any>(api, "cue_list", installed.id)).body.cues.map(
 				(cue: any) => cue.number,
@@ -215,12 +232,15 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 		]);
 		const soleBefore = await object<any>(api, "cue_list", sole.id);
 		await expect(
-			api.executeCompatibilityProgrammerCommand({ family: "cue_delete", command: "DELETE SET 2 CUE 1" }),
+			api.executeCompatibilityProgrammerCommand({
+				family: "cue_delete",
+				command: "DELETE SET 2 CUE 1",
+			}),
 		).rejects.toThrow();
 		expect((await object<any>(api, "cue_list", sole.id)).body).toEqual(
 			soleBefore.body,
 		);
-		await api.command("programmer.clear", {});
+		await clearProgrammerValues(api, { surface: "api", showId: show.id });
 		await expect(
 			api.executeCommandLine("RECORD - SET 2 CUE 1"),
 		).rejects.toThrow();

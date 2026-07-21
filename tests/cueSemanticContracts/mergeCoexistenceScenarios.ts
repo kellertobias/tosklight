@@ -1,6 +1,11 @@
 import { ApiDriver } from "../../apps/control-ui/e2e/bench/api";
 import { expect, test } from "../../apps/control-ui/e2e/bench/fixtures";
 import { setProgrammerPriority } from "../../apps/control-ui/e2e/bench/programmerPriority";
+import {
+	clearProgrammerValues,
+	releaseProgrammerFixtureValue,
+	setProgrammerFixtureValue,
+} from "../../apps/control-ui/e2e/bench/programmerValues";
 import { fixtureIdsByNumber, loadCanonicalCopy } from "../support/catalog";
 import {
 	CUE_SEMANTIC_CONTRACTS,
@@ -14,12 +19,18 @@ import {
 	visualizationLevel,
 } from "./support";
 
+const PROGRAMMER_TIMING = {
+	fade: true,
+	fadeMillis: 0,
+	delayMillis: null,
+} as const;
+
 test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 	test("MERGE-001 @api › two programmer identities arbitrate by priority, HTP magnitude, and stable LTP edit time", async ({
 		api,
 		bench,
 	}) => {
-		await loadCanonicalCopy(
+		const show = await loadCanonicalCopy(
 			api,
 			bench,
 			"merge-001-two-programmers",
@@ -41,47 +52,23 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 		await second.login("Programmer B");
 		await setProgrammerPriority(first, { surface: "api", priority: 0 });
 		await setProgrammerPriority(second, { surface: "api", priority: 0 });
-		await first.command("programmer.set", {
-			fixture_id: fixtures[1],
-			attribute: "intensity",
-			value: 0.4,
-		});
+		await setFixtureValue(first, show.id, fixtures[1], "intensity", 0.4);
 		await bench.tick(1);
-		await second.command("programmer.set", {
-			fixture_id: fixtures[1],
-			attribute: "intensity",
-			value: 0.7,
-		});
+		await setFixtureValue(second, show.id, fixtures[1], "intensity", 0.7);
 		expect(slot(await bench.tick(0), 1)).toBe(179);
 
 		await setProgrammerPriority(first, { surface: "api", priority: 10 });
 		await setProgrammerPriority(second, { surface: "api", priority: 20 });
-		await first.command("programmer.set", {
-			fixture_id: fixtures[1],
-			attribute: "intensity",
-			value: 0.9,
-		});
-		await second.command("programmer.set", {
-			fixture_id: fixtures[1],
-			attribute: "intensity",
-			value: 0.2,
-		});
+		await setFixtureValue(first, show.id, fixtures[1], "intensity", 0.9);
+		await setFixtureValue(second, show.id, fixtures[1], "intensity", 0.2);
 		expect(slot(await bench.tick(0), 1)).toBe(51);
 
 		const rgb = fixtures[21];
 		await setProgrammerPriority(first, { surface: "api", priority: 10 });
 		await setProgrammerPriority(second, { surface: "api", priority: 10 });
-		await first.command("programmer.set", {
-			fixture_id: rgb,
-			attribute: "red",
-			value: 0.4,
-		});
+		await setFixtureValue(first, show.id, rgb, "red", 0.4);
 		await bench.tick(1);
-		await second.command("programmer.set", {
-			fixture_id: rgb,
-			attribute: "red",
-			value: 0.8,
-		});
+		await setFixtureValue(second, show.id, rgb, "red", 0.8);
 		expect(await visualizationAfterTick(api, bench, rgb, "red", 0)).toBe(0.8);
 		expect(await visualizationAfterTick(api, bench, rgb, "red", 0)).toBe(0.8);
 
@@ -93,21 +80,30 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 				),
 			),
 		).toHaveLength(2);
-		await second.command("programmer.release", {
-			fixture_id: rgb,
+		await releaseProgrammerFixtureValue(second, {
+			surface: "api",
+			showId: show.id,
+			fixtureId: rgb,
 			attribute: "red",
 		});
 		expect(await visualizationAfterTick(api, bench, rgb, "red", 0)).toBe(0.4);
 	});
 });
 
-registerPairedCueScenario<{ completed: boolean }>({
+registerPairedCueScenario<{ completed: boolean; showId: string }>({
 	id: "MERGE-002",
 	title:
 		"independent Sequences coexist and retrigger only their stored addresses",
-	arrange: () => ({ completed: false }),
+	arrange: async ({ api, bench }, surface) => {
+		const show = await loadCanonicalCopy(
+			api,
+			bench,
+			surface === "api" ? "merge-002-independent" : "merge-002-independent-ui",
+			"compact-rig",
+		);
+		return { completed: false, showId: show.id };
+	},
 	api: async ({ api, bench }, state) => {
-		await loadCanonicalCopy(api, bench, "merge-002-independent", "compact-rig");
 		await setSequenceMasterFade(api, 0);
 		const fixtures = await fixtureIdsByNumber(api);
 		const aFixture = fixtures[21];
@@ -145,21 +141,13 @@ registerPairedCueScenario<{ completed: boolean }>({
 		expect(await visualizationLevel(api, aFixture, "intensity")).toBe(0.6);
 		expect(await visualizationLevel(api, bFixture, "intensity")).toBe(0.4);
 
-		await api.command("programmer.set", {
-			fixture_id: aFixture,
-			attribute: "intensity",
-			value: 0.3,
-		});
+		await setFixtureValue(api, state.showId, aFixture, "intensity", 0.3);
 		for (const [attribute, value] of [
 			["red", 1],
 			["green", 0],
 			["blue", 0],
 		] as const)
-			await api.command("programmer.set", {
-				fixture_id: aFixture,
-				attribute,
-				value,
-			});
+			await setFixtureValue(api, state.showId, aFixture, attribute, value);
 		await bench.tick(0);
 		expect(await visualizationLevel(api, aFixture, "intensity")).toBe(0.6);
 		expect(await rgbValues(api, aFixture)).toEqual([1, 0, 0]);
@@ -171,22 +159,14 @@ registerPairedCueScenario<{ completed: boolean }>({
 		expect(await rgbValues(api, aFixture)).toEqual([0, 0, 1]);
 		expect(await rgbValues(api, bFixture)).toEqual([1, 0.7, 0.4]);
 
-		await api.command("programmer.set", {
-			fixture_id: bFixture,
-			attribute: "blue",
-			value: 0.8,
-		});
+		await setFixtureValue(api, state.showId, bFixture, "blue", 0.8);
 		await bench.tick(1);
 		await api.request("POST", "/api/v1/cuelists/1/go-to", { cue_number: 1 });
 		await bench.tick(0);
 		expect(await visualizationLevel(api, bFixture, "blue")).toBe(0.8);
 
 		await setProgrammerPriority(api, { surface: "api", priority: 110 });
-		await api.command("programmer.set", {
-			fixture_id: aFixture,
-			attribute: "red",
-			value: 1,
-		});
+		await setFixtureValue(api, state.showId, aFixture, "red", 1);
 		await bench.tick(1);
 		await api.request("POST", "/api/v1/cuelists/1/go-to", { cue_number: 1 });
 		await bench.tick(0);
@@ -196,7 +176,10 @@ registerPairedCueScenario<{ completed: boolean }>({
 		await bench.tick(0);
 		expect(await visualizationLevel(api, aFixture, "red")).toBe(0);
 
-		await api.command("programmer.clear", {});
+		await clearProgrammerValues(api, {
+			surface: "api",
+			showId: state.showId,
+		});
 		await api.request("POST", "/api/v1/cuelists/2/off", {});
 		await bench.tick(0);
 		expect(await visualizationLevel(api, aFixture, "intensity")).toBe(0.6);
@@ -207,12 +190,6 @@ registerPairedCueScenario<{ completed: boolean }>({
 		state.completed = true;
 	},
 	ui: async ({ api, bench, desk, page }, state) => {
-		await loadCanonicalCopy(
-			api,
-			bench,
-			"merge-002-independent-ui",
-			"compact-rig",
-		);
 		await setSequenceMasterFade(api, 0);
 		const fixtures = await fixtureIdsByNumber(api);
 		const aFixture = fixtures[21];
@@ -246,16 +223,8 @@ registerPairedCueScenario<{ completed: boolean }>({
 		await api.request("POST", "/api/v1/cuelists/1/go", {});
 		await api.request("POST", "/api/v1/cuelists/2/go", {});
 		await bench.tick(1);
-		await api.command("programmer.set", {
-			fixture_id: aFixture,
-			attribute: "red",
-			value: 1,
-		});
-		await api.command("programmer.set", {
-			fixture_id: bFixture,
-			attribute: "blue",
-			value: 0.8,
-		});
+		await setFixtureValue(api, state.showId, aFixture, "red", 1);
+		await setFixtureValue(api, state.showId, bFixture, "blue", 0.8);
 		await bench.tick(1);
 		expect(await visualizationLevel(api, bFixture, "blue")).toBe(0.8);
 		await desk.open(bench.baseUrl);
@@ -284,3 +253,20 @@ registerPairedCueScenario<{ completed: boolean }>({
 	},
 	assert: async (_context, state) => expect(state.completed).toBe(true),
 });
+
+function setFixtureValue(
+	api: ApiDriver,
+	showId: string,
+	fixtureId: string,
+	attribute: string,
+	value: number,
+) {
+	return setProgrammerFixtureValue(api, {
+		surface: "api",
+		showId,
+		fixtureId,
+		attribute,
+		value: { kind: "normalized", value },
+		timing: PROGRAMMER_TIMING,
+	});
+}

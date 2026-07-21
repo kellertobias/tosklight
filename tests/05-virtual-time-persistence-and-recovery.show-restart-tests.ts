@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
 import { mapExistingPlaybackToSlot } from "../apps/control-ui/e2e/bench/mapExistingPlaybackToSlot";
+import { setOutputRuntime } from "../apps/control-ui/e2e/bench/outputRuntime";
 import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
 import {
 	installGroupCue,
@@ -185,7 +186,12 @@ export function registerShow001ProcessRestartTest(): void {
 		await api.request("POST", "/api/v1/cuelists/1/go", {});
 		await api.executeCommandLine("FIXTURE 12 AT 65");
 		await bench.tick(0);
-		await api.command("master.set", { grand_master: 0.5, blackout: false });
+		await setOutputRuntime(api, {
+			surface: "api",
+			showId: copy.id,
+			grandMaster: 0.5,
+			blackout: false,
+		});
 		const durableBefore = await programmer(api);
 		const revision = await api.request<any>(
 			"POST",

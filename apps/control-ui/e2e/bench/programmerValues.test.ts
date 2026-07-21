@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ApiDriver } from "./api";
+import { ApiDriver } from "./api";
 import {
 	batchProgrammerValues,
 	clearProgrammerValues,

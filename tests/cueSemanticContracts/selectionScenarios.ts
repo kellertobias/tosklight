@@ -1,5 +1,9 @@
 import { expect } from "../../apps/control-ui/e2e/bench/fixtures";
 import {
+	clearProgrammerValues,
+	setProgrammerFixtureValue,
+} from "../../apps/control-ui/e2e/bench/programmerValues";
+import {
 	fixtureIdsByNumber,
 	loadCanonicalCopy,
 	object,
@@ -18,18 +22,28 @@ import {
 	setSequenceMasterFade,
 } from "./support";
 
-registerPairedCueScenario<{ completed: boolean }>({
+const PROGRAMMER_TIMING = {
+	fade: true,
+	fadeMillis: 0,
+	delayMillis: null,
+} as const;
+
+registerPairedCueScenario<{ completed: boolean; showId: string }>({
 	id: "CUE-006",
 	title:
 		"explicit playback selection supplies the implicit Cuelist without following execution order",
-	arrange: () => ({ completed: false }),
-	api: async ({ api, bench }, state) => {
-		await loadCanonicalCopy(
+	arrange: async ({ api, bench }, surface) => {
+		const show = await loadCanonicalCopy(
 			api,
 			bench,
-			"cue-006-active-playback",
+			surface === "api"
+				? "cue-006-active-playback"
+				: "cue-006-active-playback-ui",
 			"compact-rig",
 		);
+		return { completed: false, showId: show.id };
+	},
+	api: async ({ api, bench }, state) => {
 		await setSequenceMasterFade(api, 0);
 		const fixtures = await fixtureIdsByNumber(api);
 		const first = await installPlaybackSequence(api, 1, [
@@ -43,10 +57,13 @@ registerPairedCueScenario<{ completed: boolean }>({
 		await api.request("POST", "/api/v1/cuelists/1/go", {});
 		expect((await playbackState(api)).selected_playback).toBe(2);
 
-		await api.command("programmer.set", {
-			fixture_id: fixtures[3],
+		await setProgrammerFixtureValue(api, {
+			surface: "api",
+			showId: state.showId,
+			fixtureId: fixtures[3],
 			attribute: "intensity",
-			value: 0.7,
+			value: { kind: "normalized", value: 0.7 },
+			timing: PROGRAMMER_TIMING,
 		});
 		await api.executeCommandLine("RECORD CUE 7");
 		expect(
@@ -60,11 +77,17 @@ registerPairedCueScenario<{ completed: boolean }>({
 			),
 		).toEqual([1]);
 
-		await api.command("programmer.clear", {});
-		await api.command("programmer.set", {
-			fixture_id: fixtures[4],
+		await clearProgrammerValues(api, {
+			surface: "api",
+			showId: state.showId,
+		});
+		await setProgrammerFixtureValue(api, {
+			surface: "api",
+			showId: state.showId,
+			fixtureId: fixtures[4],
 			attribute: "intensity",
-			value: 0.6,
+			value: { kind: "normalized", value: 0.6 },
+			timing: PROGRAMMER_TIMING,
 		});
 		await api.executeCommandLine("RECORD SET 1 CUE 8");
 		expect(
@@ -76,12 +99,6 @@ registerPairedCueScenario<{ completed: boolean }>({
 		state.completed = true;
 	},
 	ui: async ({ api, bench, desk, page }, state) => {
-		await loadCanonicalCopy(
-			api,
-			bench,
-			"cue-006-active-playback-ui",
-			"compact-rig",
-		);
 		await setSequenceMasterFade(api, 0);
 		const fixtures = await fixtureIdsByNumber(api);
 		const first = await installPlaybackSequence(
@@ -115,10 +132,13 @@ registerPairedCueScenario<{ completed: boolean }>({
 			.poll(async () => runtime(api, 1))
 			.toMatchObject({ current_cue_number: 1, enabled: true });
 		expect((await playbackState(api)).selected_playback).toBe(2);
-		await api.command("programmer.set", {
-			fixture_id: fixtures[3],
+		await setProgrammerFixtureValue(api, {
+			surface: "api",
+			showId: state.showId,
+			fixtureId: fixtures[3],
 			attribute: "intensity",
-			value: 0.7,
+			value: { kind: "normalized", value: 0.7 },
+			timing: PROGRAMMER_TIMING,
 		});
 		await page.locator(".mode-toggle").click();
 		await pressCommand(page, "RECORD CUE 7", "RECORD CUE 7");

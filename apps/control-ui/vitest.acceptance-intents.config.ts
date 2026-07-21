@@ -5,6 +5,7 @@ export default defineConfig({
 		environment: "node",
 		include: [
 			"e2e/bench/mapExistingPlaybackToSlot.test.ts",
+			"e2e/bench/outputRuntime.test.ts",
 			"e2e/bench/programmerPreloadLifecycle.test.ts",
 			"e2e/bench/programmerPriority.test.ts",
 			"e2e/bench/programmerValues.test.ts",

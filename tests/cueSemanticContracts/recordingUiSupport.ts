@@ -1,5 +1,6 @@
 import type { BenchUiContext } from "../../apps/control-ui/e2e/bench/fixtures";
 import { expect } from "../../apps/control-ui/e2e/bench/fixtures";
+import { clearProgrammerValues } from "../../apps/control-ui/e2e/bench/programmerValues";
 import { object, objects, putObject } from "../support/catalog";
 import {
 	emptyPlaybackPage,
@@ -12,7 +13,7 @@ import {
 
 export const cue001Ui = async (
 	{ api, bench, desk, page }: BenchUiContext,
-	state: { completed: boolean },
+	state: { completed: boolean; showId: string },
 ) => {
 	await emptyPlaybackPage(api);
 	const beforeCuelists = new Set(
@@ -53,7 +54,10 @@ export const cue001Ui = async (
 		["GO −", "3", 1],
 		["FLASH", "1", 0.5],
 	] as const) {
-		await api.command("programmer.clear", {});
+		await clearProgrammerValues(api, {
+			surface: "api",
+			showId: state.showId,
+		});
 		await api.executeCommandLine(`GROUP ${group} AT ${level * 100}`);
 		await page.getByRole("button", { name: "REC", exact: true }).click();
 		const card = page
@@ -89,7 +93,10 @@ export const cue001Ui = async (
 		["ON", "3", 0.3],
 		["OFF", "1", 0.4],
 	].entries()) {
-		await api.command("programmer.clear", {});
+		await clearProgrammerValues(api, {
+			surface: "api",
+			showId: state.showId,
+		});
 		await api.executeCommandLine(`GROUP ${group} AT ${level * 100}`);
 		await page.getByRole("button", { name: "REC", exact: true }).click();
 		const card = page

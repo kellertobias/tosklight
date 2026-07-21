@@ -1,5 +1,9 @@
 import { expect } from "../../apps/control-ui/e2e/bench/fixtures";
 import {
+	clearProgrammerValues,
+	setProgrammerGroupValue,
+} from "../../apps/control-ui/e2e/bench/programmerValues";
+import {
 	fixtureIdsByNumber,
 	loadCanonicalCopy,
 	object,
@@ -17,13 +21,26 @@ import {
 	visualizationLevel,
 } from "./support";
 
-registerPairedCueScenario<{ completed: boolean }>({
+const PROGRAMMER_TIMING = {
+	fade: true,
+	fadeMillis: 0,
+	delayMillis: null,
+} as const;
+
+registerPairedCueScenario<{ completed: boolean; showId: string }>({
 	id: "CUE-002",
 	title:
 		"Cue-only restoration reconstructs identically for sequential GO and direct jumps",
-	arrange: () => ({ completed: false }),
+	arrange: async ({ api, bench }, surface) => {
+		const show = await loadCanonicalCopy(
+			api,
+			bench,
+			surface === "api" ? "cue-002-cue-only" : "cue-002-visible-cue-only",
+			"compact-rig",
+		);
+		return { completed: false, showId: show.id };
+	},
 	api: async ({ api, bench }, state) => {
-		await loadCanonicalCopy(api, bench, "cue-002-cue-only", "compact-rig");
 		await setSequenceMasterFade(api, 0);
 		const fixtures = await fixtureIdsByNumber(api);
 		const installed = await installPlaybackSequence(api, 1, [
@@ -70,12 +87,6 @@ registerPairedCueScenario<{ completed: boolean }>({
 		state.completed = true;
 	},
 	ui: async ({ api, bench, desk, page }, state) => {
-		const show = await loadCanonicalCopy(
-			api,
-			bench,
-			"cue-002-visible-cue-only",
-			"compact-rig",
-		);
 		await installCompactGroups(api);
 		await setSequenceMasterFade(api, 0);
 		const installed = await installPlaybackSequence(
@@ -84,10 +95,13 @@ registerPairedCueScenario<{ completed: boolean }>({
 			[groupCue(1, [["1", "intensity", 0.3]])],
 			{ priority: 100 },
 		);
-		await api.command("programmer.group.set", {
-			group_id: "1",
+		await setProgrammerGroupValue(api, {
+			surface: "api",
+			showId: state.showId,
+			groupId: "1",
 			attribute: "intensity",
-			value: 0.8,
+			value: { kind: "normalized", value: 0.8 },
+			timing: PROGRAMMER_TIMING,
 		});
 		await desk.open(bench.baseUrl);
 		await page.locator(".mode-toggle").click();
@@ -107,7 +121,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 					(await object<any>(api, "cue_list", installed.id)).body.cues.length,
 			)
 			.toBe(2);
-		await api.request("POST", `/api/v1/shows/${show.id}/open`, {
+		await api.request("POST", `/api/v1/shows/${state.showId}/open`, {
 			transition: "hold_current",
 		});
 		await expect
@@ -118,11 +132,17 @@ registerPairedCueScenario<{ completed: boolean }>({
 			)
 			.toBe(true);
 
-		await api.command("programmer.clear", {});
-		await api.command("programmer.group.set", {
-			group_id: "2",
+		await clearProgrammerValues(api, {
+			surface: "api",
+			showId: state.showId,
+		});
+		await setProgrammerGroupValue(api, {
+			surface: "api",
+			showId: state.showId,
+			groupId: "2",
 			attribute: "intensity",
-			value: 0.6,
+			value: { kind: "normalized", value: 0.6 },
+			timing: PROGRAMMER_TIMING,
 		});
 		await setCueOnlyFromUi(page, false);
 		await page.getByRole("button", { name: "REC", exact: true }).click();
@@ -151,7 +171,10 @@ registerPairedCueScenario<{ completed: boolean }>({
 			),
 		).toMatchObject({ automatic_restore: true });
 
-		await api.command("programmer.clear", {});
+		await clearProgrammerValues(api, {
+			surface: "api",
+			showId: state.showId,
+		});
 		await api.request("POST", "/api/v1/cuelists/1/off", {});
 		const states: number[][] = [];
 		for (let index = 0; index < 3; index += 1) {

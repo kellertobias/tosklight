@@ -5,6 +5,10 @@ import {
 	releaseProgrammerPreload,
 } from "../../apps/control-ui/e2e/bench/programmerPreloadLifecycle";
 import {
+	clearProgrammerValues,
+	setProgrammerGroupValue,
+} from "../../apps/control-ui/e2e/bench/programmerValues";
+import {
 	loadCanonicalCopy,
 	object,
 	objects,
@@ -29,6 +33,12 @@ import {
 	setSequenceMasterFade,
 	showObjectEventAfter,
 } from "./support";
+
+const PROGRAMMER_TIMING = {
+	fade: true,
+	fadeMillis: 0,
+	delayMillis: null,
+} as const;
 
 registerPairedCueScenario<{ completed: boolean; showId: string }>({
 	id: "CUE-008",
@@ -134,19 +144,19 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 	assert: async (_context, state) => expect(state.completed).toBe(true),
 });
 
-registerPairedCueScenario<{ completed: boolean }>({
+registerPairedCueScenario<{ completed: boolean; showId: string }>({
 	id: "CUE-001",
 	title:
 		"Record targets playbacks while decimal insertion and Record operations preserve tracking",
 	arrange: async ({ api, bench }, surface) => {
-		await loadCanonicalCopy(
+		const show = await loadCanonicalCopy(
 			api,
 			bench,
 			`cue-001-record-and-replay-${surface}`,
 			"compact-rig",
 		);
 		await installCompactGroups(api);
-		return { completed: false };
+		return { completed: false, showId: show.id };
 	},
 	api: async ({ api, bench }, state) => {
 		await setSequenceMasterFade(api, 0);
@@ -158,10 +168,13 @@ registerPairedCueScenario<{ completed: boolean }>({
 			]),
 		]);
 
-		await api.command("programmer.group.set", {
-			group_id: "3",
+		await setProgrammerGroupValue(api, {
+			surface: "api",
+			showId: state.showId,
+			groupId: "3",
 			attribute: "intensity",
-			value: 1,
+			value: { kind: "normalized", value: 1 },
+			timing: PROGRAMMER_TIMING,
 		});
 		await api.executeCommandLine("RECORD SET 1 CUE 1.5");
 		let stored = await object<any>(api, "cue_list", installed.id);
@@ -189,7 +202,10 @@ registerPairedCueScenario<{ completed: boolean }>({
 			}));
 		expect(cueSemantics(pageStored.body)).toEqual(cueSemantics(stored.body));
 
-		await api.command("programmer.clear", {});
+		await clearProgrammerValues(api, {
+			surface: "api",
+			showId: state.showId,
+		});
 		const trackedSequence = [
 			[1, 0, 0],
 			[1, 0, 1],
@@ -203,10 +219,13 @@ registerPairedCueScenario<{ completed: boolean }>({
 		}
 		await api.request("POST", "/api/v1/cuelists/1/off", {});
 
-		await api.command("programmer.group.set", {
-			group_id: "2",
+		await setProgrammerGroupValue(api, {
+			surface: "api",
+			showId: state.showId,
+			groupId: "2",
 			attribute: "intensity",
-			value: 0.8,
+			value: { kind: "normalized", value: 0.8 },
+			timing: PROGRAMMER_TIMING,
 		});
 		await api.executeCommandLine("RECORD + SET 1 CUE 2");
 		stored = await object<any>(api, "cue_list", installed.id);
@@ -214,11 +233,17 @@ registerPairedCueScenario<{ completed: boolean }>({
 			groupValues(stored.body.cues.find((cue: any) => cue.number === 2)),
 		).toEqual({ "2:intensity": 0.8, "2:red": 0.2 });
 
-		await api.command("programmer.clear", {});
-		await api.command("programmer.group.set", {
-			group_id: "2",
+		await clearProgrammerValues(api, {
+			surface: "api",
+			showId: state.showId,
+		});
+		await setProgrammerGroupValue(api, {
+			surface: "api",
+			showId: state.showId,
+			groupId: "2",
 			attribute: "red",
-			value: 0.9,
+			value: { kind: "normalized", value: 0.9 },
+			timing: PROGRAMMER_TIMING,
 		});
 		await api.executeCommandLine("RECORD - SET 1 CUE 2");
 		stored = await object<any>(api, "cue_list", installed.id);
@@ -226,7 +251,10 @@ registerPairedCueScenario<{ completed: boolean }>({
 			groupValues(stored.body.cues.find((cue: any) => cue.number === 2)),
 		).toEqual({ "2:intensity": 0.8 });
 
-		await api.command("programmer.clear", {});
+		await clearProgrammerValues(api, {
+			surface: "api",
+			showId: state.showId,
+		});
 		const beforeDelete = stored.body;
 		const stream = await openEventStream(api);
 		try {
@@ -252,7 +280,10 @@ registerPairedCueScenario<{ completed: boolean }>({
 				afterRecordMinus.revision,
 			);
 			mark = stream.events.length;
-			await api.executeCompatibilityProgrammerCommand({ family: "cue_delete", command: "DELETE SET 1 CUE 2" });
+			await api.executeCompatibilityProgrammerCommand({
+				family: "cue_delete",
+				command: "DELETE SET 1 CUE 2",
+			});
 			const deleteEvent = await showObjectEventAfter(
 				stream.events,
 				mark,
