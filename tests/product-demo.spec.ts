@@ -397,7 +397,7 @@ test("@ui narrates the complete Full HD product demo surface in one regression r
   } finally {
     if (video) {
       await fs.mkdir(path.dirname(VIDEO), { recursive: true });
-      // Register the durable copy before page closure. The dedicated `./test demo` result directory
+      // Register the durable copy before page closure. The dedicated `npm run test:demo` result directory
       // prevents unrelated concurrent Playwright runs from deleting the source recording.
       const saveVideo = video.saveAs(VIDEO);
       await page.close();

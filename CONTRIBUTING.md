@@ -55,10 +55,10 @@ Before submitting a change, run the smallest relevant checks for the area you
 changed. Common checks include:
 
 ```sh
-./test unit
-./test e2e-api
-./test e2e-ui
-./test e2e tests/<focused-spec>.spec.ts
+npm run test:unit
+npm run test:e2e-api
+npm run test:e2e-ui
+npm run test:e2e -- tests/<focused-spec>.spec.ts
 ```
 
 Keep changes focused, preserve existing show compatibility unless a migration

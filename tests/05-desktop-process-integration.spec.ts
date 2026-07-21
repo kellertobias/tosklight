@@ -12,7 +12,7 @@ const enabled = process.env.LIGHT_DESKTOP_SMOKE === "1";
 
 test.describe("docs/testing/05-virtual-time-persistence-and-recovery.md · packaged desktop", () => {
   test.describe.configure({ mode: "serial" });
-  test.skip(!enabled, "Run through ./test desktop-smoke after building the macOS app bundle.");
+  test.skip(!enabled, "Run through npm run test:desktop-smoke after building the macOS app bundle.");
   test.setTimeout(120_000);
 
   test("DESKTOP-001 @desktop › packaged app owns and terminates its exact child server", async () => {

@@ -15,7 +15,7 @@ Start with the [quickstart help](docs/help/00-quickstart.markdown) or browse the
 ## Run the server
 
 ```sh
-./dev
+npm run dev
 ```
 
 Open `http://127.0.0.1:5000`. A new desk contains an enabled `Operator` user. Use `--bind 0.0.0.0:5000` only on a trusted control network.
@@ -25,29 +25,29 @@ Set `LIGHT_DESK_TOKEN` when exposing the server on a LAN. API clients then send 
 ## Development and builds
 
 ```sh
-./dev                    # server + Tauri app with UI hot reload
-./build open             # debug builds, stop old instances, and open the app
-./build manual           # PDF and deployable HTML manuals from docs/help Markdown
-./build archive          # self-contained server ZIPs for macOS, Windows, Linux AMD64, and Linux ARM64
-./build archive install  # build archives and install/open ~/Applications/ToskLight.app
-./build migrate-artifacts # explicitly move legacy ./light-data into .artifacts/runtime/
-./build clean             # remove reproducible artifacts while preserving runtime data
+npm run dev                    # server + Tauri app with UI hot reload
+npm run open             # debug builds, stop old instances, and open the app
+npm run manual           # PDF and deployable HTML manuals from docs/help Markdown
+npm run bundle          # self-contained server ZIPs for macOS, Windows, Linux AMD64, and Linux ARM64
+npm run bundle:install  # build archives and install/open ~/Applications/ToskLight.app
+npm run migrate-artifacts # explicitly move legacy ./light-data into .artifacts/runtime/
+npm run clean             # remove reproducible artifacts while preserving runtime data
 ```
 
 The generated manuals are written to `.artifacts/generated/manual/pdf/tosklight-manual.pdf` and
 `.artifacts/generated/manual/html/tosklight-manual/index.html`. The webhost-ready package is
 `.artifacts/generated/manual/html/tosklight-manual-html.zip`; extract it directly into a document
 root to deploy the single-page manual and its images.
-Use `./test help-screenshots` to intentionally refresh the application images
+Use `npm run test:help-screenshots` to intentionally refresh the application images
 consumed by the Help window, PDF, and HTML manual. See the
 [manual authoring guide](docs/help/99-Development/04-manual-and-help-screenshots.md) for the Markdown and screenshot
 contract.
 
 Repository-owned assets live under `assets/`. The transferable shipped
-fixture packages are in `assets/fixture-library/`; a successful `./test demo`
+fixture packages are in `assets/fixture-library/`; a successful `npm run test:demo`
 atomically refreshes the completed portable show at `assets/demo.show`.
 
-`./build archive` ships the web UI inside each `light-server` binary. It creates a
+`npm run bundle` ships the web UI inside each `light-server` binary. It creates a
 universal macOS binary plus Windows, Linux AMD64, and Linux ARM64 binaries in
 `.artifacts/release/`; Linux binaries are statically linked. Building the non-macOS
 targets requires `zig`, `cargo-zigbuild`, and the Rust targets named by the
@@ -55,9 +55,9 @@ build script. The portable Linux binaries omit native USB-MIDI because it
 depends on the target machine's ALSA library; RTP-MIDI, OSC, and network output
 remain available.
 
-Both local run commands store desk data in `.artifacts/runtime/light-data/` by default. Existing `./light-data` state is never moved implicitly: run `./build migrate-artifacts` once after reviewing the destination. If both locations contain data, the command stops without merging them. Set `LIGHT_DATA_DIR` to use a different directory. The app talks to the server on `127.0.0.1:5000`; `./dev` restarts cleanly as one foreground environment, while backend source changes currently require restarting the command.
+Both local run commands store desk data in `.artifacts/runtime/light-data/` by default. Existing `./light-data` state is never moved implicitly: run `npm run migrate-artifacts` once after reviewing the destination. If both locations contain data, the command stops without merging them. Set `LIGHT_DATA_DIR` to use a different directory. The app talks to the server on `127.0.0.1:5000`; `npm run dev` restarts cleanly as one foreground environment, while backend source changes currently require restarting the command.
 
-All repository-local build products, manuals, release packages, test evidence, caches, and scratch files live below ignored `.artifacts/`. `./build clean` removes only reproducible subtrees and preserves the active development runtime. Runtime removal is deliberately separate and prints the exact confirmation command because it includes local shows and desk state.
+All repository-local build products, manuals, release packages, test evidence, caches, and scratch files live below ignored `.artifacts/`. `npm run clean` removes only reproducible subtrees and preserves the active development runtime. Runtime removal is deliberately separate and prints the exact confirmation command because it includes local shows and desk state.
 
 The server maintains:
 
@@ -103,7 +103,7 @@ Show objects use the kinds `patched_fixture`, `cue_list`, and `route` for the li
 
 ## Verification
 
-[Build and test commands](docs/engineering/build-and-test-commands.md) documents every `./dev`, `./build`, and `./test` subcommand, what `./test architecture` enforces, and which check to run for which change.
+[Build and test commands](docs/engineering/build-and-test-commands.md) documents every `npm run` dev, build, and test script, what `npm run test:architecture` enforces, and which check to run for which change.
 
 All persisted-data changes are also governed by the [backward-compatibility acceptance criteria](docs/acceptance-criteria.md). A feature is not complete until legacy-file behavior is migrated and tested, or the compatibility requirement has been explicitly decided with the operator.
 

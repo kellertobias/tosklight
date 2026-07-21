@@ -61,17 +61,17 @@ Honor the narrowest requested scope. If the request says to edit planning or tes
 Start with the smallest relevant checks, then widen according to risk:
 
 ```sh
-./test unit
-./test e2e-api
-./test e2e-ui
-./test e2e tests/<focused-spec>.spec.ts
-./test desktop-smoke
-./build open
+npm run test:unit
+npm run test:e2e-api
+npm run test:e2e-ui
+npm run test:e2e -- tests/<focused-spec>.spec.ts
+npm run test:desktop-smoke
+npm run open
 ```
 
 For direct package checks, use the current repository scripts and manifests. Prefer `cargo fmt` for Rust formatting; do not run standalone `rustfmt` against workspace files.
 
-When real operator behavior changed, `./build open` is the authoritative desktop path. After launch:
+When real operator behavior changed, `npm run open` is the authoritative desktop path. After launch:
 
 ```sh
 curl -fsS http://127.0.0.1:5000/api/v1/readiness
@@ -84,8 +84,8 @@ If the app looks stale, verify the bundle opened by the current `build` script b
 ## Documentation and screenshots
 
 - The Markdown files under `docs/help` remain the source of truth for both in-app help and the PDF manual.
-- Use `./build manual` to generate and verify the manual.
-- Use `./test help-screenshots` only when intentionally refreshing help screenshots.
+- Use `npm run manual` to generate and verify the manual.
+- Use `npm run test:help-screenshots` only when intentionally refreshing help screenshots.
 - Check screenshot diffs visually and keep them tied to stable, representative operator states.
 
 ## Working tree and commits

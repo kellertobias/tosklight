@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Stamp the workspace version into the assembled landing page and build its screenshot
-// gallery from the help screenshots that `./test help-screenshots` regenerates.
+// gallery from the help screenshots that `npm run test:help-screenshots` regenerates.
 
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";

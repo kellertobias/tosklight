@@ -1,14 +1,15 @@
 # Build and Test Commands
 
-Every supported workflow runs through three repository-root scripts: `./dev`, `./build`, and
-`./test`. Prefer them over calling `cargo`, `npm`, or `playwright` directly — they resolve artifact
-paths, generate Tauri configs, and compose the steps in the right order.
+Every supported workflow runs through the root `package.json` scripts (`npm run …`), which are
+backed by `tools/dev.sh`, `tools/build.sh`, and `tools/test.sh`. Prefer them over calling `cargo`,
+`npm`, or `playwright` directly — they resolve artifact paths, generate Tauri configs, and compose
+the steps in the right order. Run `npm run` to list every script.
 
 - [Quick reference](#quick-reference)
-- [`./dev`](#dev)
-- [`./build`](#build)
-- [`./test`](#test)
-- [What `./test architecture` actually checks](#what-test-architecture-actually-checks)
+- [`npm run dev`](#dev)
+- [`npm run` build scripts](#build)
+- [`npm run test` scripts](#test)
+- [What `npm run test:architecture` actually checks](#what-test-architecture-actually-checks)
 - [Verification ladder](#verification-ladder)
 - [Other tools](#other-tools)
 - [Artifact paths](#artifact-paths)
@@ -17,51 +18,51 @@ paths, generate Tauri configs, and compose the steps in the right order.
 ## Quick reference
 
 ```sh
-./dev                        # server + Tauri app with UI hot reload
-./build open                 # debug builds, stop old instances, open the app
-./build manual               # PDF and HTML manuals from docs/help
-./build archive [install]    # release artifacts for macOS, Windows, Linux
-./build clean                # remove reproducible artifacts
-./build path NAME            # resolve an artifact path
+npm run dev                        # server + Tauri app with UI hot reload
+npm run open                 # debug builds, stop old instances, open the app
+npm run manual               # PDF and HTML manuals from docs/help
+npm run bundle [install]    # release artifacts for macOS, Windows, Linux
+npm run clean                # remove reproducible artifacts
+npm run artifact-path -- NAME            # resolve an artifact path
 
-./test architecture          # dependency direction + source size
-./test unit                  # architecture + tsc/vite + cargo + vitest
-./test e2e-api               # Playwright @api, no browser
-./test e2e-ui                # Playwright @ui, real Chrome
-./test e2e [spec]            # everything, or one focused spec
-./test desktop-smoke         # packaged .app process integration (macOS)
-./test help-screenshots      # regenerate help images — only when intentional
-./test all                   # unit then e2e
+npm run test:architecture          # dependency direction + source size
+npm run test:unit                  # architecture + tsc/vite + cargo + vitest
+npm run test:e2e-api               # Playwright @api, no browser
+npm run test:e2e-ui                # Playwright @ui, real Chrome
+npm run test:e2e -- [spec]            # everything, or one focused spec
+npm run test:desktop-smoke         # packaged .app process integration (macOS)
+npm run test:help-screenshots      # regenerate help images — only when intentional
+npm run test:all                   # unit then e2e
 
 cargo run -p light-wire --example generate-contracts   # regenerate wire TS + schemas
 cargo fmt                                              # never standalone rustfmt
 ```
 
-## `./dev`
+## `npm run dev`
 
 Hot-reload development loop. Starts `cargo run -p light-server` in the foreground against the
 artifact data directory and `assets/fixture-library`, waits for readiness, then runs the control-UI
 Tauri dev server.
 
-UI and Tauri changes hot-reload. **Rust changes require restarting `./dev`.** It traps EXIT/INT/TERM
+UI and Tauri changes hot-reload. **Rust changes require restarting `npm run dev`.** It traps EXIT/INT/TERM
 so the server is killed with it.
 
 Open `http://127.0.0.1:5000`. A new desk contains one enabled `Operator` user.
 
-## `./build`
+## `npm run` build scripts
 
 | Command | What it does |
 | --- | --- |
-| `./build open` | The authoritative desktop path. Checks runtime migration, stops running instances (launchd + `light-server`/`ToskLight`/vite), writes Tauri configs, `npm ci` in both apps, builds the control UI, builds `light-server`, builds both Tauri debug bundles, copies the server binary into `ToskLight.app/Contents/MacOS/light-server`, submits the server as launchd job `de.tokenet.tosklight.dev-server`, waits for readiness, **verifies the launchd PID owns that readiness**, and opens the app. |
-| `./build manual` | Auto-provisions a pinned Python venv at `.artifacts/cache/manual-venv`, then builds and verifies the PDF and the HTML manual. See the [manual authoring guide](../help/99-Development/04-manual-and-help-screenshots.md). |
-| `./build archive` | Cross-platform release. macOS universal binary via `lipo`, plus Windows `x86_64-pc-windows-gnu` and Linux `x86_64`/`aarch64-unknown-linux-musl` via `cargo zigbuild`. Release Tauri bundles for both apps; each server zipped with `assets/fixture-library`. Requires `cargo, npm, ditto, zip, lipo, rustup, cargo-zigbuild, zig`. |
-| `./build archive install` | The above, then install into `~/Applications` and open. |
-| `./build migrate-artifacts` | Explicitly moves legacy `./light-data` into `.artifacts/runtime/light-data`. Never implicit; stops without merging if both exist. |
-| `./build clean` | Removes reproducible artifacts, preserving the active development runtime. |
-| `./build clean runtime PATH` | Removes runtime data. Deliberately separate and requires the exact absolute path, because it includes local shows and desk state. |
-| `./build path NAME` | Prints a resolved path: `root, cargo, manual-pdf, manual-html, release, runtime, test-results, playwright-report, visual-inspection`. |
+| `npm run open` | The authoritative desktop path. Checks runtime migration, stops running instances (launchd + `light-server`/`ToskLight`/vite), writes Tauri configs, `npm ci` in both apps, builds the control UI, builds `light-server`, builds both Tauri debug bundles, copies the server binary into `ToskLight.app/Contents/MacOS/light-server`, submits the server as launchd job `de.tokenet.tosklight.dev-server`, waits for readiness, **verifies the launchd PID owns that readiness**, and opens the app. |
+| `npm run manual` | Auto-provisions a pinned Python venv at `.artifacts/cache/manual-venv`, then builds and verifies the PDF and the HTML manual. See the [manual authoring guide](../help/99-Development/04-manual-and-help-screenshots.md). |
+| `npm run bundle` | Cross-platform release. macOS universal binary via `lipo`, plus Windows `x86_64-pc-windows-gnu` and Linux `x86_64`/`aarch64-unknown-linux-musl` via `cargo zigbuild`. Release Tauri bundles for both apps; each server zipped with `assets/fixture-library`. Requires `cargo, npm, ditto, zip, lipo, rustup, cargo-zigbuild, zig`. |
+| `npm run bundle:install` | The above, then install into `~/Applications` and open. |
+| `npm run migrate-artifacts` | Explicitly moves legacy `./light-data` into `.artifacts/runtime/light-data`. Never implicit; stops without merging if both exist. |
+| `npm run clean` | Removes reproducible artifacts, preserving the active development runtime. |
+| `npm run clean -- runtime PATH` | Removes runtime data. Deliberately separate and requires the exact absolute path, because it includes local shows and desk state. |
+| `npm run artifact-path -- NAME` | Prints a resolved path: `root, cargo, manual-pdf, manual-html, release, runtime, test-results, playwright-report, visual-inspection`. |
 
-After `./build open`:
+After `npm run open`:
 
 ```sh
 curl -fsS http://127.0.0.1:5000/api/v1/readiness
@@ -74,23 +75,23 @@ readiness is healthy but the app looks stuck, time `/api/v1/readiness`, `/api/v1
 **If the app looks stale, verify which bundle the build script actually opened before reworking UI
 code.**
 
-## `./test`
+## `npm run test` scripts
 
 | Command | What it runs |
 | --- | --- |
-| `./test architecture` | `tools/check-architecture.mjs`, the source-size unit tests, and `tools/check-source-size.mjs`. See [below](#what-test-architecture-actually-checks). |
-| `./test unit` | `architecture` → control-UI `npm run build` (`tsc --noEmit && vite build`) → `cargo test --workspace --exclude light-control-ui --exclude light-hardware-controls --no-default-features` → `npm test` (vitest). |
-| `./test e2e [args]` | Builds the UI and server, then Playwright with the root config. |
-| `./test e2e-api` | Playwright `--grep '@api'`. Process-level, no browser. |
-| `./test e2e-ui` | Playwright `--grep '@ui'`. Real Chrome. |
-| `./test e2e-supplemental` | `--grep-invert '@api\|@ui'` — the `@osc`, `@wire`, `@restart`, `@desktop`, `@bench` tags. |
-| `./test desktop-smoke` | macOS only. Builds the Tauri debug bundle, copies the server binary in, runs `tests/05-desktop-process-integration.spec.ts` with `LIGHT_DESKTOP_SMOKE=1`. |
-| `./test help-screenshots` | **Wipes and regenerates** `docs/help/assets/screenshots/`. Only run when intentionally refreshing images, and review the diffs visually. |
-| `./test record` | Serial narrated video of the whole catalog, assembled with ffmpeg into `.artifacts/test/visual-inspection/`. |
-| `./test demo` | The product walkthrough; refreshes `assets/demo.show`. |
-| `./test app-icons` | Asserts the required Tauri icon set for both apps. |
-| `./test artifact-paths` | Self-test of the artifact path bindings across bash, Node, and Python. |
-| `./test all` | `unit` then `e2e`. |
+| `npm run test:architecture` | `tools/check-architecture.mjs`, the source-size unit tests, and `tools/check-source-size.mjs`. See [below](#what-test-architecture-actually-checks). |
+| `npm run test:unit` | `architecture` → control-UI `npm run build` (`tsc --noEmit && vite build`) → `cargo test --workspace --exclude light-control-ui --exclude light-hardware-controls --no-default-features` → `npm test` (vitest). |
+| `npm run test:e2e -- [args]` | Builds the UI and server, then Playwright with the root config. |
+| `npm run test:e2e-api` | Playwright `--grep '@api'`. Process-level, no browser. |
+| `npm run test:e2e-ui` | Playwright `--grep '@ui'`. Real Chrome. |
+| `npm run test:e2e-supplemental` | `--grep-invert '@api\|@ui'` — the `@osc`, `@wire`, `@restart`, `@desktop`, `@bench` tags. |
+| `npm run test:desktop-smoke` | macOS only. Builds the Tauri debug bundle, copies the server binary in, runs `tests/05-desktop-process-integration.spec.ts` with `LIGHT_DESKTOP_SMOKE=1`. |
+| `npm run test:help-screenshots` | **Wipes and regenerates** `docs/help/assets/screenshots/`. Only run when intentionally refreshing images, and review the diffs visually. |
+| `npm run test:record` | Serial narrated video of the whole catalog, assembled with ffmpeg into `.artifacts/test/visual-inspection/`. |
+| `npm run test:demo` | The product walkthrough; refreshes `assets/demo.show`. |
+| `npm run test:app-icons` | Asserts the required Tauri icon set for both apps. |
+| `npm run test:artifact-paths` | Self-test of the artifact path bindings across bash, Node, and Python. |
+| `npm run test:all` | `unit` then `e2e`. |
 
 Test layering:
 
@@ -106,7 +107,7 @@ command-line HTTP API, or explicit deterministic bench controls. `pairedScenario
 `@api` and a `@ui` test with the same arrangement and the same assert oracle, which is how surface
 parity is proven rather than assumed. See [test map](test-map.md) and `docs/testing/README.md`.
 
-## What `./test architecture` actually checks
+## What `npm run test:architecture` actually checks
 
 It is the machine-enforced half of this repository's architecture rules. Convention is not relied
 on: if a boundary matters, it is checked here.
@@ -169,9 +170,9 @@ Split by responsibility, abstraction level, ownership, and test boundary — not
 
 ### Related contract check
 
-Not part of `./test architecture`, but the same family: `crates/wire/tests/generated_contracts.rs`
+Not part of `npm run test:architecture`, but the same family: `crates/wire/tests/generated_contracts.rs`
 re-renders every generated artifact in memory and asserts byte equality with the checked-in files,
-so a stale `light-wire.ts` fails `cargo test` (and therefore `./test unit`). Regenerate with:
+so a stale `light-wire.ts` fails `cargo test` (and therefore `npm run test:unit`). Regenerate with:
 
 ```sh
 cargo run -p light-wire --example generate-contracts
@@ -183,16 +184,16 @@ Start with the smallest relevant check, then widen by risk.
 
 | You changed | Run |
 | --- | --- |
-| Module boundaries, crate deps, file sizes | `./test architecture` |
-| Rust domain or application logic | `cargo test -p <crate>`, then `./test unit` |
-| Wire DTOs | regenerate contracts, then `./test unit` |
-| Frontend logic | `npm test` in `apps/control-ui`, then `./test unit` |
-| Operator-visible behaviour | `./test e2e-api` and `./test e2e-ui`, or `./test e2e tests/<spec>.spec.ts` |
-| OSC, restart, or wire behaviour | `./test e2e-supplemental` |
-| Desktop lifecycle, native windows, server supervision | `./test desktop-smoke` |
-| `docs/help/` content | `./dev` to check live help, then `./build manual` |
-| Panes, or anything the help images show | `./test help-screenshots`, then review diffs visually |
-| Real operator behaviour, before handoff | `./build open` |
+| Module boundaries, crate deps, file sizes | `npm run test:architecture` |
+| Rust domain or application logic | `cargo test -p <crate>`, then `npm run test:unit` |
+| Wire DTOs | regenerate contracts, then `npm run test:unit` |
+| Frontend logic | `npm test` in `apps/control-ui`, then `npm run test:unit` |
+| Operator-visible behaviour | `npm run test:e2e-api` and `npm run test:e2e-ui`, or `npm run test:e2e -- tests/<spec>.spec.ts` |
+| OSC, restart, or wire behaviour | `npm run test:e2e-supplemental` |
+| Desktop lifecycle, native windows, server supervision | `npm run test:desktop-smoke` |
+| `docs/help/` content | `npm run dev` to check live help, then `npm run manual` |
+| Panes, or anything the help images show | `npm run test:help-screenshots`, then review diffs visually |
+| Real operator behaviour, before handoff | `npm run open` |
 
 Use `cargo fmt` for Rust formatting. Do not run standalone `rustfmt` against workspace files.
 
@@ -225,7 +226,7 @@ Everything reproducible lives under ignored `.artifacts/`:
 ```
 
 Override the root with `LIGHT_ARTIFACTS_DIR`, or the data directory with `LIGHT_DATA_DIR`. Resolve
-any path for a script with `./build path NAME`.
+any path for a script with `npm run artifact-path -- NAME`.
 
 ## CI
 
@@ -233,9 +234,9 @@ any path for a script with `./build path NAME`.
 
 | Job | Runner | Runs |
 | --- | --- | --- |
-| `unit` | ubuntu | `./test unit` |
-| `e2e` | ubuntu, sharded matrix over `api`/`ui`/`supplemental` | `./test e2e-*`, uploading `.artifacts/test/results` on failure |
-| `desktop-smoke` | macos-14 | `./test desktop-smoke` |
+| `unit` | ubuntu | `npm run test:unit` |
+| `e2e` | ubuntu, sharded matrix over `api`/`ui`/`supplemental` | `npm run test:e2e-*`, uploading `.artifacts/test/results` on failure |
+| `desktop-smoke` | macos-14 | `npm run test:desktop-smoke` |
 
 Manual and release CI runs on Forgejo (`.forgejo/workflows/manual.yml`): the manual builds on PR and
 main, and on `v*` tags the PDF and HTML archive are attached to the release. PR builds never receive

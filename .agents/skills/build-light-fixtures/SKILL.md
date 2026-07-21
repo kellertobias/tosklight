@@ -45,7 +45,7 @@ cargo test -p light-fixture
 cargo check -p light-server
 (cd apps/control-ui && npm run typecheck)
 (cd apps/control-ui && npm test -- --run src/windows/stage3dScene.test.ts)
-./test unit
+npm run test:unit
 ```
 
 Build and start an isolated server with both a temporary desk directory and the repository package directory:
@@ -64,7 +64,7 @@ fixture_server_pid=$!
 
 Poll `/api/v1/readiness`, then fetch `/api/v1/fixture-profiles`. Assert the exact manufacturer/name, mode names and footprints, stable IDs, `reserved_source: null`, and required asset data URLs. Exercise package export and re-import through the authenticated REST endpoints or Rust codec, comparing normalized profiles and stable IDs.
 
-Stop and restart the isolated server against the same temporary data directory and confirm IDs and revisions are unchanged. Terminate only the recorded PID and remove only the recorded temporary directory. Do not run `./build open` unless desktop packaging itself is in scope. When shipped-library help changes, also run `./build manual`.
+Stop and restart the isolated server against the same temporary data directory and confirm IDs and revisions are unchanged. Terminate only the recorded PID and remove only the recorded temporary directory. Do not run `npm run open` unless desktop packaging itself is in scope. When shipped-library help changes, also run `npm run manual`.
 
 ## Completion criteria
 
