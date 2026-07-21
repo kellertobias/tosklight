@@ -19,6 +19,16 @@ mod cue_recording_programming_ports;
 mod cue_recording_routes;
 #[path = "command_http/cue_recording_wire.rs"]
 mod cue_recording_wire;
+#[path = "command_http/cue_transfer_command.rs"]
+mod cue_transfer_command;
+#[path = "command_http/cue_transfer_ports.rs"]
+mod cue_transfer_ports;
+#[path = "command_http/cue_transfer_programming_ports.rs"]
+mod cue_transfer_programming_ports;
+#[path = "command_http/cue_transfer_routes.rs"]
+mod cue_transfer_routes;
+#[path = "command_http/cue_transfer_wire.rs"]
+mod cue_transfer_wire;
 #[path = "command_http/events.rs"]
 mod events;
 #[path = "command_http/group_recording_ports.rs"]
@@ -72,6 +82,7 @@ pub(super) use adapter::{
     ExistingCommandOutcome, ExistingCommandPolicy, execute_existing_command, route_osc_command_key,
 };
 pub(crate) use cue_recording_osc::intercept_armed_playback as intercept_armed_cue_playback;
+pub(crate) use cue_transfer_ports::ServerProgrammingCueTransferPorts;
 pub(super) use interaction_wire::interaction_change;
 pub(super) use lifecycle_wire::lifecycle_change;
 pub(super) use preload_playback_queue_wire::change as preload_playback_queue_change;

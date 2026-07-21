@@ -94,6 +94,10 @@
         "cancel_label": {
           "type": "string"
         },
+        "choice_id": {
+          "type": "string",
+          "format": "uuid"
+        },
         "command": {
           "type": "string"
         },
@@ -106,12 +110,24 @@
             "$ref": "#/$defs/CommandChoiceOption"
           }
         },
+        "show_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "show_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
         "type": {
           "$ref": "#/$defs/CueMoveCopyChoiceType"
         }
       },
       "required": [
         "type",
+        "choice_id",
+        "show_id",
+        "show_revision",
         "operation",
         "command",
         "options",

@@ -190,6 +190,9 @@ fn shared_interaction_refresh_publishes_pending_choice_invalidation_once_per_des
         registry.set_pending_command_choice(
             session,
             Some(CueMoveCopyChoice {
+                choice_id: uuid::Uuid::from_u128(1),
+                show_id: uuid::Uuid::from_u128(2),
+                show_revision: 3,
                 operation: CueTransferOperation::Copy,
                 command: "COPY SET 1 CUE 1 AT SET 2 CUE 2".into(),
                 options: Vec::new(),

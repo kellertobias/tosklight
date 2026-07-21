@@ -39,6 +39,9 @@ impl ProgrammingPorts for TestPorts {
         if command.starts_with("COPY SET") {
             return ProgrammingExecution::ChoiceRequired {
                 pending_choice: CueMoveCopyChoice {
+                    choice_id: uuid::Uuid::from_u128(1),
+                    show_id: uuid::Uuid::from_u128(2),
+                    show_revision: 3,
                     operation: CueTransferOperation::Copy,
                     command: command.into(),
                     options: vec![ProgrammingChoiceOption {

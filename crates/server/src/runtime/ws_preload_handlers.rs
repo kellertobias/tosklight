@@ -148,25 +148,25 @@ pub(super) fn ws_programmer_execute(
         )
         .with_request_id(&command.request_id)
     });
-    if let Some(result) = ws_typed_recording(state, session, &input.value, &context) {
-        let final_text = Some(if result.is_ok() {
-            ""
-        } else {
-            input.value.as_str()
-        });
-        state
-            .programmers
-            .complete_command_execution(session.id, final_text, None);
-        return result;
-    }
-    let outcome = command_http::execute_existing_command(
-        state,
-        session,
-        &input.value,
-        "software",
-        &context,
-        command_http::ExistingCommandPolicy::Compatibility,
-    );
+    let outcome = ws_typed_recording(state, session, &input.value, &context).unwrap_or_else(|| {
+        command_http::execute_existing_command(
+            state,
+            session,
+            &input.value,
+            "software",
+            &context,
+            command_http::ExistingCommandPolicy::Compatibility,
+        )
+    });
+    finish_ws_execution(state, session, &input.value, outcome)
+}
+
+fn finish_ws_execution(
+    state: &AppState,
+    session: &Session,
+    command: &str,
+    outcome: command_http::ExistingCommandOutcome,
+) -> Result<serde_json::Value, String> {
     let pending_choice = match &outcome {
         command_http::ExistingCommandOutcome::ChoiceRequired { pending_choice } => {
             Some(pending_choice.clone())
@@ -177,7 +177,7 @@ pub(super) fn ws_programmer_execute(
     let final_text = match &outcome {
         command_http::ExistingCommandOutcome::Accepted { .. } => Some(""),
         command_http::ExistingCommandOutcome::ChoiceRequired { .. }
-        | command_http::ExistingCommandOutcome::Rejected { .. } => Some(input.value.as_str()),
+        | command_http::ExistingCommandOutcome::Rejected { .. } => Some(command),
     };
     state
         .programmers
@@ -207,20 +207,21 @@ fn ws_typed_recording(
     session: &Session,
     command: &str,
     context: &light_application::ActionContext,
-) -> Option<Result<serde_json::Value, String>> {
+) -> Option<command_http::ExistingCommandOutcome> {
     let ports = command_http::ServerProgrammingPorts::new(state, session, "software", true);
     let outcome = ports.record_typed_command(&state.programmers, context, command)?;
     Some(match outcome {
         light_application::ProgrammingExecution::Accepted { applied, warning } => {
-            Ok(serde_json::json!({
-                "applied":applied,
-                "persistence_warning":warning,
-                "programmer":state.programmers.get(session.id)
-            }))
+            command_http::ExistingCommandOutcome::Accepted {
+                applied,
+                persistence_warning: warning,
+            }
         }
-        light_application::ProgrammingExecution::Rejected { error } => Err(error),
-        light_application::ProgrammingExecution::ChoiceRequired { .. } => {
-            Err("typed recording returned an unexpected command choice".into())
+        light_application::ProgrammingExecution::ChoiceRequired { pending_choice } => {
+            command_http::ExistingCommandOutcome::ChoiceRequired { pending_choice }
+        }
+        light_application::ProgrammingExecution::Rejected { error } => {
+            command_http::ExistingCommandOutcome::Rejected { error }
         }
     })
 }

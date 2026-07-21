@@ -199,58 +199,6 @@ fn command_playback_surface(source: light_application::ActionSource) -> Playback
     }
 }
 
-pub(super) fn pending_cue_transfer_choice(
-    command_line: &str,
-) -> Option<light_application::CueMoveCopyChoice> {
-    let tokens = command_line
-        .replace(',', ".")
-        .replace('.', " . ")
-        .split_whitespace()
-        .map(|token| token.to_ascii_uppercase())
-        .collect::<Vec<_>>();
-    let (operation, operation_token) = match tokens.first()?.as_str() {
-        "COPY" | "CPY" => (light_application::CueTransferOperation::Copy, "COPY"),
-        "MOVE" | "MOV" => (light_application::CueTransferOperation::Move, "MOVE"),
-        _ => return None,
-    };
-    if tokens
-        .get(1)
-        .is_some_and(|token| matches!(token.as_str(), "PLAIN" | "STATUS"))
-    {
-        return None;
-    }
-    let at = tokens.iter().position(|token| token == "AT")?;
-    if tokens.get(1).is_none_or(|token| token != "SET")
-        || !tokens[1..at].iter().any(|token| token == "CUE")
-        || tokens.get(at + 1).is_none_or(|token| token != "SET")
-        || !tokens[at + 1..].iter().any(|token| token == "CUE")
-    {
-        return None;
-    }
-    let title = match operation {
-        light_application::CueTransferOperation::Copy => "Copy",
-        light_application::CueTransferOperation::Move => "Move",
-    };
-    let suffix = tokens[1..].join(" ");
-    Some(light_application::CueMoveCopyChoice {
-        operation,
-        command: command_line.to_owned(),
-        options: vec![
-            light_application::ProgrammingChoiceOption {
-                id: light_application::ProgrammingChoiceOptionId::Plain,
-                label: format!("Plain {title}"),
-                command: format!("{operation_token} PLAIN {suffix}"),
-            },
-            light_application::ProgrammingChoiceOption {
-                id: light_application::ProgrammingChoiceOptionId::Status,
-                label: format!("Status {title}"),
-                command: format!("{operation_token} STATUS {suffix}"),
-            },
-        ],
-        cancel_label: "Cancel".into(),
-    })
-}
-
 pub(super) fn command_speed_group_index(token: &str) -> Result<usize, String> {
     let group = token
         .parse::<usize>()

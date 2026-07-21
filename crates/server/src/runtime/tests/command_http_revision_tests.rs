@@ -52,7 +52,7 @@ async fn verify_idempotent_execution(
     assert_eq!(executed.status(), StatusCode::OK);
     let executed_etag = executed.headers()[header::ETAG].clone();
     let executed = json(executed).await;
-    assert_eq!(executed["outcome"], "accepted");
+    assert_eq!(executed["outcome"], "accepted", "{executed:#}");
     assert_eq!(executed["action"], "executed");
     assert_eq!(executed["applied"], 1);
     assert_eq!(executed["command_line"]["text"], "FIXTURE");
@@ -78,58 +78,7 @@ async fn verify_idempotent_execution(
     assert_eq!(reused.status(), StatusCode::CONFLICT);
 }
 
-async fn verify_choice_and_rejection_replay(scenario: &CommandHttpScenario) {
-    let command = "COPY SET 1 CUE 1 AT SET 2 CUE 2";
-    let before_enter = scenario.put(command, 2).await;
-    assert_eq!(before_enter.status(), StatusCode::OK);
-    let before_enter = json(before_enter).await;
-    assert!(before_enter["pending_choice"].is_null());
-    let choice = command_http::execute_existing_command(
-        &scenario.state,
-        &scenario.session,
-        command,
-        "test",
-        &operator_action_context(&scenario.session, light_application::ActionSource::Http)
-            .with_request_id("compatibility-choice"),
-        command_http::ExistingCommandPolicy::Compatibility,
-    );
-    assert!(matches!(
-        choice,
-        command_http::ExistingCommandOutcome::ChoiceRequired { .. }
-    ));
-    let compatibility = scenario
-        .execute("pending-choice", None)
-        .await;
-    assert_eq!(compatibility.status(), StatusCode::OK);
-    let compatibility = json(compatibility).await;
-    assert_eq!(compatibility["outcome"], "choice_required");
-    assert_eq!(
-        compatibility["pending_choice"],
-        compatibility["command_line"]["pending_choice"]
-    );
-    assert_eq!(
-        compatibility["command_line"]["text"],
-        command
-    );
-    let choice_revision = compatibility["command_line"]["revision"].as_u64().unwrap();
-    assert_eq!(choice_revision, 4);
-    let authoritative = json(scenario.get().await).await;
-    assert_eq!(authoritative["pending_choice"], compatibility["pending_choice"]);
-    let snapshot = json(scenario.interaction_snapshot().await).await;
-    assert_eq!(
-        snapshot["projection"]["command_line"]["pending_choice"],
-        compatibility["pending_choice"]
-    );
-    let replay = json(scenario.execute("pending-choice", None).await).await;
-    assert_eq!(replay, compatibility);
-
-    let cancelled = scenario.put("", choice_revision).await;
-    assert_eq!(cancelled.status(), StatusCode::OK);
-    let cancelled = json(cancelled).await;
-    assert!(cancelled["pending_choice"].is_null());
-    let late_replay = json(scenario.execute("pending-choice", None).await).await;
-    assert_eq!(late_replay["outcome"], "choice_required");
-    assert_eq!(late_replay["command_line"], cancelled);
+async fn verify_rejection_replay(scenario: &CommandHttpScenario) {
     verify_rejected_command_is_atomic(scenario).await;
 }
 
@@ -178,7 +127,7 @@ async fn command_line_v2_is_revisioned_desk_scoped_and_idempotent() {
     let fixture_id = scenario.install_direct_fixture();
     verify_revisioned_command_line(&scenario).await;
     verify_idempotent_execution(&scenario, fixture_id).await;
-    verify_choice_and_rejection_replay(&scenario).await;
+    verify_rejection_replay(&scenario).await;
     let interaction = scenario.interaction_snapshot().await;
     assert_eq!(interaction.status(), StatusCode::OK);
     let interaction = json(interaction).await;

@@ -192,6 +192,10 @@ pub struct CommandErrorResponse {
 pub struct CueMoveCopyChoice {
     #[serde(rename = "type")]
     pub choice_type: CueMoveCopyChoiceType,
+    pub choice_id: Uuid,
+    pub show_id: Uuid,
+    #[ts(type = "number")]
+    pub show_revision: u64,
     pub operation: CueTransferOperation,
     pub command: String,
     pub options: Vec<CommandChoiceOption>,
@@ -310,6 +314,9 @@ mod tests {
             "outcome": "choice_required",
             "pending_choice": {
                 "type": "cue_move_copy",
+                "choice_id": "00000000-0000-0000-0000-000000000003",
+                "show_id": "00000000-0000-0000-0000-000000000004",
+                "show_revision": 12,
                 "operation": "copy",
                 "command": "COPY SET 1 CUE 1 AT SET 2 CUE 2",
                 "options": [
@@ -333,6 +340,9 @@ mod tests {
                 "revision": 8,
                 "pending_choice": {
                     "type": "cue_move_copy",
+                    "choice_id": "00000000-0000-0000-0000-000000000003",
+                    "show_id": "00000000-0000-0000-0000-000000000004",
+                    "show_revision": 12,
                     "operation": "copy",
                     "command": "COPY SET 1 CUE 1 AT SET 2 CUE 2",
                     "options": [

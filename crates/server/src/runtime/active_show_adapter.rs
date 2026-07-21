@@ -120,7 +120,7 @@ pub(super) enum ActiveShowBackupKind {
     ShowObjects,
 }
 
-pub(super) struct ServerActiveShowUnitOfWork {
+pub(crate) struct ServerActiveShowUnitOfWork {
     store: ShowStore,
     document: PortableShowDocument,
     backup: ShowMutationBackupPlan,

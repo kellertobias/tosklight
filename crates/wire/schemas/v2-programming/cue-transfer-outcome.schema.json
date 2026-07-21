@@ -1,104 +1,88 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "CommandOperationResponse",
-  "description": "Complete response to a mutating command-line operation.",
-  "type": "object",
-  "properties": {
-    "command_line": {
-      "$ref": "#/$defs/CommandLineResponse"
-    },
-    "request_id": {
-      "type": "string"
-    }
-  },
+  "title": "CueTransferOutcome",
   "oneOf": [
     {
       "type": "object",
       "properties": {
-        "action": {
-          "$ref": "#/$defs/CommandAcceptedAction"
+        "choice_id": {
+          "type": "string",
+          "format": "uuid"
         },
-        "applied": {
+        "command_line": {
+          "$ref": "#/$defs/CommandLineResponse"
+        },
+        "correlation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "interaction_event_sequence": {
           "type": [
             "integer",
             "null"
           ],
-          "format": "uint",
+          "format": "uint64",
           "minimum": 0
         },
-        "outcome": {
-          "type": "string",
-          "const": "accepted"
-        },
-        "warning": {
+        "persistence_warning": {
           "type": [
             "string",
             "null"
           ]
-        }
-      },
-      "required": [
-        "outcome",
-        "action"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "outcome": {
-          "type": "string",
-          "const": "choice_required"
         },
-        "pending_choice": {
-          "$ref": "#/$defs/CueMoveCopyChoice"
-        }
-      },
-      "required": [
-        "outcome",
-        "pending_choice"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "error": {
+        "projections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CueTransferObjectProjection"
+          }
+        },
+        "replayed": {
+          "type": "boolean"
+        },
+        "request_id": {
           "type": "string"
         },
-        "outcome": {
+        "show_event_sequence": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "show_id": {
           "type": "string",
-          "const": "rejected"
+          "format": "uuid"
+        },
+        "show_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "const": "changed"
+        },
+        "summary": {
+          "$ref": "#/$defs/CueTransferSummary"
         }
       },
+      "additionalProperties": false,
       "required": [
-        "outcome",
-        "error"
+        "status",
+        "request_id",
+        "correlation_id",
+        "replayed",
+        "show_id",
+        "choice_id",
+        "summary",
+        "show_revision",
+        "projections",
+        "show_event_sequence",
+        "command_line",
+        "interaction_event_sequence",
+        "persistence_warning"
       ]
     }
   ],
-  "required": [
-    "request_id",
-    "command_line"
-  ],
   "$defs": {
-    "CommandAcceptedAction": {
-      "description": "Accepted command-line state transition.",
-      "type": "string",
-      "enum": [
-        "edited",
-        "executed",
-        "cleared_command_line",
-        "cleared_preload",
-        "cleared_selection",
-        "cleared_values",
-        "undone",
-        "no_change",
-        "preload_entered",
-        "preload_committed",
-        "shift_pressed",
-        "shift_released",
-        "ignored_release"
-      ]
-    },
     "CommandChoiceOption": {
       "type": "object",
       "properties": {
@@ -223,11 +207,81 @@
         "cue_move_copy"
       ]
     },
+    "CueTransferMode": {
+      "type": "string",
+      "enum": [
+        "plain",
+        "status"
+      ]
+    },
+    "CueTransferObjectProjection": {
+      "type": "object",
+      "properties": {
+        "body": true,
+        "cue_list_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "object_id": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "object_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "cue_list_id",
+        "object_id",
+        "object_revision",
+        "body"
+      ]
+    },
     "CueTransferOperation": {
       "type": "string",
       "enum": [
         "copy",
         "move"
+      ]
+    },
+    "CueTransferSummary": {
+      "type": "object",
+      "properties": {
+        "destination_cue_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "destination_cue_number": {
+          "type": "number",
+          "format": "double"
+        },
+        "mode": {
+          "$ref": "#/$defs/CueTransferMode"
+        },
+        "operation": {
+          "$ref": "#/$defs/CueTransferOperation"
+        },
+        "source_cue_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "source_cue_number": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "operation",
+        "mode",
+        "source_cue_id",
+        "source_cue_number",
+        "destination_cue_id",
+        "destination_cue_number"
       ]
     }
   }

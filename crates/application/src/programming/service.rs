@@ -17,6 +17,10 @@ mod cue_recording;
 mod cue_recording_replay;
 #[path = "service/cue_recording_validation.rs"]
 mod cue_recording_validation;
+#[path = "service/cue_transfer.rs"]
+mod cue_transfer;
+#[path = "service/cue_transfer_replay.rs"]
+mod cue_transfer_replay;
 #[path = "service/external.rs"]
 mod external;
 #[path = "service/group_recording.rs"]
@@ -59,6 +63,7 @@ mod values_replay_memory;
 mod values_validation;
 
 use cue_recording_replay::CueRecordingReplayCache;
+use cue_transfer_replay::{CueTransferChoiceCache, CueTransferReplayCache};
 use group_recording_replay::GroupRecordingReplayCache;
 use lifecycle_publication::LifecyclePublicationGate;
 use preload_values_replay::PreloadValuesReplayCache;
@@ -87,6 +92,8 @@ pub struct ProgrammingService {
     values_replay: Arc<Mutex<ValuesReplayCache>>,
     preload_values_replay: Arc<Mutex<PreloadValuesReplayCache>>,
     cue_recording_replay: Arc<Mutex<CueRecordingReplayCache>>,
+    cue_transfer_choices: Arc<Mutex<CueTransferChoiceCache>>,
+    cue_transfer_replay: Arc<Mutex<CueTransferReplayCache>>,
     group_recording_replay: Arc<Mutex<GroupRecordingReplayCache>>,
     preset_recording_replay: Arc<Mutex<PresetRecordingReplayCache>>,
     update_replay: Arc<Mutex<UpdateReplayCache>>,
@@ -109,6 +116,8 @@ impl ProgrammingService {
             values_replay: Arc::default(),
             preload_values_replay: Arc::default(),
             cue_recording_replay: Arc::default(),
+            cue_transfer_choices: Arc::default(),
+            cue_transfer_replay: Arc::default(),
             group_recording_replay: Arc::default(),
             preset_recording_replay: Arc::default(),
             update_replay: Arc::default(),

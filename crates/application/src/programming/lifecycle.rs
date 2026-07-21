@@ -118,6 +118,7 @@ impl ProgrammingService {
         self.invalidate_values_replay(target.user_id);
         self.invalidate_preload_values_replay(target.user_id);
         self.invalidate_cue_recording_replay(target.user_id);
+        self.invalidate_cue_transfer_authority(target.user_id);
         self.invalidate_group_recording_replay(target.user_id);
         self.invalidate_preset_recording_replay(target.user_id);
         self.invalidate_update_replay(target.user_id);

@@ -19,7 +19,7 @@ export type CommandHttpSource = "http" | "http_key";
 
 export type CommandChoiceOption = { id: CommandChoiceOptionId, label: string, command: string, };
 
-export type CueMoveCopyChoice = { type: CueMoveCopyChoiceType, operation: CueTransferOperation, command: string, options: Array<CommandChoiceOption>, cancel_label: string, };
+export type CueMoveCopyChoice = { type: CueMoveCopyChoiceType, choice_id: string, show_id: string, show_revision: number, operation: CueTransferOperation, command: string, options: Array<CommandChoiceOption>, cancel_label: string, };
 
 export type ReplaceCommandLineRequest = { text: string, };
 
@@ -204,6 +204,20 @@ export type CueRecordOutcome = { "status": "changed", request_id: string, correl
 export type CueRecordErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
 
 export type CueRecordErrorResponse = { kind: CueRecordErrorKind, error: string, current_revision?: number | null, retryable: boolean, };
+
+export type CueTransferMode = "plain" | "status";
+
+export type CueTransferRequest = { request_id: string, choice_id: string, mode: CueTransferMode, expected_command_line_revision: number, };
+
+export type CueTransferObjectProjection = { cue_list_id: string, object_id: string, object_revision: number, body: unknown, };
+
+export type CueTransferSummary = { operation: CueTransferOperation, mode: CueTransferMode, source_cue_id: string, source_cue_number: number, destination_cue_id: string, destination_cue_number: number, };
+
+export type CueTransferOutcome = { "status": "changed", request_id: string, correlation_id: string, replayed: boolean, show_id: string, choice_id: string, summary: CueTransferSummary, show_revision: number, projections: Array<CueTransferObjectProjection>, show_event_sequence: number, command_line: CommandLineResponse, interaction_event_sequence?: number | null, persistence_warning?: string | null, };
+
+export type CueTransferErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
+
+export type CueTransferErrorResponse = { kind: CueTransferErrorKind, error: string, current_revision?: number | null, current_related_revision?: number | null, retryable: boolean, };
 
 export type ProgrammingUpdateCueMode = "existing_only" | "existing_in_current_cue" | "add_to_current_cue" | "add_new";
 

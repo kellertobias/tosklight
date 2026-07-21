@@ -3,8 +3,6 @@
 mod bootstrap;
 #[path = "command_http.rs"]
 mod command_http;
-#[path = "cue_transfer.rs"]
-mod cue_transfer;
 #[path = "default_show.rs"]
 mod default_show;
 mod event_transport;
@@ -95,8 +93,6 @@ use tower_http::{
     trace::TraceLayer,
 };
 use uuid::Uuid;
-
-use cue_transfer::{CueTransferMode, destination_cue};
 
 mod active_show_adapter;
 mod active_show_objects;

@@ -8,6 +8,7 @@ mod contribution;
 mod controls;
 mod cue_recording;
 mod cue_tracking;
+mod cue_transfer;
 mod engine;
 mod model;
 mod phaser;
@@ -24,6 +25,7 @@ pub use cue_recording::{
     CueListRecordingPlan, CueRecordOperation, CueRecordingContent, CueRecordingPlanError,
     CueRecordingTiming,
 };
+pub use cue_transfer::{CueTransferMode, transferred_cue};
 pub use engine::PlaybackEngine;
 pub use model::{cue::*, playback::*, runtime::*};
 pub use phaser::*;

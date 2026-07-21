@@ -3,7 +3,6 @@ use super::*;
 struct ParsedShowOperation<'a> {
     operation: &'a str,
     body: &'a [String],
-    transfer_mode: Option<CueTransferMode>,
 }
 
 fn parse_show_operation(tokens: &[String]) -> ParsedShowOperation<'_> {
@@ -14,22 +13,9 @@ fn parse_show_operation(tokens: &[String]) -> ParsedShowOperation<'_> {
         "CPY" => "COPY",
         value => value,
     };
-    let mut body = &tokens[1..];
-    let transfer_mode = match body.first().map(String::as_str) {
-        Some("PLAIN") => {
-            body = &body[1..];
-            Some(CueTransferMode::Plain)
-        }
-        Some("STATUS") => {
-            body = &body[1..];
-            Some(CueTransferMode::Status)
-        }
-        _ => None,
-    };
     ParsedShowOperation {
         operation,
-        body,
-        transfer_mode,
+        body: &tokens[1..],
     }
 }
 
@@ -51,8 +37,14 @@ pub(super) fn execute_show_command(
         operation => {
             if operation == "DELETE" && parsed.body.first().is_some_and(|token| token == "GROUP") {
                 delete_group_command(state, parsed.body, context)
-            } else if parsed.body.first().is_some_and(|token| token == "SET") {
-                execute_cue_mutation(state, operation, parsed.transfer_mode, parsed.body, context)
+            } else if operation == "DELETE"
+                && parsed.body.first().is_some_and(|token| token == "SET")
+            {
+                execute_cue_delete(state, parsed.body, context)
+            } else if matches!(operation, "MOVE" | "COPY")
+                && parsed.body.first().is_some_and(|token| token == "SET")
+            {
+                Err("Cue MOVE/COPY must use the typed Programming transfer action".into())
             } else {
                 execute_preset_mutation(state, operation, parsed.body, context)
             }

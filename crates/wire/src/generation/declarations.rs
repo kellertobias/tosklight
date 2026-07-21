@@ -2,6 +2,7 @@ use ts_rs::{Config, TS};
 
 use crate::v2::command_line::*;
 use crate::v2::cue_recording::*;
+use crate::v2::cue_transfer::*;
 use crate::v2::events::*;
 use crate::v2::group_recording::*;
 use crate::v2::patch::*;
@@ -179,6 +180,13 @@ fn programming(config: &Config) -> Vec<String> {
         CueRecordOutcome::decl(config),
         CueRecordErrorKind::decl(config),
         CueRecordErrorResponse::decl(config),
+        CueTransferMode::decl(config),
+        CueTransferRequest::decl(config),
+        CueTransferObjectProjection::decl(config),
+        CueTransferSummary::decl(config),
+        CueTransferOutcome::decl(config),
+        CueTransferErrorKind::decl(config),
+        CueTransferErrorResponse::decl(config),
     ]
 }
 

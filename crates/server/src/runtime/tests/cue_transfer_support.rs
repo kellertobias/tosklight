@@ -43,6 +43,7 @@ impl CueTransferScenario {
             desk,
         };
         state.programmers.start(session.id, user.id);
+        state.sessions.write().insert(session.id, session.clone());
         let fixtures = [
             light_core::FixtureId::new(),
             light_core::FixtureId::new(),

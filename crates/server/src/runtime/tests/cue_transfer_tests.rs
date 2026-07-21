@@ -34,7 +34,19 @@ fn legacy_choice_selection_resets_the_authoritative_command_once() {
             },
         )
     };
-    assert!(dispatch("pending-copy", "COPY SET 1 CUE 2 AT SET 2 CUE 2").ok);
+    let pending = dispatch("pending-copy", "COPY SET 1 CUE 2 AT SET 2 CUE 2");
+    assert!(pending.ok);
+    let pending = pending.payload.unwrap()["pending_choice"].clone();
+    assert_eq!(pending["type"], "cue_move_copy");
+    let authoritative = scenario
+        .state
+        .programmers
+        .command_line_state(scenario.session.id)
+        .unwrap();
+    assert_eq!(
+        authoritative.pending_choice.as_ref().unwrap().choice_id,
+        serde_json::from_value::<Uuid>(pending["choice_id"].clone()).unwrap()
+    );
     let before = scenario.state.application_events.latest_sequence();
 
     assert!(dispatch("plain-copy", "COPY PLAIN SET 1 CUE 2 AT SET 2 CUE 2").ok);
@@ -99,12 +111,12 @@ fn cue_copy_preserves_extensions_on_duplicate_id_destination_cues() {
         .replace_snapshot(load_engine_snapshot(&entry).unwrap())
         .unwrap();
 
-    execute_programmer_command(
-        &scenario.state,
-        &scenario.session,
+    let response = dispatch_cue_transfer(
+        &scenario,
+        "copy-duplicate-destination",
         "COPY PLAIN SET 1 CUE 2 AT SET 2 CUE 2",
-    )
-    .unwrap();
+    );
+    assert!(response.ok, "Cue copy failed: {:?}", response.error);
 
     let (_, destination_object, destination) = cue_list_for_playback(
         &ShowStore::open(&scenario.show_path).unwrap(),
@@ -142,7 +154,7 @@ fn verify_pending_cue_transfer_choice(
             payload: serde_json::json!({"value":"COPY SET 1 CUE 2 AT SET 2 CUE 2"}),
         },
     );
-    assert!(response.ok);
+    assert!(response.ok, "pending transfer failed: {:?}", response.error);
     let pending = &response.payload.unwrap()["pending_choice"];
     assert_eq!(pending["type"], "cue_move_copy");
     assert_eq!(pending["options"][0]["label"], "Plain Copy");
@@ -173,15 +185,17 @@ fn execute_and_verify_cue_transfer(
     before: &CueTransferBaseline,
     case: CueTransferCase,
 ) {
-    execute_programmer_command(
-        &scenario.state,
-        &scenario.session,
-        &format!(
-            "{} {} SET 1 CUE 2 AT SET 2 CUE 2",
-            case.operation, case.mode
-        ),
-    )
-    .unwrap();
+    let had_pending_choice = scenario
+        .state
+        .programmers
+        .command_line_state(scenario.session.id)
+        .is_some_and(|command| command.pending_choice.is_some());
+    let command = format!(
+        "{} {} SET 1 CUE 2 AT SET 2 CUE 2",
+        case.operation, case.mode
+    );
+    let response = dispatch_cue_transfer(scenario, "explicit-transfer", &command);
+    assert!(response.ok, "Cue transfer failed: {:?}", response.error);
     let store = ShowStore::open(&scenario.show_path).unwrap();
     let (_, source_object, source) =
         cue_list_for_playback(&store, &scenario.state.engine.snapshot(), 1).unwrap();
@@ -193,7 +207,7 @@ fn execute_and_verify_cue_transfer(
     );
     assert_eq!(
         scenario.state.application_events.latest_sequence(),
-        before.event_sequence + 1
+        before.event_sequence + u64::from(had_pending_choice) + 1
     );
     assert_eq!(
         cue_transfer_backup_count(&scenario.data_dir),
@@ -254,6 +268,25 @@ fn execute_and_verify_cue_transfer(
         "newer-desk"
     );
     verify_transferred_state(scenario, &destination, case.status);
+}
+
+fn dispatch_cue_transfer(
+    scenario: &CueTransferScenario,
+    request_id: &str,
+    value: &str,
+) -> WsResponse {
+    dispatch_ws_command(
+        &scenario.state,
+        &scenario.session,
+        WsCommand {
+            protocol_version: 1,
+            request_id: request_id.into(),
+            session_id: scenario.session.id,
+            expected_revision: None,
+            command: "programmer.execute".into(),
+            payload: serde_json::json!({"value":value}),
+        },
+    )
 }
 
 fn verify_transferred_state(

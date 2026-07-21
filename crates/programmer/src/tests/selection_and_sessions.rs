@@ -327,6 +327,9 @@ fn pending_command_choices_are_revisioned_shared_by_desk_and_cleared_by_edits() 
     assert!(edited.pending_choice.is_none());
 
     let choice = CueMoveCopyChoice {
+        choice_id: uuid::Uuid::from_u128(1),
+        show_id: uuid::Uuid::from_u128(2),
+        show_revision: 3,
         operation: CueTransferOperation::Copy,
         command: command.into(),
         options: vec![],
@@ -336,7 +339,7 @@ fn pending_command_choices_are_revisioned_shared_by_desk_and_cleared_by_edits() 
         .set_pending_command_choice(first, Some(choice.clone()))
         .unwrap();
     assert_eq!(pending.revision, edited.revision + 1);
-    assert_eq!(pending.pending_choice, Some(choice.clone()));
+    assert_eq!(pending.pending_choice.as_deref(), Some(&choice));
     assert_eq!(registry.command_line_state(peer).unwrap(), pending);
     assert!(
         registry

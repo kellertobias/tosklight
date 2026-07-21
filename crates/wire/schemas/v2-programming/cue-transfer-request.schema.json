@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CueTransferRequest",
+  "type": "object",
+  "properties": {
+    "choice_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "expected_command_line_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0
+    },
+    "mode": {
+      "$ref": "#/$defs/CueTransferMode"
+    },
+    "request_id": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "choice_id",
+    "mode",
+    "expected_command_line_revision"
+  ],
+  "$defs": {
+    "CueTransferMode": {
+      "type": "string",
+      "enum": [
+        "plain",
+        "status"
+      ]
+    }
+  }
+}

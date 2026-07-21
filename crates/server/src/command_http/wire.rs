@@ -76,6 +76,9 @@ fn wire_action(action: ProgrammingAction) -> CommandAcceptedAction {
 pub(crate) fn wire_choice(choice: ApplicationCueChoice) -> CueMoveCopyChoice {
     CueMoveCopyChoice {
         choice_type: WireChoiceType::CueMoveCopy,
+        choice_id: choice.choice_id,
+        show_id: choice.show_id,
+        show_revision: choice.show_revision,
         operation: match choice.operation {
             ApplicationCueOperation::Copy => WireCueOperation::Copy,
             ApplicationCueOperation::Move => WireCueOperation::Move,
@@ -99,7 +102,9 @@ pub(crate) fn wire_choice(choice: ApplicationCueChoice) -> CueMoveCopyChoice {
 
 pub(super) fn command_line_from_state(state: CommandLineState) -> CommandLineResponse {
     let text = state.visible_text().to_owned();
-    let pending_choice = state.pending_choice.map(wire_choice);
+    let pending_choice = state
+        .pending_choice
+        .map(|choice| wire_choice((*choice).clone()));
     CommandLineResponse {
         text,
         target: match state.target {

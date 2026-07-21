@@ -1,6 +1,7 @@
 use crate::{CueMoveCopyChoice, ProgrammerCaptureMode, ProgrammerRegistry, ProgrammerSelection};
 use light_core::SessionId;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 /// The desk-local default scope used when an operator starts a new command.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -43,7 +44,7 @@ pub struct CommandLineState {
     pub pristine: bool,
     pub revision: u64,
     #[serde(skip)]
-    pub pending_choice: Option<CueMoveCopyChoice>,
+    pub pending_choice: Option<Arc<CueMoveCopyChoice>>,
 }
 
 impl Default for CommandLineState {
@@ -329,11 +330,11 @@ impl ProgrammerRegistry {
         );
         if current.text != text
             || current.pristine != pristine
-            || current.pending_choice != pending_choice
+            || current.pending_choice.as_deref() != pending_choice.as_ref()
         {
             current.text = text;
             current.pristine = pristine;
-            current.pending_choice = pending_choice;
+            current.pending_choice = pending_choice.map(Arc::new);
             current.revision += 1;
         }
         let result = current.clone();

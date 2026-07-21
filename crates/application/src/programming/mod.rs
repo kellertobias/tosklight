@@ -2,6 +2,7 @@ mod capture_mode_projection;
 mod command;
 mod cue_active_show;
 mod cue_recording;
+mod cue_transfer;
 mod event;
 mod group_active_show;
 mod group_recording;
@@ -36,6 +37,13 @@ pub use cue_recording::{
     ProgrammingCueRecordTarget, ProgrammingCueRecordTiming, ProgrammingCueRecordingEnvironment,
     ProgrammingCueRecordingPorts, ProgrammingCueResolvedTarget,
     ProgrammingCueShowRevisionExpectation, ProgrammingRecordedCue,
+};
+pub use cue_transfer::{
+    ProgrammingCueTransferAddress, ProgrammingCueTransferChoiceRequest,
+    ProgrammingCueTransferEndpoint, ProgrammingCueTransferMode,
+    ProgrammingCueTransferObjectProjection, ProgrammingCueTransferOutcome,
+    ProgrammingCueTransferPorts, ProgrammingCueTransferRequest, ProgrammingCueTransferResult,
+    ProgrammingCueTransferSummary,
 };
 pub use event::ProgrammingInteractionChange;
 pub use group_recording::{

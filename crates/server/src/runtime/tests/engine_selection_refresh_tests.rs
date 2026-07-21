@@ -119,6 +119,9 @@ async fn active_show_install_clears_each_desk_pending_choice_once() {
             session.id,
             Some(command),
             Some(light_application::CueMoveCopyChoice {
+                choice_id: uuid::Uuid::from_u128(1),
+                show_id: uuid::Uuid::from_u128(2),
+                show_revision: 3,
                 operation: light_application::CueTransferOperation::Copy,
                 command: command.into(),
                 options: Vec::new(),

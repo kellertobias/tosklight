@@ -40,9 +40,6 @@ pub(crate) fn execute_existing_command(
     policy: ExistingCommandPolicy,
 ) -> ExistingCommandOutcome {
     let request_id = context.request_id.as_deref();
-    if let Some(pending_choice) = super::super::pending_cue_transfer_choice(command) {
-        return ExistingCommandOutcome::ChoiceRequired { pending_choice };
-    }
     if let Some(error) = atomic_policy_error(command, policy) {
         super::super::record_command_history(
             state, session, command, "rejected", &error, source, request_id,
