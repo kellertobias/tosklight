@@ -48,8 +48,8 @@ export type CommandOperationResponse = CommandOperationBase & (
  * ownership gap it is riding on rather than hiding behind an anonymous "legacy" call.
  */
 export type CompatibilityCommandFamily =
-  /** Whole-Cue deletion; Cue recording subtract is a different operation and is not a substitute. */
-  | "cue_delete"
+  /** Preset deletion; Group and whole-Cue deletion have typed application actions. */
+  | "preset_delete"
   /** Preset `MOVE`/`COPY`; only Cue transfer is intercepted by the typed Programming boundary. */
   | "preset_transfer"
   /** `UPDATE`; the command grammar is not yet routed through the typed Update workflow. */
@@ -68,13 +68,15 @@ const CUE_TRANSFER = /^(?:MOVE|MOV|COPY|CPY)\s+(?:(?:PLAIN|STATUS)\s+)?SET\b/i;
 const CUE_OR_GROUP_RECORD = /^(?:RECORD|REC)\s+(?:[+-]\s+)?(?:GROUP|CUE|SET)\b/i;
 const PRESET_RECORD = /^(?:RECORD|REC)\s+\S+(?:\s+\S+){0,2}$/i;
 const GROUP_DELETE = /^(?:DELETE|DEL)\s+GROUP\b/i;
+const CUE_DELETE = /^(?:DELETE|DEL)\s+SET\b/i;
 
 /**
  * Classifies one command against the grammars the server intercepts before its atomic-family check.
  *
  * `record_typed_command` routes Group recording, Preset recording, Cue recording, Cue transfer,
- * CUE navigation, and Speed Group commands through typed application boundaries, so those reach
- * public v2 HTTP contracts. CUE and SPD therefore have no leading-token cases below.
+ * CUE navigation, whole-Cue deletion, and Speed Group commands through typed application
+ * boundaries, so those reach public v2 HTTP contracts. CUE and SPD therefore have no
+ * leading-token cases below.
  * Everything else in a legacy family is still compatibility-owned. This is a static ownership
  * decision on purpose: attempting v2 and falling back to v1 would hide an ownership regression.
  */
@@ -84,6 +86,7 @@ export function commandLineOwnership(command: string): CommandLineOwnership {
     CUE_TRANSFER.test(trimmed) ||
     CUE_OR_GROUP_RECORD.test(trimmed) ||
     GROUP_DELETE.test(trimmed) ||
+    CUE_DELETE.test(trimmed) ||
     PRESET_RECORD.test(trimmed)
   ) {
     return { via: "command-line-http" };
@@ -92,7 +95,7 @@ export function commandLineOwnership(command: string): CommandLineOwnership {
   switch (family) {
     case "DELETE":
     case "DEL":
-      return { via: "compatibility", family: "cue_delete" };
+      return { via: "compatibility", family: "preset_delete" };
     case "MOVE":
     case "MOV":
     case "COPY":

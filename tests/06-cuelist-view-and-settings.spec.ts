@@ -1,5 +1,6 @@
 import type { Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
 import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
+import { deleteCue } from "../apps/control-ui/e2e/bench/cueDeletion";
 import { expect, test, type BenchUiContext } from "../apps/control-ui/e2e/bench/fixtures";
 import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
 import { activeShowId, fixtureIdsByNumber, loadCanonicalCopy, object, putObject } from "./support/catalog";
@@ -281,7 +282,11 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       await api.request("POST", "/api/v1/cuelists/1/go", {});
       await api.request("POST", "/api/v1/cuelists/1/go", {});
       const heldLevel = slot(await bench.tick(0), 1);
-      await api.executeCompatibilityProgrammerCommand({ family: "cue_delete", command: "DELETE SET 1 CUE 2" });
+      await deleteCue(api, {
+        surface: "api",
+        address: { type: "pool", playbackNumber: 1 },
+        cueNumber: 2,
+      });
       expect((await object<any>(api, "cue_list", installed.id)).body.cues.map((item: any) => item.number)).toEqual([1, 3]);
       expect(await runtime(api, 1)).toMatchObject({
         current_cue_number: 2,
@@ -295,7 +300,13 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 
       const sole = await installCuelist(api, { name: "Sole Cue Safeguard", numbers: [1], playback: 2 });
       const soleBefore = await object<any>(api, "cue_list", sole.id);
-      await expect(api.executeCompatibilityProgrammerCommand({ family: "cue_delete", command: "DELETE SET 2 CUE 1" })).rejects.toThrow();
+      await expect(
+        deleteCue(api, {
+          surface: "api",
+          address: { type: "pool", playbackNumber: 2 },
+          cueNumber: 1,
+        }),
+      ).rejects.toThrow();
       expect((await object<any>(api, "cue_list", sole.id)).body).toEqual(soleBefore.body);
       state.completed = true;
     },

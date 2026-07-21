@@ -20,6 +20,7 @@ export const COMPATIBILITY_FAMILIES = Object.freeze([
   "cue_navigation",
   "speed_group",
   "cue_delete",
+  "preset_delete",
   "preset_transfer",
   "update",
 ]);

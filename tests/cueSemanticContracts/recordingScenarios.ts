@@ -1,4 +1,5 @@
 import { closeWebSocket } from "../../apps/control-ui/e2e/bench/api";
+import { deleteCue } from "../../apps/control-ui/e2e/bench/cueDeletion";
 import { expect } from "../../apps/control-ui/e2e/bench/fixtures";
 import {
 	enterProgrammerPreload,
@@ -280,9 +281,10 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 				afterRecordMinus.revision,
 			);
 			mark = stream.events.length;
-			await api.executeCompatibilityProgrammerCommand({
-				family: "cue_delete",
-				command: "DELETE SET 1 CUE 2",
+			await deleteCue(api, {
+				surface: "api",
+				address: { type: "pool", playbackNumber: 1 },
+				cueNumber: 2,
 			});
 			const deleteEvent = await showObjectEventAfter(
 				stream.events,

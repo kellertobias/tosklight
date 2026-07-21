@@ -2,23 +2,19 @@
 	"version": 2,
 	"directActionCommands": {
 		"tests/04-osc-api-and-cross-surface.spec.ts": 5,
+		"tests/09-cue-delete-v1-compatibility.spec.ts": 1,
 		"tests/09-cue-navigation-v1-compatibility.spec.ts": 6
 	},
 	"directActionFamilies": {
 		"not.a.command": 1,
 		"programmer.command_line": 1,
 		"programmer.command_target": 1,
-		"programmer.execute": 6,
+		"programmer.execute": 7,
 		"programmer.group.set": 2
 	},
 	"compatibilityCommands": {
-		"tests/06-cuelist-view-and-settings.spec.ts": 2,
-		"tests/cueSemanticContracts/recordingScenarios.ts": 1,
-		"tests/cueSemanticContracts/trackingScenarios.ts": 2,
 		"tests/support/catalog.ts": 1,
 		"tests/support/foundational/apiState.ts": 1
 	},
-	"compatibilityFamilies": {
-		"cue_delete": 5
-	}
+	"compatibilityFamilies": {}
 }

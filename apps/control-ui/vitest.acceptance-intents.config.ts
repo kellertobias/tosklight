@@ -4,6 +4,7 @@ export default defineConfig({
 	test: {
 		environment: "node",
 		include: [
+			"e2e/bench/cueDeletion.test.ts",
 			"e2e/bench/mapExistingPlaybackToSlot.test.ts",
 			"e2e/bench/outputRuntime.test.ts",
 			"e2e/bench/playbackRuntimeAction.test.ts",

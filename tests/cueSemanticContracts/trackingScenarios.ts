@@ -1,4 +1,5 @@
 import { expect, test } from "../../apps/control-ui/e2e/bench/fixtures";
+import { deleteCue } from "../../apps/control-ui/e2e/bench/cueDeletion";
 import {
 	clearProgrammerValues,
 	setProgrammerFixtureValue,
@@ -203,9 +204,10 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 		});
 		expect(logicalSlots(await bench.tick(0), 12)).toEqual(beforeSlots);
 
-		await api.executeCompatibilityProgrammerCommand({
-			family: "cue_delete",
-			command: "DELETE SET 1 CUE 1",
+		await deleteCue(api, {
+			surface: "api",
+			address: { type: "pool", playbackNumber: 1 },
+			cueNumber: 1,
 		});
 		expect(
 			(await object<any>(api, "cue_list", installed.id)).body.cues.map(
@@ -232,9 +234,10 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 		]);
 		const soleBefore = await object<any>(api, "cue_list", sole.id);
 		await expect(
-			api.executeCompatibilityProgrammerCommand({
-				family: "cue_delete",
-				command: "DELETE SET 2 CUE 1",
+			deleteCue(api, {
+				surface: "api",
+				address: { type: "pool", playbackNumber: 2 },
+				cueNumber: 1,
 			}),
 		).rejects.toThrow();
 		expect((await object<any>(api, "cue_list", sole.id)).body).toEqual(
