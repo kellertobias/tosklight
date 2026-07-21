@@ -1,19 +1,20 @@
 # Major Refactoring Progress
 
-Estimated progress: **98%**
+Estimated progress: **98.3%**
 
-Estimated Codex ETA: **roughly 20–38 hours of active Codex execution**, plus required reference-
+Estimated Codex ETA: **roughly 19–36 hours of active Codex execution**, plus required reference-
 hardware measurement time, to repository-wide acceptance. The Programmer, Playback, Output,
-Speed Group, Group management, and Patch foundations are mature. Remaining work is concentrated in
-configuration/layout and shell authority, the last broad frontend facade consumers, residual
-portable mutations/events, and final performance/desktop acceptance.
+Speed Group, Group management, Patch, and desk-configuration foundations are mature. Remaining work
+is concentrated in layout/session/shell authority, the last broad frontend facade consumers,
+residual portable mutations/events, and final performance/desktop acceptance.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-21 after completing typed Group management end to end and finishing Patch read
-ownership, which retires the broad Patch bootstrap snapshot from the frontend facade.
+Last updated: 2026-07-21 after completing typed Group management end to end, finishing Patch read
+ownership, and scoping desk-configuration authority. The broad Patch snapshot and the broad
+configuration field are both gone from the frontend facade.
 
 ## Guardrails
 
@@ -624,12 +625,27 @@ ownership, which retires the broad Patch bootstrap snapshot from the frontend fa
   boundary no longer seeds `initialFixtures` from the facade. The typed batch mutation, profile
   snapshot, stored-show, and unpatched-fixture contracts are unchanged.
 
+- [x] Scoped desk-configuration authority and removed the broad configuration facade field.
+  Configuration reads are almost entirely scalar, so each consumer selects one setting through an
+  equality-cached projection: changing the programmer fade no longer rerenders the sequence-master,
+  speed-group, Matter, Patch-preview, or file-manager readers, and unrelated server-context churn
+  rerenders none of them. A reader outside a mounted configuration boundary observes an inert empty
+  snapshot instead of falling back to broad server state. All 13 production readers migrated,
+  including the two settings surfaces that genuinely edit the whole configuration. The
+  authoritative configuration is published into the store outside the broad React context update
+  path, keeping the existing bootstrap load and `server_configuration_changed` refresh as its
+  source. The migration also exposed and fixed two Rules-of-Hooks violations: the Patch DMX preview
+  and the Cuelist settings speed groups read configuration inside a short-circuit expression, which
+  became a conditional hook call once the read was a selector.
+
 ## In progress
 
 - [ ] Continue vertical feature-store/event slices and move the remaining production callers away
   from broad `useServer()`, generic show-object mutation, and one-off polling. The next coherent
-  owners are configuration/timing/Matter settings, stage and user-layout persistence, shell and
-  connection status, and the one-shot Cue-thumbnail Visualization read.
+  owners are stage and user-layout persistence, shell/connection/desk-lock status, fixture library
+  and show lists, and the one-shot Cue-thumbnail Visualization read. Configuration timing and
+  Matter reads are complete; their writers (`saveConfiguration`, `setControlTiming`) still cross
+  the facade.
 - [ ] Add the remaining typed actions required to remove compatibility facades: standalone Playback
   `SET`, command-line bare `UPDATE`, Preset delete/transfer, output-route/user-layout, and residual
   portable-show mutations.
@@ -687,6 +703,19 @@ new scenarios may not add a direct family or raw v1 action without an exact base
   readiness/log/operator-path verification.
 
 ## Current verification snapshot
+
+- The desk-configuration slice passes the full frontend suite of 1,956 tests in 271 files,
+  including 4 new selector tests proving unrelated-setting rerender isolation, own-setting
+  invalidation, stable equality for a replaced-but-equal speed-group array, and no broad fallback
+  outside a mounted boundary. Frontend typecheck and the production Vite build pass with only the
+  existing large-chunk advisory. `node tools/check-architecture.mjs`,
+  `node tools/check-source-size.mjs`, `node tools/test-command-boundaries.mjs`, and
+  `git diff --check` all pass.
+  Rust was not re-run for this slice because it contains no Rust changes; the last full Rust run
+  remains 386 `light-application`, 79 `light-wire` plus generated contracts, and 408 `light-server`
+  tests with 1 ignored.
+  Known gaps: no desktop `./build open` run and no Playwright acceptance run for this slice, and
+  the configuration writers still cross the broad facade.
 
 - The Patch read-ownership slice passes the full frontend suite of 1,952 tests in 270 files,
   including 7 new selector tests that prove unrelated-delta rerender isolation, own-fixture
