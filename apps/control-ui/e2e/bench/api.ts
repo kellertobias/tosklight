@@ -48,8 +48,6 @@ export type CommandOperationResponse = CommandOperationBase & (
  * ownership gap it is riding on rather than hiding behind an anonymous "legacy" call.
  */
 export type CompatibilityCommandFamily =
-  /** `SPD GRP` BPM and synchronization; no application-owned Speed Group action exists. */
-  | "speed_group"
   /** Whole-Cue deletion; Cue recording subtract is a different operation and is not a substitute. */
   | "cue_delete"
   /** Preset `MOVE`/`COPY`; only Cue transfer is intercepted by the typed Programming boundary. */
@@ -74,9 +72,9 @@ const GROUP_DELETE = /^(?:DELETE|DEL)\s+GROUP\b/i;
 /**
  * Classifies one command against the grammars the server intercepts before its atomic-family check.
  *
- * `record_typed_command` routes Group recording, Preset recording, Cue recording, Cue transfer, and
- * CUE navigation through the typed Programming boundary, so those reach the public v2 command-line
- * HTTP contract. CUE therefore has no leading-token case below: it is owned outright.
+ * `record_typed_command` routes Group recording, Preset recording, Cue recording, Cue transfer,
+ * CUE navigation, and Speed Group commands through typed application boundaries, so those reach
+ * public v2 HTTP contracts. CUE and SPD therefore have no leading-token cases below.
  * Everything else in a legacy family is still compatibility-owned. This is a static ownership
  * decision on purpose: attempting v2 and falling back to v1 would hide an ownership regression.
  */
@@ -92,8 +90,6 @@ export function commandLineOwnership(command: string): CommandLineOwnership {
   }
   const family = trimmed.match(/^[A-Za-z]+/)?.[0]?.toUpperCase();
   switch (family) {
-    case "SPD":
-      return { via: "compatibility", family: "speed_group" };
     case "DELETE":
     case "DEL":
       return { via: "compatibility", family: "cue_delete" };

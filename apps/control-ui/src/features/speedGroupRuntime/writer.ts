@@ -135,6 +135,7 @@ export class SpeedGroupRuntimeWriter implements SpeedGroupRuntimeActions {
 			requestId: write.requestId,
 			expectedAuthorityId: authority.authorityId,
 			expectedRevision: authority.revision,
+			expectedGroups: authority.groups,
 			action: write.action,
 		};
 	}

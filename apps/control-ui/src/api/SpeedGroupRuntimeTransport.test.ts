@@ -5,6 +5,7 @@ import {
 	CORRELATION_ID,
 	DESK_ID,
 	OTHER_DESK_ID,
+	speedAuthority,
 } from "../features/speedGroupRuntime/testFixtures";
 import type { SpeedGroupTransportError } from "../features/speedGroupRuntime/transport";
 import { HttpSpeedGroupRuntimeTransport } from "./SpeedGroupRuntimeTransport";
@@ -14,6 +15,7 @@ const REQUEST: SpeedGroupActionRequest = {
 	requestId: "speed-request",
 	expectedAuthorityId: AUTHORITY_ID,
 	expectedRevision: 4,
+	expectedGroups: speedAuthority().groups,
 	action: { type: "set_bpm", group: "A", bpm: 128.5 },
 };
 

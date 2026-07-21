@@ -12,6 +12,7 @@ export default defineConfig({
 			"e2e/bench/programmingSelection.test.ts",
 			"e2e/bench/programmerValues.test.ts",
 			"e2e/bench/presetRecall.test.ts",
+			"e2e/bench/speedGroupRuntime.test.ts",
 		],
 	},
 });

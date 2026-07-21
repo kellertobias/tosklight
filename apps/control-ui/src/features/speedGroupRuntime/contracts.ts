@@ -59,6 +59,8 @@ export interface SpeedGroupActionRequest {
 	requestId: string;
 	expectedAuthorityId: string;
 	expectedRevision: number;
+	/** Local decoder context captured with the revision; never serialized. */
+	expectedGroups?: readonly SpeedGroupProjection[];
 	action: SpeedGroupAction;
 }
 

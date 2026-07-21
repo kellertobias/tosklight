@@ -195,6 +195,7 @@ export class SpeedGroupRuntimeStore {
 			? {
 					authorityId: this.authoritative.authorityId,
 					revision: this.authoritative.revision,
+					groups: this.authoritative.groups,
 				}
 			: null;
 	}

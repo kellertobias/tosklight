@@ -1,5 +1,4 @@
 import {
-	type SpeedGroupAction,
 	type SpeedGroupActionOutcome,
 	type SpeedGroupActionRequest,
 	type SpeedGroupAuthorityProjection,
@@ -23,6 +22,7 @@ import {
 	stringAt,
 } from "./playbackWirePrimitives";
 import { programmingUuidAt } from "./programmingWireProjection";
+import { assertSpeedGroupOutcomeGroups } from "./speedGroupRuntimeOutcomeWire";
 import {
 	messageFields,
 	outcomeFields,
@@ -82,7 +82,7 @@ export function decodeSpeedGroupActionOutcome(
 	if (revision !== expectedRevision)
 		throw mismatch("$.revision", expectedRevision, revision);
 	const groups = groupsAt(response.groups, "$.groups");
-	assertOutcomeGroups(groups, request.action);
+	assertSpeedGroupOutcomeGroups(groups, request);
 	const base = {
 		requestId,
 		correlationId: programmingUuidAt(
@@ -279,25 +279,6 @@ function changeAt(value: unknown, path: string): SpeedGroupChange {
 		),
 		groups,
 	};
-}
-
-function assertOutcomeGroups(
-	groups: readonly SpeedGroupProjection[],
-	action: SpeedGroupAction,
-) {
-	const expected =
-		action.type === "synchronize"
-			? [action.source, action.target].sort()
-			: [action.group];
-	if (
-		groups.length !== expected.length ||
-		groups.some((group, index) => group.group !== expected[index])
-	)
-		throw new WireValidationError(
-			"$.groups",
-			`authoritative groups ${expected.join(", ")}`,
-			groups,
-		);
 }
 
 function eventObjectAt(value: unknown) {

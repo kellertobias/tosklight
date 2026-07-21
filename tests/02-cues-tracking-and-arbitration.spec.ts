@@ -1,6 +1,7 @@
+import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
 import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
 import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
-import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
+import { applySpeedGroupRuntimeAction } from "../apps/control-ui/e2e/bench/speedGroupRuntime";
 import type { Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
 import { fixtureIdsByNumber, loadCanonicalCopy, object, objects, putObject } from "./support/catalog";
 
@@ -88,25 +89,46 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     },
     api: async ({ api, bench }, state) => {
       for (const [group, bpm] of [
-        [1, 120],
-        [2, 127.5],
-        [3, 131],
-        [4, 142],
-        [5, 153],
+        ["A", 120],
+        ["B", 127.5],
+        ["C", 131],
+        ["D", 142],
+        ["E", 153],
       ] as const) {
-        await api.executeCompatibilityProgrammerCommand({ family: "speed_group", command: `SPD GRP ${group} AT ${bpm}` });
+        await applySpeedGroupRuntimeAction(api, {
+          surface: "api",
+          action: { type: "set_bpm", group, bpm },
+        });
       }
       expect(await speedConfiguration(api)).toEqual([120, 127.5, 131, 142, 153]);
-      await api.executeCompatibilityProgrammerCommand({ family: "speed_group", command: "SPD GRP 1 AT + 5" });
-      await api.executeCompatibilityProgrammerCommand({ family: "speed_group", command: "SPD GRP 1 AT - 5" });
+      await applySpeedGroupRuntimeAction(api, {
+        surface: "api",
+        action: { type: "adjust_bpm", group: "A", deltaBpm: 5 },
+      });
+      await applySpeedGroupRuntimeAction(api, {
+        surface: "api",
+        action: { type: "adjust_bpm", group: "A", deltaBpm: -5 },
+      });
       expect((await speedConfiguration(api))[0]).toBe(120);
-      await api.executeCompatibilityProgrammerCommand({ family: "speed_group", command: "SPD GRP 3 AT 90" });
-      await api.executeCompatibilityProgrammerCommand({ family: "speed_group", command: "SPD GRP 1 AT SPD GRP 3" });
+      await applySpeedGroupRuntimeAction(api, {
+        surface: "api",
+        action: { type: "set_bpm", group: "C", bpm: 90 },
+      });
+      await applySpeedGroupRuntimeAction(api, {
+        surface: "api",
+        action: { type: "synchronize", source: "A", target: "C" },
+      });
       await assertSpeedGroupsSynchronized(api, bench, 120);
-      await api.executeCompatibilityProgrammerCommand({ family: "speed_group", command: "SPD GRP 3 AT 90" });
+      await applySpeedGroupRuntimeAction(api, {
+        surface: "api",
+        action: { type: "set_bpm", group: "C", bpm: 90 },
+      });
       let [speedA, speedC] = await Promise.all([speedGroup(api, "A"), speedGroup(api, "C")]);
       expect([speedA.snapshot.manual_bpm, speedC.snapshot.manual_bpm, speedA.snapshot.synchronized_with, speedC.snapshot.synchronized_with]).toEqual([120, 90, null, null]);
-      await api.executeCompatibilityProgrammerCommand({ family: "speed_group", command: "SPD GRP 1 AT SPD GRP 3" });
+      await applySpeedGroupRuntimeAction(api, {
+        surface: "api",
+        action: { type: "synchronize", source: "A", target: "C" },
+      });
       await assertSpeedGroupsSynchronized(api, bench, 120);
       for (let tap = 0; tap < 5; tap += 1) {
         if (tap > 0) await bench.tick(750);

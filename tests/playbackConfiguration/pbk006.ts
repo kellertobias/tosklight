@@ -1,5 +1,6 @@
 import { expect, test } from "../../apps/control-ui/e2e/bench/fixtures";
 import { pairedScenario } from "../../apps/control-ui/e2e/bench/pairedScenario";
+import { applySpeedGroupRuntimeAction } from "../../apps/control-ui/e2e/bench/speedGroupRuntime";
 import {
 	armSet,
 	authoritativeMasterObservation,
@@ -35,13 +36,16 @@ export function registerPbk006PairedScenario(): void {
 			);
 			await setSpeedRates(api, [120, 96, 72, 60, 48]);
 			for (const [group, bpm] of [
-				[1, 120],
-				[2, 96],
-				[3, 72],
-				[4, 60],
-				[5, 48],
+				["A", 120],
+				["B", 96],
+				["C", 72],
+				["D", 60],
+				["E", 48],
 			] as const)
-				await api.executeCompatibilityProgrammerCommand({ family: "speed_group", command: `SPD GRP ${group} AT ${bpm}` });
+				await applySpeedGroupRuntimeAction(api, {
+					surface: "api",
+					action: { type: "set_bpm", group, bpm },
+				});
 			await installPlaybacks(
 				api,
 				[

@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { SpeedGroupActionRequest } from "../features/speedGroupRuntime/contracts";
+import type {
+	SpeedGroupActionRequest,
+	SpeedGroupProjection,
+} from "../features/speedGroupRuntime/contracts";
 import {
 	AUTHORITY_ID,
 	CORRELATION_ID,
 	DESK_ID,
 	OTHER_AUTHORITY_ID,
+	speedAuthority,
 } from "../features/speedGroupRuntime/testFixtures";
 import {
 	decodeSpeedGroupActionOutcome,
@@ -19,6 +23,7 @@ const REQUEST: SpeedGroupActionRequest = {
 	requestId: "speed-request",
 	expectedAuthorityId: AUTHORITY_ID,
 	expectedRevision: 4,
+	expectedGroups: speedAuthority().groups,
 	action: { type: "set_bpm", group: "A", bpm: 128.5 },
 };
 
@@ -183,6 +188,45 @@ describe("Speed Group runtime wire", () => {
 			durability: "persistence_pending",
 			warning: "save pending",
 		});
+	});
+
+	it("accepts only captured reciprocal peers in authoritative action outcomes", () => {
+		const expectedGroups: SpeedGroupProjection[] = (
+			["A", "B", "C", "D", "E"] as const
+		).map((id) => ({
+			group: id,
+			manualBpm: 120,
+			paused: false,
+			speedMasterScale: 1,
+			synchronizedWith: id === "A" ? "C" : id === "C" ? "A" : null,
+			phaseOriginMillis: 100,
+		}));
+		const request: SpeedGroupActionRequest = {
+			...REQUEST,
+			expectedGroups,
+			action: { type: "set_bpm", group: "C", bpm: 90 },
+		};
+		const authoritative = outcome({
+			groups: [group("A"), group("C", { manual_bpm: 90 })],
+		});
+
+		expect(decodeSpeedGroupActionOutcome(authoritative, request)).toMatchObject(
+			{ groups: [{ group: "A" }, { group: "C" }] },
+		);
+		expect(() =>
+			decodeSpeedGroupActionOutcome(
+				outcome({
+					groups: [group("A"), group("B"), group("C", { manual_bpm: 90 })],
+				}),
+				request,
+			),
+		).toThrow(WireValidationError);
+		expect(() =>
+			decodeSpeedGroupActionOutcome(
+				outcome({ groups: [group("C"), group("C")] }),
+				request,
+			),
+		).toThrow(WireValidationError);
 	});
 
 	it.each([
