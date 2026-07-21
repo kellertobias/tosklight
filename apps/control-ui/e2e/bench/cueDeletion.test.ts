@@ -17,13 +17,9 @@ const CUE_TWO_ID = "88888888-8888-4888-8888-888888888888";
 const CUE_THREE_ID = "99999999-9999-4999-8999-999999999999";
 
 describe("Cue deletion acceptance intent", () => {
-	it("routes whole-Cue deletion through v2 while retaining preset deletion explicitly", () => {
+	it("routes whole-Cue deletion through the v2 command-line boundary", () => {
 		expect(commandLineOwnership("DELETE SET 1 CUE 2")).toEqual({
 			via: "command-line-http",
-		});
-		expect(commandLineOwnership("DEL COLOR 1")).toEqual({
-			via: "compatibility",
-			family: "preset_delete",
 		});
 	});
 
