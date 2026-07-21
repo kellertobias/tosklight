@@ -1,20 +1,86 @@
 # Major Refactoring Progress
 
-Estimated progress: **98.3%**
+Estimated progress: **97%** (revised down from 98.3% after the first e2e run exposed 88 pre-existing
+operator-path failures that earlier unit-only checkpoints had hidden).
 
-Estimated Codex ETA: **roughly 19–36 hours of active Codex execution**, plus required reference-
-hardware measurement time, to repository-wide acceptance. The Programmer, Playback, Output,
-Speed Group, Group management, Patch, and desk-configuration foundations are mature. Remaining work
-is concentrated in layout/session/shell authority, the last broad frontend facade consumers,
-residual portable mutations/events, and final performance/desktop acceptance.
+Estimated Codex ETA: **roughly 30–55 hours of active Codex execution**, plus required reference-
+hardware measurement time, to repository-wide acceptance. The frontend facade decomposition is
+mature (Patch, configuration, stage-layout, desk-lock, and shell-status authorities are all
+scoped). The dominant remaining risk is now operator-path acceptance: the typed Playback-topology
+migration ships with 88 failing e2e scenarios that must be reconciled with the acceptance specs,
+plus the one Patch definition-resolution regression owned by this effort. See "End-to-end
+acceptance status" below.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-21 after completing typed Group management end to end, finishing Patch read
-ownership, and scoping desk-configuration authority. The broad Patch snapshot and the broad
-configuration field are both gone from the frontend facade.
+Last updated: 2026-07-22 after the first full Playwright run of this effort. It surfaced a large
+pre-existing e2e regression (88 failures) plus 5 introduced by the Patch reader migration; one class
+of the 5 is fixed and the rest is scoped. See "End-to-end acceptance status" below before doing
+further facade work — the e2e baseline is not green and must be addressed.
+
+Earlier the same day: completed typed Group management end to end, finished Patch read ownership,
+scoped desk-configuration, stage-layout, desk-lock, and shell-status authorities, and fixed the
+polled-value rerender churn. The broad Patch snapshot, configuration, stageLayout, deskLock,
+status, and error fields are all gone from the frontend facade.
+
+## End-to-end acceptance status (2026-07-22)
+
+This is the first `./test e2e` (now `tools/test.sh e2e`) run since checkpoint `47030ed`; every
+milestone before this was verified with unit/contract tests only. The suite is **not green**, and
+the failures split cleanly:
+
+- **Full suite at `47030ed` (pre-work checkpoint): 174 passed, 88 failed, 26 skipped, 0 flaky.**
+- **Full suite at HEAD (`47a9466`): 169 passed, 93 failed, 26 skipped, 0 flaky.**
+- Diff of failing spec titles: **0 fixed, exactly 5 introduced** by the 28 commits since `47030ed`.
+
+**88 failures are pre-existing** — the prior agent's cuelist/topology/visualization migration was
+committed with a broken e2e suite that was never run. Signature: `@api` variants pass, `@ui`
+variants fail (e.g. CUE-011 "renumber is one revision" — the UI-driven path emits the wrong show
+revision count while the API path is correct). This is a large, separate body of work: the typed
+Playback-topology migration of inline Cue edits, Cuelist settings, and atomic renumber needs its
+operator-path behavior reconciled with the acceptance specs. It is **not** caused by any facade
+slice in this document.
+
+**5 failures were introduced here, all one root cause** — the Patch reader migration moved
+programmer-surface consumers off the always-present `server.patch.fixtures` onto the scoped Patch
+store:
+
+- `POSITION-HOME-001 @ui` — Return Home button stays disabled (no home assignments)
+- `PROG-002 @ui` (hardware encoder spread + fixture window)
+- `ENCODER-DISPLAY-001 @supplemental-ui` — encoder slots show "Unassigned" instead of Pan/Tilt
+- `HIGHLIGHT-003 @ui` — PREV/NEXT/ALL selection + keypad geometry
+- `COMMAND-HISTORY-001 @supplemental-ui` — reconnect/hardware-layout unfinished input
+
+Two mechanisms:
+
+1. **Activation cold-start (FIXED, commit `346726b`).** The scoped selectors gated Patch-stream
+   activation on a non-empty selection, so fixtures cold-started on the first selection where the
+   old bootstrap load made them present as soon as a show opened. `PatchFeatureBoundary` now mounts
+   a persistent `PatchAuthorityActivation` so the shared authority hydrates whenever a show is open.
+   This clears COMMAND-HISTORY-001 @ui and the PROG-002 supplemental variants. Rerender isolation is
+   unaffected (it is in the selectors, not in lazy activation). 1,974/1,974 unit tests still pass.
+
+2. **Definition-resolution race (REMAINING — next fix).** The scoped store resolves fixture
+   definitions client-side via `mergeFixtureDefinitions(fixtureProfiles, fixtureLibrary)` and
+   applies its snapshot exactly once. If the snapshot is fetched before `fixtureProfiles` finish
+   loading, `projectionToPatchedFixture` falls back to `syntheticDefinition`, which carries no head
+   parameters — so `useSupportedAttributes`/`returnHomeAssignments` see no attributes and the
+   controls render empty/disabled. The old `server.patch` was server-resolved, so it never raced.
+   Fix: make `PatchSession`/`PatchStore` re-project (or re-fetch the snapshot) when the definition
+   resolver changes, so late-arriving definitions upgrade the synthetic fixtures. This is the
+   remaining regression owned by this effort (POSITION-HOME-001, HIGHLIGHT-003, ENCODER-DISPLAY-001,
+   PROG-002 @ui).
+
+Desktop smoke (`tools/test.sh desktop-smoke`) passes 2/2 (DESKTOP-001, DESKTOP-002): the packaged
+app owns and terminates its exact child server and refuses to adopt an independent one.
+
+Process notes for the next session: the branch now carries semantic-release/DX tooling commits
+(`d5206f8`, `62d2ac3`, `47a9466`) that moved `build`/`test`/`dev` to `tools/*.sh` — use those paths.
+Playwright clears `.artifacts/test/results` at the start of every run, so copy the failure set aside
+before running another suite. `git checkout`-based bisecting is unsafe while uncommitted work is in
+the tree; commit or stash first.
 
 ## Guardrails
 
@@ -663,12 +729,18 @@ configuration field are both gone from the frontend facade.
 
 ## In progress
 
+- [ ] **Highest priority — fix the e2e baseline before more facade work.** (a) Finish the Patch
+  definition-resolution regression owned by this effort (POSITION-HOME-001, HIGHLIGHT-003,
+  ENCODER-DISPLAY-001, PROG-002 @ui) by re-projecting the scoped Patch store when definitions load.
+  (b) Reconcile the 88 pre-existing operator-path failures from the typed Playback-topology
+  migration with the acceptance specs. See "End-to-end acceptance status". Do not treat the facade
+  decomposition as done while e2e is red.
 - [ ] Continue vertical feature-store/event slices and move the remaining production callers away
-  from broad `useServer()`, generic show-object mutation, and one-off polling. The next coherent
-  owners are stage and user-layout persistence, shell/connection/desk-lock status, fixture library
-  and show lists, and the one-shot Cue-thumbnail Visualization read. Configuration timing and
-  Matter reads are complete; their writers (`saveConfiguration`, `setControlTiming`) still cross
-  the facade.
+  from broad `useServer()`, generic show-object mutation, and one-off polling. Configuration,
+  stage-layout, desk-lock, and shell-status are complete (reads and writes). The next coherent
+  owners are user/desk-layout persistence (`deskLayout`/`deskLayoutScope`/`saveDeskLayout`, one
+  consumer), `bootstrap`/`session` identity (recommend narrow identity hooks, not field removal),
+  fixture library and show lists, and the one-shot Cue-thumbnail Visualization read.
 - [ ] Add the remaining typed actions required to remove compatibility facades: standalone Playback
   `SET`, command-line bare `UPDATE`, Preset delete/transfer, output-route/user-layout, and residual
   portable-show mutations.
