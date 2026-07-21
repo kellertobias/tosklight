@@ -6,7 +6,11 @@ import {
 } from "../../api/PatchTransport";
 import { useServer } from "../../api/ServerContext";
 import { mergeFixtureDefinitions } from "../../components/setup/fixtureProfileModel";
-import { PatchViewProvider, useOptionalPatch } from "./PatchContext";
+import {
+	PatchViewProvider,
+	useOptionalPatch,
+	usePatchView,
+} from "./PatchContext";
 import { EMPTY_FIXTURES } from "./selectors";
 
 /** Composes one lazy Patch authority for all consumers under this boundary. */
@@ -44,7 +48,22 @@ function PatchFeatureProvider({ children }: PropsWithChildren) {
 			definitions={definitions}
 			transport={transport}
 		>
+			<PatchAuthorityActivation />
 			{children}
 		</PatchViewProvider>
 	);
+}
+
+/**
+ * Keeps the shared Patch authority hydrated for the whole desk.
+ *
+ * Patched fixtures are desk-wide data that many always-visible controls read, so — like the former
+ * bootstrap patch load — the snapshot and stream stay active whenever a show is open, rather than
+ * cold-starting on the operator's first selection. The session self-gates on an open show, so this
+ * does nothing until one exists. Per-consumer rerender isolation is unaffected; it comes from the
+ * scoped selectors, not from lazy activation.
+ */
+function PatchAuthorityActivation() {
+	usePatchView();
+	return null;
 }
