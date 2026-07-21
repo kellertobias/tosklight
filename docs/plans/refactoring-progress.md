@@ -1,19 +1,20 @@
 # Major Refactoring Progress
 
-Estimated progress: **99%**
+Estimated progress: **96%**
 
-Estimated Codex ETA: **two focused implementation milestones plus final acceptance, or roughly
-6–12 hours of active Codex execution**, to repository-wide acceptance. Portable Playback
-topology, Virtual Playback, Cue-editor/Cuelist settings, and typed Update convergence are
-complete; typed Cue transfer, the physical compatibility panes, the public test-DSL handoff, and
-final acceptance remain.
+Estimated Codex ETA: **roughly 18–30 hours of active Codex execution**, to repository-wide
+acceptance. Typed Cue transfer is complete. Physical Playback authority still requires an exact
+map-existing action and a page create/rename action before the broad Playback snapshot can be
+retired; the remaining compatibility callers, public test-DSL handoff, and final performance and
+desktop acceptance follow. This corrected estimate reflects the audited compatibility surface,
+not a regression in completed work.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-20 after completing the typed Programming Update application, wire, and
-frontend authority without broad refreshes.
+Last updated: 2026-07-20 after completing typed Cue COPY/MOVE Plain/Status authority from the
+Programming application boundary through the scoped frontend writer.
 
 ## Guardrails
 
@@ -102,6 +103,22 @@ frontend authority without broad refreshes.
   retry, replay, pending rollback, exact conflict repair, and same-Show authority replacement.
   Update dialogs and Setup settings now consume that capability without `refresh()`, bootstrap,
   or broad Playback reads, and the internal v1 Update API/server-context facade is removed.
+- [x] Completed Cue COPY/MOVE Plain/Status as one typed Programming action. The retained choice
+  carries exact Show, source, destination, command-line, user, session, and desk authority; a real
+  transfer preserves lossless Cuelist fields and Cue identity rules, commits one or two Cuelist
+  projections in one ActiveShow transaction, and emits exactly one Show event. Copy allocates one
+  destination Cue ID, Move retains the source ID, Status materializes tracked fixture and Group
+  state without per-address timing, and the sole-Cue cross-Cuelist Move remains rejected. The
+  authenticated v2 route reports request/correlation identity, replay state, authoritative Show
+  and command-line revisions, projection/event authority, and persistence warning. Replay is
+  checked before the resolved choice, so a retry after Cancel or success cannot repeat the
+  mutation or resurrect the choice. The action-only frontend provider performs no snapshot or
+  socket work, installs strict lossless projections into the existing Show Objects authority, and
+  reconciles optimistic choice closure whether the response or event arrives first. Conflicts
+  repair only the Show/Cuelist or exact desk command-line authority; late responses cannot cross a
+  server, session, Show, desk, or user replacement. Legacy command/OSC/WebSocket execution shares
+  the typed boundary while its temporary per-object v1 notification remains isolated to the
+  compatibility path; non-SET Preset COPY/MOVE remains owned by Preset mutation.
 - [x] Made virtual Playback exclusion activation one atomic Engine transition. Actual exclusion and
   auto-off releases are returned as sorted related projections, published once before the primary
   high-water event, retained by idempotent replay without re-execution, and applied to the frontend
@@ -391,9 +408,10 @@ frontend authority without broad refreshes.
 
 - [ ] Continue vertical feature-store/event slices and move the remaining production callers away
   from broad `useServer()`, polling, and generic show-object mutation.
-- [ ] Finish the remaining Playback ownership callers: move typed Cue transfer, then the physical
-  compatibility panes onto the committed topology and runtime boundaries. Update, Cue editor/
-  Cuelist settings, and Virtual Playback are complete.
+- [ ] Finish the remaining Playback ownership callers: add exact typed map-existing Playback and
+  page create/rename actions, move the physical bank and companion page tools onto committed
+  topology/runtime/desk boundaries, then retire broad `/playbacks` consumers. Update, Cue transfer,
+  Cue editor/Cuelist settings, and Virtual Playback are complete.
 - [ ] Move the remaining selection consumers onto the scoped Programming store, then remove their
   legacy bootstrap fields and broad Programmer refresh paths. Group Pool, Group Strip, and the
   command bar, Stage, Stage/Fixture pane chrome, Channels, Fixture Sheet, Patch, and Presets have
@@ -402,9 +420,11 @@ frontend authority without broad refreshes.
 
 ## Remaining architecture work
 
-1. Complete vertical frontend slices for Playback, Programmer, Highlight, Output health, remaining
-   Show capabilities, Patch, Screens, Files, and Configuration. Replace polling and broad bootstrap
-   refreshes with narrow snapshots plus relevant event subscriptions.
+1. Complete physical Playback authority without changing desk semantics. Add a typed
+   `map_existing_playback` action that retains the existing Playback number instead of allocating a
+   clone, then add typed page create/rename. Migrate the bank, configuration, page tools, hardware
+   summary, shortcuts, Numeric Pad, secondary screens, and Product Demo onto exact topology,
+   runtime, Group, and desk projections before deleting the broad `/playbacks` snapshot.
 2. Publish the remaining externally observable transitions once through typed events: Highlight
    movement, transition completion, output health/overload, and any remaining automatic runtime
    changes.
@@ -419,6 +439,13 @@ frontend authority without broad refreshes.
    acceptance test has moved to a typed replacement.
 7. Repair the remaining stale feature-plan links and keep the committed `docs/engineering` handoff
    synchronized as compatibility adapters are retired.
+
+The audited public test boundary still contains 145 direct v1 WebSocket commands, 40 legacy text
+commands, and 142 generic show-object writes. The first test-DSL migration should converge visible
+command-line, software-key, and OSC command intent while retaining one explicit v1 compatibility
+test. Missing typed seams for priority, Preset recall, output-route/user-layout mutation, session
+handoff, and DesktopBridge must remain visible work rather than being hidden behind a generic test
+helper.
 
 ## Performance and acceptance still required
 
@@ -718,6 +745,22 @@ frontend authority without broad refreshes.
   10 architecture scanner tests pass. Every new production file remains below 400 lines and the
   split `UpdateWorkflow` function is 59 lines; the committed aggregate source-size exception for
   the isolated Dynamics Editor experiment remains outside this slice.
+- Typed Cue transfer passes all 91 Programmer tests, 8 focused application tests, 4 Playback
+  transfer tests, 4 wire transfer tests, generated-contract verification, 7 focused server route/
+  compatibility tests, and 6 targeted server regressions covering the four Plain/Status and
+  Move/Copy axes, choice reset, v1-notification isolation, Preset ownership, replay after choice
+  resolution, and desk-scoped command-line idempotency. The doubly stale Show regression proves a
+  conflict reports the current ActiveShow revision rather than the older pending-choice revision.
+  Strict Clippy for the touched Rust crates, `cargo fmt --all -- --check`, and `git diff --check`
+  pass. Eight focused frontend files pass all 71 transport, decoder, provider, writer, modal, and
+  Programming-interaction tests; the full frontend run passes 1,395 tests in 207 files and
+  typecheck passes. Coverage includes forged-scope rejection, exact one-event mutation
+  cardinality, both HTTP/event orderings, rollback, replay/no-change, narrow conflict and cursor
+  repair, dormant action-only composition, scope replacement, and late response rejection. A
+  future route hardening test should still exercise valid same-user peer-desk credentials and a
+  second authenticated user rather than only forged contexts. Wire generation retains only the
+  known non-fatal `ts-rs`
+  `deny_unknown_fields` warning; Serde and checked-in schemas remain strict.
 
 ## Wrap-up handoff
 
@@ -740,11 +783,12 @@ frontend authority without broad refreshes.
   remains a separate future milestone.
 - Preload now prepares one final-state-aware batch, and virtual-exclusion restart authority is
   private, desk-exact, migration-compatible, and absent from public runtime projections.
-- Recommended next slice: move Cue COPY/MOVE Plain/Status transfer into one typed Programming
-  application action with exact source/destination authority, one coherent lossless projection,
-  replay, and scoped frontend installation. The physical Playback compatibility snapshot follows;
+- Recommended next slice: add typed `map_existing_playback` and migrate the physical Playback bank
+  onto exact topology/runtime/desk authority. Preserve the existing Playback number, hardware and
+  touch geometry, Record/Update interception, explicit-page behavior, `surface: "physical"`, and
+  Flash/Swap release cleanup. Page create/rename and the remaining broad Playback consumers follow;
   keep the public test DSL and final repository-wide acceptance/performance run as the closing
-  milestone.
+  milestones.
 
 Test files may exceed the hard limits, but should still be split when it improves readability and
 makes operator intent more visible.
