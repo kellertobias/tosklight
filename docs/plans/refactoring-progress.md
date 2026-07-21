@@ -1,21 +1,20 @@
 # Major Refactoring Progress
 
-Estimated progress: **98.5%**
+Estimated progress: **98.7%**
 
-Estimated Codex ETA: **roughly 6–11 hours of active Codex execution**, to repository-wide
+Estimated Codex ETA: **roughly 5–10 hours of active Codex execution**, to repository-wide
 acceptance. Typed Playback Page creation/rename and strict desk selection, the companion Page and
 Playback surfaces, scoped command execution, Group selection, Cuelist authority, and typed CUE
-navigation are complete. Portable Group decoupling is now complete. System Controls and direct
-Group-master authority, broad frontend `/playbacks` retirement, public test-DSL convergence, and
-final performance/desktop acceptance remain.
+navigation are complete. Portable Group decoupling and scoped System Controls runtime authority
+are now complete. Direct Group-master authority, broad frontend `/playbacks` retirement, public
+test-DSL convergence, and final performance/desktop acceptance remain.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-21 after completing portable Group decoupling for parameter projection, Cue
-thumbnails, selected-membership synchronization, Group derivation, and paperwork export, and after
-removing the dead Playback configuration facade.
+Last updated: 2026-07-21 after moving System Controls from the broad Playback snapshot onto dormant
+portable Cuelist/Playback definitions and exact mapped or direct Cuelist runtime identities.
 
 ## Guardrails
 
@@ -425,8 +424,15 @@ removing the dead Playback configuration facade.
   derived-Group detachment now use the Show Objects projection, and paperwork loads Cuelists,
   Groups, and Presets on demand from the active Show. The unused Page, slot, definition, exclusion,
   pool-action, and Cuelist-unassignment `ServerContext` facade actions are deleted. Broad
-  `/playbacks` now remains only for the separately tracked runtime Group masters and System
-  Controls enumeration.
+  `/playbacks` now remains only for the separately tracked runtime Group masters.
+- [x] Moved System Controls runtime enumeration and release onto scoped authority. The closed modal
+  opens no Show-object or runtime snapshot and no socket; the open modal hydrates only portable
+  Cuelists and Playbacks, then subscribes to the exact mapped Playback and direct Cuelist runtime
+  identities it displays. Individual and aggregate release preserve request replay, either HTTP/
+  event order, loading refusal, and Show/server/session replacement safety. Aggregate Stop
+  deduplicates exact sources while retaining Programmer clear and Preload release. Playback store
+  scope reset now occurs outside React render, and selector caches invalidate when a replacement
+  authority changes the selected identity set.
 - [x] Added typed action-time Cue recording. One Programming action captures only normal or pending-
   Preload recordable values, resolves explicit or authoritative active targets under the portable
   Show revision, and atomically creates, updates, or deletes the Cue plus any required Cuelist,
@@ -875,6 +881,14 @@ and DesktopBridge must remain visible work rather than being hidden behind a gen
   broad Playback reads. Dependency directions, all 10 source-size scanner tests, the zero-hard-
   violation source-size ratchet, and `git diff --check` pass. New production modules remain below
   200 lines.
+- The scoped System Controls cohort passes 54 focused tests, all 1,625 frontend tests in 223 files,
+  frontend typecheck, and the production build; Vite reports only the existing large-chunk
+  advisory. Focused coverage proves closed-modal dormancy, exact mapped/direct runtime hydration,
+  loading refusal, per-source and deduplicated aggregate release, replay/retry, both HTTP/event
+  orders, Show replacement, stale-row suppression, and absence of broad Playback or bootstrap
+  reads. All changed production files remain below 400 lines, and `git diff --check` passes. The
+  aggregate architecture check is otherwise green but currently reports the concurrent direct-
+  Group backend test file at 1,261 lines; that slice must split it before integration.
 
 ## Wrap-up handoff
 

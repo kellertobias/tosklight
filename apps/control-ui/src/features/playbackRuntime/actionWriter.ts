@@ -4,8 +4,8 @@ import {
 	type PoolPlaybackAction,
 	type PoolPlaybackInput,
 } from "../server/playbackActionMapping";
-import type { PlaybackOutcome } from "./contracts";
-import { playbackIdentity } from "./contracts";
+import type { PlaybackIdentity, PlaybackOutcome } from "./contracts";
+import { identityKey, playbackIdentity } from "./contracts";
 import type { PlaybackRuntimeStore } from "./store";
 
 export type PlaybackRuntimeActionApply = (
@@ -26,12 +26,29 @@ export type PlaybackDeskPageApply = (
 	page: number,
 ) => Promise<PlaybackDeskPageOutcome>;
 
+type CueListPlaybackIdentity = Extract<
+	PlaybackIdentity,
+	{ kind: "playback" | "cue_list" }
+>;
+
+export interface CueListRuntimeSource {
+	identity: CueListPlaybackIdentity;
+	cueListId: string;
+}
+
 export interface PlaybackRuntimeActions {
 	setActivePage(page: number): Promise<boolean>;
 	poolPlaybackAction(
 		playbackNumber: number,
 		action: PoolPlaybackAction,
 		input?: PoolPlaybackInput,
+	): Promise<PlaybackOutcome | null>;
+	/**
+	 * Optional only while older feature test doubles implement the pre-release
+	 * action surface. Production providers always expose the writer method.
+	 */
+	releaseCueListSource?(
+		source: CueListRuntimeSource,
 	): Promise<PlaybackOutcome | null>;
 }
 
@@ -73,6 +90,14 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 			if (isSafetyRelease(action, input) && !this.matchesScope())
 				return this.sendSafetyRelease(request);
 			return await this.execute(playbackNumber, action, input, request);
+		} catch (reason) {
+			return this.rejectSetup(reason);
+		}
+	}
+
+	async releaseCueListSource(source: CueListRuntimeSource) {
+		try {
+			return await this.executeCueListRelease(source);
 		} catch (reason) {
 			return this.rejectSetup(reason);
 		}
@@ -132,6 +157,44 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 		} catch (reason) {
 			return this.rollback(reason, token, scope);
 		}
+	}
+
+	private async executeCueListRelease(source: CueListRuntimeSource) {
+		const scope = this.options.store.captureScope();
+		if (!this.isCurrent(scope)) return null;
+		this.assertRunningCueListSource(source);
+		const request = cueListReleaseRequest(source);
+		const token = this.options.store.beginRequest(source.identity);
+		try {
+			const outcome = await this.applyWithRetry(request, scope);
+			return this.accept(outcome, request, token, scope);
+		} catch (reason) {
+			return this.rollback(reason, token, scope);
+		}
+	}
+
+	private assertRunningCueListSource(source: CueListRuntimeSource) {
+		const expectedPlayback =
+			source.identity.kind === "playback"
+				? source.identity.playback_number
+				: null;
+		if (
+			source.identity.kind === "cue_list" &&
+			source.identity.cue_list_id !== source.cueListId
+		)
+			throw new Error("Cuelist release identity does not match its source");
+		const projections = this.options.store
+			.getSnapshot()
+			.projections.get(identityKey(source.identity));
+		const running = projections?.some(
+			(projection) =>
+				projection.playback_number === expectedPlayback &&
+				projection.target === "cue_list" &&
+				projection.cue_list_id === source.cueListId &&
+				projection.runtime !== null,
+		);
+		if (!running)
+			throw new Error("Authoritative Cuelist runtime is not ready");
 	}
 
 	private optimisticToken(
@@ -232,6 +295,27 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 			state.deskId === this.options.deskId
 		);
 	}
+}
+
+function cueListReleaseRequest(
+	source: CueListRuntimeSource,
+): PlaybackActionRequest {
+	const address =
+		source.identity.kind === "playback"
+			? {
+					kind: "playback" as const,
+					playback_number: source.identity.playback_number,
+				}
+			: {
+					kind: "cue_list" as const,
+					cue_list_id: source.identity.cue_list_id,
+				};
+	return {
+		request_id: crypto.randomUUID(),
+		address,
+		action: { type: "release" },
+		surface: "virtual",
+	};
 }
 
 function isSafetyRelease(

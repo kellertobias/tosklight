@@ -20,13 +20,15 @@ export interface PlaybackRuntimeSessionOptions {
 	transport: PlaybackEventTransport | null;
 	loadSnapshot(identities: PlaybackIdentity[]): Promise<PlaybackSnapshot>;
 	onError?: (error: Error | null) => void;
+	/** Provider ownership resets the store in a layout effect before activation. */
+	resetStore?: boolean;
 }
 
 export class PlaybackRuntimeSession {
 	private readonly scope = new PlaybackViewScope();
 	private readonly showId: string;
 	private readonly deskId: string;
-	private readonly storeScope: number;
+	private storeScope: number | null;
 	private readonly store: PlaybackRuntimeStore;
 	private readonly transport: PlaybackEventTransport | null;
 	private readonly loadSnapshot: PlaybackRuntimeSessionOptions["loadSnapshot"];
@@ -45,11 +47,14 @@ export class PlaybackRuntimeSession {
 		this.transport = options.transport;
 		this.loadSnapshot = options.loadSnapshot;
 		this.onError = options.onError;
-		this.store.reset(this.showId, this.deskId, options.authorityKey);
-		this.storeScope = this.store.captureScope();
+		if (options.resetStore !== false)
+			this.store.reset(this.showId, this.deskId, options.authorityKey);
+		this.storeScope =
+			options.resetStore === false ? null : this.store.captureScope();
 	}
 
 	activate(identity: PlaybackIdentity) {
+		this.captureStoreScope();
 		if (this.scope.activate(identity)) this.scheduleRefresh();
 		let active = true;
 		return () => {
@@ -60,6 +65,7 @@ export class PlaybackRuntimeSession {
 	}
 
 	activateDesk() {
+		this.captureStoreScope();
 		if (this.scope.activateDesk()) this.scheduleRefresh();
 		let active = true;
 		return () => {
@@ -88,7 +94,8 @@ export class PlaybackRuntimeSession {
 	}
 
 	private async refresh() {
-		if (!this.store.isScopeCurrent(this.storeScope)) return;
+		if (this.storeScope == null || !this.store.isScopeCurrent(this.storeScope))
+			return;
 		const generation = ++this.lifecycle;
 		this.clearReconnect();
 		this.closeStream();
@@ -181,6 +188,7 @@ export class PlaybackRuntimeSession {
 			const snapshots = await this.loadSnapshots(identities);
 			if (
 				generation !== this.lifecycle ||
+				this.storeScope == null ||
 				!this.store.isScopeCurrent(this.storeScope)
 			)
 				return;
@@ -257,8 +265,13 @@ export class PlaybackRuntimeSession {
 		return (
 			generation === this.lifecycle &&
 			key === this.scope.key() &&
+			this.storeScope != null &&
 			this.store.isScopeCurrent(this.storeScope)
 		);
+	}
+
+	private captureStoreScope() {
+		this.storeScope ??= this.store.captureScope();
 	}
 
 	private closeStream() {

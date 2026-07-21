@@ -4,6 +4,7 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useSyncExternalStore,
@@ -65,6 +66,7 @@ export function PlaybackRuntimeViewProvider({
 						transport,
 						loadSnapshot,
 						onError,
+						resetStore: false,
 					})
 				: null,
 		[authorityKey, deskId, loadSnapshot, onError, showId, store, transport],
@@ -83,9 +85,9 @@ export function PlaybackRuntimeViewProvider({
 				: null,
 		[applyAction, applyDeskPage, authorityKey, deskId, onError, showId, store],
 	);
-	useEffect(() => {
-		if (!session) store.reset(showId, deskId, authorityKey);
-	}, [authorityKey, deskId, session, showId, store]);
+	useLayoutEffect(() => {
+		store.reset(showId, deskId, authorityKey);
+	}, [authorityKey, deskId, showId, store]);
 	useStrictModeSafeStop(session);
 	useStrictModeSafeStop(actions);
 	return (
@@ -219,6 +221,36 @@ export function usePlaybackProjectionMap(playbackNumbers: readonly number[]) {
 	);
 }
 
+export interface DirectCueListProjectionSelection {
+	ready: boolean;
+	projections: ReadonlyMap<string, PlaybackProjection | undefined>;
+}
+
+export function useDirectCueListProjectionMap(
+	cueListIds: readonly string[],
+	enabled = true,
+): DirectCueListProjectionSelection {
+	const canonical = enabled ? [...new Set(cueListIds)].sort() : [];
+	const key = canonical.join("|");
+	const identities = useMemo(
+		() => canonical.map(cueListIdentity),
+		// The canonical Cuelist key owns array equality.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[key],
+	);
+	usePlaybackRuntimeView(identities);
+	return usePlaybackSelector(
+		useCallback(
+			(state: PlaybackRuntimeState) => directCueListSelection(state, canonical),
+			// The same canonical key denotes the selected Cuelist set.
+			// eslint-disable-next-line react-hooks/exhaustive-deps
+			[key],
+		),
+		equalDirectCueListSelection,
+		enabled && cueListIds.length > 0,
+	);
+}
+
 export function usePlaybackRuntimeStatus(enabled = true) {
 	return usePlaybackSelector(selectStatus, equalStatus, enabled);
 }
@@ -229,18 +261,25 @@ function usePlaybackSelector<T>(
 	enabled = true,
 ) {
 	const store = useContext(StoreContext) ?? fallbackStore;
-	const cache = useRef<{ state: PlaybackRuntimeState | null; value?: T }>({
-		state: null,
-	});
+	const cache = useRef<{
+		state: PlaybackRuntimeState | null;
+		selector: ((state: PlaybackRuntimeState) => T) | null;
+		value?: T;
+	}>({ state: null, selector: null });
 	const getSelection = useCallback(() => {
 		const state = store.getSnapshot();
-		if (cache.current.state === state) return cache.current.value as T;
+		if (cache.current.selector === selector && cache.current.state === state)
+			return cache.current.value as T;
 		const value = selector(state);
-		if (cache.current.state && equal(cache.current.value as T, value)) {
+		if (
+			cache.current.selector === selector &&
+			cache.current.state &&
+			equal(cache.current.value as T, value)
+		) {
 			cache.current.state = state;
 			return cache.current.value as T;
 		}
-		cache.current = { state, value };
+		cache.current = { state, selector, value };
 		return value;
 	}, [equal, selector, store]);
 	return useSyncExternalStore(
@@ -259,6 +298,45 @@ function equalProjectionMap(
 	return (
 		left.size === right.size &&
 		[...left].every(([key, value]) => right.get(key) === value)
+	);
+}
+
+function directCueListSelection(
+	state: PlaybackRuntimeState,
+	cueListIds: readonly string[],
+): DirectCueListProjectionSelection {
+	let ready = true;
+	const projections = new Map<string, PlaybackProjection | undefined>();
+	for (const cueListId of cueListIds) {
+		const candidates = state.projections.get(`cuelist:${cueListId}`);
+		const requested = candidates?.filter(
+			(projection) =>
+				projection.requested.kind === "cue_list" &&
+				projection.requested.cue_list_id === cueListId,
+		);
+		// A mapped projection can share the same Cuelist key and replace the
+		// request-shaped copy in the normalized store. Its presence still proves
+		// that the exact Cuelist snapshot completed; only direct-row selection
+		// remains restricted to an explicitly Cuelist-requested projection.
+		if (!candidates?.length) ready = false;
+		projections.set(
+			cueListId,
+			requested?.find((projection) => projection.playback_number === null),
+		);
+	}
+	return { ready, projections };
+}
+
+function equalDirectCueListSelection(
+	left: DirectCueListProjectionSelection,
+	right: DirectCueListProjectionSelection,
+) {
+	return (
+		left.ready === right.ready &&
+		left.projections.size === right.projections.size &&
+		[...left.projections].every(
+			([key, value]) => right.projections.get(key) === value,
+		)
 	);
 }
 

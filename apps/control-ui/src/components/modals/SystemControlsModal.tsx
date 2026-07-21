@@ -6,10 +6,8 @@ import { useApp } from "../../state/AppContext";
 import { Button, ModalPortal } from "../common";
 import { compatibleSpecialDialogActions } from "./SpecialDialogsModal";
 import { OutputControls } from "./systemControls/OutputControls";
-import {
-	type RunningDynamic,
-	RunningSections,
-} from "./systemControls/RunningSections";
+import { RunningSections } from "./systemControls/RunningSections";
+import { useRunningPlaybackAuthority } from "./systemControls/runningPlaybackAuthority";
 
 const EMPTY_FIXTURE_IDS: readonly string[] = [];
 const EMPTY_PROGRAMMERS = [] as const;
@@ -23,6 +21,7 @@ function useSystemControlsModel() {
 	const [stoppingAll, setStoppingAll] = useState(false);
 	const selection = useProgrammingSelectionView(state.systemControlsOpen);
 	const lifecycle = useProgrammerLifecycleView(state.systemControlsOpen);
+	const playbackAuthority = useRunningPlaybackAuthority(state.systemControlsOpen);
 	const selectedFixtureIds = selection?.selected ?? EMPTY_FIXTURE_IDS;
 	useEffect(() => {
 		if (!state.systemControlsOpen) return;
@@ -41,26 +40,7 @@ function useSystemControlsModel() {
 			),
 		[server.patch, selectedFixtureIds],
 	);
-	const runningPlaybacks = server.playbacks?.active ?? [];
-	const pagePlaybacks = runningPlaybacks.filter(
-		(playback) => playback.playback_number != null,
-	);
-	const virtualPlaybacks = runningPlaybacks.filter(
-		(playback) => playback.playback_number == null,
-	);
 	const programmers = lifecycle?.programmers ?? EMPTY_PROGRAMMERS;
-	const dynamics: RunningDynamic[] = runningPlaybacks.flatMap((playback) => {
-		const cueList = server.playbacks?.cue_lists.find(
-			(candidate) => candidate.id === playback.cue_list_id,
-		);
-		const cue = cueList?.cues[playback.cue_index];
-		return (cue?.phasers ?? []).map((_, index) => ({
-			playback,
-			cueList,
-			cue,
-			index,
-		}));
-	});
 	const triggerLamps = async (phase: "click" | "press" | "release") => {
 		const actions = lampActions.filter((action) =>
 			phase === "click"
@@ -83,11 +63,19 @@ function useSystemControlsModel() {
 		);
 	};
 	const stopEverything = async () => {
+		if (
+			!playbackAuthority.ready ||
+			(playbackAuthority.sources.length > 0 && !playbackAuthority.canRelease)
+		)
+			return;
 		setStoppingAll(true);
 		try {
+			const sources = new Map(
+				playbackAuthority.sources.map((source) => [source.key, source]),
+			);
 			await Promise.all([
-				...runningPlaybacks.map((playback) =>
-					server.playbackAction(playback.cue_list_id, "release"),
+				...[...sources.values()].map((source) =>
+					playbackAuthority.release(source),
 				),
 				...programmers.flatMap((programmer) =>
 					programmer.sessions[0]
@@ -111,10 +99,7 @@ function useSystemControlsModel() {
 		selectedFixtureIds,
 		lifecycle,
 		programmers,
-		runningPlaybacks,
-		pagePlaybacks,
-		virtualPlaybacks,
-		dynamics,
+		playbackAuthority,
 		close: () =>
 			dispatch({
 				type: "SET_MODAL",
@@ -140,10 +125,10 @@ export function SystemControlsModal() {
 	const model = useSystemControlsModel();
 	if (!model.open) return null;
 	const activeItems =
-		model.pagePlaybacks.length +
-		model.virtualPlaybacks.length +
+		model.playbackAuthority.mappedSources.length +
+		model.playbackAuthority.virtualSources.length +
 		model.programmers.length +
-		model.dynamics.length;
+		model.playbackAuthority.dynamics.length;
 	return (
 		<ModalPortal>
 			<div
@@ -175,7 +160,11 @@ export function SystemControlsModal() {
 							className="danger"
 							disabled={
 								model.stoppingAll ||
-								(!model.runningPlaybacks.length && !model.programmers.length)
+								!model.playbackAuthority.ready ||
+								(model.playbackAuthority.sources.length > 0 &&
+									!model.playbackAuthority.canRelease) ||
+								(!model.playbackAuthority.sources.length &&
+									!model.programmers.length)
 							}
 							onClick={() => void model.stopEverything()}
 						>
@@ -183,16 +172,17 @@ export function SystemControlsModal() {
 						</Button>
 					</div>
 					<RunningSections
-						playbacks={model.server.playbacks}
-						pagePlaybacks={model.pagePlaybacks}
-						virtualPlaybacks={model.virtualPlaybacks}
-						dynamics={model.dynamics}
+						pagePlaybacks={model.playbackAuthority.mappedSources}
+						virtualPlaybacks={model.playbackAuthority.virtualSources}
+						dynamics={model.playbackAuthority.dynamics}
+						playbacksLoading={model.playbackAuthority.loading}
+						releaseAvailable={model.playbackAuthority.canRelease}
 						programmers={model.programmers}
 						programmersLoading={model.lifecycle === null}
 						currentUserId={model.server.session?.user.id ?? null}
 						currentUserName={model.server.session?.user.name ?? null}
-						onReleasePlayback={(cueListId) =>
-							void model.server.playbackAction(cueListId, "release")
+						onReleasePlayback={(source) =>
+							void model.playbackAuthority.release(source)
 						}
 						onClearProgrammer={(sessionId) =>
 							void model.server.clearProgrammer(sessionId)

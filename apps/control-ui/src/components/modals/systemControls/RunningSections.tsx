@@ -1,29 +1,22 @@
-import type { PlaybackSnapshot } from "../../../api/types";
 import type { ProgrammerLifecycleRow } from "../../../features/programmerLifecycle/contracts";
 import { Button } from "../../common";
 import { ProgrammerList } from "./ProgrammerList";
-
-type ActivePlayback = PlaybackSnapshot["active"][number];
-type CueList = PlaybackSnapshot["cue_lists"][number];
-type Cue = CueList["cues"][number];
-
-export interface RunningDynamic {
-	playback: ActivePlayback;
-	cueList: CueList | undefined;
-	cue: Cue | undefined;
-	index: number;
-}
+import type {
+	RunningCueListSource,
+	RunningDynamic,
+} from "./runningPlaybackAuthority";
 
 interface RunningSectionsProps {
-	playbacks: PlaybackSnapshot | null;
-	pagePlaybacks: readonly ActivePlayback[];
-	virtualPlaybacks: readonly ActivePlayback[];
+	pagePlaybacks: readonly RunningCueListSource[];
+	virtualPlaybacks: readonly RunningCueListSource[];
 	dynamics: readonly RunningDynamic[];
+	playbacksLoading: boolean;
+	releaseAvailable: boolean;
 	programmers: readonly ProgrammerLifecycleRow[];
 	programmersLoading: boolean;
 	currentUserId: string | null;
 	currentUserName: string | null;
-	onReleasePlayback(cueListId: string): void;
+	onReleasePlayback(source: RunningCueListSource): void;
 	onClearProgrammer(sessionId: string): void;
 }
 
@@ -35,7 +28,8 @@ export function RunningSections(props: RunningSectionsProps) {
 				empty="No virtual playbacks are running."
 				source="Virtual playback"
 				playbacks={props.virtualPlaybacks}
-				snapshot={props.playbacks}
+				loading={props.playbacksLoading}
+				releaseAvailable={props.releaseAvailable}
 				onRelease={props.onReleasePlayback}
 			/>
 			<PlaybackSection
@@ -43,7 +37,8 @@ export function RunningSections(props: RunningSectionsProps) {
 				empty="No playbacks are running."
 				source="Playback"
 				playbacks={props.pagePlaybacks}
-				snapshot={props.playbacks}
+				loading={props.playbacksLoading}
+				releaseAvailable={props.releaseAvailable}
 				onRelease={props.onReleasePlayback}
 			/>
 			<ProgrammerList
@@ -55,43 +50,45 @@ export function RunningSections(props: RunningSectionsProps) {
 			/>
 			<DynamicsSection
 				dynamics={props.dynamics}
+				loading={props.playbacksLoading}
+				releaseAvailable={props.releaseAvailable}
 				onRelease={props.onReleasePlayback}
 			/>
 		</div>
 	);
 }
 
-function PlaybackSection({
-	title,
-	empty,
-	source,
-	playbacks,
-	snapshot,
-	onRelease,
-}: {
+interface PlaybackSectionProps {
 	title: string;
 	empty: string;
 	source: "Playback" | "Virtual playback";
-	playbacks: readonly ActivePlayback[];
-	snapshot: PlaybackSnapshot | null;
-	onRelease(cueListId: string): void;
-}) {
+	playbacks: readonly RunningCueListSource[];
+	loading: boolean;
+	releaseAvailable: boolean;
+	onRelease(source: RunningCueListSource): void;
+}
+
+function PlaybackSection(props: PlaybackSectionProps) {
 	return (
 		<section>
 			<h3>
-				{title} <small>{playbacks.length}</small>
+				{props.title} <small>{props.playbacks.length}</small>
 			</h3>
 			<div className="programmer-list">
-				{playbacks.map((playback) => (
+				{props.playbacks.map((playback) => (
 					<PlaybackRow
-						key={playback.cue_list_id}
+						key={playback.key}
 						playback={playback}
-						snapshot={snapshot}
-						source={source}
-						onRelease={onRelease}
+						source={props.source}
+						releaseAvailable={props.releaseAvailable}
+						onRelease={props.onRelease}
 					/>
 				))}
-				{!playbacks.length && <p className="empty-window-message">{empty}</p>}
+				{!props.playbacks.length && (
+					<p className="empty-window-message">
+						{props.loading ? `${props.title} loading…` : props.empty}
+					</p>
+				)}
 			</div>
 		</section>
 	);
@@ -99,46 +96,36 @@ function PlaybackSection({
 
 function PlaybackRow({
 	playback,
-	snapshot,
 	source,
+	releaseAvailable,
 	onRelease,
 }: {
-	playback: ActivePlayback;
-	snapshot: PlaybackSnapshot | null;
+	playback: RunningCueListSource;
 	source: "Playback" | "Virtual playback";
-	onRelease(cueListId: string): void;
+	releaseAvailable: boolean;
+	onRelease(source: RunningCueListSource): void;
 }) {
-	const cueList = snapshot?.cue_lists.find(
-		(candidate) => candidate.id === playback.cue_list_id,
-	);
-	const cue = cueList?.cues[playback.cue_index];
-	const definition =
-		playback.playback_number == null
-			? null
-			: snapshot?.pool.find(
-					(candidate) => candidate.number === playback.playback_number,
-				);
-	const label =
-		definition?.name ||
-		cueList?.name ||
-		`Cuelist ${playback.cue_list_id.slice(0, 8)}`;
+	const cueNumber =
+		playback.cue?.number ??
+		playback.runtime.current?.number ??
+		playback.runtime.cue_index + 1;
 	return (
 		<article>
 			<span>
-				<b>{label}</b>
+				<b>{playback.label}</b>
 				<small>
-					{playback.playback_number == null
+					{playback.playbackNumber == null
 						? source
-						: `Playback ${playback.playback_number}`}{" "}
-					· Cue {cue?.number ?? playback.cue_index + 1} ·{" "}
-					{Math.round(playback.master * 100)}% ·{" "}
-					{playback.paused ? "Paused" : "Running"}
+						: `Playback ${playback.playbackNumber}`} {" "}
+					· Cue {cueNumber} · {Math.round(playback.runtime.master * 100)}% ·{" "}
+					{playback.runtime.paused ? "Paused" : "Running"}
 				</small>
 			</span>
 			<Button
 				className="danger"
-				aria-label={`Stop ${source} ${label}`}
-				onClick={() => onRelease(playback.cue_list_id)}
+				aria-label={`Stop ${source} ${playback.label}`}
+				disabled={!releaseAvailable}
+				onClick={() => onRelease(playback)}
 			>
 				Stop
 			</Button>
@@ -148,10 +135,14 @@ function PlaybackRow({
 
 function DynamicsSection({
 	dynamics,
+	loading,
+	releaseAvailable,
 	onRelease,
 }: {
 	dynamics: readonly RunningDynamic[];
-	onRelease(cueListId: string): void;
+	loading: boolean;
+	releaseAvailable: boolean;
+	onRelease(source: RunningCueListSource): void;
 }) {
 	return (
 		<section>
@@ -161,13 +152,16 @@ function DynamicsSection({
 			<div className="programmer-list">
 				{dynamics.map((dynamic) => (
 					<DynamicRow
-						key={`${dynamic.playback.cue_list_id}-${dynamic.index}`}
+						key={`${dynamic.source.key}-${dynamic.index}`}
 						dynamic={dynamic}
+						releaseAvailable={releaseAvailable}
 						onRelease={onRelease}
 					/>
 				))}
 				{!dynamics.length && (
-					<p className="empty-window-message">No dynamics are running.</p>
+					<p className="empty-window-message">
+						{loading ? "Dynamics loading…" : "No dynamics are running."}
+					</p>
 				)}
 			</div>
 		</section>
@@ -176,29 +170,35 @@ function DynamicsSection({
 
 function DynamicRow({
 	dynamic,
+	releaseAvailable,
 	onRelease,
 }: {
 	dynamic: RunningDynamic;
-	onRelease(cueListId: string): void;
+	releaseAvailable: boolean;
+	onRelease(source: RunningCueListSource): void;
 }) {
-	const { playback, cueList, cue, index } = dynamic;
-	const source = cueList?.name ?? "Cuelist";
+	const { source, index } = dynamic;
+	const sourceLabel = source.cueList?.name ?? "Cuelist";
+	const cueNumber =
+		source.cue?.number ??
+		source.runtime.current?.number ??
+		source.runtime.cue_index + 1;
 	return (
 		<article>
 			<span>
 				<b>
-					{source} · Dynamic {index + 1}
+					{sourceLabel} · Dynamic {index + 1}
 				</b>
 				<small>
-					Cue {cue?.number ?? playback.cue_index + 1} · Stop releases its source
-					playback
+					Cue {cueNumber} · Stop releases its source playback
 				</small>
 			</span>
 			<Button
 				className="danger"
 				title="Stops this Dynamic by releasing its source playback"
-				aria-label={`Stop Dynamic ${index + 1} from ${source}`}
-				onClick={() => onRelease(playback.cue_list_id)}
+				aria-label={`Stop Dynamic ${index + 1} from ${sourceLabel}`}
+				disabled={!releaseAvailable}
+				onClick={() => onRelease(source)}
 			>
 				Stop
 			</Button>

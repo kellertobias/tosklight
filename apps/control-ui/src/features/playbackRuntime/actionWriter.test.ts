@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { PlaybackActionRequest } from "../../api/types";
 import { PlaybackRuntimeActionWriter } from "./actionWriter";
 import type { PlaybackOutcome, PlaybackProjection } from "./contracts";
-import { playbackIdentity } from "./contracts";
+import { cueListIdentity, playbackIdentity } from "./contracts";
 import { PlaybackRuntimeStore } from "./store";
 import {
 	cueProjection,
@@ -21,12 +21,15 @@ function outcome(
 		request_id: request.request_id,
 		correlation_id: "55555555-5555-4555-8555-555555555555",
 		requested: request.address,
-		resolved: {
-			kind: "playback",
-			playback_number: projection.playback_number ?? 1,
-			page: 1,
-			slot: 1,
-		},
+		resolved:
+			request.address.kind === "cue_list"
+				? request.address
+				: {
+						kind: "playback",
+						playback_number: projection.playback_number ?? 1,
+						page: 1,
+						slot: 1,
+					},
 		outcome: { status: eventSequence == null ? "no_change" : "applied" },
 		durability: "durable",
 		projection,
@@ -61,6 +64,39 @@ function readyStore() {
 	store.reset(SHOW_ID, DESK_ID, "authority-a");
 	store.installSnapshot(playbackSnapshot([identity]), [identity]);
 	return store;
+}
+
+function directCueProjection(cueIndex = 0): PlaybackProjection {
+	return {
+		...cueProjection(1, cueIndex),
+		requested: cueListIdentity("33333333-3333-4333-8333-333333333333"),
+		playback_number: null,
+	};
+}
+
+function released(projection: PlaybackProjection): PlaybackProjection {
+	if (projection.target !== "cue_list")
+		throw new Error("fixture must contain a Cuelist projection");
+	return { ...projection, runtime: null };
+}
+
+function directReadyStore() {
+	const store = new PlaybackRuntimeStore();
+	const identity = cueListIdentity("33333333-3333-4333-8333-333333333333");
+	store.reset(SHOW_ID, DESK_ID, "authority-a");
+	store.installSnapshot(
+		{ ...playbackSnapshot([identity]), projections: [directCueProjection()] },
+		[identity],
+	);
+	return store;
+}
+
+function playbackSourceIdentity(playbackNumber: number) {
+	return { kind: "playback", playback_number: playbackNumber } as const;
+}
+
+function cueListSourceIdentity(cueListId: string) {
+	return { kind: "cue_list", cue_list_id: cueListId } as const;
 }
 
 function pageOutcome(page: number, eventSequence: number | null = 11) {
@@ -285,6 +321,174 @@ describe("PlaybackRuntimeActionWriter", () => {
 		});
 		expect(result?.replayed).toBe(true);
 		expect(runtime(store).cue_index).toBe(1);
+	});
+
+	it("retries an exact mapped Cuelist release with one request identity", async () => {
+		const store = readyStore();
+		const requests: PlaybackActionRequest[] = [];
+		const retryable = Object.assign(new Error("temporarily offline"), {
+			retryable: true,
+		});
+		const applyAction = vi.fn(async (_showId, _deskId, request) => {
+			requests.push(request);
+			if (requests.length === 1) throw retryable;
+			return { ...outcome(request, released(cueProjection()), 12), replayed: true };
+		});
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction,
+		});
+
+		const result = await writer.releaseCueListSource({
+			identity: playbackSourceIdentity(1),
+			cueListId: "33333333-3333-4333-8333-333333333333",
+		});
+
+		expect(requests).toHaveLength(2);
+		expect(requests[1]).toBe(requests[0]);
+		expect(requests[0]).toMatchObject({
+			address: { kind: "playback", playback_number: 1 },
+			action: { type: "release" },
+			surface: "virtual",
+		});
+		expect(result?.replayed).toBe(true);
+	});
+
+	it("addresses an exact direct Cuelist runtime without borrowing a Playback", async () => {
+		const store = directReadyStore();
+		const applyAction = vi.fn(async (_showId, _deskId, request) =>
+			outcome(request, released(directCueProjection()), 12),
+		);
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction,
+		});
+
+		await writer.releaseCueListSource({
+			identity: cueListSourceIdentity(
+				"33333333-3333-4333-8333-333333333333",
+			),
+			cueListId: "33333333-3333-4333-8333-333333333333",
+		});
+
+		expect(applyAction).toHaveBeenCalledWith(
+			SHOW_ID,
+			DESK_ID,
+			expect.objectContaining({
+				address: {
+					kind: "cue_list",
+					cue_list_id: "33333333-3333-4333-8333-333333333333",
+				},
+				action: { type: "release" },
+				surface: "virtual",
+			}),
+		);
+	});
+
+	it("refuses a direct release until that exact running source is hydrated", async () => {
+		const store = readyStore();
+		const applyAction = vi.fn();
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction,
+		});
+
+		await expect(
+			writer.releaseCueListSource({
+				identity: cueListSourceIdentity(
+					"33333333-3333-4333-8333-333333333333",
+				),
+				cueListId: "33333333-3333-4333-8333-333333333333",
+			}),
+		).resolves.toBeNull();
+
+		expect(applyAction).not.toHaveBeenCalled();
+		expect(store.getSnapshot().error?.message).toBe(
+			"Authoritative Cuelist runtime is not ready",
+		);
+	});
+
+	it("deduplicates a mapped release event arriving after its response", async () => {
+		const store = readyStore();
+		const projection = released(cueProjection());
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction: async (_showId, _deskId, request) =>
+				outcome(request, projection, 12),
+		});
+
+		await writer.releaseCueListSource({
+			identity: playbackSourceIdentity(1),
+			cueListId: "33333333-3333-4333-8333-333333333333",
+		});
+		const afterResponse = store.getSnapshot();
+
+		expect(store.applyProjection(projection, 12)).toBe(false);
+		expect(store.getSnapshot()).toBe(afterResponse);
+	});
+
+	it("settles a direct release when its event arrives before the response", async () => {
+		const store = directReadyStore();
+		const pending = deferred<PlaybackOutcome>();
+		let request: PlaybackActionRequest | null = null;
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction: (_showId, _deskId, value) => {
+				request = value;
+				return pending.promise;
+			},
+		});
+		const projection = released(directCueProjection());
+
+		const result = writer.releaseCueListSource({
+			identity: cueListSourceIdentity(
+				"33333333-3333-4333-8333-333333333333",
+			),
+			cueListId: "33333333-3333-4333-8333-333333333333",
+		});
+		store.applyProjection(projection, 13);
+		if (!request) throw new Error("request was not captured");
+		pending.resolve(outcome(request, projection, 13));
+
+		await expect(result).resolves.not.toBeNull();
+		expect(store.getSnapshot().eventSequence).toBe(13);
+	});
+
+	it("ignores a late Cuelist release response after authority replacement", async () => {
+		const store = readyStore();
+		const pending = deferred<PlaybackOutcome>();
+		let request: PlaybackActionRequest | null = null;
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction: (_showId, _deskId, value) => {
+				request = value;
+				return pending.promise;
+			},
+		});
+
+		const result = writer.releaseCueListSource({
+			identity: playbackSourceIdentity(1),
+			cueListId: "33333333-3333-4333-8333-333333333333",
+		});
+		store.reset(SHOW_ID, DESK_ID, "authority-b");
+		if (!request) throw new Error("request was not captured");
+		pending.resolve(outcome(request, released(cueProjection()), 14));
+
+		await expect(result).resolves.toBeNull();
+		expect(store.getSnapshot().projections.size).toBe(0);
+		expect(store.getSnapshot().error).toBeNull();
 	});
 
 	it("rolls back an optimistic master after a terminal failure", async () => {

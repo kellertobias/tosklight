@@ -61,6 +61,17 @@ const mocks = vi.hoisted(() => {
 		selectionAccess,
 		mutationQueue,
 		mutationQueueUse: vi.fn(),
+		runningAuthorityUse: vi.fn(),
+		runningAuthority: {
+			ready: true,
+			loading: false,
+			canRelease: true,
+			sources: [],
+			mappedSources: [],
+			virtualSources: [],
+			dynamics: [],
+			release: vi.fn(async () => null),
+		},
 		dispatch: vi.fn(),
 		appState: {
 			specialDialogsOpen: false,
@@ -90,6 +101,12 @@ vi.mock(
 );
 vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state: mocks.appState, dispatch: mocks.dispatch }),
+}));
+vi.mock("./systemControls/runningPlaybackAuthority", () => ({
+	useRunningPlaybackAuthority: (enabled: boolean) => {
+		mocks.runningAuthorityUse(enabled);
+		return mocks.runningAuthority;
+	},
 }));
 vi.mock("../control/VerticalTouchFader", () => ({
 	VerticalTouchFader: ({
@@ -240,6 +257,7 @@ describe("modal selection projections", () => {
 		expect(loadSnapshot).not.toHaveBeenCalled();
 		expect(transport.subscriptions).toHaveLength(0);
 		expect(mocks.mutationQueueUse).toHaveBeenCalledWith(false);
+		expect(mocks.runningAuthorityUse).toHaveBeenCalledWith(false);
 		expect(mocks.mutationQueue.submitLatest).not.toHaveBeenCalled();
 		expect(mocks.mutationQueue.submitBarrier).not.toHaveBeenCalled();
 		expect(mocks.selectionAccess).not.toHaveBeenCalled();
