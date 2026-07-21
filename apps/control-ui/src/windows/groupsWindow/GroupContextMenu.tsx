@@ -1,5 +1,6 @@
-import { useServer } from "../../api/ServerContext";
 import { Button, Input } from "../../components/common";
+import type { GroupManagementOperation } from "../../features/groupManagement/contracts";
+import { useGroupManagement } from "../../features/groupManagement/GroupManagementProvider";
 import {
 	captureGroupRecordingTarget,
 	type GroupRecordingTarget,
@@ -33,10 +34,18 @@ export function GroupContextMenu({
 	setGroupMaster: (groupId: string, value: number) => Promise<unknown>;
 	canWriteMaster: boolean;
 }) {
-	const server = useServer();
+	const groupManagement = useGroupManagement();
 	const name = group.body.name ?? `Group ${group.id}`;
 	const runAndClose = (command: string) => {
 		void runCommand(command);
+		onClose();
+	};
+	const manageAndClose = (operation: GroupManagementOperation) => {
+		void groupManagement?.manage({
+			objectId: group.id,
+			expectedObjectRevision: group.revision,
+			operation,
+		});
 		onClose();
 	};
 	const replaceMembership = () => {
@@ -81,20 +90,30 @@ export function GroupContextMenu({
 			</Button>
 			{group.body.frozen_from && (
 				<Button
-					onClick={() => {
-						void server.refreshFrozenGroup(group.id);
-						onClose();
-					}}
+					onClick={() =>
+						manageAndClose({
+							type: "refresh_frozen",
+							expectedSource: {
+								sourceGroupId: group.body.frozen_from?.source_group_id ?? "",
+								expectedSourceRevision: null,
+							},
+						})
+					}
 				>
 					Refresh frozen snapshot
 				</Button>
 			)}
 			{group.body.derived_from ? (
 				<Button
-					onClick={() => {
-						void server.detachDerivedGroup(group.id);
-						onClose();
-					}}
+					onClick={() =>
+						manageAndClose({
+							type: "detach_derived",
+							expectedSource: {
+								sourceGroupId: group.body.derived_from?.source_group_id ?? "",
+								expectedSourceRevision: null,
+							},
+						})
+					}
 				>
 					Detach derived group
 				</Button>
@@ -103,12 +122,7 @@ export function GroupContextMenu({
 					Replace membership with selection
 				</Button>
 			)}
-			<Button
-				onClick={() => {
-					void server.undoGroup(group.id);
-					onClose();
-				}}
-			>
+			<Button onClick={() => manageAndClose({ type: "undo" })}>
 				Undo membership/programming change
 			</Button>
 			<Button onClick={onClose}>Cancel</Button>

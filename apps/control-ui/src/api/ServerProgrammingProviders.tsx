@@ -12,6 +12,7 @@ import { ProgrammerPriorityProvider } from "../features/programmerPriority/Progr
 import { ProgrammerValuesViewProvider } from "../features/programmerValues/ProgrammerValuesView";
 import type { CommandExecutionRequest } from "../features/programmingInteraction/commandExecution";
 import { ProgrammingInteractionViewProvider } from "../features/programmingInteraction/ProgrammingInteractionView";
+import { GroupManagementProvider } from "../features/groupManagement/GroupManagementProvider";
 import { ProgrammingUpdateProvider } from "../features/programmingUpdate/ProgrammingUpdateProvider";
 import type { ServerContextValue } from "../features/server/ServerContextValue";
 import { useSelectedGroupMembership } from "../features/server/useSelectedGroupMembership";
@@ -150,6 +151,34 @@ export function ServerOutputRuntimeBoundary({
 	);
 }
 
+function GroupManagementBoundary({
+	children,
+	showId,
+	state,
+	boundaries,
+}: PropsWithChildren<
+	Pick<ServerProgrammingProvidersProps, "state" | "boundaries"> & {
+		showId: string | null;
+	}
+>) {
+	const loadGroup = useCallback(
+		(show: string, objectId: string) =>
+			boundaries.loadShowObject(show, "group", objectId),
+		[boundaries.loadShowObject],
+	);
+	return (
+		<GroupManagementProvider
+			showId={showId}
+			store={state.showObjectsStore}
+			transport={boundaries.groupManagementTransport}
+			loadGroup={loadGroup}
+			onError={boundaries.reportGroupManagementError}
+		>
+			{children}
+		</GroupManagementProvider>
+	);
+}
+
 function ProgrammingUpdateBoundary({
 	children,
 	showId,
@@ -256,6 +285,7 @@ function ServerShowProgrammingProviders({
 	const showId = state.bootstrap?.active_show?.id ?? null;
 	const userId = state.session?.user.id ?? null;
 	return (
+		<GroupManagementBoundary showId={showId} state={state} boundaries={boundaries}>
 		<ProgrammingUpdateBoundary
 			showId={showId}
 			userId={userId}
@@ -338,5 +368,6 @@ function ServerShowProgrammingProviders({
 				</PlaybackRuntimeViewProvider>
 			</ProgrammerLifecycleViewProvider>
 		</ProgrammingUpdateBoundary>
+		</GroupManagementBoundary>
 	);
 }

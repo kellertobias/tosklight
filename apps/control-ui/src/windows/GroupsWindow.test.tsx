@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
 	refresh: vi.fn(),
 	recordGroup: vi.fn(),
 	resetCommand: vi.fn(),
-	updateGroup: vi.fn(),
+	manageGroup: vi.fn(),
 	setGroupMaster: vi.fn(),
 	commandLine: "",
 	state: { storeArmed: false, groupsReturnToStage: false },
@@ -73,11 +73,10 @@ vi.mock("../api/ServerContext", () => ({
 		selectedFixtures: [],
 		selectedGroupId: null,
 		refresh: mocks.refresh,
-		updateGroup: mocks.updateGroup,
-		undoGroup: vi.fn(),
-		refreshFrozenGroup: vi.fn(),
-		detachDerivedGroup: vi.fn(),
 	}),
+}));
+vi.mock("../features/groupManagement/GroupManagementProvider", () => ({
+	useGroupManagement: () => ({ manage: mocks.manageGroup }),
 }));
 vi.mock("../components/control/commandLine/useCommandLineSurface", () => ({
 	useCommandLineSurface: () => ({
@@ -144,7 +143,7 @@ describe("GroupsWindow action routing", () => {
 		mocks.refresh.mockReset().mockResolvedValue(undefined);
 		mocks.recordGroup.mockReset().mockResolvedValue({ status: "changed" });
 		mocks.resetCommand.mockReset().mockResolvedValue(true);
-		mocks.updateGroup.mockReset().mockResolvedValue(true);
+		mocks.manageGroup.mockReset().mockResolvedValue({ status: "changed" });
 		mocks.setGroupMaster.mockReset().mockResolvedValue(null);
 		mocks.commandLine = "";
 		mocks.state.storeArmed = false;
@@ -298,10 +297,17 @@ describe("GroupsWindow action routing", () => {
 		fireEvent.click(await screen.findByRole("button", { name: "Use ★" }));
 		fireEvent.click(screen.getByRole("button", { name: "Save group" }));
 		await waitFor(() =>
-			expect(mocks.updateGroup).toHaveBeenCalledWith("4", {
-				name: "Copy Center Spot",
-				color: "#1bd6ec",
-				icon: "★",
+			expect(mocks.manageGroup).toHaveBeenCalledWith({
+				objectId: "4",
+				expectedObjectRevision: 1,
+				operation: {
+					type: "update_properties",
+					properties: {
+						name: "Copy Center Spot",
+						color: "#1bd6ec",
+						icon: "★",
+					},
+				},
 			}),
 		);
 	});

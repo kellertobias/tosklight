@@ -46,11 +46,4 @@ export interface ServerProgrammingContext {
 		width: number,
 		direction: string,
 	) => Promise<void>;
-	updateGroup: (
-		id: string,
-		update: Pick<StoredGroup, "name" | "color" | "icon">,
-	) => Promise<boolean>;
-	undoGroup: (id: string) => Promise<void>;
-	refreshFrozenGroup: (id: string) => Promise<void>;
-	detachDerivedGroup: (id: string) => Promise<void>;
 }

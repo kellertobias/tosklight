@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useServer } from "../../api/ServerContext";
+import { useGroupManagement } from "../../features/groupManagement/GroupManagementProvider";
 import {
 	Button,
 	ColorPickerField,
@@ -17,21 +17,23 @@ export function GroupPropertiesDialog({
 	group: Group;
 	onClose: () => void;
 }) {
-	const server = useServer();
+	const groupManagement = useGroupManagement();
 	const [name, setName] = useState(group.body.name ?? `Group ${group.id}`);
 	const [color, setColor] = useState(group.body.color ?? "#718596");
 	const [icon, setIcon] = useState(group.body.icon ?? "◇");
 	const [saving, setSaving] = useState(false);
 	const save = async () => {
-		if (!name.trim() || saving) return;
+		if (!name.trim() || saving || !groupManagement) return;
 		setSaving(true);
-		if (
-			await server.updateGroup(group.id, {
-				name: name.trim(),
-				color,
-				icon,
-			})
-		) {
+		const outcome = await groupManagement.manage({
+			objectId: group.id,
+			expectedObjectRevision: group.revision,
+			operation: {
+				type: "update_properties",
+				properties: { name: name.trim(), color, icon },
+			},
+		});
+		if (outcome) {
 			onClose();
 			return;
 		}

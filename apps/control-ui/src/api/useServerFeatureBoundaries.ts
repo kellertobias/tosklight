@@ -11,6 +11,7 @@ import { WebSocketShowObjectsEventTransport } from "./ShowObjectsEventTransport"
 import type { PlaybackRuntimeIdentity } from "./types";
 import { useCueRecordingBoundaries } from "./useCueRecordingBoundaries";
 import { useCueTransferBoundaries } from "./useCueTransferBoundaries";
+import { useGroupManagementBoundaries } from "./useGroupManagementBoundaries";
 import { useGroupRecordingBoundaries } from "./useGroupRecordingBoundaries";
 import { useOutputRuntimeBoundaries } from "./useOutputRuntimeBoundaries";
 import { usePlaybackTopologyBoundaries } from "./usePlaybackTopologyBoundaries";
@@ -37,6 +38,7 @@ export function useServerFeatureBoundaries(state: ServerState) {
 	const speedGroupRuntime = useSpeedGroupRuntimeBoundaries(state);
 	const presetRecording = usePresetRecordingBoundaries(state);
 	const presetRecall = usePresetRecallBoundaries(state);
+	const groupManagement = useGroupManagementBoundaries(state);
 	const groupRecording = useGroupRecordingBoundaries(state);
 	const cueRecording = useCueRecordingBoundaries(state);
 	const cueTransfer = useCueTransferBoundaries(state);
@@ -151,6 +153,7 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		...programmerValues,
 		...presetRecording,
 		...presetRecall,
+		...groupManagement,
 		...groupRecording,
 		...cueRecording,
 		...cueTransfer,
