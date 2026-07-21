@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { WindowProps } from "./windowTypes";
+import { usePatchedFixturesView } from "../features/patch/PatchState";
 import { useServer } from "../api/ServerContext";
 import type { DmxSnapshot, FixtureDefinition, FixtureMode, MultiPatchInstance, PatchedFixture, SplitPatch } from "../api/types";
 import { Button } from "../components/common";
@@ -144,13 +145,14 @@ export function DmxWindow({ active = true, compact }: WindowProps) {
     onValue: setSnapshot,
   });
 
+  const patchedFixtures = usePatchedFixturesView(active);
   const universeNumbers = useMemo(() => {
     const values = new Set(snapshot?.universes.map((frame) => frame.universe) ?? []);
-    server.patch?.fixtures.forEach((fixture) => fixtureDmxPatchBindings(fixture).forEach((patch) => values.add(patch.universe)));
-    server.patch?.routes.forEach((route) => values.add(route.logical_universe));
+    patchedFixtures.forEach((fixture) => fixtureDmxPatchBindings(fixture).forEach((patch) => values.add(patch.universe)));
+    server.outputRoutes.forEach((route) => values.add(route.body.logical_universe));
     if (!values.size) values.add(1);
     return [...values].sort((a, b) => a - b).slice(0, compact ? 2 : 8);
-  }, [snapshot, server.patch, compact]);
+  }, [snapshot, patchedFixtures, server.outputRoutes, compact]);
 
   useEffect(() => {
     if (!slot || !snapshot) return;
@@ -158,7 +160,7 @@ export function DmxWindow({ active = true, compact }: WindowProps) {
     setSlot((current) => current && current.universe === slot.universe && current.address === slot.address && current.value !== value ? { ...current, value } : current);
   }, [snapshot, slot?.universe, slot?.address]);
 
-  const selectedFixtureChannel = slot ? fixtureChannelAt(server.patch?.fixtures ?? [], slot.universe, slot.address) : null;
+  const selectedFixtureChannel = slot ? fixtureChannelAt(patchedFixtures, slot.universe, slot.address) : null;
   const override = (value: number | null) => {
     if (!slot) return;
     if (value !== null) setSlot({ ...slot, value });

@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { usePatchedFixturesView } from "../../features/patch/PatchState";
 import { useServer } from "../../api/ServerContext";
 import type { PatchedFixture, VisualizationSnapshot } from "../../api/types";
 import { fixtures as visualFixtures } from "../../data/mockData";
@@ -16,10 +17,10 @@ function useVisualizationSnapshot(followPreload: boolean, active: boolean) {
 }
 
 function usePatchedFixtures(override?: readonly PatchedFixture[]) {
-	const server = useServer();
+	const owned = usePatchedFixturesView(!override);
 	return useMemo(
 		() =>
-			[...(override ?? server.patch?.fixtures ?? [])].sort(
+			[...(override ?? owned)].sort(
 				(left, right) =>
 					(left.virtual_fixture_number ?? Number.MAX_SAFE_INTEGER) -
 						(right.virtual_fixture_number ?? Number.MAX_SAFE_INTEGER) ||
@@ -27,7 +28,7 @@ function usePatchedFixtures(override?: readonly PatchedFixture[]) {
 						(right.fixture_number ?? Number.MAX_SAFE_INTEGER) ||
 					left.fixture_id.localeCompare(right.fixture_id),
 			),
-		[override, server.patch],
+		[override, owned],
 	);
 }
 

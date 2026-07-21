@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useApp } from "../../state/AppContext";
+import { usePatchedFixturesView } from "../../features/patch/PatchState";
 import { useServer } from "../../api/ServerContext";
 import { VerticalTouchFader } from "./VerticalTouchFader";
 import { DualVerticalTouchFader } from "./DualVerticalTouchFader";
@@ -20,7 +21,8 @@ export function StageCommandControls() {
   const selection = useStageSelection();
   const hardwareConnected = Boolean(server.bootstrap?.hardware_connected || state.midiProfile);
   const selected = selection.fixtureIds;
-  const positions = Object.fromEntries((server.patch?.fixtures ?? []).map((fixture, index) => [fixture.fixture_id, server.stageLayout?.body.positions3d?.[fixture.fixture_id] ?? migrateStagePosition(server.stageLayout?.body.positions?.[fixture.fixture_id], index)]));
+  const patchedFixtures = usePatchedFixturesView();
+  const positions = Object.fromEntries(patchedFixtures.map((fixture, index) => [fixture.fixture_id, server.stageLayout?.body.positions3d?.[fixture.fixture_id] ?? migrateStagePosition(server.stageLayout?.body.positions?.[fixture.fixture_id], index)]));
   const first = positions[selected[0]];
   const update = (key: keyof StagePosition3d, nextValue: number) => {
     if (!first) return;

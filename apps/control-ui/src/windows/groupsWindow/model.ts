@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import type { useServer } from "../../api/ServerContext";
-import type { StoredGroup, VersionedObject } from "../../api/types";
+import type { PatchedFixture, StoredGroup, VersionedObject } from "../../api/types";
 import { groups as fallbackGroups } from "../../data/mockData";
+import { usePatchedFixturesView } from "../../features/patch/PatchState";
 import { useGroupRuntimeAuthority } from "../../features/groupRuntime/groupRuntimeAuthority";
 
 export type GroupsServer = ReturnType<typeof useServer>;
@@ -42,7 +43,7 @@ function groupCards(groups: readonly Group[]) {
 }
 
 function fixtureMetadata(
-	fixtures: NonNullable<GroupsServer["patch"]>["fixtures"],
+	fixtures: readonly PatchedFixture[],
 ): FixtureMetadata {
 	const knownFixtureIds = new Set<string>();
 	const fixtureNames = new Map<string, string>();
@@ -89,7 +90,7 @@ export function useGroupPoolModel(server: GroupsServer, active = true) {
 		return hasShow ? authority.groups : [];
 	}, [authority.groups, hasShow, server.bootstrap]);
 	const cards = useMemo(() => groupCards(groups), [groups]);
-	const fixtures = server.patch?.fixtures ?? [];
+	const fixtures = usePatchedFixturesView(active);
 	const metadata = useMemo(() => fixtureMetadata(fixtures), [fixtures]);
 	return {
 		cards,

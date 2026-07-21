@@ -29,6 +29,12 @@ import { FixtureSheetWindow } from "./FixtureSheetWindow";
 import { PatchWindow } from "./PatchWindow";
 import { PresetsWindow } from "./PresetsWindow";
 
+vi.mock("../features/patch/PatchState", async (importOriginal) => ({
+	...(await importOriginal<Record<string, unknown>>()),
+	usePatchedFixturesView: (enabled = true) =>
+		enabled ? mocks.server.patch.fixtures : [],
+}));
+
 const mocks = vi.hoisted(() => {
 	const selectionAccess = vi.fn();
 	const mutationQueue = {

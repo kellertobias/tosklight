@@ -1,10 +1,11 @@
 import { useServer } from "../api/ServerContext";
-import type { CueList, VisualizationSnapshot } from "../api/types";
+import type { CueList, PatchedFixture, VisualizationSnapshot } from "../api/types";
 import { fixtures } from "../data/mockData";
 import {
 	type RuntimeGroup,
 	useGroupRuntimeAuthority,
 } from "../features/groupRuntime/groupRuntimeAuthority";
+import { usePatchedFixturesView } from "../features/patch/PatchState";
 import { useProgrammerValueTargets } from "../features/programmerValues/useProgrammerValueTargets";
 import { useVisualizationRuntimeSnapshot } from "../features/visualizationRuntime/VisualizationRuntimeView";
 import type { FixtureSheetIncludedHeads, FixtureSheetOrder } from "../types";
@@ -33,7 +34,7 @@ function targetFamilyActive(
 }
 
 function orderedFixtureTargets({
-	server,
+	fixtures,
 	fixtureOrder,
 	activeOnly,
 	selectedCueList,
@@ -41,7 +42,7 @@ function orderedFixtureTargets({
 	groups,
 	activeValueTargets,
 }: {
-	server: ReturnType<typeof useServer>;
+	fixtures: readonly PatchedFixture[];
 	fixtureOrder: FixtureSheetOrder;
 	activeOnly: boolean;
 	selectedCueList: CueList | null;
@@ -51,7 +52,7 @@ function orderedFixtureTargets({
 }) {
 	const activeIds = activeProgrammerFixtureIds(activeValueTargets, groups);
 	const cueIds = cueListFixtureIds(selectedCueList ?? undefined, groups);
-	return [...(server.patch?.fixtures ?? [])]
+	return [...fixtures]
 		.sort(compareFixtureIds)
 		.flatMap((fixture) => fixtureSheetTargets(fixture, includedHeads))
 		.filter((target) => !activeOnly || targetFamilyActive(target, activeIds))
@@ -236,6 +237,7 @@ export function useFixtureSheetRows({
 	const server = useServer();
 	const observesGroupRuntime = active && Boolean(server.bootstrap?.active_show);
 	const groupAuthority = useGroupRuntimeAuthority(observesGroupRuntime);
+	const patchedFixtures = usePatchedFixturesView(active);
 	const observesActiveValues =
 		active && (activeOnly || fixtureOrder === "active");
 	const activeValueTargets = useProgrammerValueTargets(observesActiveValues);
@@ -256,7 +258,7 @@ export function useFixtureSheetRows({
 		};
 	return {
 		rows: orderedFixtureTargets({
-			server,
+			fixtures: patchedFixtures,
 			fixtureOrder,
 			activeOnly,
 			selectedCueList,

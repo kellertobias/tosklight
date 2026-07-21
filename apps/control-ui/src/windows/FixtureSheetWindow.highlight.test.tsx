@@ -90,10 +90,27 @@ const stepState = (active: boolean): HighlightState => ({
 	owner_user_id: "operator-a",
 });
 
+const patchFixtures = vi.hoisted(
+	() => ({ current: [] as ReturnType<typeof multiHeadFixture>[] }),
+);
+vi.mock("../features/patch/PatchState", async (importOriginal) => ({
+	...(await importOriginal<Record<string, unknown>>()),
+	usePatchedFixturesView: (enabled = true) =>
+		enabled ? patchFixtures.current : [],
+}));
+
+patchFixtures.current = [multiHeadFixture()];
 const server = {
 	bootstrap: { active_programmers: [] },
 	session: { session_id: "session-a" },
-	patch: { fixtures: [multiHeadFixture()] },
+	patch: {
+		get fixtures() {
+			return patchFixtures.current;
+		},
+		set fixtures(value: ReturnType<typeof multiHeadFixture>[]) {
+			patchFixtures.current = value;
+		},
+	},
 	groups: [],
 	get playbacks(): never {
 		throw new Error("Fixture Sheet must not read broad playbacks");

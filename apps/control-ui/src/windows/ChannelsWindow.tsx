@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { usePatchedFixturesView } from "../features/patch/PatchState";
 import { useServer } from "../api/ServerContext";
 import type { PatchedFixture, VisualizationSnapshot } from "../api/types";
 import { Button } from "../components/common";
@@ -39,10 +40,8 @@ export function ChannelsWindow({ active = true, compact }: WindowProps) {
 		() => new Set(selection?.selected ?? []),
 		[selection?.selected],
 	);
-	const channels = channelProjection(
-		server.patch?.fixtures ?? [],
-		visualization,
-	);
+	const fixtures = usePatchedFixturesView(active);
+	const channels = channelProjection(fixtures, visualization);
 	const pages = Math.max(8, Math.ceil(channels.length / PAGE_SIZE));
 	const setIntensity = (fixtureId: string, level: number) => {
 		const mutations = normalizedFixtureMutations(

@@ -2,6 +2,12 @@ import { cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useFixtureSheetRows } from "./fixtureSheetProjection";
 
+vi.mock("../features/patch/PatchState", async (importOriginal) => ({
+	...(await importOriginal<Record<string, unknown>>()),
+	usePatchedFixturesView: (enabled = true) =>
+		enabled ? mocks.server.patch.fixtures : [],
+}));
+
 const mocks = vi.hoisted(() => {
 	const runtime = {
 		master: 0.4,

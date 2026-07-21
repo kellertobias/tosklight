@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { usePatchedFixturesView } from "../../features/patch/PatchState";
 import { useServer } from "../../api/ServerContext";
 import type {
 	AttributeValue,
@@ -24,9 +25,10 @@ const NO_SUBSCRIPTION = () => () => undefined;
 
 function useStageFixtures(enabled: boolean) {
 	const server = useServer();
+	const fixtures = usePatchedFixturesView(enabled);
 	return useMemo(() => {
 		if (!enabled) return [];
-		return (server.patch?.fixtures ?? []).flatMap((fixture, fixtureIndex) =>
+		return fixtures.flatMap((fixture, fixtureIndex) =>
 			[
 				{
 					id: fixture.fixture_id,
@@ -64,7 +66,7 @@ function useStageFixtures(enabled: boolean) {
 				};
 			}),
 		);
-	}, [enabled, server.patch, server.stageLayout]);
+	}, [enabled, fixtures, server.stageLayout]);
 }
 
 function cueChanges(cue: Cue, groups: readonly ShowObject<"group">[]) {

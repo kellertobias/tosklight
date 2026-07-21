@@ -7,6 +7,12 @@ import { ShowObjectsStateProvider } from "../../features/showObjects/ShowObjects
 import { ShowObjectsStore } from "../../features/showObjects/store";
 import { useCueThumbnails } from "./useCueThumbnails";
 
+vi.mock("../../features/patch/PatchState", async (importOriginal) => ({
+	...(await importOriginal<Record<string, unknown>>()),
+	usePatchedFixturesView: (enabled = true) =>
+		enabled ? (mocks.server.patch as { fixtures: unknown[] }).fixtures : [],
+}));
+
 const mocks = vi.hoisted(() => {
 	const legacyPlaybackAccess = vi.fn();
 	const server = {

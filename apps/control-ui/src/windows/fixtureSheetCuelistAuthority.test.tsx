@@ -111,10 +111,27 @@ const CUE_LISTS = [
 
 const broadReads = { pool: 0, cueLists: 0 };
 
+const patchFixtures = vi.hoisted(
+	() => ({ current: [] as Record<string, unknown>[] }),
+);
+vi.mock("../features/patch/PatchState", async (importOriginal) => ({
+	...(await importOriginal<Record<string, unknown>>()),
+	usePatchedFixturesView: (enabled = true) =>
+		enabled ? patchFixtures.current : [],
+}));
+
+patchFixtures.current = [
+	patchedFixture("fix-1", 1),
+	patchedFixture("fix-2", 2),
+] as never;
 const server = {
 	bootstrap: { active_programmers: [] },
 	session: { session_id: "session-a" },
-	patch: { fixtures: [patchedFixture("fix-1", 1), patchedFixture("fix-2", 2)] },
+	patch: {
+		get fixtures() {
+			return patchFixtures.current;
+		},
+	},
 	groups: [],
 	playbacks: {
 		get pool() {

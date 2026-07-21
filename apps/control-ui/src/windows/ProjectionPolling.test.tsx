@@ -6,11 +6,17 @@ import { VisualizationRuntimeProvider } from "../features/visualizationRuntime/V
 import { ChannelsWindow } from "./ChannelsWindow";
 import { DmxWindow } from "./DmxWindow";
 
+vi.mock("../features/patch/PatchState", async (importOriginal) => ({
+	...(await importOriginal<Record<string, unknown>>()),
+	usePatchedFixturesView: () => [],
+}));
+
 const server = {
 	status: "connected",
 	readDmx: vi.fn().mockResolvedValue({ universes: [], overrides: [] }),
 	readVisualization: vi.fn().mockResolvedValue({ values: [] }),
 	patch: { fixtures: [], routes: [] },
+	outputRoutes: [],
 	selectedFixtures: [],
 	bootstrap: null,
 	setDmxOverride: vi.fn(),
