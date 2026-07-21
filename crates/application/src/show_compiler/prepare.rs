@@ -6,9 +6,11 @@ use crate::ActionError;
 use light_engine::EngineSnapshot;
 use light_show::{PortableShowDocument, PortableShowTransaction};
 
-/// A losslessly migrated transaction and the runtime snapshot compiled from that exact candidate.
+/// A transaction and the runtime snapshot compiled from its migration-compatible candidate.
 ///
-/// The backing show remains unchanged until an application adapter commits `transaction`.
+/// The backing show remains unchanged until an application adapter commits `transaction`. Some
+/// capability-owned actions deliberately retain only their explicit transaction while applying
+/// compatibility migrations to the compiled snapshot in memory.
 pub struct PreparedShowCandidate {
     transaction: PortableShowTransaction,
     snapshot: EngineSnapshot,
@@ -33,6 +35,28 @@ pub fn prepare_show_candidate(
     stage_candidate_migrations(document, &mut transaction)?;
     let candidate = document
         .candidate(&transaction)
+        .map_err(|error| invalid_candidate(format!("invalid portable show candidate: {error}")))?;
+    let snapshot = compile_show_candidate(candidate)?;
+    Ok(PreparedShowCandidate {
+        transaction,
+        snapshot,
+    })
+}
+
+/// Compiles one migration-compatible runtime snapshot while retaining the caller's exact
+/// transaction for persistence.
+///
+/// Capability-owned actions use this when their projections and events promise that only their
+/// explicit object changes are retained. Legacy migrations still participate in runtime
+/// compilation, but they must not silently join that capability's persisted transaction.
+pub(crate) fn prepare_show_candidate_exact_transaction(
+    document: &PortableShowDocument,
+    transaction: PortableShowTransaction,
+) -> Result<PreparedShowCandidate, ActionError> {
+    let mut compilation = transaction.clone();
+    stage_candidate_migrations(document, &mut compilation)?;
+    let candidate = document
+        .candidate(&compilation)
         .map_err(|error| invalid_candidate(format!("invalid portable show candidate: {error}")))?;
     let snapshot = compile_show_candidate(candidate)?;
     Ok(PreparedShowCandidate {

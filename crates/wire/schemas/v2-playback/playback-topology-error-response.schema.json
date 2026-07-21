@@ -9,6 +9,7 @@
         "null"
       ],
       "format": "uint64",
+      "maximum": 9007199254740991,
       "minimum": 0
     },
     "current_revision": {
@@ -17,6 +18,7 @@
         "null"
       ],
       "format": "uint64",
+      "maximum": 9007199254740991,
       "minimum": 0
     },
     "error": {

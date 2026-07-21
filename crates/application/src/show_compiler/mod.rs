@@ -8,8 +8,10 @@ mod tests;
 
 #[cfg(test)]
 pub(crate) use migrations::stage_candidate_migrations;
-pub(crate) use prepare::prepare_show_candidate_preserving_object;
 pub use prepare::{PreparedShowCandidate, prepare_show_candidate};
+pub(crate) use prepare::{
+    prepare_show_candidate_exact_transaction, prepare_show_candidate_preserving_object,
+};
 
 use crate::{ActionError, ActionErrorKind};
 use light_engine::EngineSnapshot;

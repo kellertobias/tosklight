@@ -21,6 +21,8 @@ use light_wire::v2::playback_topology::{
 };
 use uuid::Uuid;
 
+const JAVASCRIPT_MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
+
 pub(super) fn router() -> Router<AppState> {
     Router::new().route(
         "/api/v2/shows/{show_id}/playback-topology/actions",
@@ -37,6 +39,7 @@ async fn apply_action(
     let session = authenticate(&state, &headers).map_err(PlaybackTopologyHttpError::api)?;
     let show_id = parse_show_id(&show_id)?;
     let expected_revision = parse_if_match(&headers).map_err(PlaybackTopologyHttpError::api)?;
+    validate_safe_revision(expected_revision, "If-Match")?;
     let Json(request) = request.map_err(PlaybackTopologyHttpError::json)?;
     validate_request_id(&request.request_id)?;
     let (request_id, command) = playback_topology_wire::application_command(show_id, request)
@@ -86,6 +89,15 @@ fn validate_request_id(value: &str) -> Result<(), PlaybackTopologyHttpError> {
     Ok(())
 }
 
+fn validate_safe_revision(value: u64, name: &str) -> Result<(), PlaybackTopologyHttpError> {
+    if value > JAVASCRIPT_MAX_SAFE_INTEGER {
+        return Err(PlaybackTopologyHttpError::invalid(format!(
+            "{name} must not exceed the JavaScript maximum safe integer"
+        )));
+    }
+    Ok(())
+}
+
 fn http_context(session: &Session) -> ActionContext {
     ActionContext::operator(
         session.desk.id,
@@ -115,6 +127,9 @@ struct PlaybackTopologyHttpError {
 
 impl PlaybackTopologyHttpError {
     fn application(error: ActionError) -> Self {
+        if has_unsafe_revision(&error) {
+            return Self::unsafe_revision();
+        }
         Self::new(
             application_status(error.kind),
             wire_error_kind(error.kind),
@@ -151,6 +166,17 @@ impl PlaybackTopologyHttpError {
         )
     }
 
+    fn unsafe_revision() -> Self {
+        Self::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            PlaybackTopologyErrorKind::Internal,
+            "Playback topology error revision exceeds the JavaScript maximum safe integer",
+            None,
+            None,
+            false,
+        )
+    }
+
     fn blocking(error: tokio::task::JoinError) -> Self {
         Self::new(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -181,6 +207,14 @@ impl PlaybackTopologyHttpError {
             },
         }
     }
+}
+
+fn has_unsafe_revision(error: &ActionError) -> bool {
+    error
+        .current_revision
+        .into_iter()
+        .chain(error.current_related_revision)
+        .any(|revision| revision > JAVASCRIPT_MAX_SAFE_INTEGER)
 }
 
 impl IntoResponse for PlaybackTopologyHttpError {

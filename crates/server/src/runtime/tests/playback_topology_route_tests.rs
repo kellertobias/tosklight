@@ -168,7 +168,7 @@ async fn save_cue_list_preserves_extensions_and_returns_the_committed_projection
 async fn topology_route_rejects_missing_authority_and_forged_scope() {
     let scenario = TopologyScenario::new("Playback topology authorization").await;
     let revision = scenario.show_revision();
-    let request = configure_request("authorization", 0, 0);
+    let request = map_existing_request("authorization", 0, None, 0, None);
     let cursor = scenario.state.application_events.latest_sequence();
 
     let unauthorized = post_topology(
@@ -221,6 +221,34 @@ async fn topology_route_rejects_missing_authority_and_forged_scope() {
         assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{field}");
         assert_eq!(json(response).await["kind"], "invalid", "{field}");
     }
+
+    let unsafe_revision = 9_007_199_254_740_992_u64;
+    let mut unsafe_action = map_existing_request("unsafe-object-revision", 0, None, 0, None);
+    unsafe_action["action"]["expected_page_revision"] = serde_json::json!(unsafe_revision);
+    let response = scenario.action(revision, unsafe_action).await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(
+        json(response).await["error"]
+            .as_str()
+            .unwrap()
+            .contains("safe integer")
+    );
+    let response = post_topology(
+        &scenario.app,
+        Some(&scenario.token),
+        &scenario.show_id,
+        Some(unsafe_revision),
+        request,
+        None,
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(
+        json(response).await["error"]
+            .as_str()
+            .unwrap()
+            .contains("safe integer")
+    );
     assert_eq!(scenario.state.application_events.latest_sequence(), cursor);
     scenario.cleanup();
 }
@@ -331,21 +359,4 @@ async fn configured_desk_boundary_rejects_missing_or_foreign_credentials() {
     assert_eq!(allowed.status(), StatusCode::OK);
     assert_eq!(json(allowed).await["status"], "no_change");
     let _ = std::fs::remove_dir_all(data_dir);
-}
-
-fn assert_one_topology_event(state: &AppState, after: u64, changed_objects: usize) {
-    let events = show_events(state, after);
-    assert_eq!(events.len(), 1);
-    let light_application::ApplicationEvent::Show(light_application::ShowEvent::ObjectsChanged(
-        change,
-    )) = &events[0].payload
-    else {
-        panic!("expected one active-show ObjectsChanged event")
-    };
-    assert_eq!(change.changes.len(), changed_objects);
-    assert_eq!(
-        events[0].source,
-        light_application::EventSource::Action(light_application::ActionSource::Http)
-    );
-    assert!(events[0].correlation_id.is_some());
 }

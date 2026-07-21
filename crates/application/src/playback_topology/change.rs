@@ -3,7 +3,8 @@ use super::{
     stored::{Stored, candidate_projection, invalid, stored_projection},
 };
 use crate::active_show::PreparedActiveShowTransaction;
-use crate::{ActionError, ActiveShowObjectChange, ActiveShowObjectKind, prepare_show_candidate};
+use crate::show_compiler::prepare_show_candidate_exact_transaction;
+use crate::{ActionError, ActiveShowObjectChange, ActiveShowObjectKind};
 use light_playback::{PlaybackDefinition, PlaybackPage};
 use light_show::{PortableShowDocument, PortableShowRevision};
 use serde_json::Value;
@@ -57,7 +58,7 @@ pub(super) fn changed_present(
     for (kind, id, _) in &deletes {
         transaction.delete(kind.as_str(), id);
     }
-    let prepared = prepare_show_candidate(document, transaction)?;
+    let prepared = prepare_show_candidate_exact_transaction(document, transaction)?;
     let candidate = document
         .candidate(prepared.transaction())
         .map_err(invalid)?;

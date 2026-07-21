@@ -38,6 +38,15 @@ pub enum PlaybackTopologyAction {
         expected_playback_object_id: Option<String>,
         playback: PlaybackDefinition,
     },
+    MapExistingPlayback {
+        page: u8,
+        slot: u8,
+        playback_number: u16,
+        expected_page_revision: Revision,
+        expected_page_object_id: Option<String>,
+        expected_playback_revision: Revision,
+        expected_playback_object_id: Option<String>,
+    },
     ClearMappedPlayback {
         page: u8,
         slot: u8,

@@ -36,6 +36,7 @@
             "expected_revision": {
               "type": "integer",
               "format": "uint64",
+              "maximum": 9007199254740991,
               "minimum": 0
             },
             "type": {
@@ -61,6 +62,7 @@
             "expected_page_revision": {
               "type": "integer",
               "format": "uint64",
+              "maximum": 9007199254740991,
               "minimum": 0
             },
             "expected_playback_object_id": {
@@ -69,6 +71,7 @@
             "expected_playback_revision": {
               "type": "integer",
               "format": "uint64",
+              "maximum": 9007199254740991,
               "minimum": 0
             },
             "page": {
@@ -112,6 +115,7 @@
             "expected_page_revision": {
               "type": "integer",
               "format": "uint64",
+              "maximum": 9007199254740991,
               "minimum": 0
             },
             "expected_playback_object_id": {
@@ -120,6 +124,63 @@
             "expected_playback_revision": {
               "type": "integer",
               "format": "uint64",
+              "maximum": 9007199254740991,
+              "minimum": 0
+            },
+            "page": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 127,
+              "minimum": 1
+            },
+            "playback_number": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 1000,
+              "minimum": 1
+            },
+            "slot": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 127,
+              "minimum": 1
+            },
+            "type": {
+              "type": "string",
+              "const": "map_existing_playback"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "page",
+            "slot",
+            "playback_number",
+            "expected_page_revision",
+            "expected_page_object_id",
+            "expected_playback_revision",
+            "expected_playback_object_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "expected_page_object_id": {
+              "$ref": "#/$defs/PlaybackTopologyObjectIdentity"
+            },
+            "expected_page_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "maximum": 9007199254740991,
+              "minimum": 0
+            },
+            "expected_playback_object_id": {
+              "$ref": "#/$defs/PlaybackTopologyObjectIdentity"
+            },
+            "expected_playback_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "maximum": 9007199254740991,
               "minimum": 0
             },
             "page": {

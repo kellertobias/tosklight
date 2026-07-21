@@ -88,6 +88,68 @@ pub(super) fn stored_projection<T>(
     }
 }
 
+pub(super) fn cue_list_object_id(
+    document: &PortableShowDocument,
+    stored: Option<&Stored<CueList>>,
+    id: CueListId,
+) -> Result<String, ActionError> {
+    existing_or_vacant_object_id(
+        document,
+        ActiveShowObjectKind::CueList,
+        stored,
+        id.0.to_string(),
+        "Cuelist",
+    )
+}
+
+pub(super) fn playback_object_id(
+    document: &PortableShowDocument,
+    stored: Option<&Stored<PlaybackDefinition>>,
+    number: u16,
+) -> Result<String, ActionError> {
+    existing_or_vacant_object_id(
+        document,
+        ActiveShowObjectKind::Playback,
+        stored,
+        number.to_string(),
+        "Playback",
+    )
+}
+
+pub(super) fn page_object_id(
+    document: &PortableShowDocument,
+    stored: Option<&Stored<PlaybackPage>>,
+    number: u8,
+) -> Result<String, ActionError> {
+    existing_or_vacant_object_id(
+        document,
+        ActiveShowObjectKind::PlaybackPage,
+        stored,
+        number.to_string(),
+        "Playback Page",
+    )
+}
+
+fn existing_or_vacant_object_id<T>(
+    document: &PortableShowDocument,
+    kind: ActiveShowObjectKind,
+    stored: Option<&Stored<T>>,
+    canonical_id: String,
+    label: &str,
+) -> Result<String, ActionError> {
+    if let Some(stored) = stored {
+        return Ok(stored.object_id.clone());
+    }
+    let Some(occupied) = document.object(kind.as_str(), &canonical_id) else {
+        return Ok(canonical_id);
+    };
+    Err(conflict(format!(
+        "{label} canonical storage identity is already occupied"
+    ))
+    .at_revision(document.revision().value())
+    .at_related_revision(occupied.revision()))
+}
+
 pub(super) fn validate_revision<T>(
     stored: Option<&Stored<T>>,
     expected: Revision,

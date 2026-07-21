@@ -1,20 +1,19 @@
 use super::{
     PlaybackTopologyAction, PlaybackTopologyCommand, PlaybackTopologyResolution,
     change::{PreparedTopology, changed_configure, changed_present, no_change},
+    map_existing::map_existing_playback,
+    page::configured_page,
     stored::{
-        Stored, conflict, find_cue_list, find_page, find_playback, invalid, next_playback_number,
-        next_revision, not_found, pages, same_typed, stored_projection, validate_identity,
-        validate_revision,
+        Stored, conflict, cue_list_object_id, find_cue_list, find_page, find_playback, invalid,
+        next_playback_number, next_revision, not_found, page_object_id, pages, playback_object_id,
+        same_typed, stored_projection, validate_identity, validate_revision,
     },
 };
 use crate::active_show::PreparedActiveShowTransaction;
 use crate::{ActionError, ActiveShowObjectKind, lossless_json};
-use light_playback::{
-    CueList, MAX_PAGE_SLOTS, MAX_PLAYBACK_PAGES, PlaybackDefinition, PlaybackPage,
-};
+use light_playback::{CueList, MAX_PAGE_SLOTS, MAX_PLAYBACK_PAGES, PlaybackDefinition};
 use light_show::PortableShowDocument;
 use serde_json::Value;
-use std::collections::HashMap;
 
 pub(super) fn prepare(
     document: &PortableShowDocument,
@@ -56,6 +55,25 @@ pub(super) fn prepare(
                 expected_playback_object_id.as_deref(),
             ),
             playback,
+        ),
+        PlaybackTopologyAction::MapExistingPlayback {
+            page,
+            slot,
+            playback_number,
+            expected_page_revision,
+            expected_page_object_id,
+            expected_playback_revision,
+            expected_playback_object_id,
+        } => map_existing_playback(
+            document,
+            command,
+            (*page, *slot),
+            *playback_number,
+            (*expected_page_revision, *expected_playback_revision),
+            (
+                expected_page_object_id.as_deref(),
+                expected_playback_object_id.as_deref(),
+            ),
         ),
         PlaybackTopologyAction::ClearMappedPlayback {
             page,
@@ -120,10 +138,7 @@ fn save_cue_list(
             vec![stored_projection(ActiveShowObjectKind::CueList, existing)],
         ));
     }
-    let object_id = stored.as_ref().map_or_else(
-        || cue_list_id.0.to_string(),
-        |value| value.object_id.clone(),
-    );
+    let object_id = cue_list_object_id(document, stored.as_ref(), cue_list_id)?;
     let body = cue_list_body(stored.as_ref(), cue_list, raw_body)?;
     changed_present(
         document,
@@ -212,17 +227,14 @@ fn configure_slot(
     if playback_changed {
         writes.push((
             ActiveShowObjectKind::Playback,
-            playback
-                .as_ref()
-                .map_or_else(|| number.to_string(), |value| value.object_id.clone()),
+            playback_object_id(document, playback.as_ref(), number)?,
             typed_body(playback.as_ref(), &normalized)?,
         ));
     }
     if page_changed {
         writes.push((
             ActiveShowObjectKind::PlaybackPage,
-            page.as_ref()
-                .map_or_else(|| page_number.to_string(), |value| value.object_id.clone()),
+            page_object_id(document, page.as_ref(), page_number)?,
             typed_body(page.as_ref(), &desired_page)?,
         ));
     }
@@ -325,26 +337,6 @@ fn clear_mapped_playback(
             next_revision(playback.object_revision)?,
         )],
     )
-}
-
-fn configured_page(
-    stored: Option<&Stored<PlaybackPage>>,
-    page: u8,
-    slot: u8,
-    playback: u16,
-) -> Result<PlaybackPage, ActionError> {
-    let mut desired = stored.map_or_else(
-        || PlaybackPage {
-            number: page,
-            name: format!("Page {page}"),
-            slots: HashMap::new(),
-        },
-        |stored| stored.typed.clone(),
-    );
-    desired.number = page;
-    desired.slots.insert(slot, playback);
-    desired.validate().map_err(invalid)?;
-    Ok(desired)
 }
 
 fn cue_list_body(

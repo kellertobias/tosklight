@@ -174,6 +174,22 @@ pub(super) fn fingerprint(
             hasher.update(expected_playback_revision.to_le_bytes());
             hash_json(&mut hasher, expected_playback_object_id)?;
         }
+        PlaybackTopologyAction::MapExistingPlayback {
+            page,
+            slot,
+            playback_number,
+            expected_page_revision,
+            expected_page_object_id,
+            expected_playback_revision,
+            expected_playback_object_id,
+        } => {
+            hasher.update([3, *page, *slot]);
+            hasher.update(playback_number.to_le_bytes());
+            hasher.update(expected_page_revision.to_le_bytes());
+            hash_json(&mut hasher, expected_page_object_id)?;
+            hasher.update(expected_playback_revision.to_le_bytes());
+            hash_json(&mut hasher, expected_playback_object_id)?;
+        }
     }
     Ok(hasher.finalize().into())
 }

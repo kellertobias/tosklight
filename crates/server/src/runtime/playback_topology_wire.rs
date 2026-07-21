@@ -4,6 +4,8 @@ use light_playback as playback;
 use light_wire::v2::playback_topology as wire;
 use std::sync::Arc;
 
+const JAVASCRIPT_MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
+
 pub(super) fn application_command(
     show_id: ShowId,
     request: wire::PlaybackTopologyActionRequest,
@@ -17,7 +19,7 @@ pub(super) fn application_command(
             body,
         } => application::PlaybackTopologyAction::SaveCueList {
             cue_list_id: CueListId(non_nil(cue_list_id, "cue_list_id")?),
-            expected_revision,
+            expected_revision: input_revision(expected_revision, "expected_revision")?,
             expected_object_id: expected_object_id.into_option(),
             cue_list: serde_json::from_value(body.clone())
                 .map_err(|error| format!("Cuelist body is invalid: {error}"))?,
@@ -34,11 +36,40 @@ pub(super) fn application_command(
         } => application::PlaybackTopologyAction::ConfigureSlot {
             page,
             slot,
-            expected_page_revision,
+            expected_page_revision: input_revision(
+                expected_page_revision,
+                "expected_page_revision",
+            )?,
             expected_page_object_id: expected_page_object_id.into_option(),
-            expected_playback_revision,
+            expected_playback_revision: input_revision(
+                expected_playback_revision,
+                "expected_playback_revision",
+            )?,
             expected_playback_object_id: expected_playback_object_id.into_option(),
             playback: application_playback(playback)?,
+        },
+        wire::PlaybackTopologyAction::MapExistingPlayback {
+            page,
+            slot,
+            playback_number,
+            expected_page_revision,
+            expected_page_object_id,
+            expected_playback_revision,
+            expected_playback_object_id,
+        } => application::PlaybackTopologyAction::MapExistingPlayback {
+            page,
+            slot,
+            playback_number,
+            expected_page_revision: input_revision(
+                expected_page_revision,
+                "expected_page_revision",
+            )?,
+            expected_page_object_id: expected_page_object_id.into_option(),
+            expected_playback_revision: input_revision(
+                expected_playback_revision,
+                "expected_playback_revision",
+            )?,
+            expected_playback_object_id: expected_playback_object_id.into_option(),
         },
         wire::PlaybackTopologyAction::ClearMappedPlayback {
             page,
@@ -50,9 +81,15 @@ pub(super) fn application_command(
         } => application::PlaybackTopologyAction::ClearMappedPlayback {
             page,
             slot,
-            expected_page_revision,
+            expected_page_revision: input_revision(
+                expected_page_revision,
+                "expected_page_revision",
+            )?,
             expected_page_object_id: expected_page_object_id.into_option(),
-            expected_playback_revision,
+            expected_playback_revision: input_revision(
+                expected_playback_revision,
+                "expected_playback_revision",
+            )?,
             expected_playback_object_id: expected_playback_object_id.into_option(),
         },
     };
@@ -72,11 +109,11 @@ pub(super) fn outcome(
             objects,
             event_sequence,
         } => (
-            show_revision.value(),
+            output_revision(show_revision.value(), "show_revision")?,
             wire_resolution(resolution),
             wire::PlaybackTopologyActionState::Changed {
                 objects: wire_objects(&objects)?,
-                event_sequence,
+                event_sequence: output_revision(event_sequence, "event_sequence")?,
             },
         ),
         application::PlaybackTopologyOutcome::NoChange {
@@ -84,7 +121,7 @@ pub(super) fn outcome(
             resolution,
             objects,
         } => (
-            show_revision.value(),
+            output_revision(show_revision.value(), "show_revision")?,
             wire_resolution(resolution),
             wire::PlaybackTopologyActionState::NoChange {
                 objects: wire_objects(&objects)?,
@@ -245,7 +282,7 @@ fn wire_object(
         } => wire::PlaybackTopologyObjectProjection::Present {
             kind: wire_kind(*kind)?,
             object_id: object_id.clone(),
-            object_revision: *object_revision,
+            object_revision: output_revision(*object_revision, "object_revision")?,
             body: raw_body.as_ref().clone(),
         },
         application::PlaybackTopologyObjectProjection::Deleted {
@@ -255,7 +292,7 @@ fn wire_object(
         } => wire::PlaybackTopologyObjectProjection::Deleted {
             kind: wire_kind(*kind)?,
             object_id: object_id.clone(),
-            object_revision: *object_revision,
+            object_revision: output_revision(*object_revision, "object_revision")?,
         },
     })
 }
@@ -281,6 +318,21 @@ fn non_nil(value: uuid::Uuid, name: &str) -> Result<uuid::Uuid, String> {
         return Err(format!("{name} must not be nil"));
     }
     Ok(value)
+}
+
+fn input_revision(value: u64, name: &str) -> Result<u64, String> {
+    if value > JAVASCRIPT_MAX_SAFE_INTEGER {
+        return Err(format!(
+            "{name} must not exceed the JavaScript maximum safe integer"
+        ));
+    }
+    Ok(value)
+}
+
+fn output_revision(value: u64, name: &str) -> Result<u64, application::ActionError> {
+    input_revision(value, name).map_err(|message| {
+        application::ActionError::new(application::ActionErrorKind::Internal, message)
+    })
 }
 
 #[cfg(test)]

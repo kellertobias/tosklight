@@ -45,6 +45,15 @@ impl TopologyScenario {
         show_document(&self.state, &self.show_id)
     }
 
+    pub fn seed(&self, kind: &str, object_id: &str, body: &serde_json::Value) {
+        let show_id = light_core::ShowId(Uuid::parse_str(&self.show_id).unwrap());
+        let entry = self.state.desk.lock().show(show_id).unwrap().unwrap();
+        ShowStore::open(entry.path)
+            .unwrap()
+            .put_object(kind, object_id, body, 0)
+            .unwrap();
+    }
+
     pub fn cleanup(self) {
         let _ = std::fs::remove_dir_all(self.data_dir);
     }
@@ -189,6 +198,28 @@ pub(super) fn clear_request(
     })
 }
 
+pub(super) fn map_existing_request(
+    request_id: &str,
+    page_revision: u64,
+    page_object_id: Option<&str>,
+    playback_revision: u64,
+    playback_object_id: Option<&str>,
+) -> serde_json::Value {
+    serde_json::json!({
+        "request_id": request_id,
+        "action": {
+            "type": "map_existing_playback",
+            "page": 2,
+            "slot": 4,
+            "playback_number": 12,
+            "expected_page_revision": page_revision,
+            "expected_page_object_id": page_object_id,
+            "expected_playback_revision": playback_revision,
+            "expected_playback_object_id": playback_object_id
+        }
+    })
+}
+
 pub(super) fn save_request(request_id: &str, expected_revision: u64) -> serde_json::Value {
     let cue_list = cue_list(request_id);
     let cue_list_id = cue_list.id.0;
@@ -234,6 +265,23 @@ pub(super) fn show_events(
     events
 }
 
+pub(super) fn assert_one_topology_event(state: &AppState, after: u64, changed_objects: usize) {
+    let events = show_events(state, after);
+    assert_eq!(events.len(), 1);
+    let light_application::ApplicationEvent::Show(light_application::ShowEvent::ObjectsChanged(
+        change,
+    )) = &events[0].payload
+    else {
+        panic!("expected one active-show ObjectsChanged event")
+    };
+    assert_eq!(change.changes.len(), changed_objects);
+    assert_eq!(
+        events[0].source,
+        light_application::EventSource::Action(light_application::ActionSource::Http)
+    );
+    assert!(events[0].correlation_id.is_some());
+}
+
 pub(super) fn assert_etag(response: &Response, revision: u64) {
     assert_eq!(
         response.headers().get(header::ETAG).unwrap(),
@@ -274,7 +322,32 @@ fn playback_body() -> serde_json::Value {
     })
 }
 
-fn cue_list(name: &str) -> light_playback::CueList {
+pub(super) fn cue_list_playback_body(
+    number: u16,
+    cue_list_id: light_core::CueListId,
+) -> serde_json::Value {
+    let target = light_playback::PlaybackTarget::CueList { cue_list_id };
+    serde_json::to_value(light_playback::PlaybackDefinition {
+        number,
+        name: format!("Cuelist {number}"),
+        buttons: light_playback::PlaybackDefinition::default_buttons(&target),
+        fader: light_playback::PlaybackDefinition::default_fader(&target),
+        target,
+        button_count: 3,
+        has_fader: true,
+        go_activates: true,
+        auto_off: true,
+        xfade_millis: 0,
+        color: "#20c997".into(),
+        flash_release: light_playback::FlashReleaseMode::ReleaseAll,
+        protect_from_swap: false,
+        presentation_icon: None,
+        presentation_image: None,
+    })
+    .unwrap()
+}
+
+pub(super) fn cue_list(name: &str) -> light_playback::CueList {
     light_playback::CueList {
         id: light_core::CueListId::new(),
         name: name.into(),

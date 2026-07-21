@@ -19,6 +19,7 @@
     "show_revision": {
       "type": "integer",
       "format": "uint64",
+      "maximum": 9007199254740991,
       "minimum": 0
     }
   },
@@ -29,6 +30,7 @@
         "event_sequence": {
           "type": "integer",
           "format": "uint64",
+          "maximum": 9007199254740991,
           "minimum": 0
         },
         "objects": {
@@ -91,6 +93,7 @@
             "object_revision": {
               "type": "integer",
               "format": "uint64",
+              "maximum": 9007199254740991,
               "minimum": 0
             },
             "state": {
@@ -119,6 +122,7 @@
             "object_revision": {
               "type": "integer",
               "format": "uint64",
+              "maximum": 9007199254740991,
               "minimum": 0
             },
             "state": {
