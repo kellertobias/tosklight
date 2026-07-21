@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CueDeletionRequest",
+  "type": "object",
+  "properties": {
+    "address": {
+      "$ref": "#/$defs/CueDeletionAddress"
+    },
+    "authority": {
+      "$ref": "#/$defs/CueDeletionAuthority"
+    },
+    "cue_number": {
+      "type": "number",
+      "format": "double"
+    },
+    "request_id": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "address",
+    "cue_number",
+    "authority"
+  ],
+  "$defs": {
+    "CueDeletionAddress": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "playback_number": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "pool"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "playback_number"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "expected_page": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0
+            },
+            "slot": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "current_page"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "expected_page",
+            "slot"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "page": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0
+            },
+            "slot": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "page_slot"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "page",
+            "slot"
+          ]
+        }
+      ]
+    },
+    "CueDeletionAuthority": {
+      "type": "object",
+      "properties": {
+        "cue_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "cue_list_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "object_id": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "object_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0
+        },
+        "playback_number": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "playback_number",
+        "cue_list_id",
+        "object_id",
+        "object_revision",
+        "cue_id"
+      ]
+    }
+  }
+}

@@ -1,6 +1,8 @@
 mod capture_mode_projection;
 mod command;
 mod cue_active_show;
+mod cue_deletion;
+mod cue_list_resolution;
 mod cue_recording;
 mod cue_transfer;
 mod event;
@@ -31,6 +33,12 @@ pub use capture_mode_projection::{
 pub use command::{
     ExecutionPolicy, ProgrammingAction, ProgrammingCommand, ProgrammingOutcome, ProgrammingResult,
     SelectionGestureSource,
+};
+pub use cue_deletion::{
+    ProgrammingCueDeletionAddress, ProgrammingCueDeletionAuthority,
+    ProgrammingCueDeletionExpectation, ProgrammingCueDeletionObjectProjection,
+    ProgrammingCueDeletionOutcome, ProgrammingCueDeletionPorts, ProgrammingCueDeletionRequest,
+    ProgrammingCueDeletionResult, ProgrammingCueDeletionState, ProgrammingDeletedCue,
 };
 pub use cue_recording::{
     ProgrammingCueActivationCompletion, ProgrammingCueActivationPolicy,

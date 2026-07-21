@@ -53,6 +53,7 @@ impl<'a> ServerProgrammingPorts<'a> {
         self.record_group_command(programmers, context, command)
             .or_else(|| self.record_preset_command(programmers, context, command))
             .or_else(|| self.record_cue_command(programmers, context, command))
+            .or_else(|| self.delete_cue_command(programmers, context, command, policy))
             .or_else(|| self.transfer_cue_command(programmers, context, command))
             .or_else(|| self.navigate_cue_command(programmers, context, command, policy))
             .or_else(|| self.speed_group_command(programmers, context, command, policy))

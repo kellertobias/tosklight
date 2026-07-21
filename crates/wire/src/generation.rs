@@ -14,6 +14,7 @@ use crate::v2::command_line::{
     ProgrammingSelectionActionOutcome, ProgrammingSelectionActionRequest,
     ReplaceCommandLineRequest,
 };
+use crate::v2::cue_deletion::{CueDeletionErrorResponse, CueDeletionOutcome, CueDeletionRequest};
 use crate::v2::cue_recording::{CueRecordErrorResponse, CueRecordOutcome, CueRecordRequest};
 use crate::v2::cue_transfer::{CueTransferErrorResponse, CueTransferOutcome, CueTransferRequest};
 use crate::v2::events::{EventClientMessage, EventServerMessage, OutputRuntimeSnapshot};
@@ -189,6 +190,9 @@ fn programming_artifacts() -> Vec<GeneratedArtifact> {
         programming_request_schema::<CueRecordRequest>("cue-record-request"),
         programming_response_schema::<CueRecordOutcome>("cue-record-outcome"),
         programming_response_schema::<CueRecordErrorResponse>("cue-record-error-response"),
+        programming_request_schema::<CueDeletionRequest>("cue-deletion-request"),
+        programming_response_schema::<CueDeletionOutcome>("cue-deletion-outcome"),
+        programming_response_schema::<CueDeletionErrorResponse>("cue-deletion-error-response"),
         programming_request_schema::<CueTransferRequest>("cue-transfer-request"),
         programming_response_schema::<CueTransferOutcome>("cue-transfer-outcome"),
         programming_response_schema::<CueTransferErrorResponse>("cue-transfer-error-response"),

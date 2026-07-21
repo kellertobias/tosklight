@@ -2,11 +2,12 @@ use super::{
     CueTransferAuthority, ProgrammingCueTransferChoiceRequest, ProgrammingCueTransferMode,
     ProgrammingCueTransferObjectProjection, ProgrammingCueTransferSummary,
     resolution::{
-        StoredCueList, ensure_destination_available, exact_cue_list, resolve_choice,
-        source_position, validate_authority,
+        ensure_destination_available, exact_cue_list, resolve_choice, source_position,
+        validate_authority,
     },
 };
 use crate::active_show::PreparedActiveShowTransaction;
+use crate::programming::cue_list_resolution::StoredCueList;
 use crate::{
     ActionError, ActionErrorKind, ActiveShowObjectChange, ActiveShowObjectKind, CueNumber,
     lossless_json, prepare_show_candidate,

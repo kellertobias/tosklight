@@ -1,6 +1,7 @@
 use ts_rs::{Config, TS};
 
 use crate::v2::command_line::*;
+use crate::v2::cue_deletion::*;
 use crate::v2::cue_recording::*;
 use crate::v2::cue_transfer::*;
 use crate::v2::events::*;
@@ -237,6 +238,14 @@ fn programming(config: &Config) -> Vec<String> {
         CueRecordOutcome::decl(config),
         CueRecordErrorKind::decl(config),
         CueRecordErrorResponse::decl(config),
+        CueDeletionAddress::decl(config),
+        CueDeletionAuthority::decl(config),
+        CueDeletionRequest::decl(config),
+        CueDeletionObjectProjection::decl(config),
+        DeletedCueProjection::decl(config),
+        CueDeletionOutcome::decl(config),
+        CueDeletionErrorKind::decl(config),
+        CueDeletionErrorResponse::decl(config),
         CueTransferMode::decl(config),
         CueTransferRequest::decl(config),
         CueTransferObjectProjection::decl(config),

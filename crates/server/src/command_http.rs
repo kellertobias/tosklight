@@ -5,6 +5,16 @@
 
 #[path = "command_http/adapter.rs"]
 mod adapter;
+#[path = "command_http/cue_deletion_command.rs"]
+mod cue_deletion_command;
+#[path = "command_http/cue_deletion_ports.rs"]
+mod cue_deletion_ports;
+#[path = "command_http/cue_deletion_programming_ports.rs"]
+mod cue_deletion_programming_ports;
+#[path = "command_http/cue_deletion_routes.rs"]
+mod cue_deletion_routes;
+#[path = "command_http/cue_deletion_wire.rs"]
+mod cue_deletion_wire;
 #[path = "command_http/cue_navigation_action.rs"]
 mod cue_navigation_action;
 #[path = "command_http/cue_navigation_command.rs"]
@@ -109,6 +119,7 @@ mod wire;
 pub(super) use adapter::{
     ExistingCommandOutcome, ExistingCommandPolicy, execute_existing_command, route_osc_command_key,
 };
+pub(crate) use cue_deletion_ports::ServerProgrammingCueDeletionPorts;
 pub(super) use cue_navigation_action::execute_compatibility as execute_compatibility_cue_navigation;
 pub(crate) use cue_recording_osc::intercept_armed_playback as intercept_armed_cue_playback;
 pub(crate) use cue_transfer_ports::ServerProgrammingCueTransferPorts;

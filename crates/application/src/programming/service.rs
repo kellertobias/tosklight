@@ -11,6 +11,10 @@ use light_programmer::{HighlightRegistry, ProgrammerRegistry};
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
+#[path = "service/cue_deletion.rs"]
+mod cue_deletion;
+#[path = "service/cue_deletion_replay.rs"]
+mod cue_deletion_replay;
 #[path = "service/cue_recording.rs"]
 mod cue_recording;
 #[path = "service/cue_recording_replay.rs"]
@@ -76,6 +80,7 @@ mod values_replay_memory;
 #[path = "service/values_validation.rs"]
 mod values_validation;
 
+use cue_deletion_replay::CueDeletionReplayCache;
 use cue_recording_replay::CueRecordingReplayCache;
 use cue_transfer_replay::{CueTransferChoiceCache, CueTransferReplayCache};
 use group_recording_replay::GroupRecordingReplayCache;
@@ -111,6 +116,7 @@ pub struct ProgrammingService {
     preload_lifecycle_replay: Arc<Mutex<PreloadLifecycleReplayCache>>,
     priority_replay: Arc<Mutex<PriorityReplayCache>>,
     cue_recording_replay: Arc<Mutex<CueRecordingReplayCache>>,
+    cue_deletion_replay: Arc<Mutex<CueDeletionReplayCache>>,
     cue_transfer_choices: Arc<Mutex<CueTransferChoiceCache>>,
     cue_transfer_replay: Arc<Mutex<CueTransferReplayCache>>,
     group_recording_replay: Arc<Mutex<GroupRecordingReplayCache>>,
@@ -138,6 +144,7 @@ impl ProgrammingService {
             preload_lifecycle_replay: Arc::default(),
             priority_replay: Arc::default(),
             cue_recording_replay: Arc::default(),
+            cue_deletion_replay: Arc::default(),
             cue_transfer_choices: Arc::default(),
             cue_transfer_replay: Arc::default(),
             group_recording_replay: Arc::default(),

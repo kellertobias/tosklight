@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CueDeletionOutcome",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "correlation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "cue_list": {
+          "$ref": "#/$defs/CueDeletionObjectProjection"
+        },
+        "deleted_cue": {
+          "$ref": "#/$defs/DeletedCueProjection"
+        },
+        "persistence_warning": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "replayed": {
+          "type": "boolean"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "show_event_sequence": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "show_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "show_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "const": "changed"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "request_id",
+        "correlation_id",
+        "replayed",
+        "show_id",
+        "show_revision",
+        "cue_list",
+        "deleted_cue",
+        "show_event_sequence",
+        "persistence_warning"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "correlation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "cue_list": {
+          "$ref": "#/$defs/CueDeletionObjectProjection"
+        },
+        "deleted_cue": {
+          "$ref": "#/$defs/DeletedCueProjection"
+        },
+        "persistence_warning": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "replayed": {
+          "type": "boolean"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "show_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "show_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "const": "no_change"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "request_id",
+        "correlation_id",
+        "replayed",
+        "show_id",
+        "show_revision",
+        "cue_list",
+        "deleted_cue",
+        "persistence_warning"
+      ]
+    }
+  ],
+  "$defs": {
+    "CueDeletionObjectProjection": {
+      "type": "object",
+      "properties": {
+        "body": true,
+        "cue_list_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "object_id": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "object_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "cue_list_id",
+        "object_id",
+        "object_revision",
+        "body"
+      ]
+    },
+    "DeletedCueProjection": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "number": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "number"
+      ]
+    }
+  }
+}

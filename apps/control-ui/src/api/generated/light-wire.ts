@@ -263,6 +263,22 @@ export type CueRecordErrorKind = "invalid" | "unauthorized" | "forbidden" | "not
 
 export type CueRecordErrorResponse = { kind: CueRecordErrorKind, error: string, current_revision?: number | null, retryable: boolean, };
 
+export type CueDeletionAddress = { "type": "pool", playback_number: number, } | { "type": "current_page", expected_page: number, slot: number, } | { "type": "page_slot", page: number, slot: number, };
+
+export type CueDeletionAuthority = { playback_number: number, cue_list_id: string, object_id: string, object_revision: number, cue_id: string, };
+
+export type CueDeletionRequest = { request_id: string, address: CueDeletionAddress, cue_number: number, authority: CueDeletionAuthority, };
+
+export type CueDeletionObjectProjection = { cue_list_id: string, object_id: string, object_revision: number, body: unknown, };
+
+export type DeletedCueProjection = { id: string, number: number, };
+
+export type CueDeletionOutcome = { "status": "changed", request_id: string, correlation_id: string, replayed: boolean, show_id: string, show_revision: number, cue_list: CueDeletionObjectProjection, deleted_cue: DeletedCueProjection, show_event_sequence: number, persistence_warning?: string | null, } | { "status": "no_change", request_id: string, correlation_id: string, replayed: boolean, show_id: string, show_revision: number, cue_list: CueDeletionObjectProjection, deleted_cue: DeletedCueProjection, persistence_warning?: string | null, };
+
+export type CueDeletionErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
+
+export type CueDeletionErrorResponse = { kind: CueDeletionErrorKind, error: string, current_revision?: number | null, current_related_revision?: number | null, retryable: boolean, };
+
 export type CueTransferMode = "plain" | "status";
 
 export type CueTransferRequest = { request_id: string, choice_id: string, mode: CueTransferMode, expected_command_line_revision: number, };

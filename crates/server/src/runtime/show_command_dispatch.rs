@@ -40,7 +40,7 @@ pub(super) fn execute_show_command(
             } else if operation == "DELETE"
                 && parsed.body.first().is_some_and(|token| token == "SET")
             {
-                execute_cue_delete(state, parsed.body, context)
+                Err("Cue DELETE must use the typed Programming deletion action".into())
             } else if matches!(operation, "MOVE" | "COPY")
                 && parsed.body.first().is_some_and(|token| token == "SET")
             {
