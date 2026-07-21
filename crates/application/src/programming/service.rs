@@ -27,6 +27,10 @@ mod cue_transfer;
 mod cue_transfer_replay;
 #[path = "service/external.rs"]
 mod external;
+#[path = "service/group_management.rs"]
+mod group_management;
+#[path = "service/group_management_replay.rs"]
+mod group_management_replay;
 #[path = "service/group_recording.rs"]
 mod group_recording;
 #[path = "service/group_recording_replay.rs"]
@@ -83,6 +87,7 @@ mod values_validation;
 use cue_deletion_replay::CueDeletionReplayCache;
 use cue_recording_replay::CueRecordingReplayCache;
 use cue_transfer_replay::{CueTransferChoiceCache, CueTransferReplayCache};
+use group_management_replay::GroupManagementReplayCache;
 use group_recording_replay::GroupRecordingReplayCache;
 use lifecycle_publication::LifecyclePublicationGate;
 use preload_lifecycle_replay::PreloadLifecycleReplayCache;
@@ -119,6 +124,7 @@ pub struct ProgrammingService {
     cue_deletion_replay: Arc<Mutex<CueDeletionReplayCache>>,
     cue_transfer_choices: Arc<Mutex<CueTransferChoiceCache>>,
     cue_transfer_replay: Arc<Mutex<CueTransferReplayCache>>,
+    group_management_replay: Arc<Mutex<GroupManagementReplayCache>>,
     group_recording_replay: Arc<Mutex<GroupRecordingReplayCache>>,
     preset_recording_replay: Arc<Mutex<PresetRecordingReplayCache>>,
     preset_recall_replay: Arc<Mutex<PresetRecallReplayCache>>,
@@ -147,6 +153,7 @@ impl ProgrammingService {
             cue_deletion_replay: Arc::default(),
             cue_transfer_choices: Arc::default(),
             cue_transfer_replay: Arc::default(),
+            group_management_replay: Arc::default(),
             group_recording_replay: Arc::default(),
             preset_recording_replay: Arc::default(),
             preset_recall_replay: Arc::default(),

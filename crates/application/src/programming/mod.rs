@@ -7,6 +7,7 @@ mod cue_recording;
 mod cue_transfer;
 mod event;
 mod group_active_show;
+mod group_management;
 mod group_recording;
 mod lifecycle;
 mod lifecycle_projection;
@@ -58,6 +59,12 @@ pub use cue_transfer::{
     ProgrammingCueTransferSummary,
 };
 pub use event::ProgrammingInteractionChange;
+pub use group_management::{
+    GroupManagementActiveShowPorts, GroupManagementCommit, GroupManagementCommitResult,
+    GroupManagementOperation, GroupManagementOutcome, GroupManagementPorts,
+    GroupManagementProjection, GroupManagementRequest, GroupManagementResult,
+    GroupManagementSelection, GroupPropertiesUpdate, GroupSourceExpectation,
+};
 pub use group_recording::{
     ProgrammingGroupActiveShowPorts, ProgrammingGroupCommit, ProgrammingGroupCommitResult,
     ProgrammingGroupProjection, ProgrammingGroupRecordOperation, ProgrammingGroupRecordOutcome,

@@ -225,11 +225,36 @@ impl ActiveShowService {
     where
         P: ActiveShowPorts,
     {
+        self.transact_with_unit(
+            context,
+            show_id,
+            ports,
+            operation,
+            |unit| prepare(unit.document()),
+            complete,
+        )
+    }
+
+    /// Same ordered lifecycle as [`Self::transact`], but `prepare` observes the open unit of work
+    /// so a capability can read adapter-owned history, such as object undo, inside the one
+    /// transaction that later commits it.
+    pub(crate) fn transact_with_unit<P, T, R>(
+        &self,
+        context: &ActionContext,
+        show_id: ShowId,
+        ports: &P,
+        operation: &str,
+        prepare: impl FnOnce(&P::UnitOfWork) -> Result<PreparedActiveShowTransaction<T>, ActionError>,
+        complete: impl FnOnce(&EventBus, &P, &ActionContext, CompletedActiveShowTransaction<T>) -> R,
+    ) -> Result<R, ActionError>
+    where
+        P: ActiveShowPorts,
+    {
         ports.authorize_mutation(context)?;
         ports.run_active_show_lifecycle(context, show_id, || {
             let _ordered = self.operation.lock();
             let mut unit = ports.begin_active_show(context, show_id)?;
-            match prepare(unit.document())? {
+            match prepare(&unit)? {
                 PreparedActiveShowTransaction::NoChange(state) => Ok(complete(
                     &self.events,
                     ports,
