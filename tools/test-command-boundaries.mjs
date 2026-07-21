@@ -6,7 +6,7 @@
 //   1. The raw `executeLegacyCommandLine` helper is gone. It must not come back.
 //   2. Direct textual v1 WebSocket commands (`programmer.command_line`, `programmer.command_target`,
 //      `programmer.execute`) belong to the centralized senders in the bench API driver and to the
-//      one retained envelope compatibility test.
+//      the dedicated retained compatibility tests declared in the baseline.
 //
 // Command families whose production boundary does not exist yet still route through
 // `executeCompatibilityProgrammerCommand`, which names the missing owner. That surface is allowed

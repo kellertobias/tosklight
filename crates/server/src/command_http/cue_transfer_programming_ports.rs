@@ -69,9 +69,13 @@ impl ServerProgrammingPorts<'_> {
         let result = self.apply_transfer(context, &request, mode);
         let result = result.and_then(|()| {
             clear_command_line(programmers, self.session())?;
-            Ok(self.accepted_recording_command(context, raw_command, 1))
+            Ok((
+                1,
+                self.accepted_recording_command(context, raw_command, 1),
+                false,
+            ))
         });
-        self.recording_execution(context, raw_command, result.map(|warning| (1, warning)))
+        self.recording_execution(context, raw_command, result)
     }
 
     fn apply_transfer(

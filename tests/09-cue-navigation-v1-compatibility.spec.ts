@@ -6,8 +6,9 @@ import { fixtureIdsByNumber, loadCanonicalCopy, putObject } from "./support/cata
  * CUE navigation is owned by the typed v2 command-line HTTP contract; `CUE-014` states operator
  * intent through it. This spec deliberately retains the *other* surface: the v1 textual WebSocket
  * envelope that external integrations still use. It proves the compatibility caller reaches the
- * same typed Playback action and keeps its v1 response and notification behavior, so the v1 adapter
- * cannot silently diverge from the typed owner before it is removed.
+ * same typed Playback action and keeps its v1 success and rejection behavior, so the v1 adapter
+ * cannot silently diverge from the typed owner before it is removed. Rust boundary coverage owns
+ * the temporary `playback_changed` notification cardinality.
  */
 test.describe("docs/engineering/refactoring-test-boundaries.md", () => {
   test("CUE-015 @api › retained v1 WebSocket CUE navigation converges on the typed Playback action", async ({

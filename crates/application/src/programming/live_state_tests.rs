@@ -65,6 +65,7 @@ impl ProgrammingPorts for LivePorts {
         ProgrammingExecution::Accepted {
             applied: 1,
             warning: None,
+            replayed: false,
         }
     }
 

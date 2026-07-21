@@ -457,12 +457,29 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
     assert_eq!(playback_events(&scenario, baseline), 1);
     assert_eq!(compatibility_notifications(&scenario), 1);
 
-    // Replaying the compatibility request repeats neither the transition nor the notification.
+    // A delayed replay must not erase a newer command the operator has already started.
+    scenario
+        .state
+        .programmers
+        .update_command_line(scenario.session.id, |current| {
+            ("GROUP 7 +".into(), current.target, false)
+        })
+        .unwrap();
+    let history = history_len(&scenario);
+
+    // Replaying the compatibility request repeats neither interaction nor runtime side effects.
     let after = scenario.state.application_events.latest_sequence();
     let replay = dispatch_ws_command(&scenario.state, &scenario.session, ws_command());
     assert!(replay.ok, "{:?}", replay.error);
     assert_eq!(playback_events(&scenario, after), 0);
     assert_eq!(compatibility_notifications(&scenario), 1);
+    assert_eq!(history_len(&scenario), history);
+    assert_eq!(command_line_text(&scenario).await, "GROUP 7 +");
+    scenario
+        .state
+        .programmers
+        .complete_command_execution(scenario.session.id, Some(""), None)
+        .unwrap();
 
     // Real OSC keys build the same command and reach the same typed action.
     let source: SocketAddr = "127.0.0.1:9031".parse().unwrap();

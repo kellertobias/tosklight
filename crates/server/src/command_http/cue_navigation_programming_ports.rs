@@ -30,7 +30,7 @@ impl ServerProgrammingPorts<'_> {
                 // Replaying the same request ID repeats neither the runtime transition nor the
                 // command-line reset, the history entry, or the compatibility notification.
                 if transition.replayed {
-                    return Ok((1, None));
+                    return Ok((1, None, true));
                 }
                 if matches!(policy, ExecutionPolicy::Compatibility) && transition.applied {
                     cue_navigation_action::emit_compatibility_change(
@@ -41,7 +41,11 @@ impl ServerProgrammingPorts<'_> {
                     );
                 }
                 clear_command_line(programmers, self.session())?;
-                Ok((1, self.accepted_recording_command(context, command, 1)))
+                Ok((
+                    1,
+                    self.accepted_recording_command(context, command, 1),
+                    false,
+                ))
             });
         Some(self.recording_execution(context, command, result))
     }

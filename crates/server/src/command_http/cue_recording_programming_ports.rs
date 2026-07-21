@@ -22,7 +22,11 @@ impl ServerProgrammingPorts<'_> {
             }
         };
         let result = self.execute_cue_recording(programmers, context, parsed, command);
-        Some(self.recording_execution(context, command, result.map(|warning| (1, warning))))
+        Some(self.recording_execution(
+            context,
+            command,
+            result.map(|(warning, replayed)| (1, warning, replayed)),
+        ))
     }
 
     fn execute_cue_recording(
@@ -31,7 +35,7 @@ impl ServerProgrammingPorts<'_> {
         context: &ActionContext,
         parsed: super::cue_recording_command::CueRecordCommand,
         raw_command: &str,
-    ) -> Result<Option<String>, String> {
+    ) -> Result<(Option<String>, bool), String> {
         let context = recording_context(context, "cue-record");
         let command = light_application::ProgrammingCueRecordRequest {
             show_id: self.active_show_id()?,
@@ -58,10 +62,13 @@ impl ServerProgrammingPorts<'_> {
             )
             .map_err(|error| error.message)?;
         if result.replayed {
-            return Ok(None);
+            return Ok((None, true));
         }
         clear_command_line(programmers, self.session())?;
-        Ok(self.accepted_recording_command(&context, raw_command, 1))
+        Ok((
+            self.accepted_recording_command(&context, raw_command, 1),
+            false,
+        ))
     }
 
     pub(super) fn record_armed_cue(

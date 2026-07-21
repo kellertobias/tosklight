@@ -41,6 +41,9 @@ pub(super) fn parse_command_cue_number(tokens: &[String]) -> Result<f64, String>
     if tokens.is_empty() {
         return Err("CUE requires a cue number".into());
     }
+    if tokens.last().is_some_and(|token| token == ".") {
+        return Err("cue number is invalid".into());
+    }
     let value = tokens.join("");
     let number = value.parse::<f64>().map_err(|_| "cue number is invalid")?;
     if !number.is_finite() || number <= 0.0 {

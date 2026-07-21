@@ -78,7 +78,11 @@ impl<'a> ServerProgrammingPorts<'a> {
             .ok()
             .flatten()?;
         let result = self.execute_preset_recording(programmers, context, address, command);
-        Some(self.recording_execution(context, command, result.map(|warning| (1, warning))))
+        Some(self.recording_execution(
+            context,
+            command,
+            result.map(|(warning, replayed)| (1, warning, replayed)),
+        ))
     }
 
     fn execute_group_recording(
@@ -88,7 +92,7 @@ impl<'a> ServerProgrammingPorts<'a> {
         group_id: String,
         operation: light_application::ProgrammingGroupRecordOperation,
         raw_command: &str,
-    ) -> Result<(usize, Option<String>), String> {
+    ) -> Result<(usize, Option<String>, bool), String> {
         let show_id = self.active_show_id()?;
         let context = recording_context(context, "group-record");
         let command = light_application::ProgrammingGroupRecordRequest {
@@ -111,11 +115,11 @@ impl<'a> ServerProgrammingPorts<'a> {
             )
             .map_err(|error| error.message)?;
         if result.replayed {
-            return Ok((result.applied, None));
+            return Ok((result.applied, None, true));
         }
         clear_command_line(programmers, self.session)?;
         let warning = self.accepted_recording_command(&context, raw_command, result.applied);
-        Ok((result.applied, warning))
+        Ok((result.applied, warning, false))
     }
 
     fn execute_preset_recording(
@@ -124,7 +128,7 @@ impl<'a> ServerProgrammingPorts<'a> {
         context: &ActionContext,
         address: light_programmer::PresetAddress,
         raw_command: &str,
-    ) -> Result<Option<String>, String> {
+    ) -> Result<(Option<String>, bool), String> {
         let show_id = self.active_show_id()?;
         let context = recording_context(context, "preset-record");
         let command = light_application::ProgrammingPresetRecordRequest {
@@ -148,10 +152,13 @@ impl<'a> ServerProgrammingPorts<'a> {
             )
             .map_err(|error| error.message)?;
         if result.replayed {
-            return Ok(None);
+            return Ok((None, true));
         }
         clear_command_line(programmers, self.session)?;
-        Ok(self.accepted_recording_command(&context, raw_command, 1))
+        Ok((
+            self.accepted_recording_command(&context, raw_command, 1),
+            false,
+        ))
     }
 
     pub(super) fn active_show_id(&self) -> Result<light_core::ShowId, String> {
@@ -196,10 +203,14 @@ impl<'a> ServerProgrammingPorts<'a> {
         &self,
         context: &ActionContext,
         command: &str,
-        result: Result<(usize, Option<String>), String>,
+        result: Result<(usize, Option<String>, bool), String>,
     ) -> ProgrammingExecution {
         match result {
-            Ok((applied, warning)) => ProgrammingExecution::Accepted { applied, warning },
+            Ok((applied, warning, replayed)) => ProgrammingExecution::Accepted {
+                applied,
+                warning,
+                replayed,
+            },
             Err(error) => {
                 self.rejected_recording_command(context, command, &error);
                 ProgrammingExecution::Rejected { error }
@@ -319,9 +330,11 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
             ExistingCommandOutcome::Accepted {
                 applied,
                 persistence_warning,
+                replayed,
             } => ProgrammingExecution::Accepted {
                 applied,
                 warning: persistence_warning,
+                replayed,
             },
             ExistingCommandOutcome::ChoiceRequired { pending_choice } => {
                 ProgrammingExecution::ChoiceRequired { pending_choice }

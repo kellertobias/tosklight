@@ -172,5 +172,10 @@ mod tests {
         );
         assert_eq!(parse("CUE 0").unwrap_err(), "cue number must be positive");
         assert_eq!(parse("CUE ABC").unwrap_err(), "cue number is invalid");
+        assert_eq!(parse("CUE 2 .").unwrap_err(), "cue number is invalid");
+        assert_eq!(
+            parse("CUE SET 1 CUE 2 .").unwrap_err(),
+            "cue number is invalid"
+        );
     }
 }

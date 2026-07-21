@@ -26,6 +26,7 @@ impl ProgrammingPorts for QueuePorts {
         ProgrammingExecution::Accepted {
             applied: 1,
             warning: None,
+            replayed: false,
         }
     }
 

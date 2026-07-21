@@ -174,14 +174,20 @@ fn finish_ws_execution(
         command_http::ExistingCommandOutcome::Accepted { .. }
         | command_http::ExistingCommandOutcome::Rejected { .. } => None,
     };
+    let replayed = matches!(
+        &outcome,
+        command_http::ExistingCommandOutcome::Accepted { replayed: true, .. }
+    );
     let final_text = match &outcome {
         command_http::ExistingCommandOutcome::Accepted { .. } => Some(""),
         command_http::ExistingCommandOutcome::ChoiceRequired { .. }
         | command_http::ExistingCommandOutcome::Rejected { .. } => Some(command),
     };
-    state
-        .programmers
-        .complete_command_execution(session.id, final_text, pending_choice);
+    if !replayed {
+        state
+            .programmers
+            .complete_command_execution(session.id, final_text, pending_choice);
+    }
     match outcome {
         command_http::ExistingCommandOutcome::ChoiceRequired { pending_choice } => {
             Ok(serde_json::json!({
@@ -193,6 +199,7 @@ fn finish_ws_execution(
         command_http::ExistingCommandOutcome::Accepted {
             applied,
             persistence_warning,
+            ..
         } => Ok(serde_json::json!({
             "applied":applied,
             "persistence_warning":persistence_warning,
@@ -216,12 +223,15 @@ fn ws_typed_recording(
         light_application::ExecutionPolicy::Compatibility,
     )?;
     Some(match outcome {
-        light_application::ProgrammingExecution::Accepted { applied, warning } => {
-            command_http::ExistingCommandOutcome::Accepted {
-                applied,
-                persistence_warning: warning,
-            }
-        }
+        light_application::ProgrammingExecution::Accepted {
+            applied,
+            warning,
+            replayed,
+        } => command_http::ExistingCommandOutcome::Accepted {
+            applied,
+            persistence_warning: warning,
+            replayed,
+        },
         light_application::ProgrammingExecution::ChoiceRequired { pending_choice } => {
             command_http::ExistingCommandOutcome::ChoiceRequired { pending_choice }
         }

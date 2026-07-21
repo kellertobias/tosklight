@@ -13,6 +13,7 @@ pub(crate) enum ExistingCommandOutcome {
     Accepted {
         applied: usize,
         persistence_warning: Option<String>,
+        replayed: bool,
     },
     ChoiceRequired {
         pending_choice: light_application::CueMoveCopyChoice,
@@ -195,6 +196,7 @@ fn accepted_command(
     ExistingCommandOutcome::Accepted {
         applied,
         persistence_warning: warning,
+        replayed: false,
     }
 }
 

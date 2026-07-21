@@ -122,9 +122,14 @@ Every later full-suite result must be compared with this named list. A changed f
 ## Stage 1 migration progress
 
 - `ApiDriver` now exposes the revisioned desk-scoped command-line HTTP contract, including ETag validation, compare-and-set replacement, logical key phases, typed outcomes, and request IDs.
-- Both command helpers route Programmer-owned command families through `/api/v2/desks/{desk_id}/command-line/execute`. Show-, Playback-, and configuration-owned families (`CUE`, `SPD`, `RECORD`, `UPDATE`, `DELETE`, `MOVE`, `COPY`, and `SET`, including aliases) use the deliberately named `executeLegacyCommandLine` compatibility path until their owning services can provide the same atomic guarantee. The only direct `programmer.execute` text remaining in the root suite is an audit-event assertion.
+- Both command helpers route Programmer-owned and migrated Playback/Show command families through
+  `/api/v2/desks/{desk_id}/command-line/execute`. The remaining `SPD GRP`, whole-Cue deletion, and
+  Playback `SET` gaps use the deliberately named compatibility helper. Direct v1 text is confined
+  to `API-004` command editing/target selection and the dedicated `CUE-015` execution contract.
 - `API-003` exercises GET, logical keys, compare-and-set PUT, stale-writer rejection, execution, idempotent replay, Programmer state, and both network-output protocols at the process boundary.
-- The remaining 129 `api.command()` calls exercise bounded selection, Programmer value, Preload, Playback, Preset, and compatibility-error families. They remain explicitly inventoried for the Programming and Playback service migration rather than being hidden behind the new command-line client.
+- At the Stage 1 checkpoint, the remaining 129 `api.command()` calls exercised bounded selection,
+  Programmer value, Preload, Playback, Preset, and compatibility-error families. The current
+  ratchet below supersedes that historical count.
 
 ## Stage 2: the public command boundary
 
@@ -133,7 +138,7 @@ command-line calls now use helpers that name the surface they exercise.
 
 ### How ownership is decided
 
-The server intercepts four grammars in `record_typed_command` *before* its atomic-family check, so
+The server intercepts five grammars in `record_typed_command` *before* its atomic-family check, so
 those reach the public v2 command-line HTTP contract even though their leading token belongs to a
 legacy family:
 
@@ -181,9 +186,10 @@ no typed v2 owner, and the production frontend still issues it from `api/client/
 
 ### Retained v1 coverage and the ratchet
 
-`API-004 @api` is the single test that exercises the v1 textual WebSocket envelope itself —
-protocol version, request-id echo, revision, rejection shape. Other scenarios assert operator
-behavior through the categorized helper instead.
+`API-004 @api` retains the v1 command-edit and target-selection envelopes, including protocol
+version, request-id echo, and revision. `CUE-015 @api` separately retains v1 textual execution,
+success, and rejection while proving it reaches the typed Playback action. Other scenarios assert
+operator behavior through typed intent or the categorized compatibility helper.
 
 `tools/test-command-boundaries.mjs` runs inside `./test architecture`. It fails on any
 `executeLegacyCommandLine` occurrence, and ratchets both direct textual v1 WebSocket calls and

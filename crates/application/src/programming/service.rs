@@ -360,6 +360,10 @@ impl ProgrammingService {
         let current = command_line(&self.programmers, session)?;
         let command = supplied.unwrap_or_else(|| current.visible_text());
         let outcome = ports.execute(&self.programmers, context, command, policy);
+        let replayed = matches!(
+            &outcome,
+            ProgrammingExecution::Accepted { replayed: true, .. }
+        );
         let pending_choice = match &outcome {
             ProgrammingExecution::ChoiceRequired { pending_choice } => Some(pending_choice.clone()),
             ProgrammingExecution::Accepted { .. } | ProgrammingExecution::Rejected { .. } => None,
@@ -369,13 +373,15 @@ impl ProgrammingService {
         } else {
             supplied
         };
-        self.programmers
-            .complete_command_execution(session, final_text, pending_choice)
-            .ok_or_else(unknown_programmer)?;
+        if !replayed {
+            self.programmers
+                .complete_command_execution(session, final_text, pending_choice)
+                .ok_or_else(unknown_programmer)?;
+        }
         Ok(match outcome {
-            ProgrammingExecution::Accepted { applied, warning } => {
-                accepted(ProgrammingAction::Executed, Some(applied), warning)
-            }
+            ProgrammingExecution::Accepted {
+                applied, warning, ..
+            } => accepted(ProgrammingAction::Executed, Some(applied), warning),
             ProgrammingExecution::ChoiceRequired { pending_choice } => {
                 ProgrammingOutcome::ChoiceRequired { pending_choice }
             }

@@ -57,6 +57,7 @@ impl ProgrammingPorts for TestPorts {
         ProgrammingExecution::Accepted {
             applied: 1,
             warning: None,
+            replayed: false,
         }
     }
 
@@ -426,6 +427,7 @@ impl ProgrammingPorts for OrderingPorts {
         ProgrammingExecution::Accepted {
             applied: 0,
             warning: None,
+            replayed: false,
         }
     }
 

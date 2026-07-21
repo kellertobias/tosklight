@@ -30,6 +30,8 @@ pub enum ProgrammingExecution {
     Accepted {
         applied: usize,
         warning: Option<String>,
+        /// The owning application action was replayed and must not repeat interaction cleanup.
+        replayed: bool,
     },
     ChoiceRequired {
         pending_choice: CueMoveCopyChoice,
