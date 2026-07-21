@@ -1,6 +1,10 @@
 import { closeWebSocket } from "../../apps/control-ui/e2e/bench/api";
 import { expect } from "../../apps/control-ui/e2e/bench/fixtures";
 import {
+	enterProgrammerPreload,
+	releaseProgrammerPreload,
+} from "../../apps/control-ui/e2e/bench/programmerPreloadLifecycle";
+import {
 	loadCanonicalCopy,
 	object,
 	objects,
@@ -26,22 +30,25 @@ import {
 	showObjectEventAfter,
 } from "./support";
 
-registerPairedCueScenario<{ completed: boolean }>({
+registerPairedCueScenario<{ completed: boolean; showId: string }>({
 	id: "CUE-008",
 	title:
 		"blind Preload records the same Cue without activating playback or output",
 	arrange: async ({ api, bench }, surface) => {
-		await loadCanonicalCopy(
+		const show = await loadCanonicalCopy(
 			api,
 			bench,
 			`cue-008-preload-record-${surface}`,
 			"compact-rig",
 		);
 		await installCompactGroups(api);
-		return { completed: false };
+		return { completed: false, showId: show.id };
 	},
 	api: async ({ api, bench }, state) => {
-		await api.command("preload.enter", {});
+		await enterProgrammerPreload(api, {
+			surface: "api",
+			showId: state.showId,
+		});
 		await api.executeCommandLine("GROUP 1 AT 100");
 		const pending = await currentProgrammer(api);
 		expect(pending.preload_group_pending["1"].intensity.value).toMatchObject({
@@ -65,7 +72,10 @@ registerPairedCueScenario<{ completed: boolean }>({
 			),
 		).toBe(false);
 		expect(logicalSlots(await bench.tick(0), 4)).toEqual(Array(4).fill(0));
-		await api.command("preload.release", {});
+		await releaseProgrammerPreload(api, {
+			surface: "api",
+			showId: state.showId,
+		});
 		await api.request("POST", "/api/v1/cuelists/1/go", {});
 		expect(logicalSlots(await bench.tick(3_000), 4)).toEqual(
 			Array(4).fill(255),
@@ -77,7 +87,10 @@ registerPairedCueScenario<{ completed: boolean }>({
 		const beforeCuelists = new Set(
 			(await objects(api, "cue_list")).map((item) => item.id),
 		);
-		await api.command("preload.enter", {});
+		await enterProgrammerPreload(api, {
+			surface: "api",
+			showId: state.showId,
+		});
 		await api.executeCommandLine("GROUP 1 AT 100");
 
 		await desk.open(bench.baseUrl);
@@ -105,7 +118,10 @@ registerPairedCueScenario<{ completed: boolean }>({
 		).toBe(false);
 		expect(logicalSlots(await bench.tick(0), 4)).toEqual(Array(4).fill(0));
 
-		await api.command("preload.release", {});
+		await releaseProgrammerPreload(api, {
+			surface: "api",
+			showId: state.showId,
+		});
 		await api.request("POST", `/api/v1/cuelists/${playbackNumber}/go`, {});
 		await expect
 			.poll(async () => runtime(api, playbackNumber))

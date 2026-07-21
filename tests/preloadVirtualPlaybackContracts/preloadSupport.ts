@@ -99,6 +99,13 @@ export function preloadCombinedObservation(
 	};
 }
 
+export function timestampMillis(value: unknown): number {
+	expect(value).toEqual(expect.any(String));
+	const millis = Date.parse(value as string);
+	expect(Number.isFinite(millis)).toBe(true);
+	return millis;
+}
+
 export async function normalizedVirtualZones(
 	api: ApiDriver,
 ): Promise<Array<{ name: string; slots: number[] }>> {

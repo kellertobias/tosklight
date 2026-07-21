@@ -54,8 +54,6 @@ export type CompatibilityCommandFamily =
   | "cue_delete"
   /** Preset `MOVE`/`COPY`; only Cue transfer is intercepted by the typed Programming boundary. */
   | "preset_transfer"
-  /** `SET <cuelist> AT <page>.<slot>`; awaits the typed map-existing Playback topology action. */
-  | "playback_set"
   /** `UPDATE`; the command grammar is not yet routed through the typed Update workflow. */
   | "update";
 
@@ -104,8 +102,6 @@ export function commandLineOwnership(command: string): CommandLineOwnership {
     case "COPY":
     case "CPY":
       return { via: "compatibility", family: "preset_transfer" };
-    case "SET":
-      return { via: "compatibility", family: "playback_set" };
     case "UPDATE":
       return { via: "compatibility", family: "update" };
     default:

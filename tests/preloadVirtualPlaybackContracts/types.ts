@@ -19,6 +19,7 @@ export type PlaybackSpec = {
 };
 
 export type Prepared = {
+	showId: string;
 	fixtures: Record<number, string>;
 	cueLists: Record<number, string>;
 };

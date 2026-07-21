@@ -9,6 +9,11 @@ import {
 	pairedScenario,
 } from "../../apps/control-ui/e2e/bench/pairedScenario";
 import {
+	enterProgrammerPreload,
+	goProgrammerPreload,
+	releaseProgrammerPreload,
+} from "../../apps/control-ui/e2e/bench/programmerPreloadLifecycle";
+import {
 	fixtureIdsByNumber,
 	loadCanonicalCopy,
 	programmer,
@@ -29,6 +34,7 @@ import {
 	preloadCombinedObservation,
 	prepare,
 	setCaptureMask,
+	timestampMillis,
 	visualizationLevel,
 } from "./support";
 
@@ -37,7 +43,11 @@ const preload006Scenario: PairedScenario<PreloadCombinedPairState> = {
 	title:
 		"combined Preload commits atomically and releases only programmer data",
 	arrange: async ({ api, bench }, surface) => {
-		await loadCanonicalCopy(api, bench, `preload-006-paired-${surface}`);
+		const show = await loadCanonicalCopy(
+			api,
+			bench,
+			`preload-006-paired-${surface}`,
+		);
 		const fixtures = await fixtureIdsByNumber(api);
 		const groupFixture = await firstGroupFixture(api, "1");
 		const groupFixtureNumber = Number(
@@ -45,6 +55,7 @@ const preload006Scenario: PairedScenario<PreloadCombinedPairState> = {
 		);
 		const prepared = await installOnCurrentShow(
 			api,
+			show.id,
 			fixtures,
 			[
 				{
@@ -80,7 +91,10 @@ const preload006Scenario: PairedScenario<PreloadCombinedPairState> = {
 		return { ...prepared, groupFixture };
 	},
 	api: async ({ api, bench }, state) => {
-		await api.command("preload.enter", {});
+		await enterProgrammerPreload(api, {
+			surface: "api",
+			showId: state.showId,
+		});
 		await api.executeCommandLine("GROUP 1 AT 80");
 		await poolAction(api, 61, "button", {
 			button: 1,
@@ -93,10 +107,17 @@ const preload006Scenario: PairedScenario<PreloadCombinedPairState> = {
 			surface: "virtual",
 		});
 		state.pending = preloadCombinedObservation(await programmer(api));
-		state.applicationTimestamp = (await api.command<any>("preload.go", {}))
-			.payload!.application_timestamp;
+		state.applicationTimestamp = (
+			await goProgrammerPreload(api, {
+				surface: "api",
+				showId: state.showId,
+			})
+		).commit!.committedAt;
 		await bench.tick(1_500);
-		await api.command("preload.release", {});
+		await releaseProgrammerPreload(api, {
+			surface: "api",
+			showId: state.showId,
+		});
 	},
 	ui: async ({ api, bench, desk, page }, state) => {
 		await desk.open(bench.baseUrl);
@@ -132,13 +153,17 @@ const preload006Scenario: PairedScenario<PreloadCombinedPairState> = {
 		expect(await activePlayback(api, 61)).toMatchObject({
 			enabled: true,
 			current_cue_number: 1,
-			activated_at: state.applicationTimestamp,
 		});
 		expect(await activePlayback(api, 62)).toMatchObject({
 			enabled: true,
 			current_cue_number: 1,
-			activated_at: state.applicationTimestamp,
 		});
+		expect(timestampMillis((await activePlayback(api, 61))?.activated_at)).toBe(
+			timestampMillis(state.applicationTimestamp),
+		);
+		expect(timestampMillis((await activePlayback(api, 62))?.activated_at)).toBe(
+			timestampMillis(state.applicationTimestamp),
+		);
 		expect((await programmer(api)).preload_group_active).toEqual({});
 		expect(await visualizationLevel(api, state.groupFixture)).toBeCloseTo(
 			0.25,
@@ -151,10 +176,12 @@ const preload006ApiSupplement = async ({
 	api,
 	bench,
 }: BenchContractContext) => {
-	const groupFixture = await (async () => {
-		await loadCanonicalCopy(api, bench, "preload-006-combined-release");
-		return firstGroupFixture(api, "1");
-	})();
+	const show = await loadCanonicalCopy(
+		api,
+		bench,
+		"preload-006-combined-release",
+	);
+	const groupFixture = await firstGroupFixture(api, "1");
 	const fixtures = await fixtureIdsByNumber(api);
 	const groupFixtureNumber = Number(
 		Object.entries(fixtures).find(([, id]) => id === groupFixture)?.[0],
@@ -185,13 +212,16 @@ const preload006ApiSupplement = async ({
 			hasFader: false,
 		},
 	];
-	await installOnCurrentShow(api, fixtures, specs, { 1: 61, 2: 62 });
+	await installOnCurrentShow(api, show.id, fixtures, specs, { 1: 61, 2: 62 });
 	await setCaptureMask(api, true, true, true, 1_500, 8_000);
 	await poolAction(api, 60, "go");
 	// This is an ordinary live GO, so its zero-time cue correctly uses the 8 s Cue Fade.
 	await bench.tick(8_000);
 	expect(await visualizationLevel(api, groupFixture)).toBeCloseTo(0.25, 2);
-	await api.command("preload.enter", {});
+	await enterProgrammerPreload(api, {
+		surface: "api",
+		showId: show.id,
+	});
 	await api.executeCommandLine("GROUP 1 AT 80");
 	await poolAction(api, 61, "button", {
 		button: 1,
@@ -212,16 +242,23 @@ const preload006ApiSupplement = async ({
 	expect(await activePlayback(api, 62)).toBeUndefined();
 
 	await bench.tick(200);
-	const committed = (await api.command<any>("preload.go", {})).payload!;
+	const committed = (
+		await goProgrammerPreload(api, {
+			surface: "api",
+			showId: show.id,
+		})
+	).commit!;
 	const committedProgrammer = await programmer(api);
 	expect(
-		committedProgrammer.preload_group_active["1"].intensity.changed_at,
-	).toBe(committed.application_timestamp);
-	expect((await activePlayback(api, 61))?.activated_at).toBe(
-		committed.application_timestamp,
+		timestampMillis(
+			committedProgrammer.preload_group_active["1"].intensity.changed_at,
+		),
+	).toBe(timestampMillis(committed.committedAt));
+	expect(timestampMillis((await activePlayback(api, 61))?.activated_at)).toBe(
+		timestampMillis(committed.committedAt),
 	);
-	expect((await activePlayback(api, 62))?.activated_at).toBe(
-		committed.application_timestamp,
+	expect(timestampMillis((await activePlayback(api, 62))?.activated_at)).toBe(
+		timestampMillis(committed.committedAt),
 	);
 	await bench.tick(0);
 	expect(await visualizationLevel(api, groupFixture)).toBeCloseTo(0.25, 2);
@@ -232,17 +269,23 @@ const preload006ApiSupplement = async ({
 	expect(await activePlayback(api, 61)).toMatchObject({ enabled: true });
 	expect(await activePlayback(api, 62)).toMatchObject({ enabled: true });
 
-	expect((await api.command<any>("preload.release", {})).payload).toMatchObject(
-		{ released: true },
-	);
+	expect(
+		await releaseProgrammerPreload(api, {
+			surface: "api",
+			showId: show.id,
+		}),
+	).toMatchObject({ status: "changed", active: false });
 	expect(await visualizationLevel(api, groupFixture)).toBeCloseTo(0.25, 2);
 	expect(await activePlayback(api, 61)).toMatchObject({ enabled: true });
 	expect(await activePlayback(api, 62)).toMatchObject({ enabled: true });
 	const eventsBefore = await audit(api);
 	const frameBefore = await bench.tick(0);
-	expect((await api.command<any>("preload.release", {})).payload).toMatchObject(
-		{ released: false },
-	);
+	expect(
+		await releaseProgrammerPreload(api, {
+			surface: "api",
+			showId: show.id,
+		}),
+	).toMatchObject({ status: "no_change", active: false });
 	expect(
 		await audit(
 			api,

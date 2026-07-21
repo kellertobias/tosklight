@@ -8,6 +8,10 @@ import {
 	type PairedScenario,
 	pairedScenario,
 } from "../../apps/control-ui/e2e/bench/pairedScenario";
+import {
+	enterProgrammerPreload,
+	goProgrammerPreload,
+} from "../../apps/control-ui/e2e/bench/programmerPreloadLifecycle";
 import { loadCanonicalCopy, programmer } from "../support/catalog";
 import {
 	activePlayback,
@@ -20,6 +24,7 @@ import {
 	prepare,
 	setCaptureMask,
 	setPreloadMaskThroughUi,
+	timestampMillis,
 } from "./support";
 
 const preload005Scenario: PairedScenario<PreloadMaskPairState> = {
@@ -76,7 +81,7 @@ const preload005ApiSupplement = async ({
 		(_, mask) => [Boolean(mask & 1), Boolean(mask & 2), Boolean(mask & 4)],
 	);
 	for (const [programmerCapture, physicalCapture, virtualCapture] of rows) {
-		await prepare(
+		const prepared = await prepare(
 			api,
 			bench,
 			`preload-005-${Number(programmerCapture)}${Number(physicalCapture)}${Number(virtualCapture)}`,
@@ -114,7 +119,10 @@ const preload005ApiSupplement = async ({
 			saved.preload_physical_playback_actions,
 			saved.preload_virtual_playback_actions,
 		]).toEqual([programmerCapture, physicalCapture, virtualCapture]);
-		await api.command("preload.enter", {});
+		await enterProgrammerPreload(api, {
+			surface: "api",
+			showId: prepared.showId,
+		});
 		await api.executeCommandLine("GROUP 1 AT 45");
 		await poolAction(api, 51, "button", {
 			button: 1,
@@ -138,8 +146,13 @@ const preload005ApiSupplement = async ({
 		expect(Boolean(await activePlayback(api, 51))).toBe(!physicalCapture);
 		expect(Boolean(await activePlayback(api, 52))).toBe(!virtualCapture);
 		await bench.tick(100);
-		const committed = (await api.command<any>("preload.go", {})).payload!;
-		expect(committed.playback_actions).toHaveLength(
+		const committed = (
+			await goProgrammerPreload(api, {
+				surface: "api",
+				showId: prepared.showId,
+			})
+		).commit!;
+		expect(committed.executed).toHaveLength(
 			Number(physicalCapture) + Number(virtualCapture),
 		);
 		const after = await programmer(api);
@@ -148,13 +161,13 @@ const preload005ApiSupplement = async ({
 		expect(await activePlayback(api, 51)).toMatchObject({ enabled: true });
 		expect(await activePlayback(api, 52)).toMatchObject({ enabled: true });
 		if (physicalCapture)
-			expect((await activePlayback(api, 51))?.activated_at).toBe(
-				committed.application_timestamp,
-			);
+			expect(
+				timestampMillis((await activePlayback(api, 51))?.activated_at),
+			).toBe(timestampMillis(committed.committedAt));
 		if (virtualCapture)
-			expect((await activePlayback(api, 52))?.activated_at).toBe(
-				committed.application_timestamp,
-			);
+			expect(
+				timestampMillis((await activePlayback(api, 52))?.activated_at),
+			).toBe(timestampMillis(committed.committedAt));
 	}
 };
 

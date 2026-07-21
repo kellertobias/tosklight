@@ -21,7 +21,6 @@ export const COMPATIBILITY_FAMILIES = Object.freeze([
   "speed_group",
   "cue_delete",
   "preset_transfer",
-  "playback_set",
   "update",
 ]);
 

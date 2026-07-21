@@ -8,6 +8,11 @@ import {
 	type PairedScenario,
 	pairedScenario,
 } from "../../apps/control-ui/e2e/bench/pairedScenario";
+import {
+	enterProgrammerPreload,
+	goProgrammerPreload,
+	releaseProgrammerPreload,
+} from "../../apps/control-ui/e2e/bench/programmerPreloadLifecycle";
 import { programmer } from "../support/catalog";
 import {
 	activePlayback,
@@ -21,6 +26,7 @@ import {
 	prepare,
 	setCaptureMask,
 	summarizePlaybackState,
+	timestampMillis,
 	visualizationLevel,
 } from "./support";
 
@@ -55,7 +61,10 @@ const preload002Scenario: PairedScenario<PreloadPlaybackPairState> = {
 		return prepared;
 	},
 	api: async ({ api, bench }, state) => {
-		await api.command("preload.enter", {});
+		await enterProgrammerPreload(api, {
+			surface: "api",
+			showId: state.showId,
+		});
 		for (const [number, action] of [
 			[1, "toggle"],
 			[2, "go"],
@@ -69,14 +78,21 @@ const preload002Scenario: PairedScenario<PreloadPlaybackPairState> = {
 		state.pendingActions = (await programmer(api)).preload_playback_pending.map(
 			(entry: any) => entry.action,
 		);
-		state.applicationTimestamp = (await api.command<any>("preload.go", {}))
-			.payload!.application_timestamp;
+		state.applicationTimestamp = (
+			await goProgrammerPreload(api, {
+				surface: "api",
+				showId: state.showId,
+			})
+		).commit!.committedAt;
 		await bench.tick(2_000);
 		state.committedState = summarizePlaybackState(
 			await playbacks(api),
 			[1, 2, 3, 4, 5, 6],
 		);
-		await api.command("preload.release", {});
+		await releaseProgrammerPreload(api, {
+			surface: "api",
+			showId: state.showId,
+		});
 		state.releasedState = summarizePlaybackState(
 			await playbacks(api),
 			[1, 2, 3, 4, 5, 6],
@@ -128,13 +144,17 @@ const preload002Scenario: PairedScenario<PreloadPlaybackPairState> = {
 		expect(await activePlayback(api, 1)).toMatchObject({
 			enabled: true,
 			current_cue_number: 1,
-			activated_at: state.applicationTimestamp,
 		});
 		expect(await activePlayback(api, 2)).toMatchObject({
 			enabled: true,
 			current_cue_number: 1,
-			activated_at: state.applicationTimestamp,
 		});
+		expect(timestampMillis((await activePlayback(api, 1))?.activated_at)).toBe(
+			timestampMillis(state.applicationTimestamp),
+		);
+		expect(timestampMillis((await activePlayback(api, 2))?.activated_at)).toBe(
+			timestampMillis(state.applicationTimestamp),
+		);
 		expect(await activePlayback(api, 3)).toMatchObject({
 			enabled: true,
 			current_cue_number: 1,
@@ -181,7 +201,10 @@ const preload002ApiSupplement = async ({
 	await poolAction(api, 7, "temp-on");
 	await poolAction(api, 9, "go");
 
-	await api.command("preload.enter", {});
+	await enterProgrammerPreload(api, {
+		surface: "api",
+		showId: prepared.showId,
+	});
 	await api.executeCommandLine("GROUP 1 AT 40");
 	expect((await programmer(api)).preload_group_pending).toEqual({});
 	expect((await programmer(api)).group_values["1"]).toBeDefined();
@@ -236,15 +259,26 @@ const preload002ApiSupplement = async ({
 	).toEqual(["go", "go"]);
 
 	await bench.tick(100);
-	const committed = (await api.command<any>("preload.go", {})).payload!;
-	expect(committed.programmer_fade_millis).toBe(2_000);
-	expect(committed.playback_actions.map((entry: any) => entry.action)).toEqual([
-		...verbs.map(([, action]) => action),
+	const committed = (
+		await goProgrammerPreload(api, {
+			surface: "api",
+			showId: prepared.showId,
+		})
+	).commit!;
+	expect(committed.programmerFadeMillis).toBe(2_000);
+	expect(committed.executed.map((entry) => entry.action)).toEqual([
+		"go",
+		"back",
+		"on",
+		"off",
+		"toggle",
+		"temporary_on",
+		"temporary_off",
 		"go",
 		"go",
 	]);
-	expect((await activePlayback(api, 1))?.activated_at).toBe(
-		committed.application_timestamp,
+	expect(timestampMillis((await activePlayback(api, 1))?.activated_at)).toBe(
+		timestampMillis(committed.committedAt),
 	);
 	await bench.tick(1_000);
 	expect(await visualizationLevel(api, prepared.fixtures[3])).toBeCloseTo(
@@ -274,7 +308,10 @@ const preload002ApiSupplement = async ({
 		await playbacks(api),
 		[1, 2, 3, 4, 5, 6, 7, 9],
 	);
-	await api.command("preload.release", {});
+	await releaseProgrammerPreload(api, {
+		surface: "api",
+		showId: prepared.showId,
+	});
 	expect(
 		summarizePlaybackState(await playbacks(api), [1, 2, 3, 4, 5, 6, 7, 9]),
 	).toEqual(playbackState);

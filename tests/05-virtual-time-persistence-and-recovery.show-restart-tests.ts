@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
+import { mapExistingPlaybackToSlot } from "../apps/control-ui/e2e/bench/mapExistingPlaybackToSlot";
 import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
 import {
 	installGroupCue,
@@ -48,7 +49,13 @@ export function registerShow001PairedScenario(): void {
 			await api.executeCommandLine("RECORD + GROUP 3");
 			await api.executeCommandLine("GROUP 3 AT 40");
 			await api.executeCommandLine("RECORD SET 1");
-			await api.executeCompatibilityProgrammerCommand({ family: "playback_set", command: "SET 1 AT 1.1" });
+			await mapExistingPlaybackToSlot(api, {
+				surface: "api",
+				showId: state.copyId,
+				page: 1,
+				slot: 1,
+				playbackNumber: 1,
+			});
 			await api.command("programmer.clear", {});
 			await api.command("programmer.clear", {});
 			await api.request("POST", "/api/v1/cuelists/1/go", {});

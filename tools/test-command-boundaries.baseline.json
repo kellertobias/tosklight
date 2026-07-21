@@ -14,15 +14,12 @@
 		"tests/31-hardware-connected-encoders.spec.ts": 1,
 		"tests/cueSemanticContracts/cueOnlyScenarios.ts": 4,
 		"tests/cueSemanticContracts/mergeCoexistenceScenarios.ts": 14,
-		"tests/cueSemanticContracts/recordingScenarios.ts": 10,
+		"tests/cueSemanticContracts/recordingScenarios.ts": 6,
 		"tests/cueSemanticContracts/recordingUiSupport.ts": 2,
 		"tests/cueSemanticContracts/selectionScenarios.ts": 4,
 		"tests/cueSemanticContracts/trackingScenarios.ts": 3,
-		"tests/preloadVirtualPlaybackContracts/captureMaskScenarios.ts": 2,
-		"tests/preloadVirtualPlaybackContracts/combinedPreloadScenarios.ts": 7,
-		"tests/preloadVirtualPlaybackContracts/physicalPlaybackPreloadScenarios.ts": 7,
-		"tests/preloadVirtualPlaybackContracts/programmerPreloadScenarios.ts": 6,
-		"tests/preloadVirtualPlaybackContracts/virtualPlaybackPreloadScenarios.ts": 7,
+		"tests/preloadVirtualPlaybackContracts/physicalPlaybackPreloadScenarios.ts": 1,
+		"tests/preloadVirtualPlaybackContracts/virtualPlaybackPreloadScenarios.ts": 1,
 		"tests/support/foundational/apiState.ts": 5,
 		"tests/support/foundational/supplementalAfter.ts": 7,
 		"tests/support/foundational/supplementalProgrammer.ts": 4,
@@ -37,9 +34,6 @@
 		"master.set": 1,
 		"not.a.command": 1,
 		"playback.go": 2,
-		"preload.enter": 11,
-		"preload.go": 9,
-		"preload.release": 11,
 		"programmer.clear": 23,
 		"programmer.command_line": 1,
 		"programmer.command_target": 1,
@@ -54,7 +48,6 @@
 	},
 	"compatibilityCommands": {
 		"tests/02-cues-tracking-and-arbitration.spec.ts": 7,
-		"tests/05-virtual-time-persistence-and-recovery.show-restart-tests.ts": 1,
 		"tests/06-cuelist-view-and-settings.spec.ts": 2,
 		"tests/cueSemanticContracts/recordingScenarios.ts": 1,
 		"tests/cueSemanticContracts/trackingScenarios.ts": 2,
@@ -64,7 +57,6 @@
 	},
 	"compatibilityFamilies": {
 		"cue_delete": 5,
-		"playback_set": 1,
 		"speed_group": 8
 	}
 }

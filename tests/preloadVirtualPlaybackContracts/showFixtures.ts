@@ -19,13 +19,14 @@ export async function prepare(
 	specs: PlaybackSpec[],
 	slots: Record<number, number>,
 ): Promise<Prepared> {
-	await loadCanonicalCopy(api, bench, name);
+	const show = await loadCanonicalCopy(api, bench, name);
 	const fixtures = await fixtureIdsByNumber(api);
-	return installOnCurrentShow(api, fixtures, specs, slots);
+	return installOnCurrentShow(api, show.id, fixtures, specs, slots);
 }
 
 export async function installOnCurrentShow(
 	api: ApiDriver,
+	showId: string,
 	fixtures: Record<number, string>,
 	specs: PlaybackSpec[],
 	slots: Record<number, number>,
@@ -75,7 +76,7 @@ export async function installOnCurrentShow(
 			Object.entries(slots).map(([slot, number]) => [String(slot), number]),
 		),
 	);
-	return { fixtures, cueLists };
+	return { showId, fixtures, cueLists };
 }
 
 export function playbackDefinition(spec: PlaybackSpec, cueListId: string) {

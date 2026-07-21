@@ -8,6 +8,11 @@ import {
 	type PairedScenario,
 	pairedScenario,
 } from "../../apps/control-ui/e2e/bench/pairedScenario";
+import {
+	enterProgrammerPreload,
+	goProgrammerPreload,
+	releaseProgrammerPreload,
+} from "../../apps/control-ui/e2e/bench/programmerPreloadLifecycle";
 import { programmer } from "../support/catalog";
 import {
 	activePlayback,
@@ -20,6 +25,7 @@ import {
 	preloadProgrammerObservation,
 	prepare,
 	setCaptureMask,
+	timestampMillis,
 	visualizationLevel,
 } from "./support";
 
@@ -56,7 +62,10 @@ const preload001Scenario: PairedScenario<PreloadProgrammerPairState> = {
 		};
 	},
 	api: async ({ api, bench }, state) => {
-		await api.command("preload.enter", {});
+		await enterProgrammerPreload(api, {
+			surface: "api",
+			showId: state.showId,
+		});
 		await api.executeCommandLine("GROUP 1 AT 50");
 		await api.executeCommandLine("GROUP 2 AT 70 TIME 1");
 		await poolAction(api, 31, "button", {
@@ -68,10 +77,17 @@ const preload001Scenario: PairedScenario<PreloadProgrammerPairState> = {
 			api,
 			state.groupFixtures,
 		);
-		state.applicationTimestamp = (await api.command<any>("preload.go", {}))
-			.payload!.application_timestamp;
+		state.applicationTimestamp = (
+			await goProgrammerPreload(api, {
+				surface: "api",
+				showId: state.showId,
+			})
+		).commit!.committedAt;
 		await bench.tick(3_000);
-		await api.command("preload.release", {});
+		await releaseProgrammerPreload(api, {
+			surface: "api",
+			showId: state.showId,
+		});
 	},
 	ui: async ({ api, bench, desk, page }, state) => {
 		await desk.open(bench.baseUrl);
@@ -149,7 +165,10 @@ const preload001ApiSupplement = async ({
 	const before1 = await visualizationLevel(api, group1Fixture);
 	const before2 = await visualizationLevel(api, group2Fixture);
 
-	await api.command("preload.enter", {});
+	await enterProgrammerPreload(api, {
+		surface: "api",
+		showId: prepared.showId,
+	});
 	await api.executeCommandLine("GROUP 1 AT 50");
 	await api.executeCommandLine("GROUP 2 AT 70 TIME 1");
 	const pending = await programmer(api);
@@ -169,15 +188,24 @@ const preload001ApiSupplement = async ({
 	expect(await visualizationLevel(api, group1Fixture)).toBeCloseTo(before1, 5);
 	expect(await visualizationLevel(api, group2Fixture)).toBeCloseTo(before2, 5);
 
-	const committed = (await api.command<any>("preload.go", {})).payload!;
+	const committed = (
+		await goProgrammerPreload(api, {
+			surface: "api",
+			showId: prepared.showId,
+		})
+	).commit!;
 	const activeProgrammer = await programmer(api);
-	expect(activeProgrammer.preload_group_active["1"].intensity.changed_at).toBe(
-		committed.application_timestamp,
-	);
-	expect(activeProgrammer.preload_group_active["2"].intensity.changed_at).toBe(
-		committed.application_timestamp,
-	);
-	expect(committed.playback_actions).toEqual([]);
+	expect(
+		timestampMillis(
+			activeProgrammer.preload_group_active["1"].intensity.changed_at,
+		),
+	).toBe(timestampMillis(committed.committedAt));
+	expect(
+		timestampMillis(
+			activeProgrammer.preload_group_active["2"].intensity.changed_at,
+		),
+	).toBe(timestampMillis(committed.committedAt));
+	expect(committed.executed).toEqual([]);
 	await bench.tick(1_000);
 	expect(await visualizationLevel(api, group1Fixture)).toBeCloseTo(1 / 6, 2);
 	expect(await visualizationLevel(api, group2Fixture)).toBeCloseTo(0.7, 2);
@@ -185,9 +213,12 @@ const preload001ApiSupplement = async ({
 	expect(await visualizationLevel(api, group1Fixture)).toBeCloseTo(0.5, 2);
 	expect(await visualizationLevel(api, group2Fixture)).toBeCloseTo(0.7, 2);
 
-	expect((await api.command<any>("preload.release", {})).payload).toMatchObject(
-		{ released: true },
-	);
+	expect(
+		await releaseProgrammerPreload(api, {
+			surface: "api",
+			showId: prepared.showId,
+		}),
+	).toMatchObject({ status: "changed", active: false });
 	expect(await visualizationLevel(api, group1Fixture)).toBeCloseTo(before1, 5);
 	expect(await visualizationLevel(api, group2Fixture)).toBeCloseTo(before2, 5);
 	expect((await activePlayback(api, 30))?.current_cue_number).toBe(1);
