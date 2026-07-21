@@ -637,6 +637,11 @@ configuration field are both gone from the frontend facade.
   source. The migration also exposed and fixed two Rules-of-Hooks violations: the Patch DMX preview
   and the Cuelist settings speed groups read configuration inside a short-circuit expression, which
   became a conditional hook call once the read was a selector.
+  The configuration writers now live in a feature-owned, action-only provider: `saveConfiguration`
+  and `setControlTiming` are gone from the facade, timing writes merge onto the authoritative
+  configuration read from the scoped store so a partial change cannot revert an unobserved setting,
+  and the applied result still flows through the existing configuration and Matter state so the
+  store keeps a single source of truth.
 
 ## In progress
 
@@ -714,8 +719,8 @@ new scenarios may not add a direct family or raw v1 action without an exact base
   Rust was not re-run for this slice because it contains no Rust changes; the last full Rust run
   remains 386 `light-application`, 79 `light-wire` plus generated contracts, and 408 `light-server`
   tests with 1 ignored.
-  Known gaps: no desktop `./build open` run and no Playwright acceptance run for this slice, and
-  the configuration writers still cross the broad facade.
+  Including the writer migration the suite is 1,956 tests in 271 files.
+  Known gaps: no desktop `./build open` run and no Playwright acceptance run for this slice.
 
 - The Patch read-ownership slice passes the full frontend suite of 1,952 tests in 270 files,
   including 7 new selector tests that prove unrelated-delta rerender isolation, own-fixture
