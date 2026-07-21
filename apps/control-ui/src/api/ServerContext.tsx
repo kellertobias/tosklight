@@ -1,4 +1,11 @@
-import { createContext, type PropsWithChildren, useContext } from "react";
+import {
+	createContext,
+	type PropsWithChildren,
+	useCallback,
+	useContext,
+} from "react";
+import type { ConfigurationUpdateResult } from "./client/configuration";
+import { ConfigurationActionsProvider } from "../features/configuration/ConfigurationActionsProvider";
 import { ConfigurationStateProvider } from "../features/configuration/ConfigurationState";
 import { FilesProvider } from "../features/files/FilesContext";
 import { ScreensProvider } from "../features/screens/ScreensContext";
@@ -62,6 +69,13 @@ export function ServerProvider({
 		refresh,
 	};
 	const value = composeServerContextValue(model);
+	const applyConfigurationUpdate = useCallback(
+		(result: ConfigurationUpdateResult) => {
+			state.setConfiguration(result.configuration);
+			state.setMatter(result.matter);
+		},
+		[state.setConfiguration, state.setMatter],
+	);
 	const fileSource = {
 		status: value.status,
 		fileRoots: value.fileRoots,
@@ -101,6 +115,12 @@ export function ServerProvider({
 	return (
 		<ServerContext.Provider value={value}>
 			<ConfigurationStateProvider store={state.configurationStore}>
+			<ConfigurationActionsProvider
+				store={state.configurationStore}
+				updateConfiguration={state.client.updateConfiguration}
+				onApplied={applyConfigurationUpdate}
+				onError={state.setError}
+			>
 			<ServerVisualizationRuntimeBoundary state={state}>
 				<ShowObjectsViewProvider
 					showId={state.bootstrap?.active_show?.id ?? null}
@@ -167,6 +187,7 @@ export function ServerProvider({
 					</PlaybackTopologyProvider>
 				</ShowObjectsViewProvider>
 			</ServerVisualizationRuntimeBoundary>
+			</ConfigurationActionsProvider>
 			</ConfigurationStateProvider>
 		</ServerContext.Provider>
 	);

@@ -15,11 +15,16 @@ const mocks = vi.hoisted(() => ({
   server: {} as {
     configuration: Record<string, unknown> & { matter_enabled: boolean };
     matter: MatterBridgeStatus | null;
-    saveConfiguration: ReturnType<typeof vi.fn>;
   },
 }));
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => mocks.server }));
+vi.mock("../../features/configuration/ConfigurationActionsProvider", () => ({
+  useConfigurationActions: () => ({
+    saveConfiguration: mocks.saveConfiguration,
+    setControlTiming: vi.fn(),
+  }),
+}));
 
 function matterStatus(overrides: Partial<MatterBridgeStatus> = {}): MatterBridgeStatus {
   return {
@@ -41,7 +46,6 @@ beforeEach(() => {
   mocks.clipboardWriteText.mockResolvedValue(undefined);
   mocks.server.configuration = { matter_enabled: false, retained_setting: "unchanged" };
   mocks.server.matter = null;
-  mocks.server.saveConfiguration = mocks.saveConfiguration;
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: { writeText: mocks.clipboardWriteText },

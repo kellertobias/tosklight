@@ -5,6 +5,7 @@ import {
 	useSequenceMasterFadeMillis,
 	useSpeedGroupsBpm,
 } from "../../features/configuration/ConfigurationState";
+import { useConfigurationActions } from "../../features/configuration/ConfigurationActionsProvider";
 import { useServer } from "../../api/ServerContext";
 import {
 	usePlaybackDeskView,
@@ -25,6 +26,7 @@ import {
 
 export function HardwareControlSummary() {
 	const server = useServer();
+	const configurationActions = useConfigurationActions();
 	const { state, dispatch } = useApp();
 	const [pagesOpen, setPagesOpen] = useState(false);
 	const [renamePage, setRenamePage] =
@@ -67,7 +69,7 @@ export function HardwareControlSummary() {
 			Math.min(timeInput === "prog" ? 20 : 60, Number(inputValue)),
 		);
 		if (Number.isFinite(value))
-			void server.setControlTiming(
+			void configurationActions?.setControlTiming(
 				timeInput === "prog"
 					? { programmer_fade_millis: Math.round(value * 1000) }
 					: { sequence_master_fade_millis: Math.round(value * 1000) },
@@ -89,7 +91,7 @@ export function HardwareControlSummary() {
 			60000 /
 				(intervals.reduce((sum, value) => sum + value, 0) / intervals.length),
 		);
-		void server.setControlTiming({ speed_groups_bpm: values });
+		void configurationActions?.setControlTiming({ speed_groups_bpm: values });
 	};
 	return (
 		<div className="hardware-control-summary">

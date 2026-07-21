@@ -1,3 +1,4 @@
+import { useConfigurationActions } from "../../features/configuration/ConfigurationActionsProvider";
 import { useServer } from "../../api/ServerContext";
 import {
   useDeskConfiguration,
@@ -9,10 +10,11 @@ export function MatterBridgeSettings() {
   const server = useServer();
   const matter = server.matter;
   const configuration = useDeskConfiguration();
+  const configurationActions = useConfigurationActions();
   const enabled = useMatterEnabled();
   const toggleMatter = (enabled: boolean) => {
     if (!configuration) return;
-    void server.saveConfiguration({ ...configuration, matter_enabled: enabled });
+    void configurationActions?.saveConfiguration({ ...configuration, matter_enabled: enabled });
   };
 
   return <article className="matter-desk-settings" aria-label="Matter playback bridge">

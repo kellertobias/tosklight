@@ -45,17 +45,6 @@ export interface ServerShowContext {
 		showId: string,
 	) => Promise<import("../../api/types").MvrExportPreview>;
 	downloadMvr: (show: ShowEntry) => Promise<void>;
-	saveConfiguration: (configuration: DeskConfiguration) => Promise<boolean>;
-	setControlTiming: (
-		input: Partial<
-			Pick<
-				DeskConfiguration,
-				| "speed_groups_bpm"
-				| "programmer_fade_millis"
-				| "sequence_master_fade_millis"
-			>
-		>,
-	) => Promise<void>;
 	speedGroup: (
 		group: import("../../api/types").SpeedGroupId,
 	) => Promise<import("../../api/types").SpeedGroupSoundState>;

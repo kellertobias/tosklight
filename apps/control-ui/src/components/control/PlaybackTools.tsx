@@ -1,6 +1,7 @@
 import { type CSSProperties, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSequenceMasterFadeMillis } from "../../features/configuration/ConfigurationState";
+import { useConfigurationActions } from "../../features/configuration/ConfigurationActionsProvider";
 import { useServer } from "../../api/ServerContext";
 import type { SpeedGroupId } from "../../api/types";
 import { useSpeedGroupRuntimeView } from "../../features/speedGroupRuntime/SpeedGroupRuntimeView";
@@ -27,6 +28,7 @@ import {
 export function PlaybackTools() {
 	const { state, dispatch } = useApp();
 	const server = useServer();
+	const configurationActions = useConfigurationActions();
 	const sequenceMasterFadeMillis = useSequenceMasterFadeMillis();
 	const command = useCommandLineSurface({ observeCommand: false });
 	const speedGroups = useSpeedGroupRuntimeView();
@@ -97,7 +99,7 @@ export function PlaybackTools() {
 					maximum={60}
 					display={`${((sequenceMasterFadeMillis ?? 3_000) / 1_000).toFixed(1)} s`}
 					onChange={(value) =>
-						void server.setControlTiming({
+						void configurationActions?.setControlTiming({
 							sequence_master_fade_millis: Math.round(value * 1_000),
 						})
 					}

@@ -8,11 +8,13 @@ import {
 	type RecordSettings,
 	saveRecordSettings,
 } from "../../components/setup/ProgrammerDefaults";
+import { useConfigurationActions } from "../../features/configuration/ConfigurationActionsProvider";
 import { useDeskConfiguration } from "../../features/configuration/ConfigurationState";
 import { useProgrammingUpdate } from "../../features/programmingUpdate/ProgrammingUpdateProvider";
 
 export function useSetupWindowController() {
 	const server = useServer();
+	const configurationActions = useConfigurationActions();
 	const configuration = useDeskConfiguration();
 	const programmingUpdate = useProgrammingUpdate();
 	const [section, setSection] = useState(0);
@@ -104,7 +106,7 @@ export function useSetupWindowController() {
 			configuration: draft,
 		};
 		const [requiresRestart, updateSaved] = await Promise.all([
-			server.saveConfiguration(draft),
+			configurationActions?.saveConfiguration(draft) ?? Promise.resolve(false),
 			section === 2 && programmerSettingsLoaded
 				? saveUpdateSettings(programmingUpdate, updateSettings)
 				: Promise.resolve(true),
