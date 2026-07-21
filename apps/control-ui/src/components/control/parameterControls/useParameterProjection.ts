@@ -3,6 +3,7 @@ import { useServer } from "../../../api/ServerContext";
 import type { VisualizationSnapshot } from "../../../api/types";
 import { capturesProgrammerWrites } from "../../../features/programmerCaptureMode/contracts";
 import { useProgrammerCaptureModeView } from "../../../features/programmerCaptureMode/ProgrammerCaptureModeView";
+import { useProgrammerFadeMillis } from "../../../features/configuration/ConfigurationState";
 import { useSelectedPatchedFixtures } from "../../../features/patch/PatchState";
 import { selectedGroupId } from "../../../features/programmingInteraction/contracts";
 import { useProgrammingSelectionView } from "../../../features/programmingInteraction/ProgrammingInteractionView";
@@ -111,6 +112,7 @@ export function useParameterProjection(family: ParameterFamily, active = true) {
 		selectedGroup,
 		active,
 	);
+	const programmerFadeMillis = useProgrammerFadeMillis();
 	const values = useResolvedValues(visualization, selectedFixtureIds);
 	const selectedFixtures = useSelectedPatchedFixtures(
 		selectedFixtureIds,
@@ -127,6 +129,7 @@ export function useParameterProjection(family: ParameterFamily, active = true) {
 		server,
 		state,
 		active,
+		programmerFadeMillis: programmerFadeMillis ?? undefined,
 		selectedFixtureIds,
 		selectedGroupId: selectedGroup,
 		programmerValuesRoute: captureMode

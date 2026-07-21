@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LightApiClient } from "../../api/LightApiClient";
 import type {
 	BootstrapSnapshot,
@@ -85,6 +85,12 @@ export function useServerState() {
 	const highlight = useHighlightState();
 	const patchPreviewWrite = useRef<Promise<unknown>>(Promise.resolve());
 
+	// Publish the authoritative desk configuration to its scoped store so configuration readers
+	// never depend on the broad server-context update path.
+	const configurationStore = featureStores.configurationStore;
+	useEffect(() => {
+		configurationStore.install(configuration);
+	}, [configuration, configurationStore]);
 	return {
 		client,
 		status,

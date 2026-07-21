@@ -1,5 +1,6 @@
 import { type PointerEvent, useRef, useState } from "react";
 import { useSelectedPatchedFixtures } from "../../../features/patch/PatchState";
+import { useProgrammerFadeMillis } from "../../../features/configuration/ConfigurationState";
 import { useServer } from "../../../api/ServerContext";
 import {
 	normalizedFixtureMutations,
@@ -42,6 +43,7 @@ export function useColorDialog(
 	valueWrites: ProgrammerValuesMutationQueueController,
 ): ColorDialogController {
 	const server = useServer();
+	const programmerFadeMillis = useProgrammerFadeMillis() ?? undefined;
 	const [hue, setHue] = useState(0.52);
 	const [saturation, setSaturation] = useState(0.8);
 	const [brightness, setBrightness] = useState(0.85);
@@ -65,7 +67,7 @@ export function useColorDialog(
 		);
 		const mutations = normalizedFixtureMutations(
 			assignments,
-			server.configuration?.programmer_fade_millis,
+			programmerFadeMillis,
 		);
 		if (!mutations.length) return;
 		if (mode === "barrier") await valueWrites.submitBarrier(mutations);

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSpeedGroupsBpm } from "../features/configuration/ConfigurationState";
 import { useServer } from "../api/ServerContext";
 import { usePlaybackDeskView } from "../features/playbackRuntime/PlaybackRuntimeView";
 import { useCueListTopologyWriter } from "../features/playbackTopology/useCueListTopologyWriter";
@@ -10,6 +11,10 @@ import { CuelistPool } from "./cuelistWindow/CuelistPool";
 import { CuelistSettings } from "./cuelistWindow/CuelistSettings";
 import { useCuelistPool } from "./cuelistWindow/useCuelistSelection";
 import type { WindowProps } from "./windowTypes";
+
+const DEFAULT_SPEED_GROUPS_BPM: [number, number, number, number, number] = [
+	120, 90, 60, 30, 15,
+];
 
 export function CuelistWindow({
 	active = true,
@@ -68,6 +73,7 @@ export function CuelistWindow({
 	const settingsDefinition = pool.find(
 		(definition) => definition.number === settingsCuelist,
 	);
+	const speedGroupsBpm = useSpeedGroupsBpm() ?? DEFAULT_SPEED_GROUPS_BPM;
 	const settingsCueListId =
 		settingsDefinition?.target.type === "cue_list"
 			? settingsDefinition.target.cue_list_id
@@ -78,9 +84,7 @@ export function CuelistWindow({
 	const settings = settingsOpen && settingsCueObject && (
 		<CuelistSettings
 			object={settingsCueObject}
-			speedGroupsBpm={
-				server.configuration?.speed_groups_bpm ?? [120, 90, 60, 30, 15]
-			}
+			speedGroupsBpm={speedGroupsBpm}
 			close={() => setSettingsOpen(false)}
 			save={saveCueList}
 		/>

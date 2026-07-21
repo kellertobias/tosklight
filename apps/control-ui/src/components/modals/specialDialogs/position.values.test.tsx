@@ -5,6 +5,11 @@ import type { ProgrammerValuesMutationQueueController } from "../../../features/
 import { selectFixturesForSelection } from "../../../features/patch/selectors";
 import { usePositionDialog } from "./position";
 
+vi.mock("../../../features/configuration/ConfigurationState", async (importOriginal) => ({
+	...(await importOriginal<Record<string, unknown>>()),
+	useProgrammerFadeMillis: () => server.configuration.programmer_fade_millis,
+}));
+
 vi.mock("../../../features/patch/PatchState", async (importOriginal) => ({
 	...(await importOriginal<Record<string, unknown>>()),
 	useSelectedPatchedFixtures: (

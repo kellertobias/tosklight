@@ -27,7 +27,7 @@ export function setParameterMutations(
 	value: AttributeValue,
 ) {
 	const timing = parameterValueTiming(
-		projection.server.configuration?.programmer_fade_millis,
+		projection.programmerFadeMillis,
 	);
 	if (projection.selectedGroupId)
 		return [
@@ -109,7 +109,7 @@ export function directValueMutations(
 	choice: DirectValueChoice,
 ) {
 	const timing = parameterValueTiming(
-		projection.server.configuration?.programmer_fade_millis,
+		projection.programmerFadeMillis,
 	);
 	return choice.assignments.map(
 		(assignment): ProgrammerValuesMutation => ({
@@ -151,7 +151,7 @@ function setParameterMutationsForFixtures(
 	values: readonly number[],
 ) {
 	const timing = parameterValueTiming(
-		projection.server.configuration?.programmer_fade_millis,
+		projection.programmerFadeMillis,
 	);
 	return projection.selectedFixtureIds.map(
 		(fixtureId, index): ProgrammerValuesMutation => ({

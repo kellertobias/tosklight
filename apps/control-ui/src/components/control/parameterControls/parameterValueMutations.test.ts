@@ -12,9 +12,8 @@ function projection(
 	overrides: Partial<ParameterProjection> = {},
 ): ParameterProjection {
 	return {
-		server: {
-			configuration: { programmer_fade_millis: 1_250 },
-		} as ParameterProjection["server"],
+		server: {} as ParameterProjection["server"],
+		programmerFadeMillis: 1_250,
 		state: {} as ParameterProjection["state"],
 		active: true,
 		selectedFixtureIds: ["fixture-3", "fixture-1", "fixture-2"],

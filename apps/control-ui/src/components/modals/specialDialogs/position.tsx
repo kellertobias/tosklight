@@ -1,5 +1,6 @@
 import { type PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useSelectedPatchedFixtures } from "../../../features/patch/PatchState";
+import { useProgrammerFadeMillis } from "../../../features/configuration/ConfigurationState";
 import { useServer } from "../../../api/ServerContext";
 import {
 	normalizedFixtureMutations,
@@ -45,6 +46,7 @@ export function usePositionDialog(
 	valueWrites: ProgrammerValuesMutationQueueController,
 ): PositionDialogController {
 	const server = useServer();
+	const programmerFadeMillis = useProgrammerFadeMillis() ?? undefined;
 	const selectedFixtureKey = selectedFixtureIds.join("\u0000");
 	const [pan, setPan] = useState(0.5);
 	const [tilt, setTilt] = useState(0.5);
@@ -82,7 +84,7 @@ export function usePositionDialog(
 	const returnHome = async () => {
 		const mutations = normalizedFixtureMutations(
 			homeAssignments,
-			server.configuration?.programmer_fade_millis,
+			programmerFadeMillis,
 		);
 		if ((await valueWrites.submitBarrier(mutations)) === null) return;
 		const positions = new Map(fixturePositions.current);
@@ -131,7 +133,7 @@ export function usePositionDialog(
 			]);
 			const mutations = normalizedFixtureMutations(
 				assignments,
-				server.configuration?.programmer_fade_millis,
+				programmerFadeMillis,
 			);
 			void valueWrites.submitLatest(
 				programmerValuesMutationKey(mutations),
@@ -143,7 +145,7 @@ export function usePositionDialog(
 	}, [
 		active,
 		selectedFixtureKey,
-		server.configuration?.programmer_fade_millis,
+		programmerFadeMillis,
 		valueWrites.canWrite,
 		valueWrites.submitLatest,
 	]);

@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { ConfigurationStore } from "../configuration/store";
 import { OutputRuntimeStore } from "../outputRuntime/store";
 import { PlaybackRuntimeStore } from "../playbackRuntime/store";
 import { ProgrammerCaptureModeStore } from "../programmerCaptureMode/store";
@@ -18,6 +19,7 @@ export function useServerFeatureStores() {
 	const speedGroupRuntimeStore = useRef<SpeedGroupRuntimeStore | null>(null);
 	speedGroupRuntimeStore.current ??= new SpeedGroupRuntimeStore();
 	return {
+		configurationStore: useRef(new ConfigurationStore()).current,
 		outputRuntimeStore: outputRuntimeStore.current,
 		speedGroupRuntimeStore: speedGroupRuntimeStore.current,
 		playbackRuntimeStore: useRef(new PlaybackRuntimeStore()).current,

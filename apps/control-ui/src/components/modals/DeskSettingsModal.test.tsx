@@ -3,6 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MatterBridgeStatus } from "../../api/types";
 import { MatterBridgeSettings } from "../setup/MatterBridgeSettings";
 
+vi.mock("../../features/configuration/ConfigurationState", async (importOriginal) => ({
+	...(await importOriginal<Record<string, unknown>>()),
+	useDeskConfiguration: () => mocks.server.configuration,
+	useMatterEnabled: () => mocks.server.configuration.matter_enabled,
+}));
+
 const mocks = vi.hoisted(() => ({
   clipboardWriteText: vi.fn(),
   saveConfiguration: vi.fn(),

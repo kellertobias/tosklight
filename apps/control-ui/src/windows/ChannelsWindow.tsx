@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePatchedFixturesView } from "../features/patch/PatchState";
+import { useProgrammerFadeMillis } from "../features/configuration/ConfigurationState";
 import { useServer } from "../api/ServerContext";
 import type { PatchedFixture, VisualizationSnapshot } from "../api/types";
 import { Button } from "../components/common";
@@ -30,6 +31,7 @@ interface Channel {
 
 export function ChannelsWindow({ active = true, compact }: WindowProps) {
 	const server = useServer();
+	const programmerFadeMillis = useProgrammerFadeMillis() ?? undefined;
 	const selection = useProgrammingSelectionView(active);
 	const selectionActions = useProgrammingSelectionActions(active);
 	const values = useProgrammerValuesMutationQueue(active);
@@ -46,7 +48,7 @@ export function ChannelsWindow({ active = true, compact }: WindowProps) {
 	const setIntensity = (fixtureId: string, level: number) => {
 		const mutations = normalizedFixtureMutations(
 			[{ fixtureId, attribute: "intensity", value: level }],
-			server.configuration?.programmer_fade_millis,
+			programmerFadeMillis,
 		);
 		return values.submitLatest(
 			programmerValuesMutationKey(mutations),

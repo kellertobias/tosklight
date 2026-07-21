@@ -1,5 +1,6 @@
 import { type CSSProperties, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useSequenceMasterFadeMillis } from "../../features/configuration/ConfigurationState";
 import { useServer } from "../../api/ServerContext";
 import type { SpeedGroupId } from "../../api/types";
 import { useSpeedGroupRuntimeView } from "../../features/speedGroupRuntime/SpeedGroupRuntimeView";
@@ -26,6 +27,7 @@ import {
 export function PlaybackTools() {
 	const { state, dispatch } = useApp();
 	const server = useServer();
+	const sequenceMasterFadeMillis = useSequenceMasterFadeMillis();
 	const command = useCommandLineSurface({ observeCommand: false });
 	const speedGroups = useSpeedGroupRuntimeView();
 	const [soundGroup, setSoundGroup] = useState<SpeedGroupId | null>(null);
@@ -90,10 +92,10 @@ export function PlaybackTools() {
 				<TouchTimeSurface
 					label="Cue Fade"
 					value={
-						(server.configuration?.sequence_master_fade_millis ?? 3_000) / 1_000
+						(sequenceMasterFadeMillis ?? 3_000) / 1_000
 					}
 					maximum={60}
-					display={`${((server.configuration?.sequence_master_fade_millis ?? 3_000) / 1_000).toFixed(1)} s`}
+					display={`${((sequenceMasterFadeMillis ?? 3_000) / 1_000).toFixed(1)} s`}
 					onChange={(value) =>
 						void server.setControlTiming({
 							sequence_master_fade_millis: Math.round(value * 1_000),

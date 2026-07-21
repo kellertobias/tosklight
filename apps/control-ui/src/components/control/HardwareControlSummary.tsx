@@ -1,5 +1,10 @@
 import { type CSSProperties, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import {
+	useProgrammerFadeMillis,
+	useSequenceMasterFadeMillis,
+	useSpeedGroupsBpm,
+} from "../../features/configuration/ConfigurationState";
 import { useServer } from "../../api/ServerContext";
 import {
 	usePlaybackDeskView,
@@ -32,10 +37,10 @@ export function HardwareControlSummary() {
 	const runtimeStatus = usePlaybackRuntimeStatus();
 	const topology = usePlaybackPagesView();
 	const topologyActions = usePlaybackTopologyActions();
-	const bpms = server.configuration?.speed_groups_bpm ?? [120, 90, 60, 30, 15];
-	const prog = (server.configuration?.programmer_fade_millis ?? 3000) / 1000;
+	const bpms = useSpeedGroupsBpm() ?? [120, 90, 60, 30, 15];
+	const prog = (useProgrammerFadeMillis() ?? 3000) / 1000;
 	const cue =
-		(server.configuration?.sequence_master_fade_millis ?? 3000) / 1000;
+		(useSequenceMasterFadeMillis() ?? 3000) / 1000;
 	const runtimeReady = runtimeStatus.status === "ready";
 	const page = runtimeReady ? (playbackDesk?.active_page ?? null) : null;
 	const openTime = (kind: "prog" | "cue", value: number) => {

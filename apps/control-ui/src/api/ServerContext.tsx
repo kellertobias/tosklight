@@ -1,4 +1,5 @@
 import { createContext, type PropsWithChildren, useContext } from "react";
+import { ConfigurationStateProvider } from "../features/configuration/ConfigurationState";
 import { FilesProvider } from "../features/files/FilesContext";
 import { ScreensProvider } from "../features/screens/ScreensContext";
 import { SelectiveImportProvider } from "../features/selectiveImport/SelectiveImportContext";
@@ -77,7 +78,7 @@ export function ServerProvider({
 		claimFileInput: value.claimFileInput,
 		releaseFileInput: value.releaseFileInput,
 		systemPickerFallback:
-			value.configuration?.file_manager_system_picker_fallback ?? false,
+			state.configuration?.file_manager_system_picker_fallback ?? false,
 	};
 	const screenSource = {
 		screens: value.screens,
@@ -99,6 +100,7 @@ export function ServerProvider({
 	};
 	return (
 		<ServerContext.Provider value={value}>
+			<ConfigurationStateProvider store={state.configurationStore}>
 			<ServerVisualizationRuntimeBoundary state={state}>
 				<ShowObjectsViewProvider
 					showId={state.bootstrap?.active_show?.id ?? null}
@@ -165,6 +167,7 @@ export function ServerProvider({
 					</PlaybackTopologyProvider>
 				</ShowObjectsViewProvider>
 			</ServerVisualizationRuntimeBoundary>
+			</ConfigurationStateProvider>
 		</ServerContext.Provider>
 	);
 }

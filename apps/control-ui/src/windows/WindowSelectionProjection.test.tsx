@@ -35,6 +35,16 @@ vi.mock("../features/patch/PatchState", async (importOriginal) => ({
 		enabled ? mocks.server.patch.fixtures : [],
 }));
 
+vi.mock("..//features/configuration/ConfigurationState", async (importOriginal) => ({
+	...(await importOriginal<Record<string, unknown>>()),
+	usePatchPreviewHighlightDmx: () =>
+		Boolean(
+			(mocks.server.configuration as { patch_preview_highlight_dmx?: boolean })
+				.patch_preview_highlight_dmx,
+		),
+	useProgrammerFadeMillis: () => 3000,
+}));
+
 const mocks = vi.hoisted(() => {
 	const selectionAccess = vi.fn();
 	const mutationQueue = {

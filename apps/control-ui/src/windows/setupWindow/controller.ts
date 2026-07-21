@@ -8,14 +8,16 @@ import {
 	type RecordSettings,
 	saveRecordSettings,
 } from "../../components/setup/ProgrammerDefaults";
+import { useDeskConfiguration } from "../../features/configuration/ConfigurationState";
 import { useProgrammingUpdate } from "../../features/programmingUpdate/ProgrammingUpdateProvider";
 
 export function useSetupWindowController() {
 	const server = useServer();
+	const configuration = useDeskConfiguration();
 	const programmingUpdate = useProgrammingUpdate();
 	const [section, setSection] = useState(0);
 	const [draft, setDraft] = useState<DeskConfiguration | null>(
-		server.configuration,
+		configuration,
 	);
 	const [recordSettings, setRecordSettings] =
 		useState<RecordSettings>(loadRecordSettings);
@@ -45,17 +47,17 @@ export function useSetupWindowController() {
 		if (
 			pending &&
 			JSON.stringify(pending.configuration) ===
-				JSON.stringify(server.configuration)
+				JSON.stringify(configuration)
 		) {
 			pendingSave.current = null;
 			if (draftRevision.current === pending.revision) {
 				draftDirty.current = false;
-				setDraft(server.configuration);
+				setDraft(configuration);
 			}
 			return;
 		}
-		if (!draftDirty.current) setDraft(server.configuration);
-	}, [server.configuration]);
+		if (!draftDirty.current) setDraft(configuration);
+	}, [configuration]);
 
 	useEffect(() => {
 		if (section !== 2) return;

@@ -50,7 +50,6 @@ export interface ServerCoreContext
 	outputRoutes: VersionedObject<OutputRoute>[];
 	patchLayers: VersionedObject<PatchLayer>[];
 	shows: ShowEntry[];
-	configuration: DeskConfiguration | null;
 	matter: MatterBridgeStatus | null;
 	fixtureLibrary: FixtureDefinition[];
 	fixtureProfiles: FixtureProfile[];

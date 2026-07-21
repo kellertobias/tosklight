@@ -17,7 +17,6 @@ export function createServerSnapshotValue(
 	| "patchLayers"
 	| "screens"
 	| "shows"
-	| "configuration"
 	| "matter"
 	| "fixtureLibrary"
 	| "fixtureProfiles"
@@ -52,7 +51,6 @@ export function createServerSnapshotValue(
 		patchLayers,
 		screens,
 		shows,
-		configuration,
 		matter,
 		fixtureLibrary,
 		fixtureProfiles,
@@ -89,7 +87,6 @@ export function createServerSnapshotValue(
 		patchLayers,
 		screens,
 		shows,
-		configuration,
 		matter,
 		fixtureLibrary,
 		fixtureProfiles,
