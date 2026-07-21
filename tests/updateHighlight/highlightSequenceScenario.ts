@@ -1,6 +1,7 @@
 import { expect } from "../../apps/control-ui/e2e/bench/fixtures";
 import { pairedScenario } from "../../apps/control-ui/e2e/bench/pairedScenario";
 import { setProgrammerFixtureValue } from "../../apps/control-ui/e2e/bench/programmerValues";
+import { replaceProgrammingSelection } from "../../apps/control-ui/e2e/bench/programmingSelection";
 import {
 	loadCanonicalCopy,
 	object,
@@ -56,7 +57,11 @@ pairedScenario<HighlightSequenceState>({
 			"default-stage",
 		);
 		const fixtures = await fixturesByNumber(api, [101, 102, 103, 104]);
-		await api.command("selection.set", { fixtures: fixtureIds(fixtures) });
+		await replaceProgrammingSelection(api, {
+			surface: "api",
+			showId: show.id,
+			fixtures: fixtureIds(fixtures),
+		});
 		return {
 			showId: show.id,
 			fixtures,
@@ -114,9 +119,15 @@ pairedScenario<HighlightSequenceState>({
 		await api.executeCommandLine(`RECORD GROUP ${state.completeGroupId}`);
 
 		await highlightAction(api, "on");
-		await api.command("selection.set", { fixtures: [] });
+		await replaceProgrammingSelection(api, {
+			surface: "api",
+			showId: state.showId,
+			fixtures: [],
+		});
 		state.highSurvivedEmpty = (await highlightState(api)).active;
-		await api.command("selection.set", {
+		await replaceProgrammingSelection(api, {
+			surface: "api",
+			showId: state.showId,
 			fixtures: [state.fixtures[2].id, state.fixtures[3].id],
 		});
 		state.highFollowedSelection = (await highlightState(api)).active;

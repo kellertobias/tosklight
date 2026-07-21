@@ -1,6 +1,7 @@
 import { expect } from "../apps/control-ui/e2e/bench/fixtures";
 import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
 import { batchProgrammerValues } from "../apps/control-ui/e2e/bench/programmerValues";
+import { replaceProgrammingSelection } from "../apps/control-ui/e2e/bench/programmingSelection";
 import { loadCanonicalCopy, programmer } from "./support/catalog";
 
 type Assignment = { fixture_id: string; attribute: "pan" | "tilt"; value: number };
@@ -53,7 +54,11 @@ pairedScenario<ReturnHomeState>({
       ...(nonPosition ? [nonPosition.fixture_id] : []),
       chosen[1].fixtureId,
     ];
-    await api.command("selection.set", { fixtures: selected });
+    await replaceProgrammingSelection(api, {
+      surface: "api",
+      showId: show.id,
+      fixtures: selected,
+    });
     await setMany(api, show.id, before);
     return { showId: show.id, selected, home, before };
   },

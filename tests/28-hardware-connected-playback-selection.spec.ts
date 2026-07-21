@@ -3,6 +3,7 @@ import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
 import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
 import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
 import { setProgrammerFixtureValue } from "../apps/control-ui/e2e/bench/programmerValues";
+import { replaceProgrammingSelection } from "../apps/control-ui/e2e/bench/programmingSelection";
 import { fixtureIdsByNumber, loadCanonicalCopy, object, objects, programmer, putObject } from "./support/catalog";
 
 type Prepared = { firstCuelist: string; secondCuelist: string; showId: string };
@@ -35,7 +36,11 @@ pairedScenario<Prepared>({
 test("PLAYBACK-SELECT-001 @supplemental-ui › controls, Record, Group selection, and explicit pages retain separate ownership", async ({ api, bench, desk, page }) => {
   const prepared = await prepare(api, bench, "playback-select-001-boundaries");
   const fixtures = await fixtureIdsByNumber(api);
-  await api.command("selection.set", { fixtures: [fixtures[1]] });
+  await replaceProgrammingSelection(api, {
+    surface: "api",
+    showId: prepared.showId,
+    fixtures: [fixtures[1]],
+  });
   await setProgrammerFixtureValue(api, {
     surface: "api",
     showId: prepared.showId,

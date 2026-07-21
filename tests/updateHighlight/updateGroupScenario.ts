@@ -1,5 +1,6 @@
 import { expect } from "../../apps/control-ui/e2e/bench/fixtures";
 import { pairedScenario } from "../../apps/control-ui/e2e/bench/pairedScenario";
+import { replaceProgrammingSelection } from "../../apps/control-ui/e2e/bench/programmingSelection";
 import {
 	loadCanonicalCopy,
 	object,
@@ -9,6 +10,7 @@ import {
 import { escapeRegex, openGroups } from "../support/updateHighlight/highlight";
 
 interface UpdateGroupState {
+	showId: string;
 	groupId: string;
 	groupName: string;
 	revision: number;
@@ -21,7 +23,7 @@ pairedScenario<UpdateGroupState>({
 	title:
 		"Update Add New appends ordered Group membership through the authoritative workflow",
 	arrange: async ({ api, bench }, surface) => {
-		await loadCanonicalCopy(api, bench, `update-001-${surface}`);
+		const show = await loadCanonicalCopy(api, bench, `update-001-${surface}`);
 		const groups = await objects<any>(api, "group");
 		const fixtures = (await objects<any>(api, "patched_fixture")).map(
 			(entry) => entry.body.fixture_id as string,
@@ -37,8 +39,13 @@ pairedScenario<UpdateGroupState>({
 			(fixture) => !group!.body.fixtures.includes(fixture),
 		);
 		expect(added).toBeDefined();
-		await api.command("selection.set", { fixtures: [added] });
+		await replaceProgrammingSelection(api, {
+			surface: "api",
+			showId: show.id,
+			fixtures: [added!],
+		});
 		return {
+			showId: show.id,
 			groupId: group!.id,
 			groupName: group!.body.name || `Group ${group!.id}`,
 			revision: group!.revision,

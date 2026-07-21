@@ -3,6 +3,10 @@ import { expect } from "../../apps/control-ui/e2e/bench/fixtures";
 import { pairedScenario } from "../../apps/control-ui/e2e/bench/pairedScenario";
 import { setProgrammerFixtureValue } from "../../apps/control-ui/e2e/bench/programmerValues";
 import {
+	replaceProgrammingSelection,
+	selectProgrammingGroup,
+} from "../../apps/control-ui/e2e/bench/programmingSelection";
+import {
 	loadCanonicalCopy,
 	object,
 	programmer,
@@ -59,9 +63,17 @@ pairedScenario<HighlightScenarioState>({
 			"default-stage",
 		);
 		const fixtures = await fixturesByNumber(api, [101, 102, 103]);
-		await api.command("selection.set", { fixtures: [fixtures[0].id] });
+		await replaceProgrammingSelection(api, {
+			surface: "api",
+			showId: show.id,
+			fixtures: [fixtures[0].id],
+		});
 		await setPan(api, show.id, fixtures[0].id, 0.63);
-		await api.command("selection.set", { fixtures: fixtureIds(fixtures) });
+		await replaceProgrammingSelection(api, {
+			surface: "api",
+			showId: show.id,
+			fixtures: fixtureIds(fixtures),
+		});
 		return { showId: show.id, fixtures, storedPresetId: "197" };
 	},
 	api: async ({ api }, state) => {
@@ -207,7 +219,13 @@ pairedScenario<HighlightSurfaceState>({
 		};
 	},
 	api: async ({ api }, state) => {
-		await api.command("group.select", { group_id: state.liveGroup.id });
+		await selectProgrammingGroup(api, {
+			surface: "api",
+			showId: state.showId,
+			groupId: state.liveGroup.id,
+			frozen: false,
+			rule: { type: "all" },
+		});
 		await highlightAction(api, "next");
 		await highlightAction(api, "next");
 		state.steppedSelection = [...(await programmer(api)).selected];
@@ -222,11 +240,17 @@ pairedScenario<HighlightSurfaceState>({
 		await highlightAction(api, "all");
 		state.restoredSelection = [...(await programmer(api)).selected];
 		await highlightAction(api, "on");
-		await api.command("selection.set", { fixtures: [] });
+		await replaceProgrammingSelection(api, {
+			surface: "api",
+			showId: state.showId,
+			fixtures: [],
+		});
 		state.highSurvivedEmpty =
 			(await highlightState(api)).active &&
 			(await programmer(api)).selected.length === 0;
-		await api.command("selection.set", {
+		await replaceProgrammingSelection(api, {
+			surface: "api",
+			showId: state.showId,
 			fixtures: [state.fixtures[2].id, state.fixtures[3].id],
 		});
 		state.highFollowedSelection =

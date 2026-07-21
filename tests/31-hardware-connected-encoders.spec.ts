@@ -1,10 +1,15 @@
 import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
+import { replaceProgrammingSelection } from "../apps/control-ui/e2e/bench/programmingSelection";
 import { fixtureIdsByNumber, loadCanonicalCopy, pressCommand } from "./support/catalog";
 
 test("ENCODER-DISPLAY-001 @supplemental-ui › six stable slots mirror physical encoder targets", async ({ api, bench, desk, page }) => {
-  await loadCanonicalCopy(api, bench, "encoder-display-001", "default-stage");
+  const show = await loadCanonicalCopy(api, bench, "encoder-display-001", "default-stage");
   const fixtures = await fixtureIdsByNumber(api);
-  await api.command("selection.set", { fixtures: [fixtures[101]] });
+  await replaceProgrammingSelection(api, {
+    surface: "api",
+    showId: show.id,
+    fixtures: [fixtures[101]],
+  });
   await desk.open(api.baseUrl);
   const hardware = await bench.osc();
   await hardware.subscribe(`encoder-display-${crypto.randomUUID()}`, api.session!.desk.osc_alias);

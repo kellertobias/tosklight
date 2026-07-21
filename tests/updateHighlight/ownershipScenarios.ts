@@ -1,5 +1,6 @@
 import { ApiDriver } from "../../apps/control-ui/e2e/bench/api";
 import { expect, test } from "../../apps/control-ui/e2e/bench/fixtures";
+import { replaceProgrammingSelection } from "../../apps/control-ui/e2e/bench/programmingSelection";
 import { loadCanonicalCopy, programmer } from "../support/catalog";
 import {
 	assertReachableAlert,
@@ -16,7 +17,12 @@ test("HIGHLIGHT-004 @api › ownership conflicts retain same-user sessions, rele
 	api,
 	bench,
 }) => {
-	await loadCanonicalCopy(api, bench, "highlight-004", "default-stage");
+	const show = await loadCanonicalCopy(
+		api,
+		bench,
+		"highlight-004",
+		"default-stage",
+	);
 	const fixtures = await fixturesByNumber(api, [101, 102, 103]);
 	await api.request("POST", "/api/v1/users", {
 		name: "Highlight A",
@@ -49,8 +55,16 @@ test("HIGHLIGHT-004 @api › ownership conflicts retain same-user sessions, rele
 		false,
 	);
 
-	await userAFirst.command("selection.set", { fixtures: [fixtures[0].id] });
-	await userB.command("selection.set", { fixtures: [fixtures[1].id] });
+	await replaceProgrammingSelection(userAFirst, {
+		surface: "api",
+		showId: show.id,
+		fixtures: [fixtures[0].id],
+	});
+	await replaceProgrammingSelection(userB, {
+		surface: "api",
+		showId: show.id,
+		fixtures: [fixtures[1].id],
+	});
 	await highlightAction(userAFirst, "on");
 	const ownerBeforeConflict = await highlightState(userAFirst);
 	expect(ownerBeforeConflict).toMatchObject({
@@ -97,7 +111,11 @@ test("HIGHLIGHT-004 @api › ownership conflicts retain same-user sessions, rele
 
 	const otherDesk = new ApiDriver(api.baseUrl);
 	await otherDesk.login("Highlight A");
-	await otherDesk.command("selection.set", { fixtures: [fixtures[2].id] });
+	await replaceProgrammingSelection(otherDesk, {
+		surface: "api",
+		showId: show.id,
+		fixtures: [fixtures[2].id],
+	});
 	await highlightAction(otherDesk, "on");
 	expect(await highlightState(otherDesk)).toMatchObject({
 		active: true,

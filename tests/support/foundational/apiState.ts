@@ -4,6 +4,11 @@ import {
 } from "../../../apps/control-ui/e2e/bench/api";
 import { expect } from "../../../apps/control-ui/e2e/bench/fixtures";
 import { clearProgrammerValues } from "../../../apps/control-ui/e2e/bench/programmerValues";
+import {
+	gestureActiveProgrammingSelection,
+	replaceActiveProgrammingSelection,
+	replaceProgrammingSelection,
+} from "../../../apps/control-ui/e2e/bench/programmingSelection";
 import { loadCanonicalCopy } from "../catalog";
 import type { ProgrammerState, ShowEntry, VersionedObject } from "./contracts";
 
@@ -13,7 +18,11 @@ export async function loadCompactRig(
 	name: string,
 ): Promise<string> {
 	const show = await loadCanonicalCopy(api, bench, name);
-	await api.command("selection.set", { fixtures: [] });
+	await replaceProgrammingSelection(api, {
+		surface: "api",
+		showId: show.id,
+		fixtures: [],
+	});
 	await clearProgrammerValues(api, { surface: "api", showId: show.id });
 	const group4 = (await objects(api, "group")).find(
 		(group) => group.id === "4",
@@ -106,7 +115,7 @@ export async function select(
 	api: ApiDriver,
 	fixtures: string[],
 ): Promise<void> {
-	await api.command("selection.set", { fixtures });
+	await replaceActiveProgrammingSelection(api, { surface: "api", fixtures });
 }
 
 export async function gestureFixture(
@@ -114,8 +123,9 @@ export async function gestureFixture(
 	fixtureId: string,
 	remove = false,
 ): Promise<void> {
-	await api.command("selection.gesture", {
-		source: { type: "fixture", fixture_id: fixtureId },
+	await gestureActiveProgrammingSelection(api, {
+		surface: "api",
+		source: { type: "fixture", fixtureId },
 		remove,
 	});
 }
@@ -125,8 +135,9 @@ export async function gestureGroup(
 	groupId: string,
 	remove = false,
 ): Promise<void> {
-	await api.command("selection.gesture", {
-		source: { type: "live_group", group_id: groupId },
+	await gestureActiveProgrammingSelection(api, {
+		surface: "api",
+		source: { type: "live_group", groupId },
 		remove,
 	});
 }

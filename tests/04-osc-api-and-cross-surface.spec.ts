@@ -3,6 +3,7 @@ import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
 import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
 import type { OscHardware } from "../apps/control-ui/e2e/bench/protocols";
 import { setProgrammerGroupValue } from "../apps/control-ui/e2e/bench/programmerValues";
+import { replaceProgrammingSelection } from "../apps/control-ui/e2e/bench/programmingSelection";
 import type { Locator, Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
 import {
   executeProgrammerCommand,
@@ -314,18 +315,29 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     },
   });
 
-  pairedScenario<{ auditBefore: number }>({
+  pairedScenario<{ auditBefore: number; showId: string }>({
     id: "API-002",
     title: "Group CRUD produces ordered audit and object events",
     arrange: async ({ api, bench }, surface) => {
-      await loadCanonicalCopy(api, bench, `api-002-${surface}`);
-      return { auditBefore: (await audit(api)).at(-1)?.revision ?? 0 };
+      const show = await loadCanonicalCopy(api, bench, `api-002-${surface}`);
+      return {
+        auditBefore: (await audit(api)).at(-1)?.revision ?? 0,
+        showId: show.id,
+      };
     },
-    api: async ({ api }) => {
+    api: async ({ api }, state) => {
       const fixtures = await fixtureIdsByNumber(api);
-      await api.command("selection.set", { fixtures: [fixtures[1], fixtures[2]] });
+      await replaceProgrammingSelection(api, {
+        surface: "api",
+        showId: state.showId,
+        fixtures: [fixtures[1], fixtures[2]],
+      });
       await command(api, "RECORD GROUP 90");
-      await api.command("selection.set", { fixtures: [fixtures[3]] });
+      await replaceProgrammingSelection(api, {
+        surface: "api",
+        showId: state.showId,
+        fixtures: [fixtures[3]],
+      });
       await command(api, "RECORD + GROUP 90");
       await command(api, "DELETE GROUP 90");
     },

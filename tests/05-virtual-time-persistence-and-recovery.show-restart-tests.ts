@@ -4,6 +4,7 @@ import { mapExistingPlaybackToSlot } from "../apps/control-ui/e2e/bench/mapExist
 import { setOutputRuntime } from "../apps/control-ui/e2e/bench/outputRuntime";
 import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
 import { clearProgrammerValues } from "../apps/control-ui/e2e/bench/programmerValues";
+import { replaceProgrammingSelection } from "../apps/control-ui/e2e/bench/programmingSelection";
 import {
 	installGroupCue,
 	playbackRuntime,
@@ -45,7 +46,9 @@ export function registerShow001PairedScenario(): void {
 			};
 		},
 		api: async ({ api }, state) => {
-			await api.command("selection.set", {
+			await replaceProgrammingSelection(api, {
+				surface: "api",
+				showId: state.copyId,
 				fixtures: [state.fixtureIds[5], state.fixtureIds[6]],
 			});
 			await api.executeCommandLine("RECORD + GROUP 3");

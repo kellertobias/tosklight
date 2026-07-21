@@ -4,6 +4,7 @@ import {
 	test,
 } from "../../apps/control-ui/e2e/bench/fixtures";
 import { setProgrammerFixtureValue } from "../../apps/control-ui/e2e/bench/programmerValues";
+import { replaceProgrammingSelection } from "../../apps/control-ui/e2e/bench/programmingSelection";
 import {
 	loadCanonicalCopy,
 	object,
@@ -201,7 +202,11 @@ async function exerciseCueUpdate(
 		migratedDefaults,
 		authoritativeCueBaseline,
 	} = state;
-	await api.command("selection.set", { fixtures: [first, second] });
+	await replaceProgrammingSelection(api, {
+		surface: "api",
+		showId: show.id,
+		fixtures: [first, second],
+	});
 	await setProgrammerFixtureValue(api, {
 		surface: "api",
 		showId: show.id,
@@ -326,7 +331,9 @@ async function exerciseGroupUpdate(
 		migratedDefaults,
 		authoritativeGroupBaseline,
 	} = state;
-	await api.command("selection.set", {
+	await replaceProgrammingSelection(api, {
+		surface: "api",
+		showId: show.id,
 		fixtures: [second, third, first, fourth],
 	});
 	const group = await object<any>(api, "group", groupId);

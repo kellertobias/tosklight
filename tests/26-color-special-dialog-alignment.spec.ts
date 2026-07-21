@@ -2,6 +2,7 @@ import type { Page } from "../apps/control-ui/node_modules/@playwright/test/inde
 import { expect } from "../apps/control-ui/e2e/bench/fixtures";
 import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
 import { batchProgrammerValues } from "../apps/control-ui/e2e/bench/programmerValues";
+import { replaceProgrammingSelection } from "../apps/control-ui/e2e/bench/programmingSelection";
 import {
   colorProgrammerAssignments,
   interpolatePickerRange,
@@ -60,7 +61,11 @@ pairedScenario<ColorRangeState>({
       interpolatePickerRange(selected.length, start, end),
     );
     const prior = range.map((assignment) => ({ ...assignment, value: 0.33 }));
-    await api.command("selection.set", { fixtures: selected });
+    await replaceProgrammingSelection(api, {
+      surface: "api",
+      showId: show.id,
+      fixtures: selected,
+    });
     await setMany(api, show.id, prior);
     return { showId: show.id, selected, range, prior };
   },
