@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useServer } from "../api/ServerContext";
 import type { CueList, VisualizationSnapshot } from "../api/types";
 import { fixtures } from "../data/mockData";
@@ -7,7 +6,7 @@ import {
 	useGroupRuntimeAuthority,
 } from "../features/groupRuntime/groupRuntimeAuthority";
 import { useProgrammerValueTargets } from "../features/programmerValues/useProgrammerValueTargets";
-import { usePollingResource } from "../hooks/usePollingResource";
+import { useVisualizationRuntimeSnapshot } from "../features/visualizationRuntime/VisualizationRuntimeView";
 import type { FixtureSheetIncludedHeads, FixtureSheetOrder } from "../types";
 import {
 	activeProgrammerFixtureIds,
@@ -286,25 +285,14 @@ export function useFixtureSheetVisualizations(
 	preloadActive: boolean,
 	active = true,
 ) {
-	const server = useServer();
-	const [visualization, setVisualization] =
-		useState<VisualizationSnapshot | null>(null);
-	const [preloadVisualization, setPreloadVisualization] =
-		useState<VisualizationSnapshot | null>(null);
-
-	usePollingResource({
+	const visualization = useVisualizationRuntimeSnapshot({
 		enabled: active,
 		intervalMillis: 250,
-		refreshKey: preloadActive,
-		load: () =>
-			Promise.all([
-				server.readVisualization(),
-				preloadActive ? server.readVisualization(true) : Promise.resolve(null),
-			]),
-		onValue: ([next, preload]) => {
-			setVisualization(next);
-			setPreloadVisualization(preload);
-		},
+	});
+	const preloadVisualization = useVisualizationRuntimeSnapshot({
+		lane: "preload",
+		enabled: active && preloadActive,
+		intervalMillis: 250,
 	});
 
 	return { visualization, preloadVisualization };

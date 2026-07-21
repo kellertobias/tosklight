@@ -22,6 +22,7 @@ import { useSessionHandoff } from "../features/session/SessionHandoffContext";
 import { ShowObjectsViewProvider } from "../features/showObjects/ShowObjectsView";
 import { VirtualPlaybackZonesProvider } from "../features/virtualPlaybackZones/VirtualPlaybackZonesContext";
 import { ServerProgrammingProviders } from "./ServerProgrammingProviders";
+import { ServerVisualizationRuntimeBoundary } from "./ServerVisualizationRuntimeBoundary";
 import { useServerFeatureBoundaries } from "./useServerFeatureBoundaries";
 
 export type {
@@ -98,68 +99,72 @@ export function ServerProvider({
 	};
 	return (
 		<ServerContext.Provider value={value}>
-			<ShowObjectsViewProvider
-				showId={state.bootstrap?.active_show?.id ?? null}
-				authorityKey={boundaries.showObjectsAuthorityKey}
-				store={state.showObjectsStore}
-				transport={boundaries.showObjectsTransport}
-				loadCollection={boundaries.loadShowObjectCollection}
-				loadObject={boundaries.loadShowObjectSnapshot}
-				onError={boundaries.reportShowObjectError}
-			>
-				<PlaybackTopologyProvider
+			<ServerVisualizationRuntimeBoundary state={state}>
+				<ShowObjectsViewProvider
 					showId={state.bootstrap?.active_show?.id ?? null}
+					authorityKey={boundaries.showObjectsAuthorityKey}
 					store={state.showObjectsStore}
-					transport={boundaries.playbackTopologyTransport}
-					loadObject={boundaries.loadShowObject}
-					onError={boundaries.reportPlaybackTopologyError}
+					transport={boundaries.showObjectsTransport}
+					loadCollection={boundaries.loadShowObjectCollection}
+					loadObject={boundaries.loadShowObjectSnapshot}
+					onError={boundaries.reportShowObjectError}
 				>
-					<VirtualPlaybackZonesProvider
-						authority={boundaries.virtualPlaybackZonesAuthority}
-						transport={boundaries.virtualPlaybackZonesTransport}
+					<PlaybackTopologyProvider
+						showId={state.bootstrap?.active_show?.id ?? null}
+						store={state.showObjectsStore}
+						transport={boundaries.playbackTopologyTransport}
+						loadObject={boundaries.loadShowObject}
+						onError={boundaries.reportPlaybackTopologyError}
 					>
-						<GroupRecordingProvider
-							showId={state.bootstrap?.active_show?.id ?? null}
-							store={state.showObjectsStore}
-							transport={boundaries.groupRecordingTransport}
-							loadGroup={boundaries.loadGroupForRepair}
-							onError={boundaries.reportGroupRecordingError}
+						<VirtualPlaybackZonesProvider
+							authority={boundaries.virtualPlaybackZonesAuthority}
+							transport={boundaries.virtualPlaybackZonesTransport}
 						>
-							<PresetRecordingProvider
+							<GroupRecordingProvider
 								showId={state.bootstrap?.active_show?.id ?? null}
 								store={state.showObjectsStore}
-								transport={boundaries.presetRecordingTransport}
-								loadPreset={boundaries.loadPresetForRepair}
-								onError={boundaries.reportPresetRecordingError}
+								transport={boundaries.groupRecordingTransport}
+								loadGroup={boundaries.loadGroupForRepair}
+								onError={boundaries.reportGroupRecordingError}
 							>
-								<CueRecordingProvider
+								<PresetRecordingProvider
 									showId={state.bootstrap?.active_show?.id ?? null}
 									store={state.showObjectsStore}
-									playbackRuntimeStore={state.playbackRuntimeStore}
-									transport={boundaries.cueRecordingTransport}
-									selectedPlayback={boundaries.selectedCueRecordingPlayback}
-									loadObject={boundaries.loadShowObject}
-									onError={boundaries.reportCueRecordingError}
+									transport={boundaries.presetRecordingTransport}
+									loadPreset={boundaries.loadPresetForRepair}
+									onError={boundaries.reportPresetRecordingError}
 								>
-									<ServerProgrammingProviders
-										state={state}
-										boundaries={boundaries}
-										value={value}
+									<CueRecordingProvider
+										showId={state.bootstrap?.active_show?.id ?? null}
+										store={state.showObjectsStore}
+										playbackRuntimeStore={state.playbackRuntimeStore}
+										transport={boundaries.cueRecordingTransport}
+										selectedPlayback={
+											boundaries.selectedCueRecordingPlayback
+										}
+										loadObject={boundaries.loadShowObject}
+										onError={boundaries.reportCueRecordingError}
 									>
-										<SelectiveImportProvider source={selectiveImportSource}>
-											<FilesProvider source={fileSource}>
-												<ScreensProvider source={screenSource}>
-													{children}
-												</ScreensProvider>
-											</FilesProvider>
-										</SelectiveImportProvider>
-									</ServerProgrammingProviders>
-								</CueRecordingProvider>
-							</PresetRecordingProvider>
-						</GroupRecordingProvider>
-					</VirtualPlaybackZonesProvider>
-				</PlaybackTopologyProvider>
-			</ShowObjectsViewProvider>
+										<ServerProgrammingProviders
+											state={state}
+											boundaries={boundaries}
+											value={value}
+										>
+											<SelectiveImportProvider source={selectiveImportSource}>
+												<FilesProvider source={fileSource}>
+													<ScreensProvider source={screenSource}>
+														{children}
+													</ScreensProvider>
+												</FilesProvider>
+											</SelectiveImportProvider>
+										</ServerProgrammingProviders>
+									</CueRecordingProvider>
+								</PresetRecordingProvider>
+							</GroupRecordingProvider>
+						</VirtualPlaybackZonesProvider>
+					</PlaybackTopologyProvider>
+				</ShowObjectsViewProvider>
+			</ServerVisualizationRuntimeBoundary>
 		</ServerContext.Provider>
 	);
 }

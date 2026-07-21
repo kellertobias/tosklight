@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useServer } from "../../../api/ServerContext";
 import type { VisualizationSnapshot } from "../../../api/types";
 import { capturesProgrammerWrites } from "../../../features/programmerCaptureMode/contracts";
 import { useProgrammerCaptureModeView } from "../../../features/programmerCaptureMode/ProgrammerCaptureModeView";
 import { selectedGroupId } from "../../../features/programmingInteraction/contracts";
 import { useProgrammingSelectionView } from "../../../features/programmingInteraction/ProgrammingInteractionView";
-import { usePollingResource } from "../../../hooks/usePollingResource";
+import { useVisualizationRuntimeSnapshot } from "../../../features/visualizationRuntime/VisualizationRuntimeView";
 import { useApp } from "../../../state/AppContext";
 import {
 	directProgrammerChoices,
@@ -26,20 +26,10 @@ function useVisualization(
 	active: boolean,
 	selectedFixtureIds: readonly string[],
 ) {
-	const server = useServer();
-	const [visualization, setVisualization] =
-		useState<VisualizationSnapshot | null>(null);
-	useEffect(() => {
-		if (active && selectedFixtureIds.length) return;
-		setVisualization(null);
-	}, [active, selectedFixtureIds.length]);
-	usePollingResource({
+	return useVisualizationRuntimeSnapshot({
 		enabled: active && selectedFixtureIds.length > 0,
 		intervalMillis: 400,
-		load: server.readVisualization,
-		onValue: setVisualization,
 	});
-	return visualization;
 }
 
 function useSupportedAttributes(

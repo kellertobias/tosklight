@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { VisualizationSnapshot } from "../../api/types";
 import type {
 	ProgrammerFixtureValue,
 	ProgrammerGroupValue,
@@ -48,6 +49,9 @@ const normalValuesActions = vi.hoisted(() => ({
 const preloadValuesActions = vi.hoisted(() => ({
 	batch: vi.fn(async () => null),
 }));
+const visualization = vi.hoisted(() => ({
+	snapshot: null as VisualizationSnapshot | null,
+}));
 const legacyProgrammerValuesAccess = vi.fn();
 const legacyPlaybackAccess = vi.fn();
 const server = {
@@ -82,6 +86,13 @@ vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state, dispatch }),
 }));
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
+vi.mock(
+	"../../features/visualizationRuntime/VisualizationRuntimeView",
+	() => ({
+		useVisualizationRuntimeSnapshot: ({ enabled = true }) =>
+			enabled ? visualization.snapshot : null,
+	}),
+);
 vi.mock(
 	"../../features/programmerCaptureMode/ProgrammerCaptureModeView",
 	() => ({
@@ -170,6 +181,7 @@ afterEach(() => {
 	captureMode.projection.blind = false;
 	captureMode.projection.preview = false;
 	captureMode.projection.preloadCaptureProgrammer = true;
+	visualization.snapshot = null;
 	vi.clearAllMocks();
 });
 
@@ -620,8 +632,7 @@ describe("ParameterControls hardware feedback values", () => {
 				},
 			},
 		];
-		server.readVisualization.mockResolvedValue({
-			values: [
+		visualization.snapshot = visualizationSnapshot([
 				{
 					fixture_id: "fixture-1",
 					attribute: "intensity",
@@ -632,8 +643,7 @@ describe("ParameterControls hardware feedback values", () => {
 					attribute: "intensity",
 					value: { kind: "normalized", value: 0.75 },
 				},
-			],
-		});
+			]);
 
 		render(<ParameterControls />);
 
@@ -716,15 +726,13 @@ describe("ParameterControls programmer targets and alignment", () => {
 				delayMillis: null,
 			},
 		];
-		server.readVisualization.mockResolvedValue({
-			values: [
+		visualization.snapshot = visualizationSnapshot([
 				{
 					fixture_id: "fixture-1",
 					attribute: "intensity",
 					value: { kind: "normalized", value: 0 },
 				},
-			],
-		});
+			]);
 
 		render(<ParameterControls />);
 
@@ -785,15 +793,13 @@ describe("ParameterControls Group targets and alignment", () => {
 				delayMillis: null,
 			},
 		];
-		server.readVisualization.mockResolvedValue({
-			values: [
+		visualization.snapshot = visualizationSnapshot([
 				{
 					fixture_id: "fixture-1",
 					attribute: "intensity",
 					value: { kind: "normalized", value: 0 },
 				},
-			],
-		});
+			]);
 
 		render(<ParameterControls />);
 
@@ -826,6 +832,20 @@ describe("ParameterControls Group targets and alignment", () => {
 		expect(server.alignSelection).toHaveBeenCalledTimes(4);
 	});
 });
+
+function visualizationSnapshot(
+	values: VisualizationSnapshot["values"],
+): VisualizationSnapshot {
+	return {
+		revision: 1,
+		generated_at: "2026-07-21T09:00:00Z",
+		grand_master: 1,
+		blackout: false,
+		preload: false,
+		values,
+		profile_output_values: [],
+	};
+}
 
 describe("ParameterControls schema-v2 direct picker", () => {
 	it("programs indexed values by stable semantic ID", () => {

@@ -14,7 +14,7 @@ import {
 	programmerValuesMutationKey,
 	useProgrammerValuesMutationQueue,
 } from "../features/programmerValues/useProgrammerValuesMutationQueue";
-import { usePollingResource } from "../hooks/usePollingResource";
+import { useVisualizationRuntimeSnapshot } from "../features/visualizationRuntime/VisualizationRuntimeView";
 import { fixtureValue } from "./fixtureVisualization";
 import type { WindowProps } from "./windowTypes";
 
@@ -90,16 +90,10 @@ export function ChannelsWindow({ active = true, compact }: WindowProps) {
 }
 
 function useChannelVisualization(active: boolean) {
-	const server = useServer();
-	const [visualization, setVisualization] =
-		useState<VisualizationSnapshot | null>(null);
-	usePollingResource({
+	return useVisualizationRuntimeSnapshot({
 		enabled: active,
 		intervalMillis: 250,
-		load: server.readVisualization,
-		onValue: setVisualization,
 	});
-	return visualization;
 }
 
 function channelProjection(
