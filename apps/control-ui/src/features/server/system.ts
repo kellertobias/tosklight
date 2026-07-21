@@ -3,6 +3,19 @@ import type { CueList, StoredGroup, StoredPreset } from "../../api/types";
 import type { ServerController } from "./model";
 import type { ServerContextValue } from "./ServerContextValue";
 
+/**
+ * Paperwork is a one-shot operator export, so it reads the current Patch on demand instead of
+ * keeping a broad Patch snapshot resident. A Patch read failure degrades the export rather than
+ * blocking it or masking a more relevant collection error.
+ */
+async function readPatchForPaperwork(client: ServerController["client"]) {
+	try {
+		return await client.patch();
+	} catch {
+		return null;
+	}
+}
+
 export function createSystemActions(
 	model: ServerController,
 ): Pick<
@@ -19,7 +32,6 @@ export function createSystemActions(
 		setError,
 		bootstrap,
 		session,
-		patch,
 		commandTargetModeRef,
 		setCommandLineState,
 		setCommandLinePristine,
@@ -34,6 +46,7 @@ export function createSystemActions(
 		exportPaperwork: async () => {
 			try {
 				const showId = bootstrap?.active_show?.id;
+				const patch = showId ? await readPatchForPaperwork(client) : null;
 				const [groups, presets, cueLists] = showId
 					? await Promise.all([
 							client.objects<StoredGroup>(showId, "group"),

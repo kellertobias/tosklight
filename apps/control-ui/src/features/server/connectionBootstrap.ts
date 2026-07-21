@@ -57,7 +57,6 @@ async function ensureActiveShow(
 
 async function loadInitialResources(client: LightApiClient) {
 	const [
-		patch,
 		programmers,
 		shows,
 		configuration,
@@ -67,7 +66,6 @@ async function loadInitialResources(client: LightApiClient) {
 		fixtureProfileWarnings,
 		screens,
 	] = await Promise.all([
-		client.patch(),
 		client.programmers(),
 		client.shows(),
 		client.configuration(),
@@ -78,7 +76,6 @@ async function loadInitialResources(client: LightApiClient) {
 		client.screens(),
 	]);
 	return {
-		patch,
 		programmers,
 		shows,
 		configuration,
@@ -94,7 +91,6 @@ function installInitialResources(
 	state: ServerState,
 	resources: Awaited<ReturnType<typeof loadInitialResources>>,
 ) {
-	state.setPatch(resources.patch);
 	state.setShows(resources.shows);
 	state.setConfiguration(resources.configuration.configuration);
 	state.setMatter(resources.configuration.matter);

@@ -11,7 +11,6 @@ import type {
 	MediaServerFixture,
 	OutputRoute,
 	PatchLayer,
-	PatchSnapshot,
 	SessionResponse,
 	ShowEntry,
 	VersionedObject,
@@ -48,7 +47,6 @@ export interface ServerCoreContext
 	unlockDesk: (pin?: string) => Promise<boolean>;
 	createUser: (name: string) => Promise<void>;
 	changeUser: (user: import("../../api/types").DeskUser) => Promise<void>;
-	patch: PatchSnapshot | null;
 	outputRoutes: VersionedObject<OutputRoute>[];
 	patchLayers: VersionedObject<PatchLayer>[];
 	shows: ShowEntry[];

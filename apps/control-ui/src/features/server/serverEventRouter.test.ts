@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
 	BootstrapSnapshot,
 	OutputRoute,
-	PatchSnapshot,
 	ServerEvent,
 	SessionResponse,
 	VersionedObject,
@@ -96,7 +95,6 @@ function createHarness(showId = "show-a") {
 		unresolvedMvrFixtures: [],
 		deskLayout: null,
 		stageLayout: null,
-		patch: { revision: 1, fixtures: [], routes: [] },
 		selectedFixtures: [],
 		selectedGroupId: null,
 		commandLineWrite: { current: Promise.resolve() },
@@ -125,9 +123,6 @@ function createHarness(showId = "show-a") {
 		}),
 		setStageLayout: vi.fn((next) => {
 			state.stageLayout = apply(state.stageLayout, next);
-		}),
-		setPatch: vi.fn((next) => {
-			state.patch = apply(state.patch, next);
 		}),
 		setSelectedFixtures: vi.fn((next) => {
 			state.selectedFixtures = apply(state.selectedFixtures, next);
@@ -271,21 +266,16 @@ describe("show object event reconciliation", () => {
 		);
 		expect(harness.client.objects).toHaveBeenCalledWith("show-a", "route");
 		expect(harness.state.outputRoutes).toEqual([route]);
-		expect((harness.state.patch as PatchSnapshot | null)?.routes).toEqual([
-			route.body,
-		]);
 		expect(harness.client.object).not.toHaveBeenCalled();
 		expect(harness.client.patch).not.toHaveBeenCalled();
 		expect(harness.loadShowObjects).not.toHaveBeenCalled();
 	});
 
-	it("reads only the affected patched Fixture projection", async () => {
+	it("leaves patched Fixture events to the scoped Patch authority", async () => {
 		const harness = createHarness();
 		harness.route(showObjectEvent("patched_fixture", "fixture-1"));
-		await vi.waitFor(() =>
-			expect(harness.client.patch).toHaveBeenCalledOnce(),
-		);
-		expect(harness.state.setPatch).toHaveBeenCalledOnce();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(harness.client.patch).not.toHaveBeenCalled();
 		expect(harness.client.object).not.toHaveBeenCalled();
 		expect(harness.client.bootstrap).not.toHaveBeenCalled();
 		expect(harness.loadShowObjects).not.toHaveBeenCalled();
@@ -361,11 +351,6 @@ describe("show object event reconciliation", () => {
 			minimum_slots: 0,
 		});
 		harness.state.outputRoutes = [route];
-		harness.state.patch = {
-			revision: 1,
-			fixtures: [],
-			routes: [route.body],
-		} as PatchSnapshot;
 		harness.route(
 			showObjectEvent("route", "route-1", 5, 10, { deleted: true }),
 		);
@@ -375,7 +360,6 @@ describe("show object event reconciliation", () => {
 		expect(harness.client.object).not.toHaveBeenCalled();
 		expect(harness.client.objects).toHaveBeenCalledWith("show-a", "route");
 		expect(harness.state.outputRoutes).toEqual([]);
-		expect((harness.state.patch as PatchSnapshot | null)?.routes).toEqual([]);
 	});
 
 	it("applies an explicit generic-object deletion without a read", async () => {

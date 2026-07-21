@@ -109,13 +109,11 @@ export function useServerRefresh(
 		setFixtureProfileWarnings,
 		setMatter,
 		setMediaServers,
-		setPatch,
 		setShows,
 	} = state;
 	return useCallback(async () => {
 		const bootstrap = await client.bootstrap();
 		setBootstrap(bootstrap);
-		setPatch(await client.patch());
 		setShows(await client.shows());
 		const configuration = await client.configuration();
 		setConfiguration(configuration.configuration);
@@ -141,7 +139,6 @@ export function useServerRefresh(
 		setFixtureProfileWarnings,
 		setMatter,
 		setMediaServers,
-		setPatch,
 		setShows,
 	]);
 }

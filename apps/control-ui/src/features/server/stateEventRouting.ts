@@ -186,14 +186,6 @@ function isScopedCommandLineEdit(event: ServerEvent) {
 	return hasExactUniqueChanges(event, interactionChanges);
 }
 
-function refreshPatch(event: ServerEvent, state: ServerState) {
-	if (event.kind !== "show_opened") return;
-	void state.client
-		.patch()
-		.then(state.setPatch)
-		.catch(() => undefined);
-}
-
 function refreshFixtureLibrary(event: ServerEvent, state: ServerState) {
 	if (
 		!["fixture_library_changed", "fixture_profile_changed"].includes(event.kind)
@@ -274,7 +266,6 @@ export function createStateEventRouter(
 		refreshConfiguration(event, state);
 		refreshScreens(event, state);
 		refreshBootstrap(event, session, getState, loadShowObjects);
-		refreshPatch(event, state);
 		refreshFixtureLibrary(event, state);
 		refreshShows(event, state);
 		refreshMedia(event, state);

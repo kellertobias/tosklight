@@ -13,7 +13,6 @@ export function createServerSnapshotValue(
 	| "bootstrap"
 	| "session"
 	| "deskLock"
-	| "patch"
 	| "outputRoutes"
 	| "patchLayers"
 	| "screens"
@@ -49,7 +48,6 @@ export function createServerSnapshotValue(
 		bootstrap,
 		session,
 		deskLock,
-		patch,
 		outputRoutes,
 		patchLayers,
 		screens,
@@ -87,7 +85,6 @@ export function createServerSnapshotValue(
 		bootstrap,
 		session,
 		deskLock,
-		patch,
 		outputRoutes,
 		patchLayers,
 		screens,

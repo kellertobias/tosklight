@@ -271,11 +271,6 @@ function enqueueRouteProjection(
 			const state = getState();
 			if (!isCurrent() || activeShowId(state) !== change.showId) return;
 			state.setOutputRoutes(routes);
-			state.setPatch((current) =>
-				current
-					? { ...current, routes: routes.map((route) => route.body) }
-					: current,
-			);
 		},
 	});
 }
@@ -294,19 +289,8 @@ export function createShowObjectEventReconciler(
 			enqueueRouteProjection(queue, getState, change);
 			return;
 		}
-		if (change.kind === "patched_fixture") {
-			queue.enqueue({
-				key: projectionKey(change, "patch"),
-				sequence: change.sequence,
-				run: async (isCurrent) => {
-					const next = await getState().client.patch();
-					const state = getState();
-					if (isCurrent() && activeShowId(state) === change.showId)
-						state.setPatch(next);
-				},
-			});
-			return;
-		}
+		// Patch fixtures are owned by the scoped Patch authority and its own delta stream.
+		if (change.kind === "patched_fixture") return;
 		if (!isSingleObjectKind(change.kind)) return;
 		queue.enqueue({
 			key: objectKey(change),

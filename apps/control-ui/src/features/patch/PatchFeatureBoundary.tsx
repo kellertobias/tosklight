@@ -7,6 +7,7 @@ import {
 import { useServer } from "../../api/ServerContext";
 import { mergeFixtureDefinitions } from "../../components/setup/fixtureProfileModel";
 import { PatchViewProvider, useOptionalPatch } from "./PatchContext";
+import { EMPTY_FIXTURES } from "./selectors";
 
 /** Composes one lazy Patch authority for all consumers under this boundary. */
 export function PatchFeatureBoundary({ children }: PropsWithChildren) {
@@ -39,7 +40,7 @@ function PatchFeatureProvider({ children }: PropsWithChildren) {
 	return (
 		<PatchViewProvider
 			showId={server.bootstrap?.active_show?.id ?? null}
-			initialFixtures={server.patch?.fixtures ?? []}
+			initialFixtures={EMPTY_FIXTURES}
 			definitions={definitions}
 			transport={transport}
 		>

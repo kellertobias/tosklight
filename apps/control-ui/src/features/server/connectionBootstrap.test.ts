@@ -61,7 +61,6 @@ function createHarness() {
 		setConnectionGeneration: vi.fn(),
 		setCommandHistory: vi.fn(),
 		setDeskLock: vi.fn(),
-		setPatch: vi.fn(),
 		setShows: vi.fn(),
 		setConfiguration: vi.fn(),
 		setMatter: vi.fn(),
@@ -103,7 +102,7 @@ describe("connection bootstrap resources", () => {
 		);
 
 		expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
-		expect(harness.clientMethods.patch).toHaveBeenCalledOnce();
+		expect(harness.clientMethods.patch).not.toHaveBeenCalled();
 		expect(harness.clientMethods.programmers).toHaveBeenCalledOnce();
 		expect(harness.clientMethods.screens).toHaveBeenCalledOnce();
 		expect(harness.state.setScreens).toHaveBeenCalledWith(harness.screens);

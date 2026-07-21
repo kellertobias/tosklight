@@ -21,7 +21,6 @@ describe("Programmer lifecycle system actions", () => {
 			setError,
 			bootstrap: null,
 			session: { session_id: "session-a" },
-			patch: null,
 			playbacks: null,
 			commandTargetModeRef: { current: "FIXTURE" },
 			setCommandLineState,
@@ -65,10 +64,9 @@ describe("paperwork export", () => {
 		const download = mockDownload();
 		const setError = vi.fn();
 		const model = systemModel({
-			client: { objects },
+			client: { objects, patch: vi.fn(async () => ({ fixtures: ["fixture-a"] })) },
 			setError,
 			bootstrap: { active_show: { id: "show-a", name: "Tour" } },
-			patch: { fixtures: ["fixture-a"] },
 		});
 		Object.defineProperty(model, "playbacks", {
 			get: () => {
@@ -152,7 +150,6 @@ function systemModel(overrides: Record<string, unknown>) {
 		setError: vi.fn(),
 		bootstrap: null,
 		session: null,
-		patch: null,
 		commandTargetModeRef: { current: "FIXTURE" },
 		setCommandLineState: vi.fn(),
 		setCommandLinePristine: vi.fn(),

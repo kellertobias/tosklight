@@ -12,7 +12,7 @@ export function createOutputActions(
 	| "saveOutputRoute"
 	| "deleteOutputRoute"
 > {
-	const { client, setError, bootstrap, setPatch, setOutputRoutes } = model;
+	const { client, setError, bootstrap, setOutputRoutes } = model;
 	return {
 		readDmx: () => client.dmx(),
 		readVisualization: (preload = false) => client.visualization(preload),
@@ -34,7 +34,6 @@ export function createOutputActions(
 					route,
 					revision,
 				);
-				setPatch(await client.patch());
 				setOutputRoutes(
 					await client.objects<OutputRoute>(bootstrap.active_show.id, "route"),
 				);
@@ -54,7 +53,6 @@ export function createOutputActions(
 					id,
 					revision,
 				);
-				setPatch(await client.patch());
 				setOutputRoutes(
 					await client.objects<OutputRoute>(bootstrap.active_show.id, "route"),
 				);

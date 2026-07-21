@@ -10,7 +10,6 @@ import type {
 	MatterBridgeStatus,
 	OutputRoute,
 	PatchLayer,
-	PatchSnapshot,
 	ScreenSnapshot,
 	SessionResponse,
 	ShowEntry,
@@ -37,7 +36,6 @@ export function useServerState() {
 	const [deskLock, setDeskLock] = useState<
 		import("../../api/types").DeskLockState | null
 	>(null);
-	const [patch, setPatch] = useState<PatchSnapshot | null>(null);
 	const [outputRoutes, setOutputRoutes] = useState<
 		VersionedObject<OutputRoute>[]
 	>([]);
@@ -101,8 +99,6 @@ export function useServerState() {
 		setConnectionGeneration,
 		deskLock,
 		setDeskLock,
-		patch,
-		setPatch,
 		outputRoutes,
 		setOutputRoutes,
 		patchLayers,
