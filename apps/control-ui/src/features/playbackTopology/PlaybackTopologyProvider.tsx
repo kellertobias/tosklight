@@ -1,23 +1,20 @@
 import {
 	createContext,
 	type PropsWithChildren,
-	useContext,
 	useCallback,
+	useContext,
 	useEffect,
 	useMemo,
 	useState,
 } from "react";
-import type {
-	ShowObject,
-	ShowObjectKind,
-} from "../showObjects/contracts";
+import { useStrictModeSafeStop } from "../shared/useStrictModeSafeStop";
+import type { ShowObject, ShowObjectKind } from "../showObjects/contracts";
 import type { ShowObjectsStore } from "../showObjects/store";
 import type {
 	PlaybackTopologyActions,
 	PlaybackTopologyCapability,
 	PlaybackTopologyTransport,
 } from "./contracts";
-import { useStrictModeSafeStop } from "../shared/useStrictModeSafeStop";
 import { PlaybackTopologyWriter } from "./writer";
 
 interface PlaybackTopologyProviderProps {
@@ -32,9 +29,8 @@ interface PlaybackTopologyProviderProps {
 	onError?: (error: Error | null) => void;
 }
 
-const PlaybackTopologyContext = createContext<PlaybackTopologyCapability | null>(
-	null,
-);
+const PlaybackTopologyContext =
+	createContext<PlaybackTopologyCapability | null>(null);
 
 /** Action-only boundary; views separately opt into exact topology hydration. */
 export function PlaybackTopologyProvider({
@@ -73,6 +69,7 @@ export function PlaybackTopologyProvider({
 			writer && {
 				saveCueList: writer.saveCueList.bind(writer),
 				configureSlot: writer.configureSlot.bind(writer),
+				mapExistingPlayback: writer.mapExistingPlayback.bind(writer),
 				clearMappedPlayback: writer.clearMappedPlayback.bind(writer),
 			},
 		[writer],

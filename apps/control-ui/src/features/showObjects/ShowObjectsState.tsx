@@ -46,8 +46,13 @@ export function ShowObjectsStateProvider({
 	);
 }
 
-export function usePortableGroups(): readonly GroupObject[] {
-	return useShowObjectsSelector(selectPortableGroups, equalGroupCollection);
+export function usePortableGroups(enabled = true): readonly GroupObject[] {
+	const selector = useCallback(
+		(snapshot: ShowObjectsSnapshot) =>
+			enabled ? selectPortableGroups(snapshot) : EMPTY_GROUPS,
+		[enabled],
+	);
+	return useShowObjectsSelector(selector, equalGroupCollection, enabled);
 }
 
 export function useShowObjectsStore(): ShowObjectsStore {
@@ -153,6 +158,7 @@ function useShowObjectsSelector<T>(
 }
 
 const NO_SUBSCRIPTION = () => () => undefined;
+const EMPTY_GROUPS: readonly GroupObject[] = [];
 
 function shallowEqualArray<T>(left: readonly T[], right: readonly T[]) {
 	return (

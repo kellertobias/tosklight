@@ -56,7 +56,8 @@ export function projectPlaybackSlots({
 		const cueListId =
 			playback?.target.type === "cue_list" ? playback.target.cue_list_id : null;
 		const cue = cueListId
-			? (cueLists.find((candidate) => candidate.id === cueListId)?.body ?? null)
+			? (cueLists.find((candidate) => candidate.body.id === cueListId)?.body ??
+				null)
 			: null;
 		const groupId =
 			playback?.target.type === "group" ? playback.target.group_id : null;

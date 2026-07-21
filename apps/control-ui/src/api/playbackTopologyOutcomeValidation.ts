@@ -1,14 +1,14 @@
-import type { CueList, PlaybackDefinition, PlaybackPage } from "./types";
 import type {
 	PlaybackTopologyAction,
 	PlaybackTopologyObject,
 	PlaybackTopologyResolution,
 } from "../features/playbackTopology/contracts";
-import { WireValidationError } from "./wireValidation";
 import {
 	sameKnownCueList,
 	sameKnownPlayback,
 } from "./playbackTopologyKnownBodies";
+import type { CueList, PlaybackDefinition, PlaybackPage } from "./types";
+import { WireValidationError } from "./wireValidation";
 
 /** Limits a successful response to authority owned by the submitted action. */
 export function validatePlaybackTopologyObjects(
@@ -23,6 +23,13 @@ export function validatePlaybackTopologyObjects(
 		return invalid("page-slot resolution", resolution);
 	if (action.type === "configure_slot")
 		return validateConfiguredSlot(
+			action,
+			resolution.playbackNumber,
+			objects,
+			status,
+		);
+	if (action.type === "map_existing_playback")
+		return validateMappedExistingPlayback(
 			action,
 			resolution.playbackNumber,
 			objects,
@@ -111,13 +118,44 @@ function validateConfiguredSlot(
 		invalid("the server-normalized requested Playback", objects);
 }
 
+function validateMappedExistingPlayback(
+	action: Extract<PlaybackTopologyAction, { type: "map_existing_playback" }>,
+	playbackNumber: number | null,
+	objects: PlaybackTopologyObject[],
+	status: "changed" | "no_change",
+) {
+	if (playbackNumber !== action.playbackNumber)
+		return invalid("the requested existing Playback number", playbackNumber);
+	if (objects.length !== 1)
+		return invalid("only the authoritative mapped Page", objects);
+	const page = matchingPage(objects, action.page);
+	if (
+		!page ||
+		(page.body as PlaybackPage).slots[String(action.slot)] !== playbackNumber
+	)
+		invalid("the authoritative existing-Playback Page mapping", objects);
+	validateStorageId(
+		page.objectId,
+		action.expectedPageObjectId,
+		String(action.page),
+		"Playback Page",
+	);
+	validateExactRevision(
+		page.objectRevision,
+		action.expectedPageRevision,
+		status,
+		"Playback Page",
+	);
+}
+
 function validateClearedSlot(
 	action: Extract<PlaybackTopologyAction, { type: "clear_mapped_playback" }>,
 	playbackNumber: number | null,
 	objects: PlaybackTopologyObject[],
 	status: "changed" | "no_change",
 ) {
-	if (playbackNumber == null) return validateEmptyClear(action, objects, status);
+	if (playbackNumber == null)
+		return validateEmptyClear(action, objects, status);
 	if (status !== "changed") invalid("a changed mapped-Playback clear", objects);
 	const deleted = objects.filter(
 		(object) => object.kind === "playback" && object.state === "deleted",
@@ -168,10 +206,7 @@ function validateEmptyClear(
 		return invalid("at most the requested empty Page", objects);
 	if (objects.length === 0) return;
 	const page = matchingPage(objects, action.page);
-	if (
-		!page ||
-		(page.body as PlaybackPage).slots[String(action.slot)] != null
-	)
+	if (!page || (page.body as PlaybackPage).slots[String(action.slot)] != null)
 		invalid("the requested empty Page", objects);
 	validateStorageId(
 		page.objectId,
@@ -205,7 +240,10 @@ function validateConfigureRevisions(
 		"Playback",
 	);
 	if (status === "changed" && !pageChanged && !playbackChanged)
-		invalid("at least one changed configured object revision", [page, playback]);
+		invalid("at least one changed configured object revision", [
+			page,
+			playback,
+		]);
 }
 
 function validatePossibleRevision(
@@ -233,12 +271,20 @@ function validateExactRevision(
 	else validateNoChangeRevision(actual, expected, label);
 }
 
-function validateChangedRevision(actual: number, expected: number, label: string) {
+function validateChangedRevision(
+	actual: number,
+	expected: number,
+	label: string,
+) {
 	if (actual !== expected + 1)
 		invalid(`${label} revision ${expected + 1}`, actual);
 }
 
-function validateNoChangeRevision(actual: number, expected: number, label: string) {
+function validateNoChangeRevision(
+	actual: number,
+	expected: number,
+	label: string,
+) {
 	if (actual !== expected) invalid(`${label} revision ${expected}`, actual);
 }
 

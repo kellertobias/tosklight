@@ -1,7 +1,6 @@
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useState } from "react";
 import type { PlaybackButtonAction, PlaybackDefinition } from "../../api/types";
-import { useServer } from "../../api/ServerContext";
 import { Button, ColorPickerField, FormField, FormLayout, MultiValueToggleField, SelectField, SwitchField, TextField } from "../common";
 import { ModalTitleBar } from "../common/ModalTitleBar";
 import { SelectionTree, WindowScrollArea, type SelectionListOption } from "../window-kit";
@@ -62,11 +61,6 @@ export interface PlaybackConfigurationModalProps {
   empty?: boolean;
   virtual?: boolean;
   onClose: () => void;
-}
-
-export function PlaybackConfigurationModal({ playback, page, slot, empty = false, virtual = false, onClose }: PlaybackConfigurationModalProps) {
-  const server = useServer();
-  return <PlaybackConfigurationDialog playback={playback} page={page} slot={slot} empty={empty} virtual={virtual} fallbackButtons={virtual ? 1 : server.playbacks?.desk.buttons ?? 3} save={server.savePlaybackSlot} clear={server.clearPlaybackSlot} error={server.error} onClose={onClose}/>;
 }
 
 export interface PlaybackConfigurationDialogProps extends PlaybackConfigurationModalProps {

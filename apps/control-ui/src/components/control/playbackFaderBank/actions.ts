@@ -20,11 +20,18 @@ export function openPlaybackConfiguration(
 	playback: PlaybackDefinition | null,
 	slot: number,
 ) {
-	const { server, dispatch, activePageNumber, buttons, cueLists } = controller;
+	const { dispatch, activePageNumber, buttons, topology } = controller;
+	if (activePageNumber == null) return;
+	const slotData = controller.slots.find((candidate) => candidate.slot === slot);
 	const fallbackButtons = Math.max(
 		0,
-		Math.min(3, buttons ?? server.playbacks?.desk.buttons ?? 3),
+		Math.min(3, slotData?.row?.button_count ?? buttons ?? 3),
 	);
+	const playbackObject = playback
+		? topology.playbacks.find(
+				(candidate) => candidate.body.number === playback.number,
+			)
+		: null;
 	controller.setConfiguration({
 		playback: normalizePlaybackTopology(
 			playback ??
@@ -32,15 +39,20 @@ export function openPlaybackConfiguration(
 					activePageNumber,
 					slot,
 					fallbackButtons,
-					true,
-					cueLists[0]?.id ?? "",
+					slotData?.row?.has_fader ?? true,
+					topology.cueLists[0]?.body.id ?? "",
 				),
 			fallbackButtons,
-			true,
+			slotData?.row?.has_fader ?? true,
 		),
 		page: activePageNumber,
 		slot,
 		empty: !playback,
+		fallbackButtons,
+		expectedPageRevision: controller.pageObject?.revision ?? 0,
+		expectedPageObjectId: controller.pageObject?.id ?? null,
+		expectedPlaybackRevision: playbackObject?.revision ?? 0,
+		expectedPlaybackObjectId: playbackObject?.id ?? null,
 	});
 	dispatch({ type: "SET_PLAYBACK_SET_ARMED", value: false });
 	dispatch({ type: "SET_CUELIST_SET_ARMED", value: false });
@@ -51,8 +63,14 @@ export async function selectPlayback(
 	controller: PlaybackBankController,
 	playback: PlaybackDefinition,
 ) {
-	await controller.server.poolPlaybackAction(playback.number, "select");
-	if (controller.selectionPending) void controller.command.reset();
+	const outcome = await controller.runtimeActions?.poolPlaybackAction(
+		playback.number,
+		"select",
+		{ surface: "physical" },
+	);
+	if (!outcome) return false;
+	if (controller.selectionPending) void controller.commandLineActions?.reset();
+	return true;
 }
 
 export async function recordPlayback(
@@ -61,7 +79,7 @@ export async function recordPlayback(
 	playback: PlaybackDefinition | null,
 	slot: number,
 ) {
-	if (!controller.state.storeArmed) return;
+	if (!controller.state.storeArmed || controller.activePageNumber == null) return;
 	event.preventDefault();
 	event.stopPropagation();
 	const settings = loadRecordSettings();
@@ -80,7 +98,7 @@ export async function recordPlayback(
 	});
 	if (!outcome) return;
 	controller.dispatch({ type: "SET_STORE_ARMED", value: false });
-	await controller.command.reset();
+	await controller.commandLineActions?.reset();
 }
 
 export async function activateHardwareCard(
@@ -106,7 +124,7 @@ export async function activateHardwareCard(
 			);
 		return;
 	}
-	await selectPlayback(controller, playback);
+	if (!(await selectPlayback(controller, playback))) return;
 	if (playback.target.type === "cue_list") {
 		controller.dispatch({ type: "OPEN_BUILTIN", kind: "cuelists" });
 		controller.dispatch({
@@ -121,12 +139,25 @@ export async function assignPlayback(
 	slot: number,
 ) {
 	const target = controller.state.cueListSetTarget;
-	if (target == null) return;
-	const ok = await controller.command.execute(
-		`SET ${target} AT ${controller.activePageNumber}.${slot}`,
+	if (target == null || controller.activePageNumber == null) return;
+	const source = controller.topology.playbacks.find(
+		(candidate) =>
+			candidate.body.number === target &&
+			candidate.body.target.type === "cue_list",
 	);
-	if (!ok) return;
-	await controller.server.refresh();
+	if (!source) return;
+	const outcome = await controller.topologyActions?.mapExistingPlayback(
+		controller.activePageNumber,
+		slot,
+		target,
+		{
+			expectedPageRevision: controller.pageObject?.revision ?? 0,
+			expectedPageObjectId: controller.pageObject?.id ?? null,
+			expectedPlaybackRevision: source.revision,
+			expectedPlaybackObjectId: source.id,
+		},
+	);
+	if (!outcome) return;
 	controller.dispatch({ type: "SET_CUELIST_SET_ARMED", value: false });
 }
 

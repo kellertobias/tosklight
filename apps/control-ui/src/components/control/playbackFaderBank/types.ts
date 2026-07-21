@@ -1,18 +1,12 @@
-import type { useServer } from "../../../api/ServerContext";
 import type {
 	CueList,
 	PlaybackDefinition,
 	PlaybackSurfaceRow,
 } from "../../../api/types";
+import type { LegacyPlaybackRuntime } from "../../../features/playbackRuntime/legacy";
 import type { ShowObject } from "../../../features/showObjects/contracts";
 
-export type PlaybackServer = ReturnType<typeof useServer>;
-export type PlaybackSnapshotActive = NonNullable<
-	PlaybackServer["playbacks"]
->["active"][number];
-export type AuthoritativeControls = NonNullable<
-	NonNullable<PlaybackServer["playbacks"]>["authoritative_controls"]
->;
+export type PlaybackSnapshotActive = LegacyPlaybackRuntime;
 export type PlaybackGroup = ShowObject<"group">;
 
 export type PlaybackSlotProjection = {
@@ -29,4 +23,9 @@ export type PlaybackConfigurationState = {
 	page: number;
 	slot: number;
 	empty: boolean;
+	fallbackButtons: number;
+	expectedPageRevision: number;
+	expectedPageObjectId: string | null;
+	expectedPlaybackRevision: number;
+	expectedPlaybackObjectId: string | null;
 };

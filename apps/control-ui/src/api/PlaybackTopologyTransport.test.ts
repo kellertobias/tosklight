@@ -13,9 +13,10 @@ function request(): PlaybackTopologyRequest {
 	return {
 		requestId: REQUEST_ID,
 		action: {
-			type: "clear_mapped_playback",
+			type: "map_existing_playback",
 			page: 1,
 			slot: 2,
+			playbackNumber: 7,
 			expectedPageRevision: 3,
 			expectedPageObjectId: "1",
 			expectedPlaybackRevision: 4,
@@ -42,13 +43,7 @@ function outcome() {
 				kind: "playback_page",
 				object_id: "1",
 				object_revision: 4,
-				body: { number: 1, name: "Page 1", slots: {} },
-			},
-			{
-				state: "deleted",
-				kind: "playback",
-				object_id: "7",
-				object_revision: 5,
+				body: { number: 1, name: "Page 1", slots: { 2: 7 } },
 			},
 		],
 		event_sequence: 19,
@@ -77,10 +72,12 @@ describe("Playback topology v2 HTTP adapter", () => {
 		});
 		expect(fetchMock).not.toHaveBeenCalled();
 
-		await expect(transport.apply(SHOW_ID, 7, request())).resolves.toMatchObject({
-			status: "changed",
-			showRevision: 8,
-		});
+		await expect(transport.apply(SHOW_ID, 7, request())).resolves.toMatchObject(
+			{
+				status: "changed",
+				showRevision: 8,
+			},
+		);
 
 		const [url, init] = fetchMock.mock.calls[0];
 		expect(String(url)).toBe(
@@ -93,9 +90,10 @@ describe("Playback topology v2 HTTP adapter", () => {
 		expect(JSON.parse(String(init?.body))).toEqual({
 			request_id: REQUEST_ID,
 			action: {
-				type: "clear_mapped_playback",
+				type: "map_existing_playback",
 				page: 1,
 				slot: 2,
+				playback_number: 7,
 				expected_page_revision: 3,
 				expected_page_object_id: "1",
 				expected_playback_revision: 4,
@@ -143,9 +141,9 @@ describe("Playback topology v2 HTTP adapter", () => {
 				sessionToken: "session-token",
 				fetch: vi.fn(async () => result) as typeof fetch,
 			});
-			await expect(transport.apply(SHOW_ID, 7, request())).rejects.toBeInstanceOf(
-				WireValidationError,
-			);
+			await expect(
+				transport.apply(SHOW_ID, 7, request()),
+			).rejects.toBeInstanceOf(WireValidationError);
 		}
 	});
 

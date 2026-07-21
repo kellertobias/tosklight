@@ -31,6 +31,11 @@ export interface VerticalTouchFaderProps {
 	onChange?: (value: number) => void;
 }
 
+export interface VerticalTouchFaderSurfaceProps
+	extends VerticalTouchFaderProps {
+	hardware: boolean;
+}
+
 interface SetValueDialogProps {
 	label: string;
 	value: string;
@@ -192,7 +197,21 @@ function FaderActions({ actions }: { actions: VerticalTouchFaderAction[] }) {
 	);
 }
 
-export function VerticalTouchFader({
+export function VerticalTouchFader(props: VerticalTouchFaderProps) {
+	const server = useServer();
+	const { state } = useApp();
+	return (
+		<VerticalTouchFaderSurface
+			{...props}
+			hardware={Boolean(
+				server.bootstrap?.hardware_connected || state.midiProfile,
+			)}
+		/>
+	);
+}
+
+/** Pure fader surface for feature owners that already have scoped layout state. */
+export function VerticalTouchFaderSurface({
 	label,
 	value,
 	maximum = 100,
@@ -204,12 +223,8 @@ export function VerticalTouchFader({
 	directInputOffset = 0,
 	actions = [],
 	onChange,
-}: VerticalTouchFaderProps) {
-	const server = useServer();
-	const { state } = useApp();
-	const hardware = Boolean(
-		server.bootstrap?.hardware_connected || state.midiProfile,
-	);
+	hardware,
+}: VerticalTouchFaderSurfaceProps) {
 	const fader = useFaderInteraction(value, onChange);
 	const input = useDirectInput(
 		fader.localValue,

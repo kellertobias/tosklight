@@ -1,4 +1,3 @@
-import type { PlaybackDefinition } from "./types";
 import type {
 	PlaybackTopologyAction,
 	PlaybackTopologyObject,
@@ -7,6 +6,7 @@ import type {
 	PlaybackTopologyResolution,
 } from "../features/playbackTopology/contracts";
 import type { ShowObjectKind } from "../features/showObjects/contracts";
+import { validatePlaybackTopologyObjects } from "./playbackTopologyOutcomeValidation";
 import {
 	arrayAt,
 	booleanAt,
@@ -17,8 +17,8 @@ import {
 	stringAt,
 } from "./playbackWirePrimitives";
 import { decodeShowObjectBody } from "./showObjectBodyWire";
+import type { PlaybackDefinition } from "./types";
 import { WireValidationError } from "./wireValidation";
-import { validatePlaybackTopologyObjects } from "./playbackTopologyOutcomeValidation";
 
 const TOPOLOGY_KINDS = [
 	"cue_list",
@@ -45,7 +45,9 @@ export interface PlaybackTopologyErrorResponse {
 	retryable: boolean;
 }
 
-export function encodePlaybackTopologyRequest(request: PlaybackTopologyRequest) {
+export function encodePlaybackTopologyRequest(
+	request: PlaybackTopologyRequest,
+) {
 	printableAt(request.requestId, "$.requestId", 128);
 	return {
 		request_id: request.requestId,
@@ -65,7 +67,8 @@ export function decodePlaybackTopologyOutcome(
 	if (requestId !== request.requestId)
 		invalid("$.request_id", `request ${request.requestId}`, requestId);
 	const showRevision = integerAt(outcome.show_revision, "$.show_revision");
-	const expectedRevision = expectedShowRevision + (status === "changed" ? 1 : 0);
+	const expectedRevision =
+		expectedShowRevision + (status === "changed" ? 1 : 0);
 	if (showRevision !== expectedRevision)
 		invalid("$.show_revision", String(expectedRevision), showRevision);
 	const resolution = decodeResolution(outcome.resolution, request.action);
@@ -100,7 +103,10 @@ export function decodePlaybackTopologyErrorResponse(
 	return {
 		kind: enumAt(error.kind, "$.kind", ERROR_KINDS),
 		error: stringAt(error.error, "$.error"),
-		currentRevision: optionalInteger(error.current_revision, "$.current_revision"),
+		currentRevision: optionalInteger(
+			error.current_revision,
+			"$.current_revision",
+		),
 		currentRelatedRevision: optionalInteger(
 			error.current_related_revision,
 			"$.current_related_revision",
@@ -136,9 +142,49 @@ function encodeAction(action: PlaybackTopologyAction) {
 		),
 		expected_playback_object_id: action.expectedPlaybackObjectId,
 	};
-	return action.type === "configure_slot"
-		? { ...shared, playback: encodePlayback(action.playback) }
-		: shared;
+	if (action.type === "configure_slot")
+		return { ...shared, playback: encodePlayback(action.playback) };
+	if (action.type === "map_existing_playback") {
+		validateExistingPlaybackAuthority(action);
+		return {
+			...shared,
+			playback_number: boundedPositiveInteger(
+				action.playbackNumber,
+				"$.action.playbackNumber",
+				1000,
+			),
+		};
+	}
+	return shared;
+}
+
+function validateExistingPlaybackAuthority(
+	action: Extract<PlaybackTopologyAction, { type: "map_existing_playback" }>,
+) {
+	const pageIsAbsent = action.expectedPageObjectId === null;
+	if (pageIsAbsent !== (action.expectedPageRevision === 0))
+		invalid(
+			"$.action.expectedPageRevision",
+			"an exact present or absent Page identity",
+			action.expectedPageRevision,
+		);
+	if (!pageIsAbsent)
+		printableAt(
+			action.expectedPageObjectId,
+			"$.action.expectedPageObjectId",
+			128,
+		);
+	if (action.expectedPlaybackRevision < 1)
+		invalid(
+			"$.action.expectedPlaybackRevision",
+			"an existing Playback revision",
+			action.expectedPlaybackRevision,
+		);
+	printableAt(
+		action.expectedPlaybackObjectId,
+		"$.action.expectedPlaybackObjectId",
+		128,
+	);
 }
 
 function encodePlayback(playback: PlaybackDefinition) {
@@ -189,11 +235,7 @@ function encodeTarget(target: PlaybackDefinition["target"]) {
 	if (target.type === "speed_group")
 		return {
 			type: target.type,
-			group: printableAt(
-				target.group,
-				"$.action.playback.target.group",
-				16,
-			),
+			group: printableAt(target.group, "$.action.playback.target.group", 16),
 		};
 	return { type: target.type };
 }
@@ -223,8 +265,16 @@ function decodeResolution(
 		"slot",
 		"playback_number",
 	]);
-	const page = boundedPositiveInteger(resolution.page, "$.resolution.page", 127);
-	const slot = boundedPositiveInteger(resolution.slot, "$.resolution.slot", 127);
+	const page = boundedPositiveInteger(
+		resolution.page,
+		"$.resolution.page",
+		127,
+	);
+	const slot = boundedPositiveInteger(
+		resolution.slot,
+		"$.resolution.slot",
+		127,
+	);
 	const playbackNumber =
 		resolution.playback_number == null
 			? null
@@ -233,8 +283,21 @@ function decodeResolution(
 					"$.resolution.playback_number",
 					1000,
 				);
-	if (action.type === "save_cue_list" || action.page !== page || action.slot !== slot)
+	if (
+		action.type === "save_cue_list" ||
+		action.page !== page ||
+		action.slot !== slot
+	)
 		invalid("$.resolution", "the requested page slot", resolution);
+	if (
+		action.type === "map_existing_playback" &&
+		action.playbackNumber !== playbackNumber
+	)
+		invalid(
+			"$.resolution.playback_number",
+			"the requested Playback",
+			playbackNumber,
+		);
 	return { kind, page, slot, playbackNumber };
 }
 

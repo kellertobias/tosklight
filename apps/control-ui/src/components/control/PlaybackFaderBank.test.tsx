@@ -5,8 +5,12 @@ import {
 	screen,
 	waitFor,
 } from "@testing-library/react";
+import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PlaybackFaderBank, playbackRowUnits } from "./PlaybackFaderBank";
+import {
+	PlaybackFaderBank as PhysicalPlaybackFaderBank,
+	playbackRowUnits,
+} from "./PlaybackFaderBank";
 import { UPDATE_TARGET_EVENT } from "./updateWorkflow";
 
 describe("playback row height units", () => {
@@ -47,10 +51,19 @@ const mocks = vi.hoisted(() => ({
 	resetCommandLine: vi.fn(),
 	savePlaybackSlot: vi.fn(),
 	clearPlaybackSlot: vi.fn(),
+	mapExistingPlayback: vi.fn(),
 	recordCue: vi.fn(),
 	commandLine: "FIXTURE",
 	error: null as string | null,
 	hardwareConnected: false,
+	topologyReady: true,
+	runtimeReady: true,
+	groupReady: true,
+	showObjectView: vi.fn(),
+	portableGroups: vi.fn(),
+	topologyView: vi.fn(),
+	runtimeProjectionMismatch: false,
+	runtimeCueListIdOverride: null as string | null,
 	state: {
 		midiProfile: null,
 		playbackColumns: 1,
@@ -85,31 +98,173 @@ const mocks = vi.hoisted(() => ({
 	scopedCueLists: [] as Array<Record<string, any>>,
 }));
 
-vi.mock("../../api/ServerContext", () => ({
-	useServer: () => ({
-		bootstrap: { hardware_connected: mocks.hardwareConnected },
-		playbacks: mocks.playbacks,
-		groups: [],
-		configuration: {
-			speed_groups_bpm: [120, 90, 60, 30, 15],
-			programmer_fade_millis: 3_000,
-			sequence_master_fade_millis: 4_000,
-		},
-		commandLine: mocks.commandLine,
-		error: mocks.error,
-		resetCommandLine: mocks.resetCommandLine,
-		executeCommandLine: mocks.executeCommandLine,
-		refresh: mocks.refresh,
-		poolPlaybackAction: mocks.poolPlaybackAction,
-		savePlaybackSlot: mocks.savePlaybackSlot,
-		clearPlaybackSlot: mocks.clearPlaybackSlot,
-	}),
-}));
+function PlaybackFaderBank(
+	props: ComponentProps<typeof PhysicalPlaybackFaderBank>,
+) {
+	return (
+		<PhysicalPlaybackFaderBank
+			{...props}
+			hardwareConnected={mocks.hardwareConnected}
+		/>
+	);
+}
+
 vi.mock("../../features/cueRecording/CueRecordingProvider", () => ({
 	useCueRecording: () => ({ record: mocks.recordCue }),
 }));
+vi.mock("../../features/programmingInteraction/ProgrammingInteractionView", () => ({
+	useProgrammingCommandLineView: () => ({
+		text: mocks.commandLine,
+		target: "FIXTURE",
+		pristine: false,
+		revision: 1,
+		pendingChoice: null,
+	}),
+	useProgrammingCommandLineActions: () => ({
+		reset: mocks.resetCommandLine,
+	}),
+	useProgrammingInteractionStatus: () => ({ status: "ready", error: null }),
+}));
+vi.mock("../../features/playbackTopology/PlaybackTopologyView", () => ({
+	usePlaybackTopologyView: () => {
+		mocks.topologyView();
+		return {
+			ready: mocks.topologyReady,
+			error: mocks.error ? new Error(mocks.error) : null,
+			cueLists: mocks.scopedCueLists.map((body) => ({
+			kind: "cue_list",
+			id: body.storageId ?? `cue-list-object-${body.id}`,
+			revision: 2,
+			updated_at: "",
+			body,
+			})),
+			playbacks: mocks.playbacks.pool.map((body) => ({
+			kind: "playback",
+			id: `playback-object-${body.number}`,
+			revision: 5,
+			updated_at: "",
+			body,
+			})),
+			pages: mocks.playbacks.pages.map((body) => ({
+			kind: "playback_page",
+			id: `page-object-${body.number}`,
+			revision: 3,
+			updated_at: "",
+			body,
+			})),
+		};
+	},
+}));
+vi.mock("../../features/playbackTopology/PlaybackTopologyProvider", () => ({
+	usePlaybackTopologyActions: () => ({
+		configureSlot: mocks.savePlaybackSlot,
+		clearMappedPlayback: mocks.clearPlaybackSlot,
+		mapExistingPlayback: mocks.mapExistingPlayback,
+		error: mocks.error ? new Error(mocks.error) : null,
+	}),
+}));
+vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", () => {
+	const reference = (number: unknown) =>
+		typeof number === "number" ? { id: `cue-${number}`, number } : null;
+	const cueListProjection = (number: number, playback: Record<string, any>) => {
+		const active = mocks.playbacks.active.find(
+			(candidate) => candidate.playback_number === number,
+		);
+		return {
+			scope: { show_id: "show-1", show_revision: 9 },
+			requested: { kind: "playback", playback_number: number },
+			playback_number: number,
+			target: "cue_list",
+			cue_list_id:
+				mocks.runtimeCueListIdOverride ?? playback.target.cue_list_id,
+			runtime: active
+				? {
+						cue_index: active.cue_index ?? -1,
+						previous_index: active.previous_index ?? null,
+						current: reference(
+							active.current_cue_number ??
+								mocks.scopedCueLists[0]?.cues?.[active.cue_index]?.number,
+						),
+						loaded: reference(active.loaded_cue_number),
+						normal_next: reference(active.normal_next_cue_number),
+						effective_next: reference(active.effective_next_cue_number),
+						effective_next_is_loaded: Boolean(active.effective_next_is_loaded),
+						paused: Boolean(active.paused),
+						activated_at: active.activated_at ?? "",
+						master: active.master ?? 0,
+						fader_position: active.fader_position ?? active.master ?? 0,
+						fader_pickup_required: Boolean(active.fader_pickup_required),
+						flash: Boolean(active.flash),
+						temporary: Boolean(active.temporary),
+						temporary_active: Boolean(active.temporary_active),
+						temporary_master: active.temporary_master ?? 0,
+						swap_active: Boolean(active.swap_active),
+						enabled: active.enabled ?? true,
+						transition_timing_bypassed: Boolean(
+							active.transition_timing_bypassed,
+						),
+						manual_xfade_position: active.manual_xfade_position ?? 0,
+						manual_xfade_direction:
+							active.manual_xfade_direction ?? "towards_high",
+						manual_xfade_progress: active.manual_xfade_progress ?? 0,
+					}
+				: null,
+		};
+	};
+	const projection = (number: number) => {
+		const playback = mocks.playbacks.pool.find(
+			(candidate) => candidate.number === number,
+		);
+		if (!playback)
+			return {
+				scope: { show_id: "show-1", show_revision: 9 },
+				requested: { kind: "playback", playback_number: number },
+				playback_number: number,
+				target: "missing",
+			};
+		if (mocks.runtimeProjectionMismatch)
+			return {
+				scope: { show_id: "show-1", show_revision: 9 },
+				requested: { kind: "playback", playback_number: number },
+				playback_number: number,
+				target: "missing",
+			};
+		if (playback.target.type === "cue_list")
+			return cueListProjection(number, playback);
+		return {
+			scope: { show_id: "show-1", show_revision: 9 },
+			requested: { kind: "playback", playback_number: number },
+			playback_number: number,
+			target: playback.target.type,
+			...(playback.target.type === "group"
+				? { group_id: playback.target.group_id, master: 1, flash_level: 1 }
+				: {}),
+		};
+	};
+	return {
+		usePlaybackRuntimeActions: () => ({
+			poolPlaybackAction: mocks.poolPlaybackAction,
+		}),
+		usePlaybackRuntimeStatus: () => ({
+			status: mocks.runtimeReady ? "ready" : "loading",
+			error: null,
+		}),
+		usePlaybackDeskView: () => ({
+			scope: { show_id: "show-1", show_revision: 9 },
+			desk_id: "desk-1",
+			active_page: mocks.playbacks.active_page,
+			selected_playback: mocks.playbacks.selected_playback,
+		}),
+		usePlaybackProjectionMap: (numbers: number[]) =>
+			new Map(numbers.map((number) => [number, projection(number)])),
+	};
+});
 vi.mock("../../features/showObjects/ShowObjectsState", () => ({
-	usePortableGroups: () => [],
+	usePortableGroups: (enabled: boolean) => {
+		mocks.portableGroups(enabled);
+		return [];
+	},
+	useShowObjectCollectionsReady: () => mocks.groupReady,
 	useCueLists: () =>
 		mocks.scopedCueLists.map((body) => ({
 			kind: "cue_list",
@@ -135,6 +290,10 @@ vi.mock("../../features/showObjects/ShowObjectsState", () => ({
 			body,
 		})),
 }));
+vi.mock("../../features/showObjects/ShowObjectsView", () => ({
+	useShowObjectView: mocks.showObjectView,
+	useShowObjectKindsView: () => undefined,
+}));
 vi.mock("../../features/server/useShowObjectsState", () => ({
 	useGroups: () => [],
 }));
@@ -148,10 +307,11 @@ function resetPlaybackFaderMocks() {
 	mocks.dispatch.mockReset();
 	mocks.executeCommandLine.mockReset().mockResolvedValue(true);
 	mocks.refresh.mockReset().mockResolvedValue(undefined);
-	mocks.poolPlaybackAction.mockReset().mockResolvedValue(undefined);
+	mocks.poolPlaybackAction.mockReset().mockResolvedValue({ status: "no_change" });
 	mocks.resetCommandLine.mockReset();
 	mocks.savePlaybackSlot.mockReset().mockResolvedValue(true);
 	mocks.clearPlaybackSlot.mockReset().mockResolvedValue(true);
+	mocks.mapExistingPlayback.mockReset().mockResolvedValue({ status: "changed" });
 	mocks.recordCue.mockReset().mockResolvedValue({ status: "changed" });
 	mocks.playbacks.cue_lists = [
 		{
@@ -170,6 +330,14 @@ function resetPlaybackFaderMocks() {
 	mocks.commandLine = "FIXTURE";
 	mocks.error = null;
 	mocks.hardwareConnected = false;
+	mocks.topologyReady = true;
+	mocks.runtimeReady = true;
+	mocks.groupReady = true;
+	mocks.showObjectView.mockReset();
+	mocks.portableGroups.mockReset();
+	mocks.topologyView.mockReset();
+	mocks.runtimeProjectionMismatch = false;
+	mocks.runtimeCueListIdOverride = null;
 	Object.assign(mocks.state, {
 		cueListSetTarget: 12,
 		cueListSetArmed: true,
@@ -185,26 +353,31 @@ function resetPlaybackFaderMocks() {
 	mocks.playbacks.selected_playback = null;
 }
 
+function playbackDefinition(
+	number: number,
+	overrides: Record<string, unknown> = {},
+) {
+	return {
+		number,
+		name: "Front Wash",
+		target: { type: "cue_list", cue_list_id: "front" },
+		buttons: ["go", "go_minus", "flash"],
+		button_count: 3,
+		fader: "master",
+		has_fader: true,
+		go_activates: true,
+		auto_off: true,
+		xfade_millis: 0,
+		color: "#20c997",
+		flash_release: "release_all",
+		protect_from_swap: false,
+		...overrides,
+	};
+}
+
 function assignPlayback(overrides: Record<string, unknown> = {}) {
 	mocks.playbacks.pages[0].slots = { "1": 7 };
-	mocks.playbacks.pool = [
-		{
-			number: 7,
-			name: "Front Wash",
-			target: { type: "cue_list", cue_list_id: "front" },
-			buttons: ["go", "go_minus", "flash"],
-			button_count: 3,
-			fader: "master",
-			has_fader: true,
-			go_activates: true,
-			auto_off: true,
-			xfade_millis: 0,
-			color: "#20c997",
-			flash_release: "release_all",
-			protect_from_swap: false,
-			...overrides,
-		},
-	];
+	mocks.playbacks.pool = [playbackDefinition(7, overrides)];
 	Object.assign(mocks.state, {
 		cueListSetTarget: null,
 		cueListSetArmed: false,
@@ -213,6 +386,73 @@ function assignPlayback(overrides: Record<string, unknown> = {}) {
 
 describe("PlaybackFaderBank layout and configuration surfaces", () => {
 	beforeEach(resetPlaybackFaderMocks);
+
+	it("does not render stale topology while scoped authority is loading", () => {
+		assignPlayback();
+		mocks.topologyReady = false;
+		render(<PlaybackFaderBank count={1} />);
+
+		expect(screen.getByRole("status")).toHaveTextContent("Loading Playbacks…");
+		expect(
+			screen.queryByRole("button", {
+				name: "Playback representation page 1 playback 1",
+			}),
+		).not.toBeInTheDocument();
+	});
+
+	it("rejects a loaded runtime projection that does not match topology", () => {
+		assignPlayback();
+		mocks.runtimeProjectionMismatch = true;
+		render(<PlaybackFaderBank count={1} />);
+
+		expect(screen.getByRole("alert")).toHaveTextContent(
+			"Playback runtime authority does not match the visible topology",
+		);
+		expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+	});
+
+	it("rejects a runtime Cuelist projection with a foreign semantic ID", () => {
+		assignPlayback();
+		mocks.runtimeCueListIdOverride = "foreign-cuelist";
+		render(<PlaybackFaderBank count={1} />);
+
+		expect(screen.getByRole("alert")).toHaveTextContent(
+			"Playback runtime authority does not match the visible topology",
+		);
+		expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+	});
+
+	it("does not rerender for an unrelated parent-context change", () => {
+		assignPlayback();
+		function Parent({ label }: { label: string }) {
+			return (
+				<div data-unrelated={label}>
+					<PlaybackFaderBank count={1} />
+				</div>
+			);
+		}
+		const { rerender } = render(<Parent label="before" />);
+		const renders = mocks.topologyView.mock.calls.length;
+
+		rerender(<Parent label="after" />);
+
+		expect(mocks.topologyView).toHaveBeenCalledTimes(renders);
+	});
+
+	it("activates the Group collection only for a visible Group playback", () => {
+		assignPlayback();
+		const { unmount } = render(<PlaybackFaderBank count={1} />);
+		expect(mocks.showObjectView).toHaveBeenCalledWith("group", false);
+		expect(mocks.portableGroups).toHaveBeenCalledWith(false);
+		unmount();
+		mocks.showObjectView.mockReset();
+		mocks.portableGroups.mockReset();
+		assignPlayback({ target: { type: "group", group_id: "group-front" } });
+		render(<PlaybackFaderBank count={1} />);
+
+		expect(mocks.showObjectView).toHaveBeenCalledWith("group", true);
+		expect(mocks.portableGroups).toHaveBeenCalledWith(true);
+	});
 
 	it("projects arbitrary row starts and fills touch height with weighted tracks", () => {
 		Object.assign(mocks.state, {
@@ -266,6 +506,7 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 	});
 
 	it("assigns the selected Cuelist source to the touched physical page slot", async () => {
+		mocks.playbacks.pool = [playbackDefinition(12)];
 		render(<PlaybackFaderBank count={1} />);
 		fireEvent.click(
 			screen.getByRole("button", {
@@ -273,9 +514,15 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 			}),
 		);
 		await waitFor(() =>
-			expect(mocks.executeCommandLine).toHaveBeenCalledWith("SET 12 AT 1.1"),
+			expect(mocks.mapExistingPlayback).toHaveBeenCalledWith(1, 1, 12, {
+				expectedPageRevision: 3,
+				expectedPageObjectId: "page-object-1",
+				expectedPlaybackRevision: 5,
+				expectedPlaybackObjectId: "playback-object-12",
+			}),
 		);
-		expect(mocks.refresh).toHaveBeenCalledOnce();
+		expect(mocks.executeCommandLine).not.toHaveBeenCalled();
+		expect(mocks.refresh).not.toHaveBeenCalled();
 		expect(mocks.dispatch).toHaveBeenCalledWith({
 			type: "SET_CUELIST_SET_ARMED",
 			value: false,
@@ -343,6 +590,12 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 			1,
 			1,
 			expect.objectContaining({ number: 0, button_count: 3, has_fader: true }),
+			{
+				expectedPageRevision: 3,
+				expectedPageObjectId: "page-object-1",
+				expectedPlaybackRevision: 0,
+				expectedPlaybackObjectId: null,
+			},
 		);
 	});
 
@@ -437,7 +690,9 @@ describe("PlaybackFaderBank selection and Record targets", () => {
 		render(<PlaybackFaderBank count={1} />);
 		fireEvent.click(screen.getByRole("button", { name: "GO +" }));
 		await waitFor(() =>
-			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "select"),
+			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "select", {
+				surface: "physical",
+			}),
 		);
 		expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(1);
 		expect(mocks.refresh).not.toHaveBeenCalled();
@@ -465,7 +720,9 @@ describe("PlaybackFaderBank selection and Record targets", () => {
 		const card = container.querySelector(".hardware-playback-card")!;
 		fireEvent.click(card.querySelector("header b")!);
 		await waitFor(() =>
-			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "select"),
+			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "select", {
+				surface: "physical",
+			}),
 		);
 		expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(1);
 		expect(mocks.dispatch).toHaveBeenCalledWith({
@@ -528,7 +785,9 @@ describe("PlaybackFaderBank selection and Record targets", () => {
 			value: 0.42,
 			surface: "physical",
 		});
-		expect(mocks.poolPlaybackAction).not.toHaveBeenCalledWith(7, "select");
+		expect(mocks.poolPlaybackAction).not.toHaveBeenCalledWith(7, "select", {
+			surface: "physical",
+		});
 	});
 });
 
@@ -642,7 +901,7 @@ describe("PlaybackFaderBank Record targets", () => {
 
 describe("PlaybackFaderBank action dispatch and persistence", () => {
 	beforeEach(resetPlaybackFaderMocks);
-	it("dispatches the authoritative button index, including held Flash lifetime", () => {
+	it("dispatches the configured index and the concrete held Flash lifetime", async () => {
 		assignPlayback();
 		const { container } = render(<PlaybackFaderBank count={1} />);
 		expect(container.querySelector(".vertical-touch-fader-stack")).toHaveClass(
@@ -657,19 +916,99 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 		const flash = screen.getByRole("button", { name: "FLASH" });
 		fireEvent.pointerDown(flash, { pointerId: 4 });
 		fireEvent.pointerUp(flash, { pointerId: 4 });
-		expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "button", {
-			button: 3,
-			pressed: true,
-			surface: "physical",
+		await waitFor(() =>
+			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "flash", {
+				pressed: true,
+				surface: "physical",
+			}),
+		);
+		await waitFor(() =>
+			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "flash", {
+				pressed: false,
+				surface: "physical",
+			}),
+		);
+	});
+
+	it.each(["cancel", "lost capture"])(
+		"releases a held Flash once after pointer %s",
+		async (release) => {
+			assignPlayback();
+			render(<PlaybackFaderBank count={1} />);
+			const flash = screen.getByRole("button", { name: "FLASH" });
+			fireEvent.pointerDown(flash, { pointerId: 4 });
+			if (release === "cancel")
+				fireEvent.pointerCancel(flash, { pointerId: 4 });
+			else fireEvent.lostPointerCapture(flash, { pointerId: 4 });
+			fireEvent.lostPointerCapture(flash, { pointerId: 4 });
+
+			await waitFor(() =>
+				expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(2),
+			);
+			expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(7, "flash", {
+				pressed: false,
+				surface: "physical",
+			});
+		},
+	);
+
+	it("releases a held Flash when the bank unmounts", async () => {
+		assignPlayback();
+		const { unmount } = render(<PlaybackFaderBank count={1} />);
+		fireEvent.pointerDown(screen.getByRole("button", { name: "FLASH" }), {
+			pointerId: 4,
 		});
-		expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "button", {
-			button: 3,
+		unmount();
+
+		await waitFor(() =>
+			expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(2),
+		);
+		expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(7, "flash", {
 			pressed: false,
 			surface: "physical",
 		});
 	});
 
-	it("omits disabled touch buttons while preserving configured button indices", () => {
+	it("orders release after a delayed press and retains its original semantic", async () => {
+		assignPlayback();
+		let resolvePress!: (value: { status: string }) => void;
+		mocks.poolPlaybackAction
+			.mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						resolvePress = resolve;
+					}),
+			)
+			.mockResolvedValue({ status: "no_change" });
+		const { rerender } = render(<PlaybackFaderBank count={1} />);
+		fireEvent.pointerDown(screen.getByRole("button", { name: "FLASH" }), {
+			pointerId: 4,
+		});
+		await waitFor(() =>
+			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "flash", {
+				pressed: true,
+				surface: "physical",
+			}),
+		);
+		mocks.playbacks.pool = [
+			playbackDefinition(7, { buttons: ["go", "go_minus", "swap"] }),
+		];
+		mocks.hardwareConnected = true;
+		rerender(<PlaybackFaderBank count={1} />);
+
+		expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(1);
+		resolvePress({ status: "changed" });
+		await waitFor(() =>
+			expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(7, "flash", {
+				pressed: false,
+				surface: "physical",
+			}),
+		);
+		expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(2);
+		expect(screen.getByRole("button", { name: "SWAP" })).toBeInTheDocument();
+	});
+
+	it("omits disabled touch buttons while preserving configured button indices", async () => {
 		assignPlayback({ buttons: ["go", "none", "flash"], button_count: 3 });
 		const { container } = render(<PlaybackFaderBank count={1} />);
 		expect(
@@ -684,11 +1023,12 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 		fireEvent.pointerDown(screen.getByRole("button", { name: "FLASH" }), {
 			pointerId: 4,
 		});
-		expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "button", {
-			button: 3,
-			pressed: true,
-			surface: "physical",
-		});
+		await waitFor(() =>
+			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "flash", {
+				pressed: true,
+				surface: "physical",
+			}),
+		);
 	});
 
 	it("makes one configured faderless touch button fill its playback section", () => {
@@ -824,7 +1164,12 @@ describe("PlaybackFaderBank faderless controls and runtime feedback", () => {
 		expect(mocks.clearPlaybackSlot).not.toHaveBeenCalled();
 		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 		await waitFor(() =>
-			expect(mocks.clearPlaybackSlot).toHaveBeenCalledWith(1, 1),
+			expect(mocks.clearPlaybackSlot).toHaveBeenCalledWith(1, 1, {
+				expectedPageRevision: 3,
+				expectedPageObjectId: "page-object-1",
+				expectedPlaybackRevision: 5,
+				expectedPlaybackObjectId: "playback-object-7",
+			}),
 		);
 		await waitFor(() =>
 			expect(

@@ -1,6 +1,6 @@
 import {
-	cleanup,
 	act,
+	cleanup,
 	fireEvent,
 	render,
 	screen,
@@ -9,13 +9,13 @@ import {
 import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ShowObjectKind } from "../showObjects/contracts";
+import { ShowObjectsViewProvider } from "../showObjects/ShowObjectsView";
 import { ShowObjectsStore } from "../showObjects/store";
 import type {
 	ShowObjectsEventObserver,
 	ShowObjectsEventScope,
 	ShowObjectsEventTransport,
 } from "../showObjects/transport";
-import { ShowObjectsViewProvider } from "../showObjects/ShowObjectsView";
 import type { PlaybackTopologyTransport } from "./contracts";
 import {
 	PlaybackTopologyProvider,
@@ -59,7 +59,10 @@ function collection(kind: ShowObjectKind) {
 					body: {
 						number: 7,
 						name: "Front",
-						target: { type: "grand_master" },
+						target: {
+							type: "cue_list",
+							cue_list_id: "22222222-2222-4222-8222-222222222222",
+						},
 						buttons: ["blackout", "pause_dynamics", "flash"],
 						fader: "master",
 						go_activates: true,
@@ -103,15 +106,12 @@ function Consumer({
 
 function ActionConsumer() {
 	const actions = usePlaybackTopologyActions();
-	const assigned = collection("playback").objects[0]?.body;
 	return (
 		<button
 			type="button"
-			onClick={() =>
-				assigned && void actions?.configureSlot(1, 1, assigned as never)
-			}
+			onClick={() => void actions?.mapExistingPlayback(1, 1, 7)}
 		>
-			Configure
+			Map existing
 		</button>
 	);
 }
@@ -145,7 +145,14 @@ function harness(active: boolean, onRender?: () => void) {
 			</PlaybackTopologyProvider>
 		</ShowObjectsViewProvider>,
 	);
-	return { rendered, store, events, loadCollection, loadObject, actionTransport };
+	return {
+		rendered,
+		store,
+		events,
+		loadCollection,
+		loadObject,
+		actionTransport,
+	};
 }
 
 describe("Playback topology scoped composition", () => {
@@ -174,9 +181,11 @@ describe("Playback topology scoped composition", () => {
 			expect(screen.getByTestId("ready")).toHaveTextContent("true"),
 		);
 		expect(screen.getByTestId("playbacks")).toHaveTextContent("1");
-		expect(
-			loadCollection.mock.calls.map((call) => call[1]).sort(),
-		).toEqual(["cue_list", "playback", "playback_page"]);
+		expect(loadCollection.mock.calls.map((call) => call[1]).sort()).toEqual([
+			"cue_list",
+			"playback",
+			"playback_page",
+		]);
 		await waitFor(() => expect(events.subscriptions).toHaveLength(1));
 		expect(events.subscriptions[0].scope).toEqual({
 			kinds: ["cue_list", "playback", "playback_page"],
@@ -222,7 +231,7 @@ describe("Playback topology scoped composition", () => {
 			</StrictMode>,
 		);
 		await Promise.resolve();
-		fireEvent.click(screen.getByRole("button", { name: "Configure" }));
+		fireEvent.click(screen.getByRole("button", { name: "Map existing" }));
 
 		await waitFor(() => expect(apply).toHaveBeenCalledOnce());
 	});

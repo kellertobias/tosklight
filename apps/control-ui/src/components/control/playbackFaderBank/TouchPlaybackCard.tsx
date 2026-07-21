@@ -6,8 +6,8 @@ import type {
 import type { PlaybackRuntimeProjection } from "../../../api/types";
 import { isSetContextClick } from "../../../disableContextMenu";
 import {
-	VerticalTouchFader,
 	type VerticalTouchFaderAction,
+	VerticalTouchFaderSurface,
 } from "../VerticalTouchFader";
 import { openPlaybackConfiguration } from "./actions";
 import type { PlaybackBankController } from "./controller";
@@ -62,9 +62,6 @@ export function TouchPlaybackCard({
 		playback,
 		active,
 		value,
-		controller.server.configuration,
-		controller.server.playbacks?.authoritative_controls,
-		controller.state.blackout,
 		runtimeProjection,
 	);
 	return (
@@ -100,8 +97,13 @@ export function TouchPlaybackCard({
 				/>
 			)}
 			{hasFader && (
-			<VerticalTouchFader
-					disabled={controller.assignmentPending || !playback}
+				<VerticalTouchFaderSurface
+					hardware={controller.hardware}
+					disabled={
+						controller.assignmentPending ||
+						!playback ||
+						!controller.runtimeActions
+					}
 					label={playbackFaderLabel(playback)}
 					value={value}
 					accentColor={playback?.color}
@@ -110,7 +112,7 @@ export function TouchPlaybackCard({
 					actions={touchActions}
 					onChange={(next) =>
 						playback &&
-						void controller.server.poolPlaybackAction(
+						void controller.runtimeActions?.poolPlaybackAction(
 							playback.number,
 							"master",
 							{ value: next / 100, surface: "physical" },

@@ -25,19 +25,20 @@ function playback(
 	revision: number,
 	name = "Original",
 	id = "legacy-seven",
+	number = 7,
 ): ShowObject<"playback"> {
 	return {
 		kind: "playback",
 		id,
 		revision,
 		updated_at: "",
-		body: playbackBody(name),
+		body: playbackBody(name, number),
 	};
 }
 
-function playbackBody(name = "Original"): PlaybackDefinition {
+function playbackBody(name = "Original", number = 7): PlaybackDefinition {
 	return {
-		number: 7,
+		number,
 		name,
 		target: { type: "cue_list", cue_list_id: CUE_LIST_ID },
 		buttons: ["toggle", "none", "none"],
@@ -141,7 +142,9 @@ function setup(
 ) {
 	const loader =
 		loadObject ??
-		(vi.fn(async () => null as ShowObject | null) as unknown as PlaybackTopologyWriterOptions["loadObject"]);
+		(vi.fn(
+			async () => null as ShowObject | null,
+		) as unknown as PlaybackTopologyWriterOptions["loadObject"]);
 	const store = new ShowObjectsStore();
 	store.reset(SHOW_ID, "session-a");
 	store.setCollection(SHOW_ID, "cue_list", [cueList()], 10, 11);
@@ -198,8 +201,11 @@ describe("PlaybackTopologyWriter", () => {
 
 	it("sends one revisioned application action and installs its objects atomically", async () => {
 		const apply = vi.fn(
-			async (_show: string, _revision: number, request: PlaybackTopologyRequest) =>
-				changed(request),
+			async (
+				_show: string,
+				_revision: number,
+				request: PlaybackTopologyRequest,
+			) => changed(request),
 		);
 		const { store, writer } = setup(apply);
 		const before = store.getSnapshot();
@@ -230,6 +236,73 @@ describe("PlaybackTopologyWriter", () => {
 		expect(observed[0].playbackPages[0].revision).toBe(2);
 	});
 
+	it("maps an existing Playback by exact source identity and publishes only its Page", async () => {
+		const mappedPage = page(2, { 2: 7, 3: 7 });
+		const apply = vi.fn(async (_show, _revision, request) =>
+			changed(request, [present(mappedPage)]),
+		);
+		const { store, writer } = setup(apply);
+		const source = store.getSnapshot().playbacks;
+		let publications = 0;
+		store.subscribe(() => publications++);
+
+		await expect(writer.mapExistingPlayback(4, 3, 7)).resolves.toMatchObject({
+			status: "changed",
+		});
+		store.applyChange(
+			showChange(41, [
+				{
+					...mappedPage,
+					body: { ...mappedPage.body, name: "Late duplicate event" },
+				},
+			]),
+		);
+
+		expect(apply).toHaveBeenCalledOnce();
+		expect(apply.mock.calls[0]).toMatchObject([
+			SHOW_ID,
+			11,
+			{
+				action: {
+					type: "map_existing_playback",
+					page: 4,
+					slot: 3,
+					playbackNumber: 7,
+					expectedPageRevision: 1,
+					expectedPageObjectId: "legacy-page-four",
+					expectedPlaybackRevision: 1,
+					expectedPlaybackObjectId: "legacy-seven",
+				},
+			},
+		]);
+		expect(store.getSnapshot().playbacks).toBe(source);
+		expect(store.getSnapshot().playbackPages).toEqual([mappedPage]);
+		expect(publications).toBe(1);
+	});
+
+	it("carries an exact absent Page identity when creating a new mapping", async () => {
+		const createdPage = {
+			...page(1, { 1: 7 }, "5"),
+			body: { number: 5, name: "Page 5", slots: { 1: 7 } },
+		};
+		const apply = vi.fn(async (_show, _revision, request) =>
+			changed(request, [present(createdPage)]),
+		);
+		const { writer } = setup(apply);
+
+		await writer.mapExistingPlayback(5, 1, 7);
+
+		expect(apply.mock.calls[0][2]).toMatchObject({
+			action: {
+				type: "map_existing_playback",
+				expectedPageRevision: 0,
+				expectedPageObjectId: null,
+				expectedPlaybackRevision: 1,
+				expectedPlaybackObjectId: "legacy-seven",
+			},
+		});
+	});
+
 	it("replays a retryable request once with the exact same request ID", async () => {
 		const retryable = Object.assign(new Error("offline"), {
 			status: 0,
@@ -243,11 +316,11 @@ describe("PlaybackTopologyWriter", () => {
 					_show: string,
 					_revision: number,
 					request: PlaybackTopologyRequest,
-				) => changed(request),
+				) => changed(request, [present(page(2, { 2: 7, 3: 7 }))]),
 			);
 		const { writer } = setup(apply);
 
-		await writer.configureSlot(4, 2, playbackBody("Response"));
+		await writer.mapExistingPlayback(4, 3, 7);
 
 		expect(apply).toHaveBeenCalledTimes(2);
 		expect(apply.mock.calls[1][2]).toBe(apply.mock.calls[0][2]);
@@ -312,7 +385,7 @@ describe("PlaybackTopologyWriter", () => {
 		});
 	});
 
-	it("preserves an event that arrives before its HTTP outcome", async () => {
+	it("preserves a mapped Page event that arrives before its HTTP outcome", async () => {
 		const pending = deferred<PlaybackTopologyOutcome>();
 		let request!: PlaybackTopologyRequest;
 		const apply = vi.fn(async (_show, _revision, input) => {
@@ -320,32 +393,31 @@ describe("PlaybackTopologyWriter", () => {
 			return pending.promise;
 		});
 		const { store, writer } = setup(apply);
-		const operation = writer.configureSlot(4, 2, playbackBody("Response"));
+		const operation = writer.mapExistingPlayback(4, 3, 7);
 		await Promise.resolve();
-		const eventPlayback = playback(2, "Event first");
-		store.applyChange(showChange(41, [eventPlayback, page(2)]));
+		const eventPage = page(2, { 2: 7, 3: 7 });
+		store.applyChange(showChange(41, [eventPage]));
 		const afterEvent = store.getSnapshot();
 
-		pending.resolve(changed(request));
+		pending.resolve(changed(request, [present(eventPage)]));
 		await operation;
 
-		expect(store.getSnapshot().playbacks).toBe(afterEvent.playbacks);
-		expect(store.getSnapshot().playbacks[0].body.name).toBe("Event first");
+		expect(store.getSnapshot().playbackPages).toBe(afterEvent.playbackPages);
+		expect(store.getSnapshot().playbackPages[0].body.slots["3"]).toBe(7);
 	});
 
 	it("makes a replayed no-change outcome projection-stable", async () => {
 		const apply = vi.fn(async (_show, _revision, request) => ({
-			...changed(request),
+			...changed(request, [present(page(1))]),
 			status: "no_change" as const,
 			showRevision: 11,
-			objects: [present(playback(1)), present(page(1))],
 			replayed: true,
 			eventSequence: undefined as never,
 		}));
 		const { store, writer } = setup(apply);
 		const before = store.getSnapshot();
 
-		await writer.configureSlot(4, 2, playbackBody());
+		await writer.mapExistingPlayback(4, 2, 7);
 
 		const after = store.getSnapshot();
 		expect(after.playbacks).toBe(before.playbacks);
@@ -383,9 +455,11 @@ describe("PlaybackTopologyWriter", () => {
 		expect(store.getSnapshot().playbacks).toEqual([]);
 		expect(store.getSnapshot().playbackPages).toHaveLength(2);
 		expect(
-			store.getSnapshot().playbackPages.every(
-				(object) => !Object.values(object.body.slots).includes(7),
-			),
+			store
+				.getSnapshot()
+				.playbackPages.every(
+					(object) => !Object.values(object.body.slots).includes(7),
+				),
 		).toBe(true);
 		expect(publications).toBe(1);
 	});
@@ -430,6 +504,114 @@ describe("PlaybackTopologyWriter", () => {
 		expect(onError).toHaveBeenLastCalledWith(conflict);
 	});
 
+	it("repairs an existing map through the destination Page and source Playback", async () => {
+		const conflict = Object.assign(new Error("stale source Playback"), {
+			status: 409,
+			retryable: false,
+			currentRevision: 13,
+		});
+		const source = playback(4, "Source", "source-eight", 8);
+		const repairedPage = page(2, { 2: 8 });
+		const loadObject = vi.fn(
+			async (_show: string, kind: ShowObjectKind, id: string) => {
+				if (kind === "playback_page" && id === "legacy-page-four")
+					return repairedPage;
+				if (kind === "playback" && id === "source-eight") return source;
+				return null;
+			},
+		);
+		const { store, writer } = setup(
+			vi.fn(async () => {
+				throw conflict;
+			}),
+			loadObject as unknown as PlaybackTopologyWriterOptions["loadObject"],
+		);
+		store.setCollection(
+			SHOW_ID,
+			"playback",
+			[playback(1), playback(3, "Source", "source-eight", 8)],
+			10,
+			11,
+		);
+
+		await expect(writer.mapExistingPlayback(4, 2, 8)).resolves.toBeNull();
+
+		expect(loadObject).toHaveBeenCalledWith(
+			SHOW_ID,
+			"playback_page",
+			"legacy-page-four",
+		);
+		expect(loadObject).toHaveBeenCalledWith(
+			SHOW_ID,
+			"playback",
+			"source-eight",
+		);
+		expect(loadObject).not.toHaveBeenCalledWith(
+			SHOW_ID,
+			"playback",
+			"legacy-seven",
+		);
+		expect(store.getSnapshot().showRevision).toBe(13);
+	});
+
+	it("repairs an absent Page conflict through its deterministic Page identity", async () => {
+		const conflict = Object.assign(new Error("Page was created concurrently"), {
+			status: 409,
+			retryable: false,
+			currentRevision: 13,
+		});
+		const concurrentPage = {
+			...page(1, {}, "5"),
+			body: { number: 5, name: "Concurrent", slots: {} },
+		};
+		const repairedSource = playback(2);
+		const loadObject = vi.fn(
+			async (_show: string, kind: ShowObjectKind, id: string) => {
+				if (kind === "playback_page" && id === "5") return concurrentPage;
+				if (kind === "playback" && id === "legacy-seven") return repairedSource;
+				return null;
+			},
+		);
+		const { store, writer, onError } = setup(
+			vi.fn(async () => {
+				throw conflict;
+			}),
+			loadObject as unknown as PlaybackTopologyWriterOptions["loadObject"],
+		);
+
+		await expect(writer.mapExistingPlayback(5, 1, 7)).resolves.toBeNull();
+
+		expect(loadObject).toHaveBeenCalledWith(SHOW_ID, "playback_page", "5");
+		expect(loadObject).toHaveBeenCalledWith(
+			SHOW_ID,
+			"playback",
+			"legacy-seven",
+		);
+		expect(
+			store.getSnapshot().playbackPages.find((object) => object.id === "5"),
+		).toEqual(concurrentPage);
+		expect(onError).toHaveBeenLastCalledWith(conflict);
+	});
+
+	it("leaves the mapped Page and source unchanged when an action rolls back", async () => {
+		const rejected = Object.assign(new Error("forbidden"), {
+			status: 403,
+			retryable: false,
+		});
+		const { store, writer, onError } = setup(
+			vi.fn(async () => {
+				throw rejected;
+			}),
+		);
+		const before = store.getSnapshot();
+
+		await expect(writer.mapExistingPlayback(4, 3, 7)).resolves.toBeNull();
+
+		expect(store.getSnapshot().playbacks).toBe(before.playbacks);
+		expect(store.getSnapshot().playbackPages).toBe(before.playbackPages);
+		expect(onError).toHaveBeenLastCalledWith(rejected);
+	});
+
 	it("repairs a Cuelist conflict through its legacy storage key", async () => {
 		const conflict = Object.assign(new Error("stale Cuelist"), {
 			status: 409,
@@ -458,7 +640,7 @@ describe("PlaybackTopologyWriter", () => {
 		expect(store.getSnapshot().cueLists).toEqual([repaired]);
 	});
 
-	it("drops a late outcome after same-show authority replacement", async () => {
+	it("drops a late map outcome after same-show authority replacement", async () => {
 		const pending = deferred<PlaybackTopologyOutcome>();
 		let request!: PlaybackTopologyRequest;
 		const { store, writer, onError } = setup(
@@ -467,10 +649,10 @@ describe("PlaybackTopologyWriter", () => {
 				return pending.promise;
 			}),
 		);
-		const operation = writer.configureSlot(4, 2, playbackBody("Late"));
+		const operation = writer.mapExistingPlayback(4, 3, 7);
 		await Promise.resolve();
 		store.reset(SHOW_ID, "session-b");
-		pending.resolve(changed(request));
+		pending.resolve(changed(request, [present(page(2, { 2: 7, 3: 7 }))]));
 
 		await expect(operation).resolves.toBeNull();
 		expect(store.getSnapshot().playbacks).toEqual([]);

@@ -1,6 +1,5 @@
-import type { CSSProperties } from "react";
+import { useEffect, type CSSProperties } from "react";
 import { legacyPlaybackRuntime } from "../../../features/playbackRuntime/legacy";
-import { usePlaybackProjection } from "../../../features/playbackRuntime/PlaybackRuntimeView";
 import type { PlaybackBankController } from "./controller";
 import { playbackFaderValue } from "./feedback";
 import { HardwarePlaybackCard } from "./HardwarePlaybackCard";
@@ -16,23 +15,14 @@ export function PlaybackSlot({
 	slotData: PlaybackSlotProjection;
 }) {
 	const { playback, cue, group, slot, row } = slotData;
-	const runtimeProjection = usePlaybackProjection(playback?.number);
-	const active =
-		legacyPlaybackRuntime(runtimeProjection) ??
-		(playback
-			? controller.server.playbacks?.active.find(
-					(item) => item.playback_number === playback.number,
-				)
-			: undefined);
+	const runtimeProjection = playback
+		? controller.runtimeProjections.get(playback.number)
+		: undefined;
+	const active = legacyPlaybackRuntime(runtimeProjection);
 	const selected =
-		playback?.number ===
-		(controller.playbackDesk?.selected_playback ??
-			controller.server.playbacks?.selected_playback);
+		playback?.number === controller.playbackDesk?.selected_playback;
 	const configuredButtons =
-		row?.button_count ??
-		(controller.hardware
-			? 3
-			: (controller.buttons ?? controller.server.playbacks?.desk.buttons ?? 3));
+		row?.button_count ?? (controller.hardware ? 3 : (controller.buttons ?? 3));
 	const buttonCount = playback
 		? Math.min(configuredButtons, playback.button_count ?? configuredButtons)
 		: configuredButtons;
@@ -40,11 +30,11 @@ export function PlaybackSlot({
 	const value = playbackFaderValue(
 		playback,
 		active,
-		group?.body.master,
-		controller.server.configuration,
-		controller.server.playbacks?.authoritative_controls,
-		1,
 		runtimeProjection,
+	);
+	useEffect(
+		() => () => controller.heldActions.releaseSlot(slot),
+		[controller.heldActions, playback, slot],
 	);
 	const currentCue =
 		cue && active && active.cue_index >= 0 ? cue.cues[active.cue_index] : null;

@@ -22,6 +22,7 @@ vi.mock("../features/server/useShowData", () => ({
 
 let unrelatedServerRenders = 0;
 let featureRenders = 0;
+let disabledGroupRenders = 0;
 let presetRenders = 0;
 
 function UnrelatedServerConsumer() {
@@ -34,6 +35,12 @@ function GroupConsumer() {
 	const groups = usePortableGroups();
 	featureRenders += 1;
 	return <span>{groups[0]?.body.name ?? "No Group"}</span>;
+}
+
+function DisabledGroupConsumer() {
+	const groups = usePortableGroups(false);
+	disabledGroupRenders += 1;
+	return <span>{groups[0]?.body.name ?? "No disabled Group"}</span>;
 }
 
 function PresetConsumer() {
@@ -65,12 +72,14 @@ describe("ServerProvider show-object ownership", () => {
 	it("does not rerender an unrelated ServerContext consumer for a Group update", () => {
 		unrelatedServerRenders = 0;
 		featureRenders = 0;
+		disabledGroupRenders = 0;
 		presetRenders = 0;
 		let store!: ShowObjectsStore;
 		render(
 			<ServerProvider>
 				<UnrelatedServerConsumer />
 				<GroupConsumer />
+				<DisabledGroupConsumer />
 				<PresetConsumer />
 				<MutationStatusConsumer />
 				<StoreCapture onStore={(value) => (store = value)} />
@@ -79,6 +88,7 @@ describe("ServerProvider show-object ownership", () => {
 		expect(screen.getByText("No Group")).toBeTruthy();
 		expect(unrelatedServerRenders).toBe(1);
 		expect(featureRenders).toBe(1);
+		expect(disabledGroupRenders).toBe(1);
 		expect(presetRenders).toBe(1);
 
 		act(() => {
@@ -95,6 +105,8 @@ describe("ServerProvider show-object ownership", () => {
 		});
 
 		expect(screen.getByText("Front")).toBeTruthy();
+		expect(screen.getByText("No disabled Group")).toBeTruthy();
+		expect(disabledGroupRenders).toBe(1);
 		expect(presetRenders).toBe(1);
 		expect(screen.getByTestId("mutation-status").textContent).toBe(
 			"settled:ready:",

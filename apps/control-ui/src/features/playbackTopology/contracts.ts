@@ -24,6 +24,16 @@ export type PlaybackTopologyAction =
 			playback: PlaybackDefinition;
 	  }
 	| {
+			type: "map_existing_playback";
+			page: number;
+			slot: number;
+			playbackNumber: number;
+			expectedPageRevision: number;
+			expectedPageObjectId: string | null;
+			expectedPlaybackRevision: number;
+			expectedPlaybackObjectId: string;
+	  }
+	| {
 			type: "clear_mapped_playback";
 			page: number;
 			slot: number;
@@ -98,6 +108,12 @@ export interface PlaybackTopologyActions {
 		playback: PlaybackDefinition,
 		revisionBasis?: PlaybackTopologyRevisionBasis,
 	): Promise<PlaybackTopologyOutcome | null>;
+	mapExistingPlayback(
+		page: number,
+		slot: number,
+		playbackNumber: number,
+		revisionBasis?: ExistingPlaybackRevisionBasis,
+	): Promise<PlaybackTopologyOutcome | null>;
 	clearMappedPlayback(
 		page: number,
 		slot: number,
@@ -110,6 +126,11 @@ export interface PlaybackTopologyRevisionBasis {
 	expectedPageObjectId: string | null;
 	expectedPlaybackRevision: number;
 	expectedPlaybackObjectId: string | null;
+}
+
+export interface ExistingPlaybackRevisionBasis
+	extends Omit<PlaybackTopologyRevisionBasis, "expectedPlaybackObjectId"> {
+	expectedPlaybackObjectId: string;
 }
 
 export interface PlaybackTopologyCapability extends PlaybackTopologyActions {

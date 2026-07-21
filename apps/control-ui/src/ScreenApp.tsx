@@ -101,7 +101,7 @@ function ScreenSurface({ id }: { id: string }) {
       <WorkspaceView />
       {screen.show_playbacks && (
         <section className="screen-playbacks">
-          <PlaybackFaderBank pageNumber={page} firstSlot={screen.first_playback_slot} count={screen.playback_count} rows={screen.playback_rows} playbackLayout={screen.playback_layout} />
+          <PlaybackFaderBank pageNumber={page} firstSlot={screen.first_playback_slot} count={screen.playback_count} rows={screen.playback_rows} playbackLayout={screen.playback_layout} hardwareConnected={Boolean(server.bootstrap?.hardware_connected)} />
           {screen.show_page_controls && <ScreenPageControls screen={screen} page={page} />}
         </section>
       )}

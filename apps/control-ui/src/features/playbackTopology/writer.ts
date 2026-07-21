@@ -1,10 +1,12 @@
 import type { CueList, PlaybackDefinition } from "../../api/types";
-import type {
-	ShowObject,
-	ShowObjectKind,
-} from "../showObjects/contracts";
+import type { ShowObject, ShowObjectKind } from "../showObjects/contracts";
 import type { ShowObjectsStore } from "../showObjects/store";
+import {
+	playbackTopologyTransportFailure,
+	repairPlaybackTopologyConflict,
+} from "./conflictRepair";
 import type {
+	ExistingPlaybackRevisionBasis,
 	PlaybackTopologyAction,
 	PlaybackTopologyActions,
 	PlaybackTopologyOutcome,
@@ -39,12 +41,7 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 		body: CueList,
 	) {
 		return this.enqueue(() =>
-			this.saveCueListNow(
-				cueListId,
-				expectedRevision,
-				expectedObjectId,
-				body,
-			),
+			this.saveCueListNow(cueListId, expectedRevision, expectedObjectId, body),
 		);
 	}
 
@@ -56,6 +53,17 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 	) {
 		return this.enqueue(() =>
 			this.configureSlotNow(page, slot, playback, revisionBasis),
+		);
+	}
+
+	mapExistingPlayback(
+		page: number,
+		slot: number,
+		playbackNumber: number,
+		revisionBasis?: ExistingPlaybackRevisionBasis,
+	) {
+		return this.enqueue(() =>
+			this.mapExistingPlaybackNow(page, slot, playbackNumber, revisionBasis),
 		);
 	}
 
@@ -98,7 +106,8 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 		revisionBasis?: PlaybackTopologyRevisionBasis,
 	) {
 		const revisions = this.readySlotRevisions(page, slot, revisionBasis);
-		if (!revisions) return this.fail("Authoritative Playback topology is loading");
+		if (!revisions)
+			return this.fail("Authoritative Playback topology is loading");
 		return this.apply({
 			type: "configure_slot",
 			page,
@@ -114,11 +123,36 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 		revisionBasis?: PlaybackTopologyRevisionBasis,
 	) {
 		const revisions = this.readySlotRevisions(page, slot, revisionBasis);
-		if (!revisions) return this.fail("Authoritative Playback topology is loading");
+		if (!revisions)
+			return this.fail("Authoritative Playback topology is loading");
 		return this.apply({
 			type: "clear_mapped_playback",
 			page,
 			slot,
+			...revisions,
+		});
+	}
+
+	private mapExistingPlaybackNow(
+		page: number,
+		slot: number,
+		playbackNumber: number,
+		revisionBasis?: ExistingPlaybackRevisionBasis,
+	) {
+		const revisions = this.existingPlaybackRevisions(
+			page,
+			playbackNumber,
+			revisionBasis,
+		);
+		if (!revisions)
+			return this.fail(
+				`Authoritative Playback ${playbackNumber} is not available`,
+			);
+		return this.apply({
+			type: "map_existing_playback",
+			page,
+			slot,
+			playbackNumber,
 			...revisions,
 		});
 	}
@@ -163,6 +197,33 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 		return current ? (revisionBasis ?? current) : null;
 	}
 
+	private existingPlaybackRevisions(
+		page: number,
+		playbackNumber: number,
+		revisionBasis?: ExistingPlaybackRevisionBasis,
+	): ExistingPlaybackRevisionBasis | null {
+		const snapshot = this.options.store.getSnapshot();
+		if (
+			!snapshot.readyCollections.has("playback") ||
+			!snapshot.readyCollections.has("playback_page")
+		)
+			return null;
+		if (revisionBasis) return revisionBasis;
+		const pageObject = snapshot.playbackPages.find(
+			(object) => object.body.number === page,
+		);
+		const source = snapshot.playbacks.find(
+			(object) => object.body.number === playbackNumber,
+		);
+		if (!source || source.body.target.type !== "cue_list") return null;
+		return {
+			expectedPageRevision: pageObject?.revision ?? 0,
+			expectedPageObjectId: pageObject?.id ?? null,
+			expectedPlaybackRevision: source.revision,
+			expectedPlaybackObjectId: source.id,
+		};
+	}
+
 	private async apply(action: PlaybackTopologyAction) {
 		if (this.stopped) return null;
 		const snapshot = this.options.store.getSnapshot();
@@ -180,7 +241,12 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 		} catch (reason) {
 			if (!this.isCurrent(generation)) return null;
 			const error = asError(reason);
-			await this.repairConflict(error, action, generation);
+			await repairPlaybackTopologyConflict(
+				this.options,
+				error,
+				action,
+				generation,
+			);
 			this.options.onError?.(error);
 			return null;
 		}
@@ -197,8 +263,12 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 				request,
 			);
 		} catch (reason) {
-			if (!transportFailure(reason)?.retryable) throw reason;
-			return this.options.transport.apply(this.options.showId, revision, request);
+			if (!playbackTopologyTransportFailure(reason)?.retryable) throw reason;
+			return this.options.transport.apply(
+				this.options.showId,
+				revision,
+				request,
+			);
 		}
 	}
 
@@ -224,82 +294,6 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 			outcome.showRevision,
 			outcome.status === "changed" ? "seal" : "floor",
 		);
-	}
-
-	private async repairConflict(
-		error: Error,
-		action: PlaybackTopologyAction,
-		generation: number,
-	) {
-		const failure = transportFailure(error);
-		if (failure?.status !== 409) return;
-		if (failure.currentRevision != null)
-			this.options.store.installShowRevision(
-				this.options.showId,
-				failure.currentRevision,
-				generation,
-			);
-		if (action.type === "save_cue_list") {
-			const stale = this.options.store
-				.getSnapshot()
-				.cueLists.find((object) => object.body.id === action.cueListId);
-			return this.repairObject(
-				"cue_list",
-				stale?.id ?? action.cueListId,
-				generation,
-			);
-		}
-		const before = this.options.store.getSnapshot();
-		const stalePage = before.playbackPages.find(
-			(object) => object.body.number === action.page,
-		);
-		const staleNumber = stalePage?.body.slots[String(action.slot)];
-		const stalePlayback = before.playbacks.find(
-			(object) => object.body.number === staleNumber,
-		);
-		const page = await this.repairObject(
-			"playback_page",
-			stalePage?.id ?? String(action.page),
-			generation,
-		);
-		if (stalePlayback)
-			await this.repairObject("playback", stalePlayback.id, generation);
-		const playbackNumber = page?.body.slots[String(action.slot)];
-		if (playbackNumber == null) return;
-		const currentPlayback = this.options.store
-			.getSnapshot()
-			.playbacks.find((object) => object.body.number === playbackNumber);
-		if (currentPlayback?.id !== stalePlayback?.id)
-			await this.repairObject(
-				"playback",
-				currentPlayback?.id ?? String(playbackNumber),
-				generation,
-			);
-	}
-
-	private async repairObject<K extends ShowObjectKind>(
-		kind: K,
-		objectId: string,
-		generation: number,
-	) {
-		const stamp = this.options.store.captureObjectAuthority(
-			this.options.showId,
-			kind,
-			objectId,
-		);
-		if (!stamp || stamp.authorityGeneration !== generation) return null;
-		try {
-			const object = await this.options.loadObject(
-				this.options.showId,
-				kind,
-				objectId,
-			);
-			return this.options.store.installObjectIfAuthorityUnchanged(stamp, object)
-				? object
-				: null;
-		} catch {
-			return null;
-		}
 	}
 
 	private isCurrent(generation: number) {
@@ -341,26 +335,4 @@ function assertOutcome(
 
 function asError(reason: unknown) {
 	return reason instanceof Error ? reason : new Error(String(reason));
-}
-
-function transportFailure(reason: unknown) {
-	if (!(reason instanceof Error)) return null;
-	const failure = reason as Error & {
-		status?: unknown;
-		retryable?: unknown;
-		currentRevision?: unknown;
-	};
-	if (
-		typeof failure.status !== "number" ||
-		typeof failure.retryable !== "boolean"
-	)
-		return null;
-	return {
-		status: failure.status,
-		retryable: failure.retryable,
-		currentRevision:
-			typeof failure.currentRevision === "number"
-				? failure.currentRevision
-				: null,
-	};
 }

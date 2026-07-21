@@ -11,7 +11,6 @@ import type { PlaybackDefinition } from "../../api/types";
 import {
 	normalizePlaybackTopology,
 	PlaybackConfigurationDialog,
-	PlaybackConfigurationModal,
 	withFunctionDefaults,
 } from "./PlaybackConfigurationModal";
 
@@ -33,13 +32,6 @@ const mocks = vi.hoisted(() => ({
 	groups: [{ id: "group-1", body: { name: "Front Wash" } }],
 }));
 
-vi.mock("../../api/ServerContext", () => ({
-	useServer: () => ({
-		...mocks,
-		playbacks: mocks.playbacks,
-		groups: mocks.groups,
-	}),
-}));
 vi.mock("../../features/server/useShowObjectsState", () => ({
 	useGroups: () => mocks.groups,
 }));
@@ -92,10 +84,14 @@ function show(
 ) {
 	const close = vi.fn();
 	render(
-		<PlaybackConfigurationModal
+		<PlaybackConfigurationDialog
 			playback={playback}
 			page={2}
 			slot={4}
+			fallbackButtons={props.virtual ? 1 : 3}
+			save={mocks.savePlaybackSlot}
+			clear={mocks.clearPlaybackSlot}
+			error={mocks.error}
 			onClose={close}
 			{...props}
 		/>,

@@ -2,11 +2,7 @@ import type {
 	PlaybackDefinition,
 	PlaybackRuntimeProjection,
 } from "../../../api/types";
-import type {
-	AuthoritativeControls,
-	PlaybackServer,
-	PlaybackSnapshotActive,
-} from "./types";
+import type { PlaybackSnapshotActive } from "./types";
 
 export function emptyConfiguration(
 	page: number,
@@ -51,7 +47,9 @@ export function playbackButtonLabel(
 	);
 }
 
-export function isHeldAction(action: PlaybackDefinition["buttons"][number]) {
+export function isHeldAction(
+	action: PlaybackDefinition["buttons"][number],
+): action is "flash" | "swap" {
 	return action === "flash" || action === "swap";
 }
 
@@ -83,71 +81,33 @@ export function buttonFeedbackClass(
 export function playbackFaderValue(
 	playback: PlaybackDefinition | null,
 	active: PlaybackSnapshotActive | undefined,
-	groupMaster: number | undefined,
-	configuration: PlaybackServer["configuration"],
-	controls: AuthoritativeControls | undefined,
-	grandMaster: number,
 	projection?: PlaybackRuntimeProjection,
 ) {
 	if (!playback) return 0;
-	if (playback.target.type === "group") {
-		const groupId = playback.target.group_id;
-		return Math.round(
-			(projection?.target === "group"
-				? projection.master
-				: (controls?.groups.find((item) => item.id === groupId)?.master ??
-					groupMaster ??
-					1)) * 100,
-		);
-	}
+	if (playback.target.type === "group")
+		return projection?.target === "group"
+			? Math.round(projection.master * 100)
+			: 0;
 	if (playback.target.type === "speed_group") {
-		const speed =
-			controls?.speed_groups[playback.target.group.charCodeAt(0) - 65];
-		const runtime =
-			projection?.target === "speed_group" ? projection.runtime : null;
-		const bpm =
-			runtime?.effective_bpm ??
-			speed?.effective_bpm ??
-			configuration?.speed_groups_bpm[
-				playback.target.group.charCodeAt(0) - 65
-			] ??
-			120;
+		if (projection?.target !== "speed_group") return 0;
+		const runtime = projection.runtime;
+		const bpm = runtime.effective_bpm;
 		return playback.fader === "direct_bpm"
 			? bpm / 3
 			: playback.fader === "centered_relative"
-				? (runtime ?? speed)
-					? centeredRelativePosition(
-							runtime?.speed_master_scale ?? speed?.speed_master_scale ?? 1,
-						)
-					: 50
-				: Math.round(
-						(runtime?.speed_master_scale ??
-							speed?.speed_master_scale ??
-							Math.min(1, bpm / Math.max(1, speed?.manual_bpm ?? 120))) * 100,
-					);
+				? centeredRelativePosition(runtime.speed_master_scale)
+				: Math.round(runtime.speed_master_scale * 100);
 	}
 	if (playback.target.type === "programmer_fade")
-		return (
-			(projection?.target === "programmer_fade"
-				? projection.millis
-				: (controls?.programmer_fade_millis ??
-					configuration?.programmer_fade_millis ??
-					3_000)) / 200
-		);
+		return projection?.target === "programmer_fade"
+			? projection.millis / 200
+			: 0;
 	if (playback.target.type === "cue_fade")
-		return (
-			(projection?.target === "cue_fade"
-				? projection.millis
-				: (controls?.cue_fade_millis ??
-					configuration?.sequence_master_fade_millis ??
-					3_000)) / 600
-		);
+		return projection?.target === "cue_fade" ? projection.millis / 600 : 0;
 	if (playback.target.type === "grand_master")
-		return Math.round(
-			(projection?.target === "grand_master"
-				? projection.runtime.level
-				: (controls?.grand_master.level ?? grandMaster)) * 100,
-		);
+		return projection?.target === "grand_master"
+			? Math.round(projection.runtime.level * 100)
+			: 0;
 	if (playback.fader === "x_fade")
 		return Math.round((active?.manual_xfade_position ?? 0) * 100);
 	if (playback.fader === "temp")
@@ -188,36 +148,26 @@ export function playbackFaderDisplay(
 	playback: PlaybackDefinition | null,
 	active: PlaybackSnapshotActive | undefined,
 	value: number,
-	configuration: PlaybackServer["configuration"],
-	controls: AuthoritativeControls | undefined,
-	blackout: boolean,
 	projection?: PlaybackRuntimeProjection,
 ) {
 	if (!playback) return "Empty";
 	if (playback.target.type === "speed_group") {
-		const speed =
-			controls?.speed_groups[playback.target.group.charCodeAt(0) - 65];
-		const runtime =
-			projection?.target === "speed_group" ? projection.runtime : null;
-		const bpm =
-			runtime?.effective_bpm ??
-			speed?.effective_bpm ??
-			configuration?.speed_groups_bpm[
-				playback.target.group.charCodeAt(0) - 65
-			] ??
-			120;
-		return `${Math.round(bpm)} BPM · ${(runtime?.paused ?? speed?.paused) ? "PAUSED" : ((runtime?.source ?? speed?.source)?.replaceAll("_", " ").toUpperCase() ?? `${value.toFixed(0)}%`)}`;
+		if (projection?.target !== "speed_group") return "Unavailable";
+		const runtime = projection.runtime;
+		return `${Math.round(runtime.effective_bpm)} BPM · ${runtime.paused ? "PAUSED" : runtime.source.replaceAll("_", " ").toUpperCase()}`;
 	}
 	if (playback.target.type === "programmer_fade")
-		return `${(((projection?.target === "programmer_fade" ? projection.millis : controls?.programmer_fade_millis) ?? configuration?.programmer_fade_millis ?? 3_000) / 1_000).toFixed(1)} s`;
+		return projection?.target === "programmer_fade"
+			? `${(projection.millis / 1_000).toFixed(1)} s`
+			: "Unavailable";
 	if (playback.target.type === "cue_fade")
-		return `${(((projection?.target === "cue_fade" ? projection.millis : controls?.cue_fade_millis) ?? configuration?.sequence_master_fade_millis ?? 3_000) / 1_000).toFixed(1)} s`;
+		return projection?.target === "cue_fade"
+			? `${(projection.millis / 1_000).toFixed(1)} s`
+			: "Unavailable";
 	if (playback.target.type === "grand_master") {
-		const master =
-			projection?.target === "grand_master"
-				? projection.runtime
-				: controls?.grand_master;
-		return `${value}%${(master?.blackout ?? blackout) ? " · BLACKOUT" : ""}${master?.dynamics_paused ? " · DYNAMICS PAUSED" : ""}`;
+		if (projection?.target !== "grand_master") return "Unavailable";
+		const master = projection.runtime;
+		return `${value}%${master.blackout ? " · BLACKOUT" : ""}${master.dynamics_paused ? " · DYNAMICS PAUSED" : ""}`;
 	}
 	if (playback.target.type === "group") return `${value}% master`;
 	if (playback.fader === "x_fade") {

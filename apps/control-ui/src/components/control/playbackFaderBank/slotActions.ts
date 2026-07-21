@@ -44,22 +44,8 @@ export function buildPlaybackActions({
 	);
 	const faderActions: VerticalTouchFaderAction[] = actions.map(
 		(action, button) => {
-			const releaseHeldAction = (
-				event: ReactPointerEvent<HTMLButtonElement>,
-			) => {
-				if (
-					!playback ||
-					!isHeldAction(action) ||
-					event.currentTarget.dataset.playbackHeld !== "true"
-				)
-					return;
-				delete event.currentTarget.dataset.playbackHeld;
-				void controller.server.poolPlaybackAction(playback.number, "button", {
-					button: button + 1,
-					pressed: false,
-					surface: "physical",
-				});
-			};
+			const releaseHeldAction = () =>
+				controller.heldActions.releaseButton(slot, button + 1);
 			return {
 				id: `${button}-${action}`,
 				label:
@@ -68,13 +54,14 @@ export function buildPlaybackActions({
 						: playbackButtonLabel(action),
 				disabled:
 					controller.assignmentPending ||
+					!controller.runtimeActions ||
 					!playback ||
 					action === "none",
 				className: buttonFeedbackClass(
 					action,
 					active,
 					selected,
-					controller.state.blackout,
+					runtimeBlackout(controller, playback),
 				),
 				style: playback
 					? ({
@@ -99,7 +86,7 @@ export function buildPlaybackActions({
 						return;
 					}
 					if (!isHeldAction(action) && action !== "none")
-						void controller.server.poolPlaybackAction(
+						void controller.runtimeActions?.poolPlaybackAction(
 							playback.number,
 							"button",
 							{
@@ -116,13 +103,13 @@ export function buildPlaybackActions({
 						return;
 					}
 					if (!playback || !isHeldAction(action)) return;
-					event.currentTarget.dataset.playbackHeld = "true";
 					event.currentTarget.setPointerCapture?.(event.pointerId);
-					void controller.server.poolPlaybackAction(playback.number, "button", {
-						button: button + 1,
-						pressed: true,
-						surface: "physical",
-					});
+					controller.heldActions.press(
+						slot,
+						playback.number,
+						button + 1,
+						action,
+					);
 				},
 				onPointerUp: releaseHeldAction,
 				onPointerCancel: releaseHeldAction,
@@ -131,6 +118,18 @@ export function buildPlaybackActions({
 		},
 	);
 	return { actions, faderActions };
+}
+
+function runtimeBlackout(
+	controller: PlaybackBankController,
+	playback: PlaybackDefinition | null,
+) {
+	const projection = playback
+		? controller.runtimeProjections.get(playback.number)
+		: undefined;
+	return Boolean(
+		projection?.target === "grand_master" && projection.runtime.blackout,
+	);
 }
 
 export function createSlotInterceptors(

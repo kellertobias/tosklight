@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { PlaybackTopologyRequest } from "../features/playbackTopology/contracts";
-import type { CueList, PlaybackDefinition } from "./types";
 import {
 	decodePlaybackTopologyErrorResponse,
 	decodePlaybackTopologyOutcome,
 	encodePlaybackTopologyRequest,
 } from "./playbackTopologyWire";
+import type { CueList, PlaybackDefinition } from "./types";
 
 const CUE_LIST_ID = "22222222-2222-4222-8222-222222222222";
 const REQUEST_ID = "33333333-3333-4333-8333-333333333333";
@@ -29,8 +29,9 @@ function playback(number = 0): PlaybackDefinition {
 	};
 }
 
-function request(type: "configure_slot" | "clear_mapped_playback" = "configure_slot"):
-	PlaybackTopologyRequest {
+function request(
+	type: "configure_slot" | "clear_mapped_playback" = "configure_slot",
+): PlaybackTopologyRequest {
 	const common = {
 		type,
 		page: 4,
@@ -58,6 +59,27 @@ function cueListRequest(): PlaybackTopologyRequest {
 			expectedRevision: 4,
 			expectedObjectId: "legacy-main-list",
 			body: cueList(),
+		},
+	};
+}
+
+function mapExistingRequest(
+	pageIdentity: { revision: number; objectId: string | null } = {
+		revision: 7,
+		objectId: "legacy-page-four",
+	},
+): PlaybackTopologyRequest {
+	return {
+		requestId: REQUEST_ID,
+		action: {
+			type: "map_existing_playback",
+			page: 4,
+			slot: 2,
+			playbackNumber: 7,
+			expectedPageRevision: pageIdentity.revision,
+			expectedPageObjectId: pageIdentity.objectId,
+			expectedPlaybackRevision: 3,
+			expectedPlaybackObjectId: "legacy-playback-seven",
 		},
 	};
 }
@@ -143,6 +165,32 @@ describe("Playback topology v2 wire", () => {
 		});
 	});
 
+	it("encodes one exact existing-Playback map without a Playback body", () => {
+		expect(encodePlaybackTopologyRequest(mapExistingRequest())).toEqual({
+			request_id: REQUEST_ID,
+			action: {
+				type: "map_existing_playback",
+				page: 4,
+				slot: 2,
+				playback_number: 7,
+				expected_page_revision: 7,
+				expected_page_object_id: "legacy-page-four",
+				expected_playback_revision: 3,
+				expected_playback_object_id: "legacy-playback-seven",
+			},
+		});
+		expect(
+			encodePlaybackTopologyRequest(
+				mapExistingRequest({ revision: 0, objectId: null }),
+			),
+		).toMatchObject({
+			action: {
+				expected_page_revision: 0,
+				expected_page_object_id: null,
+			},
+		});
+	});
+
 	it("encodes the exact Cuelist storage identity precondition", () => {
 		expect(encodePlaybackTopologyRequest(cueListRequest())).toEqual({
 			request_id: REQUEST_ID,
@@ -158,7 +206,8 @@ describe("Playback topology v2 wire", () => {
 
 	it("keeps decoded target extensions out of the strict action DTO", () => {
 		const configure = request();
-		if (configure.action.type !== "configure_slot") throw new Error("configure");
+		if (configure.action.type !== "configure_slot")
+			throw new Error("configure");
 		const withExtension = {
 			...playback(),
 			target: {
@@ -208,6 +257,81 @@ describe("Playback topology v2 wire", () => {
 				},
 			],
 		});
+	});
+
+	it("accepts only the one authoritative Page for an existing-Playback map", () => {
+		const outcome = decodePlaybackTopologyOutcome(
+			changedOutcome({ objects: [pageObject()] }),
+			mapExistingRequest(),
+			11,
+		);
+		expect(outcome).toMatchObject({
+			status: "changed",
+			resolution: { playbackNumber: 7 },
+			objects: [
+				{
+					kind: "playback_page",
+					objectId: "legacy-page-four",
+					objectRevision: 8,
+				},
+			],
+		});
+
+		expect(() =>
+			decodePlaybackTopologyOutcome(
+				changedOutcome({ objects: [pageObject(), playbackObject()] }),
+				mapExistingRequest(),
+				11,
+			),
+		).toThrow("only the authoritative mapped Page");
+		expect(() =>
+			decodePlaybackTopologyOutcome(
+				changedOutcome({
+					resolution: {
+						kind: "page_slot",
+						page: 4,
+						slot: 2,
+						playback_number: 8,
+					},
+					objects: [pageObject({ 2: 8 })],
+				}),
+				mapExistingRequest(),
+				11,
+			),
+		).toThrow("the requested Playback");
+	});
+
+	it("validates an existing-Playback no-change and exact identity pairs", () => {
+		const { event_sequence: _eventSequence, ...withoutEvent } =
+			changedOutcome();
+		expect(
+			decodePlaybackTopologyOutcome(
+				{
+					...withoutEvent,
+					status: "no_change",
+					show_revision: 11,
+					objects: [{ ...pageObject(), object_revision: 7 }],
+					replayed: true,
+				},
+				mapExistingRequest(),
+				11,
+			),
+		).toMatchObject({ status: "no_change", replayed: true });
+
+		for (const invalidRequest of [
+			mapExistingRequest({ revision: 0, objectId: "legacy-page-four" }),
+			mapExistingRequest({ revision: 7, objectId: null }),
+			{
+				...mapExistingRequest(),
+				action: {
+					...mapExistingRequest().action,
+					expectedPlaybackRevision: 0,
+				},
+			},
+		])
+			expect(() => encodePlaybackTopologyRequest(invalidRequest)).toThrow(
+				"$.action.expected",
+			);
 	});
 
 	it("resolves a saved Cuelist by semantic ID while preserving its storage key", () => {
@@ -269,10 +393,8 @@ describe("Playback topology v2 wire", () => {
 				expectedPlaybackObjectId: null,
 			},
 		};
-		const {
-			event_sequence: _eventSequence,
-			...changedWithoutEvent
-		} = changedOutcome();
+		const { event_sequence: _eventSequence, ...changedWithoutEvent } =
+			changedOutcome();
 		const outcome = decodePlaybackTopologyOutcome(
 			{
 				...changedWithoutEvent,
@@ -342,19 +464,13 @@ describe("Playback topology v2 wire", () => {
 				"$.objects[0].unexpected",
 			],
 		] as const)
-			expect(() =>
-				decodePlaybackTopologyOutcome(value, request(), 11),
-			).toThrow(path);
+			expect(() => decodePlaybackTopologyOutcome(value, request(), 11)).toThrow(
+				path,
+			);
 
 		for (const objects of [
-			[
-				{ ...playbackObject(), object_revision: 999 },
-				pageObject(),
-			],
-			[
-				playbackObject(),
-				{ ...pageObject(), object_id: "another-page" },
-			],
+			[{ ...playbackObject(), object_revision: 999 }, pageObject()],
+			[playbackObject(), { ...pageObject(), object_id: "another-page" }],
 			[
 				{
 					...playbackObject(),
@@ -441,10 +557,8 @@ describe("Playback topology v2 wire", () => {
 	});
 
 	it("requires exact unchanged object revisions for a no-change outcome", () => {
-		const {
-			event_sequence: _eventSequence,
-			...withoutEvent
-		} = changedOutcome();
+		const { event_sequence: _eventSequence, ...withoutEvent } =
+			changedOutcome();
 		const value = {
 			...withoutEvent,
 			status: "no_change",
@@ -454,9 +568,9 @@ describe("Playback topology v2 wire", () => {
 				{ ...pageObject(), object_revision: 7 },
 			],
 		};
-		expect(
-			decodePlaybackTopologyOutcome(value, request(), 11),
-		).toMatchObject({ status: "no_change" });
+		expect(decodePlaybackTopologyOutcome(value, request(), 11)).toMatchObject({
+			status: "no_change",
+		});
 
 		expect(() =>
 			decodePlaybackTopologyOutcome(

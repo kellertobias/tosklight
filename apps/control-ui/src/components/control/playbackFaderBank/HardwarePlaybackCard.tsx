@@ -49,17 +49,10 @@ export function HardwarePlaybackCard({
 }: HardwarePlaybackCardProps) {
 	const { playback, cue, group, slot, row, rowIndex } = slotData;
 	const cueIndex = active?.enabled === false ? -1 : (active?.cue_index ?? -1);
-	const headerPage =
-		controller.page?.number ??
-		controller.pageNumber ??
-		controller.state.playbackPage + 1;
 	const display = playbackFaderDisplay(
 		playback,
 		active,
 		value,
-		controller.server.configuration,
-		controller.server.playbacks?.authoritative_controls,
-		controller.state.blackout,
 		runtimeProjection,
 	);
 	return (
@@ -106,7 +99,7 @@ export function HardwarePlaybackCard({
 					</b>
 				</div>
 				<strong>
-					{headerPage}.{slot}
+					{controller.activePageNumber}.{slot}
 				</strong>
 			</header>
 			{cue ? (
@@ -153,9 +146,10 @@ export function HardwarePlaybackCard({
 							max="100"
 							step="0.1"
 							value={value}
+							disabled={!playback || !controller.runtimeActions}
 							onInput={(event) =>
 								playback &&
-								void controller.server.poolPlaybackAction(
+								void controller.runtimeActions?.poolPlaybackAction(
 									playback.number,
 									"master",
 									{
