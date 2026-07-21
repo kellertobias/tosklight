@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { retainEquivalent } from "./pollingEquivalence";
 import type { ServerState } from "./useServerState";
 
 function useMediaPreviewCleanup(state: ServerState) {
@@ -63,7 +64,7 @@ function useHighlightPolling(state: ServerState) {
 				.then(() => client.highlight())
 				.then((next) => {
 					if (cancelled || request !== highlightEpoch.current) return;
-					setHighlight(next);
+					setHighlight((current) => retainEquivalent(current, next));
 					if (!highlightErrorSticky.current) setHighlightError(null);
 				})
 				.catch((reason) => {
@@ -98,7 +99,11 @@ function useMatterPolling(state: ServerState) {
 		const poll = () =>
 			void client
 				.matterStatus()
-				.then((next) => !cancelled && setMatter(next))
+				.then(
+					(next) =>
+						!cancelled &&
+						setMatter((current) => retainEquivalent(current, next)),
+				)
 				.catch(() => undefined);
 		poll();
 		const timer = window.setInterval(poll, 1_000);
