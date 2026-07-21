@@ -1,20 +1,19 @@
 # Major Refactoring Progress
 
-Estimated progress: **96%**
+Estimated progress: **97%**
 
-Estimated Codex ETA: **roughly 35–65 hours of active Codex execution**, plus required reference-
-hardware measurement time, to repository-wide acceptance. The lower percentage and wider ETA are
-an intentional correction after the refreshed public-boundary inventory: the scoped runtime and
-Programmer foundations are mature, but residual portable mutations, production facade retirement,
-public-DSL convergence, event gaps, and final performance/desktop acceptance remain substantive
-work rather than cleanup.
+Estimated Codex ETA: **roughly 25–45 hours of active Codex execution**, plus required reference-
+hardware measurement time, to repository-wide acceptance. The Programmer, Playback, Output,
+Speed Group, and public command-family foundations are mature. Remaining work is concentrated in
+Group management, Patch and configuration authority, the last broad frontend facade consumers,
+residual portable mutations/events, and final performance/desktop acceptance.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-21 after completing production and public Preload/Output ownership, the
-typed Speed Group backend, and the first 54 public Programmer-values action migrations.
+Last updated: 2026-07-21 after completing scoped Speed Group production/public ownership, typed
+whole-Cue deletion and public migration, and the shared scoped Visualization runtime.
 
 ## Guardrails
 
@@ -519,6 +518,26 @@ typed Speed Group backend, and the first 54 public Programmer-values action migr
   execution share the syntactic parser and service; authoritative execution emits no v1 payload,
   while the retained compatibility path emits its prior payload once. Sound observation/config,
   Learn, pause, double/half, and legacy Playback controls remain a separate runtime-control slice.
+- [x] Completed the Speed Group production client and public action owner. The strict retained
+  store, HTTP/WebSocket adapter, and writer bind the installation/session authority, reconcile
+  optimistic set/adjust/synchronize actions in either event/response order, repair gaps and
+  conflicts, and remain dormant until a Speed view mounts. Playback Tools no longer borrows BPM
+  from bootstrap, Sound-to-Light activation is modal-scoped, and all eight public Speed commands
+  now use one typed intent each rather than the compatibility WebSocket family.
+- [x] Added typed whole-Cue deletion and migrated its public scenarios. Pool, current-Page, and
+  explicit-Page addresses resolve exact Playback, Page, Cuelist, Cue, Show, desk, user, and session
+  authority; one replayable Programming action preserves lossless Cuelist fields, rejects stale
+  revisions and sole-Cue deletion, and emits at most one Show event. The strict public helper
+  validates request/correlation identity, ETags, revisions, projection identity, replay/no-change,
+  and late session replacement. Five public compatibility calls are gone; one dedicated v1
+  WebSocket specification remains as the intentional external-client proof.
+- [x] Added one shared, view-scoped Visualization runtime for the transitional v1 projection.
+  Normal and Preload lanes are independently reference-counted, use the fastest mounted polling
+  interval without overlapping requests, strictly decode the exact lane, and clear immediately on
+  Show/session/server replacement. Parameter Controls, Channels, Fixture Sheet, and Stage now
+  share the retained projection without duplicate polling or broad rerenders. The adapter verifies
+  requested Show/session/server authority and drops late generations; the v1 payload itself lacks
+  scope identifiers, so response payload scope cannot yet be independently cross-checked.
 - [x] Added strict public Programmer-values intents and migrated 54 normal fixture/Group set,
   release, clear, and ordered batch call sites. Each helper captures exact active Show, desk,
   session, authenticated user, capture-mode revision, and values revision without bootstrap, and
@@ -556,10 +575,12 @@ typed Speed Group backend, and the first 54 public Programmer-values action migr
 ## In progress
 
 - [ ] Continue vertical feature-store/event slices and move the remaining production callers away
-  from broad `useServer()`, polling, and generic show-object mutation.
-- [ ] Complete the manual Speed Group frontend/public owner and the typed whole-Cue delete action,
-  then add standalone Playback `SET`, bare `UPDATE`, Preset transfer, output-route/user-layout,
-  and residual portable-show actions required by acceptance scenarios.
+  from broad `useServer()`, generic show-object mutation, and one-off polling. The next coherent
+  owners are Group management, remaining Patch readers, configuration/layout state, and the
+  one-shot Cue-thumbnail Visualization read.
+- [ ] Add the remaining typed actions required to remove compatibility facades: Group property/
+  undo/refresh/detach operations, standalone Playback `SET`, command-line bare `UPDATE`, Preset
+  delete/transfer, output-route/user-layout, and residual portable-show mutations.
 - [ ] Continue converging the public test DSL, then run the final repository-wide performance,
   unrestricted socket, desktop, migration, and operator-path acceptance suite.
 
@@ -573,9 +594,9 @@ typed Speed Group backend, and the first 54 public Programmer-values action migr
 3. Replace production `useServer()` callers with feature-local stores/hooks. Remove broad global
    React update ownership, DOM/custom-event SET/Store/Update routing, and polling-based refreshes.
 4. Add typed public actions for the compatibility families and direct v1 actions still exercised by
-   acceptance coverage. Priority, Preset recall, Preload, Output, and the Speed Group backend are
-   complete. The Speed Group frontend/public owner and whole-Cue delete are active; standalone
-   Playback `SET`, bare `UPDATE`, and Preset transfer follow as separate application-owned actions.
+   acceptance coverage. Priority, Preset recall, Preload, Output, Speed Group, Cue navigation, and
+   whole-Cue deletion are complete. Standalone Playback `SET`, bare `UPDATE`, and Preset deletion/
+   transfer follow as separate application-owned actions.
 5. Complete public portable-show mutation seams for output routes, user layouts, standalone
    Playback/Page operations, typed undo, and any remaining Patch/setup callers. Preserve lossless
    extensions, one transaction/event, revision checks, replay, and stored-empty semantics.
@@ -587,16 +608,13 @@ typed Speed Group backend, and the first 54 public Programmer-values action migr
 8. Repair the remaining stale feature-plan links and keep the committed `docs/engineering` handoff
    synchronized as compatibility adapters are retired.
 
-The refreshed public-boundary audit now counts **59 direct v1 `ApiDriver.command()` scenario calls
-across 17 files**, plus 13 categorized compatibility calls: eight Speed Group commands and five
-whole-Cue deletes. The direct inventory consists of 23 remaining value calls, 25 selection calls,
-two `playback.go` calls, API-004's three retained edit/target/unknown-envelope probes, and CUE-015's
-six dedicated navigation compatibility calls. CROSS-002's two value calls deliberately remain in
-the 23 because that scenario tests an external authenticated command-WebSocket mutation; ordinary
-value setup should continue shrinking around them. The earlier generic show-object inventory has
-not yet gained an exact ratchet and must be refreshed before its next migration cohort rather than
-treated as current by implication. Every inventory must reach an explicit retained boundary rather
-than being concealed behind a generic helper.
+The command-boundary ratchet now counts **12 direct v1 `ApiDriver.command()` calls across three
+files**, all deliberate compatibility or negative-envelope probes: API-004/CROSS-002 retain five
+edit, target, unknown-action, and external Group-value calls; CUE-015 retains six CUE-navigation
+WebSocket calls; and CUE-016 retains one whole-Cue-delete WebSocket call. There are **zero literal
+categorized public compatibility-family calls**. Two shared command dispatch helpers remain
+ratcheted because they can route still-untyped Preset delete/transfer and bare `UPDATE` grammar;
+new scenarios may not add a direct family or raw v1 action without an exact baseline change.
 
 ## Performance and acceptance still required
 
@@ -1020,6 +1038,16 @@ than being concealed behind a generic helper.
   typecheck, production build, architecture, source-size, generated contracts, the command-boundary
   scanner and its 11 unit tests, and whitespace validation. Five cue UI runs remain blocked after
   successful strict setup by the separately tracked absent Playback-card controls.
+- The current checkpoint adds 61 focused Visualization contract/consumer tests and passes the full
+  frontend suite at 1,927 tests in 268 files, frontend typecheck, production build, dependency
+  direction, source-size, and whitespace checks. The shared runtime proves first-view dormancy,
+  one non-overlapping fastest poll per lane, independent Preload authority, selector isolation,
+  exact wire/lane rejection, immediate scope clearing, and late-response suppression. Cue deletion
+  adds 10 strict helper/ownership tests, three migrated public API scenarios, and one dedicated v1
+  compatibility scenario; all pass, as do the 73-test aggregate intent configuration, the command-
+  boundary ratchet, and its 11 scanner tests. The source-size ratchet reports zero files above
+  1,200 lines and zero functions above 150 lines; design-goal debt remains at 138 production files
+  above 400 lines and 5,833 functions above 20 lines.
 
 ## Wrap-up handoff
 
@@ -1039,14 +1067,16 @@ than being concealed behind a generic helper.
   is restricted to same-user session rows and remains only for startup and the shrinking
   compatibility surfaces tracked above.
 - Patch/setup selection and explicit Cue pending-choice authority are complete. Public Priority,
-  Preset, hosted-picker, session, desktop, OSC, Preload, Output, and the first 54 normal-values
-  intents are complete; selection, residual values, and the remaining command families continue.
+  Preset recall, hosted-picker, session, desktop, OSC, Preload, Output, normal Programmer values,
+  selection, Playback GO, Speed Group, Cue navigation, and whole-Cue deletion intents are complete.
+  The only direct v1 command calls left are the explicitly retained probes enumerated above.
 - Preload now prepares one final-state-aware batch, and virtual-exclusion restart authority is
   private, desk-exact, migration-compatible, and absent from public runtime projections.
-- Recommended next slice: finish the active Speed Group frontend/public owner and typed whole-Cue
-  delete action, then close residual values/selection, standalone Playback `SET`, bare `UPDATE`,
-  Preset transfer, and the remaining portable-show action gaps. Keep public-DSL convergence,
-  repository-wide acceptance, and reference-hardware performance as the closing milestones.
+- Recommended next slice: implement typed Group management end to end, then migrate the remaining
+  Patch readers before removing broad Patch bootstrap state. Follow with configuration/layout and
+  residual portable-show actions, Preset delete/transfer, standalone Playback `SET`, and bare
+  `UPDATE`. Keep repository-wide acceptance, desktop verification, and reference-hardware
+  performance as the closing milestones.
 
 Test files may exceed the hard limits, but should still be split when it improves readability and
 makes operator intent more visible.
