@@ -37,11 +37,13 @@ the failures split cleanly:
 
 **88 failures are pre-existing** — the prior agent's cuelist/topology/visualization migration was
 committed with a broken e2e suite that was never run. Signature: `@api` variants pass, `@ui`
-variants fail (e.g. CUE-011 "renumber is one revision" — the UI-driven path emits the wrong show
-revision count while the API path is correct). This is a large, separate body of work: the typed
-Playback-topology migration of inline Cue edits, Cuelist settings, and atomic renumber needs its
-operator-path behavior reconciled with the acceptance specs. It is **not** caused by any facade
-slice in this document.
+variants fail. A full clustered diagnosis with a prioritized, independence-annotated remediation
+plan is in [`e2e-failure-diagnosis.md`](e2e-failure-diagnosis.md). Headline: 7 clusters; ~59 of 88
+are frontend-only, ~29 backend/persistence. The single highest-value fix is the **profile-snapshot
+indirection** regression (~13 pre-existing failures) — and it is the **same root cause** as the 4
+introduced Patch-reader regressions below, so one backend fix (restoring parameterized
+`patched_fixture`/patch definitions) likely clears **~17** at once. It is **not** caused by any
+facade slice in this document.
 
 **5 failures were introduced here, all one root cause** — the Patch reader migration moved
 programmer-surface consumers off the always-present `server.patch.fixtures` onto the scoped Patch
