@@ -1,6 +1,10 @@
 import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
 import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
 import {
+	clearProgrammerValues,
+	releaseProgrammerFixtureValue,
+} from "../apps/control-ui/e2e/bench/programmerValues";
+import {
 	command,
 	expectProgrammer,
 	expectSlotsAfterTick,
@@ -63,20 +67,30 @@ test.describe(FOUNDATIONAL_SCENARIOS, () => {
 		);
 	});
 
-	pairedScenario<{ overrideSlots: number[]; fixture: string }>({
+	pairedScenario<{ overrideSlots: number[]; fixture: string; showId: string }>({
 		id: "PROG-003",
 		title:
 			"newer fixture intensity wins LTP and releases back to its Group value",
 		arrange: async ({ api, bench }, surface) => {
-			await loadCompactRig(api, bench, `prog-003-paired-${surface}`);
-			return { overrideSlots: [], fixture: (await fixtureIdsByNumber(api))[1] };
+			const showId = await loadCompactRig(
+				api,
+				bench,
+				`prog-003-paired-${surface}`,
+			);
+			return {
+				overrideSlots: [],
+				fixture: (await fixtureIdsByNumber(api))[1],
+				showId,
+			};
 		},
 		api: async ({ api, bench }, state) => {
 			await command(api, "GROUP 1 AT 50");
 			await command(api, "1 AT 25");
 			state.overrideSlots = slotsFromFrame(await bench.tick(3_000), 12);
-			await api.command("programmer.release", {
-				fixture_id: state.fixture,
+			await releaseProgrammerFixtureValue(api, {
+				surface: "api",
+				showId: state.showId,
+				fixtureId: state.fixture,
 				attribute: INTENSITY,
 			});
 		},
@@ -110,13 +124,21 @@ test.describe(FOUNDATIONAL_SCENARIOS, () => {
 	});
 
 	pairedScenario<{
+		showId: string;
 		afterFirstClear: { selected: number; values: number; slots: number[] };
 	}>({
 		id: "PROG-004",
 		title: "Clear removes selection first and programmer values second",
 		arrange: async ({ api, bench }, surface) => {
-			await loadCompactRig(api, bench, `prog-004-paired-${surface}`);
-			return { afterFirstClear: { selected: -1, values: -1, slots: [] } };
+			const showId = await loadCompactRig(
+				api,
+				bench,
+				`prog-004-paired-${surface}`,
+			);
+			return {
+				showId,
+				afterFirstClear: { selected: -1, values: -1, slots: [] },
+			};
 		},
 		api: async ({ api, bench }, state) => {
 			await command(api, "1 + 2 AT 50");
@@ -128,7 +150,10 @@ test.describe(FOUNDATIONAL_SCENARIOS, () => {
 				values: first.values.length,
 				slots: slotsFromFrame(await bench.tick(0), 12),
 			};
-			await api.command("programmer.clear", {});
+			await clearProgrammerValues(api, {
+				surface: "api",
+				showId: state.showId,
+			});
 		},
 		ui: async ({ api, bench, desk, page }, state) => {
 			await desk.open(api.baseUrl);

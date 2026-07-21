@@ -7,6 +7,12 @@ import {
 } from "./support/operator";
 import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
 import { DmxReceiver } from "../apps/control-ui/e2e/bench/protocols";
+import {
+  batchProgrammerValues,
+  releaseProgrammerFixtureValue,
+  setProgrammerFixtureValue,
+  type ProgrammerValuesMutation,
+} from "../apps/control-ui/e2e/bench/programmerValues";
 import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
 import {
   fixtureIdsByNumber,
@@ -43,6 +49,7 @@ interface SixteenBitFixture {
 }
 
 interface SixteenBitState {
+  showId: string;
   fixtures: {
     msb: SixteenBitFixture;
     lsb: SixteenBitFixture;
@@ -65,20 +72,27 @@ interface MinimumRouteState {
 
 interface DeliveryRouteState {
   receiver: DmxReceiver;
+  showId: string;
 }
 
+const PROGRAMMER_TIMING = {
+  fade: true,
+  fadeMillis: 3_000,
+  delayMillis: null,
+} as const;
+
 test.describe("docs/testing/03-network-output-protocols.md", () => {
-  pairedScenario<{ values: number[]; observations: ConversionObservation[] }>({
+  pairedScenario<{ showId: string; values: number[]; observations: ConversionObservation[] }>({
     id: "DMX-001",
     title: "exact byte conversion agrees in logical, Art-Net, and sACN output",
     arrange: async ({ api, bench }, surface) => {
-      await loadCanonicalCopy(api, bench, `dmx-001-${surface}`);
-      return { values: [0, 25, 50, 75, 100], observations: [] };
+      const show = await loadCanonicalCopy(api, bench, `dmx-001-${surface}`);
+      return { showId: show.id, values: [0, 25, 50, 75, 100], observations: [] };
     },
     api: async ({ api, bench }, state) => {
       const fixture = (await fixtureIdsByNumber(api))[1];
       for (const percent of state.values) {
-        await api.command("programmer.set", { fixture_id: fixture, attribute: "intensity", value: percent / 100 });
+        await setNormalizedFixtureValue(api, state.showId, fixture, "intensity", percent / 100);
         state.observations.push(await captureConversion(api, bench, fixture, percent));
       }
     },
@@ -184,22 +198,25 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
     },
   });
 
-  pairedScenario<{ extraArt: DmxReceiver; disabledSacn: DmxReceiver }>({
+  pairedScenario<{ extraArt: DmxReceiver; disabledSacn: DmxReceiver; showId: string }>({
     id: "DMX-004",
     title: "remapped fan-out reaches every enabled destination and no disabled route",
     arrange: async ({ api, bench }, surface) => {
-      await loadCanonicalCopy(api, bench, `dmx-004-${surface}`);
+      const show = await loadCanonicalCopy(api, bench, `dmx-004-${surface}`);
       const extraArt = await DmxReceiver.bind();
       const disabledSacn = await DmxReceiver.bind();
       await putObject(api, "route", "artnet-11", route("art_net", 1, 11, extraArt.port, true));
       await putObject(api, "route", "sacn-102", route("sacn", 1, 102, disabledSacn.port, false));
-      return { extraArt, disabledSacn };
+      return { extraArt, disabledSacn, showId: show.id };
     },
-    api: async ({ api }) => {
+    api: async ({ api }, state) => {
       const fixtures = await fixtureIdsByNumber(api);
-      for (const [number, value] of [[1, 0.25], [2, 0.5], [3, 0.75]] as const) {
-        await api.command("programmer.set", { fixture_id: fixtures[number], attribute: "intensity", value });
-      }
+      await batchProgrammerValues(api, {
+        surface: "api",
+        showId: state.showId,
+        mutations: ([[1, 0.25], [2, 0.5], [3, 0.75]] as const).map(([number, value]) =>
+          normalizedFixtureMutation(fixtures[number], "intensity", value)),
+      });
     },
     ui: async ({ bench, desk, page }) => {
       await desk.open(bench.baseUrl);
@@ -272,11 +289,11 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
     id: "DMX-006",
     title: "16-bit metadata and virtual heads encode deterministic component bytes",
     arrange: async ({ api, bench }, surface) => {
-      await loadCanonicalCopy(api, bench, `dmx-006-${surface}`, "default-stage");
-      return installSixteenBitMatrix(api, bench);
+      const show = await loadCanonicalCopy(api, bench, `dmx-006-${surface}`, "default-stage");
+      return { ...(await installSixteenBitMatrix(api, bench)), showId: show.id };
     },
     api: async ({ api }, state) => {
-      await api.command("programmer.set", { fixture_id: state.fixtures.msb.id, attribute: "intensity", value: 0.5 });
+      await setNormalizedFixtureValue(api, state.showId, state.fixtures.msb.id, "intensity", 0.5);
     },
     ui: async ({ bench, desk, page }) => {
       await desk.open(bench.baseUrl);
@@ -308,7 +325,7 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
       ];
       for (const fixture of [state.fixtures.msb, state.fixtures.lsb, state.fixtures.inverted]) {
         for (const value of boundaries) {
-          await api.command("programmer.set", { fixture_id: fixture.id, attribute: "intensity", value });
+          await setNormalizedFixtureValue(api, state.showId, fixture.id, "intensity", value);
           const encoded = encodeSixteenBit(value, fixture.invert);
           await expectFixtureBytes(
             bench,
@@ -321,7 +338,7 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
         }
       }
 
-      await api.command("programmer.set", { fixture_id: state.fixtures.defaulted.id, attribute: "intensity", value: 0.75 });
+      await setNormalizedFixtureValue(api, state.showId, state.fixtures.defaulted.id, "intensity", 0.75);
       await expectFixtureBytes(
         bench,
         state.logicalUniverse,
@@ -330,7 +347,12 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
         orderedBytes(encodeSixteenBit(0.75, false), "msb_first"),
         3_000,
       );
-      await api.command("programmer.release", { fixture_id: state.fixtures.defaulted.id, attribute: "intensity" });
+      await releaseProgrammerFixtureValue(api, {
+        surface: "api",
+        showId: state.showId,
+        fixtureId: state.fixtures.defaulted.id,
+        attribute: "intensity",
+      });
       await expectFixtureBytes(
         bench,
         state.logicalUniverse,
@@ -340,15 +362,25 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
         3_000,
       );
 
-      await expectSunstripVirtualDimmers(api, bench, state.sunstripDestinationUniverse);
+      await expectSunstripVirtualDimmers(
+        api,
+        bench,
+        state.showId,
+        state.sunstripDestinationUniverse,
+      );
     },
   });
 
-  pairedScenario<{ failing: DmxReceiver; destination: string }>({
+  pairedScenario<{
+    failing: DmxReceiver;
+    destination: string;
+    showId: string;
+    valuesEventSequence: number | null;
+  }>({
     id: "DMX-007",
     title: "one route failure is isolated and recovery sends current state",
     arrange: async ({ api, bench }, surface) => {
-      await loadCanonicalCopy(api, bench, `dmx-007-${surface}`);
+      const show = await loadCanonicalCopy(api, bench, `dmx-007-${surface}`);
       const failing = await DmxReceiver.bind();
       const destination = `127.0.0.1:${failing.port}`;
       await putObject(api, "route", "dmx-007-failing", {
@@ -360,11 +392,12 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
         enabled: true,
       });
       await api.request("POST", "/api/v1/test/output/failure", { destination, enabled: true }, false);
-      return { failing, destination };
+      return { failing, destination, showId: show.id, valuesEventSequence: null };
     },
-    api: async ({ api }) => {
+    api: async ({ api }, state) => {
       const fixture = (await fixtureIdsByNumber(api))[1];
-      await api.command("programmer.set", { fixture_id: fixture, attribute: "intensity", value: 0.25 });
+      const outcome = await setNormalizedFixtureValue(api, state.showId, fixture, "intensity", 0.25);
+      state.valuesEventSequence = outcome.status === "changed" ? outcome.eventSequence : null;
     },
     ui: async ({ bench, desk, page }) => {
       await desk.open(bench.baseUrl);
@@ -372,8 +405,11 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
     },
     assert: async ({ api, bench }, state, surface) => {
       const before = await api.request<any>("GET", "/api/v1/diagnostics");
-      await expect.poll(async () => (await api.request<any[]>("GET", "/api/v1/audit?after=0")).at(-1)?.kind)
-        .toBe(surface === "ui" ? "command_applied" : "programmer_changed");
+      if (surface === "api") expect(state.valuesEventSequence).not.toBeNull();
+      else await expect.poll(async () =>
+        (await api.request<any[]>("GET", "/api/v1/audit?after=0"))
+          .some((event) => event.kind === "command_applied"),
+      ).toBe(true);
       const auditBefore = await api.request<any[]>("GET", "/api/v1/audit?after=0");
       const auditRevision = Math.max(0, ...auditBefore.map((event) => event.revision));
       const failingErrorsBefore = routeSendErrors(before, state.destination);
@@ -458,8 +494,8 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
     id: "DMX-009",
     title: "protocol-correct delivery modes persist and resolve to the actual socket destinations",
     arrange: async ({ api, bench }, surface) => {
-      await loadCanonicalCopy(api, bench, `dmx-009-${surface}`);
-      return { receiver: await DmxReceiver.bind() };
+      const show = await loadCanonicalCopy(api, bench, `dmx-009-${surface}`);
+      return { receiver: await DmxReceiver.bind(), showId: show.id };
     },
     api: async ({ api }, state) => {
       await putObject(api, "route", "dmx-009-art-broadcast", deliveryRoute("art_net", 201, "broadcast"));
@@ -467,7 +503,7 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
       await putObject(api, "route", "dmx-009-sacn-multicast", deliveryRoute("sacn", 301, "multicast"));
       await putObject(api, "route", "dmx-009-sacn-unicast", deliveryRoute("sacn", 302, "unicast", state.receiver.port));
       const fixture = (await fixtureIdsByNumber(api))[1];
-      await api.command("programmer.set", { fixture_id: fixture, attribute: "intensity", value: 0.5 });
+      await setNormalizedFixtureValue(api, state.showId, fixture, "intensity", 0.5);
     },
     ui: async ({ bench, desk, page }, state) => {
       await desk.open(bench.baseUrl);
@@ -718,14 +754,54 @@ async function expectFixtureBytes(
   expect(wire).toEqual(expected);
 }
 
-async function expectSunstripVirtualDimmers(api: any, bench: any, destinationUniverse: number): Promise<void> {
+async function setNormalizedFixtureValue(
+  api: ApiDriver,
+  showId: string,
+  fixtureId: string,
+  attribute: string,
+  value: number,
+) {
+  return setProgrammerFixtureValue(api, {
+    surface: "api",
+    showId,
+    fixtureId,
+    attribute,
+    value: { kind: "normalized", value },
+    timing: PROGRAMMER_TIMING,
+  });
+}
+
+function normalizedFixtureMutation(
+  fixtureId: string,
+  attribute: string,
+  value: number,
+): ProgrammerValuesMutation {
+  return {
+    action: "set_fixture",
+    fixtureId,
+    attribute,
+    value: { kind: "normalized", value },
+    timing: PROGRAMMER_TIMING,
+  };
+}
+
+async function expectSunstripVirtualDimmers(
+  api: ApiDriver,
+  bench: any,
+  showId: string,
+  destinationUniverse: number,
+): Promise<void> {
   const sunstrip = (await objects<any>(api, "patched_fixture")).find((entry) => entry.body.fixture_number === 501)!;
   const heads = [...sunstrip.body.logical_heads].sort((left: any, right: any) => left.head_index - right.head_index);
   expect(heads).toHaveLength(10);
-  for (const [index, head] of heads.entries()) {
-    await api.command("programmer.set", { fixture_id: head.fixture_id, attribute: "color.red", value: 1 });
-    await api.command("programmer.set", { fixture_id: head.fixture_id, attribute: "intensity", value: (index + 1) / 10 });
-  }
+  await batchProgrammerValues(api, {
+    surface: "api",
+    showId,
+    mutations: heads.flatMap((head: any, index: number) => [
+      normalizedFixtureMutation(head.fixture_id, "color.red", 1),
+      normalizedFixtureMutation(head.fixture_id, "intensity", (index + 1) / 10),
+    ]),
+  });
   const mark = bench.artnet.mark();
   const tick = await bench.tick(3_000);
   const logical = tick.universes.find((entry: any) => entry.universe === 3)!.slots;

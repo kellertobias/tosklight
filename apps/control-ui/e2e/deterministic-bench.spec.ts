@@ -1,5 +1,6 @@
 import { expect, test } from "./bench/fixtures";
 import { pairedScenario } from "./bench/pairedScenario";
+import { setProgrammerGroupValue } from "./bench/programmerValues";
 
 interface OutputMarks { artnet: number; sacn: number }
 
@@ -8,8 +9,15 @@ function pairedGroupOutput(id: string, percent: number, expectedByte: number) {
     id,
     title: `group programming at ${percent}% reaches identical application and wire output`,
     arrange: ({ bench }) => ({ artnet: bench.artnet.mark(), sacn: bench.sacn.mark() }),
-    api: async ({ api }, _marks) => {
-      await api.command("programmer.group.set", { group_id: "1", attribute: "intensity", value: percent / 100 });
+    api: async ({ api, show }, _marks) => {
+      await setProgrammerGroupValue(api, {
+        surface: "api",
+        showId: show.id,
+        groupId: "1",
+        attribute: "intensity",
+        value: { kind: "normalized", value: percent / 100 },
+        timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
+      });
     },
     ui: async ({ bench, desk }, _marks) => {
       await desk.open(bench.baseUrl);

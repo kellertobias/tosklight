@@ -2,9 +2,10 @@ import type { Locator, Page } from "../apps/control-ui/node_modules/@playwright/
 import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
 import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
 import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
+import { setProgrammerFixtureValue } from "../apps/control-ui/e2e/bench/programmerValues";
 import { fixtureIdsByNumber, loadCanonicalCopy, object, objects, programmer, putObject } from "./support/catalog";
 
-type Prepared = { firstCuelist: string; secondCuelist: string };
+type Prepared = { firstCuelist: string; secondCuelist: string; showId: string };
 
 pairedScenario<Prepared>({
   id: "PLAYBACK-SELECT-001",
@@ -35,7 +36,14 @@ test("PLAYBACK-SELECT-001 @supplemental-ui › controls, Record, Group selection
   const prepared = await prepare(api, bench, "playback-select-001-boundaries");
   const fixtures = await fixtureIdsByNumber(api);
   await api.command("selection.set", { fixtures: [fixtures[1]] });
-  await api.command("programmer.set", { fixture_id: fixtures[1], attribute: "intensity", value: 0.73 });
+  await setProgrammerFixtureValue(api, {
+    surface: "api",
+    showId: prepared.showId,
+    fixtureId: fixtures[1],
+    attribute: "intensity",
+    value: { kind: "normalized", value: 0.73 },
+    timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
+  });
 
   await desk.open(api.baseUrl);
   await openPlaybackMode(page);
@@ -83,7 +91,7 @@ test("PLAYBACK-SELECT-001 @supplemental-ui › controls, Record, Group selection
 });
 
 async function prepare(api: ApiDriver, bench: any, name: string): Promise<Prepared> {
-  await loadCanonicalCopy(api, bench, name, "default-stage");
+  const show = await loadCanonicalCopy(api, bench, name, "default-stage");
   const fixtures = await fixtureIdsByNumber(api);
   const firstCuelist = crypto.randomUUID();
   const secondCuelist = crypto.randomUUID();
@@ -105,7 +113,7 @@ async function prepare(api: ApiDriver, bench: any, name: string): Promise<Prepar
   await putObject(api, "playback", "43", playback(43, "Hardware Group", { type: "group", group_id: "1" }, ["select", "flash", "select_dereferenced"]));
   await putObject(api, "playback_page", "1", { number: 1, name: "Main", slots: { "1": 41, "2": 43 } });
   await putObject(api, "playback_page", "2", { number: 2, name: "Page 2", slots: { "1": 42 } });
-  return { firstCuelist, secondCuelist };
+  return { firstCuelist, secondCuelist, showId: show.id };
 }
 
 function cueList(id: string, name: string) {

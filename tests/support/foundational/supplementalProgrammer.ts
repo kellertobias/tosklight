@@ -1,5 +1,11 @@
 import { expect } from "../../../apps/control-ui/e2e/bench/fixtures";
 import { recallPreset } from "../../../apps/control-ui/e2e/bench/presetRecall";
+import {
+	releaseProgrammerFixtureValue,
+	releaseProgrammerGroupValue,
+	setProgrammerFixtureValue,
+	setProgrammerGroupValue,
+} from "../../../apps/control-ui/e2e/bench/programmerValues";
 import type { FoundationalCase } from "./case";
 import {
 	command,
@@ -79,15 +85,18 @@ export const ltpApi: FoundationalCase = {
 	title:
 		"PROG-003 @supplemental › API higher/lower LTP and scoped release permutations",
 	run: async ({ api, bench }) => {
-		await loadCompactRig(api, bench, "prog-003-api");
+		const showId = await loadCompactRig(api, bench, "prog-003-api");
 		const fixtures = await fixtureIdsByNumber(api);
 
 		await command(api, "GROUP 1 AT 50");
 		await command(api, "1 AT 75");
-		await api.command("programmer.set", {
-			fixture_id: fixtures[1],
+		await setProgrammerFixtureValue(api, {
+			surface: "api",
+			showId,
+			fixtureId: fixtures[1],
 			attribute: "pan",
-			value: 0.33,
+			value: { kind: "normalized", value: 0.33 },
+			timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
 		});
 		await expectSlotsAfterTick(
 			bench,
@@ -95,8 +104,10 @@ export const ltpApi: FoundationalCase = {
 			[191, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128],
 		);
 
-		await api.command("programmer.release", {
-			fixture_id: fixtures[1],
+		await releaseProgrammerFixtureValue(api, {
+			surface: "api",
+			showId,
+			fixtureId: fixtures[1],
 			attribute: INTENSITY,
 		});
 		await expectProgrammer(api, (programmer) => {
@@ -116,7 +127,7 @@ export const ltpApi: FoundationalCase = {
 		});
 		await expectSlotsAfterTick(bench, 0, Array(12).fill(128));
 
-		await loadCompactRig(api, bench, "prog-003-lower-api");
+		const lowerShowId = await loadCompactRig(api, bench, "prog-003-lower-api");
 		const lowerFixtures = await fixtureIdsByNumber(api);
 		await command(api, "GROUP 1 AT 50");
 		await command(api, "1 AT 25");
@@ -132,13 +143,18 @@ export const ltpApi: FoundationalCase = {
 			3_000,
 			[128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128],
 		);
-		await api.command("programmer.group.set", {
-			group_id: "1",
+		await setProgrammerGroupValue(api, {
+			surface: "api",
+			showId: lowerShowId,
+			groupId: "1",
 			attribute: "pan",
-			value: 0.4,
+			value: { kind: "normalized", value: 0.4 },
+			timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
 		});
-		await api.command("programmer.group.release", {
-			group_id: "1",
+		await releaseProgrammerGroupValue(api, {
+			surface: "api",
+			showId: lowerShowId,
+			groupId: "1",
 			attribute: INTENSITY,
 		});
 		await expectProgrammer(api, (programmer) => {

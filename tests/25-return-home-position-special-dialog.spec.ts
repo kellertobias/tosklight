@@ -1,9 +1,11 @@
 import { expect } from "../apps/control-ui/e2e/bench/fixtures";
 import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
+import { batchProgrammerValues } from "../apps/control-ui/e2e/bench/programmerValues";
 import { loadCanonicalCopy, programmer } from "./support/catalog";
 
 type Assignment = { fixture_id: string; attribute: "pan" | "tilt"; value: number };
 type ReturnHomeState = {
+  showId: string;
   selected: string[];
   home: Assignment[];
   before: Assignment[];
@@ -13,7 +15,7 @@ pairedScenario<ReturnHomeState>({
   id: "POSITION-HOME-001",
   title: "Return Home applies per-head Position defaults as one programmer gesture",
   arrange: async ({ api, bench }, surface) => {
-    await loadCanonicalCopy(api, bench, `position-home-001-${surface}`, "default-stage");
+    const show = await loadCanonicalCopy(api, bench, `position-home-001-${surface}`, "default-stage");
     const patch = await api.request<any>("GET", "/api/v1/patch", undefined, false);
     const targets = patch.fixtures.flatMap((fixture: any) => {
       const logicalByIndex = new Map(
@@ -52,11 +54,11 @@ pairedScenario<ReturnHomeState>({
       chosen[1].fixtureId,
     ];
     await api.command("selection.set", { fixtures: selected });
-    await api.command("programmer.set_many", { assignments: before });
-    return { selected, home, before };
+    await setMany(api, show.id, before);
+    return { showId: show.id, selected, home, before };
   },
   api: async ({ api }, state) => {
-    await api.command("programmer.set_many", { assignments: state.home });
+    await setMany(api, state.showId, state.home);
   },
   ui: async ({ api, bench, desk, page }, state) => {
     await desk.open(api.baseUrl);
@@ -99,20 +101,33 @@ pairedScenario<ReturnHomeState>({
     expect((await programmer(api)).selected).toEqual(surface === "ui" ? [] : state.selected);
     await expectAssignments(api, state.home);
     const audit = await api.request<any[]>("GET", "/api/v1/audit?after=0");
-    expect(audit.some((event) =>
-      event.kind === "command_applied" && event.payload.command === "programmer.set_many",
-    )).toBe(true);
+    expect(audit.some((event) => event.kind === "programmer_changed")).toBe(true);
   },
 });
+
+async function setMany(api: any, showId: string, assignments: Assignment[]): Promise<void> {
+  await batchProgrammerValues(api, {
+    surface: "api",
+    showId,
+    mutations: assignments.map((assignment) => ({
+      action: "set_fixture",
+      fixtureId: assignment.fixture_id,
+      attribute: assignment.attribute,
+      value: { kind: "normalized", value: assignment.value },
+      timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
+    })),
+  });
+}
 
 async function expectAssignments(api: any, expected: Assignment[]): Promise<void> {
   await expect.poll(async () => {
     const values = (await programmer(api)).values;
-    return expected.map((assignment) => {
+    return expected.every((assignment) => {
       const actual = values.find((value) =>
         value.fixture_id === assignment.fixture_id && value.attribute === assignment.attribute,
       );
-      return actual?.value?.value ?? actual?.value;
+      const value = actual?.value?.value ?? actual?.value;
+      return typeof value === "number" && Math.abs(value - assignment.value) < 0.00001;
     });
-  }).toEqual(expected.map((assignment) => assignment.value));
+  }).toBe(true);
 }

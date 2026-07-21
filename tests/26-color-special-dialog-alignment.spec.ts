@@ -1,6 +1,7 @@
 import type { Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
 import { expect } from "../apps/control-ui/e2e/bench/fixtures";
 import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
+import { batchProgrammerValues } from "../apps/control-ui/e2e/bench/programmerValues";
 import {
   colorProgrammerAssignments,
   interpolatePickerRange,
@@ -10,6 +11,7 @@ import { loadCanonicalCopy, programmer } from "./support/catalog";
 
 type Assignment = { fixtureId: string; attribute: string; value: number };
 type ColorRangeState = {
+  showId: string;
   selected: string[];
   range: Assignment[];
   prior: Assignment[];
@@ -22,7 +24,7 @@ pairedScenario<ColorRangeState>({
   id: "COLOR-RANGE-001",
   title: "Shift-drag applies an ordered Color range from software and attached hardware",
   arrange: async ({ api, bench }, surface) => {
-    await loadCanonicalCopy(api, bench, `color-range-001-${surface}`, "default-stage");
+    const show = await loadCanonicalCopy(api, bench, `color-range-001-${surface}`, "default-stage");
     const patch = await api.request<any>("GET", "/api/v1/patch", undefined, false);
     const colorTargets = patch.fixtures.flatMap((fixture: any) => {
       const logicalByIndex = new Map(
@@ -59,11 +61,11 @@ pairedScenario<ColorRangeState>({
     );
     const prior = range.map((assignment) => ({ ...assignment, value: 0.33 }));
     await api.command("selection.set", { fixtures: selected });
-    await setMany(api, prior);
-    return { selected, range, prior };
+    await setMany(api, show.id, prior);
+    return { showId: show.id, selected, range, prior };
   },
   api: async ({ api }, state) => {
-    await setMany(api, state.range);
+    await setMany(api, state.showId, state.range);
   },
   ui: async ({ api, bench, desk, page }, state) => {
     await desk.open(api.baseUrl);
@@ -172,12 +174,16 @@ async function closeAndUndo(page: Page, api: any, expected: Assignment[]): Promi
   await expectAssignments(api, expected);
 }
 
-async function setMany(api: any, assignments: Assignment[]): Promise<void> {
-  await api.command("programmer.set_many", {
-    assignments: assignments.map(({ fixtureId, attribute, value }) => ({
-      fixture_id: fixtureId,
+async function setMany(api: any, showId: string, assignments: Assignment[]): Promise<void> {
+  await batchProgrammerValues(api, {
+    surface: "api",
+    showId,
+    mutations: assignments.map(({ fixtureId, attribute, value }) => ({
+      action: "set_fixture",
+      fixtureId,
       attribute,
-      value,
+      value: { kind: "normalized", value },
+      timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
     })),
   });
 }
@@ -197,7 +203,5 @@ async function expectAssignments(api: any, expected: Assignment[]): Promise<void
 
 async function batchCommandCount(api: any): Promise<number> {
   const audit = await api.request<any[]>("GET", "/api/v1/audit?after=0");
-  return audit.filter((event) =>
-    event.kind === "command_applied" && event.payload.command === "programmer.set_many",
-  ).length;
+  return audit.filter((event) => event.kind === "programmer_changed").length;
 }
