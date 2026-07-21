@@ -1,3 +1,4 @@
+import { useConnectionStatus } from "../features/shellStatus/ShellStatusState";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { WindowProps } from "./windowTypes";
 import { usePatchedFixturesView } from "../features/patch/PatchState";
@@ -120,6 +121,7 @@ export function dmxChannelsPerRow(width: number, size: "small" | "large") {
 
 export function DmxWindow({ active = true, compact }: WindowProps) {
   const server = useServer();
+  const connectionStatus = useConnectionStatus();
   const { state, dispatch } = useApp();
   const [slot, setSlot] = useState<Slot | null>(null);
   const [snapshot, setSnapshot] = useState<DmxSnapshot | null>(null);
@@ -139,7 +141,7 @@ export function DmxWindow({ active = true, compact }: WindowProps) {
   const channelsPerRow = dmxChannelsPerRow(valuesWidth, state.dmxDotSize);
 
   usePollingResource({
-    enabled: active && server.status === "connected",
+    enabled: active && connectionStatus === "connected",
     intervalMillis: 250,
     load: server.readDmx,
     onValue: setSnapshot,

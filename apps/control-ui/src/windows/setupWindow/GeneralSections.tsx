@@ -1,3 +1,4 @@
+import { useConnectionStatus } from "../../features/shellStatus/ShellStatusState";
 import { Button } from "../../components/common";
 import { ShowRecoveryFileManager } from "../../components/setup/ShowRecoveryFileManager";
 import type { SetupWindowController } from "./controller";
@@ -8,6 +9,7 @@ export function ShowsRecoverySection({
 	controller: SetupWindowController;
 }) {
 	const { server } = controller;
+	const connectionStatus = useConnectionStatus();
 	return (
 		<>
 			<h2>Shows & recovery</h2>
@@ -24,7 +26,7 @@ export function ShowsRecoverySection({
 					<small>Portable SQLite files</small>
 				</section>
 				<section>
-					<b>{server.status}</b>
+					<b>{connectionStatus}</b>
 					<small>
 						{server.bootstrap?.active_show
 							? "Autosave active"

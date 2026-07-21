@@ -63,7 +63,7 @@ export function ServerProvider({
 	};
 	const value = composeServerContextValue(model);
 	const fileSource = {
-		status: value.status,
+		status: state.status,
 		fileRoots: value.fileRoots,
 		fileEntries: value.fileEntries,
 		fileMetadata: value.fileMetadata,

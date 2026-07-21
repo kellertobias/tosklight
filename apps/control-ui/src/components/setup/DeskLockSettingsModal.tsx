@@ -1,3 +1,4 @@
+import { ServerErrorNotice } from "../shell/ServerErrorNotice";
 import { useEffect, useState } from "react";
 import { useServer } from "../../api/ServerContext";
 import {
@@ -82,7 +83,7 @@ export function DeskLockSettingsModal({ onClose }: { onClose: () => void }) {
 						{wallpaper && <Button onClick={() => setWallpaper(null)}>Use default wallpaper</Button>}
 					</FormField>
 				</FormLayout>
-				{server.error && <p className="modal-error" role="alert">{server.error}</p>}
+				<ServerErrorNotice alert />
 			</section>
 		</div>
 	);

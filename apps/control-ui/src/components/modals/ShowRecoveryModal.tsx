@@ -1,3 +1,4 @@
+import { ServerErrorNotice } from "../shell/ServerErrorNotice";
 import { useState } from "react";
 import { useServer } from "../../api/ServerContext";
 import { Button, ModalTitleBar } from "../common";
@@ -37,7 +38,7 @@ export function ShowRecoveryModal() {
       <small>This creates and activates a separate show from the untouched built-in 49-fixture rig. The damaged file remains available for recovery.</small>
       <Button disabled={busy} onClick={() => void initialize()}>{busy ? "Initializing…" : "Initialize New Empty Show"}</Button>
       <small>This creates and activates a separate empty show. The damaged file remains available for recovery.</small>
-      {server.error && <p className="modal-error">{server.error}</p>}
+      <ServerErrorNotice />
     </section>
   </div>;
 }

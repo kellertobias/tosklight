@@ -1,3 +1,4 @@
+import { useConnectionStatus } from "../../features/shellStatus/ShellStatusState";
 import { useEffect, useRef } from "react";
 import { useFiles } from "../../features/files/FilesContext";
 import type { FilesContextValue } from "../../features/files/types";
@@ -12,6 +13,7 @@ function useFileOperationRouting(
 	server: FilesContextValue,
 	enabled: boolean,
 ) {
+	const connectionStatus = useConnectionStatus();
 	const serverRef = useRef(server);
 	serverRef.current = server;
 	useEffect(() => {
@@ -113,11 +115,11 @@ function useFileOperationRouting(
 
 	useEffect(() => {
 		if (!enabled) return;
-		if (server.status === "connected" || !state.operationRef.current) return;
+		if (connectionStatus === "connected" || !state.operationRef.current) return;
 		operations.cancelOperation(
 			"The file operation was cancelled because the desk connection was lost.",
 		);
-	}, [enabled, operations, server.status, state.operationRef]);
+	}, [enabled, operations, connectionStatus, state.operationRef]);
 }
 
 function useFileOperationKeys(

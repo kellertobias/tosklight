@@ -1,3 +1,4 @@
+import { useConnectionStatus } from "./features/shellStatus/ShellStatusState";
 import { AppProvider } from "./state/AppContext";
 import { AppShell } from "./components/shell/AppShell";
 import { QuitConfirmOverlay } from "./components/modals/QuitConfirmOverlay";
@@ -10,16 +11,17 @@ import { PatchFeatureBoundary } from "./features/patch/PatchFeatureBoundary";
 
 function DesktopReady() {
 	const server = useServer();
+	const connectionStatus = useConnectionStatus();
 	const desktop = useDesktopBridge();
 	useEffect(() => {
 		if (
-			server.status !== "connected" ||
+			connectionStatus !== "connected" ||
 			!server.bootstrap ||
 			!desktop.available
 		)
 			return;
 		void desktop.frontendReady();
-	}, [server.status, server.bootstrap, desktop]);
+	}, [connectionStatus, server.bootstrap, desktop]);
 	return null;
 }
 

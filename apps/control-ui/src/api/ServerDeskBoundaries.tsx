@@ -3,6 +3,7 @@ import { ConfigurationActionsProvider } from "../features/configuration/Configur
 import { ConfigurationStateProvider } from "../features/configuration/ConfigurationState";
 import { DeskLockActionsProvider } from "../features/deskLock/DeskLockActionsProvider";
 import { DeskLockStateProvider } from "../features/deskLock/DeskLockState";
+import { ShellStatusStateProvider } from "../features/shellStatus/ShellStatusState";
 import type { StoredStageLayout } from "../features/server/contracts";
 import type { useServerState } from "../features/server/useServerState";
 import { StageLayoutActionsProvider } from "../features/stageLayout/StageLayoutActionsProvider";
@@ -50,6 +51,7 @@ export function ServerDeskBoundaries({
 		[state.client],
 	);
 	return (
+		<ShellStatusStateProvider store={state.shellStatusStore}>
 		<DeskLockStateProvider store={state.deskLockStore}>
 		<DeskLockActionsProvider
 			store={state.deskLockStore}
@@ -81,5 +83,6 @@ export function ServerDeskBoundaries({
 		</ConfigurationStateProvider>
 		</DeskLockActionsProvider>
 		</DeskLockStateProvider>
+		</ShellStatusStateProvider>
 	);
 }

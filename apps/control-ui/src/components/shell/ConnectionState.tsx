@@ -1,3 +1,4 @@
+import { useConnectionStatus, useServerError } from "../../features/shellStatus/ShellStatusState";
 import { useEffect, useMemo, useState } from "react";
 import { useServer } from "../../api/ServerContext";
 import { configuredServerUrl } from "../../api/LightApiClient";
@@ -7,6 +8,8 @@ import { useDesktopBridge } from "../../platform/desktop";
 
 export function ConnectionState() {
   const server = useServer();
+  const connectionStatus = useConnectionStatus();
+  const serverError = useServerError();
   const desktop = useDesktopBridge();
   const [deskToken, setDeskToken] = useState("");
   const [serverUrl, setServerUrl] = useState(configuredServerUrl());
@@ -24,24 +27,24 @@ export function ConnectionState() {
     const timer = window.setTimeout(() => setStartupGrace(false), 10_000);
     return () => window.clearTimeout(timer);
   }, []);
-  if (server.status === "connected") return null;
+  if (connectionStatus === "connected") return null;
   if (server.bootstrap)
     return (
-      <div className={`connection-banner ${server.status}`} role="status">
+      <div className={`connection-banner ${connectionStatus}`} role="status">
         <span className="status-pulse" />
         <b>
-          {server.status === "connecting"
+          {connectionStatus === "connecting"
             ? "Reconnecting to server…"
             : "Server unavailable"}
         </b>
         <small>
-          {server.error ??
+          {serverError ??
             "Playback state remains visible while the connection recovers."}
         </small>
       </div>
     );
   const boundaryRequired =
-    server.error?.toLowerCase().includes("desk boundary token") ?? false;
+    serverError?.toLowerCase().includes("desk boundary token") ?? false;
   const startingBuiltIn = isTauri && usesBuiltInServer && startupGrace && !boundaryRequired;
   return (
     <div className="connection-cover" role="status">
@@ -57,7 +60,7 @@ export function ConnectionState() {
             ? "Connect to this desk"
             : "Connecting to ToskLight"}
         </h1>
-        <p>{startingBuiltIn ? "Starting built-in server…" : boundaryRequired ? server.error : usesBuiltInServer ? server.error ?? "Built-in server is unavailable." : server.error ?? "Starting a secure operator session…"}</p>
+        <p>{startingBuiltIn ? "Starting built-in server…" : boundaryRequired ? serverError : usesBuiltInServer ? serverError ?? "Built-in server is unavailable." : serverError ?? "Starting a secure operator session…"}</p>
         {startingBuiltIn ? <small>Preparing the show engine and control surface</small> : boundaryRequired ? (
           <form
             className="connection-form"

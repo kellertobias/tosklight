@@ -88,6 +88,10 @@ export function useServerState() {
 	useEffect(() => {
 		configurationStore.install(configuration);
 	}, [configuration, configurationStore]);
+	const shellStatusStore = featureStores.shellStatusStore;
+	useEffect(() => {
+		shellStatusStore.install(status, error);
+	}, [status, error, shellStatusStore]);
 	const stageLayoutStore = featureStores.stageLayoutStore;
 	useEffect(() => {
 		stageLayoutStore.install(stageLayout);

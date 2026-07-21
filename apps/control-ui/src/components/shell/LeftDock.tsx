@@ -6,7 +6,7 @@ import { useServer } from "../../api/ServerContext";
 import appIcon from "../../../src-tauri/icons/icon.svg";
 import { DeskSettingsModal } from "../modals/DeskSettingsModal";
 import { Button } from "../common";
-import { getShowIndicator } from "./showIndicator";
+import { useShowIndicator } from "./showIndicator";
 
 export const builtIns: Array<[BuiltInWindow, string, string]> = [
   ["stage", "⌖", "Stage"], ["fixtures", "♙", "Fixtures"],
@@ -20,7 +20,7 @@ export function LeftDock() {
   const longPress = useRef<number | null>(null);
   const held = useRef(false);
   const suppressUntil = useRef(0);
-  const showIndicator = getShowIndicator(server.status);
+  const showIndicator = useShowIndicator();
   const activeShow = server.bootstrap?.active_show;
   const showIdentity = activeShow?.revision_copy ? `Revision Copy · ${activeShow.name}` : activeShow?.name ?? "Show";
   const identityDetail = activeShow?.revision_copy

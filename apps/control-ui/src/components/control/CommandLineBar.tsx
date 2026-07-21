@@ -1,3 +1,4 @@
+import { useServerError } from "../../features/shellStatus/ShellStatusState";
 import {
 	type Dispatch,
 	type RefObject,
@@ -39,15 +40,16 @@ function queuedPlaybackLabel(action: string, playbackNumber: number) {
 
 function useCommandErrors(setCompleted: Dispatch<SetStateAction<boolean>>) {
 	const server = useServer();
+	const serverError = useServerError();
 	const [commandError, setCommandError] = useState<string | null>(null);
 	const [persistentError, setPersistentError] = useState<string | null>(null);
 	const [errorOpen, setErrorOpen] = useState(false);
 	useEffect(() => {
-		if (server.error) setPersistentError(server.error);
-	}, [server.error]);
+		if (serverError) setPersistentError(serverError);
+	}, [serverError]);
 	useEffect(() => {
-		if (commandError && server.error) setCommandError(server.error);
-	}, [server.error, commandError]);
+		if (commandError && serverError) setCommandError(serverError);
+	}, [serverError, commandError]);
 	useEffect(() => {
 		const showCommandError = (event: Event) => {
 			setCompleted(false);
@@ -109,6 +111,7 @@ function useHistoryDismissal(
 export function CommandLineBar() {
 	const { state, dispatch } = useApp();
 	const server = useServer();
+	const serverError = useServerError();
 	const command = useCommandLineSurface({ selection: true });
 	const programmerActivity = useProgrammerValuesActivity();
 	const preloadPlaybackQueue = useProgrammerPreloadPlaybackQueueView();
@@ -154,7 +157,7 @@ export function CommandLineBar() {
 			dispatch({ type: "SET_UPDATE_ARMED", value: false });
 		if (!ok)
 			errors.setCommandError(
-				server.error ?? "The command could not be executed.",
+				serverError ?? "The command could not be executed.",
 			);
 	};
 	const toggleRecord = () => {

@@ -54,6 +54,11 @@ const entries: FileEntry[] = [
 	},
 ];
 
+vi.mock("../features/shellStatus/ShellStatusState", () => ({
+	useConnectionStatus: () => mocks.server.status,
+	useServerError: () => null,
+}));
+
 const mocks = vi.hoisted(() => ({
 	server: {
 		status: "connected",

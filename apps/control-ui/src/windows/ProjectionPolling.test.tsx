@@ -6,6 +6,11 @@ import { VisualizationRuntimeProvider } from "../features/visualizationRuntime/V
 import { ChannelsWindow } from "./ChannelsWindow";
 import { DmxWindow } from "./DmxWindow";
 
+vi.mock("../features/shellStatus/ShellStatusState", () => ({
+	useConnectionStatus: () => server.status,
+	useServerError: () => null,
+}));
+
 vi.mock("../features/patch/PatchState", async (importOriginal) => ({
 	...(await importOriginal<Record<string, unknown>>()),
 	usePatchedFixturesView: () => [],

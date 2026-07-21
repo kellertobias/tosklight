@@ -5,8 +5,6 @@ export function createServerSnapshotValue(
 	model: ServerController,
 ): Pick<
 	ServerContextValue,
-	| "status"
-	| "error"
 	| "dismissError"
 	| "simulateError"
 	| "readServerLogs"
@@ -39,8 +37,6 @@ export function createServerSnapshotValue(
 > {
 	const {
 		client,
-		status,
-		error,
 		setError,
 		bootstrap,
 		session,
@@ -71,8 +67,6 @@ export function createServerSnapshotValue(
 		highlightErrorSticky,
 	} = model;
 	return {
-		status,
-		error,
 		dismissError: () => setError(null),
 		simulateError: (message) => setError(message),
 		readServerLogs: () => client.auditEvents(),

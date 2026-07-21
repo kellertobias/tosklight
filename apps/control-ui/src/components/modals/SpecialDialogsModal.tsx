@@ -7,6 +7,7 @@ import {
 	programmerValuesMutationKey,
 	useProgrammerValuesMutationQueue,
 } from "../../features/programmerValues/useProgrammerValuesMutationQueue";
+import { ServerErrorNotice } from "../shell/ServerErrorNotice";
 import { useSelectedPatchedFixtures } from "../../features/patch/PatchState";
 import { useApp } from "../../state/AppContext";
 import { Button, ModalPortal } from "../common";
@@ -131,11 +132,7 @@ export function SpecialDialogsModal() {
 							/>
 						)}
 					</div>
-					{server.error && (
-						<p className="modal-error" role="alert">
-							{server.error}
-						</p>
-					)}
+					<ServerErrorNotice alert />
 				</section>
 			</div>
 		</ModalPortal>

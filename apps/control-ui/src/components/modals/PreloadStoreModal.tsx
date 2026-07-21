@@ -1,3 +1,4 @@
+import { ServerErrorNotice } from "../shell/ServerErrorNotice";
 import { useEffect, useMemo, useState } from "react";
 import { useServer } from "../../api/ServerContext";
 import { useCueRecording } from "../../features/cueRecording/CueRecordingProvider";
@@ -134,7 +135,7 @@ export function PreloadStoreModal() {
 							Existing target revision {targetObject.revision}; normal conflict protection applies.
 						</small>
 					)}
-					{server.error && <p className="modal-error">{server.error}</p>}
+					<ServerErrorNotice />
 				</section>
 			</div>
 		</ModalPortal>

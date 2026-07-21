@@ -27,8 +27,6 @@ import type {
 export interface ServerCoreContext
 	extends FileCapabilities,
 		ScreenCapabilities {
-	status: ConnectionStatus;
-	error: string | null;
 	dismissError: () => void;
 	simulateError: (message: string | null) => void;
 	readServerLogs: () => Promise<

@@ -1,3 +1,4 @@
+import { ServerErrorNotice } from "../../components/shell/ServerErrorNotice";
 import { ScreensSetup } from "../../components/setup/ScreensSetup";
 import { WindowScrollArea } from "../../components/window-kit";
 import type { SetupWindowController } from "./controller";
@@ -49,9 +50,7 @@ export function SetupContent({
 							onUndoAvailabilityChange={controller.updateScreenUndoAvailability}
 						/>
 					</div>
-					{controller.server.error && (
-						<p className="modal-error">{controller.server.error}</p>
-					)}
+					<ServerErrorNotice />
 				</div>
 			</WindowScrollArea>
 		</main>
