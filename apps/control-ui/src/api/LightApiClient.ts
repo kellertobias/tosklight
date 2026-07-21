@@ -55,7 +55,6 @@ export class LightApiClient extends LightClientRuntime {
 		"setPatchPreviewHighlight",
 	);
 	auditEvents = bindClientMethod(this.deskApi, "auditEvents");
-	setMaster = bindClientMethod(this.outputApi, "setMaster");
 
 	fileRoots = bindClientMethod(this.fileApi, "fileRoots");
 	fileEntries = bindClientMethod(this.fileApi, "fileEntries");

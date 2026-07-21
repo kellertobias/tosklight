@@ -1,5 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useServer } from "../../api/ServerContext";
+import {
+	useOutputRuntimeActions,
+	useOutputRuntimeView,
+} from "../../features/outputRuntime/OutputRuntimeView";
 import { useProgrammerLifecycleView } from "../../features/programmerLifecycle/ProgrammerLifecycleView";
 import { useProgrammerPreloadLifecycleView } from "../../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
 import { useProgrammingSelectionView } from "../../features/programmingInteraction/ProgrammingInteractionView";
@@ -16,23 +20,22 @@ const EMPTY_PROGRAMMERS = [] as const;
 function useSystemControlsModel() {
 	const { state, dispatch } = useApp();
 	const server = useServer();
-	const [master, setMaster] = useState(100);
-	const [blackout, setBlackout] = useState(false);
 	const [lampResult, setLampResult] = useState("");
 	const [stoppingAll, setStoppingAll] = useState(false);
+	const output = useOutputRuntimeView(state.systemControlsOpen);
+	const outputActions = useOutputRuntimeActions(state.systemControlsOpen);
 	const selection = useProgrammingSelectionView(state.systemControlsOpen);
 	const lifecycle = useProgrammerLifecycleView(state.systemControlsOpen);
 	const preload = useProgrammerPreloadLifecycleView(state.systemControlsOpen);
-	const playbackAuthority = useRunningPlaybackAuthority(state.systemControlsOpen);
+	const playbackAuthority = useRunningPlaybackAuthority(
+		state.systemControlsOpen,
+	);
 	const selectedFixtureIds = selection?.selected ?? EMPTY_FIXTURE_IDS;
-	useEffect(() => {
-		if (!state.systemControlsOpen) return;
-		void server.readVisualization().then((snapshot) => {
-			setMaster(Math.round(snapshot.grand_master * 100));
-			setBlackout(snapshot.blackout);
-			dispatch({ type: "SET_BLACKOUT", value: snapshot.blackout });
-		});
-	}, [state.systemControlsOpen, server.readVisualization, dispatch]);
+	const outputReady = output.ready && outputActions !== null;
+	const master = output.projection
+		? Math.round(output.projection.grandMaster * 100)
+		: null;
+	const blackout = output.projection?.blackout ?? false;
 	const lampActions = useMemo(
 		() =>
 			compatibleSpecialDialogActions(
@@ -97,6 +100,7 @@ function useSystemControlsModel() {
 		server,
 		master,
 		blackout,
+		outputReady,
 		lampResult,
 		stoppingAll,
 		selectedFixtureIds,
@@ -113,14 +117,13 @@ function useSystemControlsModel() {
 		stopEverything,
 		triggerLamps,
 		setMaster: (value: number) => {
-			setMaster(value);
-			void server.setMaster(value / 100, undefined);
+			if (!outputReady || !outputActions) return;
+			void outputActions.setOutput({ grandMaster: value / 100 });
 		},
 		toggleBlackout: () => {
+			if (!outputReady || !outputActions) return;
 			const next = !blackout;
-			setBlackout(next);
-			dispatch({ type: "SET_BLACKOUT", value: next });
-			void server.setMaster(undefined, next);
+			void outputActions.setOutput({ blackout: next });
 		},
 	};
 }
@@ -198,6 +201,7 @@ export function SystemControlsModal() {
 					<OutputControls
 						master={model.master}
 						blackout={model.blackout}
+						ready={model.outputReady}
 						lampResult={model.lampResult}
 						lampActionsAvailable={model.selectedFixtureIds.length > 0}
 						onMaster={model.setMaster}

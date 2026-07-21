@@ -12,6 +12,7 @@ import type { PlaybackRuntimeIdentity } from "./types";
 import { useCueRecordingBoundaries } from "./useCueRecordingBoundaries";
 import { useCueTransferBoundaries } from "./useCueTransferBoundaries";
 import { useGroupRecordingBoundaries } from "./useGroupRecordingBoundaries";
+import { useOutputRuntimeBoundaries } from "./useOutputRuntimeBoundaries";
 import { usePlaybackTopologyBoundaries } from "./usePlaybackTopologyBoundaries";
 import { usePresetRecallBoundaries } from "./usePresetRecallBoundaries";
 import { usePresetRecordingBoundaries } from "./usePresetRecordingBoundaries";
@@ -28,8 +29,10 @@ export function useServerFeatureBoundaries(state: ServerState) {
 	);
 	const programmerValues = useProgrammerValuesBoundaries(state);
 	const programmerLifecycle = useProgrammerLifecycleBoundaries(state);
-	const programmerPreloadLifecycle = useProgrammerPreloadLifecycleBoundaries(state);
+	const programmerPreloadLifecycle =
+		useProgrammerPreloadLifecycleBoundaries(state);
 	const programmerPriority = useProgrammerPriorityBoundaries(state);
+	const outputRuntime = useOutputRuntimeBoundaries(state);
 	const presetRecording = usePresetRecordingBoundaries(state);
 	const presetRecall = usePresetRecallBoundaries(state);
 	const groupRecording = useGroupRecordingBoundaries(state);
@@ -141,6 +144,7 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		...programmerLifecycle,
 		...programmerPreloadLifecycle,
 		...programmerPriority,
+		...outputRuntime,
 		...programmerValues,
 		...presetRecording,
 		...presetRecall,

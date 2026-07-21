@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import { PlaybackRuntimeStore } from "../playbackRuntime/store";
+import { OutputRuntimeStore } from "../outputRuntime/store";
 import { ProgrammerCaptureModeStore } from "../programmerCaptureMode/store";
 import { ProgrammerLifecycleStore } from "../programmerLifecycle/store";
 import { ProgrammerPreloadPlaybackQueueStore } from "../programmerPreloadPlaybackQueue/store";
@@ -11,7 +12,10 @@ import { ProgrammingInteractionStore } from "../programmingInteraction/store";
 
 /** Stable external stores kept outside the broad React server-state update path. */
 export function useServerFeatureStores() {
+	const outputRuntimeStore = useRef<OutputRuntimeStore | null>(null);
+	outputRuntimeStore.current ??= new OutputRuntimeStore();
 	return {
+		outputRuntimeStore: outputRuntimeStore.current,
 		playbackRuntimeStore: useRef(new PlaybackRuntimeStore()).current,
 		programmingInteractionStore: useRef(new ProgrammingInteractionStore())
 			.current,

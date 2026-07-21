@@ -95,8 +95,6 @@ export function reduceNavigation(
 						dockMode: "builtins",
 						groupsReturnToStage: null,
 					};
-		case "SET_BLACKOUT":
-			return { ...state, blackout: action.value };
 		case "TOGGLE_CONTROL_MODE":
 			return {
 				...state,

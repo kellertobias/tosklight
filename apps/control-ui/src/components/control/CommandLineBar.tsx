@@ -113,9 +113,8 @@ export function CommandLineBar() {
 	const programmerActivity = useProgrammerValuesActivity();
 	const preloadPlaybackQueue = useProgrammerPreloadPlaybackQueueView();
 	const preload = useProgrammerPreloadLifecycleView();
-	const hardware = Boolean(
-		server.bootstrap?.hardware_connected || state.midiProfile,
-	);
+	const hardware =
+		Boolean(server.bootstrap?.hardware_connected) || Boolean(state.midiProfile);
 	const [completed, setCompleted] = useState(false);
 	const editGeneration = useRef(0);
 	const errors = useCommandErrors(setCompleted);

@@ -123,6 +123,22 @@ export function useOutputRuntimeView(enabled = true) {
 	);
 }
 
+/** Blackout-only subscription; Grand Master and lifecycle churn keep identity. */
+export function useOutputRuntimeBlackout(enabled = true) {
+	useOutputRuntimeActivation(enabled);
+	return useOutputRuntimeSelector(
+		useCallback(
+			(state: OutputRuntimeState) =>
+				enabled && state.status === "ready" && state.projection
+					? state.projection.blackout
+					: null,
+			[enabled],
+		),
+		Object.is,
+		enabled,
+	);
+}
+
 /** Action-only controls activate the authority needed for revision checks. */
 export function useOutputRuntimeActions(enabled = true) {
 	useOutputRuntimeActivation(enabled);

@@ -11,7 +11,6 @@ export function createSystemActions(
 	| "exportPaperwork"
 	| "shutdownServer"
 	| "clearProgrammer"
-	| "setMaster"
 	| "setDeskToken"
 	| "setServerUrl"
 > {
@@ -87,14 +86,6 @@ export function createSystemActions(
 					setCommandLineState(commandTargetModeRef.current);
 					setCommandLinePristine(true);
 				}
-				setError(null);
-			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
-			}
-		},
-		setMaster: async (grandMaster, blackout) => {
-			try {
-				await client.setMaster({ grand_master: grandMaster, blackout });
 				setError(null);
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));

@@ -108,7 +108,6 @@ export type Action =
 	  }
 	| { type: "OPEN_GROUPS_FROM_STAGE"; origin?: "builtin" | "desk" }
 	| { type: "RETURN_TO_STAGE" }
-	| { type: "SET_BLACKOUT"; value: boolean }
 	| { type: "TOGGLE_MAXIMIZE"; id: string }
 	| { type: "REMOVE_PANE"; id: string }
 	| { type: "OPEN_DESK_SETTINGS"; id: string | null }

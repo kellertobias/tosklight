@@ -34,8 +34,4 @@ export class OutputApiClient {
 			},
 		);
 	}
-
-	setMaster(payload: { grand_master?: number; blackout?: boolean }) {
-		return this.transport.command("master.set", payload);
-	}
 }

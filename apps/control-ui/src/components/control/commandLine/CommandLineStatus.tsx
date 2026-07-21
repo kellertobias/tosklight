@@ -1,27 +1,29 @@
-import { useServer } from "../../../api/ServerContext";
-import { useApp } from "../../../state/AppContext";
+import { memo } from "react";
+import type { ConnectionStatus } from "../../../api/types";
+import { useOutputRuntimeBlackout } from "../../../features/outputRuntime/OutputRuntimeView";
 import { Button } from "../../common";
 
-export function CommandLineStatus() {
-	const server = useServer();
-	const { state, dispatch } = useApp();
-	const frequency = server.bootstrap?.frame_rate_hz ?? "—";
-	const timecode = server.bootstrap?.active_timecode;
+export const CommandLineStatus = memo(function CommandLineStatus({
+	status,
+	frequency,
+	timecode,
+	onOpen,
+}: {
+	status: ConnectionStatus;
+	frequency: number | "—";
+	timecode: string | null;
+	onOpen: () => void;
+}) {
+	const blackout = useOutputRuntimeBlackout() === true;
 	return (
 		<Button
 			aria-label={`DMX ${frequency}Hz; ${timecode ?? "No Timecode"}. Open running and output controls`}
-			className={`command-status ${server.status}`}
+			className={`command-status ${status}`}
 			title="Open running and output controls"
-			onClick={() =>
-				dispatch({
-					type: "SET_MODAL",
-					modal: "systemControlsOpen",
-					value: true,
-				})
-			}
+			onClick={onOpen}
 		>
-			<span className={state.blackout ? "blackout-status" : ""}>
-				{state.blackout ? (
+			<span className={blackout ? "blackout-status" : ""}>
+				{blackout ? (
 					<>
 						<i>
 							<span className="status-label-full">DMX </span>
@@ -48,7 +50,7 @@ export function CommandLineStatus() {
 			</span>
 		</Button>
 	);
-}
+});
 
 export function CommandErrorBanner({
 	message,

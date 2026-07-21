@@ -201,7 +201,6 @@ export interface AppState {
 	fixtureGroupsVisible: boolean;
 	presetGroupsVisible: boolean;
 	groupsReturnToStage: "builtin" | "desk" | null;
-	blackout: boolean;
 }
 
 export type FixtureSheetOrder = "fixture-id" | "active";

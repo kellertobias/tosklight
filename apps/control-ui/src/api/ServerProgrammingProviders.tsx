@@ -1,5 +1,6 @@
 import { type PropsWithChildren, useCallback } from "react";
 import { CueTransferProvider } from "../features/cueTransfer/CueTransferProvider";
+import { OutputRuntimeProvider } from "../features/outputRuntime/OutputRuntimeView";
 import { PlaybackRuntimeViewProvider } from "../features/playbackRuntime/PlaybackRuntimeView";
 import { PresetRecallProvider } from "../features/presetRecall/PresetRecallProvider";
 import { ProgrammerCaptureModeViewProvider } from "../features/programmerCaptureMode/ProgrammerCaptureModeView";
@@ -86,16 +87,42 @@ export function ServerProgrammingProviders(
 ) {
 	const { state, boundaries } = props;
 	return (
-		<ProgrammerPriorityProvider
-			userId={state.session?.user.id ?? null}
-			authorityKey={boundaries.programmerPriorityAuthorityKey}
-			store={state.programmerPriorityStore}
-			transport={boundaries.programmerPriorityTransport}
-			onSessionError={boundaries.reportProgrammerPrioritySessionError}
-			onMutationError={boundaries.reportProgrammerPriorityMutationError}
+		<ServerOutputRuntimeBoundary state={state} boundaries={boundaries}>
+			<ProgrammerPriorityProvider
+				userId={state.session?.user.id ?? null}
+				authorityKey={boundaries.programmerPriorityAuthorityKey}
+				store={state.programmerPriorityStore}
+				transport={boundaries.programmerPriorityTransport}
+				onSessionError={boundaries.reportProgrammerPrioritySessionError}
+				onMutationError={boundaries.reportProgrammerPriorityMutationError}
+			>
+				<ServerShowProgrammingProviders {...props} />
+			</ProgrammerPriorityProvider>
+		</ServerOutputRuntimeBoundary>
+	);
+}
+
+export function ServerOutputRuntimeBoundary({
+	children,
+	state,
+	boundaries,
+}: PropsWithChildren<
+	Pick<ServerProgrammingProvidersProps, "state" | "boundaries">
+>) {
+	const showId = state.bootstrap?.active_show?.id ?? null;
+	const deskId = state.session?.desk.id ?? null;
+	return (
+		<OutputRuntimeProvider
+			showId={showId}
+			deskId={deskId}
+			authorityKey={boundaries.outputRuntimeAuthorityKey}
+			store={state.outputRuntimeStore}
+			transport={boundaries.outputRuntimeTransport}
+			onSessionError={boundaries.reportOutputRuntimeSessionError}
+			onMutationError={boundaries.reportOutputRuntimeMutationError}
 		>
-			<ServerShowProgrammingProviders {...props} />
-		</ProgrammerPriorityProvider>
+			{children}
+		</OutputRuntimeProvider>
 	);
 }
 
@@ -156,9 +183,7 @@ function PreloadProgrammingProviders({
 			<ProgrammerPreloadPlaybackQueueViewProvider
 				showId={showId}
 				userId={userId}
-				authorityKey={
-					boundaries.programmerPreloadPlaybackQueueAuthorityKey
-				}
+				authorityKey={boundaries.programmerPreloadPlaybackQueueAuthorityKey}
 				store={state.programmerPreloadPlaybackQueueStore}
 				transport={boundaries.programmerPreloadPlaybackQueueTransport}
 				loadSnapshot={boundaries.loadProgrammerPreloadPlaybackQueueSnapshot}
@@ -183,18 +208,12 @@ function PreloadProgrammingProviders({
 						showId={showId}
 						userId={userId}
 						deskId={state.session?.desk.id ?? null}
-						authorityKey={
-							boundaries.programmerPreloadLifecycleAuthorityKey
-						}
-						lifecycleAuthorityKey={
-							boundaries.programmerLifecycleAuthorityKey
-						}
+						authorityKey={boundaries.programmerPreloadLifecycleAuthorityKey}
+						lifecycleAuthorityKey={boundaries.programmerLifecycleAuthorityKey}
 						showStore={state.showObjectsStore}
 						store={state.programmerPreloadLifecycleStore}
 						transport={boundaries.programmerPreloadLifecycleTransport}
-						onError={
-							boundaries.reportProgrammerPreloadLifecycleMutationError
-						}
+						onError={boundaries.reportProgrammerPreloadLifecycleMutationError}
 					>
 						{children}
 					</ProgrammerPreloadLifecycleProvider>

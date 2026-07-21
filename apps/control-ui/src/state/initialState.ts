@@ -80,5 +80,4 @@ export const initialState: AppState = {
 	fixtureGroupsVisible: true,
 	presetGroupsVisible: true,
 	groupsReturnToStage: null,
-	blackout: false,
 };

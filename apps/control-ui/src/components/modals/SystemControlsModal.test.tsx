@@ -63,7 +63,10 @@ function runningSource(
 		label,
 		runtime: {
 			cue_index: 0,
-			current: { id: `${cueListId}-cue-1`, number: playbackNumber == null ? 3 : 1 },
+			current: {
+				id: `${cueListId}-cue-1`,
+				number: playbackNumber == null ? 3 : 1,
+			},
 			master: options.master ?? 1,
 			paused: options.paused ?? false,
 		} as RunningCueListSource["runtime"],
@@ -103,12 +106,29 @@ const playbackAuthority = {
 	dynamics: [{ source: mapped, index: 0 }],
 	release,
 };
+const outputAuthority = vi.hoisted(() => ({
+	viewCalls: [] as boolean[],
+	actionCalls: [] as boolean[],
+	view: {
+		projection: {
+			showId: "show-a",
+			identity: "global_master" as const,
+			revision: 1,
+			grandMaster: 1,
+			blackout: false,
+		},
+		status: "ready" as const,
+		error: null,
+		repairRequired: false,
+		pending: false,
+		ready: true,
+	},
+	actions: { setOutput: vi.fn().mockResolvedValue(null) } as {
+		setOutput: ReturnType<typeof vi.fn>;
+	} | null,
+}));
 let legacyReads = 0;
 const server = {
-	readVisualization: vi
-		.fn()
-		.mockResolvedValue({ grand_master: 1, blackout: false }),
-	setMaster: vi.fn(),
 	setProgrammer: vi.fn(),
 	selectedFixtures: [],
 	patch: { fixtures: [] },
@@ -119,7 +139,9 @@ const server = {
 	},
 	get playbacks() {
 		legacyReads += 1;
-		throw new Error("System Controls must not read the legacy Playback snapshot");
+		throw new Error(
+			"System Controls must not read the legacy Playback snapshot",
+		);
 	},
 	clearProgrammer,
 	controlFixtureAction: vi.fn().mockResolvedValue(undefined),
@@ -143,6 +165,16 @@ const preloadLifecycle = {
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
 vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state: appState, dispatch }),
+}));
+vi.mock("../../features/outputRuntime/OutputRuntimeView", () => ({
+	useOutputRuntimeView: (enabled = true) => {
+		outputAuthority.viewCalls.push(enabled);
+		return outputAuthority.view;
+	},
+	useOutputRuntimeActions: (enabled = true) => {
+		outputAuthority.actionCalls.push(enabled);
+		return enabled ? outputAuthority.actions : null;
+	},
 }));
 vi.mock("../../features/programmerLifecycle/ProgrammerLifecycleView", () => ({
 	useProgrammerLifecycleView: () => lifecycle.projection,
@@ -169,6 +201,20 @@ afterEach(() => {
 	legacyReads = 0;
 	authorityCalls.length = 0;
 	preloadLifecycleCalls.length = 0;
+	outputAuthority.viewCalls.length = 0;
+	outputAuthority.actionCalls.length = 0;
+	outputAuthority.actions = { setOutput: vi.fn().mockResolvedValue(null) };
+	Object.assign(outputAuthority.view, {
+		projection: {
+			showId: "show-a",
+			identity: "global_master",
+			revision: 1,
+			grandMaster: 1,
+			blackout: false,
+		},
+		status: "ready",
+		ready: true,
+	});
 	preloadLifecycle.ready = true;
 	preloadLifecycle.active = false;
 	appState.systemControlsOpen = true;
@@ -298,10 +344,42 @@ describe("SystemControlsModal", () => {
 
 		expect(screen.getByText("Playbacks loading…")).toBeInTheDocument();
 		expect(screen.getByText("Virtual playbacks loading…")).toBeInTheDocument();
-		expect(screen.getByRole("button", { name: "Stop everything" })).toBeDisabled();
+		expect(
+			screen.getByRole("button", { name: "Stop everything" }),
+		).toBeDisabled();
 		expect(release).not.toHaveBeenCalled();
 		expect(clearProgrammer).not.toHaveBeenCalled();
 		expect(preloadLifecycle.actions.release).not.toHaveBeenCalled();
+	});
+
+	it("routes Grand Master and blackout only through scoped Output actions", () => {
+		render(<SystemControlsModal />);
+
+		fireEvent.input(screen.getByRole("slider", { name: "Grand master" }), {
+			target: { value: "42" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "BLACKOUT" }));
+
+		expect(outputAuthority.actions?.setOutput).toHaveBeenNthCalledWith(1, {
+			grandMaster: 0.42,
+		});
+		expect(outputAuthority.actions?.setOutput).toHaveBeenNthCalledWith(2, {
+			blackout: true,
+		});
+	});
+
+	it("refuses Output mutations while projection or writer authority is loading", () => {
+		outputAuthority.view.ready = false;
+		outputAuthority.actions = null;
+		render(<SystemControlsModal />);
+
+		const slider = screen.getByRole("slider", { name: "Grand master" });
+		const blackout = screen.getByRole("button", { name: "BLACKOUT" });
+		expect(slider).toBeDisabled();
+		expect(blackout).toBeDisabled();
+		fireEvent.input(slider, { target: { value: "42" } });
+		fireEvent.click(blackout);
+		expect(outputAuthority.actions).toBeNull();
 	});
 
 	it("keeps scoped authority dormant while the modal is closed", () => {
@@ -310,7 +388,8 @@ describe("SystemControlsModal", () => {
 
 		expect(authorityCalls).toEqual([false]);
 		expect(preloadLifecycleCalls).toEqual([false]);
+		expect(outputAuthority.viewCalls).toEqual([false]);
+		expect(outputAuthority.actionCalls).toEqual([false]);
 		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-		expect(server.readVisualization).not.toHaveBeenCalled();
 	});
 });

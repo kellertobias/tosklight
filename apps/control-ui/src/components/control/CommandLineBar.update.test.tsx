@@ -74,7 +74,6 @@ const state = {
 	regularNumberShortcuts: true,
 	playbackPage: 0,
 	playbackPageNames: ["Main"],
-	blackout: false,
 	builtIn: null as string | null,
 	patchSetArmed: false,
 };
@@ -156,6 +155,9 @@ vi.mock("./commandLine/playbackShortcutAuthority", () => ({
 }));
 vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state, dispatch }),
+}));
+vi.mock("../../features/outputRuntime/OutputRuntimeView", () => ({
+	useOutputRuntimeBlackout: () => false,
 }));
 vi.mock("../../features/programmerValues/useProgrammerValuesActivity", () => ({
 	useProgrammerValuesActivity: () => activity.current,
@@ -373,7 +375,9 @@ describe("Shift+Record Update gestures", () => {
 		expect(panel).toHaveTextContent("Rejected");
 		expect(panel).toHaveTextContent("FIXTURE 1 AT FULL");
 		expect(panel).toHaveTextContent("Accepted");
-		expect(authority.store.getSnapshot().commandLine?.text).toBe("FIXTURE 7 AT");
+		expect(authority.store.getSnapshot().commandLine?.text).toBe(
+			"FIXTURE 7 AT",
+		);
 		expect(server.executeCommandLine).not.toHaveBeenCalled();
 
 		fireEvent.click(screen.getAllByRole("button", { name: "Reuse" })[1]);

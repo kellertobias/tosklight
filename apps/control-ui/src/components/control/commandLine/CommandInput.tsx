@@ -1,7 +1,8 @@
+import { useCallback } from "react";
 import type { CommandTargetMode } from "../../../controlSurface/commandTarget";
 import { useApp } from "../../../state/AppContext";
 import { Button, Input } from "../../common";
-import { CommandLineStatus } from "./CommandLineStatus";
+import { CommandLineStatusBoundary } from "./CommandLineStatusBoundary";
 
 export function CommandInput({
 	playback,
@@ -27,6 +28,15 @@ export function CommandInput({
 	onOpenHistory: () => void;
 }) {
 	const { state, dispatch } = useApp();
+	const openSystemControls = useCallback(
+		() =>
+			dispatch({
+				type: "SET_MODAL",
+				modal: "systemControlsOpen",
+				value: true,
+			}),
+		[dispatch],
+	);
 	return (
 		<>
 			<Button
@@ -67,7 +77,7 @@ export function CommandInput({
 						ESC
 					</Button>
 				)}
-				<CommandLineStatus />
+				<CommandLineStatusBoundary onOpen={openSystemControls} />
 			</div>
 			{completed && (
 				<span

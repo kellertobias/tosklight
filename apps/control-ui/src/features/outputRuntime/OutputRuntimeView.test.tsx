@@ -12,6 +12,7 @@ import type { OutputRuntimeActionOutcome } from "./contracts";
 import {
 	OutputRuntimeProvider,
 	useOutputRuntimeActions,
+	useOutputRuntimeBlackout,
 	useOutputRuntimeView,
 } from "./OutputRuntimeView";
 import { OutputRuntimeStore } from "./store";
@@ -196,5 +197,52 @@ describe("OutputRuntimeProvider", () => {
 
 		expect(screen.getByText("0.6:false:false")).toBeInTheDocument();
 		expect(onSiblingRender).toHaveBeenCalledTimes(renders);
+	});
+
+	it("keeps a blackout scalar subscriber stable for Grand Master-only events", async () => {
+		const store = new OutputRuntimeStore();
+		const transport = new FakeOutputRuntimeTransport();
+		const renders = vi.fn();
+		function BlackoutProbe() {
+			renders();
+			return <span>Blackout {String(useOutputRuntimeBlackout())}</span>;
+		}
+		render(provider(<BlackoutProbe />, store, transport));
+		await waitFor(() =>
+			expect(screen.getByText("Blackout false")).toBeInTheDocument(),
+		);
+		const readyRenders = renders.mock.calls.length;
+
+		act(() =>
+			transport.emit({
+				type: "event",
+				sequence: 11,
+				correlationId: null,
+				change: {
+					projection: outputProjection({
+						revision: 2,
+						grandMaster: 0.4,
+					}),
+				},
+			}),
+		);
+		expect(renders).toHaveBeenCalledTimes(readyRenders);
+
+		act(() =>
+			transport.emit({
+				type: "event",
+				sequence: 12,
+				correlationId: null,
+				change: {
+					projection: outputProjection({
+						revision: 3,
+						grandMaster: 0.4,
+						blackout: true,
+					}),
+				},
+			}),
+		);
+		expect(screen.getByText("Blackout true")).toBeInTheDocument();
+		expect(renders).toHaveBeenCalledTimes(readyRenders + 1);
 	});
 });

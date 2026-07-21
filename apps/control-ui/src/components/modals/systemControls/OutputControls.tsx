@@ -3,8 +3,9 @@ import { Button } from "../../common";
 import { HorizontalTouchFader } from "../../control/HorizontalTouchFader";
 
 interface OutputControlsProps {
-	master: number;
+	master: number | null;
 	blackout: boolean;
+	ready: boolean;
 	lampResult: string;
 	lampActionsAvailable: boolean;
 	onMaster(value: number): void;
@@ -19,11 +20,14 @@ export function OutputControls(props: OutputControlsProps) {
 			<section className="master-controls">
 				<HorizontalTouchFader
 					label="Grand master"
-					value={props.master}
+					value={props.master ?? 0}
+					display={props.ready ? undefined : "—"}
+					disabled={!props.ready}
 					onChange={props.onMaster}
 				/>
 				<Button
 					className={props.blackout ? "danger active" : "danger"}
+					disabled={!props.ready}
 					onClick={props.onBlackout}
 				>
 					{props.blackout ? "RELEASE BLACKOUT" : "BLACKOUT"}
