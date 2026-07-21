@@ -41,7 +41,7 @@ export function registerPbk006PairedScenario(): void {
 				[4, 60],
 				[5, 48],
 			] as const)
-				await api.executeLegacyCommandLine(`SPD GRP ${group} AT ${bpm}`);
+				await api.executeCompatibilityProgrammerCommand({ family: "speed_group", command: `SPD GRP ${group} AT ${bpm}` });
 			await installPlaybacks(
 				api,
 				[

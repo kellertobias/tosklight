@@ -103,11 +103,11 @@ pairedScenario<HighlightSequenceState>({
 			attribute: "pan",
 			value: 0.72,
 		});
-		await api.executeLegacyCommandLine(
+		await api.executeCommandLine(
 			`RECORD GROUP ${state.singletonGroupId}`,
 		);
 		await highlightAction(api, "all");
-		await api.executeLegacyCommandLine(`RECORD GROUP ${state.completeGroupId}`);
+		await api.executeCommandLine(`RECORD GROUP ${state.completeGroupId}`);
 
 		await highlightAction(api, "on");
 		await api.command("selection.set", { fixtures: [] });

@@ -17,6 +17,7 @@ import {
   object,
   objects,
   pressCommand,
+  programmer,
   putObject,
 } from "./support/catalog";
 
@@ -123,12 +124,12 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     arrange: async ({ api, bench }, surface) => {
       await loadCanonicalCopy(api, bench, `osc-003-${surface}`);
       const second = await createSession(api, crypto.randomUUID());
-      await withSession(api, second, () => api.command("programmer.command_line", { value: "GROUP 2 +" }));
+      await withSession(api, second, () => api.setCommandLineText("GROUP 2 +"));
       return { second };
     },
     api: async ({ api, bench }, state) => {
       state.first = api.session!;
-      await api.command("programmer.command_line", { value: "GROUP 1 +" });
+      await api.setCommandLineText("GROUP 1 +");
       await subscribeIsolatedHardware(bench, state);
     },
     ui: async ({ api, bench, desk, page }, state) => {
@@ -212,7 +213,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       await loadCanonicalCopy(api, bench, `osc-005-${surface}`);
       await ensureGroupSeven(api);
       const second = await createSession(api, crypto.randomUUID());
-      await withSession(api, second, () => api.command("programmer.command_line", { value: "GROUP 1 +" }));
+      await withSession(api, second, () => api.setCommandLineText("GROUP 1 +"));
       return { second, auditBefore: (await audit(api)).at(-1)?.revision ?? 0 };
     },
     api: async ({ api }, state) => {
@@ -401,6 +402,32 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       .toEqual(Array(12).fill(128));
     expect(Array.from((await bench.sacn.nextAfter(sacnMark, "sacn", 101)).slots.slice(0, 12)))
       .toEqual(Array(12).fill(128));
+  });
+
+  // The single retained direct exercise of the v1 textual command-line WebSocket envelope.
+  // Every other scenario states operator intent through the v2 command-line HTTP contract or the
+  // categorized compatibility helper; this test owns the envelope itself so the wire shape stays
+  // covered while the remaining compatibility families move to typed services.
+  test("API-004 @api › retained v1 WebSocket command-line envelope contract", async ({ api, bench }) => {
+    await loadCanonicalCopy(api, bench, "api-004-v1-command-line-envelope");
+
+    const accepted = await api.command<unknown>("programmer.command_line", { value: "GROUP 1 +" });
+    expect(accepted).toMatchObject({ protocol_version: 1, ok: true });
+    expect(accepted.request_id).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(Number.isSafeInteger(accepted.revision)).toBe(true);
+    expect((await programmer(api)).command_line).toBe("GROUP 1 +");
+
+    // The v1 envelope still owns the FIXTURE/GROUP command target; no typed v2 action replaces it.
+    const target = await api.command<unknown>("programmer.command_target", { value: "FIXTURE" });
+    expect(target).toMatchObject({ protocol_version: 1, ok: true });
+    expect(target.revision).toBeGreaterThanOrEqual(accepted.revision);
+
+    // Textual execution reports its rejection through the same envelope rather than an HTTP status.
+    await expect(api.command("programmer.execute", { value: "CUE 4242" }))
+      .rejects.toThrow(/programmer\.execute failed/i);
+
+    // Unknown commands stay a transport-level error, which is what compatibility callers observe.
+    await expect(api.command("not.a.command", {})).rejects.toThrow("unknown command");
   });
 
   registerGroupOutputPair("CROSS-001", 50, 128, "equivalent group value agrees across command surfaces");

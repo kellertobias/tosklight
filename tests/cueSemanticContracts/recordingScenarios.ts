@@ -147,7 +147,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 			attribute: "intensity",
 			value: 1,
 		});
-		await api.executeLegacyCommandLine("RECORD SET 1 CUE 1.5");
+		await api.executeCommandLine("RECORD SET 1 CUE 1.5");
 		let stored = await object<any>(api, "cue_list", installed.id);
 		expect(stored.body.cues.map((cue: any) => cue.number)).toEqual([1, 1.5, 2]);
 		expect(groupValues(stored.body.cues[0])).toEqual({ "1:intensity": 1 });
@@ -164,7 +164,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 				["2", "red", 0.2],
 			]),
 		]);
-		await api.executeLegacyCommandLine("RECORD SET 1 . 2 CUE 1.5");
+		await api.executeCommandLine("RECORD SET 1 . 2 CUE 1.5");
 		const pageStored = await object<any>(api, "cue_list", pageAddressed.id);
 		const cueSemantics = (body: any) =>
 			body.cues.map((cue: any) => ({
@@ -192,7 +192,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 			attribute: "intensity",
 			value: 0.8,
 		});
-		await api.executeLegacyCommandLine("RECORD + SET 1 CUE 2");
+		await api.executeCommandLine("RECORD + SET 1 CUE 2");
 		stored = await object<any>(api, "cue_list", installed.id);
 		expect(
 			groupValues(stored.body.cues.find((cue: any) => cue.number === 2)),
@@ -204,7 +204,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 			attribute: "red",
 			value: 0.9,
 		});
-		await api.executeLegacyCommandLine("RECORD - SET 1 CUE 2");
+		await api.executeCommandLine("RECORD - SET 1 CUE 2");
 		stored = await object<any>(api, "cue_list", installed.id);
 		expect(
 			groupValues(stored.body.cues.find((cue: any) => cue.number === 2)),
@@ -215,7 +215,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 		const stream = await openEventStream(api);
 		try {
 			let mark = stream.events.length;
-			await api.executeLegacyCommandLine("RECORD - SET 1 CUE 2");
+			await api.executeCommandLine("RECORD - SET 1 CUE 2");
 			const recordMinusEvent = await showObjectEventAfter(
 				stream.events,
 				mark,
@@ -236,7 +236,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 				afterRecordMinus.revision,
 			);
 			mark = stream.events.length;
-			await api.executeLegacyCommandLine("DELETE SET 1 CUE 2");
+			await api.executeCompatibilityProgrammerCommand({ family: "cue_delete", command: "DELETE SET 1 CUE 2" });
 			const deleteEvent = await showObjectEventAfter(
 				stream.events,
 				mark,

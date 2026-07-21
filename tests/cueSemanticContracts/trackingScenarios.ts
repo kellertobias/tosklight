@@ -189,7 +189,7 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 		});
 		expect(logicalSlots(await bench.tick(0), 12)).toEqual(beforeSlots);
 
-		await api.executeLegacyCommandLine("DELETE SET 1 CUE 1");
+		await api.executeCompatibilityProgrammerCommand({ family: "cue_delete", command: "DELETE SET 1 CUE 1" });
 		expect(
 			(await object<any>(api, "cue_list", installed.id)).body.cues.map(
 				(cue: any) => cue.number,
@@ -215,14 +215,14 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 		]);
 		const soleBefore = await object<any>(api, "cue_list", sole.id);
 		await expect(
-			api.executeLegacyCommandLine("DELETE SET 2 CUE 1"),
+			api.executeCompatibilityProgrammerCommand({ family: "cue_delete", command: "DELETE SET 2 CUE 1" }),
 		).rejects.toThrow();
 		expect((await object<any>(api, "cue_list", sole.id)).body).toEqual(
 			soleBefore.body,
 		);
 		await api.command("programmer.clear", {});
 		await expect(
-			api.executeLegacyCommandLine("RECORD - SET 2 CUE 1"),
+			api.executeCommandLine("RECORD - SET 2 CUE 1"),
 		).rejects.toThrow();
 		expect((await object<any>(api, "cue_list", sole.id)).body).toEqual(
 			soleBefore.body,

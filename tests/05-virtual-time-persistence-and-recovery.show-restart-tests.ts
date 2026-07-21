@@ -45,10 +45,10 @@ export function registerShow001PairedScenario(): void {
 			await api.command("selection.set", {
 				fixtures: [state.fixtureIds[5], state.fixtureIds[6]],
 			});
-			await api.executeLegacyCommandLine("RECORD + GROUP 3");
+			await api.executeCommandLine("RECORD + GROUP 3");
 			await api.executeCommandLine("GROUP 3 AT 40");
-			await api.executeLegacyCommandLine("RECORD SET 1");
-			await api.executeLegacyCommandLine("SET 1 AT 1.1");
+			await api.executeCommandLine("RECORD SET 1");
+			await api.executeCompatibilityProgrammerCommand({ family: "playback_set", command: "SET 1 AT 1.1" });
 			await api.command("programmer.clear", {});
 			await api.command("programmer.clear", {});
 			await api.request("POST", "/api/v1/cuelists/1/go", {});

@@ -56,7 +56,7 @@ test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
       const keepBoth = await api.request<any>("POST", "/api/v1/files/shows/operations", { operation: "copy", sources: [`${workspace}/range.txt`], destination: `${workspace}/Destination`, conflict: "keep_both", apply_to_all: true });
       expect(keepBoth).toEqual(expect.objectContaining({ complete: true, paths: expect.arrayContaining([`${workspace}/Destination/range copy.txt`]) }));
 
-      await api.command("programmer.command_line", { value: "COPY" });
+      await api.setCommandLineText("COPY");
       const claimed = await api.request<any>("POST", "/api/v1/files/input-context", { instance_id: "acceptance-file-manager", action: "copy", origin: "pending" });
       expect(claimed).toEqual(expect.objectContaining({ instance_id: "acceptance-file-manager", action: "copy", session_id: api.session!.session_id, desk_id: api.session!.desk.id }));
       const programmers = await api.request<any[]>("GET", "/api/v1/programmers");

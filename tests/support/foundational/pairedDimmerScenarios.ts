@@ -89,8 +89,8 @@ export function registerDimmerAndDerivedGroupPairedScenarios() {
 			return {};
 		},
 		api: async ({ api }) => {
-			await api.command("programmer.command_target", { value: "GROUP" });
-			await api.command("programmer.command_target", { value: "FIXTURE" });
+			await api.setCompatibilityCommandTarget("GROUP");
+			await api.setCompatibilityCommandTarget("FIXTURE");
 			await command(api, "G1 + F2");
 		},
 		ui: async ({ api, desk, page }) => {

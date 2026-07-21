@@ -192,7 +192,7 @@ export const commandApiBoundaries: FoundationalCase = {
 			expectedNumbers: number[],
 			expectedSources: ExpectedSource[],
 		) => {
-			await api.command("programmer.command_line", { value });
+			await api.setCommandLineText(value);
 			expect((await programmer(api)).command_line).toBe(value);
 			await command(api, value);
 			await expectSelectedNumbers(api, expectedNumbers);
@@ -215,7 +215,7 @@ export const commandApiBoundaries: FoundationalCase = {
 
 		// Cases 1–8: Group is the persistent default. Bare terms are live Groups while explicit
 		// Fixture terms remain scoped to only their own address term.
-		await api.command("programmer.command_target", { value: "GROUP" });
+		await api.setCompatibilityCommandTarget("GROUP");
 		await select(api, []);
 		await enter(
 			"G1 + G2",
@@ -263,7 +263,7 @@ export const commandApiBoundaries: FoundationalCase = {
 
 		// Cases 9–16: Fixture is the persistent default. A single explicit Group prefix remains
 		// live; DEGRP expands only its own term to fixture references.
-		await api.command("programmer.command_target", { value: "FIXTURE" });
+		await api.setCompatibilityCommandTarget("FIXTURE");
 		await enter(
 			"F1 + F2",
 			[1, 2],

@@ -69,21 +69,21 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       const show = await loadCanonicalCopy(api, bench, "cue-go-to-load-wire", "compact-rig");
       const cueListId = await installTwinPlaybacks(api);
       await api.request("POST", "/api/v1/cuelists/2/select", {});
-      await api.executeLegacyCommandLine("CUE SET 1 CUE 3");
-      await api.executeLegacyCommandLine("CUE CUE SET 1 . 2 CUE 2");
+      await api.executeCompatibilityProgrammerCommand({ family: "cue_navigation", command: "CUE SET 1 CUE 3" });
+      await api.executeCompatibilityProgrammerCommand({ family: "cue_navigation", command: "CUE CUE SET 1 . 2 CUE 2" });
       expect(await runtime(api, 1)).toMatchObject({ current_cue_number: 3, master: 1, enabled: true });
       expect(await runtime(api, 2)).toMatchObject({ enabled: false, loaded_cue_number: 2, effective_next_is_loaded: true });
 
       const before = await playbackState(api);
-      await expect(api.executeLegacyCommandLine("CUE 99")).rejects.toThrow(/cue does not exist/i);
-      await expect(api.executeLegacyCommandLine("CUE SET 99 CUE 1")).rejects.toThrow(/playback 99 does not exist/i);
+      await expect(api.executeCompatibilityProgrammerCommand({ family: "cue_navigation", command: "CUE 99" })).rejects.toThrow(/cue does not exist/i);
+      await expect(api.executeCompatibilityProgrammerCommand({ family: "cue_navigation", command: "CUE SET 99 CUE 1" })).rejects.toThrow(/playback 99 does not exist/i);
       await expect(api.request("POST", `/api/v1/playbacks/${cueListId}/go`, {})).rejects.toThrow(/multiple playbacks/i);
       expect(await playbackState(api)).toMatchObject({ selected_playback: before.selected_playback, active: before.active });
 
       const otherDesk = new ApiDriver(api.baseUrl);
       await otherDesk.login("Operator");
       expect((await playbackState(otherDesk)).selected_playback).toBeNull();
-      await expect(otherDesk.executeLegacyCommandLine("CUE 2")).rejects.toThrow(/no playback is selected/i);
+      await expect(otherDesk.executeCompatibilityProgrammerCommand({ family: "cue_navigation", command: "CUE 2" })).rejects.toThrow(/no playback is selected/i);
       await otherDesk.request("POST", "/api/v1/cuelists/1/select", {});
       expect((await playbackState(otherDesk)).selected_playback).toBe(1);
       expect((await playbackState(api)).selected_playback).toBe(2);
@@ -93,7 +93,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       expect((await playbackState(sameDesk)).selected_playback).toBe(2);
 
       await api.request("PUT", "/api/v1/master", { grand_master: 0.5, blackout: false });
-      await api.executeLegacyCommandLine("CUE SET 1 CUE 3");
+      await api.executeCompatibilityProgrammerCommand({ family: "cue_navigation", command: "CUE SET 1 CUE 3" });
       const masterFrame = await bench.tick(3_000);
       const visualization = await api.request<any>("GET", "/api/v1/visualization");
       expect(visualization).toMatchObject({ grand_master: 0.5, blackout: false });
@@ -103,11 +103,11 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       expect((await bench.tick(0)).universes.find((universe: any) => universe.universe === 1)?.slots[0]).toBe(0);
       await api.request("PUT", "/api/v1/master", { grand_master: 1, blackout: false });
 
-      await api.executeLegacyCommandLine("CUE CUE SET 1 CUE 2");
+      await api.executeCompatibilityProgrammerCommand({ family: "cue_navigation", command: "CUE CUE SET 1 CUE 2" });
       expect((await runtime(api, 1)).loaded_cue_number).toBe(2);
-      await api.executeLegacyCommandLine("CUE CUE SET 1 CUE 1");
+      await api.executeCompatibilityProgrammerCommand({ family: "cue_navigation", command: "CUE CUE SET 1 CUE 1" });
       expect(await runtime(api, 1)).toMatchObject({ loaded_cue_number: 1, effective_next_is_loaded: true });
-      await api.executeLegacyCommandLine("CUE CUE SET 1 CUE 2");
+      await api.executeCompatibilityProgrammerCommand({ family: "cue_navigation", command: "CUE CUE SET 1 CUE 2" });
 
       const beforeRenumber = await object<any>(api, "cue_list", cueListId);
       const loadedCueId = beforeRenumber.body.cues.find((cue: any) => cue.number === 2).id;
@@ -145,7 +145,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       expect((await runtime(api, 1)).loaded_cue_id).toBeUndefined();
       expect((await runtime(api, 1)).loaded_cue_number).toBeUndefined();
 
-      await api.executeLegacyCommandLine("CUE CUE SET 1 CUE 10");
+      await api.executeCompatibilityProgrammerCommand({ family: "cue_navigation", command: "CUE CUE SET 1 CUE 10" });
       expect((await runtime(api, 1)).effective_next_is_loaded).toBe(true);
       await api.request("POST", `/api/v1/shows/${show.id}/open`, { transition: "hold_current" });
       expect((await playbackState(api)).active).toHaveLength(0);

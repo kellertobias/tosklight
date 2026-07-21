@@ -21,7 +21,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       for (const transfer of cueTransfers) {
         const setup = await installCueTransferScenario(api, bench, `cue-009-api-${transfer.operation.toLowerCase()}-${transfer.mode.toLowerCase()}`);
         const sourceBefore = await object<any>(api, "cue_list", setup.sourceId);
-        await api.executeLegacyCommandLine(
+        await api.executeCommandLine(
           `${transfer.operation} ${transfer.mode.toUpperCase()} SET 1 CUE 2 AT SET 2 CUE 2`,
         );
         await assertCueTransferOutcome(api, bench, setup, sourceBefore, transfer);
@@ -94,19 +94,19 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
         [4, 142],
         [5, 153],
       ] as const) {
-        await api.executeLegacyCommandLine(`SPD GRP ${group} AT ${bpm}`);
+        await api.executeCompatibilityProgrammerCommand({ family: "speed_group", command: `SPD GRP ${group} AT ${bpm}` });
       }
       expect(await speedConfiguration(api)).toEqual([120, 127.5, 131, 142, 153]);
-      await api.executeLegacyCommandLine("SPD GRP 1 AT + 5");
-      await api.executeLegacyCommandLine("SPD GRP 1 AT - 5");
+      await api.executeCompatibilityProgrammerCommand({ family: "speed_group", command: "SPD GRP 1 AT + 5" });
+      await api.executeCompatibilityProgrammerCommand({ family: "speed_group", command: "SPD GRP 1 AT - 5" });
       expect((await speedConfiguration(api))[0]).toBe(120);
-      await api.executeLegacyCommandLine("SPD GRP 3 AT 90");
-      await api.executeLegacyCommandLine("SPD GRP 1 AT SPD GRP 3");
+      await api.executeCompatibilityProgrammerCommand({ family: "speed_group", command: "SPD GRP 3 AT 90" });
+      await api.executeCompatibilityProgrammerCommand({ family: "speed_group", command: "SPD GRP 1 AT SPD GRP 3" });
       await assertSpeedGroupsSynchronized(api, bench, 120);
-      await api.executeLegacyCommandLine("SPD GRP 3 AT 90");
+      await api.executeCompatibilityProgrammerCommand({ family: "speed_group", command: "SPD GRP 3 AT 90" });
       let [speedA, speedC] = await Promise.all([speedGroup(api, "A"), speedGroup(api, "C")]);
       expect([speedA.snapshot.manual_bpm, speedC.snapshot.manual_bpm, speedA.snapshot.synchronized_with, speedC.snapshot.synchronized_with]).toEqual([120, 90, null, null]);
-      await api.executeLegacyCommandLine("SPD GRP 1 AT SPD GRP 3");
+      await api.executeCompatibilityProgrammerCommand({ family: "speed_group", command: "SPD GRP 1 AT SPD GRP 3" });
       await assertSpeedGroupsSynchronized(api, bench, 120);
       for (let tap = 0; tap < 5; tap += 1) {
         if (tap > 0) await bench.tick(750);

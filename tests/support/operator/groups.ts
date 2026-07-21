@@ -29,7 +29,7 @@ export async function storeGroup(request: StoreGroupRequest): Promise<void> {
 		return;
 	}
 	if (request.surface.via === "command-line") {
-		await request.surface.api.executeLegacyCommandLine(
+		await request.surface.api.executeCommandLine(
 			groupRecordCommand(request.group, request.operation ?? "overwrite"),
 		);
 		return;

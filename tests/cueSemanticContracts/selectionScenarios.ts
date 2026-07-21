@@ -48,7 +48,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 			attribute: "intensity",
 			value: 0.7,
 		});
-		await api.executeLegacyCommandLine("RECORD CUE 7");
+		await api.executeCommandLine("RECORD CUE 7");
 		expect(
 			(await object<any>(api, "cue_list", second.id)).body.cues.map(
 				(cue: any) => cue.number,
@@ -66,7 +66,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 			attribute: "intensity",
 			value: 0.6,
 		});
-		await api.executeLegacyCommandLine("RECORD SET 1 CUE 8");
+		await api.executeCommandLine("RECORD SET 1 CUE 8");
 		expect(
 			(await object<any>(api, "cue_list", first.id)).body.cues.map(
 				(cue: any) => cue.number,

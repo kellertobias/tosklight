@@ -1,6 +1,6 @@
 import {
 	type ApiDriver,
-	commandLineRequiresLegacyCompatibility,
+	commandLineOwnership,
 } from "../../../apps/control-ui/e2e/bench/api";
 import { expect } from "../../../apps/control-ui/e2e/bench/fixtures";
 import { loadCanonicalCopy } from "../catalog";
@@ -36,11 +36,15 @@ export async function loadCompactRig(
 }
 
 export async function command(api: ApiDriver, value: string): Promise<void> {
-	if (commandLineRequiresLegacyCompatibility(value)) {
-		await api.executeLegacyCommandLine(value);
-	} else {
-		await api.executeCommandLine(value);
+	const ownership = commandLineOwnership(value);
+	if (ownership.via === "compatibility") {
+		await api.executeCompatibilityProgrammerCommand({
+			family: ownership.family,
+			command: value,
+		});
+		return;
 	}
+	await api.executeCommandLine(value);
 }
 
 export async function commandError(

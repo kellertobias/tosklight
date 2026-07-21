@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import type { Page } from "../../apps/control-ui/node_modules/@playwright/test/index.js";
 import { expect } from "../../apps/control-ui/e2e/bench/fixtures";
 import {
-  commandLineRequiresLegacyCompatibility,
+  commandLineOwnership,
   type ApiDriver,
 } from "../../apps/control-ui/e2e/bench/api";
 import { executeProgrammerCommand } from "./operator";
@@ -61,11 +61,15 @@ export async function loadCanonicalCopy(api: ApiDriver, bench: any, name: string
 }
 
 export async function command(api: ApiDriver, value: string): Promise<void> {
-  if (commandLineRequiresLegacyCompatibility(value)) {
-    await api.executeLegacyCommandLine(value);
-  } else {
-    await api.executeCommandLine(value);
+  const ownership = commandLineOwnership(value);
+  if (ownership.via === "compatibility") {
+    await api.executeCompatibilityProgrammerCommand({
+      family: ownership.family,
+      command: value,
+    });
+    return;
   }
+  await api.executeCommandLine(value);
 }
 
 export async function pressCommand(page: Page, value: string, visibleValue?: string): Promise<void> {

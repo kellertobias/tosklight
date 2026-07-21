@@ -23,7 +23,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 		const secondScreen = await page.context().newPage();
 		await secondScreen.goto(bench.baseUrl);
 		await expect(secondScreen.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
-		await api.command("programmer.command_line", { value: "" });
+		await api.setCommandLineText("");
 		const hardware = await bench.osc();
 		await hardware.subscribe(`desk-lock-${crypto.randomUUID()}`, api.session!.desk.osc_alias);
 		const before = await api.request<any>("GET", "/api/v1/dmx");

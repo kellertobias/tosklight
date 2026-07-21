@@ -141,8 +141,10 @@ export const missingGroupApi: FoundationalCase = {
 		await expect(commandError(api, "GROUP 4")).resolves.toContain(
 			"group 4 does not exist",
 		);
-		await expect(commandError(api, "RECORD + GROUP 4")).resolves.toContain(
-			"group 4 does not exist",
+		// Group recording now crosses the typed Programming boundary, which reports the missing
+		// Group with a capitalized subject. The rejection wording is otherwise unchanged.
+		await expect(commandError(api, "RECORD + GROUP 4")).resolves.toMatch(
+			/group 4 does not exist/i,
 		);
 	},
 };
