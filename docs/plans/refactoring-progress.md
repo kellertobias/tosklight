@@ -1,19 +1,20 @@
 # Major Refactoring Progress
 
-Estimated progress: **98.9%**
+Estimated progress: **96%**
 
-Estimated Codex ETA: **roughly 16–30 hours of active Codex execution**, plus any required reference-
-hardware measurement time, to repository-wide acceptance. Direct Group runtime authority and the
-broad frontend `/playbacks` retirement are complete. The refreshed public-boundary audit exposed
-the remaining typed action seams, test-DSL migration, private-adapter cleanup, and final
-performance/desktop acceptance work rather than hiding those calls behind generic helpers.
+Estimated Codex ETA: **roughly 50–90 hours of active Codex execution**, plus required reference-
+hardware measurement time, to repository-wide acceptance. The lower percentage and wider ETA are
+an intentional correction after the refreshed public-boundary inventory: the scoped runtime and
+Programmer foundations are mature, but Preload lifecycle, residual portable mutations, production
+facade retirement, public-DSL convergence, event gaps, and final performance/desktop acceptance
+remain substantive work rather than cleanup.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-21 after completing direct Group runtime authority, migrating Group Window and
-Fixture Sheet, and removing broad `/api/v1/playbacks` ownership from the frontend.
+Last updated: 2026-07-21 after completing the remaining production Patch mutation callers, public
+session/desktop/OSC test adapters, and the typed Programmer-priority and Preset-recall backend.
 
 ## Guardrails
 
@@ -449,6 +450,23 @@ Fixture Sheet, and removing broad `/api/v1/playbacks` ownership from the fronten
   changes. The dead `playbackAction` facade is gone, and a production architecture ratchet rejects
   broad snapshot state, fetches, endpoint strings, and the legacy `useGroups` helper while leaving
   backend/external v1 compatibility coverage intact.
+- [x] Moved the remaining production Patch mutation callers behind the feature-owned Patch
+  boundary. Patch Parameter Controls, Fixture Patch Setup, Media Server Setup, and Patch Window now
+  capture scoped authority and use typed optimistic mutation with rollback and replacement guards;
+  the dead broad fixture writers were removed. Stale preview media responses are suppressed, and
+  hidden/inactive Patch surfaces do not acquire mutation authority.
+- [x] Added explicit public session-handoff, desktop, and hardware-OSC test adapters. Session
+  credentials remain Node-owned and are cleared across navigation, close, reconnect, disposal, and
+  replacement; late prior-document captures cannot regain authority. Desktop and OSC controls are
+  opt-in and absent from ordinary browser execution. Public scenarios no longer inspect private
+  session storage or fabricate Tauri globals, and an architecture ratchet enforces those boundaries.
+- [x] Added typed per-user Programmer-priority snapshot, action, tombstone, and event authority.
+  Revisions, timestamps, request replay, no-change, lifecycle replacement, exact-user subscription
+  security, same-user multi-desk sharing, and foreign-user rejection remain independent of the
+  normal-values projection. Added atomic Preset recall over one coherent portable Show document:
+  exact Preset and Group revisions are captured once, ordered values apply in one Programmer
+  transaction, open selection gestures close through one sparse interaction event, interaction-only
+  outcomes omit the complete values projection, and v1 compatibility reuses the typed service.
 - [x] Added typed action-time Cue recording. One Programming action captures only normal or pending-
   Preload recordable values, resolves explicit or authoritative active targets under the portable
   Show revision, and atomically creates, updates, or deletes the Cue plus any required Cuelist,
@@ -493,12 +511,13 @@ Fixture Sheet, and removing broad `/api/v1/playbacks` ownership from the fronten
 
 - [ ] Continue vertical feature-store/event slices and move the remaining production callers away
   from broad `useServer()`, polling, and generic show-object mutation.
-- [ ] Add the typed public actions still required by acceptance scenarios: Programmer priority,
-  Preset recall, Preload lifecycle, Output master/blackout, remaining command grammar families,
-  output-route/user-layout and residual portable-show mutations.
-- [ ] Add session-handoff and controllable desktop/OSC adapters, converge the public test DSL, then
-  run the final repository-wide performance, unrestricted socket, desktop, migration, and
-  operator-path acceptance suite.
+- [ ] Complete the Priority and Preset-recall frontend/public-DSL owners, then add the typed public
+  actions still required by acceptance scenarios: Preload lifecycle, Output master/blackout,
+  remaining command grammar families, output-route/user-layout, and residual portable-show
+  mutations.
+- [ ] Replace the final raw hosted-file-picker test event, converge the public test DSL, then run
+  the final repository-wide performance, unrestricted socket, desktop, migration, and operator-path
+  acceptance suite.
 
 ## Remaining architecture work
 
@@ -510,14 +529,16 @@ Fixture Sheet, and removing broad `/api/v1/playbacks` ownership from the fronten
 3. Replace production `useServer()` callers with feature-local stores/hooks. Remove broad global
    React update ownership, DOM/custom-event SET/Store/Update routing, and polling-based refreshes.
 4. Add typed public actions for the compatibility families and direct v1 actions still exercised by
-   acceptance coverage. Priority and Preset recall are the active slice; Preload lifecycle, Output
-   runtime mutation, Speed Group, whole-Cue delete, standalone Playback `SET`, bare `UPDATE`, and
-   Preset transfer follow as separate application-owned actions.
+   acceptance coverage. Priority and Preset recall now have backend owners; their production/public
+   callers and Preload lifecycle are active. Output runtime mutation, Speed Group, whole-Cue delete,
+   standalone Playback `SET`, bare `UPDATE`, and Preset transfer follow as separate
+   application-owned actions.
 5. Complete public portable-show mutation seams for output routes, user layouts, standalone
    Playback/Page operations, typed undo, and any remaining Patch/setup callers. Preserve lossless
    extensions, one transaction/event, revision checks, replay, and stored-empty semantics.
-6. Add explicit session-handoff, desktop, and OSC test adapters so public scenarios no longer read
-   private storage, Tauri globals, or raw `light:*` events.
+6. Finish the feature-owned hosted-file-picker test adapter. Session-handoff, desktop, and OSC
+   adapters already prevent public scenarios from reading private storage or fabricating Tauri
+   globals; the hosted picker is the sole remaining raw `light:*` test event.
 7. Expand the public test DSL and migrate remaining legacy command helpers. Tests must express the
    intended operator workflow and keep software, command-line, and OSC surfaces explicit rather
    than hiding meaningful parity behind one generic implementation shortcut.
@@ -940,10 +961,11 @@ ratchets rather than being concealed behind a generic helper.
   remains a separate future milestone.
 - Preload now prepares one final-state-aware batch, and virtual-exclusion restart authority is
   private, desk-exact, migration-compatible, and absent from public runtime projections.
-- Recommended next slice: finish typed Programmer priority and Preset recall, then publish Preload
-  lifecycle and Output runtime mutation before closing the remaining command-grammar and portable-
-  show action gaps. Add explicit session/desktop adapters before the one-owner public DSL migration;
-  keep repository-wide acceptance and reference-hardware performance as the closing milestone.
+- Recommended next slice: finish the production/public Priority and Preset-recall owners while the
+  typed Preload lifecycle wraps the existing final-state-aware commit. Then publish Output runtime
+  mutation before closing the remaining command-grammar and portable-show action gaps. Keep the
+  one-owner public DSL migration, repository-wide acceptance, and reference-hardware performance as
+  the closing milestones.
 
 Test files may exceed the hard limits, but should still be split when it improves readability and
 makes operator intent more visible.
