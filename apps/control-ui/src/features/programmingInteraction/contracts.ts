@@ -8,6 +8,9 @@ export interface CommandChoiceOption {
 
 export interface PendingCommandChoice {
 	type: "cue_move_copy";
+	choiceId: string;
+	showId: string;
+	showRevision: number;
 	operation: "copy" | "move";
 	command: string;
 	options: readonly CommandChoiceOption[];
@@ -112,10 +115,7 @@ export interface ProgrammingSnapshot {
 export type ProgrammingCapability = "commandLine" | "selection";
 
 export type CommandLinePatch = Partial<
-	Pick<
-		CommandLineProjection,
-		"text" | "target" | "pristine" | "pendingChoice"
-	>
+	Pick<CommandLineProjection, "text" | "target" | "pristine" | "pendingChoice">
 >;
 
 export interface SelectionPatch {

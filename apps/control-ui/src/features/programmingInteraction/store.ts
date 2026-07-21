@@ -209,6 +209,23 @@ export class ProgrammingInteractionStore {
 		return true;
 	}
 
+	installCommandLineRepair(
+		commandLine: CommandLineProjection,
+		expectedScope = this.scope,
+	) {
+		if (!this.isScopeCurrent(expectedScope)) return false;
+		const decision = this.installDecision(
+			"command line",
+			this.authoritativeCommandLine,
+			commandLine,
+			this.state.eventSequence ?? 0,
+		);
+		if (decision !== "install") return true;
+		this.authoritativeCommandLine = commandLine;
+		this.publishRendered();
+		return true;
+	}
+
 	commitSelection(
 		token: string | null,
 		selection: SelectionProjection,
@@ -253,7 +270,12 @@ export class ProgrammingInteractionStore {
 		snapshot: ProgrammingSnapshot,
 	) {
 		if (!this.hasOperation(token, "selection", scope)) return false;
-		if (!this.installSnapshot(snapshot, { updateSessionState: false, expectedScope: scope }))
+		if (
+			!this.installSnapshot(snapshot, {
+				updateSessionState: false,
+				expectedScope: scope,
+			})
+		)
 			return false;
 		return this.commit(token, scope);
 	}
@@ -266,7 +288,8 @@ export class ProgrammingInteractionStore {
 
 	setLoading(expectedScope = this.scope) {
 		if (!this.isScopeCurrent(expectedScope)) return false;
-		if (this.state.status !== "loading") this.publishRendered({ status: "loading" });
+		if (this.state.status !== "loading")
+			this.publishRendered({ status: "loading" });
 		return true;
 	}
 
@@ -315,10 +338,7 @@ export class ProgrammingInteractionStore {
 		);
 	}
 
-	private publishAuthoritative(
-		sequence: number,
-		updateSessionState = true,
-	) {
+	private publishAuthoritative(sequence: number, updateSessionState = true) {
 		const update: Partial<ProgrammingInteractionState> = {
 			eventSequence: Math.max(this.state.eventSequence ?? 0, sequence),
 		};

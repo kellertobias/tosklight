@@ -35,10 +35,7 @@ export function programmingUuidAt(value: unknown, path: string) {
 	return value;
 }
 
-function decodeChoiceOption(
-	value: unknown,
-	path: string,
-): CommandChoiceOption {
+function decodeChoiceOption(value: unknown, path: string): CommandChoiceOption {
 	const option = recordAt(value, path);
 	return {
 		id: enumAt(option.id, `${path}.id`, ["plain", "status"]),
@@ -47,10 +44,16 @@ function decodeChoiceOption(
 	};
 }
 
-function decodePendingChoice(value: unknown, path: string): PendingCommandChoice {
+function decodePendingChoice(
+	value: unknown,
+	path: string,
+): PendingCommandChoice {
 	const choice = recordAt(value, path);
 	return {
 		type: enumAt(choice.type, `${path}.type`, ["cue_move_copy"]),
+		choiceId: programmingUuidAt(choice.choice_id, `${path}.choice_id`),
+		showId: programmingUuidAt(choice.show_id, `${path}.show_id`),
+		showRevision: integerAt(choice.show_revision, `${path}.show_revision`),
 		operation: enumAt(choice.operation, `${path}.operation`, ["copy", "move"]),
 		command: plainProgrammingStringAt(choice.command, `${path}.command`),
 		options: arrayAt(choice.options, `${path}.options`).map((option, index) =>
@@ -120,10 +123,7 @@ function decodeSelectionReference(
 	if (type === "fixture" || type === "remove_fixture")
 		return {
 			type,
-			fixtureId: programmingUuidAt(
-				reference.fixture_id,
-				`${path}.fixture_id`,
-			),
+			fixtureId: programmingUuidAt(reference.fixture_id, `${path}.fixture_id`),
 		};
 	return {
 		type,
@@ -185,10 +185,7 @@ export function decodeProgrammingSelection(
 		expression:
 			selection.expression === null
 				? null
-				: decodeSelectionExpression(
-						selection.expression,
-						`${path}.expression`,
-					),
+				: decodeSelectionExpression(selection.expression, `${path}.expression`),
 		revision: integerAt(selection.revision, `${path}.revision`),
 		gestureOpen: booleanAt(selection.gesture_open, `${path}.gesture_open`),
 	};
@@ -227,16 +224,12 @@ export function decodeProgrammingChange(
 			change,
 		);
 	const commandLine = hasCommandLine
-		? decodeProgrammingCommandLine(
-				change.command_line,
-				`${path}.command_line`,
-			)
+		? decodeProgrammingCommandLine(change.command_line, `${path}.command_line`)
 		: null;
 	const selection = hasSelection
 		? decodeProgrammingSelection(change.selection, `${path}.selection`)
 		: null;
-	if (commandLine && selection)
-		return { deskId, commandLine, selection };
+	if (commandLine && selection) return { deskId, commandLine, selection };
 	if (commandLine) return { deskId, commandLine };
 	if (selection) return { deskId, selection };
 	throw new WireValidationError(
@@ -246,9 +239,7 @@ export function decodeProgrammingChange(
 	);
 }
 
-export function programmingComponentPresence(
-	change: ProgrammingChange,
-) {
+export function programmingComponentPresence(change: ProgrammingChange) {
 	return {
 		commandLine: "commandLine" in change,
 		selection: "selection" in change,

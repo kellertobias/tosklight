@@ -71,7 +71,8 @@ export class WireValidationError extends TypeError {
 function describe(value: unknown): string {
 	if (value === null) return "null";
 	if (Array.isArray(value)) return "array";
-	if (typeof value === "number" && !Number.isFinite(value)) return String(value);
+	if (typeof value === "number" && !Number.isFinite(value))
+		return String(value);
 	return typeof value;
 }
 
@@ -144,18 +145,17 @@ function cueMoveCopyChoiceAt(
 ): asserts value is CueMoveCopyChoice {
 	const choice = objectAt(value, path);
 	enumAt(choice.type, `${path}.type`, CHOICE_TYPES);
-	enumAt(
-		choice.operation,
-		`${path}.operation`,
-		CUE_TRANSFER_OPERATIONS,
-	);
+	uuidAt(choice.choice_id, `${path}.choice_id`);
+	uuidAt(choice.show_id, `${path}.show_id`);
+	unsignedIntegerAt(choice.show_revision, `${path}.show_revision`);
+	enumAt(choice.operation, `${path}.operation`, CUE_TRANSFER_OPERATIONS);
 	stringAt(choice.command, `${path}.command`);
 	if (!Array.isArray(choice.options)) {
 		invalid(`${path}.options`, "an array", choice.options);
 	}
-	choice.options.forEach((option, index) =>
-		choiceOptionAt(option, `${path}.options[${index}]`),
-	);
+	choice.options.forEach((option, index) => {
+		choiceOptionAt(option, `${path}.options[${index}]`);
+	});
 	stringAt(choice.cancel_label, `${path}.cancel_label`);
 }
 
@@ -169,10 +169,7 @@ function commandLineAt(
 	booleanAt(commandLine.pristine, `${path}.pristine`);
 	unsignedIntegerAt(commandLine.revision, `${path}.revision`);
 	if (commandLine.pending_choice !== null) {
-		cueMoveCopyChoiceAt(
-			commandLine.pending_choice,
-			`${path}.pending_choice`,
-		);
+		cueMoveCopyChoiceAt(commandLine.pending_choice, `${path}.pending_choice`);
 	}
 }
 

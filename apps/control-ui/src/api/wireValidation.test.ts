@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-	WireValidationError,
 	decodeCommandLineChangedEvent,
 	decodeCommandLineResponse,
 	decodeCommandOperationOutcome,
 	decodeCommandOperationResponse,
+	WireValidationError,
 } from "./wireValidation";
 
 const commandLine = {
@@ -17,6 +17,9 @@ const commandLine = {
 
 const pendingChoice = {
 	type: "cue_move_copy",
+	choice_id: "11111111-1111-4111-8111-111111111111",
+	show_id: "22222222-2222-4222-8222-222222222222",
+	show_revision: 7,
 	operation: "copy",
 	command: "CUE 1 COPY CUE 2",
 	options: [

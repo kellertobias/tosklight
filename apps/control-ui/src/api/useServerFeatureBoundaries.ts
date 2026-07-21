@@ -10,6 +10,7 @@ import { HttpShowObjectSnapshotTransport } from "./ShowObjectSnapshotTransport";
 import { WebSocketShowObjectsEventTransport } from "./ShowObjectsEventTransport";
 import type { PlaybackRuntimeIdentity } from "./types";
 import { useCueRecordingBoundaries } from "./useCueRecordingBoundaries";
+import { useCueTransferBoundaries } from "./useCueTransferBoundaries";
 import { useGroupRecordingBoundaries } from "./useGroupRecordingBoundaries";
 import { usePlaybackTopologyBoundaries } from "./usePlaybackTopologyBoundaries";
 import { usePresetRecordingBoundaries } from "./usePresetRecordingBoundaries";
@@ -27,6 +28,7 @@ export function useServerFeatureBoundaries(state: ServerState) {
 	const presetRecording = usePresetRecordingBoundaries(state);
 	const groupRecording = useGroupRecordingBoundaries(state);
 	const cueRecording = useCueRecordingBoundaries(state);
+	const cueTransfer = useCueTransferBoundaries(state);
 	const playbackTopology = usePlaybackTopologyBoundaries(state);
 	const programmingUpdate = useProgrammingUpdateBoundaries(state);
 	const showObjectsAuthorityKey = [
@@ -132,6 +134,7 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		...presetRecording,
 		...groupRecording,
 		...cueRecording,
+		...cueTransfer,
 		...playbackTopology,
 		...programmingUpdate,
 		loadPlaybackSnapshot,

@@ -30,6 +30,8 @@ const SELECTION: ProgrammingEventScope = {
 	commandLine: false,
 	selection: true,
 };
+const CHOICE_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const SHOW_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
 function record(value: unknown) {
 	return value as Record<string, unknown>;
@@ -115,6 +117,9 @@ describe("Programming projection wire validation", () => {
 				text: "",
 				pending_choice: {
 					type: "cue_move_copy",
+					choice_id: CHOICE_ID,
+					show_id: SHOW_ID,
+					show_revision: 7,
 					operation: "copy",
 					command: "CUE 1 COPY CUE 2",
 					options: [{ id: "plain", label: "Copy", command: "ENT" }],
@@ -147,49 +152,80 @@ describe("Programming projection wire validation", () => {
 	});
 
 	it.each([
-		["requested desk", (value: ReturnType<typeof programmingSnapshot>) => value],
-		["snapshot desk", (value: ReturnType<typeof programmingSnapshot>) => {
-			value.projection.desk_id = OTHER_PROGRAMMING_DESK_ID;
-			return value;
-		}],
-		["cursor", (value: ReturnType<typeof programmingSnapshot>) => {
-			value.cursor.sequence = -1;
-			return value;
-		}],
-		["command revision", (value: ReturnType<typeof programmingSnapshot>) => {
-			value.projection.command_line.revision = 1.5;
-			return value;
-		}],
-		["selection revision", (value: ReturnType<typeof programmingSnapshot>) => {
-			value.projection.selection.revision = Number.MAX_SAFE_INTEGER + 1;
-			return value;
-		}],
-		["selection gesture context", (value: ReturnType<typeof programmingSnapshot>) => {
-			record(value.projection.selection).gesture_open = "open";
-			return value;
-		}],
-		["fixture UUID", (value: ReturnType<typeof programmingSnapshot>) => {
-			value.projection.selection.selected = ["fixture-1"];
-			return value;
-		}],
-		["selection expression", (value: ReturnType<typeof programmingSnapshot>) => {
-			record(value.projection.selection.expression).type = "live_groups";
-			return value;
-		}],
-		["Every Nth divisor", (value: ReturnType<typeof programmingSnapshot>) => {
-			const expression = record(value.projection.selection.expression);
-			record(expression.rule).n = 0;
-			return value;
-		}],
-		["selection reference", (value: ReturnType<typeof programmingSnapshot>) => {
-			value.projection.selection.expression = {
-				type: "sources",
-				items: [{ type: "fixture", fixture_id: "fixture-1" }],
-			};
-			return value;
-		}],
+		[
+			"requested desk",
+			(value: ReturnType<typeof programmingSnapshot>) => value,
+		],
+		[
+			"snapshot desk",
+			(value: ReturnType<typeof programmingSnapshot>) => {
+				value.projection.desk_id = OTHER_PROGRAMMING_DESK_ID;
+				return value;
+			},
+		],
+		[
+			"cursor",
+			(value: ReturnType<typeof programmingSnapshot>) => {
+				value.cursor.sequence = -1;
+				return value;
+			},
+		],
+		[
+			"command revision",
+			(value: ReturnType<typeof programmingSnapshot>) => {
+				value.projection.command_line.revision = 1.5;
+				return value;
+			},
+		],
+		[
+			"selection revision",
+			(value: ReturnType<typeof programmingSnapshot>) => {
+				value.projection.selection.revision = Number.MAX_SAFE_INTEGER + 1;
+				return value;
+			},
+		],
+		[
+			"selection gesture context",
+			(value: ReturnType<typeof programmingSnapshot>) => {
+				record(value.projection.selection).gesture_open = "open";
+				return value;
+			},
+		],
+		[
+			"fixture UUID",
+			(value: ReturnType<typeof programmingSnapshot>) => {
+				value.projection.selection.selected = ["fixture-1"];
+				return value;
+			},
+		],
+		[
+			"selection expression",
+			(value: ReturnType<typeof programmingSnapshot>) => {
+				record(value.projection.selection.expression).type = "live_groups";
+				return value;
+			},
+		],
+		[
+			"Every Nth divisor",
+			(value: ReturnType<typeof programmingSnapshot>) => {
+				const expression = record(value.projection.selection.expression);
+				record(expression.rule).n = 0;
+				return value;
+			},
+		],
+		[
+			"selection reference",
+			(value: ReturnType<typeof programmingSnapshot>) => {
+				value.projection.selection.expression = {
+					type: "sources",
+					items: [{ type: "fixture", fixture_id: "fixture-1" }],
+				};
+				return value;
+			},
+		],
 	])("rejects an invalid %s", (label, mutate) => {
-		const expectedDesk = label === "requested desk" ? "desk-1" : PROGRAMMING_DESK_ID;
+		const expectedDesk =
+			label === "requested desk" ? "desk-1" : PROGRAMMING_DESK_ID;
 		expect(() =>
 			decodeProgrammingInteractionSnapshot(
 				mutate(programmingSnapshot()),
@@ -206,20 +242,17 @@ describe("Programming event wire validation", () => {
 		["both", COMMAND],
 		["both", SELECTION],
 		["both", BOTH],
-	] as const)(
-		"accepts a %s change routed through a subscribed component",
-		(capability, scope) => {
-			const value = programmingEvent(capability);
-			expect(
-				decodeProgrammingEventMessage(value, PROGRAMMING_DESK_ID, scope),
-			).toEqual({
-				type: "event",
-				sequence: 21,
-				correlationId: "33333333-3333-4333-8333-333333333333",
-				change: decodedChange(capability),
-			});
-		},
-	);
+	] as const)("accepts a %s change routed through a subscribed component", (capability, scope) => {
+		const value = programmingEvent(capability);
+		expect(
+			decodeProgrammingEventMessage(value, PROGRAMMING_DESK_ID, scope),
+		).toEqual({
+			type: "event",
+			sequence: 21,
+			correlationId: "33333333-3333-4333-8333-333333333333",
+			change: decodedChange(capability),
+		});
+	});
 
 	it("decodes cursors and ignores another event capability", () => {
 		expect(
@@ -264,46 +297,106 @@ describe("Programming event wire validation", () => {
 	});
 
 	it.each([
-		["wrong class", "commandLine", BOTH, (event: ReturnType<typeof programmingEvent>) => {
-			event.event.class = "transition";
-		}],
-		["replaceable delivery", "commandLine", BOTH, (event: ReturnType<typeof programmingEvent>) => {
-			event.event.delivery = "replaceable";
-		}],
-		["unsafe sequence", "commandLine", BOTH, (event: ReturnType<typeof programmingEvent>) => {
-			event.event.sequence = Number.MAX_SAFE_INTEGER + 1;
-		}],
-		["wrong envelope desk", "commandLine", BOTH, (event: ReturnType<typeof programmingEvent>) => {
-			event.event.desk_id = OTHER_PROGRAMMING_DESK_ID;
-		}],
-		["wrong payload desk", "commandLine", BOTH, (event: ReturnType<typeof programmingEvent>) => {
-			event.event.payload.change.desk_id = OTHER_PROGRAMMING_DESK_ID;
-		}],
-		["null primary route", "commandLine", BOTH, (event: ReturnType<typeof programmingEvent>) => {
-			record(event.event).object = null;
-		}],
-		["legacy route", "commandLine", BOTH, (event: ReturnType<typeof programmingEvent>) => {
-			event.event.object.id = `programming-interaction:${PROGRAMMING_DESK_ID}`;
-		}],
-		["extra route", "commandLine", BOTH, (event: ReturnType<typeof programmingEvent>) => {
-			event.event.related_objects.push({
-				capability: "desk",
-				id: `programming-selection:${PROGRAMMING_DESK_ID}`,
-			});
-		}],
-		["duplicate route", "both", BOTH, (event: ReturnType<typeof programmingEvent>) => {
-			event.event.related_objects.push(event.event.related_objects[0]);
-		}],
-		["reversed combined routes", "both", BOTH, (event: ReturnType<typeof programmingEvent>) => {
-			event.event.object.id = `programming-selection:${PROGRAMMING_DESK_ID}`;
-			event.event.related_objects[0].id = `programming-command-line:${PROGRAMMING_DESK_ID}`;
-		}],
-		["null component", "commandLine", BOTH, (event: ReturnType<typeof programmingEvent>) => {
-			record(event.event.payload.change).command_line = null;
-		}],
-		["invalid correlation UUID", "commandLine", BOTH, (event: ReturnType<typeof programmingEvent>) => {
-			event.event.correlation_id = "request-1";
-		}],
+		[
+			"wrong class",
+			"commandLine",
+			BOTH,
+			(event: ReturnType<typeof programmingEvent>) => {
+				event.event.class = "transition";
+			},
+		],
+		[
+			"replaceable delivery",
+			"commandLine",
+			BOTH,
+			(event: ReturnType<typeof programmingEvent>) => {
+				event.event.delivery = "replaceable";
+			},
+		],
+		[
+			"unsafe sequence",
+			"commandLine",
+			BOTH,
+			(event: ReturnType<typeof programmingEvent>) => {
+				event.event.sequence = Number.MAX_SAFE_INTEGER + 1;
+			},
+		],
+		[
+			"wrong envelope desk",
+			"commandLine",
+			BOTH,
+			(event: ReturnType<typeof programmingEvent>) => {
+				event.event.desk_id = OTHER_PROGRAMMING_DESK_ID;
+			},
+		],
+		[
+			"wrong payload desk",
+			"commandLine",
+			BOTH,
+			(event: ReturnType<typeof programmingEvent>) => {
+				event.event.payload.change.desk_id = OTHER_PROGRAMMING_DESK_ID;
+			},
+		],
+		[
+			"null primary route",
+			"commandLine",
+			BOTH,
+			(event: ReturnType<typeof programmingEvent>) => {
+				record(event.event).object = null;
+			},
+		],
+		[
+			"legacy route",
+			"commandLine",
+			BOTH,
+			(event: ReturnType<typeof programmingEvent>) => {
+				event.event.object.id = `programming-interaction:${PROGRAMMING_DESK_ID}`;
+			},
+		],
+		[
+			"extra route",
+			"commandLine",
+			BOTH,
+			(event: ReturnType<typeof programmingEvent>) => {
+				event.event.related_objects.push({
+					capability: "desk",
+					id: `programming-selection:${PROGRAMMING_DESK_ID}`,
+				});
+			},
+		],
+		[
+			"duplicate route",
+			"both",
+			BOTH,
+			(event: ReturnType<typeof programmingEvent>) => {
+				event.event.related_objects.push(event.event.related_objects[0]);
+			},
+		],
+		[
+			"reversed combined routes",
+			"both",
+			BOTH,
+			(event: ReturnType<typeof programmingEvent>) => {
+				event.event.object.id = `programming-selection:${PROGRAMMING_DESK_ID}`;
+				event.event.related_objects[0].id = `programming-command-line:${PROGRAMMING_DESK_ID}`;
+			},
+		],
+		[
+			"null component",
+			"commandLine",
+			BOTH,
+			(event: ReturnType<typeof programmingEvent>) => {
+				record(event.event.payload.change).command_line = null;
+			},
+		],
+		[
+			"invalid correlation UUID",
+			"commandLine",
+			BOTH,
+			(event: ReturnType<typeof programmingEvent>) => {
+				event.event.correlation_id = "request-1";
+			},
+		],
 		["unsubscribed component", "commandLine", SELECTION, () => {}],
 	] as const)("rejects %s", (_label, capability, scope, mutate) => {
 		const event = programmingEvent(capability);

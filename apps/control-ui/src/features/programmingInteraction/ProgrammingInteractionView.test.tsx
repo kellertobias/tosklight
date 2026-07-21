@@ -1,8 +1,14 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+	act,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from "@testing-library/react";
 import { useLayoutEffect } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { useCommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
 import { Button } from "../../components/common/controls";
+import { useCommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
 import type {
 	SelectionActionOutcome,
 	SelectionActionRequest,
@@ -24,9 +30,9 @@ import {
 	FIXTURE_3,
 	OTHER_SHOW_ID,
 	programmingSnapshot,
+	SHOW_ID,
 	selection,
 	selectionChange,
-	SHOW_ID,
 } from "./testFixtures";
 
 const server = vi.hoisted(() => ({
@@ -265,6 +271,9 @@ describe("ProgrammingInteractionViewProvider", () => {
 						...commandLine(3, command),
 						pendingChoice: {
 							type: "cue_move_copy",
+							choiceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+							showId: SHOW_ID,
+							showRevision: 7,
 							operation: "copy",
 							command,
 							options: [],
@@ -352,7 +361,9 @@ describe("ProgrammingInteractionViewProvider", () => {
 			commandLine: true,
 			selection: false,
 		});
-		await waitFor(() => expect(screen.getByText("FIXTURE")).toBeInTheDocument());
+		await waitFor(() =>
+			expect(screen.getByText("FIXTURE")).toBeInTheDocument(),
+		);
 
 		const beforeIrrelevant = onRender.mock.calls.length;
 		act(() =>
@@ -473,7 +484,9 @@ describe("ProgrammingInteractionViewProvider", () => {
 			</ProgrammingInteractionViewProvider>
 		);
 		const rendered = render(view(SHOW_ID));
-		await waitFor(() => expect(screen.getByText("FIXTURE")).toBeInTheDocument());
+		await waitFor(() =>
+			expect(screen.getByText("FIXTURE")).toBeInTheDocument(),
+		);
 
 		rendered.rerender(view(OTHER_SHOW_ID));
 		await waitFor(() => expect(screen.getByText("GROUP")).toBeInTheDocument());

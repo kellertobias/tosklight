@@ -1,7 +1,13 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ProgrammingInteractionViewProvider } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import type { CommandLineProjection } from "../../features/programmingInteraction/contracts";
+import { ProgrammingInteractionViewProvider } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import { ProgrammingInteractionStore } from "../../features/programmingInteraction/store";
 import {
 	commandLine,
@@ -13,6 +19,9 @@ import { CommandChoiceModal } from "./CommandChoiceModal";
 
 const CHOICE = {
 	type: "cue_move_copy" as const,
+	choiceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+	showId: SHOW_ID,
+	showRevision: 7,
 	operation: "copy" as const,
 	command: "COPY SET 1 CUE 2 AT SET 2 CUE 2",
 	options: [
@@ -78,66 +87,93 @@ function renderScopedChoice({
 }
 
 const server = {
-  pendingCommandChoice: {
-    type: "cue_move_copy" as const,
-    operation: "copy" as const,
-    command: "COPY SET 1 CUE 2 AT SET 2 CUE 2",
-    options: [
-      { id: "plain", label: "Plain Copy", command: "COPY PLAIN SET 1 CUE 2 AT SET 2 CUE 2" },
-      { id: "status", label: "Status Copy", command: "COPY STATUS SET 1 CUE 2 AT SET 2 CUE 2" },
-    ],
-    cancel_label: "Cancel",
-  } as null | {
-    type: "cue_move_copy";
-    operation: "copy" | "move";
-    command: string;
-    options: Array<{ id: string; label: string; command: string }>;
-    cancel_label: string;
-  },
-  executeCommandLine: vi.fn().mockResolvedValue(true),
+	pendingCommandChoice: {
+		type: "cue_move_copy" as const,
+		operation: "copy" as const,
+		command: "COPY SET 1 CUE 2 AT SET 2 CUE 2",
+		options: [
+			{
+				id: "plain",
+				label: "Plain Copy",
+				command: "COPY PLAIN SET 1 CUE 2 AT SET 2 CUE 2",
+			},
+			{
+				id: "status",
+				label: "Status Copy",
+				command: "COPY STATUS SET 1 CUE 2 AT SET 2 CUE 2",
+			},
+		],
+		cancel_label: "Cancel",
+	} as null | {
+		type: "cue_move_copy";
+		operation: "copy" | "move";
+		command: string;
+		options: Array<{ id: string; label: string; command: string }>;
+		cancel_label: string;
+	},
+	executeCommandLine: vi.fn().mockResolvedValue(true),
 	dismissCommandChoice: vi.fn(() => {
 		server.pendingCommandChoice = null;
 	}),
-  cancelCommandChoice: vi.fn(),
+	cancelCommandChoice: vi.fn(),
 };
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
+const transfer = vi.hoisted(() => ({ apply: vi.fn().mockResolvedValue(true) }));
+vi.mock("../../features/cueTransfer/CueTransferProvider", () => ({
+	useCueTransfer: () => transfer,
+}));
 
 afterEach(() => {
-  cleanup();
-  vi.clearAllMocks();
-  server.pendingCommandChoice = {
-    type: "cue_move_copy",
-    operation: "copy",
-    command: "COPY SET 1 CUE 2 AT SET 2 CUE 2",
-    options: [
-      { id: "plain", label: "Plain Copy", command: "COPY PLAIN SET 1 CUE 2 AT SET 2 CUE 2" },
-      { id: "status", label: "Status Copy", command: "COPY STATUS SET 1 CUE 2 AT SET 2 CUE 2" },
-    ],
-    cancel_label: "Cancel",
-  };
+	cleanup();
+	vi.clearAllMocks();
+	transfer.apply.mockResolvedValue(true);
+	server.pendingCommandChoice = {
+		type: "cue_move_copy",
+		operation: "copy",
+		command: "COPY SET 1 CUE 2 AT SET 2 CUE 2",
+		options: [
+			{
+				id: "plain",
+				label: "Plain Copy",
+				command: "COPY PLAIN SET 1 CUE 2 AT SET 2 CUE 2",
+			},
+			{
+				id: "status",
+				label: "Status Copy",
+				command: "COPY STATUS SET 1 CUE 2 AT SET 2 CUE 2",
+			},
+		],
+		cancel_label: "Cancel",
+	};
 });
 
 describe("CommandChoiceModal", () => {
-  it("renders only the authoritative Plain, Status, and Cancel choices", async () => {
-	renderScopedChoice();
+	it("renders only the authoritative Plain, Status, and Cancel choices", async () => {
+		renderScopedChoice();
 
-	await screen.findByRole("dialog", { name: "Cue Copy choice" });
-    expect(screen.getByRole("button", { name: "Plain Copy" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Status Copy" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Move/ })).not.toBeInTheDocument();
-  });
+		await screen.findByRole("dialog", { name: "Cue Copy choice" });
+		expect(
+			screen.getByRole("button", { name: "Plain Copy" }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: "Status Copy" }),
+		).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: /Move/ }),
+		).not.toBeInTheDocument();
+	});
 
-  it("executes the selected explicit command", async () => {
-	renderScopedChoice();
-	await screen.findByRole("dialog", { name: "Cue Copy choice" });
-    fireEvent.click(screen.getByRole("button", { name: "Status Copy" }));
-    await waitFor(() => expect(server.executeCommandLine).toHaveBeenCalledWith(
-		"COPY STATUS SET 1 CUE 2 AT SET 2 CUE 2",
-		{ target: "FIXTURE", pristine: false },
-	));
-  });
+	it("executes the selected typed transfer without replaying its command", async () => {
+		renderScopedChoice();
+		await screen.findByRole("dialog", { name: "Cue Copy choice" });
+		fireEvent.click(screen.getByRole("button", { name: "Status Copy" }));
+		await waitFor(() =>
+			expect(transfer.apply).toHaveBeenCalledWith(CHOICE, "status"),
+		);
+		expect(server.executeCommandLine).not.toHaveBeenCalled();
+	});
 
 	it("ignores a legacy response choice before scoped authority requires it", async () => {
 		const store = new ProgrammingInteractionStore();
