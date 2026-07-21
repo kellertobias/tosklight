@@ -4,6 +4,11 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  evaluateTestCommandBoundaries,
+  readTestSources,
+  scanTestCommandBoundaries,
+} from "./test-command-boundaries.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const failures = [];
@@ -181,11 +186,23 @@ function typeScriptDependencyDirections() {
     fail("generated wire DTOs must be consumed and validated by the frontend API boundary");
 }
 
+function testCommandBoundaries() {
+  const baselinePath = path.join(repositoryRoot, "tools/test-command-boundaries.baseline.json");
+  if (!fs.existsSync(baselinePath)) {
+    fail(`${relative(baselinePath)} is missing; regenerate the test command boundary baseline`);
+    return;
+  }
+  const baseline = JSON.parse(fs.readFileSync(baselinePath, "utf8"));
+  const scan = scanTestCommandBoundaries(readTestSources(repositoryRoot));
+  for (const failure of evaluateTestCommandBoundaries(scan, baseline)) fail(failure);
+}
+
 rustDependencyDirections();
 serverEntrypointIsThin();
 activeShowMutationDirections();
 playbackOwnershipBoundaries();
 typeScriptDependencyDirections();
+testCommandBoundaries();
 
 if (failures.length > 0) {
   for (const failure of failures) console.error(`architecture error: ${failure}`);

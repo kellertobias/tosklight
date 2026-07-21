@@ -1,6 +1,6 @@
 # Canonical repository-local development artifacts
 /.artifacts/
-
+/.next/*
 # Rust
 /target/
 

@@ -65,6 +65,31 @@ The server maintains:
 - `shows/*.show`: portable, versioned SQLite show files.
 - A fixed-deadline 44 Hz render scheduler with health counters exposed by `/api/v1/bootstrap` and `/api/v1/configuration`.
 
+## Code tour for new developers
+
+The repository ships a guided onboarding tour under [`.tour/`](.tour). Start it with
+[CodeSafari](https://github.com/kellertobias/codesafari) — no install required:
+
+```sh
+npx @tobisk/codesafari dev        # tour viewer at http://localhost:4317
+npx @tobisk/codesafari validate   # check the tour content for problems
+npx @tobisk/codesafari export     # emit a static, offline copy to ./codesafari-site
+```
+
+The viewer opens a read-only IDE: a file tree, a source pane, and a step panel, so you can follow a
+tour and still explore any file. It covers:
+
+- **Tours** — Orientation, One Action End to End, Add a Capability, A Frontend Slice in Detail, and
+  Rust by Example for developers new to Rust.
+- **Components** — Control UI, UI Library, Tauri apps, Backend/Application, Engine & Output, Help
+  Generator, and Testbench.
+- **Glossary** — the operator vocabulary (Cue, Playback, Programmer, patch) and the architecture
+  concepts (action context, projections, revisions, tick budget) you need before reading the code.
+
+Every page is plain Markdown, so it is also readable directly on the file system or on the
+repository host. `docs/engineering/` remains the authority for architecture rules; the tour links
+into it rather than restating it.
+
 ## API model
 
 - REST under `/api/v1` provides sessions, bootstrap snapshots, show upload/download/open, revisioned show objects, patch inspection, programmer management, playback actions, and diagnostics.
@@ -77,6 +102,8 @@ The server maintains:
 Show objects use the kinds `patched_fixture`, `cue_list`, and `route` for the live engine snapshot. Other kinds such as presets, groups, phasers, mappings, and user layouts use the same revisioned object store.
 
 ## Verification
+
+[Build and test commands](docs/engineering/build-and-test-commands.md) documents every `./dev`, `./build`, and `./test` subcommand, what `./test architecture` enforces, and which check to run for which change.
 
 All persisted-data changes are also governed by the [backward-compatibility acceptance criteria](docs/acceptance-criteria.md). A feature is not complete until legacy-file behavior is migrated and tested, or the compatibility requirement has been explicitly decided with the operator.
 

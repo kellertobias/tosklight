@@ -14,7 +14,7 @@ test("logical lines count a final unterminated line", () => {
   assert.equal(logicalLineCount("one\ntwo\n"), 2);
 });
 
-test("only machine-managed locks and generated schemas are exempt", () => {
+test("only machine-managed locks, generated schemas, and experiments are exempt", () => {
   assert.equal(exemptionReason("Cargo.lock"), "machine-managed lockfile");
   assert.equal(exemptionReason("apps/a/package-lock.json"), "machine-managed lockfile");
   assert.equal(
@@ -25,8 +25,13 @@ test("only machine-managed locks and generated schemas are exempt", () => {
     exemptionReason("crates/wire/schemas/v2-events/event-server-message.schema.json"),
     "Rust-generated wire schema JSON",
   );
+  assert.equal(
+    exemptionReason("experiments/dynamics-editor/app.js"),
+    "isolated experiment prototype",
+  );
   assert.equal(exemptionReason("fixtures/schema.json"), undefined);
   assert.equal(exemptionReason("docs/generated.md"), undefined);
+  assert.equal(exemptionReason("apps/control-ui/src/experiments/panel.tsx"), undefined);
 });
 
 test("test sources are identified without exempting them from goal reporting", () => {

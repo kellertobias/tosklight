@@ -6,7 +6,8 @@ export const LIMITS = Object.freeze({
 });
 
 // These are the only text files excluded from line limits. They are rewritten by
-// package managers or deterministic generators, so splitting them would corrupt their format.
+// package managers or deterministic generators, so splitting them would corrupt their format,
+// or they are isolated prototypes that no production code imports.
 const MACHINE_MANAGED_LOCKFILES = new Set([
   "Cargo.lock",
   "bun.lock",
@@ -16,6 +17,11 @@ const MACHINE_MANAGED_LOCKFILES = new Set([
 ]);
 const TAURI_SCHEMA = /^apps\/[^/]+\/src-tauri\/gen\/schemas\/[^/]+\.json$/u;
 const WIRE_SCHEMA = /^crates\/wire\/schemas\/[^/]+\/[^/]+\.schema\.json$/u;
+// Standalone clickable prototypes under `experiments/`. They are deliberately isolated from
+// `apps/` and `crates/`: no imports, packages, API calls, persistence, or backend behavior, and
+// nothing in production references them. They explore layouts, so splitting them by responsibility
+// would defeat their purpose. Promote an experiment into `apps/` before it earns the limits.
+const EXPERIMENT = /^experiments\//u;
 const TEST_DIRECTORY = /(^|\/)(?:__tests__|e2e|tests)(?:\/|$)/u;
 const TEST_FILENAME = /(?:^|\.)\b(?:spec|test)\.[^.]+$/u;
 
@@ -24,6 +30,7 @@ export function exemptionReason(repositoryPath) {
   if (MACHINE_MANAGED_LOCKFILES.has(basename)) return "machine-managed lockfile";
   if (TAURI_SCHEMA.test(repositoryPath)) return "Tauri-generated schema JSON";
   if (WIRE_SCHEMA.test(repositoryPath)) return "Rust-generated wire schema JSON";
+  if (EXPERIMENT.test(repositoryPath)) return "isolated experiment prototype";
   return undefined;
 }
 
