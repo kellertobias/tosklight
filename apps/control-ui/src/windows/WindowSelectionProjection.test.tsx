@@ -156,6 +156,14 @@ vi.mock("../features/server/useShowObjectsState", () => ({
 	useGroups: () => [],
 }));
 vi.mock("./fixtureSheetColumns", () => ({ fixtureSheetColumns: () => [] }));
+vi.mock("./fixtureSheetCuelistAuthority", () => ({
+	useFixtureSheetCuelistAuthority: () => ({
+		ready: true,
+		cueLists: [],
+		selectedCueListId: "",
+		selectedCueList: null,
+	}),
+}));
 vi.mock("./fixtureSheetProjection", () => ({
 	useFixtureSheetRows: () => mocks.fixtureSheetRows,
 	useFixtureSheetVisualizations: () => ({

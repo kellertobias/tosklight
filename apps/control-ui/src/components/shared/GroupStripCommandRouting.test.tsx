@@ -11,11 +11,11 @@ import { UPDATE_TARGET_EVENT } from "../control/updateWorkflow";
 
 const mocks = vi.hoisted(() => ({
 	dispatch: vi.fn(),
-	executeCommandLine: vi.fn(),
-	selectionGesture: vi.fn(),
-	setCommandLine: vi.fn(),
-	selectGroup: vi.fn(),
-	resetCommandLine: vi.fn(),
+	executeCommand: vi.fn(),
+	selectLive: vi.fn(),
+	replaceCommand: vi.fn(),
+	selectFrozen: vi.fn(),
+	resetCommand: vi.fn(),
 	refresh: vi.fn(),
 	recordGroup: vi.fn(),
 	state: { storeArmed: false, updateArmed: false },
@@ -36,21 +36,35 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../api/ServerContext", () => ({
 	useServer: () => ({
 		bootstrap: { active_show: { id: "show" } },
-		groups: mocks.groups,
-		selectedGroupId: null,
-		executeCommandLine: mocks.executeCommandLine,
-		selectionGesture: mocks.selectionGesture,
-		setCommandLine: mocks.setCommandLine,
-		selectGroup: mocks.selectGroup,
-		resetCommandLine: mocks.resetCommandLine,
 		refresh: mocks.refresh,
+	}),
+}));
+vi.mock("../control/commandLine/useCommandLineSurface", () => ({
+	useCommandLineSurface: () => ({
+		ready: true,
+		text: "",
+		target: "GROUP" as const,
+		pristine: true,
+		selected: [],
+		selectedGroupId: null,
+		read: () => ({ text: "", target: "GROUP", pristine: true, ready: true }),
+		replace: mocks.replaceCommand,
+		reset: mocks.resetCommand,
+		execute: mocks.executeCommand,
+		cancelChoice: vi.fn(),
 	}),
 }));
 vi.mock("../../features/groupRecording/GroupRecordingProvider", () => ({
 	useGroupRecording: () => ({ record: mocks.recordGroup }),
 }));
-vi.mock("../../features/server/useShowObjectsState", () => ({
-	useGroups: () => mocks.groups,
+vi.mock("../../features/showObjects/ShowObjectsState", () => ({
+	usePortableGroups: () => mocks.groups,
+}));
+vi.mock("../../features/groupSelection/useGroupSelectionActions", () => ({
+	useGroupSelectionActions: () => ({
+		selectLive: mocks.selectLive,
+		selectFrozen: mocks.selectFrozen,
+	}),
 }));
 
 vi.mock("../../state/AppContext", () => ({
@@ -65,13 +79,13 @@ describe("GroupStrip action routing", () => {
 
 	beforeEach(() => {
 		mocks.dispatch.mockReset();
-		mocks.executeCommandLine.mockReset().mockResolvedValue(true);
-		mocks.selectionGesture.mockReset().mockResolvedValue(undefined);
-		mocks.setCommandLine.mockReset();
-		mocks.selectGroup.mockReset().mockResolvedValue(undefined);
+		mocks.executeCommand.mockReset().mockResolvedValue(true);
+		mocks.selectLive.mockReset().mockReturnValue(Promise.resolve(null));
+		mocks.replaceCommand.mockReset().mockResolvedValue(true);
+		mocks.selectFrozen.mockReset().mockReturnValue(Promise.resolve(null));
 		mocks.refresh.mockReset().mockResolvedValue(undefined);
 		mocks.recordGroup.mockReset().mockResolvedValue({ status: "changed" });
-		mocks.resetCommandLine.mockReset();
+		mocks.resetCommand.mockReset().mockResolvedValue(true);
 		mocks.state.storeArmed = false;
 		mocks.state.updateArmed = false;
 		mocks.groups = [
@@ -88,14 +102,26 @@ describe("GroupStrip action routing", () => {
 		];
 	});
 
-	it("selects shortcut groups through the shared surface gesture", () => {
+	it("selects shortcut groups through the scoped live-Group gesture", () => {
 		render(<GroupStrip />);
 		fireEvent.click(screen.getByText("Shortcut Group").closest("button")!);
-		expect(mocks.selectionGesture).toHaveBeenCalledWith({
-			type: "live_group",
-			group_id: "1",
-		});
-		expect(mocks.setCommandLine).toHaveBeenCalledWith("GROUP 1");
+		expect(mocks.selectLive).toHaveBeenCalledWith(mocks.groups[0]);
+		expect(mocks.replaceCommand).toHaveBeenCalledWith("GROUP 1");
+	});
+
+	it("freezes shortcut groups through the scoped selectGroup action", () => {
+		render(<GroupStrip />);
+		fireEvent.doubleClick(screen.getByText("Shortcut Group").closest("button")!);
+		expect(mocks.selectFrozen).toHaveBeenCalledWith(mocks.groups[0]);
+		expect(mocks.selectLive).not.toHaveBeenCalled();
+	});
+
+	it("leaves the command line alone when refused authority blocks selection", () => {
+		mocks.selectLive.mockReturnValue(null);
+		render(<GroupStrip />);
+		fireEvent.click(screen.getByText("Shortcut Group").closest("button")!);
+		expect(mocks.selectLive).toHaveBeenCalledOnce();
+		expect(mocks.replaceCommand).not.toHaveBeenCalled();
 	});
 
 	it("routes an armed Update touch to the exact Group target without selecting it", () => {
@@ -108,7 +134,7 @@ describe("GroupStrip action routing", () => {
 			family: { type: "group" },
 			object_id: "1",
 		});
-		expect(mocks.selectionGesture).not.toHaveBeenCalled();
+		expect(mocks.selectLive).not.toHaveBeenCalled();
 		window.removeEventListener(UPDATE_TARGET_EVENT, selected);
 	});
 
@@ -140,8 +166,8 @@ describe("GroupStrip action routing", () => {
 		expect(
 			screen.queryByRole("dialog", { name: "Record to Stored Empty Shortcut" }),
 		).toBeNull();
-		expect(mocks.executeCommandLine).not.toHaveBeenCalled();
-		expect(mocks.resetCommandLine).toHaveBeenCalledOnce();
+		expect(mocks.executeCommand).not.toHaveBeenCalled();
+		expect(mocks.resetCommand).toHaveBeenCalledOnce();
 		expect(mocks.refresh).not.toHaveBeenCalled();
 		expect(mocks.dispatch).toHaveBeenCalledWith({
 			type: "SET_STORE_ARMED",
@@ -163,8 +189,8 @@ describe("GroupStrip action routing", () => {
 				expectedObjectRevision: 4,
 			}),
 		);
-		expect(mocks.executeCommandLine).not.toHaveBeenCalled();
-		expect(mocks.resetCommandLine).toHaveBeenCalledOnce();
+		expect(mocks.executeCommand).not.toHaveBeenCalled();
+		expect(mocks.resetCommand).toHaveBeenCalledOnce();
 		expect(mocks.refresh).not.toHaveBeenCalled();
 		expect(mocks.dispatch).toHaveBeenCalledWith({
 			type: "SET_STORE_ARMED",
@@ -180,6 +206,6 @@ describe("GroupStrip action routing", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Overwrite" }));
 
 		await waitFor(() => expect(mocks.recordGroup).toHaveBeenCalledOnce());
-		expect(mocks.resetCommandLine).not.toHaveBeenCalled();
+		expect(mocks.resetCommand).not.toHaveBeenCalled();
 	});
 });

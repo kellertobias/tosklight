@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useServer } from "../api/ServerContext";
 import { usePollingResource } from "../hooks/usePollingResource";
-import type { VisualizationSnapshot } from "../api/types";
+import type { CueList, VisualizationSnapshot } from "../api/types";
 import { fixtures } from "../data/mockData";
 import type { ShowObject } from "../features/showObjects/contracts";
 import { useGroups } from "../features/server/useShowObjectsState";
@@ -35,7 +35,7 @@ function orderedFixtureTargets({
 	server,
 	fixtureOrder,
 	activeOnly,
-	cueListId,
+	selectedCueList,
 	includedHeads,
 	groups,
 	activeValueTargets,
@@ -43,16 +43,13 @@ function orderedFixtureTargets({
 	server: ReturnType<typeof useServer>;
 	fixtureOrder: FixtureSheetOrder;
 	activeOnly: boolean;
-	cueListId: string;
+	selectedCueList: CueList | null;
 	includedHeads: FixtureSheetIncludedHeads;
 	groups: readonly FixtureGroup[];
 	activeValueTargets: Parameters<typeof activeProgrammerFixtureIds>[0];
 }) {
 	const activeIds = activeProgrammerFixtureIds(activeValueTargets, groups);
-	const selectedCueList = server.playbacks?.cue_lists.find(
-		(cueList) => cueList.id === cueListId,
-	);
-	const cueIds = cueListFixtureIds(selectedCueList, groups);
+	const cueIds = cueListFixtureIds(selectedCueList ?? undefined, groups);
 	return [...(server.patch?.fixtures ?? [])]
 		.sort(compareFixtureIds)
 		.flatMap((fixture) => fixtureSheetTargets(fixture, includedHeads))
@@ -223,7 +220,7 @@ export function useFixtureSheetRows({
 	preloadVisualization,
 	fixtureOrder,
 	activeOnly,
-	cueListId,
+	selectedCueList,
 	includedHeads,
 	active = true,
 }: {
@@ -231,7 +228,7 @@ export function useFixtureSheetRows({
 	preloadVisualization: VisualizationSnapshot | null;
 	fixtureOrder: FixtureSheetOrder;
 	activeOnly: boolean;
-	cueListId: string;
+	selectedCueList: CueList | null;
 	includedHeads: FixtureSheetIncludedHeads;
 	active?: boolean;
 }) {
@@ -253,7 +250,7 @@ export function useFixtureSheetRows({
 			server,
 			fixtureOrder,
 			activeOnly,
-			cueListId,
+			selectedCueList,
 			includedHeads,
 			groups,
 			activeValueTargets,

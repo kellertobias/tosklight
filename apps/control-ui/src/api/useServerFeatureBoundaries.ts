@@ -122,6 +122,9 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		) => (await loadShowObjectSnapshot(showId, kind, objectId)).object,
 		[loadShowObjectSnapshot],
 	);
+	const reportShowObjectError = useFeatureErrorReporter(state.setError);
+	const reportPlaybackError = useFeatureErrorReporter(state.setError);
+	const reportPlaybackTopologyError = useFeatureErrorReporter(state.setError);
 	return {
 		showObjectsTransport,
 		showObjectsAuthorityKey,
@@ -142,8 +145,9 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		loadShowObjectCollection,
 		loadShowObjectSnapshot,
 		loadShowObject,
-		reportShowObjectError: useFeatureErrorReporter(state.setError),
-		reportPlaybackError: useFeatureErrorReporter(state.setError),
+		reportShowObjectError,
+		reportPlaybackError,
+		reportPlaybackTopologyError,
 		reportProgrammingSessionError: programmingErrors.reportSession,
 		reportProgrammingMutationError: programmingErrors.reportMutation,
 	};

@@ -43,9 +43,7 @@ export function CuelistWindow({
 	const firstAvailableCuelist = pool[0]?.number ?? 1;
 	const paneSelectedCuelist =
 		cueListSource === "follow-selection"
-			? (playbackDesk?.selected_playback ??
-				server.playbacks?.selected_playback ??
-				null)
+			? (playbackDesk?.selected_playback ?? null)
 			: (fixedCueListNumber ?? firstAvailableCuelist);
 	const selectedCuelist = builtIn
 		? (state.cuelistBuiltInNumber ?? firstAvailableCuelist)

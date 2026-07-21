@@ -1,12 +1,11 @@
 import type { CueList, PlaybackDefinition } from "../../api/types";
 import type { ShowObject, ShowObjectKind } from "../showObjects/contracts";
 import type { ShowObjectsStore } from "../showObjects/store";
-import {
-	playbackTopologyTransportFailure,
-	repairPlaybackTopologyConflict,
-} from "./conflictRepair";
+import { repairPlaybackTopologyConflict } from "./conflictRepair";
 import type {
+	ExistingPlaybackPageRevisionBasis,
 	ExistingPlaybackRevisionBasis,
+	PlaybackPageRevisionBasis,
 	PlaybackTopologyAction,
 	PlaybackTopologyActions,
 	PlaybackTopologyOutcome,
@@ -14,6 +13,9 @@ import type {
 	PlaybackTopologyRevisionBasis,
 	PlaybackTopologyTransport,
 } from "./contracts";
+import { existingPageRevisions, readyPageRevisions } from "./pageAuthority";
+import { normalizePlaybackPageName } from "./pageNames";
+import { PlaybackTopologyWriterLifecycle } from "./writerLifecycle";
 
 export interface PlaybackTopologyWriterOptions {
 	showId: string;
@@ -29,10 +31,31 @@ export interface PlaybackTopologyWriterOptions {
 
 /** Serializes each portable topology intent as one revision-checked Show action. */
 export class PlaybackTopologyWriter implements PlaybackTopologyActions {
-	private stopped = false;
-	private tail: Promise<void> = Promise.resolve();
+	private readonly lifecycle: PlaybackTopologyWriterLifecycle;
 
-	constructor(private readonly options: PlaybackTopologyWriterOptions) {}
+	constructor(private readonly options: PlaybackTopologyWriterOptions) {
+		this.lifecycle = new PlaybackTopologyWriterLifecycle(
+			options.showId,
+			options.store,
+			options.transport,
+		);
+	}
+
+	createPage(page: number, revisionBasis?: PlaybackPageRevisionBasis) {
+		return this.lifecycle.enqueue((generation) =>
+			this.createPageNow(generation, page, revisionBasis),
+		);
+	}
+
+	renamePage(
+		page: number,
+		name: string,
+		revisionBasis?: ExistingPlaybackPageRevisionBasis,
+	) {
+		return this.lifecycle.enqueue((generation) =>
+			this.renamePageNow(generation, page, name, revisionBasis),
+		);
+	}
 
 	saveCueList(
 		cueListId: string,
@@ -40,8 +63,14 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 		expectedObjectId: string | null,
 		body: CueList,
 	) {
-		return this.enqueue(() =>
-			this.saveCueListNow(cueListId, expectedRevision, expectedObjectId, body),
+		return this.lifecycle.enqueue((generation) =>
+			this.saveCueListNow(
+				generation,
+				cueListId,
+				expectedRevision,
+				expectedObjectId,
+				body,
+			),
 		);
 	}
 
@@ -51,8 +80,8 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 		playback: PlaybackDefinition,
 		revisionBasis?: PlaybackTopologyRevisionBasis,
 	) {
-		return this.enqueue(() =>
-			this.configureSlotNow(page, slot, playback, revisionBasis),
+		return this.lifecycle.enqueue((generation) =>
+			this.configureSlotNow(generation, page, slot, playback, revisionBasis),
 		);
 	}
 
@@ -62,8 +91,14 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 		playbackNumber: number,
 		revisionBasis?: ExistingPlaybackRevisionBasis,
 	) {
-		return this.enqueue(() =>
-			this.mapExistingPlaybackNow(page, slot, playbackNumber, revisionBasis),
+		return this.lifecycle.enqueue((generation) =>
+			this.mapExistingPlaybackNow(
+				generation,
+				page,
+				slot,
+				playbackNumber,
+				revisionBasis,
+			),
 		);
 	}
 
@@ -72,16 +107,57 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 		slot: number,
 		revisionBasis?: PlaybackTopologyRevisionBasis,
 	) {
-		return this.enqueue(() =>
-			this.clearMappedPlaybackNow(page, slot, revisionBasis),
+		return this.lifecycle.enqueue((generation) =>
+			this.clearMappedPlaybackNow(generation, page, slot, revisionBasis),
 		);
 	}
 
 	stop() {
-		this.stopped = true;
+		this.lifecycle.stop();
+	}
+
+	private createPageNow(
+		generation: number,
+		page: number,
+		revisionBasis?: PlaybackPageRevisionBasis,
+	) {
+		const revisions = readyPageRevisions(
+			this.options.store,
+			page,
+			revisionBasis,
+		);
+		if (!revisions)
+			return this.fail("Authoritative Playback Pages are loading", generation);
+		return this.apply({ type: "create_page", page, ...revisions }, generation);
+	}
+
+	private renamePageNow(
+		generation: number,
+		page: number,
+		name: string,
+		revisionBasis?: ExistingPlaybackPageRevisionBasis,
+	) {
+		const normalized = normalizePlaybackPageName(name);
+		if (!normalized)
+			return this.fail("Playback Page name is invalid", generation);
+		const revisions = existingPageRevisions(
+			this.options.store,
+			page,
+			revisionBasis,
+		);
+		if (!revisions)
+			return this.fail(
+				`Authoritative Playback Page ${page} is not available`,
+				generation,
+			);
+		return this.apply(
+			{ type: "rename_page", page, name: normalized, ...revisions },
+			generation,
+		);
 	}
 
 	private saveCueListNow(
+		generation: number,
 		cueListId: string,
 		expectedRevision: number,
 		expectedObjectId: string | null,
@@ -89,17 +165,21 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 	) {
 		const snapshot = this.options.store.getSnapshot();
 		if (!snapshot.readyCollections.has("cue_list"))
-			return this.fail("Authoritative Cuelists are loading");
-		return this.apply({
-			type: "save_cue_list",
-			cueListId,
-			expectedRevision,
-			expectedObjectId,
-			body,
-		});
+			return this.fail("Authoritative Cuelists are loading", generation);
+		return this.apply(
+			{
+				type: "save_cue_list",
+				cueListId,
+				expectedRevision,
+				expectedObjectId,
+				body,
+			},
+			generation,
+		);
 	}
 
 	private configureSlotNow(
+		generation: number,
 		page: number,
 		slot: number,
 		playback: PlaybackDefinition,
@@ -107,33 +187,30 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 	) {
 		const revisions = this.readySlotRevisions(page, slot, revisionBasis);
 		if (!revisions)
-			return this.fail("Authoritative Playback topology is loading");
-		return this.apply({
-			type: "configure_slot",
-			page,
-			slot,
-			...revisions,
-			playback,
-		});
+			return this.fail("Authoritative Playback topology is loading", generation);
+		return this.apply(
+			{ type: "configure_slot", page, slot, ...revisions, playback },
+			generation,
+		);
 	}
 
 	private clearMappedPlaybackNow(
+		generation: number,
 		page: number,
 		slot: number,
 		revisionBasis?: PlaybackTopologyRevisionBasis,
 	) {
 		const revisions = this.readySlotRevisions(page, slot, revisionBasis);
 		if (!revisions)
-			return this.fail("Authoritative Playback topology is loading");
-		return this.apply({
-			type: "clear_mapped_playback",
-			page,
-			slot,
-			...revisions,
-		});
+			return this.fail("Authoritative Playback topology is loading", generation);
+		return this.apply(
+			{ type: "clear_mapped_playback", page, slot, ...revisions },
+			generation,
+		);
 	}
 
 	private mapExistingPlaybackNow(
+		generation: number,
 		page: number,
 		slot: number,
 		playbackNumber: number,
@@ -147,23 +224,18 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 		if (!revisions)
 			return this.fail(
 				`Authoritative Playback ${playbackNumber} is not available`,
+				generation,
 			);
-		return this.apply({
-			type: "map_existing_playback",
-			page,
-			slot,
-			playbackNumber,
-			...revisions,
-		});
-	}
-
-	private enqueue(operation: () => Promise<PlaybackTopologyOutcome | null>) {
-		const result = this.tail.then(operation, operation);
-		this.tail = result.then(
-			() => undefined,
-			() => undefined,
+		return this.apply(
+			{
+				type: "map_existing_playback",
+				page,
+				slot,
+				playbackNumber,
+				...revisions,
+			},
+			generation,
 		);
-		return result;
 	}
 
 	private slotRevisions(page: number, slot: number) {
@@ -224,22 +296,25 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 		};
 	}
 
-	private async apply(action: PlaybackTopologyAction) {
-		if (this.stopped) return null;
+	private async apply(action: PlaybackTopologyAction, generation: number) {
+		if (!this.lifecycle.isCurrent(generation)) return null;
 		const snapshot = this.options.store.getSnapshot();
-		const generation = snapshot.authorityGeneration;
 		if (snapshot.showRevision == null)
-			return this.fail("Authoritative Show revision is loading");
+			return this.fail("Authoritative Show revision is loading", generation);
 		const request = { requestId: crypto.randomUUID(), action };
 		try {
-			const outcome = await this.send(snapshot.showRevision, request);
-			if (!this.isCurrent(generation)) return null;
+			const outcome = await this.lifecycle.send(
+				snapshot.showRevision,
+				request,
+				generation,
+			);
+			if (!this.lifecycle.isCurrent(generation)) return null;
 			assertOutcome(request, outcome);
 			this.install(outcome);
 			this.options.onError?.(null);
 			return outcome;
 		} catch (reason) {
-			if (!this.isCurrent(generation)) return null;
+			if (!this.lifecycle.isCurrent(generation)) return null;
 			const error = asError(reason);
 			await repairPlaybackTopologyConflict(
 				this.options,
@@ -247,28 +322,9 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 				action,
 				generation,
 			);
+			if (!this.lifecycle.isCurrent(generation)) return null;
 			this.options.onError?.(error);
 			return null;
-		}
-	}
-
-	private async send(
-		revision: number,
-		request: PlaybackTopologyRequest,
-	): Promise<PlaybackTopologyOutcome> {
-		try {
-			return await this.options.transport.apply(
-				this.options.showId,
-				revision,
-				request,
-			);
-		} catch (reason) {
-			if (!playbackTopologyTransportFailure(reason)?.retryable) throw reason;
-			return this.options.transport.apply(
-				this.options.showId,
-				revision,
-				request,
-			);
 		}
 	}
 
@@ -296,15 +352,9 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 		);
 	}
 
-	private isCurrent(generation: number) {
-		return (
-			!this.stopped &&
-			this.options.store.getSnapshot().authorityGeneration === generation
-		);
-	}
-
-	private fail(message: string): Promise<null> {
-		this.options.onError?.(new Error(message));
+	private fail(message: string, generation: number): Promise<null> {
+		if (this.lifecycle.isCurrent(generation))
+			this.options.onError?.(new Error(message));
 		return Promise.resolve(null);
 	}
 }
@@ -323,6 +373,11 @@ function assertOutcome(
 			resolution.cueListId !== action.cueListId
 		)
 			throw new Error("Playback topology response Cuelist does not match");
+		return;
+	}
+	if (action.type === "create_page" || action.type === "rename_page") {
+		if (resolution.kind !== "page" || resolution.page !== action.page)
+			throw new Error("Playback topology response Page does not match");
 		return;
 	}
 	if (

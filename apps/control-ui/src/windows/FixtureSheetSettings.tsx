@@ -1,4 +1,3 @@
-import { useServer } from "../api/ServerContext";
 import { Select, SwitchField } from "../components/common";
 import { WindowSettings } from "../components/window-kit";
 import { useApp } from "../state/AppContext";
@@ -7,6 +6,7 @@ import type {
 	FixtureSheetIncludedHeads,
 	FixtureSheetOrder,
 } from "../types";
+import type { FixtureSheetCuelistOption } from "./fixtureSheetCuelistAuthority";
 
 const columnOrder: FixtureSheetColumn[] = [
 	"id",
@@ -38,16 +38,17 @@ const columnLabels: Record<FixtureSheetColumn, string> = {
 
 function FixtureSheetViewSettings({
 	activeOnly,
+	cueLists,
 	cueListId,
 	fixtureOrder,
 	includedHeads,
 }: {
 	activeOnly: boolean;
+	cueLists: readonly FixtureSheetCuelistOption[];
 	cueListId: string;
 	fixtureOrder: FixtureSheetOrder;
 	includedHeads: FixtureSheetIncludedHeads;
 }) {
-	const server = useServer();
 	const { dispatch } = useApp();
 	return (
 		<div className="fixture-sheet-settings-sections">
@@ -112,7 +113,7 @@ function FixtureSheetViewSettings({
 						}
 					>
 						<option value="">All fixtures</option>
-						{(server.playbacks?.cue_lists ?? []).map((cueList) => (
+						{cueLists.map((cueList) => (
 							<option key={cueList.id} value={cueList.id}>
 								{cueList.name}
 							</option>
@@ -190,6 +191,7 @@ function FixtureSheetGroupSettings({ visible }: { visible: boolean }) {
 export function FixtureSheetSettings({
 	activeOnly,
 	anchor,
+	cueLists,
 	cueListId,
 	fixtureOrder,
 	groupsVisible,
@@ -198,6 +200,7 @@ export function FixtureSheetSettings({
 }: {
 	activeOnly: boolean;
 	anchor: DOMRect;
+	cueLists: readonly FixtureSheetCuelistOption[];
 	cueListId: string;
 	fixtureOrder: FixtureSheetOrder;
 	groupsVisible: boolean;
@@ -217,6 +220,7 @@ export function FixtureSheetSettings({
 					content: (
 						<FixtureSheetViewSettings
 							activeOnly={activeOnly}
+							cueLists={cueLists}
 							cueListId={cueListId}
 							fixtureOrder={fixtureOrder}
 							includedHeads={includedHeads}

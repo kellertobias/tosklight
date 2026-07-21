@@ -10,7 +10,8 @@ import {
 	emptyGroupRecordingTarget,
 	type GroupRecordingTarget,
 } from "../../features/groupRecording/target";
-import { useGroups } from "../../features/server/useShowObjectsState";
+import { useGroupSelectionActions } from "../../features/groupSelection/useGroupSelectionActions";
+import { usePortableGroups } from "../../features/showObjects/ShowObjectsState";
 import { useApp } from "../../state/AppContext";
 import { Button } from "../common";
 import { ButtonGrid } from "../window-kit";
@@ -19,7 +20,7 @@ import { type RecordMode, RecordModeDialog } from "./RecordModeDialog";
 const MIN_SHORTCUT_SIZE = 88;
 const SHORTCUT_GAP = 2;
 
-type ShortcutGroup = ReturnType<typeof useGroups>[number];
+type ShortcutGroup = ReturnType<typeof usePortableGroups>[number];
 
 export function groupShortcutCount(width: number) {
 	return Math.max(
@@ -97,7 +98,8 @@ export function GroupStrip({ active = true }: { active?: boolean }) {
 		enabled: active,
 		observeCommand: false,
 	});
-	const storedGroups = useGroups(server.playbacks);
+	const storedGroups = usePortableGroups(active);
+	const groupSelection = useGroupSelectionActions(active);
 	const { state, dispatch } = useApp();
 	const { gridRef, slotCount } = useGroupShortcutCount(active);
 	const [recordTarget, setRecordTarget] = useState<GroupRecordingTarget | null>(
@@ -139,9 +141,11 @@ export function GroupStrip({ active = true }: { active?: boolean }) {
 		if (outcome) await commandLine.reset();
 		return outcome;
 	};
-	const selectGroup = (id: string) => {
-		void server.selectionGesture({ type: "live_group", group_id: id });
-		void commandLine.replace(`GROUP ${id}`);
+	const selectGroup = (group: ShortcutGroup) => {
+		const write = groupSelection.selectLive(group);
+		if (!write) return;
+		void write;
+		void commandLine.replace(`GROUP ${group.id}`);
 	};
 	const activateShortcut = (group: ShortcutGroup | null, index: number) => {
 		const id = group?.id ?? String(index + 1);
@@ -150,7 +154,7 @@ export function GroupStrip({ active = true }: { active?: boolean }) {
 			return;
 		}
 		if (group && !state.storeArmed) {
-			selectGroup(group.id);
+			selectGroup(group);
 			return;
 		}
 		if (!state.storeArmed) return;
@@ -192,7 +196,7 @@ export function GroupStrip({ active = true }: { active?: boolean }) {
 						onClick={() => activateShortcut(group, index)}
 						onDoubleClick={() => {
 							if (group && !state.updateArmed)
-								void server.selectGroup(group.id, true);
+								void groupSelection.selectFrozen(group);
 						}}
 					/>
 				))}

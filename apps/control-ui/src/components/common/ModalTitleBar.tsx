@@ -15,6 +15,7 @@ export function ModalTitleBar({
 	search,
 	actions,
 	onClose,
+	closeDisabled = false,
 	closeLabel = "Close modal",
 	className = "",
 }: {
@@ -26,6 +27,7 @@ export function ModalTitleBar({
 	search?: ReactNode;
 	actions?: ReactNode;
 	onClose?: () => void;
+	closeDisabled?: boolean;
 	closeLabel?: string;
 	className?: string;
 }) {
@@ -60,6 +62,7 @@ export function ModalTitleBar({
 					className="ui-button ui-secondary ui-default ui-modal-title-close"
 					aria-label={closeLabel}
 					title={closeLabel}
+					disabled={closeDisabled}
 					onClick={onClose}
 				>
 					×

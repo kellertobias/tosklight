@@ -1,6 +1,4 @@
 import { useState } from "react";
-import { useServer } from "../../api/ServerContext";
-import type { PlaybackDefinition } from "../../api/types";
 import { useVirtualPlaybackSurfaceZones } from "../control/virtualPlayback/useVirtualPlaybackSurfaceZones";
 import {
   usePlaybackDeskView,
@@ -18,6 +16,7 @@ import { WindowSettings, type WindowSettingsTab } from "../window-kit";
 import { DEVELOPMENT_VIEW_OPTIONS } from "../../windows/DevelopmentWindow";
 import { requestPaneRemoval } from "../shell/paneRemovalGuard";
 import { PRESET_FAMILIES } from "../../presetFamilies";
+import { useCuePaneCuelistPlaybacks, type CuePaneCuelistPlayback } from "./cuePaneCuelistAuthority";
 
 function VirtualPlaybackZoneEditor({ zone, zones, visibleCells, saving, persist }: { zone: VirtualPlaybackZone; zones: readonly VirtualPlaybackZone[]; visibleCells: number; saving: boolean; persist: (zones: readonly VirtualPlaybackZone[]) => void }) {
   const [name, setName] = useState(zone.name);
@@ -53,10 +52,8 @@ function VirtualPlaybackZoneSettings({ pane, rows, columns }: { pane: PaneModel;
   return <section className="virtual-playback-zone-settings" aria-label="Playback Exclusion Zones"><h3>Playback Exclusion Zones</h3><p>Shift-select at least two cells in the pane to create a zone. A newly activated member releases the other active members; creating or editing a zone never operates a playback.</p>{surface.saving && <p role="status">Saving Playback Exclusion Zones…</p>}{!surface.ready ? <p role={surface.error ? "alert" : "status"}>{surface.error ?? "Loading Playback Exclusion Zones…"}</p> : surface.zones.length === 0 ? <p>No exclusion zones are configured for this pane.</p> : surface.zones.map((zone) => <VirtualPlaybackZoneEditor key={zone.id} zone={zone} zones={surface.zones} visibleCells={visibleCells} saving={surface.saving} persist={(next) => void surface.persist(next)}/>)}</section>;
 }
 
-function CuePaneSettings({ pane }: { pane: PaneModel }) {
+function CuePaneSettings({ pane, cueLists }: { pane: PaneModel; cueLists: readonly CuePaneCuelistPlayback[] }) {
   const { dispatch } = useApp();
-  const server = useServer();
-  const cueLists = (server.playbacks?.pool ?? []).filter((definition): definition is PlaybackDefinition & { target: { type: "cue_list"; cue_list_id: string } } => definition.target.type === "cue_list").sort((left, right) => left.number - right.number);
   const fixedNumber = pane.fixedCueListNumber ?? cueLists[0]?.number;
   return <FormLayout labelPlacement="side">
     <MultiValueToggleField label="Displayed Cuelist" value={pane.cueListSource ?? "fixed"} onChange={(source) => dispatch({ type: "SET_PANE_CUELIST", id: pane.id, source })} options={[{ value: "fixed", label: "Fixed" }, { value: "follow-selection", label: "Follow selection" }]}/>
@@ -66,15 +63,21 @@ function CuePaneSettings({ pane }: { pane: PaneModel }) {
 }
 
 export function PaneSettingsModal() {
-  const { state, dispatch } = useApp();
+  const { state } = useApp();
   if (!state.paneSettingsId) return null;
   const desk = state.desks.find((item) => item.id === state.activeDeskId)!;
   const pane = desk.panes.find((item) => item.id === state.paneSettingsId);
   if (!pane) return null;
+  return <PaneSettingsDialog pane={pane}/>;
+}
+
+function PaneSettingsDialog({ pane }: { pane: PaneModel }) {
+  const { state, dispatch } = useApp();
+  const cuePaneCueLists = useCuePaneCuelistPlaybacks(pane.kind === "cues");
   const close = () => dispatch({ type: "SET_PANE_SETTINGS", id: null });
   const tabs: WindowSettingsTab[] = [{ id: "pane", label: "Pane Settings", content: <><p>Selected pane: <b>{pane.title}</b></p><div className="size-grid"><TouchSelect label="Grid width" value={pane.width} options={Array.from({ length: GRID_COLUMNS }, (_, index) => index + 1)} onChange={(width) => dispatch({ type: "SET_PANE_RECT", id: pane.id, rect: { width } })}/><TouchSelect label="Grid height" value={pane.height} options={Array.from({ length: GRID_ROWS }, (_, index) => index + 1)} onChange={(height) => dispatch({ type: "SET_PANE_RECT", id: pane.id, rect: { height } })}/></div><div className="dialog-grid"><Button className="danger" onClick={() => { if (requestPaneRemoval(pane.id)) dispatch({ type: "REMOVE_PANE", id: pane.id }); }}>Remove pane</Button></div></> }];
   if (pane.kind === "cues") {
-    tabs.push({ id: "cues", label: "Cues", content: <CuePaneSettings pane={pane}/> });
+    tabs.push({ id: "cues", label: "Cues", content: <CuePaneSettings pane={pane} cueLists={cuePaneCueLists}/> });
   }
   if (pane.kind === "presets") tabs.push({ id: "pool", label: "Pool", content: <><h3>Preset family</h3><div className="button-group">{PRESET_FAMILIES.map((family) => <Button key={family} className={(pane.presetFamily ?? state.presetFamily) === family ? "active" : ""} onClick={() => dispatch({ type: "SET_PANE_PRESET_FAMILY", id: pane.id, family })}>{family}</Button>)}</div><SwitchField label="Enable pool colors" checked={pane.presetPoolColors ?? true} onChange={(event) => dispatch({ type: "SET_PANE_PRESET_COLORS", id: pane.id, value: event.target.checked })}/></> });
   if (pane.kind === "stage") tabs.push({ id: "stage", label: "Stage", content: <FormLayout labelPlacement="side"><MultiValueToggleField label="Stage view" value={pane.stageView ?? "2d"} onChange={(value) => dispatch({ type: "SET_PANE_STAGE_OPTION", id: pane.id, option: "stageView", value })} options={[{ value: "2d", label: "2D" }, { value: "3d", label: "3D" }]}/><SwitchField label="Follow Preload" checked={Boolean(pane.followPreload)} onChange={(event) => dispatch({ type: "SET_PANE_STAGE_OPTION", id: pane.id, option: "followPreload", value: event.target.checked })}/><SwitchField label="Beam direction guides" checked={pane.showBeamGuides ?? true} onChange={(event) => dispatch({ type: "SET_PANE_STAGE_OPTION", id: pane.id, option: "showBeamGuides", value: event.target.checked })}/></FormLayout> });

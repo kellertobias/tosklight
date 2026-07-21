@@ -1,4 +1,4 @@
-import type { PropsWithChildren } from "react";
+import { type PropsWithChildren, useCallback } from "react";
 import { CueTransferProvider } from "../features/cueTransfer/CueTransferProvider";
 import { PlaybackRuntimeViewProvider } from "../features/playbackRuntime/PlaybackRuntimeView";
 import { ProgrammerCaptureModeViewProvider } from "../features/programmerCaptureMode/ProgrammerCaptureModeView";
@@ -6,6 +6,7 @@ import { ProgrammerLifecycleViewProvider } from "../features/programmerLifecycle
 import { ProgrammerPreloadPlaybackQueueViewProvider } from "../features/programmerPreloadPlaybackQueue/ProgrammerPreloadPlaybackQueueView";
 import { ProgrammerPreloadValuesViewProvider } from "../features/programmerPreloadValues/ProgrammerPreloadValuesView";
 import { ProgrammerValuesViewProvider } from "../features/programmerValues/ProgrammerValuesView";
+import type { CommandExecutionRequest } from "../features/programmingInteraction/commandExecution";
 import { ProgrammingInteractionViewProvider } from "../features/programmingInteraction/ProgrammingInteractionView";
 import { ProgrammingUpdateProvider } from "../features/programmingUpdate/ProgrammingUpdateProvider";
 import type { ServerContextValue } from "../features/server/ServerContextValue";
@@ -44,6 +45,13 @@ export function ServerProgrammingProviders({
 }: PropsWithChildren<ServerProgrammingProvidersProps>) {
 	const showId = state.bootstrap?.active_show?.id ?? null;
 	const userId = state.session?.user.id ?? null;
+	// The command surface owns no transport. Execution is injected here as one
+	// narrow feature action over the existing command-execution path.
+	const executeCommand = useCallback(
+		({ command, target, pristine }: CommandExecutionRequest) =>
+			value.executeCommandLine(command, { target, pristine }),
+		[value.executeCommandLine],
+	);
 	return (
 		<ProgrammingUpdateProvider
 			showId={showId}
@@ -70,14 +78,7 @@ export function ServerProgrammingProviders({
 					transport={boundaries.playbackTransport}
 					loadSnapshot={boundaries.loadPlaybackSnapshot}
 					applyAction={boundaries.applyPlaybackRuntimeAction}
-					initialDesk={
-						state.playbacks
-							? {
-									activePage: state.playbacks.active_page,
-									selectedPlayback: state.playbacks.selected_playback ?? null,
-								}
-							: null
-					}
+					applyDeskPage={boundaries.applyPlaybackDeskPage}
 					onError={boundaries.reportPlaybackError}
 				>
 					<ProgrammerCaptureModeViewProvider
@@ -155,6 +156,7 @@ export function ServerProgrammingProviders({
 											replaceCommandLine={
 												state.client.replaceProgrammingCommandLine
 											}
+											executeCommand={executeCommand}
 											applySelection={state.client.applyProgrammingSelection}
 											onSessionError={boundaries.reportProgrammingSessionError}
 											onMutationError={

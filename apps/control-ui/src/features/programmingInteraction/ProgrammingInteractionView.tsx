@@ -10,6 +10,11 @@ import {
 	useSyncExternalStore,
 } from "react";
 import {
+	type CommandExecutionOutcome,
+	createCommandLineExecution,
+	type ExecuteCommandLine,
+} from "./commandExecution";
+import {
 	type CommandLineExecutionResult,
 	ProgrammingCommandLineWriter,
 	type ProgrammingCommandLineWriterOptions,
@@ -45,6 +50,7 @@ interface ProgrammingInteractionViewProviderProps {
 	transport: ProgrammingEventTransport | null;
 	loadSnapshot: ProgrammingInteractionSessionOptions["loadSnapshot"];
 	replaceCommandLine?: ProgrammingCommandLineWriterOptions["replace"];
+	executeCommand?: ExecuteCommandLine;
 	applySelection?: ProgrammingSelectionWriterOptions["apply"];
 	onSessionError?: (error: Error | null) => void;
 	onMutationError?: (error: Error | null) => void;
@@ -54,6 +60,8 @@ export interface ProgrammingCommandLineActions {
 	replace(text: string): Promise<boolean>;
 	reset(): Promise<boolean>;
 	flush(): Promise<boolean>;
+	/** Settles pending edits, then runs the command against the scoped authority. */
+	execute(value?: string): Promise<CommandExecutionOutcome>;
 	executeAfterPendingWrites(
 		execute: () => Promise<boolean>,
 		optimisticReset: CommandLinePatch,
@@ -84,6 +92,7 @@ export function ProgrammingInteractionViewProvider({
 	transport,
 	loadSnapshot,
 	replaceCommandLine,
+	executeCommand,
 	applySelection,
 	onSessionError,
 	onMutationError,
@@ -155,27 +164,30 @@ export function ProgrammingInteractionViewProvider({
 			store,
 		],
 	);
-	const commandLineActions = useMemo<ProgrammingCommandLineActions | null>(
-		() =>
-			commandLineWriter
-				? {
-						replace: (text) => commandLineWriter.replace(text),
-						reset: () => commandLineWriter.replace(""),
-						flush: () => commandLineWriter.flush(),
-						executeAfterPendingWrites: (execute, optimisticReset) => {
-							const run = () =>
-								commandLineWriter.executeAfterPendingWrites(
-									execute,
-									optimisticReset,
-								);
-							return selectionWriter
-								? selectionWriter.runAfterPendingWrites(run, "write_failed")
-								: run();
-						},
-					}
-				: null,
-		[commandLineWriter, selectionWriter],
-	);
+	const commandLineActions = useMemo<ProgrammingCommandLineActions | null>(() => {
+		if (!commandLineWriter) return null;
+		const executeAfterPendingWrites: ProgrammingCommandLineActions["executeAfterPendingWrites"] =
+			(execute, optimisticReset) => {
+				const run = () =>
+					commandLineWriter.executeAfterPendingWrites(execute, optimisticReset);
+				return selectionWriter
+					? selectionWriter.runAfterPendingWrites(run, "write_failed")
+					: run();
+			};
+		return {
+			replace: (text) => commandLineWriter.replace(text),
+			reset: () => commandLineWriter.replace(""),
+			flush: () => commandLineWriter.flush(),
+			execute: createCommandLineExecution({
+				store,
+				// Selection writes share this barrier, so Enter still settles every
+				// pending desk edit before the command runs.
+				executeAfterPendingWrites,
+				execute: executeCommand,
+			}),
+			executeAfterPendingWrites,
+		};
+	}, [commandLineWriter, executeCommand, selectionWriter, store]);
 	const selectionActions = useMemo<ProgrammingSelectionActions | null>(
 		() =>
 			selectionWriter
@@ -217,6 +229,24 @@ export function useProgrammingCommandLineView(
 			(state: ProgrammingInteractionState) =>
 				enabled && observe ? state.commandLine : null,
 			[enabled, observe],
+		),
+		Object.is,
+	);
+}
+
+/**
+ * Whether scoped command-line authority is installed for the current scope.
+ *
+ * This is a scalar selector so action-only consumers observe readiness without
+ * rerendering for ordinary command text. It intentionally does not activate the
+ * capability; the view or action hook that needs the data owns that.
+ */
+export function useProgrammingCommandLineReady(enabled = true) {
+	return useProgrammingSelector(
+		useCallback(
+			(state: ProgrammingInteractionState) =>
+				enabled && state.commandLine !== null,
+			[enabled],
 		),
 		Object.is,
 	);

@@ -66,6 +66,39 @@ const programmerValuesActions = {
 const selectionActions = {
 	replace: vi.fn().mockResolvedValue(null),
 };
+const commandProjection = {
+	text: "FIXTURE",
+	target: "FIXTURE" as const,
+	pristine: true,
+	pendingChoice: null,
+	revision: 1,
+};
+const commandActions = {
+	replace: vi.fn(async (text: string) => {
+		commandProjection.text = text;
+		commandProjection.pristine = text.trim().toUpperCase() === commandProjection.target;
+		return true;
+	}),
+	reset: vi.fn(async () => {
+		commandProjection.text = commandProjection.target;
+		commandProjection.pristine = true;
+		return true;
+	}),
+	flush: vi.fn().mockResolvedValue(true),
+	execute: vi.fn().mockResolvedValue({ executed: true, report: "none" }),
+	executeAfterPendingWrites: vi.fn(),
+};
+const commandStore = {
+	getSnapshot: () => ({ commandLine: commandProjection }),
+};
+let playbackDesk: {
+	active_page: number;
+	selected_playback: number | null;
+} | null = {
+	active_page: 1,
+	selected_playback: 42,
+};
+let runtimeStatus: "ready" | "loading" | "error" = "ready";
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
 vi.mock("../../state/AppContext", () => ({
@@ -77,10 +110,18 @@ vi.mock("../../features/programmerValues/useProgrammerValuesActivity", () => ({
 vi.mock("../../features/programmerValues/ProgrammerValuesView", () => ({
 	useProgrammerValuesActions: () => programmerValuesActions,
 }));
+vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", () => ({
+	usePlaybackDeskView: () => playbackDesk,
+	usePlaybackRuntimeStatus: () => ({ status: runtimeStatus, error: null }),
+}));
 vi.mock(
 	"../../features/programmingInteraction/ProgrammingInteractionView",
 	async (importOriginal) => ({
 		...(await importOriginal()),
+		useProgrammingCommandLineView: () => commandProjection,
+		useProgrammingCommandLineReady: () => true,
+		useProgrammingCommandLineActions: () => commandActions,
+		useProgrammingInteractionStore: () => commandStore,
 		useProgrammingSelectionView: () => ({
 			selected: server.selectedFixtures,
 			expression: { type: "static" },
@@ -95,11 +136,14 @@ afterEach(() => {
 	cleanup();
 	server.bootstrap.active_programmers = [];
 	server.selectedFixtures = [];
-	server.commandLine = "FIXTURE";
-	server.commandLinePristine = true;
+	commandProjection.text = "FIXTURE";
+	commandProjection.pristine = true;
 	state.shiftArmed = false;
 	state.preload = "idle";
 	state.activeDeskId = "programming";
+	server.playbacks.selected_playback = 42;
+	playbackDesk = { active_page: 1, selected_playback: 42 };
+	runtimeStatus = "ready";
 	valuesActivity.current = {
 		authority: "loading",
 		ready: false,
@@ -206,7 +250,7 @@ describe("NumericPad Clear and SET routing", () => {
 
 		expect(set).toHaveBeenCalledOnce();
 		expect((set.mock.calls[0][0] as CustomEvent<string>).detail).toBe("set");
-		expect(server.setCommandLine).not.toHaveBeenCalled();
+		expect(commandActions.replace).not.toHaveBeenCalled();
 		fallback.remove();
 	});
 
@@ -220,7 +264,7 @@ describe("NumericPad Clear and SET routing", () => {
 			type: "SET_PATCH_ARMED",
 			value: true,
 		});
-		expect(server.setCommandLine).not.toHaveBeenCalled();
+		expect(commandActions.replace).not.toHaveBeenCalled();
 	});
 
 	it("does not let a hidden Presets pane steal SET from another visible built-in", () => {
@@ -235,7 +279,7 @@ describe("NumericPad Clear and SET routing", () => {
 			type: "SET_PRESET_SET_ARMED",
 			value: true,
 		});
-		expect(server.setCommandLine).toHaveBeenCalledWith("SET", false);
+		expect(commandActions.replace).toHaveBeenCalledWith("SET");
 	});
 
 	it("keeps SET as a command token once Copy or Move entry has started", () => {
@@ -243,8 +287,8 @@ describe("NumericPad Clear and SET routing", () => {
 		(state.desks[0] as { panes: Array<{ kind: string }> }).panes = [
 			{ kind: "presets" },
 		];
-		server.commandLine = "COPY";
-		server.commandLinePristine = false;
+		commandProjection.text = "COPY";
+		commandProjection.pristine = false;
 		render(<NumericPad />);
 
 		fireEvent.click(screen.getByRole("button", { name: "SET" }));
@@ -252,7 +296,7 @@ describe("NumericPad Clear and SET routing", () => {
 			type: "SET_PRESET_SET_ARMED",
 			value: true,
 		});
-		expect(server.setCommandLine).toHaveBeenCalledWith("COPY SET ", false);
+		expect(commandActions.replace).toHaveBeenCalledWith("COPY SET ");
 	});
 });
 
@@ -346,7 +390,8 @@ describe("NumericPad layout and Shift routing", () => {
 });
 
 describe("NumericPad Shift routing", () => {
-	it("routes Shift shortcuts to built-ins, the explicitly selected playback, and stored desks", () => {
+	it("routes Shift shortcuts to built-ins, the scoped selected playback, and stored desks", () => {
+		server.playbacks.selected_playback = 99;
 		render(<NumericPad />);
 		const shifted = (key: string) => {
 			fireEvent.click(screen.getByRole("button", { name: "SHIFT" }));
@@ -387,6 +432,10 @@ describe("NumericPad Shift routing", () => {
 			type: "OPEN_BUILTIN_CUELIST",
 			number: 42,
 		});
+		expect(dispatch).not.toHaveBeenCalledWith({
+			type: "OPEN_BUILTIN_CUELIST",
+			number: 99,
+		});
 		shifted("5");
 		expect(dispatch).toHaveBeenCalledWith({
 			type: "OPEN_BUILTIN",
@@ -398,13 +447,12 @@ describe("NumericPad Shift routing", () => {
 			kind: "channels",
 		});
 		shifted("TIME");
-		expect(server.setCommandLine).toHaveBeenCalledWith("SPD GRP", false);
-		server.commandLine = "SPD GRP 1 AT";
-		server.commandLinePristine = false;
+		expect(commandActions.replace).toHaveBeenCalledWith("SPD GRP");
+		commandProjection.text = "SPD GRP 1 AT";
+		commandProjection.pristine = false;
 		shifted("TIME");
-		expect(server.setCommandLine).toHaveBeenCalledWith(
+		expect(commandActions.replace).toHaveBeenCalledWith(
 			"SPD GRP 1 AT SPD GRP",
-			false,
 		);
 		shifted("7");
 		shifted("8");
@@ -433,5 +481,23 @@ describe("NumericPad Shift routing", () => {
 			modal: "systemControlsOpen",
 			value: true,
 		});
+	});
+
+	it("opens Cuelists without selecting stale bootstrap Playback state while desk authority loads", () => {
+		server.playbacks.selected_playback = 99;
+		playbackDesk = { active_page: 1, selected_playback: 42 };
+		runtimeStatus = "loading";
+		render(<NumericPad />);
+
+		fireEvent.click(screen.getByRole("button", { name: "SHIFT" }));
+		fireEvent.click(screen.getByRole("button", { name: "4" }));
+
+		expect(dispatch).toHaveBeenCalledWith({
+			type: "OPEN_BUILTIN",
+			kind: "cuelists",
+		});
+		expect(dispatch).not.toHaveBeenCalledWith(
+			expect.objectContaining({ type: "OPEN_BUILTIN_CUELIST" }),
+		);
 	});
 });

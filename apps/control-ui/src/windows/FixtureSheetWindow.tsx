@@ -15,6 +15,7 @@ import {
 	useFixtureSheetRows,
 	useFixtureSheetVisualizations,
 } from "./fixtureSheetProjection";
+import { useFixtureSheetCuelistAuthority } from "./fixtureSheetCuelistAuthority";
 import { createFixtureStepPresenter } from "./fixtureSheetStep";
 import type { WindowProps } from "./windowTypes";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
@@ -40,13 +41,11 @@ export function FixtureSheetWindow({
 		: state.fixtureGroupsVisible;
 	const fixtureOrder = compact ? "fixture-id" : state.fixtureSheetOrder;
 	const activeOnly = compact ? false : state.fixtureSheetActiveOnly;
-	const cueListId =
-		compact ||
-		!(server.playbacks?.cue_lists ?? []).some(
-			(cueList) => cueList.id === state.fixtureSheetCueListId,
-		)
-			? ""
-			: state.fixtureSheetCueListId;
+	const cuelistFilter = useFixtureSheetCuelistAuthority({
+		enabled: active && !compact,
+		savedCueListId: state.fixtureSheetCueListId,
+	});
+	const cueListId = cuelistFilter.selectedCueListId;
 	const visibleColumnIds = compact
 		? DEFAULT_FIXTURE_SHEET_COLUMNS
 		: state.fixtureSheetColumns;
@@ -61,7 +60,7 @@ export function FixtureSheetWindow({
 		preloadVisualization,
 		fixtureOrder,
 		activeOnly,
-		cueListId,
+		selectedCueList: cuelistFilter.selectedCueList,
 		includedHeads,
 		active,
 	});
@@ -120,6 +119,7 @@ export function FixtureSheetWindow({
 				<FixtureSheetSettings
 					activeOnly={activeOnly}
 					anchor={settingsAnchor}
+					cueLists={cuelistFilter.cueLists}
 					cueListId={cueListId}
 					fixtureOrder={fixtureOrder}
 					groupsVisible={groupsVisible}

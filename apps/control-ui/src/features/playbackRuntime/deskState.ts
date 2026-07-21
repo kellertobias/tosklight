@@ -26,11 +26,6 @@ export class PlaybackDeskState {
 		return this.sequence;
 	}
 
-	seed(projection: PlaybackDesk) {
-		if (!this.authoritative) this.authoritative = projection;
-		return this.render();
-	}
-
 	hydrate(projection: PlaybackDesk, sequence: number) {
 		if (sequence < this.sequence) return null;
 		this.install(projection, sequence);

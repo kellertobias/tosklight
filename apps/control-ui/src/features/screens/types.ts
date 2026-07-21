@@ -1,8 +1,6 @@
 import type {
 	BootstrapSnapshot,
 	ControlDesk,
-	PlaybackPage,
-	PlaybackSnapshot,
 	ScreenConfiguration,
 	ScreenSnapshot,
 	SessionResponse,
@@ -18,8 +16,6 @@ export interface ScreenCapabilities {
 export interface ScreensContextValue extends ScreenCapabilities {
 	bootstrap: BootstrapSnapshot | null;
 	session: SessionResponse | null;
-	playbacks: PlaybackSnapshot | null;
-	savePlaybackPage: (page: PlaybackPage) => Promise<boolean>;
 	updateControlDesk: (desk: ControlDesk) => Promise<void>;
 	selectControlDesk: (id: string) => void;
 	removeClient: (deskId: string) => Promise<boolean>;

@@ -9,6 +9,7 @@ import {
 import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ShowObjectKind } from "../showObjects/contracts";
+import { ShowObjectsStateProvider } from "../showObjects/ShowObjectsState";
 import { ShowObjectsViewProvider } from "../showObjects/ShowObjectsView";
 import { ShowObjectsStore } from "../showObjects/store";
 import type {
@@ -21,7 +22,10 @@ import {
 	PlaybackTopologyProvider,
 	usePlaybackTopologyActions,
 } from "./PlaybackTopologyProvider";
-import { usePlaybackTopologyView } from "./PlaybackTopologyView";
+import {
+	usePlaybackPagesView,
+	usePlaybackTopologyView,
+} from "./PlaybackTopologyView";
 
 const SHOW_ID = "11111111-1111-4111-8111-111111111111";
 
@@ -104,6 +108,21 @@ function Consumer({
 	);
 }
 
+function PageConsumer({
+	onRender = () => undefined,
+}: {
+	onRender?: () => void;
+}) {
+	onRender();
+	const view = usePlaybackPagesView();
+	return (
+		<div>
+			<span data-testid="page-ready">{String(view.ready)}</span>
+			<span data-testid="pages">{view.pages.length}</span>
+		</div>
+	);
+}
+
 function ActionConsumer() {
 	const actions = usePlaybackTopologyActions();
 	return (
@@ -116,7 +135,7 @@ function ActionConsumer() {
 	);
 }
 
-function harness(active: boolean, onRender?: () => void) {
+function harness(active: boolean, onRender?: () => void, pagesOnly = false) {
 	const store = new ShowObjectsStore();
 	const events = new FakeEvents();
 	const loadCollection = vi.fn(async (_show: string, kind: ShowObjectKind) =>
@@ -141,7 +160,11 @@ function harness(active: boolean, onRender?: () => void) {
 				transport={actionTransport}
 				loadObject={vi.fn()}
 			>
-				<Consumer active={active} onRender={onRender} />
+				{pagesOnly ? (
+					<PageConsumer onRender={onRender} />
+				) : (
+					<Consumer active={active} onRender={onRender} />
+				)}
 			</PlaybackTopologyProvider>
 		</ShowObjectsViewProvider>,
 	);
@@ -191,6 +214,49 @@ describe("Playback topology scoped composition", () => {
 			kinds: ["cue_list", "playback", "playback_page"],
 			objects: [],
 		});
+	});
+
+	it("hydrates Page chrome without Cuelist or Playback subscriptions", async () => {
+		const onRender = vi.fn();
+		const { events, loadCollection, store } = harness(true, onRender, true);
+
+		await waitFor(() =>
+			expect(screen.getByTestId("page-ready")).toHaveTextContent("true"),
+		);
+		expect(screen.getByTestId("pages")).toHaveTextContent("1");
+		expect(loadCollection.mock.calls.map((call) => call[1])).toEqual([
+			"playback_page",
+		]);
+		await waitFor(() => expect(events.subscriptions).toHaveLength(1));
+		expect(events.subscriptions[0].scope).toEqual({
+			kinds: ["playback_page"],
+			objects: [],
+		});
+		const renderCount = onRender.mock.calls.length;
+		act(() => store.setCollection(SHOW_ID, "playback", [], 8, 8));
+		expect(onRender).toHaveBeenCalledTimes(renderCount);
+	});
+
+	it("hides retained Pages whenever their scoped collection is not ready", () => {
+		const store = new ShowObjectsStore();
+		store.reset(SHOW_ID, "session-a");
+		store.setCollection(
+			SHOW_ID,
+			"playback_page",
+			collection("playback_page").objects as never,
+			5,
+			7,
+		);
+		store.markCollectionDormant("playback_page");
+
+		render(
+			<ShowObjectsStateProvider store={store}>
+				<PageConsumer />
+			</ShowObjectsStateProvider>,
+		);
+
+		expect(screen.getByTestId("page-ready")).toHaveTextContent("false");
+		expect(screen.getByTestId("pages")).toHaveTextContent("0");
 	});
 
 	it("marks dormant collections unready before a later remount", async () => {

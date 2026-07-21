@@ -14,7 +14,20 @@ export type PlaybackRuntimeActionApply = (
 	request: PlaybackActionRequest,
 ) => Promise<PlaybackOutcome>;
 
+export interface PlaybackDeskPageOutcome {
+	desk_id: string;
+	page: number;
+	event_sequence: number | null;
+	page_creation_event_sequence: number | null;
+}
+
+export type PlaybackDeskPageApply = (
+	deskId: string,
+	page: number,
+) => Promise<PlaybackDeskPageOutcome>;
+
 export interface PlaybackRuntimeActions {
+	setActivePage(page: number): Promise<boolean>;
 	poolPlaybackAction(
 		playbackNumber: number,
 		action: PoolPlaybackAction,
@@ -27,6 +40,7 @@ interface PlaybackRuntimeActionWriterOptions {
 	deskId: string;
 	store: PlaybackRuntimeStore;
 	applyAction: PlaybackRuntimeActionApply;
+	applyDeskPage?: PlaybackDeskPageApply;
 	onError?: (error: Error | null) => void;
 }
 
@@ -37,6 +51,16 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 
 	stop() {
 		this.stopped = true;
+	}
+
+	async setActivePage(page: number) {
+		try {
+			assertPage(page);
+			return await this.setActivePageNow(page);
+		} catch (reason) {
+			this.rejectSetup(reason);
+			return false;
+		}
 	}
 
 	async poolPlaybackAction(
@@ -52,6 +76,42 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 		} catch (reason) {
 			return this.rejectSetup(reason);
 		}
+	}
+
+	private async setActivePageNow(page: number) {
+		if (!this.options.applyDeskPage)
+			throw new Error("Playback desk page actions are unavailable");
+		const scope = this.options.store.captureScope();
+		if (!this.isCurrent(scope)) return false;
+		const token = this.options.store.beginOptimisticPage(page);
+		if (!token) throw new Error("Authoritative Playback desk is loading");
+		try {
+			const outcome = await this.options.applyDeskPage(this.options.deskId, page);
+			return this.acceptPage(outcome, page, token, scope);
+		} catch (reason) {
+			return this.rollbackPage(reason, token, scope);
+		}
+	}
+
+	private acceptPage(
+		outcome: PlaybackDeskPageOutcome,
+		page: number,
+		token: string,
+		scope: number,
+	) {
+		if (!this.isCurrent(scope)) return false;
+		assertPageOutcome(outcome, this.options.deskId, page);
+		this.options.store.commitPage(token, page, outcome.event_sequence);
+		this.reportActionError(null);
+		return true;
+	}
+
+	private rollbackPage(reason: unknown, token: string, scope: number) {
+		if (!this.isCurrent(scope)) return false;
+		const error = asError(reason);
+		if (this.options.store.rollbackPage(token, error))
+			this.reportActionError(error);
+		return false;
 	}
 
 	private async execute(
@@ -70,7 +130,7 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 			const outcome = await this.applyWithRetry(request, scope);
 			return this.accept(outcome, request, token, scope);
 		} catch (reason) {
-			return this.rollback(reason, token, optimistic !== null, scope);
+			return this.rollback(reason, token, scope);
 		}
 	}
 
@@ -131,30 +191,33 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 		if (outcome.request_id !== request.request_id)
 			throw new Error("Playback outcome request ID does not match the request");
 		if (!this.options.store.installOutcome(outcome, token)) return null;
-		this.options.onError?.(null);
+		this.reportActionError(null);
 		return outcome;
 	}
 
 	private rollback(
 		reason: unknown,
 		token: string,
-		optimistic: boolean,
 		scope: number,
 	) {
 		if (!this.isCurrent(scope)) return null;
 		const error = asError(reason);
 		if (!this.options.store.rollbackProjection(token, error)) return null;
-		if (!optimistic) this.options.store.setError(error);
-		this.options.onError?.(error);
+		this.reportActionError(error);
 		return null;
 	}
 
 	private rejectSetup(reason: unknown) {
 		const error = asError(reason);
 		if (!this.matchesScope()) return null;
-		this.options.store.setError(error);
-		this.options.onError?.(error);
+		this.options.store.reportActionError(error);
+		this.reportActionError(error);
 		return null;
+	}
+
+	private reportActionError(error: Error | null) {
+		if (this.options.store.getSnapshot().status !== "error")
+			this.options.onError?.(error);
 	}
 
 	private isCurrent(scope: number) {
@@ -196,4 +259,30 @@ function isRetryable(reason: unknown) {
 
 function asError(reason: unknown) {
 	return reason instanceof Error ? reason : new Error(String(reason));
+}
+
+function assertPage(page: number) {
+	if (!Number.isSafeInteger(page) || page < 1 || page > 127)
+		throw new Error("Playback page must be an integer between 1 and 127");
+}
+
+function assertPageOutcome(
+	outcome: PlaybackDeskPageOutcome,
+	deskId: string,
+	page: number,
+) {
+	if (outcome.desk_id !== deskId || outcome.page !== page)
+		throw new Error("Playback page response does not match the active desk request");
+	assertOptionalSequence(outcome.event_sequence, "event sequence");
+	assertOptionalSequence(
+		outcome.page_creation_event_sequence,
+		"page creation event sequence",
+	);
+	if (outcome.page_creation_event_sequence !== null)
+		throw new Error("Playback page selection unexpectedly created a Page");
+}
+
+function assertOptionalSequence(value: number | null, label: string) {
+	if (value != null && (!Number.isSafeInteger(value) || value < 0))
+		throw new Error(`Playback page response ${label} is invalid`);
 }

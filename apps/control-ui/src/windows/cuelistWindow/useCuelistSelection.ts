@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { useServer } from "../../api/ServerContext";
 import { useCueListRuntime } from "../../features/playbackRuntime/PlaybackRuntimeView";
 import {
 	useCueLists,
@@ -22,7 +21,6 @@ export function useSelectedCuelist(
 	selectedCuelist: number | null,
 	enabled = true,
 ) {
-	const server = useServer();
 	const pool = useCuelistPool();
 	const cueLists = useCueLists();
 	const selectedPlaybackDefinition = pool.find(
@@ -42,7 +40,9 @@ export function useSelectedCuelist(
 		? cueLists.find((candidate) => candidate.body.id === selectedCueListId)
 		: legacyFirstCueObject;
 	const cueList = selectedCueObject?.body;
-	const liveActive = useCueListRuntime(
+	// The exact Cuelist runtime is the only live authority; an absent projection
+	// means "not running", never a reason to read a broad Playback snapshot.
+	const active = useCueListRuntime(
 		enabled ? selectedCueListId : null,
 		selectedDefinition?.number,
 	);
@@ -51,12 +51,6 @@ export function useSelectedCuelist(
 		selectedPlaybackDefinition,
 		selectedCueObject,
 		cueList,
-		active:
-			liveActive ??
-			(cueList
-				? server.playbacks?.active.find(
-						(item) => item.cue_list_id === cueList.id,
-					)
-				: undefined),
+		active,
 	};
 }

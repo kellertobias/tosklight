@@ -153,7 +153,7 @@ describe("PlaybackRuntimeViewProvider", () => {
 		expect(transport.subscriptions).toHaveLength(0);
 	});
 
-	it("keeps scoped action failures out of the global session error channel", async () => {
+	it("reports scoped action failures through the provider error channel", async () => {
 		const store = new PlaybackRuntimeStore();
 		store.reset(SHOW_ID, DESK_ID, "authority-a");
 		const onError = vi.fn();
@@ -182,7 +182,10 @@ describe("PlaybackRuntimeViewProvider", () => {
 		});
 
 		expect(store.getSnapshot().error?.message).toBe("action failed");
-		expect(onError).not.toHaveBeenCalled();
+		expect(onError).toHaveBeenCalledOnce();
+		expect(onError).toHaveBeenCalledWith(
+			expect.objectContaining({ message: "action failed" }),
+		);
 	});
 
 	it("does not fetch or subscribe a hidden view and isolates irrelevant events", async () => {

@@ -8,6 +8,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProgrammingInteractionViewProvider } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import { ProgrammingInteractionStore } from "../../features/programmingInteraction/store";
+import { createCommandLineTestAuthority } from "../../features/programmingInteraction/testing/commandLineTestAuthority";
 import {
 	commandChange,
 	commandLine,
@@ -131,6 +132,16 @@ const server = {
 };
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
+// This harness exercises the software keypad, not the Playback key authority,
+// which owns its own hydration and is covered by useCommandLineShortcuts.test.
+vi.mock("./commandLine/playbackShortcutAuthority", () => ({
+	usePlaybackShortcutAuthority: () => ({
+		ready: false,
+		activePage: null,
+		pages: [],
+		slotPlayback: () => null,
+	}),
+}));
 vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state, dispatch }),
 }));
@@ -201,6 +212,9 @@ describe("scoped command-line integration", () => {
 				transport={transport}
 				loadSnapshot={loadSnapshot}
 				replaceCommandLine={replaceCommandLine}
+				executeCommand={({ command, target, pristine }) =>
+					server.executeCommandLine(command, { target, pristine })
+				}
 			>
 				<CommandLineBar />
 			</ProgrammingInteractionViewProvider>,
@@ -329,9 +343,11 @@ describe("Shift+Record Update gestures", () => {
 		);
 	});
 
-	it("opens bounded desk history without changing or executing the unfinished command", () => {
+	it("opens bounded desk history without changing or executing the unfinished command", async () => {
 		server.commandLine = "FIXTURE 7 AT";
-		render(<CommandLineBar />);
+		const authority = createCommandLineTestAuthority({ text: "FIXTURE 7 AT" });
+		render(authority.wrap(<CommandLineBar />));
+		await act(authority.settle);
 
 		fireEvent.click(screen.getByRole("textbox", { name: "Command line" }));
 		const panel = screen.getByRole("dialog", { name: "Command line history" });
@@ -339,23 +355,30 @@ describe("Shift+Record Update gestures", () => {
 		expect(panel).toHaveTextContent("Rejected");
 		expect(panel).toHaveTextContent("FIXTURE 1 AT FULL");
 		expect(panel).toHaveTextContent("Accepted");
-		expect(server.commandLine).toBe("FIXTURE 7 AT");
+		expect(authority.store.getSnapshot().commandLine?.text).toBe("FIXTURE 7 AT");
 		expect(server.executeCommandLine).not.toHaveBeenCalled();
 
 		fireEvent.click(screen.getAllByRole("button", { name: "Reuse" })[1]);
-		expect(server.setCommandLine).toHaveBeenCalledWith(
-			"FIXTURE 1 AT FULL",
-			false,
-		);
+		await act(authority.settle);
+		expect(authority.writes).toEqual([
+			{
+				deskId: authority.deskId,
+				text: "FIXTURE 1 AT FULL",
+				expectedRevision: 1,
+			},
+		]);
+		expect(server.setCommandLine).not.toHaveBeenCalled();
 		expect(server.executeCommandLine).not.toHaveBeenCalled();
 		expect(
 			screen.queryByRole("dialog", { name: "Command line history" }),
 		).not.toBeInTheDocument();
 	});
 
-	it("closes history with Escape or outside pointer input without clearing the command", () => {
+	it("closes history with Escape or outside pointer input without clearing the command", async () => {
 		server.commandLine = "GROUP 3 AT";
-		render(<CommandLineBar />);
+		const authority = createCommandLineTestAuthority({ text: "GROUP 3 AT" });
+		render(authority.wrap(<CommandLineBar />));
+		await act(authority.settle);
 		const input = screen.getByRole("textbox", { name: "Command line" });
 
 		fireEvent.click(input);
@@ -363,7 +386,7 @@ describe("Shift+Record Update gestures", () => {
 		expect(
 			screen.queryByRole("dialog", { name: "Command line history" }),
 		).not.toBeInTheDocument();
-		expect(server.commandLine).toBe("GROUP 3 AT");
+		expect(authority.store.getSnapshot().commandLine?.text).toBe("GROUP 3 AT");
 
 		fireEvent.click(input);
 		fireEvent.pointerDown(
@@ -372,7 +395,8 @@ describe("Shift+Record Update gestures", () => {
 		expect(
 			screen.queryByRole("dialog", { name: "Command line history" }),
 		).not.toBeInTheDocument();
-		expect(server.commandLine).toBe("GROUP 3 AT");
+		expect(authority.store.getSnapshot().commandLine?.text).toBe("GROUP 3 AT");
+		expect(authority.writes).toHaveLength(0);
 	});
 
 	it("uses gray for no timecode and blue only for a present timecode", () => {
@@ -455,13 +479,15 @@ describe("Shift+Record Update gestures", () => {
 		expect(server.setCommandLine).not.toHaveBeenCalled();
 	});
 
-	it("keeps single, second-press, and long-press software gestures mutually exclusive", () => {
+	it("keeps single, second-press, and long-press software gestures mutually exclusive", async () => {
 		const menu = vi.fn();
 		const settings = vi.fn();
 		window.addEventListener(UPDATE_TARGET_MENU_EVENT, menu);
 		window.addEventListener(UPDATE_SETTINGS_EVENT, settings);
 		state.shiftArmed = true;
-		render(<CommandLineBar />);
+		const authority = createCommandLineTestAuthority();
+		render(authority.wrap(<CommandLineBar />));
+		await act(authority.settle);
 		const record = screen.getByRole("button", { name: "REC" });
 
 		fireEvent.pointerDown(record);
@@ -471,7 +497,15 @@ describe("Shift+Record Update gestures", () => {
 			type: "SET_UPDATE_ARMED",
 			value: true,
 		});
-		expect(server.setCommandLine).toHaveBeenCalledWith("UPDATE ", false);
+		await act(authority.settle);
+		expect(authority.writes).toEqual([
+			{
+				deskId: authority.deskId,
+				text: "UPDATE ",
+				expectedRevision: 1,
+			},
+		]);
+		expect(server.setCommandLine).not.toHaveBeenCalled();
 		expect(menu).not.toHaveBeenCalled();
 
 		fireEvent.pointerDown(record);
@@ -496,17 +530,27 @@ describe("Shift+Record Update gestures", () => {
 		window.removeEventListener(UPDATE_SETTINGS_EVENT, settings);
 	});
 
-	it("uses the same exclusive gestures for Shift+End on a software-only desk", () => {
+	it("uses the same exclusive gestures for Shift+End on a software-only desk", async () => {
 		const menu = vi.fn();
 		const settings = vi.fn();
 		window.addEventListener(UPDATE_TARGET_MENU_EVENT, menu);
 		window.addEventListener(UPDATE_SETTINGS_EVENT, settings);
-		render(<CommandLineBar />);
+		const authority = createCommandLineTestAuthority();
+		render(authority.wrap(<CommandLineBar />));
+		await act(authority.settle);
 
 		fireEvent.keyDown(window, { code: "End", key: "End", shiftKey: true });
 		vi.advanceTimersByTime(100);
 		fireEvent.keyUp(window, { code: "End", key: "End", shiftKey: true });
 		expect(state.updateArmed).toBe(true);
+		await act(authority.settle);
+		expect(authority.writes).toEqual([
+			{
+				deskId: authority.deskId,
+				text: "UPDATE ",
+				expectedRevision: 1,
+			},
+		]);
 
 		fireEvent.keyDown(window, { code: "End", key: "End", shiftKey: true });
 		fireEvent.keyUp(window, { code: "End", key: "End", shiftKey: true });

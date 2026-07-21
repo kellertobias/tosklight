@@ -141,6 +141,51 @@ describe("PlaybackRuntimeSession", () => {
 		expect(harness.store.getSnapshot().desk?.active_page).toBe(3);
 	});
 
+	it("keeps one desk subscription while duplicate consumers mount and release", async () => {
+		const harness = createHarness();
+		const releaseFirst = harness.session.activateDesk();
+		await settle();
+		const transport = harness.transport as FakeTransport;
+
+		const releaseSecond = harness.session.activateDesk();
+		await settle();
+		expect(harness.loadSnapshot).toHaveBeenCalledOnce();
+		expect(transport.subscriptions).toHaveLength(1);
+
+		releaseSecond();
+		await settle();
+		expect(harness.loadSnapshot).toHaveBeenCalledOnce();
+		expect(transport.subscriptions).toHaveLength(1);
+		expect(transport.subscriptions[0].close).not.toHaveBeenCalled();
+
+		releaseFirst();
+		await settle();
+		expect(transport.subscriptions[0].close).toHaveBeenCalledOnce();
+	});
+
+	it("keeps one runtime subscription while duplicate identity consumers mount and release", async () => {
+		const harness = createHarness();
+		const identity = playbackIdentity(1);
+		const releaseFirst = harness.session.activate(identity);
+		await settle();
+		const transport = harness.transport as FakeTransport;
+
+		const releaseSecond = harness.session.activate(identity);
+		await settle();
+		expect(harness.loadSnapshot).toHaveBeenCalledOnce();
+		expect(transport.subscriptions).toHaveLength(1);
+
+		releaseFirst();
+		await settle();
+		expect(harness.loadSnapshot).toHaveBeenCalledOnce();
+		expect(transport.subscriptions).toHaveLength(1);
+		expect(transport.subscriptions[0].close).not.toHaveBeenCalled();
+
+		releaseSecond();
+		await settle();
+		expect(transport.subscriptions[0].close).toHaveBeenCalledOnce();
+	});
+
 	it("does not install or notify for an irrelevant delivered identity", async () => {
 		const harness = createHarness();
 		harness.session.activate(playbackIdentity(1));

@@ -95,6 +95,9 @@ vi.mock("../features/programmingInteraction/ProgrammingInteractionView", () => (
     active ? { gesture: server.selectionGesture } : null,
 }));
 vi.mock("../features/server/useShowObjectsState", () => ({ useGroups: () => server.groups }));
+vi.mock("./fixtureSheetCuelistAuthority", () => ({
+  useFixtureSheetCuelistAuthority: () => ({ ready: true, cueLists: [], selectedCueListId: "", selectedCueList: null }),
+}));
 vi.mock("../state/AppContext", () => ({ useApp: () => ({ state, dispatch }) }));
 
 beforeEach(() => {

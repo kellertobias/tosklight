@@ -115,6 +115,7 @@ export function GroupsWindow({ active = true, compact }: WindowProps) {
 		<div className="pool-window group-pool-window">
 			{!compact && <GroupPoolHeader command={command} />}
 			<GroupPoolGrid
+				active={active}
 				command={command}
 				cards={model.cards}
 				capabilities={model.capabilities}

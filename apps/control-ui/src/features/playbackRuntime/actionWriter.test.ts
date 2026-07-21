@@ -7,6 +7,7 @@ import { PlaybackRuntimeStore } from "./store";
 import {
 	cueProjection,
 	DESK_ID,
+	deskProjection,
 	playbackSnapshot,
 	SHOW_ID,
 } from "./testFixtures";
@@ -62,6 +63,15 @@ function readyStore() {
 	return store;
 }
 
+function pageOutcome(page: number, eventSequence: number | null = 11) {
+	return {
+		desk_id: DESK_ID,
+		page,
+		event_sequence: eventSequence,
+		page_creation_event_sequence: null,
+	};
+}
+
 function deferred<T>() {
 	let resolve!: (value: T) => void;
 	let reject!: (reason?: unknown) => void;
@@ -73,6 +83,174 @@ function deferred<T>() {
 }
 
 describe("PlaybackRuntimeActionWriter", () => {
+	it("optimistically selects a page and deduplicates its later desk event", async () => {
+		const store = readyStore();
+		const pending = deferred<ReturnType<typeof pageOutcome>>();
+		const applyDeskPage = vi.fn(() => pending.promise);
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction: vi.fn(),
+			applyDeskPage,
+		});
+
+		const result = writer.setActivePage(2);
+		expect(store.getSnapshot().desk?.active_page).toBe(2);
+		pending.resolve(pageOutcome(2));
+
+		await expect(result).resolves.toBe(true);
+		expect(applyDeskPage).toHaveBeenCalledWith(DESK_ID, 2);
+		expect(store.applyDesk(deskProjection(2), 11)).toBe(false);
+		expect(store.getSnapshot().desk?.active_page).toBe(2);
+	});
+
+	it("settles a page response after its authoritative desk event", async () => {
+		const store = readyStore();
+		const pending = deferred<ReturnType<typeof pageOutcome>>();
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction: vi.fn(),
+			applyDeskPage: () => pending.promise,
+		});
+
+		const result = writer.setActivePage(3);
+		expect(store.applyDesk(deskProjection(3), 12)).toBe(true);
+		pending.resolve(pageOutcome(3, 12));
+
+		await expect(result).resolves.toBe(true);
+		expect(store.getSnapshot().desk?.active_page).toBe(3);
+	});
+
+	it("rolls back a failed page selection without disabling a retry", async () => {
+		const store = readyStore();
+		const applyDeskPage = vi
+			.fn()
+			.mockRejectedValueOnce(new Error("page rejected"))
+			.mockResolvedValueOnce(pageOutcome(2, 12));
+		const onError = vi.fn();
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction: vi.fn(),
+			applyDeskPage,
+			onError,
+		});
+
+		await expect(writer.setActivePage(4)).resolves.toBe(false);
+		expect(store.getSnapshot().desk?.active_page).toBe(1);
+		expect(store.getSnapshot().status).toBe("ready");
+		expect(store.getSnapshot().error?.message).toBe("page rejected");
+		expect(onError).toHaveBeenLastCalledWith(
+			expect.objectContaining({ message: "page rejected" }),
+		);
+
+		await expect(writer.setActivePage(2)).resolves.toBe(true);
+		expect(applyDeskPage).toHaveBeenCalledTimes(2);
+		expect(store.getSnapshot().desk?.active_page).toBe(2);
+		expect(store.getSnapshot().status).toBe("ready");
+		expect(store.getSnapshot().error).toBeNull();
+		expect(onError).toHaveBeenLastCalledWith(null);
+	});
+
+	it("rejects a mismatched page response and restores desk authority", async () => {
+		const store = readyStore();
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction: vi.fn(),
+			applyDeskPage: async () => pageOutcome(7),
+		});
+
+		await expect(writer.setActivePage(6)).resolves.toBe(false);
+		expect(store.getSnapshot().desk?.active_page).toBe(1);
+		expect(store.getSnapshot().error?.message).toBe(
+			"Playback page response does not match the active desk request",
+		);
+	});
+
+	it("rejects a compatibility response that silently created a Page", async () => {
+		const store = readyStore();
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction: vi.fn(),
+			applyDeskPage: async () => ({
+				...pageOutcome(6),
+				page_creation_event_sequence: 10,
+			}),
+		});
+
+		await expect(writer.setActivePage(6)).resolves.toBe(false);
+		expect(store.getSnapshot().desk?.active_page).toBe(1);
+		expect(store.getSnapshot().error?.message).toBe(
+			"Playback page selection unexpectedly created a Page",
+		);
+	});
+
+	it("rejects page numbers outside the desk contract before writing", async () => {
+		const store = readyStore();
+		const applyDeskPage = vi.fn();
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction: vi.fn(),
+			applyDeskPage,
+		});
+
+		await expect(writer.setActivePage(128)).resolves.toBe(false);
+		expect(applyDeskPage).not.toHaveBeenCalled();
+		expect(store.getSnapshot().desk?.active_page).toBe(1);
+		expect(store.getSnapshot().error?.message).toBe(
+			"Playback page must be an integer between 1 and 127",
+		);
+	});
+
+	it("refuses page writes until exact desk authority is hydrated", async () => {
+		const store = new PlaybackRuntimeStore();
+		store.reset(SHOW_ID, DESK_ID, "authority-a");
+		const applyDeskPage = vi.fn();
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction: vi.fn(),
+			applyDeskPage,
+		});
+
+		await expect(writer.setActivePage(2)).resolves.toBe(false);
+		expect(applyDeskPage).not.toHaveBeenCalled();
+		expect(store.getSnapshot().error?.message).toBe(
+			"Authoritative Playback desk is loading",
+		);
+	});
+
+	it("ignores a page response after authority replacement", async () => {
+		const store = readyStore();
+		const pending = deferred<ReturnType<typeof pageOutcome>>();
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction: vi.fn(),
+			applyDeskPage: () => pending.promise,
+		});
+
+		const result = writer.setActivePage(5);
+		store.reset(SHOW_ID, DESK_ID, "authority-b");
+		pending.resolve(pageOutcome(5));
+
+		await expect(result).resolves.toBe(false);
+		expect(store.getSnapshot().desk).toBeNull();
+		expect(store.getSnapshot().error).toBeNull();
+	});
+
 	it("replays a retry with the exact request ID and virtual surface metadata", async () => {
 		const store = readyStore();
 		const requests: PlaybackActionRequest[] = [];
@@ -112,12 +290,18 @@ describe("PlaybackRuntimeActionWriter", () => {
 	it("rolls back an optimistic master after a terminal failure", async () => {
 		const store = readyStore();
 		const pending = deferred<PlaybackOutcome>();
+		let attempts = 0;
 		const onError = vi.fn();
 		const writer = new PlaybackRuntimeActionWriter({
 			showId: SHOW_ID,
 			deskId: DESK_ID,
 			store,
-			applyAction: () => pending.promise,
+			applyAction: async (_showId, _deskId, request) => {
+				attempts += 1;
+				return attempts === 1
+					? pending.promise
+					: outcome(request, masterProjection(0.6), 14);
+			},
 			onError,
 		});
 
@@ -131,8 +315,88 @@ describe("PlaybackRuntimeActionWriter", () => {
 		expect(await result).toBeNull();
 		expect(runtime(store).master).toBe(1);
 		expect(store.getSnapshot().pendingKeys.size).toBe(0);
+		expect(store.getSnapshot().status).toBe("ready");
 		expect(store.getSnapshot().error?.message).toBe("conflict");
 		expect(onError).toHaveBeenCalledWith(expect.any(Error));
+
+		await expect(
+			writer.poolPlaybackAction(1, "master", {
+				value: 0.6,
+				surface: "virtual",
+			}),
+		).resolves.not.toBeNull();
+		expect(attempts).toBe(2);
+		expect(runtime(store).master).toBe(0.6);
+		expect(store.getSnapshot().status).toBe("ready");
+		expect(store.getSnapshot().error).toBeNull();
+		expect(onError).toHaveBeenLastCalledWith(null);
+	});
+
+	it("keeps GO authority ready after failure and clears the error on retry", async () => {
+		const store = readyStore();
+		const beforeCue = runtime(store).cue_index;
+		let attempts = 0;
+		const onError = vi.fn();
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction: async (_showId, _deskId, request) => {
+				attempts += 1;
+				if (attempts === 1) throw new Error("GO rejected");
+				return outcome(request, cueProjection(1, 1), 14);
+			},
+			onError,
+		});
+
+		await expect(
+			writer.poolPlaybackAction(1, "go", { surface: "virtual" }),
+		).resolves.toBeNull();
+		expect(runtime(store).cue_index).toBe(beforeCue);
+		expect(store.getSnapshot().pendingKeys.size).toBe(0);
+		expect(store.getSnapshot().status).toBe("ready");
+		expect(store.getSnapshot().error?.message).toBe("GO rejected");
+		expect(onError).toHaveBeenLastCalledWith(
+			expect.objectContaining({ message: "GO rejected" }),
+		);
+
+		await expect(
+			writer.poolPlaybackAction(1, "go", { surface: "virtual" }),
+		).resolves.not.toBeNull();
+		expect(attempts).toBe(2);
+		expect(runtime(store).cue_index).toBe(1);
+		expect(store.getSnapshot().status).toBe("ready");
+		expect(store.getSnapshot().error).toBeNull();
+		expect(onError).toHaveBeenLastCalledWith(null);
+	});
+
+	it("does not let a late GO outcome hide a session failure", async () => {
+		const store = readyStore();
+		const pending = deferred<PlaybackOutcome>();
+		let request: PlaybackActionRequest | null = null;
+		const onError = vi.fn();
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction: (_showId, _deskId, value) => {
+				request = value;
+				return pending.promise;
+			},
+			onError,
+		});
+
+		const result = writer.poolPlaybackAction(1, "go", { surface: "virtual" });
+		const sessionError = new Error("Playback session failed");
+		store.setError(sessionError);
+		if (!request) throw new Error("request was not captured");
+		pending.resolve(outcome(request, cueProjection(1, 2), 15));
+
+		await expect(result).resolves.not.toBeNull();
+		expect(runtime(store).cue_index).toBe(2);
+		expect(store.getSnapshot().status).toBe("error");
+		expect(store.getSnapshot().error).toBe(sessionError);
+		expect(onError).not.toHaveBeenCalled();
 	});
 
 	it("deduplicates an event arriving after the authoritative response", async () => {

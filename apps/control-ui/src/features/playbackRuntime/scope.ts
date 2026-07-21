@@ -16,6 +16,7 @@ export class PlaybackViewScope {
 			identity,
 			references: (current?.references ?? 0) + 1,
 		});
+		return current == null;
 	}
 
 	deactivate(identity: PlaybackIdentity) {
@@ -33,10 +34,13 @@ export class PlaybackViewScope {
 
 	activateDesk() {
 		this.deskReferences++;
+		return this.deskReferences === 1;
 	}
 
 	deactivateDesk() {
+		const hadLastReference = this.deskReferences === 1;
 		this.deskReferences = Math.max(0, this.deskReferences - 1);
+		return hadLastReference;
 	}
 
 	includesProjection(projection: PlaybackProjection) {

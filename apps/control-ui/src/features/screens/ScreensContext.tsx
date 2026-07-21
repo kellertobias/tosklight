@@ -16,7 +16,6 @@ export function ScreensProvider({
 	const saveScreen = useStableCallback(source.saveScreen);
 	const deleteScreen = useStableCallback(source.deleteScreen);
 	const setScreenPage = useStableCallback(source.setScreenPage);
-	const savePlaybackPage = useStableCallback(source.savePlaybackPage);
 	const updateControlDesk = useStableCallback(source.updateControlDesk);
 	const selectControlDesk = useStableCallback(source.selectControlDesk);
 	const removeClient = useStableCallback(source.removeClient);
@@ -25,11 +24,9 @@ export function ScreensProvider({
 			screens: source.screens,
 			bootstrap: source.bootstrap,
 			session: source.session,
-			playbacks: source.playbacks,
 			saveScreen,
 			deleteScreen,
 			setScreenPage,
-			savePlaybackPage,
 			updateControlDesk,
 			selectControlDesk,
 			removeClient,
@@ -38,11 +35,9 @@ export function ScreensProvider({
 			source.screens,
 			source.bootstrap,
 			source.session,
-			source.playbacks,
 			saveScreen,
 			deleteScreen,
 			setScreenPage,
-			savePlaybackPage,
 			updateControlDesk,
 			selectControlDesk,
 			removeClient,

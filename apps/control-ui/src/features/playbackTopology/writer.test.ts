@@ -65,6 +65,21 @@ function page(
 	};
 }
 
+function numberedPage(
+	number: number,
+	name = `Page ${number}`,
+	revision = 1,
+	id = String(number),
+): ShowObject<"playback_page"> {
+	return {
+		kind: "playback_page",
+		id,
+		revision,
+		updated_at: "",
+		body: { number, name, slots: {} },
+	};
+}
+
 function cueList(
 	revision = 1,
 	id = "legacy-main-list",
@@ -115,6 +130,17 @@ function changed(
 			correlationId: CORRELATION_ID,
 			showRevision,
 			resolution: { kind: "cue_list", cueListId: action.cueListId },
+			objects,
+			eventSequence,
+			replayed: false,
+		};
+	if (action.type === "create_page" || action.type === "rename_page")
+		return {
+			status: "changed",
+			requestId: request.requestId,
+			correlationId: CORRELATION_ID,
+			showRevision,
+			resolution: { kind: "page", page: action.page },
 			objects,
 			eventSequence,
 			replayed: false,
@@ -303,6 +329,100 @@ describe("PlaybackTopologyWriter", () => {
 		});
 	});
 
+	it("creates one Page from exact absent authority and installs its projection", async () => {
+		const created = numberedPage(5);
+		const apply = vi.fn(async (_show, _revision, request) =>
+			changed(request, [present(created)]),
+		);
+		const { store, writer } = setup(apply);
+		const playbacks = store.getSnapshot().playbacks;
+		let publications = 0;
+		store.subscribe(() => publications++);
+
+		await expect(writer.createPage(5)).resolves.toMatchObject({
+			status: "changed",
+			resolution: { kind: "page", page: 5 },
+		});
+
+		expect(apply.mock.calls[0][2]).toMatchObject({
+			action: {
+				type: "create_page",
+				page: 5,
+				expectedPageRevision: 0,
+				expectedPageObjectId: null,
+			},
+		});
+		expect(store.getSnapshot().playbackPages).toContainEqual(created);
+		expect(store.getSnapshot().playbacks).toBe(playbacks);
+		store.applyChange(
+			showChange(41, [
+				{
+					...created,
+					body: { ...created.body, name: "Late duplicate event" },
+				},
+			]),
+		);
+		expect(store.getSnapshot().playbackPages).toContainEqual(created);
+		expect(publications).toBe(1);
+	});
+
+	it("renames a Page with its captured storage identity and normalized name", async () => {
+		const renamed = numberedPage(4, "Act One", 2, "legacy-page-four");
+		const apply = vi.fn(async (_show, _revision, request) =>
+			changed(request, [present(renamed)]),
+		);
+		const { store, writer } = setup(apply);
+
+		await writer.renamePage(4, "  Act One  ", {
+			expectedPageRevision: 1,
+			expectedPageObjectId: "legacy-page-four",
+		});
+
+		expect(apply.mock.calls[0][2]).toMatchObject({
+			action: {
+				type: "rename_page",
+				page: 4,
+				name: "Act One",
+				expectedPageRevision: 1,
+				expectedPageObjectId: "legacy-page-four",
+			},
+		});
+		expect(store.getSnapshot().playbackPages[0]).toEqual(renamed);
+	});
+
+	it("rejects an invalid Page name before sending an action", async () => {
+		const apply = vi.fn();
+		const { writer, onError } = setup(apply);
+
+		await expect(writer.renamePage(4, "   ")).resolves.toBeNull();
+		await expect(writer.renamePage(4, "x".repeat(81))).resolves.toBeNull();
+
+		expect(apply).not.toHaveBeenCalled();
+		expect(onError).toHaveBeenLastCalledWith(
+			expect.objectContaining({ message: "Playback Page name is invalid" }),
+		);
+	});
+
+	it("does not send a captured Page rename while Page authority is dormant", async () => {
+		const apply = vi.fn();
+		const { store, writer, onError } = setup(apply);
+		store.markCollectionDormant("playback_page");
+
+		await expect(
+			writer.renamePage(4, "Act One", {
+				expectedPageRevision: 1,
+				expectedPageObjectId: "legacy-page-four",
+			}),
+		).resolves.toBeNull();
+
+		expect(apply).not.toHaveBeenCalled();
+		expect(onError).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				message: "Authoritative Playback Page 4 is not available",
+			}),
+		);
+	});
+
 	it("replays a retryable request once with the exact same request ID", async () => {
 		const retryable = Object.assign(new Error("offline"), {
 			status: 0,
@@ -327,6 +447,31 @@ describe("PlaybackTopologyWriter", () => {
 		expect(apply.mock.calls[1][2].requestId).toBe(
 			apply.mock.calls[0][2].requestId,
 		);
+	});
+
+	it("does not retry a failed request after authority replacement", async () => {
+		const retryable = Object.assign(new Error("offline"), {
+			status: 0,
+			retryable: true,
+		});
+		let store!: ShowObjectsStore;
+		const apply = vi
+			.fn()
+			.mockImplementationOnce(async () => {
+				store.reset(SHOW_ID, "session-b");
+				throw retryable;
+			})
+			.mockImplementation(async (_show, _revision, request) =>
+				changed(request, [present(numberedPage(5))]),
+			);
+		const setupResult = setup(apply);
+		store = setupResult.store;
+
+		await expect(setupResult.writer.createPage(5)).resolves.toBeNull();
+
+		expect(apply).toHaveBeenCalledOnce();
+		expect(store.getSnapshot().playbackPages).toEqual([]);
+		expect(setupResult.onError).not.toHaveBeenCalled();
 	});
 
 	it("serializes concurrent intents so the second uses committed revisions", async () => {
@@ -362,6 +507,61 @@ describe("PlaybackTopologyWriter", () => {
 				expectedPlaybackRevision: 2,
 			},
 		});
+	});
+
+	it("drops a queued Page action after authority replacement", async () => {
+		const pending = deferred<PlaybackTopologyOutcome>();
+		let firstRequest!: PlaybackTopologyRequest;
+		const apply = vi.fn(async (_show, _revision, request) => {
+			if (apply.mock.calls.length === 1) {
+				firstRequest = request;
+				return pending.promise;
+			}
+			return changed(request, [present(numberedPage(6))], 22, 52);
+		});
+		const { store, writer, onError } = setup(apply);
+		const first = writer.createPage(5);
+		const second = writer.createPage(6);
+		await vi.waitFor(() => expect(apply).toHaveBeenCalledOnce());
+
+		store.reset(SHOW_ID, "session-b");
+		const replacementPage = numberedPage(9, "Replacement", 4, "replacement");
+		store.setCollection(SHOW_ID, "cue_list", [cueList()], 20, 21);
+		store.setCollection(SHOW_ID, "playback", [playback(1)], 20, 21);
+		store.setCollection(
+			SHOW_ID,
+			"playback_page",
+			[replacementPage],
+			20,
+			21,
+		);
+		pending.resolve(changed(firstRequest, [present(numberedPage(5))]));
+
+		await expect(Promise.all([first, second])).resolves.toEqual([null, null]);
+		expect(apply).toHaveBeenCalledOnce();
+		expect(store.getSnapshot().playbackPages).toEqual([replacementPage]);
+		expect(onError).not.toHaveBeenCalled();
+	});
+
+	it("does not report a queued Page preflight after the writer stops", async () => {
+		const pending = deferred<PlaybackTopologyOutcome>();
+		let request!: PlaybackTopologyRequest;
+		const apply = vi.fn(async (_show, _revision, input) => {
+			request = input;
+			return pending.promise;
+		});
+		const { store, writer, onError } = setup(apply);
+		const first = writer.createPage(5);
+		const second = writer.renamePage(4, "Queued");
+		await vi.waitFor(() => expect(apply).toHaveBeenCalledOnce());
+
+		store.markCollectionDormant("playback_page");
+		writer.stop();
+		pending.resolve(changed(request, [present(numberedPage(5))]));
+
+		await expect(Promise.all([first, second])).resolves.toEqual([null, null]);
+		expect(apply).toHaveBeenCalledOnce();
+		expect(onError).not.toHaveBeenCalled();
 	});
 
 	it("preserves the edit-base revisions captured before a queued configuration", async () => {
@@ -404,6 +604,48 @@ describe("PlaybackTopologyWriter", () => {
 
 		expect(store.getSnapshot().playbackPages).toBe(afterEvent.playbackPages);
 		expect(store.getSnapshot().playbackPages[0].body.slots["3"]).toBe(7);
+	});
+
+	it("preserves a Page-create event that arrives before its HTTP outcome", async () => {
+		const pending = deferred<PlaybackTopologyOutcome>();
+		let request!: PlaybackTopologyRequest;
+		const apply = vi.fn(async (_show, _revision, input) => {
+			request = input;
+			return pending.promise;
+		});
+		const { store, writer } = setup(apply);
+		const operation = writer.createPage(5);
+		await Promise.resolve();
+		const created = numberedPage(5);
+		store.applyChange(showChange(41, [created]));
+		const afterEvent = store.getSnapshot();
+
+		pending.resolve(changed(request, [present(created)]));
+		await operation;
+
+		expect(store.getSnapshot().playbackPages).toBe(afterEvent.playbackPages);
+		expect(store.getSnapshot().playbackPages).toContainEqual(created);
+	});
+
+	it("keeps an existing Page create no-change projection-stable", async () => {
+		const apply = vi.fn(async (_show, _revision, request) => ({
+			status: "no_change" as const,
+			requestId: request.requestId,
+			correlationId: CORRELATION_ID,
+			showRevision: 11,
+			resolution: { kind: "page" as const, page: 4 },
+			objects: [present(page(1))],
+			replayed: false,
+		}));
+		const { store, writer } = setup(apply);
+		const before = store.getSnapshot();
+
+		await expect(writer.createPage(4)).resolves.toMatchObject({
+			status: "no_change",
+		});
+
+		expect(store.getSnapshot().playbackPages).toBe(before.playbackPages);
+		expect(store.getSnapshot().playbacks).toBe(before.playbacks);
 	});
 
 	it("makes a replayed no-change outcome projection-stable", async () => {
@@ -502,6 +744,75 @@ describe("PlaybackTopologyWriter", () => {
 		expect(store.getSnapshot().playbackPages).toEqual([repairedPage]);
 		expect(store.getSnapshot().playbacks).toEqual([]);
 		expect(onError).toHaveBeenLastCalledWith(conflict);
+	});
+
+	it("repairs a Page rename conflict through its captured storage identity", async () => {
+		const conflict = Object.assign(new Error("stale Page"), {
+			status: 409,
+			retryable: false,
+			currentRevision: 13,
+		});
+		const repaired = numberedPage(4, "Concurrent", 2, "legacy-page-four");
+		const loadObject = vi.fn(async () => repaired);
+		const { store, writer, onError } = setup(
+			vi.fn(async () => {
+				throw conflict;
+			}),
+			loadObject as unknown as PlaybackTopologyWriterOptions["loadObject"],
+		);
+
+		await expect(writer.renamePage(4, "Local")).resolves.toBeNull();
+
+		expect(loadObject).toHaveBeenCalledWith(
+			SHOW_ID,
+			"playback_page",
+			"legacy-page-four",
+		);
+		expect(store.getSnapshot().playbackPages).toEqual([repaired]);
+		expect(store.getSnapshot().showRevision).toBe(13);
+		expect(onError).toHaveBeenLastCalledWith(conflict);
+	});
+
+	it("drops a stale error when authority changes during conflict repair", async () => {
+		const conflict = Object.assign(new Error("stale Page"), {
+			status: 409,
+			retryable: false,
+			currentRevision: 13,
+		});
+		const repair = deferred<ShowObject<"playback_page"> | null>();
+		const loadObject = vi.fn(() => repair.promise);
+		const { store, writer, onError } = setup(
+			vi.fn(async () => {
+				throw conflict;
+			}),
+			loadObject as unknown as PlaybackTopologyWriterOptions["loadObject"],
+		);
+		const operation = writer.renamePage(4, "Local");
+		await vi.waitFor(() => expect(loadObject).toHaveBeenCalledOnce());
+		store.reset(SHOW_ID, "session-b");
+		repair.resolve(numberedPage(4, "Concurrent", 2, "legacy-page-four"));
+
+		await expect(operation).resolves.toBeNull();
+		expect(store.getSnapshot().playbackPages).toEqual([]);
+		expect(onError).not.toHaveBeenCalled();
+	});
+
+	it("leaves Page authority unchanged when create rolls back", async () => {
+		const rejected = Object.assign(new Error("forbidden"), {
+			status: 403,
+			retryable: false,
+		});
+		const { store, writer, onError } = setup(
+			vi.fn(async () => {
+				throw rejected;
+			}),
+		);
+		const before = store.getSnapshot();
+
+		await expect(writer.createPage(5)).resolves.toBeNull();
+
+		expect(store.getSnapshot().playbackPages).toBe(before.playbackPages);
+		expect(onError).toHaveBeenLastCalledWith(rejected);
 	});
 
 	it("repairs an existing map through the destination Page and source Playback", async () => {

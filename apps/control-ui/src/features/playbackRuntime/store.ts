@@ -78,18 +78,6 @@ export class PlaybackRuntimeStore {
 		return scope === this.scope;
 	}
 
-	seedDesk(activePage: number, selectedPlayback: number | null, revision = 0) {
-		const { showId, deskId } = this.state;
-		if (!showId || !deskId || this.state.desk) return;
-		const desk = this.deskState.seed({
-			scope: { show_id: showId, show_revision: revision },
-			desk_id: deskId,
-			active_page: activePage,
-			selected_playback: selectedPlayback,
-		});
-		this.publish({ desk, showRevision: revision });
-	}
-
 	setLoading() {
 		if (this.state.status !== "loading") this.publish({ status: "loading" });
 	}
@@ -181,7 +169,6 @@ export class PlaybackRuntimeStore {
 		)
 			return false;
 		const projections = new Map(this.state.projections);
-		const matchesOutcome = this.matches(outcome.projection.scope.show_id);
 		for (const related of outcome.related)
 			this.mergeProjection(
 				related.projection,
@@ -213,8 +200,7 @@ export class PlaybackRuntimeStore {
 				this.state.eventSequence,
 			),
 			pendingKeys: this.pendingKeys(),
-			status: matchesOutcome ? "ready" : this.state.status,
-			error: null,
+			error: this.actionError(null),
 		});
 		return true;
 	}
@@ -231,7 +217,11 @@ export class PlaybackRuntimeStore {
 		const token = this.beginTrackedRequest(key, optimistic);
 		const projections = new Map(this.state.projections);
 		projections.set(key, this.renderProjectionKey(key));
-		this.publish({ projections, pendingKeys: this.pendingKeys(), error: null });
+		this.publish({
+			projections,
+			pendingKeys: this.pendingKeys(),
+			error: this.actionError(null),
+		});
 		return token;
 	}
 
@@ -242,36 +232,49 @@ export class PlaybackRuntimeStore {
 	rollbackProjection(token: string | null, error: Error) {
 		const operation = this.requests.take(token);
 		if (!operation) return false;
-		if (!operation.optimistic) return true;
+		if (!operation.optimistic) {
+			this.publish({
+				pendingKeys: this.pendingKeys(),
+				error: this.actionError(error),
+			});
+			return true;
+		}
 		const projections = new Map(this.state.projections);
 		projections.set(operation.key, this.renderProjectionKey(operation.key));
 		this.publish({
 			projections,
 			pendingKeys: this.pendingKeys(),
-			status: "error",
-			error,
+			error: this.actionError(error),
 		});
 		return true;
+	}
+
+	reportActionError(error: Error) {
+		const nextError = this.actionError(error);
+		if (nextError !== this.state.error) this.publish({ error: nextError });
 	}
 
 	beginOptimisticPage(page: number) {
 		const operation = this.deskState.begin(page);
 		if (!operation) return null;
-		this.publish({ desk: operation.desk, error: null });
+		this.publish({ desk: operation.desk, error: this.actionError(null) });
 		return operation.token;
 	}
 
 	commitPage(token: string | null, _page: number, sequence: number | null) {
 		const desk = this.deskState.commit(token, sequence);
 		if (!desk) return false;
-		this.publish({ desk, error: null });
+		this.publish({ desk, error: this.actionError(null) });
 		return true;
 	}
 
 	rollbackPage(token: string | null, error: Error) {
 		const desk = this.deskState.rollback(token);
 		if (!desk) return false;
-		this.publish({ desk, status: "error", error });
+		// The desk remains authoritative after an action rollback. Keep the
+		// session status ready so the operator can retry without waiting for an
+		// unrelated snapshot or event; session failures still use setError().
+		this.publish({ desk, error: this.actionError(error) });
 		return true;
 	}
 
@@ -364,6 +367,10 @@ export class PlaybackRuntimeStore {
 
 	private matches(showId: string, deskId = this.state.deskId) {
 		return showId === this.state.showId && deskId === this.state.deskId;
+	}
+
+	private actionError(error: Error | null) {
+		return this.state.status === "error" ? this.state.error : error;
 	}
 
 	private publish(update: Partial<PlaybackRuntimeState>) {

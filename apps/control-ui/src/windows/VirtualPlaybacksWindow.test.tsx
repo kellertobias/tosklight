@@ -209,6 +209,7 @@ vi.mock("../features/showObjects/ShowObjectsView", () => ({
 }));
 vi.mock("../features/showObjects/ShowObjectsState", () => ({
 	useCueLists: () => mocks.topology.cueLists,
+	usePlaybackDefinitions: () => mocks.topology.playbacks,
 	usePortableGroups: () => [],
 }));
 

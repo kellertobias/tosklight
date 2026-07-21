@@ -136,12 +136,14 @@ export function CommandLineBar() {
 		.filter(Boolean)
 		.join(" · ");
 	const replaceCommand = (value: string, pristine = false) => {
+		if (!command.ready) return;
 		editGeneration.current++;
 		setCompleted(false);
 		errors.setCommandError(null);
 		void command.replace(value, pristine);
 	};
 	const execute = async (value?: string) => {
+		if (!command.ready) return;
 		const generation = editGeneration.current;
 		const ok = await command.execute(value);
 		setCompleted(ok && generation === editGeneration.current);
@@ -200,6 +202,8 @@ export function CommandLineBar() {
 	return (
 		<header
 			className={`command-line-bar command-line-left ${state.controlMode === "playbacks" ? "playback-mode" : ""} ${errors.commandError ? "has-command-error" : ""}`}
+			aria-busy={!command.ready}
+			data-command-authority={command.ready ? "ready" : "loading"}
 		>
 			<CommandErrorBanner
 				message={errors.commandError}

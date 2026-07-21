@@ -1,5 +1,4 @@
 import { useRef } from "react";
-import { useServer } from "../../api/ServerContext";
 import { requestUpdateTarget } from "../../components/control/updateWorkflow";
 import type { CommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
 import { ButtonGrid, WindowScrollArea } from "../../components/window-kit";
@@ -11,8 +10,10 @@ import {
 	emptyGroupRecordingTarget,
 	type GroupRecordingTarget,
 } from "../../features/groupRecording/target";
+import { useGroupSelectionActions } from "../../features/groupSelection/useGroupSelectionActions";
 
 export function GroupPoolGrid({
+	active = true,
 	cards,
 	capabilities,
 	knownFixtureIds,
@@ -23,6 +24,7 @@ export function GroupPoolGrid({
 	recordGroup,
 	runCommand,
 }: Pick<FixtureMetadata, "capabilities" | "knownFixtureIds"> & {
+	active?: boolean;
 	cards: (Group | null)[];
 	command: CommandLineSurface;
 	onOpenContext: (id: string) => void;
@@ -31,7 +33,7 @@ export function GroupPoolGrid({
 	recordGroup: (target: GroupRecordingTarget) => Promise<unknown>;
 	runCommand: (command: string) => Promise<unknown>;
 }) {
-	const server = useServer();
+	const groupSelection = useGroupSelectionActions(active);
 	const { state, dispatch } = useApp();
 	const hold = useRef<number | null>(null);
 	const cancelHold = () => {
@@ -50,7 +52,7 @@ export function GroupPoolGrid({
 			return;
 		}
 		if (group && !state.storeArmed) {
-			void server.selectionGesture({ type: "live_group", group_id: group.id });
+			void groupSelection.selectLive(group);
 			return;
 		}
 		if (!state.storeArmed) return;

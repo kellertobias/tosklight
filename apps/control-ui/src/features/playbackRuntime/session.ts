@@ -50,26 +50,22 @@ export class PlaybackRuntimeSession {
 	}
 
 	activate(identity: PlaybackIdentity) {
-		this.scope.activate(identity);
-		this.scheduleRefresh();
+		if (this.scope.activate(identity)) this.scheduleRefresh();
 		let active = true;
 		return () => {
 			if (!active) return;
 			active = false;
-			this.scope.deactivate(identity);
-			this.scheduleRefresh();
+			if (this.scope.deactivate(identity)) this.scheduleRefresh();
 		};
 	}
 
 	activateDesk() {
-		this.scope.activateDesk();
-		this.scheduleRefresh();
+		if (this.scope.activateDesk()) this.scheduleRefresh();
 		let active = true;
 		return () => {
 			if (!active) return;
 			active = false;
-			this.scope.deactivateDesk();
-			this.scheduleRefresh();
+			if (this.scope.deactivateDesk()) this.scheduleRefresh();
 		};
 	}
 

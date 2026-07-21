@@ -12,6 +12,7 @@ import {
 	PlaybackRuntimeActionWriter,
 	type PlaybackRuntimeActionApply,
 	type PlaybackRuntimeActions,
+	type PlaybackDeskPageApply,
 } from "./actionWriter";
 import type { PlaybackIdentity, PlaybackProjection } from "./contracts";
 import { cueListIdentity, identityKey, playbackIdentity } from "./contracts";
@@ -32,7 +33,7 @@ export interface PlaybackRuntimeViewProviderProps {
 	transport: PlaybackEventTransport | null;
 	loadSnapshot: PlaybackRuntimeSessionOptions["loadSnapshot"];
 	applyAction?: PlaybackRuntimeActionApply | null;
-	initialDesk?: { activePage: number; selectedPlayback: number | null } | null;
+	applyDeskPage?: PlaybackDeskPageApply | null;
 	onError?: (error: Error | null) => void;
 }
 
@@ -50,7 +51,7 @@ export function PlaybackRuntimeViewProvider({
 	transport,
 	loadSnapshot,
 	applyAction,
-	initialDesk,
+	applyDeskPage,
 	onError,
 }: PropsWithChildren<PlaybackRuntimeViewProviderProps>) {
 	const session = useMemo(
@@ -76,18 +77,16 @@ export function PlaybackRuntimeViewProvider({
 						deskId,
 						store,
 						applyAction,
+						applyDeskPage: applyDeskPage ?? undefined,
+						onError,
 					})
 				: null,
-		[applyAction, authorityKey, deskId, showId, store],
+		[applyAction, applyDeskPage, authorityKey, deskId, onError, showId, store],
 	);
 	useEffect(() => {
 		if (!session) store.reset(showId, deskId, authorityKey);
 	}, [authorityKey, deskId, session, showId, store]);
 	useStrictModeSafeStop(session);
-	useEffect(() => {
-		if (initialDesk)
-			store.seedDesk(initialDesk.activePage, initialDesk.selectedPlayback);
-	}, [authorityKey, initialDesk, store]);
 	useStrictModeSafeStop(actions);
 	return (
 		<StoreContext.Provider value={store}>

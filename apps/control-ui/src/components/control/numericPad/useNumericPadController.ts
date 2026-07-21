@@ -1,7 +1,11 @@
 import { useServer } from "../../../api/ServerContext";
-import { useProgrammingSelectionActions } from "../../../features/programmingInteraction/ProgrammingInteractionView";
+import {
+	usePlaybackDeskView,
+	usePlaybackRuntimeStatus,
+} from "../../../features/playbackRuntime/PlaybackRuntimeView";
 import { useProgrammerValuesActions } from "../../../features/programmerValues/ProgrammerValuesView";
 import { useProgrammerValuesActivity } from "../../../features/programmerValues/useProgrammerValuesActivity";
+import { useProgrammingSelectionActions } from "../../../features/programmingInteraction/ProgrammingInteractionView";
 import { useApp } from "../../../state/AppContext";
 import type { BuiltInWindow } from "../../../types";
 import { useCommandLineSurface } from "../commandLine/useCommandLineSurface";
@@ -29,6 +33,8 @@ export function useNumericPadController() {
 	const values = useProgrammerValuesActivity();
 	const valuesActions = useProgrammerValuesActions();
 	const selectionActions = useProgrammingSelectionActions(true);
+	const playbackDesk = usePlaybackDeskView();
+	const playbackStatus = usePlaybackRuntimeStatus();
 	const hasSelection = command.selected.length > 0;
 	const hasProgrammerValues = values.ready && values.valueCount > 0;
 	const context = {
@@ -39,6 +45,8 @@ export function useNumericPadController() {
 		values,
 		valuesActions,
 		selectionActions,
+		playbackDesk,
+		playbackReady: playbackStatus.status === "ready" && playbackDesk !== null,
 	};
 	return {
 		state,
@@ -62,6 +70,8 @@ interface NumericPadContext {
 	values: ReturnType<typeof useProgrammerValuesActivity>;
 	valuesActions: ReturnType<typeof useProgrammerValuesActions>;
 	selectionActions: ReturnType<typeof useProgrammingSelectionActions>;
+	playbackDesk: ReturnType<typeof usePlaybackDeskView>;
+	playbackReady: boolean;
 }
 
 function toggleRecord({ state, dispatch, command }: NumericPadContext) {
@@ -104,7 +114,7 @@ function pressKey(context: NumericPadContext, key: SoftwareKey) {
 }
 
 function handleShiftedKey(
-	{ state, dispatch, command, server }: NumericPadContext,
+	{ state, dispatch, command, playbackDesk, playbackReady }: NumericPadContext,
 	key: SoftwareKey,
 	text: string,
 ) {
@@ -128,10 +138,12 @@ function handleShiftedKey(
 		return true;
 	}
 	if (key === "4") {
-		const activePlayback = server.playbacks?.selected_playback;
 		dispatch({ type: "OPEN_BUILTIN", kind: "cuelists" });
-		if (activePlayback != null)
-			dispatch({ type: "OPEN_BUILTIN_CUELIST", number: activePlayback });
+		if (playbackReady && playbackDesk?.selected_playback != null)
+			dispatch({
+				type: "OPEN_BUILTIN_CUELIST",
+				number: playbackDesk.selected_playback,
+			});
 		return true;
 	}
 	if (key === "7" || key === "8" || key === "9") {

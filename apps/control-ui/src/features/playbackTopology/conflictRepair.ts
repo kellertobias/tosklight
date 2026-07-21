@@ -28,9 +28,27 @@ export async function repairPlaybackTopologyConflict(
 		);
 	if (action.type === "save_cue_list")
 		return repairCueList(options, action, generation);
+	if (action.type === "create_page" || action.type === "rename_page")
+		return repairPage(options, action, generation);
 	if (action.type === "map_existing_playback")
 		return repairExistingPlaybackMap(options, action, generation);
 	await repairMappedSlot(options, action.page, action.slot, generation);
+}
+
+async function repairPage(
+	options: PlaybackTopologyRepairOptions,
+	action: Extract<
+		PlaybackTopologyAction,
+		{ type: "create_page" | "rename_page" }
+	>,
+	generation: number,
+) {
+	await repairObject(
+		options,
+		"playback_page",
+		action.expectedPageObjectId ?? String(action.page),
+		generation,
+	);
 }
 
 export function playbackTopologyTransportFailure(reason: unknown) {

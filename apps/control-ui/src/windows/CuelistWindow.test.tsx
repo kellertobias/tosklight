@@ -14,6 +14,7 @@ import type {
 	PlaybackSnapshot,
 } from "../api/types";
 import { PaneSettingsModal } from "../components/modals/PaneSettingsModal";
+import { createCommandLineTestAuthority } from "../features/programmingInteraction/testing/commandLineTestAuthority";
 import { CuelistWindow } from "./CuelistWindow";
 
 const mocks = vi.hoisted(() => ({
@@ -472,18 +473,10 @@ describe("CuelistWindow fixed and selected playback sources", () => {
 			within(view.container).queryByText("Main opening"),
 		).not.toBeInTheDocument();
 
+		// No Playback runtime authority is mounted here, so follow-selection has
+		// no selected Playback even though the legacy snapshot names one. Desk
+		// projection coverage lives in cuelistPlaybackAuthority.test.tsx.
 		mocks.playbacks.selected_playback = 1;
-		view.rerender(
-			<CuelistWindow
-				compact
-				cueListTab="cues"
-				cueListSource="follow-selection"
-			/>,
-		);
-		expect(
-			within(view.container).getByText("Main opening"),
-		).toBeInTheDocument();
-
 		mocks.playbacks.active = [
 			{
 				playback_number: 1,
@@ -502,33 +495,11 @@ describe("CuelistWindow fixed and selected playback sources", () => {
 			/>,
 		);
 		expect(
-			within(view.container).getByText("Selected Cue · 2"),
-		).toBeInTheDocument();
-		expect(
-			within(view.container).getByText("Main chase step").closest("tr"),
-		).toHaveClass("current", "selected");
-
-		mocks.playbacks.selected_playback = 2;
-		view.rerender(
-			<CuelistWindow
-				compact
-				cueListTab="cues"
-				cueListSource="follow-selection"
-			/>,
-		);
-		expect(within(view.container).getByText("Encore look")).toBeInTheDocument();
-
-		mocks.playbacks.selected_playback = null;
-		view.rerender(
-			<CuelistWindow
-				compact
-				cueListTab="cues"
-				cueListSource="follow-selection"
-			/>,
-		);
-		expect(
 			within(view.container).getByText("No Cuelist selected"),
 		).toBeInTheDocument();
+		expect(
+			within(view.container).queryByText("Main opening"),
+		).not.toBeInTheDocument();
 	});
 });
 
@@ -1059,7 +1030,9 @@ describe("CuelistWindow pool recording", () => {
 	beforeEach(resetCuelistWindowMocks);
 
 	it("renders empty numbered slots and records into the touched slot", async () => {
-		render(<CuelistWindow compact cueListTab="pool" />);
+		const authority = createCommandLineTestAuthority({ text: "STORE" });
+		render(authority.wrap(<CuelistWindow compact cueListTab="pool" />));
+		await act(authority.settle);
 		expect(screen.getAllByText("Tap to record Cuelist")).toHaveLength(1000);
 		fireEvent.click(
 			screen.getAllByText("Tap to record Cuelist")[0].closest("button")!,
@@ -1076,7 +1049,16 @@ describe("CuelistWindow pool recording", () => {
 		);
 		expect(mocks.executeCommandLine).not.toHaveBeenCalled();
 		expect(mocks.refresh).not.toHaveBeenCalled();
-		expect(mocks.resetCommandLine).toHaveBeenCalledOnce();
+		await waitFor(() =>
+			expect(authority.writes).toEqual([
+				{
+					deskId: authority.deskId,
+					text: "",
+					expectedRevision: 1,
+				},
+			]),
+		);
+		expect(mocks.resetCommandLine).not.toHaveBeenCalled();
 		expect(mocks.dispatch).toHaveBeenCalledWith({
 			type: "SET_STORE_ARMED",
 			value: false,

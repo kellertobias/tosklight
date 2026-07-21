@@ -1,16 +1,24 @@
-import { type Dispatch, useEffect, useRef } from "react";
-import { useServer } from "../../../api/ServerContext";
-import type { ServerContextValue } from "../../../features/server/ServerContextValue";
+import { type Dispatch, useEffect, useLayoutEffect, useRef } from "react";
+import { usePlaybackRuntimeActions } from "../../../features/playbackRuntime/PlaybackRuntimeView";
+import { usePlaybackTopologyActions } from "../../../features/playbackTopology/PlaybackTopologyProvider";
 import { useApp } from "../../../state/AppContext";
 import type { Action } from "../../../state/appReducer";
 import type { AppState } from "../../../types";
 import type { CommandTargetMode } from "../../../controlSurface/commandTarget";
-import { canAdvancePlaybackPage } from "../PlaybackPageDialogs";
 import {
 	editTargetedCommandWithSoftwareKey,
 	softwareKeyFromKeyboard,
 } from "../softwareKeypad";
 import { openUpdateSettings } from "../updateWorkflow";
+import { KeyboardHeldActions } from "./keyboardFlashActions";
+import { usePlaybackShortcutAuthority } from "./playbackShortcutAuthority";
+import {
+	type PlaybackShortcutContext,
+	KeyboardPageActions,
+	pressPlaybackSlot,
+	releasePlaybackSlot,
+	stepPlaybackPage,
+} from "./playbackShortcutKeys";
 
 interface ShortcutCallbacks {
 	completed: boolean;
@@ -30,12 +38,10 @@ interface UpdateGesture {
 	held: { current: boolean };
 }
 
-interface ShortcutContext extends ShortcutCallbacks {
+interface ShortcutContext extends ShortcutCallbacks, PlaybackShortcutContext {
 	state: AppState;
 	dispatch: Dispatch<Action>;
-	server: ServerContextValue;
 	update: UpdateGesture;
-	flashes: Map<string, number>;
 }
 
 function isExternalEditor(target: EventTarget | null) {
@@ -46,41 +52,13 @@ function isExternalEditor(target: EventTarget | null) {
 	);
 }
 
-function triggerPlaybackButton(
-	context: ShortcutContext,
-	event: KeyboardEvent,
-	slot: number,
-) {
-	const { server } = context;
-	const page = server.playbacks?.pages.find(
-		(candidate) => candidate.number === server.playbacks?.active_page,
-	);
-	const playbackNumber = page?.slots[String(slot)];
-	const definition = server.playbacks?.pool.find(
-		(candidate) => candidate.number === playbackNumber,
-	);
-	const action = definition?.buttons[0];
-	if (!definition || !action || action === "none") return;
-	if (action !== "flash") {
-		void server.poolPlaybackAction(
-			definition.number,
-			action.replaceAll("_", "-") as Parameters<
-				typeof server.poolPlaybackAction
-			>[1],
-		);
-		return;
-	}
-	if (event.repeat) return;
-	context.flashes.set(event.code, definition.number);
-	void server.poolPlaybackAction(definition.number, "flash", { pressed: true });
-}
-
 function handleFunctionKey(context: ShortcutContext, event: KeyboardEvent) {
 	if (!/^F(?:[1-9]|1[0-3])$/.test(event.key)) return false;
 	event.preventDefault();
 	const number = Number(event.key.slice(1));
 	if (number <= 8) {
-		triggerPlaybackButton(context, event, number);
+		// A loading Page/desk/topology consumes the key but sends nothing.
+		if (context.authority.ready) pressPlaybackSlot(context, event, number);
 		return true;
 	}
 	const group = String.fromCharCode(65 + number - 9) as
@@ -96,35 +74,13 @@ function handleFunctionKey(context: ShortcutContext, event: KeyboardEvent) {
 	return true;
 }
 
-function activatePlaybackPage(context: ShortcutContext, page: number) {
-	context.dispatch({ type: "SET_PLAYBACK_PAGE", page: page - 1 });
-	void context.server.setPlaybackPage(page);
-}
-
-function createPlaybackPage(context: ShortcutContext, page: number) {
-	void context.server
-		.savePlaybackPage({ number: page, name: `Page ${page}`, slots: {} })
-		.then((saved) => {
-			if (saved) activatePlaybackPage(context, page);
-		});
-}
-
 function handlePageKey(context: ShortcutContext, event: KeyboardEvent) {
 	if (event.code !== "PageUp" && event.code !== "PageDown") return false;
 	event.preventDefault();
-	const { server, state } = context;
-	const current = server.playbacks?.active_page ?? state.playbackPage + 1;
-	const pages = server.playbacks?.pages ?? [];
-	const page = current + (event.code === "PageUp" ? 1 : -1);
-	if (page < 1) return true;
-	if (pages.some((item) => item.number === page)) {
-		activatePlaybackPage(context, page);
-	} else if (
-		event.code === "PageUp" &&
-		canAdvancePlaybackPage(pages, current)
-	) {
-		createPlaybackPage(context, page);
-	}
+	if (event.repeat) return true;
+	// A loading Page/desk/topology consumes the key but creates nothing.
+	if (context.authority.ready)
+		stepPlaybackPage(context, event.code === "PageUp" ? 1 : -1);
 	return true;
 }
 
@@ -226,12 +182,7 @@ function handleKeyUp(context: ShortcutContext, event: KeyboardEvent) {
 		finishUpdateGesture(context);
 		return;
 	}
-	const playbackNumber = context.flashes.get(event.code);
-	if (playbackNumber == null) return;
-	context.flashes.delete(event.code);
-	void context.server.poolPlaybackAction(playbackNumber, "flash", {
-		pressed: false,
-	});
+	releasePlaybackSlot(context, event);
 }
 
 function releaseHeldControls(context: ShortcutContext) {
@@ -239,12 +190,8 @@ function releaseHeldControls(context: ShortcutContext) {
 		window.clearTimeout(context.update.hold.current);
 	context.update.hold.current = null;
 	context.update.active.current = false;
-	for (const playbackNumber of context.flashes.values()) {
-		void context.server.poolPlaybackAction(playbackNumber, "flash", {
-			pressed: false,
-		});
-	}
-	context.flashes.clear();
+	context.heldActions.releaseAll();
+	context.pageActions.invalidate();
 }
 
 function useRunningMenuShortcut(hardware: boolean) {
@@ -274,34 +221,62 @@ export function useCommandLineShortcuts(
 	callbacks: ShortcutCallbacks,
 ) {
 	const { state, dispatch } = useApp();
-	const server = useServer();
+	const active = !hardware && state.regularNumberShortcuts;
+	const authority = usePlaybackShortcutAuthority(active);
+	const runtimeActions = usePlaybackRuntimeActions();
+	const topologyActions = usePlaybackTopologyActions();
 	const update: UpdateGesture = {
 		hold: useRef<number | null>(null),
 		active: useRef(false),
 		held: useRef(false),
 	};
-	const flashes = useRef(new Map<string, number>());
+	const heldActions = useRef(new KeyboardHeldActions()).current;
+	const pageActions = useRef(new KeyboardPageActions()).current;
 	const context = useRef<ShortcutContext | null>(null);
 	context.current = {
 		state,
 		dispatch,
-		server,
+		authority,
+		runtimeActions,
 		update,
-		flashes: flashes.current,
+		heldActions,
+		pageActions,
 		...callbacks,
 	};
 	useRunningMenuShortcut(hardware);
+	useLayoutEffect(() => {
+		if (!active) return;
+		heldActions.syncAuthority(runtimeActions);
+		return () => heldActions.releaseAll();
+	}, [active, heldActions, runtimeActions]);
+	useLayoutEffect(() => {
+		if (!active || !authority.ready) return pageActions.invalidate();
+		pageActions.syncAuthority(
+			topologyActions?.createPage ?? null,
+			runtimeActions?.setActivePage ?? null,
+		);
+		return () => pageActions.invalidate();
+	}, [
+		active,
+		authority.ready,
+		pageActions,
+		runtimeActions?.setActivePage,
+		topologyActions?.createPage,
+	]);
 	useEffect(() => {
-		if (hardware || !state.regularNumberShortcuts) return;
+		if (!active) return;
 		const current = () => context.current as ShortcutContext;
 		const keydown = (event: KeyboardEvent) => handleKeyDown(current(), event);
 		const keyup = (event: KeyboardEvent) => handleKeyUp(current(), event);
+		const blur = () => heldActions.releaseAll();
 		window.addEventListener("keydown", keydown);
 		window.addEventListener("keyup", keyup);
+		window.addEventListener("blur", blur);
 		return () => {
 			window.removeEventListener("keydown", keydown);
 			window.removeEventListener("keyup", keyup);
+			window.removeEventListener("blur", blur);
 			releaseHeldControls(current());
 		};
-	}, [hardware, state.regularNumberShortcuts]);
+	}, [active, heldActions]);
 }

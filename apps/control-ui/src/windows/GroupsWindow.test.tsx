@@ -11,11 +11,13 @@ import { GroupsWindow } from "./GroupsWindow";
 
 const mocks = vi.hoisted(() => ({
 	dispatch: vi.fn(),
-	executeCommandLine: vi.fn(),
-	selectionGesture: vi.fn(),
+	executeCommand: vi.fn(),
+	replaceCommand: vi.fn(),
+	selectLive: vi.fn(),
+	selectFrozen: vi.fn(),
 	refresh: vi.fn(),
 	recordGroup: vi.fn(),
-	resetCommandLine: vi.fn(),
+	resetCommand: vi.fn(),
 	updateGroup: vi.fn(),
 	commandLine: "",
 	state: { storeArmed: false, groupsReturnToStage: false },
@@ -62,16 +64,32 @@ vi.mock("../api/ServerContext", () => ({
 		patch: { fixtures: [], revision: 0 },
 		selectedFixtures: [],
 		selectedGroupId: null,
-		executeCommandLine: mocks.executeCommandLine,
-		selectionGesture: mocks.selectionGesture,
 		refresh: mocks.refresh,
-		resetCommandLine: mocks.resetCommandLine,
 		updateGroup: mocks.updateGroup,
-		commandLine: mocks.commandLine,
 		setGroupMaster: vi.fn(),
 		undoGroup: vi.fn(),
 		refreshFrozenGroup: vi.fn(),
 		detachDerivedGroup: vi.fn(),
+	}),
+}));
+vi.mock("../components/control/commandLine/useCommandLineSurface", () => ({
+	useCommandLineSurface: () => ({
+		ready: true,
+		text: mocks.commandLine,
+		target: "GROUP" as const,
+		pristine: true,
+		selected: [],
+		selectedGroupId: null,
+		read: () => ({
+			text: mocks.commandLine,
+			target: "GROUP",
+			pristine: true,
+			ready: true,
+		}),
+		replace: mocks.replaceCommand,
+		reset: mocks.resetCommand,
+		execute: mocks.executeCommand,
+		cancelChoice: vi.fn(),
 	}),
 }));
 vi.mock("../features/groupRecording/GroupRecordingProvider", () => ({
@@ -79,6 +97,12 @@ vi.mock("../features/groupRecording/GroupRecordingProvider", () => ({
 }));
 vi.mock("../features/server/useShowObjectsState", () => ({
 	useGroups: () => mocks.groups,
+}));
+vi.mock("../features/groupSelection/useGroupSelectionActions", () => ({
+	useGroupSelectionActions: () => ({
+		selectLive: mocks.selectLive,
+		selectFrozen: mocks.selectFrozen,
+	}),
 }));
 
 vi.mock("../state/AppContext", () => ({
@@ -93,11 +117,13 @@ describe("GroupsWindow action routing", () => {
 
 	beforeEach(() => {
 		mocks.dispatch.mockReset();
-		mocks.executeCommandLine.mockReset().mockResolvedValue(true);
-		mocks.selectionGesture.mockReset().mockResolvedValue(undefined);
+		mocks.executeCommand.mockReset().mockResolvedValue(true);
+		mocks.replaceCommand.mockReset().mockResolvedValue(true);
+		mocks.selectLive.mockReset().mockReturnValue(Promise.resolve(null));
+		mocks.selectFrozen.mockReset().mockReturnValue(Promise.resolve(null));
 		mocks.refresh.mockReset().mockResolvedValue(undefined);
 		mocks.recordGroup.mockReset().mockResolvedValue({ status: "changed" });
-		mocks.resetCommandLine.mockReset();
+		mocks.resetCommand.mockReset().mockResolvedValue(true);
 		mocks.updateGroup.mockReset().mockResolvedValue(true);
 		mocks.commandLine = "";
 		mocks.state.storeArmed = false;
@@ -107,13 +133,10 @@ describe("GroupsWindow action routing", () => {
 		mocks.groups[1].revision = 1;
 	});
 
-	it("selects a stored group through the shared surface gesture", () => {
+	it("selects a stored group through the scoped live-Group gesture", () => {
 		render(<GroupsWindow />);
 		fireEvent.click(screen.getByText("Stored Empty").closest("button")!);
-		expect(mocks.selectionGesture).toHaveBeenCalledWith({
-			type: "live_group",
-			group_id: "4",
-		});
+		expect(mocks.selectLive).toHaveBeenCalledWith(mocks.groups[0]);
 	});
 
 	it("records directly into a stored empty Group through the typed action", async () => {
@@ -130,8 +153,8 @@ describe("GroupsWindow action routing", () => {
 		expect(
 			screen.queryByRole("dialog", { name: "Record to Stored Empty" }),
 		).toBeNull();
-		expect(mocks.executeCommandLine).not.toHaveBeenCalled();
-		expect(mocks.resetCommandLine).toHaveBeenCalledOnce();
+		expect(mocks.executeCommand).not.toHaveBeenCalled();
+		expect(mocks.resetCommand).toHaveBeenCalledOnce();
 		expect(mocks.refresh).not.toHaveBeenCalled();
 		expect(mocks.dispatch).toHaveBeenCalledWith({
 			type: "SET_STORE_ARMED",
@@ -153,8 +176,8 @@ describe("GroupsWindow action routing", () => {
 			}),
 		);
 		expect(screen.queryByRole("dialog")).toBeNull();
-		expect(mocks.executeCommandLine).not.toHaveBeenCalled();
-		expect(mocks.resetCommandLine).toHaveBeenCalledOnce();
+		expect(mocks.executeCommand).not.toHaveBeenCalled();
+		expect(mocks.resetCommand).toHaveBeenCalledOnce();
 		expect(mocks.refresh).not.toHaveBeenCalled();
 	});
 
@@ -172,8 +195,8 @@ describe("GroupsWindow action routing", () => {
 				expectedObjectRevision: 1,
 			}),
 		);
-		expect(mocks.executeCommandLine).not.toHaveBeenCalled();
-		expect(mocks.resetCommandLine).toHaveBeenCalledOnce();
+		expect(mocks.executeCommand).not.toHaveBeenCalled();
+		expect(mocks.resetCommand).toHaveBeenCalledOnce();
 		expect(mocks.refresh).not.toHaveBeenCalled();
 		expect(mocks.dispatch).toHaveBeenCalledWith({
 			type: "SET_STORE_ARMED",
@@ -188,14 +211,14 @@ describe("GroupsWindow action routing", () => {
 		fireEvent.click(screen.getByText("Stored Empty").closest("button")!);
 
 		await waitFor(() => expect(mocks.recordGroup).toHaveBeenCalledOnce());
-		expect(mocks.resetCommandLine).not.toHaveBeenCalled();
+		expect(mocks.resetCommand).not.toHaveBeenCalled();
 	});
 
 	it("opens and saves group properties when SET is armed before tapping the tile", async () => {
 		mocks.commandLine = "SET ";
 		render(<GroupsWindow />);
 		fireEvent.click(screen.getByText("Stored Empty").closest("button")!);
-		expect(mocks.resetCommandLine).toHaveBeenCalledOnce();
+		expect(mocks.resetCommand).toHaveBeenCalledOnce();
 		expect(
 			screen.getByRole("dialog", { name: "Group properties" }),
 		).toBeInTheDocument();

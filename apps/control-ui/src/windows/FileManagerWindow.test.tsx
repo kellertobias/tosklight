@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FileEntry } from "../api/types";
 import { Button } from "../components/common/controls";
 import { requestPaneRemoval } from "../components/shell/paneRemovalGuard";
+import { createCommandLineTestAuthority } from "../features/programmingInteraction/testing/commandLineTestAuthority";
 import {
 	FileManager,
 	nextKeepBothName,
@@ -851,7 +852,9 @@ describe("FileManager input ownership", () => {
 
 	it("claims an unowned desk action only after a pointer interaction inside this instance", async () => {
 		mocks.server.commandLine = "COPY";
-		render(<FileManager instanceId="claim" />);
+		const authority = createCommandLineTestAuthority({ text: "COPY" });
+		render(authority.wrap(<FileManager instanceId="claim" />));
+		await act(authority.settle);
 		const manager = await screen.findByRole("region", { name: "File Manager" });
 		fireEvent.focus(manager);
 		expect(mocks.server.resetCommandLine).not.toHaveBeenCalled();
@@ -866,8 +869,15 @@ describe("FileManager input ownership", () => {
 			),
 		);
 		await waitFor(() =>
-			expect(mocks.server.resetCommandLine).toHaveBeenCalledOnce(),
+			expect(authority.writes).toEqual([
+				{
+					deskId: authority.deskId,
+					text: "",
+					expectedRevision: 1,
+				},
+			]),
 		);
+		expect(mocks.server.resetCommandLine).not.toHaveBeenCalled();
 		expect(
 			await within(manager).findByRole("button", { name: "Copy Here" }),
 		).toBeVisible();

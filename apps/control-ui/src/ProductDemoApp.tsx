@@ -2,9 +2,9 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import type { DmxSnapshot } from "./api/types";
 import { ServerProvider, useServer } from "./api/ServerContext";
 import { NumericPad } from "./components/control/NumericPad";
-import { Button, Input } from "./components/common";
 import { AppShell } from "./components/shell/AppShell";
 import { DeskLockOverlay } from "./components/modals/DeskLockOverlay";
+import { DemoPlaybackControls } from "./features/productDemo/DemoPlaybackControls";
 import { AppProvider, useApp } from "./state/AppContext";
 import { StageWindow } from "./windows/StageWindow";
 import { DEFAULT_STAGE_CAMERA_3D } from "./windows/Stage3dCanvas";
@@ -63,51 +63,6 @@ function DemoCard({ className, title, meta, children }: { className: string; tit
   return <section className={`product-demo-card ${className}`}>
     <header><b>{title}</b><span>{meta}</span></header>
     <div className="product-demo-card-body">{children}</div>
-  </section>;
-}
-
-function DemoPlaybackButton({ slot, button = 1, label = String(button) }: { slot: number; button?: number; label?: string }) {
-  const server = useServer();
-  const [pressed, setPressed] = useState(false);
-  const page = server.playbacks?.pages.find((candidate) => candidate.number === server.playbacks?.active_page);
-  const playbackNumber = page?.slots[String(slot)];
-  const send = (next: boolean) => {
-    setPressed(next);
-    if (playbackNumber == null) return;
-    void server.poolPlaybackAction(playbackNumber, "button", { button, pressed: next, surface: "physical" });
-  };
-  return <Button
-    className={`product-demo-playback-button ${pressed ? "local-pressed" : ""}`}
-    aria-label={`Playback ${slot} button ${button}`}
-    onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); send(true); }}
-    onPointerUp={() => send(false)}
-    onPointerCancel={() => send(false)}
-  >{label}</Button>;
-}
-
-function DemoPlaybackStrip({ slot }: { slot: number }) {
-  const server = useServer();
-  const page = server.playbacks?.pages.find((candidate) => candidate.number === server.playbacks?.active_page);
-  const playbackNumber = page?.slots[String(slot)];
-  const active = server.playbacks?.active.find((candidate) => candidate.playback_number === playbackNumber);
-  const value = Math.max(0, Math.min(1, active?.fader_position ?? active?.master ?? 0));
-  return <article className="product-demo-playback-strip">
-    <b>PB {slot}</b>
-    <DemoPlaybackButton slot={slot}/>
-    <label className="product-demo-playback-fader" style={{ "--demo-playback-level": value } as CSSProperties}>
-      <span>FADER</span><strong>{Math.round(value * 100)}%</strong>
-      <Input aria-label={`Playback ${slot} fader`} type="range" min="0" max="1" step=".001" value={value} onInput={(event) => {
-        if (playbackNumber != null) void server.poolPlaybackAction(playbackNumber, "master", { value: Number(event.currentTarget.value), surface: "physical" });
-      }}/>
-    </label>
-    <footer><DemoPlaybackButton slot={slot} button={2}/><DemoPlaybackButton slot={slot} button={3}/></footer>
-  </article>;
-}
-
-function DemoPlaybackControls() {
-  return <section className="product-demo-playbacks" aria-label="Virtual playback controls">
-    <div className="product-demo-playback-top-row">{[21, 22, 23, 24].map((slot) => <DemoPlaybackButton slot={slot} label={String(slot)} key={slot}/>)}</div>
-    <div className="product-demo-playback-strips">{[1, 2, 3, 4].map((slot) => <DemoPlaybackStrip slot={slot} key={slot}/>)}</div>
   </section>;
 }
 

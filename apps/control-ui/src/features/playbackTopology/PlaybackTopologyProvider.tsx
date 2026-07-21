@@ -67,6 +67,8 @@ export function PlaybackTopologyProvider({
 	const actions = useMemo<PlaybackTopologyActions | null>(
 		() =>
 			writer && {
+				createPage: writer.createPage.bind(writer),
+				renamePage: writer.renamePage.bind(writer),
 				saveCueList: writer.saveCueList.bind(writer),
 				configureSlot: writer.configureSlot.bind(writer),
 				mapExistingPlayback: writer.mapExistingPlayback.bind(writer),

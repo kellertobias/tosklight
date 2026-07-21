@@ -1,13 +1,25 @@
 import { useCallback } from "react";
-import { useServer } from "../../../api/ServerContext";
-import { commandTargetAfterEnter } from "../../../controlSurface/commandTarget";
+import type { CommandTarget } from "../../../features/programmingInteraction/contracts";
+import { selectedGroupId } from "../../../features/programmingInteraction/contracts";
 import {
 	useProgrammingCommandLineActions,
+	useProgrammingCommandLineReady,
 	useProgrammingCommandLineView,
 	useProgrammingInteractionStore,
 	useProgrammingSelectionView,
 } from "../../../features/programmingInteraction/ProgrammingInteractionView";
-import { selectedGroupId } from "../../../features/programmingInteraction/contracts";
+
+/**
+ * What a not-ready surface shows instead of retained legacy or bootstrap state.
+ *
+ * Scoped authority is the only source of command text, so a loading, absent, or
+ * replaced authority displays nothing and refuses every write.
+ */
+const NOT_READY = {
+	text: "",
+	target: "FIXTURE" as CommandTarget,
+	pristine: true,
+};
 
 export function useCommandLineSurface({
 	selection = false,
@@ -18,89 +30,64 @@ export function useCommandLineSurface({
 	enabled?: boolean;
 	observeCommand?: boolean;
 } = {}) {
-	const server = useServer();
 	const projection = useProgrammingCommandLineView(enabled, observeCommand);
 	const selectionProjection = useProgrammingSelectionView(selection && enabled);
 	const actions = useProgrammingCommandLineActions();
 	const store = useProgrammingInteractionStore();
-	const text = projection?.text ?? server.commandLine;
-	const target = projection?.target ?? server.commandTargetMode;
-	const pristine = projection?.pristine ?? server.commandLinePristine;
+	const authoritative = useProgrammingCommandLineReady(enabled);
+	const ready = authoritative && actions !== null;
+	const text = projection?.text ?? NOT_READY.text;
+	const target = projection?.target ?? NOT_READY.target;
+	const pristine = projection?.pristine ?? NOT_READY.pristine;
 	const selected = selectionProjection?.selected ?? [];
 	const read = useCallback(() => {
 		const current = store.getSnapshot().commandLine;
-		return current && actions
-			? {
-					text: current.text,
-					target: current.target,
-					pristine: current.pristine,
-				}
-			: {
-					text: server.commandLine,
-					target: server.commandTargetMode,
-					pristine: server.commandLinePristine,
-				};
-	}, [actions, server, store]);
+		if (!enabled || !current || !actions)
+			return { ...NOT_READY, ready: false };
+		return {
+			text: current.text,
+			target: current.target,
+			pristine: current.pristine,
+			ready: true,
+		};
+	}, [actions, enabled, store]);
+	const writable = useCallback(
+		() =>
+			enabled && Boolean(actions) && store.getSnapshot().commandLine !== null,
+		[actions, enabled, store],
+	);
 	const replace = useCallback(
-		(value: string, legacyPristine?: boolean) => {
-			if (store.getSnapshot().commandLine && actions)
-				return actions.replace(value);
-			if (legacyPristine === undefined) server.setCommandLine(value);
-			else server.setCommandLine(value, legacyPristine);
-			return Promise.resolve(true);
-		},
-		[actions, server, store],
+		// The scoped writer derives pristine from the authoritative target, so the
+		// legacy pristine argument callers still pass is deliberately unused.
+		(value: string, _legacyPristine?: boolean) =>
+			writable() && actions
+				? actions.replace(value)
+				: Promise.resolve(false),
+		[actions, writable],
 	);
 	const reset = useCallback(
-		() => {
-			if (store.getSnapshot().commandLine && actions) return actions.reset();
-			server.resetCommandLine();
-			return Promise.resolve(true);
-		},
-		[actions, server, store],
+		() =>
+			writable() && actions ? actions.reset() : Promise.resolve(false),
+		[actions, writable],
 	);
 	const execute = useCallback(
 		async (value?: string) => {
-			const current = read();
-			const scoped = Boolean(store.getSnapshot().commandLine && actions);
-			const command = value ?? current.text;
-			const trimmed = command.trim();
-			if (!scoped || !actions) return server.executeCommandLine(command);
-			const pristine =
-				!trimmed || trimmed.toUpperCase() === current.target;
-			const resetTarget =
-				commandTargetAfterEnter(command, current.target, pristine) ??
-				current.target;
-			const result = await actions.executeAfterPendingWrites(() =>
-				server.executeCommandLine(command, {
-					target: current.target,
-					pristine,
-				}),
-				{
-					text: resetTarget,
-					target: resetTarget,
-					pristine: true,
-					pendingChoice: null,
-				},
-			);
-			if (result === "write_failed") reportConcurrentCommandChange();
-			if (result === "execution_unknown")
-				reportUnreconciledCommand();
-			return (
-				result === "executed" ||
-				result === "execution_unknown"
-			);
+			if (!writable() || !actions) return false;
+			const outcome = await actions.execute(value);
+			if (outcome.report === "concurrent_change")
+				reportConcurrentCommandChange();
+			if (outcome.report === "unreconciled") reportUnreconciledCommand();
+			return outcome.executed;
 		},
-		[actions, read, server, store],
+		[actions, writable],
 	);
-	const cancelChoice = useCallback(() => {
-		if (store.getSnapshot().commandLine && actions) {
-			return actions.reset();
-		}
-		server.cancelCommandChoice();
-		return Promise.resolve(true);
-	}, [actions, server, store]);
+	const cancelChoice = useCallback(
+		() =>
+			writable() && actions ? actions.reset() : Promise.resolve(false),
+		[actions, writable],
+	);
 	return {
+		ready,
 		text,
 		target,
 		pristine,

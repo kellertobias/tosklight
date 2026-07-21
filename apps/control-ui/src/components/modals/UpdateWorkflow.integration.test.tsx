@@ -1,4 +1,5 @@
 import {
+	act,
 	cleanup,
 	fireEvent,
 	render,
@@ -8,6 +9,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UpdateSettings, UpdateTargetRequest } from "../../api/types";
+import { createCommandLineTestAuthority } from "../../features/programmingInteraction/testing/commandLineTestAuthority";
 import {
 	defaultUpdateSettings,
 	UPDATE_SETTINGS_EVENT,
@@ -159,7 +161,11 @@ describe("Update workflow integration", () => {
 		workflow.server.commandLine = "UPDATE GROUP 3";
 		workflow.update.loadSettings.mockResolvedValue(settings);
 		workflow.update.applyDirect.mockResolvedValue(mutationFor(target));
-		render(<UpdateWorkflow />);
+		const authority = createCommandLineTestAuthority({
+			text: "UPDATE GROUP 3",
+		});
+		render(authority.wrap(<UpdateWorkflow />));
+		await act(authority.settle);
 
 		expect(screen.getByRole("status")).toHaveTextContent("UPDATE armed");
 		fireEvent(
@@ -188,7 +194,16 @@ describe("Update workflow integration", () => {
 			type: "SET_SHIFT_ARMED",
 			value: false,
 		});
-		expect(workflow.server.resetCommandLine).toHaveBeenCalledOnce();
+		await waitFor(() =>
+			expect(authority.writes).toEqual([
+				{
+					deskId: authority.deskId,
+					text: "",
+					expectedRevision: 1,
+				},
+			]),
+		);
+		expect(workflow.server.resetCommandLine).not.toHaveBeenCalled();
 	});
 
 	it("confirms the exact preview authority for a Cue-less touched request", async () => {

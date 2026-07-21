@@ -80,11 +80,9 @@ export function ServerProvider({
 		screens: value.screens,
 		bootstrap: value.bootstrap,
 		session: value.session,
-		playbacks: value.playbacks,
 		saveScreen: value.saveScreen,
 		deleteScreen: value.deleteScreen,
 		setScreenPage: value.setScreenPage,
-		savePlaybackPage: value.savePlaybackPage,
 		updateControlDesk: value.updateControlDesk,
 		selectControlDesk: value.selectControlDesk,
 		removeClient: value.removeClient,
@@ -112,6 +110,7 @@ export function ServerProvider({
 					store={state.showObjectsStore}
 					transport={boundaries.playbackTopologyTransport}
 					loadObject={boundaries.loadShowObject}
+					onError={boundaries.reportPlaybackTopologyError}
 				>
 					<VirtualPlaybackZonesProvider
 						authority={boundaries.virtualPlaybackZonesAuthority}

@@ -1,10 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { useServer } from "../../api/ServerContext";
-import type {
-	PlaybackDefinition,
-	PlaybackPage,
-	PlaybackSnapshot,
-} from "../../api/types";
+import type { PlaybackDefinition, PlaybackPage } from "../../api/types";
 import { Button, SearchBar } from "../../components/common";
 import {
 	cueUpdateTarget,
@@ -94,7 +89,6 @@ function CuelistPoolSlot(props: PoolSlotProps) {
 }
 
 function useCuelistPoolActions(props: CuelistPoolProps) {
-	const server = useServer();
 	const command = useCommandLineSurface({
 		enabled: props.active,
 		observeCommand: false,
@@ -162,7 +156,7 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 		props.onMessage("");
 		props.onOpenCuelist(number);
 	};
-	return { server, state, clearHold, startHold, click };
+	return { state, clearHold, startHold, click };
 }
 
 function usePoolSlots(
@@ -170,19 +164,12 @@ function usePoolSlots(
 	search: string,
 	pages: PlaybackPage[] | undefined,
 	runtimes: ReturnType<typeof usePlaybackProjectionMap>,
-	legacyRuntime: PlaybackSnapshot["active"] | undefined,
 ) {
 	return useMemo(() => {
 		const byNumber = new Map(
 			pool.map((playback) => [playback.number, playback]),
 		);
 		const usageByNumber = new Map<number, number[]>();
-		const legacyMasters = new Map(
-			(legacyRuntime ?? []).map((runtime) => [
-				runtime.playback_number,
-				runtime.master,
-			]),
-		);
 		for (const page of pages ?? []) {
 			for (const playbackNumber of Object.values(page.slots)) {
 				const pages = usageByNumber.get(playbackNumber) ?? [];
@@ -194,10 +181,7 @@ function usePoolSlots(
 		return Array.from({ length: 1000 }, (_, index) => ({
 			number: index + 1,
 			playback: byNumber.get(index + 1) ?? null,
-			runtimeMaster:
-				runtimeMaster(runtimes.get(index + 1)) ??
-				legacyMasters.get(index + 1) ??
-				null,
+			runtimeMaster: runtimeMaster(runtimes.get(index + 1)) ?? null,
 			usage: usageByNumber.get(index + 1) ?? [],
 		})).filter(
 			({ number, playback }) =>
@@ -205,12 +189,11 @@ function usePoolSlots(
 				playback?.name.toLowerCase().includes(normalizedSearch) ||
 				String(number).includes(search),
 		);
-	}, [legacyRuntime, pages, pool, runtimes, search]);
+	}, [pages, pool, runtimes, search]);
 }
 
 export function CuelistPool(props: CuelistPoolProps) {
-	const { server, state, clearHold, startHold, click } =
-		useCuelistPoolActions(props);
+	const { state, clearHold, startHold, click } = useCuelistPoolActions(props);
 	const [search, setSearch] = useState("");
 	const pool = useCuelistPool();
 	const pages = usePlaybackPages();
@@ -223,7 +206,6 @@ export function CuelistPool(props: CuelistPoolProps) {
 		search,
 		pages.map((object) => object.body),
 		runtimes,
-		server.playbacks?.active,
 	);
 	const workflowMessage =
 		state.cueListSetTarget != null
