@@ -9,14 +9,25 @@ import {
 	useRef,
 	useSyncExternalStore,
 } from "react";
+import { useStrictModeSafeStop } from "../shared/useStrictModeSafeStop";
 import {
-	PlaybackRuntimeActionWriter,
+	type PlaybackDeskPageApply,
 	type PlaybackRuntimeActionApply,
 	type PlaybackRuntimeActions,
-	type PlaybackDeskPageApply,
+	PlaybackRuntimeActionWriter,
 } from "./actionWriter";
 import type { PlaybackIdentity, PlaybackProjection } from "./contracts";
-import { cueListIdentity, identityKey, playbackIdentity } from "./contracts";
+import {
+	cueListIdentity,
+	groupIdentity,
+	identityKey,
+	playbackIdentity,
+} from "./contracts";
+import {
+	equalGroupProjectionSelection,
+	type GroupProjectionSelection,
+	selectGroupProjections,
+} from "./groupProjectionSelection";
 import { legacyPlaybackRuntime } from "./legacy";
 import {
 	PlaybackRuntimeSession,
@@ -24,7 +35,6 @@ import {
 } from "./session";
 import { type PlaybackRuntimeState, PlaybackRuntimeStore } from "./store";
 import type { PlaybackEventTransport } from "./transport";
-import { useStrictModeSafeStop } from "../shared/useStrictModeSafeStop";
 
 export interface PlaybackRuntimeViewProviderProps {
 	showId: string | null;
@@ -109,7 +119,7 @@ export function usePlaybackRuntimeView(
 	identities: readonly PlaybackIdentity[],
 ) {
 	const session = useContext(SessionContext);
-	const key = identities.map(identityKey).sort().join("|");
+	const key = JSON.stringify(identities.map(identityKey).sort());
 	useEffect(() => {
 		if (!session || !identities.length) return;
 		const releases = identities.map((identity) => session.activate(identity));
@@ -231,7 +241,7 @@ export function useDirectCueListProjectionMap(
 	enabled = true,
 ): DirectCueListProjectionSelection {
 	const canonical = enabled ? [...new Set(cueListIds)].sort() : [];
-	const key = canonical.join("|");
+	const key = JSON.stringify(canonical);
 	const identities = useMemo(
 		() => canonical.map(cueListIdentity),
 		// The canonical Cuelist key owns array equality.
@@ -248,6 +258,31 @@ export function useDirectCueListProjectionMap(
 		),
 		equalDirectCueListSelection,
 		enabled && cueListIds.length > 0,
+	);
+}
+
+export function useGroupProjectionMap(
+	groupIds: readonly string[],
+	enabled = true,
+): GroupProjectionSelection {
+	const canonical = enabled ? [...new Set(groupIds)].sort() : [];
+	const key = JSON.stringify(canonical);
+	const identities = useMemo(
+		() => canonical.map(groupIdentity),
+		// The canonical Group key owns array equality.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[key],
+	);
+	usePlaybackRuntimeView(identities);
+	return usePlaybackSelector(
+		useCallback(
+			(state: PlaybackRuntimeState) => selectGroupProjections(state, canonical),
+			// The same canonical key denotes the selected Group set.
+			// eslint-disable-next-line react-hooks/exhaustive-deps
+			[key],
+		),
+		equalGroupProjectionSelection,
+		enabled && groupIds.length > 0,
 	);
 }
 

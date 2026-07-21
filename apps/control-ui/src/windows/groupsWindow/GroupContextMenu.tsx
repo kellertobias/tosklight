@@ -1,10 +1,10 @@
 import { useServer } from "../../api/ServerContext";
 import { Button, Input } from "../../components/common";
-import type { Group } from "./model";
 import {
 	captureGroupRecordingTarget,
 	type GroupRecordingTarget,
 } from "../../features/groupRecording/target";
+import type { Group } from "./model";
 
 function orderedMembers(group: Group, fixtureNames: Map<string, string>) {
 	if (!group.body.fixtures.length) return "empty";
@@ -22,12 +22,16 @@ export function GroupContextMenu({
 	onClose,
 	recordGroup,
 	runCommand,
+	setGroupMaster,
+	canWriteMaster,
 }: {
 	fixtureNames: Map<string, string>;
 	group: Group;
 	onClose: () => void;
 	recordGroup: (target: GroupRecordingTarget) => Promise<unknown>;
 	runCommand: (command: string) => Promise<unknown>;
+	setGroupMaster: (groupId: string, value: number) => Promise<unknown>;
+	canWriteMaster: boolean;
 }) {
 	const server = useServer();
 	const name = group.body.name ?? `Group ${group.id}`;
@@ -62,12 +66,10 @@ export function GroupContextMenu({
 					type="range"
 					min="0"
 					max="100"
+					disabled={!canWriteMaster}
 					value={(group.body.master ?? 1) * 100}
 					onChange={(event) =>
-						void server.setGroupMaster(
-							group.id,
-							Number(event.target.value) / 100,
-						)
+						void setGroupMaster(group.id, Number(event.target.value) / 100)
 					}
 				/>
 			</div>

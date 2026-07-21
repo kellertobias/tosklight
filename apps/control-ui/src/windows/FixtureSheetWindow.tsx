@@ -3,6 +3,10 @@ import { useServer } from "../api/ServerContext";
 import { GroupStrip } from "../components/shared/GroupStrip";
 import { SourceLegend } from "../components/shared/SourceLegend";
 import { WindowHeader } from "../components/window-kit";
+import {
+	useProgrammingSelectionActions,
+	useProgrammingSelectionView,
+} from "../features/programmingInteraction/ProgrammingInteractionView";
 import { useApp } from "../state/AppContext";
 import type { FixtureSheetColumn } from "../types";
 import {
@@ -11,25 +15,19 @@ import {
 } from "./FixtureSheetSettings";
 import { FixtureSheetTable } from "./FixtureSheetTable";
 import { fixtureSheetColumns } from "./fixtureSheetColumns";
+import { useFixtureSheetCuelistAuthority } from "./fixtureSheetCuelistAuthority";
 import {
 	useFixtureSheetRows,
 	useFixtureSheetVisualizations,
 } from "./fixtureSheetProjection";
-import { useFixtureSheetCuelistAuthority } from "./fixtureSheetCuelistAuthority";
 import { createFixtureStepPresenter } from "./fixtureSheetStep";
 import type { WindowProps } from "./windowTypes";
-import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
-import {
-	useProgrammingSelectionActions,
-	useProgrammingSelectionView,
-} from "../features/programmingInteraction/ProgrammingInteractionView";
 
 export function FixtureSheetWindow({
 	active = true,
 	compact,
 	showGroupShortcuts,
 }: WindowProps) {
-	useShowObjectView("group", active);
 	const server = useServer();
 	const selection = useProgrammingSelectionView(active);
 	const selectionActions = useProgrammingSelectionActions(active);
@@ -55,15 +53,16 @@ export function FixtureSheetWindow({
 		state.preload !== "idle",
 		active,
 	);
-	const { rows, activeValuesLoading } = useFixtureSheetRows({
-		visualization,
-		preloadVisualization,
-		fixtureOrder,
-		activeOnly,
-		selectedCueList: cuelistFilter.selectedCueList,
-		includedHeads,
-		active,
-	});
+	const { rows, activeValuesLoading, groupRuntimeLoading } =
+		useFixtureSheetRows({
+			visualization,
+			preloadVisualization,
+			fixtureOrder,
+			activeOnly,
+			selectedCueList: cuelistFilter.selectedCueList,
+			includedHeads,
+			active,
+		});
 	const presentStep = useMemo(
 		() => createFixtureStepPresenter(server.highlight),
 		[server.highlight],
@@ -98,6 +97,11 @@ export function FixtureSheetWindow({
 			{activeValuesLoading && (
 				<p className="fixture-sheet-loading" role="status">
 					Programmer values loading…
+				</p>
+			)}
+			{groupRuntimeLoading && (
+				<p className="fixture-sheet-loading" role="status">
+					Group runtime loading…
 				</p>
 			)}
 			<FixtureSheetTable

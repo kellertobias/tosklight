@@ -1,11 +1,13 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useServer } from "../api/ServerContext";
-import { usePollingResource } from "../hooks/usePollingResource";
 import type { CueList, VisualizationSnapshot } from "../api/types";
 import { fixtures } from "../data/mockData";
-import type { ShowObject } from "../features/showObjects/contracts";
-import { useGroups } from "../features/server/useShowObjectsState";
+import {
+	type RuntimeGroup,
+	useGroupRuntimeAuthority,
+} from "../features/groupRuntime/groupRuntimeAuthority";
 import { useProgrammerValueTargets } from "../features/programmerValues/useProgrammerValueTargets";
+import { usePollingResource } from "../hooks/usePollingResource";
 import type { FixtureSheetIncludedHeads, FixtureSheetOrder } from "../types";
 import {
 	activeProgrammerFixtureIds,
@@ -19,7 +21,7 @@ import {
 } from "./fixtureSheetTargets";
 
 type FixtureSheetTarget = ReturnType<typeof fixtureSheetTargets>[number];
-type FixtureGroup = ShowObject<"group">;
+type FixtureGroup = RuntimeGroup;
 
 function targetFamilyActive(
 	target: FixtureSheetTarget,
@@ -188,9 +190,9 @@ function fixtureSheetRow({
 		},
 		limitingGroups: groups.filter(
 			(group) =>
-				group.body.playback_fader != null &&
+				group.runtime.playbackNumber != null &&
 				group.body.fixtures.includes(target.fixtureId) &&
-				(group.body.master ?? 1) < 1,
+				group.runtime.master < 1,
 		),
 		positionLabel: hasPosition ? undefined : "—",
 	};
@@ -233,7 +235,8 @@ export function useFixtureSheetRows({
 	active?: boolean;
 }) {
 	const server = useServer();
-	const groups = useGroups(server.playbacks);
+	const observesGroupRuntime = active && Boolean(server.bootstrap?.active_show);
+	const groupAuthority = useGroupRuntimeAuthority(observesGroupRuntime);
 	const observesActiveValues =
 		active && (activeOnly || fixtureOrder === "active");
 	const activeValueTargets = useProgrammerValueTargets(observesActiveValues);
@@ -243,8 +246,15 @@ export function useFixtureSheetRows({
 		return {
 			rows: demoFixtureSheetRows(),
 			activeValuesLoading: false,
+			groupRuntimeLoading: false,
 		};
 	}
+	if (observesGroupRuntime && !groupAuthority.ready)
+		return {
+			rows: [],
+			activeValuesLoading,
+			groupRuntimeLoading: true,
+		};
 	return {
 		rows: orderedFixtureTargets({
 			server,
@@ -252,7 +262,7 @@ export function useFixtureSheetRows({
 			activeOnly,
 			selectedCueList,
 			includedHeads,
-			groups,
+			groups: groupAuthority.groups,
 			activeValueTargets,
 		}).map((target, index) =>
 			fixtureSheetRow({
@@ -260,10 +270,11 @@ export function useFixtureSheetRows({
 				index,
 				visualization,
 				preloadVisualization,
-				groups,
+				groups: groupAuthority.groups,
 			}),
 		),
 		activeValuesLoading,
+		groupRuntimeLoading: false,
 	};
 }
 

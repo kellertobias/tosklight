@@ -1,18 +1,17 @@
 import { useEffect, useState } from "react";
 import { useServer } from "../api/ServerContext";
 import {
+	type CommandLineSurface,
+	useCommandLineSurface,
+} from "../components/control/commandLine/useCommandLineSurface";
+import {
 	type RecordMode,
 	RecordModeDialog,
 } from "../components/shared/RecordModeDialog";
 import { WindowHeader } from "../components/window-kit";
-import { useApp } from "../state/AppContext";
-import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
 import { useGroupRecording } from "../features/groupRecording/GroupRecordingProvider";
 import type { GroupRecordingTarget } from "../features/groupRecording/target";
-import {
-	type CommandLineSurface,
-	useCommandLineSurface,
-} from "../components/control/commandLine/useCommandLineSurface";
+import { useApp } from "../state/AppContext";
 import { GroupContextMenu } from "./groupsWindow/GroupContextMenu";
 import { GroupPoolGrid } from "./groupsWindow/GroupPoolGrid";
 import { GroupPropertiesDialog } from "./groupsWindow/GroupPropertiesDialog";
@@ -53,7 +52,6 @@ function GroupPoolHeader({ command }: { command: CommandLineSurface }) {
 }
 
 export function GroupsWindow({ active = true, compact }: WindowProps) {
-	useShowObjectView("group", active);
 	const server = useServer();
 	const groupRecording = useGroupRecording();
 	const command = useCommandLineSurface({
@@ -62,7 +60,7 @@ export function GroupsWindow({ active = true, compact }: WindowProps) {
 		observeCommand: false,
 	});
 	const { dispatch } = useApp();
-	const model = useGroupPoolModel(server);
+	const model = useGroupPoolModel(server, active);
 	const [contextGroup, setContextGroup] = useState<string | null>(null);
 	const [recordGroup, setRecordGroup] = useState<GroupRecordingTarget | null>(
 		null,
@@ -72,6 +70,13 @@ export function GroupsWindow({ active = true, compact }: WindowProps) {
 	const propertiesTarget = model.groups.find(
 		(group) => group.id === propertiesGroup,
 	);
+	const groupScope = server.bootstrap?.active_show?.id ?? null;
+
+	useEffect(() => {
+		setContextGroup(null);
+		setPropertiesGroup(null);
+		setRecordGroup(null);
+	}, [groupScope, model.groupRuntimeReady]);
 
 	useEffect(() => {
 		if (!active) return;
@@ -114,18 +119,24 @@ export function GroupsWindow({ active = true, compact }: WindowProps) {
 	return (
 		<div className="pool-window group-pool-window">
 			{!compact && <GroupPoolHeader command={command} />}
-			<GroupPoolGrid
-				active={active}
-				command={command}
-				cards={model.cards}
-				capabilities={model.capabilities}
-				knownFixtureIds={model.knownFixtureIds}
-				onOpenContext={setContextGroup}
-				onOpenProperties={setPropertiesGroup}
-				onOpenRecord={setRecordGroup}
-				recordGroup={recordGroupAction}
-				runCommand={runCommand}
-			/>
+			{model.groupRuntimeReady ? (
+				<GroupPoolGrid
+					active={active}
+					command={command}
+					cards={model.cards}
+					capabilities={model.capabilities}
+					knownFixtureIds={model.knownFixtureIds}
+					onOpenContext={setContextGroup}
+					onOpenProperties={setPropertiesGroup}
+					onOpenRecord={setRecordGroup}
+					recordGroup={recordGroupAction}
+					runCommand={runCommand}
+				/>
+			) : (
+				<p className="pool-loading" role="status">
+					Group runtime loading…
+				</p>
+			)}
 			{contextual && (
 				<GroupContextMenu
 					fixtureNames={model.fixtureNames}
@@ -133,6 +144,8 @@ export function GroupsWindow({ active = true, compact }: WindowProps) {
 					onClose={() => setContextGroup(null)}
 					recordGroup={recordGroupAction}
 					runCommand={runCommand}
+					setGroupMaster={model.setGroupMaster}
+					canWriteMaster={model.canWriteGroupRuntime}
 				/>
 			)}
 			{recordGroup && (

@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import type { PlaybackSnapshot } from "../../api/types";
-import type { ServerController } from "./model";
-import { createGroupEditingActions } from "./groupEditing";
 import { ShowObjectsStore } from "../showObjects/store";
+import { createGroupEditingActions } from "./groupEditing";
+import type { ServerController } from "./model";
 
 const SHOW_ID = "11111111-1111-4111-8111-111111111111";
 
@@ -30,7 +29,6 @@ function harness(
 				_revision: number,
 			) => write,
 		),
-		setGroupMaster: vi.fn().mockResolvedValue({ group_id: "1", master: 0.7 }),
 		objects: vi.fn(),
 		bootstrap: vi.fn(),
 		shows: vi.fn(),
@@ -41,53 +39,16 @@ function harness(
 		patch: vi.fn(),
 	};
 	const setError = vi.fn();
-	let playbacks = {
-		cue_lists: [],
-		pool: [],
-		pages: [],
-		active: [],
-		desk: {
-			id: "desk",
-			name: "Desk",
-			osc_alias: "main",
-			columns: 1,
-			rows: 1,
-			buttons: 1,
-		},
-		active_page: 1,
-		authoritative_controls: {
-			speed_groups: [],
-			groups: [{ id: "1", master: 0.2, flash_level: 0 }],
-			grand_master: {
-				level: 1,
-				blackout: false,
-				flash_active: false,
-				dynamics_paused: false,
-			},
-			programmer_fade_millis: 0,
-			cue_fade_millis: 0,
-		},
-	} as PlaybackSnapshot;
-	const setPlaybacks = vi.fn(
-		(next: (current: PlaybackSnapshot | null) => PlaybackSnapshot | null) => {
-			playbacks = next(playbacks) as PlaybackSnapshot;
-		},
-	);
 	const model = {
 		client,
 		setError,
 		bootstrap: { active_show: { id: SHOW_ID } },
-		playbacks,
 		showObjectsStore,
-		setPlaybacks,
 	} as unknown as ServerController;
 	return {
 		client,
 		setError,
 		showObjectsStore,
-		get playbacks() {
-			return playbacks;
-		},
 		actions: createGroupEditingActions(model),
 	};
 }
@@ -139,7 +100,9 @@ describe("Group optimistic object mutation", () => {
 			"Front Wash",
 		);
 		await expect(result).resolves.toBe(false);
-		expect(test.showObjectsStore.getSnapshot().groups[0].body.name).toBe("Front");
+		expect(test.showObjectsStore.getSnapshot().groups[0].body.name).toBe(
+			"Front",
+		);
 		expect(test.showObjectsStore.getSnapshot().pendingObjectKeys.size).toBe(0);
 		expect(test.setError).toHaveBeenLastCalledWith("revision conflict");
 	});
@@ -173,18 +136,5 @@ describe("Group optimistic object mutation", () => {
 			}),
 			8,
 		);
-	});
-
-	it("keeps runtime Group master feedback out of portable Group state", async () => {
-		const test = harness(Promise.resolve({ revision: 4, event_sequence: 12 }));
-
-		await test.actions.setGroupMaster("1", 0.7);
-
-		expect(test.showObjectsStore.getSnapshot().groups[0].body.master).toBe(0.2);
-		expect(
-			test.playbacks.authoritative_controls?.groups.find(
-				(group) => group.id === "1",
-			)?.master,
-		).toBe(0.7);
 	});
 });

@@ -2,12 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import type { PlaybackActionRequest } from "../../api/types";
 import { PlaybackRuntimeActionWriter } from "./actionWriter";
 import type { PlaybackOutcome, PlaybackProjection } from "./contracts";
-import { cueListIdentity, playbackIdentity } from "./contracts";
+import { cueListIdentity, groupIdentity, playbackIdentity } from "./contracts";
 import { PlaybackRuntimeStore } from "./store";
 import {
 	cueProjection,
 	DESK_ID,
 	deskProjection,
+	GROUP_ID,
+	groupProjection,
 	playbackSnapshot,
 	SHOW_ID,
 } from "./testFixtures";
@@ -89,6 +91,55 @@ function directReadyStore() {
 		[identity],
 	);
 	return store;
+}
+
+function groupReadyStore(playbackNumber: number | null = null) {
+	const store = new PlaybackRuntimeStore();
+	const identity = groupIdentity(GROUP_ID);
+	store.reset(SHOW_ID, DESK_ID, "authority-a");
+	store.installSnapshot(
+		playbackSnapshot([identity], 10, [
+			groupProjection(GROUP_ID, 1, playbackNumber),
+		]),
+		[identity],
+	);
+	return store;
+}
+
+function groupOutcome(
+	request: PlaybackActionRequest,
+	projection = groupProjection(),
+	eventSequence: number | null = 12,
+): PlaybackOutcome {
+	if (request.address.kind !== "group" || projection.target !== "group")
+		throw new Error("Group outcome fixture requires a Group request");
+	return {
+		request_id: request.request_id,
+		correlation_id: "55555555-5555-4555-8555-555555555555",
+		requested: request.address,
+		resolved: {
+			kind: "group",
+			group_id: request.address.group_id,
+			playback_number: projection.playback_number,
+		},
+		outcome: { status: eventSequence == null ? "no_change" : "applied" },
+		durability: "durable",
+		projection,
+		related: [],
+		desk: null,
+		event_sequence: eventSequence,
+		desk_event_sequence: null,
+		replayed: false,
+	};
+}
+
+function groupMaster(store: PlaybackRuntimeStore) {
+	const projection = store
+		.getSnapshot()
+		.projections.get(`group:${GROUP_ID}`)?.[0];
+	if (projection?.target !== "group")
+		throw new Error("expected an authoritative Group projection");
+	return projection.master;
 }
 
 function playbackSourceIdentity(playbackNumber: number) {
@@ -332,7 +383,10 @@ describe("PlaybackRuntimeActionWriter", () => {
 		const applyAction = vi.fn(async (_showId, _deskId, request) => {
 			requests.push(request);
 			if (requests.length === 1) throw retryable;
-			return { ...outcome(request, released(cueProjection()), 12), replayed: true };
+			return {
+				...outcome(request, released(cueProjection()), 12),
+				replayed: true,
+			};
 		});
 		const writer = new PlaybackRuntimeActionWriter({
 			showId: SHOW_ID,
@@ -369,9 +423,7 @@ describe("PlaybackRuntimeActionWriter", () => {
 		});
 
 		await writer.releaseCueListSource({
-			identity: cueListSourceIdentity(
-				"33333333-3333-4333-8333-333333333333",
-			),
+			identity: cueListSourceIdentity("33333333-3333-4333-8333-333333333333"),
 			cueListId: "33333333-3333-4333-8333-333333333333",
 		});
 
@@ -401,9 +453,7 @@ describe("PlaybackRuntimeActionWriter", () => {
 
 		await expect(
 			writer.releaseCueListSource({
-				identity: cueListSourceIdentity(
-					"33333333-3333-4333-8333-333333333333",
-				),
+				identity: cueListSourceIdentity("33333333-3333-4333-8333-333333333333"),
 				cueListId: "33333333-3333-4333-8333-333333333333",
 			}),
 		).resolves.toBeNull();
@@ -451,9 +501,7 @@ describe("PlaybackRuntimeActionWriter", () => {
 		const projection = released(directCueProjection());
 
 		const result = writer.releaseCueListSource({
-			identity: cueListSourceIdentity(
-				"33333333-3333-4333-8333-333333333333",
-			),
+			identity: cueListSourceIdentity("33333333-3333-4333-8333-333333333333"),
 			cueListId: "33333333-3333-4333-8333-333333333333",
 		});
 		store.applyProjection(projection, 13);
@@ -722,5 +770,228 @@ describe("PlaybackRuntimeActionWriter", () => {
 			surface: "virtual",
 		});
 		expect(store.getSnapshot().projections.size).toBe(0);
+	});
+
+	it("writes an optimistic Group master through only the direct Group address", async () => {
+		const store = groupReadyStore(17);
+		const pending = deferred<PlaybackOutcome>();
+		let request: PlaybackActionRequest | null = null;
+		const applyAction = vi.fn((_showId, _deskId, value) => {
+			request = value;
+			return pending.promise;
+		});
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction,
+		});
+
+		const result = writer.setGroupMaster(GROUP_ID, 0.35);
+		expect(groupMaster(store)).toBe(0.35);
+		expect(request).toMatchObject({
+			address: { kind: "group", group_id: GROUP_ID },
+			action: { type: "master", value: 0.35 },
+			surface: "virtual",
+		});
+		expect(request).not.toHaveProperty("address.playback_number");
+		if (!request) throw new Error("request was not captured");
+		const projection = groupProjection(GROUP_ID, 0.35, 17);
+		pending.resolve(groupOutcome(request, projection, 12));
+
+		await expect(result).resolves.not.toBeNull();
+		const afterResponse = store.getSnapshot();
+		expect(store.applyProjection(projection, 12)).toBe(false);
+		expect(store.getSnapshot()).toBe(afterResponse);
+		expect(groupMaster(store)).toBe(0.35);
+	});
+
+	it("settles event-before-response, replay, and no-change Group outcomes", async () => {
+		const store = groupReadyStore();
+		const pending = deferred<PlaybackOutcome>();
+		let request: PlaybackActionRequest | null = null;
+		const applyAction = vi
+			.fn()
+			.mockImplementationOnce((_showId, _deskId, value) => {
+				request = value;
+				return pending.promise;
+			});
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction,
+		});
+		const projection = groupProjection(GROUP_ID, 0.6);
+
+		const result = writer.setGroupMaster(GROUP_ID, 0.6);
+		expect(store.applyProjection(projection, 13)).toBe(true);
+		if (!request) throw new Error("request was not captured");
+		pending.resolve({
+			...groupOutcome(request, projection, 13),
+			replayed: true,
+		});
+		await expect(result).resolves.toMatchObject({ replayed: true });
+		expect(groupMaster(store)).toBe(0.6);
+
+		applyAction.mockImplementationOnce(async (_showId, _deskId, value) => ({
+			...groupOutcome(value, projection, null),
+			outcome: { status: "no_change" },
+		}));
+		await expect(writer.setGroupMaster(GROUP_ID, 0.6)).resolves.toMatchObject({
+			outcome: { status: "no_change" },
+		});
+		expect(groupMaster(store)).toBe(0.6);
+		expect(store.getSnapshot().pendingKeys.size).toBe(0);
+	});
+
+	it("rolls back a conflicting Group master and permits a clean retry", async () => {
+		const store = groupReadyStore();
+		let attempts = 0;
+		const applyAction = vi.fn(async (_showId, _deskId, request) => {
+			attempts += 1;
+			if (attempts === 1)
+				throw Object.assign(new Error("revision conflict"), { status: 409 });
+			return groupOutcome(request, groupProjection(GROUP_ID, 0.7), 14);
+		});
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction,
+		});
+
+		await expect(writer.setGroupMaster(GROUP_ID, 0.4)).resolves.toBeNull();
+		expect(groupMaster(store)).toBe(1);
+		expect(store.getSnapshot().error?.message).toBe("revision conflict");
+		await expect(writer.setGroupMaster(GROUP_ID, 0.7)).resolves.not.toBeNull();
+		expect(groupMaster(store)).toBe(0.7);
+		expect(store.getSnapshot().error).toBeNull();
+	});
+
+	it("retries a Group request with one request ID", async () => {
+		const store = groupReadyStore();
+		const requests: PlaybackActionRequest[] = [];
+		const applyAction = vi.fn(async (_showId, _deskId, request) => {
+			requests.push(request);
+			if (requests.length === 1)
+				throw Object.assign(new Error("offline"), { retryable: true });
+			return {
+				...groupOutcome(request, groupProjection(GROUP_ID, 0.5), 15),
+				replayed: true,
+			};
+		});
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction,
+		});
+
+		await expect(writer.setGroupMaster(GROUP_ID, 0.5)).resolves.toMatchObject({
+			replayed: true,
+		});
+		expect(requests).toHaveLength(2);
+		expect(requests[1]).toBe(requests[0]);
+		expect(requests[1].request_id).toBe(requests[0].request_id);
+	});
+
+	it("rejects absent, malformed, and mismatched Group authority", async () => {
+		const store = groupReadyStore();
+		const applyAction = vi.fn();
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction,
+		});
+
+		await expect(writer.setGroupMaster("absent", 0.5)).resolves.toBeNull();
+		await expect(writer.setGroupMaster("bad\u0000id", 0.5)).resolves.toBeNull();
+		await expect(
+			writer.setGroupMaster("é".repeat(129), 0.5),
+		).resolves.toBeNull();
+		await expect(writer.setGroupMaster(GROUP_ID, 1.1)).resolves.toBeNull();
+		expect(applyAction).not.toHaveBeenCalled();
+		expect(store.getSnapshot().pendingKeys.size).toBe(0);
+
+		const invalidOutcome = vi.fn(async (_showId, _deskId, request) => ({
+			...groupOutcome(request, groupProjection("other", 0.5), 16),
+			resolved: {
+				kind: "group" as const,
+				group_id: "other",
+				playback_number: null,
+			},
+		}));
+		const invalidWriter = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction: invalidOutcome,
+		});
+		await expect(
+			invalidWriter.setGroupMaster(GROUP_ID, 0.5),
+		).resolves.toBeNull();
+		expect(groupMaster(store)).toBe(1);
+		expect(store.getSnapshot().error?.message).toBe(
+			"Playback outcome does not match the Group request",
+		);
+	});
+
+	it("drops a late Group outcome after same-scope authority replacement", async () => {
+		const store = groupReadyStore();
+		const pending = deferred<PlaybackOutcome>();
+		let request: PlaybackActionRequest | null = null;
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction: (_showId, _deskId, value) => {
+				request = value;
+				return pending.promise;
+			},
+		});
+
+		const result = writer.setGroupMaster(GROUP_ID, 0.3);
+		store.reset(SHOW_ID, DESK_ID, "authority-b");
+		if (!request) throw new Error("request was not captured");
+		pending.resolve(groupOutcome(request, groupProjection(GROUP_ID, 0.3), 17));
+
+		await expect(result).resolves.toBeNull();
+		expect(store.getSnapshot().projections.size).toBe(0);
+		expect(store.getSnapshot().error).toBeNull();
+	});
+
+	it("sends a captured Group Flash release through its original writer", async () => {
+		const store = groupReadyStore(17);
+		const requests: PlaybackActionRequest[] = [];
+		let releaseAttempts = 0;
+		const applyAction = vi.fn(async (_showId, _deskId, request) => {
+			requests.push(request);
+			if (request.action.type === "flash" && request.action.pressed)
+				return groupOutcome(request, groupProjection(GROUP_ID, 1, 17), 18);
+			releaseAttempts += 1;
+			if (releaseAttempts === 1)
+				throw Object.assign(new Error("reconnecting"), { retryable: true });
+			return groupOutcome(request, groupProjection(GROUP_ID, 1, 17), null);
+		});
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction,
+		});
+
+		await writer.setGroupFlash(GROUP_ID, true);
+		writer.stop();
+		store.reset(SHOW_ID, DESK_ID, "authority-b");
+		await expect(writer.setGroupFlash(GROUP_ID, false)).resolves.not.toBeNull();
+
+		expect(requests.at(-1)).toBe(requests.at(-2));
+		expect(requests.at(-1)).toMatchObject({
+			address: { kind: "group", group_id: GROUP_ID },
+			action: { type: "flash", pressed: false },
+		});
+		expect(requests.at(-1)).not.toHaveProperty("address.playback_number");
 	});
 });

@@ -8,25 +8,16 @@ import type {
 import { identityKey, projectionKeys } from "./contracts";
 import { PlaybackDeskState } from "./deskState";
 import { optimisticMaster } from "./optimistic";
-import { projectSnapshot, upsertProjection } from "./projectionCollection";
-import { PlaybackRequestTracker } from "./requestTracker";
 import {
 	outcomeEventSequence,
 	outcomeMatchesScope,
 	outcomeShowRevision,
 } from "./outcome";
+import { projectSnapshot, upsertProjection } from "./projectionCollection";
+import { PlaybackRequestTracker } from "./requestTracker";
+import type { PlaybackRuntimeState } from "./storeState";
 
-export interface PlaybackRuntimeState {
-	showId: string | null;
-	deskId: string | null;
-	showRevision: number | null;
-	eventSequence: number | null;
-	desk: PlaybackDesk | null;
-	projections: ReadonlyMap<string, readonly PlaybackProjection[]>;
-	pendingKeys: ReadonlySet<string>;
-	status: "idle" | "loading" | "ready" | "error";
-	error: Error | null;
-}
+export type { PlaybackRuntimeState } from "./storeState";
 
 export class PlaybackRuntimeStore {
 	private readonly listeners = new Set<() => void>();
@@ -205,11 +196,14 @@ export class PlaybackRuntimeStore {
 		return true;
 	}
 
-	beginOptimisticMaster(playbackNumber: number, value: number) {
-		const key = `playback:${playbackNumber}`;
+	beginOptimisticMaster(target: number | PlaybackIdentity, value: number) {
+		const key =
+			typeof target === "number" ? `playback:${target}` : identityKey(target);
 		const current = this.state.projections.get(key) ?? [];
-		const projection = current.find(
-			(candidate) => candidate.playback_number === playbackNumber,
+		const projection = current.find((candidate) =>
+			typeof target === "number"
+				? candidate.playback_number === target
+				: projectionKeys(candidate).includes(key),
 		);
 		if (!projection) return null;
 		const optimistic = optimisticMaster(projection, value);
@@ -289,8 +283,7 @@ export class PlaybackRuntimeStore {
 		for (const key of projectionKeys(projection)) {
 			const current = this.keySequences.get(key) ?? 0;
 			const baseline = baseSequences?.get(key) ?? 0;
-			if (sequence == null ? current > baseline : current >= sequence)
-				continue;
+			if (sequence == null ? current > baseline : current >= sequence) continue;
 			this.authoritativeProjections.set(
 				key,
 				upsertProjection(
@@ -317,7 +310,9 @@ export class PlaybackRuntimeStore {
 			return this.state.desk;
 		const deskSequence = outcome.desk_event_sequence ?? sequence;
 		if (deskSequence != null)
-			return this.deskState.apply(outcome.desk, deskSequence) ?? this.state.desk;
+			return (
+				this.deskState.apply(outcome.desk, deskSequence) ?? this.state.desk
+			);
 		return deskBaseSequence == null
 			? this.state.desk
 			: this.deskState.installUnsequenced(outcome.desk, deskBaseSequence);
@@ -362,7 +357,9 @@ export class PlaybackRuntimeStore {
 			!this.matches(outcome.projection.scope.show_id) ||
 			!projectionKeys(outcome.projection).includes(requestKey)
 		)
-			throw new Error("Playback outcome does not match the active request scope");
+			throw new Error(
+				"Playback outcome does not match the active request scope",
+			);
 	}
 
 	private matches(showId: string, deskId = this.state.deskId) {

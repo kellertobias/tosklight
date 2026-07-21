@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import type { useServer } from "../../api/ServerContext";
 import type { StoredGroup, VersionedObject } from "../../api/types";
 import { groups as fallbackGroups } from "../../data/mockData";
-import { useGroups } from "../../features/server/useShowObjectsState";
+import { useGroupRuntimeAuthority } from "../../features/groupRuntime/groupRuntimeAuthority";
 
 export type GroupsServer = ReturnType<typeof useServer>;
 export type Group = VersionedObject<StoredGroup>;
@@ -81,14 +81,22 @@ function fixtureMetadata(
 	return { capabilities, fixtureNames, knownFixtureIds };
 }
 
-export function useGroupPoolModel(server: GroupsServer) {
-	const storedGroups = useGroups(server.playbacks);
+export function useGroupPoolModel(server: GroupsServer, active = true) {
+	const hasShow = Boolean(server.bootstrap?.active_show);
+	const authority = useGroupRuntimeAuthority(active && hasShow);
 	const groups = useMemo(() => {
 		if (!server.bootstrap) return fallbackGroupPool();
-		return server.bootstrap.active_show ? storedGroups : [];
-	}, [server.bootstrap, storedGroups]);
+		return hasShow ? authority.groups : [];
+	}, [authority.groups, hasShow, server.bootstrap]);
 	const cards = useMemo(() => groupCards(groups), [groups]);
 	const fixtures = server.patch?.fixtures ?? [];
 	const metadata = useMemo(() => fixtureMetadata(fixtures), [fixtures]);
-	return { cards, groups, ...metadata };
+	return {
+		cards,
+		groups,
+		groupRuntimeReady: !hasShow || authority.ready,
+		canWriteGroupRuntime: hasShow && authority.canWrite,
+		setGroupMaster: authority.setMaster,
+		...metadata,
+	};
 }

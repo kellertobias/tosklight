@@ -19,8 +19,11 @@ const mocks = vi.hoisted(() => ({
 	recordGroup: vi.fn(),
 	resetCommand: vi.fn(),
 	updateGroup: vi.fn(),
+	setGroupMaster: vi.fn(),
 	commandLine: "",
 	state: { storeArmed: false, groupsReturnToStage: false },
+	runtimeReady: true,
+	runtimeCanWrite: true,
 	groups: [
 		{
 			id: "4",
@@ -37,6 +40,7 @@ const mocks = vi.hoisted(() => ({
 				derived_from: null,
 				frozen_from: null,
 			},
+			runtime: { master: 1, flashLevel: 0, playbackNumber: 4 },
 		},
 		{
 			id: "5",
@@ -53,12 +57,16 @@ const mocks = vi.hoisted(() => ({
 				derived_from: null,
 				frozen_from: null,
 			},
+			runtime: { master: 1, flashLevel: 0, playbackNumber: 5 },
 		},
 	],
 }));
 
 vi.mock("../api/ServerContext", () => ({
 	useServer: () => ({
+		get playbacks() {
+			throw new Error("Groups Window must not read broad playbacks");
+		},
 		bootstrap: { active_show: { id: "show" } },
 		groups: mocks.groups,
 		patch: { fixtures: [], revision: 0 },
@@ -66,7 +74,6 @@ vi.mock("../api/ServerContext", () => ({
 		selectedGroupId: null,
 		refresh: mocks.refresh,
 		updateGroup: mocks.updateGroup,
-		setGroupMaster: vi.fn(),
 		undoGroup: vi.fn(),
 		refreshFrozenGroup: vi.fn(),
 		detachDerivedGroup: vi.fn(),
@@ -95,8 +102,15 @@ vi.mock("../components/control/commandLine/useCommandLineSurface", () => ({
 vi.mock("../features/groupRecording/GroupRecordingProvider", () => ({
 	useGroupRecording: () => ({ record: mocks.recordGroup }),
 }));
-vi.mock("../features/server/useShowObjectsState", () => ({
-	useGroups: () => mocks.groups,
+vi.mock("../features/groupRuntime/groupRuntimeAuthority", () => ({
+	useGroupRuntimeAuthority: () => ({
+		ready: mocks.runtimeReady,
+		loading: !mocks.runtimeReady,
+		canWrite: mocks.runtimeCanWrite,
+		groups: mocks.groups,
+		setMaster: mocks.setGroupMaster,
+		setFlash: vi.fn(),
+	}),
 }));
 vi.mock("../features/groupSelection/useGroupSelectionActions", () => ({
 	useGroupSelectionActions: () => ({
@@ -112,6 +126,12 @@ vi.mock("../state/AppContext", () => ({
 	}),
 }));
 
+function buttonForText(text: string, index = 0) {
+	const button = screen.getAllByText(text)[index]?.closest("button");
+	if (!button) throw new Error(`Missing button for ${text}`);
+	return button;
+}
+
 describe("GroupsWindow action routing", () => {
 	afterEach(() => cleanup());
 
@@ -125,24 +145,73 @@ describe("GroupsWindow action routing", () => {
 		mocks.recordGroup.mockReset().mockResolvedValue({ status: "changed" });
 		mocks.resetCommand.mockReset().mockResolvedValue(true);
 		mocks.updateGroup.mockReset().mockResolvedValue(true);
+		mocks.setGroupMaster.mockReset().mockResolvedValue(null);
 		mocks.commandLine = "";
 		mocks.state.storeArmed = false;
 		mocks.state.groupsReturnToStage = false;
+		mocks.runtimeReady = true;
+		mocks.runtimeCanWrite = true;
 		mocks.groups[0].body.color = undefined;
 		mocks.groups[0].body.icon = undefined;
 		mocks.groups[1].revision = 1;
 	});
 
+	it("refuses every apparent empty-slot interaction while runtime loads", () => {
+		mocks.runtimeReady = false;
+		mocks.state.storeArmed = true;
+		render(<GroupsWindow />);
+
+		expect(screen.getByRole("status")).toHaveTextContent(
+			"Group runtime loading…",
+		);
+		expect(screen.queryByText("Tap to record empty group")).toBeNull();
+		expect(mocks.recordGroup).not.toHaveBeenCalled();
+		expect(mocks.selectLive).not.toHaveBeenCalled();
+	});
+
+	it("disables the Group master when the scoped writer is absent", () => {
+		mocks.runtimeCanWrite = false;
+		render(<GroupsWindow />);
+		fireEvent.contextMenu(buttonForText("Stored Empty"));
+
+		expect(screen.getByLabelText("Stored Empty master")).toBeDisabled();
+		expect(mocks.setGroupMaster).not.toHaveBeenCalled();
+	});
+
+	it("does not reopen an old Group context after authority replacement", () => {
+		const view = render(<GroupsWindow />);
+		fireEvent.contextMenu(buttonForText("Stored Empty"));
+		expect(screen.getByLabelText("Stored Empty master")).toBeInTheDocument();
+
+		mocks.runtimeReady = false;
+		view.rerender(<GroupsWindow />);
+		expect(screen.queryByLabelText("Stored Empty master")).toBeNull();
+
+		mocks.runtimeReady = true;
+		view.rerender(<GroupsWindow />);
+		expect(screen.queryByLabelText("Stored Empty master")).toBeNull();
+	});
+
+	it("writes the context master through exact scoped Group authority", async () => {
+		render(<GroupsWindow />);
+		fireEvent.contextMenu(buttonForText("Stored Empty"));
+		fireEvent.change(screen.getByLabelText("Stored Empty master"), {
+			target: { value: "35" },
+		});
+
+		expect(mocks.setGroupMaster).toHaveBeenCalledWith("4", 0.35);
+	});
+
 	it("selects a stored group through the scoped live-Group gesture", () => {
 		render(<GroupsWindow />);
-		fireEvent.click(screen.getByText("Stored Empty").closest("button")!);
+		fireEvent.click(buttonForText("Stored Empty"));
 		expect(mocks.selectLive).toHaveBeenCalledWith(mocks.groups[0]);
 	});
 
 	it("records directly into a stored empty Group through the typed action", async () => {
 		mocks.state.storeArmed = true;
 		render(<GroupsWindow />);
-		fireEvent.click(screen.getByText("Stored Empty").closest("button")!);
+		fireEvent.click(buttonForText("Stored Empty"));
 		await waitFor(() =>
 			expect(mocks.recordGroup).toHaveBeenCalledWith({
 				objectId: "4",
@@ -165,9 +234,7 @@ describe("GroupsWindow action routing", () => {
 	it("records empty pool cells through one typed action without a mode dialog", async () => {
 		mocks.state.storeArmed = true;
 		render(<GroupsWindow />);
-		fireEvent.click(
-			screen.getAllByText("Tap to record empty group")[0].closest("button")!,
-		);
+		fireEvent.click(buttonForText("Tap to record empty group"));
 		await waitFor(() =>
 			expect(mocks.recordGroup).toHaveBeenCalledWith({
 				objectId: "1",
@@ -184,7 +251,7 @@ describe("GroupsWindow action routing", () => {
 	it("captures the Group revision when the dialog opens and records Merge", async () => {
 		mocks.state.storeArmed = true;
 		const view = render(<GroupsWindow />);
-		fireEvent.click(screen.getByText("Stored Populated").closest("button")!);
+		fireEvent.click(buttonForText("Stored Populated"));
 		mocks.groups[1].revision = 9;
 		view.rerender(<GroupsWindow />);
 		fireEvent.click(screen.getByRole("button", { name: "Merge" }));
@@ -208,7 +275,7 @@ describe("GroupsWindow action routing", () => {
 		mocks.state.storeArmed = true;
 		mocks.recordGroup.mockResolvedValue(null);
 		render(<GroupsWindow />);
-		fireEvent.click(screen.getByText("Stored Empty").closest("button")!);
+		fireEvent.click(buttonForText("Stored Empty"));
 
 		await waitFor(() => expect(mocks.recordGroup).toHaveBeenCalledOnce());
 		expect(mocks.resetCommand).not.toHaveBeenCalled();
@@ -217,7 +284,7 @@ describe("GroupsWindow action routing", () => {
 	it("opens and saves group properties when SET is armed before tapping the tile", async () => {
 		mocks.commandLine = "SET ";
 		render(<GroupsWindow />);
-		fireEvent.click(screen.getByText("Stored Empty").closest("button")!);
+		fireEvent.click(buttonForText("Stored Empty"));
 		expect(mocks.resetCommand).toHaveBeenCalledOnce();
 		expect(
 			screen.getByRole("dialog", { name: "Group properties" }),

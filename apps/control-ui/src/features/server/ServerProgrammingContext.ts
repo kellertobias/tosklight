@@ -53,8 +53,6 @@ export interface ServerProgrammingContext {
 		id: string,
 		update: Pick<StoredGroup, "name" | "color" | "icon">,
 	) => Promise<boolean>;
-	setGroupMaster: (id: string, master: number) => Promise<void>;
-	setGroupMasterFlash: (id: string, value: number) => Promise<void>;
 	undoGroup: (id: string) => Promise<void>;
 	refreshFrozenGroup: (id: string) => Promise<void>;
 	detachDerivedGroup: (id: string) => Promise<void>;

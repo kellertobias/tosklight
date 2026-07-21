@@ -12,6 +12,9 @@ function deferredActions() {
 	}> = [];
 	const actions: PlaybackRuntimeActions = {
 		setActivePage: vi.fn(async () => true),
+		releaseCueListSource: vi.fn(async () => null),
+		setGroupMaster: vi.fn(async () => null),
+		setGroupFlash: vi.fn(async () => null),
 		poolPlaybackAction: vi.fn(async (playbackNumber, action, input) => {
 			calls.push({ playbackNumber, action, input });
 			await new Promise<void>((resolve) => settle.push(resolve));
@@ -89,9 +92,7 @@ describe("HeldDemoButtons", () => {
 		held.press(1, 12, 1);
 		settle.shift()?.();
 		await drain(settle, calls, 3);
-		expect(
-			calls.map((call) => [call.playbackNumber, call.input]),
-		).toEqual([
+		expect(calls.map((call) => [call.playbackNumber, call.input])).toEqual([
 			[11, { button: 1, pressed: true, surface: "physical" }],
 			[11, { button: 1, pressed: false, surface: "physical" }],
 			[12, { button: 1, pressed: true, surface: "physical" }],
@@ -108,8 +109,9 @@ describe("HeldDemoButtons", () => {
 		held.releaseAll();
 		held.releaseAll();
 		await drain(settle, calls, 6);
-		expect(calls.filter((call) => (call.input as { pressed: boolean }).pressed))
-			.toHaveLength(3);
+		expect(
+			calls.filter((call) => (call.input as { pressed: boolean }).pressed),
+		).toHaveLength(3);
 		expect(
 			calls
 				.filter((call) => !(call.input as { pressed: boolean }).pressed)

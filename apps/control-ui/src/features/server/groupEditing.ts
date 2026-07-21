@@ -5,16 +5,12 @@ import {
 	reconcileShowObject,
 	runOptimisticShowObjectMutation,
 } from "./showObjectMutations";
-import { updateRuntimeGroupMaster } from "./groupRuntimeProjection";
 import { currentPortableGroups } from "./showObjectSelectors";
 
 export function createGroupEditingActions(
 	model: ServerController,
-): Pick<
-	ServerContextValue,
-	"updateGroup" | "setGroupMaster" | "setGroupMasterFlash" | "undoGroup"
-> {
-	const { client, setError, bootstrap, setPlaybacks } = model;
+): Pick<ServerContextValue, "updateGroup" | "undoGroup"> {
+	const { client, setError, bootstrap } = model;
 	return {
 		updateGroup: async (id, update) => {
 			try {
@@ -39,37 +35,11 @@ export function createGroupEditingActions(
 					"group",
 					id,
 					body,
-					() =>
-						client.putObject(
-							showId,
-							"group",
-							id,
-							body,
-							existing.revision,
-						),
+					() => client.putObject(showId, "group", id, body, existing.revision),
 				);
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
 				return false;
-			}
-		},
-		setGroupMaster: async (id, master) => {
-			try {
-				await client.setGroupMaster(id, master);
-				setPlaybacks((current) =>
-					updateRuntimeGroupMaster(current, id, master),
-				);
-				setError(null);
-			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
-			}
-		},
-		setGroupMasterFlash: async (id, value) => {
-			try {
-				await client.setGroupMasterFlash(id, value);
-				setError(null);
-			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
 			}
 		},
 		undoGroup: async (id) => {

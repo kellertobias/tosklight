@@ -1,11 +1,21 @@
 import type { PlaybackActionRequest } from "../../api/types";
 import {
-	poolPlaybackRequest,
 	type PoolPlaybackAction,
 	type PoolPlaybackInput,
+	poolPlaybackRequest,
 } from "../server/playbackActionMapping";
+import {
+	assertGroupMaster,
+	assertPlaybackPage,
+	assertPlaybackPageOutcome,
+	cueListReleaseRequest,
+	groupActionRequest,
+	isPlaybackSafetyRelease,
+	isRetryablePlaybackFailure,
+	playbackActionError,
+} from "./actionWriterSupport";
 import type { PlaybackIdentity, PlaybackOutcome } from "./contracts";
-import { identityKey, playbackIdentity } from "./contracts";
+import { groupIdentity, identityKey, playbackIdentity } from "./contracts";
 import type { PlaybackRuntimeStore } from "./store";
 
 export type PlaybackRuntimeActionApply = (
@@ -43,12 +53,16 @@ export interface PlaybackRuntimeActions {
 		action: PoolPlaybackAction,
 		input?: PoolPlaybackInput,
 	): Promise<PlaybackOutcome | null>;
-	/**
-	 * Optional only while older feature test doubles implement the pre-release
-	 * action surface. Production providers always expose the writer method.
-	 */
-	releaseCueListSource?(
+	releaseCueListSource(
 		source: CueListRuntimeSource,
+	): Promise<PlaybackOutcome | null>;
+	setGroupMaster(
+		groupId: string,
+		value: number,
+	): Promise<PlaybackOutcome | null>;
+	setGroupFlash(
+		groupId: string,
+		pressed: boolean,
 	): Promise<PlaybackOutcome | null>;
 }
 
@@ -72,7 +86,7 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 
 	async setActivePage(page: number) {
 		try {
-			assertPage(page);
+			assertPlaybackPage(page);
 			return await this.setActivePageNow(page);
 		} catch (reason) {
 			this.rejectSetup(reason);
@@ -87,7 +101,10 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 	) {
 		try {
 			const request = poolPlaybackRequest(playbackNumber, action, input);
-			if (isSafetyRelease(action, input) && !this.matchesScope())
+			if (
+				isPlaybackSafetyRelease(action, input.pressed) &&
+				!this.matchesScope()
+			)
 				return this.sendSafetyRelease(request);
 			return await this.execute(playbackNumber, action, input, request);
 		} catch (reason) {
@@ -103,6 +120,30 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 		}
 	}
 
+	async setGroupMaster(groupId: string, value: number) {
+		try {
+			assertGroupMaster(value);
+			return await this.executeGroup(
+				groupId,
+				groupActionRequest(groupId, { type: "master", value }),
+				value,
+			);
+		} catch (reason) {
+			return this.rejectSetup(reason);
+		}
+	}
+
+	async setGroupFlash(groupId: string, pressed: boolean) {
+		try {
+			const request = groupActionRequest(groupId, { type: "flash", pressed });
+			if (!pressed && !this.matchesScope())
+				return this.sendSafetyRelease(request);
+			return await this.executeGroup(groupId, request);
+		} catch (reason) {
+			return this.rejectSetup(reason);
+		}
+	}
+
 	private async setActivePageNow(page: number) {
 		if (!this.options.applyDeskPage)
 			throw new Error("Playback desk page actions are unavailable");
@@ -111,7 +152,10 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 		const token = this.options.store.beginOptimisticPage(page);
 		if (!token) throw new Error("Authoritative Playback desk is loading");
 		try {
-			const outcome = await this.options.applyDeskPage(this.options.deskId, page);
+			const outcome = await this.options.applyDeskPage(
+				this.options.deskId,
+				page,
+			);
 			return this.acceptPage(outcome, page, token, scope);
 		} catch (reason) {
 			return this.rollbackPage(reason, token, scope);
@@ -125,7 +169,7 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 		scope: number,
 	) {
 		if (!this.isCurrent(scope)) return false;
-		assertPageOutcome(outcome, this.options.deskId, page);
+		assertPlaybackPageOutcome(outcome, this.options.deskId, page);
 		this.options.store.commitPage(token, page, outcome.event_sequence);
 		this.reportActionError(null);
 		return true;
@@ -133,7 +177,7 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 
 	private rollbackPage(reason: unknown, token: string, scope: number) {
 		if (!this.isCurrent(scope)) return false;
-		const error = asError(reason);
+		const error = playbackActionError(reason);
 		if (this.options.store.rollbackPage(token, error))
 			this.reportActionError(error);
 		return false;
@@ -173,6 +217,41 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 		}
 	}
 
+	private async executeGroup(
+		groupId: string,
+		request: PlaybackActionRequest,
+		optimisticMaster?: number,
+	) {
+		const scope = this.options.store.captureScope();
+		if (!this.isCurrent(scope)) return null;
+		this.assertGroupAuthority(groupId);
+		const identity = groupIdentity(groupId);
+		const token =
+			optimisticMaster == null
+				? this.options.store.beginRequest(identity)
+				: this.options.store.beginOptimisticMaster(identity, optimisticMaster);
+		if (!token) throw new Error("Authoritative Group runtime is not ready");
+		try {
+			const outcome = await this.applyWithRetry(request, scope);
+			assertGroupOutcome(outcome, groupId);
+			return this.accept(outcome, request, token, scope);
+		} catch (reason) {
+			return this.rollback(reason, token, scope);
+		}
+	}
+
+	private assertGroupAuthority(groupId: string) {
+		const projection = this.options.store
+			.getSnapshot()
+			.projections.get(identityKey(groupIdentity(groupId)))
+			?.find(
+				(candidate) =>
+					candidate.target === "group" && candidate.group_id === groupId,
+			);
+		if (!projection)
+			throw new Error("Authoritative Group runtime is not ready");
+	}
+
 	private assertRunningCueListSource(source: CueListRuntimeSource) {
 		const expectedPlayback =
 			source.identity.kind === "playback"
@@ -193,8 +272,7 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 				projection.cue_list_id === source.cueListId &&
 				projection.runtime !== null,
 		);
-		if (!running)
-			throw new Error("Authoritative Cuelist runtime is not ready");
+		if (!running) throw new Error("Authoritative Cuelist runtime is not ready");
 	}
 
 	private optimisticToken(
@@ -207,10 +285,7 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 			: null;
 	}
 
-	private async applyWithRetry(
-		request: PlaybackActionRequest,
-		scope: number,
-	) {
+	private async applyWithRetry(request: PlaybackActionRequest, scope: number) {
 		try {
 			return await this.options.applyAction(
 				this.options.showId,
@@ -218,7 +293,8 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 				request,
 			);
 		} catch (reason) {
-			if (!this.isCurrent(scope) || !isRetryable(reason)) throw reason;
+			if (!this.isCurrent(scope) || !isRetryablePlaybackFailure(reason))
+				throw reason;
 			return this.options.applyAction(
 				this.options.showId,
 				this.options.deskId,
@@ -235,7 +311,7 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 				request,
 			);
 		} catch (reason) {
-			if (!isRetryable(reason)) throw reason;
+			if (!isRetryablePlaybackFailure(reason)) throw reason;
 			return this.options.applyAction(
 				this.options.showId,
 				this.options.deskId,
@@ -258,20 +334,16 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 		return outcome;
 	}
 
-	private rollback(
-		reason: unknown,
-		token: string,
-		scope: number,
-	) {
+	private rollback(reason: unknown, token: string, scope: number) {
 		if (!this.isCurrent(scope)) return null;
-		const error = asError(reason);
+		const error = playbackActionError(reason);
 		if (!this.options.store.rollbackProjection(token, error)) return null;
 		this.reportActionError(error);
 		return null;
 	}
 
 	private rejectSetup(reason: unknown) {
-		const error = asError(reason);
+		const error = playbackActionError(reason);
 		if (!this.matchesScope()) return null;
 		this.options.store.reportActionError(error);
 		this.reportActionError(error);
@@ -297,76 +369,17 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 	}
 }
 
-function cueListReleaseRequest(
-	source: CueListRuntimeSource,
-): PlaybackActionRequest {
-	const address =
-		source.identity.kind === "playback"
-			? {
-					kind: "playback" as const,
-					playback_number: source.identity.playback_number,
-				}
-			: {
-					kind: "cue_list" as const,
-					cue_list_id: source.identity.cue_list_id,
-				};
-	return {
-		request_id: crypto.randomUUID(),
-		address,
-		action: { type: "release" },
-		surface: "virtual",
-	};
-}
-
-function isSafetyRelease(
-	action: PoolPlaybackAction,
-	input: PoolPlaybackInput,
-) {
-	return (
-		input.pressed === false &&
-		(action === "button" || action === "flash" || action === "swap")
-	);
-}
-
-function isRetryable(reason: unknown) {
-	if (reason instanceof TypeError) return true;
-	if (!(reason instanceof Error)) return false;
-	const failure = reason as Error & { retryable?: unknown; status?: unknown };
-	if (typeof failure.retryable === "boolean") return failure.retryable;
-	return (
-		failure.status === 0 ||
-		failure.status === 408 ||
-		failure.status === 429 ||
-		(typeof failure.status === "number" && failure.status >= 500)
-	);
-}
-
-function asError(reason: unknown) {
-	return reason instanceof Error ? reason : new Error(String(reason));
-}
-
-function assertPage(page: number) {
-	if (!Number.isSafeInteger(page) || page < 1 || page > 127)
-		throw new Error("Playback page must be an integer between 1 and 127");
-}
-
-function assertPageOutcome(
-	outcome: PlaybackDeskPageOutcome,
-	deskId: string,
-	page: number,
-) {
-	if (outcome.desk_id !== deskId || outcome.page !== page)
-		throw new Error("Playback page response does not match the active desk request");
-	assertOptionalSequence(outcome.event_sequence, "event sequence");
-	assertOptionalSequence(
-		outcome.page_creation_event_sequence,
-		"page creation event sequence",
-	);
-	if (outcome.page_creation_event_sequence !== null)
-		throw new Error("Playback page selection unexpectedly created a Page");
-}
-
-function assertOptionalSequence(value: number | null, label: string) {
-	if (value != null && (!Number.isSafeInteger(value) || value < 0))
-		throw new Error(`Playback page response ${label} is invalid`);
+function assertGroupOutcome(outcome: PlaybackOutcome, groupId: string) {
+	if (
+		outcome.requested.kind !== "group" ||
+		outcome.requested.group_id !== groupId ||
+		outcome.resolved.kind !== "group" ||
+		outcome.resolved.group_id !== groupId ||
+		outcome.projection.target !== "group" ||
+		outcome.projection.group_id !== groupId ||
+		outcome.projection.requested.kind !== "group" ||
+		outcome.projection.requested.group_id !== groupId ||
+		outcome.projection.playback_number !== outcome.resolved.playback_number
+	)
+		throw new Error("Playback outcome does not match the Group request");
 }

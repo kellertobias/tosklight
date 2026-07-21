@@ -89,10 +89,10 @@ export function useRunningPlaybackAuthority(
 		(status.status === "ready" && derived.mappedReady && direct.ready);
 	const ready = enabled && collectionsReady && runtimeReady;
 	const actions = usePlaybackRuntimeActions();
-	const canRelease = ready && actions?.releaseCueListSource != null;
+	const canRelease = ready && actions !== null;
 	const release = useCallback(
 		(source: CueListRuntimeSource) =>
-			canRelease && actions?.releaseCueListSource
+			canRelease && actions
 				? actions.releaseCueListSource(source)
 				: Promise.resolve(null),
 		[actions, canRelease],
@@ -131,7 +131,9 @@ function deriveSources(
 	mapped: ReadonlyMap<number, PlaybackProjection | undefined>,
 	direct: ReadonlyMap<string, PlaybackProjection | undefined>,
 ) {
-	const cueLists = new Map(model.cueLists.map((cueList) => [cueList.id, cueList]));
+	const cueLists = new Map(
+		model.cueLists.map((cueList) => [cueList.id, cueList]),
+	);
 	let mappedReady = true;
 	const mappedSources = model.playbacks.flatMap((playback) => {
 		const projection = mapped.get(playback.number);
@@ -155,9 +157,7 @@ function deriveSources(
 		const projection = direct.get(cueList.id);
 		if (!isDirectRuntime(projection, cueList.id)) return [];
 		const runtime = projection.runtime;
-		return runtime
-			? [source(projection, runtime, cueList)]
-			: [];
+		return runtime ? [source(projection, runtime, cueList)] : [];
 	});
 	const sources = [...mappedSources, ...virtualSources];
 	return {
