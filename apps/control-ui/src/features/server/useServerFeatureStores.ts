@@ -3,6 +3,7 @@ import { PlaybackRuntimeStore } from "../playbackRuntime/store";
 import { ProgrammerCaptureModeStore } from "../programmerCaptureMode/store";
 import { ProgrammerLifecycleStore } from "../programmerLifecycle/store";
 import { ProgrammerPreloadPlaybackQueueStore } from "../programmerPreloadPlaybackQueue/store";
+import { ProgrammerPreloadLifecycleStore } from "../programmerPreloadLifecycle/store";
 import { ProgrammerPreloadValuesStore } from "../programmerPreloadValues/store";
 import { ProgrammerPriorityStore } from "../programmerPriority/store";
 import { ProgrammerValuesStore } from "../programmerValues/store";
@@ -23,6 +24,9 @@ export function useServerFeatureStores() {
 			.current,
 		programmerPreloadPlaybackQueueStore: useRef(
 			new ProgrammerPreloadPlaybackQueueStore(),
+		).current,
+		programmerPreloadLifecycleStore: useRef(
+			new ProgrammerPreloadLifecycleStore(),
 		).current,
 	};
 }

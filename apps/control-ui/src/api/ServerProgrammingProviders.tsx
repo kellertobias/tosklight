@@ -5,6 +5,7 @@ import { PresetRecallProvider } from "../features/presetRecall/PresetRecallProvi
 import { ProgrammerCaptureModeViewProvider } from "../features/programmerCaptureMode/ProgrammerCaptureModeView";
 import { ProgrammerLifecycleViewProvider } from "../features/programmerLifecycle/ProgrammerLifecycleView";
 import { ProgrammerPreloadPlaybackQueueViewProvider } from "../features/programmerPreloadPlaybackQueue/ProgrammerPreloadPlaybackQueueView";
+import { ProgrammerPreloadLifecycleProvider } from "../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
 import { ProgrammerPreloadValuesViewProvider } from "../features/programmerPreloadValues/ProgrammerPreloadValuesView";
 import { ProgrammerPriorityProvider } from "../features/programmerPriority/ProgrammerPriorityView";
 import { ProgrammerValuesViewProvider } from "../features/programmerValues/ProgrammerValuesView";
@@ -126,6 +127,83 @@ function ProgrammingUpdateBoundary({
 	);
 }
 
+function PreloadProgrammingProviders({
+	children,
+	showId,
+	userId,
+	state,
+	boundaries,
+	value,
+}: PropsWithChildren<
+	ServerProgrammingProvidersProps & {
+		showId: string | null;
+		userId: string | null;
+	}
+>) {
+	const executeCommand = useCommandExecution(value);
+	return (
+		<ProgrammerPreloadValuesViewProvider
+			showId={showId}
+			userId={userId}
+			authorityKey={boundaries.programmerPreloadValuesAuthorityKey}
+			store={state.programmerPreloadValuesStore}
+			transport={boundaries.programmerPreloadValuesTransport}
+			loadSnapshot={boundaries.loadProgrammerPreloadValuesSnapshot}
+			applyAction={boundaries.applyProgrammerPreloadValuesAction}
+			onSessionError={boundaries.reportProgrammerPreloadValuesSessionError}
+			onMutationError={boundaries.reportProgrammerPreloadValuesMutationError}
+		>
+			<ProgrammerPreloadPlaybackQueueViewProvider
+				showId={showId}
+				userId={userId}
+				authorityKey={
+					boundaries.programmerPreloadPlaybackQueueAuthorityKey
+				}
+				store={state.programmerPreloadPlaybackQueueStore}
+				transport={boundaries.programmerPreloadPlaybackQueueTransport}
+				loadSnapshot={boundaries.loadProgrammerPreloadPlaybackQueueSnapshot}
+				onSessionError={
+					boundaries.reportProgrammerPreloadPlaybackQueueSessionError
+				}
+			>
+				<ProgrammingInteractionViewProvider
+					showId={showId}
+					deskId={state.session?.desk.id ?? null}
+					authorityKey={boundaries.programmingAuthorityKey}
+					store={state.programmingInteractionStore}
+					transport={boundaries.programmingTransport}
+					loadSnapshot={boundaries.loadProgrammingInteractionSnapshot}
+					replaceCommandLine={state.client.replaceProgrammingCommandLine}
+					executeCommand={executeCommand}
+					applySelection={state.client.applyProgrammingSelection}
+					onSessionError={boundaries.reportProgrammingSessionError}
+					onMutationError={boundaries.reportProgrammingMutationError}
+				>
+					<ProgrammerPreloadLifecycleProvider
+						showId={showId}
+						userId={userId}
+						deskId={state.session?.desk.id ?? null}
+						authorityKey={
+							boundaries.programmerPreloadLifecycleAuthorityKey
+						}
+						lifecycleAuthorityKey={
+							boundaries.programmerLifecycleAuthorityKey
+						}
+						showStore={state.showObjectsStore}
+						store={state.programmerPreloadLifecycleStore}
+						transport={boundaries.programmerPreloadLifecycleTransport}
+						onError={
+							boundaries.reportProgrammerPreloadLifecycleMutationError
+						}
+					>
+						{children}
+					</ProgrammerPreloadLifecycleProvider>
+				</ProgrammingInteractionViewProvider>
+			</ProgrammerPreloadPlaybackQueueViewProvider>
+		</ProgrammerPreloadValuesViewProvider>
+	);
+}
+
 function ServerShowProgrammingProviders({
 	children,
 	state,
@@ -134,7 +212,6 @@ function ServerShowProgrammingProviders({
 }: PropsWithChildren<ServerProgrammingProvidersProps>) {
 	const showId = state.bootstrap?.active_show?.id ?? null;
 	const userId = state.session?.user.id ?? null;
-	const executeCommand = useCommandExecution(value);
 	return (
 		<ProgrammingUpdateBoundary
 			showId={showId}
@@ -191,73 +268,27 @@ function ServerShowProgrammingProviders({
 								onSessionError={boundaries.reportProgrammerValuesSessionError}
 								onMutationError={boundaries.reportProgrammerValuesMutationError}
 							>
-								<ProgrammerPreloadValuesViewProvider
+								<PreloadProgrammingProviders
 									showId={showId}
 									userId={userId}
-									authorityKey={boundaries.programmerPreloadValuesAuthorityKey}
-									store={state.programmerPreloadValuesStore}
-									transport={boundaries.programmerPreloadValuesTransport}
-									loadSnapshot={boundaries.loadProgrammerPreloadValuesSnapshot}
-									applyAction={boundaries.applyProgrammerPreloadValuesAction}
-									onSessionError={
-										boundaries.reportProgrammerPreloadValuesSessionError
-									}
-									onMutationError={
-										boundaries.reportProgrammerPreloadValuesMutationError
-									}
+									state={state}
+									boundaries={boundaries}
+									value={value}
 								>
-									<ProgrammerPreloadPlaybackQueueViewProvider
+									<PresetRecallBoundary
 										showId={showId}
 										userId={userId}
-										authorityKey={
-											boundaries.programmerPreloadPlaybackQueueAuthorityKey
-										}
-										store={state.programmerPreloadPlaybackQueueStore}
-										transport={
-											boundaries.programmerPreloadPlaybackQueueTransport
-										}
-										loadSnapshot={
-											boundaries.loadProgrammerPreloadPlaybackQueueSnapshot
-										}
-										onSessionError={
-											boundaries.reportProgrammerPreloadPlaybackQueueSessionError
-										}
+										state={state}
+										boundaries={boundaries}
 									>
-										<ProgrammingInteractionViewProvider
-											showId={showId}
-											deskId={state.session?.desk.id ?? null}
-											authorityKey={boundaries.programmingAuthorityKey}
-											store={state.programmingInteractionStore}
-											transport={boundaries.programmingTransport}
-											loadSnapshot={
-												boundaries.loadProgrammingInteractionSnapshot
-											}
-											replaceCommandLine={
-												state.client.replaceProgrammingCommandLine
-											}
-											executeCommand={executeCommand}
-											applySelection={state.client.applyProgrammingSelection}
-											onSessionError={boundaries.reportProgrammingSessionError}
-											onMutationError={
-												boundaries.reportProgrammingMutationError
-											}
-										>
-											<PresetRecallBoundary
-												showId={showId}
-												userId={userId}
-												state={state}
-												boundaries={boundaries}
-											>
-												<SelectedGroupMembershipSync state={state} />
-												<ShowObjectDetailSubscription
-													kind="group"
-													objectId={value.selectedGroupId}
-												/>
-												{children}
-											</PresetRecallBoundary>
-										</ProgrammingInteractionViewProvider>
-									</ProgrammerPreloadPlaybackQueueViewProvider>
-								</ProgrammerPreloadValuesViewProvider>
+										<SelectedGroupMembershipSync state={state} />
+										<ShowObjectDetailSubscription
+											kind="group"
+											objectId={value.selectedGroupId}
+										/>
+										{children}
+									</PresetRecallBoundary>
+								</PreloadProgrammingProviders>
 							</ProgrammerValuesViewProvider>
 						</CueTransferProvider>
 					</ProgrammerCaptureModeViewProvider>

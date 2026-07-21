@@ -143,8 +143,6 @@ export interface AppState {
 	maximizedPaneId: string | null;
 	windowPicker: GridRect | null;
 	savingDesk: boolean;
-	preload: "idle" | "blind" | "output";
-	preloadActive: boolean;
 	speedGroup: "A" | "B" | "C" | "D" | "E";
 	playbackColumns: number;
 	playbackRows: number;

@@ -47,11 +47,24 @@ const playbackQueue = vi.hoisted(() => ({
 	},
 }));
 
+const preloadLifecycle = vi.hoisted(() => ({
+	ready: true,
+	armed: false,
+	active: false,
+	pending: false,
+	phase: "idle" as const,
+	error: null,
+	actions: {
+		enter: vi.fn().mockResolvedValue(null),
+		go: vi.fn().mockResolvedValue(null),
+		clearPending: vi.fn().mockResolvedValue(null),
+		release: vi.fn().mockResolvedValue(null),
+	},
+}));
+
 const state = {
 	midiProfile: false,
 	controlMode: "programmer",
-	preload: "idle",
-	preloadActive: false,
 	updateArmed: false,
 	storeArmed: false,
 	shiftArmed: false,
@@ -122,7 +135,6 @@ const server = {
 	status: "connected",
 	poolPlaybackAction: vi.fn(),
 	setPlaybackPage: vi.fn(),
-	preloadAction: vi.fn(),
 	executeCommandLine: vi.fn().mockResolvedValue(true),
 	setCommandLine: vi.fn((value: string) => {
 		server.commandLine = value;
@@ -154,6 +166,10 @@ vi.mock(
 		useProgrammerPreloadPlaybackQueueView: () => playbackQueue.current,
 	}),
 );
+vi.mock(
+	"../../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView",
+	() => ({ useProgrammerPreloadLifecycleView: () => preloadLifecycle }),
+);
 
 beforeEach(() => {
 	vi.useFakeTimers();
@@ -164,8 +180,10 @@ beforeEach(() => {
 	state.patchSetArmed = false;
 	state.midiProfile = false;
 	state.regularNumberShortcuts = true;
-	state.preload = "idle";
-	state.preloadActive = false;
+	preloadLifecycle.ready = true;
+	preloadLifecycle.armed = false;
+	preloadLifecycle.active = false;
+	preloadLifecycle.pending = false;
 	server.commandLine = "FIXTURE";
 	server.bootstrap.active_programmers = [];
 	server.bootstrap.active_timecode = null;
@@ -310,7 +328,7 @@ describe("Shift+Record Update gestures", () => {
 				},
 			],
 		};
-		state.preload = "blind";
+		preloadLifecycle.armed = true;
 
 		const { rerender } = render(<CommandLineBar />);
 
@@ -319,7 +337,7 @@ describe("Shift+Record Update gestures", () => {
 		).toBeInTheDocument();
 		expect(screen.queryByText(/PROG 6/)).not.toBeInTheDocument();
 
-		state.preload = "idle";
+		preloadLifecycle.armed = false;
 		activity.current = {
 			authority: "loading",
 			ready: false,

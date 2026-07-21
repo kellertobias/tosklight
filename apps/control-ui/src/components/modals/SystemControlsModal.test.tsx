@@ -122,8 +122,22 @@ const server = {
 		throw new Error("System Controls must not read the legacy Playback snapshot");
 	},
 	clearProgrammer,
-	preloadAction: vi.fn().mockResolvedValue(undefined),
 	controlFixtureAction: vi.fn().mockResolvedValue(undefined),
+};
+const preloadLifecycleCalls: boolean[] = [];
+const preloadLifecycle = {
+	ready: true,
+	armed: false,
+	active: false,
+	pending: false,
+	phase: "idle" as const,
+	error: null,
+	actions: {
+		enter: vi.fn().mockResolvedValue(null),
+		go: vi.fn().mockResolvedValue(null),
+		clearPending: vi.fn().mockResolvedValue(null),
+		release: vi.fn().mockResolvedValue(null),
+	},
 };
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
@@ -133,6 +147,15 @@ vi.mock("../../state/AppContext", () => ({
 vi.mock("../../features/programmerLifecycle/ProgrammerLifecycleView", () => ({
 	useProgrammerLifecycleView: () => lifecycle.projection,
 }));
+vi.mock(
+	"../../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView",
+	() => ({
+		useProgrammerPreloadLifecycleView: (enabled = true) => {
+			preloadLifecycleCalls.push(enabled);
+			return preloadLifecycle;
+		},
+	}),
+);
 vi.mock("./systemControls/runningPlaybackAuthority", () => ({
 	useRunningPlaybackAuthority: (enabled: boolean) => {
 		authorityCalls.push(enabled);
@@ -145,6 +168,9 @@ afterEach(() => {
 	vi.clearAllMocks();
 	legacyReads = 0;
 	authorityCalls.length = 0;
+	preloadLifecycleCalls.length = 0;
+	preloadLifecycle.ready = true;
+	preloadLifecycle.active = false;
 	appState.systemControlsOpen = true;
 	Object.assign(playbackAuthority, {
 		ready: true,
@@ -254,8 +280,8 @@ describe("SystemControlsModal", () => {
 		expect(release).toHaveBeenCalledWith(mapped);
 		expect(release).toHaveBeenCalledWith(direct);
 		expect(clearProgrammer).toHaveBeenCalledWith("session-1");
-		expect(server.preloadAction).toHaveBeenCalledWith("release");
-		expect(dispatch).toHaveBeenCalledWith({ type: "RELEASE_PRELOAD" });
+		expect(preloadLifecycle.actions.release).toHaveBeenCalledOnce();
+		expect(dispatch).not.toHaveBeenCalledWith({ type: "RELEASE_PRELOAD" });
 	});
 
 	it("refuses Stop everything while Playback authority is loading", () => {
@@ -275,7 +301,7 @@ describe("SystemControlsModal", () => {
 		expect(screen.getByRole("button", { name: "Stop everything" })).toBeDisabled();
 		expect(release).not.toHaveBeenCalled();
 		expect(clearProgrammer).not.toHaveBeenCalled();
-		expect(server.preloadAction).not.toHaveBeenCalled();
+		expect(preloadLifecycle.actions.release).not.toHaveBeenCalled();
 	});
 
 	it("keeps scoped authority dormant while the modal is closed", () => {
@@ -283,6 +309,7 @@ describe("SystemControlsModal", () => {
 		render(<SystemControlsModal />);
 
 		expect(authorityCalls).toEqual([false]);
+		expect(preloadLifecycleCalls).toEqual([false]);
 		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 		expect(server.readVisualization).not.toHaveBeenCalled();
 	});

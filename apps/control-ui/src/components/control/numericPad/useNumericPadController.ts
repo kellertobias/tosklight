@@ -5,6 +5,7 @@ import {
 } from "../../../features/playbackRuntime/PlaybackRuntimeView";
 import { useProgrammerValuesActions } from "../../../features/programmerValues/ProgrammerValuesView";
 import { useProgrammerValuesActivity } from "../../../features/programmerValues/useProgrammerValuesActivity";
+import { useProgrammerPreloadLifecycleView } from "../../../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
 import { useProgrammingSelectionActions } from "../../../features/programmingInteraction/ProgrammingInteractionView";
 import { useApp } from "../../../state/AppContext";
 import type { BuiltInWindow } from "../../../types";
@@ -35,6 +36,7 @@ export function useNumericPadController() {
 	const selectionActions = useProgrammingSelectionActions(true);
 	const playbackDesk = usePlaybackDeskView();
 	const playbackStatus = usePlaybackRuntimeStatus();
+	const preload = useProgrammerPreloadLifecycleView();
 	const hasSelection = command.selected.length > 0;
 	const hasProgrammerValues = values.ready && values.valueCount > 0;
 	const context = {
@@ -47,9 +49,11 @@ export function useNumericPadController() {
 		selectionActions,
 		playbackDesk,
 		playbackReady: playbackStatus.status === "ready" && playbackDesk !== null,
+		preload,
 	};
 	return {
 		state,
+		preload,
 		clearClass: hasSelection
 			? "clear-active"
 			: hasProgrammerValues
@@ -72,6 +76,7 @@ interface NumericPadContext {
 	selectionActions: ReturnType<typeof useProgrammingSelectionActions>;
 	playbackDesk: ReturnType<typeof usePlaybackDeskView>;
 	playbackReady: boolean;
+	preload: ReturnType<typeof useProgrammerPreloadLifecycleView>;
 }
 
 function toggleRecord({ state, dispatch, command }: NumericPadContext) {
@@ -85,9 +90,10 @@ function toggleRecord({ state, dispatch, command }: NumericPadContext) {
 		void command.replace(currentCommand.text.replace(/^RECORD\s*/i, ""), false);
 }
 
-async function advancePreload({ state, dispatch, server }: NumericPadContext) {
-	await server.preloadAction(state.preload === "blind" ? "go" : "enter");
-	dispatch({ type: "ADVANCE_PRELOAD" });
+async function advancePreload({ preload }: NumericPadContext) {
+	if (!preload.ready || !preload.actions) return;
+	if (preload.armed) await preload.actions.go();
+	else await preload.actions.enter();
 }
 
 function pressKey(context: NumericPadContext, key: SoftwareKey) {
@@ -166,12 +172,13 @@ function clearStep(context: NumericPadContext) {
 		values,
 		valuesActions,
 		selectionActions,
+		preload,
 	} = context;
 	for (const [type, armed] of clearableArmedStates(state))
 		if (armed) dispatch({ type, value: false });
 	void command.reset();
-	if (state.preload !== "idle" || values.authority === "preload") {
-		void server.preloadAction("clear");
+	if (preload.armed || preload.active || values.authority === "preload") {
+		if (preload.ready) void preload.actions?.clearPending();
 		return;
 	}
 	if (command.selected.length > 0) {

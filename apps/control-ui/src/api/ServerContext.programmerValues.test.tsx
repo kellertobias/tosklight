@@ -211,6 +211,7 @@ function lifecycleProjection(revision: number) {
 				connected: true,
 				selectedFixtureCount: 0,
 				normalValueCount: 0,
+				preloadActive: false,
 				sessions: [],
 			},
 		],

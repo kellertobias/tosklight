@@ -8,6 +8,7 @@ import { presets } from "../data/mockData";
 import type { PresetRecallActions } from "../features/presetRecall/contracts";
 import { usePresetRecall } from "../features/presetRecall/PresetRecallProvider";
 import { usePresetRecording } from "../features/presetRecording/PresetRecordingProvider";
+import { useProgrammerPreloadLifecycleView } from "../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
 import {
 	type PresetCard,
 	resolvePresetCards,
@@ -99,7 +100,7 @@ function activatePreset(options: PresetActivationOptions) {
 		});
 }
 
-export function PresetsWindow({
+function usePresetsWindowModel({
 	active = true,
 	compact,
 	paneId,
@@ -112,6 +113,7 @@ export function PresetsWindow({
 	const selection = presetRecall.selection;
 	const storedPresets = usePresets(active);
 	const presetRecording = usePresetRecording();
+	const preload = useProgrammerPreloadLifecycleView(active);
 	const command = useCommandLineSurface({
 		enabled: active,
 		observeCommand: false,
@@ -156,7 +158,7 @@ export function PresetsWindow({
 			index,
 			family,
 			mode,
-			preloadActive: state.preload !== "idle",
+			preloadActive: preload.armed || preload.active,
 			actions: presetRecording,
 			storePreload: server.storePreload,
 		});
@@ -184,67 +186,96 @@ export function PresetsWindow({
 			onDisarmSet: () =>
 				dispatch({ type: "SET_PRESET_SET_ARMED", value: false }),
 		});
+	const setColors = (value: boolean) =>
+		dispatch(
+			compact && paneId
+				? { type: "SET_PANE_PRESET_COLORS", id: paneId, value }
+				: { type: "SET_PRESET_POOL_COLORS", value },
+		);
+	const saveCustomization = () => {
+		if (configureIndex == null) return;
+		const id =
+			cards[configureIndex]?.id ??
+			presetStorageKey(presetAddress(family, configureIndex + 1));
+		const next = { ...customizations, [id]: configureDraft };
+		setCustomizations(next);
+		localStorage.setItem(
+			"light.preset-button-customizations",
+			JSON.stringify(next),
+		);
+		setConfigureIndex(null);
+	};
+	return {
+		active,
+		compact,
+		family,
+		colorsEnabled,
+		cards,
+		customizations,
+		groupsVisible,
+		selectionCount: selection?.selected.length ?? 0,
+		storeArmed: state.storeArmed,
+		updateArmed: state.updateArmed,
+		setArmed: state.presetSetArmed,
+		settingsAnchor,
+		recordPresetIndex,
+		configureIndex,
+		configureDraft,
+		activate,
+		setFamily,
+		setSettingsAnchor,
+		setColors,
+		cancelRecording,
+		recordPreset,
+		setConfigureDraft,
+		setConfigureIndex,
+		saveCustomization,
+		openGroups: () => dispatch({ type: "OPEN_BUILTIN", kind: "groups" }),
+	};
+}
 
+export function PresetsWindow(props: WindowProps) {
+	const model = usePresetsWindowModel(props);
 	return (
 		<div
-			className={`pool-window preset-pool-window ${colorsEnabled ? "pool-colors" : "pool-colors-disabled"} pool-family-${family.toLowerCase()}`}
+			className={`pool-window preset-pool-window ${model.colorsEnabled ? "pool-colors" : "pool-colors-disabled"} pool-family-${model.family.toLowerCase()}`}
 		>
-			{!compact && (
+			{!model.compact && (
 				<PresetWindowHeader
-					family={family}
-					onFamily={setFamily}
-					onOpenGroups={() =>
-						dispatch({ type: "OPEN_BUILTIN", kind: "groups" })
-					}
-					onSettings={setSettingsAnchor}
+					family={model.family}
+					onFamily={model.setFamily}
+					onOpenGroups={model.openGroups}
+					onSettings={model.setSettingsAnchor}
 				/>
 			)}
 			<PresetCardGrid
-				cards={cards}
-				family={family}
-				customizations={customizations}
-				colorsEnabled={colorsEnabled}
-				selectionCount={selection?.selected.length ?? 0}
-				storeArmed={state.storeArmed}
-				updateArmed={state.updateArmed}
-				setArmed={state.presetSetArmed}
-				onActivate={activate}
+				cards={model.cards}
+				family={model.family}
+				customizations={model.customizations}
+				colorsEnabled={model.colorsEnabled}
+				selectionCount={model.selectionCount}
+				storeArmed={model.storeArmed}
+				updateArmed={model.updateArmed}
+				setArmed={model.setArmed}
+				onActivate={model.activate}
 			/>
-			{groupsVisible && <GroupStrip active={active} />}
+			{model.groupsVisible && <GroupStrip active={model.active} />}
 			<PresetWindowOverlays
-				settingsAnchor={settingsAnchor}
-				family={family}
-				colorsEnabled={colorsEnabled}
-				cards={cards}
-				recordIndex={recordPresetIndex}
-				configureIndex={configureIndex}
-				configureDraft={configureDraft}
-				onFamily={setFamily}
-				onColors={(value) =>
-					dispatch(
-						compact && paneId
-							? { type: "SET_PANE_PRESET_COLORS", id: paneId, value }
-							: { type: "SET_PRESET_POOL_COLORS", value },
-					)
-				}
-				onCloseSettings={() => setSettingsAnchor(null)}
-				onRecord={recordPreset}
-				onCancelRecord={cancelRecording}
-				onDraft={setConfigureDraft}
-				onCloseConfigure={() => setConfigureIndex(null)}
-				onSaveConfigure={() => {
-					if (configureIndex == null) return;
-					const id =
-						cards[configureIndex]?.id ??
-						presetStorageKey(presetAddress(family, configureIndex + 1));
-					const next = { ...customizations, [id]: configureDraft };
-					setCustomizations(next);
-					localStorage.setItem(
-						"light.preset-button-customizations",
-						JSON.stringify(next),
-					);
-					setConfigureIndex(null);
-				}}
+				settingsAnchor={model.settingsAnchor}
+				family={model.family}
+				colorsEnabled={model.colorsEnabled}
+				cards={model.cards}
+				recordIndex={model.recordPresetIndex}
+				configureIndex={model.configureIndex}
+				configureDraft={model.configureDraft}
+				onFamily={model.setFamily}
+				onColors={model.setColors}
+				onCloseSettings={() => model.setSettingsAnchor(null)}
+				onRecord={model.recordPreset}
+				onCancelRecord={model.cancelRecording}
+				onDraft={model.setConfigureDraft}
+				onCloseConfigure={() => model.setConfigureIndex(null)}
+				onSaveConfigure={model.saveCustomization}
 			/>
 		</div>
 	);

@@ -7,6 +7,7 @@ import {
 	useProgrammingSelectionActions,
 	useProgrammingSelectionView,
 } from "../features/programmingInteraction/ProgrammingInteractionView";
+import { useProgrammerPreloadLifecycleView } from "../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
 import { useApp } from "../state/AppContext";
 import type { FixtureSheetColumn } from "../types";
 import {
@@ -31,6 +32,7 @@ export function FixtureSheetWindow({
 	const server = useServer();
 	const selection = useProgrammingSelectionView(active);
 	const selectionActions = useProgrammingSelectionActions(active);
+	const preload = useProgrammerPreloadLifecycleView(active);
 	const { state } = useApp();
 	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
 	const [activeRow, setActiveRow] = useState(0);
@@ -50,7 +52,7 @@ export function FixtureSheetWindow({
 	const showType = compact || state.fixtureSheetShowType;
 	const includedHeads = compact ? "all" : state.fixtureSheetIncludedHeads;
 	const { visualization, preloadVisualization } = useFixtureSheetVisualizations(
-		state.preload !== "idle",
+		preload.armed || preload.active,
 		active,
 	);
 	const { rows, activeValuesLoading, groupRuntimeLoading } =

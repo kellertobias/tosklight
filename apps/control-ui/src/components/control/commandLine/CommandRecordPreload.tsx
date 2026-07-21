@@ -6,6 +6,9 @@ export function CommandRecordPreload({
 	hasRecordableContent,
 	pendingSummary,
 	preloadLabel,
+	preloadArmed,
+	preloadActive,
+	preloadReady,
 	onRecordStart,
 	onRecordEnd,
 	onRecordCancel,
@@ -16,6 +19,9 @@ export function CommandRecordPreload({
 	hasRecordableContent: boolean;
 	pendingSummary: string;
 	preloadLabel: string;
+	preloadArmed: boolean;
+	preloadActive: boolean;
+	preloadReady: boolean;
 	onRecordStart: (shifted: boolean) => void;
 	onRecordEnd: () => void;
 	onRecordCancel: () => void;
@@ -52,17 +58,19 @@ export function CommandRecordPreload({
 						: "REC"}
 			</Button>
 			<Button
-				className={`preload-button ${state.preload === "blind" ? "preload-go" : "preload-enter"}`}
+				className={`preload-button ${preloadArmed ? "preload-go" : "preload-enter"}`}
+				disabled={!preloadReady}
+				aria-busy={!preloadReady}
 				title={
-					state.preload === "blind" && pendingSummary
+					preloadArmed && pendingSummary
 						? `Pending Preload: ${pendingSummary}`
-						: state.preloadActive
+						: preloadActive
 							? "Hold to release the active preload scene"
 							: undefined
 				}
 				onPointerDown={() => {
 					preloadHeld.current = false;
-					if (!state.preloadActive) return;
+					if (!preloadActive) return;
 					preloadHold.current = window.setTimeout(() => {
 						preloadHeld.current = true;
 						void onReleasePreload();
@@ -77,10 +85,10 @@ export function CommandRecordPreload({
 				}}
 			>
 				<b>{preloadLabel}</b>
-				{state.preload === "blind" && pendingSummary ? (
+				{preloadArmed && pendingSummary ? (
 					<small>{pendingSummary}</small>
 				) : (
-					state.preloadActive && <small>(Hold: release)</small>
+					preloadActive && <small>(Hold: release)</small>
 				)}
 			</Button>
 		</div>

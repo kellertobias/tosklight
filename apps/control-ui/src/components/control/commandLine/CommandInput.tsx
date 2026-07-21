@@ -10,6 +10,7 @@ export function CommandInput({
 	commandError,
 	commandLine,
 	commandTarget,
+	preloadArmed,
 	onReplace,
 	onExecute,
 	onOpenHistory,
@@ -20,6 +21,7 @@ export function CommandInput({
 	commandError: string | null;
 	commandLine: string;
 	commandTarget: CommandTargetMode;
+	preloadArmed: boolean;
 	onReplace: (value: string, pristine?: boolean) => void;
 	onExecute: () => Promise<void>;
 	onOpenHistory: () => void;
@@ -39,7 +41,7 @@ export function CommandInput({
 			</Button>
 			<div className="command-field">
 				<Input
-					className={`command-input ${state.preload === "blind" ? "blind" : ""} ${state.updateArmed ? "update-armed" : ""} ${completed ? "completed" : ""} ${commandError ? "error" : ""}`}
+					className={`command-input ${preloadArmed ? "blind" : ""} ${state.updateArmed ? "update-armed" : ""} ${completed ? "completed" : ""} ${commandError ? "error" : ""}`}
 					aria-label="Command line"
 					value={commandLine}
 					placeholder=""

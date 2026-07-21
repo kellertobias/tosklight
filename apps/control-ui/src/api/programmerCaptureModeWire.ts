@@ -8,6 +8,7 @@ import {
 	arrayAt,
 	booleanAt,
 	enumAt,
+	exactRecordAt,
 	integerAt,
 	recordAt,
 	stringAt,
@@ -66,12 +67,18 @@ export function decodeProgrammerCaptureModeEventMessage(
 	return decodeCaptureModeEvent(message, expectedUserId);
 }
 
-function decodeCaptureModeProjection(
+export function decodeCaptureModeProjection(
 	value: unknown,
 	path: string,
 	expectedUserId: string,
 ): ProgrammerCaptureModeProjection {
-	const projection = recordAt(value, path);
+	const projection = exactRecordAt(value, path, [
+		"user_id",
+		"revision",
+		"blind",
+		"preview",
+		"preload_capture_programmer",
+	]);
 	const userId = programmingUuidAt(projection.user_id, `${path}.user_id`);
 	assertExpectedUser(userId, expectedUserId, `${path}.user_id`);
 	return {

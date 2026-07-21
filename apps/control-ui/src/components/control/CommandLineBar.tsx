@@ -20,6 +20,7 @@ import { useCommandLineSurface } from "./commandLine/useCommandLineSurface";
 import { useRecordGesture } from "./commandLine/useRecordGesture";
 import "./CommandLineHistory.css";
 import { useProgrammerPreloadPlaybackQueueView } from "../../features/programmerPreloadPlaybackQueue/ProgrammerPreloadPlaybackQueueView";
+import { useProgrammerPreloadLifecycleView } from "../../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
 import { useProgrammerValuesActivity } from "../../features/programmerValues/useProgrammerValuesActivity";
 import { openUpdateTargetMenu } from "./updateWorkflow";
 
@@ -111,6 +112,7 @@ export function CommandLineBar() {
 	const command = useCommandLineSurface({ selection: true });
 	const programmerActivity = useProgrammerValuesActivity();
 	const preloadPlaybackQueue = useProgrammerPreloadPlaybackQueueView();
+	const preload = useProgrammerPreloadLifecycleView();
 	const hardware = Boolean(
 		server.bootstrap?.hardware_connected || state.midiProfile,
 	);
@@ -123,7 +125,7 @@ export function CommandLineBar() {
 	const hasRecordableContent =
 		command.selected.length > 0 ||
 		(programmerActivity.ready && programmerActivity.valueCount > 0) ||
-		state.preloadActive;
+		preload.active;
 	const pendingLabels = (preloadPlaybackQueue?.actions ?? []).map((pending) =>
 		queuedPlaybackLabel(pending.action, pending.playbackNumber),
 	);
@@ -181,12 +183,13 @@ export function CommandLineBar() {
 	};
 	const record = useRecordGesture({ armUpdateOrMenu, toggleRecord });
 	const advancePreload = async () => {
-		await server.preloadAction(state.preload === "blind" ? "go" : "enter");
-		dispatch({ type: "ADVANCE_PRELOAD" });
+		if (!preload.ready || !preload.actions) return;
+		if (preload.armed) await preload.actions.go();
+		else await preload.actions.enter();
 	};
 	const releasePreload = async () => {
-		await server.preloadAction("release");
-		dispatch({ type: "RELEASE_PRELOAD" });
+		if (!preload.ready || !preload.actions) return;
+		await preload.actions.release();
 	};
 	useCommandLineShortcuts(hardware, {
 		completed,
@@ -216,6 +219,7 @@ export function CommandLineBar() {
 				commandError={errors.commandError}
 				commandLine={command.text}
 				commandTarget={command.target}
+				preloadArmed={preload.armed}
 				onReplace={replaceCommand}
 				onExecute={execute}
 				onOpenHistory={() => setHistoryOpen(true)}
@@ -238,7 +242,10 @@ export function CommandLineBar() {
 			<CommandRecordPreload
 				hasRecordableContent={hasRecordableContent}
 				pendingSummary={pendingSummary}
-				preloadLabel={state.preload === "blind" ? "PRELOAD GO" : "PRELOAD"}
+				preloadLabel={preload.armed ? "PRELOAD GO" : "PRELOAD"}
+				preloadArmed={preload.armed}
+				preloadActive={preload.active}
+				preloadReady={preload.ready}
 				onRecordStart={record.begin}
 				onRecordEnd={record.end}
 				onRecordCancel={record.cancel}

@@ -29,8 +29,15 @@ export interface ProgrammerLifecycleViewProviderProps {
 	onSessionError?: (error: Error | null) => void;
 }
 
+export interface ProgrammerLifecycleAuthority {
+	store: ProgrammerLifecycleStore;
+	activate(): () => void;
+	repairAuthority(error: Error): Promise<void>;
+}
+
 const StoreContext = createContext<ProgrammerLifecycleStore | null>(null);
 const SessionContext = createContext<ProgrammerLifecycleSession | null>(null);
+const AuthorityContext = createContext<ProgrammerLifecycleAuthority | null>(null);
 const fallbackStore = new ProgrammerLifecycleStore();
 
 export function ProgrammerLifecycleViewProvider({
@@ -54,6 +61,17 @@ export function ProgrammerLifecycleViewProvider({
 				: null,
 		[authorityKey, loadSnapshot, onSessionError, store, transport],
 	);
+	const authority = useMemo<ProgrammerLifecycleAuthority | null>(
+		() =>
+			session
+				? {
+						store,
+						activate: () => session.activate(),
+						repairAuthority: (error) => session.repairAuthority(error),
+					}
+				: null,
+		[session, store],
+	);
 	useLayoutEffect(() => {
 		store.reset(authorityKey);
 	}, [authorityKey, store]);
@@ -61,7 +79,9 @@ export function ProgrammerLifecycleViewProvider({
 	return (
 		<StoreContext.Provider value={store}>
 			<SessionContext.Provider value={session}>
-				{children}
+				<AuthorityContext.Provider value={authority}>
+					{children}
+				</AuthorityContext.Provider>
 			</SessionContext.Provider>
 		</StoreContext.Provider>
 	);
@@ -102,6 +122,10 @@ export function useProgrammerLifecycleStatus() {
 
 export function useProgrammerLifecycleStore() {
 	return useContext(StoreContext) ?? fallbackStore;
+}
+
+export function useProgrammerLifecycleAuthority() {
+	return useContext(AuthorityContext);
 }
 
 function useLifecycleViewActivation(enabled: boolean) {

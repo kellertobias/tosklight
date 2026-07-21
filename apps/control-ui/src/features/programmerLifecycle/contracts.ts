@@ -9,6 +9,7 @@ export interface ProgrammerLifecycleRow {
 	connected: boolean;
 	selectedFixtureCount: number;
 	normalValueCount: number;
+	preloadActive: boolean;
 	sessions: readonly ProgrammerLifecycleSessionProjection[];
 }
 

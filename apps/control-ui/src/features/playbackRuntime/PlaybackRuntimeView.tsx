@@ -48,9 +48,17 @@ export interface PlaybackRuntimeViewProviderProps {
 	onError?: (error: Error | null) => void;
 }
 
+export interface PlaybackRuntimeAuthority {
+	store: PlaybackRuntimeStore;
+	activate(identity: PlaybackIdentity): () => void;
+	activateDesk(): () => void;
+	repairAuthority(error: Error): Promise<void>;
+}
+
 const StoreContext = createContext<PlaybackRuntimeStore | null>(null);
 const SessionContext = createContext<PlaybackRuntimeSession | null>(null);
 const ActionsContext = createContext<PlaybackRuntimeActions | null>(null);
+const AuthorityContext = createContext<PlaybackRuntimeAuthority | null>(null);
 const fallbackStore = new PlaybackRuntimeStore();
 
 export function PlaybackRuntimeViewProvider({
@@ -95,6 +103,18 @@ export function PlaybackRuntimeViewProvider({
 				: null,
 		[applyAction, applyDeskPage, authorityKey, deskId, onError, showId, store],
 	);
+	const authority = useMemo<PlaybackRuntimeAuthority | null>(
+		() =>
+			session
+				? {
+						store,
+						activate: (identity) => session.activate(identity),
+						activateDesk: () => session.activateDesk(),
+						repairAuthority: (error) => session.repairAuthority(error),
+					}
+				: null,
+		[session, store],
+	);
 	useLayoutEffect(() => {
 		store.reset(showId, deskId, authorityKey);
 	}, [authorityKey, deskId, showId, store]);
@@ -103,9 +123,11 @@ export function PlaybackRuntimeViewProvider({
 	return (
 		<StoreContext.Provider value={store}>
 			<SessionContext.Provider value={session}>
-				<ActionsContext.Provider value={actions}>
-					{children}
-				</ActionsContext.Provider>
+				<AuthorityContext.Provider value={authority}>
+					<ActionsContext.Provider value={actions}>
+						{children}
+					</ActionsContext.Provider>
+				</AuthorityContext.Provider>
 			</SessionContext.Provider>
 		</StoreContext.Provider>
 	);
@@ -113,6 +135,10 @@ export function PlaybackRuntimeViewProvider({
 
 export function usePlaybackRuntimeActions() {
 	return useContext(ActionsContext);
+}
+
+export function usePlaybackRuntimeAuthority() {
+	return useContext(AuthorityContext);
 }
 
 export function usePlaybackRuntimeView(

@@ -30,9 +30,6 @@ export interface ServerProgrammingContext {
 		attribute: string,
 		mode: "left" | "right" | "center" | "out",
 	) => Promise<void>;
-	preloadAction: (
-		action: "enter" | "go" | "clear" | "release",
-	) => Promise<void>;
 	storePreload: (
 		input: {
 			target: "preset" | "cue";

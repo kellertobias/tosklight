@@ -31,11 +31,19 @@ export interface ProgrammerPreloadPlaybackQueueViewProviderProps {
 	onSessionError?: (error: Error | null) => void;
 }
 
+export interface ProgrammerPreloadPlaybackQueueAuthority {
+	store: ProgrammerPreloadPlaybackQueueStore;
+	activate(): () => void;
+	repairAuthority(error: Error): Promise<void>;
+}
+
 const StoreContext = createContext<ProgrammerPreloadPlaybackQueueStore | null>(
 	null,
 );
 const SessionContext =
 	createContext<ProgrammerPreloadPlaybackQueueSession | null>(null);
+const AuthorityContext =
+	createContext<ProgrammerPreloadPlaybackQueueAuthority | null>(null);
 const fallbackStore = new ProgrammerPreloadPlaybackQueueStore();
 
 export function ProgrammerPreloadPlaybackQueueViewProvider({
@@ -71,6 +79,17 @@ export function ProgrammerPreloadPlaybackQueueViewProvider({
 			userId,
 		],
 	);
+	const authority = useMemo<ProgrammerPreloadPlaybackQueueAuthority | null>(
+		() =>
+			session
+				? {
+						store,
+						activate: () => session.activate(),
+						repairAuthority: (error) => session.repairAuthority(error),
+					}
+				: null,
+		[session, store],
+	);
 	useLayoutEffect(() => {
 		store.reset(showId, userId, authorityKey);
 	}, [authorityKey, showId, store, userId]);
@@ -78,7 +97,9 @@ export function ProgrammerPreloadPlaybackQueueViewProvider({
 	return (
 		<StoreContext.Provider value={store}>
 			<SessionContext.Provider value={session}>
-				{children}
+				<AuthorityContext.Provider value={authority}>
+					{children}
+				</AuthorityContext.Provider>
 			</SessionContext.Provider>
 		</StoreContext.Provider>
 	);
@@ -123,6 +144,10 @@ export function useProgrammerPreloadPlaybackQueueStatus() {
 
 export function useProgrammerPreloadPlaybackQueueStore() {
 	return useContext(StoreContext) ?? fallbackStore;
+}
+
+export function useProgrammerPreloadPlaybackQueueAuthority() {
+	return useContext(AuthorityContext);
 }
 
 function useQueueViewActivation(enabled: boolean) {

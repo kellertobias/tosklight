@@ -115,6 +115,12 @@ export class ProgrammerPreloadPlaybackQueueStore {
 		return scope === this.scope;
 	}
 
+	authoritativeRevision(expectedScope = this.scope) {
+		return this.isScopeCurrent(expectedScope)
+			? (this.state.projection?.revision ?? null)
+			: null;
+	}
+
 	private matchesScope(
 		showId: string | null,
 		userId: string | null,

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useServer } from "../../api/ServerContext";
 import { useProgrammerLifecycleView } from "../../features/programmerLifecycle/ProgrammerLifecycleView";
+import { useProgrammerPreloadLifecycleView } from "../../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
 import { useProgrammingSelectionView } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import { useApp } from "../../state/AppContext";
 import { Button, ModalPortal } from "../common";
@@ -21,6 +22,7 @@ function useSystemControlsModel() {
 	const [stoppingAll, setStoppingAll] = useState(false);
 	const selection = useProgrammingSelectionView(state.systemControlsOpen);
 	const lifecycle = useProgrammerLifecycleView(state.systemControlsOpen);
+	const preload = useProgrammerPreloadLifecycleView(state.systemControlsOpen);
 	const playbackAuthority = useRunningPlaybackAuthority(state.systemControlsOpen);
 	const selectedFixtureIds = selection?.selected ?? EMPTY_FIXTURE_IDS;
 	useEffect(() => {
@@ -65,6 +67,8 @@ function useSystemControlsModel() {
 	const stopEverything = async () => {
 		if (
 			!playbackAuthority.ready ||
+			!preload.ready ||
+			!preload.actions ||
 			(playbackAuthority.sources.length > 0 && !playbackAuthority.canRelease)
 		)
 			return;
@@ -82,9 +86,8 @@ function useSystemControlsModel() {
 						? [server.clearProgrammer(programmer.sessions[0].sessionId)]
 						: [],
 				),
-				server.preloadAction("release"),
+				preload.actions.release(),
 			]);
-			dispatch({ type: "RELEASE_PRELOAD" });
 		} finally {
 			setStoppingAll(false);
 		}
@@ -100,6 +103,7 @@ function useSystemControlsModel() {
 		lifecycle,
 		programmers,
 		playbackAuthority,
+		preload,
 		close: () =>
 			dispatch({
 				type: "SET_MODAL",
@@ -128,7 +132,8 @@ export function SystemControlsModal() {
 		model.playbackAuthority.mappedSources.length +
 		model.playbackAuthority.virtualSources.length +
 		model.programmers.length +
-		model.playbackAuthority.dynamics.length;
+		model.playbackAuthority.dynamics.length +
+		(model.preload.active ? 1 : 0);
 	return (
 		<ModalPortal>
 			<div
@@ -161,10 +166,12 @@ export function SystemControlsModal() {
 							disabled={
 								model.stoppingAll ||
 								!model.playbackAuthority.ready ||
+								!model.preload.ready ||
 								(model.playbackAuthority.sources.length > 0 &&
 									!model.playbackAuthority.canRelease) ||
 								(!model.playbackAuthority.sources.length &&
-									!model.programmers.length)
+									!model.programmers.length &&
+									!model.preload.active)
 							}
 							onClick={() => void model.stopEverything()}
 						>

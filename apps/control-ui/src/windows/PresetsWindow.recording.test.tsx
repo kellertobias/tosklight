@@ -10,7 +10,6 @@ import { PresetsWindow } from "./PresetsWindow";
 
 const mocks = vi.hoisted(() => ({
 	state: {
-		preload: "idle",
 		presetFamily: "Color",
 		presetPoolColors: true,
 		presetGroupsVisible: false,
@@ -24,6 +23,15 @@ const mocks = vi.hoisted(() => ({
 	commandReset: vi.fn(async () => true),
 	storePreload: vi.fn(async () => true),
 	recall: vi.fn(async () => null),
+	preload: {
+		ready: true,
+		armed: false,
+		active: false,
+		pending: false,
+		phase: "idle" as const,
+		error: null,
+		actions: null,
+	},
 }));
 
 vi.mock("../api/ServerContext", () => ({
@@ -47,6 +55,10 @@ vi.mock("../features/presetRecall/PresetRecallProvider", () => ({
 vi.mock("../features/presetRecording/PresetRecordingProvider", () => ({
 	usePresetRecording: () => ({ record: mocks.record }),
 }));
+vi.mock(
+	"../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView",
+	() => ({ useProgrammerPreloadLifecycleView: () => mocks.preload }),
+);
 vi.mock("../components/control/commandLine/useCommandLineSurface", () => ({
 	useCommandLineSurface: () => ({ reset: mocks.commandReset }),
 }));
@@ -59,7 +71,8 @@ function firstPresetCell() {
 }
 
 beforeEach(() => {
-	mocks.state.preload = "idle";
+	mocks.preload.armed = false;
+	mocks.preload.active = false;
 	mocks.state.storeArmed = true;
 	mocks.presets = [];
 	mocks.dispatch.mockClear();
@@ -199,7 +212,7 @@ describe("PresetsWindow normal recording boundary", () => {
 	});
 
 	it("keeps Preload recording on its established path", () => {
-		mocks.state.preload = "active";
+		mocks.preload.active = true;
 		render(<PresetsWindow compact />);
 
 		fireEvent.click(firstPresetCell());

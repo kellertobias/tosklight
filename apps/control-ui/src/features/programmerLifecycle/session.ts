@@ -67,6 +67,15 @@ export class ProgrammerLifecycleSession {
 		this.storeScope = null;
 	}
 
+	async repairAuthority(error: Error) {
+		if (this.stopped || this.storeScope === null || this.references === 0)
+			throw new Error("The Programmer lifecycle authority is unavailable");
+		await this.repair(this.lifecycle, error);
+		const state = this.store.getSnapshot();
+		if (state.repairRequired)
+			throw state.error ?? new Error("Programmer lifecycle repair failed");
+	}
+
 	private scheduleRefresh(delay = 0) {
 		if (this.stopped) return;
 		if (delay === 0) this.clearReconnect();

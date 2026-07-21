@@ -27,6 +27,7 @@ export function lifecycleRow(
 		connected: true,
 		selectedFixtureCount: 2,
 		normalValueCount: 3,
+		preloadActive: false,
 		sessions: [{ sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }],
 		...overrides,
 	};

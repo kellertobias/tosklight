@@ -18,7 +18,6 @@ const server = {
 	resetCommandLine: vi.fn(),
 	clearProgrammer: vi.fn(),
 	undoProgrammer: vi.fn(),
-	preloadAction: vi.fn().mockResolvedValue(undefined),
 	executeCommandLine: vi.fn().mockResolvedValue(true),
 	setCommandLine: vi.fn(),
 	setControlTiming: vi.fn(),
@@ -39,7 +38,6 @@ const server = {
 const state = {
 	storeArmed: false,
 	cueListSetArmed: false,
-	preload: "idle",
 	builtIn: null as string | null,
 	activeDeskId: "programming",
 	desks: [
@@ -65,6 +63,20 @@ const programmerValuesActions = {
 };
 const selectionActions = {
 	replace: vi.fn().mockResolvedValue(null),
+};
+const preloadLifecycle = {
+	ready: true,
+	armed: false,
+	active: false,
+	pending: false,
+	phase: "idle" as const,
+	error: null,
+	actions: {
+		enter: vi.fn().mockResolvedValue(null),
+		go: vi.fn().mockResolvedValue(null),
+		clearPending: vi.fn().mockResolvedValue(null),
+		release: vi.fn().mockResolvedValue(null),
+	},
 };
 const commandProjection = {
 	text: "FIXTURE",
@@ -110,6 +122,10 @@ vi.mock("../../features/programmerValues/useProgrammerValuesActivity", () => ({
 vi.mock("../../features/programmerValues/ProgrammerValuesView", () => ({
 	useProgrammerValuesActions: () => programmerValuesActions,
 }));
+vi.mock(
+	"../../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView",
+	() => ({ useProgrammerPreloadLifecycleView: () => preloadLifecycle }),
+);
 vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", () => ({
 	usePlaybackDeskView: () => playbackDesk,
 	usePlaybackRuntimeStatus: () => ({ status: runtimeStatus, error: null }),
@@ -139,7 +155,10 @@ afterEach(() => {
 	commandProjection.text = "FIXTURE";
 	commandProjection.pristine = true;
 	state.shiftArmed = false;
-	state.preload = "idle";
+	preloadLifecycle.ready = true;
+	preloadLifecycle.armed = false;
+	preloadLifecycle.active = false;
+	preloadLifecycle.pending = false;
 	state.activeDeskId = "programming";
 	server.playbacks.selected_playback = 42;
 	playbackDesk = { active_page: 1, selected_playback: 42 };
@@ -208,7 +227,7 @@ describe("NumericPad Clear and SET routing", () => {
 	});
 
 	it("routes Clear through the active Preload authority", () => {
-		state.preload = "blind";
+		preloadLifecycle.armed = true;
 		valuesActivity.current = {
 			authority: "preload",
 			ready: true,
@@ -221,7 +240,7 @@ describe("NumericPad Clear and SET routing", () => {
 		expect(clear).toHaveClass("clear-warning");
 		fireEvent.click(clear);
 
-		expect(server.preloadAction).toHaveBeenCalledWith("clear");
+		expect(preloadLifecycle.actions.clearPending).toHaveBeenCalledOnce();
 		expect(programmerValuesActions.clear).not.toHaveBeenCalled();
 	});
 

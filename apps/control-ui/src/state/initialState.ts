@@ -13,8 +13,6 @@ export const initialState: AppState = {
 	maximizedPaneId: null,
 	windowPicker: null,
 	savingDesk: false,
-	preload: "idle",
-	preloadActive: false,
 	speedGroup: "A",
 	playbackColumns: 8,
 	playbackRows: 1,

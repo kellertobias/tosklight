@@ -10,16 +10,6 @@ describe("appReducer control mode and pane geometry", () => {
 		).toBe("programmer");
 	});
 
-	it("cycles preload from blind to output and supports release", () => {
-		const blind = appReducer(initialState, { type: "ADVANCE_PRELOAD" });
-		expect(blind.preload).toBe("blind");
-		const output = appReducer(blind, { type: "ADVANCE_PRELOAD" });
-		expect(output.preload).toBe("output");
-		expect(appReducer(output, { type: "RELEASE_PRELOAD" }).preload).toBe(
-			"idle",
-		);
-	});
-
 	it("keeps resized panes inside the 24 by 18 grid", () => {
 		const isolated = {
 			...initialState,

@@ -99,10 +99,6 @@ export class ProgrammingApiClient {
 		});
 	}
 
-	preload(action: "enter" | "go" | "clear" | "release") {
-		return this.transport.command(`preload.${action}`, {});
-	}
-
 	controlFixtureAction(fixtureId: string, actionId: string, active: boolean) {
 		return this.transport.command("programmer.control_action", {
 			fixture_id: fixtureId,

@@ -7,14 +7,6 @@ export function reduceControls(
 	action: Action,
 ): AppState | undefined {
 	switch (action.type) {
-		case "ADVANCE_PRELOAD":
-			return {
-				...state,
-				preload: state.preload === "blind" ? "output" : "blind",
-				preloadActive: state.preload === "blind" ? true : state.preloadActive,
-			};
-		case "RELEASE_PRELOAD":
-			return { ...state, preload: "idle", preloadActive: false };
 		case "SET_SPEED_GROUP":
 			return { ...state, speedGroup: action.value };
 		case "SET_PLAYBACK_LAYOUT":

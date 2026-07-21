@@ -45,7 +45,7 @@ export function decodeProgrammerPreloadPlaybackQueueSnapshot(
 	const snapshot = exactRecordAt(value, "$", ["cursor", "projection"]);
 	return {
 		cursor: decodeCursor(snapshot.cursor, "$.cursor"),
-		projection: decodeProjection(
+		projection: decodeProgrammerPreloadPlaybackQueueProjection(
 			snapshot.projection,
 			"$.projection",
 			expectedUserId,
@@ -79,7 +79,7 @@ export function decodeProgrammerPreloadPlaybackQueueEventMessage(
 	return decodeEvent(message.event, expectedUserId);
 }
 
-function decodeProjection(
+export function decodeProgrammerPreloadPlaybackQueueProjection(
 	value: unknown,
 	path: string,
 	expectedUserId: string,
@@ -168,7 +168,7 @@ function decodeEvent(
 		type: "event",
 		sequence,
 		correlationId: nullableUuid(event.correlation_id, "$.event.correlation_id"),
-		projection: decodeProjection(
+		projection: decodeProgrammerPreloadPlaybackQueueProjection(
 			change.projection,
 			"$.event.payload.change.projection",
 			expectedUserId,

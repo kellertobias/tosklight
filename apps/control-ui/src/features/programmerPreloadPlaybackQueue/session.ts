@@ -73,6 +73,16 @@ export class ProgrammerPreloadPlaybackQueueSession {
 		this.storeScope = null;
 	}
 
+	async repairAuthority(error: Error) {
+		if (this.stopped || this.storeScope === null)
+			throw new Error("The Preload playback queue session is unavailable");
+		if (this.references > 0) await this.repair(this.lifecycle, error);
+		else await this.repairWithoutStream(error);
+		const state = this.store.getSnapshot();
+		if (state.repairRequired)
+			throw state.error ?? new Error("Preload playback queue repair failed");
+	}
+
 	private scheduleRefresh(delay = 0) {
 		if (this.stopped) return;
 		if (delay === 0) this.clearReconnect();
@@ -211,6 +221,16 @@ export class ProgrammerPreloadPlaybackQueueSession {
 		} catch (reason) {
 			if (this.isCurrent(generation)) this.fail(asError(reason));
 		}
+	}
+
+	private async repairWithoutStream(error: Error) {
+		const expectedScope = this.expectedStoreScope();
+		this.store.setRepairRequired(error, expectedScope);
+		this.onError?.(error);
+		const snapshot = await this.loadSnapshot();
+		if (!this.store.installRepairSnapshot(snapshot, expectedScope))
+			throw this.scopeError("repair snapshot");
+		this.onError?.(null);
 	}
 
 	private fail(error: Error) {

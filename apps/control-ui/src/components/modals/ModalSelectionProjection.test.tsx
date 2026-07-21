@@ -48,7 +48,6 @@ const mocks = vi.hoisted(() => {
 		setMaster: vi.fn(async () => undefined),
 		playbackAction: vi.fn(async () => undefined),
 		clearProgrammer: vi.fn(async () => undefined),
-		preloadAction: vi.fn(async () => undefined),
 	};
 	Object.defineProperty(server, "selectedFixtures", {
 		get() {

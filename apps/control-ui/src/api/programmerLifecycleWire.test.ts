@@ -16,6 +16,7 @@ function programmer() {
 		connected: true,
 		selected_fixture_count: 2,
 		normal_value_count: 3,
+		preload_active: true,
 		sessions: [{ session_id: SESSION_ID }],
 	};
 }
@@ -59,11 +60,23 @@ describe("Programmer lifecycle wire decoding", () => {
 						connected: true,
 						selectedFixtureCount: 2,
 						normalValueCount: 3,
+						preloadActive: true,
 						sessions: [{ sessionId: SESSION_ID }],
 					},
 				],
 			},
 		});
+	});
+
+	it("requires the authoritative Preload-active field", () => {
+		const missing = programmer() as Record<string, unknown>;
+		delete missing.preload_active;
+		expect(() =>
+			decodeProgrammerLifecycleSnapshot({
+				cursor: { sequence: 1 },
+				projection: { revision: 1, programmers: [missing] },
+			}),
+		).toThrow(/preload_active/);
 	});
 
 	it("rejects undeclared Programmer content and selection identities", () => {

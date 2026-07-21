@@ -48,6 +48,7 @@ function row() {
 		connected: true,
 		selected_fixture_count: 2,
 		normal_value_count: 1,
+		preload_active: false,
 		sessions: [{ session_id: SESSION_ID }],
 	};
 }

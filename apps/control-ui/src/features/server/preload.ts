@@ -4,7 +4,7 @@ import { reconcileShowObject } from "./showObjectMutations";
 
 export function createPreloadActions(
 	model: ServerController,
-): Pick<ServerContextValue, "preloadAction" | "storePreload" | "storeDynamic"> {
+): Pick<ServerContextValue, "storePreload" | "storeDynamic"> {
 	const {
 		client,
 		setError,
@@ -15,14 +15,6 @@ export function createPreloadActions(
 		refresh,
 	} = model;
 	return {
-		preloadAction: async (action) => {
-			try {
-				await client.preload(action);
-				setError(null);
-			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
-			}
-		},
 		storePreload: async (input, revision) => {
 			try {
 				if (!bootstrap?.active_show)

@@ -71,7 +71,8 @@ function DemoActions({ pad }: { pad: NumericPadController }) {
 				{pad.state.updateArmed ? "UPDATE" : "RECORD"}
 			</Button>
 			<Button
-				className={`demo-preload ${pad.state.preload === "blind" ? "preload-go" : ""}`}
+				className={`demo-preload ${pad.preload.armed ? "preload-go" : ""}`}
+				disabled={!pad.preload.ready}
 				style={{ gridColumn: 2, gridRow: 1 }}
 				onClick={() => void pad.advancePreload()}
 			>

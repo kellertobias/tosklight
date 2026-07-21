@@ -48,11 +48,20 @@ export interface ProgrammerPreloadValuesViewProviderProps {
 	onMutationError?: (error: Error | null) => void;
 }
 
+export interface ProgrammerPreloadValuesAuthority {
+	store: ProgrammerPreloadValuesStore;
+	activate(): () => void;
+	repairAuthority(error: Error): Promise<void>;
+}
+
 const StoreContext = createContext<ProgrammerPreloadValuesStore | null>(null);
 const SessionContext = createContext<ProgrammerPreloadValuesSession | null>(
 	null,
 );
 const ActionsContext = createContext<ProgrammerPreloadValuesActions | null>(
+	null,
+);
+const AuthorityContext = createContext<ProgrammerPreloadValuesAuthority | null>(
 	null,
 );
 const EnabledContext = createContext(false);
@@ -139,6 +148,17 @@ export function ProgrammerPreloadValuesViewProvider({
 			userId,
 		],
 	);
+	const authority = useMemo<ProgrammerPreloadValuesAuthority | null>(
+		() =>
+			session
+				? {
+						store,
+						activate: () => session.activate(),
+						repairAuthority: (error) => session.repairAuthority(error),
+					}
+				: null,
+		[session, store],
+	);
 	useLayoutEffect(() => {
 		store.reset(showId, userId, authorityKey);
 	}, [authorityKey, showId, store, userId]);
@@ -150,13 +170,15 @@ export function ProgrammerPreloadValuesViewProvider({
 	return (
 		<StoreContext.Provider value={store}>
 			<SessionContext.Provider value={session}>
-				<EnabledContext.Provider value={captureEnabled}>
-					<ActionsContext.Provider
-						value={captureEnabled ? (actions ?? writer) : null}
-					>
-						{children}
-					</ActionsContext.Provider>
-				</EnabledContext.Provider>
+				<AuthorityContext.Provider value={authority}>
+					<EnabledContext.Provider value={captureEnabled}>
+						<ActionsContext.Provider
+							value={captureEnabled ? (actions ?? writer) : null}
+						>
+							{children}
+						</ActionsContext.Provider>
+					</EnabledContext.Provider>
+				</AuthorityContext.Provider>
 			</SessionContext.Provider>
 		</StoreContext.Provider>
 	);
@@ -203,6 +225,10 @@ export function useProgrammerPreloadValuesActions() {
 
 export function useProgrammerPreloadValuesStore() {
 	return useContext(StoreContext) ?? fallbackStore;
+}
+
+export function useProgrammerPreloadValuesAuthority() {
+	return useContext(AuthorityContext);
 }
 
 function usePreloadViewActivation(enabled: boolean) {

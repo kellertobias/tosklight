@@ -16,6 +16,7 @@ import { usePlaybackTopologyBoundaries } from "./usePlaybackTopologyBoundaries";
 import { usePresetRecallBoundaries } from "./usePresetRecallBoundaries";
 import { usePresetRecordingBoundaries } from "./usePresetRecordingBoundaries";
 import { useProgrammerLifecycleBoundaries } from "./useProgrammerLifecycleBoundaries";
+import { useProgrammerPreloadLifecycleBoundaries } from "./useProgrammerPreloadLifecycleBoundaries";
 import { useProgrammerPriorityBoundaries } from "./useProgrammerPriorityBoundaries";
 import { useProgrammerValuesBoundaries } from "./useProgrammerValuesBoundaries";
 import { useProgrammingUpdateBoundaries } from "./useProgrammingUpdateBoundaries";
@@ -27,6 +28,7 @@ export function useServerFeatureBoundaries(state: ServerState) {
 	);
 	const programmerValues = useProgrammerValuesBoundaries(state);
 	const programmerLifecycle = useProgrammerLifecycleBoundaries(state);
+	const programmerPreloadLifecycle = useProgrammerPreloadLifecycleBoundaries(state);
 	const programmerPriority = useProgrammerPriorityBoundaries(state);
 	const presetRecording = usePresetRecordingBoundaries(state);
 	const presetRecall = usePresetRecallBoundaries(state);
@@ -137,6 +139,7 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		programmingTransport,
 		programmingAuthorityKey,
 		...programmerLifecycle,
+		...programmerPreloadLifecycle,
 		...programmerPriority,
 		...programmerValues,
 		...presetRecording,

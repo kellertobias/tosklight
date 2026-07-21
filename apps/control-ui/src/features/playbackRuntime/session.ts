@@ -39,6 +39,7 @@ export class PlaybackRuntimeSession {
 	private reconnectTimer: ReturnType<typeof globalThis.setTimeout> | null =
 		null;
 	private repairRunning = false;
+	private repairPromise: Promise<void> | null = null;
 
 	constructor(options: PlaybackRuntimeSessionOptions) {
 		this.showId = options.showId;
@@ -80,6 +81,20 @@ export class PlaybackRuntimeSession {
 		this.lifecycle++;
 		this.clearReconnect();
 		this.closeStream();
+	}
+
+	async repairAuthority(error: Error) {
+		if (
+			this.storeScope === null ||
+			!this.store.isScopeCurrent(this.storeScope) ||
+			!this.scope.hasViews()
+		)
+			throw new Error("The Playback runtime authority is unavailable");
+		this.store.setError(error);
+		this.onError?.(error);
+		await this.repair(this.lifecycle);
+		if (this.store.getSnapshot().status === "error")
+			throw this.store.getSnapshot().error ?? error;
 	}
 
 	private scheduleRefresh(delay = 0) {
@@ -180,10 +195,19 @@ export class PlaybackRuntimeSession {
 			this.store.applyDesk(projection, message.sequence);
 	}
 
-	private async repair(generation: number) {
-		if (this.repairRunning) return;
-		const identities = this.scope.values();
+	private repair(generation: number) {
+		if (this.repairRunning) return this.repairPromise ?? Promise.resolve();
+		const repair = this.performRepair(generation).finally(() => {
+			this.repairRunning = false;
+			if (this.repairPromise === repair) this.repairPromise = null;
+		});
 		this.repairRunning = true;
+		this.repairPromise = repair;
+		return repair;
+	}
+
+	private async performRepair(generation: number) {
+		const identities = this.scope.values();
 		try {
 			const snapshots = await this.loadSnapshots(identities);
 			if (
@@ -202,8 +226,6 @@ export class PlaybackRuntimeSession {
 			this.onError?.(null);
 		} catch (reason) {
 			if (generation === this.lifecycle) this.protocolReset(asError(reason));
-		} finally {
-			this.repairRunning = false;
 		}
 	}
 

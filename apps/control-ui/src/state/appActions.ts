@@ -119,8 +119,6 @@ export type Action =
 	| { type: "SAVE_DESK_TO"; id: string }
 	| { type: "OPEN_WINDOW_PICKER"; rect: GridRect | null }
 	| { type: "ADD_WINDOW"; kind: BuiltInWindow }
-	| { type: "ADVANCE_PRELOAD" }
-	| { type: "RELEASE_PRELOAD" }
 	| { type: "SET_SPEED_GROUP"; value: AppState["speedGroup"] }
 	| { type: "SET_PLAYBACK_LAYOUT"; columns: number; rows: number }
 	| { type: "SET_PLAYBACK_PAGE"; page: number }

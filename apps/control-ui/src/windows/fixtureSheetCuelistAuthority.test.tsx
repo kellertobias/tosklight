@@ -133,7 +133,6 @@ const server = {
 };
 
 const state = {
-	preload: "idle",
 	fixtureGroupsVisible: false,
 	fixtureSheetOrder: "fixture-id" as const,
 	fixtureSheetActiveOnly: false,
@@ -149,6 +148,20 @@ vi.mock("../features/programmingInteraction/ProgrammingInteractionView", () => (
 	useProgrammingSelectionView: () => ({ selected: [] }),
 	useProgrammingSelectionActions: () => ({ gesture: vi.fn() }),
 }));
+vi.mock(
+	"../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView",
+	() => ({
+		useProgrammerPreloadLifecycleView: () => ({
+			ready: true,
+			armed: false,
+			active: false,
+			pending: false,
+			phase: "idle",
+			error: null,
+			actions: null,
+		}),
+	}),
+);
 vi.mock("../features/server/useShowObjectsState", () => ({
 	useGroups: () => [],
 }));

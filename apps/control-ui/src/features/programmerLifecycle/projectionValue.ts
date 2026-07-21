@@ -60,6 +60,8 @@ function canonicalRow(row: ProgrammerLifecycleRow): ProgrammerLifecycleRow {
 	assertIdentifier(row.userId, "user ID");
 	if (typeof row.connected !== "boolean")
 		throw protocolError("connected must be a boolean");
+	if (typeof row.preloadActive !== "boolean")
+		throw protocolError("Preload active must be a boolean");
 	assertNonNegativeInteger(row.selectedFixtureCount, "selected fixture count");
 	assertNonNegativeInteger(row.normalValueCount, "normal value count");
 	const sessions = row.sessions.map(canonicalSession);

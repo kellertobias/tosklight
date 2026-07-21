@@ -84,6 +84,7 @@ function decodeProgrammer(
 		"connected",
 		"selected_fixture_count",
 		"normal_value_count",
+		"preload_active",
 		"sessions",
 	]);
 	return {
@@ -98,6 +99,7 @@ function decodeProgrammer(
 			row.normal_value_count,
 			`${path}.normal_value_count`,
 		),
+		preloadActive: booleanAt(row.preload_active, `${path}.preload_active`),
 		sessions: arrayAt(row.sessions, `${path}.sessions`).map((session, index) =>
 			decodeSession(session, `${path}.sessions[${index}]`),
 		),

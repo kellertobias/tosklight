@@ -104,7 +104,6 @@ const server = {
 	selectionGesture: vi.fn().mockResolvedValue(undefined),
 };
 const state = {
-	preload: "idle",
 	fixtureGroupsVisible: false,
 	fixtureSheetOrder: "fixture-id" as const,
 	fixtureSheetActiveOnly: false,
@@ -157,6 +156,20 @@ vi.mock("../features/groupRuntime/groupRuntimeAuthority", () => ({
 		setFlash: vi.fn(),
 	}),
 }));
+vi.mock(
+	"../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView",
+	() => ({
+		useProgrammerPreloadLifecycleView: () => ({
+			ready: true,
+			armed: false,
+			active: false,
+			pending: false,
+			phase: "idle",
+			error: null,
+			actions: null,
+		}),
+	}),
+);
 vi.mock("./fixtureSheetCuelistAuthority", () => ({
 	useFixtureSheetCuelistAuthority: () => ({
 		ready: true,
