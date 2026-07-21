@@ -1,5 +1,6 @@
 import type { ApiDriver } from "../../../apps/control-ui/e2e/bench/api";
 import { expect } from "../../../apps/control-ui/e2e/bench/fixtures";
+import { goCueListPlayback } from "../../../apps/control-ui/e2e/bench/playbackRuntimeAction";
 import { recallPreset } from "../../../apps/control-ui/e2e/bench/presetRecall";
 import { clearProgrammerValues } from "../../../apps/control-ui/e2e/bench/programmerValues";
 import type { FoundationalCase } from "./case";
@@ -168,7 +169,12 @@ async function verifyLiveSpreadStorage(api: ApiDriver, bench: BenchDriver) {
 	});
 	await expectSlotsAfterTick(bench, 3_000, expected);
 	await clearProgrammerValues(api, { surface: "api", showId });
-	await api.command("playback.go", { cue_list_id: cueListId });
+	await goCueListPlayback(api, {
+		surface: "api",
+		showId,
+		playbackNumber: 1,
+		cueListId,
+	});
 	await expectSlotsAfterTick(bench, 3_000, expected);
 }
 
@@ -206,7 +212,12 @@ async function verifyDereferencedSpreadStorage(
 	});
 	await expectSlotsAfterTick(bench, 3_000, expected);
 	await clearProgrammerValues(api, { surface: "api", showId });
-	await api.command("playback.go", { cue_list_id: cueListId });
+	await goCueListPlayback(api, {
+		surface: "api",
+		showId,
+		playbackNumber: 2,
+		cueListId,
+	});
 	await expectSlotsAfterTick(bench, 3_000, expected);
 }
 

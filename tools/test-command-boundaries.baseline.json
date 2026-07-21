@@ -2,12 +2,10 @@
 	"version": 2,
 	"directActionCommands": {
 		"tests/04-osc-api-and-cross-surface.spec.ts": 5,
-		"tests/09-cue-navigation-v1-compatibility.spec.ts": 6,
-		"tests/support/foundational/supplementalAfter.ts": 2
+		"tests/09-cue-navigation-v1-compatibility.spec.ts": 6
 	},
 	"directActionFamilies": {
 		"not.a.command": 1,
-		"playback.go": 2,
 		"programmer.command_line": 1,
 		"programmer.command_target": 1,
 		"programmer.execute": 6,
