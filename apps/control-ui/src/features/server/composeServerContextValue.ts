@@ -14,7 +14,6 @@ import type { ServerController } from "./model";
 import { createMvrActions } from "./mvr";
 import { createOutputActions } from "./output";
 import { createPatchActions } from "./patch";
-import { createPlaybackRuntimeActions } from "./playbackRuntime";
 import { createPreloadActions } from "./preload";
 import { createPresetActions } from "./presets";
 import { createProgrammerSelectionActions } from "./programmerSelection";
@@ -34,7 +33,6 @@ export function composeServerContextValue(model: ServerController) {
 		...createCommandLineActions(model),
 		...createProgrammerSelectionActions(model),
 		...createFixtureProgrammingActions(model),
-		...createPlaybackRuntimeActions(model),
 		...createOutputActions(model),
 		...createShowLifecycleActions(model),
 		...createShowRevisionActions(model),

@@ -186,6 +186,34 @@ function typeScriptDependencyDirections() {
     fail("generated wire DTOs must be consumed and validated by the frontend API boundary");
 }
 
+const legacyPlaybackPatterns = [
+  ["server.playbacks", /\bserver\s*\.\s*playbacks\b/u],
+  ["state.playbacks", /\bstate\s*\.\s*playbacks\b/u],
+  ["setPlaybacks", /\bsetPlaybacks\b/u],
+  ["client.playbacks()", /\bclient\s*\.\s*playbacks\s*\(/u],
+  ["the broad /api/v1/playbacks endpoint", /["'`]\/api\/v1\/playbacks(?:[/?"'`])/u],
+  ["the legacy useGroups helper", /\buseGroups\b/u],
+];
+
+function isProductionTypeScript(file) {
+  const name = relative(file);
+  return (
+    /\.[cm]?tsx?$/u.test(file) &&
+    !name.includes("/__tests__/") &&
+    !/\.(?:test|spec)\.[cm]?tsx?$/u.test(name)
+  );
+}
+
+function legacyPlaybackSnapshotBoundaries() {
+  const sourceRoot = path.join(repositoryRoot, "apps/control-ui/src");
+  for (const file of walk(sourceRoot).filter(isProductionTypeScript)) {
+    const source = fs.readFileSync(file, "utf8");
+    for (const [description, pattern] of legacyPlaybackPatterns)
+      if (pattern.test(source))
+        fail(`${relative(file)} reintroduces ${description}; use scoped Playback authority`);
+  }
+}
+
 function testCommandBoundaries() {
   const baselinePath = path.join(repositoryRoot, "tools/test-command-boundaries.baseline.json");
   if (!fs.existsSync(baselinePath)) {
@@ -202,6 +230,7 @@ serverEntrypointIsThin();
 activeShowMutationDirections();
 playbackOwnershipBoundaries();
 typeScriptDependencyDirections();
+legacyPlaybackSnapshotBoundaries();
 testCommandBoundaries();
 
 if (failures.length > 0) {

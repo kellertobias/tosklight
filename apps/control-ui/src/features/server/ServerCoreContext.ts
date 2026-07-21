@@ -12,7 +12,6 @@ import type {
 	OutputRoute,
 	PatchLayer,
 	PatchSnapshot,
-	PlaybackSnapshot,
 	SessionResponse,
 	ShowEntry,
 	VersionedObject,
@@ -52,7 +51,6 @@ export interface ServerCoreContext
 	patch: PatchSnapshot | null;
 	outputRoutes: VersionedObject<OutputRoute>[];
 	patchLayers: VersionedObject<PatchLayer>[];
-	playbacks: PlaybackSnapshot | null;
 	shows: ShowEntry[];
 	configuration: DeskConfiguration | null;
 	matter: MatterBridgeStatus | null;

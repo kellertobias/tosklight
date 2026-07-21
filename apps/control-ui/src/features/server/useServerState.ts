@@ -11,7 +11,6 @@ import type {
 	OutputRoute,
 	PatchLayer,
 	PatchSnapshot,
-	PlaybackSnapshot,
 	ScreenSnapshot,
 	SessionResponse,
 	ShowEntry,
@@ -45,7 +44,6 @@ export function useServerState() {
 	const [patchLayers, setPatchLayers] = useState<VersionedObject<PatchLayer>[]>(
 		[],
 	);
-	const [playbacks, setPlaybacks] = useState<PlaybackSnapshot | null>(null);
 	const featureStores = useServerFeatureStores();
 	const [screens, setScreens] = useState<ScreenSnapshot | null>(null);
 	const [shows, setShows] = useState<ShowEntry[]>([]);
@@ -109,8 +107,6 @@ export function useServerState() {
 		setOutputRoutes,
 		patchLayers,
 		setPatchLayers,
-		playbacks,
-		setPlaybacks,
 		...featureStores,
 		screens,
 		setScreens,

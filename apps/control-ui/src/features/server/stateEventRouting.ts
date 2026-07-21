@@ -21,15 +21,6 @@ function refreshHighlight(event: ServerEvent, state: ServerState) {
 		.catch(() => undefined);
 }
 
-function refreshPlaybackState(event: ServerEvent, state: ServerState) {
-	const kinds = ["show_opened"];
-	if (!kinds.includes(event.kind)) return;
-	void state.client
-		.playbacks()
-		.then(state.setPlaybacks)
-		.catch(() => undefined);
-}
-
 function refreshConfiguration(event: ServerEvent, state: ServerState) {
 	const kinds = [
 		"server_configuration_changed",
@@ -280,7 +271,6 @@ export function createStateEventRouter(
 	return (event: ServerEvent) => {
 		const state = getState();
 		refreshHighlight(event, state);
-		refreshPlaybackState(event, state);
 		refreshConfiguration(event, state);
 		refreshScreens(event, state);
 		refreshBootstrap(event, session, getState, loadShowObjects);

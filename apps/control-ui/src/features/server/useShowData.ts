@@ -110,14 +110,12 @@ export function useServerRefresh(
 		setMatter,
 		setMediaServers,
 		setPatch,
-		setPlaybacks,
 		setShows,
 	} = state;
 	return useCallback(async () => {
 		const bootstrap = await client.bootstrap();
 		setBootstrap(bootstrap);
 		setPatch(await client.patch());
-		if (client.currentSession) setPlaybacks(await client.playbacks());
 		setShows(await client.shows());
 		const configuration = await client.configuration();
 		setConfiguration(configuration.configuration);
@@ -144,7 +142,6 @@ export function useServerRefresh(
 		setMatter,
 		setMediaServers,
 		setPatch,
-		setPlaybacks,
 		setShows,
 	]);
 }

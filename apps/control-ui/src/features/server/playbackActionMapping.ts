@@ -54,19 +54,6 @@ export function poolPlaybackRequest(
 	);
 }
 
-export function cueListPlaybackRequest(
-	cueListId: string,
-	action: "go" | "back" | "pause" | "release",
-): PlaybackActionRequest {
-	return actionRequest(
-		{ kind: "cue_list", cue_list_id: cueListId },
-		action === "release"
-			? { type: "release" }
-			: { type: action, pressed: true },
-		"virtual",
-	);
-}
-
 function actionRequest(
 	address: PlaybackAddress,
 	action: PlaybackAction,

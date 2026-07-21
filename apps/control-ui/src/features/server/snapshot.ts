@@ -16,7 +16,6 @@ export function createServerSnapshotValue(
 	| "patch"
 	| "outputRoutes"
 	| "patchLayers"
-	| "playbacks"
 	| "screens"
 	| "shows"
 	| "configuration"
@@ -53,7 +52,6 @@ export function createServerSnapshotValue(
 		patch,
 		outputRoutes,
 		patchLayers,
-		playbacks,
 		screens,
 		shows,
 		configuration,
@@ -92,7 +90,6 @@ export function createServerSnapshotValue(
 		patch,
 		outputRoutes,
 		patchLayers,
-		playbacks,
 		screens,
 		shows,
 		configuration,

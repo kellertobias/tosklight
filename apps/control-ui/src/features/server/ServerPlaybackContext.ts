@@ -5,10 +5,6 @@ import type {
 } from "../../api/types";
 
 export interface ServerPlaybackContext {
-	playbackAction: (
-		cueListId: string,
-		action: "go" | "back" | "pause" | "release",
-	) => Promise<void>;
 	readDmx: () => Promise<DmxSnapshot>;
 	readVisualization: (preload?: boolean) => Promise<VisualizationSnapshot>;
 	setDmxOverride: (

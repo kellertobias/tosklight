@@ -47,7 +47,8 @@ function apply<T>(current: T, next: T | ((value: T) => T)) {
 
 function createHarness(showId = "show-a") {
 	const loadShowObjects = vi.fn().mockResolvedValue(undefined);
-	const client = {
+	const unexpectedLegacyPlaybackRead = vi.fn();
+	const clientMethods = {
 		object: vi
 			.fn<
 				(
@@ -66,7 +67,6 @@ function createHarness(showId = "show-a") {
 			),
 		objects: vi.fn().mockResolvedValue([]),
 		patch: vi.fn().mockResolvedValue({ revision: 3, fixtures: [], routes: [] }),
-		playbacks: vi.fn().mockResolvedValue({ cue_lists: [], active: [] }),
 		bootstrap: vi.fn().mockResolvedValue(bootstrap(showId)),
 		configuration: vi.fn().mockResolvedValue({ configuration: {}, matter: {} }),
 		screens: vi.fn().mockResolvedValue({ screens: [], active_pages: {} }),
@@ -78,6 +78,15 @@ function createHarness(showId = "show-a") {
 		fixtureProfileWarnings: vi.fn().mockResolvedValue([]),
 		highlight: vi.fn().mockResolvedValue(null),
 	};
+	const client = new Proxy(clientMethods, {
+		get(target, property, receiver) {
+			if (property === "playbacks") {
+				unexpectedLegacyPlaybackRead();
+				return vi.fn().mockResolvedValue({ cue_lists: [], active: [] });
+			}
+			return Reflect.get(target, property, receiver);
+		},
+	});
 	const state = {
 		client,
 		bootstrap: bootstrap(showId),
@@ -88,7 +97,6 @@ function createHarness(showId = "show-a") {
 		deskLayout: null,
 		stageLayout: null,
 		patch: { revision: 1, fixtures: [], routes: [] },
-		playbacks: null,
 		selectedFixtures: [],
 		selectedGroupId: null,
 		commandLineWrite: { current: Promise.resolve() },
@@ -121,9 +129,6 @@ function createHarness(showId = "show-a") {
 		setPatch: vi.fn((next) => {
 			state.patch = apply(state.patch, next);
 		}),
-		setPlaybacks: vi.fn((next) => {
-			state.playbacks = apply(state.playbacks, next);
-		}),
 		setSelectedFixtures: vi.fn((next) => {
 			state.selectedFixtures = apply(state.selectedFixtures, next);
 		}),
@@ -147,6 +152,7 @@ function createHarness(showId = "show-a") {
 		client,
 		loadShowObjects,
 		state,
+		unexpectedLegacyPlaybackRead,
 		route: createServerEventRouter(() => state, session, loadShowObjects),
 	};
 }
@@ -218,8 +224,7 @@ describe("server event routing", () => {
 		const harness = createHarness();
 		harness.route(event("playback_changed", {}));
 		await Promise.resolve();
-		expect(harness.client.playbacks).not.toHaveBeenCalled();
-		expect(harness.state.setPlaybacks).not.toHaveBeenCalled();
+		expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
 	});
 });
 
@@ -243,7 +248,7 @@ describe("show object event reconciliation", () => {
 		expect(harness.client.object).toHaveBeenCalledWith("show-a", kind, id);
 		expect(harness.state[setter]).toHaveBeenCalledOnce();
 		expect(harness.client.patch).not.toHaveBeenCalled();
-		expect(harness.client.playbacks).not.toHaveBeenCalled();
+		expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
 		expect(harness.client.bootstrap).not.toHaveBeenCalled();
 		expect(harness.loadShowObjects).not.toHaveBeenCalled();
 	});
@@ -274,21 +279,32 @@ describe("show object event reconciliation", () => {
 		expect(harness.loadShowObjects).not.toHaveBeenCalled();
 	});
 
-	it.each([
-		["patched_fixture", "fixture-1", "patch", "setPatch"],
-		["playback", "1", "playbacks", "setPlaybacks"],
-		["playback_page", "1", "playbacks", "setPlaybacks"],
-	] as const)("reads only the affected %s projection", async (kind, id, request, setter) => {
+	it("reads only the affected patched Fixture projection", async () => {
 		const harness = createHarness();
-		harness.route(showObjectEvent(kind, id));
+		harness.route(showObjectEvent("patched_fixture", "fixture-1"));
 		await vi.waitFor(() =>
-			expect(harness.client[request]).toHaveBeenCalledOnce(),
+			expect(harness.client.patch).toHaveBeenCalledOnce(),
 		);
-		expect(harness.state[setter]).toHaveBeenCalledOnce();
+		expect(harness.state.setPatch).toHaveBeenCalledOnce();
 		expect(harness.client.object).not.toHaveBeenCalled();
 		expect(harness.client.bootstrap).not.toHaveBeenCalled();
 		expect(harness.loadShowObjects).not.toHaveBeenCalled();
 	});
+
+	it.each(["playback", "playback_page"])(
+		"leaves %s object events to scoped stores",
+		async (kind) => {
+			const harness = createHarness();
+			harness.route(showObjectEvent(kind, "1"));
+			await Promise.resolve();
+			await Promise.resolve();
+			expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
+			expect(harness.client.object).not.toHaveBeenCalled();
+			expect(harness.client.objects).not.toHaveBeenCalled();
+			expect(harness.client.bootstrap).not.toHaveBeenCalled();
+			expect(harness.loadShowObjects).not.toHaveBeenCalled();
+		},
+	);
 
 	it("ignores malformed, unknown, other-show, and other-user object events", async () => {
 		const harness = createHarness();
@@ -306,7 +322,7 @@ describe("show object event reconciliation", () => {
 		await Promise.resolve();
 		expect(harness.client.object).not.toHaveBeenCalled();
 		expect(harness.client.patch).not.toHaveBeenCalled();
-		expect(harness.client.playbacks).not.toHaveBeenCalled();
+		expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
 		expect(harness.loadShowObjects).not.toHaveBeenCalled();
 	});
 
@@ -619,5 +635,16 @@ describe("broad state hydration boundaries", () => {
 			expect(harness.loadShowObjects).toHaveBeenCalledWith("show-b", "user-1"),
 		);
 		expect(harness.loadShowObjects).toHaveBeenCalledOnce();
+		expect(harness.client.screens).toHaveBeenCalledOnce();
+		expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
+	});
+
+	it("refreshes only Screens for a Playback Page desk event", async () => {
+		const harness = createHarness();
+		harness.route(event("playback_page_changed", { page: 2 }, 1));
+		await vi.waitFor(() => expect(harness.client.screens).toHaveBeenCalledOnce());
+		expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
+		expect(harness.client.bootstrap).not.toHaveBeenCalled();
+		expect(harness.loadShowObjects).not.toHaveBeenCalled();
 	});
 });

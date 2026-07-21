@@ -79,7 +79,7 @@ describe("LightApiClient server selection and sessions", () => {
 				),
 			)
 			.mockResolvedValueOnce(
-				new Response(JSON.stringify({ cue_lists: [], active: [] }), {
+				new Response(JSON.stringify({ screens: [], active_pages: {} }), {
 					status: 200,
 					headers: { "content-type": "application/json" },
 				}),
@@ -88,7 +88,7 @@ describe("LightApiClient server selection and sessions", () => {
 		const client = new LightApiClient("http://desk.local");
 
 		await client.login("Operator");
-		await client.playbacks();
+		await client.screens();
 
 		expect(fetchMock.mock.calls[0][0]).toBe(
 			"http://desk.local/api/v1/sessions",

@@ -307,19 +307,6 @@ export function createShowObjectEventReconciler(
 			});
 			return;
 		}
-		if (change.kind === "playback" || change.kind === "playback_page") {
-			queue.enqueue({
-				key: projectionKey(change, "playbacks"),
-				sequence: change.sequence,
-				run: async (isCurrent) => {
-					const next = await getState().client.playbacks();
-					const state = getState();
-					if (isCurrent() && activeShowId(state) === change.showId)
-						state.setPlaybacks(next);
-				},
-			});
-			return;
-		}
 		if (!isSingleObjectKind(change.kind)) return;
 		queue.enqueue({
 			key: objectKey(change),

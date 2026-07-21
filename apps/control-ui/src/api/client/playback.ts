@@ -10,7 +10,6 @@ import type {
 	ControlDesk,
 	PlaybackDefinition,
 	PlaybackPage,
-	PlaybackSnapshot,
 	ScreenConfiguration,
 	ScreenSnapshot,
 	VirtualPlaybackExclusionSnapshot,
@@ -61,10 +60,6 @@ interface PlaybackPageSelectionOptions {
 
 export class PlaybackApiClient {
 	constructor(private readonly transport: LiveClientTransport) {}
-
-	playbacks(): Promise<PlaybackSnapshot> {
-		return this.transport.request("/api/v1/playbacks");
-	}
 
 	async playbackRuntimeSnapshot(
 		deskId: string,

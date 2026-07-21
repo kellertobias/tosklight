@@ -20,7 +20,6 @@ export function createSessionActions(
 		setBootstrap,
 		setSession,
 		setDeskLock,
-		setPlaybacks,
 	} = model;
 	return {
 		configureDeskLock: async (input) => {
@@ -81,9 +80,6 @@ export function createSessionActions(
 					current ? { ...current, desk: updated } : current,
 				);
 				setBootstrap(await client.bootstrap());
-				setPlaybacks((current) =>
-					current ? { ...current, desk: updated } : current,
-				);
 				setError(null);
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));

@@ -292,7 +292,7 @@ describe("ServerProvider Cue recording boundary", () => {
 		boundaries.recordCue.mockReset();
 		boundaries.subscribeShowObjects.mockReset();
 		const broadBootstrap = vi.spyOn(LightApiClient.prototype, "bootstrap");
-		const broadPlaybacks = vi.spyOn(PlaybackApiClient.prototype, "playbacks");
+		const unrelatedScreens = vi.spyOn(PlaybackApiClient.prototype, "screens");
 		let observer: ShowObjectsEventObserver | null = null;
 		boundaries.loadCollection.mockImplementation(
 			async (_showId: string, kind: ShowObjectKind) => ({
@@ -337,7 +337,7 @@ describe("ServerProvider Cue recording boundary", () => {
 		expect(boundaries.loadObject).not.toHaveBeenCalled();
 		expect(boundaries.subscribeShowObjects).not.toHaveBeenCalled();
 		expect(broadBootstrap).not.toHaveBeenCalled();
-		expect(broadPlaybacks).not.toHaveBeenCalled();
+		expect(unrelatedScreens).not.toHaveBeenCalled();
 
 		rendered.rerender(<Harness showCueValues />);
 		await waitFor(() =>
@@ -405,6 +405,6 @@ describe("ServerProvider Cue recording boundary", () => {
 		expect(boundaries.loadObjectSnapshot).not.toHaveBeenCalled();
 		expect(boundaries.loadObject).not.toHaveBeenCalled();
 		expect(broadBootstrap).not.toHaveBeenCalled();
-		expect(broadPlaybacks).not.toHaveBeenCalled();
+		expect(unrelatedScreens).not.toHaveBeenCalled();
 	});
 });
