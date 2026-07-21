@@ -14,19 +14,13 @@ export async function expectGroup(
 	id: string,
 	assertion: (group: VersionedObject) => void,
 ): Promise<void> {
-	await expect
-		.poll(
-			async () => {
-				const group = (await objects(api, "group")).find(
-					(item) => item.id === id,
-				);
-				expect(group).toBeDefined();
-				assertion(group!);
-				return true;
-			},
-			{ timeout: 2_000 },
-		)
-		.toBe(true);
+	await expect(async () => {
+		const group = (await objects(api, "group")).find(
+			(item) => item.id === id,
+		);
+		expect(group).toBeDefined();
+		assertion(group!);
+	}).toPass({ timeout: 2_000 });
 }
 
 export async function expectGroupMissing(
