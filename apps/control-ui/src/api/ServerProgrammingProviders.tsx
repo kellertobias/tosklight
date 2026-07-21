@@ -6,6 +6,7 @@ import { ProgrammerCaptureModeViewProvider } from "../features/programmerCapture
 import { ProgrammerLifecycleViewProvider } from "../features/programmerLifecycle/ProgrammerLifecycleView";
 import { ProgrammerPreloadPlaybackQueueViewProvider } from "../features/programmerPreloadPlaybackQueue/ProgrammerPreloadPlaybackQueueView";
 import { ProgrammerPreloadValuesViewProvider } from "../features/programmerPreloadValues/ProgrammerPreloadValuesView";
+import { ProgrammerPriorityProvider } from "../features/programmerPriority/ProgrammerPriorityView";
 import { ProgrammerValuesViewProvider } from "../features/programmerValues/ProgrammerValuesView";
 import type { CommandExecutionRequest } from "../features/programmingInteraction/commandExecution";
 import { ProgrammingInteractionViewProvider } from "../features/programmingInteraction/ProgrammingInteractionView";
@@ -79,15 +80,36 @@ function useCommandExecution(value: ServerContextValue) {
 	);
 }
 
-export function ServerProgrammingProviders({
+export function ServerProgrammingProviders(
+	props: PropsWithChildren<ServerProgrammingProvidersProps>,
+) {
+	const { state, boundaries } = props;
+	return (
+		<ProgrammerPriorityProvider
+			userId={state.session?.user.id ?? null}
+			authorityKey={boundaries.programmerPriorityAuthorityKey}
+			store={state.programmerPriorityStore}
+			transport={boundaries.programmerPriorityTransport}
+			onSessionError={boundaries.reportProgrammerPrioritySessionError}
+			onMutationError={boundaries.reportProgrammerPriorityMutationError}
+		>
+			<ServerShowProgrammingProviders {...props} />
+		</ProgrammerPriorityProvider>
+	);
+}
+
+function ProgrammingUpdateBoundary({
 	children,
+	showId,
+	userId,
 	state,
 	boundaries,
-	value,
-}: PropsWithChildren<ServerProgrammingProvidersProps>) {
-	const showId = state.bootstrap?.active_show?.id ?? null;
-	const userId = state.session?.user.id ?? null;
-	const executeCommand = useCommandExecution(value);
+}: PropsWithChildren<
+	Pick<ServerProgrammingProvidersProps, "state" | "boundaries"> & {
+		showId: string | null;
+		userId: string | null;
+	}
+>) {
 	return (
 		<ProgrammingUpdateProvider
 			showId={showId}
@@ -98,6 +120,27 @@ export function ServerProgrammingProviders({
 			store={state.showObjectsStore}
 			transport={boundaries.programmingUpdateTransport}
 			loadObject={boundaries.loadShowObject}
+		>
+			{children}
+		</ProgrammingUpdateProvider>
+	);
+}
+
+function ServerShowProgrammingProviders({
+	children,
+	state,
+	boundaries,
+	value,
+}: PropsWithChildren<ServerProgrammingProvidersProps>) {
+	const showId = state.bootstrap?.active_show?.id ?? null;
+	const userId = state.session?.user.id ?? null;
+	const executeCommand = useCommandExecution(value);
+	return (
+		<ProgrammingUpdateBoundary
+			showId={showId}
+			userId={userId}
+			state={state}
+			boundaries={boundaries}
 		>
 			<ProgrammerLifecycleViewProvider
 				authorityKey={boundaries.programmerLifecycleAuthorityKey}
@@ -220,6 +263,6 @@ export function ServerProgrammingProviders({
 					</ProgrammerCaptureModeViewProvider>
 				</PlaybackRuntimeViewProvider>
 			</ProgrammerLifecycleViewProvider>
-		</ProgrammingUpdateProvider>
+		</ProgrammingUpdateBoundary>
 	);
 }

@@ -4,6 +4,7 @@ import { ProgrammerCaptureModeStore } from "../programmerCaptureMode/store";
 import { ProgrammerLifecycleStore } from "../programmerLifecycle/store";
 import { ProgrammerPreloadPlaybackQueueStore } from "../programmerPreloadPlaybackQueue/store";
 import { ProgrammerPreloadValuesStore } from "../programmerPreloadValues/store";
+import { ProgrammerPriorityStore } from "../programmerPriority/store";
 import { ProgrammerValuesStore } from "../programmerValues/store";
 import { ProgrammingInteractionStore } from "../programmingInteraction/store";
 
@@ -16,6 +17,7 @@ export function useServerFeatureStores() {
 		programmerCaptureModeStore: useRef(new ProgrammerCaptureModeStore())
 			.current,
 		programmerLifecycleStore: useRef(new ProgrammerLifecycleStore()).current,
+		programmerPriorityStore: useRef(new ProgrammerPriorityStore()).current,
 		programmerValuesStore: useRef(new ProgrammerValuesStore()).current,
 		programmerPreloadValuesStore: useRef(new ProgrammerPreloadValuesStore())
 			.current,
