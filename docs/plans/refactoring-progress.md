@@ -1,20 +1,19 @@
 # Major Refactoring Progress
 
-Estimated progress: **97.5%**
+Estimated progress: **98%**
 
-Estimated Codex ETA: **roughly 23–42 hours of active Codex execution**, plus required reference-
+Estimated Codex ETA: **roughly 20–38 hours of active Codex execution**, plus required reference-
 hardware measurement time, to repository-wide acceptance. The Programmer, Playback, Output,
-Speed Group, Group management, and public command-family foundations are mature. Remaining work is
-concentrated in Patch and configuration authority, the last broad frontend facade consumers,
-residual portable mutations/events, and final performance/desktop acceptance.
+Speed Group, Group management, and Patch foundations are mature. Remaining work is concentrated in
+configuration/layout and shell authority, the last broad frontend facade consumers, residual
+portable mutations/events, and final performance/desktop acceptance.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-21 after completing typed Group management end to end: the application action
-family, wire contract, server route, and the scoped frontend authority that retires the last four
-Group mutations from the broad server facade.
+Last updated: 2026-07-21 after completing typed Group management end to end and finishing Patch read
+ownership, which retires the broad Patch bootstrap snapshot from the frontend facade.
 
 ## Guardrails
 
@@ -604,12 +603,33 @@ Group mutations from the broad server facade.
   generic v1 object endpoints, which already route through `ActiveShowService`, so no group-specific
   compatibility adapter remained to re-route.
 
+- [x] Finished Patch read ownership and removed the broad Patch bootstrap state. A feature-owned
+  selector layer projects the authoritative Patch store with per-element equality, so an unrelated
+  Patch delta returns the previous reference instead of rerendering a consumer; a disabled reader
+  registers no store listener, and a reader outside a mounted Patch boundary observes an inert
+  empty snapshot rather than falling back to bootstrap data. Selectors cover the whole list, exact
+  storage IDs, one exact fixture, a selection resolved through logical heads, and load status, and
+  caller-owned identity arrays are keyed so a fresh array per render cannot bust the cache.
+  All 19 production readers migrated: Parameter Controls, the Special Dialogs modal, the Color,
+  Control and Position special dialogs, System Controls lamp actions, Highlight Controls, Channels,
+  DMX, the Stage visualization and Stage command controls, the Fixture Sheet projection,
+  Group-window fixture resolution, and Cue thumbnails. Each activates Patch only while its own view
+  is active, so a covered or inactive pane opens no snapshot and no stream. DMX now reads logical
+  universes from the scoped output routes, removing the last reader of the routes copy embedded in
+  the Patch snapshot.
+  Startup no longer loads the broad Patch snapshot, the manual refresh no longer refetches it, a
+  `show_opened` event no longer triggers a Patch reload, and a `patched_fixture` object change no
+  longer refetches the whole Patch. Paperwork export reads the current Patch on demand and degrades
+  to a null Patch rather than blocking the export or masking a collection error. The Patch feature
+  boundary no longer seeds `initialFixtures` from the facade. The typed batch mutation, profile
+  snapshot, stored-show, and unpatched-fixture contracts are unchanged.
+
 ## In progress
 
 - [ ] Continue vertical feature-store/event slices and move the remaining production callers away
   from broad `useServer()`, generic show-object mutation, and one-off polling. The next coherent
-  owners are the remaining Patch readers, configuration/layout state, and the one-shot
-  Cue-thumbnail Visualization read.
+  owners are configuration/timing/Matter settings, stage and user-layout persistence, shell and
+  connection status, and the one-shot Cue-thumbnail Visualization read.
 - [ ] Add the remaining typed actions required to remove compatibility facades: standalone Playback
   `SET`, command-line bare `UPDATE`, Preset delete/transfer, output-route/user-layout, and residual
   portable-show mutations.
@@ -667,6 +687,20 @@ new scenarios may not add a direct family or raw v1 action without an exact base
   readiness/log/operator-path verification.
 
 ## Current verification snapshot
+
+- The Patch read-ownership slice passes the full frontend suite of 1,952 tests in 270 files,
+  including 7 new selector tests that prove unrelated-delta rerender isolation, own-fixture
+  invalidation, whole-list stability across an empty delta, head-selection resolution, caller array
+  identity churn, no store listener while disabled, and no bootstrap fallback outside a mounted
+  boundary. Frontend typecheck and the production Vite build pass with only the existing large-chunk
+  advisory. Rust is unaffected and re-verified: `cargo fmt --all -- --check`, 386 `light-application`
+  tests, 79 `light-wire` tests plus generated contracts, and 408 `light-server` tests with 1 ignored.
+  `node tools/check-architecture.mjs`, `node tools/check-source-size.mjs`,
+  `node tools/test-command-boundaries.mjs`, and `git diff --check` all pass.
+  Known gaps: no desktop `./build open` run and no Playwright acceptance run for this slice; the
+  rerender-isolation guarantees are proven at the selector level rather than by counting renders in
+  each migrated window; and `StageCommandControls` still derives fallback stage positions from the
+  fixture array index, so it depends on authoritative Patch ordering.
 
 - The Group management slice passes `cargo fmt --all -- --check`; all 386 `light-application` tests
   including 12 new Group-management candidate tests; all 79 `light-wire` unit tests plus
