@@ -1,14 +1,29 @@
 use light_application::{
-    ActionContext, ActionError, ProgrammingPresetActiveShowPorts, ProgrammingPresetCommit,
-    ProgrammingPresetCommitResult,
+    ActionContext, ActionError, ProgrammingPorts, ProgrammingPresetActiveShowPorts,
+    ProgrammingPresetCommit, ProgrammingPresetCommitResult, ProgrammingPresetRecordingPorts,
 };
 
 use super::super::{
     AppState, ProgrammingInstallOwner, ProgrammingOwnerGesturePolicy,
     ProgrammingOwnerHighlightPolicy, ServerActiveShowPorts,
 };
+use super::programming_ports::ServerProgrammingPorts;
 
 impl ProgrammingPresetActiveShowPorts for ServerActiveShowPorts {}
+
+impl ProgrammingPresetRecordingPorts for ServerProgrammingPorts<'_> {
+    fn authorize_preset_recording(&self, context: &ActionContext) -> Result<(), ActionError> {
+        <Self as ProgrammingPorts>::authorize(self, context)
+    }
+
+    fn commit_preset(
+        &self,
+        context: &ActionContext,
+        request: &ProgrammingPresetCommit,
+    ) -> Result<ProgrammingPresetCommitResult, ActionError> {
+        commit(self.state(), context, request)
+    }
+}
 
 pub(super) fn commit(
     state: &AppState,

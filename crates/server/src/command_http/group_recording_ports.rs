@@ -1,14 +1,29 @@
 use light_application::{
     ActionContext, ActionError, ProgrammingGroupActiveShowPorts, ProgrammingGroupCommit,
-    ProgrammingGroupCommitResult,
+    ProgrammingGroupCommitResult, ProgrammingGroupRecordingPorts, ProgrammingPorts,
 };
 
 use super::super::{
     AppState, ProgrammingInstallOwner, ProgrammingOwnerGesturePolicy,
     ProgrammingOwnerHighlightPolicy, ServerActiveShowPorts,
 };
+use super::programming_ports::ServerProgrammingPorts;
 
 impl ProgrammingGroupActiveShowPorts for ServerActiveShowPorts {}
+
+impl ProgrammingGroupRecordingPorts for ServerProgrammingPorts<'_> {
+    fn authorize_group_recording(&self, context: &ActionContext) -> Result<(), ActionError> {
+        <Self as ProgrammingPorts>::authorize(self, context)
+    }
+
+    fn commit_group(
+        &self,
+        context: &ActionContext,
+        request: &ProgrammingGroupCommit,
+    ) -> Result<ProgrammingGroupCommitResult, ActionError> {
+        commit(self.state(), context, request)
+    }
+}
 
 pub(super) fn commit(
     state: &AppState,

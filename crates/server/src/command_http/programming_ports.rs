@@ -2,9 +2,8 @@ use super::adapter::{ExistingCommandOutcome, ExistingCommandPolicy, execute_exis
 use super::events::persist_with_warning;
 use light_application::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ExecutionPolicy,
-    ProgrammingExecution, ProgrammingGroupRecordingPorts, ProgrammingPorts,
-    ProgrammingPresetRecordingPorts, ProgrammingSelectionEnvironment, ProgrammingSelectionQuery,
-    ProgrammingValuesEnvironment,
+    ProgrammingExecution, ProgrammingPorts, ProgrammingSelectionEnvironment,
+    ProgrammingSelectionQuery, ProgrammingValuesEnvironment,
 };
 use light_programmer::ProgrammerRegistry;
 
@@ -246,20 +245,6 @@ pub(super) fn recording_context(context: &ActionContext, prefix: &str) -> Action
     }
 }
 
-impl ProgrammingGroupRecordingPorts for ServerProgrammingPorts<'_> {
-    fn authorize_group_recording(&self, context: &ActionContext) -> Result<(), ActionError> {
-        <Self as ProgrammingPorts>::authorize(self, context)
-    }
-
-    fn commit_group(
-        &self,
-        context: &ActionContext,
-        commit: &light_application::ProgrammingGroupCommit,
-    ) -> Result<light_application::ProgrammingGroupCommitResult, ActionError> {
-        super::group_recording_ports::commit(self.state(), context, commit)
-    }
-}
-
 pub(super) fn clear_command_line(
     programmers: &ProgrammerRegistry,
     session: &Session,
@@ -268,20 +253,6 @@ pub(super) fn clear_command_line(
         .update_command_line(session.id, |current| (String::new(), current.target, true))
         .ok_or_else(|| "programmer command line does not exist".to_owned())?;
     Ok(())
-}
-
-impl ProgrammingPresetRecordingPorts for ServerProgrammingPorts<'_> {
-    fn authorize_preset_recording(&self, context: &ActionContext) -> Result<(), ActionError> {
-        <Self as ProgrammingPorts>::authorize(self, context)
-    }
-
-    fn commit_preset(
-        &self,
-        context: &ActionContext,
-        commit: &light_application::ProgrammingPresetCommit,
-    ) -> Result<light_application::ProgrammingPresetCommitResult, ActionError> {
-        super::preset_recording_ports::commit(self.state(), context, commit)
-    }
 }
 
 impl ProgrammingPorts for ServerProgrammingPorts<'_> {
