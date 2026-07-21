@@ -125,3 +125,66 @@ Every later full-suite result must be compared with this named list. A changed f
 - Both command helpers route Programmer-owned command families through `/api/v2/desks/{desk_id}/command-line/execute`. Show-, Playback-, and configuration-owned families (`CUE`, `SPD`, `RECORD`, `UPDATE`, `DELETE`, `MOVE`, `COPY`, and `SET`, including aliases) use the deliberately named `executeLegacyCommandLine` compatibility path until their owning services can provide the same atomic guarantee. The only direct `programmer.execute` text remaining in the root suite is an audit-event assertion.
 - `API-003` exercises GET, logical keys, compare-and-set PUT, stale-writer rejection, execution, idempotent replay, Programmer state, and both network-output protocols at the process boundary.
 - The remaining 129 `api.command()` calls exercise bounded selection, Programmer value, Preload, Playback, Preset, and compatibility-error families. They remain explicitly inventoried for the Programming and Playback service migration rather than being hidden behind the new command-line client.
+
+## Stage 2: the public command boundary
+
+`executeLegacyCommandLine` is retired. Its 40 call sites and the 10 direct textual v1 WebSocket
+command-line calls now use helpers that name the surface they exercise.
+
+### How ownership is decided
+
+The server intercepts four grammars in `record_typed_command` *before* its atomic-family check, so
+those reach the public v2 command-line HTTP contract even though their leading token belongs to a
+legacy family:
+
+| Grammar | Typed owner |
+| --- | --- |
+| `RECORD\|REC [+\|-] GROUP <id>`, `DELETE\|DEL GROUP <id>` | Group recording |
+| `RECORD\|REC <preset address>` | Preset recording |
+| `RECORD\|REC [+\|-] (CUE\|SET) …` | Cue recording |
+| `MOVE\|COPY [PLAIN\|STATUS] SET … AT SET …` | Cue transfer |
+
+`commandLineOwnership()` in the bench API driver mirrors exactly that rule. It is a **static**
+decision. Attempting v2 and falling back to v1 is prohibited: it would silently absorb an ownership
+regression instead of failing.
+
+### The three surfaces
+
+- **Command-line HTTP** — `executeCommandLine`, `sendCommandKey`, `replaceCommandLine`,
+  `setCommandLineText`. The public v2 contract.
+- **Visible software keys** and **exact OSC keys/phases** — `doProgrammerStep` and
+  `executeProgrammerCommand` over `ProgrammerSurface`. OSC retains exact press/release pairs with
+  feedback waits; these are independent acceptance surfaces, not shortcuts for each other.
+- **Named compatibility** — `executeCompatibilityProgrammerCommand({ family, command })` for
+  families whose production boundary does not exist yet. The raw v1 textual sender is private.
+
+### Compatibility families and what each is waiting for
+
+| Family | Sites | Waiting for |
+| --- | --- | --- |
+| `cue_navigation` | 10 | typed Playback `go_to`/`load` owning the command grammar |
+| `speed_group` | 8 | any application-owned Speed Group BPM/copy action |
+| `cue_delete` | 5 | whole-Cue deletion; Cue recording subtract is a different operation |
+| `playback_set` | 1 | `map_existing_playback` integrated into command execution |
+| `preset_transfer` | 0 | Preset `MOVE`/`COPY` ownership (only Cue transfer is intercepted) |
+| `update` | 0 | `UPDATE` grammar routed through the typed Update workflow |
+
+`setCompatibilityCommandTarget` is a separate named v1 caller: the FIXTURE/GROUP command target has
+no typed v2 owner, and the production frontend still issues it from `api/client/programming.ts`.
+
+### Retained v1 coverage and the ratchet
+
+`API-004 @api` is the single test that exercises the v1 textual WebSocket envelope itself —
+protocol version, request-id echo, revision, rejection shape. Other scenarios assert operator
+behavior through the categorized helper instead.
+
+`tools/test-command-boundaries.mjs` runs inside `./test architecture`. It fails on any
+`executeLegacyCommandLine` occurrence, and ratchets both direct textual v1 WebSocket calls and
+categorized compatibility call sites against `tools/test-command-boundaries.baseline.json`. Removing
+a call site reports a stale baseline entry, so the baseline tightens rather than drifting.
+
+### Known behavior difference
+
+Routing `RECORD + GROUP <n>` to the typed boundary changes one rejection message: the compatibility
+path reports `group <n> does not exist` while the typed path reports `Group <n> does not exist`.
+`GROUP-005 @supplemental` now matches that rejection case-insensitively; its intent is unchanged.
