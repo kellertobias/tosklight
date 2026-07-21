@@ -721,6 +721,9 @@ new scenarios may not add a direct family or raw v1 action without an exact base
 
 ## Current verification snapshot
 
+- The polled-value churn fix adds 5 tests and brings the frontend suite to 1,969 tests in 274 files;
+  typecheck, the production build, and all ratchets pass. The saving is reasoned from the removed
+  state-update path rather than measured on the desk.
 - The desk-lock slice passes the full frontend suite of 1,964 tests in 273 files, including 4 new
   tests proving that an equivalent poll result publishes nothing, that a reader does not rerender
   across equivalent polls, that a genuine lock change does rerender, and that a reader outside a
