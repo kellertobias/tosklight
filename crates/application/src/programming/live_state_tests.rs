@@ -25,8 +25,12 @@ mod lifecycle_publication;
 mod preload_playback_queue;
 #[path = "live_state_tests/preload_values_actions.rs"]
 mod preload_values_actions;
+#[path = "live_state_tests/preset_recall.rs"]
+mod preset_recall;
 #[path = "live_state_tests/preset_recording.rs"]
 mod preset_recording;
+#[path = "live_state_tests/priority.rs"]
+mod priority;
 #[path = "live_state_tests/routing.rs"]
 mod routing;
 #[path = "live_state_tests/selection_refresh.rs"]
@@ -42,6 +46,7 @@ struct LivePorts {
     selection: Mutex<Vec<FixtureId>>,
     reconciled_selection: Mutex<Option<Vec<FixtureId>>>,
     reconciliations: Mutex<Vec<ProgrammingReconciliation>>,
+    persisted_operations: Mutex<Vec<&'static str>>,
     registry: Option<ProgrammerRegistry>,
 }
 
@@ -69,7 +74,8 @@ impl ProgrammingPorts for LivePorts {
         }
     }
 
-    fn persist(&self, _context: &ActionContext, _operation: &'static str) -> Option<String> {
+    fn persist(&self, _context: &ActionContext, operation: &'static str) -> Option<String> {
+        self.persisted_operations.lock().push(operation);
         None
     }
 

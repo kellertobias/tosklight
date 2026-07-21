@@ -10,8 +10,10 @@ use crate::v2::playback::*;
 use crate::v2::playback_topology::*;
 use crate::v2::preload_playback_queue::*;
 use crate::v2::preload_values::*;
+use crate::v2::preset_recall::*;
 use crate::v2::preset_recording::*;
 use crate::v2::programmer_lifecycle::*;
+use crate::v2::programmer_priority::*;
 use crate::v2::programming::*;
 use crate::v2::programming_update::*;
 use crate::v2::selective_import::*;
@@ -112,6 +114,14 @@ fn programming(config: &Config) -> Vec<String> {
         ProgrammingLifecycleDelta::decl(config),
         ProgrammingLifecycleChange::decl(config),
         ProgrammingLifecycleSnapshot::decl(config),
+        ProgrammerPriorityActionRequest::decl(config),
+        ProgrammerPriorityProjection::decl(config),
+        ProgrammerPriorityChange::decl(config),
+        ProgrammerPrioritySnapshot::decl(config),
+        ProgrammerPriorityActionState::decl(config),
+        ProgrammerPriorityActionOutcome::decl(config),
+        ProgrammerPriorityErrorKind::decl(config),
+        ProgrammerPriorityErrorResponse::decl(config),
         ProgrammingColorXyz::decl(config),
         ProgrammingAttributeValue::decl(config),
         ProgrammingFixtureValue::decl(config),
@@ -159,6 +169,12 @@ fn programming(config: &Config) -> Vec<String> {
         PresetRecordOutcome::decl(config),
         PresetRecordErrorKind::decl(config),
         PresetRecordErrorResponse::decl(config),
+        PresetRecallRequest::decl(config),
+        RecalledPresetProjection::decl(config),
+        PresetRecallActionState::decl(config),
+        PresetRecallOutcome::decl(config),
+        PresetRecallErrorKind::decl(config),
+        PresetRecallErrorResponse::decl(config),
         GroupRecordOperation::decl(config),
         GroupRecordRequest::decl(config),
         RecordedGroupProjection::decl(config),

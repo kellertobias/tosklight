@@ -14,7 +14,10 @@ mod preload_playback_queue_projection;
 mod preload_values_action;
 mod preload_values_projection;
 mod preset_active_show;
+mod preset_recall;
+mod preset_recall_plan;
 mod preset_recording;
+mod priority;
 mod projection;
 mod service;
 pub mod update;
@@ -84,11 +87,21 @@ pub use preload_values_projection::{
     ProgrammingPreloadValuesChange, ProgrammingPreloadValuesProjection,
     ProgrammingPreloadValuesSnapshot,
 };
+pub use preset_recall::{
+    ProgrammingPresetRecallEnvironment, ProgrammingPresetRecallOutcome,
+    ProgrammingPresetRecallPorts, ProgrammingPresetRecallRequest, ProgrammingPresetRecallResult,
+    ProgrammingPresetRecallRevisionExpectation, ProgrammingRecalledPresetProjection,
+};
 pub use preset_recording::{
     ProgrammingPresetActiveShowPorts, ProgrammingPresetCommit, ProgrammingPresetCommitResult,
     ProgrammingPresetProjection, ProgrammingPresetRecordOutcome, ProgrammingPresetRecordRequest,
     ProgrammingPresetRecordResult, ProgrammingPresetRecordingPorts,
     ProgrammingPresetRevisionExpectation,
+};
+pub use priority::{
+    ProgrammingPriorityActionState, ProgrammingPriorityChange, ProgrammingPriorityProjection,
+    ProgrammingPriorityRequest, ProgrammingPriorityResult, ProgrammingPriorityRevisionExpectation,
+    ProgrammingPrioritySnapshot,
 };
 pub use projection::{ProgrammingInteractionProjection, ProgrammingLiveSnapshot};
 pub use service::ProgrammingService;

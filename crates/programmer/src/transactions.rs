@@ -16,6 +16,7 @@ pub struct ProgrammerTransactionSnapshot {
     normal_values_generation: u64,
     preload_values_generation: u64,
     preload_playback_queue_generation: u64,
+    priority_changed_at: chrono::DateTime<chrono::Utc>,
     interaction_context: SessionId,
     selection: Option<SelectionContext>,
     command_line: Option<CommandLineState>,
@@ -170,6 +171,18 @@ impl ProgrammerRegistry {
             .get(&user_id)
             .copied()
             .unwrap_or(0);
+        let priority_revision = self
+            .priority_revisions
+            .read()
+            .get(&user_id)
+            .copied()
+            .unwrap_or(0);
+        let priority_changed_at = self
+            .priority_changed_at
+            .read()
+            .get(&user_id)
+            .cloned()
+            .unwrap_or(state.last_activity);
         let selection = self.selection_contexts.read().get(&context).cloned();
         let command = self.command_states.read().get(&context).cloned();
         Some(ProgrammerRegistry {
@@ -216,6 +229,14 @@ impl ProgrammerRegistry {
                 user_id,
                 capture_mode_revision,
             )]))),
+            priority_revisions: Arc::new(RwLock::new(HashMap::from([(
+                user_id,
+                priority_revision,
+            )]))),
+            priority_changed_at: Arc::new(RwLock::new(HashMap::from([(
+                user_id,
+                priority_changed_at,
+            )]))),
             mutation_gates: Arc::default(),
             unknown_mutation_gate: Arc::new(ReentrantMutex::new(())),
             clock: Arc::clone(&self.clock),
@@ -255,6 +276,12 @@ impl ProgrammerRegistry {
             .get(&user_id)
             .copied()
             .unwrap_or(0);
+        let staged_priority_changed_at = staged
+            .priority_changed_at
+            .read()
+            .get(&user_id)
+            .cloned()
+            .unwrap_or(state.last_activity);
         let selection = staged.selection_contexts.read().get(&context).cloned();
         let command = staged.command_states.read().get(&context).cloned();
 
@@ -293,6 +320,9 @@ impl ProgrammerRegistry {
         self.preload_playback_queue_generations
             .write()
             .insert(user_id, staged_preload_playback_queue_generation);
+        self.priority_changed_at
+            .write()
+            .insert(user_id, staged_priority_changed_at);
         true
     }
 
@@ -327,6 +357,12 @@ impl ProgrammerRegistry {
             .get(&state.user_id)
             .copied()
             .unwrap_or(0);
+        let priority_changed_at = self
+            .priority_changed_at
+            .read()
+            .get(&state.user_id)
+            .cloned()
+            .unwrap_or(state.last_activity);
         let selection = self
             .selection_contexts
             .read()
@@ -343,6 +379,7 @@ impl ProgrammerRegistry {
             normal_values_generation,
             preload_values_generation,
             preload_playback_queue_generation,
+            priority_changed_at,
             interaction_context,
             selection,
             command_line,
@@ -366,6 +403,9 @@ impl ProgrammerRegistry {
         self.preload_playback_queue_generations
             .write()
             .insert(user_id, snapshot.preload_playback_queue_generation);
+        self.priority_changed_at
+            .write()
+            .insert(user_id, snapshot.priority_changed_at);
         let mut selections = self.selection_contexts.write();
         match snapshot.selection {
             Some(selection) => {

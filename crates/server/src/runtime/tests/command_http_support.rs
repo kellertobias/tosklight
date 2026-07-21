@@ -212,6 +212,65 @@ impl CommandHttpScenario {
             .unwrap()
     }
 
+    async fn priority_snapshot_for(&self, user_id: Uuid, token: Option<&str>) -> Response {
+        let mut request = Request::get(format!(
+            "/api/v2/users/{user_id}/programmer-priority/snapshot"
+        ));
+        if let Some(token) = token {
+            request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
+        }
+        self.app
+            .clone()
+            .oneshot(request.body(Body::empty()).unwrap())
+            .await
+            .unwrap()
+    }
+
+    async fn priority_action_for(
+        &self,
+        user_id: Uuid,
+        token: &str,
+        input: serde_json::Value,
+    ) -> Response {
+        self.app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/api/v2/users/{user_id}/programmer-priority/actions"
+                ))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(input.to_string()))
+                .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+
+    async fn preset_recall_action(
+        &self,
+        show_id: &str,
+        token: Option<&str>,
+        input: serde_json::Value,
+    ) -> Response {
+        let mut request = Request::post(format!(
+            "/api/v2/shows/{show_id}/presets/recall"
+        ));
+        if let Some(token) = token {
+            request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
+        }
+        self.app
+            .clone()
+            .oneshot(
+                request
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(input.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+
     async fn preload_values_snapshot(&self) -> Response {
         self.preload_values_snapshot_for(self.session.user.id.0, Some(&self.token))
             .await

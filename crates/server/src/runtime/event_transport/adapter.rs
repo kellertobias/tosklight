@@ -188,6 +188,11 @@ fn wire_payload(
             change: super::super::command_http::values_change(change),
         },
         application::ApplicationEvent::Programming(
+            application::ProgrammingEvent::PriorityChanged(change),
+        ) => wire::EventPayload::ProgrammerPriorityChanged {
+            change: super::super::command_http::priority_change(change),
+        },
+        application::ApplicationEvent::Programming(
             application::ProgrammingEvent::CaptureModeChanged(change),
         ) => wire::EventPayload::ProgrammingCaptureModeChanged {
             change: super::super::command_http::capture_mode_change(change),

@@ -35,6 +35,18 @@ pub enum NormalProgrammerValueMutation {
     },
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct NormalPresetRecallTransition {
+    pub values_changed: bool,
+    pub active_context_changed: bool,
+}
+
+impl NormalPresetRecallTransition {
+    pub const fn changed(self) -> bool {
+        self.values_changed || self.active_context_changed
+    }
+}
+
 impl ProgrammerRegistry {
     /// Apply one normal, recordable Programmer action independently of Preload capture mode.
     ///
@@ -99,6 +111,55 @@ impl ProgrammerRegistry {
         drop(states);
         self.mark_normal_values_changed(user_id);
         true
+    }
+
+    /// Applies one planned Preset recall as a single normal Programmer transaction.
+    ///
+    /// The caller supplies unique addresses in final Programmer order. Values and active context
+    /// share one checkpoint and timestamp; only a real values transition advances the retained
+    /// normal-values generation.
+    pub fn apply_normal_preset_recall(
+        &self,
+        session: SessionId,
+        mutations: &[NormalProgrammerValueMutation],
+        active_context: String,
+    ) -> Option<NormalPresetRecallTransition> {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
+        self.close_selection_gesture(session);
+        let mut states = self.states.write();
+        let state = states.get_mut(&self.key(session))?;
+        let fixture_index = FixtureValueIndex::new(&state.values);
+        let changed = mutations
+            .iter()
+            .map(|mutation| mutation_changes(state, &fixture_index, mutation))
+            .collect::<Vec<_>>();
+        drop(fixture_index);
+        let transition = NormalPresetRecallTransition {
+            values_changed: changed.iter().any(|changed| *changed),
+            active_context_changed: state.active_context.as_deref() != Some(&active_context),
+        };
+        if !transition.changed() {
+            return Some(transition);
+        }
+        state.checkpoint();
+        let changed_at = self.clock.now();
+        let mut fixture_batch = FixtureValueBatch::default();
+        for (mutation, changed) in mutations.iter().zip(changed) {
+            if changed {
+                apply_mutation(self, state, mutation, changed_at, &mut fixture_batch);
+            }
+        }
+        let touched = fixture_batch.commit(&mut state.values);
+        restamp_transient_values(self, state, &touched, changed_at);
+        state.active_context = Some(active_context);
+        state.last_activity = changed_at;
+        let user_id = state.user_id;
+        drop(states);
+        if transition.values_changed {
+            self.mark_normal_values_changed(user_id);
+        }
+        Some(transition)
     }
 }
 

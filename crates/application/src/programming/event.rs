@@ -1,6 +1,7 @@
 use super::{
     ProgrammingCaptureModeChange, ProgrammingInteractionProjection, ProgrammingLifecycleChange,
-    ProgrammingPreloadPlaybackQueueChange, ProgrammingPreloadValuesChange, ProgrammingValuesChange,
+    ProgrammingPreloadPlaybackQueueChange, ProgrammingPreloadValuesChange,
+    ProgrammingPriorityChange, ProgrammingValuesChange,
 };
 use crate::{
     ActionContext, ApplicationEvent, DeliveryPolicy, EventCapability, EventClass, EventDraft,
@@ -81,6 +82,13 @@ impl EventObject {
         )
     }
 
+    pub fn programming_priority(user_id: Uuid) -> Self {
+        Self::new(
+            EventCapability::Programmer,
+            format!("programming-priority:{user_id}"),
+        )
+    }
+
     pub fn programming_capture_mode(user_id: Uuid) -> Self {
         Self::new(
             EventCapability::Programmer,
@@ -113,6 +121,13 @@ impl EventObject {
             .and_then(|value| Uuid::parse_str(value).ok())
     }
 
+    pub fn programming_priority_user_id(&self) -> Option<Uuid> {
+        (self.capability == EventCapability::Programmer)
+            .then(|| self.id.strip_prefix("programming-priority:"))
+            .flatten()
+            .and_then(|value| Uuid::parse_str(value).ok())
+    }
+
     pub fn programming_capture_mode_user_id(&self) -> Option<Uuid> {
         (self.capability == EventCapability::Programmer)
             .then(|| self.id.strip_prefix("programming-capture-mode:"))
@@ -129,6 +144,7 @@ impl EventObject {
 
     pub fn programming_user_id(&self) -> Option<Uuid> {
         self.programming_values_user_id()
+            .or_else(|| self.programming_priority_user_id())
             .or_else(|| self.programming_preload_values_user_id())
             .or_else(|| self.programming_preload_playback_queue_user_id())
             .or_else(|| self.programming_capture_mode_user_id())
@@ -143,6 +159,23 @@ impl EventObject {
 }
 
 impl EventDraft {
+    pub fn programming_priority_changed(
+        context: &ActionContext,
+        change: ProgrammingPriorityChange,
+    ) -> Self {
+        let object = EventObject::programming_priority(change.user_id().0);
+        Self {
+            desk_id: None,
+            class: EventClass::Projection,
+            object: Some(object),
+            related_objects: Vec::new(),
+            source: EventSource::Action(context.source),
+            correlation_id: Some(context.correlation_id),
+            delivery: DeliveryPolicy::Replaceable,
+            payload: ApplicationEvent::Programming(ProgrammingEvent::PriorityChanged(change)),
+        }
+    }
+
     pub fn programming_lifecycle_changed(
         change: ProgrammingLifecycleChange,
         source: EventSource,

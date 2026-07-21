@@ -57,12 +57,22 @@ mod preload_playback_queue_wire;
 mod preload_values_routes;
 #[path = "command_http/preload_values_wire.rs"]
 mod preload_values_wire;
+#[path = "command_http/preset_recall_ports.rs"]
+mod preset_recall_ports;
+#[path = "command_http/preset_recall_routes.rs"]
+mod preset_recall_routes;
+#[path = "command_http/preset_recall_wire.rs"]
+mod preset_recall_wire;
 #[path = "command_http/preset_recording_ports.rs"]
 mod preset_recording_ports;
 #[path = "command_http/preset_recording_routes.rs"]
 mod preset_recording_routes;
 #[path = "command_http/preset_recording_wire.rs"]
 mod preset_recording_wire;
+#[path = "command_http/programmer_priority_routes.rs"]
+mod programmer_priority_routes;
+#[path = "command_http/programmer_priority_wire.rs"]
+mod programmer_priority_wire;
 #[path = "command_http/programming_ports.rs"]
 mod programming_ports;
 #[path = "command_http/routes.rs"]
@@ -94,6 +104,7 @@ pub(super) use interaction_wire::interaction_change;
 pub(super) use lifecycle_wire::lifecycle_change;
 pub(super) use preload_playback_queue_wire::change as preload_playback_queue_change;
 pub(super) use preload_values_wire::change as preload_values_change;
+pub(super) use programmer_priority_wire::change as priority_change;
 pub(crate) use programming_ports::ServerProgrammingPorts;
 pub(super) use routes::router;
 pub(super) use values_wire::{capture_mode_change, values_change};

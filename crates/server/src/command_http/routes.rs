@@ -52,6 +52,8 @@ pub(crate) fn router() -> Router<AppState> {
         .merge(super::cue_transfer_routes::router())
         .merge(super::group_recording_routes::router())
         .merge(super::preset_recording_routes::router())
+        .merge(super::preset_recall_routes::router())
+        .merge(super::programmer_priority_routes::router())
         .merge(super::selection_routes::router())
         .merge(super::values_routes::router())
 }

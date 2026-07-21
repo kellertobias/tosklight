@@ -435,6 +435,7 @@ async fn programmer_delete_recreates_same_user_desks_with_monotonic_exact_user_a
     let user_id = scenario.session.user.id;
     assert_eq!(scenario.state.programmers.normal_values_revision(user_id), 2);
     assert_eq!(scenario.state.programmers.capture_mode_revision(user_id), 2);
+    assert_eq!(scenario.state.programmers.priority_revision(user_id), 1);
     for session_id in [scenario.session.id, second_session] {
         let programmer = scenario.state.programmers.get(session_id).unwrap();
         assert!(programmer.values.is_empty());
@@ -451,11 +452,12 @@ async fn programmer_delete_recreates_same_user_desks_with_monotonic_exact_user_a
     else {
         panic!("the lifecycle events should remain replayable")
     };
-    assert_eq!(events.len(), 3);
+    assert_eq!(events.len(), 4);
     assert!(events.iter().all(|event| event.desk_id.is_none()));
     let mut values_events = 0;
     let mut capture_events = 0;
     let mut lifecycle_events = 0;
+    let mut priority_events = 0;
     for event in &events {
         match &event.payload {
             light_application::ApplicationEvent::Programming(
@@ -486,10 +488,21 @@ async fn programmer_delete_recreates_same_user_desks_with_monotonic_exact_user_a
                 assert_ne!(programmer.programmer_id, old_programmer_id);
                 assert_eq!(programmer.sessions.len(), 2);
             }
+            light_application::ApplicationEvent::Programming(
+                light_application::ProgrammingEvent::PriorityChanged(
+                    light_application::ProgrammingPriorityChange::Upsert { projection },
+                ),
+            ) => {
+                priority_events += 1;
+                assert_eq!(projection.user_id, user_id);
+                assert_eq!(projection.revision, 1);
+                assert_eq!(projection.priority, 100);
+            }
             _ => panic!("unexpected Programmer lifecycle event"),
         }
     }
     assert_eq!((values_events, capture_events, lifecycle_events), (1, 1, 1));
+    assert_eq!(priority_events, 1);
     assert_eq!(
         scenario
             .state

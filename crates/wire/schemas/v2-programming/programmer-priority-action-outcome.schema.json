@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProgrammerPriorityActionOutcome",
+  "type": "object",
+  "properties": {
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "projection": {
+      "$ref": "#/$defs/ProgrammerPriorityProjection"
+    },
+    "replayed": {
+      "type": "boolean"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "warning": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "event_sequence": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "const": "changed"
+        }
+      },
+      "required": [
+        "status",
+        "event_sequence"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "no_change"
+        }
+      },
+      "required": [
+        "status"
+      ]
+    }
+  ],
+  "required": [
+    "request_id",
+    "correlation_id",
+    "projection",
+    "replayed"
+  ],
+  "$defs": {
+    "ProgrammerPriorityProjection": {
+      "type": "object",
+      "properties": {
+        "changed_at": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "integer",
+          "format": "int16",
+          "maximum": 32767,
+          "minimum": -32768
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "user_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "user_id",
+        "revision",
+        "priority",
+        "changed_at"
+      ]
+    }
+  }
+}

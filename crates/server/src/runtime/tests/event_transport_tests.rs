@@ -13,8 +13,8 @@ use light_application::{
     ProgrammingPreloadPlaybackAction, ProgrammingPreloadPlaybackQueueChange,
     ProgrammingPreloadPlaybackQueueItem, ProgrammingPreloadPlaybackQueueProjection,
     ProgrammingPreloadPlaybackSurface, ProgrammingPreloadValuesChange,
-    ProgrammingPreloadValuesProjection, ProgrammingValuesChange, ProgrammingValuesProjection,
-    publish_automatic_playback_events,
+    ProgrammingPreloadValuesProjection, ProgrammingPriorityChange, ProgrammingPriorityProjection,
+    ProgrammingValuesChange, ProgrammingValuesProjection, publish_automatic_playback_events,
 };
 use light_core::{CueListId, ManualClock, ShowId, UserId};
 use light_engine::EnginePlaybackCommand;
@@ -259,6 +259,78 @@ fn programmer_values_objects_are_limited_to_the_authenticated_user() {
         rate_limits: Vec::new(),
     });
     assert!(EventStream::subscribe(&bus, &session, malformed_request).is_err());
+}
+
+#[test]
+fn programmer_priority_objects_are_limited_to_the_exact_authenticated_user() {
+    let bus = EventBus::new(8);
+    let user_id = Uuid::from_u128(11);
+    let session = event_session(Uuid::from_u128(1), user_id);
+    let object = |user_id| wire::EventObject {
+        capability: wire::EventCapability::Programmer,
+        id: format!("programming-priority:{user_id}"),
+    };
+    assert!(
+        EventStream::subscribe(
+            &bus,
+            &session,
+            programmer_subscription(object(Uuid::from_u128(12)), None),
+        )
+        .is_err()
+    );
+    assert!(
+        EventStream::subscribe(
+            &bus,
+            &session,
+            programmer_subscription(object(user_id), None),
+        )
+        .is_ok()
+    );
+    assert!(
+        EventStream::subscribe(
+            &bus,
+            &session,
+            programmer_subscription(
+                wire::EventObject {
+                    capability: wire::EventCapability::Programmer,
+                    id: "programming-priority:not-a-uuid".into(),
+                },
+                None,
+            ),
+        )
+        .is_err()
+    );
+}
+
+#[tokio::test]
+async fn broad_subscription_delivers_only_authenticated_user_priority() {
+    let bus = EventBus::new(8);
+    let user_id = Uuid::from_u128(11);
+    let session = event_session(Uuid::from_u128(1), user_id);
+    let request = Ok(wire::EventClientMessage::Subscribe {
+        filter: wire::EventSubscriptionFilter::default(),
+        after_sequence: Some(0),
+        capacity: None,
+        rate_limits: Vec::new(),
+    });
+    let mut stream = EventStream::subscribe(&bus, &session, request).unwrap();
+
+    bus.publish(programmer_priority_draft(Uuid::from_u128(12), 1));
+    assert!(stream.subscription.try_next().is_none());
+    let expected = bus.publish(programmer_priority_draft(user_id, 2));
+
+    let Some(wire::EventServerMessage::Event { event }) = stream.next().await else {
+        panic!("expected the authenticated user's Programmer priority")
+    };
+    assert_eq!(event.sequence, expected.sequence);
+    let wire::EventPayload::ProgrammerPriorityChanged {
+        change: light_wire::v2::programmer_priority::ProgrammerPriorityChange::Upsert { projection },
+    } = event.payload
+    else {
+        panic!("expected a Programmer priority payload")
+    };
+    assert_eq!(projection.user_id, user_id);
+    assert_eq!(projection.revision, 2);
 }
 
 #[test]
@@ -691,6 +763,25 @@ fn programmer_values_draft(user_id: Uuid, revision: u64) -> EventDraft {
                 group_values: Vec::new(),
             }
             .into(),
+        },
+    )
+}
+
+fn programmer_priority_draft(user_id: Uuid, revision: u64) -> EventDraft {
+    EventDraft::programming_priority_changed(
+        &ActionContext::operator(
+            Uuid::from_u128(1),
+            user_id,
+            Uuid::new_v4(),
+            ActionSource::UserInterface,
+        ),
+        ProgrammingPriorityChange::Upsert {
+            projection: ProgrammingPriorityProjection {
+                user_id: UserId(user_id),
+                revision,
+                priority: 90,
+                changed_at: Utc::now(),
+            },
         },
     )
 }

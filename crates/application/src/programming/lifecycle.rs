@@ -3,7 +3,7 @@ use super::preload_values_projection::ProgrammingPreloadValuesContent;
 use super::values_projection::ProgrammingValuesContent;
 use super::{
     ProgrammingPorts, ProgrammingPreloadPlaybackQueueChange, ProgrammingPreloadValuesChange,
-    ProgrammingService, ProgrammingValuesChange,
+    ProgrammingPriorityChange, ProgrammingService, ProgrammingValuesChange,
 };
 use crate::{ActionContext, ActionError, ActionErrorKind};
 use light_core::{SessionId, UserId};
@@ -59,10 +59,12 @@ pub struct ProgrammingLifecycleResult<T> {
     pub capture_mode_revision: u64,
     pub preload_values_revision: u64,
     pub preload_playback_queue_revision: u64,
+    pub priority_revision: u64,
     pub values_event_sequence: Option<u64>,
     pub preload_values_event_sequence: Option<u64>,
     pub preload_playback_queue_event_sequence: Option<u64>,
     pub capture_mode_event_sequence: Option<u64>,
+    pub priority_event_sequence: Option<u64>,
 }
 
 impl ProgrammingService {
@@ -104,6 +106,11 @@ impl ProgrammingService {
             .programmers
             .capture_mode(target.current_session_id)
             .ok_or_else(lifecycle_target_unavailable)?;
+        let before_priority = self.priority_projection(
+            target.current_session_id,
+            target.user_id,
+            self.programmers.priority_revision(target.user_id),
+        )?;
         let before_preload_values = ProgrammingPreloadValuesContent::read(
             &self.programmers,
             target.current_session_id,
@@ -117,10 +124,12 @@ impl ProgrammingService {
         let completion = operation();
         self.invalidate_values_replay(target.user_id);
         self.invalidate_preload_values_replay(target.user_id);
+        self.invalidate_priority_replay(target.user_id);
         self.invalidate_cue_recording_replay(target.user_id);
         self.invalidate_cue_transfer_authority(target.user_id);
         self.invalidate_group_recording_replay(target.user_id);
         self.invalidate_preset_recording_replay(target.user_id);
+        self.invalidate_preset_recall_replay(target.user_id);
         self.invalidate_update_replay(target.user_id);
         let after_values = self.lifecycle_values(&target, completion.replacement_session_id)?;
         let after_preload_values =
@@ -135,12 +144,19 @@ impl ProgrammingService {
             after_preload_values,
         );
         let capture_mode = self.capture_mode_change(target.user_id, before_mode, after_mode);
+        let priority = self.lifecycle_priority_change(
+            &target,
+            completion.replacement_session_id,
+            before_priority,
+        )?;
         let preload_playback_queue = self.lifecycle_preload_playback_queue_change(
             target.user_id,
             before_preload_playback_queue,
             after_preload_playback_queue,
         );
         let capture_mode_event_sequence = self.publish_capture_mode(actor_context, capture_mode);
+        let priority_event_sequence =
+            priority.map(|change| self.publish_priority(actor_context, change));
         let values_event_sequence = self.publish_values(actor_context, values);
         let preload_values_event_sequence =
             self.publish_preload_values(actor_context, preload_values);
@@ -155,10 +171,12 @@ impl ProgrammingService {
             preload_playback_queue_revision: self
                 .programmers
                 .preload_playback_queue_revision(target.user_id),
+            priority_revision: self.programmers.priority_revision(target.user_id),
             values_event_sequence,
             preload_values_event_sequence,
             preload_playback_queue_event_sequence,
             capture_mode_event_sequence,
+            priority_event_sequence,
         })
     }
 
@@ -233,6 +251,37 @@ impl ProgrammingService {
                 )
             },
         )
+    }
+
+    fn lifecycle_priority_change(
+        &self,
+        target: &ProgrammingLifecycleTarget,
+        replacement: Option<SessionId>,
+        before: super::ProgrammingPriorityProjection,
+    ) -> Result<Option<ProgrammingPriorityChange>, ActionError> {
+        let Some(session) = replacement else {
+            let mut revision = self.programmers.priority_revision(target.user_id);
+            if revision <= before.revision {
+                revision = self.programmers.advance_priority_revision(target.user_id);
+            }
+            return Ok(Some(ProgrammingPriorityChange::Remove {
+                user_id: target.user_id,
+                revision,
+            }));
+        };
+        if self.programmers.user_id(session) != Some(target.user_id) {
+            return Err(ActionError::new(
+                ActionErrorKind::Internal,
+                "replacement Programmer session does not belong to the target user",
+            ));
+        }
+        let mut revision = self.programmers.priority_revision(target.user_id);
+        let mut after = self.priority_projection(session, target.user_id, revision)?;
+        if after != before && revision <= before.revision {
+            revision = self.programmers.advance_priority_revision(target.user_id);
+            after.revision = revision;
+        }
+        Ok((before != after).then_some(ProgrammingPriorityChange::Upsert { projection: after }))
     }
 
     fn lifecycle_values_change(

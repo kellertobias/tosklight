@@ -2,7 +2,8 @@ use super::ProgrammingService;
 use crate::{
     ActionContext, ActionError, EventDraft, ProgrammingCaptureModeChange,
     ProgrammingCaptureModeProjection, ProgrammingInteractionChange,
-    ProgrammingPreloadPlaybackQueueChange, ProgrammingPreloadValuesChange, ProgrammingValuesChange,
+    ProgrammingPreloadPlaybackQueueChange, ProgrammingPreloadValuesChange,
+    ProgrammingPriorityChange, ProgrammingValuesChange,
 };
 use light_core::{SessionId, UserId};
 use std::sync::Arc;
@@ -12,6 +13,16 @@ use super::super::preload_values_projection::ProgrammingPreloadValuesContent;
 use super::super::values_projection::ProgrammingValuesContent;
 
 impl ProgrammingService {
+    pub(in crate::programming) fn publish_priority(
+        &self,
+        context: &ActionContext,
+        change: ProgrammingPriorityChange,
+    ) -> u64 {
+        self.events
+            .publish(EventDraft::programming_priority_changed(context, change))
+            .sequence
+    }
+
     pub(super) fn publish_interaction(
         &self,
         context: &ActionContext,

@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PresetRecallRequest",
+  "type": "object",
+  "properties": {
+    "address": {
+      "$ref": "#/$defs/PresetRecordingAddress"
+    },
+    "expected_capture_mode_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "expected_preset_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "expected_programmer_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "expected_selection_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "expected_show_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "request_id": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "address",
+    "expected_preset_revision",
+    "expected_show_revision",
+    "expected_programmer_revision",
+    "expected_capture_mode_revision",
+    "expected_selection_revision"
+  ],
+  "$defs": {
+    "PresetRecordingAddress": {
+      "type": "object",
+      "properties": {
+        "family": {
+          "$ref": "#/$defs/PresetRecordingFamily"
+        },
+        "number": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "family",
+        "number"
+      ]
+    },
+    "PresetRecordingFamily": {
+      "type": "string",
+      "enum": [
+        "mixed",
+        "intensity",
+        "color",
+        "position",
+        "beam"
+      ]
+    }
+  }
+}

@@ -6,6 +6,7 @@ use super::{
     preload_playback_queue::ProgrammingPreloadPlaybackQueueChange,
     preload_values::ProgrammingPreloadValuesChange,
     programmer_lifecycle::ProgrammingLifecycleChange,
+    programmer_priority::ProgrammerPriorityChange,
     programming::{ProgrammingCaptureModeChange, ProgrammingValuesChange},
 };
 
@@ -159,6 +160,9 @@ pub enum EventActionSource {
 pub enum EventPayload {
     ProgrammingInteractionChanged {
         change: ProgrammingInteractionChange,
+    },
+    ProgrammerPriorityChanged {
+        change: ProgrammerPriorityChange,
     },
     ProgrammingValuesChanged {
         change: ProgrammingValuesChange,

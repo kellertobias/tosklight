@@ -501,6 +501,22 @@
           "type": "object",
           "properties": {
             "change": {
+              "$ref": "#/$defs/ProgrammerPriorityChange"
+            },
+            "type": {
+              "type": "string",
+              "const": "programmer_priority_changed"
+            }
+          },
+          "required": [
+            "type",
+            "change"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "change": {
               "$ref": "#/$defs/ProgrammingValuesChange"
             },
             "type": {
@@ -1817,6 +1833,81 @@
         "follow",
         "wait",
         "timecode"
+      ]
+    },
+    "ProgrammerPriorityChange": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "projection": {
+              "$ref": "#/$defs/ProgrammerPriorityProjection"
+            },
+            "type": {
+              "type": "string",
+              "const": "upsert"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "projection"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "remove"
+            },
+            "user_id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "user_id",
+            "revision"
+          ]
+        }
+      ]
+    },
+    "ProgrammerPriorityProjection": {
+      "type": "object",
+      "properties": {
+        "changed_at": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "integer",
+          "format": "int16",
+          "maximum": 32767,
+          "minimum": -32768
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "user_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "user_id",
+        "revision",
+        "priority",
+        "changed_at"
       ]
     },
     "ProgrammerSelectionExpression": {

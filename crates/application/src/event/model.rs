@@ -8,7 +8,7 @@ use crate::{
     programming::{
         ProgrammingCaptureModeChange, ProgrammingInteractionChange, ProgrammingLifecycleChange,
         ProgrammingPreloadPlaybackQueueChange, ProgrammingPreloadValuesChange,
-        ProgrammingValuesChange,
+        ProgrammingPriorityChange, ProgrammingValuesChange,
     },
 };
 use light_core::ShowId;
@@ -118,6 +118,7 @@ pub enum PlaybackEvent {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProgrammingEvent {
     InteractionChanged(ProgrammingInteractionChange),
+    PriorityChanged(ProgrammingPriorityChange),
     LifecycleChanged(ProgrammingLifecycleChange),
     CaptureModeChanged(ProgrammingCaptureModeChange),
     ValuesChanged(ProgrammingValuesChange),

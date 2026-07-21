@@ -50,7 +50,9 @@ pub use highlight::{
     is_duplicate_osc_action,
 };
 pub use lifecycle_projection::{ProgrammerLifecycleSession, ProgrammerLifecycleSummary};
-pub use normal_values::{NormalProgrammerValueMutation, NormalProgrammerValueTiming};
+pub use normal_values::{
+    NormalPresetRecallTransition, NormalProgrammerValueMutation, NormalProgrammerValueTiming,
+};
 pub use preload::PreloadPlaybackAction;
 pub use preload_playback_queue::{PreloadPlaybackQueueAction, PreloadPlaybackQueueSurface};
 pub use preload_values::{

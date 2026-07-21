@@ -35,10 +35,17 @@ use crate::v2::preload_values::{
     ProgrammingPreloadValuesActionOutcome, ProgrammingPreloadValuesActionRequest,
     ProgrammingPreloadValuesErrorResponse, ProgrammingPreloadValuesSnapshot,
 };
+use crate::v2::preset_recall::{
+    PresetRecallErrorResponse, PresetRecallOutcome, PresetRecallRequest,
+};
 use crate::v2::preset_recording::{
     PresetRecordErrorResponse, PresetRecordOutcome, PresetRecordRequest,
 };
 use crate::v2::programmer_lifecycle::ProgrammingLifecycleSnapshot;
+use crate::v2::programmer_priority::{
+    ProgrammerPriorityActionOutcome, ProgrammerPriorityActionRequest,
+    ProgrammerPriorityErrorResponse, ProgrammerPrioritySnapshot,
+};
 use crate::v2::programming::{
     ProgrammingCaptureModeSnapshot, ProgrammingValuesActionOutcome, ProgrammingValuesActionRequest,
     ProgrammingValuesErrorResponse, ProgrammingValuesSnapshot,
@@ -111,6 +118,16 @@ pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
         programming_response_schema::<ProgrammingLifecycleSnapshot>(
             "programming-lifecycle-snapshot",
         ),
+        programming_request_schema::<ProgrammerPriorityActionRequest>(
+            "programmer-priority-action-request",
+        ),
+        programming_response_schema::<ProgrammerPriorityActionOutcome>(
+            "programmer-priority-action-outcome",
+        ),
+        programming_response_schema::<ProgrammerPriorityErrorResponse>(
+            "programmer-priority-error-response",
+        ),
+        programming_response_schema::<ProgrammerPrioritySnapshot>("programmer-priority-snapshot"),
         programming_request_schema::<ProgrammingPreloadValuesActionRequest>(
             "programming-preload-values-action-request",
         ),
@@ -129,6 +146,9 @@ pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
         programming_request_schema::<PresetRecordRequest>("preset-record-request"),
         programming_response_schema::<PresetRecordOutcome>("preset-record-outcome"),
         programming_response_schema::<PresetRecordErrorResponse>("preset-record-error-response"),
+        programming_request_schema::<PresetRecallRequest>("preset-recall-request"),
+        programming_response_schema::<PresetRecallOutcome>("preset-recall-outcome"),
+        programming_response_schema::<PresetRecallErrorResponse>("preset-recall-error-response"),
         programming_request_schema::<GroupRecordRequest>("group-record-request"),
         programming_response_schema::<GroupRecordOutcome>("group-record-outcome"),
         programming_response_schema::<GroupRecordErrorResponse>("group-record-error-response"),

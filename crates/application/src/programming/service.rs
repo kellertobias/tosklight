@@ -33,10 +33,18 @@ mod lifecycle_publication;
 mod preload_values;
 #[path = "service/preload_values_replay.rs"]
 mod preload_values_replay;
+#[path = "service/preset_recall.rs"]
+mod preset_recall;
+#[path = "service/preset_recall_replay.rs"]
+mod preset_recall_replay;
 #[path = "service/preset_recording.rs"]
 mod preset_recording;
 #[path = "service/preset_recording_replay.rs"]
 mod preset_recording_replay;
+#[path = "service/priority.rs"]
+mod priority;
+#[path = "service/priority_replay.rs"]
+mod priority_replay;
 #[path = "service/publication.rs"]
 mod publication;
 #[path = "service/selection.rs"]
@@ -67,7 +75,9 @@ use cue_transfer_replay::{CueTransferChoiceCache, CueTransferReplayCache};
 use group_recording_replay::GroupRecordingReplayCache;
 use lifecycle_publication::LifecyclePublicationGate;
 use preload_values_replay::PreloadValuesReplayCache;
+use preset_recall_replay::PresetRecallReplayCache;
 use preset_recording_replay::PresetRecordingReplayCache;
+use priority_replay::PriorityReplayCache;
 use state::{interaction_change, reconciliation};
 use support::{
     ReplayCache, Snapshot, accepted, command_line, context_session, context_user, replace_error,
@@ -91,11 +101,13 @@ pub struct ProgrammingService {
     replay: Arc<Mutex<ReplayCache>>,
     values_replay: Arc<Mutex<ValuesReplayCache>>,
     preload_values_replay: Arc<Mutex<PreloadValuesReplayCache>>,
+    priority_replay: Arc<Mutex<PriorityReplayCache>>,
     cue_recording_replay: Arc<Mutex<CueRecordingReplayCache>>,
     cue_transfer_choices: Arc<Mutex<CueTransferChoiceCache>>,
     cue_transfer_replay: Arc<Mutex<CueTransferReplayCache>>,
     group_recording_replay: Arc<Mutex<GroupRecordingReplayCache>>,
     preset_recording_replay: Arc<Mutex<PresetRecordingReplayCache>>,
+    preset_recall_replay: Arc<Mutex<PresetRecallReplayCache>>,
     update_replay: Arc<Mutex<UpdateReplayCache>>,
     pub(super) events: EventBus,
     lifecycle_publication: Arc<Mutex<LifecyclePublicationGate>>,
@@ -115,11 +127,13 @@ impl ProgrammingService {
             replay: Arc::default(),
             values_replay: Arc::default(),
             preload_values_replay: Arc::default(),
+            priority_replay: Arc::default(),
             cue_recording_replay: Arc::default(),
             cue_transfer_choices: Arc::default(),
             cue_transfer_replay: Arc::default(),
             group_recording_replay: Arc::default(),
             preset_recording_replay: Arc::default(),
+            preset_recall_replay: Arc::default(),
             update_replay: Arc::default(),
             events,
             lifecycle_publication: Arc::default(),

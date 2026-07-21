@@ -94,18 +94,34 @@ pub(super) fn ws_programmer_priority(
     state: &AppState,
     session: &Session,
     command: &WsCommand,
-) -> Result<serde_json::Value, String> {
+    context: &light_application::ActionContext,
+    ports: &command_http::ServerProgrammingPorts<'_>,
+) -> Result<WsTypedProgrammingAction, String> {
     #[derive(Deserialize)]
     struct Input {
         priority: i16,
     }
     let input: Input =
         serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
-    if !state.programmers.set_priority(session.id, input.priority) {
-        return Err("programmer does not exist".into());
-    }
-    persist_programmer(state, session).map_err(|e| e.message)?;
-    Ok(serde_json::json!({"programmer":state.programmers.get(session.id)}))
+    let result = state
+        .programming
+        .handle_priority(
+            light_application::ActionEnvelope {
+                context: context.clone(),
+                command: light_application::ProgrammingPriorityRequest {
+                    expected_revision:
+                        light_application::ProgrammingPriorityRevisionExpectation::Current,
+                    priority: input.priority,
+                },
+            },
+            ports,
+        )
+        .map_err(|error| error.message)?;
+    Ok(WsTypedProgrammingAction {
+        payload: serde_json::json!({"programmer":state.programmers.get(session.id)}),
+        values_changed: false,
+        replayed: result.replayed,
+    })
 }
 
 pub(super) fn ws_programmer_set(

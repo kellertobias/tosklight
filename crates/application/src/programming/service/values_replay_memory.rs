@@ -1,6 +1,6 @@
 use super::super::{
     ProgrammingPreloadValuesOutcome, ProgrammingPreloadValuesResult, ProgrammingValuesOutcome,
-    ProgrammingValuesResult,
+    ProgrammingValuesProjection, ProgrammingValuesResult,
 };
 use crate::ActionContext;
 use light_core::AttributeValue;
@@ -36,24 +36,30 @@ pub(super) fn values_result_retained_bytes(result: &ProgrammingValuesResult) -> 
     let mut bytes = size_of::<ProgrammingValuesResult>()
         + result_dynamic_bytes(&result.context, &result.warning);
     if let ProgrammingValuesOutcome::Changed { projection, .. } = &result.outcome {
-        bytes = bytes.saturating_add(size_of_val(projection.as_ref()) + 2 * size_of::<usize>());
+        bytes = bytes.saturating_add(programming_values_projection_retained_bytes(projection));
+    }
+    bytes
+}
+
+pub(super) fn programming_values_projection_retained_bytes(
+    projection: &ProgrammingValuesProjection,
+) -> usize {
+    let mut bytes = size_of_val(projection) + 2 * size_of::<usize>();
+    bytes = bytes.saturating_add(
+        projection.fixture_values.capacity() * size_of::<ProgrammerFixtureUpdate>(),
+    );
+    bytes = bytes
+        .saturating_add(projection.group_values.capacity() * size_of::<ProgrammerGroupUpdate>());
+    for value in &projection.fixture_values {
+        bytes = bytes
+            .saturating_add(value.attribute.0.capacity() + attribute_value_bytes(&value.value));
+    }
+    for value in &projection.group_values {
         bytes = bytes.saturating_add(
-            projection.fixture_values.capacity() * size_of::<ProgrammerFixtureUpdate>(),
+            value.group_id.capacity()
+                + value.attribute.0.capacity()
+                + attribute_value_bytes(&value.value),
         );
-        bytes = bytes.saturating_add(
-            projection.group_values.capacity() * size_of::<ProgrammerGroupUpdate>(),
-        );
-        for value in &projection.fixture_values {
-            bytes = bytes
-                .saturating_add(value.attribute.0.capacity() + attribute_value_bytes(&value.value));
-        }
-        for value in &projection.group_values {
-            bytes = bytes.saturating_add(
-                value.group_id.capacity()
-                    + value.attribute.0.capacity()
-                    + attribute_value_bytes(&value.value),
-            );
-        }
     }
     bytes
 }

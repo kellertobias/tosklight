@@ -35,6 +35,13 @@ pub struct ProgrammerRegistry {
     /// advance it; the Programming application boundary advances it once per semantic tuple
     /// transition after all nested mutations and reconciliation have completed.
     pub(crate) capture_mode_revisions: Arc<RwLock<HashMap<UserId, u64>>>,
+    /// Monotonic public revision for the lightweight per-user Programmer priority authority.
+    /// Priority changes intentionally do not advance the normal-values generation because that
+    /// projection excludes interaction metadata.
+    pub(crate) priority_revisions: Arc<RwLock<HashMap<UserId, u64>>>,
+    /// Timestamp paired with `priority_revisions`. General Programmer activity must never change
+    /// this value because priority clients reconcile it under that independent revision.
+    pub(crate) priority_changed_at: Arc<RwLock<HashMap<UserId, chrono::DateTime<chrono::Utc>>>>,
     /// Serializes compound mutations per user without preventing unrelated programmers from
     /// progressing concurrently. The mutex is reentrant because public mutation helpers compose
     /// other public helpers (for example, `activate_preload` calls `activate_preload_at`).
@@ -66,6 +73,8 @@ impl ProgrammerRegistry {
             preload_playback_queue_generations: Arc::default(),
             preload_playback_queue_revisions: Arc::default(),
             capture_mode_revisions: Arc::default(),
+            priority_revisions: Arc::default(),
+            priority_changed_at: Arc::default(),
             mutation_gates: Arc::default(),
             unknown_mutation_gate: Arc::new(ReentrantMutex::new(())),
             clock,
@@ -166,12 +175,21 @@ impl ProgrammerRegistry {
     }
 
     pub fn set_priority(&self, session: SessionId, priority: i16) -> bool {
+        self.update_priority(session, priority).is_some()
+    }
+
+    /// Updates shared user-owned priority without materializing a normal-values projection.
+    ///
+    /// `None` means the session is absent, `Some(false)` is an exact semantic no-op, and
+    /// `Some(true)` means the priority and the priority stamped onto retained values changed.
+    pub fn update_priority(&self, session: SessionId, priority: i16) -> Option<bool> {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();
         let mut states = self.states.write();
-        let Some(state) = states.get_mut(&self.key(session)) else {
-            return false;
-        };
+        let state = states.get_mut(&self.key(session))?;
+        if state.priority == priority {
+            return Some(false);
+        }
         state.priority = priority;
         for value in state
             .values
@@ -187,8 +205,12 @@ impl ProgrammerRegistry {
         {
             value.priority = priority;
         }
-        state.last_activity = self.clock.now();
-        true
+        let changed_at = self.clock.now();
+        state.last_activity = changed_at;
+        let user_id = state.user_id;
+        drop(states);
+        self.priority_changed_at.write().insert(user_id, changed_at);
+        Some(true)
     }
 
     /// Reset a fresh runtime during startup or a test-bench rebuild.
@@ -211,6 +233,8 @@ impl ProgrammerRegistry {
             self.preload_playback_queue_generations.write().clear();
             self.preload_playback_queue_revisions.write().clear();
             self.capture_mode_revisions.write().clear();
+            self.priority_revisions.write().clear();
+            self.priority_changed_at.write().clear();
         });
     }
 
@@ -234,6 +258,21 @@ impl ProgrammerRegistry {
             .map(|state| state.user_id)
     }
 
+    /// Reads only lightweight priority authority; retained Programmer values are never cloned.
+    pub fn priority_state(
+        &self,
+        session: SessionId,
+    ) -> Option<(UserId, i16, chrono::DateTime<chrono::Utc>)> {
+        let states = self.states.read();
+        let state = states.get(&self.key(session))?;
+        let changed_at = self
+            .priority_changed_at
+            .read()
+            .get(&state.user_id)
+            .cloned()?;
+        Some((state.user_id, state.priority, changed_at))
+    }
+
     pub fn normal_values_revision(&self, user_id: UserId) -> u64 {
         self.normal_values_revisions
             .read()
@@ -244,6 +283,21 @@ impl ProgrammerRegistry {
 
     pub fn advance_normal_values_revision(&self, user_id: UserId) -> u64 {
         let mut revisions = self.normal_values_revisions.write();
+        let revision = revisions.entry(user_id).or_default();
+        *revision = revision.saturating_add(1);
+        *revision
+    }
+
+    pub fn priority_revision(&self, user_id: UserId) -> u64 {
+        self.priority_revisions
+            .read()
+            .get(&user_id)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    pub fn advance_priority_revision(&self, user_id: UserId) -> u64 {
+        let mut revisions = self.priority_revisions.write();
         let revision = revisions.entry(user_id).or_default();
         *revision = revision.saturating_add(1);
         *revision
@@ -433,6 +487,8 @@ impl ProgrammerRegistry {
         if !state.preload_playback_pending.is_empty() {
             self.mark_preload_playback_queue_changed(state.user_id);
         }
+        self.advance_priority_revision(state.user_id);
+        self.priority_changed_at.write().remove(&state.user_id);
         true
     }
     pub fn active(&self) -> Vec<ProgrammerState> {

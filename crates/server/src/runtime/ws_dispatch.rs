@@ -80,7 +80,9 @@ fn dispatch_ws_payload(
         "programmer.align" => ws_programmer_align(state, session, command),
         "programmer.group.set" => ws_programmer_group_set(state, session, command),
         "programmer.group.release" => ws_programmer_group_release(state, session, command),
-        "programmer.priority" => ws_programmer_priority(state, session, command),
+        "programmer.priority" => {
+            Err("Programmer priority requires the typed action boundary".into())
+        }
         "programmer.set" => ws_programmer_set(state, session, command),
         "programmer.set_many" => ws_programmer_set_many(state, session, command),
         "programmer.set_value" => ws_programmer_set_value(state, session, command),
@@ -99,7 +101,7 @@ fn dispatch_ws_payload(
         "programmer.command_line" => ws_programmer_command_line(state, session, command),
         "programmer.command_target" => ws_programmer_command_target(state, session, command),
         "programmer.execute" => ws_programmer_execute(state, session, command, context),
-        "preset.apply" => ws_preset_apply(state, session, command),
+        "preset.apply" => Err("Preset recall requires the typed action boundary".into()),
         "programmer.mode" => ws_programmer_mode(state, session, command),
         "master.set" => ws_master_set(state, session, command),
         "group.master.set" => ws_group_master_set(state, session, command),
@@ -123,7 +125,14 @@ pub(super) fn dispatch_ws_command(
     };
     let result = dispatch_validated_ws_command(state, session, &command, live_absolute);
     match result.response {
-        Ok(payload) => successful_ws_response(state, session, command, payload, result.changes),
+        Ok(payload) => successful_ws_response(
+            state,
+            session,
+            command,
+            payload,
+            result.changes,
+            result.replayed,
+        ),
         Err(error) => failed_ws_response(&command, revision, error),
     }
 }
@@ -181,6 +190,12 @@ fn dispatch_validated_ws_command(
     };
     let context = interaction_context(session, command);
     let ports = command_http::ServerProgrammingPorts::new(state, session, "software", true);
+    if matches!(
+        command.command.as_str(),
+        "programmer.priority" | "preset.apply"
+    ) {
+        return dispatch_typed_programming_action(state, session, command, &context, &ports);
+    }
     match state
         .programming
         .run_external_interaction(&context, &ports, || {
@@ -193,6 +208,32 @@ fn dispatch_validated_ws_command(
             completed.preload_playback_queue_event_sequence.is_some(),
         ),
         Err(error) => WsProgrammingOutput::untracked(Err(error.message)),
+    }
+}
+
+fn dispatch_typed_programming_action(
+    state: &AppState,
+    session: &Session,
+    command: &WsCommand,
+    context: &light_application::ActionContext,
+    ports: &command_http::ServerProgrammingPorts<'_>,
+) -> WsProgrammingOutput {
+    let result = match command.command.as_str() {
+        "programmer.priority" => ws_programmer_priority(state, session, command, context, ports),
+        "preset.apply" => ws_preset_apply(state, session, command, context, ports),
+        _ => unreachable!("only typed compatibility actions reach this boundary"),
+    };
+    match result {
+        Ok(result) => WsProgrammingOutput {
+            response: Ok(result.payload),
+            changes: result
+                .values_changed
+                .then_some("values")
+                .into_iter()
+                .collect(),
+            replayed: result.replayed,
+        },
+        Err(error) => WsProgrammingOutput::untracked(Err(error)),
     }
 }
 
@@ -215,6 +256,7 @@ fn dispatch_live_interaction(
             .then_some("transient_control")
             .into_iter()
             .collect(),
+        replayed: false,
     }
 }
 
@@ -259,8 +301,11 @@ fn successful_ws_response(
     command: WsCommand,
     payload: serde_json::Value,
     changes: Vec<&'static str>,
+    replayed: bool,
 ) -> WsResponse {
-    publish_compatibility_events(state, session, &command, &payload, &changes);
+    if !replayed {
+        publish_compatibility_events(state, session, &command, &payload, &changes);
+    }
     WsResponse {
         protocol_version: 1,
         request_id: command.request_id,
@@ -285,6 +330,7 @@ fn failed_ws_response(command: &WsCommand, revision: u64, error: String) -> WsRe
 struct WsProgrammingOutput {
     response: Result<serde_json::Value, String>,
     changes: Vec<&'static str>,
+    replayed: bool,
 }
 
 impl WsProgrammingOutput {
@@ -292,6 +338,7 @@ impl WsProgrammingOutput {
         Self {
             response,
             changes: Vec::new(),
+            replayed: false,
         }
     }
 
@@ -316,6 +363,12 @@ impl WsProgrammingOutput {
         }
         self
     }
+}
+
+pub(super) struct WsTypedProgrammingAction {
+    pub(super) payload: serde_json::Value,
+    pub(super) values_changed: bool,
+    pub(super) replayed: bool,
 }
 
 fn reconcile_interaction(

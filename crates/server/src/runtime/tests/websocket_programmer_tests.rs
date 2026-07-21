@@ -332,7 +332,22 @@ async fn compatibility_command_line_publishes_only_its_scoped_component() {
         },
     );
     assert!(value_only.ok, "{:?}", value_only.error);
-    assert_eq!(state.application_events.latest_sequence(), sequence);
+    assert_eq!(state.application_events.latest_sequence(), sequence + 1);
+    let filter = light_application::EventFilter::default().with_object(
+        light_application::EventObject::programming_priority(session.user.id.0),
+    );
+    let light_application::EventReplay::Events(events) =
+        state.application_events.replay(sequence, &filter)
+    else {
+        panic!("the priority event should remain replayable")
+    };
+    assert_eq!(events.len(), 1);
+    assert!(matches!(
+        events[0].payload,
+        light_application::ApplicationEvent::Programming(
+            light_application::ProgrammingEvent::PriorityChanged(_)
+        )
+    ));
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

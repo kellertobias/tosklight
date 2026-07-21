@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProgrammerPrioritySnapshot",
+  "type": "object",
+  "properties": {
+    "cursor": {
+      "$ref": "#/$defs/EventSnapshotCursor"
+    },
+    "projection": {
+      "$ref": "#/$defs/ProgrammerPriorityProjection"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "cursor",
+    "projection"
+  ],
+  "$defs": {
+    "EventSnapshotCursor": {
+      "type": "object",
+      "properties": {
+        "sequence": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "sequence"
+      ]
+    },
+    "ProgrammerPriorityProjection": {
+      "type": "object",
+      "properties": {
+        "changed_at": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "integer",
+          "format": "int16",
+          "maximum": 32767,
+          "minimum": -32768
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "user_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "user_id",
+        "revision",
+        "priority",
+        "changed_at"
+      ]
+    }
+  }
+}

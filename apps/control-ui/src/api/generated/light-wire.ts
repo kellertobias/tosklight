@@ -69,6 +69,22 @@ export type ProgrammingLifecycleChange = { revision: number, delta: ProgrammingL
 
 export type ProgrammingLifecycleSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingLifecycleProjection, };
 
+export type ProgrammerPriorityActionRequest = { request_id: string, expected_revision: number, priority: number, };
+
+export type ProgrammerPriorityProjection = { user_id: string, revision: number, priority: number, changed_at: string, };
+
+export type ProgrammerPriorityChange = { "type": "upsert", projection: ProgrammerPriorityProjection, } | { "type": "remove", user_id: string, revision: number, };
+
+export type ProgrammerPrioritySnapshot = { cursor: EventSnapshotCursor, projection: ProgrammerPriorityProjection, };
+
+export type ProgrammerPriorityActionState = { "status": "changed", event_sequence: number, } | { "status": "no_change" };
+
+export type ProgrammerPriorityActionOutcome = { request_id: string, correlation_id: string, projection: ProgrammerPriorityProjection, replayed: boolean, warning?: string | null, } & ({ "status": "changed", event_sequence: number, } | { "status": "no_change" });
+
+export type ProgrammerPriorityErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
+
+export type ProgrammerPriorityErrorResponse = { kind: ProgrammerPriorityErrorKind, error: string, current_revision?: number | null, retryable: boolean, };
+
 export type ProgrammingColorXyz = { x: number, y: number, z: number, };
 
 export type ProgrammingAttributeValue = { "kind": "normalized", "value": number } | { "kind": "spread", "value": Array<number> } | { "kind": "discrete", "value": string } | { "kind": "color_xyz", "value": ProgrammingColorXyz } | { "kind": "raw_dmx", "value": number } | { "kind": "raw_dmx_exact", "value": number };
@@ -162,6 +178,18 @@ export type PresetRecordOutcome = { "status": "changed", request_id: string, cor
 export type PresetRecordErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
 
 export type PresetRecordErrorResponse = { kind: PresetRecordErrorKind, error: string, current_revision?: number | null, retryable: boolean, };
+
+export type PresetRecallRequest = { request_id: string, address: PresetRecordingAddress, expected_preset_revision: number, expected_show_revision: number, expected_programmer_revision: number, expected_capture_mode_revision: number, expected_selection_revision: number, };
+
+export type RecalledPresetProjection = { id: string, revision: number, body: unknown, };
+
+export type PresetRecallActionState = { "status": "changed", projection?: ProgrammingValuesProjection | null, event_sequence?: number | null, } | { "status": "no_change" };
+
+export type PresetRecallOutcome = { request_id: string, correlation_id: string, replayed: boolean, show_revision: number, programmer_revision: number, capture_mode_revision: number, selection_revision: number, interaction_event_sequence?: number | null, applied_fixtures: number, active_context: string, preset: RecalledPresetProjection, warning?: string | null, } & ({ "status": "changed", projection?: ProgrammingValuesProjection | null, event_sequence?: number | null, } | { "status": "no_change" });
+
+export type PresetRecallErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
+
+export type PresetRecallErrorResponse = { kind: PresetRecallErrorKind, error: string, current_revision?: number | null, current_related_revision?: number | null, retryable: boolean, };
 
 export type GroupRecordOperation = "overwrite" | "merge" | "subtract" | "delete";
 
@@ -357,7 +385,7 @@ export type ManagedAssetReference = { asset_id: string, revision: number, };
 
 export type SelectiveImportChange = { show_id: string, show_revision: number, objects: Array<SelectiveImportObjectChange>, profile_revisions: Array<FixtureProfileIdentity>, managed_assets: Array<ManagedAssetReference>, };
 
-export type EventPayload = { "type": "programming_interaction_changed", change: ProgrammingInteractionChange, } | { "type": "programming_values_changed", change: ProgrammingValuesChange, } | { "type": "programming_capture_mode_changed", change: ProgrammingCaptureModeChange, } | { "type": "programming_preload_values_changed", change: ProgrammingPreloadValuesChange, } | { "type": "programming_preload_playback_queue_changed", change: ProgrammingPreloadPlaybackQueueChange, } | { "type": "programming_lifecycle_changed", change: ProgrammingLifecycleChange, } | { "type": "playback_runtime_changed", change: PlaybackRuntimeChange, } | { "type": "playback_view_changed", projection: PlaybackDeskProjection, } | { "type": "output_runtime_changed", change: OutputRuntimeChange, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, } | { "type": "selective_import_applied", change: SelectiveImportChange, };
+export type EventPayload = { "type": "programming_interaction_changed", change: ProgrammingInteractionChange, } | { "type": "programmer_priority_changed", change: ProgrammerPriorityChange, } | { "type": "programming_values_changed", change: ProgrammingValuesChange, } | { "type": "programming_capture_mode_changed", change: ProgrammingCaptureModeChange, } | { "type": "programming_preload_values_changed", change: ProgrammingPreloadValuesChange, } | { "type": "programming_preload_playback_queue_changed", change: ProgrammingPreloadPlaybackQueueChange, } | { "type": "programming_lifecycle_changed", change: ProgrammingLifecycleChange, } | { "type": "playback_runtime_changed", change: PlaybackRuntimeChange, } | { "type": "playback_view_changed", projection: PlaybackDeskProjection, } | { "type": "output_runtime_changed", change: OutputRuntimeChange, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, } | { "type": "selective_import_applied", change: SelectiveImportChange, };
 
 export type EventEnvelope = { sequence: number, occurred_at: string, desk_id: string | null, class: EventClass, object: EventObject | null, related_objects?: Array<EventObject> | null, source: EventSource, correlation_id: string | null, delivery: EventDeliveryPolicy, payload: EventPayload, };
 

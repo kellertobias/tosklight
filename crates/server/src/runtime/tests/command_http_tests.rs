@@ -12,6 +12,7 @@ include!("command_http_values_tests.rs");
 include!("command_http_preload_values_tests.rs");
 include!("command_http_preload_playback_queue_tests.rs");
 include!("command_http_preset_recording_tests.rs");
+include!("command_http_priority_preset_recall_tests.rs");
 include!("command_http_group_recording_tests.rs");
 include!("command_http_cue_recording_tests.rs");
 include!("command_http_cue_transfer_tests.rs");

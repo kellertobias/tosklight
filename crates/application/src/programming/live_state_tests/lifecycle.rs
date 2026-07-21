@@ -121,8 +121,10 @@ fn target_user_replacement_is_monotonic_exact_once_and_invalidates_old_values_re
 
     assert_eq!(result.values_revision, 2);
     assert_eq!(result.capture_mode_revision, 2);
+    assert_eq!(result.priority_revision, 1);
     assert!(result.values_event_sequence.is_some());
     assert!(result.capture_mode_event_sequence.is_some());
+    assert!(result.priority_event_sequence.is_some());
     for session in [first_session, second_session] {
         let state = registry.get(session).unwrap();
         assert!(state.values.is_empty());
@@ -132,7 +134,7 @@ fn target_user_replacement_is_monotonic_exact_once_and_invalidates_old_values_re
     let EventReplay::Events(published) = events.replay(cursor, &EventFilter::default()) else {
         panic!("lifecycle events should remain replayable")
     };
-    assert_eq!(published.len(), 3);
+    assert_eq!(published.len(), 4);
     assert!(published.iter().all(|event| event.desk_id.is_none()));
     assert!(
         published
@@ -149,6 +151,22 @@ fn target_user_replacement_is_monotonic_exact_once_and_invalidates_old_values_re
         })
         .collect::<Vec<_>>();
     assert_eq!(lifecycle.len(), 1);
+    let priority = published
+        .iter()
+        .filter_map(|event| match &event.payload {
+            ApplicationEvent::Programming(ProgrammingEvent::PriorityChanged(change)) => {
+                Some(change)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(priority.len(), 1);
+    let ProgrammingPriorityChange::Upsert { projection } = priority[0] else {
+        panic!("replacement should publish the new priority authority")
+    };
+    assert_eq!(projection.user_id, target_user);
+    assert_eq!(projection.revision, 1);
+    assert_eq!(projection.priority, 100);
     let ProgrammingLifecycleDelta::Upsert { programmer } = &lifecycle[0].delta else {
         panic!("replacement should upsert the new Programmer identity")
     };
@@ -162,4 +180,61 @@ fn target_user_replacement_is_monotonic_exact_once_and_invalidates_old_values_re
     let stale = service.handle_values(old_action, &ports).unwrap_err();
     assert_eq!(stale.kind, ActionErrorKind::Conflict);
     assert_eq!(stale.current_revision, Some(2));
+}
+
+#[test]
+fn target_user_removal_publishes_one_exact_priority_tombstone() {
+    let registry = ProgrammerRegistry::default();
+    let target_user = UserId::new();
+    let target_session = SessionId::new();
+    let target_desk = Uuid::new_v4();
+    registry.start(target_session, target_user);
+    registry.attach_command_context(target_session, SessionId(target_desk));
+    let actor_user = UserId::new();
+    let actor_session = SessionId::new();
+    let actor_context = ActionContext::operator(
+        Uuid::new_v4(),
+        actor_user.0,
+        actor_session.0,
+        ActionSource::Http,
+    );
+    registry.start(actor_session, actor_user);
+    let events = EventBus::new(8);
+    let service = ProgrammingService::new(
+        registry.clone(),
+        events.clone(),
+        Arc::new(HighlightRegistry::default()),
+    );
+    let ports = LifecyclePorts {
+        fixture: FixtureId::new(),
+    };
+
+    let result = service
+        .replace_user_programmer(
+            &actor_context,
+            &ports,
+            ProgrammingLifecycleTarget::new(target_user, target_session, vec![target_desk]),
+            || {
+                assert!(registry.clear(target_session));
+                ProgrammingLifecycleCompletion::new((), None)
+            },
+        )
+        .unwrap();
+
+    assert_eq!(result.priority_revision, 1);
+    assert_eq!(result.priority_event_sequence, Some(1));
+    let EventReplay::Events(events) = events.replay(
+        0,
+        &EventFilter::default().with_object(EventObject::programming_priority(target_user.0)),
+    ) else {
+        panic!("priority removal should remain replayable")
+    };
+    assert_eq!(events.len(), 1);
+    let ApplicationEvent::Programming(ProgrammingEvent::PriorityChanged(
+        ProgrammingPriorityChange::Remove { user_id, revision },
+    )) = &events[0].payload
+    else {
+        panic!("removal should publish an exact priority tombstone")
+    };
+    assert_eq!((*user_id, *revision), (target_user, 1));
 }

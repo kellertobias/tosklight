@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProgrammerPriorityActionRequest",
+  "type": "object",
+  "properties": {
+    "expected_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "priority": {
+      "type": "integer",
+      "format": "int16",
+      "maximum": 32767,
+      "minimum": -32768
+    },
+    "request_id": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "expected_revision",
+    "priority"
+  ]
+}
