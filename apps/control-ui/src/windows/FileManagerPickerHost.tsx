@@ -2,38 +2,33 @@ import { useEffect, useRef, useState } from "react";
 import { useFiles } from "../features/files/FilesContext";
 import { Button, Input, ModalTitleBar } from "../components/common";
 import { PaneChromeProvider } from "../components/shell/PaneChromeContext";
-import { extension, FileManager, type FileManagerPickerOptions, type FileManagerSelection, type FileManagerTarget } from "./FileManagerWindow";
+import { extension, FileManager } from "./FileManagerWindow";
+import {
+	attachControllableHostedPicker,
+	controllableHostedPickerOutcome,
+} from "./fileManagerWindow/controllableHostedPicker";
+import {
+	createHostedPickerOperation,
+	type FileManagerPickerRequest,
+	type HostedPickerRequest,
+} from "./fileManagerWindow/hostedPickerContract";
 
 export const OPEN_FILE_MANAGER_PICKER_EVENT = "light:open-file-manager-picker";
 
-export type FileManagerPickerRequest = Omit<FileManagerPickerOptions, "onSelect" | "onCancel">;
-
-export interface SystemFilePickerSelection {
-  source: "system";
-  target: FileManagerTarget;
-  files: File[];
-  directoryName?: string;
-}
-
-export type HostedFileManagerPickerResult = FileManagerSelection[] | SystemFilePickerSelection | null;
-
-interface HostedPickerRequest extends FileManagerPickerRequest {
-  onSelect: (selection: FileManagerSelection[]) => void;
-  onSystemSelect: (selection: SystemFilePickerSelection) => void;
-  onCancel: () => void;
-}
+export type {
+	FileManagerPickerRequest,
+	HostedFileManagerPickerResult,
+	SystemFilePickerSelection,
+} from "./fileManagerWindow/hostedPickerContract";
 
 export function openFileManagerPicker(options: FileManagerPickerRequest) {
-  return new Promise<HostedFileManagerPickerResult>((resolve) => {
-    window.dispatchEvent(new CustomEvent<HostedPickerRequest>(OPEN_FILE_MANAGER_PICKER_EVENT, {
-      detail: {
-        ...options,
-        onSelect: (selection) => resolve(selection),
-        onSystemSelect: (selection) => resolve(selection),
-        onCancel: () => resolve(null),
-      },
-    }));
-  });
+	const operation = createHostedPickerOperation(options);
+	window.dispatchEvent(
+		new CustomEvent<HostedPickerRequest>(OPEN_FILE_MANAGER_PICKER_EVENT, {
+			detail: operation.request,
+		}),
+	);
+	return operation.result;
 }
 
 export function FileManagerPickerHost() {
@@ -44,30 +39,51 @@ export function FileManagerPickerHost() {
   const [chromeToolbar, setChromeToolbar] = useState<HTMLSpanElement | null>(null);
   const requestRef = useRef<HostedPickerRequest | null>(null);
   const systemInput = useRef<HTMLInputElement | null>(null);
-  requestRef.current = request;
 
   useEffect(() => {
-    const open = (event: Event) => {
-      const incoming = (event as CustomEvent<HostedPickerRequest>).detail;
-      const next = incoming && {
-        ...incoming,
-        onSystemSelect: typeof incoming.onSystemSelect === "function" ? incoming.onSystemSelect : () => incoming.onCancel(),
-      };
-      if (!next || typeof next.onSelect !== "function" || typeof next.onCancel !== "function") return;
-      requestRef.current?.onCancel();
-      requestRef.current = next;
-      setSystemError("");
-      setRequest(next);
-    };
+		const accept = (next: HostedPickerRequest) => {
+			requestRef.current?.onCancel();
+			requestRef.current = next;
+			setSystemError("");
+			setRequest(next);
+		};
+		const cancel = (target: HostedPickerRequest) => {
+			if (requestRef.current !== target) return;
+			requestRef.current = null;
+			setRequest((current) => (current === target ? null : current));
+			target.onCancel();
+		};
+		const open = (event: Event) => {
+			const next = normalizeHostedPickerRequest(
+				(event as CustomEvent<unknown>).detail,
+			);
+			if (next) accept(next);
+		};
+		const detachControl = attachControllableHostedPicker((options) => {
+			const operation = createHostedPickerOperation(options);
+			accept(operation.request);
+			return {
+				outcome: operation.result.then(controllableHostedPickerOutcome),
+				cancel: () => cancel(operation.request),
+			};
+		});
     window.addEventListener(OPEN_FILE_MANAGER_PICKER_EVENT, open);
-    return () => window.removeEventListener(OPEN_FILE_MANAGER_PICKER_EVENT, open);
+		return () => {
+			window.removeEventListener(OPEN_FILE_MANAGER_PICKER_EVENT, open);
+			detachControl();
+			const active = requestRef.current;
+			requestRef.current = null;
+			active?.onCancel();
+		};
   }, []);
 
   if (!request) return null;
-  const close = () => {
-    requestRef.current = null;
-    setRequest(null);
-  };
+	const complete = (callback: () => void) => {
+		if (requestRef.current !== request) return;
+		requestRef.current = null;
+		setRequest(null);
+		callback();
+	};
   const target = request.target ?? "files";
   const purpose = request.purpose ?? (target === "folders"
     ? request.multiple ? "Select folders" : "Select a folder"
@@ -90,13 +106,19 @@ export function FileManagerPickerHost() {
       setSystemError(`Choose only ${allowedExtensions.map((value) => `.${value}`).join(", ")} files.`);
       return;
     }
-    request.onSystemSelect({
-      source: "system",
-      target,
-      files: selected,
-      ...(target === "folders" ? { directoryName: selected[0]?.webkitRelativePath.split("/")[0] || undefined } : {}),
-    });
-    close();
+		complete(() =>
+			request.onSystemSelect({
+				source: "system",
+				target,
+				files: selected,
+				...(target === "folders"
+					? {
+							directoryName:
+								selected[0]?.webkitRelativePath.split("/")[0] || undefined,
+						}
+					: {}),
+			}),
+		);
   };
   return <div className="file-picker-backdrop" role="dialog" aria-modal="true" aria-label="Choose files or folders">
     <div className="file-picker-surface">
@@ -105,24 +127,15 @@ export function FileManagerPickerHost() {
         details={<><b>{purpose}</b><small><span className="pane-chrome-info-target" ref={setChromeInfo} /></small></>}
         actions={<span className="pane-chrome-toolbar-target" ref={setChromeToolbar} />}
         closeLabel="Close File Manager"
-        onClose={() => {
-          request.onCancel();
-          close();
-        }}
+		onClose={() => complete(request.onCancel)}
       />
       <PaneChromeProvider value={{ info: chromeInfo, toolbar: chromeToolbar }}>
         <FileManager
           instanceId="hosted-file-picker"
           picker={{
             ...request,
-            onSelect: (selection) => {
-              request.onSelect(selection);
-              close();
-            },
-            onCancel: () => {
-              request.onCancel();
-              close();
-            },
+			onSelect: (selection) => complete(() => request.onSelect(selection)),
+			onCancel: () => complete(request.onCancel),
           }}
         />
       </PaneChromeProvider>
@@ -144,4 +157,21 @@ export function FileManagerPickerHost() {
       </footer>}
     </div>
   </div>;
+}
+
+function normalizeHostedPickerRequest(value: unknown): HostedPickerRequest | null {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+	const incoming = value as HostedPickerRequest;
+	if (
+		typeof incoming.onSelect !== "function" ||
+		typeof incoming.onCancel !== "function"
+	)
+		return null;
+	return {
+		...incoming,
+		onSystemSelect:
+			typeof incoming.onSystemSelect === "function"
+				? incoming.onSystemSelect
+				: () => incoming.onCancel(),
+	};
 }

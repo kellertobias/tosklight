@@ -1,10 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const RETAINED_LIGHT_EVENTS = new Map([
-  ["tests/16-file-manager.spec.ts", new Set(["light:open-file-manager-picker"])],
-]);
-
 export function readPrivateBoundarySources(repositoryRoot) {
   return ["tests", "apps/control-ui/e2e"]
     .flatMap((directory) => walk(path.join(repositoryRoot, directory)))
@@ -22,10 +18,10 @@ export function scanPrivateTestBoundaries(sources) {
       failures.push(`${file} reads the private primary-session storage record`);
     if (source.includes("__TAURI_INTERNALS__"))
       failures.push(`${file} fabricates private Tauri runtime internals`);
-    for (const event of rawLightEvents(source)) {
-      if (!RETAINED_LIGHT_EVENTS.get(file)?.has(event))
-        failures.push(`${file} dispatches private ${event} instead of a public adapter`);
-    }
+		for (const event of rawLightEvents(source))
+			failures.push(
+				`${file} dispatches private ${event} instead of a public adapter`,
+			);
   }
   return failures;
 }

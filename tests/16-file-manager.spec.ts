@@ -1,5 +1,6 @@
 import type { Locator, Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
 import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
+import { ControllableHostedFilePickerDriver } from "../apps/control-ui/e2e/bench/hostedFilePicker";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -230,43 +231,95 @@ test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
     await fs.mkdir(path.join(directory, "Folder"), { recursive: true });
     await fs.writeFile(path.join(directory, "allowed.txt"), "allowed");
     await fs.writeFile(path.join(directory, "blocked.png"), "not really an image");
-    await desk.open(bench.baseUrl);
+		const picker = new ControllableHostedFilePickerDriver(page);
+		await picker.install();
+		try {
+			await desk.open(bench.baseUrl);
 
-    await openHostedPicker(page, { target: "files", multiple: false, allowedExtensions: ["txt"], initialRootId: "shows", initialDirectory: workspace });
-    let dialog = page.getByRole("dialog", { name: "Choose files or folders" });
-    await expect(dialog.getByRole("heading", { name: "File Manager" })).toBeVisible();
-    await expect(dialog.getByText("Select a file", { exact: true })).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Close File Manager" })).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Edit", exact: true })).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "New", exact: true })).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "View", exact: true })).toBeVisible();
-    await expect(dialog.getByRole("navigation", { name: "Breadcrumb" })).toContainText(workspace);
-    await dialog.getByRole("button", { name: "blocked.png, file" }).click();
-    await expect(dialog.getByRole("button", { name: "Select", exact: true })).toBeDisabled();
-    await expect.poll(() => pickerResult(page)).toBe("pending");
-    await dialog.getByRole("button", { name: "allowed.txt, file" }).click();
-    await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Select", exact: true })).toBeEnabled();
-    await page.keyboard.press("Enter");
-    await expect(dialog).toHaveCount(0);
-    await expect.poll(async () => (await pickerResult(page) as any[])[0]?.entry?.path).toBe(`${workspace}/allowed.txt`);
+			const fileOutcome = picker.open({
+				target: "files",
+				multiple: false,
+				allowedExtensions: ["txt"],
+				initialRootId: "shows",
+				initialDirectory: workspace,
+			});
+			let dialog = page.getByRole("dialog", {
+				name: "Choose files or folders",
+			});
+			await expect(
+				dialog.getByRole("heading", { name: "File Manager" }),
+			).toBeVisible();
+			await expect(dialog.getByText("Select a file", { exact: true })).toBeVisible();
+			await expect(
+				dialog.getByRole("button", { name: "Close File Manager" }),
+			).toBeVisible();
+			await expect(
+				dialog.getByRole("button", { name: "Edit", exact: true }),
+			).toBeVisible();
+			await expect(
+				dialog.getByRole("button", { name: "New", exact: true }),
+			).toBeVisible();
+			await expect(
+				dialog.getByRole("button", { name: "View", exact: true }),
+			).toBeVisible();
+			await expect(
+				dialog.getByRole("navigation", { name: "Breadcrumb" }),
+			).toContainText(workspace);
+			await dialog.getByRole("button", { name: "blocked.png, file" }).click();
+			await expect(
+				dialog.getByRole("button", { name: "Select", exact: true }),
+			).toBeDisabled();
+			expect(picker.pendingRequests).toBe(1);
+			await dialog.getByRole("button", { name: "allowed.txt, file" }).click();
+			await expect(dialog).toBeVisible();
+			await expect(
+				dialog.getByRole("button", { name: "Select", exact: true }),
+			).toBeEnabled();
+			await page.keyboard.press("Enter");
+			await expect(dialog).toHaveCount(0);
+			expect(await fileOutcome).toEqual({
+				status: "selected",
+				selections: [
+					expect.objectContaining({ path: `${workspace}/allowed.txt` }),
+				],
+			});
 
-    await openHostedPicker(page, { target: "folders", multiple: false, initialRootId: "shows", initialDirectory: workspace });
-    dialog = page.getByRole("dialog", { name: "Choose files or folders" });
-    await dialog.getByRole("button", { name: "Folder, folder" }).click();
-    await page.keyboard.press("Escape");
-    await expect(dialog).toHaveCount(0);
-    await expect.poll(() => pickerResult(page)).toBe("cancelled");
+			const folderOutcome = picker.open({
+				target: "folders",
+				multiple: false,
+				initialRootId: "shows",
+				initialDirectory: workspace,
+			});
+			dialog = page.getByRole("dialog", { name: "Choose files or folders" });
+			await dialog.getByRole("button", { name: "Folder, folder" }).click();
+			await page.keyboard.press("Escape");
+			await expect(dialog).toHaveCount(0);
+			expect(await folderOutcome).toEqual({ status: "cancelled" });
 
-    await openHostedPicker(page, { target: "either", multiple: true, initialRootId: "shows", initialDirectory: workspace });
-    dialog = page.getByRole("dialog", { name: "Choose files or folders" });
-    await dialog.getByRole("button", { name: "Folder, folder" }).click();
-    await dialog.getByRole("button", { name: "allowed.txt, file" }).click({ modifiers: ["ControlOrMeta"] });
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole("button", { name: "Select", exact: true }).click();
-    await expect(dialog).toHaveCount(0);
-    await expect.poll(async () => (await pickerResult(page) as any[]).map((selection) => selection.entry.path).sort())
-      .toEqual([`${workspace}/Folder`, `${workspace}/allowed.txt`].sort());
+			const multipleOutcome = picker.open({
+				target: "either",
+				multiple: true,
+				initialRootId: "shows",
+				initialDirectory: workspace,
+			});
+			dialog = page.getByRole("dialog", { name: "Choose files or folders" });
+			await dialog.getByRole("button", { name: "Folder, folder" }).click();
+			await dialog
+				.getByRole("button", { name: "allowed.txt, file" })
+				.click({ modifiers: ["ControlOrMeta"] });
+			await expect(dialog).toBeVisible();
+			await dialog.getByRole("button", { name: "Select", exact: true }).click();
+			await expect(dialog).toHaveCount(0);
+			const result = await multipleOutcome;
+			expect(result.status).toBe("selected");
+			if (result.status === "selected") {
+				expect(result.selections.map(({ path }) => path).sort()).toEqual(
+					[`${workspace}/Folder`, `${workspace}/allowed.txt`].sort(),
+				);
+			}
+		} finally {
+			await picker.dispose();
+		}
   });
 
   test("FILE-016 @ui › form fields use the confined picker first and expose a constrained system fallback only when enabled", async ({ api, bench, desk, page }) => {
@@ -304,24 +357,6 @@ test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
 
 function propertiesFor(manager: Locator) {
   return manager.getByRole("complementary", { name: "Selection properties" });
-}
-
-async function openHostedPicker(page: Page, configuration: Record<string, unknown>) {
-  // Retained private boundary: replace with a feature-owned hosted-picker test port, not a generic
-  // browser escape hatch. tools/test-private-boundaries.mjs allows only this exact event and file.
-  await page.evaluate((options) => {
-    const state = window as Window & { __filePickerResult?: unknown };
-    state.__filePickerResult = "pending";
-    window.dispatchEvent(new CustomEvent("light:open-file-manager-picker", { detail: {
-      ...options,
-      onSelect: (selection: unknown[]) => { state.__filePickerResult = selection; },
-      onCancel: () => { state.__filePickerResult = "cancelled"; },
-    } }));
-  }, configuration);
-}
-
-function pickerResult(page: Page) {
-  return page.evaluate(() => (window as Window & { __filePickerResult?: unknown }).__filePickerResult);
 }
 
 function minimalWave() {

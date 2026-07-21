@@ -18,16 +18,12 @@ test("rejects session storage, Tauri internals, and raw Light events", () => {
   ]);
 });
 
-test("retains only the named hosted-picker compatibility control", () => {
+test("rejects the former hosted-picker compatibility event in every test", () => {
   assert.deepEqual(scanPrivateTestBoundaries([{
     file: "tests/16-file-manager.spec.ts",
     source: `window.dispatchEvent(new CustomEvent("light:open-file-manager-picker"));`,
-  }]), []);
-  assert.deepEqual(scanPrivateTestBoundaries([{
-    file: "tests/another.spec.ts",
-    source: `window.dispatchEvent(new Event("light:open-file-manager-picker"));`,
   }]), [
-    "tests/another.spec.ts dispatches private light:open-file-manager-picker instead of a public adapter",
+		"tests/16-file-manager.spec.ts dispatches private light:open-file-manager-picker instead of a public adapter",
   ]);
 });
 
