@@ -1,9 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { WindowProps } from "./windowTypes";
-import {
-	FixturePatchSetupContent,
-	PatchFeatureBoundary,
-} from "../components/setup/FixturePatchSetup";
+import { FixturePatchSetupContent } from "../components/setup/FixturePatchSetup";
+import { PatchFeatureBoundary } from "../features/patch/PatchFeatureBoundary";
 import { MediaServerSetup } from "../components/setup/MediaServerSetup";
 import { WindowHeader, WindowScrollArea } from "../components/window-kit";
 import { StageWindow } from "./StageWindow";
@@ -14,14 +12,16 @@ import { useProgrammingSelectionView } from "../features/programmingInteraction/
 
 export function PatchWindow({ active = true }: WindowProps) {
 	const [tab, setTab] = useState<"fixtures" | "media">("fixtures");
-	if (tab === "media")
-		return <PatchMediaWindow onFixtures={() => setTab("fixtures")} />;
 	return (
 		<PatchFeatureBoundary>
-			<PatchWindowContent
-				active={active}
-				onMedia={() => setTab("media")}
-			/>
+			{tab === "media" ? (
+				<PatchMediaWindow
+					active={active}
+					onFixtures={() => setTab("fixtures")}
+				/>
+			) : (
+				<PatchWindowContent active={active} onMedia={() => setTab("media")} />
+			)}
 		</PatchFeatureBoundary>
 	);
 }
@@ -109,7 +109,13 @@ function PatchWindowContent({
 	);
 }
 
-function PatchMediaWindow({ onFixtures }: { onFixtures: () => void }) {
+function PatchMediaWindow({
+	active,
+	onFixtures,
+}: {
+	active: boolean;
+	onFixtures: () => void;
+}) {
 	return (
 		<>
 			<WindowHeader
@@ -129,7 +135,7 @@ function PatchMediaWindow({ onFixtures }: { onFixtures: () => void }) {
 			/>
 			<WindowScrollArea>
 				<main>
-					<MediaServerSetup />
+					<MediaServerSetup active={active} />
 				</main>
 			</WindowScrollArea>
 		</>

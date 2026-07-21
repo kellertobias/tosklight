@@ -168,10 +168,7 @@ function wireProfileProjection() {
 	};
 }
 
-function wireFixtureProjection(
-	fixtureId = FIXTURE_ID,
-	fixtureNumber = 1,
-) {
+function wireFixtureProjection(fixtureId = FIXTURE_ID, fixtureNumber = 1) {
 	const fixture = fixtureProjection(fixtureId, fixtureNumber);
 	return {
 		fixture_id: fixture.fixtureId,
@@ -261,16 +258,14 @@ function candidate(fixtureId = FIXTURE_ID, fixtureNumber = 1) {
 
 describe("Patch v2 wire boundary", () => {
 	it("derives selection targets from authoritative logical heads", () => {
-		expect(
-			patchedFixtureResults([candidate()], [fixtureProjection()]),
-		).toEqual([
-			{
-				fixtureId: FIXTURE_ID,
-				selectionFixtureIds: [
-					"70000000-0000-0000-0000-000000000001",
-				],
-			},
-		]);
+		expect(patchedFixtureResults([candidate()], [fixtureProjection()])).toEqual(
+			[
+				{
+					fixtureId: FIXTURE_ID,
+					selectionFixtureIds: ["70000000-0000-0000-0000-000000000001"],
+				},
+			],
+		);
 	});
 
 	it("accepts a complete targeted snapshot and rejects unsafe revisions", () => {
@@ -358,10 +353,11 @@ describe("Patch v2 network boundary", () => {
 		}
 	});
 
-	it.each([1, 4])(
-		"sends one atomic request for a batch of %i fixture(s) and no unrelated reads",
-		async (count) => {
-			const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+	it.each([
+		1, 4,
+	])("sends one atomic request for a batch of %i fixture(s) and no unrelated reads", async (count) => {
+		const fetchMock = vi.fn(
+			async (_input: RequestInfo | URL, init?: RequestInit) => {
 				const body = JSON.parse(String(init?.body)) as {
 					request_id: string;
 					fixtures: unknown[];
@@ -370,39 +366,38 @@ describe("Patch v2 network boundary", () => {
 					status: 200,
 					headers: { "content-type": "application/json" },
 				});
-			});
-			const transport = new HttpPatchTransport({
-				baseUrl: "http://desk.local",
-				sessionToken: "session-token",
-				fetch: fetchMock as typeof fetch,
-			});
-			const inputs = Array.from({ length: count }, (_, index) => {
-				const item = candidate(
-					"40000000-0000-0000-0000-" +
-						String(index + 1).padStart(12, "0"),
-					index + 1,
-				);
-				return item.input;
-			});
-
-			await transport.patchFixtures(SHOW_ID, 7, {
-				requestId: "request-" + count,
-				fixtures: inputs,
-				removeFixtureIds: [],
-			});
-
-			expect(fetchMock).toHaveBeenCalledOnce();
-			const [url, init] = fetchMock.mock.calls[0];
-			expect(String(url)).toBe(
-				"http://desk.local/api/v2/shows/" + SHOW_ID + "/patch/fixtures",
+			},
+		);
+		const transport = new HttpPatchTransport({
+			baseUrl: "http://desk.local",
+			sessionToken: "session-token",
+			fetch: fetchMock as typeof fetch,
+		});
+		const inputs = Array.from({ length: count }, (_, index) => {
+			const item = candidate(
+				"40000000-0000-0000-0000-" + String(index + 1).padStart(12, "0"),
+				index + 1,
 			);
-			expect(JSON.parse(String(init?.body)).fixtures).toHaveLength(count);
-			expect((init?.headers as Headers).get("if-match")).toBe("7");
-			expect(String(url)).not.toMatch(
-				/\/bootstrap|\/playbacks|\/shows$|\/configuration|\/media-servers|\/fixture-library|\/fixture-profiles/,
-			);
-		},
-	);
+			return item.input;
+		});
+
+		await transport.patchFixtures(SHOW_ID, 7, {
+			requestId: "request-" + count,
+			fixtures: inputs,
+			removeFixtureIds: [],
+		});
+
+		expect(fetchMock).toHaveBeenCalledOnce();
+		const [url, init] = fetchMock.mock.calls[0];
+		expect(String(url)).toBe(
+			"http://desk.local/api/v2/shows/" + SHOW_ID + "/patch/fixtures",
+		);
+		expect(JSON.parse(String(init?.body)).fixtures).toHaveLength(count);
+		expect((init?.headers as Headers).get("if-match")).toBe("7");
+		expect(String(url)).not.toMatch(
+			/\/bootstrap|\/playbacks|\/shows$|\/configuration|\/media-servers|\/fixture-library|\/fixture-profiles/,
+		);
+	});
 
 	it("subscribes only to the active show's Patch projection and closes with the view", () => {
 		const sockets: FakeWebSocket[] = [];
@@ -513,10 +508,7 @@ describe("Patch optimistic store", () => {
 		expect(
 			store.applyDelta(
 				delta(2, 2, 11, [
-					fixtureProjection(
-						"40000000-0000-0000-0000-000000000009",
-						9,
-					),
+					fixtureProjection("40000000-0000-0000-0000-000000000009", 9),
 				]),
 			),
 		).toBe("applied");
@@ -524,9 +516,7 @@ describe("Patch optimistic store", () => {
 		store.rollback("request-local", new Error("network failed"));
 
 		expect(
-			store
-				.getSnapshot()
-				.fixtures.map((fixture) => fixture.fixture_id),
+			store.getSnapshot().fixtures.map((fixture) => fixture.fixture_id),
 		).toEqual(["40000000-0000-0000-0000-000000000009"]);
 		expect(store.getSnapshot().error).toBe("network failed");
 	});
@@ -564,6 +554,95 @@ describe("Patch optimistic store", () => {
 });
 
 describe("Patch session repair lifecycle", () => {
+	it("does no snapshot or socket work before the first Patch view mounts", async () => {
+		const transport = new FakePatchTransport([snapshot()]);
+		const session = patchSession(transport);
+
+		expect(transport.snapshot).not.toHaveBeenCalled();
+		expect(transport.subscribe).not.toHaveBeenCalled();
+
+		const release = session.activate();
+		await vi.waitFor(() => expect(transport.snapshot).toHaveBeenCalledOnce());
+		await vi.waitFor(() =>
+			expect(session.store.getSnapshot().status).toBe("ready"),
+		);
+		expect(transport.subscribe).toHaveBeenCalledOnce();
+		release();
+		await Promise.resolve();
+	});
+
+	it("hides retained authority and refuses writes across a view restart", async () => {
+		const transport = new FakePatchTransport([
+			snapshot(1, 1, 10, [fixtureProjection()]),
+			snapshot(2, 1, 12, [fixtureProjection()]),
+		]);
+		const session = patchSession(transport);
+		const releaseFirst = session.activate();
+		await vi.waitFor(() =>
+			expect(session.store.getSnapshot().status).toBe("ready"),
+		);
+
+		releaseFirst();
+		await Promise.resolve();
+		expect(session.store.getSnapshot()).toMatchObject({
+			status: "loading",
+			fixtures: [],
+		});
+
+		const releaseSecond = session.activate();
+		expect(session.store.getSnapshot()).toMatchObject({
+			status: "loading",
+			fixtures: [],
+		});
+		await expect(
+			session.updateFixture(FIXTURE_ID, { name: "Stale edit" }),
+		).rejects.toThrow(
+			"Patch authority changed before the mutation completed",
+		);
+		await vi.waitFor(() =>
+			expect(session.store.getSnapshot().status).toBe("ready"),
+		);
+		expect(transport.snapshot).toHaveBeenCalledTimes(2);
+		releaseSecond();
+		await Promise.resolve();
+	});
+
+	it("drops a late mutation outcome after the final Patch view releases", async () => {
+		const transport = new FakePatchTransport([
+			snapshot(1, 1, 10, [fixtureProjection()]),
+		]);
+		let complete!: (outcome: PatchMutationOutcome) => void;
+		transport.patchFixtures.mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					complete = resolve;
+				}),
+		);
+		const session = patchSession(transport);
+		const release = session.activate();
+		await vi.waitFor(() =>
+			expect(session.store.getSnapshot().status).toBe("ready"),
+		);
+
+		const write = session.updateFixture(FIXTURE_ID, { name: "Late name" });
+		await vi.waitFor(() =>
+			expect(transport.patchFixtures).toHaveBeenCalledOnce(),
+		);
+		const request = transport.patchFixtures.mock.calls[0][2];
+		release();
+		await Promise.resolve();
+		complete(outcome(request.requestId, 2, 2, [fixtureProjection()]));
+
+		await expect(write).rejects.toThrow(
+			"Patch authority changed before the mutation completed",
+		);
+		expect(session.store.getSnapshot()).toMatchObject({
+			status: "loading",
+			fixtures: [],
+			pendingFixtureIds: new Set(),
+		});
+	});
+
 	it("restarts with a fresh snapshot and subscription after cleanup", async () => {
 		const transport = new FakePatchTransport([snapshot(), snapshot(2, 1, 12)]);
 		const session = new PatchSession({
@@ -636,10 +715,81 @@ describe("Patch session repair lifecycle", () => {
 		expect(attempts[0][1]).toBe(3);
 		expect(attempts[1][1]).toBe(3);
 		expect(attempts[0][2]).toEqual(attempts[1][2]);
-		expect(session.store.getSnapshot().fixtures[0].name).toBe(
-			"Recovered name",
-		);
+		expect(session.store.getSnapshot().fixtures[0].name).toBe("Recovered name");
 		expect(session.store.getSnapshot().pendingFixtureIds.size).toBe(0);
+		session.stop();
+	});
+
+	it("settles optimistic state from authoritative no-change and replay outcomes", async () => {
+		const transport = new FakePatchTransport([
+			snapshot(1, 1, 10, [fixtureProjection()]),
+		]);
+		transport.patchFixtures.mockImplementation(
+			async (_showId, _revision, mutation) => ({
+				requestId: mutation.requestId,
+				replayed: true,
+				changed: false,
+				showId: SHOW_ID,
+				showRevision: 1,
+				patchRevision: 1,
+				eventSequence: null,
+				fixtures: [fixtureProjection()],
+				removedFixtureIds: [],
+				profileRevisions: [profileProjection()],
+			}),
+		);
+		const session = patchSession(transport);
+		await session.start();
+
+		const result = await session.updateFixture(FIXTURE_ID, {
+			name: "No-op optimistic name",
+		});
+
+		expect(result).toMatchObject({ replayed: true, changed: false });
+		expect(session.store.getSnapshot().fixtures[0].name).toBe("Atomic Wash 1");
+		expect(session.store.getSnapshot().pendingFixtureIds.size).toBe(0);
+		session.stop();
+	});
+
+	it("repairs a revision conflict and rebases one typed Patch action", async () => {
+		const repaired = {
+			...fixtureProjection(),
+			name: "External name",
+		};
+		const accepted = {
+			...repaired,
+			location: { x: 10, y: 0, z: 0 },
+		};
+		const transport = new FakePatchTransport([
+			snapshot(1, 1, 10, [fixtureProjection()]),
+			snapshot(2, 2, 11, [repaired]),
+		]);
+		transport.patchFixtures.mockImplementation(
+			async (_showId, _revision, mutation) => {
+				if (transport.patchFixtures.mock.calls.length === 1)
+					throw new PatchTransportError("revision conflict", 409, 2, false);
+				return {
+					...outcome(mutation.requestId, 3, 3, [accepted]),
+					eventSequence: 12,
+				};
+			},
+		);
+		const session = patchSession(transport);
+		await session.start();
+
+		await session.updateFixture(FIXTURE_ID, {
+			location: { x: 10, y: 0, z: 0 },
+		});
+
+		expect(transport.patchFixtures).toHaveBeenCalledTimes(2);
+		expect(transport.patchFixtures.mock.calls.map((call) => call[1])).toEqual([
+			1, 2,
+		]);
+		expect(transport.patchFixtures.mock.calls[1][2].fixtures[0]).toMatchObject({
+			name: "External name",
+			location: { x: 10, y: 0, z: 0 },
+		});
+		expect(session.store.getSnapshot().fixtures[0].name).toBe("External name");
 		session.stop();
 	});
 
@@ -738,12 +888,14 @@ class FakePatchTransport implements PatchTransport {
 		): Promise<PatchMutationOutcome> => Promise.reject(new Error("Not used")),
 	);
 
-	subscribe = vi.fn((
-		_showId: string,
-		_afterSequence: number,
-		observer: PatchEventObserver,
-	): PatchEventStream => {
-		this.observer = observer;
-		return { repair: this.repair, close: vi.fn() };
-	});
+	subscribe = vi.fn(
+		(
+			_showId: string,
+			_afterSequence: number,
+			observer: PatchEventObserver,
+		): PatchEventStream => {
+			this.observer = observer;
+			return { repair: this.repair, close: vi.fn() };
+		},
+	);
 }

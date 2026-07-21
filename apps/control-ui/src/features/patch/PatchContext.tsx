@@ -26,7 +26,9 @@ export function patchedFixtureResults(
 	candidates: readonly PatchFixtureCandidate[],
 	projections: readonly PatchFixtureProjection[],
 ): readonly PatchedFixtureResult[] {
-	const byId = new Map(projections.map((fixture) => [fixture.fixtureId, fixture]));
+	const byId = new Map(
+		projections.map((fixture) => [fixture.fixtureId, fixture]),
+	);
 	return candidates.map((candidate) => {
 		const fixtureId = candidate.fixture.fixture_id;
 		const heads = byId.get(fixtureId)?.logicalHeads ?? [];
@@ -59,6 +61,7 @@ interface PatchViewProviderProps {
 }
 
 const PatchContext = createContext<PatchContextValue | null>(null);
+const PatchSessionContext = createContext<PatchSession | null>(null);
 const noopSubscribe = () => () => undefined;
 
 export function PatchViewProvider({
@@ -94,27 +97,23 @@ export function PatchViewProvider({
 			showRevision: null,
 			patchRevision: null,
 			cursor: null,
-			fixtures: initialFixtures,
+			fixtures: [],
 			pendingFixtureIds: new Set(),
 			error: null,
 		}),
-		[initialFixtures, showId],
+		[showId],
 	);
 	const snapshot = useSyncExternalStore(
 		session?.store.subscribe ?? noopSubscribe,
 		session?.store.getSnapshot ?? (() => emptySnapshot),
 		session?.store.getSnapshot ?? (() => emptySnapshot),
 	);
-	useEffect(() => {
-		if (!session) return;
-		void session.start().catch(() => undefined);
-		return () => session.stop();
-	}, [session]);
+	useEffect(() => () => session?.stop(), [session]);
 	const value = useMemo<PatchContextValue>(
 		() => ({
 			...snapshot,
 			patchFixtures: async (candidates) => {
-				if (!session) return null;
+				if (!session || snapshot.status !== "ready") return null;
 				try {
 					const outcome = await session.patchFixtures(candidates);
 					return patchedFixtureResults(candidates, outcome.fixtures);
@@ -123,7 +122,7 @@ export function PatchViewProvider({
 				}
 			},
 			updateFixture: async (fixtureId, changes) => {
-				if (!session) return false;
+				if (!session || snapshot.status !== "ready") return false;
 				try {
 					await session.updateFixture(fixtureId, changes);
 					return true;
@@ -132,7 +131,7 @@ export function PatchViewProvider({
 				}
 			},
 			deleteFixture: async (fixtureId) => {
-				if (!session) return false;
+				if (!session || snapshot.status !== "ready") return false;
 				try {
 					await session.deleteFixture(fixtureId);
 					return true;
@@ -144,7 +143,9 @@ export function PatchViewProvider({
 		[session, snapshot],
 	);
 	return (
-		<PatchContext.Provider value={value}>{children}</PatchContext.Provider>
+		<PatchSessionContext.Provider value={session}>
+			<PatchContext.Provider value={value}>{children}</PatchContext.Provider>
+		</PatchSessionContext.Provider>
 	);
 }
 
@@ -153,6 +154,19 @@ export function usePatch(): PatchContextValue {
 	if (!context)
 		throw new Error("usePatch must be used inside PatchViewProvider");
 	return context;
+}
+
+export function useOptionalPatch(): PatchContextValue | null {
+	return useContext(PatchContext);
+}
+
+/** Activates the exact Patch snapshot and stream only for a mounted Patch view. */
+export function usePatchView(enabled = true): void {
+	const session = useContext(PatchSessionContext);
+	useEffect(() => {
+		if (!session || !enabled) return;
+		return session.activate();
+	}, [enabled, session]);
 }
 
 export type { PatchFixtureCandidate } from "./model";

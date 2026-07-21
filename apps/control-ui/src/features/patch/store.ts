@@ -11,11 +11,7 @@ import {
 	projectionToPatchedFixture,
 } from "./model";
 
-export type PatchStoreStatus =
-	| "loading"
-	| "ready"
-	| "repairing"
-	| "error";
+export type PatchStoreStatus = "loading" | "ready" | "repairing" | "error";
 
 export interface PatchStoreSnapshot {
 	status: PatchStoreStatus;
@@ -38,6 +34,7 @@ interface PendingPatch {
 export class PatchStore {
 	private readonly listeners = new Set<() => void>();
 	private authoritative = new Map<string, PatchedFixture>();
+	private readonly fixtureHints: ReadonlyMap<string, PatchedFixture>;
 	private profiles = new Map<string, PatchProfileRevision>();
 	private pending = new Map<string, PendingPatch>();
 	private showRevision: number | null = null;
@@ -45,6 +42,7 @@ export class PatchStore {
 	private cursor: number | null = null;
 	private status: PatchStoreStatus = "loading";
 	private error: string | null = null;
+	private authorityVisible = false;
 	private value: PatchStoreSnapshot;
 
 	constructor(
@@ -52,7 +50,7 @@ export class PatchStore {
 		private readonly resolveDefinition: PatchDefinitionResolver,
 		initialFixtures: readonly PatchedFixture[] = [],
 	) {
-		this.authoritative = new Map(
+		this.fixtureHints = new Map(
 			initialFixtures.map((fixture) => [fixture.fixture_id, fixture]),
 		);
 		this.value = this.buildSnapshot();
@@ -64,6 +62,22 @@ export class PatchStore {
 	};
 
 	getSnapshot = () => this.value;
+
+	beginAuthorityLoad(): void {
+		this.pending.clear();
+		this.authorityVisible = false;
+		this.status = "loading";
+		this.error = null;
+		this.publish();
+	}
+
+	deactivate(): void {
+		this.pending.clear();
+		this.authorityVisible = false;
+		this.status = "loading";
+		this.error = null;
+		this.publish();
+	}
 
 	begin(
 		requestId: string,
@@ -139,12 +153,16 @@ export class PatchStore {
 		this.showRevision = snapshot.showRevision;
 		this.patchRevision = snapshot.patchRevision;
 		this.cursor = snapshot.cursor;
+		this.authorityVisible = true;
 		this.status = "ready";
 		this.error = null;
 		this.publish();
 	}
 
-	applyDelta(delta: PatchChange, sequence = delta.eventSequence): PatchDeltaResult {
+	applyDelta(
+		delta: PatchChange,
+		sequence = delta.eventSequence,
+	): PatchDeltaResult {
 		const result = this.applyDeltaWithoutPublishing(delta, sequence);
 		if (result !== "repair") this.publish();
 		return result;
@@ -194,11 +212,7 @@ export class PatchStore {
 			return "repair";
 		if (delta.patchRevision < this.patchRevision) return "stale";
 		if (delta.patchRevision === this.patchRevision) {
-			if (
-				sequence != null &&
-				this.cursor != null &&
-				sequence > this.cursor
-			)
+			if (sequence != null && this.cursor != null && sequence > this.cursor)
 				return "repair";
 			return "stale";
 		}
@@ -211,7 +225,10 @@ export class PatchStore {
 
 		const profiles = new Map(this.profiles);
 		for (const profile of delta.profileRevisions)
-			profiles.set(profileKey(profile.profileId, profile.profileRevision), profile);
+			profiles.set(
+				profileKey(profile.profileId, profile.profileRevision),
+				profile,
+			);
 		const authoritative = new Map(this.authoritative);
 		for (const fixtureId of delta.removedFixtureIds)
 			authoritative.delete(fixtureId);
@@ -231,8 +248,7 @@ export class PatchStore {
 		this.profiles = profiles;
 		this.showRevision = delta.showRevision;
 		this.patchRevision = delta.patchRevision;
-		if (sequence != null)
-			this.cursor = Math.max(this.cursor ?? 0, sequence);
+		if (sequence != null) this.cursor = Math.max(this.cursor ?? 0, sequence);
 		this.status = "ready";
 		this.error = null;
 		return "applied";
@@ -242,9 +258,7 @@ export class PatchStore {
 		fixtureId: string,
 		requestId?: string,
 	): PatchedFixture | undefined {
-		const requested = requestId
-			? this.pending.get(requestId)
-			: undefined;
+		const requested = requestId ? this.pending.get(requestId) : undefined;
 		const requestedCandidate = requested?.candidates.find(
 			(item) => item.fixture.fixture_id === fixtureId,
 		);
@@ -257,11 +271,13 @@ export class PatchStore {
 			);
 			if (candidate) return candidate.fixture;
 		}
-		return undefined;
+		return this.fixtureHints.get(fixtureId);
 	}
 
 	private buildSnapshot(): PatchStoreSnapshot {
-		const visible = new Map(this.authoritative);
+		const visible = this.authorityVisible
+			? new Map(this.authoritative)
+			: new Map<string, PatchedFixture>();
 		const pendingFixtureIds = new Set<string>();
 		for (const patch of this.pending.values()) {
 			for (const fixtureId of patch.removeFixtureIds) visible.delete(fixtureId);

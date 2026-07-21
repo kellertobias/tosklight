@@ -44,17 +44,19 @@ const server = {
 	unresolvedMvrFixtures: [],
 	selectedFixtures: [] as string[],
 	setSelection: vi.fn(),
-	updatePatchedFixture: vi.fn().mockResolvedValue(true),
-	deletePatchedFixture: vi.fn().mockResolvedValue(true),
-	patchFixture: vi.fn(),
 	refresh: vi.fn(),
 	savePatchLayer: vi.fn(),
 };
 const patchFeature = {
 	patchFixtures: vi.fn(),
+	updateFixture: vi.fn().mockResolvedValue(true),
+	deleteFixture: vi.fn().mockResolvedValue(true),
 };
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
+vi.mock("../../features/patch/PatchFeatureBoundary", () => ({
+	PatchFeatureBoundary: ({ children }: { children: ReactNode }) => children,
+}));
 vi.mock(
 	"../../features/programmingInteraction/ProgrammingInteractionView",
 	() => ({
@@ -80,8 +82,8 @@ vi.mock("../../features/patch/PatchContext", async (importOriginal) => {
 			pendingFixtureIds: new Set<string>(),
 			error: null,
 			patchFixtures: patchFeature.patchFixtures,
-			updateFixture: server.updatePatchedFixture,
-			deleteFixture: server.deletePatchedFixture,
+			updateFixture: patchFeature.updateFixture,
+			deleteFixture: patchFeature.deleteFixture,
 		}),
 	};
 });
@@ -237,9 +239,8 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	programming.actions.replace.mockResolvedValue(null);
 	programming.actions.gesture.mockResolvedValue(null);
-	server.updatePatchedFixture.mockResolvedValue(true);
-	server.deletePatchedFixture.mockResolvedValue(true);
-	server.patchFixture.mockResolvedValue("new-fixture");
+	patchFeature.updateFixture.mockResolvedValue(true);
+	patchFeature.deleteFixture.mockResolvedValue(true);
 	patchFeature.patchFixtures.mockImplementation(
 		async (candidates: Array<{ fixture: PatchedFixture }>) =>
 			candidates.map((candidate) => ({
@@ -357,17 +358,14 @@ describe("selected split selection and SET editing", () => {
 		);
 
 		await waitFor(() =>
-			expect(server.updatePatchedFixture).toHaveBeenCalledWith(
-				"fixture-split",
-				{
-					split_patches: [
-						{ split: 1, universe: 1, address: 101 },
-						{ split: 3, universe: 4, address: 401 },
-					],
-					universe: 1,
-					address: 101,
-				},
-			),
+			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
+				split_patches: [
+					{ split: 1, universe: 1, address: 101 },
+					{ split: 3, universe: 4, address: 401 },
+				],
+				universe: 1,
+				address: 101,
+			}),
 		);
 		expect(dispatch).toHaveBeenCalledWith({
 			type: "SET_PATCH_ARMED",
@@ -464,7 +462,7 @@ describe("selected split conflict validation", () => {
 		expect(
 			screen.queryByRole("dialog", { name: "Fixture Address" }),
 		).not.toBeInTheDocument();
-		expect(server.updatePatchedFixture).not.toHaveBeenCalled();
+		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
 	});
 });
 
@@ -491,14 +489,15 @@ describe("fixture batch IDs and title actions", () => {
 		});
 		fireEvent.click(screen.getByRole("button", { name: "Add 4 fixtures" }));
 
-		await waitFor(() => expect(patchFeature.patchFixtures).toHaveBeenCalledOnce());
+		await waitFor(() =>
+			expect(patchFeature.patchFixtures).toHaveBeenCalledOnce(),
+		);
 		expect(
 			patchFeature.patchFixtures.mock.calls[0][0].map(
 				(candidate: { fixture: PatchedFixture }) =>
 					candidate.fixture.fixture_number,
 			),
 		).toEqual([100, 102, 103, 104]);
-		expect(server.patchFixture).not.toHaveBeenCalled();
 		expect(server.refresh).not.toHaveBeenCalled();
 	});
 
@@ -628,11 +627,12 @@ describe("fixture batch DMX placement", () => {
 		fireEvent.click(
 			within(placement).getByRole("button", { name: "Add 3 fixtures" }),
 		);
-		await waitFor(() => expect(patchFeature.patchFixtures).toHaveBeenCalledOnce());
+		await waitFor(() =>
+			expect(patchFeature.patchFixtures).toHaveBeenCalledOnce(),
+		);
 		expect(
 			patchFeature.patchFixtures.mock.calls[0][0].map(
-				(candidate: { fixture: PatchedFixture }) =>
-					candidate.fixture.address,
+				(candidate: { fixture: PatchedFixture }) => candidate.fixture.address,
 			),
 		).toEqual([1, 50, 3]);
 		expect(programming.actions.replace).toHaveBeenCalledWith({
@@ -713,10 +713,10 @@ describe("visual-only Venue placement", () => {
 			within(placement).getByRole("button", { name: "Add 1 fixtures" }),
 		);
 
-		await waitFor(() => expect(patchFeature.patchFixtures).toHaveBeenCalledOnce());
-		expect(
-			patchFeature.patchFixtures.mock.calls[0][0][0].fixture,
-		).toEqual(
+		await waitFor(() =>
+			expect(patchFeature.patchFixtures).toHaveBeenCalledOnce(),
+		);
+		expect(patchFeature.patchFixtures.mock.calls[0][0][0].fixture).toEqual(
 			expect.objectContaining({
 				fixture_number: null,
 				virtual_fixture_number: 1,
@@ -865,10 +865,9 @@ describe("schema-v2 location and multi-patch editing", () => {
 		);
 		fireEvent.click(within(titleBar).getByRole("button", { name: "Set" }));
 		await waitFor(() =>
-			expect(server.updatePatchedFixture).toHaveBeenCalledWith(
-				"fixture-split",
-				{ location: { x: 1000, y: 0, z: 0 } },
-			),
+			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
+				location: { x: 1000, y: 0, z: 0 },
+			}),
 		);
 	});
 
@@ -903,7 +902,7 @@ describe("schema-v2 location and multi-patch editing", () => {
 		);
 
 		await waitFor(() =>
-			expect(server.updatePatchedFixture).toHaveBeenCalledWith(
+			expect(patchFeature.updateFixture).toHaveBeenCalledWith(
 				"fixture-split",
 				expect.objectContaining({
 					multipatch: [
@@ -949,7 +948,7 @@ describe("schema-v2 delete and unpatch controls", () => {
 			within(dialog).getByRole("button", { name: "Unpatch fixture" }),
 		);
 		await waitFor(() =>
-			expect(server.updatePatchedFixture).toHaveBeenCalledWith(
+			expect(patchFeature.updateFixture).toHaveBeenCalledWith(
 				"fixture-split",
 				expect.objectContaining({
 					universe: null,
@@ -968,7 +967,7 @@ describe("schema-v2 delete and unpatch controls", () => {
 				}),
 			),
 		);
-		expect(server.deletePatchedFixture).not.toHaveBeenCalled();
+		expect(patchFeature.deleteFixture).not.toHaveBeenCalled();
 	});
 
 	it("opens delete confirmation for the selected fixture and confirms with Enter", async () => {
@@ -985,9 +984,9 @@ describe("schema-v2 delete and unpatch controls", () => {
 
 		fireEvent.keyDown(window, { key: "Enter" });
 		await waitFor(() =>
-			expect(server.deletePatchedFixture).toHaveBeenCalledWith("fixture-split"),
+			expect(patchFeature.deleteFixture).toHaveBeenCalledWith("fixture-split"),
 		);
-		expect(server.updatePatchedFixture).not.toHaveBeenCalled();
+		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
 	});
 });
 
@@ -1003,31 +1002,28 @@ describe("schema-v2 current-fixture conflict resolution", () => {
 			screen.getByRole("button", { name: "Unpatch current fixture" }),
 		);
 		await waitFor(() =>
-			expect(server.updatePatchedFixture).toHaveBeenCalledWith(
-				"fixture-split",
-				{
-					universe: null,
-					address: null,
-					split_patches: [
-						{ split: 1, universe: null, address: null },
-						{ split: 3, universe: null, address: null },
-					],
-					multipatch: [
-						{
-							id: "current-mp",
-							name: "Current duplicate",
-							universe: null,
-							address: null,
-							split_patches: [
-								{ split: 1, universe: null, address: null },
-								{ split: 3, universe: null, address: null },
-							],
-							location: { x: 0, y: 0, z: 0 },
-							rotation: { x: 0, y: 0, z: 0 },
-						},
-					],
-				},
-			),
+			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
+				universe: null,
+				address: null,
+				split_patches: [
+					{ split: 1, universe: null, address: null },
+					{ split: 3, universe: null, address: null },
+				],
+				multipatch: [
+					{
+						id: "current-mp",
+						name: "Current duplicate",
+						universe: null,
+						address: null,
+						split_patches: [
+							{ split: 1, universe: null, address: null },
+							{ split: 3, universe: null, address: null },
+						],
+						location: { x: 0, y: 0, z: 0 },
+						rotation: { x: 0, y: 0, z: 0 },
+					},
+				],
+			}),
 		);
 	});
 });
@@ -1083,7 +1079,7 @@ describe("schema-v2 all-conflict resolution", () => {
 			universe: 1,
 			address: 101,
 		});
-		expect(server.updatePatchedFixture).not.toHaveBeenCalled();
+		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
 		expect(confirm).toHaveBeenCalledOnce();
 	});
 });

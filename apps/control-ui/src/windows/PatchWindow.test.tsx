@@ -5,9 +5,6 @@ import type { PatchedFixture } from "../api/types";
 import { PatchWindow } from "./PatchWindow";
 
 vi.mock("../components/setup/FixturePatchSetup", () => ({
-	PatchFeatureBoundary: ({ children }: { children: ReactNode }) => (
-		<div data-testid="patch-boundary">{children}</div>
-	),
 	FixturePatchSetupContent: ({
 		active,
 		onStagePreview,
@@ -25,6 +22,12 @@ vi.mock("../components/setup/FixturePatchSetup", () => ({
 				Media Servers
 			</div>
 		</div>
+	),
+}));
+
+vi.mock("../features/patch/PatchFeatureBoundary", () => ({
+	PatchFeatureBoundary: ({ children }: { children: ReactNode }) => (
+		<div data-testid="patch-boundary">{children}</div>
 	),
 }));
 
@@ -49,7 +52,11 @@ vi.mock("../platform/desktop", () => ({
 }));
 
 vi.mock("./StageWindow", () => ({
-	StageWindow: ({ patchedFixtures }: { patchedFixtures?: PatchedFixture[] }) => (
+	StageWindow: ({
+		patchedFixtures,
+	}: {
+		patchedFixtures?: PatchedFixture[];
+	}) => (
 		<div data-testid="stage-fixtures">
 			{patchedFixtures?.map((fixture) => fixture.fixture_id).join(",")}
 		</div>
@@ -78,7 +85,7 @@ describe("Patch window Stage preview", () => {
 		);
 	});
 
-	it("owns the Patch subscription only while the fixture view is active", () => {
+	it("keeps one Patch boundary across fixture and media views", () => {
 		const { rerender } = render(<PatchWindow active={false} />);
 		expect(screen.getByTestId("patch-boundary")).toBeInTheDocument();
 		expect(screen.getByTestId("patch-content")).toHaveAttribute(
@@ -94,7 +101,7 @@ describe("Patch window Stage preview", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: "Media Servers" }));
 
-		expect(screen.queryByTestId("patch-boundary")).not.toBeInTheDocument();
+		expect(screen.getByTestId("patch-boundary")).toBeInTheDocument();
 		expect(screen.getByText("Media setup")).toBeInTheDocument();
 	});
 });

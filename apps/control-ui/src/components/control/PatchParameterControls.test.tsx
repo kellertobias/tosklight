@@ -4,6 +4,7 @@ import { PatchParameterControls } from "./PatchParameterControls";
 
 const mocks = vi.hoisted(() => ({
 	selection: null as null | { selected: readonly string[] },
+	patchStatus: "ready" as "loading" | "ready",
 	update: vi.fn(),
 }));
 
@@ -23,14 +24,13 @@ const secondFixture = {
 	location: { x: 200, y: 0, z: 0 },
 };
 
-vi.mock("../../api/ServerContext", () => ({
-	useServer: () => ({
-		patch: { fixtures: [fixture, secondFixture] },
-		updatePatchedFixture: mocks.update,
-		get selectedFixtures() {
-			throw new Error("legacy selection must not be read");
-		},
+vi.mock("../../features/patch/PatchContext", () => ({
+	usePatch: () => ({
+		status: mocks.patchStatus,
+		fixtures: mocks.patchStatus === "ready" ? [fixture, secondFixture] : [],
+		updateFixture: mocks.update,
 	}),
+	usePatchView: vi.fn(),
 }));
 
 vi.mock(
@@ -42,18 +42,32 @@ vi.mock(
 
 beforeEach(() => {
 	mocks.selection = null;
+	mocks.patchStatus = "ready";
 	mocks.update.mockReset().mockResolvedValue(true);
 });
 
 afterEach(cleanup);
 
 describe("Patch parameter selection", () => {
-	it("shows loading and keeps every edit inert without scoped authority", () => {
+	it("shows selection loading and keeps every edit inert without scoped authority", () => {
 		render(<PatchParameterControls />);
 
-		expect(screen.getByText("Programmer selection loading…")).toBeInTheDocument();
+		expect(
+			screen.getByText("Programmer selection loading…"),
+		).toBeInTheDocument();
 		for (const button of screen.getAllByRole("button"))
 			expect(button).toBeDisabled();
+	});
+
+	it("does not expose stale fixtures or write while Patch authority loads", () => {
+		mocks.patchStatus = "loading";
+		mocks.selection = { selected: ["fixture-1"] };
+		render(<PatchParameterControls />);
+
+		expect(screen.getByText("Patch loading…")).toBeInTheDocument();
+		for (const button of screen.getAllByRole("button"))
+			expect(button).toBeDisabled();
+		expect(mocks.update).not.toHaveBeenCalled();
 	});
 
 	it("edits the first fixture selected by the scoped projection", () => {

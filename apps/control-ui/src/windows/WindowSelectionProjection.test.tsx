@@ -193,7 +193,6 @@ vi.mock("./FixtureSheetTable", () => ({
 	),
 }));
 vi.mock("../components/setup/FixturePatchSetup", () => ({
-	PatchFeatureBoundary: ({ children }: PropsWithChildren) => children,
 	FixturePatchSetupContent: ({
 		onStagePreview,
 		onMedia,
@@ -210,6 +209,9 @@ vi.mock("../components/setup/FixturePatchSetup", () => ({
 			</button>
 		</>
 	),
+}));
+vi.mock("../features/patch/PatchFeatureBoundary", () => ({
+	PatchFeatureBoundary: ({ children }: PropsWithChildren) => children,
 }));
 vi.mock("../components/setup/MediaServerSetup", () => ({
 	MediaServerSetup: () => <div>Media setup</div>,
@@ -307,7 +309,9 @@ describe("window selection projections", () => {
 
 		mocks.fixtureSheetRows = { rows: [], activeValuesLoading: false };
 		rerender(view(<FixtureSheetWindow />));
-		expect(screen.queryByText("Programmer values loading…")).not.toBeInTheDocument();
+		expect(
+			screen.queryByText("Programmer values loading…"),
+		).not.toBeInTheDocument();
 	});
 
 	it("updates Channels, Fixture Sheet, and Presets from scoped events", async () => {

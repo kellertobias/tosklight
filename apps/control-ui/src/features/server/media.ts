@@ -3,15 +3,10 @@ import type { ServerContextValue } from "./ServerContextValue";
 
 export function createMediaActions(
 	model: ServerController,
-): Pick<
-	ServerContextValue,
-	"refreshMediaPreview" | "refreshMediaThumbnails" | "configureMediaServer"
-> {
+): Pick<ServerContextValue, "refreshMediaPreview" | "refreshMediaThumbnails"> {
 	const {
 		client,
 		setError,
-		bootstrap,
-		setPatch,
 		mediaServers,
 		setMediaServers,
 		setMediaPreviewUrls,
@@ -58,34 +53,6 @@ export function createMediaActions(
 							.catch(() => ({ fixtures: mediaServers }))
 					).fixtures,
 				);
-				setError(reason instanceof Error ? reason.message : String(reason));
-			}
-		},
-		configureMediaServer: async (fixtureId, ipAddress, port = 4811) => {
-			try {
-				if (!bootstrap?.active_show)
-					throw new Error("Open a show before configuring media servers");
-				const fixtures = await client.objects<
-					import("../../api/types").PatchedFixture
-				>(bootstrap.active_show.id, "patched_fixture");
-				const object = fixtures.find(
-					(candidate) => candidate.body.fixture_id === fixtureId,
-				);
-				if (!object) throw new Error("Patched fixture object was not found");
-				const direct_control = ipAddress
-					? { protocol: "citp" as const, ip_address: ipAddress, port }
-					: null;
-				await client.putObject(
-					bootstrap.active_show.id,
-					"patched_fixture",
-					object.id,
-					{ ...object.body, direct_control },
-					object.revision,
-				);
-				setPatch(await client.patch());
-				setMediaServers((await client.mediaServers()).fixtures);
-				setError(null);
-			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
 			}
 		},

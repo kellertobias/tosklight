@@ -10,7 +10,7 @@ import {
 } from "react";
 import { useServer } from "../../../api/ServerContext";
 import type { PatchedFixture } from "../../../api/types";
-import { usePatch } from "../../../features/patch/PatchContext";
+import { usePatch, usePatchView } from "../../../features/patch/PatchContext";
 import { useApp } from "../../../state/AppContext";
 import { parsePatchAddress } from "../../input/ConsoleFields";
 import {
@@ -289,6 +289,7 @@ function filterDefinitions(
 function useFixturePatchController(props: FixturePatchSetupProps) {
 	const server = useServer();
 	const patch = usePatch();
+	usePatchView(props.active ?? true);
 	const selection = usePatchSelection(props.active ?? true);
 	const app = useApp();
 	const ui = usePatchUiState();

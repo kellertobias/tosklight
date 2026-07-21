@@ -1,5 +1,5 @@
-import { useServer } from "../../api/ServerContext";
 import type { PatchedFixture } from "../../api/types";
+import { usePatch, usePatchView } from "../../features/patch/PatchContext";
 import { useProgrammingSelectionView } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import { Button } from "../common";
 
@@ -11,10 +11,11 @@ const slots = (["x", "y", "z"] as const)
 	.sort((left, right) => left.kind.localeCompare(right.kind));
 
 export function PatchParameterControls() {
-	const server = useServer();
+	const patch = usePatch();
+	usePatchView();
 	const selection = useProgrammingSelectionView();
 	const fixture = selection
-		? selectedPatchedFixture(server.patch?.fixtures ?? [], selection.selected)
+		? selectedPatchedFixture(patch.fixtures, selection.selected)
 		: null;
 	const updateVector = (
 		kind: "location" | "rotation",
@@ -23,15 +24,19 @@ export function PatchParameterControls() {
 	) => {
 		if (!fixture) return;
 		const current = fixture[kind] ?? { x: 0, y: 0, z: 0 };
-		void server.updatePatchedFixture(fixture.fixture_id, {
+		void patch.updateFixture(fixture.fixture_id, {
 			[kind]: { ...current, [axis]: current[axis] + delta },
 		});
 	};
-	const label = selection
-		? fixture
-			? fixture.name || fixture.definition.name
-			: "Select a patched fixture"
-		: "Programmer selection loading…";
+	const label =
+		patch.status !== "ready"
+			? "Patch loading…"
+			: selection
+				? fixture
+					? fixture.name || fixture.definition.name
+					: "Select a patched fixture"
+				: "Programmer selection loading…";
+	const disabled = patch.status !== "ready" || !fixture;
 	return (
 		<div className="parameter-controls patch-parameter-controls">
 			<div className="family-tabs">
@@ -46,7 +51,7 @@ export function PatchParameterControls() {
 						kind={kind}
 						axis={axis}
 						stored={fixture?.[kind]?.[axis] ?? 0}
-						disabled={!fixture}
+						disabled={disabled}
 						onChange={updateVector}
 					/>
 				))}
@@ -89,7 +94,9 @@ function PatchVectorControl({
 }) {
 	const label = kind === "location" ? "Location" : "Rotation";
 	const display =
-		kind === "location" ? `${(stored / 1000).toFixed(3)} m` : `${stored.toFixed(0)}°`;
+		kind === "location"
+			? `${(stored / 1000).toFixed(3)} m`
+			: `${stored.toFixed(0)}°`;
 	const step = kind === "location" ? 10 : 1;
 	return (
 		<div className="patch-vector-control">
