@@ -14,7 +14,7 @@ import {
 } from "./model";
 import type { PatchFixtureProjection } from "./contracts";
 import { PatchSession } from "./session";
-import type { PatchStoreSnapshot } from "./store";
+import type { PatchStore, PatchStoreSnapshot } from "./store";
 import type { PatchTransport } from "./transport";
 
 export interface PatchedFixtureResult {
@@ -158,6 +158,15 @@ export function usePatch(): PatchContextValue {
 
 export function useOptionalPatch(): PatchContextValue | null {
 	return useContext(PatchContext);
+}
+
+/**
+ * The authoritative Patch store for scoped readers, or null outside a mounted Patch boundary.
+ *
+ * Readers must treat null as "no authority yet" and never fall back to bootstrap Patch data.
+ */
+export function usePatchStoreOrNull(): PatchStore | null {
+	return useContext(PatchSessionContext)?.store ?? null;
 }
 
 /** Activates the exact Patch snapshot and stream only for a mounted Patch view. */
