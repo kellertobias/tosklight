@@ -62,16 +62,31 @@ Two mechanisms:
    This clears COMMAND-HISTORY-001 @ui and the PROG-002 supplemental variants. Rerender isolation is
    unaffected (it is in the selectors, not in lazy activation). 1,974/1,974 unit tests still pass.
 
-2. **Definition-resolution race (REMAINING — next fix).** The scoped store resolves fixture
-   definitions client-side via `mergeFixtureDefinitions(fixtureProfiles, fixtureLibrary)` and
-   applies its snapshot exactly once. If the snapshot is fetched before `fixtureProfiles` finish
-   loading, `projectionToPatchedFixture` falls back to `syntheticDefinition`, which carries no head
-   parameters — so `useSupportedAttributes`/`returnHomeAssignments` see no attributes and the
-   controls render empty/disabled. The old `server.patch` was server-resolved, so it never raced.
-   Fix: make `PatchSession`/`PatchStore` re-project (or re-fetch the snapshot) when the definition
-   resolver changes, so late-arriving definitions upgrade the synthetic fixtures. This is the
-   remaining regression owned by this effort (POSITION-HOME-001, HIGHLIGHT-003, ENCODER-DISPLAY-001,
-   PROG-002 @ui).
+2. **Incomplete client-side fixture definitions (REMAINING — confirmed, not yet fixed).** The
+   scoped store resolves fixture definitions client-side in `projectionToPatchedFixture`
+   (`features/patch/model.ts`) via `resolveDefinition(profileId, profileRevision, modeId)` over
+   `mergeFixtureDefinitions(server.fixtureProfiles, server.fixtureLibrary)`. On the programmer
+   surface that resolution does **not** match, so fixtures fall back to `syntheticDefinition`, which
+   has no `definition.heads[].parameters`. Consumers that need parameters —
+   `returnHomeAssignments`/`parameterDefault` (`components/modals/specialPosition.ts`),
+   `useSupportedAttributes`/`directProgrammerChoices` (parameter controls), the hardware-encoder
+   attribute display — therefore see no attributes, so Return Home is disabled, encoder slots read
+   "Unassigned", and the spread finds nothing. The old `server.patch.fixtures` came from
+   `/api/v1/patch`, which the **server** resolved with complete definitions, so it never had this
+   gap. The Patch *window* tests pass because that view only reads number/name/address, not
+   parameters — the incomplete definitions went unnoticed until programmer-surface readers migrated.
+
+   A re-projection/re-fetch-on-definitions-load fix was tried and **did not work** — this is not a
+   load-timing race; the client resolution never matches on this surface (a profileId/revision/modeId
+   key mismatch between the v2 patch projection and `fixtureProfiles`, or `fixtureProfiles` lacking
+   full parameter data). Do not retry the timing angle. The real fix is one of: (a) align the
+   `resolveDefinition` key matching / ensure `fixtureProfiles` carries complete parameterized modes,
+   (b) have the v2 patch snapshot/delta carry server-resolved head parameters as `/api/v1/patch`
+   did, or (c) resolve against a definition source that includes parameters on the programmer
+   surface. Needs investigation of why `resolveDefinition` returns null for these fixtures — inspect
+   the actual `profileId`/`profileRevision`/`modeId` on a v2 `PatchFixtureProjection` versus the keys
+   in `mergeFixtureDefinitions` output. Owns: POSITION-HOME-001, HIGHLIGHT-003, ENCODER-DISPLAY-001,
+   PROG-002 @ui.
 
 Desktop smoke (`tools/test.sh desktop-smoke`) passes 2/2 (DESKTOP-001, DESKTOP-002): the packaged
 app owns and terminates its exact child server and refuses to adopt an independent one.
